@@ -5,9 +5,12 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Jobs\Media\CalculateMediaHashesJob;
 use App\Models\AuditLog;
+use App\Models\Album;
 use App\Models\MediaItem;
+use App\Models\StorageConnection;
 use App\Models\UploadChunk;
 use App\Models\UploadSession;
+use App\Services\Storage\GoogleDriveStorageProvider;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -185,20 +188,70 @@ class UploadController extends Controller
                 throw new \RuntimeException("Size mismatch: expected {$session->total_size}, got {$assembledSize}");
             }
 
+            // Upload to Google Drive (synchronous, best-effort)
+            $driveFileId       = null;
+            $driveParentFolder = null;
+            try {
+                $connection = StorageConnection::whereHas(
+                        'owner',
+                        fn($q) => $q->whereHas(
+                            'gallerySpaces',
+                            fn($q2) => $q2->where('gallery_spaces.id', $session->gallery_space_id)
+                        )
+                    )
+                    ->where('provider', 'google_drive')
+                    ->where('connection_status', 'healthy')
+                    ->first();
+
+                if ($connection) {
+                    $provider = new GoogleDriveStorageProvider($connection);
+
+                    // Determine target Drive folder (album folder or root)
+                    $driveFolderId = null;
+                    if ($session->target_album_id) {
+                        $album = Album::find($session->target_album_id);
+                        $driveFolderId = $album?->drive_folder_id;
+
+                        // Create album Drive folder inline if missing
+                        if (!$driveFolderId && $album) {
+                            $parentId  = $album->parent?->drive_folder_id ?? $connection->root_folder_id;
+                            if ($parentId) {
+                                $folder        = $provider->createFolder($album->title, $parentId);
+                                $driveFolderId = $folder['id'];
+                                $album->update(['drive_folder_id' => $driveFolderId, 'sync_status' => 'synced']);
+                            }
+                        }
+                    }
+                    $driveFolderId = $driveFolderId ?? $connection->root_folder_id;
+
+                    if ($driveFolderId) {
+                        $driveFile         = $provider->upload($destPath, $session->original_filename, $driveFolderId, $session->mime_type);
+                        $driveFileId       = $driveFile['id'];
+                        $driveParentFolder = $driveFolderId;
+                        Log::info('Media uploaded to Drive', ['file_id' => $driveFileId]);
+                    }
+                }
+            } catch (\Throwable $driveEx) {
+                // Drive upload is non-fatal — file is already on local disk
+                Log::warning('Drive upload failed (non-fatal)', ['error' => $driveEx->getMessage()]);
+            }
+
             $media = MediaItem::create([
-                'gallery_space_id'  => $session->gallery_space_id,
-                'owner_user_id'     => $session->user_id,
-                'uploaded_by'       => $session->user_id,
-                'primary_album_id'  => $session->target_album_id,
-                'original_filename' => $session->original_filename,
-                'safe_filename'     => preg_replace('/[^a-zA-Z0-9._-]/', '_', $session->original_filename),
-                'extension'         => strtolower(pathinfo($session->original_filename, PATHINFO_EXTENSION)),
-                'mime_type'         => $session->mime_type,
-                'media_type'        => str_starts_with($session->mime_type, 'video/') ? 'video' : 'photo',
-                'size_bytes'        => $assembledSize,
-                'sha256'            => $session->sha256,
-                'status'            => 'ready',
-                'uploaded_at'       => now(),
+                'gallery_space_id'    => $session->gallery_space_id,
+                'owner_user_id'       => $session->user_id,
+                'uploaded_by'         => $session->user_id,
+                'primary_album_id'    => $session->target_album_id,
+                'drive_file_id'       => $driveFileId,
+                'drive_parent_folder_id' => $driveParentFolder,
+                'original_filename'   => $session->original_filename,
+                'safe_filename'       => preg_replace('/[^a-zA-Z0-9._-]/', '_', $session->original_filename),
+                'extension'           => strtolower(pathinfo($session->original_filename, PATHINFO_EXTENSION)),
+                'mime_type'           => $session->mime_type,
+                'media_type'          => str_starts_with($session->mime_type, 'video/') ? 'video' : 'photo',
+                'size_bytes'          => $assembledSize,
+                'sha256'              => $session->sha256,
+                'status'              => 'ready',
+                'uploaded_at'         => now(),
             ]);
 
             // Store original file under public storage so it can be served
@@ -261,7 +314,7 @@ class UploadController extends Controller
         try {
             $ext = strtolower($media->extension);
 
-            $src = match($ext) {
+            $src = match ($ext) {
                 'jpg', 'jpeg' => @imagecreatefromjpeg($sourcePath),
                 'png'         => @imagecreatefrompng($sourcePath),
                 'webp'        => @imagecreatefromwebp($sourcePath),
@@ -279,9 +332,15 @@ class UploadController extends Controller
             if (function_exists('exif_read_data') && in_array($ext, ['jpg', 'jpeg'])) {
                 $exif = @exif_read_data($sourcePath);
                 $orientation = $exif['Orientation'] ?? 1;
-                if ($orientation === 6) { $src = imagerotate($src, -90, 0); [$origW, $origH] = [$origH, $origW]; }
-                elseif ($orientation === 3) { $src = imagerotate($src, 180, 0); }
-                elseif ($orientation === 8) { $src = imagerotate($src, 90, 0); [$origW, $origH] = [$origH, $origW]; }
+                if ($orientation === 6) {
+                    $src = imagerotate($src, -90, 0);
+                    [$origW, $origH] = [$origH, $origW];
+                } elseif ($orientation === 3) {
+                    $src = imagerotate($src, 180, 0);
+                } elseif ($orientation === 8) {
+                    $src = imagerotate($src, 90, 0);
+                    [$origW, $origH] = [$origH, $origW];
+                }
             }
 
             // Square crop from center
