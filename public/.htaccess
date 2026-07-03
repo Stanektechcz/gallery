@@ -3,6 +3,9 @@
         Options -MultiViews -Indexes
     </IfModule>
 
+    # Allow Apache to follow the storage symlink (public/storage -> storage/app/public)
+    Options +FollowSymLinks
+
     RewriteEngine On
 
     # Handle Authorization Header
