@@ -22,6 +22,33 @@ class AlbumController extends Controller
 {
     public function __construct(private readonly AlbumService $albumService) {}
 
+    public function create(Request $request): Response
+    {
+        $space = $request->user()->gallerySpaces()->first();
+
+        // Pre-select parent when coming from a specific album page
+        $parentUuid = $request->query('parent');
+        $parent = $parentUuid
+            ? Album::where('uuid', $parentUuid)->where('gallery_space_id', $space->id)->first()
+            : null;
+
+        // Build flat list of all albums for parent selector
+        $allAlbums = Album::where('gallery_space_id', $space->id)
+            ->whereNull('deleted_at')
+            ->orderBy('materialized_path')
+            ->get(['id', 'uuid', 'title', 'depth', 'materialized_path'])
+            ->map(fn ($a) => [
+                'id'    => $a->id,
+                'uuid'  => $a->uuid,
+                'title' => str_repeat('— ', $a->depth) . $a->title,
+            ]);
+
+        return Inertia::render('Albums/Create', [
+            'allAlbums'  => $allAlbums,
+            'parentAlbum' => $parent ? ['id' => $parent->id, 'uuid' => $parent->uuid, 'title' => $parent->title] : null,
+        ]);
+    }
+
     public function index(Request $request): Response
     {
         $space = $request->user()->gallerySpaces()->first();

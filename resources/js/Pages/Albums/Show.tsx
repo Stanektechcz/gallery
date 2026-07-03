@@ -1,7 +1,7 @@
 import UploadZone from '@/Components/UploadZone';
 import AppLayout from '@/Layouts/AppLayout';
 import { Head, Link, router } from '@inertiajs/react';
-import { ChevronRight, Clock, FolderOpen, Image, Upload } from 'lucide-react';
+import { ChevronRight, Clock, FolderOpen, FolderPlus, Image, Upload } from 'lucide-react';
 import { useState } from 'react';
 
 interface MediaItem {
@@ -111,19 +111,28 @@ export default function AlbumShow({ album, breadcrumb, children, media }: Props)
                             )}
                         </div>
                     </div>
-                    {/* Upload button */}
-                    <button
-                        onClick={() => setUploadOpen(v => !v)}
-                        className={[
-                            'flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-all',
-                            uploadOpen
-                                ? 'bg-[var(--color-accent)] text-white'
-                                : 'bg-[var(--color-bg-card)] border border-[var(--color-border)] text-white hover:border-[var(--color-accent)]/60',
-                        ].join(' ')}
-                    >
-                        <Upload size={15} />
-                        Nahrát
-                    </button>
+                    {/* Action buttons */}
+                    <div className="flex items-center gap-2">
+                        <Link
+                            href={`/albums/create?parent=${album.uuid}`}
+                            className="flex items-center gap-2 rounded-lg bg-[var(--color-bg-card)] border border-[var(--color-border)] text-white hover:border-[var(--color-accent)]/60 px-3 py-2 text-sm font-medium transition-all"
+                        >
+                            <FolderPlus size={15} />
+                            Podalbu
+                        </Link>
+                        <button
+                            onClick={() => setUploadOpen(v => !v)}
+                            className={[
+                                'flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-all',
+                                uploadOpen
+                                    ? 'bg-[var(--color-accent)] text-white'
+                                    : 'bg-[var(--color-bg-card)] border border-[var(--color-border)] text-white hover:border-[var(--color-accent)]/60',
+                            ].join(' ')}
+                        >
+                            <Upload size={15} />
+                            Nahrát
+                        </button>
+                    </div>
                 </div>
 
                 {/* Upload panel */}

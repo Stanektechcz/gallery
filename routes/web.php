@@ -52,6 +52,7 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/',            [AlbumController::class, 'index'])->name('index');
         Route::post('/',           [AlbumController::class, 'store'])->name('store');
         Route::get('/tree',        [AlbumController::class, 'tree'])->name('tree');
+        Route::get('/create',      [AlbumController::class, 'create'])->name('create');
         Route::get('/{uuid}',      [AlbumController::class, 'show'])->name('show');
         Route::patch('/{uuid}',    [AlbumController::class, 'update'])->name('update');
         Route::post('/{uuid}/move', [AlbumController::class, 'move'])->name('move');
