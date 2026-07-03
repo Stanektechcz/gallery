@@ -203,19 +203,29 @@ class UploadController extends Controller
 
             // Store original file under public storage so it can be served
             $relPath = "media/{$media->uuid}/original." . $media->extension;
-            Storage::disk('public')->makeDirectory("media/{$media->uuid}");
-            copy($destPath, Storage::disk('public')->path($relPath));
+            $stored = Storage::disk('public')->put(
+                $relPath,
+                fopen($destPath, 'rb')
+            );
+            if (!$stored) {
+                throw new \RuntimeException("Failed to store file to public disk: {$relPath}");
+            }
 
-            // Register original variant so the grid can display it
+            // Register original variant
             $media->variants()->create([
-                'type'        => 'original',
-                'disk'        => 'public',
-                'path'        => $relPath,
-                'mime_type'   => $media->mime_type,
-                'size_bytes'  => $assembledSize,
-                'width'       => null,
-                'height'      => null,
+                'type'       => 'original',
+                'disk'       => 'public',
+                'path'       => $relPath,
+                'mime_type'  => $media->mime_type,
+                'size_bytes' => $assembledSize,
+                'width'      => null,
+                'height'     => null,
             ]);
+
+            // Generate thumbnail synchronously using GD (no queue needed)
+            if ($media->media_type === 'photo' && extension_loaded('gd')) {
+                $this->generateThumbnail($media, $destPath);
+            }
 
             $session->update([
                 'status'             => 'completed',
@@ -240,6 +250,72 @@ class UploadController extends Controller
             $session->update(['status' => 'failed']);
             Log::error('Upload assembly failed', ['uuid' => $uuid, 'error' => $e->getMessage()]);
             return response()->json(['error' => 'Assembly failed: ' . $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * Generate a JPEG thumbnail using GD — synchronous, no queue needed.
+     */
+    private function generateThumbnail(MediaItem $media, string $sourcePath): void
+    {
+        try {
+            $ext = strtolower($media->extension);
+
+            $src = match($ext) {
+                'jpg', 'jpeg' => @imagecreatefromjpeg($sourcePath),
+                'png'         => @imagecreatefrompng($sourcePath),
+                'webp'        => @imagecreatefromwebp($sourcePath),
+                'gif'         => @imagecreatefromgif($sourcePath),
+                default       => null,
+            };
+
+            if (!$src) return; // unsupported format by GD (e.g. HEIC, TIFF) — skip silently
+
+            $origW = imagesx($src);
+            $origH = imagesy($src);
+            $size  = 400;
+
+            // Preserve EXIF orientation
+            if (function_exists('exif_read_data') && in_array($ext, ['jpg', 'jpeg'])) {
+                $exif = @exif_read_data($sourcePath);
+                $orientation = $exif['Orientation'] ?? 1;
+                if ($orientation === 6) { $src = imagerotate($src, -90, 0); [$origW, $origH] = [$origH, $origW]; }
+                elseif ($orientation === 3) { $src = imagerotate($src, 180, 0); }
+                elseif ($orientation === 8) { $src = imagerotate($src, 90, 0); [$origW, $origH] = [$origH, $origW]; }
+            }
+
+            // Square crop from center
+            $minDim = min($origW, $origH);
+            $cropX  = (int)(($origW - $minDim) / 2);
+            $cropY  = (int)(($origH - $minDim) / 2);
+
+            $thumb = imagecreatetruecolor($size, $size);
+            imagecopyresampled($thumb, $src, 0, 0, $cropX, $cropY, $size, $size, $minDim, $minDim);
+            imagedestroy($src);
+
+            // Save to temp then push via Storage
+            $tmpPath = tempnam(sys_get_temp_dir(), 'gallery_thumb_') . '.jpg';
+            imagejpeg($thumb, $tmpPath, 85);
+            imagedestroy($thumb);
+
+            $thumbRel = "media/{$media->uuid}/thumbnail.jpg";
+            $stored   = Storage::disk('public')->put($thumbRel, fopen($tmpPath, 'rb'));
+            @unlink($tmpPath);
+
+            if ($stored) {
+                $media->variants()->create([
+                    'type'       => 'thumbnail',
+                    'disk'       => 'public',
+                    'path'       => $thumbRel,
+                    'mime_type'  => 'image/jpeg',
+                    'size_bytes' => Storage::disk('public')->size($thumbRel),
+                    'width'      => $size,
+                    'height'     => $size,
+                ]);
+            }
+        } catch (\Throwable $e) {
+            Log::warning('Thumbnail generation failed', ['media_id' => $media->id, 'error' => $e->getMessage()]);
+            // Non-fatal — original variant is already stored
         }
     }
 
