@@ -419,6 +419,11 @@ class GoogleDriveStorageProvider implements StorageProviderInterface
         return $this->deletePermanently($fileId);
     }
 
+    public function watchChanges(string $webhookUrl, string $channelId, string $token): array
+    {
+        return $this->createWatchChannel($webhookUrl, $channelId, $token);
+    }
+
     public function createWatchChannel(string $webhookUrl, string $channelId, string $token): array
     {
         $channel = new \Google\Service\Drive\Channel([
