@@ -1,7 +1,7 @@
 import UploadZone from '@/Components/UploadZone';
 import AppLayout from '@/Layouts/AppLayout';
 import { Head, Link, router } from '@inertiajs/react';
-import { ChevronRight, Clock, FolderOpen, FolderPlus, Image, Upload } from 'lucide-react';
+import { ChevronRight, Clock, Film, FolderOpen, FolderPlus, Image, Upload } from 'lucide-react';
 import { useState } from 'react';
 
 interface MediaItem {
@@ -183,7 +183,9 @@ export default function AlbumShow({ album, breadcrumb, children, media }: Props)
                             style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '4px' }}
                         >
                             {media.data.map(item => {
-                                const thumb = item.variants?.find(v => v.type === 'thumbnail');
+                                const thumb   = item.variants?.find(v => v.type === 'thumbnail');
+                                const original = item.variants?.find(v => v.type === 'original');
+                                const displayUrl = thumb?.url ?? (item.media_type === 'photo' ? original?.url : null);
                                 const placeholder = item.variants?.find(v => v.type === 'placeholder');
                                 return (
                                     <Link
@@ -191,11 +193,25 @@ export default function AlbumShow({ album, breadcrumb, children, media }: Props)
                                         href={`/media/${item.uuid}`}
                                         className="relative group aspect-square rounded overflow-hidden bg-[var(--color-bg-card)]"
                                     >
-                                        {placeholder?.dominant_color && (
+                                        {placeholder?.dominant_color && !displayUrl && (
                                             <div className="absolute inset-0" style={{ backgroundColor: placeholder.dominant_color }} />
                                         )}
-                                        {thumb && (
-                                            <img src={thumb.url} alt="" loading="lazy" className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                                        {displayUrl ? (
+                                            <img src={displayUrl} alt="" loading="lazy" className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                                        ) : (
+                                            <div className="absolute inset-0 flex items-center justify-center bg-[var(--color-bg-secondary)]">
+                                                {item.media_type === 'video'
+                                                    ? <Film size={32} className="text-[var(--color-text-secondary)] opacity-60" />
+                                                    : <Image size={32} className="text-[var(--color-text-secondary)] opacity-60" />
+                                                }
+                                            </div>
+                                        )}
+                                        {item.media_type === 'video' && displayUrl && (
+                                            <div className="absolute inset-0 flex items-center justify-center">
+                                                <div className="w-8 h-8 rounded-full bg-black/50 flex items-center justify-center">
+                                                    <Film size={16} className="text-white" />
+                                                </div>
+                                            </div>
                                         )}
                                     </Link>
                                 );

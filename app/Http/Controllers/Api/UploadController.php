@@ -197,8 +197,24 @@ class UploadController extends Controller
                 'media_type'        => str_starts_with($session->mime_type, 'video/') ? 'video' : 'photo',
                 'size_bytes'        => $assembledSize,
                 'sha256'            => $session->sha256,
-                'status'            => 'received',
+                'status'            => 'ready',
                 'uploaded_at'       => now(),
+            ]);
+
+            // Store original file under public storage so it can be served
+            $relPath = "media/{$media->uuid}/original." . $media->extension;
+            Storage::disk('public')->makeDirectory("media/{$media->uuid}");
+            copy($destPath, Storage::disk('public')->path($relPath));
+
+            // Register original variant so the grid can display it
+            $media->variants()->create([
+                'type'        => 'original',
+                'disk'        => 'public',
+                'path'        => $relPath,
+                'mime_type'   => $media->mime_type,
+                'size_bytes'  => $assembledSize,
+                'width'       => null,
+                'height'      => null,
             ]);
 
             $session->update([

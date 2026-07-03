@@ -37,7 +37,7 @@ class AlbumController extends Controller
             ->whereNull('deleted_at')
             ->orderBy('materialized_path')
             ->get(['id', 'uuid', 'title', 'depth', 'materialized_path'])
-            ->map(fn ($a) => [
+            ->map(fn($a) => [
                 'id'    => $a->id,
                 'uuid'  => $a->uuid,
                 'title' => str_repeat('— ', $a->depth) . $a->title,
@@ -87,7 +87,7 @@ class AlbumController extends Controller
             })
             ->with(['variants', 'tags', 'people', 'places'])
             ->whereNull('trashed_at')
-            ->where('status', 'ready')
+            ->whereIn('status', ['ready', 'received'])
             ->orderBy('taken_at')
             ->paginate(60);
 

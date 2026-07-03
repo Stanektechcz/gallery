@@ -9,7 +9,7 @@ class MediaVariant extends Model
     protected $fillable = [
         'media_item_id', 'type', 'disk', 'path',
         'width', 'height', 'size_bytes', 'format',
-        'blur_hash', 'dominant_color', 'aspect_ratio',
+        'mime_type', 'blur_hash', 'dominant_color', 'aspect_ratio',
     ];
 
     protected function casts(): array
