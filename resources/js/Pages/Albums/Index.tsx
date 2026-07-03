@@ -48,9 +48,6 @@ function AlbumCard({ album }: { album: AlbumNode }) {
                 )}
 
                 {/* Sync status badge */}
-                {album.sync_status === 'pending' && (
-                    <div className="absolute top-2 right-2 w-2 h-2 rounded-full bg-yellow-400 animate-pulse" title="Synchronizace čeká" />
-                )}
                 {album.sync_status === 'failed' && (
                     <div className="absolute top-2 right-2 w-2 h-2 rounded-full bg-red-400" title="Chyba synchronizace" />
                 )}

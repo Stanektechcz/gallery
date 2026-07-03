@@ -100,12 +100,6 @@ export default function AlbumShow({ album, breadcrumb, children, media }: Props)
                                     {new Date(album.event_date_start).toLocaleDateString('cs-CZ')}
                                 </span>
                             )}
-                            {album.sync_status === 'pending' && (
-                                <span className="flex items-center gap-1 text-yellow-400">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse" />
-                                    Synchronizace čeká
-                                </span>
-                            )}
                             {album.sync_status === 'synced' && (
                                 <span className="text-green-400">✓ Synchronizováno</span>
                             )}
@@ -164,9 +158,6 @@ export default function AlbumShow({ album, breadcrumb, children, media }: Props)
                                                 <div className="w-full h-full flex items-center justify-center">
                                                     <FolderOpen size={32} className="text-[var(--color-text-secondary)]" style={{ color: child.color ?? undefined }} />
                                                 </div>
-                                            )}
-                                            {child.sync_status === 'pending' && (
-                                                <div className="absolute top-2 right-2 w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
                                             )}
                                         </div>
                                         <div className="p-2.5">
