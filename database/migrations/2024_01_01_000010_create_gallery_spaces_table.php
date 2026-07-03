@@ -48,7 +48,7 @@ return new class extends Migration
             $table->boolean('is_active')->default(true);
             $table->timestamp('activated_at')->nullable();
             $table->timestamps();
-            $table->unique(['owner_user_id', 'partner_user_id', 'gallery_space_id']);
+            $table->unique(['owner_user_id', 'partner_user_id', 'gallery_space_id'], 'partner_shares_unique');
         });
     }
 
