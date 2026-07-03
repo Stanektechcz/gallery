@@ -193,12 +193,12 @@ class UploadController extends Controller
             $driveParentFolder = null;
             try {
                 $connection = StorageConnection::whereHas(
-                        'owner',
-                        fn($q) => $q->whereHas(
-                            'gallerySpaces',
-                            fn($q2) => $q2->where('gallery_spaces.id', $session->gallery_space_id)
-                        )
+                    'owner',
+                    fn($q) => $q->whereHas(
+                        'gallerySpaces',
+                        fn($q2) => $q2->where('gallery_spaces.id', $session->gallery_space_id)
                     )
+                )
                     ->where('provider', 'google_drive')
                     ->where('connection_status', 'healthy')
                     ->first();
@@ -307,74 +307,125 @@ class UploadController extends Controller
     }
 
     /**
-     * Generate a JPEG thumbnail using GD — synchronous, no queue needed.
+     * Generate a JPEG thumbnail — tries Imagick first, then GD.
+     * If both fail, creates a thumbnail alias pointing to the original.
      */
     private function generateThumbnail(MediaItem $media, string $sourcePath): void
     {
-        try {
-            $ext = strtolower($media->extension);
+        $thumbRel = "media/{$media->uuid}/thumbnail.jpg";
+        $size     = 400;
 
-            $src = match ($ext) {
-                'jpg', 'jpeg' => @imagecreatefromjpeg($sourcePath),
-                'png'         => @imagecreatefrompng($sourcePath),
-                'webp'        => @imagecreatefromwebp($sourcePath),
-                'gif'         => @imagecreatefromgif($sourcePath),
-                default       => null,
-            };
+        // --- Try Imagick ---
+        if (extension_loaded('imagick')) {
+            try {
+                $im = new \Imagick($sourcePath);
+                $im->setIteratorIndex(0);
+                $im->setImageColorspace(\Imagick::COLORSPACE_SRGB);
+                $im->autoOrient();
 
-            if (!$src) return; // unsupported format by GD (e.g. HEIC, TIFF) — skip silently
+                $w = $im->getImageWidth();
+                $h = $im->getImageHeight();
+                $min = min($w, $h);
+                $im->cropImage($min, $min, (int)(($w - $min) / 2), (int)(($h - $min) / 2));
+                $im->thumbnailImage($size, $size);
+                $im->setImageFormat('jpeg');
+                $im->setImageCompressionQuality(85);
 
-            $origW = imagesx($src);
-            $origH = imagesy($src);
-            $size  = 400;
+                $tmpPath = tempnam(sys_get_temp_dir(), 'gallery_thumb_') . '.jpg';
+                $im->writeImage($tmpPath);
+                $im->destroy();
 
-            // Preserve EXIF orientation
-            if (function_exists('exif_read_data') && in_array($ext, ['jpg', 'jpeg'])) {
-                $exif = @exif_read_data($sourcePath);
-                $orientation = $exif['Orientation'] ?? 1;
-                if ($orientation === 6) {
-                    $src = imagerotate($src, -90, 0);
-                    [$origW, $origH] = [$origH, $origW];
-                } elseif ($orientation === 3) {
-                    $src = imagerotate($src, 180, 0);
-                } elseif ($orientation === 8) {
-                    $src = imagerotate($src, 90, 0);
-                    [$origW, $origH] = [$origH, $origW];
+                $stored = Storage::disk('public')->put($thumbRel, fopen($tmpPath, 'rb'));
+                @unlink($tmpPath);
+
+                if ($stored) {
+                    $media->variants()->create([
+                        'type'       => 'thumbnail',
+                        'disk'       => 'public',
+                        'path'       => $thumbRel,
+                        'mime_type'  => 'image/jpeg',
+                        'size_bytes' => Storage::disk('public')->size($thumbRel),
+                        'width'      => $size,
+                        'height'     => $size,
+                    ]);
+                    return;
                 }
+            } catch (\Throwable $e) {
+                Log::warning('Imagick thumbnail failed, trying GD', ['media_id' => $media->id, 'error' => $e->getMessage()]);
             }
+        }
 
-            // Square crop from center
-            $minDim = min($origW, $origH);
-            $cropX  = (int)(($origW - $minDim) / 2);
-            $cropY  = (int)(($origH - $minDim) / 2);
+        // --- Try GD ---
+        if (extension_loaded('gd')) {
+            try {
+                $ext = strtolower($media->extension);
+                $src = match ($ext) {
+                    'jpg', 'jpeg' => @imagecreatefromjpeg($sourcePath),
+                    'png'         => @imagecreatefrompng($sourcePath),
+                    'webp'        => @imagecreatefromwebp($sourcePath),
+                    'gif'         => @imagecreatefromgif($sourcePath),
+                    default       => null,
+                };
 
-            $thumb = imagecreatetruecolor($size, $size);
-            imagecopyresampled($thumb, $src, 0, 0, $cropX, $cropY, $size, $size, $minDim, $minDim);
-            imagedestroy($src);
+                if ($src) {
+                    if (function_exists('exif_read_data') && in_array($ext, ['jpg', 'jpeg'])) {
+                        $exif        = @exif_read_data($sourcePath);
+                        $orientation = $exif['Orientation'] ?? 1;
+                        if ($orientation === 6) { $src = imagerotate($src, -90, 0); }
+                        elseif ($orientation === 3) { $src = imagerotate($src, 180, 0); }
+                        elseif ($orientation === 8) { $src = imagerotate($src, 90, 0); }
+                    }
 
-            // Save to temp then push via Storage
-            $tmpPath = tempnam(sys_get_temp_dir(), 'gallery_thumb_') . '.jpg';
-            imagejpeg($thumb, $tmpPath, 85);
-            imagedestroy($thumb);
+                    $origW = imagesx($src);
+                    $origH = imagesy($src);
+                    $min   = min($origW, $origH);
+                    $cropX = (int)(($origW - $min) / 2);
+                    $cropY = (int)(($origH - $min) / 2);
 
-            $thumbRel = "media/{$media->uuid}/thumbnail.jpg";
-            $stored   = Storage::disk('public')->put($thumbRel, fopen($tmpPath, 'rb'));
-            @unlink($tmpPath);
+                    $thumb = imagecreatetruecolor($size, $size);
+                    imagecopyresampled($thumb, $src, 0, 0, $cropX, $cropY, $size, $size, $min, $min);
+                    imagedestroy($src);
 
-            if ($stored) {
-                $media->variants()->create([
-                    'type'       => 'thumbnail',
-                    'disk'       => 'public',
-                    'path'       => $thumbRel,
-                    'mime_type'  => 'image/jpeg',
-                    'size_bytes' => Storage::disk('public')->size($thumbRel),
-                    'width'      => $size,
-                    'height'     => $size,
-                ]);
+                    $tmpPath = tempnam(sys_get_temp_dir(), 'gallery_thumb_') . '.jpg';
+                    imagejpeg($thumb, $tmpPath, 85);
+                    imagedestroy($thumb);
+
+                    $stored = Storage::disk('public')->put($thumbRel, fopen($tmpPath, 'rb'));
+                    @unlink($tmpPath);
+
+                    if ($stored) {
+                        $media->variants()->create([
+                            'type'       => 'thumbnail',
+                            'disk'       => 'public',
+                            'path'       => $thumbRel,
+                            'mime_type'  => 'image/jpeg',
+                            'size_bytes' => Storage::disk('public')->size($thumbRel),
+                            'width'      => $size,
+                            'height'     => $size,
+                        ]);
+                        return;
+                    }
+                }
+            } catch (\Throwable $e) {
+                Log::warning('GD thumbnail failed', ['media_id' => $media->id, 'error' => $e->getMessage()]);
             }
-        } catch (\Throwable $e) {
-            Log::warning('Thumbnail generation failed', ['media_id' => $media->id, 'error' => $e->getMessage()]);
-            // Non-fatal — original variant is already stored
+        }
+
+        // --- Fallback: alias thumbnail = original ---
+        // When neither Imagick nor GD work, point thumbnail at the original file
+        // so the grid shows something instead of a blank placeholder.
+        $originalVar = $media->variants()->where('type', 'original')->first();
+        if ($originalVar) {
+            $media->variants()->create([
+                'type'       => 'thumbnail',
+                'disk'       => $originalVar->disk,
+                'path'       => $originalVar->path,
+                'mime_type'  => $originalVar->mime_type,
+                'size_bytes' => $originalVar->size_bytes,
+                'width'      => null,
+                'height'     => null,
+            ]);
+            Log::info('Thumbnail aliased to original (no GD/Imagick)', ['media_id' => $media->id]);
         }
     }
 

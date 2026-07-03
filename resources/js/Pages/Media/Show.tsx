@@ -262,11 +262,6 @@ export default function MediaShow({ media, breadcrumb, prev, next }: Props) {
                                     className="max-h-[calc(100vh-120px)] max-w-full object-contain relative z-10"
                                     style={{ aspectRatio: item.width && item.height ? `${item.width}/${item.height}` : undefined }}
                                 />
-                                {largeVar.type === 'original' && (
-                                    <div className="absolute bottom-3 right-3 text-[10px] text-white/40 bg-black/30 px-2 py-0.5 rounded">
-                                        original • náhled se generuje
-                                    </div>
-                                )}
                             </div>
                         ) : (
                             <div className="flex flex-col items-center gap-3 text-[var(--color-text-secondary)]">
