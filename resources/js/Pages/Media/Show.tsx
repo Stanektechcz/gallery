@@ -100,11 +100,13 @@ export default function MediaShow({ media, breadcrumb, prev, next }: Props) {
     const largeVar = item.variants.find(v => v.type === 'large')
                   ?? item.variants.find(v => v.type === 'medium')
                   ?? item.variants.find(v => v.type === 'small')
-                  ?? item.variants.find(v => v.type === 'thumbnail');
+                  ?? item.variants.find(v => v.type === 'thumbnail')
+                  ?? item.variants.find(v => v.type === 'original');
 
+    const originalVar = item.variants.find(v => v.type === 'original');
     const placeholder = item.variants.find(v => v.type === 'placeholder');
     const compatVideo = item.variants.find(v => v.type === 'video_compat');
-    const poster      = item.variants.find(v => v.type === 'video_poster');
+    const poster      = item.variants.find(v => v.type === 'video_poster') ?? item.variants.find(v => v.type === 'thumbnail');
 
     const toggleFavorite = async () => {
         setSaving(true);
@@ -245,6 +247,7 @@ export default function MediaShow({ media, breadcrumb, prev, next }: Props) {
                                 preload="metadata"
                             >
                                 {compatVideo && <source src={compatVideo.url} type="video/mp4" />}
+                                {originalVar && <source src={originalVar.url} type={item.mime_type} />}
                                 <source src={`/media/${item.uuid}/stream`} type={item.mime_type} />
                             </video>
                         ) : largeVar ? (
@@ -259,6 +262,11 @@ export default function MediaShow({ media, breadcrumb, prev, next }: Props) {
                                     className="max-h-[calc(100vh-120px)] max-w-full object-contain relative z-10"
                                     style={{ aspectRatio: item.width && item.height ? `${item.width}/${item.height}` : undefined }}
                                 />
+                                {largeVar.type === 'original' && (
+                                    <div className="absolute bottom-3 right-3 text-[10px] text-white/40 bg-black/30 px-2 py-0.5 rounded">
+                                        original • náhled se generuje
+                                    </div>
+                                )}
                             </div>
                         ) : (
                             <div className="flex flex-col items-center gap-3 text-[var(--color-text-secondary)]">

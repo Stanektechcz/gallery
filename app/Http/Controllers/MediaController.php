@@ -7,6 +7,7 @@ use App\Models\MediaItem;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -164,10 +165,15 @@ class MediaController extends Controller
             }
         }
 
-        // Serve local variant
-        $variant = $media->getVariant('large') ?? $media->getVariant('medium');
+        // Serve local variant — try from largest to original
+        $variant = $media->getVariant('large')
+            ?? $media->getVariant('medium')
+            ?? $media->getVariant('original');
         if ($variant) {
-            return response()->download(storage_path('app/public/' . $variant->path), $media->original_filename);
+            $path = Storage::disk($variant->disk)->path($variant->path);
+            if (file_exists($path)) {
+                return response()->download($path, $media->original_filename);
+            }
         }
 
         abort(404, 'Soubor není dostupný.');
