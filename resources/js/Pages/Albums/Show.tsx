@@ -1,6 +1,8 @@
+import UploadZone from '@/Components/UploadZone';
 import AppLayout from '@/Layouts/AppLayout';
-import { Head, Link } from '@inertiajs/react';
-import { ChevronRight, Clock, FolderOpen, Image } from 'lucide-react';
+import { Head, Link, router } from '@inertiajs/react';
+import { ChevronRight, Clock, FolderOpen, Image, Upload } from 'lucide-react';
+import { useState } from 'react';
 
 interface MediaItem {
     id: number;
@@ -46,6 +48,12 @@ interface Props {
 }
 
 export default function AlbumShow({ album, breadcrumb, children, media }: Props) {
+    const [uploadOpen, setUploadOpen] = useState(false);
+
+    const handleUploadComplete = () => {
+        router.reload({ only: ['media', 'album'] });
+    };
+
     return (
         <AppLayout>
             <Head title={album.title} />
@@ -69,7 +77,7 @@ export default function AlbumShow({ album, breadcrumb, children, media }: Props)
                 </nav>
 
                 {/* Album header */}
-                <div className="flex items-start justify-between mb-6">
+                <div className="flex items-start justify-between mb-4">
                     <div>
                         <h1 className="text-xl font-semibold text-white mb-1">{album.title}</h1>
                         {album.description && (
@@ -103,7 +111,27 @@ export default function AlbumShow({ album, breadcrumb, children, media }: Props)
                             )}
                         </div>
                     </div>
+                    {/* Upload button */}
+                    <button
+                        onClick={() => setUploadOpen(v => !v)}
+                        className={[
+                            'flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-all',
+                            uploadOpen
+                                ? 'bg-[var(--color-accent)] text-white'
+                                : 'bg-[var(--color-bg-card)] border border-[var(--color-border)] text-white hover:border-[var(--color-accent)]/60',
+                        ].join(' ')}
+                    >
+                        <Upload size={15} />
+                        Nahrát
+                    </button>
                 </div>
+
+                {/* Upload panel */}
+                {uploadOpen && (
+                    <div className="mb-6 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-4">
+                        <UploadZone albumId={album.id} onUploadComplete={handleUploadComplete} />
+                    </div>
+                )}
 
                 {/* Sub-albums */}
                 {children.length > 0 && (
@@ -185,7 +213,13 @@ export default function AlbumShow({ album, breadcrumb, children, media }: Props)
                         <div className="flex flex-col items-center justify-center h-48 text-[var(--color-text-secondary)]">
                             <FolderOpen size={40} className="mb-3 opacity-30" />
                             <p>Album je prázdné</p>
-                            <p className="text-sm mt-1">Nahrajte fotky nebo vytvořte podalba</p>
+                            <button
+                                onClick={() => setUploadOpen(true)}
+                                className="mt-3 flex items-center gap-2 rounded-lg bg-[var(--color-accent)] px-4 py-2 text-sm font-medium text-white hover:opacity-90 transition-opacity"
+                            >
+                                <Upload size={15} />
+                                Nahrát fotky nebo videa
+                            </button>
                         </div>
                     )
                 )}
