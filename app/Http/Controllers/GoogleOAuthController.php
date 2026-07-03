@@ -151,4 +151,29 @@ class GoogleOAuthController extends Controller
 
         return response()->json(['tests' => $results]);
     }
+
+    /**
+     * POST /settings/storage/google/init-structure
+     * (Re-)initialize Drive root folder structure when root_folder_id is missing.
+     */
+    public function initStructure(Request $request): RedirectResponse
+    {
+        if (!$request->user()->isAdmin()) abort(403);
+
+        $connection = StorageConnection::where('owner_user_id', $request->user()->id)->firstOrFail();
+
+        try {
+            $driveService = new DriveStructureService($connection);
+            $structure    = $driveService->initializeRootStructure();
+
+            AuditLog::record('storage.google.init_structure', $connection, [
+                'root_id' => $structure['root_id'],
+            ]);
+
+            return back()->with('success', 'Struktura Google Drive byla inicializována. Root ID: ' . $structure['root_id']);
+        } catch (\Throwable $e) {
+            Log::error('Drive initStructure failed', ['error' => $e->getMessage()]);
+            return back()->with('error', 'Inicializace selhala: ' . $e->getMessage());
+        }
+    }
 }
