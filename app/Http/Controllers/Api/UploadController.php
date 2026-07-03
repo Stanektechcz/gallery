@@ -208,7 +208,7 @@ class UploadController extends Controller
             ]);
 
             // Dispatch metadata + hash processing (async, best-effort)
-            CalculateMediaHashesJob::dispatch($media)->onQueue('media');
+            CalculateMediaHashesJob::dispatch($media->id)->onQueue('media');
 
             // Cleanup chunk files
             Storage::disk('local')->deleteDirectory("upload_chunks/{$session->uuid}");
@@ -220,7 +220,6 @@ class UploadController extends Controller
                 'status'   => 'completed',
                 'media_id' => $media->id,
             ]);
-
         } catch (\Throwable $e) {
             $session->update(['status' => 'failed']);
             Log::error('Upload assembly failed', ['uuid' => $uuid, 'error' => $e->getMessage()]);
