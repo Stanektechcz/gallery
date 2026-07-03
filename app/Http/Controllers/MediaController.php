@@ -1,0 +1,342 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\AuditLog;
+use App\Models\MediaItem;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
+use Inertia\Inertia;
+use Inertia\Response;
+
+class MediaController extends Controller
+{
+    public function show(Request $request, string $uuid): Response
+    {
+        $media = MediaItem::where('uuid', $uuid)
+            ->with(['variants', 'tags', 'people', 'places', 'primaryAlbum', 'albums', 'currentEdit'])
+            ->firstOrFail();
+
+        Gate::authorize('view', $media);
+
+        $album      = $media->primaryAlbum;
+        $breadcrumb = $album ? $album->breadcrumb : [];
+
+        // Attach public URL to each variant
+        $media->variants->each(function ($v) {
+            $v->url = $v->disk === 'public'
+                ? asset('storage/' . $v->path)
+                : url('media-stream/' . $v->path);
+        });
+
+        $prevNext = $this->getPrevNext($media);
+
+        return Inertia::render('Media/Show', [
+            'media'      => $media,
+            'breadcrumb' => $breadcrumb,
+            'prev'       => $prevNext['prev'],
+            'next'       => $prevNext['next'],
+        ]);
+    }
+
+    public function apiShow(Request $request, string $uuid): JsonResponse
+    {
+        $media = MediaItem::where('uuid', $uuid)->with(['variants', 'tags', 'people', 'places'])->firstOrFail();
+        Gate::authorize('view', $media);
+        return response()->json($media);
+    }
+
+    public function update(Request $request, string $uuid): JsonResponse
+    {
+        $media = MediaItem::where('uuid', $uuid)->firstOrFail();
+        Gate::authorize('update', $media);
+
+        if ($request->user()->read_only_mode) {
+            return response()->json(['error' => 'Read-only mode'], 403);
+        }
+
+        $data = $request->validate([
+            'display_title' => 'nullable|string|max:512',
+            'description'   => 'nullable|string',
+            'caption'       => 'nullable|string',
+            'notes'         => 'nullable|string',
+            'rating'        => 'nullable|integer|min:0|max:5',
+            'taken_at'      => 'nullable|date',
+            'latitude'      => 'nullable|numeric|between:-90,90',
+            'longitude'     => 'nullable|numeric|between:-180,180',
+            'tag_ids'       => 'nullable|array',
+            'tag_ids.*'     => 'integer|exists:tags,id',
+            'person_ids'    => 'nullable|array',
+            'person_ids.*'  => 'integer|exists:people,id',
+        ]);
+
+        $media->update(array_filter($data, fn($v, $k) => !in_array($k, ['tag_ids', 'person_ids']), ARRAY_FILTER_USE_BOTH));
+
+        if (isset($data['tag_ids'])) {
+            $media->tags()->sync($data['tag_ids']);
+        }
+        if (isset($data['person_ids'])) {
+            $media->people()->sync($data['person_ids']);
+        }
+
+        $media->rebuildSearchText();
+
+        AuditLog::record('media.update', $media, array_keys($data));
+
+        return response()->json($media->fresh()->load(['variants', 'tags', 'people', 'places']));
+    }
+
+    public function trash(Request $request, string $uuid): JsonResponse
+    {
+        $media = MediaItem::where('uuid', $uuid)->firstOrFail();
+        Gate::authorize('delete', $media);
+
+        if ($request->user()->read_only_mode) abort(403);
+
+        $media->update([
+            'trashed_at'  => now(),
+            'purge_after' => now()->addDays(config('gallery.trash_retention_days', 30)),
+        ]);
+
+        AuditLog::record('media.trash', $media);
+
+        return response()->json(['status' => 'trashed']);
+    }
+
+    public function restore(Request $request, string $uuid): JsonResponse
+    {
+        $media = MediaItem::where('uuid', $uuid)->firstOrFail();
+        Gate::authorize('restore', $media);
+
+        $media->update(['trashed_at' => null, 'purge_after' => null]);
+
+        AuditLog::record('media.restore', $media);
+
+        return response()->json(['status' => 'restored']);
+    }
+
+    public function purge(Request $request, string $uuid): JsonResponse
+    {
+        $media = MediaItem::where('uuid', $uuid)->firstOrFail();
+
+        if (!$request->user()->isAdmin()) abort(403, 'Trvalé smazání vyžaduje admin oprávnění.');
+        if (!$request->user()->read_only_mode === false) {
+        } // not read-only
+
+        AuditLog::record('media.purge', $media, ['filename' => $media->original_filename]);
+
+        // Queue Drive trash if drive file exists
+        if ($media->drive_file_id) {
+            \App\Jobs\Media\PurgeMediaFromDriveJob::dispatch($media)->onQueue('drive');
+        }
+
+        $media->delete();
+
+        return response()->json(['status' => 'purged']);
+    }
+
+    public function download(Request $request, string $uuid): mixed
+    {
+        $media = MediaItem::where('uuid', $uuid)->firstOrFail();
+        Gate::authorize('view', $media);
+
+        $wantOriginal = $request->boolean('original', false);
+
+        if ($wantOriginal && $media->drive_file_id) {
+            // Stream from Drive
+            $connection = \App\Models\StorageConnection::where('owner_user_id', $media->owner_user_id)
+                ->where('connection_status', 'healthy')
+                ->first();
+
+            if ($connection) {
+                $provider = new \App\Services\Storage\GoogleDriveStorageProvider($connection);
+                $stream   = $provider->download($media->drive_file_id);
+                return response()->stream(function () use ($stream) {
+                    while (!$stream->eof()) {
+                        echo $stream->read(8192);
+                        flush();
+                    }
+                }, 200, [
+                    'Content-Type'        => $media->mime_type,
+                    'Content-Disposition' => 'attachment; filename="' . $media->original_filename . '"',
+                ]);
+            }
+        }
+
+        // Serve local variant
+        $variant = $media->getVariant('large') ?? $media->getVariant('medium');
+        if ($variant) {
+            return response()->download(storage_path('app/public/' . $variant->path), $media->original_filename);
+        }
+
+        abort(404, 'Soubor není dostupný.');
+    }
+
+    public function stream(Request $request, string $uuid): mixed
+    {
+        $media = MediaItem::where('uuid', $uuid)->firstOrFail();
+        Gate::authorize('view', $media);
+
+        // For videos, prefer the compatibility variant stored locally
+        $compat = $media->getVariant('video_compat');
+        if ($compat) {
+            $path = storage_path('app/public/' . $compat->path);
+            return response()->file($path, ['Content-Type' => 'video/mp4']);
+        }
+
+        // Stream from Drive
+        if ($media->drive_file_id) {
+            $connection = \App\Models\StorageConnection::where('owner_user_id', $media->owner_user_id)
+                ->where('connection_status', 'healthy')->first();
+
+            if ($connection) {
+                $provider = new \App\Services\Storage\GoogleDriveStorageProvider($connection);
+                $stream   = $provider->download($media->drive_file_id);
+                return response()->stream(function () use ($stream) {
+                    while (!$stream->eof()) {
+                        echo $stream->read(8192);
+                        flush();
+                    }
+                }, 200, ['Content-Type' => $media->mime_type]);
+            }
+        }
+
+        abort(404);
+    }
+
+    public function toggleFavorite(Request $request, string $uuid): JsonResponse
+    {
+        $media = MediaItem::where('uuid', $uuid)->firstOrFail();
+        Gate::authorize('view', $media);
+
+        $user    = $request->user();
+        $exists  = $user->favorites()->where('media_item_id', $media->id)->exists();
+
+        if ($exists) {
+            $user->favorites()->detach($media->id);
+            $isFav = false;
+        } else {
+            $user->favorites()->attach($media->id);
+            $isFav = true;
+        }
+
+        return response()->json(['is_favorite' => $isFav]);
+    }
+
+    public function archive(Request $request, string $uuid): JsonResponse
+    {
+        $media = MediaItem::where('uuid', $uuid)->firstOrFail();
+        Gate::authorize('update', $media);
+
+        $archived = !$media->is_archived;
+        $media->update(['is_archived' => $archived]);
+
+        AuditLog::record($archived ? 'media.archive' : 'media.unarchive', $media);
+
+        return response()->json(['is_archived' => $archived]);
+    }
+
+    public function applyEdit(Request $request, string $uuid): JsonResponse
+    {
+        $media = MediaItem::where('uuid', $uuid)->firstOrFail();
+        Gate::authorize('update', $media);
+
+        $data = $request->validate([
+            'operations' => 'required|array',
+            'operations.*.type' => 'required|in:crop,rotate,mirror_h,mirror_v',
+        ]);
+
+        $latestEdit = $media->edits()->where('is_current', true)->first();
+        $newVersion = ($latestEdit?->version ?? 0) + 1;
+
+        $media->edits()->where('is_current', true)->update(['is_current' => false]);
+
+        $edit = $media->edits()->create([
+            'version'        => $newVersion,
+            'operations_json' => $data['operations'],
+            'is_current'     => true,
+            'created_by'     => $request->user()->id,
+            'created_at'     => now(),
+        ]);
+
+        // Queue regeneration of display variant
+        \App\Jobs\Media\ApplyMediaEditJob::dispatch($media, $edit)->onQueue('media');
+
+        return response()->json(['version' => $newVersion, 'status' => 'processing']);
+    }
+
+    public function bulkAction(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'action'    => 'required|in:trash,restore,archive,unarchive,favorite,unfavorite,tag,untag,add_to_album',
+            'media_ids' => 'required|array|max:500',
+            'media_ids.*' => 'integer',
+            'tag_id'    => 'nullable|integer|exists:tags,id',
+            'album_id'  => 'nullable|integer|exists:albums,id',
+        ]);
+
+        $user   = $request->user();
+        $media  = MediaItem::whereIn('id', $data['media_ids'])->get();
+
+        foreach ($media as $item) {
+            Gate::authorize($data['action'] === 'trash' ? 'delete' : 'update', $item);
+        }
+
+        $processed = 0;
+        foreach ($media as $item) {
+            match ($data['action']) {
+                'trash'       => $item->update(['trashed_at' => now(), 'purge_after' => now()->addDays(30)]),
+                'restore'     => $item->update(['trashed_at' => null, 'purge_after' => null]),
+                'archive'     => $item->update(['is_archived' => true]),
+                'unarchive'   => $item->update(['is_archived' => false]),
+                'favorite'    => $user->favorites()->syncWithoutDetaching([$item->id]),
+                'unfavorite'  => $user->favorites()->detach($item->id),
+                'tag'         => $item->tags()->syncWithoutDetaching([$data['tag_id']]),
+                'untag'       => $item->tags()->detach($data['tag_id'] ?? []),
+                'add_to_album' => \DB::table('album_media')->insertOrIgnore([
+                    'album_id'      => $data['album_id'],
+                    'media_item_id' => $item->id,
+                    'added_at'      => now(),
+                    'added_by'      => $user->id,
+                ]),
+            };
+            $processed++;
+        }
+
+        return response()->json(['processed' => $processed]);
+    }
+
+    public function shareTarget(Request $request): \Illuminate\Http\RedirectResponse
+    {
+        // Handle PWA Web Share Target — redirect to upload page with shared files
+        if ($request->hasFile('media')) {
+            // Store file temporarily and redirect to upload UI
+            session(['share_target_files' => collect($request->file('media'))->map(fn($f) => [
+                'name'     => $f->getClientOriginalName(),
+                'tmp_path' => $f->store('share_target', 'local'),
+                'mime'     => $f->getMimeType(),
+                'size'     => $f->getSize(),
+            ])->toArray()]);
+        }
+
+        return redirect('/timeline?from_share=1');
+    }
+
+    private function getPrevNext(MediaItem $media): array
+    {
+        if (!$media->primary_album_id || !$media->taken_at) return ['prev' => null, 'next' => null];
+
+        $query = MediaItem::where('primary_album_id', $media->primary_album_id)
+            ->whereNull('trashed_at')
+            ->where('status', 'ready');
+
+        $prev = $query->clone()->where('taken_at', '<', $media->taken_at)
+            ->orderBy('taken_at', 'desc')->select(['id', 'uuid'])->first();
+
+        $next = $query->clone()->where('taken_at', '>', $media->taken_at)
+            ->orderBy('taken_at', 'asc')->select(['id', 'uuid'])->first();
+
+        return ['prev' => $prev, 'next' => $next];
+    }
+}

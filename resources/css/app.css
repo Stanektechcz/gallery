@@ -1,0 +1,67 @@
+@import "tailwindcss";
+
+@layer base {
+    :root {
+        --color-bg-primary: #0f0f1a;
+        --color-bg-secondary: #1a1a2e;
+        --color-bg-card: #16213e;
+        --color-accent: #6c63ff;
+        --color-accent-hover: #7c74ff;
+        --color-text-primary: #f0f0f5;
+        --color-text-secondary: #9ca3af;
+        --color-border: #2d2d4e;
+    }
+
+    html {
+        font-family: "Inter", system-ui, sans-serif;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+    }
+
+    body {
+        background-color: var(--color-bg-primary);
+        color: var(--color-text-primary);
+        overscroll-behavior: none;
+    }
+
+    ::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+        background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+        background-color: rgba(255, 255, 255, 0.1);
+        border-radius: 3px;
+    }
+    ::selection {
+        background-color: rgba(108, 99, 255, 0.3);
+    }
+}
+
+@layer utilities {
+    .scrollbar-hide {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+    }
+    .scrollbar-hide::-webkit-scrollbar {
+        display: none;
+    }
+    .glass {
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        background: rgba(22, 33, 62, 0.85);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+    }
+}
+
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+@source '../../storage/framework/views/*.php';
+
+@theme {
+    --font-sans:
+        "Instrument Sans", ui-sans-serif, system-ui, sans-serif,
+        "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol",
+        "Noto Color Emoji";
+}

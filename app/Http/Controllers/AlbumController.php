@@ -1,0 +1,150 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Http\Requests\Album\CreateAlbumRequest;
+use App\Models\MediaItem;
+use App\Http\Requests\Album\MoveAlbumRequest;
+use App\Http\Requests\Album\UpdateAlbumRequest;
+use App\Jobs\Drive\CreateDriveFolderJob;
+use App\Jobs\Drive\MoveDriveFolderJob;
+use App\Jobs\Drive\RenameDriveFolderJob;
+use App\Models\Album;
+use App\Models\GallerySpace;
+use App\Services\AlbumService;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Gate;
+use Inertia\Inertia;
+use Inertia\Response;
+
+class AlbumController extends Controller
+{
+    public function __construct(private readonly AlbumService $albumService) {}
+
+    public function index(Request $request): Response
+    {
+        $space = $request->user()->gallerySpaces()->first();
+
+        $albums = Album::with(['cover', 'children.cover'])
+            ->where('gallery_space_id', $space->id)
+            ->whereNull('parent_id')
+            ->whereNull('deleted_at')
+            ->orderBy('sort_mode')
+            ->get();
+
+        return Inertia::render('Albums/Index', [
+            'albums'      => $albums,
+            'gallerySpace' => $space,
+        ]);
+    }
+
+    public function show(Request $request, string $uuid): Response
+    {
+        $album = Album::where('uuid', $uuid)
+            ->with(['cover', 'places', 'tags', 'people'])
+            ->firstOrFail();
+
+        Gate::authorize('view', $album);
+
+        $children = $album->children()
+            ->with('cover')
+            ->whereNull('deleted_at')
+            ->orderBy('title')
+            ->get();
+
+        $media = MediaItem::query()
+            ->where(function ($q) use ($album) {
+                $q->where('primary_album_id', $album->id)
+                    ->orWhereHas('albums', fn($q2) => $q2->where('albums.id', $album->id));
+            })
+            ->with(['variants', 'tags', 'people', 'places'])
+            ->whereNull('trashed_at')
+            ->where('status', 'ready')
+            ->orderBy('taken_at')
+            ->paginate(60);
+
+        return Inertia::render('Albums/Show', [
+            'album'      => $album,
+            'breadcrumb' => $album->breadcrumb,
+            'children'   => $children,
+            'media'      => $media,
+        ]);
+    }
+
+    public function store(CreateAlbumRequest $request): \Illuminate\Http\RedirectResponse
+    {
+        $space = $request->user()->gallerySpaces()->first();
+
+        $album = $this->albumService->create(
+            space: $space,
+            data: $request->validated(),
+            user: $request->user()
+        );
+
+        // Queue Drive folder creation
+        CreateDriveFolderJob::dispatch($album);
+
+        return redirect()->route('albums.show', $album->uuid)
+            ->with('success', 'Album bylo vytvořeno.');
+    }
+
+    public function update(UpdateAlbumRequest $request, string $uuid): \Illuminate\Http\RedirectResponse
+    {
+        $album = Album::where('uuid', $uuid)->firstOrFail();
+        Gate::authorize('update', $album);
+
+        $data = $request->validated();
+
+        if (isset($data['title']) && $data['title'] !== $album->title) {
+            $album->update(['sync_status' => 'pending']);
+            RenameDriveFolderJob::dispatch($album, $data['title']);
+        }
+
+        $this->albumService->update($album, $data, $request->user());
+
+        return back()->with('success', 'Album bylo upraveno.');
+    }
+
+    public function move(MoveAlbumRequest $request, string $uuid): \Illuminate\Http\JsonResponse
+    {
+        $album     = Album::where('uuid', $uuid)->firstOrFail();
+        $newParent = $request->input('parent_id')
+            ? Album::findOrFail($request->input('parent_id'))
+            : null;
+
+        Gate::authorize('update', $album);
+        if ($newParent) Gate::authorize('update', $newParent);
+
+        $album->moveTo($newParent?->id);
+
+        // Queue Drive move
+        MoveDriveFolderJob::dispatch($album, $newParent?->drive_folder_id);
+
+        return response()->json(['status' => 'moved', 'album' => $album->fresh()]);
+    }
+
+    public function destroy(string $uuid): \Illuminate\Http\RedirectResponse
+    {
+        $album = Album::where('uuid', $uuid)->firstOrFail();
+        Gate::authorize('delete', $album);
+
+        $this->albumService->softDelete($album, request()->user());
+
+        return redirect()->route('albums.index')->with('success', 'Album bylo smazáno.');
+    }
+
+    public function tree(Request $request): \Illuminate\Http\JsonResponse
+    {
+        $space = $request->user()->gallerySpaces()->first();
+
+        $albums = Album::where('gallery_space_id', $space->id)
+            ->whereNull('deleted_at')
+            ->select(['id', 'uuid', 'parent_id', 'title', 'slug', 'depth', 'sort_mode', 'icon', 'color', 'media_count', 'descendant_count', 'sync_status'])
+            ->orderBy('depth')
+            ->orderBy('title')
+            ->get();
+
+        return response()->json($this->albumService->buildTree($albums));
+    }
+}
