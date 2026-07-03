@@ -139,3 +139,9 @@ Route::post('/webhooks/google-drive', [App\Http\Controllers\Webhooks\GoogleDrive
 // ── Health ──────────────────────────────────────────────
 Route::get('/health/live',  [App\Http\Controllers\HealthController::class, 'live'])->name('health.live');
 Route::get('/health/ready', [App\Http\Controllers\HealthController::class, 'ready'])->name('health.ready');
+
+// ── Media file proxy (bypasses Apache symlink issues) ───
+// Serves files from storage/app/public directly via Laravel
+Route::get('/files/{path}', [App\Http\Controllers\MediaFileController::class, 'serve'])
+    ->where('path', '.*')
+    ->name('media.file');

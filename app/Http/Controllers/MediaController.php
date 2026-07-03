@@ -24,10 +24,10 @@ class MediaController extends Controller
         $album      = $media->primaryAlbum;
         $breadcrumb = $album ? $album->breadcrumb : [];
 
-        // Attach public URL to each variant
+        // Attach URL to each variant (uses model getUrlAttribute, explicit here for clarity)
         $media->variants->each(function ($v) {
             $v->url = $v->disk === 'public'
-                ? asset('storage/' . $v->path)
+                ? url('/files/' . ltrim($v->path, '/'))
                 : url('media-stream/' . $v->path);
         });
 
