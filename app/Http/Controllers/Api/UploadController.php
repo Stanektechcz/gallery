@@ -258,7 +258,8 @@ class UploadController extends Controller
             $relPath = "media/{$media->uuid}/original." . $media->extension;
             $stored = Storage::disk('public')->put(
                 $relPath,
-                fopen($destPath, 'rb')
+                fopen($destPath, 'rb'),
+                'public'
             );
             if (!$stored) {
                 throw new \RuntimeException("Failed to store file to public disk: {$relPath}");
@@ -371,9 +372,13 @@ class UploadController extends Controller
                     if (function_exists('exif_read_data') && in_array($ext, ['jpg', 'jpeg'])) {
                         $exif        = @exif_read_data($sourcePath);
                         $orientation = $exif['Orientation'] ?? 1;
-                        if ($orientation === 6) { $src = imagerotate($src, -90, 0); }
-                        elseif ($orientation === 3) { $src = imagerotate($src, 180, 0); }
-                        elseif ($orientation === 8) { $src = imagerotate($src, 90, 0); }
+                        if ($orientation === 6) {
+                            $src = imagerotate($src, -90, 0);
+                        } elseif ($orientation === 3) {
+                            $src = imagerotate($src, 180, 0);
+                        } elseif ($orientation === 8) {
+                            $src = imagerotate($src, 90, 0);
+                        }
                     }
 
                     $origW = imagesx($src);
@@ -390,7 +395,7 @@ class UploadController extends Controller
                     imagejpeg($thumb, $tmpPath, 85);
                     imagedestroy($thumb);
 
-                    $stored = Storage::disk('public')->put($thumbRel, fopen($tmpPath, 'rb'));
+                    $stored = Storage::disk('public')->put($thumbRel, fopen($tmpPath, 'rb'), 'public');
                     @unlink($tmpPath);
 
                     if ($stored) {
