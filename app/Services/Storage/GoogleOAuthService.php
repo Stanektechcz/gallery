@@ -5,6 +5,7 @@ namespace App\Services\Storage;
 use App\Models\StorageConnection;
 use App\Models\User;
 use Google\Client as GoogleClient;
+use Google\Service\Drive;
 
 class GoogleOAuthService
 {
@@ -45,10 +46,12 @@ class GoogleOAuthService
             throw new \RuntimeException("OAuth error: {$tokenData['error_description']} ({$tokenData['error']})");
         }
 
-        // Get user info
+        // Get user email via Drive About (works with drive.file scope — no extra scope needed)
         $this->client->setAccessToken($tokenData);
-        $oauth2   = new \Google\Service\Oauth2($this->client);
-        $userInfo = $oauth2->userinfo->get();
+        $driveService = new Drive($this->client);
+        $about        = $driveService->about->get(['fields' => 'user']);
+        $userEmail    = $about->getUser()->getEmailAddress();
+        $userId       = $about->getUser()->getPermissionId();
 
         // Find or create storage connection
         $connection = StorageConnection::firstOrNew([
@@ -56,8 +59,8 @@ class GoogleOAuthService
             'provider'         => 'google_drive',
         ]);
 
-        $connection->google_subject_id = $userInfo->getId();
-        $connection->account_email     = $userInfo->getEmail();
+        $connection->google_subject_id = $userId;
+        $connection->account_email     = $userEmail;
         $connection->setAccessToken(json_encode($tokenData));
         $connection->token_expires_at  = now()->addSeconds($tokenData['expires_in'] ?? 3600);
 
