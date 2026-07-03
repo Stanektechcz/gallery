@@ -26,16 +26,6 @@ class AssembleUploadChunksJob implements ShouldQueue
     {
     }
 
-    public static function dispatch(UploadSession $session): void
-    {
-        static::dispatchJob($session->id)->onQueue('uploads');
-    }
-
-    private static function dispatchJob(int $id): \Illuminate\Foundation\Bus\PendingDispatch
-    {
-        return new static($id);
-    }
-
     public function handle(): void
     {
         $session = UploadSession::with('chunks')->find($this->uploadSessionId);

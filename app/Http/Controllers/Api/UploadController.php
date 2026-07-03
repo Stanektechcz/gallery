@@ -156,7 +156,7 @@ class UploadController extends Controller
         }
 
         $session->update(['status' => 'assembling']);
-        AssembleUploadChunksJob::dispatch($session);
+        AssembleUploadChunksJob::dispatch($session->id)->onQueue('uploads');
 
         return response()->json([
             'uuid'   => $session->uuid,
