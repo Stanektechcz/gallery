@@ -97,7 +97,7 @@ class MediaController extends Controller
 
         $media->update([
             'trashed_at'  => now(),
-            'purge_after' => now()->addDays(config('gallery.trash_retention_days', 30)),
+            'purge_after' => now()->addDays((int) config('gallery.trash_retention_days', 30)),
         ]);
 
         AuditLog::record('media.trash', $media);
