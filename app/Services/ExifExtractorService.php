@@ -19,11 +19,9 @@ class ExifExtractorService
 
     public function __construct()
     {
-        $configured = config('gallery.exiftool_path', '/usr/bin/exiftool');
-        // Auto-discover if configured path doesn't exist
-        $this->exiftoolPath = file_exists($configured)
-            ? $configured
-            : $this->discoverExiftool();
+        // Do NOT use file_exists() on exiftool path — blocked by PHP open_basedir.
+        // Just store configured path and let proc_open fail gracefully if missing.
+        $this->exiftoolPath = config('gallery.exiftool_path', '/usr/bin/exiftool');
     }
 
     /**
@@ -81,7 +79,9 @@ class ExifExtractorService
 
     private function extractViaExiftool(string $sourcePath): array
     {
-        if (!$this->exiftoolPath) {
+        // open_basedir prevents file_exists() on /usr/bin/exiftool.
+        // Always attempt proc_open — exit code != 0 if binary missing.
+        if (empty($this->exiftoolPath)) {
             return [];
         }
 
@@ -93,7 +93,8 @@ class ExifExtractorService
                 $this->exiftoolPath,
                 '-json',
                 '-n',
-                '-charset', 'UTF8',
+                '-charset',
+                'UTF8',
                 $sourcePath,
             ];
 
@@ -487,22 +488,6 @@ class ExifExtractorService
 
     private function discoverExiftool(): string
     {
-        // Try proc_open to find exiftool without shell_exec
-        try {
-            $proc = proc_open(['which', 'exiftool'], [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
-            if (is_resource($proc)) {
-                $out = trim(stream_get_contents($pipes[1]));
-                fclose($pipes[1]);
-                fclose($pipes[2]);
-                proc_close($proc);
-                if ($out && file_exists($out)) return $out;
-            }
-        } catch (\Throwable) {
-        }
-
-        foreach (['/usr/bin/exiftool', '/usr/local/bin/exiftool', '/opt/homebrew/bin/exiftool'] as $p) {
-            if (file_exists($p)) return $p;
-        }
-        return '';
+        return '/usr/bin/exiftool'; // not used anymore, kept for compatibility
     }
 }
