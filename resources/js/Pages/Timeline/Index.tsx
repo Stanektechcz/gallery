@@ -1,8 +1,8 @@
 import AppLayout from '@/Layouts/AppLayout';
-import { Head, router } from '@inertiajs/react';
+import { Link, Head, router } from '@inertiajs/react';
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
-import { Heart, Play, Trash2 } from 'lucide-react';
+import { Grid3X3, Heart, Map, Play, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
 interface MediaCard {
@@ -14,6 +14,7 @@ interface MediaCard {
     height: number | null;
     is_favorite: boolean;
     rating: number | null;
+    primary_album?: { id: number; uuid: string; title: string; slug: string } | null;
     variants: Array<{ type: string; url: string; blur_hash?: string; dominant_color?: string; aspect_ratio?: number }>;
 }
 
@@ -32,12 +33,15 @@ function MediaCardComponent({ item, onFavoriteToggle, onTrash }: {
                ?? item.variants?.find(v => v.type === 'original');
     const placeholder = item.variants?.find(v => v.type === 'placeholder');
     const aspect = thumb?.aspect_ratio ?? (item.width && item.height ? item.width / item.height : 1);
+    const [hover, setHover] = useState(false);
 
     return (
         <div
             className="relative group cursor-pointer rounded overflow-hidden bg-[var(--color-bg-card)]"
             style={{ aspectRatio: aspect }}
             onClick={() => router.visit(`/media/${item.uuid}`)}
+            onMouseEnter={() => setHover(true)}
+            onMouseLeave={() => setHover(false)}
         >
             {placeholder?.dominant_color && (
                 <div className="absolute inset-0" style={{ backgroundColor: placeholder.dominant_color }} />
@@ -64,9 +68,22 @@ function MediaCardComponent({ item, onFavoriteToggle, onTrash }: {
             )}
 
             {/* Favorite indicator (always visible when favorited) */}
-            {item.is_favorite && (
+            {item.is_favorite && !hover && (
                 <div className="absolute top-2 left-2">
                     <Heart size={12} className="text-red-400 fill-red-400" />
+                </div>
+            )}
+
+            {/* Album path badge */}
+            {item.primary_album && (
+                <div className="absolute bottom-0 left-0 right-0 px-1.5 py-1 bg-gradient-to-t from-black/70 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Link
+                        href={`/albums/${item.primary_album.uuid}`}
+                        onClick={e => e.stopPropagation()}
+                        className="text-[9px] text-white/80 hover:text-white truncate block"
+                    >
+                        📁 {item.primary_album.title}
+                    </Link>
                 </div>
             )}
 
@@ -209,8 +226,16 @@ export default function TimelineIndex() {
                 {/* Header */}
                 <div className="sticky top-0 z-20 px-4 py-3 border-b border-[var(--color-border)] bg-[var(--color-bg-primary)]/90 backdrop-blur-sm flex items-center justify-between">
                     <h1 className="text-sm font-semibold text-white">Fotky</h1>
-                    <div className="flex items-center gap-2 text-xs text-[var(--color-text-secondary)]">
-                        <span>{allItems.length} položek</span>
+                    <div className="flex items-center gap-3">
+                        <span className="text-xs text-[var(--color-text-secondary)]">{allItems.length} položek</span>
+                        <div className="flex items-center gap-1 bg-[var(--color-bg-card)] rounded-lg p-0.5 border border-[var(--color-border)]">
+                            <button className="p-1.5 rounded text-[var(--color-accent)] bg-[var(--color-accent)]/10" title="Mřížka">
+                                <Grid3X3 size={14} />
+                            </button>
+                            <Link href="/map" className="p-1.5 rounded text-[var(--color-text-secondary)] hover:text-white transition-colors" title="Mapa">
+                                <Map size={14} />
+                            </Link>
+                        </div>
                     </div>
                 </div>
 

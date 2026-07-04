@@ -1,4 +1,4 @@
-import { Link } from '@inertiajs/react';
+import { Link, router } from '@inertiajs/react';
 import { clsx } from 'clsx';
 import { Heart, Play, Star } from 'lucide-react';
 
@@ -37,9 +37,17 @@ export function MediaCard({ item, selected, onSelect, onAction, badge, href }: P
     const aspect      = thumb?.aspect_ratio ?? (item.width && item.height ? item.width / item.height : 1);
 
     const handleClick = (e: React.MouseEvent) => {
-        if (onSelect) {
+        if (onSelect && (e.ctrlKey || e.metaKey || e.shiftKey)) {
+            // Ctrl/Cmd/Shift+click = toggle selection
             e.preventDefault();
             onSelect(item.uuid, !selected);
+        } else if (onSelect && selected) {
+            // If already selected, toggle off
+            e.preventDefault();
+            onSelect(item.uuid, false);
+        } else {
+            // Regular click = navigate
+            router.visit(href ?? `/media/${item.uuid}`);
         }
     };
 

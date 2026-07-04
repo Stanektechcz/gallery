@@ -66,6 +66,7 @@ interface MediaItem {
     is_archived: boolean;
     trashed_at?: string;
     status: string;
+    drive_file_id?: string;
     variants: Variant[];
     tags: Tag[];
     people: Person[];
@@ -387,19 +388,60 @@ export default function MediaShow({ media, breadcrumb, prev, next }: Props) {
                             {item.latitude && item.longitude && (
                                 <section>
                                     <h3 className="text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider mb-2 flex items-center gap-1">
-                                        <MapPin size={10} /> GPS
+                                        <MapPin size={10} /> GPS poloha
                                     </h3>
-                                    <p className="text-xs text-white">{item.latitude.toFixed(6)}, {item.longitude.toFixed(6)}</p>
-                                    <a
-                                        href={`https://maps.google.com/maps?q=${item.latitude},${item.longitude}`}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="text-xs text-[var(--color-accent)] hover:underline mt-1 inline-block"
-                                    >
-                                        Otevřít v Google Maps →
-                                    </a>
+                                    <div className="space-y-1 text-xs">
+                                        <div className="flex justify-between">
+                                            <span className="text-[var(--color-text-secondary)]">Šířka</span>
+                                            <span className="text-white font-mono">{item.latitude.toFixed(6)}°</span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                            <span className="text-[var(--color-text-secondary)]">Délka</span>
+                                            <span className="text-white font-mono">{item.longitude.toFixed(6)}°</span>
+                                        </div>
+                                        {item.altitude != null && (
+                                            <div className="flex justify-between">
+                                                <span className="text-[var(--color-text-secondary)]">Nadm. výška</span>
+                                                <span className="text-white">{Math.round(item.altitude)} m</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="flex gap-2 mt-2">
+                                        <a href={`https://maps.google.com/maps?q=${item.latitude},${item.longitude}`}
+                                            target="_blank" rel="noopener noreferrer"
+                                            className="text-[10px] text-[var(--color-accent)] hover:underline">
+                                            Google Maps ↗
+                                        </a>
+                                        <a href={`https://www.mapy.cz/?q=${item.latitude},${item.longitude}`}
+                                            target="_blank" rel="noopener noreferrer"
+                                            className="text-[10px] text-[var(--color-accent)] hover:underline">
+                                            Mapy.cz ↗
+                                        </a>
+                                    </div>
                                 </section>
                             )}
+
+                            {/* Google Drive */}
+                            <section>
+                                <h3 className="text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider mb-2">Google Drive</h3>
+                                <div className="space-y-1 text-xs">
+                                    {item.drive_file_id ? (
+                                        <>
+                                            <div className="flex justify-between">
+                                                <span className="text-[var(--color-text-secondary)]">Stav</span>
+                                                <span className="text-green-400">✓ Synchronizováno</span>
+                                            </div>
+                                            <a href={`https://drive.google.com/file/d/${item.drive_file_id}/view`}
+                                                target="_blank" rel="noopener noreferrer"
+                                                className="text-[10px] text-[var(--color-accent)] hover:underline block mt-1">
+                                                Otevřít na Drive ↗
+                                            </a>
+                                        </>
+                                    ) : (
+                                        <span className="text-[var(--color-text-secondary)]">Nesynchronizováno</span>
+                                    )}
+                                </div>
+                            </section>
 
                             {/* Tags */}
                             {item.tags.length > 0 && (

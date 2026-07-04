@@ -25,7 +25,10 @@ class TimelineController extends Controller
             ->where('is_archived', false)
             ->where('is_hidden', false)
             ->where('status', 'ready')
-            ->with(['variants' => fn($q) => $q->whereIn('type', ['thumbnail', 'placeholder'])])
+            ->with([
+                'variants'     => fn($q) => $q->whereIn('type', ['thumbnail', 'placeholder']),
+                'primaryAlbum' => fn($q) => $q->select('id', 'uuid', 'title', 'slug', 'materialized_path', 'parent_id'),
+            ])
             ->select([
                 'id', 'uuid', 'media_type', 'taken_at', 'width', 'height',
                 'is_favorite', 'rating', 'primary_album_id',
