@@ -140,8 +140,13 @@ export default function MediaShow({ media, breadcrumb, prev, next }: Props) {
 
     const trashItem = async () => {
         if (!confirm('Přesunout do koše?')) return;
-        await axios.delete(`/media/${item.uuid}`);
-        router.visit('/timeline');
+        try {
+            await axios.delete(`/media/${item.uuid}`);
+            router.visit('/timeline');
+        } catch (e: any) {
+            const msg = e?.response?.data?.message ?? e?.message ?? 'Chyba p\u0159i p\u0159esunu do ko\u0161e';
+            alert(msg);
+        }
     };
 
     const downloadItem = () => {

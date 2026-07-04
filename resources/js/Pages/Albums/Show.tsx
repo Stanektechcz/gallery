@@ -39,7 +39,8 @@ interface Props {
     filters: Filters;
 }
 
-export default function AlbumShow({ album, breadcrumb, children, media, filters }: Props) {
+export default function AlbumShow({ album, breadcrumb, children, media, filters: rawFilters }: Props) {
+    const filters: Filters = rawFilters ?? { sort: 'taken_at', dir: 'desc', type: null, search: null };
     const [uploadOpen, setUploadOpen] = useState(false);
     const [search, setSearch]         = useState(filters.search ?? '');
     const [deleting, setDeleting]     = useState(false);
