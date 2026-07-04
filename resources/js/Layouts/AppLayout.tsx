@@ -1,10 +1,12 @@
-import { Link, usePage } from '@inertiajs/react';
+import { Link, router, usePage } from '@inertiajs/react';
 import { clsx } from 'clsx';
 import {
     Archive,
+    Calendar,
     Clock,
     FolderOpen,
     Heart,
+    Home,
     Images,
     Map,
     Menu,
@@ -14,7 +16,84 @@ import {
     Trash2,
     X
 } from 'lucide-react';
-import { ReactNode, useState } from 'react';
+import { ReactNode, useEffect, useState } from 'react';
+
+// ─── Command Palette ────────────────────────────────────
+const COMMANDS = [
+    { label: 'Domovská stránka',    href: '/',          keywords: 'home domov' },
+    { label: 'Fotky / Timeline',    href: '/timeline',  keywords: 'fotky timeline' },
+    { label: 'Alba',                href: '/albums',    keywords: 'album folder' },
+    { label: 'Nové album',          href: '/albums/create', keywords: 'new album' },
+    { label: 'Kalendář',            href: '/calendar',  keywords: 'kalendar calendar' },
+    { label: 'Mapa',                href: '/map',       keywords: 'map gps' },
+    { label: 'Hledat',              href: '/search',    keywords: 'hledat search' },
+    { label: 'Oblíbené',            href: '/favorites', keywords: 'oblibene heart' },
+    { label: 'Vzpomínky',           href: '/memories',  keywords: 'vzpominky memories' },
+    { label: 'Archiv',              href: '/archive',   keywords: 'archiv archive' },
+    { label: 'Koš',                 href: '/trash',     keywords: 'kos trash delete' },
+    { label: 'Sdílené',             href: '/shares',    keywords: 'share sdilene' },
+    { label: 'Nastavení Drive',     href: '/settings/storage/google', keywords: 'settings google drive' },
+];
+
+function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void }) {
+    const [query, setQuery] = useState('');
+
+    useEffect(() => {
+        if (!open) setQuery('');
+    }, [open]);
+
+    const filtered = query.trim()
+        ? COMMANDS.filter(c =>
+            c.label.toLowerCase().includes(query.toLowerCase()) ||
+            c.keywords.includes(query.toLowerCase())
+          )
+        : COMMANDS;
+
+    const go = (href: string) => { onClose(); router.visit(href); };
+
+    if (!open) return null;
+
+    return (
+        <div className="fixed inset-0 z-[500] flex items-start justify-center pt-[15vh]">
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+            <div className="relative z-10 w-full max-w-md bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-xl shadow-2xl overflow-hidden">
+                <div className="flex items-center gap-3 px-4 py-3 border-b border-[var(--color-border)]">
+                    <Search size={16} className="text-[var(--color-text-secondary)] shrink-0" />
+                    <input
+                        autoFocus
+                        value={query}
+                        onChange={e => setQuery(e.target.value)}
+                        onKeyDown={e => {
+                            if (e.key === 'Escape') onClose();
+                            if (e.key === 'Enter' && filtered[0]) go(filtered[0].href);
+                        }}
+                        placeholder="Přejít na… (Ctrl+K)"
+                        className="flex-1 bg-transparent text-white text-sm outline-none placeholder-[var(--color-text-secondary)]"
+                    />
+                    <kbd className="text-[10px] text-[var(--color-text-secondary)] border border-[var(--color-border)] rounded px-1.5 py-0.5">ESC</kbd>
+                </div>
+                <ul className="max-h-72 overflow-y-auto py-1">
+                    {filtered.map((c, i) => (
+                        <li key={c.href}>
+                            <button
+                                onClick={() => go(c.href)}
+                                className="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-white/10 flex items-center gap-3 transition-colors"
+                            >
+                                <span className="flex-1">{c.label}</span>
+                                {i === 0 && query && (
+                                    <kbd className="text-[10px] text-[var(--color-text-secondary)] border border-[var(--color-border)] rounded px-1.5 py-0.5">↵</kbd>
+                                )}
+                            </button>
+                        </li>
+                    ))}
+                    {filtered.length === 0 && (
+                        <li className="px-4 py-6 text-center text-sm text-[var(--color-text-secondary)]">Nic nenalezeno</li>
+                    )}
+                </ul>
+            </div>
+        </div>
+    );
+}
 
 interface AppLayoutProps {
     children: ReactNode;
@@ -22,8 +101,10 @@ interface AppLayoutProps {
 }
 
 const navItems = [
+    { href: '/',          label: 'Domů',       icon: Home },
     { href: '/timeline',  label: 'Fotky',      icon: Images },
     { href: '/albums',    label: 'Alba',        icon: FolderOpen },
+    { href: '/calendar',  label: 'Kalendář',   icon: Calendar },
     { href: '/map',       label: 'Mapa',        icon: Map },
     { href: '/search',    label: 'Hledat',      icon: Search },
     { href: '/favorites', label: 'Oblíbené',    icon: Heart },
@@ -37,6 +118,7 @@ const navItems = [
 ];
 
 const mobileNav = [
+    { href: '/',          label: 'Domů',     icon: Home },
     { href: '/timeline',  label: 'Fotky',    icon: Images },
     { href: '/albums',    label: 'Alba',     icon: FolderOpen },
     { href: '/favorites', label: 'Oblíbené', icon: Heart },
@@ -48,9 +130,22 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
     const { auth, flash } = usePage().props as any;
     const currentPath = window.location.pathname;
     const [mobileOpen, setMobileOpen] = useState(false);
+    const [cmdOpen,    setCmdOpen]    = useState(false);
+
+    useEffect(() => {
+        const handler = (e: KeyboardEvent) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+                e.preventDefault();
+                setCmdOpen(v => !v);
+            }
+        };
+        window.addEventListener('keydown', handler);
+        return () => window.removeEventListener('keydown', handler);
+    }, []);
 
     return (
         <div className="flex h-screen overflow-hidden">
+            <CommandPalette open={cmdOpen} onClose={() => setCmdOpen(false)} />
             {/* Sidebar — Desktop */}
             <aside className="hidden md:flex flex-col w-60 shrink-0 border-r border-[var(--color-border)] bg-[var(--color-bg-secondary)]">
                 {/* Logo */}

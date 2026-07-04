@@ -154,4 +154,54 @@ class TimelineController extends Controller
             'memories' => $grouped,
         ]);
     }
+
+    /**
+     * GET /api/v1/timeline/calendar?year=2026&month=7
+     * Returns per-day counts for calendar view.
+     */
+    public function calendar(Request $request): JsonResponse
+    {
+        $user  = $request->user();
+        $space = $user->gallerySpaces()->first();
+
+        $year  = (int) $request->input('year',  now()->year);
+        $month = (int) $request->input('month', now()->month);
+
+        $days = MediaItem::query()
+            ->where('gallery_space_id', $space->id)
+            ->whereNull('trashed_at')
+            ->where('is_archived', false)
+            ->whereNotNull('taken_at')
+            ->whereYear('taken_at',  $year)
+            ->whereMonth('taken_at', $month)
+            ->selectRaw("DAY(taken_at) as day,
+                COUNT(*) as total,
+                SUM(CASE WHEN media_type='photo' THEN 1 ELSE 0 END) as photos,
+                SUM(CASE WHEN media_type='video' THEN 1 ELSE 0 END) as videos")
+            ->groupByRaw("DAY(taken_at)")
+            ->orderBy('day')
+            ->get();
+
+        // Attach one thumbnail per day
+        $thumbs = [];
+        foreach ($days as $d) {
+            $item = MediaItem::where('gallery_space_id', $space->id)
+                ->whereNull('trashed_at')
+                ->whereYear('taken_at', $year)
+                ->whereMonth('taken_at', $month)
+                ->whereDay('taken_at', $d->day)
+                ->with(['variants' => fn($q) => $q->where('type', 'thumbnail')])
+                ->first(['id', 'uuid']);
+            $thumbs[$d->day] = $item ? [
+                'uuid' => $item->uuid,
+                'thumb' => $item->variants->first()?->url,
+            ] : null;
+        }
+
+        return response()->json([
+            'year'  => $year,
+            'month' => $month,
+            'days'  => $days->map(fn($d) => array_merge($d->toArray(), ['thumb' => $thumbs[$d->day]])),
+        ]);
+    }
 }

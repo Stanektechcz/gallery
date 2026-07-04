@@ -13,6 +13,7 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
         Route::get('/buckets',  [TimelineController::class, 'buckets'])->name('buckets');
         Route::get('/map',      [TimelineController::class, 'mapPoints'])->name('map');
         Route::get('/memories', [TimelineController::class, 'memories'])->name('memories');
+        Route::get('/calendar', [TimelineController::class, 'calendar'])->name('calendar');
     });
 
     // Search

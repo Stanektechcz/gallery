@@ -44,7 +44,8 @@ Route::post('/share-target', [MediaController::class, 'shareTarget'])->name('sha
 Route::middleware(['auth'])->group(function () {
 
     // Dashboard / Timeline
-    Route::get('/', fn() => Inertia::render('Timeline/Index'))->name('timeline');
+    Route::get('/',         [App\Http\Controllers\DashboardController::class, 'index'])->name('dashboard');
+    Route::get('/home',     [App\Http\Controllers\DashboardController::class, 'index'])->name('home');
     Route::get('/timeline', fn() => Inertia::render('Timeline/Index'))->name('timeline.index');
 
     // Albums
@@ -75,10 +76,13 @@ Route::middleware(['auth'])->group(function () {
     });
 
     // Map
-    Route::get('/map', fn() => Inertia::render('Map/Index'))->name('map');
+    Route::get('/map',      fn() => Inertia::render('Map/Index'))->name('map');
 
     // Search
-    Route::get('/search', fn() => Inertia::render('Search/Index'))->name('search');
+    Route::get('/search',   fn() => Inertia::render('Search/Index'))->name('search');
+
+    // Calendar
+    Route::get('/calendar', fn() => Inertia::render('Calendar/Index'))->name('calendar');
 
     // Favorites
     Route::get('/favorites', [FavoritesController::class, 'index'])->name('favorites');

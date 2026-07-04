@@ -1,0 +1,214 @@
+import AppLayout from '@/Layouts/AppLayout';
+import { Head, Link } from '@inertiajs/react';
+import { Album, CalendarDays, Clock, FolderOpen, Heart, Map, MapPin, Shuffle, Star, TrendingUp, Upload } from 'lucide-react';
+
+interface MediaCard {
+    id: number;
+    uuid: string;
+    media_type: string;
+    variants: Array<{ type: string; url: string }>;
+}
+
+interface DashboardData {
+    greeting: string;
+    user_name: string;
+    this_time_last_year: {
+        count: number;
+        date: string;
+        items: MediaCard[];
+    };
+    recent_media: MediaCard[];
+    random_memory: MediaCard | null;
+    last_album: { uuid: string; title: string; date?: string } | null;
+    pending_uploads: number;
+    map_stats: { locations: number; countries: number };
+    year_stats: { year: number; photos: number; videos: number };
+}
+
+interface Props {
+    data: DashboardData | null;
+}
+
+function MediaStrip({ items, max = 6 }: { items: MediaCard[]; max?: number }) {
+    const show = items.slice(0, max);
+    return (
+        <div className="flex gap-1.5 flex-wrap">
+            {show.map(item => {
+                const thumb = item.variants?.find(v => v.type === 'thumbnail')?.url
+                           ?? item.variants?.find(v => v.type === 'placeholder')?.url;
+                return (
+                    <Link key={item.id} href={`/media/${item.uuid}`}>
+                        <div className="w-16 h-16 rounded-lg overflow-hidden bg-[var(--color-bg-card)] shrink-0">
+                            {thumb
+                                ? <img src={thumb} alt="" className="w-full h-full object-cover hover:scale-105 transition-transform duration-200" />
+                                : <div className="w-full h-full flex items-center justify-center text-[var(--color-text-secondary)]">
+                                    <Album size={16} />
+                                  </div>
+                            }
+                        </div>
+                    </Link>
+                );
+            })}
+        </div>
+    );
+}
+
+function DashCard({ icon: Icon, label, children, href, color = 'var(--color-accent)' }: {
+    icon: any; label: string; children: React.ReactNode; href?: string; color?: string;
+}) {
+    const inner = (
+        <div className="bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-xl p-4 hover:border-[var(--color-accent)]/40 transition-colors">
+            <div className="flex items-center gap-2 mb-3">
+                <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ backgroundColor: color + '22' }}>
+                    <Icon size={14} style={{ color }} />
+                </div>
+                <span className="text-xs font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">{label}</span>
+            </div>
+            {children}
+        </div>
+    );
+
+    return href ? <Link href={href}>{inner}</Link> : inner;
+}
+
+export default function DashboardIndex({ data }: Props) {
+    if (!data) {
+        return (
+            <AppLayout>
+                <Head title="Domů" />
+                <div className="flex items-center justify-center h-full text-[var(--color-text-secondary)]">
+                    <p>Galerie není nakonfigurována.</p>
+                </div>
+            </AppLayout>
+        );
+    }
+
+    const hour = new Date().getHours();
+    const emoji = hour < 12 ? '☀️' : hour < 18 ? '🌤️' : '🌙';
+
+    return (
+        <AppLayout>
+            <Head title="Domů" />
+
+            <div className="p-4 max-w-4xl mx-auto space-y-5 pb-8">
+                {/* Greeting */}
+                <div className="pt-2">
+                    <h1 className="text-2xl font-bold text-white">
+                        {data.greeting}, {data.user_name} {emoji}
+                    </h1>
+                    <p className="text-sm text-[var(--color-text-secondary)] mt-1">
+                        {new Date().toLocaleDateString('cs-CZ', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                    </p>
+                </div>
+
+                {/* Quick stats bar */}
+                <div className="grid grid-cols-3 gap-3">
+                    <Link href="/timeline" className="bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-xl p-3 text-center hover:border-[var(--color-accent)]/50 transition-colors">
+                        <p className="text-xl font-bold text-white">{data.year_stats.photos.toLocaleString('cs-CZ')}</p>
+                        <p className="text-[10px] text-[var(--color-text-secondary)] mt-0.5">fotek {data.year_stats.year}</p>
+                    </Link>
+                    <Link href="/timeline" className="bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-xl p-3 text-center hover:border-[var(--color-accent)]/50 transition-colors">
+                        <p className="text-xl font-bold text-white">{data.year_stats.videos.toLocaleString('cs-CZ')}</p>
+                        <p className="text-[10px] text-[var(--color-text-secondary)] mt-0.5">videí {data.year_stats.year}</p>
+                    </Link>
+                    <Link href="/map" className="bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-xl p-3 text-center hover:border-[var(--color-accent)]/50 transition-colors">
+                        <p className="text-xl font-bold text-white">{data.map_stats.locations}</p>
+                        <p className="text-[10px] text-[var(--color-text-secondary)] mt-0.5">míst na mapě</p>
+                    </Link>
+                </div>
+
+                {/* This time last year */}
+                {data.this_time_last_year.count > 0 && (
+                    <DashCard icon={CalendarDays} label={`Dnes před rokem • ${data.this_time_last_year.date}`} color="#ec4899">
+                        <p className="text-xs text-[var(--color-text-secondary)] mb-3">
+                            {data.this_time_last_year.count} {data.this_time_last_year.count === 1 ? 'fotografie' : data.this_time_last_year.count < 5 ? 'fotografie' : 'fotografií'}
+                        </p>
+                        <MediaStrip items={data.this_time_last_year.items} max={8} />
+                    </DashCard>
+                )}
+
+                {/* 2-column grid for cards */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {/* Recent memories */}
+                    <DashCard icon={Heart} label="Naše poslední vzpomínky" href="/timeline" color="#f97316">
+                        <MediaStrip items={data.recent_media} max={6} />
+                        <p className="text-xs text-[var(--color-text-secondary)] mt-2">Nejnovější fotky →</p>
+                    </DashCard>
+
+                    {/* Random memory */}
+                    {data.random_memory && (
+                        <DashCard icon={Shuffle} label="Náhodná vzpomínka" href={`/media/${data.random_memory.uuid}`} color="#8b5cf6">
+                            <MediaStrip items={[data.random_memory]} max={1} />
+                            <p className="text-xs text-[var(--color-text-secondary)] mt-2">Otevřít →</p>
+                        </DashCard>
+                    )}
+
+                    {/* Last album */}
+                    {data.last_album && (
+                        <DashCard icon={FolderOpen} label="Pokračovat v albu" href={`/albums/${data.last_album.uuid}`} color="#06b6d4">
+                            <p className="text-base font-semibold text-white">{data.last_album.title}</p>
+                            {data.last_album.date && (
+                                <p className="text-xs text-[var(--color-text-secondary)] mt-1">{data.last_album.date}</p>
+                            )}
+                            <p className="text-xs text-[var(--color-accent)] mt-2">Otevřít album →</p>
+                        </DashCard>
+                    )}
+
+                    {/* Map */}
+                    <DashCard icon={Map} label="Vaše společná mapa" href="/map" color="#22c55e">
+                        <p className="text-base font-semibold text-white">
+                            {data.map_stats.locations} míst
+                        </p>
+                        <p className="text-xs text-[var(--color-text-secondary)] mt-1">
+                            z {data.map_stats.countries} {data.map_stats.countries === 1 ? 'země' : data.map_stats.countries < 5 ? 'zemí' : 'zemí'}
+                        </p>
+                        <p className="text-xs text-[var(--color-accent)] mt-2">Zobrazit mapu →</p>
+                    </DashCard>
+
+                    {/* Pending uploads */}
+                    {data.pending_uploads > 0 && (
+                        <DashCard icon={Upload} label="Čeká na nahrání" color="#f59e0b">
+                            <p className="text-base font-semibold text-white">{data.pending_uploads} souborů</p>
+                            <p className="text-xs text-[var(--color-text-secondary)] mt-1">Probíhající nahrávání</p>
+                        </DashCard>
+                    )}
+
+                    {/* Year stats */}
+                    <DashCard icon={TrendingUp} label={`Rok ${data.year_stats.year}`} href="/timeline" color="#6366f1">
+                        <div className="flex items-baseline gap-2">
+                            <p className="text-base font-semibold text-white">
+                                {(data.year_stats.photos + data.year_stats.videos).toLocaleString('cs-CZ')}
+                            </p>
+                            <p className="text-xs text-[var(--color-text-secondary)]">médií celkem</p>
+                        </div>
+                        <p className="text-xs text-[var(--color-text-secondary)] mt-1">
+                            {data.year_stats.photos.toLocaleString('cs-CZ')} fotek
+                            · {data.year_stats.videos.toLocaleString('cs-CZ')} videí
+                        </p>
+                    </DashCard>
+                </div>
+
+                {/* Quick nav */}
+                <div>
+                    <h2 className="text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider mb-3">Rychlý přístup</h2>
+                    <div className="grid grid-cols-4 gap-2">
+                        {[
+                            { href: '/timeline', icon: Clock,    label: 'Fotky' },
+                            { href: '/albums',   icon: FolderOpen, label: 'Alba' },
+                            { href: '/map',      icon: MapPin,   label: 'Mapa' },
+                            { href: '/favorites',icon: Heart,    label: 'Oblíbené' },
+                            { href: '/memories', icon: Star,     label: 'Vzpomínky' },
+                            { href: '/search',   icon: Album,    label: 'Hledat' },
+                        ].map(item => (
+                            <Link key={item.href} href={item.href}
+                                className="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-[var(--color-bg-card)] border border-[var(--color-border)] hover:border-[var(--color-accent)]/50 transition-colors">
+                                <item.icon size={18} className="text-[var(--color-text-secondary)]" />
+                                <span className="text-[10px] text-[var(--color-text-secondary)]">{item.label}</span>
+                            </Link>
+                        ))}
+                    </div>
+                </div>
+            </div>
+        </AppLayout>
+    );
+}
