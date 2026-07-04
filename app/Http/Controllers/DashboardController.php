@@ -25,7 +25,7 @@ class DashboardController extends Controller
         $hour  = $now->hour;
         $name  = $user->name;
 
-        $greeting = match(true) {
+        $greeting = match (true) {
             $hour < 5  => "Dobrou noc",
             $hour < 12 => "Dobré ráno",
             $hour < 17 => "Dobré odpoledne",

@@ -1,0 +1,1 @@
+import{r as e}from"./app-XXRk8gir.js";e();

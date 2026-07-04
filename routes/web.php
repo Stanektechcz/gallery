@@ -84,6 +84,12 @@ Route::middleware(['auth'])->group(function () {
     // Calendar
     Route::get('/calendar', fn() => Inertia::render('Calendar/Index'))->name('calendar');
 
+    // Stats
+    Route::get('/stats', [App\Http\Controllers\StatsController::class, 'index'])->name('stats');
+
+    // Inbox (unboxed media)
+    Route::get('/inbox', [App\Http\Controllers\InboxController::class, 'index'])->name('inbox');
+
     // Favorites
     Route::get('/favorites', [FavoritesController::class, 'index'])->name('favorites');
     Route::post('/favorites/{uuid}/toggle', [FavoritesController::class, 'toggle'])->name('favorites.toggle');
