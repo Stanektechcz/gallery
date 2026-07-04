@@ -87,13 +87,13 @@ class ExifExtractorService
 
         try {
             // proc_open works even when shell_exec / exec are disabled in php.ini
+            // Note: NO -G1 (would prefix keys), NO -a (would create arrays for duplicates)
+            // -n gives decimal GPS values directly
             $cmd = [
                 $this->exiftoolPath,
                 '-json',
-                '-n',              // numeric values (GPS as decimal)
+                '-n',
                 '-charset', 'UTF8',
-                '-a',              // allow duplicate tags (gets both EXIF and XMP GPS)
-                '-G1',             // include group name prefix
                 $sourcePath,
             ];
 
@@ -127,8 +127,15 @@ class ExifExtractorService
                 return [];
             }
 
-            return $this->normalizeExiftoolData($raw[0]);
+            // Log GPS keys found for debugging
+            $gpsKeys = array_filter(array_keys($raw[0]), fn($k) => stripos($k, 'gps') !== false || stripos($k, 'latitude') !== false || stripos($k, 'longitude') !== false);
+            if ($gpsKeys) {
+                Log::info('exiftool GPS keys found', array_intersect_key($raw[0], array_flip($gpsKeys)));
+            } else {
+                Log::info('exiftool: no GPS keys in output', ['file' => basename($sourcePath), 'total_keys' => count($raw[0])]);
+            }
 
+            return $this->normalizeExiftoolData($raw[0]);
         } catch (\Throwable $e) {
             Log::warning('exiftool extraction failed', ['error' => $e->getMessage()]);
             return [];
@@ -139,34 +146,35 @@ class ExifExtractorService
     {
         $result = [];
 
-        // exiftool with -G1 prefixes keys: "EXIF:GPSLatitude", "XMP:GPSLatitude", etc.
-        // We check all group prefixes
+        // Without -G1, exiftool returns simple keys: GPSLatitude, DateTimeOriginal, etc.
+        // exiftool -n returns GPS as decimal floats directly
         $get = function (string ...$keys) use ($raw): mixed {
             foreach ($keys as $key) {
+                // Direct match (no prefix, most common without -G1)
                 if (isset($raw[$key]) && $raw[$key] !== '' && $raw[$key] !== null) {
                     return $raw[$key];
                 }
-                // Try with common group prefixes
-                foreach (['EXIF:', 'XMP:', 'GPS:', 'Composite:', 'IFD0:', 'ExifIFD:', 'MakerNotes:', ''] as $prefix) {
-                    $prefixed = $prefix . $key;
-                    if (isset($raw[$prefixed]) && $raw[$prefixed] !== '' && $raw[$prefixed] !== null) {
-                        return $raw[$prefixed];
+                // Case-insensitive search as fallback
+                $lower = strtolower($key);
+                foreach ($raw as $k => $v) {
+                    if (strtolower($k) === $lower && $v !== '' && $v !== null) {
+                        return $v;
                     }
                 }
             }
             return null;
         };
 
-        // GPS — try composite (most reliable) then raw GPS tags
-        $lat = $get('GPSLatitude', 'Latitude', 'GPS Latitude');
-        $lng = $get('GPSLongitude', 'Longitude', 'GPS Longitude');
-        if ($lat !== null && $lng !== null) {
+        // GPS — exiftool -n returns decimal degrees directly (no rational conversion needed)
+        $lat = $get('GPSLatitude', 'Latitude');
+        $lng = $get('GPSLongitude', 'Longitude');
+        if ($lat !== null && $lng !== null && is_numeric($lat) && is_numeric($lng)) {
             $result['latitude']  = (float) $lat;
             $result['longitude'] = (float) $lng;
         }
 
         $alt = $get('GPSAltitude', 'Altitude');
-        if ($alt !== null) {
+        if ($alt !== null && is_numeric($alt)) {
             $result['altitude'] = round((float) $alt, 1);
         }
 
@@ -175,7 +183,8 @@ class ExifExtractorService
         if ($dt) {
             try {
                 $result['taken_at'] = \Carbon\Carbon::parse((string) $dt);
-            } catch (\Throwable) {}
+            } catch (\Throwable) {
+            }
         }
 
         // Camera
@@ -223,10 +232,16 @@ class ExifExtractorService
             $im->destroy();
 
             $result = [];
-            if ($w > 0) { $result['width'] = $w; $result['height'] = $h; }
+            if ($w > 0) {
+                $result['width'] = $w;
+                $result['height'] = $h;
+            }
 
             if (!empty($props['exif:DateTimeOriginal'])) {
-                try { $result['taken_at'] = \Carbon\Carbon::createFromFormat('Y:m:d H:i:s', $props['exif:DateTimeOriginal']); } catch (\Throwable) {}
+                try {
+                    $result['taken_at'] = \Carbon\Carbon::createFromFormat('Y:m:d H:i:s', $props['exif:DateTimeOriginal']);
+                } catch (\Throwable) {
+                }
             }
             if (!empty($props['exif:Make']))  $result['camera_make']  = substr($props['exif:Make'],  0, 100);
             if (!empty($props['exif:Model'])) $result['camera_model'] = substr($props['exif:Model'], 0, 100);
@@ -257,7 +272,10 @@ class ExifExtractorService
             $result = [];
 
             if (!empty($exif['DateTimeOriginal'])) {
-                try { $result['taken_at'] = \Carbon\Carbon::createFromFormat('Y:m:d H:i:s', $exif['DateTimeOriginal']); } catch (\Throwable) {}
+                try {
+                    $result['taken_at'] = \Carbon\Carbon::createFromFormat('Y:m:d H:i:s', $exif['DateTimeOriginal']);
+                } catch (\Throwable) {
+                }
             }
             if (!empty($exif['Make']))  $result['camera_make']  = substr($exif['Make'],  0, 100);
             if (!empty($exif['Model'])) $result['camera_model'] = substr($exif['Model'], 0, 100);
@@ -474,11 +492,13 @@ class ExifExtractorService
             $proc = proc_open(['which', 'exiftool'], [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
             if (is_resource($proc)) {
                 $out = trim(stream_get_contents($pipes[1]));
-                fclose($pipes[1]); fclose($pipes[2]);
+                fclose($pipes[1]);
+                fclose($pipes[2]);
                 proc_close($proc);
                 if ($out && file_exists($out)) return $out;
             }
-        } catch (\Throwable) {}
+        } catch (\Throwable) {
+        }
 
         foreach (['/usr/bin/exiftool', '/usr/local/bin/exiftool', '/opt/homebrew/bin/exiftool'] as $p) {
             if (file_exists($p)) return $p;
