@@ -21,6 +21,8 @@ class MediaVariant extends Model
         'aspect_ratio',
     ];
 
+    protected $appends = ['url'];
+
     protected function casts(): array
     {
         return ['aspect_ratio' => 'float'];

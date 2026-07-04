@@ -276,9 +276,12 @@ class UploadController extends Controller
                 'height'     => null,
             ]);
 
-            // Generate thumbnail synchronously using GD (no queue needed)
-            if ($media->media_type === 'photo' && extension_loaded('gd')) {
-                $this->generateThumbnail($media, $destPath);
+            // Generate thumbnail synchronously using GD/Imagick (no queue needed)
+            $this->generateThumbnail($media, $destPath);
+
+            // Extract basic EXIF data synchronously (GPS + date + dimensions)
+            if ($media->media_type === 'photo') {
+                $this->extractBasicExif($media, $destPath);
             }
 
             $session->update([
@@ -432,6 +435,67 @@ class UploadController extends Controller
             ]);
             Log::info('Thumbnail aliased to original (no GD/Imagick)', ['media_id' => $media->id]);
         }
+    }
+
+    /**
+     * Extract GPS, date, and dimensions from EXIF synchronously.
+     */
+    private function extractBasicExif(MediaItem $media, string $sourcePath): void
+    {
+        try {
+            // Get image dimensions via GD or getimagesize
+            [$imgW, $imgH] = @getimagesize($sourcePath) ?: [null, null];
+            if ($imgW && $imgH) {
+                $media->update(['width' => $imgW, 'height' => $imgH]);
+            }
+
+            if (!function_exists('exif_read_data')) return;
+
+            $exif = @exif_read_data($sourcePath, 'EXIF,GPS,IFD0', false);
+            if (!$exif) return;
+
+            $updates = [];
+
+            // Date taken
+            if (!empty($exif['DateTimeOriginal'])) {
+                try {
+                    $updates['taken_at'] = \Carbon\Carbon::createFromFormat('Y:m:d H:i:s', $exif['DateTimeOriginal']);
+                } catch (\Throwable) {}
+            }
+
+            // Camera
+            if (!empty($exif['Make']))  $updates['camera_make']  = substr($exif['Make'],  0, 100);
+            if (!empty($exif['Model'])) $updates['camera_model'] = substr($exif['Model'], 0, 100);
+
+            // GPS
+            if (!empty($exif['GPSLatitude']) && !empty($exif['GPSLongitude'])) {
+                $lat = $this->gpsToDecimal($exif['GPSLatitude'], $exif['GPSLatitudeRef'] ?? 'N');
+                $lng = $this->gpsToDecimal($exif['GPSLongitude'], $exif['GPSLongitudeRef'] ?? 'E');
+                if ($lat && $lng) {
+                    $updates['latitude']  = $lat;
+                    $updates['longitude'] = $lng;
+                }
+                if (!empty($exif['GPSAltitude'])) {
+                    $parts = explode('/', $exif['GPSAltitude']);
+                    $updates['altitude'] = count($parts) === 2 && $parts[1] ? round($parts[0] / $parts[1], 1) : null;
+                }
+            }
+
+            if ($updates) {
+                $media->update($updates);
+            }
+        } catch (\Throwable $e) {
+            Log::warning('EXIF extraction failed', ['media_id' => $media->id, 'error' => $e->getMessage()]);
+        }
+    }
+
+    private function gpsToDecimal(array $coords, string $ref): ?float
+    {
+        if (count($coords) < 3) return null;
+        [$d, $m, $s] = $coords;
+        $toFloat = fn($v) => is_string($v) && str_contains($v, '/') ? (float) explode('/', $v)[0] / max(1, (float) explode('/', $v)[1]) : (float) $v;
+        $decimal = $toFloat($d) + $toFloat($m) / 60 + $toFloat($s) / 3600;
+        return in_array(strtoupper($ref), ['S', 'W']) ? -$decimal : $decimal;
     }
 
     /**

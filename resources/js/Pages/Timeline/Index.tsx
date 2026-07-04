@@ -1,5 +1,5 @@
 import AppLayout from '@/Layouts/AppLayout';
-import { Head } from '@inertiajs/react';
+import { Head, router } from '@inertiajs/react';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import axios from 'axios';
 import { Heart, Play } from 'lucide-react';
@@ -23,8 +23,9 @@ interface TimelineGroup {
     items: MediaCard[];
 }
 
-function MediaCardComponent({ item, onSelect }: { item: MediaCard; onSelect: (id: number) => void }) {
-    const thumb = item.variants?.find(v => v.type === 'thumbnail');
+function MediaCardComponent({ item }: { item: MediaCard }) {
+    const thumb = item.variants?.find(v => v.type === 'thumbnail')
+               ?? item.variants?.find(v => v.type === 'original');
     const placeholder = item.variants?.find(v => v.type === 'placeholder');
     const aspect = thumb?.aspect_ratio ?? (item.width && item.height ? item.width / item.height : 1);
 
@@ -32,7 +33,7 @@ function MediaCardComponent({ item, onSelect }: { item: MediaCard; onSelect: (id
         <div
             className="relative group cursor-pointer rounded overflow-hidden bg-[var(--color-bg-card)]"
             style={{ aspectRatio: aspect }}
-            onClick={() => onSelect(item.id)}
+            onClick={() => router.visit(`/media/${item.uuid}`)}
         >
             {/* Placeholder color */}
             {placeholder?.dominant_color && (
@@ -88,7 +89,7 @@ function DateGroup({ group }: { group: TimelineGroup }) {
                 }}
             >
                 {group.items.map(item => (
-                    <MediaCardComponent key={item.id} item={item} onSelect={() => {}} />
+                    <MediaCardComponent key={item.id} item={item} />
                 ))}
             </div>
         </section>
