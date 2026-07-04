@@ -453,87 +453,62 @@ class UploadController extends Controller
                 $updates['height'] = $imgH;
             }
 
-            // --- Try Imagick first (supports HEIC/HEIF natively) ---
+            // --- exiftool FIRST (best for HEIC/HEIF — reads XMP + EXIF + all containers) ---
+            $exiftoolPath = config('gallery.exiftool_path', '/usr/bin/exiftool');
+            if (file_exists($exiftoolPath)) {
+                $json = shell_exec(escapeshellcmd($exiftoolPath) . ' -json -n -charset UTF8 ' . escapeshellarg($sourcePath) . ' 2>/dev/null');
+                if ($json) {
+                    $data = json_decode($json, true)[0] ?? [];
+
+                    if (!empty($data['DateTimeOriginal'])) {
+                        try { $updates['taken_at'] = \Carbon\Carbon::parse($data['DateTimeOriginal']); } catch (\Throwable) {}
+                    }
+                    if (!empty($data['Make']))  $updates['camera_make']  = substr($data['Make'],  0, 100);
+                    if (!empty($data['Model'])) $updates['camera_model'] = substr($data['Model'], 0, 100);
+                    if (!empty($data['LensModel'])) $updates['lens_model'] = substr($data['LensModel'], 0, 255);
+                    if (!empty($data['GPSLatitude']))  $updates['latitude']  = (float) $data['GPSLatitude'];
+                    if (!empty($data['GPSLongitude'])) $updates['longitude'] = (float) $data['GPSLongitude'];
+                    if (!empty($data['GPSAltitude']))  $updates['altitude']  = round((float) $data['GPSAltitude'], 1);
+                    if (!empty($data['FocalLength']))  $updates['focal_length']  = (string) $data['FocalLength'];
+                    if (!empty($data['ISO']))           $updates['iso']           = (int) $data['ISO'];
+                    if (!empty($data['Aperture']))      $updates['aperture']      = (string) $data['Aperture'];
+                    if (!empty($data['ExposureTime']))  $updates['shutter_speed'] = (string) $data['ExposureTime'];
+                    if (!empty($data['ImageWidth']))    $updates['width']         = (int) $data['ImageWidth'];
+                    if (!empty($data['ImageHeight']))   $updates['height']        = (int) $data['ImageHeight'];
+
+                    if ($updates) $media->update($updates);
+                    return; // exiftool succeeded
+                }
+            }
+
+            // --- Imagick fallback (slower, may miss GPS in HEIC XMP) ---
             if (extension_loaded('imagick')) {
                 try {
                     $im   = new \Imagick($sourcePath . '[0]');
                     $props = $im->getImageProperties('exif:*');
                     $im->destroy();
 
-                    // Dimensions from Imagick if getimagesize failed
                     if (!$imgW && isset($props['exif:PixelXDimension'])) {
                         $updates['width']  = (int) $props['exif:PixelXDimension'];
                         $updates['height'] = (int) ($props['exif:PixelYDimension'] ?? 0);
                     }
-
                     if (!empty($props['exif:DateTimeOriginal'])) {
-                        try {
-                            $updates['taken_at'] = \Carbon\Carbon::createFromFormat('Y:m:d H:i:s', $props['exif:DateTimeOriginal']);
-                        } catch (\Throwable) {}
+                        try { $updates['taken_at'] = \Carbon\Carbon::createFromFormat('Y:m:d H:i:s', $props['exif:DateTimeOriginal']); } catch (\Throwable) {}
                     }
-
                     if (!empty($props['exif:Make']))  $updates['camera_make']  = substr($props['exif:Make'],  0, 100);
                     if (!empty($props['exif:Model'])) $updates['camera_model'] = substr($props['exif:Model'], 0, 100);
-                    if (!empty($props['exif:FocalLength'])) $updates['focal_length'] = $props['exif:FocalLength'];
-                    if (!empty($props['exif:ISOSpeedRatings'])) $updates['iso'] = (int) $props['exif:ISOSpeedRatings'];
-                    if (!empty($props['exif:FNumber'])) $updates['aperture'] = $props['exif:FNumber'];
-                    if (!empty($props['exif:ExposureTime'])) $updates['shutter_speed'] = $props['exif:ExposureTime'];
 
-                    // GPS from Imagick EXIF
-                    $lat = $this->parseImagickGps(
-                        $props['exif:GPSLatitude'] ?? null,
-                        $props['exif:GPSLatitudeRef'] ?? 'N'
-                    );
-                    $lng = $this->parseImagickGps(
-                        $props['exif:GPSLongitude'] ?? null,
-                        $props['exif:GPSLongitudeRef'] ?? 'E'
-                    );
+                    $lat = $this->parseImagickGps($props['exif:GPSLatitude'] ?? null, $props['exif:GPSLatitudeRef'] ?? 'N');
+                    $lng = $this->parseImagickGps($props['exif:GPSLongitude'] ?? null, $props['exif:GPSLongitudeRef'] ?? 'E');
                     if ($lat && $lng) {
                         $updates['latitude']  = $lat;
                         $updates['longitude'] = $lng;
                     }
-                    if (!empty($props['exif:GPSAltitude'])) {
-                        $parts = explode('/', $props['exif:GPSAltitude']);
-                        if (count($parts) === 2 && $parts[1]) {
-                            $updates['altitude'] = round((float)$parts[0] / (float)$parts[1], 1);
-                        }
-                    }
 
                     if ($updates) $media->update($updates);
-                    return; // Imagick succeeded
+                    return;
                 } catch (\Throwable $e) {
-                    Log::info('Imagick EXIF read failed, trying exiftool/exif_read_data', [
-                        'media_id' => $media->id, 'error' => $e->getMessage()
-                    ]);
-                }
-            }
-
-            // --- Try exiftool (handles HEIC, RAW, virtually everything) ---
-            $exiftoolPath = config('gallery.exiftool_path', '/usr/bin/exiftool');
-            if (file_exists($exiftoolPath)) {
-                $json = shell_exec(escapeshellcmd($exiftoolPath) . ' -json -n ' . escapeshellarg($sourcePath) . ' 2>/dev/null');
-                if ($json) {
-                    $data = json_decode($json, true)[0] ?? [];
-
-                    if (!empty($data['DateTimeOriginal'])) {
-                        try {
-                            $updates['taken_at'] = \Carbon\Carbon::parse($data['DateTimeOriginal']);
-                        } catch (\Throwable) {}
-                    }
-                    if (!empty($data['Make']))  $updates['camera_make']  = substr($data['Make'],  0, 100);
-                    if (!empty($data['Model'])) $updates['camera_model'] = substr($data['Model'], 0, 100);
-                    if (!empty($data['GPSLatitude']))  $updates['latitude']  = (float) $data['GPSLatitude'];
-                    if (!empty($data['GPSLongitude'])) $updates['longitude'] = (float) $data['GPSLongitude'];
-                    if (!empty($data['GPSAltitude']))  $updates['altitude']  = round((float) $data['GPSAltitude'], 1);
-                    if (!empty($data['FocalLength']))  $updates['focal_length'] = (string) $data['FocalLength'];
-                    if (!empty($data['ISO']))           $updates['iso'] = (int) $data['ISO'];
-                    if (!empty($data['Aperture']))      $updates['aperture'] = (string) $data['Aperture'];
-                    if (!empty($data['ExposureTime']))  $updates['shutter_speed'] = (string) $data['ExposureTime'];
-                    if (!empty($data['ImageWidth']))    $updates['width']  = (int) $data['ImageWidth'];
-                    if (!empty($data['ImageHeight']))   $updates['height'] = (int) $data['ImageHeight'];
-
-                    if ($updates) $media->update($updates);
-                    return; // exiftool succeeded
+                    Log::warning('Imagick EXIF read failed', ['media_id' => $media->id, 'error' => $e->getMessage()]);
                 }
             }
 
@@ -543,7 +518,10 @@ class UploadController extends Controller
             if (!$exif) return;
 
             if (!empty($exif['DateTimeOriginal'])) {
-                try { $updates['taken_at'] = \Carbon\Carbon::createFromFormat('Y:m:d H:i:s', $exif['DateTimeOriginal']); } catch (\Throwable) {}
+                try {
+                    $updates['taken_at'] = \Carbon\Carbon::createFromFormat('Y:m:d H:i:s', $exif['DateTimeOriginal']);
+                } catch (\Throwable) {
+                }
             }
             if (!empty($exif['Make']))  $updates['camera_make']  = substr($exif['Make'],  0, 100);
             if (!empty($exif['Model'])) $updates['camera_model'] = substr($exif['Model'], 0, 100);
