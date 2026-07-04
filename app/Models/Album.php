@@ -43,10 +43,13 @@ class Album extends Model
         });
 
         static::deleting(function (Album $album) {
-            DB::table('album_closure')
-                ->where('descendant_id', $album->id)
-                ->orWhere('ancestor_id', $album->id)
-                ->delete();
+            // Only clean closure table on hard delete, not soft delete
+            if ($album->isForceDeleting()) {
+                DB::table('album_closure')
+                    ->where('descendant_id', $album->id)
+                    ->orWhere('ancestor_id', $album->id)
+                    ->delete();
+            }
         });
     }
 

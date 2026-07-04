@@ -48,8 +48,10 @@ class GenerateMissingThumbnailsCommand extends Command
                     $relPath = "media/{$media->uuid}/original.{$media->extension}";
                     if (Storage::disk('public')->put($relPath, fopen($sourcePath, 'rb'), 'public')) {
                         $media->variants()->updateOrCreate(['type' => 'original'], [
-                            'disk' => 'public', 'path' => $relPath,
-                            'mime_type' => $media->mime_type, 'size_bytes' => filesize($sourcePath),
+                            'disk' => 'public',
+                            'path' => $relPath,
+                            'mime_type' => $media->mime_type,
+                            'size_bytes' => filesize($sourcePath),
                         ]);
                     }
                 }
@@ -58,7 +60,8 @@ class GenerateMissingThumbnailsCommand extends Command
             if (!$sourcePath || !file_exists($sourcePath)) {
                 $this->newLine();
                 $this->warn("  No source for #{$media->id} {$media->original_filename}" . ($media->drive_file_id ? ' (has Drive ID, use --recover)' : ' (no Drive ID)'));
-                $bar->advance(); $fail++;
+                $bar->advance();
+                $fail++;
                 return;
             }
 
@@ -118,19 +121,26 @@ class GenerateMissingThumbnailsCommand extends Command
                 $exif = @exif_read_data($path);
                 if ($exif) {
                     if (!empty($exif['DateTimeOriginal'])) {
-                        try { $updates['taken_at'] = \Carbon\Carbon::createFromFormat('Y:m:d H:i:s', $exif['DateTimeOriginal']); } catch (\Throwable) {}
+                        try {
+                            $updates['taken_at'] = \Carbon\Carbon::createFromFormat('Y:m:d H:i:s', $exif['DateTimeOriginal']);
+                        } catch (\Throwable) {
+                        }
                     }
                     if (!empty($exif['GPSLatitude']) && !empty($exif['GPSLongitude'])) {
                         $lat = $this->gps($exif['GPSLatitude'], $exif['GPSLatitudeRef'] ?? 'N');
                         $lng = $this->gps($exif['GPSLongitude'], $exif['GPSLongitudeRef'] ?? 'E');
-                        if ($lat && $lng) { $updates['latitude'] = $lat; $updates['longitude'] = $lng; }
+                        if ($lat && $lng) {
+                            $updates['latitude'] = $lat;
+                            $updates['longitude'] = $lng;
+                        }
                     }
                     if (!empty($exif['Make']))  $updates['camera_make']  = substr($exif['Make'],  0, 100);
                     if (!empty($exif['Model'])) $updates['camera_model'] = substr($exif['Model'], 0, 100);
                 }
             }
             if ($updates) $media->update($updates);
-        } catch (\Throwable) {}
+        } catch (\Throwable) {
+        }
     }
 
     private function gps(array $c, string $ref): ?float
@@ -151,18 +161,29 @@ class GenerateMissingThumbnailsCommand extends Command
                 $im = new \Imagick($sourcePath . '[0]');
                 $im->setImageColorspace(\Imagick::COLORSPACE_SRGB);
                 $im->autoOrient();
-                $w = $im->getImageWidth(); $h = $im->getImageHeight(); $min = min($w, $h);
+                $w = $im->getImageWidth();
+                $h = $im->getImageHeight();
+                $min = min($w, $h);
                 $im->cropImage($min, $min, (int)(($w - $min) / 2), (int)(($h - $min) / 2));
                 $im->thumbnailImage($size, $size);
                 $im->setImageFormat('jpeg');
                 $im->setImageCompressionQuality(85);
                 $tmp = tempnam(sys_get_temp_dir(), 'gt_') . '.jpg';
-                $im->writeImage($tmp); $im->destroy();
+                $im->writeImage($tmp);
+                $im->destroy();
                 if (Storage::disk('public')->put($thumbRel, fopen($tmp, 'rb'), 'public')) {
                     @unlink($tmp);
-                    $media->variants()->updateOrCreate(['type' => 'thumbnail'],
-                        ['disk' => 'public', 'path' => $thumbRel, 'mime_type' => 'image/jpeg',
-                         'size_bytes' => Storage::disk('public')->size($thumbRel), 'width' => $size, 'height' => $size]);
+                    $media->variants()->updateOrCreate(
+                        ['type' => 'thumbnail'],
+                        [
+                            'disk' => 'public',
+                            'path' => $thumbRel,
+                            'mime_type' => 'image/jpeg',
+                            'size_bytes' => Storage::disk('public')->size($thumbRel),
+                            'width' => $size,
+                            'height' => $size
+                        ]
+                    );
                     return;
                 }
                 @unlink($tmp);
@@ -181,17 +202,28 @@ class GenerateMissingThumbnailsCommand extends Command
                 default       => null,
             };
             if ($src) {
-                $w = imagesx($src); $h = imagesy($src); $min = min($w, $h);
+                $w = imagesx($src);
+                $h = imagesy($src);
+                $min = min($w, $h);
                 $thumb = imagecreatetruecolor($size, $size);
                 imagecopyresampled($thumb, $src, 0, 0, (int)(($w - $min) / 2), (int)(($h - $min) / 2), $size, $size, $min, $min);
                 imagedestroy($src);
                 $tmp = tempnam(sys_get_temp_dir(), 'gt_') . '.jpg';
-                imagejpeg($thumb, $tmp, 85); imagedestroy($thumb);
+                imagejpeg($thumb, $tmp, 85);
+                imagedestroy($thumb);
                 if (Storage::disk('public')->put($thumbRel, fopen($tmp, 'rb'), 'public')) {
                     @unlink($tmp);
-                    $media->variants()->updateOrCreate(['type' => 'thumbnail'],
-                        ['disk' => 'public', 'path' => $thumbRel, 'mime_type' => 'image/jpeg',
-                         'size_bytes' => Storage::disk('public')->size($thumbRel), 'width' => $size, 'height' => $size]);
+                    $media->variants()->updateOrCreate(
+                        ['type' => 'thumbnail'],
+                        [
+                            'disk' => 'public',
+                            'path' => $thumbRel,
+                            'mime_type' => 'image/jpeg',
+                            'size_bytes' => Storage::disk('public')->size($thumbRel),
+                            'width' => $size,
+                            'height' => $size
+                        ]
+                    );
                     return;
                 }
                 @unlink($tmp);
@@ -200,10 +232,17 @@ class GenerateMissingThumbnailsCommand extends Command
 
         $orig = $media->variants()->where('type', 'original')->first();
         if ($orig) {
-            $media->variants()->updateOrCreate(['type' => 'thumbnail'],
-                ['disk' => $orig->disk, 'path' => $orig->path, 'mime_type' => $orig->mime_type,
-                 'size_bytes' => $orig->size_bytes, 'width' => null, 'height' => null]);
+            $media->variants()->updateOrCreate(
+                ['type' => 'thumbnail'],
+                [
+                    'disk' => $orig->disk,
+                    'path' => $orig->path,
+                    'mime_type' => $orig->mime_type,
+                    'size_bytes' => $orig->size_bytes,
+                    'width' => null,
+                    'height' => null
+                ]
+            );
         }
     }
 }
-

@@ -1,9 +1,9 @@
 import AppLayout from '@/Layouts/AppLayout';
 import { Head, router } from '@inertiajs/react';
-import { useInfiniteQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
-import { Heart, Play } from 'lucide-react';
-import { useEffect, useRef } from 'react';
+import { Heart, Play, Trash2 } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 
 interface MediaCard {
     id: number;
@@ -23,7 +23,11 @@ interface TimelineGroup {
     items: MediaCard[];
 }
 
-function MediaCardComponent({ item }: { item: MediaCard }) {
+function MediaCardComponent({ item, onFavoriteToggle, onTrash }: {
+    item: MediaCard;
+    onFavoriteToggle: (uuid: string, current: boolean) => void;
+    onTrash: (uuid: string) => void;
+}) {
     const thumb = item.variants?.find(v => v.type === 'thumbnail')
                ?? item.variants?.find(v => v.type === 'original');
     const placeholder = item.variants?.find(v => v.type === 'placeholder');
@@ -35,15 +39,10 @@ function MediaCardComponent({ item }: { item: MediaCard }) {
             style={{ aspectRatio: aspect }}
             onClick={() => router.visit(`/media/${item.uuid}`)}
         >
-            {/* Placeholder color */}
             {placeholder?.dominant_color && (
-                <div
-                    className="absolute inset-0"
-                    style={{ backgroundColor: placeholder.dominant_color }}
-                />
+                <div className="absolute inset-0" style={{ backgroundColor: placeholder.dominant_color }} />
             )}
 
-            {/* Thumbnail */}
             {thumb && (
                 <img
                     src={thumb.url}
@@ -54,8 +53,8 @@ function MediaCardComponent({ item }: { item: MediaCard }) {
                 />
             )}
 
-            {/* Overlay */}
-            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
+            {/* Hover overlay */}
+            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors" />
 
             {/* Video badge */}
             {item.media_type === 'video' && (
@@ -64,17 +63,39 @@ function MediaCardComponent({ item }: { item: MediaCard }) {
                 </div>
             )}
 
-            {/* Favorite */}
+            {/* Favorite indicator (always visible when favorited) */}
             {item.is_favorite && (
                 <div className="absolute top-2 left-2">
                     <Heart size={12} className="text-red-400 fill-red-400" />
                 </div>
             )}
+
+            {/* Hover actions */}
+            <div className="absolute bottom-0 left-0 right-0 p-1.5 flex items-center justify-between opacity-0 group-hover:opacity-100 transition-opacity">
+                <button
+                    onClick={e => { e.stopPropagation(); onFavoriteToggle(item.uuid, item.is_favorite); }}
+                    className="w-7 h-7 rounded-full bg-black/60 flex items-center justify-center hover:bg-black/80 transition-colors"
+                    title={item.is_favorite ? 'Odebrat z oblíbených' : 'Přidat do oblíbených'}
+                >
+                    <Heart size={12} className={item.is_favorite ? 'text-red-400 fill-red-400' : 'text-white'} />
+                </button>
+                <button
+                    onClick={e => { e.stopPropagation(); onTrash(item.uuid); }}
+                    className="w-7 h-7 rounded-full bg-black/60 flex items-center justify-center hover:bg-red-500/80 transition-colors"
+                    title="Přesunout do koše"
+                >
+                    <Trash2 size={12} className="text-white" />
+                </button>
+            </div>
         </div>
     );
 }
 
-function DateGroup({ group }: { group: TimelineGroup }) {
+function DateGroup({ group, onFavoriteToggle, onTrash }: {
+    group: TimelineGroup;
+    onFavoriteToggle: (uuid: string, current: boolean) => void;
+    onTrash: (uuid: string) => void;
+}) {
     return (
         <section className="mb-6">
             <div className="sticky top-0 z-10 py-3 px-4 bg-[var(--color-bg-primary)]/80 backdrop-blur-sm">
@@ -89,7 +110,7 @@ function DateGroup({ group }: { group: TimelineGroup }) {
                 }}
             >
                 {group.items.map(item => (
-                    <MediaCardComponent key={item.id} item={item} />
+                    <MediaCardComponent key={item.id} item={item} onFavoriteToggle={onFavoriteToggle} onTrash={onTrash} />
                 ))}
             </div>
         </section>
@@ -119,6 +140,29 @@ function groupByDate(items: MediaCard[]): TimelineGroup[] {
 
 export default function TimelineIndex() {
     const sentinelRef = useRef<HTMLDivElement>(null);
+    const queryClient = useQueryClient();
+    const [localItems, setLocalItems] = useState<Record<string, Partial<MediaCard>>>({});
+
+    const toggleFavorite = async (uuid: string, current: boolean) => {
+        setLocalItems(prev => ({ ...prev, [uuid]: { is_favorite: !current } }));
+        try {
+            await axios.post(`/api/v1/favorites/${uuid}/toggle`);
+        } catch {
+            setLocalItems(prev => ({ ...prev, [uuid]: { is_favorite: current } }));
+        }
+    };
+
+    const trashItem = async (uuid: string) => {
+        if (!confirm('P\u0159esunout do ko\u0161e?')) return;
+        setLocalItems(prev => ({ ...prev, [uuid]: { ...prev[uuid], _trashed: true } as any }));
+        try {
+            await axios.delete(`/media/${uuid}`);
+            queryClient.invalidateQueries({ queryKey: ['timeline'] });
+        } catch (e: any) {
+            setLocalItems(prev => { const n = { ...prev }; delete n[uuid]; return n; });
+            alert(e?.response?.data?.message ?? 'Chyba p\u0159i p\u0159esunu');
+        }
+    };
 
     const {
         data,
@@ -152,7 +196,9 @@ export default function TimelineIndex() {
         return () => observer.disconnect();
     }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
-    const allItems: MediaCard[] = data?.pages.flatMap(p => p.data) ?? [];
+    const allItems: MediaCard[] = (data?.pages.flatMap(p => p.data) ?? [])
+        .filter(item => !(localItems[item.uuid] as any)?._trashed)
+        .map(item => ({ ...item, ...(localItems[item.uuid] ?? {}) }));
     const groups = groupByDate(allItems);
 
     return (
@@ -186,7 +232,7 @@ export default function TimelineIndex() {
                 )}
 
                 {groups.map(group => (
-                    <DateGroup key={group.date} group={group} />
+                    <DateGroup key={group.date} group={group} onFavoriteToggle={toggleFavorite} onTrash={trashItem} />
                 ))}
 
                 {/* Sentinel for infinite scroll */}

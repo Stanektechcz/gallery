@@ -130,7 +130,7 @@ class AlbumController extends Controller
             ->with('success', 'Album bylo vytvořeno.');
     }
 
-    public function update(UpdateAlbumRequest $request, string $uuid): \Illuminate\Http\RedirectResponse
+    public function update(UpdateAlbumRequest $request, string $uuid): \Illuminate\Http\RedirectResponse|\Illuminate\Http\JsonResponse
     {
         $album = Album::where('uuid', $uuid)->firstOrFail();
         Gate::authorize('update', $album);
@@ -142,7 +142,11 @@ class AlbumController extends Controller
             RenameDriveFolderJob::dispatch($album, $data['title']);
         }
 
-        $this->albumService->update($album, $data, $request->user());
+        $updated = $this->albumService->update($album, $data, $request->user());
+
+        if ($request->wantsJson()) {
+            return response()->json(['album' => $updated]);
+        }
 
         return back()->with('success', 'Album bylo upraveno.');
     }
