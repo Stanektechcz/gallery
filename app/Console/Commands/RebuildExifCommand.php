@@ -34,7 +34,9 @@ class RebuildExifCommand extends Command
         }
 
         $bar  = $this->output->createProgressBar($total);
-        $done = 0; $fail = 0; $nogps = 0;
+        $done = 0;
+        $fail = 0;
+        $nogps = 0;
 
         $exiftoolPath = config('gallery.exiftool_path', '/usr/bin/exiftool');
 
@@ -46,7 +48,8 @@ class RebuildExifCommand extends Command
             if (!$sourcePath || !file_exists($sourcePath)) {
                 $this->newLine();
                 $this->line("  <comment>No local file for #{$media->id} {$media->original_filename}</comment>");
-                $bar->advance(); $fail++;
+                $bar->advance();
+                $fail++;
                 return;
             }
 
@@ -80,9 +83,9 @@ class RebuildExifCommand extends Command
             ->whereDoesntHave('variants')
             ->orWhere(function ($q) {
                 $q->whereNull('drive_file_id')
-                  ->whereHas('variants', function ($q2) {
-                      $q2->where('type', 'original');
-                  }, '=', 0);
+                    ->whereHas('variants', function ($q2) {
+                        $q2->where('type', 'original');
+                    }, '=', 0);
             });
 
         // More precise: find items where the original file doesn't exist and no drive_file_id
@@ -104,61 +107,6 @@ class RebuildExifCommand extends Command
 
     private function extractExif(string $sourcePath, string $exiftoolPath): array
     {
-        $updates = [];
-
-        // 1. Try exiftool (best - handles HEIC, JPEG, RAW, everything)
-        if (file_exists($exiftoolPath)) {
-            $json = shell_exec(escapeshellcmd($exiftoolPath) . ' -json -n -charset UTF8 ' . escapeshellarg($sourcePath) . ' 2>/dev/null');
-            if ($json) {
-                $data = json_decode($json, true)[0] ?? [];
-                if (!empty($data['DateTimeOriginal'])) {
-                    try { $updates['taken_at'] = \Carbon\Carbon::parse($data['DateTimeOriginal']); } catch (\Throwable) {}
-                }
-                if (!empty($data['Make']))  $updates['camera_make']  = substr($data['Make'],  0, 100);
-                if (!empty($data['Model'])) $updates['camera_model'] = substr($data['Model'], 0, 100);
-                if (!empty($data['GPSLatitude']))  $updates['latitude']  = (float) $data['GPSLatitude'];
-                if (!empty($data['GPSLongitude'])) $updates['longitude'] = (float) $data['GPSLongitude'];
-                if (!empty($data['GPSAltitude']))  $updates['altitude']  = round((float) $data['GPSAltitude'], 1);
-                if (!empty($data['FocalLength']))  $updates['focal_length']  = (string) $data['FocalLength'];
-                if (!empty($data['ISO']))           $updates['iso']           = (int) $data['ISO'];
-                if (!empty($data['Aperture']))      $updates['aperture']      = (string) $data['Aperture'];
-                if (!empty($data['ExposureTime']))  $updates['shutter_speed'] = (string) $data['ExposureTime'];
-                if (!empty($data['ImageWidth']))    $updates['width']         = (int) $data['ImageWidth'];
-                if (!empty($data['ImageHeight']))   $updates['height']        = (int) $data['ImageHeight'];
-                if (!empty($data['LensModel']))     $updates['lens_model']    = substr($data['LensModel'], 0, 255);
-                return $updates;
-            }
-        }
-
-        // 2. Imagick fallback
-        if (extension_loaded('imagick')) {
-            try {
-                $im    = new \Imagick($sourcePath . '[0]');
-                $props = $im->getImageProperties('exif:*');
-                $im->destroy();
-
-                if (!empty($props['exif:DateTimeOriginal'])) {
-                    try { $updates['taken_at'] = \Carbon\Carbon::createFromFormat('Y:m:d H:i:s', $props['exif:DateTimeOriginal']); } catch (\Throwable) {}
-                }
-                if (!empty($props['exif:Make']))  $updates['camera_make']  = substr($props['exif:Make'],  0, 100);
-                if (!empty($props['exif:Model'])) $updates['camera_model'] = substr($props['exif:Model'], 0, 100);
-
-                $lat = $this->parseGps($props['exif:GPSLatitude'] ?? null, $props['exif:GPSLatitudeRef'] ?? 'N');
-                $lng = $this->parseGps($props['exif:GPSLongitude'] ?? null, $props['exif:GPSLongitudeRef'] ?? 'E');
-                if ($lat && $lng) { $updates['latitude'] = $lat; $updates['longitude'] = $lng; }
-            } catch (\Throwable) {}
-        }
-
-        return $updates;
-    }
-
-    private function parseGps(?string $raw, string $ref): ?float
-    {
-        if (!$raw) return null;
-        $parts = array_map('trim', explode(',', $raw));
-        if (count($parts) < 3) return null;
-        $f = fn($v) => str_contains($v, '/') ? (float)explode('/', $v)[0] / max(1, (float)explode('/', $v)[1]) : (float)$v;
-        $d = $f($parts[0]) + $f($parts[1]) / 60 + $f($parts[2]) / 3600;
-        return in_array(strtoupper($ref), ['S', 'W']) ? -$d : $d;
+        return (new \App\Services\ExifExtractorService())->extract($sourcePath);
     }
 }
