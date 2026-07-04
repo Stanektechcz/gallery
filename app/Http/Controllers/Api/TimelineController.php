@@ -111,8 +111,11 @@ class TimelineController extends Controller
             ->where('status', 'ready')
             ->whereNotNull('latitude')
             ->whereNotNull('longitude')
-            ->select(['id', 'uuid', 'latitude', 'longitude', 'taken_at', 'media_type'])
-            ->with(['variants' => fn($q) => $q->where('type', 'thumbnail')])
+            ->select(['id', 'uuid', 'latitude', 'longitude', 'taken_at', 'media_type', 'primary_album_id', 'original_filename'])
+            ->with([
+                'variants'     => fn($q) => $q->whereIn('type', ['thumbnail', 'placeholder']),
+                'primaryAlbum' => fn($q) => $q->select('id', 'uuid', 'title'),
+            ])
             ->limit(5000)
             ->get();
 

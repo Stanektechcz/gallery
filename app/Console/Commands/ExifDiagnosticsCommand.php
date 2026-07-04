@@ -61,7 +61,8 @@ class ExifDiagnosticsCommand extends Command
                 $proc = proc_open([$exiftoolPath, '-ver'], [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
                 if (is_resource($proc)) {
                     $ver = trim(stream_get_contents($pipes[1]));
-                    fclose($pipes[1]); fclose($pipes[2]);
+                    fclose($pipes[1]);
+                    fclose($pipes[2]);
                     proc_close($proc);
                     $this->line("  Version: <fg=green>{$ver}</>");
                 }

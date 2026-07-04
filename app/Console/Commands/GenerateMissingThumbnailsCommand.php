@@ -125,18 +125,25 @@ class GenerateMissingThumbnailsCommand extends Command
                     $im->destroy();
 
                     if (!empty($props['exif:DateTimeOriginal'])) {
-                        try { $updates['taken_at'] = \Carbon\Carbon::createFromFormat('Y:m:d H:i:s', $props['exif:DateTimeOriginal']); } catch (\Throwable) {}
+                        try {
+                            $updates['taken_at'] = \Carbon\Carbon::createFromFormat('Y:m:d H:i:s', $props['exif:DateTimeOriginal']);
+                        } catch (\Throwable) {
+                        }
                     }
                     if (!empty($props['exif:Make']))  $updates['camera_make']  = substr($props['exif:Make'],  0, 100);
                     if (!empty($props['exif:Model'])) $updates['camera_model'] = substr($props['exif:Model'], 0, 100);
 
                     $lat = $this->parseGps($props['exif:GPSLatitude'] ?? null, $props['exif:GPSLatitudeRef'] ?? 'N');
                     $lng = $this->parseGps($props['exif:GPSLongitude'] ?? null, $props['exif:GPSLongitudeRef'] ?? 'E');
-                    if ($lat && $lng) { $updates['latitude'] = $lat; $updates['longitude'] = $lng; }
+                    if ($lat && $lng) {
+                        $updates['latitude'] = $lat;
+                        $updates['longitude'] = $lng;
+                    }
 
                     if ($updates) $media->update($updates);
                     return;
-                } catch (\Throwable) {}
+                } catch (\Throwable) {
+                }
             }
 
             // Try exiftool
@@ -146,7 +153,10 @@ class GenerateMissingThumbnailsCommand extends Command
                 if ($json) {
                     $data = json_decode($json, true)[0] ?? [];
                     if (!empty($data['DateTimeOriginal'])) {
-                        try { $updates['taken_at'] = \Carbon\Carbon::parse($data['DateTimeOriginal']); } catch (\Throwable) {}
+                        try {
+                            $updates['taken_at'] = \Carbon\Carbon::parse($data['DateTimeOriginal']);
+                        } catch (\Throwable) {
+                        }
                     }
                     if (!empty($data['Make']))  $updates['camera_make']  = substr($data['Make'],  0, 100);
                     if (!empty($data['Model'])) $updates['camera_model'] = substr($data['Model'], 0, 100);
@@ -163,12 +173,18 @@ class GenerateMissingThumbnailsCommand extends Command
                 $exif = @exif_read_data($path);
                 if ($exif) {
                     if (!empty($exif['DateTimeOriginal'])) {
-                        try { $updates['taken_at'] = \Carbon\Carbon::createFromFormat('Y:m:d H:i:s', $exif['DateTimeOriginal']); } catch (\Throwable) {}
+                        try {
+                            $updates['taken_at'] = \Carbon\Carbon::createFromFormat('Y:m:d H:i:s', $exif['DateTimeOriginal']);
+                        } catch (\Throwable) {
+                        }
                     }
                     if (!empty($exif['GPSLatitude']) && !empty($exif['GPSLongitude'])) {
                         $lat = $this->gps($exif['GPSLatitude'], $exif['GPSLatitudeRef'] ?? 'N');
                         $lng = $this->gps($exif['GPSLongitude'], $exif['GPSLongitudeRef'] ?? 'E');
-                        if ($lat && $lng) { $updates['latitude'] = $lat; $updates['longitude'] = $lng; }
+                        if ($lat && $lng) {
+                            $updates['latitude'] = $lat;
+                            $updates['longitude'] = $lng;
+                        }
                     }
                     if (!empty($exif['Make']))  $updates['camera_make']  = substr($exif['Make'],  0, 100);
                     if (!empty($exif['Model'])) $updates['camera_model'] = substr($exif['Model'], 0, 100);

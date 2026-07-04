@@ -11,12 +11,17 @@ import {
     ExternalLink,
     Heart,
     Info, MapPin,
+    Maximize2,
+    Minimize2,
+    RotateCcw,
     Star,
     Tag,
     Trash2,
-    Users
+    Users,
+    ZoomIn,
+    ZoomOut,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 interface Variant {
     id: number;
@@ -96,48 +101,158 @@ function ProgressiveImage({ uuid, fullUrl, thumbUrl, alt, width, height, dominan
     uuid: string; fullUrl: string; thumbUrl?: string;
     alt: string; width?: number; height?: number; dominantColor?: string;
 }) {
-    const [loaded, setLoaded] = useState(false);
-    const [error, setError]   = useState(false);
+    const [loaded, setLoaded]     = useState(false);
+    const [error, setError]       = useState(false);
+    const [scale, setScale]       = useState(1);
+    const [offset, setOffset]     = useState({ x: 0, y: 0 });
+    const [dragging, setDragging] = useState(false);
+    const [fullscreen, setFullscreen] = useState(false);
+    const dragStart  = useRef<{ x: number; y: number; ox: number; oy: number } | null>(null);
+    const containerRef = useRef<HTMLDivElement>(null);
+
+    const clampOffset = useCallback((s: number, ox: number, oy: number) => {
+        if (s <= 1) return { x: 0, y: 0 };
+        const el = containerRef.current;
+        if (!el) return { x: ox, y: oy };
+        const maxX = el.clientWidth  * (s - 1) / 2;
+        const maxY = el.clientHeight * (s - 1) / 2;
+        return { x: Math.max(-maxX, Math.min(maxX, ox)), y: Math.max(-maxY, Math.min(maxY, oy)) };
+    }, []);
+
+    const zoom = useCallback((delta: number, cx?: number, cy?: number) => {
+        setScale(prev => {
+            const next = Math.max(1, Math.min(8, prev + delta));
+            setOffset(o => clampOffset(next, o.x, o.y));
+            return next;
+        });
+    }, [clampOffset]);
+
+    const reset = () => { setScale(1); setOffset({ x: 0, y: 0 }); };
+
+    // Mouse wheel zoom
+    const onWheel = (e: React.WheelEvent) => {
+        e.preventDefault();
+        zoom(e.deltaY < 0 ? 0.3 : -0.3);
+    };
+
+    // Double-click zoom
+    const onDblClick = (e: React.MouseEvent) => {
+        if (scale > 1) { reset(); } else { zoom(2); }
+    };
+
+    // Drag to pan
+    const onMouseDown = (e: React.MouseEvent) => {
+        if (scale <= 1) return;
+        setDragging(true);
+        dragStart.current = { x: e.clientX, y: e.clientY, ox: offset.x, oy: offset.y };
+    };
+    const onMouseMove = (e: React.MouseEvent) => {
+        if (!dragging || !dragStart.current) return;
+        const dx = e.clientX - dragStart.current.x;
+        const dy = e.clientY - dragStart.current.y;
+        setOffset(clampOffset(scale, dragStart.current.ox + dx, dragStart.current.oy + dy));
+    };
+    const onMouseUp = () => { setDragging(false); dragStart.current = null; };
+
+    // Keyboard shortcuts
+    useEffect(() => {
+        const handler = (e: KeyboardEvent) => {
+            if (e.key === '+' || e.key === '=') zoom(0.5);
+            if (e.key === '-') zoom(-0.5);
+            if (e.key === '0') reset();
+            if (e.key === 'f' || e.key === 'F') setFullscreen(v => !v);
+        };
+        window.addEventListener('keydown', handler);
+        return () => window.removeEventListener('keydown', handler);
+    }, [zoom]);
+
+    const imgStyle: React.CSSProperties = {
+        transform: `scale(${scale}) translate(${offset.x / scale}px, ${offset.y / scale}px)`,
+        transformOrigin: 'center',
+        transition: dragging ? 'none' : 'transform 0.15s ease',
+        cursor: scale > 1 ? (dragging ? 'grabbing' : 'grab') : 'zoom-in',
+        maxHeight: 'calc(100vh - 120px)',
+        maxWidth: '100%',
+        objectFit: 'contain',
+    };
 
     return (
-        <div className="relative max-h-full max-w-full flex items-center justify-center">
-            {/* Color placeholder */}
+        <div
+            ref={containerRef}
+            className={clsx(
+                'relative flex items-center justify-center select-none overflow-hidden',
+                fullscreen ? 'fixed inset-0 z-[200] bg-black' : 'w-full h-full'
+            )}
+            onWheel={onWheel}
+            onMouseDown={onMouseDown}
+            onMouseMove={onMouseMove}
+            onMouseUp={onMouseUp}
+            onMouseLeave={onMouseUp}
+            onDoubleClick={onDblClick}
+        >
+            {/* Blurred placeholder */}
             {dominantColor && !loaded && (
-                <div className="absolute inset-0 rounded" style={{ backgroundColor: dominantColor }} />
+                <div className="absolute inset-0" style={{ backgroundColor: dominantColor }} />
             )}
-            {/* Blurred thumb (instant) */}
             {thumbUrl && !loaded && (
-                <img src={thumbUrl} alt="" aria-hidden className="absolute inset-0 w-full h-full object-contain blur-sm opacity-60 transition-opacity duration-300" />
+                <img src={thumbUrl} alt="" aria-hidden className="absolute inset-0 w-full h-full object-contain blur-sm opacity-60" />
             )}
-            {/* Full resolution (from Drive or local) */}
+
+            {/* Full resolution */}
             {!error ? (
                 <img
                     key={uuid}
                     src={fullUrl}
                     alt={alt}
                     onLoad={() => setLoaded(true)}
-                    onError={() => { setError(true); }}
-                    className={`max-h-[calc(100vh-120px)] max-w-full object-contain relative z-10 transition-opacity duration-500 ${loaded ? 'opacity-100' : 'opacity-0'}`}
-                    style={{ aspectRatio: width && height ? `${width}/${height}` : undefined }}
+                    onError={() => setError(true)}
+                    style={{ ...imgStyle, opacity: loaded ? 1 : 0 }}
+                    draggable={false}
                 />
             ) : thumbUrl ? (
-                <img
-                    src={thumbUrl}
-                    alt={alt}
-                    className="max-h-[calc(100vh-120px)] max-w-full object-contain relative z-10"
-                    style={{ aspectRatio: width && height ? `${width}/${height}` : undefined }}
-                />
+                <img src={thumbUrl} alt={alt} style={imgStyle} draggable={false} />
             ) : (
                 <div className="flex flex-col items-center gap-2 text-[var(--color-text-secondary)]">
                     <Clock size={24} />
                     <p className="text-sm">Fotografie není dostupná</p>
                 </div>
             )}
+
             {/* Loading spinner */}
             {!loaded && !error && (
-                <div className="absolute bottom-4 right-4 z-20">
-                    <div className="w-4 h-4 rounded-full border-2 border-white/40 border-t-white animate-spin" />
+                <div className="absolute bottom-4 right-4 z-20 w-5 h-5 rounded-full border-2 border-white/40 border-t-white animate-spin" />
+            )}
+
+            {/* Zoom controls */}
+            {loaded && (
+                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1 bg-black/60 backdrop-blur rounded-full px-2 py-1">
+                    <button onClick={() => zoom(-0.5)} className="p-1.5 text-white/80 hover:text-white transition-colors" title="Oddálit (-)">
+                        <ZoomOut size={14} />
+                    </button>
+                    <span className="text-white/70 text-xs w-10 text-center">{Math.round(scale * 100)}%</span>
+                    <button onClick={() => zoom(0.5)} className="p-1.5 text-white/80 hover:text-white transition-colors" title="Přiblížit (+)">
+                        <ZoomIn size={14} />
+                    </button>
+                    {scale > 1 && (
+                        <button onClick={reset} className="p-1.5 text-white/80 hover:text-white transition-colors" title="Původní velikost (0)">
+                            <RotateCcw size={14} />
+                        </button>
+                    )}
+                    <div className="w-px h-4 bg-white/20 mx-0.5" />
+                    <button onClick={() => setFullscreen(v => !v)} className="p-1.5 text-white/80 hover:text-white transition-colors" title="Celá obrazovka (F)">
+                        {fullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+                    </button>
                 </div>
+            )}
+
+            {/* Fullscreen close */}
+            {fullscreen && (
+                <button
+                    onClick={() => setFullscreen(false)}
+                    className="absolute top-4 right-4 z-30 p-2 rounded-full bg-black/60 text-white hover:bg-black/80 transition-colors"
+                >
+                    <Minimize2 size={18} />
+                </button>
             )}
         </div>
     );
