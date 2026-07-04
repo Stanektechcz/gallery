@@ -91,6 +91,57 @@ function formatDate(d?: string): string {
     return new Date(d).toLocaleString('cs-CZ', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
+function ProgressiveImage({ uuid, fullUrl, thumbUrl, alt, width, height, dominantColor }: {
+    uuid: string; fullUrl: string; thumbUrl?: string;
+    alt: string; width?: number; height?: number; dominantColor?: string;
+}) {
+    const [loaded, setLoaded] = useState(false);
+    const [error, setError]   = useState(false);
+
+    return (
+        <div className="relative max-h-full max-w-full flex items-center justify-center">
+            {/* Color placeholder */}
+            {dominantColor && !loaded && (
+                <div className="absolute inset-0 rounded" style={{ backgroundColor: dominantColor }} />
+            )}
+            {/* Blurred thumb (instant) */}
+            {thumbUrl && !loaded && (
+                <img src={thumbUrl} alt="" aria-hidden className="absolute inset-0 w-full h-full object-contain blur-sm opacity-60 transition-opacity duration-300" />
+            )}
+            {/* Full resolution (from Drive or local) */}
+            {!error ? (
+                <img
+                    key={uuid}
+                    src={fullUrl}
+                    alt={alt}
+                    onLoad={() => setLoaded(true)}
+                    onError={() => { setError(true); }}
+                    className={`max-h-[calc(100vh-120px)] max-w-full object-contain relative z-10 transition-opacity duration-500 ${loaded ? 'opacity-100' : 'opacity-0'}`}
+                    style={{ aspectRatio: width && height ? `${width}/${height}` : undefined }}
+                />
+            ) : thumbUrl ? (
+                <img
+                    src={thumbUrl}
+                    alt={alt}
+                    className="max-h-[calc(100vh-120px)] max-w-full object-contain relative z-10"
+                    style={{ aspectRatio: width && height ? `${width}/${height}` : undefined }}
+                />
+            ) : (
+                <div className="flex flex-col items-center gap-2 text-[var(--color-text-secondary)]">
+                    <Clock size={24} />
+                    <p className="text-sm">Fotografie není dostupná</p>
+                </div>
+            )}
+            {/* Loading spinner */}
+            {!loaded && !error && (
+                <div className="absolute bottom-4 right-4 z-20">
+                    <div className="w-4 h-4 rounded-full border-2 border-white/40 border-t-white animate-spin" />
+                </div>
+            )}
+        </div>
+    );
+}
+
 export default function MediaShow({ media, breadcrumb, prev, next }: Props) {
     const [item, setItem]        = useState(media);
     const [infoOpen, setInfo]    = useState(false);
@@ -98,16 +149,22 @@ export default function MediaShow({ media, breadcrumb, prev, next }: Props) {
     const [hovRating, setHovR]   = useState(0);
     const [saving, setSaving]    = useState(false);
 
-    const largeVar = item.variants.find(v => v.type === 'large')
-                  ?? item.variants.find(v => v.type === 'medium')
-                  ?? item.variants.find(v => v.type === 'small')
-                  ?? item.variants.find(v => v.type === 'thumbnail')
-                  ?? item.variants.find(v => v.type === 'original');
+    const largeVar    = item.variants.find(v => v.type === 'large')
+                    ?? item.variants.find(v => v.type === 'medium')
+                    ?? item.variants.find(v => v.type === 'small')
+                    ?? item.variants.find(v => v.type === 'thumbnail')
+                    ?? item.variants.find(v => v.type === 'original');
 
     const originalVar = item.variants.find(v => v.type === 'original');
     const placeholder = item.variants.find(v => v.type === 'placeholder');
     const compatVideo = item.variants.find(v => v.type === 'video_compat');
     const poster      = item.variants.find(v => v.type === 'video_poster') ?? item.variants.find(v => v.type === 'thumbnail');
+
+    // Full-res URL: always stream via /media/{uuid}/full (local first, Drive fallback)
+    const fullUrl  = `/media/${item.uuid}/full`;
+    // Thumb for progressive loading placeholder
+    const thumbUrl = item.variants.find(v => v.type === 'thumbnail')?.url
+                  ?? item.variants.find(v => v.type === 'original')?.url;
 
     const toggleFavorite = async () => {
         setSaving(true);
@@ -263,19 +320,16 @@ export default function MediaShow({ media, breadcrumb, prev, next }: Props) {
                                 {originalVar && <source src={originalVar.url} type={item.mime_type} />}
                                 <source src={`/media/${item.uuid}/stream`} type={item.mime_type} />
                             </video>
-                        ) : largeVar ? (
-                            <div className="relative max-h-full max-w-full flex items-center justify-center">
-                                {placeholder?.dominant_color && (
-                                    <div className="absolute inset-0" style={{ backgroundColor: placeholder.dominant_color }} />
-                                )}
-                                <img
-                                    key={item.uuid}
-                                    src={largeVar.url}
-                                    alt={item.display_title ?? item.original_filename}
-                                    className="max-h-[calc(100vh-120px)] max-w-full object-contain relative z-10"
-                                    style={{ aspectRatio: item.width && item.height ? `${item.width}/${item.height}` : undefined }}
-                                />
-                            </div>
+                        ) : item.media_type === 'photo' ? (
+                            <ProgressiveImage
+                                uuid={item.uuid}
+                                fullUrl={fullUrl}
+                                thumbUrl={thumbUrl}
+                                alt={item.display_title ?? item.original_filename}
+                                width={item.width}
+                                height={item.height}
+                                dominantColor={placeholder?.dominant_color}
+                            />
                         ) : (
                             <div className="flex flex-col items-center gap-3 text-[var(--color-text-secondary)]">
                                 <div className="w-16 h-16 rounded-xl bg-[var(--color-bg-card)] flex items-center justify-center">

@@ -160,6 +160,71 @@ class MediaController extends Controller
         return response()->json(['status' => 'purged']);
     }
 
+    /**
+     * GET /media/{uuid}/full
+     * Serve full-resolution image inline (for viewer).
+     * 1. Local original file (fast, no Drive API)
+     * 2. Drive stream (if local missing — full quality guaranteed)
+     */
+    public function full(Request $request, string $uuid): mixed
+    {
+        $media = MediaItem::where('uuid', $uuid)->firstOrFail();
+        Gate::authorize('view', $media);
+
+        // 1. Try local original first
+        $original = $media->variants()->where('type', 'original')->first();
+        if ($original && $original->disk === 'public') {
+            $localPath = Storage::disk('public')->path($original->path);
+            if (file_exists($localPath)) {
+                return response()->file($localPath, [
+                    'Content-Type'  => $media->mime_type,
+                    'Cache-Control' => 'private, max-age=86400',
+                ]);
+            }
+        }
+
+        // 2. Stream from Drive (full original quality, no local file needed)
+        if ($media->drive_file_id) {
+            $connection = \App\Models\StorageConnection::whereHas(
+                'owner',
+                fn($q) => $q->whereHas('gallerySpaces', fn($q2) => $q2->where('gallery_spaces.id', $media->gallery_space_id))
+            )->where('provider', 'google_drive')->where('connection_status', 'healthy')->first();
+
+            if ($connection) {
+                $provider = new \App\Services\Storage\GoogleDriveStorageProvider($connection);
+                try {
+                    $stream = $provider->download($media->drive_file_id);
+                    $size   = $media->size_bytes;
+                    return response()->stream(function () use ($stream) {
+                        while (!$stream->eof()) {
+                            echo $stream->read(65536);
+                            flush();
+                        }
+                    }, 200, array_filter([
+                        'Content-Type'   => $media->mime_type,
+                        'Content-Length' => $size ?: null,
+                        'Cache-Control'  => 'private, max-age=86400',
+                    ]));
+                } catch (\Throwable $e) {
+                    \Illuminate\Support\Facades\Log::warning('Drive full stream failed', ['uuid' => $uuid, 'error' => $e->getMessage()]);
+                }
+            }
+        }
+
+        // 3. Fallback: any local variant
+        foreach (['large', 'medium', 'small', 'thumbnail'] as $type) {
+            $v = $media->variants()->where('type', $type)->first();
+            if ($v && $v->disk === 'public') {
+                $p = Storage::disk('public')->path($v->path);
+                if (file_exists($p)) {
+                    return response()->file($p, ['Content-Type' => $v->mime_type ?? $media->mime_type]);
+                }
+            }
+        }
+
+        abort(404, 'Plné rozlišení není dostupné.');
+    }
+
     public function download(Request $request, string $uuid): mixed
     {
         $media = MediaItem::where('uuid', $uuid)->firstOrFail();

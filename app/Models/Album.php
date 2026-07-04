@@ -13,13 +13,35 @@ class Album extends Model
     use HasFactory, SoftDeletes;
 
     protected $fillable = [
-        'uuid', 'gallery_space_id', 'parent_id', 'title', 'slug', 'depth',
-        'materialized_path', 'full_display_path', 'drive_folder_id', 'drive_parent_folder_id',
-        'cover_media_id', 'description', 'event_date_start', 'event_date_end',
-        'default_place_id', 'color', 'icon', 'sort_mode', 'sort_direction',
-        'manual_sort_order', 'visibility', 'inherit_permissions',
-        'created_by', 'updated_by', 'sync_status', 'last_drive_sync_at',
-        'media_count', 'descendant_count', 'total_size_bytes',
+        'uuid',
+        'gallery_space_id',
+        'parent_id',
+        'title',
+        'slug',
+        'depth',
+        'materialized_path',
+        'full_display_path',
+        'drive_folder_id',
+        'drive_parent_folder_id',
+        'cover_media_id',
+        'description',
+        'event_date_start',
+        'event_date_end',
+        'default_place_id',
+        'color',
+        'icon',
+        'sort_mode',
+        'sort_direction',
+        'manual_sort_order',
+        'visibility',
+        'inherit_permissions',
+        'created_by',
+        'updated_by',
+        'sync_status',
+        'last_drive_sync_at',
+        'media_count',
+        'descendant_count',
+        'total_size_bytes',
     ];
 
     protected function casts(): array
@@ -54,11 +76,26 @@ class Album extends Model
     }
 
     // Relations
-    public function gallerySpace()   { return $this->belongsTo(GallerySpace::class); }
-    public function parent()         { return $this->belongsTo(Album::class, 'parent_id'); }
-    public function children()       { return $this->hasMany(Album::class, 'parent_id'); }
-    public function creator()        { return $this->belongsTo(User::class, 'created_by'); }
-    public function cover()          { return $this->belongsTo(MediaItem::class, 'cover_media_id'); }
+    public function gallerySpace()
+    {
+        return $this->belongsTo(GallerySpace::class);
+    }
+    public function parent()
+    {
+        return $this->belongsTo(Album::class, 'parent_id');
+    }
+    public function children()
+    {
+        return $this->hasMany(Album::class, 'parent_id');
+    }
+    public function creator()
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
+    public function cover()
+    {
+        return $this->belongsTo(MediaItem::class, 'cover_media_id');
+    }
 
     public function media()
     {
@@ -124,7 +161,7 @@ class Album extends Model
             $rows = \DB::table('album_closure')
                 ->where('descendant_id', $this->parent_id)
                 ->get()
-                ->map(fn ($row) => [
+                ->map(fn($row) => [
                     'ancestor_id'   => $row->ancestor_id,
                     'descendant_id' => $this->id,
                     'depth'         => $row->depth + 1,

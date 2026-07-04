@@ -67,6 +67,7 @@ Route::middleware(['auth'])->group(function () {
         Route::post('/{uuid}/restore',  [MediaController::class, 'restore'])->name('restore');
         Route::delete('/{uuid}/purge',  [MediaController::class, 'purge'])->name('purge');
         Route::get('/{uuid}/download',  [MediaController::class, 'download'])->name('download');
+        Route::get('/{uuid}/full',      [MediaController::class, 'full'])->name('full');
         Route::get('/{uuid}/stream',    [MediaController::class, 'stream'])->name('stream');
         Route::post('/{uuid}/favorite', [MediaController::class, 'toggleFavorite'])->name('favorite');
         Route::post('/{uuid}/archive',  [MediaController::class, 'archive'])->name('archive');
