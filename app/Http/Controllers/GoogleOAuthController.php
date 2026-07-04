@@ -14,9 +14,7 @@ use Inertia\Response;
 
 class GoogleOAuthController extends Controller
 {
-    public function __construct(private readonly GoogleOAuthService $oauthService)
-    {
-    }
+    public function __construct(private readonly GoogleOAuthService $oauthService) {}
 
     /**
      * GET /settings/storage/google/connect
@@ -32,7 +30,7 @@ class GoogleOAuthController extends Controller
         return Inertia::render('Settings/Storage/Google', [
             'connection' => $connection ? [
                 'status'       => $connection->connection_status,
-                'account_email'=> $connection->account_email,
+                'account_email' => $connection->account_email,
                 'root_folder'  => $connection->root_folder_name,
                 'quota_total'  => $connection->quota_total,
                 'quota_used'   => $connection->quota_used,
@@ -93,7 +91,6 @@ class GoogleOAuthController extends Controller
 
             return redirect()->route('settings.storage.google')
                 ->with('success', "Google Drive připojen. Účet: {$connection->account_email}");
-
         } catch (\Throwable $e) {
             Log::error('Google OAuth callback failed', ['error' => $e->getMessage()]);
             return redirect()->route('settings.storage.google')

@@ -1,5 +1,5 @@
 import AppLayout from '@/Layouts/AppLayout';
-import { Head, Link, router, useForm } from '@inertiajs/react';
+import { Head, Link, useForm } from '@inertiajs/react';
 import { ChevronLeft, FolderPlus, Loader2 } from 'lucide-react';
 
 interface AlbumOption {

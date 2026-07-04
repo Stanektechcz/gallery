@@ -80,22 +80,36 @@ class AlbumController extends Controller
             ->orderBy('title')
             ->get();
 
-        $media = MediaItem::query()
+        // Filtrace a třídění
+        $sortBy  = $request->input('sort', 'taken_at');
+        $sortDir = $request->input('dir', 'desc');
+        $type    = $request->input('type');   // photo|video
+        $search  = $request->input('search');
+
+        $allowedSort = ['taken_at', 'uploaded_at', 'size_bytes', 'original_filename'];
+        if (!in_array($sortBy, $allowedSort)) $sortBy = 'taken_at';
+        if (!in_array($sortDir, ['asc', 'desc'])) $sortDir = 'desc';
+
+        $mediaQuery = MediaItem::query()
             ->where(function ($q) use ($album) {
                 $q->where('primary_album_id', $album->id)
                     ->orWhereHas('albums', fn($q2) => $q2->where('albums.id', $album->id));
             })
             ->with(['variants', 'tags', 'people', 'places'])
             ->whereNull('trashed_at')
-            ->whereIn('status', ['ready', 'received'])
-            ->orderBy('taken_at')
-            ->paginate(60);
+            ->whereIn('status', ['ready', 'received']);
+
+        if ($type) $mediaQuery->where('media_type', $type);
+        if ($search) $mediaQuery->where('original_filename', 'like', "%{$search}%");
+
+        $media = $mediaQuery->orderBy($sortBy, $sortDir)->paginate(60)->withQueryString();
 
         return Inertia::render('Albums/Show', [
             'album'      => $album,
             'breadcrumb' => $album->breadcrumb,
             'children'   => $children,
             'media'      => $media,
+            'filters'    => ['sort' => $sortBy, 'dir' => $sortDir, 'type' => $type, 'search' => $search],
         ]);
     }
 
@@ -151,13 +165,16 @@ class AlbumController extends Controller
         return response()->json(['status' => 'moved', 'album' => $album->fresh()]);
     }
 
-    public function destroy(string $uuid): \Illuminate\Http\RedirectResponse
+    public function destroy(string $uuid): \Illuminate\Http\JsonResponse|\Illuminate\Http\RedirectResponse
     {
         $album = Album::where('uuid', $uuid)->firstOrFail();
         Gate::authorize('delete', $album);
 
         $this->albumService->softDelete($album, request()->user());
 
+        if (request()->wantsJson()) {
+            return response()->json(['status' => 'deleted']);
+        }
         return redirect()->route('albums.index')->with('success', 'Album bylo smazáno.');
     }
 

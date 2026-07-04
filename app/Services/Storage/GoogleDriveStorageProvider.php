@@ -159,7 +159,7 @@ class GoogleDriveStorageProvider implements StorageProviderInterface
             'id'          => $file->getId(),
             'name'        => $file->getName(),
             'parents'     => $file->getParents() ?? [],
-            'created_time'=> $file->getCreatedTime(),
+            'created_time' => $file->getCreatedTime(),
         ];
     }
 
@@ -215,7 +215,7 @@ class GoogleDriveStorageProvider implements StorageProviderInterface
         $this->connection->markHealthy();
 
         return [
-            'files'      => array_map(fn ($f) => $this->fileToArray($f), $result->getFiles()),
+            'files'      => array_map(fn($f) => $this->fileToArray($f), $result->getFiles()),
             'next_token' => $result->getNextPageToken(),
         ];
     }
@@ -280,7 +280,8 @@ class GoogleDriveStorageProvider implements StorageProviderInterface
         // Extract session URI from Location header
         // The Google client returns the session URI internally; we need to initiate via direct HTTP
         $httpClient = $this->client->authorize();
-        $response   = $httpClient->request('POST',
+        $response   = $httpClient->request(
+            'POST',
             'https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable',
             [
                 'headers' => [
@@ -404,8 +405,14 @@ class GoogleDriveStorageProvider implements StorageProviderInterface
         return true;
     }
 
-    public function trashFile(string $fileId): bool   { return $this->trash($fileId); }
-    public function restoreFile(string $fileId): bool { return $this->restore($fileId); }
+    public function trashFile(string $fileId): bool
+    {
+        return $this->trash($fileId);
+    }
+    public function restoreFile(string $fileId): bool
+    {
+        return $this->restore($fileId);
+    }
 
     public function deletePermanently(string $fileId): bool
     {
@@ -481,7 +488,7 @@ class GoogleDriveStorageProvider implements StorageProviderInterface
         $this->connection->markHealthy();
 
         return [
-            'changes'         => array_map(fn ($c) => [
+            'changes'         => array_map(fn($c) => [
                 'file_id'  => $c->getFileId(),
                 'removed'  => $c->getRemoved(),
                 'time'     => $c->getTime(),
@@ -507,7 +514,7 @@ class GoogleDriveStorageProvider implements StorageProviderInterface
             'md5_checksum' => $file->getMd5Checksum(),
             'parents'      => $file->getParents() ?? [],
             'created_time' => $file->getCreatedTime(),
-            'modified_time'=> $file->getModifiedTime(),
+            'modified_time' => $file->getModifiedTime(),
             'trashed'      => $file->getTrashed(),
         ];
     }

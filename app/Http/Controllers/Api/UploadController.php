@@ -460,7 +460,8 @@ class UploadController extends Controller
             if (!empty($exif['DateTimeOriginal'])) {
                 try {
                     $updates['taken_at'] = \Carbon\Carbon::createFromFormat('Y:m:d H:i:s', $exif['DateTimeOriginal']);
-                } catch (\Throwable) {}
+                } catch (\Throwable) {
+                }
             }
 
             // Camera

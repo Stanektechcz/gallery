@@ -8,6 +8,7 @@ import {
     ChevronLeft, ChevronRight,
     Clock,
     Download,
+    ExternalLink,
     Heart,
     Info, MapPin,
     Star,
@@ -147,6 +148,10 @@ export default function MediaShow({ media, breadcrumb, prev, next }: Props) {
         window.open(`/media/${item.uuid}/download?original=1`, '_blank');
     };
 
+    const downloadLocal = () => {
+        window.open(`/media/${item.uuid}/download`, '_blank');
+    };
+
     return (
         <AppLayout>
             <Head title={item.display_title ?? item.original_filename} />
@@ -210,8 +215,11 @@ export default function MediaShow({ media, breadcrumb, prev, next }: Props) {
                         <button onClick={() => setInfo(!infoOpen)} className={clsx('p-2 rounded-lg hover:bg-white/10 transition-colors', infoOpen ? 'text-white bg-white/10' : 'text-[var(--color-text-secondary)]')}>
                             <Info size={16} />
                         </button>
-                        <button onClick={downloadItem} className="p-2 rounded-lg hover:bg-white/10 text-[var(--color-text-secondary)] hover:text-white transition-colors">
+                        <button onClick={downloadItem} title="Stáhnout originál z Drive" className="p-2 rounded-lg hover:bg-white/10 text-[var(--color-text-secondary)] hover:text-white transition-colors">
                             <Download size={16} />
+                        </button>
+                        <button onClick={downloadLocal} title="Stáhnout lokální kopii" className="p-2 rounded-lg hover:bg-white/10 text-[var(--color-text-secondary)] hover:text-white transition-colors">
+                            <ExternalLink size={16} />
                         </button>
                         <button onClick={archiveItem} className="p-2 rounded-lg hover:bg-white/10 text-[var(--color-text-secondary)] hover:text-white transition-colors" title="Archivovat">
                             <Archive size={16} />

@@ -127,16 +127,21 @@ async function uploadChunks(
     }
 
     // Complete — server assembles synchronously and returns media_id immediately
-    const completeRes = await axios.post(`/api/v1/uploads/${sessionId}/complete`);
-    const completeData = completeRes.data as { status: string; media_id?: number };
+    const completeRes = await axios.post(
+        `/api/v1/uploads/${sessionId}/complete`,
+    );
+    const completeData = completeRes.data as {
+        status: string;
+        media_id?: number;
+    };
 
-    if (completeData.status === 'completed') {
-        await updateUpload(sessionId, { status: 'completed' });
+    if (completeData.status === "completed") {
+        await updateUpload(sessionId, { status: "completed" });
         onProgress?.({
             id: sessionId,
             filename: file.name,
             percent: 100,
-            status: 'done',
+            status: "done",
             mediaId: completeData.media_id,
         });
         return;

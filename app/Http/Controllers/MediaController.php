@@ -120,19 +120,42 @@ class MediaController extends Controller
     public function purge(Request $request, string $uuid): JsonResponse
     {
         $media = MediaItem::where('uuid', $uuid)->firstOrFail();
-
-        if (!$request->user()->isAdmin()) abort(403, 'Trvalé smazání vyžaduje admin oprávnění.');
-        if (!$request->user()->read_only_mode === false) {
-        } // not read-only
+        Gate::authorize('delete', $media);
 
         AuditLog::record('media.purge', $media, ['filename' => $media->original_filename]);
 
-        // Queue Drive trash if drive file exists
-        if ($media->drive_file_id) {
-            \App\Jobs\Media\PurgeMediaFromDriveJob::dispatch($media)->onQueue('drive');
+        // Delete local files synchronously
+        foreach ($media->variants as $variant) {
+            if ($variant->disk === 'public') {
+                Storage::disk('public')->delete($variant->path);
+            }
+        }
+        Storage::disk('public')->deleteDirectory("media/{$media->uuid}");
+
+        // Delete assembled source
+        $uploadDir = storage_path("app/uploads/{$media->uuid}");
+        if (is_dir($uploadDir)) {
+            array_map('unlink', glob("$uploadDir/*") ?: []);
+            @rmdir($uploadDir);
         }
 
-        $media->delete();
+        // Trash on Drive synchronously (best-effort)
+        if ($media->drive_file_id) {
+            try {
+                $conn = \App\Models\StorageConnection::whereHas(
+                    'owner',
+                    fn($q) => $q->whereHas('gallerySpaces', fn($q2) => $q2->where('gallery_spaces.id', $media->gallery_space_id))
+                )->where('provider', 'google_drive')->where('connection_status', 'healthy')->first();
+
+                if ($conn) {
+                    (new \App\Services\Storage\GoogleDriveStorageProvider($conn))->trash($media->drive_file_id);
+                }
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('Drive trash failed', ['error' => $e->getMessage()]);
+            }
+        }
+
+        $media->forceDelete();
 
         return response()->json(['status' => 'purged']);
     }

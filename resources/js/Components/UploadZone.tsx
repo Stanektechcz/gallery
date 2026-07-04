@@ -1,6 +1,6 @@
-import { useCallback, useRef, useState } from 'react';
-import { Upload, X, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
 import { startUpload } from '@/lib/uploadService';
+import { AlertCircle, CheckCircle, Loader2, Upload, X } from 'lucide-react';
+import { useCallback, useRef, useState } from 'react';
 
 interface UploadFile {
     id: string;

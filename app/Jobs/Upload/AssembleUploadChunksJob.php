@@ -22,9 +22,7 @@ class AssembleUploadChunksJob implements ShouldQueue
     public int $tries   = 3;
     public int $timeout = 600;
 
-    public function __construct(private readonly int $uploadSessionId)
-    {
-    }
+    public function __construct(private readonly int $uploadSessionId) {}
 
     public function handle(): void
     {
@@ -109,7 +107,6 @@ class AssembleUploadChunksJob implements ShouldQueue
 
             AuditLog::record('media.upload', $media, ['filename' => $media->original_filename]);
             Log::info("Upload assembled for session {$session->uuid}, media #{$media->id}");
-
         } catch (\Throwable $e) {
             $session->update(['status' => 'failed']);
             Log::error("Upload assembly failed for session {$session->uuid}", ['error' => $e->getMessage()]);
