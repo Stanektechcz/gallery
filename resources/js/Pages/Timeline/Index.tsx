@@ -1,5 +1,5 @@
 import AppLayout from '@/Layouts/AppLayout';
-import { Link, Head, router } from '@inertiajs/react';
+import { Head, Link, router } from '@inertiajs/react';
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import { Grid3X3, Heart, Map, Play, Trash2 } from 'lucide-react';

@@ -37,18 +37,14 @@ export function MediaCard({ item, selected, onSelect, onAction, badge, href }: P
     const aspect      = thumb?.aspect_ratio ?? (item.width && item.height ? item.width / item.height : 1);
 
     const handleClick = (e: React.MouseEvent) => {
-        if (onSelect && (e.ctrlKey || e.metaKey || e.shiftKey)) {
-            // Ctrl/Cmd/Shift+click = toggle selection
-            e.preventDefault();
-            onSelect(item.uuid, !selected);
-        } else if (onSelect && selected) {
-            // If already selected, toggle off
-            e.preventDefault();
-            onSelect(item.uuid, false);
-        } else {
-            // Regular click = navigate
-            router.visit(href ?? `/media/${item.uuid}`);
-        }
+        // Always navigate on normal click — selection is only via the checkbox
+        router.visit(href ?? `/media/${item.uuid}`);
+    };
+
+    const handleCheckboxClick = (e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (onSelect) onSelect(item.uuid, !selected);
     };
 
     const content = (
@@ -78,12 +74,15 @@ export function MediaCard({ item, selected, onSelect, onAction, badge, href }: P
 
             {/* Selection checkbox */}
             {onSelect && (
-                <div className={clsx(
-                    'absolute top-2 left-2 w-5 h-5 rounded border-2 flex items-center justify-center transition-all',
-                    selected
-                        ? 'bg-[var(--color-accent)] border-[var(--color-accent)]'
-                        : 'bg-black/40 border-white/60 opacity-0 group-hover:opacity-100'
-                )}>
+                <div
+                    className={clsx(
+                        'absolute top-2 left-2 w-5 h-5 rounded border-2 flex items-center justify-center transition-all cursor-pointer z-10',
+                        selected
+                            ? 'bg-[var(--color-accent)] border-[var(--color-accent)]'
+                            : 'bg-black/40 border-white/60 opacity-0 group-hover:opacity-100'
+                    )}
+                    onClick={handleCheckboxClick}
+                >
                     {selected && <span className="text-white text-xs font-bold">✓</span>}
                 </div>
             )}

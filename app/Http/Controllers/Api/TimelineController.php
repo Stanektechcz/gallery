@@ -30,8 +30,15 @@ class TimelineController extends Controller
                 'primaryAlbum' => fn($q) => $q->select('id', 'uuid', 'title', 'slug', 'materialized_path', 'parent_id'),
             ])
             ->select([
-                'id', 'uuid', 'media_type', 'taken_at', 'width', 'height',
-                'is_favorite', 'rating', 'primary_album_id',
+                'id',
+                'uuid',
+                'media_type',
+                'taken_at',
+                'width',
+                'height',
+                'is_favorite',
+                'rating',
+                'primary_album_id',
             ]);
 
         // Apply filters
@@ -52,7 +59,7 @@ class TimelineController extends Controller
         }
 
         $query->orderBy('taken_at', 'desc')
-              ->orderBy('id', 'desc');
+            ->orderBy('id', 'desc');
 
         $perPage  = min((int) $request->input('per_page', 60), 200);
         $paginated = $query->cursorPaginate($perPage);
