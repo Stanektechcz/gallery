@@ -1,6 +1,7 @@
 import { Link, router, usePage } from '@inertiajs/react';
 import { clsx } from 'clsx';
 import {
+    Activity,
     Archive,
     BarChart3,
     Calendar,
@@ -16,6 +17,7 @@ import {
     Settings,
     Share2,
     Trash2,
+    Users,
     X
 } from 'lucide-react';
 import { ReactNode, useEffect, useState } from 'react';
@@ -31,8 +33,10 @@ const COMMANDS = [
     { label: 'Hledat',              href: '/search',    keywords: 'hledat search' },
     { label: 'Oblíbené',            href: '/favorites', keywords: 'oblibene heart' },
     { label: 'Vzpomínky',           href: '/memories',  keywords: 'vzpominky memories' },
+    { label: 'Lidé',                href: '/people',    keywords: 'lide people osoby' },
     { label: 'Statistiky',          href: '/stats',     keywords: 'statistiky stats' },
     { label: 'Nezařazené',          href: '/inbox',     keywords: 'nezarazene inbox' },
+    { label: 'Aktivita',            href: '/activity',  keywords: 'aktivita activity log' },
     { label: 'Archiv',              href: '/archive',   keywords: 'archiv archive' },
     { label: 'Koš',                 href: '/trash',     keywords: 'kos trash delete' },
     { label: 'Sdílené',             href: '/shares',    keywords: 'share sdilene' },
@@ -114,8 +118,11 @@ const navItems = [
     { href: '/favorites', label: 'Oblíbené',     icon: Heart },
     { href: '/memories',  label: 'Vzpomínky',    icon: Clock },
     { divider: true },
+    { href: '/people',    label: 'Lidé',         icon: Users },
     { href: '/inbox',     label: 'Nezařazené',   icon: Inbox },
+    { href: '/activity',  label: 'Aktivita',     icon: Activity },
     { href: '/stats',     label: 'Statistiky',   icon: BarChart3 },
+    { divider: true },
     { href: '/archive',   label: 'Archiv',       icon: Archive },
     { href: '/trash',     label: 'Koš',          icon: Trash2 },
     { divider: true },

@@ -322,13 +322,28 @@ export default function MediaShow({ media, breadcrumb, prev, next }: Props) {
         }
     };
 
-    const downloadItem = () => {
-        window.open(`/media/${item.uuid}/download?original=1`, '_blank');
-    };
+    const downloadItem = () => { window.open(`/media/${item.uuid}/download?original=1`, '_blank'); };
+    const downloadLocal = () => { window.open(`/media/${item.uuid}/download`, '_blank'); };
 
-    const downloadLocal = () => {
-        window.open(`/media/${item.uuid}/download`, '_blank');
-    };
+    // Keyboard shortcuts (bod 62)
+    useEffect(() => {
+        const handler = async (e: KeyboardEvent) => {
+            // Skip if focus is on input/textarea
+            const tag = (e.target as HTMLElement)?.tagName?.toLowerCase();
+            if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+
+            switch (e.key) {
+                case 'f': case 'F': toggleFavorite(); break;
+                case 'i': case 'I': setInfo(v => !v); break;
+                case 'd': case 'D': downloadItem(); break;
+                case 'Delete': trashItem(); break;
+                case 'ArrowLeft':  if (prev) router.visit(`/media/${prev.uuid}`); break;
+                case 'ArrowRight': if (next) router.visit(`/media/${next.uuid}`); break;
+            }
+        };
+        window.addEventListener('keydown', handler);
+        return () => window.removeEventListener('keydown', handler);
+    }, [item.uuid, item.is_favorite, prev, next]);
 
     return (
         <AppLayout>

@@ -77,7 +77,7 @@ class StatsController extends Controller
                 'photos'    => $photos,
                 'videos'    => $videos,
                 'with_gps'  => $withGps,
-                'total_size'=> $totalSize,
+                'total_size' => $totalSize,
                 'albums'    => $albums,
                 'favorites' => $favorites,
                 'archived'  => $archived,
