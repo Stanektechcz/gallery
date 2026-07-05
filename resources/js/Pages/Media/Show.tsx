@@ -68,6 +68,9 @@ interface MediaItem {
     focal_length?: string;
     rating?: number;
     is_favorite: boolean;
+    is_my_favorite?: boolean;
+    is_shared_favorite?: boolean;
+    my_rating?: number;
     is_archived: boolean;
     trashed_at?: string;
     status: string;
@@ -104,14 +107,18 @@ const REACTIONS = [
     { emoji: '🔥', key: 'top',    label: 'Top' },
 ];
 
+interface ReactionDetail { user_id: number; name: string; initial: string; reaction: string; is_me: boolean; }
+
 function ReactionPanel({ uuid }: { uuid: string }) {
     const [reactions, setReactions] = useState<Record<string, number>>({});
     const [mine,      setMine]      = useState<string | null>(null);
+    const [details,   setDetails]   = useState<ReactionDetail[]>([]);
 
     useEffect(() => {
         axios.get(`/api/v1/media/${uuid}/reactions`).then(r => {
             setReactions(r.data.counts ?? {});
             setMine(r.data.mine ?? null);
+            setDetails(r.data.details ?? []);
         }).catch(() => {});
     }, [uuid]);
 
@@ -119,7 +126,6 @@ function ReactionPanel({ uuid }: { uuid: string }) {
         const prev = mine;
         const prevCounts = { ...reactions };
         const newMine = mine === key ? null : key;
-        // Optimistic
         const newCounts = { ...reactions };
         if (prev) newCounts[prev] = Math.max(0, (newCounts[prev]||1) - 1);
         if (newMine) newCounts[newMine] = (newCounts[newMine]||0) + 1;
@@ -128,6 +134,7 @@ function ReactionPanel({ uuid }: { uuid: string }) {
             const r = await axios.post(`/api/v1/media/${uuid}/react`, { reaction: newMine });
             setReactions(r.data.counts ?? newCounts);
             setMine(r.data.mine ?? newMine);
+            if (r.data.details) setDetails(r.data.details);
         } catch {
             setMine(prev); setReactions(prevCounts);
         }
@@ -137,13 +144,27 @@ function ReactionPanel({ uuid }: { uuid: string }) {
         <section>
             <h3 className="text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider mb-2">Reakce</h3>
             <div className="flex gap-2 flex-wrap">
-                {REACTIONS.map(r => (
-                    <button key={r.key} onClick={() => react(r.key)} title={r.label}
-                        className={`flex items-center gap-1 px-2 py-1 rounded-full border text-xs transition-all ${mine === r.key ? 'bg-[var(--color-accent)]/20 border-[var(--color-accent)] text-white' : 'border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[var(--color-accent)]/50 hover:text-white'}`}>
-                        <span>{r.emoji}</span>
-                        {(reactions[r.key]||0) > 0 && <span>{reactions[r.key]}</span>}
-                    </button>
-                ))}
+                {REACTIONS.map(r => {
+                    const who = details.filter(d => d.reaction === r.key);
+                    return (
+                        <button key={r.key} onClick={() => react(r.key)} title={r.label}
+                            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-full border text-xs transition-all ${mine === r.key ? 'bg-[var(--color-accent)]/20 border-[var(--color-accent)] text-white' : 'border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[var(--color-accent)]/50 hover:text-white'}`}>
+                            <span className="text-sm">{r.emoji}</span>
+                            {who.length > 0 && (
+                                <span className="flex items-center gap-0.5">
+                                    {who.map(d => (
+                                        <span key={d.user_id}
+                                            className={`inline-flex w-4 h-4 rounded-full items-center justify-center text-[9px] font-bold ${d.is_me ? 'bg-[var(--color-accent)] text-white' : 'bg-white/20 text-white'}`}
+                                            title={d.name}>
+                                            {d.initial}
+                                        </span>
+                                    ))}
+                                </span>
+                            )}
+                            {who.length === 0 && <span className="text-[10px]">{r.label}</span>}
+                        </button>
+                    );
+                })}
             </div>
         </section>
     );
@@ -313,19 +334,27 @@ function ProgressiveImage({ uuid, fullUrl, thumbUrl, alt, width, height, dominan
 export default function MediaShow({ media, breadcrumb, prev, next }: Props) {
     const [item, setItem]        = useState(media);
     const [infoOpen, setInfo]    = useState(false);
-    const [rating, setRating]    = useState(media.rating ?? 0);
+    const [isMine,     setIsMine]    = useState(media.is_my_favorite ?? media.is_favorite);
+    const [isShared,   setIsShared]  = useState(media.is_shared_favorite ?? false);
+    const [rating, setRating]    = useState(media.my_rating ?? media.rating ?? 0);
     const [hovRating, setHovR]   = useState(0);
     const [saving, setSaving]    = useState(false);
     const [comments, setComments] = useState<any[]>([]);
     const [commentText, setCommentText] = useState('');
     const [commentPrivate, setCommentPrivate] = useState(false);
     const [commentsLoaded, setCommentsLoaded] = useState(false);
+    const [memberRatings, setMemberRatings] = useState<{user_id:number;name:string;initial:string;rating:number;is_me:boolean}[]>([]);
 
-    // Load comments when info panel opens
+    // Load comments + per-user ratings when info panel opens
     useEffect(() => {
         if (infoOpen && !commentsLoaded) {
             axios.get(`/api/v1/media/${item.uuid}/comments`)
                 .then(r => { setComments(r.data ?? []); setCommentsLoaded(true); })
+                .catch(() => {});
+        }
+        if (infoOpen && memberRatings.length === 0) {
+            axios.get(`/api/v1/media/${item.uuid}/ratings`)
+                .then(r => setMemberRatings(r.data ?? []))
                 .catch(() => {});
         }
     }, [infoOpen, item.uuid]);
@@ -351,7 +380,9 @@ export default function MediaShow({ media, breadcrumb, prev, next }: Props) {
         setSaving(true);
         try {
             const res = await axios.post(`/api/v1/favorites/${item.uuid}/toggle`);
-            setItem(prev => ({ ...prev, is_favorite: res.data.is_favorite }));
+            setIsMine(res.data.is_my_favorite);
+            setIsShared(res.data.is_shared_favorite ?? false);
+            setItem(prev => ({ ...prev, is_favorite: res.data.is_favorite, is_my_favorite: res.data.is_my_favorite, is_shared_favorite: res.data.is_shared_favorite }));
         } finally {
             setSaving(false);
         }
@@ -363,7 +394,9 @@ export default function MediaShow({ media, breadcrumb, prev, next }: Props) {
         try {
             await axios.patch(`/api/v1/media/${item.uuid}`, { rating: newVal });
             setRating(newVal);
-            setItem(prev => ({ ...prev, rating: newVal }));
+            setItem(prev => ({ ...prev, rating: newVal, my_rating: newVal }));
+            // Refresh member ratings
+            axios.get(`/api/v1/media/${item.uuid}/ratings`).then(r => setMemberRatings(r.data ?? []));
         } finally {
             setSaving(false);
         }
@@ -438,16 +471,21 @@ export default function MediaShow({ media, breadcrumb, prev, next }: Props) {
 
                     {/* Actions */}
                     <div className="flex items-center gap-1 shrink-0">
-                        {/* Favorite */}
+                        {/* Favorite — moje / společné */}
                         <button
                             onClick={toggleFavorite}
                             disabled={saving}
-                            className={clsx('p-2 rounded-lg hover:bg-white/10 transition-colors', item.is_favorite ? 'text-red-400' : 'text-[var(--color-text-secondary)]')}
+                            title={isShared ? 'Společné oblíbené ❤️❤️' : isMine ? 'Odebrat z oblíbených' : 'Přidat do oblíbených'}
+                            className={clsx(
+                                'flex items-center gap-0.5 p-2 rounded-lg hover:bg-white/10 transition-colors',
+                                isMine ? 'text-red-400' : 'text-[var(--color-text-secondary)]'
+                            )}
                         >
-                            <Heart size={16} className={item.is_favorite ? 'fill-red-400' : ''} />
+                            <Heart size={16} className={isMine ? 'fill-red-400' : ''} />
+                            {isShared && <Heart size={12} className="fill-red-400 text-red-400 -ml-1" />}
                         </button>
 
-                        {/* Rating */}
+                        {/* Star rating — my rating */}
                         <div className="flex items-center gap-0.5">
                             {[1,2,3,4,5].map(n => (
                                 <button
@@ -690,6 +728,29 @@ export default function MediaShow({ media, breadcrumb, prev, next }: Props) {
 
                             {/* Reakce (bod 19) */}
                             <ReactionPanel uuid={item.uuid} />
+
+                            {/* Per-user star ratings (bod 18) */}
+                            {memberRatings.length > 0 && (
+                                <section>
+                                    <h3 className="text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider mb-2">Hodnocení</h3>
+                                    <div className="space-y-2">
+                                        {memberRatings.map(m => (
+                                            <div key={m.user_id} className="flex items-center gap-2">
+                                                <span className={`text-[10px] w-16 truncate ${m.is_me ? 'text-white font-medium' : 'text-[var(--color-text-secondary)]'}`}>{m.name}</span>
+                                                <div className="flex gap-0.5">
+                                                    {[1,2,3,4,5].map(n => (
+                                                        <span key={n}>
+                                                            <Star size={11} className={n <= (m.is_me ? rating : m.rating) ? 'text-yellow-400 fill-yellow-400' : 'text-[var(--color-border)]'}/>
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                                {m.rating === 0 && m.is_me && <span className="text-[9px] text-[var(--color-text-secondary)]">bez hodnocení</span>}
+                                                {m.rating === 0 && !m.is_me && <span className="text-[9px] text-[var(--color-text-secondary)]">—</span>}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </section>
+                            )}
 
                             {/* Komentáře (bod 20) */}
                             <section>

@@ -29,7 +29,22 @@ class ReactionController extends Controller
             ->where('user_id', $user->id)
             ->value('reaction');
 
-        return response()->json(['counts' => $counts, 'mine' => $mine]);
+        // Who reacted with what (for pair gallery display)
+        $memberIds = $user->gallerySpaces()->first()->members()->pluck('users.id');
+        $details   = DB::table('media_reactions')
+            ->join('users', 'users.id', '=', 'media_reactions.user_id')
+            ->where('media_reactions.media_item_id', $media->id)
+            ->whereIn('media_reactions.user_id', $memberIds)
+            ->get(['users.id as user_id', 'users.name', 'media_reactions.reaction'])
+            ->map(fn($r) => [
+                'user_id'  => $r->user_id,
+                'name'     => $r->name,
+                'initial'  => mb_strtoupper(mb_substr($r->name, 0, 1)),
+                'reaction' => $r->reaction,
+                'is_me'    => $r->user_id === $user->id,
+            ]);
+
+        return response()->json(['counts' => $counts, 'mine' => $mine, 'details' => $details]);
     }
 
     public function react(Request $request, string $uuid): JsonResponse

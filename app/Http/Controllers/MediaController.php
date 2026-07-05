@@ -6,6 +6,7 @@ use App\Models\AuditLog;
 use App\Models\MediaItem;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
@@ -33,8 +34,34 @@ class MediaController extends Controller
 
         $prevNext = $this->getPrevNext($media);
 
+        // Per-user data for the current viewer
+        $user       = $request->user();
+        $memberIds  = $user->gallerySpaces()->first()->members()->pluck('users.id');
+
+        $isMyFav = DB::table('user_favorites')
+            ->where('user_id', $user->id)
+            ->where('media_item_id', $media->id)
+            ->exists();
+
+        $favCount = DB::table('user_favorites')
+            ->where('media_item_id', $media->id)
+            ->whereIn('user_id', $memberIds)
+            ->count();
+        $isShared = $memberIds->count() > 1 && $favCount >= $memberIds->count();
+
+        $myRating = DB::table('user_ratings')
+            ->where('user_id', $user->id)
+            ->where('media_item_id', $media->id)
+            ->value('rating');
+
+        // Merge per-user fields into the serialized media array
+        $mediaData                       = $media->toArray();
+        $mediaData['is_my_favorite']     = $isMyFav;
+        $mediaData['is_shared_favorite'] = $isShared;
+        $mediaData['my_rating']          = $myRating;
+
         return Inertia::render('Media/Show', [
-            'media'      => $media,
+            'media'      => $mediaData,
             'breadcrumb' => $breadcrumb,
             'prev'       => $prevNext['prev'],
             'next'       => $prevNext['next'],
@@ -46,6 +73,34 @@ class MediaController extends Controller
         $media = MediaItem::where('uuid', $uuid)->with(['variants', 'tags', 'people', 'places'])->firstOrFail();
         Gate::authorize('view', $media);
         return response()->json($media);
+    }
+
+    /**
+     * GET /api/v1/media/{uuid}/ratings
+     * Return per-user ratings for all gallery space members.
+     */
+    public function ratings(Request $request, string $uuid): JsonResponse
+    {
+        $user  = $request->user();
+        $media = MediaItem::where('uuid', $uuid)->firstOrFail();
+
+        $members = $user->gallerySpaces()->first()->members()->get(['users.id', 'users.name']);
+
+        $userRatings = DB::table('user_ratings')
+            ->where('media_item_id', $media->id)
+            ->whereIn('user_id', $members->pluck('id'))
+            ->get(['user_id', 'rating'])
+            ->keyBy('user_id');
+
+        $result = $members->map(fn($m) => [
+            'user_id' => $m->id,
+            'name'    => $m->name,
+            'initial' => mb_strtoupper(mb_substr($m->name, 0, 1)),
+            'rating'  => $userRatings->get($m->id)?->rating ?? 0,
+            'is_me'   => $m->id === $user->id,
+        ]);
+
+        return response()->json($result);
     }
 
     public function update(Request $request, string $uuid): JsonResponse
@@ -73,6 +128,22 @@ class MediaController extends Controller
         ]);
 
         $media->update(array_filter($data, fn($v, $k) => !in_array($k, ['tag_ids', 'person_ids']), ARRAY_FILTER_USE_BOTH));
+
+        // Per-user rating: save to user_ratings table when rating is in request
+        if (array_key_exists('rating', $data)) {
+            $ratingVal = $data['rating'] ?? null;
+            if ($ratingVal === null || $ratingVal === 0) {
+                DB::table('user_ratings')
+                    ->where('user_id', $request->user()->id)
+                    ->where('media_item_id', $media->id)
+                    ->delete();
+            } else {
+                DB::table('user_ratings')->updateOrInsert(
+                    ['user_id' => $request->user()->id, 'media_item_id' => $media->id],
+                    ['rating' => $ratingVal, 'updated_at' => now(), 'created_at' => now()]
+                );
+            }
+        }
 
         if (isset($data['tag_ids'])) {
             $media->tags()->sync($data['tag_ids']);

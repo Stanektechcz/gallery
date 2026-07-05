@@ -1,114 +1,109 @@
 import { MediaCardData, MediaGrid } from '@/Components/MediaGrid';
 import AppLayout from '@/Layouts/AppLayout';
-import { Head, router } from '@inertiajs/react';
+import { Head } from '@inertiajs/react';
 import axios from 'axios';
-import { Heart, X } from 'lucide-react';
+import { Heart } from 'lucide-react';
 import { useCallback, useState } from 'react';
 
+interface Member { id: number; name: string; is_me: boolean; }
+
 interface Props {
-    media: {
-        data: MediaCardData[];
-        current_page: number;
-        last_page: number;
-        total: number;
-    };
+    my_items:      MediaCardData[];
+    shared_items:  MediaCardData[];
+    partner_items: MediaCardData[];
+    members:       Member[];
 }
 
-export default function FavoritesIndex({ media }: Props) {
-    const [selected, setSelected]  = useState<Set<string>>(new Set());
-    const [items, setItems]        = useState<MediaCardData[]>(media.data);
-    const [processing, setProc]    = useState(false);
+type Tab = 'my' | 'shared' | 'partner';
+
+export default function FavoritesIndex({ my_items, shared_items, partner_items, members }: Props) {
+    const [tab,         setTab]        = useState<Tab>('my');
+    const [myItems,     setMyItems]    = useState<MediaCardData[]>(my_items);
+    const [sharedItems, setSharedItems] = useState<MediaCardData[]>(shared_items);
+    const [partItems,   setPartItems]  = useState<MediaCardData[]>(partner_items);
+    const [selected,    setSelected]   = useState<Set<string>>(new Set());
+
+    const partner = members.find(m => !m.is_me);
+    const me      = members.find(m => m.is_me);
+
+    const currentItems = tab === 'my' ? myItems : tab === 'shared' ? sharedItems : partItems;
+    const setCurrentItems = tab === 'my' ? setMyItems : tab === 'shared' ? setSharedItems : setPartItems;
 
     const toggleSelect = useCallback((uuid: string, sel: boolean) => {
         setSelected(prev => { const n = new Set(prev); sel ? n.add(uuid) : n.delete(uuid); return n; });
     }, []);
 
-    const unfavoriteSelected = async () => {
-        if (processing) return;
-        setProc(true);
-        const uuids = Array.from(selected);
-        try {
-            await Promise.all(uuids.map(uuid => axios.post(`/api/v1/favorites/${uuid}/toggle`)));
-            setItems(prev => prev.filter(i => !uuids.includes(i.uuid)));
-            setSelected(new Set());
-        } finally {
-            setProc(false);
+    const unfavorite = async (uuid: string) => {
+        const res = await axios.post(`/api/v1/favorites/${uuid}/toggle`);
+        if (!res.data.is_my_favorite) {
+            setMyItems(prev => prev.filter(i => i.uuid !== uuid));
+            setSharedItems(prev => prev.filter(i => i.uuid !== uuid));
         }
     };
 
-    const toggleFavorite = async (uuid: string) => {
-        const res = await axios.post(`/api/v1/favorites/${uuid}/toggle`);
-        if (!res.data.is_favorite) {
-            setItems(prev => prev.filter(i => i.uuid !== uuid));
-        }
-    };
+    const TABS: { key: Tab; label: string; count: number; shared?: boolean }[] = [
+        { key: 'my',      label: `❤️ ${me?.name ?? 'Moje'}`,           count: myItems.length },
+        { key: 'partner', label: `❤️ ${partner?.name ?? 'Partner'}`,   count: partItems.length },
+        { key: 'shared',  label: '❤️❤️ Společné',                       count: sharedItems.length, shared: true },
+    ];
 
     return (
         <AppLayout>
             <Head title="Oblíbené" />
-            <div className="min-h-full">
+            <div className="flex flex-col h-full min-h-0">
+
                 {/* Header */}
-                <div className="sticky top-0 z-20 px-4 py-3 border-b border-[var(--color-border)] bg-[var(--color-bg-primary)]/90 backdrop-blur-sm">
-                    <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                            <Heart size={16} className="text-red-400 fill-red-400" />
-                            <h1 className="text-sm font-semibold text-white">Oblíbené</h1>
-                            <span className="text-xs text-[var(--color-text-secondary)]">{items.length} položek</span>
+                <div className="shrink-0 px-5 py-3 border-b border-[var(--color-border)]">
+                    <div className="flex items-center justify-between gap-4">
+                        <h1 className="text-sm font-semibold text-white flex items-center gap-2">
+                            <Heart size={16} className="text-red-400 fill-red-400"/> Oblíbené
+                        </h1>
+                        {/* Tabs */}
+                        <div className="flex gap-1">
+                            {TABS.map(t => (
+                                <button key={t.key} onClick={() => { setTab(t.key); setSelected(new Set()); }}
+                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-colors ${tab === t.key ? 'bg-[var(--color-accent)] text-white' : 'border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-white'}`}>
+                                    {t.label}
+                                    <span className={`text-[10px] ${tab === t.key ? 'opacity-80' : 'opacity-60'}`}>({t.count})</span>
+                                </button>
+                            ))}
                         </div>
-                        {selected.size > 0 ? (
-                            <div className="flex items-center gap-2">
-                                <span className="text-xs text-[var(--color-text-secondary)]">{selected.size} vybráno</span>
-                                <button
-                                    onClick={unfavoriteSelected}
-                                    disabled={processing}
-                                    className="text-xs bg-red-500/20 hover:bg-red-500/30 disabled:opacity-50 text-red-400 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1"
-                                >
-                                    <Heart size={12} /> Odebrat z oblíbených
-                                </button>
-                                <button onClick={() => setSelected(new Set())} className="text-[var(--color-text-secondary)] hover:text-white p-1">
-                                    <X size={14} />
-                                </button>
-                            </div>
-                        ) : (
-                            items.length > 0 && (
-                                <button
-                                    onClick={() => setSelected(new Set(items.map(i => i.uuid)))}
-                                    className="text-xs text-[var(--color-text-secondary)] hover:text-white"
-                                >
-                                    Vybrat vše
-                                </button>
-                            )
-                        )}
                     </div>
+
+                    {/* Shared explanation */}
+                    {tab === 'shared' && (
+                        <p className="text-[10px] text-[var(--color-text-secondary)] mt-1.5">
+                            Fotky označené jako oblíbené od obou: {members.map(m => m.name).join(' a ')}
+                        </p>
+                    )}
+                    {tab === 'partner' && partner && (
+                        <p className="text-[10px] text-[var(--color-text-secondary)] mt-1.5">
+                            Fotky označené pouze {partner.name}
+                        </p>
+                    )}
                 </div>
 
-                <div className="p-4">
+                {/* Grid */}
+                <div className="flex-1 overflow-y-auto p-4">
                     <MediaGrid
-                        items={items}
-                        selected={selected}
-                        onSelect={toggleSelect}
+                        items={currentItems}
+                        selected={tab === 'my' ? selected : new Set()}
+                        onSelect={tab === 'my' ? toggleSelect : undefined}
                         getHref={i => `/media/${i.uuid}`}
                         emptyState={
                             <div className="flex flex-col items-center justify-center h-64 text-[var(--color-text-secondary)]">
-                                <Heart size={48} className="mb-3 opacity-20" />
-                                <p className="text-lg font-medium text-white mb-1">Žádné oblíbené</p>
-                                <p className="text-sm">Označte fotky nebo videa srdíčkem ❤️ a zobrazí se zde</p>
+                                <Heart size={48} className="mb-3 opacity-20"/>
+                                <p className="text-sm font-medium text-white mb-1">
+                                    {tab === 'my' ? 'Žádné vlastní oblíbené' : tab === 'shared' ? 'Žádná společná oblíbená' : `${partner?.name ?? 'Partner'} zatím nic neoznačil/a`}
+                                </p>
+                                <p className="text-xs opacity-60">
+                                    {tab === 'my' && 'Označte fotky srdíčkem ❤️ v prohlížeči (klávesa F)'}
+                                    {tab === 'shared' && 'Když oba označíte stejnou fotku, zobrazí se zde ❤️❤️'}
+                                    {tab === 'partner' && 'Partnerova/partnerčina oblíbená se zde zobrazí automaticky'}
+                                </p>
                             </div>
                         }
                     />
-
-                    {/* Pagination */}
-                    {media.last_page > 1 && (
-                        <div className="flex justify-center gap-2 mt-6">
-                            {media.current_page > 1 && (
-                                <button onClick={() => router.get('/favorites', { page: String(media.current_page - 1) })} className="px-4 py-2 text-sm bg-[var(--color-bg-card)] hover:bg-white/10 text-white rounded-lg">← Předchozí</button>
-                            )}
-                            <span className="px-4 py-2 text-sm text-[var(--color-text-secondary)]">{media.current_page} / {media.last_page}</span>
-                            {media.current_page < media.last_page && (
-                                <button onClick={() => router.get('/favorites', { page: String(media.current_page + 1) })} className="px-4 py-2 text-sm bg-[var(--color-bg-card)] hover:bg-white/10 text-white rounded-lg">Další →</button>
-                            )}
-                        </div>
-                    )}
                 </div>
             </div>
         </AppLayout>
