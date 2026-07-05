@@ -20,27 +20,31 @@ interface Props {
 }
 
 const EVENT_ICONS: Record<string, string> = {
-    'media.upload':    '📸',
-    'media.trash':     '🗑️',
-    'media.restore':   '♻️',
-    'media.purge':     '💥',
-    'album.create':    '📁',
-    'album.update':    '✏️',
-    'album.delete':    '🗑️',
+    'media.upload':              '📸',
+    'media.trash':               '🗑️',
+    'media.restore':             '♻️',
+    'media.purge':               '💥',
+    'album.create':              '📁',
+    'album.update':              '✏️',
+    'album.delete':              '🗑️',
     'storage.google.connect':    '🔗',
     'storage.google.disconnect': '🔌',
+    'storage.google.reconnect':  '🔄',
+    'storage.google.init_structure': '⚙️',
 };
 
 const EVENT_LABELS: Record<string, string> = {
-    'media.upload':    'nahrál/a fotografii',
-    'media.trash':     'přesunul/a do koše',
-    'media.restore':   'obnovil/a z koše',
-    'media.purge':     'trvale smazal/a',
-    'album.create':    'vytvořil/a album',
-    'album.update':    'upravil/a album',
-    'album.delete':    'smazal/a album',
+    'media.upload':              'nahrál/a médium',
+    'media.trash':               'přesunul/a do koše',
+    'media.restore':             'obnovil/a z koše',
+    'media.purge':               'trvale smazal/a',
+    'album.create':              'vytvořil/a album',
+    'album.update':              'upravil/a album',
+    'album.delete':              'smazal/a album',
     'storage.google.connect':    'připojil/a Google Drive',
     'storage.google.disconnect': 'odpojil/a Google Drive',
+    'storage.google.reconnect':  'obnovil/a token Drive',
+    'storage.google.init_structure': 'inicializoval/a Drive strukturu',
 };
 
 function timeAgo(d: string): string {

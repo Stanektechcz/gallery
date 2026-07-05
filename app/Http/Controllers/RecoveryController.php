@@ -18,12 +18,16 @@ class RecoveryController extends Controller
 
         // Database
         $dbOk = true;
-        try { DB::select('SELECT 1'); } catch (\Throwable) { $dbOk = false; }
+        try {
+            DB::select('SELECT 1');
+        } catch (\Throwable) {
+            $dbOk = false;
+        }
 
         // Drive connection
         $driveConn = $space
             ? StorageConnection::whereHas('owner', fn($q) => $q->whereHas('gallerySpaces', fn($q2) => $q2->where('gallery_spaces.id', $space->id)))
-                ->where('provider', 'google_drive')->first()
+            ->where('provider', 'google_drive')->first()
             : null;
 
         // Media stats

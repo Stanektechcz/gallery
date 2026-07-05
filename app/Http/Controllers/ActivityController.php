@@ -14,22 +14,19 @@ class ActivityController extends Controller
         $user  = $request->user();
         $space = $user->gallerySpaces()->first();
 
+        // AuditLog stores user_id — filter logs by this gallery's users
+        $spaceUserIds = $space
+            ? $space->members()->pluck('users.id')->toArray()
+            : [$user->id];
+
         $logs = AuditLog::with('user:id,name')
-            ->where(function ($q) use ($space) {
-                $q->where('loggable_type', 'App\\Models\\MediaItem')
-                    ->whereHasMorph('loggable', [\App\Models\MediaItem::class], fn($q2) => $q2->where('gallery_space_id', $space->id));
-            })
-            ->orWhere(function ($q) use ($space) {
-                $q->where('loggable_type', 'App\\Models\\Album')
-                    ->whereHasMorph('loggable', [\App\Models\Album::class], fn($q2) => $q2->where('gallery_space_id', $space->id));
-            })
+            ->whereIn('user_id', $spaceUserIds)
             ->orderByDesc('created_at')
             ->paginate(40);
 
-        // Format for frontend
         $formatted = $logs->through(fn($log) => [
             'id'          => $log->id,
-            'event'       => $log->event,
+            'event'       => $log->action,
             'user_name'   => $log->user?->name ?? 'Systém',
             'description' => $this->describe($log),
             'created_at'  => $log->created_at->toIso8601String(),
@@ -38,11 +35,12 @@ class ActivityController extends Controller
         return Inertia::render('Activity/Index', ['logs' => $formatted]);
     }
 
-    private function describe(\App\Models\AuditLog $log): string
+    private function describe(AuditLog $log): string
     {
-        $data = $log->changes ?? [];
+        $data = $log->payload ?? [];
         if (isset($data['filename'])) return $data['filename'];
         if (isset($data['title']))    return $data['title'];
+        if (isset($data['via']))      return $data['via'];
         return '';
     }
 }
