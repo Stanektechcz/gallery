@@ -23,6 +23,33 @@ class UploadController extends Controller
     private const CHUNK_DIR  = 'upload_chunks';
 
     /**
+     * POST /api/v1/uploads/check-duplicate
+     * Check whether a file with given SHA-256 already exists in the gallery space.
+     */
+    public function checkDuplicate(Request $request): JsonResponse
+    {
+        $v = $request->validate(['sha256' => 'required|string|size:64']);
+
+        $user  = $request->user();
+        $space = $user->gallerySpaces()->first();
+
+        $existing = MediaItem::where('gallery_space_id', $space->id)
+            ->where('sha256', $v['sha256'])
+            ->whereNull('trashed_at')
+            ->first(['uuid', 'original_filename', 'taken_at']);
+
+        if ($existing) {
+            return response()->json([
+                'exists'     => true,
+                'media_uuid' => $existing->uuid,
+                'filename'   => $existing->original_filename,
+            ]);
+        }
+
+        return response()->json(['exists' => false]);
+    }
+
+    /**
      * Initiate a new resumable upload session.
      * POST /api/v1/uploads
      */

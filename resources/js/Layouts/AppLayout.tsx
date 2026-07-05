@@ -27,6 +27,7 @@ import {
     X
 } from 'lucide-react';
 import { ReactNode, useEffect, useState } from 'react';
+import UploadPanel from '@/Components/UploadPanel';
 
 // ─── Command Palette ────────────────────────────────────
 const COMMANDS = [
@@ -292,6 +293,9 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
                 <main className="flex-1 overflow-y-auto">
                     {children}
                 </main>
+
+                {/* Global upload manager panel */}
+                <UploadPanel />
 
                 {/* Mobile Bottom Nav */}
                 <nav className="md:hidden flex items-center border-t border-[var(--color-border)] bg-[var(--color-bg-secondary)] safe-area-pb">

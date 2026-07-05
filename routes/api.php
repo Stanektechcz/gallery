@@ -21,6 +21,7 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
 
     // Resumable upload
     Route::prefix('uploads')->name('api.uploads.')->group(function () {
+        Route::post('/check-duplicate',              [UploadController::class, 'checkDuplicate'])->name('check-duplicate');
         Route::post('/',                             [UploadController::class, 'initiate'])->name('initiate');
         Route::get('/{uuid}',                        [UploadController::class, 'status'])->name('status');
         Route::put('/{uuid}/chunks/{index}',         [UploadController::class, 'uploadChunk'])->name('chunk');
