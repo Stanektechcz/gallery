@@ -99,6 +99,15 @@ Route::middleware(['auth'])->group(function () {
     // Journey (Naše cesta)
     Route::get('/journey', fn() => Inertia::render('Journey/Index'))->name('journey');
 
+    // Tags
+    Route::get('/tags', fn() => Inertia::render('Tags/Index'))->name('tags');
+
+    // Recovery Center
+    Route::get('/recovery', [App\Http\Controllers\RecoveryController::class, 'index'])->name('recovery');
+
+    // Export
+    Route::post('/export/download', [App\Http\Controllers\ExportController::class, 'download'])->name('export.download');
+
     // Favorites
     Route::get('/favorites', [FavoritesController::class, 'index'])->name('favorites');
     Route::post('/favorites/{uuid}/toggle', [FavoritesController::class, 'toggle'])->name('favorites.toggle');

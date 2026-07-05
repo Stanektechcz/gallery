@@ -316,6 +316,19 @@ export default function MediaShow({ media, breadcrumb, prev, next }: Props) {
     const [rating, setRating]    = useState(media.rating ?? 0);
     const [hovRating, setHovR]   = useState(0);
     const [saving, setSaving]    = useState(false);
+    const [comments, setComments] = useState<any[]>([]);
+    const [commentText, setCommentText] = useState('');
+    const [commentPrivate, setCommentPrivate] = useState(false);
+    const [commentsLoaded, setCommentsLoaded] = useState(false);
+
+    // Load comments when info panel opens
+    useEffect(() => {
+        if (infoOpen && !commentsLoaded) {
+            axios.get(`/api/v1/media/${item.uuid}/comments`)
+                .then(r => { setComments(r.data ?? []); setCommentsLoaded(true); })
+                .catch(() => {});
+        }
+    }, [infoOpen, item.uuid]);
 
     const largeVar    = item.variants.find(v => v.type === 'large')
                     ?? item.variants.find(v => v.type === 'medium')
@@ -677,6 +690,44 @@ export default function MediaShow({ media, breadcrumb, prev, next }: Props) {
 
                             {/* Reakce (bod 19) */}
                             <ReactionPanel uuid={item.uuid} />
+
+                            {/* Komentáře (bod 20) */}
+                            <section>
+                                <h3 className="text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider mb-2">Komentáře</h3>
+                                <div className="space-y-2 mb-3 max-h-40 overflow-y-auto">
+                                    {comments.map(c => (
+                                        <div key={c.id} className={`p-2 rounded-lg text-xs ${c.is_private ? 'bg-yellow-500/10 border border-yellow-500/20' : 'bg-[var(--color-bg-secondary)]'}`}>
+                                            <div className="flex items-center justify-between mb-1">
+                                                <span className="font-medium text-white">{c.user_name}</span>
+                                                {c.is_private && <span className="text-[9px] text-yellow-400">soukromé</span>}
+                                            </div>
+                                            <p className="text-[var(--color-text-secondary)] leading-relaxed">{c.body}</p>
+                                        </div>
+                                    ))}
+                                    {comments.length === 0 && <p className="text-xs text-[var(--color-text-secondary)]">Žádné komentáře</p>}
+                                </div>
+                                <form onSubmit={async e => {
+                                    e.preventDefault();
+                                    if (!commentText.trim()) return;
+                                    const r = await axios.post(`/api/v1/media/${item.uuid}/comments`, { body: commentText, is_private: commentPrivate });
+                                    setComments(prev => [...prev, r.data]);
+                                    setCommentText('');
+                                }} className="space-y-2">
+                                    <textarea value={commentText} onChange={e => setCommentText(e.target.value)}
+                                        placeholder="Přidat komentář…" rows={2}
+                                        className="w-full bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-lg px-2 py-1.5 text-xs text-white placeholder-[var(--color-text-secondary)] outline-none focus:border-[var(--color-accent)] resize-none" />
+                                    <div className="flex items-center justify-between">
+                                        <label className="flex items-center gap-1.5 text-xs text-[var(--color-text-secondary)] cursor-pointer">
+                                            <input type="checkbox" checked={commentPrivate} onChange={e => setCommentPrivate(e.target.checked)} className="w-3 h-3" />
+                                            Soukromá poznámka
+                                        </label>
+                                        <button type="submit" disabled={!commentText.trim()}
+                                            className="text-xs bg-[var(--color-accent)] text-white px-2.5 py-1 rounded-lg disabled:opacity-40 hover:opacity-90">
+                                            Přidat
+                                        </button>
+                                    </div>
+                                </form>
+                            </section>
 
                             {/* Keyboard shortcuts hint */}
                             <section className="pt-2 border-t border-[var(--color-border)]">

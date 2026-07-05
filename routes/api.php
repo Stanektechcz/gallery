@@ -42,6 +42,9 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
         Route::post('/bulk',              [App\Http\Controllers\MediaController::class, 'bulkAction'])->name('bulk');
         Route::get('/{uuid}/reactions',   [App\Http\Controllers\Api\ReactionController::class, 'index'])->name('reactions');
         Route::post('/{uuid}/react',      [App\Http\Controllers\Api\ReactionController::class, 'react'])->name('react');
+        Route::get('/{uuid}/comments',    [App\Http\Controllers\Api\CommentController::class, 'index'])->name('comments.index');
+        Route::post('/{uuid}/comments',   [App\Http\Controllers\Api\CommentController::class, 'store'])->name('comments.store');
+        Route::delete('/{uuid}/comments/{id}', [App\Http\Controllers\Api\CommentController::class, 'destroy'])->name('comments.destroy');
     });
 
     // People

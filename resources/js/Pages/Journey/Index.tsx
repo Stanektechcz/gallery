@@ -1,5 +1,5 @@
 import AppLayout from '@/Layouts/AppLayout';
-import { Head, Link, router } from '@inertiajs/react';
+import { Head } from '@inertiajs/react';
 import axios from 'axios';
 import { Heart, MapPin, Music, Plus, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
