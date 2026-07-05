@@ -96,6 +96,10 @@ Route::middleware(['auth'])->group(function () {
     // People
     Route::get('/people',   fn() => Inertia::render('People/Index'))->name('people');
 
+    // Places (Místa jako plnohodnotné stránky)
+    Route::get('/places',      fn() => Inertia::render('Places/Index'))->name('places');
+    Route::get('/places/{id}', fn() => Inertia::render('Places/Show'))->name('places.show');
+
     // Activity
     Route::get('/activity', [App\Http\Controllers\ActivityController::class, 'index'])->name('activity');
 

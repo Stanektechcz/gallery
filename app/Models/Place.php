@@ -7,8 +7,10 @@ use Illuminate\Database\Eloquent\Model;
 class Place extends Model
 {
     protected $fillable = [
-        'name', 'country', 'country_code', 'region', 'city', 'district',
+        'gallery_space_id',
+        'name', 'type', 'country', 'country_code', 'region', 'city', 'district',
         'address', 'latitude', 'longitude', 'radius_meters', 'source',
+        'description', 'website_url', 'osm_id', 'osm_type',
         'external_id', 'created_by',
     ];
 
