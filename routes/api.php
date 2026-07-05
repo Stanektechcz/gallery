@@ -68,6 +68,11 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
     Route::get('/exports/{id}', [App\Http\Controllers\Api\ExportController::class, 'status'])->name('api.exports.status');
     Route::get('/exports/{id}/download', [App\Http\Controllers\Api\ExportController::class, 'download'])->name('api.exports.download');
 
+    // Journey (Naše cesta)
+    Route::get('/journey',         [App\Http\Controllers\Api\JourneyController::class, 'index'])->name('api.journey.index');
+    Route::post('/journey',        [App\Http\Controllers\Api\JourneyController::class, 'store'])->name('api.journey.store');
+    Route::delete('/journey/{id}', [App\Http\Controllers\Api\JourneyController::class, 'destroy'])->name('api.journey.destroy');
+
     // Favorites API (Sanctum stateful — works from browser Axios)
     Route::post('/favorites/{uuid}/toggle', [App\Http\Controllers\FavoritesController::class, 'toggle'])->name('api.favorites.toggle');
 

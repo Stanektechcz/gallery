@@ -96,6 +96,9 @@ Route::middleware(['auth'])->group(function () {
     // Activity
     Route::get('/activity', [App\Http\Controllers\ActivityController::class, 'index'])->name('activity');
 
+    // Journey (Naše cesta)
+    Route::get('/journey', fn() => Inertia::render('Journey/Index'))->name('journey');
+
     // Favorites
     Route::get('/favorites', [FavoritesController::class, 'index'])->name('favorites');
     Route::post('/favorites/{uuid}/toggle', [FavoritesController::class, 'toggle'])->name('favorites.toggle');
