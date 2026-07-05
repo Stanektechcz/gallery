@@ -88,6 +88,20 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
     Route::patch('/itinerary/{id}',         [App\Http\Controllers\Api\ItineraryController::class, 'update'])->name('api.itinerary.update');
     Route::delete('/itinerary/{id}',        [App\Http\Controllers\Api\ItineraryController::class, 'destroy'])->name('api.itinerary.destroy');
 
+    // Trips (Cesty a výlety) — static sub-routes first
+    Route::get('/trips/{id}/suggest-media',          [App\Http\Controllers\Api\TripController::class, 'suggestMedia'])->name('api.trips.suggest-media');
+    Route::get('/trips/{id}/media',                  [App\Http\Controllers\Api\TripController::class, 'media'])->name('api.trips.media');
+    Route::post('/trips/{id}/media',                 [App\Http\Controllers\Api\TripController::class, 'addMedia'])->name('api.trips.add-media');
+    Route::delete('/trips/{id}/media/{mediaId}',     [App\Http\Controllers\Api\TripController::class, 'removeMedia'])->name('api.trips.remove-media');
+    Route::put('/trips/{id}/waypoints/reorder',      [App\Http\Controllers\Api\TripController::class, 'reorderWaypoints'])->name('api.trips.waypoints.reorder');
+    Route::post('/trips/{id}/waypoints',             [App\Http\Controllers\Api\TripController::class, 'addWaypoint'])->name('api.trips.waypoints.add');
+    Route::delete('/trips/{id}/waypoints/{wpId}',    [App\Http\Controllers\Api\TripController::class, 'removeWaypoint'])->name('api.trips.waypoints.remove');
+    Route::get('/trips',                             [App\Http\Controllers\Api\TripController::class, 'index'])->name('api.trips.index');
+    Route::post('/trips',                            [App\Http\Controllers\Api\TripController::class, 'store'])->name('api.trips.store');
+    Route::get('/trips/{id}',                        [App\Http\Controllers\Api\TripController::class, 'show'])->name('api.trips.show');
+    Route::patch('/trips/{id}',                      [App\Http\Controllers\Api\TripController::class, 'update'])->name('api.trips.update');
+    Route::delete('/trips/{id}',                     [App\Http\Controllers\Api\TripController::class, 'destroy'])->name('api.trips.destroy');
+
     // Favorites API (Sanctum stateful — works from browser Axios)
     Route::post('/favorites/{uuid}/toggle', [App\Http\Controllers\FavoritesController::class, 'toggle'])->name('api.favorites.toggle');
 

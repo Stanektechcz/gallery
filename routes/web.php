@@ -75,6 +75,9 @@ Route::middleware(['auth'])->group(function () {
         Route::post('/{uuid}/edit',     [MediaController::class, 'applyEdit'])->name('edit');
     });
 
+    // Trips (Cesty a výlety)
+    Route::get('/trips',    fn() => Inertia::render('Trips/Index'))->name('trips');
+
     // Map
     Route::get('/map',      fn() => Inertia::render('Map/Index'))->name('map');
 
