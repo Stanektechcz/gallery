@@ -1,8 +1,9 @@
+import { BulkActionBar } from '@/Components/BulkActionBar';
 import AppLayout from '@/Layouts/AppLayout';
 import { Head, Link, router } from '@inertiajs/react';
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
-import { Archive, Grid3X3, Heart, Map, Maximize2, Play, Trash2, X } from 'lucide-react';
+import { Grid3X3, Heart, Map, Maximize2, Play, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 const GRID_SIZES = [120, 160, 200, 260];
@@ -101,28 +102,7 @@ export default function TimelineIndex() {
     };
     const toggleSelect = (uuid: string) => setSelected(prev => { const n=new Set(prev); n.has(uuid)?n.delete(uuid):n.add(uuid); return n; });
     const clearSelect  = () => setSelected(new Set());
-
-    // Batch actions
-    const batchTrash = async () => {
-        if (!confirm(`Přesunout ${selected.size} médií do koše?`)) return;
-        const uuids = Array.from(selected);
-        await Promise.all(uuids.map(u => axios.delete(`/media/${u}`).catch(()=>{})));
-        setLocalItems(p => { const n={...p}; uuids.forEach(u => { n[u]={...(n[u]??{}),_trashed:true} as any; }); return n; });
-        clearSelect();
-        queryClient.invalidateQueries({ queryKey: ['timeline'] });
-    };
-    const batchFav = async () => {
-        const uuids = Array.from(selected);
-        await Promise.all(uuids.map(u => axios.post(`/api/v1/favorites/${u}/toggle`).catch(()=>{})));
-        setLocalItems(p => { const n={...p}; uuids.forEach(u => { n[u]={...(n[u]??{}),is_favorite:true}; }); return n; });
-        clearSelect();
-    };
-    const batchArchive = async () => {
-        const uuids = Array.from(selected);
-        await Promise.all(uuids.map(u => axios.post(`/media/${u}/archive`).catch(()=>{})));
-        clearSelect();
-        queryClient.invalidateQueries({ queryKey: ['timeline'] });
-    };
+    const selectAll    = () => setSelected(new Set(allItems.map(i => i.uuid)));
 
     const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading } = useInfiniteQuery({
         queryKey: ['timeline'],
@@ -229,17 +209,18 @@ export default function TimelineIndex() {
                         </div>
                     </div>
 
-                    {/* Batch toolbar */}
+                    {/* Bulk action bar (floating, bottom-fixed) */}
                     {selected.size > 0 && (
-                        <div className="sticky top-[41px] z-20 px-4 py-2 bg-[var(--color-accent)]/10 border-b border-[var(--color-accent)]/30 flex items-center gap-3 backdrop-blur">
-                            <span className="text-xs font-semibold text-[var(--color-accent)]">{selected.size} vybráno</span>
-                            <div className="flex items-center gap-2 flex-1">
-                                <button onClick={batchFav}     className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg bg-[var(--color-bg-card)] border border-[var(--color-border)] text-white hover:border-red-400/50 transition-colors"><Heart size={12}/> Oblíbené</button>
-                                <button onClick={batchArchive} className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg bg-[var(--color-bg-card)] border border-[var(--color-border)] text-white hover:border-yellow-400/50 transition-colors"><Archive size={12}/> Archivovat</button>
-                                <button onClick={batchTrash}   className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg bg-red-500/20 border border-red-500/30 text-red-400 hover:bg-red-500/30 transition-colors"><Trash2 size={12}/> Koš</button>
-                            </div>
-                            <button onClick={clearSelect} className="p-1.5 text-[var(--color-text-secondary)] hover:text-white"><X size={14}/></button>
-                        </div>
+                        <BulkActionBar
+                            selectedUuids={Array.from(selected)}
+                            totalCount={allItems.length}
+                            onSelectAll={selectAll}
+                            onClearAll={clearSelect}
+                            onDone={(msg) => {
+                                clearSelect();
+                                queryClient.invalidateQueries({ queryKey: ['timeline'] });
+                            }}
+                        />
                     )}
 
                     {isLoading && (

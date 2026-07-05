@@ -434,39 +434,93 @@ class MediaController extends Controller
     public function bulkAction(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'action'    => 'required|in:trash,restore,archive,unarchive,favorite,unfavorite,tag,untag,add_to_album',
-            'media_ids' => 'required|array|max:500',
-            'media_ids.*' => 'integer',
-            'tag_id'    => 'nullable|integer|exists:tags,id',
-            'album_id'  => 'nullable|integer|exists:albums,id',
+            'action'       => 'required|in:trash,restore,archive,unarchive,favorite,unfavorite,tag,untag,add_to_album,move,add_person,add_place,rate,shift_date',
+            // Accept UUIDs (frontend) or integer IDs (legacy)
+            'uuids'        => 'nullable|array|max:500',
+            'uuids.*'      => 'string',
+            'media_ids'    => 'nullable|array|max:500',
+            'media_ids.*'  => 'integer',
+            // Action-specific fields
+            'tag_id'       => 'nullable|integer|exists:tags,id',
+            'album_id'     => 'nullable|integer|exists:albums,id',
+            'album_uuid'   => 'nullable|string|exists:albums,uuid',
+            'person_id'    => 'nullable|integer|exists:people,id',
+            'place_id'     => 'nullable|integer|exists:places,id',
+            'rating'       => 'nullable|integer|min:0|max:5',
+            'hours_offset' => 'nullable|numeric',
         ]);
 
-        $user   = $request->user();
-        $media  = MediaItem::whereIn('id', $data['media_ids'])->get();
+        $user = $request->user();
 
-        foreach ($media as $item) {
-            Gate::authorize($data['action'] === 'trash' ? 'delete' : 'update', $item);
+        // Resolve media: UUID list takes priority
+        if (! empty($data['uuids'])) {
+            $media = MediaItem::whereIn('uuid', $data['uuids'])->get();
+        } else {
+            $media = MediaItem::whereIn('id', $data['media_ids'] ?? [])->get();
         }
 
-        $processed = 0;
+        // Resolve album by UUID if provided
+        $album = null;
+        if (! empty($data['album_uuid'])) {
+            $album = \App\Models\Album::where('uuid', $data['album_uuid'])->first();
+        } elseif (! empty($data['album_id'])) {
+            $album = \App\Models\Album::find($data['album_id']);
+        }
+
+        $action       = $data['action'];
+        $hoursOffset  = (float) ($data['hours_offset'] ?? 0);
+        $ratingVal    = $data['rating'] ?? null;
+        $processed    = 0;
+
         foreach ($media as $item) {
-            match ($data['action']) {
-                'trash'       => $item->update(['trashed_at' => now(), 'purge_after' => now()->addDays(30)]),
-                'restore'     => $item->update(['trashed_at' => null, 'purge_after' => null]),
-                'archive'     => $item->update(['is_archived' => true]),
-                'unarchive'   => $item->update(['is_archived' => false]),
-                'favorite'    => $user->favorites()->syncWithoutDetaching([$item->id]),
-                'unfavorite'  => $user->favorites()->detach($item->id),
-                'tag'         => $item->tags()->syncWithoutDetaching([$data['tag_id']]),
-                'untag'       => $item->tags()->detach($data['tag_id'] ?? []),
-                'add_to_album' => \DB::table('album_media')->insertOrIgnore([
-                    'album_id'      => $data['album_id'],
-                    'media_item_id' => $item->id,
-                    'added_at'      => now(),
-                    'added_by'      => $user->id,
-                ]),
-            };
-            $processed++;
+            try {
+                Gate::authorize(in_array($action, ['trash']) ? 'delete' : 'update', $item);
+
+                match ($action) {
+                    'trash'        => $item->update(['trashed_at' => now(), 'purge_after' => now()->addDays(30)]),
+                    'restore'      => $item->update(['trashed_at' => null, 'purge_after' => null]),
+                    'archive'      => $item->update(['is_archived' => true]),
+                    'unarchive'    => $item->update(['is_archived' => false]),
+
+                    // Per-user favorites (use user_favorites table)
+                    'favorite'     => DB::table('user_favorites')->insertOrIgnore(['user_id' => $user->id, 'media_item_id' => $item->id, 'created_at' => now()]),
+                    'unfavorite'   => DB::table('user_favorites')->where('user_id', $user->id)->where('media_item_id', $item->id)->delete(),
+
+                    'tag'          => $item->tags()->syncWithoutDetaching([$data['tag_id']]),
+                    'untag'        => $item->tags()->detach($data['tag_id'] ?? []),
+
+                    'add_to_album' => $album ? DB::table('album_media')->insertOrIgnore(['album_id' => $album->id, 'media_item_id' => $item->id, 'added_at' => now(), 'added_by' => $user->id]) : null,
+
+                    'move'         => $album ? $item->update(['primary_album_id' => $album->id]) : null,
+
+                    'add_person'   => isset($data['person_id']) ? $item->people()->syncWithoutDetaching([$data['person_id']]) : null,
+
+                    'add_place'    => isset($data['place_id']) ? DB::table('media_place')->insertOrIgnore(['media_item_id' => $item->id, 'place_id' => $data['place_id'], 'is_primary' => false]) : null,
+
+                    'rate'         => $ratingVal === null || $ratingVal === 0
+                        ? DB::table('user_ratings')->where('user_id', $user->id)->where('media_item_id', $item->id)->delete()
+                        : DB::table('user_ratings')->updateOrInsert(
+                            ['user_id' => $user->id, 'media_item_id' => $item->id],
+                            ['rating' => $ratingVal, 'updated_at' => now(), 'created_at' => now()]
+                        ),
+
+                    'shift_date'   => $hoursOffset != 0 && $item->taken_at
+                        ? $item->update(['taken_at' => $item->taken_at->copy()->addSeconds((int) ($hoursOffset * 3600))])
+                        : null,
+                };
+
+                $processed++;
+            } catch (\Throwable $e) {
+                // Skip items we can't process, continue with others
+            }
+        }
+
+        // After favorite changes, update the is_favorite aggregate on media_items
+        if (in_array($action, ['favorite', 'unfavorite'])) {
+            foreach ($media as $item) {
+                $anyFav = DB::table('user_favorites')->where('media_item_id', $item->id)->exists();
+                $item->update(['is_favorite' => $anyFav]);
+            }
         }
 
         return response()->json(['processed' => $processed]);
