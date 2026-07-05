@@ -37,9 +37,11 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
 
     // Media API
     Route::prefix('media')->name('api.media.')->group(function () {
-        Route::get('/{uuid}',           [App\Http\Controllers\MediaController::class, 'apiShow'])->name('show');
-        Route::patch('/{uuid}',         [App\Http\Controllers\MediaController::class, 'update'])->name('update');
-        Route::post('/bulk',            [App\Http\Controllers\MediaController::class, 'bulkAction'])->name('bulk');
+        Route::get('/{uuid}',             [App\Http\Controllers\MediaController::class, 'apiShow'])->name('show');
+        Route::patch('/{uuid}',           [App\Http\Controllers\MediaController::class, 'update'])->name('update');
+        Route::post('/bulk',              [App\Http\Controllers\MediaController::class, 'bulkAction'])->name('bulk');
+        Route::get('/{uuid}/reactions',   [App\Http\Controllers\Api\ReactionController::class, 'index'])->name('reactions');
+        Route::post('/{uuid}/react',      [App\Http\Controllers\Api\ReactionController::class, 'react'])->name('react');
     });
 
     // People

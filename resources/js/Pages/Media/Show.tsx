@@ -97,6 +97,58 @@ function formatDate(d?: string): string {
     return new Date(d).toLocaleString('cs-CZ', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
+const REACTIONS = [
+    { emoji: '❤️', key: 'love',   label: 'Miluju' },
+    { emoji: '😂', key: 'funny',  label: 'Vtipné' },
+    { emoji: '🥹', key: 'memory', label: 'Vzpomínka' },
+    { emoji: '🔥', key: 'top',    label: 'Top' },
+];
+
+function ReactionPanel({ uuid }: { uuid: string }) {
+    const [reactions, setReactions] = useState<Record<string, number>>({});
+    const [mine,      setMine]      = useState<string | null>(null);
+
+    useEffect(() => {
+        axios.get(`/api/v1/media/${uuid}/reactions`).then(r => {
+            setReactions(r.data.counts ?? {});
+            setMine(r.data.mine ?? null);
+        }).catch(() => {});
+    }, [uuid]);
+
+    const react = async (key: string) => {
+        const prev = mine;
+        const prevCounts = { ...reactions };
+        const newMine = mine === key ? null : key;
+        // Optimistic
+        const newCounts = { ...reactions };
+        if (prev) newCounts[prev] = Math.max(0, (newCounts[prev]||1) - 1);
+        if (newMine) newCounts[newMine] = (newCounts[newMine]||0) + 1;
+        setMine(newMine); setReactions(newCounts);
+        try {
+            const r = await axios.post(`/api/v1/media/${uuid}/react`, { reaction: newMine });
+            setReactions(r.data.counts ?? newCounts);
+            setMine(r.data.mine ?? newMine);
+        } catch {
+            setMine(prev); setReactions(prevCounts);
+        }
+    };
+
+    return (
+        <section>
+            <h3 className="text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider mb-2">Reakce</h3>
+            <div className="flex gap-2 flex-wrap">
+                {REACTIONS.map(r => (
+                    <button key={r.key} onClick={() => react(r.key)} title={r.label}
+                        className={`flex items-center gap-1 px-2 py-1 rounded-full border text-xs transition-all ${mine === r.key ? 'bg-[var(--color-accent)]/20 border-[var(--color-accent)] text-white' : 'border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[var(--color-accent)]/50 hover:text-white'}`}>
+                        <span>{r.emoji}</span>
+                        {(reactions[r.key]||0) > 0 && <span>{reactions[r.key]}</span>}
+                    </button>
+                ))}
+            </div>
+        </section>
+    );
+}
+
 function ProgressiveImage({ uuid, fullUrl, thumbUrl, alt, width, height, dominantColor }: {
     uuid: string; fullUrl: string; thumbUrl?: string;
     alt: string; width?: number; height?: number; dominantColor?: string;
@@ -622,6 +674,22 @@ export default function MediaShow({ media, breadcrumb, prev, next }: Props) {
                                     </Link>
                                 </section>
                             )}
+
+                            {/* Reakce (bod 19) */}
+                            <ReactionPanel uuid={item.uuid} />
+
+                            {/* Keyboard shortcuts hint */}
+                            <section className="pt-2 border-t border-[var(--color-border)]">
+                                <h3 className="text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider mb-2">Zkratky</h3>
+                                <div className="space-y-1 text-[10px] text-[var(--color-text-secondary)]">
+                                    {[['F','Oblíbené'],['I','Info panel'],['D','Stáhnout'],['Del','Koš'],['← →','Navigace']].map(([k,v]) => (
+                                        <div key={k} className="flex justify-between">
+                                            <kbd className="bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded px-1.5 py-0.5 font-mono">{k}</kbd>
+                                            <span>{v}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </section>
                         </div>
                     )}
                 </div>
