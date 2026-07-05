@@ -71,17 +71,22 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
     Route::get('/exports/{id}', [App\Http\Controllers\Api\ExportController::class, 'status'])->name('api.exports.status');
     Route::get('/exports/{id}/download', [App\Http\Controllers\Api\ExportController::class, 'download'])->name('api.exports.download');
 
-    // Journey (Naše cesta)
-    Route::get('/journey',         [App\Http\Controllers\Api\JourneyController::class, 'index'])->name('api.journey.index');
-    Route::post('/journey',        [App\Http\Controllers\Api\JourneyController::class, 'store'])->name('api.journey.store');
-    Route::delete('/journey/{id}', [App\Http\Controllers\Api\JourneyController::class, 'destroy'])->name('api.journey.destroy');
+    // Journey (Naše cesta) — static routes before {id} wildcard
+    Route::get('/journey/auto-suggest',  [App\Http\Controllers\Api\JourneyController::class, 'autoSuggest'])->name('api.journey.auto-suggest');
+    Route::post('/journey/auto-import',  [App\Http\Controllers\Api\JourneyController::class, 'autoImport'])->name('api.journey.auto-import');
+    Route::get('/journey',               [App\Http\Controllers\Api\JourneyController::class, 'index'])->name('api.journey.index');
+    Route::post('/journey',              [App\Http\Controllers\Api\JourneyController::class, 'store'])->name('api.journey.store');
+    Route::patch('/journey/{id}',        [App\Http\Controllers\Api\JourneyController::class, 'update'])->name('api.journey.update');
+    Route::delete('/journey/{id}',       [App\Http\Controllers\Api\JourneyController::class, 'destroy'])->name('api.journey.destroy');
+    Route::get('/journey/{id}/photos',   [App\Http\Controllers\Api\JourneyController::class, 'photos'])->name('api.journey.photos');
 
-    // Itinerary (světový itinerář)
+    // Itinerary (světový itinerář) — static routes before {id} wildcard
+    Route::get('/itinerary/search',         [App\Http\Controllers\Api\ItineraryController::class, 'search'])->name('api.itinerary.search');
+    Route::post('/itinerary/check-visited', [App\Http\Controllers\Api\ItineraryController::class, 'checkVisited'])->name('api.itinerary.check-visited');
     Route::get('/itinerary',                [App\Http\Controllers\Api\ItineraryController::class, 'index'])->name('api.itinerary.index');
     Route::post('/itinerary',               [App\Http\Controllers\Api\ItineraryController::class, 'store'])->name('api.itinerary.store');
     Route::patch('/itinerary/{id}',         [App\Http\Controllers\Api\ItineraryController::class, 'update'])->name('api.itinerary.update');
     Route::delete('/itinerary/{id}',        [App\Http\Controllers\Api\ItineraryController::class, 'destroy'])->name('api.itinerary.destroy');
-    Route::post('/itinerary/check-visited', [App\Http\Controllers\Api\ItineraryController::class, 'checkVisited'])->name('api.itinerary.check-visited');
 
     // Favorites API (Sanctum stateful — works from browser Axios)
     Route::post('/favorites/{uuid}/toggle', [App\Http\Controllers\FavoritesController::class, 'toggle'])->name('api.favorites.toggle');

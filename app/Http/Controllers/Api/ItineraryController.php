@@ -83,6 +83,10 @@ class ItineraryController extends Controller
             'longitude'    => 'nullable|numeric|between:-180,180',
             'category'     => 'nullable|in:country,city,landmark,restaurant,museum,nature,other',
             'notes'        => 'nullable|string|max:2000',
+            'description'  => 'nullable|string|max:5000',
+            'website_url'  => 'nullable|url|max:512',
+            'osm_id'       => 'nullable|string|max:50',
+            'osm_type'     => 'nullable|string|max:20',
             'priority'     => 'nullable|in:dream,soon,someday',
         ]);
 
@@ -107,10 +111,12 @@ class ItineraryController extends Controller
         $space = $user->gallerySpaces()->first();
 
         $validated = $request->validate([
-            'visited'    => 'nullable|boolean',
-            'visited_at' => 'nullable|date',
-            'priority'   => 'nullable|in:dream,soon,someday',
-            'notes'      => 'nullable|string|max:2000',
+            'visited'      => 'nullable|boolean',
+            'visited_at'   => 'nullable|date',
+            'priority'     => 'nullable|in:dream,soon,someday',
+            'notes'        => 'nullable|string|max:2000',
+            'description'  => 'nullable|string|max:5000',
+            'website_url'  => 'nullable|url|max:512',
         ]);
 
         if (isset($validated['visited']) && $validated['visited'] && !isset($validated['visited_at'])) {
@@ -178,5 +184,100 @@ class ItineraryController extends Controller
         }
 
         return response()->json(['auto_detected' => $updated]);
+    }
+
+    /**
+     * GET /api/v1/itinerary/search?q=...
+     * Proxy Nominatim forward geocoding search (avoids CORS + enforces User-Agent policy).
+     */
+    public function search(Request $request): JsonResponse
+    {
+        $q = $request->validate(['q' => 'required|string|min:2|max:200'])['q'];
+
+        $url = 'https://nominatim.openstreetmap.org/search?' . http_build_query([
+            'format'         => 'json',
+            'addressdetails' => '1',
+            'limit'          => '8',
+            'q'              => $q,
+        ]);
+
+        $results = $this->nominatimCurl($url);
+
+        $mapped = array_map(function ($item) {
+            $addr = $item['address'] ?? [];
+            $cc   = strtoupper($addr['country_code'] ?? '');
+            $type = $item['type'] ?? $item['class'] ?? 'other';
+
+            $category = match (true) {
+                in_array($type, ['city', 'town', 'village', 'municipality', 'borough'])          => 'city',
+                in_array($type, ['country'])                                                       => 'country',
+                in_array($type, [
+                    'attraction',
+                    'castle',
+                    'monument',
+                    'memorial',
+                    'ruins',
+                    'archaeological_site',
+                    'landmark'
+                ])                             => 'landmark',
+                in_array($type, ['restaurant', 'cafe', 'bar', 'fast_food', 'pub'])                => 'restaurant',
+                in_array($type, ['museum', 'gallery', 'theatre', 'cinema'])                       => 'museum',
+                in_array($type, [
+                    'nature_reserve',
+                    'park',
+                    'forest',
+                    'mountain',
+                    'peak',
+                    'beach',
+                    'bay',
+                    'island',
+                    'lake'
+                ])                             => 'nature',
+                default                                                                            => 'other',
+            };
+
+            $name = $addr['city'] ?? $addr['town'] ?? $addr['village'] ?? $addr['county']
+                ?? $addr['state'] ?? $item['name'] ?? '';
+
+            return [
+                'osm_id'       => (string) ($item['osm_id'] ?? ''),
+                'osm_type'     => $item['osm_type'] ?? '',
+                'display_name' => $item['display_name'] ?? '',
+                'name'         => $name ?: ($item['display_name'] ?? ''),
+                'country'      => $addr['country'] ?? '',
+                'country_code' => $cc,
+                'latitude'     => (float) ($item['lat'] ?? 0),
+                'longitude'    => (float) ($item['lon'] ?? 0),
+                'category'     => $category,
+                'type'         => $type,
+            ];
+        }, $results);
+
+        return response()->json($mapped);
+    }
+
+    private function nominatimCurl(string $url): array
+    {
+        if (! function_exists('curl_init')) {
+            return [];
+        }
+
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT        => 5,
+            CURLOPT_USERAGENT      => 'MakiGallery/1.0 (gallery.stanektech.cz)',
+            CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_FOLLOWLOCATION => true,
+        ]);
+        $resp = curl_exec($ch);
+        $err  = curl_errno($ch);
+        curl_close($ch);
+
+        if ($err || ! $resp) {
+            return [];
+        }
+
+        return json_decode($resp, true) ?? [];
     }
 }
