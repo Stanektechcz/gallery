@@ -37,6 +37,7 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
 
     // Media API
     Route::prefix('media')->name('api.media.')->group(function () {
+        Route::get('/compare',            [App\Http\Controllers\MediaController::class, 'compare'])->name('compare');
         Route::get('/{uuid}',             [App\Http\Controllers\MediaController::class, 'apiShow'])->name('show');
         Route::patch('/{uuid}',           [App\Http\Controllers\MediaController::class, 'update'])->name('update');
         Route::post('/bulk',              [App\Http\Controllers\MediaController::class, 'bulkAction'])->name('bulk');

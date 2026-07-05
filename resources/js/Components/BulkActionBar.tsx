@@ -1,7 +1,7 @@
 import axios from 'axios';
 import {
     Archive, ArrowRight, Calendar, Download,
-    FolderPlus, Heart, MapPin, Star, Tag, Trash2, Users, X,
+    FolderPlus, Heart, Layers, MapPin, Star, Tag, Trash2, Users, X,
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -260,6 +260,15 @@ export function BulkActionBar({
 
                 {/* Action buttons */}
                 <div className="flex gap-1.5 overflow-x-auto pb-0.5 scrollbar-none -mx-1 px-1">
+                    {/* Compare button — only when 2-4 items selected */}
+                    {count >= 2 && count <= 4 && (
+                        <a href={`/compare?uuids=${selectedUuids.slice(0, 4).join(',')}`}
+                            className="flex items-center gap-1.5 whitespace-nowrap text-xs px-3 py-1.5 rounded-lg border transition-all shrink-0 text-[var(--color-accent)] bg-[var(--color-accent)]/10 border-[var(--color-accent)]/40 hover:bg-[var(--color-accent)]/20">
+                            <Layers size={12}/>
+                            Porovnat {count}
+                        </a>
+                    )}
+
                     {ACTION_BTNS.map(a => {
                         const Icon = a.icon;
                         const isActive = panel === a.key;

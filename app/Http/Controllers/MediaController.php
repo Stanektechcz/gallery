@@ -76,6 +76,72 @@ class MediaController extends Controller
     }
 
     /**
+     * GET /api/v1/media/compare?uuids=a,b,c,d
+     * Return enriched data for up to 4 media items for side-by-side comparison.
+     */
+    public function compare(Request $request): JsonResponse
+    {
+        $uuids = array_values(array_filter(array_map('trim', explode(',', $request->input('uuids', '')))));
+        $uuids = array_slice($uuids, 0, 4);
+
+        if (empty($uuids)) {
+            return response()->json([]);
+        }
+
+        $items = MediaItem::whereIn('uuid', $uuids)
+            ->with(['variants'])
+            ->get();
+
+        // Preserve request order
+        $ordered = collect($uuids)->map(fn($uuid) => $items->firstWhere('uuid', $uuid))->filter()->values();
+
+        $user     = $request->user();
+        $spaceId  = $user->gallerySpaces()->first()->id;
+
+        // Per-user favorites for this user
+        $myFavIds = DB::table('user_favorites')->where('user_id', $user->id)->pluck('media_item_id')->flip();
+        $myRatings = DB::table('user_ratings')->where('user_id', $user->id)->whereIn('media_item_id', $ordered->pluck('id'))->pluck('rating', 'media_item_id');
+
+        return response()->json($ordered->map(function ($m) use ($myFavIds, $myRatings) {
+            Gate::authorize('view', $m);
+
+            $thumb = $m->variants->first(fn($v) => $v->type === 'thumbnail')
+                  ?? $m->variants->first(fn($v) => $v->type === 'small')
+                  ?? $m->variants->first();
+
+            $large = $m->variants->first(fn($v) => $v->type === 'large')
+                  ?? $m->variants->first(fn($v) => $v->type === 'medium')
+                  ?? $thumb;
+
+            $makeUrl = fn($v) => $v ? ($v->disk === 'public' ? url('/files/' . ltrim($v->path, '/')) : url('media-stream/' . $v->path)) : null;
+
+            return [
+                'id'            => $m->id,
+                'uuid'          => $m->uuid,
+                'media_type'    => $m->media_type,
+                'filename'      => $m->original_filename,
+                'display_title' => $m->display_title,
+                'taken_at'      => $m->taken_at?->toIso8601String(),
+                'width'         => $m->width,
+                'height'        => $m->height,
+                'is_favorite'   => $m->is_favorite,
+                'is_my_favorite' => $myFavIds->has($m->id),
+                'rating'        => $m->rating,
+                'my_rating'     => $myRatings->get($m->id, 0),
+                'camera_make'   => $m->camera_make,
+                'camera_model'  => $m->camera_model,
+                'aperture'      => $m->aperture,
+                'shutter_speed' => $m->shutter_speed,
+                'iso'           => $m->iso,
+                'focal_length'  => $m->focal_length,
+                'full_url'      => "/media/{$m->uuid}/full",
+                'thumb_url'     => $makeUrl($thumb),
+                'large_url'     => $makeUrl($large),
+            ];
+        }));
+    }
+
+    /**
      * GET /api/v1/media/{uuid}/ratings
      * Return per-user ratings for all gallery space members.
      */

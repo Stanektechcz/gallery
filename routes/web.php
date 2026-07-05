@@ -75,6 +75,9 @@ Route::middleware(['auth'])->group(function () {
         Route::post('/{uuid}/edit',     [MediaController::class, 'applyEdit'])->name('edit');
     });
 
+    // Compare (Porovnání fotografií)
+    Route::get('/compare', fn() => Inertia::render('Compare/Index'))->name('compare');
+
     // Trips (Cesty a výlety)
     Route::get('/trips',    fn() => Inertia::render('Trips/Index'))->name('trips');
 
