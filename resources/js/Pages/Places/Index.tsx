@@ -2,7 +2,7 @@ import AppLayout from '@/Layouts/AppLayout';
 import { Head, router } from '@inertiajs/react';
 import axios from 'axios';
 import {
-    ExternalLink, MapPin, Plus, RefreshCw, Search, Trash2, X
+    MapPin, Plus, RefreshCw, Search, Trash2, X
 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 

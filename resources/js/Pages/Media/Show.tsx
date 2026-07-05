@@ -9,17 +9,20 @@ import {
     Clock,
     Download,
     ExternalLink,
+    FolderOpen,
     Heart,
     Info, MapPin,
     Maximize2,
+    MessageSquare,
     Minimize2,
+    MoreHorizontal,
     RotateCcw,
     Star,
     Tag,
     Trash2,
     Users,
     ZoomIn,
-    ZoomOut,
+    ZoomOut
 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
@@ -37,6 +40,7 @@ interface Variant {
 interface Tag { id: number; name: string; slug: string; color?: string }
 interface Person { id: number; name: string }
 interface Place { id: number; name: string; city?: string; country?: string; latitude?: number; longitude?: number }
+interface Album { id: number; uuid: string; title: string }
 
 interface MediaItem {
     id: number;
@@ -79,6 +83,7 @@ interface MediaItem {
     tags: Tag[];
     people: Person[];
     places: Place[];
+    albums?: Album[];
 }
 
 interface Props {
@@ -170,9 +175,48 @@ function ReactionPanel({ uuid }: { uuid: string }) {
     );
 }
 
-function ProgressiveImage({ uuid, fullUrl, thumbUrl, alt, width, height, dominantColor }: {
+// ── GPS mini-map (lazy Leaflet) ─────────────────────────────────────────
+function GpsMap({ lat, lng }: { lat: number; lng: number }) {
+    const mapRef = useRef<HTMLDivElement>(null);
+    const [ready, setReady] = useState(!!(window as any).L);
+
+    useEffect(() => {
+        if ((window as any).L) { setReady(true); return; }
+        const link = document.createElement('link'); link.rel = 'stylesheet';
+        link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'; document.head.appendChild(link);
+        const s = document.createElement('script');
+        s.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+        s.onload = () => setReady(true); document.head.appendChild(s);
+    }, []);
+
+    useEffect(() => {
+        if (!ready || !mapRef.current) return;
+        const L = (window as any).L;
+        const map = L.map(mapRef.current, {
+            zoomControl: false, attributionControl: false,
+            dragging: false, touchZoom: false, doubleClickZoom: false, scrollWheelZoom: false,
+        }).setView([lat, lng], 14);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+        L.circleMarker([lat, lng], { radius: 9, fillColor: '#6366f1', color: 'white', weight: 2.5, fillOpacity: 1 }).addTo(map);
+        return () => { try { map.remove(); } catch { /* ignore */ } };
+    }, [ready, lat, lng]);
+
+    return (
+        <a href={`https://maps.google.com/maps?q=${lat},${lng}`} target="_blank" rel="noopener noreferrer"
+            className="block w-full h-28 rounded-lg overflow-hidden group relative">
+            {!ready && <div className="w-full h-full bg-[var(--color-bg-secondary)] animate-pulse rounded-lg"/>}
+            <div ref={mapRef} className="w-full h-full"/>
+            <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/30">
+                <span className="text-[10px] text-white bg-black/50 px-2 py-0.5 rounded">Otevřít mapy ↗</span>
+            </div>
+        </a>
+    );
+}
+
+function ProgressiveImage({ uuid, fullUrl, thumbUrl, alt, width, height, dominantColor, prevUuid, nextUuid }: {
     uuid: string; fullUrl: string; thumbUrl?: string;
     alt: string; width?: number; height?: number; dominantColor?: string;
+    prevUuid?: string; nextUuid?: string;
 }) {
     const [loaded, setLoaded]     = useState(false);
     const [error, setError]       = useState(false);
@@ -180,8 +224,12 @@ function ProgressiveImage({ uuid, fullUrl, thumbUrl, alt, width, height, dominan
     const [offset, setOffset]     = useState({ x: 0, y: 0 });
     const [dragging, setDragging] = useState(false);
     const [fullscreen, setFullscreen] = useState(false);
-    const dragStart  = useRef<{ x: number; y: number; ox: number; oy: number } | null>(null);
-    const containerRef = useRef<HTMLDivElement>(null);
+    const dragStart     = useRef<{ x: number; y: number; ox: number; oy: number } | null>(null);
+    const pinchDistRef  = useRef<number | null>(null);
+    const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
+    const containerRef  = useRef<HTMLDivElement>(null);
+    // Keep scale in a ref for non-React touch handlers
+    const scaleRef = useRef(1);
 
     const clampOffset = useCallback((s: number, ox: number, oy: number) => {
         if (s <= 1) return { x: 0, y: 0 };
@@ -192,28 +240,24 @@ function ProgressiveImage({ uuid, fullUrl, thumbUrl, alt, width, height, dominan
         return { x: Math.max(-maxX, Math.min(maxX, ox)), y: Math.max(-maxY, Math.min(maxY, oy)) };
     }, []);
 
-    const zoom = useCallback((delta: number, cx?: number, cy?: number) => {
+    const zoom = useCallback((delta: number) => {
         setScale(prev => {
             const next = Math.max(1, Math.min(8, prev + delta));
+            scaleRef.current = next;
             setOffset(o => clampOffset(next, o.x, o.y));
             return next;
         });
     }, [clampOffset]);
 
-    const reset = () => { setScale(1); setOffset({ x: 0, y: 0 }); };
+    const reset = () => { setScale(1); scaleRef.current = 1; setOffset({ x: 0, y: 0 }); };
 
     // Mouse wheel zoom
-    const onWheel = (e: React.WheelEvent) => {
-        e.preventDefault();
-        zoom(e.deltaY < 0 ? 0.3 : -0.3);
-    };
+    const onWheel = (e: React.WheelEvent) => { e.preventDefault(); zoom(e.deltaY < 0 ? 0.3 : -0.3); };
 
     // Double-click zoom
-    const onDblClick = (e: React.MouseEvent) => {
-        if (scale > 1) { reset(); } else { zoom(2); }
-    };
+    const onDblClick = (e: React.MouseEvent) => { if (scale > 1) { reset(); } else { zoom(2); } };
 
-    // Drag to pan
+    // Mouse drag to pan
     const onMouseDown = (e: React.MouseEvent) => {
         if (scale <= 1) return;
         setDragging(true);
@@ -226,6 +270,70 @@ function ProgressiveImage({ uuid, fullUrl, thumbUrl, alt, width, height, dominan
         setOffset(clampOffset(scale, dragStart.current.ox + dx, dragStart.current.oy + dy));
     };
     const onMouseUp = () => { setDragging(false); dragStart.current = null; };
+
+    // Touch: non-passive touchmove to allow preventDefault for pinch
+    useEffect(() => {
+        const el = containerRef.current;
+        if (!el) return;
+        const handler = (e: TouchEvent) => {
+            if (e.touches.length >= 2) {
+                e.preventDefault(); // Block page scroll during pinch
+            } else if (e.touches.length === 1 && scaleRef.current > 1) {
+                e.preventDefault(); // Block scroll when panning a zoomed image
+            }
+        };
+        el.addEventListener('touchmove', handler, { passive: false });
+        return () => el.removeEventListener('touchmove', handler);
+    }, []);
+
+    const onTouchStart = (e: React.TouchEvent) => {
+        if (e.touches.length === 2) {
+            // Pinch start
+            const dx = e.touches[0].clientX - e.touches[1].clientX;
+            const dy = e.touches[0].clientY - e.touches[1].clientY;
+            pinchDistRef.current = Math.sqrt(dx * dx + dy * dy);
+            swipeStartRef.current = null;
+        } else if (e.touches.length === 1) {
+            pinchDistRef.current = null;
+            swipeStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+            if (scaleRef.current > 1) {
+                // Pan start
+                dragStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY, ox: offset.x, oy: offset.y };
+            }
+        }
+    };
+
+    const onTouchMove = (e: React.TouchEvent) => {
+        if (e.touches.length === 2 && pinchDistRef.current !== null) {
+            // Pinch zoom
+            const dx = e.touches[0].clientX - e.touches[1].clientX;
+            const dy = e.touches[0].clientY - e.touches[1].clientY;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            const delta = (dist - pinchDistRef.current) / 80;
+            zoom(delta);
+            pinchDistRef.current = dist;
+        } else if (e.touches.length === 1 && scaleRef.current > 1 && dragStart.current) {
+            // Pan when zoomed
+            const dx = e.touches[0].clientX - dragStart.current.x;
+            const dy = e.touches[0].clientY - dragStart.current.y;
+            setOffset(clampOffset(scaleRef.current, dragStart.current.ox + dx, dragStart.current.oy + dy));
+        }
+    };
+
+    const onTouchEnd = (e: React.TouchEvent) => {
+        pinchDistRef.current = null;
+        dragStart.current = null;
+        // Swipe navigation (only when not zoomed)
+        if (scaleRef.current <= 1 && swipeStartRef.current && e.changedTouches.length > 0) {
+            const dx = e.changedTouches[0].clientX - swipeStartRef.current.x;
+            const dy = e.changedTouches[0].clientY - swipeStartRef.current.y;
+            if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+                if (dx < 0 && nextUuid) router.visit(`/media/${nextUuid}`);
+                if (dx > 0 && prevUuid) router.visit(`/media/${prevUuid}`);
+            }
+        }
+        swipeStartRef.current = null;
+    };
 
     // Keyboard shortcuts
     useEffect(() => {
@@ -262,6 +370,9 @@ function ProgressiveImage({ uuid, fullUrl, thumbUrl, alt, width, height, dominan
             onMouseUp={onMouseUp}
             onMouseLeave={onMouseUp}
             onDoubleClick={onDblClick}
+            onTouchStart={onTouchStart}
+            onTouchMove={onTouchMove}
+            onTouchEnd={onTouchEnd}
         >
             {/* Blurred placeholder */}
             {dominantColor && !loaded && (
@@ -334,6 +445,7 @@ function ProgressiveImage({ uuid, fullUrl, thumbUrl, alt, width, height, dominan
 export default function MediaShow({ media, breadcrumb, prev, next }: Props) {
     const [item, setItem]        = useState(media);
     const [infoOpen, setInfo]    = useState(false);
+    const [moreOpen, setMoreOpen] = useState(false);
     const [isMine,     setIsMine]    = useState(media.is_my_favorite ?? media.is_favorite);
     const [isShared,   setIsShared]  = useState(media.is_shared_favorite ?? false);
     const [rating, setRating]    = useState(media.my_rating ?? media.rating ?? 0);
@@ -448,81 +560,109 @@ export default function MediaShow({ media, breadcrumb, prev, next }: Props) {
             <Head title={item.display_title ?? item.original_filename} />
 
             <div className="flex flex-col h-full min-h-0">
-                {/* Top bar */}
-                <div className="shrink-0 px-4 py-2 border-b border-[var(--color-border)] flex items-center justify-between gap-2 bg-[var(--color-bg-secondary)]">
-                    {/* Back + breadcrumb */}
-                    <div className="flex items-center gap-2 min-w-0">
-                        <Link href="/timeline" className="text-[var(--color-text-secondary)] hover:text-white p-1 rounded">
-                            <ChevronLeft size={16} />
-                        </Link>
-                        {breadcrumb.length > 0 && (
-                            <div className="flex items-center gap-1 text-xs text-[var(--color-text-secondary)] min-w-0">
-                                {breadcrumb.map((crumb, i) => (
-                                    <span key={crumb.id} className="flex items-center gap-1">
-                                        {i > 0 && <ChevronRight size={10} />}
-                                        <Link href={`/albums/${crumb.uuid}`} className="hover:text-white truncate max-w-24">
-                                            {crumb.title}
-                                        </Link>
-                                    </span>
-                                ))}
-                            </div>
-                        )}
+                {/* ── Top bar ─────────────────────────────────────────────── */}
+                <div className="shrink-0 h-11 px-2 border-b border-[var(--color-border)] flex items-center gap-1 bg-[var(--color-bg-secondary)]">
+
+                    {/* Back to timeline */}
+                    <Link href="/timeline" className="p-2 text-[var(--color-text-secondary)] hover:text-white rounded-lg hover:bg-white/10 shrink-0" title="Zpět (Esc)">
+                        <ChevronLeft size={16}/>
+                    </Link>
+
+                    {/* ← Prev photo */}
+                    <Link href={prev ? `/media/${prev.uuid}` : '#'}
+                        className={clsx('p-1.5 rounded hover:bg-white/10 transition-colors shrink-0', prev ? 'text-white' : 'text-[var(--color-border)] pointer-events-none')}
+                        title="Předchozí (←)">
+                        <ChevronLeft size={13}/>
+                    </Link>
+
+                    {/* Title (centered) */}
+                    <p className="flex-1 text-center text-sm text-white/80 font-medium truncate px-1 min-w-0">
+                        {item.display_title ?? item.original_filename}
+                    </p>
+
+                    {/* Next photo → */}
+                    <Link href={next ? `/media/${next.uuid}` : '#'}
+                        className={clsx('p-1.5 rounded hover:bg-white/10 transition-colors shrink-0', next ? 'text-white' : 'text-[var(--color-border)] pointer-events-none')}
+                        title="Další (→)">
+                        <ChevronRight size={13}/>
+                    </Link>
+
+                    <div className="w-px h-4 bg-[var(--color-border)] mx-0.5"/>
+
+                    {/* ❤️ Favorite */}
+                    <button onClick={toggleFavorite} disabled={saving}
+                        title={isShared ? 'Společné oblíbené ❤️❤️' : isMine ? 'Odebrat z oblíbených (F)' : 'Přidat do oblíbených (F)'}
+                        className={clsx('flex items-center gap-0.5 p-2 rounded-lg hover:bg-white/10 transition-colors shrink-0', isMine ? 'text-red-400' : 'text-[var(--color-text-secondary)]')}>
+                        <Heart size={15} className={isMine ? 'fill-red-400' : ''}/>
+                        {isShared && <Heart size={11} className="fill-red-400 text-red-400 -ml-1.5"/>}
+                    </button>
+
+                    {/* ★ Rating */}
+                    <div className="flex items-center gap-0 shrink-0">
+                        {[1,2,3,4,5].map(n => (
+                            <button key={n} onClick={() => setRatingValue(n)}
+                                onMouseEnter={() => setHovR(n)} onMouseLeave={() => setHovR(0)}
+                                className="p-1 hover:scale-110 transition-transform">
+                                <Star size={13} className={clsx('transition-colors',
+                                    (hovRating || rating) >= n ? 'text-yellow-400 fill-yellow-400' : 'text-[var(--color-text-secondary)]')}/>
+                            </button>
+                        ))}
                     </div>
 
-                    {/* Actions */}
-                    <div className="flex items-center gap-1 shrink-0">
-                        {/* Favorite — moje / společné */}
-                        <button
-                            onClick={toggleFavorite}
-                            disabled={saving}
-                            title={isShared ? 'Společné oblíbené ❤️❤️' : isMine ? 'Odebrat z oblíbených' : 'Přidat do oblíbených'}
-                            className={clsx(
-                                'flex items-center gap-0.5 p-2 rounded-lg hover:bg-white/10 transition-colors',
-                                isMine ? 'text-red-400' : 'text-[var(--color-text-secondary)]'
-                            )}
-                        >
-                            <Heart size={16} className={isMine ? 'fill-red-400' : ''} />
-                            {isShared && <Heart size={12} className="fill-red-400 text-red-400 -ml-1" />}
-                        </button>
+                    {/* 💬 Comments (opens info panel) */}
+                    <button onClick={() => setInfo(v => { if (!v) return true; return v; })}
+                        className={clsx('relative p-2 rounded-lg hover:bg-white/10 transition-colors shrink-0', infoOpen ? 'text-white' : 'text-[var(--color-text-secondary)]')}
+                        title="Komentáře">
+                        <MessageSquare size={15}/>
+                        {comments.length > 0 && (
+                            <span className="absolute top-0.5 right-0.5 text-[9px] bg-[var(--color-accent)] text-white rounded-full w-3.5 h-3.5 flex items-center justify-center font-bold leading-none">
+                                {comments.length}
+                            </span>
+                        )}
+                    </button>
 
-                        {/* Star rating — my rating */}
-                        <div className="flex items-center gap-0.5">
-                            {[1,2,3,4,5].map(n => (
-                                <button
-                                    key={n}
-                                    onClick={() => setRatingValue(n)}
-                                    onMouseEnter={() => setHovR(n)}
-                                    onMouseLeave={() => setHovR(0)}
-                                    className="p-1 hover:scale-110 transition-transform"
-                                >
-                                    <Star
-                                        size={14}
-                                        className={clsx(
-                                            'transition-colors',
-                                            (hovRating || rating) >= n ? 'text-yellow-400 fill-yellow-400' : 'text-[var(--color-text-secondary)]'
-                                        )}
-                                    />
+                    {/* ℹ Info panel toggle */}
+                    <button onClick={() => setInfo(!infoOpen)}
+                        className={clsx('p-2 rounded-lg hover:bg-white/10 transition-colors shrink-0', infoOpen ? 'text-white bg-white/10' : 'text-[var(--color-text-secondary)]')}
+                        title="Info panel (I)">
+                        <Info size={15}/>
+                    </button>
+
+                    {/* ⋯ More */}
+                    <div className="relative shrink-0">
+                        <button onClick={() => setMoreOpen(v => !v)}
+                            className="p-2 rounded-lg hover:bg-white/10 text-[var(--color-text-secondary)] hover:text-white transition-colors"
+                            title="Další akce">
+                            <MoreHorizontal size={15}/>
+                        </button>
+                        {moreOpen && (
+                            <div className="absolute right-0 top-full mt-1 w-48 bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-xl shadow-2xl overflow-hidden z-50"
+                                onMouseLeave={() => setMoreOpen(false)}>
+                                <button onClick={() => { downloadItem(); setMoreOpen(false); }}
+                                    className="w-full text-left px-4 py-2.5 text-xs text-[var(--color-text-secondary)] hover:text-white hover:bg-white/5 flex items-center gap-2">
+                                    <Download size={12}/> Stáhnout z Drive
                                 </button>
-                            ))}
-                        </div>
-
-                        <div className="w-px h-4 bg-[var(--color-border)] mx-1" />
-
-                        <button onClick={() => setInfo(!infoOpen)} className={clsx('p-2 rounded-lg hover:bg-white/10 transition-colors', infoOpen ? 'text-white bg-white/10' : 'text-[var(--color-text-secondary)]')}>
-                            <Info size={16} />
-                        </button>
-                        <button onClick={downloadItem} title="Stáhnout originál z Drive" className="p-2 rounded-lg hover:bg-white/10 text-[var(--color-text-secondary)] hover:text-white transition-colors">
-                            <Download size={16} />
-                        </button>
-                        <button onClick={downloadLocal} title="Stáhnout lokální kopii" className="p-2 rounded-lg hover:bg-white/10 text-[var(--color-text-secondary)] hover:text-white transition-colors">
-                            <ExternalLink size={16} />
-                        </button>
-                        <button onClick={archiveItem} className="p-2 rounded-lg hover:bg-white/10 text-[var(--color-text-secondary)] hover:text-white transition-colors" title="Archivovat">
-                            <Archive size={16} />
-                        </button>
-                        <button onClick={trashItem} className="p-2 rounded-lg hover:bg-red-500/20 text-[var(--color-text-secondary)] hover:text-red-400 transition-colors">
-                            <Trash2 size={16} />
-                        </button>
+                                <button onClick={() => { downloadLocal(); setMoreOpen(false); }}
+                                    className="w-full text-left px-4 py-2.5 text-xs text-[var(--color-text-secondary)] hover:text-white hover:bg-white/5 flex items-center gap-2">
+                                    <ExternalLink size={12}/> Stáhnout lokálně
+                                </button>
+                                <div className="border-t border-[var(--color-border)]"/>
+                                <button onClick={() => { archiveItem(); setMoreOpen(false); }}
+                                    className="w-full text-left px-4 py-2.5 text-xs text-[var(--color-text-secondary)] hover:text-white hover:bg-white/5 flex items-center gap-2">
+                                    <Archive size={12}/> Archivovat
+                                </button>
+                                <button onClick={() => { trashItem(); setMoreOpen(false); }}
+                                    className="w-full text-left px-4 py-2.5 text-xs text-red-400 hover:bg-red-500/10 flex items-center gap-2">
+                                    <Trash2 size={12}/> Přesunout do koše
+                                </button>
+                                <div className="border-t border-[var(--color-border)]"/>
+                                <div className="px-4 py-2 text-[10px] text-[var(--color-text-secondary)] space-y-0.5">
+                                    <p>F — oblíbené · I — info</p>
+                                    <p>D — stáhnout · Del — koš</p>
+                                    <p>← → — navigace · +/- zoom</p>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
 
@@ -530,14 +670,14 @@ export default function MediaShow({ media, breadcrumb, prev, next }: Props) {
                 <div className="flex flex-1 min-h-0 overflow-hidden">
                     {/* Media viewer */}
                     <div className="flex-1 flex items-center justify-center bg-black relative overflow-hidden">
-                        {/* Prev / Next */}
+                        {/* Prev / Next overlays (shown on hover, useful for mouse) */}
                         {prev && (
-                            <Link href={`/media/${prev.uuid}`} className="absolute left-3 z-10 p-2 rounded-full bg-black/40 hover:bg-black/60 text-white transition-colors">
+                            <Link href={`/media/${prev.uuid}`} className="absolute left-3 z-10 p-2 rounded-full bg-black/40 hover:bg-black/60 text-white transition-colors opacity-0 hover:opacity-100 group-hover:opacity-100 focus:opacity-100">
                                 <ChevronLeft size={20} />
                             </Link>
                         )}
                         {next && (
-                            <Link href={`/media/${next.uuid}`} className="absolute right-3 z-10 p-2 rounded-full bg-black/40 hover:bg-black/60 text-white transition-colors">
+                            <Link href={`/media/${next.uuid}`} className="absolute right-3 z-10 p-2 rounded-full bg-black/40 hover:bg-black/60 text-white transition-colors opacity-0 hover:opacity-100 group-hover:opacity-100 focus:opacity-100">
                                 <ChevronRight size={20} />
                             </Link>
                         )}
@@ -563,6 +703,8 @@ export default function MediaShow({ media, breadcrumb, prev, next }: Props) {
                                 width={item.width}
                                 height={item.height}
                                 dominantColor={placeholder?.dominant_color}
+                                prevUuid={prev?.uuid}
+                                nextUuid={next?.uuid}
                             />
                         ) : (
                             <div className="flex flex-col items-center gap-3 text-[var(--color-text-secondary)]">
@@ -623,7 +765,9 @@ export default function MediaShow({ media, breadcrumb, prev, next }: Props) {
                                     <h3 className="text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider mb-2 flex items-center gap-1">
                                         <MapPin size={10} /> GPS poloha
                                     </h3>
-                                    <div className="space-y-1 text-xs">
+                                    {/* Mini interactive map */}
+                                    <GpsMap lat={item.latitude} lng={item.longitude} />
+                                    <div className="mt-2 space-y-1 text-xs">
                                         <div className="flex justify-between">
                                             <span className="text-[var(--color-text-secondary)]">Šířka</span>
                                             <span className="text-white font-mono">{item.latitude.toFixed(6)}°</span>
@@ -700,9 +844,10 @@ export default function MediaShow({ media, breadcrumb, prev, next }: Props) {
                                     </h3>
                                     <div className="flex flex-wrap gap-1">
                                         {item.people.map(person => (
-                                            <span key={person.id} className="text-[10px] bg-[var(--color-accent)]/20 text-[var(--color-accent)] px-2 py-0.5 rounded-full">
+                                            <Link key={person.id} href={`/people?highlight=${person.id}`}
+                                                className="text-[10px] bg-[var(--color-accent)]/20 text-[var(--color-accent)] px-2 py-0.5 rounded-full hover:bg-[var(--color-accent)]/40 transition-colors">
                                                 {person.name}
-                                            </span>
+                                            </Link>
                                         ))}
                                     </div>
                                 </section>
@@ -712,17 +857,49 @@ export default function MediaShow({ media, breadcrumb, prev, next }: Props) {
                             {item.description && (
                                 <section>
                                     <h3 className="text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider mb-2">Popis</h3>
-                                    <p className="text-xs text-white">{item.description}</p>
+                                    <p className="text-xs text-white leading-relaxed">{item.description}</p>
                                 </section>
                             )}
 
-                            {/* Albums */}
-                            {breadcrumb.length > 0 && (
+                            {/* Albums — all memberships */}
+                            {(item.albums && item.albums.length > 0 || breadcrumb.length > 0) && (
                                 <section>
-                                    <h3 className="text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider mb-2">Album</h3>
-                                    <Link href={`/albums/${breadcrumb[breadcrumb.length - 1]?.uuid}`} className="text-xs text-[var(--color-accent)] hover:underline">
-                                        {breadcrumb.map(b => b.title).join(' / ')}
-                                    </Link>
+                                    <h3 className="text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider mb-2 flex items-center gap-1">
+                                        <FolderOpen size={10}/> Alba
+                                    </h3>
+                                    <div className="flex flex-wrap gap-1">
+                                        {/* All albums from eager-loaded relation */}
+                                        {item.albums && item.albums.length > 0 ? (
+                                            item.albums.map(album => (
+                                                <Link key={album.uuid} href={`/albums/${album.uuid}`}
+                                                    className="text-[10px] bg-[var(--color-bg-secondary)] border border-[var(--color-border)] text-[var(--color-accent)] px-2 py-0.5 rounded-full hover:border-[var(--color-accent)] transition-colors">
+                                                    📁 {album.title}
+                                                </Link>
+                                            ))
+                                        ) : breadcrumb.length > 0 ? (
+                                            <Link href={`/albums/${breadcrumb[breadcrumb.length - 1]?.uuid}`}
+                                                className="text-[10px] bg-[var(--color-bg-secondary)] border border-[var(--color-border)] text-[var(--color-accent)] px-2 py-0.5 rounded-full hover:border-[var(--color-accent)] transition-colors">
+                                                📁 {breadcrumb.map(b => b.title).join(' / ')}
+                                            </Link>
+                                        ) : null}
+                                    </div>
+                                </section>
+                            )}
+
+                            {/* Places — linked places */}
+                            {item.places && item.places.length > 0 && (
+                                <section>
+                                    <h3 className="text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider mb-2 flex items-center gap-1">
+                                        <MapPin size={10}/> Místa
+                                    </h3>
+                                    <div className="flex flex-wrap gap-1">
+                                        {item.places.map(place => (
+                                            <Link key={place.id} href={`/places/${place.id}`}
+                                                className="text-[10px] bg-[var(--color-bg-secondary)] border border-[var(--color-border)] text-white px-2 py-0.5 rounded-full hover:border-[var(--color-accent)] transition-colors">
+                                                📍 {place.name}{place.city ? ` · ${place.city}` : ''}
+                                            </Link>
+                                        ))}
+                                    </div>
                                 </section>
                             )}
 

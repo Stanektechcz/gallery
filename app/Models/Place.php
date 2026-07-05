@@ -8,10 +8,24 @@ class Place extends Model
 {
     protected $fillable = [
         'gallery_space_id',
-        'name', 'type', 'country', 'country_code', 'region', 'city', 'district',
-        'address', 'latitude', 'longitude', 'radius_meters', 'source',
-        'description', 'website_url', 'osm_id', 'osm_type',
-        'external_id', 'created_by',
+        'name',
+        'type',
+        'country',
+        'country_code',
+        'region',
+        'city',
+        'district',
+        'address',
+        'latitude',
+        'longitude',
+        'radius_meters',
+        'source',
+        'description',
+        'website_url',
+        'osm_id',
+        'osm_type',
+        'external_id',
+        'created_by',
     ];
 
     protected function casts(): array
@@ -22,7 +36,10 @@ class Place extends Model
         ];
     }
 
-    public function creator() { return $this->belongsTo(User::class, 'created_by'); }
+    public function creator()
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
 
     public function media()
     {
