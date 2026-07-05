@@ -594,18 +594,74 @@ class MediaController extends Controller
 
     public function shareTarget(Request $request): \Illuminate\Http\RedirectResponse
     {
-        // Handle PWA Web Share Target — redirect to upload page with shared files
+        // Handle PWA Web Share Target — store files in session, redirect to album picker
         if ($request->hasFile('media')) {
-            // Store file temporarily and redirect to upload UI
-            session(['share_target_files' => collect($request->file('media'))->map(fn($f) => [
-                'name'     => $f->getClientOriginalName(),
-                'tmp_path' => $f->store('share_target', 'local'),
-                'mime'     => $f->getMimeType(),
-                'size'     => $f->getSize(),
-            ])->toArray()]);
+            $request->session()->put('share_target_files',
+                collect($request->file('media'))->map(fn($f) => [
+                    'name'     => $f->getClientOriginalName(),
+                    'tmp_path' => $f->store('share_target', 'local'),
+                    'mime'     => $f->getMimeType(),
+                    'size'     => $f->getSize(),
+                ])->values()->toArray()
+            );
         }
 
-        return redirect('/timeline?from_share=1');
+        return redirect('/share-target');
+    }
+
+    /**
+     * GET /share-target
+     * Show the "save to album" picker for files received via Web Share Target.
+     */
+    public function showShareTarget(Request $request): \Inertia\Response
+    {
+        $files = $request->session()->get('share_target_files', []);
+
+        $filesMeta = collect($files)->map(fn($f, $i) => [
+            'index' => $i,
+            'name'  => $f['name'],
+            'mime'  => $f['mime'],
+            'size'  => $f['size'],
+        ])->values()->all();
+
+        return Inertia::render('ShareTarget/Index', [
+            'files' => $filesMeta,
+        ]);
+    }
+
+    /**
+     * GET /share-target/file/{index}
+     * Serve a temp file stored during Web Share Target processing.
+     */
+    public function serveShareFile(Request $request, int $index): mixed
+    {
+        $files = $request->session()->get('share_target_files', []);
+        if (! isset($files[$index])) {
+            abort(404);
+        }
+
+        $path = Storage::disk('local')->path($files[$index]['tmp_path']);
+        if (! file_exists($path)) {
+            abort(404, 'Temp file no longer available');
+        }
+
+        return response()->file($path, [
+            'Content-Type'        => $files[$index]['mime'],
+            'Content-Disposition' => 'inline; filename="' . $files[$index]['name'] . '"',
+        ]);
+    }
+
+    /**
+     * DELETE /share-target
+     * Clean up temp files and clear session after upload completes.
+     */
+    public function clearShareTarget(Request $request): \Illuminate\Http\JsonResponse
+    {
+        $files = $request->session()->pull('share_target_files', []);
+        foreach ($files as $f) {
+            Storage::disk('local')->delete($f['tmp_path']);
+        }
+        return response()->json(['ok' => true]);
     }
 
     private function getPrevNext(MediaItem $media): array

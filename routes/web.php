@@ -37,7 +37,13 @@ Route::post('/s/{token}/verify', [ShareController::class, 'verify'])->name('shar
 Route::post('/s/{token}/upload', [ShareController::class, 'guestUpload'])->name('share.guest-upload');
 
 // Share Target (PWA Web Share Target)
-Route::post('/share-target', [MediaController::class, 'shareTarget'])->name('share-target')
+Route::post('/share-target',              [MediaController::class, 'shareTarget'])->name('share-target')
+    ->middleware(['auth']);
+Route::get('/share-target',               [MediaController::class, 'showShareTarget'])->name('share-target.show')
+    ->middleware(['auth']);
+Route::get('/share-target/file/{index}',  [MediaController::class, 'serveShareFile'])->name('share-target.file')
+    ->middleware(['auth']);
+Route::delete('/share-target',            [MediaController::class, 'clearShareTarget'])->name('share-target.clear')
     ->middleware(['auth']);
 
 // ── Authenticated ───────────────────────────────────────
