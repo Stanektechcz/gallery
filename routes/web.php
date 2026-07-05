@@ -97,7 +97,10 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/activity', [App\Http\Controllers\ActivityController::class, 'index'])->name('activity');
 
     // Journey (Naše cesta)
-    Route::get('/journey', fn() => Inertia::render('Journey/Index'))->name('journey');
+    Route::get('/journey',    fn() => Inertia::render('Journey/Index'))->name('journey');
+
+    // Itinerary (světový itinerář)
+    Route::get('/itinerary',  fn() => Inertia::render('Itinerary/Index'))->name('itinerary');
 
     // Tags
     Route::get('/tags', fn() => Inertia::render('Tags/Index'))->name('tags');

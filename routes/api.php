@@ -76,6 +76,13 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
     Route::post('/journey',        [App\Http\Controllers\Api\JourneyController::class, 'store'])->name('api.journey.store');
     Route::delete('/journey/{id}', [App\Http\Controllers\Api\JourneyController::class, 'destroy'])->name('api.journey.destroy');
 
+    // Itinerary (světový itinerář)
+    Route::get('/itinerary',                [App\Http\Controllers\Api\ItineraryController::class, 'index'])->name('api.itinerary.index');
+    Route::post('/itinerary',               [App\Http\Controllers\Api\ItineraryController::class, 'store'])->name('api.itinerary.store');
+    Route::patch('/itinerary/{id}',         [App\Http\Controllers\Api\ItineraryController::class, 'update'])->name('api.itinerary.update');
+    Route::delete('/itinerary/{id}',        [App\Http\Controllers\Api\ItineraryController::class, 'destroy'])->name('api.itinerary.destroy');
+    Route::post('/itinerary/check-visited', [App\Http\Controllers\Api\ItineraryController::class, 'checkVisited'])->name('api.itinerary.check-visited');
+
     // Favorites API (Sanctum stateful — works from browser Axios)
     Route::post('/favorites/{uuid}/toggle', [App\Http\Controllers\FavoritesController::class, 'toggle'])->name('api.favorites.toggle');
 
