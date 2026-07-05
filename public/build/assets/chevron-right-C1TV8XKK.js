@@ -1,0 +1,1 @@
+import{n as e}from"./images-n-eVT3xZ.js";var t=e(`chevron-right`,[[`path`,{d:`m9 18 6-6-6-6`,key:`mthhwq`}]]);export{t};
