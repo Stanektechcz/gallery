@@ -36,7 +36,7 @@ class GalleryNotification extends Notification
 
     private function defaultIcon(): string
     {
-        return match($this->type) {
+        return match ($this->type) {
             'upload.complete'  => '✅',
             'media.favorited'  => '❤️',
             'media.added'      => '📸',

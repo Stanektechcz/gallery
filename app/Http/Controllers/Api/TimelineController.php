@@ -119,7 +119,30 @@ class TimelineController extends Controller
             ->limit(5000)
             ->get();
 
-        return response()->json(['points' => $points]);
+        // Albums with location set
+        $albums = \App\Models\Album::where('gallery_space_id', $space->id)
+            ->whereNull('deleted_at')
+            ->whereNotNull('latitude')
+            ->whereNotNull('longitude')
+            ->select(['id', 'uuid', 'title', 'latitude', 'longitude', 'location_name', 'location_country', 'event_date_start', 'event_date_end', 'color', 'icon', 'media_count'])
+            ->with(['cover' => fn($q) => $q->with(['variants' => fn($q2) => $q2->where('type', 'thumbnail')])])
+            ->get()
+            ->map(fn($a) => [
+                'id'             => $a->id,
+                'uuid'           => $a->uuid,
+                'title'          => $a->title,
+                'latitude'       => $a->latitude,
+                'longitude'      => $a->longitude,
+                'location_name'  => $a->location_name,
+                'location_country' => $a->location_country,
+                'event_date_start' => $a->event_date_start?->toDateString(),
+                'event_date_end'   => $a->event_date_end?->toDateString(),
+                'color'          => $a->color,
+                'media_count'    => $a->media_count,
+                'cover_thumb'    => $a->cover?->thumbnail_url,
+            ]);
+
+        return response()->json(['points' => $points, 'albums' => $albums]);
     }
 
     /**

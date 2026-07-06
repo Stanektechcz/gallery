@@ -1,4 +1,5 @@
 import AppLayout from '@/Layouts/AppLayout';
+import LocationPicker from '@/Components/LocationPicker';
 import { Head, Link, useForm } from '@inertiajs/react';
 import { ChevronLeft, FolderPlus, Loader2 } from 'lucide-react';
 
@@ -15,15 +16,21 @@ interface Props {
 
 export default function AlbumsCreate({ allAlbums, parentAlbum }: Props) {
     const { data, setData, post, processing, errors } = useForm({
-        title:            '',
-        parent_id:        parentAlbum?.id ?? ('' as number | ''),
-        description:      '',
-        event_date_start: '',
-        event_date_end:   '',
-        color:            '',
-        visibility:       'private' as 'private' | 'shared' | 'public',
-        sort_mode:        'date_taken' as string,
-        sort_direction:   'asc'       as 'asc' | 'desc',
+        title:                 '',
+        parent_id:             parentAlbum?.id ?? ('' as number | ''),
+        description:           '',
+        event_date_start:      '',
+        event_date_end:        '',
+        color:                 '',
+        visibility:            'private' as 'private' | 'shared' | 'public',
+        sort_mode:             'date_taken' as string,
+        sort_direction:        'asc'       as 'asc' | 'desc',
+        // Location
+        location_name:         '',
+        latitude:              '' as number | '',
+        longitude:             '' as number | '',
+        location_country:      '',
+        location_country_code: '',
     });
 
     function submit(e: React.FormEvent) {
@@ -100,6 +107,25 @@ export default function AlbumsCreate({ allAlbums, parentAlbum }: Props) {
                             className="w-full rounded-lg bg-[var(--color-bg-card)] border border-[var(--color-border)] text-white placeholder-[var(--color-text-secondary)] px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-accent)] transition-colors resize-none"
                         />
                     </div>
+
+                    {/* Location with Nominatim autocomplete */}
+                    <LocationPicker
+                        label="Lokalita alba"
+                        value={{
+                            location_name:         data.location_name,
+                            latitude:              data.latitude,
+                            longitude:             data.longitude,
+                            location_country:      data.location_country,
+                            location_country_code: data.location_country_code,
+                        }}
+                        onChange={v => {
+                            setData('location_name',         v.location_name);
+                            setData('latitude',              v.latitude);
+                            setData('longitude',             v.longitude);
+                            setData('location_country',      v.location_country ?? '');
+                            setData('location_country_code', v.location_country_code ?? '');
+                        }}
+                    />
 
                     {/* Dates */}
                     <div className="grid grid-cols-2 gap-3">

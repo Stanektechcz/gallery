@@ -1,11 +1,12 @@
 import AlbumEvent from '@/Components/AlbumEvent';
+import LocationPicker from '@/Components/LocationPicker';
 import SmartAlbumEditor from '@/Components/SmartAlbumEditor';
 import UploadZone from '@/Components/UploadZone';
 import AppLayout from '@/Layouts/AppLayout';
 import AlbumStory from '@/Pages/Albums/Story';
 import { Head, Link, router } from '@inertiajs/react';
 import axios from 'axios';
-import { ArrowUpDown, BookOpen, ChevronRight, Clock, Edit3, Film, FolderOpen, FolderPlus, Grid3X3, Image, Search, SortAsc, SortDesc, Trash2, Upload } from 'lucide-react';
+import { ArrowUpDown, BookOpen, ChevronRight, Clock, Edit3, Film, FolderOpen, FolderPlus, Grid3X3, Image, MapPin, Search, SortAsc, SortDesc, Trash2, Upload } from 'lucide-react';
 import { useState } from 'react';
 
 interface MediaItem {
@@ -32,6 +33,10 @@ interface Album {
     story_mode?: boolean;
     album_type?: 'physical' | 'smart';
     smart_rules?: any;
+    location_name?: string;
+    latitude?: number;
+    longitude?: number;
+    location_country?: string;
     cover?: { variants: Array<{ type: string; url: string }> } | null;
 }
 
@@ -55,6 +60,15 @@ export default function AlbumShow({ album, breadcrumb, children, media, filters:
     const [isStoryMode, setIsStoryMode] = useState(album.story_mode ?? false);
     const [showSmartEditor, setShowSmartEditor] = useState(false);
     const [albumType, setAlbumType]   = useState(album.album_type ?? 'physical');
+    const [showLocationEdit, setShowLocationEdit] = useState(false);
+    const [locationVal, setLocationVal] = useState({
+        location_name:         album.location_name ?? '',
+        latitude:              album.latitude ?? '' as number | '',
+        longitude:             album.longitude ?? '' as number | '',
+        location_country:      album.location_country ?? '',
+        location_country_code: '',
+    });
+    const [savingLocation, setSavingLocation] = useState(false);
 
     const applyFilter = (patch: Partial<Filters>) => {
         router.get(`/albums/${album.uuid}`, { ...filters, ...patch, search: search || undefined } as any, { preserveScroll: true, preserveState: true });
@@ -77,6 +91,20 @@ export default function AlbumShow({ album, breadcrumb, children, media, filters:
     };
 
     const handleUploadComplete = () => router.reload({ only: ['media', 'album'] });
+
+    const saveLocation = async () => {
+        setSavingLocation(true);
+        try {
+            await axios.patch(`/albums/${album.uuid}`, {
+                location_name:    locationVal.location_name || null,
+                latitude:         locationVal.latitude || null,
+                longitude:        locationVal.longitude || null,
+                location_country: locationVal.location_country || null,
+            });
+            setShowLocationEdit(false);
+            router.reload({ only: ['album'] });
+        } finally { setSavingLocation(false); }
+    };
 
     const SortBtn = ({ value, label }: { value: string; label: string }) => (
         <button
@@ -129,11 +157,44 @@ export default function AlbumShow({ album, breadcrumb, children, media, filters:
                             )}
                         </h1>
                         {album.description && <p className="text-sm text-[var(--color-text-secondary)] mb-1">{album.description}</p>}
-                        <div className="flex flex-wrap items-center gap-3 text-xs text-[var(--color-text-secondary)]">
+                        <div className="flex flex-wrap items-center gap-3 mt-1 text-xs text-[var(--color-text-secondary)]">
                             {album.media_count > 0 && <span className="flex items-center gap-1"><Image size={12}/>{album.media_count} médií</span>}
                             {album.descendant_count > 0 && <span className="flex items-center gap-1"><FolderOpen size={12}/>{album.descendant_count} alb</span>}
                             {album.event_date_start && <span className="flex items-center gap-1"><Clock size={12}/>{new Date(album.event_date_start).toLocaleDateString('cs-CZ')}</span>}
+                            {/* Location display */}
+                            {album.location_name ? (
+                                <button onClick={() => setShowLocationEdit(v=>!v)}
+                                    className="flex items-center gap-1 text-[var(--color-accent)] hover:underline">
+                                    <MapPin size={11}/> {album.location_name}{album.location_country ? `, ${album.location_country}` : ''}
+                                </button>
+                            ) : (
+                                <button onClick={() => setShowLocationEdit(v=>!v)}
+                                    className="flex items-center gap-1 text-[var(--color-border)] hover:text-[var(--color-text-secondary)] transition-colors">
+                                    <MapPin size={11}/> Přidat lokalitu
+                                </button>
+                            )}
                         </div>
+
+                        {/* Inline location editor */}
+                        {showLocationEdit && (
+                            <div className="mt-3 p-3 bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-xl space-y-2">
+                                <LocationPicker
+                                    label="Lokalita alba"
+                                    value={locationVal}
+                                    onChange={setLocationVal}
+                                />
+                                <div className="flex gap-2">
+                                    <button onClick={saveLocation} disabled={savingLocation}
+                                        className="text-xs bg-[var(--color-accent)] text-white px-3 py-1.5 rounded-lg hover:opacity-90 disabled:opacity-40 flex items-center gap-1.5">
+                                        {savingLocation ? '…' : '💾'} Uložit
+                                    </button>
+                                    <button onClick={() => setShowLocationEdit(false)}
+                                        className="text-xs border border-[var(--color-border)] text-[var(--color-text-secondary)] px-3 py-1.5 rounded-lg hover:text-white">
+                                        Zrušit
+                                    </button>
+                                </div>
+                            </div>
+                        )}
                     </div>
                     <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
                         <Link href={`/albums/create?parent=${album.uuid}`} className="flex items-center gap-1.5 rounded-lg bg-[var(--color-bg-card)] border border-[var(--color-border)] text-white hover:border-[var(--color-accent)]/60 px-3 py-2 text-sm font-medium transition-all">

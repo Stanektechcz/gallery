@@ -358,7 +358,8 @@ class UploadController extends Controller
                         ['media_uuid' => $media->uuid],
                     );
                 }
-            } catch (\Throwable) { /* non-fatal */ }
+            } catch (\Throwable) { /* non-fatal */
+            }
 
             return response()->json([
                 'uuid'     => $session->uuid,

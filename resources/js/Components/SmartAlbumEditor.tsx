@@ -4,8 +4,8 @@
  */
 
 import axios from 'axios';
-import { Check, Loader2, Plus, RefreshCw, Sparkles, Trash2, X } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { Check, Loader2, Plus, RefreshCw, Sparkles, X } from 'lucide-react';
+import { useState } from 'react';
 
 interface Condition {
     field: string;

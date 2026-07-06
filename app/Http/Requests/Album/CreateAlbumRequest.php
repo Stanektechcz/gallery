@@ -24,6 +24,12 @@ class CreateAlbumRequest extends FormRequest
             'visibility'       => 'nullable|in:private,shared,public',
             'sort_mode'        => 'nullable|in:date_taken,date_uploaded,title,manual',
             'sort_direction'   => 'nullable|in:asc,desc',
+            // Location
+            'location_name'    => 'nullable|string|max:255',
+            'latitude'         => 'nullable|numeric|between:-90,90',
+            'longitude'        => 'nullable|numeric|between:-180,180',
+            'location_country' => 'nullable|string|max:100',
+            'location_country_code' => 'nullable|string|max:3',
         ];
     }
 }

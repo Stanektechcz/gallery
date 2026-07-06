@@ -106,10 +106,14 @@ class SmartAlbumService
             'extension'   => is_array($value)
                 ? $q->whereIn('extension', $value)
                 : $q->where('extension', $value),
-            'tag_id'      => $q->whereHas('tags', fn($tq) =>
+            'tag_id'      => $q->whereHas(
+                'tags',
+                fn($tq) =>
                 is_array($value) ? $tq->whereIn('tags.id', $value) : $tq->where('tags.id', $value)
             ),
-            'person_id'   => $q->whereHas('people', fn($pq) =>
+            'person_id'   => $q->whereHas(
+                'people',
+                fn($pq) =>
                 is_array($value) ? $pq->whereIn('people.id', $value) : $pq->where('people.id', $value)
             ),
             default => null,

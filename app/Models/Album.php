@@ -52,6 +52,11 @@ class Album extends Model
         'event_latitude',
         'event_longitude',
         'event_gps_radius',
+        'location_name',
+        'latitude',
+        'longitude',
+        'location_country',
+        'location_country_code',
     ];
 
     protected function casts(): array
