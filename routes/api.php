@@ -42,6 +42,12 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
         Route::patch('/{uuid}/story/{blockId}',        [App\Http\Controllers\Api\AlbumStoryController::class, 'update'])->name('story.update');
         Route::delete('/{uuid}/story/{blockId}',       [App\Http\Controllers\Api\AlbumStoryController::class, 'destroy'])->name('story.destroy');
         Route::patch('/{uuid}/story-mode',             [App\Http\Controllers\Api\AlbumStoryController::class, 'toggleStoryMode'])->name('story-mode');
+
+        // Album event mode
+        Route::get('/{uuid}/event',                    [App\Http\Controllers\Api\AlbumEventController::class, 'show'])->name('event.show');
+        Route::patch('/{uuid}/event',                  [App\Http\Controllers\Api\AlbumEventController::class, 'update'])->name('event.update');
+        Route::get('/{uuid}/event-media',              [App\Http\Controllers\Api\AlbumEventController::class, 'detectMedia'])->name('event.detect');
+        Route::post('/{uuid}/event-collect',           [App\Http\Controllers\Api\AlbumEventController::class, 'collect'])->name('event.collect');
     });
 
     // Media API

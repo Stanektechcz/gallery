@@ -42,6 +42,14 @@ class Album extends Model
         'media_count',
         'descendant_count',
         'total_size_bytes',
+        'story_mode',
+        'event_mode',
+        'event_start_at',
+        'event_end_at',
+        'event_place_name',
+        'event_latitude',
+        'event_longitude',
+        'event_gps_radius',
     ];
 
     protected function casts(): array
@@ -49,8 +57,14 @@ class Album extends Model
         return [
             'event_date_start'    => 'date',
             'event_date_end'      => 'date',
+            'event_start_at'      => 'datetime',
+            'event_end_at'        => 'datetime',
             'last_drive_sync_at'  => 'datetime',
             'inherit_permissions' => 'boolean',
+            'story_mode'          => 'boolean',
+            'event_mode'          => 'boolean',
+            'event_latitude'      => 'float',
+            'event_longitude'     => 'float',
         ];
     }
 

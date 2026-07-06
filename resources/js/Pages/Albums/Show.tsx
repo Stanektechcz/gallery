@@ -1,3 +1,4 @@
+import AlbumEvent from '@/Components/AlbumEvent';
 import AlbumStory from '@/Pages/Albums/Story';
 import UploadZone from '@/Components/UploadZone';
 import AppLayout from '@/Layouts/AppLayout';
@@ -95,6 +96,9 @@ export default function AlbumShow({ album, breadcrumb, children, media, filters:
                     ))}
                     <span className="flex items-center gap-1"><ChevronRight size={12} /><span className="text-white font-medium">{album.title}</span></span>
                 </nav>
+
+                {/* Event Mode bar + detection banner */}
+                <AlbumEvent albumUuid={album.uuid}/>
 
                 {/* Header */}
                 <div className="flex items-start justify-between mb-4 gap-3">
