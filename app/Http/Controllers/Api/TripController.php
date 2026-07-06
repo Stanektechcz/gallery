@@ -7,7 +7,9 @@ use App\Models\MediaItem;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class TripController extends Controller
 {
@@ -262,6 +264,14 @@ class TripController extends Controller
      */
     public function addWaypoint(Request $request, int $id): JsonResponse
     {
+        // Guard: if table doesn't exist yet (migration pending), return clear error
+        if (! Schema::hasTable('trip_waypoints')) {
+            return response()->json([
+                'error'   => 'trips_not_ready',
+                'message' => 'Spusťte php artisan migrate na serveru.',
+            ], 503);
+        }
+
         $user  = $request->user();
         $space = $user->gallerySpaces()->first();
 
@@ -376,6 +386,71 @@ class TripController extends Controller
         }
 
         return response()->json(['reordered' => count($v['order'])]);
+    }
+
+    /**
+     * GET /api/v1/trips/route-distance
+     * Proxy OSRM open routing for real road/walk/cycle distances.
+     * Cached 7 days. No API key needed (uses public OSRM instance).
+     */
+    public function routeDistance(Request $request): JsonResponse
+    {
+        $v = $request->validate([
+            'from_lat' => 'required|numeric|between:-90,90',
+            'from_lng' => 'required|numeric|between:-180,180',
+            'to_lat'   => 'required|numeric|between:-90,90',
+            'to_lng'   => 'required|numeric|between:-180,180',
+            'mode'     => 'nullable|in:driving,walking,cycling',
+        ]);
+
+        $mode = $v['mode'] ?? 'driving';
+        $cacheKey = sprintf('osrm:%s:%.4f,%.4f:%.4f,%.4f',
+            $mode, $v['from_lat'], $v['from_lng'], $v['to_lat'], $v['to_lng']);
+
+        $result = Cache::remember($cacheKey, 86400 * 7, function () use ($v, $mode) {
+            $url = sprintf(
+                'http://router.project-osrm.org/route/v1/%s/%.6f,%.6f;%.6f,%.6f?overview=false',
+                $mode,
+                (float) $v['from_lng'], (float) $v['from_lat'],
+                (float) $v['to_lng'],   (float) $v['to_lat']
+            );
+
+            if (! function_exists('curl_init')) {
+                return null;
+            }
+
+            $ch = curl_init($url);
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_TIMEOUT        => 6,
+                CURLOPT_USERAGENT      => 'MakiGallery/1.0 (gallery.stanektech.cz)',
+                CURLOPT_SSL_VERIFYPEER => true,
+            ]);
+            $resp = curl_exec($ch);
+            $errno = curl_errno($ch);
+            curl_close($ch);
+
+            if ($errno || ! $resp) {
+                return null;
+            }
+
+            $data = json_decode($resp, true);
+            if (! isset($data['routes'][0])) {
+                return null;
+            }
+
+            return [
+                'distance_km'  => round($data['routes'][0]['distance'] / 1000, 1),
+                'duration_min' => (int) round($data['routes'][0]['duration'] / 60),
+                'source'       => 'osrm',
+            ];
+        });
+
+        if (! $result) {
+            return response()->json(['error' => 'routing_unavailable'], 503);
+        }
+
+        return response()->json($result);
     }
 
     /**

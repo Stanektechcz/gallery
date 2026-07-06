@@ -35,6 +35,7 @@ interface Waypoint {
     sort_order: number; notes?: string; arrived_at?: string; departed_at?: string;
     transport_mode?: TransportMode; duration_override?: number;
 }
+interface OsrmRoute { distance_km: number; duration_min: number; source?: string; }
 interface Trip {
     id: number; name: string; description?: string; notes?: string;
     start_date: string; end_date: string; duration_days: number;
@@ -58,6 +59,33 @@ function fmtRange(start: string, end: string): string {
         return `${s.getDate()}. – ${e.getDate()}. ${MONTHS_CS[e.getMonth()]} ${e.getFullYear()}`;
     }
     return `${s.getDate()}. ${MONTHS_CS[s.getMonth()]} – ${e.getDate()}. ${MONTHS_CS[e.getMonth()]} ${e.getFullYear()}`;
+}
+
+function buildTransportLinks(from: Waypoint, to: Waypoint, tripDate: string) {
+    const f = encodeURIComponent(from.place_name);
+    const t = encodeURIComponent(to.place_name);
+    const iso = tripDate.substring(0, 10);
+    const [y, mo, d] = iso.split('-');
+    const czDate = `${d}.${mo}.${y}`;
+    const fLat = from.latitude, fLng = from.longitude;
+    const tLat = to.latitude,   tLng = to.longitude;
+    return [
+        { label: 'ČD / IDOS',   icon: '🚂', color: '#e31e24', url: `https://idos.idnes.cz/vlak/spojeni/?f=${f}&t=${t}&date=${iso}&time=0600` },
+        { label: 'RegioJet',    icon: '🟡', color: '#f5c400', url: `https://www.regiojet.cz/vlaky-a-autobusy/jizdenky-online/?f=${from.place_name}&t=${to.place_name}&date=${iso}` },
+        { label: 'FlixBus',     icon: '🟢', color: '#73d700', url: `https://shop.flixbus.cz/search?departureCity=${f}&arrivalCity=${t}&rideDate=${iso}&adult=1` },
+        { label: 'Google Maps', icon: '🗺️', color: '#4285f4',
+            url: fLat && fLng && tLat && tLng
+                ? `https://www.google.com/maps/dir/${fLat},${fLng}/${tLat},${tLng}/`
+                : `https://www.google.com/maps/dir/?api=1&origin=${f}&destination=${t}&travelmode=driving` },
+        { label: 'Waze',        icon: '🔵', color: '#33ccff',
+            url: tLat && tLng ? `https://waze.com/ul?navigate=yes&to=${tLat},${tLng}&from=${fLat},${fLng}` : null },
+        { label: 'Mapy.cz',    icon: '📍', color: '#e25400',
+            url: fLat && fLng && tLat && tLng
+                ? `https://mapy.cz/zakladni?planovani-trasy&planovani[0][x]=${fLng}&planovani[0][y]=${fLat}&planovani[1][x]=${tLng}&planovani[1][y]=${tLat}`
+                : `https://mapy.cz/` },
+        { label: 'Skyscanner',  icon: '✈️', color: '#0770e3', url: `https://www.skyscanner.cz/letiste/${f}/${t}/${iso.replace(/-/g, '')}/1adults/` },
+        { label: 'IDOS autobus',icon: '🚌', color: '#e07000', url: `https://idos.idnes.cz/autobus/spojeni/?f=${f}&t=${t}&date=${iso}&time=0600` },
+    ].filter(l => l.url !== null) as {label:string;icon:string;color:string;url:string}[];
 }
 
 export default function TripsIndex() {
@@ -95,8 +123,11 @@ export default function TripsIndex() {
     const dragIdx     = useRef<number | null>(null);
     const [dragOver,  setDragOver]  = useState<number | null>(null);
 
-    // Transport mode editing
-    const [editLegIdx, setEditLegIdx] = useState<number | null>(null);
+    // Transport mode + OSRM routing
+    const [editLegIdx,  setEditLegIdx]  = useState<number | null>(null);
+    const [osrmRoutes,  setOsrmRoutes]  = useState<Record<string, OsrmRoute>>({});
+    const [fetchingLegs, setFetchingLegs] = useState<Record<string, boolean>>({});
+    const [wpError,     setWpError]     = useState<string | null>(null);
 
     const selected = trips.find(t => t.id === selectedId) ?? null;
 
@@ -220,6 +251,7 @@ export default function TripsIndex() {
     const addWaypoint = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!selectedId || !wpForm.place_name) return;
+        setWpError(null);
         try {
             const r = await axios.post(`/api/v1/trips/${selectedId}/waypoints`, {
                 place_name: wpForm.place_name,
@@ -228,9 +260,13 @@ export default function TripsIndex() {
             });
             setTrips(prev => prev.map(t => t.id === selectedId ? { ...t, waypoints: [...t.waypoints, r.data] } : t));
             setWpForm({ place_name: '', latitude: '', longitude: '' }); setWpSearch(''); setShowWpForm(false);
-        } catch (err) {
-            console.error('addWaypoint failed:', err);
-            alert('Chyba při ukládání bodu trasy. Zkontrolujte připojení.');
+        } catch (err: any) {
+            const msg = err?.response?.data?.message ?? err?.response?.data?.error ?? 'Chyba ukládání';
+            if (msg.includes('migrate') || err?.response?.status === 503) {
+                setWpError('⚠️ Server potřebuje spustit: php artisan migrate');
+            } else {
+                setWpError(`Chyba: ${msg}`);
+            }
         }
     };
 
@@ -281,8 +317,48 @@ export default function TripsIndex() {
         setTrips(prev => prev.map(t => t.id === selectedId
             ? { ...t, waypoints: t.waypoints.map(w => w.id === wpId ? { ...w, ...r.data } : w) }
             : t));
-        setEditLegIdx(null);
+        // If mode changed to routable, fetch OSRM
+        if (mode && ['car','walk','bike'].includes(mode)) {
+            const wps = trips.find(t => t.id === selectedId)?.waypoints ?? [];
+            const idx = wps.findIndex(w => w.id === wpId);
+            if (idx > 0) {
+                const prev = wps[idx - 1];
+                if (prev.latitude && prev.longitude && wps[idx].latitude) {
+                    const osrmMode = mode === 'car' ? 'driving' : mode === 'walk' ? 'walking' : 'cycling';
+                    fetchLegRoute(prev, wps[idx], osrmMode);
+                }
+            }
+        }
     };
+
+    // Fetch OSRM road distance for a single leg
+    const fetchLegRoute = useCallback(async (from: Waypoint, to: Waypoint, osrmMode: 'driving'|'walking'|'cycling') => {
+        if (!from.latitude || !from.longitude || !to.latitude || !to.longitude) return;
+        const key = `${from.id}_${to.id}_${osrmMode}`;
+        setFetchingLegs(prev => ({ ...prev, [key]: true }));
+        try {
+            const r = await axios.get('/api/v1/trips/route-distance', {
+                params: { from_lat: from.latitude, from_lng: from.longitude, to_lat: to.latitude, to_lng: to.longitude, mode: osrmMode },
+            });
+            setOsrmRoutes(prev => ({ ...prev, [key]: r.data }));
+        } catch { /* OSRM unavailable — fall back to Haversine */ }
+        finally { setFetchingLegs(prev => ({ ...prev, [key]: false })); }
+    }, []);
+
+    // Auto-fetch OSRM routes when selection changes
+    useEffect(() => {
+        if (!selected) return;
+        selected.waypoints.forEach((wp, i) => {
+            if (i === 0) return;
+            const prev = selected.waypoints[i - 1];
+            const mode = wp.transport_mode;
+            if (!mode || !['car','walk','bike'].includes(mode)) return;
+            const osrmMode = mode === 'car' ? 'driving' : mode === 'walk' ? 'walking' : 'cycling';
+            const key = `${prev.id}_${wp.id}_${osrmMode}`;
+            if (!osrmRoutes[key]) fetchLegRoute(prev, wp, osrmMode);
+        });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selected?.id, selected?.waypoints.map(w => `${w.id}:${w.transport_mode}`).join(',')]);
 
     // Drag-and-drop handlers
     const handleDragStart = (idx: number) => { dragIdx.current = idx; };
@@ -301,19 +377,26 @@ export default function TripsIndex() {
         await axios.put(`/api/v1/trips/${selectedId}/waypoints/reorder`, { order: wps.map(w => w.id) });
     };
 
-    // Compute per-leg and total route stats
-    const routeLegs = (selected?.waypoints ?? []).reduce<Array<{km: number|null; mode: TransportMode|null; time: number|null}>>((acc, wp, i) => {
+    // Compute per-leg stats (OSRM when available, Haversine fallback)
+    const routeLegs = (selected?.waypoints ?? []).reduce<Array<{
+        km: number|null; mode: TransportMode|null; time: number|null; osrm: OsrmRoute|null; fetching: boolean;
+    }>>((acc, wp, i) => {
         if (i === 0) return acc;
         const prev = selected!.waypoints[i - 1];
         const hasPrev = prev.latitude && prev.longitude;
         const hasCur  = wp.latitude  && wp.longitude;
-        const km   = (hasPrev && hasCur) ? haversine(prev.latitude!, prev.longitude!, wp.latitude!, wp.longitude!) : null;
-        const mode = wp.transport_mode ?? null;
-        const speed = mode ? TRANSPORT[mode].speed : null;
-        const time = wp.duration_override
+        const km      = (hasPrev && hasCur) ? haversine(prev.latitude!, prev.longitude!, wp.latitude!, wp.longitude!) : null;
+        const mode    = wp.transport_mode ?? null;
+        const osrmMode = mode === 'car' ? 'driving' : mode === 'walk' ? 'walking' : mode === 'bike' ? 'cycling' : null;
+        const osrmKey  = osrmMode ? `${prev.id}_${wp.id}_${osrmMode}` : null;
+        const osrm     = osrmKey ? (osrmRoutes[osrmKey] ?? null) : null;
+        const fetching = osrmKey ? (fetchingLegs[osrmKey] ?? false) : false;
+        const speed    = mode ? TRANSPORT[mode].speed : null;
+        const time     = wp.duration_override
             ? wp.duration_override / 60
+            : osrm ? osrm.duration_min / 60
             : (km && speed) ? km / speed : null;
-        acc.push({ km, mode, time });
+        acc.push({ km, mode, time, osrm, fetching });
         return acc;
     }, []);
     const totalKm   = routeLegs.every(l => l.km   !== null) ? routeLegs.reduce((s, l) => s + l.km!,   0) : null;
@@ -566,6 +649,15 @@ export default function TripsIndex() {
                                         </form>
                                     )}
 
+                                    {/* Error banner */}
+                                    {wpError && (
+                                        <div className="mx-2 mt-1 bg-red-500/10 border border-red-500/30 rounded-lg p-2 text-[10px] text-red-400 flex items-start gap-1.5 shrink-0">
+                                            <span className="shrink-0">⚠️</span>
+                                            <span>{wpError}</span>
+                                            <button onClick={() => setWpError(null)} className="ml-auto shrink-0 hover:text-white"><X size={10}/></button>
+                                        </div>
+                                    )}
+
                                     {/* Waypoints list with drag-and-drop */}
                                     <div className="flex-1 overflow-y-auto">
                                         {selected.waypoints.length === 0 ? (
@@ -603,42 +695,90 @@ export default function TripsIndex() {
                                                             </button>
                                                         </div>
 
-                                                        {/* Transport leg — between this and the NEXT waypoint */}
+                                                        {/* ── Transport leg ── */}
                                                         {idx < selected.waypoints.length - 1 && (() => {
                                                             const leg = routeLegs[idx];
-                                                            const isEditing = editLegIdx === idx;
+                                                            const nextWp = selected.waypoints[idx + 1];
+                                                            const isOpen = editLegIdx === idx;
+
+                                                            // Compact display text
+                                                            const distText = leg?.osrm
+                                                                ? `${leg.osrm.distance_km}km`
+                                                                : (leg?.km ? `~${fmtDist(leg.km)}` : null);
+                                                            const timeText = leg?.osrm
+                                                                ? fmtTime(leg.osrm.duration_min / 60)
+                                                                : (leg?.time ? fmtTime(leg.time) : null);
+
                                                             return (
-                                                                <div className="mx-3 my-0.5">
-                                                                    {isEditing ? (
-                                                                        <div className="bg-[var(--color-bg-secondary)] rounded-lg p-2 space-y-1.5 border border-[var(--color-border)]">
-                                                                            <p className="text-[9px] text-[var(--color-text-secondary)] font-semibold uppercase tracking-wider">Doprava do {selected.waypoints[idx+1].place_name}</p>
-                                                                            <div className="flex flex-wrap gap-1">
-                                                                                {(Object.keys(TRANSPORT) as TransportMode[]).map(m => (
-                                                                                    <button key={m} type="button"
-                                                                                        onClick={() => updateWaypointMode(selected.waypoints[idx+1].id, m)}
-                                                                                        className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[9px] border transition-colors ${selected.waypoints[idx+1].transport_mode === m ? 'bg-[var(--color-accent)] border-transparent text-white' : 'border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-white'}`}>
-                                                                                        <span>{TRANSPORT[m].icon}</span> {TRANSPORT[m].label}
-                                                                                    </button>
-                                                                                ))}
+                                                                <div className="mx-2 mb-0.5">
+                                                                    {/* Compact leg row */}
+                                                                    <button onClick={() => setEditLegIdx(isOpen ? null : idx)}
+                                                                        className={`flex items-center gap-1.5 w-full text-left px-2 py-1 rounded-lg transition-colors ${isOpen ? 'bg-[var(--color-bg-card)] border border-[var(--color-border)]' : 'hover:bg-[var(--color-bg-secondary)]'} group/leg`}>
+                                                                        <div className="w-px h-5 bg-[var(--color-border)] mx-1.5 shrink-0"/>
+                                                                        {leg?.fetching ? (
+                                                                            <RefreshCw size={10} className="text-[var(--color-text-secondary)] animate-spin shrink-0"/>
+                                                                        ) : leg?.mode ? (
+                                                                            <span className="text-sm shrink-0">{TRANSPORT[leg.mode].icon}</span>
+                                                                        ) : (
+                                                                            <span className="text-[9px] text-[var(--color-text-secondary)] opacity-50 group-hover/leg:opacity-100 shrink-0">+ doprava</span>
+                                                                        )}
+                                                                        <span className="text-[9px] text-[var(--color-text-secondary)] flex-1 truncate">
+                                                                            {leg?.mode && TRANSPORT[leg.mode].label}
+                                                                            {distText && ` · ${distText}`}
+                                                                            {timeText && ` · ${timeText}`}
+                                                                            {leg?.osrm && <span className="ml-1 opacity-40">(cesta)</span>}
+                                                                        </span>
+                                                                        <span className="text-[9px] text-[var(--color-text-secondary)] shrink-0 opacity-50 group-hover/leg:opacity-100">↗</span>
+                                                                    </button>
+
+                                                                    {/* Expanded planning panel */}
+                                                                    {isOpen && (
+                                                                        <div className="bg-[var(--color-bg-card)] border border-t-0 border-[var(--color-border)] rounded-b-lg p-2.5 space-y-2.5">
+                                                                            {/* Route info */}
+                                                                            <div>
+                                                                                <p className="text-[9px] text-[var(--color-text-secondary)] font-semibold uppercase tracking-wider mb-1">
+                                                                                    {wp.place_name} → {nextWp.place_name}
+                                                                                </p>
+                                                                                <div className="flex gap-2 text-[9px]">
+                                                                                    {leg?.km && <span className="text-[var(--color-text-secondary)]">✈ vzduch: {fmtDist(leg.km)}</span>}
+                                                                                    {leg?.osrm && <span className="text-white font-medium">🛣 silnice: {leg.osrm.distance_km}km · {fmtTime(leg.osrm.duration_min/60)}</span>}
+                                                                                    {leg?.fetching && <span className="text-[var(--color-text-secondary)] animate-pulse">počítám…</span>}
+                                                                                </div>
                                                                             </div>
-                                                                            <button onClick={() => setEditLegIdx(null)} className="text-[9px] text-[var(--color-text-secondary)] hover:text-white">Zavřít</button>
+
+                                                                            {/* Mode selector */}
+                                                                            <div>
+                                                                                <p className="text-[9px] text-[var(--color-text-secondary)] mb-1">Způsob dopravy:</p>
+                                                                                <div className="flex flex-wrap gap-1">
+                                                                                    {(Object.keys(TRANSPORT) as TransportMode[]).map(m => (
+                                                                                        <button key={m} type="button"
+                                                                                            onClick={() => {
+                                                                                                updateWaypointMode(nextWp.id, nextWp.transport_mode === m ? null : m);
+                                                                                                if (['car','walk','bike'].includes(m) && wp.latitude && wp.longitude && nextWp.latitude) {
+                                                                                                    const om = m === 'car' ? 'driving' : m === 'walk' ? 'walking' : 'cycling';
+                                                                                                    fetchLegRoute(wp, nextWp, om);
+                                                                                                }
+                                                                                            }}
+                                                                                            className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] border transition-colors ${nextWp.transport_mode === m ? 'bg-[var(--color-accent)] border-transparent text-white' : 'border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-white'}`}>
+                                                                                            <span>{TRANSPORT[m].icon}</span> {TRANSPORT[m].label}
+                                                                                        </button>
+                                                                                    ))}
+                                                                                </div>
+                                                                            </div>
+
+                                                                            {/* Transport booking links */}
+                                                                            <div>
+                                                                                <p className="text-[9px] text-[var(--color-text-secondary)] mb-1">Rezervace a vyhledávání:</p>
+                                                                                <div className="flex flex-wrap gap-1">
+                                                                                    {buildTransportLinks(wp, nextWp, selected.start_date).map(link => (
+                                                                                        <a key={link.label} href={link.url} target="_blank" rel="noopener noreferrer"
+                                                                                            className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] bg-[var(--color-bg-secondary)] border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-white hover:border-white/20 transition-colors">
+                                                                                            <span>{link.icon}</span> {link.label}
+                                                                                        </a>
+                                                                                    ))}
+                                                                                </div>
+                                                                            </div>
                                                                         </div>
-                                                                    ) : (
-                                                                        <button onClick={() => setEditLegIdx(isEditing ? null : idx)}
-                                                                            className="flex items-center gap-1.5 w-full text-left px-2 py-1 rounded-lg hover:bg-[var(--color-bg-secondary)] group/leg transition-colors">
-                                                                            <div className="w-0.5 h-4 bg-[var(--color-border)] mx-1 shrink-0"/>
-                                                                            {leg?.mode ? (
-                                                                                <span className="text-sm">{TRANSPORT[leg.mode].icon}</span>
-                                                                            ) : (
-                                                                                <span className="text-[9px] text-[var(--color-text-secondary)] opacity-50 group-hover/leg:opacity-100">+ doprava</span>
-                                                                            )}
-                                                                            {leg?.km !== null && (
-                                                                                <span className="text-[9px] text-[var(--color-text-secondary)]">
-                                                                                    {fmtDist(leg.km!)}
-                                                                                    {leg.time !== null && ` · ${fmtTime(leg.time!)}`}
-                                                                                </span>
-                                                                            )}
-                                                                        </button>
                                                                     )}
                                                                 </div>
                                                             );
