@@ -277,25 +277,31 @@ class TripController extends Controller
             'arrived_at'       => 'nullable|date',
             'departed_at'      => 'nullable|date',
             'transport_mode'   => 'nullable|in:car,train,bus,plane,walk,bike,boat',
-            'duration_override'=> 'nullable|integer|min:0',
+            'duration_override' => 'nullable|integer|min:0',
         ]);
 
         $maxOrder = DB::table('trip_waypoints')->where('trip_id', $id)->max('sort_order') ?? -1;
 
-        $wpId = DB::table('trip_waypoints')->insertGetId([
-            'trip_id'          => $id,
-            'place_name'       => $v['place_name'],
-            'latitude'         => $v['latitude'] ?? null,
-            'longitude'        => $v['longitude'] ?? null,
-            'notes'            => $v['notes'] ?? null,
-            'arrived_at'       => $v['arrived_at'] ?? null,
-            'departed_at'      => $v['departed_at'] ?? null,
-            'transport_mode'   => $v['transport_mode'] ?? null,
-            'duration_override'=> $v['duration_override'] ?? null,
-            'sort_order'       => $maxOrder + 1,
-            'created_at'       => now(),
-            'updated_at'       => now(),
-        ]);
+        // Base insert — always works, even if migration for new columns hasn't run
+        $insertData = [
+            'trip_id'     => $id,
+            'place_name'  => $v['place_name'],
+            'latitude'    => $v['latitude'] ?? null,
+            'longitude'   => $v['longitude'] ?? null,
+            'notes'       => $v['notes'] ?? null,
+            'arrived_at'  => $v['arrived_at'] ?? null,
+            'departed_at' => $v['departed_at'] ?? null,
+            'sort_order'  => $maxOrder + 1,
+            'created_at'  => now(),
+            'updated_at'  => now(),
+        ];
+        // Add new columns only if migration has run
+        if (\Illuminate\Support\Facades\Schema::hasColumn('trip_waypoints', 'transport_mode')) {
+            $insertData['transport_mode']    = $v['transport_mode'] ?? null;
+            $insertData['duration_override'] = $v['duration_override'] ?? null;
+        }
+
+        $wpId = DB::table('trip_waypoints')->insertGetId($insertData);
 
         $wp = DB::table('trip_waypoints')->find($wpId);
         if ($wp) {
@@ -320,16 +326,22 @@ class TripController extends Controller
 
         $v = $request->validate([
             'transport_mode'   => 'nullable|in:car,train,bus,plane,walk,bike,boat',
-            'duration_override'=> 'nullable|integer|min:0|max:10000',
+            'duration_override' => 'nullable|integer|min:0|max:10000',
             'notes'            => 'nullable|string|max:2000',
             'arrived_at'       => 'nullable|date',
             'departed_at'      => 'nullable|date',
         ]);
 
+        // Only update new columns if migration has run
+        if (! \Illuminate\Support\Facades\Schema::hasColumn('trip_waypoints', 'transport_mode')) {
+            unset($v['transport_mode'], $v['duration_override']);
+        }
+
         DB::table('trip_waypoints')
             ->where('id', $wpId)
             ->where('trip_id', $id)
             ->update(array_merge($v, ['updated_at' => now()]));
+
 
         $wp = DB::table('trip_waypoints')->find($wpId);
         if ($wp) {

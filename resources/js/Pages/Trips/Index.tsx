@@ -87,10 +87,10 @@ export default function TripsIndex() {
     const [wpDropdown, setWpDropdown] = useState(false);
     const [wpForm,     setWpForm]     = useState({ place_name: '', latitude: '', longitude: '' });
 
-    // Notes inline edit
     const [editNotes, setEditNotes] = useState(false);
     const [notesVal,  setNotesVal]  = useState('');
-
+    const [savingNotes, setSavingNotes] = useState(false);
+    const notesSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     // Drag-and-drop reorder state
     const dragIdx     = useRef<number | null>(null);
     const [dragOver,  setDragOver]  = useState<number | null>(null);
@@ -108,6 +108,7 @@ export default function TripsIndex() {
     // Load media + suggest when trip changes
     useEffect(() => {
         if (!selectedId) { setTripMedia([]); setSuggestion(null); return; }
+        setEditNotes(false);
         setLoadingMedia(true); setTripMedia([]); setSuggestion(null);
         Promise.all([
             axios.get(`/api/v1/trips/${selectedId}/media`),
@@ -219,13 +220,18 @@ export default function TripsIndex() {
     const addWaypoint = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!selectedId || !wpForm.place_name) return;
-        const r = await axios.post(`/api/v1/trips/${selectedId}/waypoints`, {
-            place_name: wpForm.place_name,
-            latitude:   wpForm.latitude ? parseFloat(wpForm.latitude) : undefined,
-            longitude:  wpForm.longitude ? parseFloat(wpForm.longitude) : undefined,
-        });
-        setTrips(prev => prev.map(t => t.id === selectedId ? { ...t, waypoints: [...t.waypoints, r.data] } : t));
-        setWpForm({ place_name: '', latitude: '', longitude: '' }); setWpSearch(''); setShowWpForm(false);
+        try {
+            const r = await axios.post(`/api/v1/trips/${selectedId}/waypoints`, {
+                place_name: wpForm.place_name,
+                latitude:   wpForm.latitude ? parseFloat(wpForm.latitude) : undefined,
+                longitude:  wpForm.longitude ? parseFloat(wpForm.longitude) : undefined,
+            });
+            setTrips(prev => prev.map(t => t.id === selectedId ? { ...t, waypoints: [...t.waypoints, r.data] } : t));
+            setWpForm({ place_name: '', latitude: '', longitude: '' }); setWpSearch(''); setShowWpForm(false);
+        } catch (err) {
+            console.error('addWaypoint failed:', err);
+            alert('Chyba při ukládání bodu trasy. Zkontrolujte připojení.');
+        }
     };
 
     const removeWaypoint = async (wpId: number) => {
@@ -247,11 +253,24 @@ export default function TripsIndex() {
         } finally { setAddingMedia(false); }
     };
 
-    const saveNotes = async () => {
+    const saveNotes = async (val: string) => {
         if (!selectedId) return;
-        await axios.patch(`/api/v1/trips/${selectedId}`, { notes: notesVal });
-        setTrips(prev => prev.map(t => t.id === selectedId ? { ...t, notes: notesVal } : t));
-        setEditNotes(false);
+        setSavingNotes(true);
+        try {
+            await axios.patch(`/api/v1/trips/${selectedId}`, { notes: val });
+            setTrips(prev => prev.map(t => t.id === selectedId ? { ...t, notes: val } : t));
+        } finally { setSavingNotes(false); }
+    };
+
+    // Auto-save notes with debounce (500ms after last keystroke) + immediate on blur
+    const handleNotesChange = (val: string) => {
+        setNotesVal(val);
+        if (notesSaveTimer.current) clearTimeout(notesSaveTimer.current);
+        notesSaveTimer.current = setTimeout(() => saveNotes(val), 800);
+    };
+    const handleNotesBlur = (val: string) => {
+        if (notesSaveTimer.current) { clearTimeout(notesSaveTimer.current); notesSaveTimer.current = null; }
+        saveNotes(val);
     };
 
     const updateWaypointMode = async (wpId: number, mode: TransportMode | null, durOverride?: number) => {
@@ -666,22 +685,18 @@ export default function TripsIndex() {
 
                             {/* Lower half: notes + photo grid */}
                             <div className="flex-1 overflow-y-auto min-h-0">
-                                {/* Notes strip */}
-                                <div className="px-4 py-2 border-b border-[var(--color-border)] flex items-start gap-3">
-                                    {editNotes ? (
-                                        <div className="flex-1 flex gap-2">
-                                            <textarea value={notesVal} onChange={e => setNotesVal(e.target.value)} rows={2} autoFocus
-                                                className="flex-1 bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded px-2 py-1 text-xs text-white outline-none focus:border-[var(--color-accent)] resize-none"/>
-                                            <div className="flex flex-col gap-1 shrink-0">
-                                                <button onClick={saveNotes} className="text-xs bg-[var(--color-accent)] text-white px-2 py-1 rounded hover:opacity-90">💾</button>
-                                                <button onClick={() => setEditNotes(false)} className="text-xs border border-[var(--color-border)] text-[var(--color-text-secondary)] px-2 py-1 rounded hover:text-white">✕</button>
-                                            </div>
-                                        </div>
-                                    ) : (
-                                        <p className="flex-1 text-xs text-[var(--color-text-secondary)] cursor-pointer hover:text-white transition-colors py-1"
-                                            onClick={() => { setNotesVal(selected.notes ?? ''); setEditNotes(true); }}>
-                                            {selected.notes || '+ Přidat poznámky…'}
-                                        </p>
+                                {/* Notes strip — always editable, auto-saves on change + blur */}
+                                <div className="px-4 py-2 border-b border-[var(--color-border)] relative">
+                                    <textarea
+                                        value={editNotes ? notesVal : (selected.notes ?? '')}
+                                        onFocus={() => { if (!editNotes) { setNotesVal(selected.notes ?? ''); setEditNotes(true); } }}
+                                        onChange={e => handleNotesChange(e.target.value)}
+                                        onBlur={e => { handleNotesBlur(e.target.value); setEditNotes(false); }}
+                                        rows={2} placeholder="+ Přidat poznámky k cestě…"
+                                        className="w-full bg-transparent text-xs text-[var(--color-text-secondary)] placeholder-[var(--color-text-secondary)]/40 outline-none resize-none hover:text-white focus:text-white transition-colors"
+                                    />
+                                    {savingNotes && (
+                                        <span className="absolute right-4 top-2 text-[9px] text-[var(--color-text-secondary)] animate-pulse">ukládám…</span>
                                     )}
                                 </div>
 
