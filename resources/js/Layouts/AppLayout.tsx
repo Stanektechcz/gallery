@@ -1,10 +1,12 @@
 import UploadPanel from '@/Components/UploadPanel';
 import { Link, router, usePage } from '@inertiajs/react';
+import axios from 'axios';
 import { clsx } from 'clsx';
 import {
     Activity,
     Archive,
     BarChart3,
+    Bell,
     BookHeart,
     Calendar,
     Clock,
@@ -29,89 +31,298 @@ import {
     Users,
     X
 } from 'lucide-react';
-import { ReactNode, useEffect, useState } from 'react';
+import { ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 
 // ─── Command Palette ────────────────────────────────────
-const COMMANDS = [
-    { label: 'Domovská stránka',    href: '/',          keywords: 'home domov' },
-    { label: 'Fotky / Timeline',    href: '/timeline',  keywords: 'fotky timeline' },
-    { label: 'Alba',                href: '/albums',    keywords: 'album folder' },
-    { label: 'Nové album',          href: '/albums/create', keywords: 'new album' },
-    { label: 'Kalendář',            href: '/calendar',  keywords: 'kalendar calendar' },
-    { label: 'Mapa',                href: '/map',       keywords: 'map gps' },
-    { label: 'Hledat',              href: '/search',    keywords: 'hledat search' },
-    { label: 'Oblíbené',            href: '/favorites', keywords: 'oblibene heart' },
-    { label: 'Vzpomínky',           href: '/memories',  keywords: 'vzpominky memories' },
-    { label: 'Naše cesta',          href: '/journey',   keywords: 'nase cesta journey kronika' },
-    { label: 'Itinerář světa',      href: '/itinerary', keywords: 'itinerar svet travel wishlist' },
-    { label: 'Lidé',                href: '/people',    keywords: 'lide people osoby' },
-    { label: 'Tagy',                href: '/tags',      keywords: 'tagy tags' },
-    { label: 'Statistiky',          href: '/stats',     keywords: 'statistiky stats' },
-    { label: 'Nezařazené',          href: '/inbox',     keywords: 'nezarazene inbox' },
-    { label: 'Aktivita',            href: '/activity',  keywords: 'aktivita activity log' },
-    { label: 'Recovery Center',     href: '/recovery',  keywords: 'recovery health oprava' },
-    { label: 'Archiv',              href: '/archive',   keywords: 'archiv archive' },
-    { label: 'Koš',                 href: '/trash',     keywords: 'kos trash delete' },
-    { label: 'Sdílené',             href: '/shares',    keywords: 'share sdilene' },
-    { label: 'Nastavení Drive',     href: '/settings/storage/google', keywords: 'settings google drive' },
+
+type CommandGroup = 'nav' | 'action' | 'search';
+
+interface Command {
+    label:    string;
+    keywords: string;
+    group:    CommandGroup;
+    href?:    string;
+    action?:  () => void;
+    icon?:    string;
+}
+
+const NAV_COMMANDS: Command[] = [
+    { group: 'nav', label: 'Domovská stránka',    href: '/',          keywords: 'home domov dashboard' },
+    { group: 'nav', label: 'Fotky / Timeline',    href: '/timeline',  keywords: 'fotky timeline chronology' },
+    { group: 'nav', label: 'Alba',                href: '/albums',    keywords: 'album folder slozka' },
+    { group: 'nav', label: 'Kalendář',            href: '/calendar',  keywords: 'kalendar calendar' },
+    { group: 'nav', label: 'Mapa',                href: '/map',       keywords: 'map gps lokace' },
+    { group: 'nav', label: 'Oblíbené',            href: '/favorites', keywords: 'oblibene heart srdce' },
+    { group: 'nav', label: 'Vzpomínky',           href: '/memories',  keywords: 'vzpominky memories' },
+    { group: 'nav', label: 'Naše cesta',          href: '/journey',   keywords: 'nase cesta journey kronika' },
+    { group: 'nav', label: 'Itinerář světa',      href: '/itinerary', keywords: 'itinerar svet travel' },
+    { group: 'nav', label: 'Cesty',               href: '/trips',     keywords: 'cesty trips vylety' },
+    { group: 'nav', label: 'Místa',               href: '/places',    keywords: 'mista places lokace' },
+    { group: 'nav', label: 'Lidé',                href: '/people',    keywords: 'lide people osoby' },
+    { group: 'nav', label: 'Tagy',                href: '/tags',      keywords: 'tagy tags' },
+    { group: 'nav', label: 'Porovnání',           href: '/compare',   keywords: 'porovnat compare' },
+    { group: 'nav', label: 'Slideshow',           href: '/timeline',  keywords: 'slideshow prezentace' },
+    { group: 'nav', label: 'TV Režim',            href: '/tv',        keywords: 'tv televize mode' },
+    { group: 'nav', label: 'Výběry k tisku',      href: '/print',     keywords: 'tisk print fotokniha' },
+    { group: 'nav', label: 'Statistiky',          href: '/stats',     keywords: 'statistiky stats' },
+    { group: 'nav', label: 'Nezařazené',          href: '/inbox',     keywords: 'nezarazene inbox' },
+    { group: 'nav', label: 'Aktivita',            href: '/activity',  keywords: 'aktivita activity' },
+    { group: 'nav', label: 'Recovery Center',     href: '/recovery',  keywords: 'recovery zdravi' },
+    { group: 'nav', label: 'Archiv',              href: '/archive',   keywords: 'archiv' },
+    { group: 'nav', label: 'Koš',                 href: '/trash',     keywords: 'kos trash smazat' },
+    { group: 'nav', label: 'Sdílené',             href: '/shares',    keywords: 'share sdilene' },
+    { group: 'nav', label: 'Nastavení Drive',     href: '/settings/storage/google', keywords: 'settings nastaveni google drive' },
 ];
 
+const ACTION_COMMANDS: Command[] = [
+    { group: 'action', label: 'Vytvořit album',     href: '/albums/create', keywords: 'create album novy', icon: '📁' },
+    { group: 'action', label: 'Nahrát fotografie',  href: '/timeline',      keywords: 'upload nahrat foto', icon: '📤' },
+    { group: 'action', label: 'Nová fotokniha',     href: '/print',         keywords: 'fotokniha print selection', icon: '🖨️' },
+];
+
+const GROUP_LABELS: Record<CommandGroup, string> = {
+    nav:    'Přejít na',
+    action: 'Akce',
+    search: 'Hledat',
+};
+
 function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void }) {
-    const [query, setQuery] = useState('');
+    const [query,    setQuery]    = useState('');
+    const [activeIdx, setActive]  = useState(0);
+    const inputRef = useRef<HTMLInputElement>(null);
 
-    useEffect(() => {
-        if (!open) setQuery('');
-    }, [open]);
+    useEffect(() => { if (!open) { setQuery(''); setActive(0); } }, [open]);
+    useEffect(() => { if (open) inputRef.current?.focus(); }, [open]);
 
-    const filtered = query.trim()
-        ? COMMANDS.filter(c =>
-            c.label.toLowerCase().includes(query.toLowerCase()) ||
-            c.keywords.includes(query.toLowerCase())
-          )
-        : COMMANDS;
+    const allCommands: Command[] = [...NAV_COMMANDS, ...ACTION_COMMANDS];
 
-    const go = (href: string) => { onClose(); router.visit(href); };
+    // If query starts with known search triggers, add search command
+    const searchCmd: Command | null = query.trim().length >= 2 ? {
+        group: 'search',
+        label: `Hledat „${query.trim()}"`,
+        href: `/search?q=${encodeURIComponent(query.trim())}`,
+        keywords: '',
+        icon: '🔍',
+    } : null;
+
+    const filtered: Command[] = query.trim()
+        ? [
+            ...(searchCmd ? [searchCmd] : []),
+            ...allCommands.filter(c =>
+                c.label.toLowerCase().includes(query.toLowerCase()) ||
+                c.keywords.includes(query.toLowerCase())
+            ),
+          ]
+        : allCommands;
+
+    // Groups for ungrouped display
+    const go = useCallback((cmd: Command) => {
+        onClose();
+        if (cmd.action) { cmd.action(); return; }
+        if (cmd.href) router.visit(cmd.href);
+    }, [onClose]);
+
+    const handleKey = (e: React.KeyboardEvent) => {
+        if (e.key === 'Escape') { onClose(); return; }
+        if (e.key === 'ArrowDown') { e.preventDefault(); setActive(i => Math.min(i + 1, filtered.length - 1)); }
+        if (e.key === 'ArrowUp')   { e.preventDefault(); setActive(i => Math.max(i - 1, 0)); }
+        if (e.key === 'Enter' && filtered[activeIdx]) go(filtered[activeIdx]);
+    };
 
     if (!open) return null;
 
+    // Group results when no query
+    const grouped = !query.trim()
+        ? {
+            action: filtered.filter(c => c.group === 'action'),
+            nav:    filtered.filter(c => c.group === 'nav'),
+          }
+        : null;
+
+    let globalIdx = 0;
+
+    const renderCmd = (cmd: Command, idx: number) => {
+        const isActive = idx === activeIdx;
+        return (
+            <button key={`${cmd.group}-${cmd.label}`}
+                onClick={() => go(cmd)}
+                onMouseEnter={() => setActive(idx)}
+                className={`w-full text-left px-4 py-2 text-sm flex items-center gap-3 transition-colors ${isActive ? 'bg-[var(--color-accent)]/15 text-white' : 'text-[var(--color-text-secondary)] hover:text-white'}`}>
+                {cmd.icon && <span className="text-base w-5 text-center shrink-0">{cmd.icon}</span>}
+                <span className="flex-1">{cmd.label}</span>
+                {isActive && <kbd className="text-[10px] text-[var(--color-text-secondary)] border border-[var(--color-border)] rounded px-1.5 py-0.5 shrink-0">↵</kbd>}
+            </button>
+        );
+    };
+
     return (
-        <div className="fixed inset-0 z-[500] flex items-start justify-center pt-[15vh]">
-            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-            <div className="relative z-10 w-full max-w-md bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-xl shadow-2xl overflow-hidden">
+        <div className="fixed inset-0 z-[500] flex items-start justify-center pt-[12vh]">
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose}/>
+            <div className="relative z-10 w-full max-w-lg bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-2xl shadow-2xl overflow-hidden">
+                {/* Search input */}
                 <div className="flex items-center gap-3 px-4 py-3 border-b border-[var(--color-border)]">
-                    <Search size={16} className="text-[var(--color-text-secondary)] shrink-0" />
+                    <Search size={16} className="text-[var(--color-text-secondary)] shrink-0"/>
                     <input
-                        autoFocus
+                        ref={inputRef}
                         value={query}
-                        onChange={e => setQuery(e.target.value)}
-                        onKeyDown={e => {
-                            if (e.key === 'Escape') onClose();
-                            if (e.key === 'Enter' && filtered[0]) go(filtered[0].href);
-                        }}
-                        placeholder="Přejít na… (Ctrl+K)"
+                        onChange={e => { setQuery(e.target.value); setActive(0); }}
+                        onKeyDown={handleKey}
+                        placeholder="Přejdi na stránku, hledej, proveď akci…"
                         className="flex-1 bg-transparent text-white text-sm outline-none placeholder-[var(--color-text-secondary)]"
                     />
-                    <kbd className="text-[10px] text-[var(--color-text-secondary)] border border-[var(--color-border)] rounded px-1.5 py-0.5">ESC</kbd>
+                    <kbd className="text-[10px] text-[var(--color-text-secondary)] border border-[var(--color-border)] rounded px-1.5 py-0.5 shrink-0">ESC</kbd>
                 </div>
-                <ul className="max-h-72 overflow-y-auto py-1">
-                    {filtered.map((c, i) => (
-                        <li key={c.href}>
-                            <button
-                                onClick={() => go(c.href)}
-                                className="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-white/10 flex items-center gap-3 transition-colors"
-                            >
-                                <span className="flex-1">{c.label}</span>
-                                {i === 0 && query && (
-                                    <kbd className="text-[10px] text-[var(--color-text-secondary)] border border-[var(--color-border)] rounded px-1.5 py-0.5">↵</kbd>
-                                )}
-                            </button>
-                        </li>
-                    ))}
-                    {filtered.length === 0 && (
-                        <li className="px-4 py-6 text-center text-sm text-[var(--color-text-secondary)]">Nic nenalezeno</li>
+
+                {/* Results */}
+                <div className="max-h-80 overflow-y-auto py-1">
+                    {filtered.length === 0 ? (
+                        <p className="px-4 py-8 text-center text-sm text-[var(--color-text-secondary)]">Nic nenalezeno</p>
+                    ) : grouped ? (
+                        <>
+                            {grouped.action.length > 0 && (
+                                <>
+                                    <p className="px-4 pt-2 pb-1 text-[10px] font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider">Akce</p>
+                                    {grouped.action.map(cmd => { const i = globalIdx++; return renderCmd(cmd, i); })}
+                                </>
+                            )}
+                            {grouped.nav.length > 0 && (
+                                <>
+                                    <p className="px-4 pt-2 pb-1 text-[10px] font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider">Přejít na</p>
+                                    {grouped.nav.map(cmd => { const i = globalIdx++; return renderCmd(cmd, i); })}
+                                </>
+                            )}
+                        </>
+                    ) : (
+                        filtered.map((cmd, i) => renderCmd(cmd, i))
                     )}
-                </ul>
+                </div>
+
+                {/* Footer hint */}
+                <div className="px-4 py-2 border-t border-[var(--color-border)] flex items-center gap-4 text-[10px] text-[var(--color-text-secondary)]">
+                    <span>↑↓ Navigace</span>
+                    <span>↵ Otevřít</span>
+                    <span>ESC Zavřít</span>
+                    <div className="flex-1"/>
+                    <span>Ctrl+K</span>
+                </div>
             </div>
+        </div>
+    );
+}
+
+// ─── Notification Bell ───────────────────────────────────
+
+interface GalleryNotif {
+    id:         string;
+    read_at:    string | null;
+    created_at: string;
+    data: {
+        type:    string;
+        message: string;
+        link?:   string;
+        icon?:   string;
+    };
+}
+
+function NotificationBell() {
+    const [notifs,     setNotifs]     = useState<GalleryNotif[]>([]);
+    const [open,       setOpen]       = useState(false);
+    const [loading,    setLoading]    = useState(false);
+    const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+    const load = useCallback(async () => {
+        setLoading(true);
+        try {
+            const r = await axios.get('/api/v1/notifications');
+            setNotifs(r.data?.data ?? r.data ?? []);
+        } catch { /* ignore */ }
+        finally { setLoading(false); }
+    }, []);
+
+    // Load on mount + every 60s
+    useEffect(() => {
+        load();
+        pollRef.current = setInterval(load, 60_000);
+        return () => { if (pollRef.current) clearInterval(pollRef.current); };
+    }, [load]);
+
+    const markRead = async (id: string) => {
+        await axios.post(`/api/v1/notifications/${id}/read`).catch(() => {});
+        setNotifs(prev => prev.map(n => n.id === id ? { ...n, read_at: new Date().toISOString() } : n));
+    };
+
+    const markAllRead = async () => {
+        await axios.post('/api/v1/notifications/read-all').catch(() => {});
+        setNotifs(prev => prev.map(n => ({ ...n, read_at: n.read_at ?? new Date().toISOString() })));
+    };
+
+    const unread = notifs.filter(n => !n.read_at).length;
+
+    const handleClick = (n: GalleryNotif) => {
+        markRead(n.id);
+        if (n.data.link) router.visit(n.data.link);
+        setOpen(false);
+    };
+
+    const fmtTime = (d: string) => {
+        const diff = Date.now() - new Date(d).getTime();
+        if (diff < 60_000) return 'Právě teď';
+        if (diff < 3_600_000) return `${Math.floor(diff / 60_000)} min`;
+        if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)} h`;
+        return new Date(d).toLocaleDateString('cs-CZ', { day: 'numeric', month: 'short' });
+    };
+
+    return (
+        <div className="relative">
+            <button onClick={() => setOpen(v => !v)}
+                className={`relative p-2 rounded-lg hover:bg-white/10 transition-colors ${open ? 'text-white bg-white/10' : 'text-[var(--color-text-secondary)]'}`}>
+                <Bell size={18}/>
+                {unread > 0 && (
+                    <span className="absolute top-0.5 right-0.5 w-4 h-4 bg-[var(--color-accent)] text-white text-[9px] font-bold rounded-full flex items-center justify-center">
+                        {unread > 9 ? '9+' : unread}
+                    </span>
+                )}
+            </button>
+
+            {open && (
+                <>
+                    <div className="fixed inset-0 z-40" onClick={() => setOpen(false)}/>
+                    <div className="absolute right-0 top-full mt-2 w-80 bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-xl shadow-2xl overflow-hidden z-50">
+                        <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--color-border)]">
+                            <h3 className="text-sm font-semibold text-white">Notifikace</h3>
+                            {unread > 0 && (
+                                <button onClick={markAllRead} className="text-[10px] text-[var(--color-accent)] hover:underline">
+                                    Označit vše jako přečtené
+                                </button>
+                            )}
+                        </div>
+
+                        <div className="max-h-80 overflow-y-auto">
+                            {notifs.length === 0 ? (
+                                <div className="px-4 py-8 text-center text-[var(--color-text-secondary)]">
+                                    <Bell size={24} className="mx-auto mb-2 opacity-30"/>
+                                    <p className="text-sm">Žádné notifikace</p>
+                                </div>
+                            ) : notifs.map(n => (
+                                <button key={n.id}
+                                    onClick={() => handleClick(n)}
+                                    className={`w-full text-left px-4 py-3 border-b border-[var(--color-border)] last:border-0 hover:bg-white/5 transition-colors flex items-start gap-3 ${!n.read_at ? 'bg-[var(--color-accent)]/5' : ''}`}>
+                                    <span className="text-xl shrink-0 mt-0.5">{n.data.icon ?? '🔔'}</span>
+                                    <div className="flex-1 min-w-0">
+                                        <p className={`text-xs leading-relaxed ${!n.read_at ? 'text-white font-medium' : 'text-[var(--color-text-secondary)]'}`}>
+                                            {n.data.message}
+                                        </p>
+                                        <p className="text-[10px] text-[var(--color-text-secondary)] mt-0.5">{fmtTime(n.created_at)}</p>
+                                    </div>
+                                    {!n.read_at && (
+                                        <div className="w-2 h-2 rounded-full bg-[var(--color-accent)] shrink-0 mt-1.5"/>
+                                    )}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                </>
+            )}
         </div>
     );
 }
@@ -216,16 +427,19 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
                     })}
                 </nav>
 
-                {/* User */}
+                {/* User + Notifications */}
                 <div className="border-t border-[var(--color-border)] p-3">
-                    <div className="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-white/5 cursor-pointer">
-                        <div className="w-7 h-7 rounded-full bg-[var(--color-accent)]/30 flex items-center justify-center text-xs font-bold text-[var(--color-accent)]">
-                            {auth?.user?.name?.[0]?.toUpperCase() ?? '?'}
+                    <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-1 px-2 py-2 rounded-lg hover:bg-white/5 cursor-pointer min-w-0">
+                            <div className="w-7 h-7 rounded-full bg-[var(--color-accent)]/30 flex items-center justify-center text-xs font-bold text-[var(--color-accent)] shrink-0">
+                                {auth?.user?.name?.[0]?.toUpperCase() ?? '?'}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <p className="text-xs font-medium text-white truncate">{auth?.user?.name}</p>
+                                <p className="text-xs text-[var(--color-text-secondary)] truncate">{auth?.user?.role}</p>
+                            </div>
                         </div>
-                        <div className="flex-1 min-w-0">
-                            <p className="text-xs font-medium text-white truncate">{auth?.user?.name}</p>
-                            <p className="text-xs text-[var(--color-text-secondary)] truncate">{auth?.user?.role}</p>
-                        </div>
+                        <NotificationBell/>
                     </div>
                 </div>
             </aside>

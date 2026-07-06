@@ -109,6 +109,18 @@ class FavoritesController extends Controller
             ->where('users.id', '!=', $user->id)
             ->first(['users.name']);
 
+        // Notify the media owner if it's not the same user
+        if ($isMine && $media->owner_user_id && $media->owner_user_id !== $user->id) {
+            $owner = \App\Models\User::find($media->owner_user_id);
+            $owner?->notify(new \App\Notifications\GalleryNotification(
+                'media.favorited',
+                "{$user->name} označil/a vaši fotku jako oblíbenou",
+                "/media/{$media->uuid}",
+                null,
+                ['media_uuid' => $media->uuid],
+            ));
+        }
+
         return response()->json([
             'is_my_favorite'     => $isMine,
             'is_shared_favorite' => $isShared,

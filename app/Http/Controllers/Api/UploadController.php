@@ -345,6 +345,21 @@ class UploadController extends Controller
 
             AuditLog::record('media.upload', $media, ['filename' => $media->original_filename]);
 
+            // Notify other space members about new upload
+            try {
+                $space = \App\Models\GallerySpace::find($session->gallery_space_id);
+                if ($space) {
+                    \App\Notifications\GalleryNotification::notifySpace(
+                        $space,
+                        $session->user_id,
+                        'media.added',
+                        request()->user()?->name . ' přidal/a nové médium: ' . $session->original_filename,
+                        "/media/{$media->uuid}",
+                        ['media_uuid' => $media->uuid],
+                    );
+                }
+            } catch (\Throwable) { /* non-fatal */ }
+
             return response()->json([
                 'uuid'     => $session->uuid,
                 'status'   => 'completed',
