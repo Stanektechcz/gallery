@@ -90,22 +90,43 @@ class AlbumController extends Controller
         if (!in_array($sortBy, $allowedSort)) $sortBy = 'taken_at';
         if (!in_array($sortDir, ['asc', 'desc'])) $sortDir = 'desc';
 
-        $mediaQuery = MediaItem::query()
-            ->where(function ($q) use ($album) {
-                $q->where('primary_album_id', $album->id)
-                    ->orWhereHas('albums', fn($q2) => $q2->where('albums.id', $album->id));
-            })
-            ->with(['variants', 'tags', 'people', 'places'])
-            ->whereNull('trashed_at')
-            ->whereIn('status', ['ready', 'received']);
+        // Smart albums: compute media from rules instead of album_media
+        $space = $request->user()->gallerySpaces()->first();
+        if ($album->album_type === 'smart' && $album->smart_rules) {
+            $smartService = new \App\Services\Media\SmartAlbumService();
+            $mediaQuery   = $smartService->buildQuery($album, $space->id)
+                ->with(['variants', 'tags', 'people', 'places'])
+                ->whereIn('status', ['ready', 'received']);
 
-        if ($type) $mediaQuery->where('media_type', $type);
-        if ($search) $mediaQuery->where('original_filename', 'like', "%{$search}%");
+            if ($type)   $mediaQuery->where('media_type', $type);
+            if ($search) $mediaQuery->where('original_filename', 'like', "%{$search}%");
 
-        $media = $mediaQuery->orderBy($sortBy, $sortDir)->paginate(60)->withQueryString();
+            $media = $mediaQuery->orderBy($sortBy, $sortDir)->paginate(60)->withQueryString();
+        } else {
+            $mediaQuery = MediaItem::query()
+                ->where(function ($q) use ($album) {
+                    $q->where('primary_album_id', $album->id)
+                        ->orWhereHas('albums', fn($q2) => $q2->where('albums.id', $album->id));
+                })
+                ->with(['variants', 'tags', 'people', 'places'])
+                ->whereNull('trashed_at')
+                ->whereIn('status', ['ready', 'received']);
+
+            if ($type)   $mediaQuery->where('media_type', $type);
+            if ($search) $mediaQuery->where('original_filename', 'like', "%{$search}%");
+
+            $media = $mediaQuery->orderBy($sortBy, $sortDir)->paginate(60)->withQueryString();
+        }
+
+        // Serialize smart_rules for frontend
+        $albumData                = $album->toArray();
+        $albumData['album_type']  = $album->album_type ?? 'physical';
+        $albumData['smart_rules'] = is_string($album->smart_rules)
+            ? json_decode($album->smart_rules, true)
+            : $album->smart_rules;
 
         return Inertia::render('Albums/Show', [
-            'album'      => $album,
+            'album'      => $albumData,
             'breadcrumb' => $album->breadcrumb,
             'children'   => $children,
             'media'      => $media,

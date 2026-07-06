@@ -1,4 +1,5 @@
 import AlbumEvent from '@/Components/AlbumEvent';
+import SmartAlbumEditor from '@/Components/SmartAlbumEditor';
 import UploadZone from '@/Components/UploadZone';
 import AppLayout from '@/Layouts/AppLayout';
 import AlbumStory from '@/Pages/Albums/Story';
@@ -29,6 +30,8 @@ interface Album {
     sync_status: string;
     color?: string;
     story_mode?: boolean;
+    album_type?: 'physical' | 'smart';
+    smart_rules?: any;
     cover?: { variants: Array<{ type: string; url: string }> } | null;
 }
 
@@ -50,6 +53,8 @@ export default function AlbumShow({ album, breadcrumb, children, media, filters:
     const [activeTab, setActiveTab]   = useState<'grid' | 'story'>('grid');
     const [storyEdit, setStoryEdit]   = useState(false);
     const [isStoryMode, setIsStoryMode] = useState(album.story_mode ?? false);
+    const [showSmartEditor, setShowSmartEditor] = useState(false);
+    const [albumType, setAlbumType]   = useState(album.album_type ?? 'physical');
 
     const applyFilter = (patch: Partial<Filters>) => {
         router.get(`/albums/${album.uuid}`, { ...filters, ...patch, search: search || undefined } as any, { preserveScroll: true, preserveState: true });
@@ -100,10 +105,29 @@ export default function AlbumShow({ album, breadcrumb, children, media, filters:
                 {/* Event Mode bar + detection banner */}
                 <AlbumEvent albumUuid={album.uuid}/>
 
+                {/* Smart album editor */}
+                {showSmartEditor && (
+                    <SmartAlbumEditor
+                        albumUuid={album.uuid}
+                        initialRules={album.smart_rules}
+                        albumType={albumType}
+                        onSaved={(type, rules) => {
+                            setAlbumType(type);
+                            setShowSmartEditor(false);
+                            router.reload({ only: ['album', 'media'] });
+                        }}
+                    />
+                )}
+
                 {/* Header */}
                 <div className="flex items-start justify-between mb-4 gap-3">
                     <div className="min-w-0">
-                        <h1 className="text-xl font-semibold text-white mb-1 truncate">{album.title}</h1>
+                        <h1 className="text-xl font-semibold text-white mb-1 flex items-center gap-2 truncate">
+                            {album.title}
+                            {albumType === 'smart' && (
+                                <span className="text-[10px] bg-[var(--color-accent)]/20 text-[var(--color-accent)] px-2 py-0.5 rounded-full font-medium shrink-0">✨ Dynamické</span>
+                            )}
+                        </h1>
                         {album.description && <p className="text-sm text-[var(--color-text-secondary)] mb-1">{album.description}</p>}
                         <div className="flex flex-wrap items-center gap-3 text-xs text-[var(--color-text-secondary)]">
                             {album.media_count > 0 && <span className="flex items-center gap-1"><Image size={12}/>{album.media_count} médií</span>}
@@ -115,6 +139,10 @@ export default function AlbumShow({ album, breadcrumb, children, media, filters:
                         <Link href={`/albums/create?parent=${album.uuid}`} className="flex items-center gap-1.5 rounded-lg bg-[var(--color-bg-card)] border border-[var(--color-border)] text-white hover:border-[var(--color-accent)]/60 px-3 py-2 text-sm font-medium transition-all">
                             <FolderPlus size={14}/> Podalbu
                         </Link>
+                        <button onClick={() => setShowSmartEditor(v=>!v)}
+                            className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-all ${showSmartEditor ? 'bg-[var(--color-accent)] text-white' : 'bg-[var(--color-bg-card)] border border-[var(--color-border)] text-white hover:border-[var(--color-accent)]/60'}`}>
+                            ✨ {albumType === 'smart' ? 'Pravidla' : 'Typ alba'}
+                        </button>
                         <button onClick={() => setUploadOpen(v=>!v)} className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-all ${uploadOpen ? 'bg-[var(--color-accent)] text-white' : 'bg-[var(--color-bg-card)] border border-[var(--color-border)] text-white hover:border-[var(--color-accent)]/60'}`}>
                             <Upload size={14}/> Nahrát
                         </button>

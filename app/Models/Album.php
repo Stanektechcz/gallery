@@ -43,6 +43,8 @@ class Album extends Model
         'descendant_count',
         'total_size_bytes',
         'story_mode',
+        'album_type',
+        'smart_rules',
         'event_mode',
         'event_start_at',
         'event_end_at',

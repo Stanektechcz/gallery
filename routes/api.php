@@ -35,6 +35,11 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
         Route::get('/tree',     [App\Http\Controllers\AlbumController::class, 'tree'])->name('tree');
         Route::get('/{uuid}',   [App\Http\Controllers\AlbumController::class, 'show'])->name('show');
 
+        // Smart album rules management
+        Route::get('/{uuid}/smart-rules',    [App\Http\Controllers\Api\SmartAlbumController::class, 'getRules'])->name('smart.rules');
+        Route::put('/{uuid}/smart-rules',    [App\Http\Controllers\Api\SmartAlbumController::class, 'updateRules'])->name('smart.update');
+        Route::get('/{uuid}/smart-preview',  [App\Http\Controllers\Api\SmartAlbumController::class, 'preview'])->name('smart.preview');
+
         // Album story blocks
         Route::get('/{uuid}/story',                    [App\Http\Controllers\Api\AlbumStoryController::class, 'index'])->name('story.index');
         Route::post('/{uuid}/story',                   [App\Http\Controllers\Api\AlbumStoryController::class, 'store'])->name('story.store');
@@ -83,6 +88,10 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
     Route::get('/notifications', fn() => request()->user()->notifications()->paginate(20));
     Route::post('/notifications/{id}/read', fn(string $id) => request()->user()->notifications()->findOrFail($id)->markAsRead());
     Route::post('/notifications/read-all', fn() => request()->user()->unreadNotifications->markAsRead());
+
+    // Recovery
+    Route::get('/recovery/duplicates',       [App\Http\Controllers\RecoveryController::class, 'findDuplicates'])->name('api.recovery.duplicates');
+    Route::delete('/recovery/duplicates/trash', [App\Http\Controllers\RecoveryController::class, 'trashDuplicates'])->name('api.recovery.trash');
 
     // Saved searches
     Route::apiResource('saved-searches', App\Http\Controllers\Api\SavedSearchController::class);

@@ -80,4 +80,82 @@ class RecoveryController extends Controller
             ] : null,
         ]);
     }
+
+    /**
+     * GET /api/v1/recovery/duplicates
+     * Find exact duplicates (same sha256) in the gallery space.
+     */
+    public function findDuplicates(Request $request): \Illuminate\Http\JsonResponse
+    {
+        $space = $request->user()->gallerySpaces()->first();
+
+        // Find sha256 hashes that appear more than once
+        $dupHashes = DB::table('media_items')
+            ->where('gallery_space_id', $space->id)
+            ->whereNull('trashed_at')
+            ->whereNotNull('sha256')
+            ->select('sha256', DB::raw('COUNT(*) as cnt'))
+            ->groupBy('sha256')
+            ->having('cnt', '>', 1)
+            ->orderByDesc('cnt')
+            ->limit(50)
+            ->pluck('cnt', 'sha256');
+
+        $groups = [];
+        foreach ($dupHashes as $hash => $count) {
+            $items = MediaItem::with('variants')
+                ->where('gallery_space_id', $space->id)
+                ->whereNull('trashed_at')
+                ->where('sha256', $hash)
+                ->orderBy('taken_at')
+                ->get();
+
+            $groups[] = [
+                'sha256' => $hash,
+                'count'  => $count,
+                'items'  => $items->map(fn($m) => [
+                    'id'            => $m->id,
+                    'uuid'          => $m->uuid,
+                    'filename'      => $m->original_filename,
+                    'taken_at'      => $m->taken_at,
+                    'size_bytes'    => $m->size_bytes,
+                    'thumbnail_url' => $m->thumbnail_url,
+                    'in_albums'     => $m->albums()->count() + ($m->primary_album_id ? 1 : 0),
+                    'is_favorite'   => $m->is_favorite,
+                ])->toArray(),
+            ];
+        }
+
+        return response()->json([
+            'group_count'  => count($groups),
+            'total_extras' => array_sum(array_map(fn($g) => $g['count'] - 1, $groups)),
+            'groups'       => $groups,
+        ]);
+    }
+
+    /**
+     * DELETE /api/v1/recovery/duplicates/trash
+     * Move duplicate items (all but oldest per group) to trash.
+     */
+    public function trashDuplicates(Request $request): \Illuminate\Http\JsonResponse
+    {
+        $space = $request->user()->gallerySpaces()->first();
+        $v = $request->validate([
+            'media_ids'   => 'required|array|max:500',
+            'media_ids.*' => 'integer',
+        ]);
+
+        $trashed = MediaItem::where('gallery_space_id', $space->id)
+            ->whereIn('id', $v['media_ids'])
+            ->whereNull('trashed_at')
+            ->get();
+
+        $count = 0;
+        foreach ($trashed as $m) {
+            $m->update(['trashed_at' => now(), 'purge_after' => now()->addDays(30)]);
+            $count++;
+        }
+
+        return response()->json(['trashed' => $count]);
+    }
 }
