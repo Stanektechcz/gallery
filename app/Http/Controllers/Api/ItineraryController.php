@@ -38,8 +38,7 @@ class ItineraryController extends Controller
                 AVG(longitude) as longitude,
                 COUNT(*) as photo_count,
                 MIN(taken_at) as first_visit,
-                MAX(taken_at) as last_visit,
-                camera_make
+                MAX(taken_at) as last_visit
             ")
             ->groupByRaw("ROUND(latitude, 1), ROUND(longitude, 1)")
             ->orderByDesc('photo_count')
@@ -294,7 +293,10 @@ class ItineraryController extends Controller
             ->whereNull('trashed_at')
             ->whereNotNull('latitude')
             ->whereRaw('ABS(latitude - ?) < ? AND ABS(longitude - ?) < ?', [
-                $place->latitude, $deg, $place->longitude, $deg
+                $place->latitude,
+                $deg,
+                $place->longitude,
+                $deg
             ])
             ->orderByDesc('taken_at')
             ->limit(20)

@@ -26,6 +26,7 @@ const PRIORITY_COLORS = { dream: '#ec4899', soon: '#f97316', someday: '#6366f1' 
 const PRIORITY_LABELS = { dream: '✨ Sen', soon: '🎯 Brzy', someday: '🌍 Jednou' };
 const CATEGORIES = ['city','country','landmark','restaurant','museum','nature','other'];
 const CAT_EMOJI: Record<string, string> = { city:'🏙️', country:'🌍', landmark:'🗺️', restaurant:'🍽️', museum:'🏛️', nature:'🌿', other:'📍' };
+const CAT_LABEL: Record<string, string> = { city:'Město', country:'Stát/Kraj', landmark:'Památka', restaurant:'Restaurace', museum:'Muzeum', nature:'Příroda', other:'Jiné' };
 const EMPTY_FORM = { name:'', country:'', country_code:'', latitude:'', longitude:'', category:'city', priority:'someday', notes:'', description:'', website_url:'', osm_id:'', osm_type:'' };
 
 export default function ItineraryIndex() {
@@ -286,7 +287,7 @@ export default function ItineraryIndex() {
                                                     <span className="text-sm shrink-0 mt-0.5">{CAT_EMOJI[r.category]??'📍'}</span>
                                                     <div className="flex-1 min-w-0">
                                                         <p className="text-xs font-medium text-white truncate">{r.name || r.display_name}</p>
-                                                        <p className="text-[10px] text-[var(--color-text-secondary)] truncate">{r.country}{r.type ? ' · ' + r.type : ''}</p>
+                                                        <p className="text-[10px] text-[var(--color-text-secondary)] truncate">{r.country}{r.type ? ' · ' + (CAT_LABEL[r.type] ?? r.type) : ''}</p>
                                                     </div>
                                                 </button>
                                             ))}
@@ -308,7 +309,7 @@ export default function ItineraryIndex() {
                                 <div className="grid grid-cols-2 gap-2">
                                     <select value={form.category} onChange={e=>setForm(p=>({...p,category:e.target.value}))}
                                         className="bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-lg px-2 py-1.5 text-xs text-white outline-none focus:border-[var(--color-accent)]">
-                                        {CATEGORIES.map(c => <option key={c} value={c}>{CAT_EMOJI[c]} {c}</option>)}
+                                        {CATEGORIES.map(c => <option key={c} value={c}>{CAT_EMOJI[c]} {CAT_LABEL[c] ?? c}</option>)}
                                     </select>
                                     <select value={form.priority} onChange={e=>setForm(p=>({...p,priority:e.target.value}))}
                                         className="bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-lg px-2 py-1.5 text-xs text-white outline-none focus:border-[var(--color-accent)]">

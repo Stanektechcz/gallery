@@ -127,31 +127,31 @@ class TripController extends Controller
     public function media(Request $request, int $id): JsonResponse
     {
         try {
-        $user  = $request->user();
-        $space = $user->gallerySpaces()->first();
+            $user  = $request->user();
+            $space = $user->gallerySpaces()->first();
 
-        if (! $this->tripBelongsToSpace($id, $space->id)) {
-            return response()->json(['error' => 'not found'], 404);
-        }
+            if (! $this->tripBelongsToSpace($id, $space->id)) {
+                return response()->json(['error' => 'not found'], 404);
+            }
 
-        $mediaIds = DB::table('trip_media')->where('trip_id', $id)->pluck('media_item_id');
+            $mediaIds = DB::table('trip_media')->where('trip_id', $id)->pluck('media_item_id');
 
-        $items = MediaItem::with('variants')
-            ->whereIn('id', $mediaIds)
-            ->whereNull('trashed_at')
-            ->orderBy('taken_at')
-            ->get()
-            ->map(fn($p) => [
-                'id'            => $p->id,
-                'uuid'          => $p->uuid,
-                'file_name'     => $p->file_name,
-                'thumbnail_url' => $p->thumbnail_url,
-                'taken_at'      => $p->taken_at,
-                'latitude'      => $p->latitude,
-                'longitude'     => $p->longitude,
-            ]);
+            $items = MediaItem::with('variants')
+                ->whereIn('id', $mediaIds)
+                ->whereNull('trashed_at')
+                ->orderBy('taken_at')
+                ->get()
+                ->map(fn($p) => [
+                    'id'            => $p->id,
+                    'uuid'          => $p->uuid,
+                    'file_name'     => $p->file_name,
+                    'thumbnail_url' => $p->thumbnail_url,
+                    'taken_at'      => $p->taken_at,
+                    'latitude'      => $p->latitude,
+                    'longitude'     => $p->longitude,
+                ]);
 
-        return response()->json($items);
+            return response()->json($items);
         } catch (\Exception $e) {
             \Illuminate\Support\Facades\Log::warning('TripController::media failed: ' . $e->getMessage());
             return response()->json([]);
@@ -165,37 +165,37 @@ class TripController extends Controller
     public function suggestMedia(Request $request, int $id): JsonResponse
     {
         try {
-        $user  = $request->user();
-        $space = $user->gallerySpaces()->first();
+            $user  = $request->user();
+            $space = $user->gallerySpaces()->first();
 
-        $trip = DB::table('trips')->where('id', $id)->where('gallery_space_id', $space->id)->first();
-        if (! $trip) {
-            return response()->json(['error' => 'not found'], 404);
-        }
+            $trip = DB::table('trips')->where('id', $id)->where('gallery_space_id', $space->id)->first();
+            if (! $trip) {
+                return response()->json(['error' => 'not found'], 404);
+            }
 
-        $alreadyLinked = DB::table('trip_media')->where('trip_id', $id)->pluck('media_item_id');
+            $alreadyLinked = DB::table('trip_media')->where('trip_id', $id)->pluck('media_item_id');
 
-        $suggested = MediaItem::with('variants')
-            ->where('gallery_space_id', $space->id)
-            ->whereNull('trashed_at')
-            ->whereDate('taken_at', '>=', $trip->start_date)
-            ->whereDate('taken_at', '<=', $trip->end_date)
-            ->whereNotIn('id', $alreadyLinked)
-            ->orderBy('taken_at')
-            ->get();
+            $suggested = MediaItem::with('variants')
+                ->where('gallery_space_id', $space->id)
+                ->whereNull('trashed_at')
+                ->whereDate('taken_at', '>=', $trip->start_date)
+                ->whereDate('taken_at', '<=', $trip->end_date)
+                ->whereNotIn('id', $alreadyLinked)
+                ->orderBy('taken_at')
+                ->get();
 
-        $count = $suggested->count();
+            $count = $suggested->count();
 
-        return response()->json([
-            'count'   => $count,
-            'samples' => $suggested->take(6)->map(fn($p) => [
-                'id'            => $p->id,
-                'uuid'          => $p->uuid,
-                'thumbnail_url' => $p->thumbnail_url,
-                'taken_at'      => $p->taken_at,
-            ])->values(),
-            'all_ids' => $suggested->pluck('id')->values(),
-        ]);
+            return response()->json([
+                'count'   => $count,
+                'samples' => $suggested->take(6)->map(fn($p) => [
+                    'id'            => $p->id,
+                    'uuid'          => $p->uuid,
+                    'thumbnail_url' => $p->thumbnail_url,
+                    'taken_at'      => $p->taken_at,
+                ])->values(),
+                'all_ids' => $suggested->pluck('id')->values(),
+            ]);
         } catch (\Exception $e) {
             \Illuminate\Support\Facades\Log::warning('TripController::suggestMedia failed: ' . $e->getMessage());
             return response()->json(['count' => 0, 'samples' => [], 'all_ids' => []]);
@@ -349,6 +349,7 @@ class TripController extends Controller
 
     private function enrichTrip(object $trip): object
     {
+        try {
         $waypoints = DB::table('trip_waypoints')
             ->where('trip_id', $trip->id)
             ->orderBy('sort_order')
@@ -382,5 +383,13 @@ class TripController extends Controller
         $trip->duration_days = (int) Carbon::parse($trip->start_date)->diffInDays($trip->end_date) + 1;
 
         return $trip;
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::warning('TripController::enrichTrip failed: ' . $e->getMessage());
+            $trip->waypoints     = collect();
+            $trip->media_count   = 0;
+            $trip->cover_thumb   = null;
+            $trip->duration_days = 1;
+            return $trip;
+        }
     }
 }
