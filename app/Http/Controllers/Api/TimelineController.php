@@ -119,28 +119,33 @@ class TimelineController extends Controller
             ->limit(5000)
             ->get();
 
-        // Albums with location set
-        $albums = \App\Models\Album::where('gallery_space_id', $space->id)
-            ->whereNull('deleted_at')
-            ->whereNotNull('latitude')
-            ->whereNotNull('longitude')
-            ->select(['id', 'uuid', 'title', 'latitude', 'longitude', 'location_name', 'location_country', 'event_date_start', 'event_date_end', 'color', 'icon', 'media_count'])
-            ->with(['cover' => fn($q) => $q->with(['variants' => fn($q2) => $q2->where('type', 'thumbnail')])])
-            ->get()
-            ->map(fn($a) => [
-                'id'             => $a->id,
-                'uuid'           => $a->uuid,
-                'title'          => $a->title,
-                'latitude'       => $a->latitude,
-                'longitude'      => $a->longitude,
-                'location_name'  => $a->location_name,
-                'location_country' => $a->location_country,
-                'event_date_start' => $a->event_date_start?->toDateString(),
-                'event_date_end'   => $a->event_date_end?->toDateString(),
-                'color'          => $a->color,
-                'media_count'    => $a->media_count,
-                'cover_thumb'    => $a->cover?->thumbnail_url,
-            ]);
+        // Albums with location set (wrapped in try-catch - requires 2026_07_06_130000 migration)
+        $albums = collect();
+        try {
+            $albums = \App\Models\Album::where('gallery_space_id', $space->id)
+                ->whereNull('deleted_at')
+                ->whereNotNull('latitude')
+                ->whereNotNull('longitude')
+                ->select(['id', 'uuid', 'title', 'latitude', 'longitude', 'location_name', 'location_country', 'event_date_start', 'event_date_end', 'color', 'icon', 'media_count'])
+                ->with(['cover' => fn($q) => $q->with(['variants' => fn($q2) => $q2->where('type', 'thumbnail')])])
+                ->get()
+                ->map(fn($a) => [
+                    'id'             => $a->id,
+                    'uuid'           => $a->uuid,
+                    'title'          => $a->title,
+                    'latitude'       => $a->latitude,
+                    'longitude'      => $a->longitude,
+                    'location_name'  => $a->location_name,
+                    'location_country' => $a->location_country,
+                    'event_date_start' => $a->event_date_start?->toDateString(),
+                    'event_date_end'   => $a->event_date_end?->toDateString(),
+                    'color'          => $a->color,
+                    'media_count'    => $a->media_count,
+                    'cover_thumb'    => null, // URL set via getVariant which needs disk context
+                ]);
+        } catch (\Throwable) {
+            // Migration not yet applied — return empty albums list
+        }
 
         return response()->json(['points' => $points, 'albums' => $albums]);
     }

@@ -92,7 +92,12 @@ class AlbumController extends Controller
 
         // Smart albums: compute media from rules instead of album_media
         $space = $request->user()->gallerySpaces()->first();
-        if ($album->album_type === 'smart' && $album->smart_rules) {
+        $isSmartAlbum = false;
+        try {
+            $isSmartAlbum = ($album->album_type === 'smart') && $album->smart_rules;
+        } catch (\Throwable) { /* Migration not yet applied */ }
+
+        if ($isSmartAlbum) {
             $smartService = new \App\Services\Media\SmartAlbumService();
             $mediaQuery   = $smartService->buildQuery($album, $space->id)
                 ->with(['variants', 'tags', 'people', 'places'])
