@@ -109,6 +109,21 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
     Route::patch('/itinerary/{id}',         [App\Http\Controllers\Api\ItineraryController::class, 'update'])->name('api.itinerary.update');
     Route::delete('/itinerary/{id}',        [App\Http\Controllers\Api\ItineraryController::class, 'destroy'])->name('api.itinerary.destroy');
 
+    // Photo books (Fotokniha / výběry k tisku)
+    Route::prefix('books')->name('api.books.')->group(function () {
+        Route::get('/',                          [App\Http\Controllers\Api\PhotoBookController::class, 'index'])->name('index');
+        Route::post('/',                         [App\Http\Controllers\Api\PhotoBookController::class, 'store'])->name('store');
+        Route::get('/{uuid}',                    [App\Http\Controllers\Api\PhotoBookController::class, 'show'])->name('show');
+        Route::patch('/{uuid}',                  [App\Http\Controllers\Api\PhotoBookController::class, 'update'])->name('update');
+        Route::delete('/{uuid}',                 [App\Http\Controllers\Api\PhotoBookController::class, 'destroy'])->name('destroy');
+        Route::post('/{uuid}/items',             [App\Http\Controllers\Api\PhotoBookController::class, 'addItems'])->name('items.add');
+        Route::delete('/{uuid}/items/{itemId}',  [App\Http\Controllers\Api\PhotoBookController::class, 'removeItem'])->name('items.remove');
+        Route::put('/{uuid}/items/reorder',      [App\Http\Controllers\Api\PhotoBookController::class, 'reorder'])->name('items.reorder');
+        Route::get('/{uuid}/export/zip',         [App\Http\Controllers\Api\PhotoBookController::class, 'exportZip'])->name('export.zip');
+        Route::get('/{uuid}/export/filelist',    [App\Http\Controllers\Api\PhotoBookController::class, 'exportFileList'])->name('export.filelist');
+        Route::get('/{uuid}/export/contact',     [App\Http\Controllers\Api\PhotoBookController::class, 'contactSheetData'])->name('export.contact');
+    });
+
     // Trips (Cesty a výlety) — static sub-routes first
     Route::get('/trips/{id}/suggest-media',          [App\Http\Controllers\Api\TripController::class, 'suggestMedia'])->name('api.trips.suggest-media');
     Route::get('/trips/{id}/media',                  [App\Http\Controllers\Api\TripController::class, 'media'])->name('api.trips.media');

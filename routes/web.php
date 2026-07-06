@@ -87,6 +87,10 @@ Route::middleware(['auth'])->group(function () {
     // TV Mode (fullscreen slideshow for TV/family display)
     Route::get('/tv', fn() => Inertia::render('TV/Index'))->name('tv');
 
+    // Print selections / Photo books
+    Route::get('/print',               fn() => Inertia::render('Print/Index'))->name('print');
+    Route::get('/books/{uuid}/print',  fn() => Inertia::render('Print/ContactSheet'))->name('books.print');
+
     // Trips (Cesty a výlety)
     Route::get('/trips',    fn() => Inertia::render('Trips/Index'))->name('trips');
 

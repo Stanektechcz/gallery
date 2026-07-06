@@ -1,7 +1,7 @@
 import axios from 'axios';
 import {
     Archive, ArrowRight, Calendar, Download,
-    FolderPlus, Heart, Layers, MapPin, Star, Tag, Trash2, Users, X,
+    FolderPlus, Heart, Layers, MapPin, Printer, Star, Tag, Trash2, Users, X,
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -268,6 +268,23 @@ export function BulkActionBar({
                             Porovnat {count}
                         </a>
                     )}
+
+                    {/* Add to print selection */}
+                    <a href="/print"
+                        onClick={async (e) => {
+                            e.preventDefault();
+                            const bookUuid = prompt('UUID fotoknihy (nechte prázdné pro přechod na /print):');
+                            if (bookUuid) {
+                                await axios.post(`/api/v1/books/${bookUuid}/items`, { media_uuids: selectedUuids });
+                                onDone(`Přidáno ${count} fotek do výběru`);
+                            } else {
+                                window.open('/print', '_blank');
+                            }
+                        }}
+                        className="flex items-center gap-1.5 whitespace-nowrap text-xs px-3 py-1.5 rounded-lg border transition-all shrink-0 text-[var(--color-text-secondary)] bg-[var(--color-bg-card)] border-[var(--color-border)] hover:text-white hover:border-orange-400/50">
+                        <Printer size={12}/>
+                        Do výběru
+                    </a>
 
                     {ACTION_BTNS.map(a => {
                         const Icon = a.icon;

@@ -18,6 +18,7 @@ import {
     MapPin,
     Menu,
     Monitor,
+    Printer,
     Route,
     Search,
     Settings,
@@ -145,6 +146,7 @@ const navItems = [
     { href: '/trash',     label: 'Koš',          icon: Trash2 },
     { divider: true },
     { href: '/shares',    label: 'Sdílené',      icon: Share2 },
+    { href: '/print',     label: 'Výběry k tisku', icon: Printer },
     { href: '/tv',        label: 'TV režim',     icon: Monitor },
     { href: '/settings/storage/google', label: 'Nastavení', icon: Settings },
 ];
