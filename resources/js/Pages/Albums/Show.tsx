@@ -1,8 +1,9 @@
+import AlbumStory from '@/Pages/Albums/Story';
 import UploadZone from '@/Components/UploadZone';
 import AppLayout from '@/Layouts/AppLayout';
 import { Head, Link, router } from '@inertiajs/react';
 import axios from 'axios';
-import { ArrowUpDown, ChevronRight, Clock, Film, FolderOpen, FolderPlus, Image, Search, SortAsc, SortDesc, Trash2, Upload } from 'lucide-react';
+import { ArrowUpDown, BookOpen, ChevronRight, Clock, Edit3, Film, FolderOpen, FolderPlus, Grid3X3, Image, Search, SortAsc, SortDesc, Trash2, Upload } from 'lucide-react';
 import { useState } from 'react';
 
 interface MediaItem {
@@ -26,6 +27,7 @@ interface Album {
     descendant_count: number;
     sync_status: string;
     color?: string;
+    story_mode?: boolean;
     cover?: { variants: Array<{ type: string; url: string }> } | null;
 }
 
@@ -44,6 +46,9 @@ export default function AlbumShow({ album, breadcrumb, children, media, filters:
     const [uploadOpen, setUploadOpen] = useState(false);
     const [search, setSearch]         = useState(filters.search ?? '');
     const [deleting, setDeleting]     = useState(false);
+    const [activeTab, setActiveTab]   = useState<'grid' | 'story'>('grid');
+    const [storyEdit, setStoryEdit]   = useState(false);
+    const [isStoryMode, setIsStoryMode] = useState(album.story_mode ?? false);
 
     const applyFilter = (patch: Partial<Filters>) => {
         router.get(`/albums/${album.uuid}`, { ...filters, ...patch, search: search || undefined } as any, { preserveScroll: true, preserveState: true });
@@ -115,12 +120,51 @@ export default function AlbumShow({ album, breadcrumb, children, media, filters:
                     </div>
                 </div>
 
+                {/* Tab bar: Fotografie | Příběh */}
+                <div className="flex items-center gap-0 mb-4 border-b border-[var(--color-border)]">
+                    <button onClick={() => setActiveTab('grid')}
+                        className={`flex items-center gap-1.5 px-4 py-2.5 text-sm border-b-2 transition-colors -mb-px ${activeTab === 'grid' ? 'border-[var(--color-accent)] text-white' : 'border-transparent text-[var(--color-text-secondary)] hover:text-white'}`}>
+                        <Grid3X3 size={14}/> Fotografie
+                    </button>
+                    <button onClick={() => setActiveTab('story')}
+                        className={`flex items-center gap-1.5 px-4 py-2.5 text-sm border-b-2 transition-colors -mb-px ${activeTab === 'story' ? 'border-[var(--color-accent)] text-white' : 'border-transparent text-[var(--color-text-secondary)] hover:text-white'}`}>
+                        <BookOpen size={14}/> Příběh
+                    </button>
+                    {activeTab === 'story' && (
+                        <div className="ml-auto flex items-center gap-2 pb-1">
+                            <button onClick={() => setStoryEdit(v => !v)}
+                                className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border transition-colors ${storyEdit ? 'bg-[var(--color-accent)] border-[var(--color-accent)] text-white' : 'border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-white'}`}>
+                                <Edit3 size={12}/> {storyEdit ? 'Náhled' : 'Upravit příběh'}
+                            </button>
+                        </div>
+                    )}
+                </div>
+
                 {/* Upload panel */}
                 {uploadOpen && (
                     <div className="mb-6 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-4">
                         <UploadZone albumId={album.id} onUploadComplete={handleUploadComplete} />
                     </div>
                 )}
+
+                {/* Story tab content */}
+                {activeTab === 'story' && (
+                    <AlbumStory
+                        albumUuid={album.uuid}
+                        albumMedia={media.data.map(m => ({
+                            uuid:      m.uuid,
+                            thumb_url: m.variants.find(v => v.type === 'thumbnail')?.url ?? m.variants[0]?.url ?? '',
+                            media_type: m.media_type,
+                            is_video:  m.media_type === 'video',
+                        }))}
+                        editMode={storyEdit}
+                        coverDate={album.event_date_start}
+                        title={album.title}
+                    />
+                )}
+
+                {/* Grid tab content */}
+                {activeTab === 'grid' && (<>
 
                 {/* Filter/Sort bar */}
                 <div className="flex flex-wrap items-center gap-2 mb-5 p-3 rounded-xl bg-[var(--color-bg-card)] border border-[var(--color-border)]">
@@ -243,31 +287,9 @@ export default function AlbumShow({ album, breadcrumb, children, media, filters:
                         </div>
                     )
                 )}
+                </>)}
             </div>
         </AppLayout>
     );
 }
 
-
-interface MediaItem {
-    id: number;
-    uuid: string;
-    media_type: string;
-    taken_at: string | null;
-    variants: Array<{ type: string; url: string; dominant_color?: string }>;
-    is_favorite: boolean;
-}
-
-interface Album {
-    id: number;
-    uuid: string;
-    title: string;
-    description?: string;
-    event_date_start?: string;
-    event_date_end?: string;
-    media_count: number;
-    descendant_count: number;
-    sync_status: string;
-    color?: string;
-    cover?: { variants: Array<{ type: string; url: string }> } | null;
-}

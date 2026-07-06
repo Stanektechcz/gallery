@@ -5,10 +5,10 @@
 
 import { uploadManager, type ManagedUpload } from '@/lib/uploadManager';
 import {
-    AlertTriangle, CheckCircle2, ChevronDown, ChevronUp,
-    Loader2, Pause, Play, RefreshCw, Trash2, X, ZoomIn,
+    ChevronDown, ChevronUp,
+    Loader2, Pause, Play, RefreshCw, Trash2, X, ZoomIn
 } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 function formatBytes(b: number): string {
     if (b < 1024) return `${b} B`;

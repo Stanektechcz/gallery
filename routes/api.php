@@ -34,6 +34,14 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
         Route::get('/',         [App\Http\Controllers\AlbumController::class, 'index'])->name('index');
         Route::get('/tree',     [App\Http\Controllers\AlbumController::class, 'tree'])->name('tree');
         Route::get('/{uuid}',   [App\Http\Controllers\AlbumController::class, 'show'])->name('show');
+
+        // Album story blocks
+        Route::get('/{uuid}/story',                    [App\Http\Controllers\Api\AlbumStoryController::class, 'index'])->name('story.index');
+        Route::post('/{uuid}/story',                   [App\Http\Controllers\Api\AlbumStoryController::class, 'store'])->name('story.store');
+        Route::put('/{uuid}/story/reorder',            [App\Http\Controllers\Api\AlbumStoryController::class, 'reorder'])->name('story.reorder');
+        Route::patch('/{uuid}/story/{blockId}',        [App\Http\Controllers\Api\AlbumStoryController::class, 'update'])->name('story.update');
+        Route::delete('/{uuid}/story/{blockId}',       [App\Http\Controllers\Api\AlbumStoryController::class, 'destroy'])->name('story.destroy');
+        Route::patch('/{uuid}/story-mode',             [App\Http\Controllers\Api\AlbumStoryController::class, 'toggleStoryMode'])->name('story-mode');
     });
 
     // Media API

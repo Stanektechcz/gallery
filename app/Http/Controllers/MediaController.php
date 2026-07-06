@@ -106,12 +106,12 @@ class MediaController extends Controller
             Gate::authorize('view', $m);
 
             $thumb = $m->variants->first(fn($v) => $v->type === 'thumbnail')
-                  ?? $m->variants->first(fn($v) => $v->type === 'small')
-                  ?? $m->variants->first();
+                ?? $m->variants->first(fn($v) => $v->type === 'small')
+                ?? $m->variants->first();
 
             $large = $m->variants->first(fn($v) => $v->type === 'large')
-                  ?? $m->variants->first(fn($v) => $v->type === 'medium')
-                  ?? $thumb;
+                ?? $m->variants->first(fn($v) => $v->type === 'medium')
+                ?? $thumb;
 
             $makeUrl = fn($v) => $v ? ($v->disk === 'public' ? url('/files/' . ltrim($v->path, '/')) : url('media-stream/' . $v->path)) : null;
 
@@ -596,7 +596,8 @@ class MediaController extends Controller
     {
         // Handle PWA Web Share Target — store files in session, redirect to album picker
         if ($request->hasFile('media')) {
-            $request->session()->put('share_target_files',
+            $request->session()->put(
+                'share_target_files',
                 collect($request->file('media'))->map(fn($f) => [
                     'name'     => $f->getClientOriginalName(),
                     'tmp_path' => $f->store('share_target', 'local'),

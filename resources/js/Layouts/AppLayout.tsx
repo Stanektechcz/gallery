@@ -1,3 +1,4 @@
+import UploadPanel from '@/Components/UploadPanel';
 import { Link, router, usePage } from '@inertiajs/react';
 import { clsx } from 'clsx';
 import {
@@ -27,7 +28,6 @@ import {
     X
 } from 'lucide-react';
 import { ReactNode, useEffect, useState } from 'react';
-import UploadPanel from '@/Components/UploadPanel';
 
 // ─── Command Palette ────────────────────────────────────
 const COMMANDS = [
