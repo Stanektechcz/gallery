@@ -78,7 +78,7 @@ export default function ItineraryIndex() {
         visited.forEach(area => {
             const r = Math.min(22, 5 + Math.log(area.photo_count) * 3);
             L.circleMarker([area.latitude, area.longitude], { radius: r, fillColor: '#22c55e', color: '#16a34a', weight: 1, opacity: 0.9, fillOpacity: 0.5 })
-                .addTo(map).bindPopup(`<div style="font-size:12px"><b>📸 ${area.photo_count} fotek</b><br/>${area.first_visit ? new Date(area.first_visit).toLocaleDateString('cs-CZ') : ''}<br/><small style="color:#888">${area.latitude.toFixed(4)}, ${area.longitude.toFixed(4)}</small></div>`);
+                .addTo(map).bindPopup(`<div style="font-size:12px"><b>📸 ${area.photo_count} fotek</b><br/>${area.first_visit ? new Date(area.first_visit).toLocaleDateString('cs-CZ') : ''}<br/><small style="color:#888">${Number(area.latitude).toFixed(4)}, ${Number(area.longitude).toFixed(4)}</small></div>`);
         });
 
         wishlist.filter(p => p.latitude && p.longitude).forEach(place => {
@@ -452,7 +452,7 @@ export default function ItineraryIndex() {
 
                                             {/* Coords + links */}
                                             {place.latitude && place.longitude && (
-                                                <p className="text-[10px] text-[var(--color-text-secondary)]">📍 {place.latitude.toFixed(4)}, {place.longitude.toFixed(4)}</p>
+                                                <p className="text-[10px] text-[var(--color-text-secondary)]">📍 {Number(place.latitude).toFixed(4)}, {Number(place.longitude).toFixed(4)}</p>
                                             )}
                                             <div className="flex gap-2 flex-wrap">
                                                 {place.website_url && (
@@ -546,7 +546,7 @@ export default function ItineraryIndex() {
                                     <div key={i} className="flex items-center gap-2 py-1.5 border-b border-[var(--color-border)] last:border-0">
                                         <span className="text-sm">📸</span>
                                         <div className="flex-1 min-w-0">
-                                            <p className="text-[10px] font-mono text-[var(--color-text-secondary)] truncate">{area.latitude.toFixed(2)}°, {area.longitude.toFixed(2)}°</p>
+                                            <p className="text-[10px] font-mono text-[var(--color-text-secondary)] truncate">{Number(area.latitude).toFixed(2)}°, {Number(area.longitude).toFixed(2)}°</p>
                                             <p className="text-[10px] text-green-400">{area.photo_count} fotek</p>
                                         </div>
                                     </div>

@@ -19,12 +19,18 @@ class ItineraryController extends Controller
         $user  = $request->user();
         $space = $user->gallerySpaces()->first();
 
-        // Wishlist places
+        // Wishlist places — cast lat/lng to float (MySQL DECIMAL comes back as string via PDO)
         $wishlist = DB::table('itinerary_places')
             ->where('gallery_space_id', $space->id)
             ->orderByRaw("FIELD(priority,'dream','soon','someday')")
             ->orderBy('name')
-            ->get();
+            ->get()
+            ->map(function ($place) {
+                $place->latitude  = $place->latitude  !== null ? (float) $place->latitude  : null;
+                $place->longitude = $place->longitude !== null ? (float) $place->longitude : null;
+                $place->visited   = (bool) $place->visited;
+                return $place;
+            });
 
         // Visited places from GPS data (cluster by ~1° grid)
         $visitedFromPhotos = MediaItem::where('gallery_space_id', $space->id)
@@ -43,7 +49,12 @@ class ItineraryController extends Controller
             ->groupByRaw("ROUND(latitude, 1), ROUND(longitude, 1)")
             ->orderByDesc('photo_count')
             ->limit(500)
-            ->get();
+            ->get()
+            ->map(function ($area) {
+                $area->latitude  = (float) $area->latitude;
+                $area->longitude = (float) $area->longitude;
+                return $area;
+            });
 
         // Country stats (rough estimate from coordinates)
         $countryCount = DB::table('media_items')

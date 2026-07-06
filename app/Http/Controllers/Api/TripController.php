@@ -350,39 +350,40 @@ class TripController extends Controller
     private function enrichTrip(object $trip): object
     {
         try {
-        $waypoints = DB::table('trip_waypoints')
-            ->where('trip_id', $trip->id)
-            ->orderBy('sort_order')
-            ->get();
-
-        $mediaCount = DB::table('trip_media')->where('trip_id', $trip->id)->count();
-
-        // Cover thumbnail — prefer explicit cover, else first media item by date
-        $coverThumb = null;
-        if (! empty($trip->cover_media_id)) {
-            $cover = MediaItem::with('variants')->find($trip->cover_media_id);
-            $coverThumb = $cover?->thumbnail_url;
-        }
-        if (! $coverThumb && $mediaCount > 0) {
-            $firstId = DB::table('trip_media')
-                ->join('media_items', 'media_items.id', '=', 'trip_media.media_item_id')
-                ->where('trip_media.trip_id', $trip->id)
-                ->whereNull('media_items.trashed_at')
-                ->orderBy('media_items.taken_at')
-                ->value('media_items.id');
-
-            if ($firstId) {
-                $item = MediaItem::with('variants')->find($firstId);
-                $coverThumb = $item?->thumbnail_url;
+            $waypoints = DB::table('trip_waypoints')
+                ->where('trip_id', $trip->id)
+                ->orderBy('sort_order')
+            ->get()
+            ->map(function ($wp) {
+                $wp->latitude  = $wp->latitude  !== null ? (float) $wp->latitude  : null;
+                $wp->longitude = $wp->longitude !== null ? (float) $wp->longitude : null;
+                return $wp;
+            });
+            $coverThumb = null;
+            if (! empty($trip->cover_media_id)) {
+                $cover = MediaItem::with('variants')->find($trip->cover_media_id);
+                $coverThumb = $cover?->thumbnail_url;
             }
-        }
+            if (! $coverThumb && $mediaCount > 0) {
+                $firstId = DB::table('trip_media')
+                    ->join('media_items', 'media_items.id', '=', 'trip_media.media_item_id')
+                    ->where('trip_media.trip_id', $trip->id)
+                    ->whereNull('media_items.trashed_at')
+                    ->orderBy('media_items.taken_at')
+                    ->value('media_items.id');
 
-        $trip->waypoints     = $waypoints;
-        $trip->media_count   = $mediaCount;
-        $trip->cover_thumb   = $coverThumb;
-        $trip->duration_days = (int) Carbon::parse($trip->start_date)->diffInDays($trip->end_date) + 1;
+                if ($firstId) {
+                    $item = MediaItem::with('variants')->find($firstId);
+                    $coverThumb = $item?->thumbnail_url;
+                }
+            }
 
-        return $trip;
+            $trip->waypoints     = $waypoints;
+            $trip->media_count   = $mediaCount;
+            $trip->cover_thumb   = $coverThumb;
+            $trip->duration_days = (int) Carbon::parse($trip->start_date)->diffInDays($trip->end_date) + 1;
+
+            return $trip;
         } catch (\Exception $e) {
             \Illuminate\Support\Facades\Log::warning('TripController::enrichTrip failed: ' . $e->getMessage());
             $trip->waypoints     = collect();

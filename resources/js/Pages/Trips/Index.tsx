@@ -486,7 +486,7 @@ export default function TripsIndex() {
                                                         </div>
                                                         <div className="flex-1 min-w-0">
                                                             <p className="text-[10px] font-medium text-white truncate">{wp.place_name}</p>
-                                                            {wp.latitude && <p className="text-[9px] text-[var(--color-text-secondary)]">📍 {wp.latitude.toFixed(2)}°, {wp.longitude?.toFixed(2)}°</p>}
+                                                            {wp.latitude && <p className="text-[9px] text-[var(--color-text-secondary)]">📍 {Number(wp.latitude).toFixed(2)}°, {Number(wp.longitude).toFixed(2)}°</p>}
                                                         </div>
                                                         <button onClick={() => removeWaypoint(wp.id)}
                                                             className="p-0.5 text-[var(--color-text-secondary)] hover:text-red-400 opacity-0 group-hover/wp:opacity-100 transition-all shrink-0">
