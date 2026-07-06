@@ -4,7 +4,7 @@ import AppLayout from '@/Layouts/AppLayout';
 import { Head, Link, router } from '@inertiajs/react';
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
-import { Grid3X3, Heart, Map, Maximize2, Play } from 'lucide-react';
+import { Grid3X3, Heart, Map, Maximize2, Play, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 const GRID_SIZES = [120, 160, 200, 260];

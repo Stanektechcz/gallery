@@ -1,3 +1,8 @@
+import AppLayout from '@/Layouts/AppLayout';
+import { Head } from '@inertiajs/react';
+import axios from 'axios';
+import { CheckCircle, ExternalLink, Globe, MapPin, Plus, RefreshCw, Search, Star, Trash2, X } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 interface WishlistPlace {
     id: number; name: string; country?: string; country_code?: string;

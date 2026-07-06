@@ -95,7 +95,8 @@ class AlbumController extends Controller
         $isSmartAlbum = false;
         try {
             $isSmartAlbum = ($album->album_type === 'smart') && $album->smart_rules;
-        } catch (\Throwable) { /* Migration not yet applied */ }
+        } catch (\Throwable) { /* Migration not yet applied */
+        }
 
         if ($isSmartAlbum) {
             $smartService = new \App\Services\Media\SmartAlbumService();
