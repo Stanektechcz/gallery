@@ -270,30 +270,73 @@ class TripController extends Controller
         }
 
         $v = $request->validate([
-            'place_name'  => 'required|string|max:255',
-            'latitude'    => 'nullable|numeric|between:-90,90',
-            'longitude'   => 'nullable|numeric|between:-180,180',
-            'notes'       => 'nullable|string|max:2000',
-            'arrived_at'  => 'nullable|date',
-            'departed_at' => 'nullable|date',
+            'place_name'       => 'required|string|max:255',
+            'latitude'         => 'nullable|numeric|between:-90,90',
+            'longitude'        => 'nullable|numeric|between:-180,180',
+            'notes'            => 'nullable|string|max:2000',
+            'arrived_at'       => 'nullable|date',
+            'departed_at'      => 'nullable|date',
+            'transport_mode'   => 'nullable|in:car,train,bus,plane,walk,bike,boat',
+            'duration_override'=> 'nullable|integer|min:0',
         ]);
 
         $maxOrder = DB::table('trip_waypoints')->where('trip_id', $id)->max('sort_order') ?? -1;
 
         $wpId = DB::table('trip_waypoints')->insertGetId([
-            'trip_id'     => $id,
-            'place_name'  => $v['place_name'],
-            'latitude'    => $v['latitude'] ?? null,
-            'longitude'   => $v['longitude'] ?? null,
-            'notes'       => $v['notes'] ?? null,
-            'arrived_at'  => $v['arrived_at'] ?? null,
-            'departed_at' => $v['departed_at'] ?? null,
-            'sort_order'  => $maxOrder + 1,
-            'created_at'  => now(),
-            'updated_at'  => now(),
+            'trip_id'          => $id,
+            'place_name'       => $v['place_name'],
+            'latitude'         => $v['latitude'] ?? null,
+            'longitude'        => $v['longitude'] ?? null,
+            'notes'            => $v['notes'] ?? null,
+            'arrived_at'       => $v['arrived_at'] ?? null,
+            'departed_at'      => $v['departed_at'] ?? null,
+            'transport_mode'   => $v['transport_mode'] ?? null,
+            'duration_override'=> $v['duration_override'] ?? null,
+            'sort_order'       => $maxOrder + 1,
+            'created_at'       => now(),
+            'updated_at'       => now(),
         ]);
 
-        return response()->json(DB::table('trip_waypoints')->find($wpId), 201);
+        $wp = DB::table('trip_waypoints')->find($wpId);
+        if ($wp) {
+            $wp->latitude  = $wp->latitude  !== null ? (float) $wp->latitude  : null;
+            $wp->longitude = $wp->longitude !== null ? (float) $wp->longitude : null;
+        }
+        return response()->json($wp, 201);
+    }
+
+    /**
+     * PATCH /api/v1/trips/{id}/waypoints/{wpId}
+     * Update transport_mode, notes, or dates on a single waypoint.
+     */
+    public function updateWaypoint(Request $request, int $id, int $wpId): JsonResponse
+    {
+        $user  = $request->user();
+        $space = $user->gallerySpaces()->first();
+
+        if (! $this->tripBelongsToSpace($id, $space->id)) {
+            return response()->json(['error' => 'not found'], 404);
+        }
+
+        $v = $request->validate([
+            'transport_mode'   => 'nullable|in:car,train,bus,plane,walk,bike,boat',
+            'duration_override'=> 'nullable|integer|min:0|max:10000',
+            'notes'            => 'nullable|string|max:2000',
+            'arrived_at'       => 'nullable|date',
+            'departed_at'      => 'nullable|date',
+        ]);
+
+        DB::table('trip_waypoints')
+            ->where('id', $wpId)
+            ->where('trip_id', $id)
+            ->update(array_merge($v, ['updated_at' => now()]));
+
+        $wp = DB::table('trip_waypoints')->find($wpId);
+        if ($wp) {
+            $wp->latitude  = $wp->latitude  !== null ? (float) $wp->latitude  : null;
+            $wp->longitude = $wp->longitude !== null ? (float) $wp->longitude : null;
+        }
+        return response()->json($wp);
     }
 
     /**
@@ -353,12 +396,12 @@ class TripController extends Controller
             $waypoints = DB::table('trip_waypoints')
                 ->where('trip_id', $trip->id)
                 ->orderBy('sort_order')
-            ->get()
-            ->map(function ($wp) {
-                $wp->latitude  = $wp->latitude  !== null ? (float) $wp->latitude  : null;
-                $wp->longitude = $wp->longitude !== null ? (float) $wp->longitude : null;
-                return $wp;
-            });
+                ->get()
+                ->map(function ($wp) {
+                    $wp->latitude  = $wp->latitude  !== null ? (float) $wp->latitude  : null;
+                    $wp->longitude = $wp->longitude !== null ? (float) $wp->longitude : null;
+                    return $wp;
+                });
             $coverThumb = null;
             if (! empty($trip->cover_media_id)) {
                 $cover = MediaItem::with('variants')->find($trip->cover_media_id);

@@ -146,6 +146,7 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
     Route::delete('/trips/{id}/media/{mediaId}',     [App\Http\Controllers\Api\TripController::class, 'removeMedia'])->name('api.trips.remove-media');
     Route::put('/trips/{id}/waypoints/reorder',      [App\Http\Controllers\Api\TripController::class, 'reorderWaypoints'])->name('api.trips.waypoints.reorder');
     Route::post('/trips/{id}/waypoints',             [App\Http\Controllers\Api\TripController::class, 'addWaypoint'])->name('api.trips.waypoints.add');
+    Route::patch('/trips/{id}/waypoints/{wpId}',     [App\Http\Controllers\Api\TripController::class, 'updateWaypoint'])->name('api.trips.waypoints.update');
     Route::delete('/trips/{id}/waypoints/{wpId}',    [App\Http\Controllers\Api\TripController::class, 'removeWaypoint'])->name('api.trips.waypoints.remove');
     Route::get('/trips',                             [App\Http\Controllers\Api\TripController::class, 'index'])->name('api.trips.index');
     Route::post('/trips',                            [App\Http\Controllers\Api\TripController::class, 'store'])->name('api.trips.store');
