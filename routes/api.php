@@ -78,8 +78,13 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
     Route::delete('tags/{id}', [App\Http\Controllers\Api\TagController::class, 'destroy']);
 
     // Places
-    Route::apiResource('places', App\Http\Controllers\Api\PlaceController::class)->except(['destroy']);
-    Route::delete('places/{place}',          [App\Http\Controllers\Api\PlaceController::class, 'destroy']);
+    Route::apiResource('places', App\Http\Controllers\Api\PlaceController::class)->except(['destroy'])->names([
+        'index'   => 'api.places.index',
+        'store'   => 'api.places.store',
+        'show'    => 'api.places.show',
+        'update'  => 'api.places.update',
+    ]);
+    Route::delete('places/{place}',          [App\Http\Controllers\Api\PlaceController::class, 'destroy'])->name('api.places.destroy');
     Route::get('places/{place}/media',       [App\Http\Controllers\Api\PlaceController::class, 'media'])->name('api.places.media');
     Route::get('places/{place}/albums',      [App\Http\Controllers\Api\PlaceController::class, 'albums'])->name('api.places.albums');
     Route::post('places/{place}/auto-link',  [App\Http\Controllers\Api\PlaceController::class, 'autoLink'])->name('api.places.auto-link');

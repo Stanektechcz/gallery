@@ -114,7 +114,7 @@ Route::middleware(['auth'])->group(function () {
 
     // Places (Místa jako plnohodnotné stránky)
     Route::get('/places',      fn() => Inertia::render('Places/Index'))->name('places');
-    Route::get('/places/{id}', fn() => Inertia::render('Places/Show'))->name('places.show');
+    Route::get('/places/{id}', fn() => Inertia::render('Places/Show'))->name('places.show-page');
 
     // Activity
     Route::get('/activity', [App\Http\Controllers\ActivityController::class, 'index'])->name('activity');
