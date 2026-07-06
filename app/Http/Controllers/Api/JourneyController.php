@@ -331,7 +331,7 @@ class JourneyController extends Controller
 
         return Cache::remember($cacheKey, 86400 * 30, function () use ($lat, $lng) {
             $url = sprintf(
-                'https://nominatim.openstreetmap.org/reverse?format=json&lat=%s&lon=%s&zoom=10',
+                'https://nominatim.openstreetmap.org/reverse?format=json&lat=%s&lon=%s&zoom=10&accept-language=cs',
                 $lat,
                 $lng
             );

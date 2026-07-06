@@ -17,13 +17,14 @@ return new class extends Migration
             $table->string('place_display_name', 512)->nullable()->after('linked_itinerary_id');
         });
 
-        // itinerary_places — add description, website, OSM metadata
+        // itinerary_places — add description, website, OSM metadata, planned date
         Schema::table('itinerary_places', function (Blueprint $table) {
             $table->text('description')->nullable()->after('notes');
             $table->string('website_url', 512)->nullable()->after('description');
             $table->string('osm_id', 50)->nullable()->after('website_url');
             $table->string('osm_type', 20)->nullable()->after('osm_id');
             $table->json('address_json')->nullable()->after('osm_type');
+            $table->date('planned_date')->nullable()->after('visited_at');
         });
     }
 
@@ -34,7 +35,7 @@ return new class extends Migration
         });
 
         Schema::table('itinerary_places', function (Blueprint $table) {
-            $table->dropColumn(['description', 'website_url', 'osm_id', 'osm_type', 'address_json']);
+            $table->dropColumn(['description', 'website_url', 'osm_id', 'osm_type', 'address_json', 'planned_date']);
         });
     }
 };

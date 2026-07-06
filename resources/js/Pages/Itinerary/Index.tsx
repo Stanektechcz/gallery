@@ -1,7 +1,7 @@
 import AppLayout from '@/Layouts/AppLayout';
 import { Head } from '@inertiajs/react';
 import axios from 'axios';
-import { CheckCircle, ExternalLink, Globe, MapPin, Plus, RefreshCw, Search, Star, Trash2, X } from 'lucide-react';
+import { Calendar, CalendarClock, Camera, CheckCircle, ExternalLink, Globe, MapPin, Pencil, Plus, RefreshCw, Save, Search, Star, Trash2, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 interface WishlistPlace {
@@ -9,8 +9,9 @@ interface WishlistPlace {
     latitude?: number; longitude?: number; category: string;
     notes?: string; description?: string; website_url?: string;
     priority: 'dream' | 'soon' | 'someday'; visited: boolean; visited_at?: string;
-    osm_id?: string;
+    osm_id?: string; planned_date?: string;
 }
+interface PlacePhoto { uuid: string; thumbnail_url: string; taken_at?: string; }
 interface SearchResult {
     osm_id: string; osm_type: string; display_name: string; name: string;
     country: string; country_code: string; latitude: number; longitude: number;
@@ -36,11 +37,20 @@ export default function ItineraryIndex() {
     const [mapLoaded, setMapLoaded] = useState(false);
     const [wishlist,  setWishlist]  = useState<WishlistPlace[]>([]);
     const [visited,   setVisited]   = useState<VisitedArea[]>([]);
-    const [filter,    setFilter]    = useState<'all'|'dream'|'soon'|'someday'|'visited'>('all');
+    const [filter,    setFilter]    = useState<'all'|'dream'|'soon'|'someday'|'visited'|'planned'>('all');
     const [showForm,  setShowForm]  = useState(false);
     const [checking,  setChecking]  = useState(false);
     const [form,      setForm]      = useState({ ...EMPTY_FORM });
     const [selected,  setSelected]  = useState<WishlistPlace | null>(null);
+
+    // Inline editing state
+    const [editField, setEditField] = useState<string | null>(null);
+    const [editVal,   setEditVal]   = useState('');
+    const [saving,    setSaving]    = useState(false);
+
+    // Photos near selected place
+    const [placePhotos,  setPlacePhotos]  = useState<PlacePhoto[]>([]);
+    const [photosLoading, setPhotosLoading] = useState(false);
 
     const [searchQuery,   setSearchQuery]   = useState('');
     const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
@@ -147,6 +157,30 @@ export default function ItineraryIndex() {
         if (selected?.id === place.id) setSelected(r.data);
     };
 
+    // Generic update for any field(s)
+    const updatePlace = async (id: number, patch: Partial<WishlistPlace>) => {
+        setSaving(true);
+        try {
+            const r = await axios.patch(`/api/v1/itinerary/${id}`, patch);
+            setWishlist(prev => prev.map(p => p.id === id ? r.data : p));
+            if (selected?.id === id) setSelected(r.data);
+        } finally {
+            setSaving(false);
+            setEditField(null);
+        }
+    };
+
+    // Load nearby photos when place is selected
+    const loadPlacePhotos = useCallback(async (place: WishlistPlace) => {
+        if (!place.latitude || !place.longitude) { setPlacePhotos([]); return; }
+        setPhotosLoading(true);
+        try {
+            const r = await axios.get(`/api/v1/itinerary/${place.id}/photos`);
+            setPlacePhotos(r.data ?? []);
+        } catch { setPlacePhotos([]); }
+        finally { setPhotosLoading(false); }
+    }, []);
+
     const removePlace = async (id: number) => {
         if (!confirm('Odebrat místo z itineráře?')) return;
         await axios.delete(`/api/v1/itinerary/${id}`);
@@ -169,11 +203,16 @@ export default function ItineraryIndex() {
     const flyToPlace = (place: WishlistPlace) => {
         const map = mapObj.current;
         if (map && place.latitude && place.longitude) map.flyTo([place.latitude, place.longitude], 10, { duration: 1 });
-        setSelected(selected?.id === place.id ? null : place);
+        const newSelected = selected?.id === place.id ? null : place;
+        setSelected(newSelected);
+        setEditField(null);
+        if (newSelected) loadPlacePhotos(newSelected);
+        else setPlacePhotos([]);
     };
 
     const filtered = wishlist.filter(p => {
         if (filter === 'visited') return p.visited;
+        if (filter === 'planned') return !!p.planned_date && !p.visited;
         if (filter === 'all') return true;
         return p.priority === filter && !p.visited;
     });
@@ -305,7 +344,7 @@ export default function ItineraryIndex() {
 
                     {/* Filter tabs */}
                     <div className="flex gap-1 px-3 py-2 border-b border-[var(--color-border)] shrink-0 overflow-x-auto">
-                        {([['all','Vše'],['dream','✨ Sny'],['soon','🎯 Brzy'],['someday','🌍 Jednou'],['visited','✅ Splněno']] as const).map(([key,label]) => (
+                        {([['all','Vše'],['dream','✨ Sny'],['soon','🎯 Brzy'],['someday','🌍 Jednou'],['planned','📅 Plán'],['visited','✅ Splněno']] as const).map(([key,label]) => (
                             <button key={key} onClick={()=>setFilter(key as any)}
                                 className={`px-2 py-1 rounded-lg text-[10px] whitespace-nowrap transition-colors ${filter===key?'bg-[var(--color-accent)] text-white':'text-[var(--color-text-secondary)] hover:text-white'}`}>
                                 {label}
@@ -346,13 +385,75 @@ export default function ItineraryIndex() {
 
                                     {/* Expanded detail panel */}
                                     {selected?.id === place.id && (
-                                        <div className="mt-2 pt-2 border-t border-[var(--color-border)] space-y-1.5" onClick={e=>e.stopPropagation()}>
-                                            {place.description && <p className="text-[10px] text-[var(--color-text-secondary)] leading-relaxed">{place.description}</p>}
-                                            {place.notes && <p className="text-[10px] text-[var(--color-text-secondary)] italic">💬 {place.notes}</p>}
+                                        <div className="mt-2 pt-2 border-t border-[var(--color-border)] space-y-2" onClick={e=>e.stopPropagation()}>
+
+                                            {/* Priority picker */}
+                                            <div className="flex gap-1">
+                                                {(['dream','soon','someday'] as const).map(p => (
+                                                    <button key={p} onClick={() => updatePlace(place.id, { priority: p })}
+                                                        className={`flex-1 text-[9px] py-1 rounded-lg border transition-colors ${place.priority===p ? 'border-transparent text-white' : 'border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-white'}`}
+                                                        style={place.priority===p ? { background: PRIORITY_COLORS[p] } : {}}>
+                                                        {PRIORITY_LABELS[p]}
+                                                    </button>
+                                                ))}
+                                            </div>
+
+                                            {/* Planned date */}
+                                            <div className="flex items-center gap-1.5">
+                                                <CalendarClock size={10} className="text-[var(--color-text-secondary)] shrink-0"/>
+                                                {editField === `planned_${place.id}` ? (
+                                                    <div className="flex gap-1 flex-1">
+                                                        <input type="date" value={editVal} onChange={e=>setEditVal(e.target.value)}
+                                                            className="flex-1 bg-[var(--color-bg-secondary)] border border-[var(--color-accent)] rounded px-2 py-0.5 text-[10px] text-white outline-none"/>
+                                                        <button onClick={() => updatePlace(place.id, { planned_date: editVal || undefined } as any)}
+                                                            className="text-[10px] text-green-400 hover:text-green-300 px-1" disabled={saving}>
+                                                            <Save size={10}/>
+                                                        </button>
+                                                        <button onClick={() => setEditField(null)} className="text-[10px] text-[var(--color-text-secondary)]"><X size={10}/></button>
+                                                    </div>
+                                                ) : (
+                                                    <button onClick={() => { setEditField(`planned_${place.id}`); setEditVal(place.planned_date ?? ''); }}
+                                                        className="flex items-center gap-1 text-[10px] text-[var(--color-text-secondary)] hover:text-white">
+                                                        {place.planned_date
+                                                            ? <><Calendar size={9}/> {new Date(place.planned_date).toLocaleDateString('cs-CZ')}</>
+                                                            : <><Plus size={9}/> Přidat datum plánu</>
+                                                        }
+                                                        <Pencil size={8} className="ml-0.5 opacity-50"/>
+                                                    </button>
+                                                )}
+                                            </div>
+
+                                            {/* Notes */}
+                                            {editField === `notes_${place.id}` ? (
+                                                <div className="space-y-1">
+                                                    <textarea value={editVal} onChange={e=>setEditVal(e.target.value)} rows={3} autoFocus
+                                                        className="w-full bg-[var(--color-bg-secondary)] border border-[var(--color-accent)] rounded-lg px-2 py-1 text-[10px] text-white outline-none resize-none"/>
+                                                    <div className="flex gap-1">
+                                                        <button onClick={() => updatePlace(place.id, { notes: editVal })} disabled={saving}
+                                                            className="flex items-center gap-1 text-[10px] bg-[var(--color-accent)] text-white px-2 py-0.5 rounded hover:opacity-90 disabled:opacity-40">
+                                                            <Save size={9}/> Uložit
+                                                        </button>
+                                                        <button onClick={() => setEditField(null)} className="text-[10px] text-[var(--color-text-secondary)] px-1">Zrušit</button>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <button onClick={() => { setEditField(`notes_${place.id}`); setEditVal(place.notes ?? ''); }}
+                                                    className="w-full text-left text-[10px] text-[var(--color-text-secondary)] hover:text-white flex items-start gap-1">
+                                                    <Pencil size={9} className="mt-0.5 shrink-0"/>
+                                                    {place.notes ? <span className="italic">💬 {place.notes}</span> : <span className="opacity-60">Přidat poznámku…</span>}
+                                                </button>
+                                            )}
+
+                                            {/* Description */}
+                                            {place.description && (
+                                                <p className="text-[10px] text-[var(--color-text-secondary)] leading-relaxed">{place.description}</p>
+                                            )}
+
+                                            {/* Coords + links */}
                                             {place.latitude && place.longitude && (
                                                 <p className="text-[10px] text-[var(--color-text-secondary)]">📍 {place.latitude.toFixed(4)}, {place.longitude.toFixed(4)}</p>
                                             )}
-                                            <div className="flex gap-2">
+                                            <div className="flex gap-2 flex-wrap">
                                                 {place.website_url && (
                                                     <a href={place.website_url} target="_blank" rel="noopener noreferrer"
                                                         className="flex items-center gap-1 text-[10px] text-[var(--color-accent)] hover:underline">
@@ -366,11 +467,75 @@ export default function ItineraryIndex() {
                                                     </a>
                                                 )}
                                             </div>
+
+                                            {/* Nearby photos */}
+                                            {place.latitude && place.longitude && (
+                                                <div>
+                                                    <p className="text-[9px] font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                                                        <Camera size={9}/> Fotky z okolí
+                                                    </p>
+                                                    {photosLoading ? (
+                                                        <div className="flex gap-1">
+                                                            {[1,2,3].map(i => <div key={i} className="w-12 h-12 rounded bg-[var(--color-bg-secondary)] animate-pulse"/>)}
+                                                        </div>
+                                                    ) : placePhotos.length > 0 ? (
+                                                        <div className="flex flex-wrap gap-1">
+                                                            {placePhotos.slice(0, 10).map(ph => (
+                                                                <img key={ph.uuid} src={ph.thumbnail_url} alt=""
+                                                                    className="w-12 h-12 object-cover rounded-md border border-[var(--color-border)] hover:opacity-80 cursor-pointer transition-opacity"
+                                                                    onClick={() => window.open(`/media/${ph.uuid}`, '_blank')}
+                                                                    title={ph.taken_at ? new Date(ph.taken_at).toLocaleDateString('cs-CZ') : ''}
+                                                                />
+                                                            ))}
+                                                            {placePhotos.length > 10 && (
+                                                                <div className="w-12 h-12 rounded-md bg-[var(--color-bg-secondary)] flex items-center justify-center text-[9px] text-[var(--color-text-secondary)] font-medium">
+                                                                    +{placePhotos.length - 10}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    ) : (
+                                                        <p className="text-[9px] text-[var(--color-text-secondary)] italic">Žádné fotky z tohoto místa</p>
+                                                    )}
+                                                </div>
+                                            )}
                                         </div>
                                     )}
                                 </div>
                             </div>
                         ))}
+
+                        {/* Planning timeline — shown in 'planned' filter */}
+                        {filter === 'planned' && filtered.length > 0 && (
+                            <div className="px-3 pt-3 pb-2">
+                                <p className="text-[9px] font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider mb-3 flex items-center gap-1">
+                                    <CalendarClock size={9}/> Plánovaný itinerář
+                                </p>
+                                {[...filtered]
+                                    .sort((a, b) => (a.planned_date ?? '9999') < (b.planned_date ?? '9999') ? -1 : 1)
+                                    .map((place, idx) => (
+                                        <div key={place.id} className="flex gap-2 mb-3 relative">
+                                            {/* Timeline line */}
+                                            {idx < filtered.length - 1 && (
+                                                <div className="absolute left-[15px] top-[26px] w-0.5 h-full bg-[var(--color-border)]"/>
+                                            )}
+                                            <div className="w-8 h-8 shrink-0 rounded-full border-2 flex items-center justify-center text-sm z-10 bg-[var(--color-bg-secondary)]"
+                                                style={{ borderColor: PRIORITY_COLORS[place.priority] }}>
+                                                {CAT_EMOJI[place.category] ?? '📍'}
+                                            </div>
+                                            <div className="flex-1 min-w-0 bg-[var(--color-bg-card)] rounded-lg p-2">
+                                                <p className="text-xs font-medium text-white truncate">{place.name}</p>
+                                                {place.country && <p className="text-[9px] text-[var(--color-text-secondary)]">{place.country}</p>}
+                                                {place.planned_date && (
+                                                    <p className="text-[9px] text-[var(--color-accent)] flex items-center gap-1 mt-0.5">
+                                                        <Calendar size={8}/> {new Date(place.planned_date).toLocaleDateString('cs-CZ', { day:'numeric', month:'long', year:'numeric' })}
+                                                    </p>
+                                                )}
+                                                <p className="text-[9px] mt-0.5" style={{ color: PRIORITY_COLORS[place.priority] }}>{PRIORITY_LABELS[place.priority]}</p>
+                                            </div>
+                                        </div>
+                                    ))}
+                            </div>
+                        )}
 
                         {/* GPS photo clusters in "visited" tab */}
                         {filter === 'visited' && visited.length > 0 && (

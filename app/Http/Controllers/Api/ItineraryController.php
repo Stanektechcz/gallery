@@ -117,6 +117,9 @@ class ItineraryController extends Controller
             'notes'        => 'nullable|string|max:2000',
             'description'  => 'nullable|string|max:5000',
             'website_url'  => 'nullable|url|max:512',
+            'planned_date' => 'nullable|date',
+            'name'         => 'nullable|string|max:255',
+            'country'      => 'nullable|string|max:100',
         ]);
 
         if (isset($validated['visited']) && $validated['visited'] && !isset($validated['visited_at'])) {
@@ -195,10 +198,11 @@ class ItineraryController extends Controller
         $q = $request->validate(['q' => 'required|string|min:2|max:200'])['q'];
 
         $url = 'https://nominatim.openstreetmap.org/search?' . http_build_query([
-            'format'         => 'json',
-            'addressdetails' => '1',
-            'limit'          => '8',
-            'q'              => $q,
+            'format'          => 'json',
+            'addressdetails'  => '1',
+            'accept-language' => 'cs',
+            'limit'           => '8',
+            'q'               => $q,
         ]);
 
         $results = $this->nominatimCurl($url);
@@ -236,14 +240,23 @@ class ItineraryController extends Controller
                 default                                                                            => 'other',
             };
 
-            $name = $addr['city'] ?? $addr['town'] ?? $addr['village'] ?? $addr['county']
-                ?? $addr['state'] ?? $item['name'] ?? '';
+            // Prefer Czech/local name: localname > name in address > generic name
+            $name = $item['localname']
+                ?? $addr['city'] ?? $addr['town'] ?? $addr['village']
+                ?? $addr['suburb'] ?? $addr['county'] ?? $addr['state']
+                ?? $item['name'] ?? '';
+
+            // Czech display_name is usually "Město, Kraj, Česká republika" - extract just first part
+            $displayName = $item['display_name'] ?? '';
+            if (! $name && $displayName) {
+                $name = explode(',', $displayName)[0];
+            }
 
             return [
                 'osm_id'       => (string) ($item['osm_id'] ?? ''),
                 'osm_type'     => $item['osm_type'] ?? '',
-                'display_name' => $item['display_name'] ?? '',
-                'name'         => $name ?: ($item['display_name'] ?? ''),
+                'display_name' => $displayName,
+                'name'         => trim($name) ?: $displayName,
                 'country'      => $addr['country'] ?? '',
                 'country_code' => $cc,
                 'latitude'     => (float) ($item['lat'] ?? 0),
@@ -254,6 +267,44 @@ class ItineraryController extends Controller
         }, $results);
 
         return response()->json($mapped);
+    }
+
+    /**
+     * GET /api/v1/itinerary/{id}/photos
+     * Return GPS photos taken near a wishlist place (within ~50km).
+     */
+    public function placePhotos(Request $request, int $id): JsonResponse
+    {
+        $user  = $request->user();
+        $space = $user->gallerySpaces()->first();
+
+        $place = DB::table('itinerary_places')
+            ->where('id', $id)
+            ->where('gallery_space_id', $space->id)
+            ->first();
+
+        if (! $place || ! $place->latitude || ! $place->longitude) {
+            return response()->json([]);
+        }
+
+        $deg = 0.45; // ~50km
+
+        $photos = \App\Models\MediaItem::with('variants')
+            ->where('gallery_space_id', $space->id)
+            ->whereNull('trashed_at')
+            ->whereNotNull('latitude')
+            ->whereRaw('ABS(latitude - ?) < ? AND ABS(longitude - ?) < ?', [
+                $place->latitude, $deg, $place->longitude, $deg
+            ])
+            ->orderByDesc('taken_at')
+            ->limit(20)
+            ->get();
+
+        return response()->json($photos->map(fn($m) => [
+            'uuid'          => $m->uuid,
+            'taken_at'      => $m->taken_at,
+            'thumbnail_url' => $m->thumbnail_url,
+        ]));
     }
 
     private function nominatimCurl(string $url): array

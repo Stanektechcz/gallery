@@ -374,6 +374,12 @@ const mobileNav = [
 export default function AppLayout({ children, title }: AppLayoutProps) {
     const { auth, flash } = usePage().props as any;
     const currentPath = window.location.pathname;
+    // Exact match for root; prefix match for all others
+    // (prevents '/' highlighting /timeline, /albums, /media/... etc.)
+    const isActive = (href: string) =>
+        href === '/' || href === '/home'
+            ? currentPath === '/' || currentPath === '/home'
+            : currentPath.startsWith(href);
     const [mobileOpen, setMobileOpen] = useState(false);
     const [cmdOpen,    setCmdOpen]    = useState(false);
 
@@ -408,7 +414,7 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
                             return <div key={i} className="h-px bg-[var(--color-border)] mx-3 my-2" />;
                         }
                         const Icon = item.icon;
-                        const active = currentPath.startsWith(item.href);
+                        const active = isActive(item.href);
                         return (
                             <Link
                                 key={item.href}
@@ -466,7 +472,7 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
                             {navItems.map((item, i) => {
                                 if ('divider' in item) return <div key={i} className="h-px bg-[var(--color-border)] mx-3 my-2" />;
                                 const Icon = item.icon;
-                                const active = currentPath.startsWith(item.href);
+                                const active = isActive(item.href);
                                 return (
                                     <Link key={item.href} href={item.href} onClick={() => setMobileOpen(false)}
                                         className={clsx('flex items-center gap-3 mx-2 px-3 py-2.5 rounded-lg text-sm transition-colors',
@@ -519,7 +525,7 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
                 <nav className="md:hidden flex items-center border-t border-[var(--color-border)] bg-[var(--color-bg-secondary)] safe-area-pb">
                     {mobileNav.map(item => {
                         const Icon = item.icon;
-                        const active = currentPath.startsWith(item.href);
+                        const active = isActive(item.href);
                         return (
                             <Link key={item.href} href={item.href}
                                 className={clsx('flex-1 flex flex-col items-center py-3 gap-0.5 text-[10px] transition-colors',

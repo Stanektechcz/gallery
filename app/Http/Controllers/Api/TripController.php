@@ -126,6 +126,7 @@ class TripController extends Controller
      */
     public function media(Request $request, int $id): JsonResponse
     {
+        try {
         $user  = $request->user();
         $space = $user->gallerySpaces()->first();
 
@@ -151,6 +152,10 @@ class TripController extends Controller
             ]);
 
         return response()->json($items);
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::warning('TripController::media failed: ' . $e->getMessage());
+            return response()->json([]);
+        }
     }
 
     /**
@@ -159,6 +164,7 @@ class TripController extends Controller
      */
     public function suggestMedia(Request $request, int $id): JsonResponse
     {
+        try {
         $user  = $request->user();
         $space = $user->gallerySpaces()->first();
 
@@ -190,6 +196,10 @@ class TripController extends Controller
             ])->values(),
             'all_ids' => $suggested->pluck('id')->values(),
         ]);
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::warning('TripController::suggestMedia failed: ' . $e->getMessage());
+            return response()->json(['count' => 0, 'samples' => [], 'all_ids' => []]);
+        }
     }
 
     /**
