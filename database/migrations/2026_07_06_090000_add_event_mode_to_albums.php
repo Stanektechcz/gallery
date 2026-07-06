@@ -26,8 +26,15 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('albums', function (Blueprint $table) {
-            $table->dropColumn(['event_mode', 'event_start_at', 'event_end_at',
-                'event_place_name', 'event_latitude', 'event_longitude', 'event_gps_radius']);
+            $table->dropColumn([
+                'event_mode',
+                'event_start_at',
+                'event_end_at',
+                'event_place_name',
+                'event_latitude',
+                'event_longitude',
+                'event_gps_radius'
+            ]);
         });
     }
 };

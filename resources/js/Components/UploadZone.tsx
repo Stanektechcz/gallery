@@ -3,17 +3,28 @@ import { Upload } from 'lucide-react';
 import { useCallback, useRef, useState } from 'react';
 
 const ACCEPTED: string[] = [
+    // Standard images
     'image/jpeg', 'image/png', 'image/webp', 'image/gif',
-    'image/avif', 'image/heic', 'image/heif', 'image/tiff',
+    'image/avif', 'image/heic', 'image/heif', 'image/tiff', 'image/bmp',
+    // RAW formats (MIME types vary by browser — we use extension fallback)
+    'image/x-canon-cr2', 'image/x-canon-cr3',
+    'image/x-nikon-nef', 'image/x-sony-arw', 'image/x-adobe-dng',
+    'image/x-olympus-orf', 'image/x-panasonic-rw2', 'image/x-fuji-raf',
+    'image/x-pentax-pef', 'image/x-samsung-srw', 'image/x-raw',
+    // Video
     'video/mp4', 'video/quicktime', 'video/webm',
     'video/x-m4v', 'video/x-matroska', 'video/x-msvideo',
+    'video/avi', 'video/mpeg', 'video/mp2t',
 ];
+
+const RAW_EXTS = ['cr2','cr3','nef','nrw','arw','dng','orf','rw2','raf','pef','srw','3fr','fff','kdc','dcr','mrw','rwl','x3f'];
 
 function ok(file: File): boolean {
     if (ACCEPTED.includes(file.type)) return true;
     const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
-    return ['jpg','jpeg','png','webp','gif','avif','heic','heif','tiff','tif',
-            'mp4','mov','webm','m4v','mkv','avi'].includes(ext);
+    if (RAW_EXTS.includes(ext)) return true;
+    return ['jpg','jpeg','png','webp','gif','avif','heic','heif','tiff','tif','bmp',
+            'mp4','mov','webm','m4v','mkv','avi','mts','m2ts'].includes(ext);
 }
 
 interface Props { albumId: number | null; onUploadComplete?: () => void; }
@@ -51,7 +62,7 @@ export default function UploadZone({ albumId, onUploadComplete }: Props) {
             <p className="text-sm text-white font-medium">
                 {dragging ? 'PusĹĄte soubory sem' : queued ? `âś“ ${queued} souborĹŻ pĹ™idĂˇno` : 'PĹ™etĂˇhnÄ›te nebo kliknÄ›te'}
             </p>
-            <p className="text-xs text-[var(--color-text-secondary)]">Fotky &amp; videa Â· JPG PNG HEIC MP4 MOV</p>
+            <p className="text-xs text-[var(--color-text-secondary)]">Fotky, videa, RAW · JPG PNG HEIC AVIF CR2 NEF ARW DNG MP4 MOV MKV…</p>
             <p className="text-[10px] text-[var(--color-text-secondary)] opacity-60">Kontrola duplicit Â· pokraÄŤovĂˇnĂ­ po vĂ˝padku</p>
             <input ref={inputRef} type="file" multiple accept={ACCEPTED.join(',')} className="sr-only"
                 onChange={e => { process(e.target.files); (e.target as HTMLInputElement).value = ''; }}/>

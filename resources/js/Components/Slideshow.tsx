@@ -4,7 +4,6 @@
  * Modes: classic, chronological, travel (GPS transitions), memory (same day past years).
  */
 
-import axios from 'axios';
 import {
     ChevronLeft, ChevronRight, Map as MapIcon, Maximize2, Minimize2,
     Pause, Play, Settings2, Shuffle, SkipForward, Star, X,

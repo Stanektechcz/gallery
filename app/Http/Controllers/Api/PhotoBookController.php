@@ -181,8 +181,8 @@ class PhotoBookController extends Controller
         foreach ($rows as $row) {
             $media   = MediaItem::with('variants')->find($row->id);
             $variant = $media?->getVariant('original')
-                    ?? $media?->getVariant('large')
-                    ?? $media?->getVariant('medium');
+                ?? $media?->getVariant('large')
+                ?? $media?->getVariant('medium');
 
             if (! $variant) continue;
 
@@ -216,9 +216,16 @@ class PhotoBookController extends Controller
             ->where('photo_book_items.photo_book_id', $book->id)
             ->where('media_items.gallery_space_id', $space->id)
             ->orderBy('photo_book_items.sort_order')
-            ->get(['media_items.uuid', 'media_items.original_filename', 'media_items.taken_at',
-                   'media_items.width', 'media_items.height', 'media_items.size_bytes',
-                   'media_items.camera_make', 'media_items.camera_model']);
+            ->get([
+                'media_items.uuid',
+                'media_items.original_filename',
+                'media_items.taken_at',
+                'media_items.width',
+                'media_items.height',
+                'media_items.size_bytes',
+                'media_items.camera_make',
+                'media_items.camera_model'
+            ]);
 
         $lines   = ["# Fotokniha: {$book->name}", "# Datum exportu: " . now()->toDateTimeString(), "# Počet: {$rows->count()}", ""];
         $lines[] = "Pořadí\tUUID\tSoubor\tDatum\tRozměry\tVelikost\tFotoaparát";

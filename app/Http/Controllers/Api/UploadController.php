@@ -264,6 +264,18 @@ class UploadController extends Controller
                 Log::warning('Drive upload failed (non-fatal)', ['error' => $driveEx->getMessage()]);
             }
 
+            $ext         = strtolower(pathinfo($session->original_filename, PATHINFO_EXTENSION));
+            $formatSvc   = new \App\Services\Media\MediaFormatService();
+            $isRaw       = \App\Services\Media\MediaFormatService::isRaw($ext);
+            $isVideo     = \App\Services\Media\MediaFormatService::isVideo($ext);
+            $mediaType   = ($isVideo || str_starts_with($session->mime_type, 'video/')) ? 'video' : 'photo';
+
+            // For RAW files: extract embedded JPEG preview for thumbnailing
+            $previewPath = null;
+            if ($isRaw) {
+                $previewPath = $formatSvc->extractRawPreview($destPath);
+            }
+
             $media = MediaItem::create([
                 'gallery_space_id'    => $session->gallery_space_id,
                 'owner_user_id'       => $session->user_id,
@@ -273,9 +285,11 @@ class UploadController extends Controller
                 'drive_parent_folder_id' => $driveParentFolder,
                 'original_filename'   => $session->original_filename,
                 'safe_filename'       => preg_replace('/[^a-zA-Z0-9._-]/', '_', $session->original_filename),
-                'extension'           => strtolower(pathinfo($session->original_filename, PATHINFO_EXTENSION)),
-                'mime_type'           => $session->mime_type,
-                'media_type'          => str_starts_with($session->mime_type, 'video/') ? 'video' : 'photo',
+                'extension'           => $ext,
+                'mime_type'           => $session->mime_type ?: ($isRaw ? \App\Services\Media\MediaFormatService::rawMime($ext) : 'application/octet-stream'),
+                'media_type'          => $mediaType,
+                'is_raw'              => $isRaw,
+                'raw_format'          => $isRaw ? $ext : null,
                 'size_bytes'          => $assembledSize,
                 'sha256'              => $session->sha256,
                 'status'              => 'ready',
@@ -305,11 +319,16 @@ class UploadController extends Controller
             ]);
 
             // Generate thumbnail synchronously using GD/Imagick (no queue needed)
-            $this->generateThumbnail($media, $destPath);
+            // For RAW files: use extracted preview JPEG if available
+            $thumbSource = $previewPath ?? $destPath;
+            $this->generateThumbnail($media, $thumbSource);
+            if ($previewPath) {
+                @unlink($previewPath);
+            }
 
-            // Extract basic EXIF data synchronously (GPS + date + dimensions)
+            // Extract basic EXIF data synchronously (GPS + date + dimensions + panorama/live photo)
             if ($media->media_type === 'photo') {
-                $this->extractBasicExif($media, $destPath);
+                $this->extractBasicExif($media, $destPath, $formatSvc);
             }
 
             $session->update([
@@ -467,15 +486,55 @@ class UploadController extends Controller
 
     /**
      * Extract GPS, date, dimensions via ExifExtractorService.
-     * Supports HEIC/HEIF (Samsung/Apple), JPEG, PNG, RAW via
-     * proc_open exiftool → Imagick → PHP exif_read_data → binary parser.
+     * Also detects panorama/360° and Live Photo pairs.
      */
-    private function extractBasicExif(MediaItem $media, string $sourcePath): void
-    {
+    private function extractBasicExif(
+        MediaItem $media,
+        string $sourcePath,
+        ?\App\Services\Media\MediaFormatService $formatSvc = null
+    ): void {
+        $formatSvc ??= new \App\Services\Media\MediaFormatService();
+
         try {
-            $data = (new \App\Services\ExifExtractorService())->extract($sourcePath);
+            $exifSvc  = new \App\Services\ExifExtractorService();
+            $data     = $exifSvc->extract($sourcePath);
+            $rawExif  = $exifSvc->getRawExif($sourcePath);   // get the full raw EXIF for extended detection
+
             if ($data) {
                 $media->update(array_filter($data, fn($v) => $v !== null));
+            }
+
+            // Panorama / 360° detection
+            $panData = $formatSvc->detectPanorama(
+                $rawExif ?? [],
+                $media->width,
+                $media->height
+            );
+            if ($panData['is_panorama'] || $panData['is_360']) {
+                $media->update([
+                    'is_panorama'         => $panData['is_panorama'],
+                    'is_360'              => $panData['is_360'],
+                    'panorama_projection' => $panData['panorama_projection'],
+                ]);
+            }
+
+            // Live Photo / Motion Photo detection
+            $liveData = $formatSvc->detectLivePhoto($rawExif ?? [], $media->extension);
+            if ($liveData['is_motion_photo']) {
+                $media->update([
+                    'live_photo_content_id' => $liveData['content_id'],
+                    'live_photo_role'       => $liveData['role'],
+                ]);
+
+                // Try to link with already-uploaded pair
+                if ($liveData['content_id']) {
+                    $formatSvc->linkLivePhotoPair(
+                        $media->id,
+                        $liveData['content_id'],
+                        $liveData['role'],
+                        $media->gallery_space_id
+                    );
+                }
             }
         } catch (\Throwable $e) {
             Log::warning('EXIF extraction failed', ['media_id' => $media->id, 'error' => $e->getMessage()]);

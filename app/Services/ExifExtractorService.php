@@ -75,6 +75,43 @@ class ExifExtractorService
         return [];
     }
 
+    /**
+     * Return the full raw EXIF/XMP data from exiftool as a flat key=>value array.
+     * Used for extended detection (panorama, live photo, etc.).
+     */
+    public function getRawExif(string $sourcePath): array
+    {
+        if (! file_exists($sourcePath)) {
+            return [];
+        }
+
+        try {
+            $cmd = [
+                $this->exiftoolPath,
+                '-json',
+                '-n',
+                '-charset',
+                'UTF8',
+                '-struct',
+                $sourcePath,
+            ];
+            $desc = [[0 => 'pipe', 'r'], [1 => 'pipe', 'w'], [2 => 'pipe', 'w']];
+            $proc = proc_open($cmd, $desc, $pipes);
+            if (! is_resource($proc)) return [];
+
+            fclose($pipes[0]);
+            $stdout = stream_get_contents($pipes[1]);
+            fclose($pipes[1]);
+            fclose($pipes[2]);
+            proc_close($proc);
+
+            $raw = json_decode($stdout, true);
+            return $raw[0] ?? [];
+        } catch (\Throwable) {
+            return [];
+        }
+    }
+
     // ─── Method 1: exiftool via proc_open ───────────────────────────────────
 
     private function extractViaExiftool(string $sourcePath): array

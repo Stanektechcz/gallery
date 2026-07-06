@@ -79,6 +79,14 @@ interface MediaItem {
     trashed_at?: string;
     status: string;
     drive_file_id?: string;
+    // Extended format
+    is_panorama?: boolean;
+    is_360?: boolean;
+    panorama_projection?: string;
+    is_raw?: boolean;
+    raw_format?: string;
+    live_photo_role?: 'main' | 'video';
+    live_photo_pair_id?: number;
     variants: Variant[];
     tags: Tag[];
     people: Person[];
@@ -695,17 +703,52 @@ export default function MediaShow({ media, breadcrumb, prev, next }: Props) {
                                 <source src={`/media/${item.uuid}/stream`} type={item.mime_type} />
                             </video>
                         ) : item.media_type === 'photo' ? (
-                            <ProgressiveImage
-                                uuid={item.uuid}
-                                fullUrl={fullUrl}
-                                thumbUrl={thumbUrl}
-                                alt={item.display_title ?? item.original_filename}
-                                width={item.width}
-                                height={item.height}
-                                dominantColor={placeholder?.dominant_color}
-                                prevUuid={prev?.uuid}
-                                nextUuid={next?.uuid}
-                            />
+                            item.is_panorama ? (
+                                /* Panorama / 360° viewer */
+                                <div className="w-full h-full relative overflow-hidden">
+                                    {/* Badge */}
+                                    <div className="absolute top-3 left-3 z-10 px-2 py-0.5 rounded-full text-[11px] font-bold bg-black/60 text-white backdrop-blur-sm">
+                                        {item.is_360 ? '🌐 360°' : '🔭 Panorama'}
+                                    </div>
+                                    {item.is_360 ? (
+                                        /* 360° equirectangular: horizontally draggable */
+                                        <div className="w-full h-full overflow-x-scroll overflow-y-hidden cursor-grab active:cursor-grabbing"
+                                            style={{ scrollSnapType: 'none' }}>
+                                            <img
+                                                src={fullUrl}
+                                                alt={item.display_title ?? item.original_filename}
+                                                style={{ height: '100%', width: 'auto', minWidth: '200%', objectFit: 'cover' }}
+                                                draggable={false}
+                                            />
+                                        </div>
+                                    ) : (
+                                        /* Wide panorama: scroll-x */
+                                        <div className="w-full h-full overflow-x-auto overflow-y-hidden">
+                                            <img
+                                                src={fullUrl}
+                                                alt={item.display_title ?? item.original_filename}
+                                                style={{ height: '100%', width: 'auto', maxWidth: 'none' }}
+                                                draggable={false}
+                                            />
+                                        </div>
+                                    )}
+                                    <p className="absolute bottom-3 left-1/2 -translate-x-1/2 text-white/50 text-[10px] bg-black/40 px-2 py-0.5 rounded-full">
+                                        ← přetažením nebo scrollem →
+                                    </p>
+                                </div>
+                            ) : (
+                                <ProgressiveImage
+                                    uuid={item.uuid}
+                                    fullUrl={fullUrl}
+                                    thumbUrl={thumbUrl}
+                                    alt={item.display_title ?? item.original_filename}
+                                    width={item.width}
+                                    height={item.height}
+                                    dominantColor={placeholder?.dominant_color}
+                                    prevUuid={prev?.uuid}
+                                    nextUuid={next?.uuid}
+                                />
+                            )
                         ) : (
                             <div className="flex flex-col items-center gap-3 text-[var(--color-text-secondary)]">
                                 <div className="w-16 h-16 rounded-xl bg-[var(--color-bg-card)] flex items-center justify-center">
@@ -728,6 +771,14 @@ export default function MediaShow({ media, breadcrumb, prev, next }: Props) {
                                     <div className="flex justify-between"><span className="text-[var(--color-text-secondary)]">Velikost</span><span className="text-white">{formatBytes(item.size_bytes)}</span></div>
                                     {item.width && item.height && <div className="flex justify-between"><span className="text-[var(--color-text-secondary)]">Rozlišení</span><span className="text-white">{item.width} × {item.height}</span></div>}
                                     {item.duration_ms && <div className="flex justify-between"><span className="text-[var(--color-text-secondary)]">Délka</span><span className="text-white">{Math.round(item.duration_ms / 1000)}s</span></div>}
+                                    {/* Format badges */}
+                                    <div className="flex flex-wrap gap-1 pt-0.5">
+                                        {item.is_raw && <span className="bg-orange-500/20 text-orange-300 text-[9px] px-1.5 py-0.5 rounded-full font-medium uppercase">{item.raw_format ?? 'RAW'}</span>}
+                                        {item.is_360 && <span className="bg-indigo-500/20 text-indigo-300 text-[9px] px-1.5 py-0.5 rounded-full font-medium">🌐 360°</span>}
+                                        {item.is_panorama && !item.is_360 && <span className="bg-cyan-500/20 text-cyan-300 text-[9px] px-1.5 py-0.5 rounded-full font-medium">🔭 Panorama</span>}
+                                        {item.live_photo_role === 'main' && <span className="bg-green-500/20 text-green-300 text-[9px] px-1.5 py-0.5 rounded-full font-medium">▶ Live Photo</span>}
+                                        {item.live_photo_role === 'video' && <span className="bg-yellow-500/20 text-yellow-300 text-[9px] px-1.5 py-0.5 rounded-full font-medium">🎬 Live Video</span>}
+                                    </div>
                                 </div>
                             </section>
 

@@ -4,13 +4,14 @@
  */
 
 import AppLayout from '@/Layouts/AppLayout';
-import { Head, router } from '@inertiajs/react';
+import { Head } from '@inertiajs/react';
 import axios from 'axios';
 import {
-    Download, ExternalLink, FileText, FolderOpen, GripVertical,
-    Plus, Printer, Trash2, X,
+    Download,
+    FileText, FolderOpen, GripVertical,
+    Plus, Printer, Trash2, X
 } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 interface BookItem {
     id:         number;

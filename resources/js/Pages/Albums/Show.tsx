@@ -1,7 +1,7 @@
 import AlbumEvent from '@/Components/AlbumEvent';
-import AlbumStory from '@/Pages/Albums/Story';
 import UploadZone from '@/Components/UploadZone';
 import AppLayout from '@/Layouts/AppLayout';
+import AlbumStory from '@/Pages/Albums/Story';
 import { Head, Link, router } from '@inertiajs/react';
 import axios from 'axios';
 import { ArrowUpDown, BookOpen, ChevronRight, Clock, Edit3, Film, FolderOpen, FolderPlus, Grid3X3, Image, Search, SortAsc, SortDesc, Trash2, Upload } from 'lucide-react';
