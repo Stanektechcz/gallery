@@ -84,6 +84,9 @@ Route::middleware(['auth'])->group(function () {
     // Compare (Porovnání fotografií)
     Route::get('/compare', fn() => Inertia::render('Compare/Index'))->name('compare');
 
+    // TV Mode (fullscreen slideshow for TV/family display)
+    Route::get('/tv', fn() => Inertia::render('TV/Index'))->name('tv');
+
     // Trips (Cesty a výlety)
     Route::get('/trips',    fn() => Inertia::render('Trips/Index'))->name('trips');
 

@@ -1,4 +1,5 @@
 import { BulkActionBar } from '@/Components/BulkActionBar';
+import Slideshow, { type SlideshowItem } from '@/Components/Slideshow';
 import AppLayout from '@/Layouts/AppLayout';
 import { Head, Link, router } from '@inertiajs/react';
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
@@ -164,24 +165,27 @@ export default function TimelineIndex() {
         setSlideshowIdx(allItems.findIndex(i=>i.uuid===uuid)||0);
     };
 
+    // Map Timeline items to SlideshowItem
+    const slideshowMapped: SlideshowItem[] = useMemo(() => (slideshowItems ?? []).map(i => ({
+        uuid:          i.uuid,
+        media_type:    i.media_type as 'photo' | 'video',
+        thumb_url:     i.variants?.find(v => v.type === 'thumbnail')?.url,
+        display_title: undefined,
+        taken_at:      i.taken_at ?? undefined,
+        rating:        i.rating ?? undefined,
+    })), [slideshowItems]);
+
     return (
         <AppLayout>
             <Head title="Fotky" />
 
-            {/* Slideshow fullscreen */}
+            {/* New Slideshow */}
             {slideshowItems && (
-                <div className="fixed inset-0 z-[300] bg-black flex items-center justify-center" onClick={()=>setSlideshowItems(null)}>
-                    {slideshowItems[slideshowIdx] && (() => {
-                        const it = slideshowItems[slideshowIdx];
-                        return (<>
-                            <img src={`/media/${it.uuid}/full`} alt="" className="max-h-screen max-w-full object-contain" onClick={e=>e.stopPropagation()} />
-                            <button onClick={e=>{e.stopPropagation();setSlideshowIdx(i=>Math.max(i-1,0));}} className="absolute left-4 top-1/2 -translate-y-1/2 p-3 rounded-full bg-black/40 text-white hover:bg-black/70 text-xl">←</button>
-                            <button onClick={e=>{e.stopPropagation();setSlideshowIdx(i=>Math.min(i+1,slideshowItems.length-1));}} className="absolute right-4 top-1/2 -translate-y-1/2 p-3 rounded-full bg-black/40 text-white hover:bg-black/70 text-xl">→</button>
-                            <button onClick={()=>setSlideshowItems(null)} className="absolute top-4 right-4 p-2 rounded-full bg-black/40 text-white">✕</button>
-                            <div className="absolute bottom-4 text-white/60 text-xs">{slideshowIdx+1} / {slideshowItems.length}</div>
-                        </>);
-                    })()}
-                </div>
+                <Slideshow
+                    items={slideshowMapped}
+                    initialIndex={slideshowIdx}
+                    onClose={() => setSlideshowItems(null)}
+                />
             )}
 
             <div className="flex h-full min-h-0">
