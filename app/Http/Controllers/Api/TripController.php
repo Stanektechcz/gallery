@@ -404,15 +404,23 @@ class TripController extends Controller
         ]);
 
         $mode = $v['mode'] ?? 'driving';
-        $cacheKey = sprintf('osrm:%s:%.4f,%.4f:%.4f,%.4f',
-            $mode, $v['from_lat'], $v['from_lng'], $v['to_lat'], $v['to_lng']);
+        $cacheKey = sprintf(
+            'osrm:%s:%.4f,%.4f:%.4f,%.4f',
+            $mode,
+            $v['from_lat'],
+            $v['from_lng'],
+            $v['to_lat'],
+            $v['to_lng']
+        );
 
         $result = Cache::remember($cacheKey, 86400 * 7, function () use ($v, $mode) {
             $url = sprintf(
                 'http://router.project-osrm.org/route/v1/%s/%.6f,%.6f;%.6f,%.6f?overview=false',
                 $mode,
-                (float) $v['from_lng'], (float) $v['from_lat'],
-                (float) $v['to_lng'],   (float) $v['to_lat']
+                (float) $v['from_lng'],
+                (float) $v['from_lat'],
+                (float) $v['to_lng'],
+                (float) $v['to_lat']
             );
 
             if (! function_exists('curl_init')) {

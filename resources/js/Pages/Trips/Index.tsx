@@ -53,6 +53,75 @@ interface SearchResult {
 
 const MONTHS_CS = ['ledna','února','března','dubna','května','června','července','srpna','září','října','listopadu','prosince'];
 
+// ── Price estimation (calibrated to CZ/SK market 2025) ─────────────────────
+interface PriceEstimate {
+    carrier: string; icon: string; minPrice: number; maxPrice?: number;
+    currency: string; note?: string; bookUrl?: string;
+}
+function estimatePrices(km: number, from: string, to: string, isoDate: string): PriceEstimate[] {
+    if (!km || km < 8) return [];
+    const f = encodeURIComponent(from), t = encodeURIComponent(to);
+    const r: PriceEstimate[] = [];
+
+    // ČD (eJízdenka with early purchase ~35% off, base ~1.2 Kč/km)
+    const cdBase = Math.max(30, Math.round(1.2 * km / 10) * 10);
+    r.push({ carrier: 'České dráhy', icon: '🚂', currency: 'Kč',
+        minPrice: Math.round(cdBase * 0.65 / 5) * 5,
+        maxPrice: cdBase,
+        note: 'eJízdenka',
+        bookUrl: `https://idos.idnes.cz/vlak/spojeni/?f=${f}&t=${t}&date=${isoDate}&time=0600`,
+    });
+
+    // RegioJet Bus (~0.58 Kč/km, min 49 Kč)
+    const rjBus = Math.max(49, Math.round(0.58 * km / 5) * 5);
+    r.push({ carrier: 'RegioJet Bus', icon: '🟡', currency: 'Kč',
+        minPrice: rjBus,
+        maxPrice: Math.round(rjBus * 1.4 / 5) * 5,
+        bookUrl: `https://www.regiojet.cz/vlaky-a-autobusy/jizdenky-online/?f=${from}&t=${to}&date=${isoDate}`,
+    });
+
+    // RegioJet vlak (~0.9 Kč/km, min 79 Kč) — only if plausible route
+    if (km > 25) {
+        const rjTrain = Math.max(79, Math.round(0.9 * km / 5) * 5);
+        r.push({ carrier: 'RegioJet vlak', icon: '🟡', currency: 'Kč',
+            minPrice: rjTrain,
+            maxPrice: Math.round(rjTrain * 1.3 / 5) * 5,
+            bookUrl: `https://www.regiojet.cz/vlaky-a-autobusy/jizdenky-online/?f=${from}&t=${to}&date=${isoDate}`,
+        });
+    }
+
+    // FlixBus (~0.5 Kč/km, min 99 Kč — often flash sales)
+    if (km > 70) {
+        const flix = Math.max(99, Math.round(0.5 * km / 5) * 5);
+        r.push({ carrier: 'FlixBus', icon: '🟢', currency: 'Kč',
+            minPrice: Math.round(flix * 0.55 / 5) * 5,
+            maxPrice: Math.round(flix * 1.8 / 5) * 5,
+            note: 'flash výprodeje',
+            bookUrl: `https://shop.flixbus.cz/search?departureCity=${f}&arrivalCity=${t}&rideDate=${isoDate}&adult=1`,
+        });
+    }
+
+    // Car per person (2 people sharing, 7L/100km × 42 Kč/L)
+    const carPP = Math.max(30, Math.round(1.47 * km / 10) * 10);
+    r.push({ carrier: 'Auto /os. (2 os.)', icon: '🚗', currency: 'Kč',
+        minPrice: carPP,
+        note: 'palivo',
+        bookUrl: `https://www.google.com/maps/dir/${encodeURIComponent(from)}/${encodeURIComponent(to)}`,
+    });
+
+    // Plane — only for long routes
+    if (km > 350) {
+        r.push({ carrier: 'Letadlo', icon: '✈️', currency: 'EUR',
+            minPrice: Math.round(Math.max(30, km * 0.06) / 5) * 5,
+            maxPrice: Math.round(Math.max(80, km * 0.18) / 5) * 5,
+            note: 'low-cost',
+            bookUrl: `https://www.skyscanner.cz/letiste/${f}/${t}/${isoDate.replace(/-/g,'')}/1adults/`,
+        });
+    }
+
+    return r.sort((a, b) => a.minPrice - b.minPrice).slice(0, 4);
+}
+
 function fmtRange(start: string, end: string): string {
     const s = new Date(start), e = new Date(end);
     if (s.getMonth() === e.getMonth() && s.getFullYear() === e.getFullYear()) {
@@ -766,9 +835,51 @@ export default function TripsIndex() {
                                                                                 </div>
                                                                             </div>
 
+                                                                            {/* Price estimates */}
+                                                                            {(() => {
+                                                                                const roadKm = leg?.osrm?.distance_km ?? leg?.km ?? null;
+                                                                                if (!roadKm) return null;
+                                                                                const prices = estimatePrices(roadKm, wp.place_name, nextWp.place_name, selected.start_date.substring(0,10));
+                                                                                if (!prices.length) return null;
+                                                                                return (
+                                                                                    <div>
+                                                                                        <p className="text-[9px] text-[var(--color-text-secondary)] mb-1 flex items-center gap-1">
+                                                                                            💰 Cenové odhady
+                                                                                            <span className="opacity-50 font-normal">(přibližné)</span>
+                                                                                        </p>
+                                                                                        <div className="space-y-1">
+                                                                                            {prices.map((p, pi) => (
+                                                                                                <a key={pi} href={p.bookUrl ?? '#'} target="_blank" rel="noopener noreferrer"
+                                                                                                    className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-[var(--color-bg-secondary)] hover:bg-white/5 transition-colors group/price">
+                                                                                                    <span className="text-base shrink-0">{p.icon}</span>
+                                                                                                    <div className="flex-1 min-w-0">
+                                                                                                        <p className="text-[10px] font-medium text-white truncate">{p.carrier}</p>
+                                                                                                        {p.note && <p className="text-[9px] text-[var(--color-text-secondary)]">{p.note}</p>}
+                                                                                                    </div>
+                                                                                                    <div className="text-right shrink-0">
+                                                                                                        <p className="text-[10px] font-semibold text-[var(--color-accent)]">
+                                                                                                            od {p.minPrice} {p.currency}
+                                                                                                        </p>
+                                                                                                        {p.maxPrice && (
+                                                                                                            <p className="text-[9px] text-[var(--color-text-secondary)]">
+                                                                                                                do {p.maxPrice} {p.currency}
+                                                                                                        </p>
+                                                                                                        )}
+                                                                                                    </div>
+                                                                                                    <span className="text-[9px] text-[var(--color-text-secondary)] opacity-0 group-hover/price:opacity-100 shrink-0">↗</span>
+                                                                                                </a>
+                                                                                            ))}
+                                                                                        </div>
+                                                                                        <p className="text-[8px] text-[var(--color-text-secondary)] opacity-40 mt-1">
+                                                                                            * odhad dle vzdálenosti {leg?.osrm ? '(silniční)' : '(vzdušná čára)'}, skutečné ceny se liší
+                                                                                        </p>
+                                                                                    </div>
+                                                                                );
+                                                                            })()}
+
                                                                             {/* Transport booking links */}
                                                                             <div>
-                                                                                <p className="text-[9px] text-[var(--color-text-secondary)] mb-1">Rezervace a vyhledávání:</p>
+                                                                                <p className="text-[9px] text-[var(--color-text-secondary)] mb-1">Přímé vyhledávání:</p>
                                                                                 <div className="flex flex-wrap gap-1">
                                                                                     {buildTransportLinks(wp, nextWp, selected.start_date).map(link => (
                                                                                         <a key={link.label} href={link.url} target="_blank" rel="noopener noreferrer"
