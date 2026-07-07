@@ -198,6 +198,10 @@ export default function TripsIndex() {
     const [fetchingLegs, setFetchingLegs] = useState<Record<string, boolean>>({});
     const [wpError,     setWpError]     = useState<string | null>(null);
 
+    // Live pricing (keyed by "{from}|{to}|{date}")
+    const [livePrices,     setLivePrices]     = useState<Record<string, PriceEstimate[] | null>>({});
+    const [fetchingPrices, setFetchingPrices] = useState<Record<string, boolean>>({});
+
     const selected = trips.find(t => t.id === selectedId) ?? null;
 
     // Load trip list
@@ -414,9 +418,25 @@ export default function TripsIndex() {
         finally { setFetchingLegs(prev => ({ ...prev, [key]: false })); }
     }, []);
 
+    // Fetch live prices from RegioJet + FlixBus when a leg is opened
+    const fetchLivePrices = useCallback(async (from: Waypoint, to: Waypoint, date: string) => {
+        const key = `${from.place_name}|${to.place_name}|${date.substring(0,10)}`;
+        if (livePrices[key] !== undefined || fetchingPrices[key]) return;
+        setFetchingPrices(prev => ({ ...prev, [key]: true }));
+        try {
+            const r = await axios.get('/api/v1/trips/transport-prices', {
+                params: { from: from.place_name, to: to.place_name, date: date.substring(0, 10) },
+            });
+            setLivePrices(prev => ({ ...prev, [key]: r.data?.length ? r.data : null }));
+        } catch {
+            setLivePrices(prev => ({ ...prev, [key]: null }));
+        } finally {
+            setFetchingPrices(prev => ({ ...prev, [key]: false }));
+        }
+    }, [livePrices, fetchingPrices]);
+
     // Auto-fetch OSRM routes when selection changes
-    useEffect(() => {
-        if (!selected) return;
+    useEffect(() => {        if (!selected) return;
         selected.waypoints.forEach((wp, i) => {
             if (i === 0) return;
             const prev = selected.waypoints[i - 1];
@@ -781,7 +801,10 @@ export default function TripsIndex() {
                                                             return (
                                                                 <div className="mx-2 mb-0.5">
                                                                     {/* Compact leg row */}
-                                                                    <button onClick={() => setEditLegIdx(isOpen ? null : idx)}
+                                                                    <button onClick={() => {
+                                                                        setEditLegIdx(isOpen ? null : idx);
+                                                                        if (!isOpen) fetchLivePrices(wp, nextWp, selected.start_date);
+                                                                    }}
                                                                         className={`flex items-center gap-1.5 w-full text-left px-2 py-1 rounded-lg transition-colors ${isOpen ? 'bg-[var(--color-bg-card)] border border-[var(--color-border)]' : 'hover:bg-[var(--color-bg-secondary)]'} group/leg`}>
                                                                         <div className="w-px h-5 bg-[var(--color-border)] mx-1.5 shrink-0"/>
                                                                         {leg?.fetching ? (
@@ -835,44 +858,62 @@ export default function TripsIndex() {
                                                                                 </div>
                                                                             </div>
 
-                                                                            {/* Price estimates */}
+                                                                            {/* Price estimates — live first, static fallback */}
                                                                             {(() => {
-                                                                                const roadKm = leg?.osrm?.distance_km ?? leg?.km ?? null;
-                                                                                if (!roadKm) return null;
-                                                                                const prices = estimatePrices(roadKm, wp.place_name, nextWp.place_name, selected.start_date.substring(0,10));
-                                                                                if (!prices.length) return null;
+                                                                                const roadKm   = leg?.osrm?.distance_km ?? leg?.km ?? null;
+                                                                                const priceKey = `${wp.place_name}|${nextWp.place_name}|${selected.start_date.substring(0,10)}`;
+                                                                                const isFetching = fetchingPrices[priceKey] ?? false;
+                                                                                const live  = livePrices[priceKey];
+                                                                                const fallback = roadKm ? estimatePrices(roadKm, wp.place_name, nextWp.place_name, selected.start_date.substring(0,10)) : [];
+                                                                                const prices = live ?? fallback;
+                                                                                const isLive = !!live;
+
                                                                                 return (
                                                                                     <div>
-                                                                                        <p className="text-[9px] text-[var(--color-text-secondary)] mb-1 flex items-center gap-1">
-                                                                                            💰 Cenové odhady
-                                                                                            <span className="opacity-50 font-normal">(přibližné)</span>
+                                                                                        <p className="text-[9px] text-[var(--color-text-secondary)] mb-1 flex items-center gap-1.5">
+                                                                                            💰 Ceny jízdenek
+                                                                                            {isFetching && <RefreshCw size={8} className="animate-spin opacity-60"/>}
+                                                                                            {isLive
+                                                                                                ? <span className="text-green-400 font-medium">● živé ceny</span>
+                                                                                                : !isFetching && <span className="opacity-40">odhad dle vzdálenosti</span>
+                                                                                            }
                                                                                         </p>
-                                                                                        <div className="space-y-1">
-                                                                                            {prices.map((p, pi) => (
-                                                                                                <a key={pi} href={p.bookUrl ?? '#'} target="_blank" rel="noopener noreferrer"
-                                                                                                    className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-[var(--color-bg-secondary)] hover:bg-white/5 transition-colors group/price">
-                                                                                                    <span className="text-base shrink-0">{p.icon}</span>
-                                                                                                    <div className="flex-1 min-w-0">
-                                                                                                        <p className="text-[10px] font-medium text-white truncate">{p.carrier}</p>
-                                                                                                        {p.note && <p className="text-[9px] text-[var(--color-text-secondary)]">{p.note}</p>}
-                                                                                                    </div>
-                                                                                                    <div className="text-right shrink-0">
-                                                                                                        <p className="text-[10px] font-semibold text-[var(--color-accent)]">
-                                                                                                            od {p.minPrice} {p.currency}
-                                                                                                        </p>
-                                                                                                        {p.maxPrice && (
-                                                                                                            <p className="text-[9px] text-[var(--color-text-secondary)]">
-                                                                                                                do {p.maxPrice} {p.currency}
-                                                                                                        </p>
-                                                                                                        )}
-                                                                                                    </div>
-                                                                                                    <span className="text-[9px] text-[var(--color-text-secondary)] opacity-0 group-hover/price:opacity-100 shrink-0">↗</span>
-                                                                                                </a>
-                                                                                            ))}
-                                                                                        </div>
-                                                                                        <p className="text-[8px] text-[var(--color-text-secondary)] opacity-40 mt-1">
-                                                                                            * odhad dle vzdálenosti {leg?.osrm ? '(silniční)' : '(vzdušná čára)'}, skutečné ceny se liší
-                                                                                        </p>
+                                                                                        {isFetching && prices.length === 0 ? (
+                                                                                            <div className="space-y-1">
+                                                                                                {[1,2,3].map(i => <div key={i} className="h-8 bg-[var(--color-bg-secondary)] rounded-lg animate-pulse"/>)}
+                                                                                            </div>
+                                                                                        ) : prices.length > 0 ? (
+                                                                                            <div className="space-y-1">
+                                                                                                {prices.map((p, pi) => (
+                                                                                                    <a key={pi} href={p.bookUrl ?? '#'} target="_blank" rel="noopener noreferrer"
+                                                                                                        className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-[var(--color-bg-secondary)] hover:bg-white/5 transition-colors group/price">
+                                                                                                        <span className="text-base shrink-0">{p.icon}</span>
+                                                                                                        <div className="flex-1 min-w-0">
+                                                                                                            <p className="text-[10px] font-medium text-white truncate">{p.carrier}</p>
+                                                                                                            {p.note && <p className="text-[9px] text-[var(--color-text-secondary)]">{p.note}</p>}
+                                                                                                        </div>
+                                                                                                        <div className="text-right shrink-0">
+                                                                                                            <p className={`text-[10px] font-semibold ${isLive ? 'text-green-400' : 'text-[var(--color-accent)]'}`}>
+                                                                                                                od {p.minPrice} {p.currency}
+                                                                                                            </p>
+                                                                                                            {p.maxPrice && ! isLive && (
+                                                                                                                <p className="text-[9px] text-[var(--color-text-secondary)]">
+                                                                                                                    do {p.maxPrice} {p.currency}
+                                                                                                                </p>
+                                                                                                            )}
+                                                                                                        </div>
+                                                                                                        <span className="text-[9px] text-[var(--color-text-secondary)] opacity-0 group-hover/price:opacity-100 shrink-0">↗</span>
+                                                                                                    </a>
+                                                                                                ))}
+                                                                                                {! isLive && roadKm && (
+                                                                                                    <p className="text-[8px] text-[var(--color-text-secondary)] opacity-40 mt-0.5">
+                                                                                                        * odhad dle vzdálenosti, načítám živé ceny…
+                                                                                                    </p>
+                                                                                                )}
+                                                                                            </div>
+                                                                                        ) : (
+                                                                                            <p className="text-[9px] text-[var(--color-text-secondary)] opacity-60 italic">Zadejte GPS souřadnice zastávek pro ceník.</p>
+                                                                                        )}
                                                                                     </div>
                                                                                 );
                                                                             })()}

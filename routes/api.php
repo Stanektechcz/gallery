@@ -149,6 +149,7 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
     Route::patch('/trips/{id}/waypoints/{wpId}',     [App\Http\Controllers\Api\TripController::class, 'updateWaypoint'])->name('api.trips.waypoints.update');
     Route::delete('/trips/{id}/waypoints/{wpId}',    [App\Http\Controllers\Api\TripController::class, 'removeWaypoint'])->name('api.trips.waypoints.remove');
     Route::get('/trips/route-distance',              [App\Http\Controllers\Api\TripController::class, 'routeDistance'])->name('api.trips.route-distance');
+    Route::get('/trips/transport-prices',            [App\Http\Controllers\Api\TripController::class, 'transportPrices'])->name('api.trips.transport-prices');
     Route::get('/trips',                             [App\Http\Controllers\Api\TripController::class, 'index'])->name('api.trips.index');
     Route::post('/trips',                            [App\Http\Controllers\Api\TripController::class, 'store'])->name('api.trips.store');
     Route::get('/trips/{id}',                        [App\Http\Controllers\Api\TripController::class, 'show'])->name('api.trips.show');

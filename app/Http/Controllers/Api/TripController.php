@@ -462,6 +462,241 @@ class TripController extends Controller
     }
 
     /**
+     * GET /api/v1/trips/transport-prices?from={}&to={}&date=YYYY-MM-DD
+     * Real-time pricing from RegioJet + FlixBus (their public/semi-public APIs).
+     * Falls back to empty array — UI uses estimated prices as fallback.
+     */
+    public function transportPrices(Request $request): JsonResponse
+    {
+        $v = $request->validate([
+            'from' => 'required|string|max:120',
+            'to'   => 'required|string|max:120',
+            'date' => 'required|date_format:Y-m-d',
+        ]);
+
+        $key = 'tp:' . md5("{$v['from']}|{$v['to']}|{$v['date']}");
+
+        $prices = Cache::remember($key, 3600 * 3, function () use ($v) {
+            $all = [];
+            try { $all = array_merge($all, $this->regiojetPrices($v['from'], $v['to'], $v['date'])); } catch (\Throwable $e) {}
+            try { $all = array_merge($all, $this->flixbusPrices($v['from'], $v['to'], $v['date'])); } catch (\Throwable $e) {}
+            usort($all, fn ($a, $b) => ($a['min_price'] ?? 9999) <=> ($b['min_price'] ?? 9999));
+            return $all;
+        });
+
+        return response()->json($prices);
+    }
+
+    // ─── RegioJet ──────────────────────────────────────────────────────────
+
+    private function regiojetPrices(string $from, string $to, string $date): array
+    {
+        $cities = Cache::remember('rj_cities_v2', 86400, function () {
+            $resp = $this->curlFetch('https://brn-ybus-pubapi.sa.cz/restapi/consts/locations?locale=cs', [
+                'X-Currency: CZK',
+                'Accept: application/json',
+            ]);
+            $data = json_decode($resp, true);
+            $list = [];
+            foreach (($data['cities'] ?? []) as $c) {
+                if (isset($c['id'], $c['name'])) {
+                    $list[] = ['id' => (int) $c['id'], 'name' => (string) $c['name']];
+                }
+            }
+            return $list;
+        });
+
+        $fromId = $this->fuzzyFindCityId($cities, $from);
+        $toId   = $this->fuzzyFindCityId($cities, $to);
+
+        if (! $fromId || ! $toId || $fromId === $toId) {
+            return [];
+        }
+
+        $url  = 'https://brn-ybus-pubapi.sa.cz/restapi/routes/search/simple?' . http_build_query([
+            'tariffs'          => 'REGULAR',
+            'toLocationType'   => 'CITY',
+            'toLocationId'     => $toId,
+            'fromLocationType' => 'CITY',
+            'fromLocationId'   => $fromId,
+            'departureDate'    => $date,
+            'locale'           => 'cs',
+        ]);
+        $resp = $this->curlFetch($url, ['X-Currency: CZK', 'Accept: application/json']);
+        $data = json_decode($resp, true);
+
+        if (empty($data['routes'])) {
+            return [];
+        }
+
+        // Group by vehicle type, collect minimum price
+        $best = [];
+        foreach ($data['routes'] as $route) {
+            $price = $route['priceFrom'] ?? null;
+            if ($price === null) {
+                continue;
+            }
+            $type = in_array('TRAIN', $route['vehicleTypes'] ?? []) ? 'train' : 'bus';
+            if (! isset($best[$type]) || $price < $best[$type]['price']) {
+                $best[$type] = [
+                    'price'    => (float) $price,
+                    'currency' => 'CZK',
+                    'dep'      => $route['departureTime'] ?? null,
+                    'arr'      => $route['arrivalTime']   ?? null,
+                ];
+            }
+        }
+
+        $f  = urlencode($from);
+        $t  = urlencode($to);
+        $result = [];
+
+        if (isset($best['bus'])) {
+            $result[] = [
+                'carrier'   => 'RegioJet Bus',
+                'icon'      => '🟡',
+                'min_price' => (int) ceil($best['bus']['price']),
+                'currency'  => 'CZK',
+                'source'    => 'live',
+                'note'      => 'základní tarif',
+                'book_url'  => "https://www.regiojet.cz/vlaky-a-autobusy/jizdenky-online/?f={$from}&t={$to}&date={$date}",
+            ];
+        }
+        if (isset($best['train'])) {
+            $result[] = [
+                'carrier'   => 'RegioJet vlak',
+                'icon'      => '🟡',
+                'min_price' => (int) ceil($best['train']['price']),
+                'currency'  => 'CZK',
+                'source'    => 'live',
+                'note'      => 'základní tarif',
+                'book_url'  => "https://www.regiojet.cz/vlaky-a-autobusy/jizdenky-online/?f={$from}&t={$to}&date={$date}",
+            ];
+        }
+
+        return $result;
+    }
+
+    // ─── FlixBus ───────────────────────────────────────────────────────────
+
+    private function flixbusPrices(string $from, string $to, string $date): array
+    {
+        $fromCity = $this->flixbusCity($from);
+        $toCity   = $this->flixbusCity($to);
+
+        if (! $fromCity || ! $toCity) {
+            return [];
+        }
+
+        $url  = 'https://global.api.flixbus.com/search/service/v4/search?' . http_build_query([
+            'from_city_id'   => $fromCity['id'],
+            'to_city_id'     => $toCity['id'],
+            'departure_date' => $date,
+            'number_adult'   => 1,
+            'currency'       => 'CZK',
+            'locale'         => 'cs',
+        ]);
+        $resp = $this->curlFetch($url, ['Accept: application/json']);
+        $data = json_decode($resp, true);
+
+        // FlixBus wraps trips under different keys depending on API version
+        $trips = $data['trips'] ?? $data['available']['trips'] ?? [];
+
+        $minPrice = null;
+        foreach ($trips as $trip) {
+            $amount = $trip['available']['lowest_price']['amount']
+                ?? $trip['min_price']['amount']
+                ?? null;
+            if ($amount !== null && ($minPrice === null || $amount < $minPrice)) {
+                $minPrice = (float) $amount;
+            }
+        }
+
+        if ($minPrice === null) {
+            return [];
+        }
+
+        return [[
+            'carrier'   => 'FlixBus',
+            'icon'      => '🟢',
+            'min_price' => (int) ceil($minPrice),
+            'currency'  => 'CZK',
+            'source'    => 'live',
+            'note'      => 'od nejnižší ceny',
+            'book_url'  => 'https://shop.flixbus.cz/search?departureCity=' . urlencode($from) . '&arrivalCity=' . urlencode($to) . '&rideDate=' . $date . '&adult=1',
+        ]];
+    }
+
+    private function flixbusCity(string $name): ?array
+    {
+        $key = 'fb_city:' . md5(mb_strtolower($name));
+        return Cache::remember($key, 86400 * 7, function () use ($name) {
+            $url  = 'https://global.api.flixbus.com/search/service/v4/cities/autocomplete?' . http_build_query([
+                'q'    => $name,
+                'lang' => 'cs',
+            ]);
+            $resp = $this->curlFetch($url, ['Accept: application/json']);
+            $data = json_decode($resp, true);
+            if (empty($data) || ! isset($data[0]['id'])) {
+                return null;
+            }
+            return ['id' => $data[0]['id'], 'name' => $data[0]['name'] ?? $name];
+        });
+    }
+
+    // ─── Shared helpers ────────────────────────────────────────────────────
+
+    /**
+     * Fuzzy-find a city ID by name (handles diacritics, suffixes like "hlavní nádraží").
+     */
+    private function fuzzyFindCityId(array $cities, string $name): ?int
+    {
+        $clean = fn(string $s) => mb_strtolower(
+            preg_replace('/\s+(hlavní|hl\.|nádraží|bus|vlak|letiště|airport|centrum|město)\b.*/iu', '', trim($s)) ?? '',
+            'UTF-8'
+        );
+
+        $needle = $clean($name);
+
+        // 1. Exact match after cleaning
+        foreach ($cities as $c) {
+            if ($clean($c['name']) === $needle) {
+                return $c['id'];
+            }
+        }
+
+        // 2. Starts-with match
+        foreach ($cities as $c) {
+            $hay = $clean($c['name']);
+            if (str_starts_with($hay, $needle) || str_starts_with($needle, $hay)) {
+                return $c['id'];
+            }
+        }
+
+        return null;
+    }
+
+    private function curlFetch(string $url, array $headers = []): string
+    {
+        if (! function_exists('curl_init')) {
+            return '';
+        }
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT        => 8,
+            CURLOPT_USERAGENT      => 'MakiGallery/1.0 (gallery.stanektech.cz)',
+            CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_HTTPHEADER     => $headers,
+        ]);
+        $resp  = curl_exec($ch);
+        $errno = curl_errno($ch);
+        curl_close($ch);
+        return ($errno || ! $resp) ? '' : $resp;
+    }
+
+    /**
      * DELETE /api/v1/trips/{id}/waypoints/{wpId}
      */
     public function removeWaypoint(Request $request, int $id, int $wpId): JsonResponse
