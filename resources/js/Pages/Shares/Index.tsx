@@ -16,7 +16,7 @@ import {
     Trash2,
     Upload
 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 interface SharedLink {
     id: number;
@@ -71,6 +71,7 @@ export default function SharesIndex({ shares }: Props) {
     const [showCreate, setShowCreate] = useState(false);
     const [creating, setCreating]   = useState(false);
     const [copied, setCopied]       = useState<string | null>(null);
+    const [guestUploads, setGuestUploads] = useState<any[]>([]);
     const [form, setForm]           = useState<NewLinkForm>({
         name: '',
         target_type: 'selection',
@@ -81,6 +82,12 @@ export default function SharesIndex({ shares }: Props) {
         hide_gps: false,
         max_uses: '',
     });
+    useEffect(() => { axios.get('/api/v1/guest-uploads').then(response => setGuestUploads(response.data.data.filter((item: any) => item.status === 'pending'))).catch(() => undefined); }, []);
+    const reviewUpload = async (uuid: string, action: 'approve'|'reject') => {
+        if (action === 'reject' && !confirm('Odmítnout a smazat tento soubor?')) return;
+        await axios.post(`/api/v1/guest-uploads/${uuid}/${action}`);
+        setGuestUploads(items => items.filter(item => item.uuid !== uuid));
+    };
 
     const setF = <K extends keyof NewLinkForm>(key: K, val: NewLinkForm[K]) =>
         setForm(prev => ({ ...prev, [key]: val }));
@@ -150,6 +157,7 @@ export default function SharesIndex({ shares }: Props) {
                 </div>
 
                 <div className="p-4 max-w-2xl mx-auto">
+                    {guestUploads.length > 0 && <section className="mb-5 rounded-2xl border border-[var(--color-accent)]/30 bg-[var(--color-bg-card)] p-4"><div className="mb-3 flex items-center gap-2"><Upload size={16} className="text-[var(--color-accent)]"/><h2 className="text-sm font-semibold text-white">Čeká na schválení</h2><span className="rounded-full bg-[var(--color-accent)]/15 px-2 py-0.5 text-[10px] text-[var(--color-accent)]">{guestUploads.length}</span></div><div className="space-y-2">{guestUploads.map(upload => <div key={upload.uuid} className="flex flex-col gap-2 rounded-xl border border-[var(--color-border)] p-3 sm:flex-row sm:items-center"><div className="min-w-0 flex-1"><p className="truncate text-xs font-medium text-white">{upload.original_filename}</p><p className="text-[10px] text-[var(--color-text-secondary)]">{upload.contributor_name || 'Anonymní host'} · {Math.round(upload.size_bytes/1024/1024*10)/10} MB</p></div><div className="flex gap-2"><button onClick={() => reviewUpload(upload.uuid,'approve')} className="min-h-10 flex-1 rounded-lg bg-green-500/15 px-3 text-xs text-green-400">Přijmout</button><button onClick={() => reviewUpload(upload.uuid,'reject')} className="min-h-10 flex-1 rounded-lg bg-red-500/10 px-3 text-xs text-red-400">Odmítnout</button></div></div>)}</div></section>}
                     {items.length === 0 ? (
                         <div className="flex flex-col items-center justify-center h-64 text-[var(--color-text-secondary)]">
                             <Share2 size={48} className="mb-3 opacity-20" />

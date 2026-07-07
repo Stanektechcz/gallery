@@ -4,7 +4,7 @@ import AppLayout from '@/Layouts/AppLayout';
 import { Head, Link, router } from '@inertiajs/react';
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
-import { Grid3X3, Heart, Map, Maximize2, Play, Trash2 } from 'lucide-react';
+import { Grid3X3, Heart, Layers, Map, Maximize2, Play, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 const GRID_SIZES = [120, 160, 200, 260];
@@ -15,6 +15,7 @@ interface MediaCard {
     taken_at: string | null; width: number | null; height: number | null;
     is_favorite: boolean; rating: number | null;
     primary_album?: { id: number; uuid: string; title: string } | null;
+    stacks?: Array<{ uuid: string; items_count: number }>;
     variants: Array<{ type: string; url: string; dominant_color?: string; aspect_ratio?: number }>;
 }
 interface TimelineGroup { date: string; label: string; month: string; year: string; items: MediaCard[] }
@@ -36,6 +37,7 @@ function MediaCardComponent({ item, size, selected, onFav, onTrash, onSlideshow,
             {thumb && <img src={thumb.url} alt="" loading="lazy" decoding="async" className="absolute inset-0 w-full h-full object-cover" />}
             <div className={`absolute inset-0 transition-colors ${selected ? 'bg-[var(--color-accent)]/20' : 'bg-black/0 group-hover:bg-black/25'}`} />
             {item.media_type === 'video' && !selected && <div className="absolute top-1.5 right-1.5 bg-black/60 rounded-full p-0.5"><Play size={9} className="text-white fill-white" /></div>}
+            {(item.stacks?.[0]?.items_count ?? 0) > 1 && !selected && <div className="absolute top-1.5 right-1.5 bg-black/70 rounded-full px-1.5 py-1 flex items-center gap-1 text-[9px] text-white" title="Seskupené fotografie"><Layers size={10} />{item.stacks![0].items_count}</div>}
             {item.is_favorite && !selected && <Heart size={11} className="absolute top-1.5 left-1.5 text-red-400 fill-red-400" />}
             <div className={`absolute top-1.5 left-1.5 w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${selected ? 'bg-[var(--color-accent)] border-[var(--color-accent)]' : 'bg-black/40 border-white/60 opacity-0 group-hover:opacity-100'}`}
                 onClick={e => { e.stopPropagation(); onSelect(item.uuid); }}>
@@ -301,4 +303,3 @@ export default function TimelineIndex() {
         </AppLayout>
     );
 }
-

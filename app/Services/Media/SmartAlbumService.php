@@ -41,7 +41,7 @@ class SmartAlbumService
             ? json_decode($album->smart_rules, true)
             : $album->smart_rules;
 
-        $q    = MediaItem::where('gallery_space_id', $spaceId)->whereNull('trashed_at');
+        $q    = MediaItem::where('gallery_space_id', $spaceId)->whereNull('trashed_at')->where('is_hidden', false);
         $mode = ($rules['match'] ?? 'all') === 'any' ? 'or' : 'and';
 
         $conditions = $rules['conditions'] ?? [];

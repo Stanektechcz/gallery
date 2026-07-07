@@ -7,7 +7,12 @@ use Illuminate\Support\Str;
 
 class MediaStack extends Model
 {
-    protected $fillable = ['uuid', 'gallery_space_id', 'name', 'cover_media_id', 'created_by'];
+    protected $fillable = ['uuid', 'gallery_space_id', 'name', 'stack_type', 'confidence', 'is_automatic', 'cover_media_id', 'created_by'];
+
+    protected function casts(): array
+    {
+        return ['confidence' => 'float', 'is_automatic' => 'boolean'];
+    }
 
     protected static function booted(): void
     {

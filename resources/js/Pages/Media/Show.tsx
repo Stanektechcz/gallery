@@ -12,6 +12,7 @@ import {
     FolderOpen,
     Heart,
     Info, MapPin,
+    LockKeyhole,
     Maximize2,
     MessageSquare,
     Minimize2,
@@ -76,6 +77,7 @@ interface MediaItem {
     is_shared_favorite?: boolean;
     my_rating?: number;
     is_archived: boolean;
+    is_hidden: boolean;
     trashed_at?: string;
     status: string;
     drive_file_id?: string;
@@ -529,6 +531,12 @@ export default function MediaShow({ media, breadcrumb, prev, next }: Props) {
         }
     };
 
+    const toggleVault = async () => {
+        const response = await axios.post(`/vault/media/${item.uuid}/toggle`);
+        setItem(previous => ({ ...previous, is_hidden: response.data.is_hidden }));
+        if (response.data.is_hidden) router.visit('/vault');
+    };
+
     const trashItem = async () => {
         if (!confirm('Přesunout do koše?')) return;
         try {
@@ -658,6 +666,10 @@ export default function MediaShow({ media, breadcrumb, prev, next }: Props) {
                                 <button onClick={() => { archiveItem(); setMoreOpen(false); }}
                                     className="w-full text-left px-4 py-2.5 text-xs text-[var(--color-text-secondary)] hover:text-white hover:bg-white/5 flex items-center gap-2">
                                     <Archive size={12}/> Archivovat
+                                </button>
+                                <button onClick={() => { toggleVault(); setMoreOpen(false); }}
+                                    className="w-full text-left px-4 py-2.5 text-xs text-[var(--color-text-secondary)] hover:text-white hover:bg-white/5 flex items-center gap-2">
+                                    <LockKeyhole size={12}/> {item.is_hidden ? 'Odebrat z trezoru' : 'Přesunout do trezoru'}
                                 </button>
                                 <button onClick={() => { trashItem(); setMoreOpen(false); }}
                                     className="w-full text-left px-4 py-2.5 text-xs text-red-400 hover:bg-red-500/10 flex items-center gap-2">

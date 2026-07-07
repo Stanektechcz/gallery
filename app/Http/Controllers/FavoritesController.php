@@ -40,6 +40,7 @@ class FavoritesController extends Controller
         $baseQuery = fn($ids) => MediaItem::query()
             ->where('gallery_space_id', $space->id)
             ->whereNull('trashed_at')
+            ->where('is_hidden', false)
             ->where('status', 'ready')
             ->whereIn('id', $ids)
             ->with(['variants' => fn($q) => $q->whereIn('type', ['thumbnail', 'placeholder'])])

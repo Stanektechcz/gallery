@@ -18,6 +18,7 @@ import {
     Inbox,
     Map,
     MapPin,
+    LockKeyhole,
     Menu,
     Monitor,
     Printer,
@@ -26,6 +27,7 @@ import {
     Settings,
     Share2,
     ShieldCheck,
+    Sparkles,
     Tag,
     Ticket,
     Trash2,
@@ -70,6 +72,7 @@ const NAV_COMMANDS: Command[] = [
     { group: 'nav', label: 'Nezařazené',          href: '/inbox',     keywords: 'nezarazene inbox' },
     { group: 'nav', label: 'Aktivita',            href: '/activity',  keywords: 'aktivita activity' },
     { group: 'nav', label: 'Recovery Center',     href: '/recovery',  keywords: 'recovery zdravi' },
+    { group: 'nav', label: 'Soukromí a dědictví', href: '/privacy',   keywords: 'privacy soukromi dedictvi legacy' },
     { group: 'nav', label: 'Archiv',              href: '/archive',   keywords: 'archiv' },
     { group: 'nav', label: 'Koš',                 href: '/trash',     keywords: 'kos trash smazat' },
     { group: 'nav', label: 'Sdílené',             href: '/shares',    keywords: 'share sdilene' },
@@ -355,8 +358,10 @@ const navItems = [
     { href: '/activity',  label: 'Aktivita',     icon: Activity },
     { href: '/stats',     label: 'Statistiky',   icon: BarChart3 },
     { href: '/recovery',  label: 'Recovery',     icon: ShieldCheck },
+    { href: '/privacy',   label: 'Soukromí',     icon: ShieldCheck },
     { divider: true },
     { href: '/archive',   label: 'Archiv',       icon: Archive },
+    { href: '/vault',     label: 'Soukromý trezor', icon: LockKeyhole },
     { href: '/trash',     label: 'Koš',          icon: Trash2 },
     { divider: true },
     { href: '/shares',    label: 'Sdílené',      icon: Share2 },
@@ -368,10 +373,9 @@ const navItems = [
 const mobileNav = [
     { href: '/',          label: 'Domů',     icon: Home },
     { href: '/timeline',  label: 'Fotky',    icon: Images },
-    { href: '/albums',    label: 'Alba',     icon: FolderOpen },
-    { href: '/favorites', label: 'Oblíbené', icon: Heart },
-    { href: '/map',       label: 'Mapa',     icon: Map },
     { href: '/search',    label: 'Hledat',   icon: Search },
+    { href: '/trips',     label: 'Cesty',    icon: Route },
+    { href: '/memories',  label: 'Pro vás',  icon: Sparkles },
 ];
 
 export default function AppLayout({ children, title }: AppLayoutProps) {
@@ -549,4 +553,3 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
         </div>
     );
 }
-

@@ -1,6 +1,6 @@
 import AppLayout from '@/Layouts/AppLayout';
 import { Head, Link } from '@inertiajs/react';
-import { Album, CalendarDays, Clock, FolderOpen, Heart, Map, MapPin, Shuffle, Star, TrendingUp, Upload } from 'lucide-react';
+import { Album, CalendarDays, Clock, FolderOpen, Heart, Map, MapPin, Route, Shuffle, Sparkles, Star, TrendingUp, Upload } from 'lucide-react';
 
 interface MediaCard {
     id: number;
@@ -23,6 +23,9 @@ interface DashboardData {
     pending_uploads: number;
     map_stats: { locations: number; countries: number };
     year_stats: { year: number; photos: number; videos: number };
+    for_you: Array<{ fingerprint: string; title: string; subtitle: string; icon: string; accent: string; count: number; items: MediaCard[] }>;
+    pinned_views: Array<{ id: number; name: string; icon?: string; view_type: string }>;
+    upcoming_trip: { id: number; name: string; start_date: string; end_date: string; status: string } | null;
 }
 
 interface Props {
@@ -116,6 +119,41 @@ export default function DashboardIndex({ data }: Props) {
                         <p className="text-[10px] text-[var(--color-text-secondary)] mt-0.5">míst na mapě</p>
                     </Link>
                 </div>
+
+                {/* Personalized "For you" hero */}
+                {data.for_you?.[0] && (() => {
+                    const memory = data.for_you[0];
+                    const cover = memory.items?.[0]?.variants?.find(variant => variant.type === 'thumbnail')?.url;
+                    return (
+                        <Link href="/memories" className="relative block min-h-56 overflow-hidden rounded-3xl border border-[var(--color-border)] bg-[var(--color-bg-card)] group">
+                            {cover && <img src={cover} alt="" className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-105" />}
+                            <div className="absolute inset-0 bg-gradient-to-r from-black/90 via-black/55 to-transparent" />
+                            <div className="relative flex min-h-56 max-w-md flex-col justify-end p-6">
+                                <div className="mb-2 flex items-center gap-2 text-xs font-medium text-white/75"><Sparkles size={14} style={{ color: memory.accent }} /> Pro vás</div>
+                                <h2 className="text-2xl font-bold text-white">{memory.icon} {memory.title}</h2>
+                                <p className="mt-1 text-sm text-white/70">{memory.subtitle} · {memory.count} momentů</p>
+                                <span className="mt-4 text-xs font-medium text-white">Otevřít vzpomínku →</span>
+                            </div>
+                        </Link>
+                    );
+                })()}
+
+                {(data.upcoming_trip || data.pinned_views?.length > 0) && (
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                        {data.upcoming_trip && (
+                            <DashCard icon={Route} label="Co následuje" href={`/trips/${data.upcoming_trip.id}/plan`} color="#14b8a6">
+                                <p className="text-base font-semibold text-white">{data.upcoming_trip.name}</p>
+                                <p className="mt-1 text-xs text-[var(--color-text-secondary)]">{new Date(data.upcoming_trip.start_date).toLocaleDateString('cs-CZ')} – {new Date(data.upcoming_trip.end_date).toLocaleDateString('cs-CZ')}</p>
+                                <p className="mt-3 text-xs text-[var(--color-accent)]">Pokračovat v plánování →</p>
+                            </DashCard>
+                        )}
+                        {data.pinned_views?.length > 0 && (
+                            <DashCard icon={Sparkles} label="Připnuté pohledy" color="#8b5cf6">
+                                <div className="flex flex-wrap gap-2">{data.pinned_views.map(view => <Link key={view.id} href={`/search?view=${view.id}`} className="rounded-xl border border-[var(--color-border)] px-3 py-2 text-xs text-white hover:border-[var(--color-accent)]">{view.icon ?? '✨'} {view.name}</Link>)}</div>
+                            </DashCard>
+                        )}
+                    </div>
+                )}
 
                 {/* This time last year */}
                 {data.this_time_last_year.count > 0 && (

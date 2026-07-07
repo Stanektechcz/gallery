@@ -83,6 +83,16 @@ export default defineConfig({
                             },
                         ],
                     },
+                    {
+                        name: "Naplánovat cestu",
+                        url: "/trips",
+                        icons: [{ src: "/icons/pwa-192x192.png", sizes: "192x192" }],
+                    },
+                    {
+                        name: "Hledat ve vzpomínkách",
+                        url: "/search",
+                        icons: [{ src: "/icons/pwa-192x192.png", sizes: "192x192" }],
+                    },
                 ],
             },
             workbox: {
@@ -105,6 +115,16 @@ export default defineConfig({
                                 maxEntries: 500,
                                 maxAgeSeconds: 86400 * 30,
                             },
+                        },
+                    },
+                    {
+                        urlPattern: /^\/api\/v1\/trips\/\d+\/plan$/,
+                        handler: "NetworkFirst",
+                        options: {
+                            cacheName: "trip-plans-cache",
+                            networkTimeoutSeconds: 3,
+                            expiration: { maxEntries: 20, maxAgeSeconds: 86400 * 30 },
+                            cacheableResponse: { statuses: [0, 200] },
                         },
                     },
                 ],

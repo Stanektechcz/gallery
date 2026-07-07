@@ -1,6 +1,8 @@
 import AppLayout from '@/Layouts/AppLayout';
 import { Head, Link } from '@inertiajs/react';
-import { ChevronRight, Clock } from 'lucide-react';
+import axios from 'axios';
+import { Bookmark, Clock, EyeOff, Settings2, Sparkles, TimerReset, X } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
 interface MediaCardData {
     id: number;
@@ -9,14 +11,18 @@ interface MediaCardData {
     taken_at: string | null;
     width: number | null;
     height: number | null;
-    is_favorite?: boolean;
     variants: Array<{ type: string; url: string; dominant_color?: string | null; aspect_ratio?: number | null }>;
 }
+type MemoryType = 'on_this_day' | 'trip_anniversary' | 'favorite_flashback' | 'place_flashback' | 'monthly_highlight';
 
 interface Memory {
-    year: number;
-    label: string;
-    date_label: string;
+    fingerprint: string;
+    type: MemoryType;
+    title: string;
+    subtitle: string;
+    reason: string;
+    icon: string;
+    accent: string;
     count: number;
     items: MediaCardData[];
 }
@@ -27,104 +33,155 @@ interface Props {
     has_memories: boolean;
 }
 
-function MemoryCard({ item }: { item: MediaCardData }) {
-    const thumb       = item.variants.find(v => v.type === 'thumbnail');
-    const placeholder = item.variants.find(v => v.type === 'placeholder');
-    const aspect      = thumb?.aspect_ratio ?? 1;
+const TYPE_LABELS: Record<MemoryType, string> = {
+    on_this_day: 'Tento den',
+    trip_anniversary: 'Výročí cest',
+    favorite_flashback: 'Oblíbené znovu',
+    place_flashback: 'Místa',
+    monthly_highlight: 'Měsíční výběry',
+};
+
+function thumbnail(item?: MediaCardData) {
+    return item?.variants.find(variant => variant.type === 'thumbnail')?.url;
+}
+
+function MemoryCard({ memory, onAction }: { memory: Memory; onAction: (memory: Memory, action: 'saved' | 'dismissed' | 'snoozed') => void }) {
+    const visible = memory.items.slice(0, 5);
 
     return (
-        <Link
-            href={`/media/${item.uuid}`}
-            className="relative group rounded-lg overflow-hidden bg-[var(--color-bg-card)] cursor-pointer block"
-            style={{ aspectRatio: aspect }}
-        >
-            {placeholder?.dominant_color && (
-                <div className="absolute inset-0" style={{ backgroundColor: placeholder.dominant_color }} />
-            )}
-            {thumb && (
-                <img src={thumb.url} alt="" loading="lazy" className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
-            )}
-            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
-        </Link>
+        <article className="overflow-hidden rounded-3xl border border-[var(--color-border)] bg-[var(--color-bg-card)] shadow-xl shadow-black/10">
+            <div className="relative grid h-64 grid-cols-4 grid-rows-2 gap-1 bg-[var(--color-bg-secondary)] sm:h-80">
+                {visible.map((item, index) => (
+                    <Link key={item.uuid} href={`/media/${item.uuid}`}
+                        className={`relative overflow-hidden ${index === 0 ? 'col-span-2 row-span-2' : index === 1 || index === 2 ? 'col-span-2' : ''}`}>
+                        {thumbnail(item) ? (
+                            <img src={thumbnail(item)} alt="" loading="lazy" className="h-full w-full object-cover transition-transform duration-500 hover:scale-105" />
+                        ) : (
+                            <div className="h-full w-full" style={{ background: memory.accent }} />
+                        )}
+                        {index === 4 && memory.count > 5 && (
+                            <div className="absolute inset-0 flex items-center justify-center bg-black/55 text-xl font-bold text-white">+{memory.count - 5}</div>
+                        )}
+                    </Link>
+                ))}
+                <div className="pointer-events-none absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-black/85 to-transparent" />
+                <div className="pointer-events-none absolute bottom-0 left-0 right-0 p-5 sm:p-6">
+                    <div className="mb-2 flex items-center gap-2 text-xs font-medium text-white/80">
+                        <span className="text-lg">{memory.icon}</span>
+                        <span>{TYPE_LABELS[memory.type]}</span>
+                    </div>
+                    <h2 className="text-xl font-bold text-white sm:text-2xl">{memory.title}</h2>
+                    <p className="mt-1 text-sm text-white/75">{memory.subtitle} · {memory.count} {memory.count === 1 ? 'moment' : 'momentů'}</p>
+                </div>
+            </div>
+
+            <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+                <div className="flex items-start gap-2 text-xs text-[var(--color-text-secondary)]">
+                    <Sparkles size={14} className="mt-0.5 shrink-0" style={{ color: memory.accent }} />
+                    <div>
+                        <p className="font-medium text-white">Proč ji vidíte</p>
+                        <p>{memory.reason}</p>
+                    </div>
+                </div>
+                <div className="flex gap-2">
+                    <button onClick={() => onAction(memory, 'saved')} title="Uložit vzpomínku"
+                        className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-[var(--color-accent)] px-3 text-xs font-medium text-white sm:flex-none">
+                        <Bookmark size={15} /> Uložit
+                    </button>
+                    <button onClick={() => onAction(memory, 'snoozed')} title="Připomenout později"
+                        className="flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-white">
+                        <TimerReset size={16} />
+                    </button>
+                    <button onClick={() => onAction(memory, 'dismissed')} title="Tuto vzpomínku nezobrazovat"
+                        className="flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-red-500/50 hover:text-red-400">
+                        <EyeOff size={16} />
+                    </button>
+                </div>
+            </div>
+        </article>
     );
 }
 
-export default function MemoriesIndex({ memories, today_label, has_memories }: Props) {
+function PreferencesPanel({ onClose }: { onClose: () => void }) {
+    const [frequency, setFrequency] = useState('normal');
+    const [enabled, setEnabled] = useState<MemoryType[]>(Object.keys(TYPE_LABELS) as MemoryType[]);
+    const [saving, setSaving] = useState(false);
+
+    useEffect(() => {
+        axios.get('/api/v1/memories/preferences').then(response => {
+            setFrequency(response.data.frequency ?? 'normal');
+            if (response.data.enabled_types) setEnabled(response.data.enabled_types);
+        });
+    }, []);
+
+    const save = async () => {
+        setSaving(true);
+        await axios.patch('/api/v1/memories/preferences', { frequency, enabled_types: enabled });
+        setSaving(false);
+        onClose();
+        window.location.reload();
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 backdrop-blur-sm sm:items-center sm:p-4">
+            <div className="w-full max-w-md rounded-t-3xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-5 shadow-2xl sm:rounded-3xl">
+                <div className="mb-5 flex items-center justify-between">
+                    <div><h2 className="font-semibold text-white">Nastavení vzpomínek</h2><p className="text-xs text-[var(--color-text-secondary)]">Vy rozhodujete, co se vrací.</p></div>
+                    <button onClick={onClose} className="flex h-10 w-10 items-center justify-center rounded-xl hover:bg-white/5"><X size={18} /></button>
+                </div>
+                <label className="mb-4 block text-xs text-[var(--color-text-secondary)]">Četnost
+                    <select value={frequency} onChange={event => setFrequency(event.target.value)} className="mt-1.5 min-h-11 w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-3 text-sm text-white">
+                        <option value="more">Častěji</option><option value="normal">Běžně</option><option value="less">Méně často</option><option value="off">Vypnout</option>
+                    </select>
+                </label>
+                <p className="mb-2 text-xs text-[var(--color-text-secondary)]">Typy vzpomínek</p>
+                <div className="space-y-1">
+                    {(Object.keys(TYPE_LABELS) as MemoryType[]).map(type => (
+                        <label key={type} className="flex min-h-11 cursor-pointer items-center justify-between rounded-xl px-3 hover:bg-white/5">
+                            <span className="text-sm text-white">{TYPE_LABELS[type]}</span>
+                            <input type="checkbox" checked={enabled.includes(type)} onChange={() => setEnabled(previous => previous.includes(type) ? previous.filter(item => item !== type) : [...previous, type])} />
+                        </label>
+                    ))}
+                </div>
+                <button onClick={save} disabled={saving || enabled.length === 0} className="mt-5 min-h-11 w-full rounded-xl bg-[var(--color-accent)] text-sm font-medium text-white disabled:opacity-40">{saving ? 'Ukládám…' : 'Uložit nastavení'}</button>
+            </div>
+        </div>
+    );
+}
+
+export default function MemoriesIndex({ memories: initialMemories, today_label, has_memories }: Props) {
+    const [memories, setMemories] = useState(initialMemories);
+    const [showSettings, setShowSettings] = useState(false);
+
+    const action = async (memory: Memory, type: 'saved' | 'dismissed' | 'snoozed') => {
+        await axios.post('/api/v1/memories/interactions', { fingerprint: memory.fingerprint, memory_type: memory.type, action: type });
+        if (type !== 'saved') setMemories(previous => previous.filter(item => item.fingerprint !== memory.fingerprint));
+    };
+
     return (
         <AppLayout>
             <Head title="Vzpomínky" />
             <div className="min-h-full">
-                {/* Header */}
-                <div className="sticky top-0 z-20 px-4 py-3 border-b border-[var(--color-border)] bg-[var(--color-bg-primary)]/90 backdrop-blur-sm">
-                    <div className="flex items-center gap-2">
-                        <Clock size={16} className="text-[var(--color-accent)]" />
-                        <h1 className="text-sm font-semibold text-white">Vzpomínky</h1>
-                        <span className="text-xs text-[var(--color-text-secondary)]">· {today_label}</span>
+                <header className="sticky top-0 z-20 border-b border-[var(--color-border)] bg-[var(--color-bg-primary)]/90 px-4 py-3 backdrop-blur-xl">
+                    <div className="mx-auto flex max-w-5xl items-center justify-between">
+                        <div className="flex items-center gap-3">
+                            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[var(--color-accent)]/15"><Clock size={19} className="text-[var(--color-accent)]" /></div>
+                            <div><h1 className="font-semibold text-white">Pro vás</h1><p className="text-xs text-[var(--color-text-secondary)]">{today_label} · osobní výběry z vašeho archivu</p></div>
+                        </div>
+                        <button onClick={() => setShowSettings(true)} className="flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-white"><Settings2 size={17} /></button>
                     </div>
-                </div>
+                </header>
 
-                <div className="p-4 max-w-3xl mx-auto">
-                    {!has_memories ? (
-                        <div className="flex flex-col items-center justify-center h-64 text-[var(--color-text-secondary)]">
-                            <Clock size={48} className="mb-3 opacity-20" />
-                            <p className="text-lg font-medium text-white mb-1">Žádné vzpomínky</p>
-                            <p className="text-sm text-center max-w-xs">
-                                Vzpomínky se zobrazí, když budete mít fotky ze stejného dne v minulých letech.
-                                Přidejte fotky a za rok se tu objeví vzpomínky!
-                            </p>
+                <main className="mx-auto max-w-5xl space-y-6 p-3 pb-24 sm:p-6">
+                    {!has_memories || memories.length === 0 ? (
+                        <div className="flex min-h-[60vh] flex-col items-center justify-center text-center text-[var(--color-text-secondary)]">
+                            <div className="mb-4 flex h-20 w-20 items-center justify-center rounded-3xl bg-[var(--color-accent)]/10"><Sparkles size={34} className="text-[var(--color-accent)]" /></div>
+                            <h2 className="text-lg font-semibold text-white">Vzpomínky právě odpočívají</h2>
+                            <p className="mt-2 max-w-sm text-sm">Až najdeme výročí, oblíbené momenty, významnou cestu nebo známé místo, objeví se tady.</p>
                         </div>
-                    ) : (
-                        <div className="space-y-10">
-                            {memories.map(memory => (
-                                <section key={memory.year}>
-                                    {/* Memory header */}
-                                    <div className="flex items-center gap-3 mb-4">
-                                        <div className="flex items-center gap-2">
-                                            <div className="w-8 h-8 rounded-xl bg-[var(--color-accent)]/20 flex items-center justify-center">
-                                                <Clock size={14} className="text-[var(--color-accent)]" />
-                                            </div>
-                                            <div>
-                                                <p className="text-sm font-semibold text-white">{memory.label}</p>
-                                                <p className="text-xs text-[var(--color-text-secondary)]">{memory.date_label} · {memory.count} {memory.count === 1 ? 'fotka' : memory.count < 5 ? 'fotky' : 'fotek'}</p>
-                                            </div>
-                                        </div>
-                                        <div className="flex-1 h-px bg-[var(--color-border)]" />
-                                        <span className="text-xs font-bold text-[var(--color-text-secondary)]">{memory.year}</span>
-                                    </div>
-
-                                    {/* Photos grid */}
-                                    <div
-                                        style={{
-                                            display: 'grid',
-                                            gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
-                                            gap: '4px',
-                                        }}
-                                    >
-                                        {memory.items.slice(0, 12).map(item => (
-                                            <MemoryCard key={item.uuid} item={item} />
-                                        ))}
-
-                                        {/* "See all" card if more than 12 */}
-                                        {memory.count > 12 && (
-                                            <Link
-                                                href={`/timeline?date=${memory.year}-${new Date().getMonth() + 1 < 10 ? '0' : ''}${new Date().getMonth() + 1}-${new Date().getDate() < 10 ? '0' : ''}${new Date().getDate()}&year=${memory.year}`}
-                                                className="relative rounded-lg overflow-hidden bg-[var(--color-bg-card)] flex items-center justify-center aspect-square hover:bg-white/5 transition-colors group"
-                                            >
-                                                <div className="text-center">
-                                                    <p className="text-2xl font-bold text-white">+{memory.count - 12}</p>
-                                                    <div className="flex items-center gap-1 text-xs text-[var(--color-text-secondary)] mt-1">
-                                                        <span>Zobrazit vše</span>
-                                                        <ChevronRight size={10} />
-                                                    </div>
-                                                </div>
-                                            </Link>
-                                        )}
-                                    </div>
-                                </section>
-                            ))}
-                        </div>
-                    )}
-                </div>
+                    ) : memories.map(memory => <MemoryCard key={memory.fingerprint} memory={memory} onAction={action} />)}
+                </main>
+                {showSettings && <PreferencesPanel onClose={() => setShowSettings(false)} />}
             </div>
         </AppLayout>
     );

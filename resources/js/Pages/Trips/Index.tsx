@@ -1,5 +1,5 @@
 import AppLayout from '@/Layouts/AppLayout';
-import { Head } from '@inertiajs/react';
+import { Head, Link } from '@inertiajs/react';
 import axios from 'axios';
 import { Calendar, Camera, GripVertical, MapPin, Plus, RefreshCw, Route, Search, Trash2, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -56,7 +56,7 @@ const MONTHS_CS = ['ledna','února','března','dubna','května','června','červ
 // ── Price estimation (calibrated to CZ/SK market 2025) ─────────────────────
 interface PriceEstimate {
     carrier: string; icon: string; minPrice: number; maxPrice?: number;
-    currency: string; note?: string; bookUrl?: string;
+    currency: string; note?: string; bookUrl?: string; mode: TransportMode;
 }
 function estimatePrices(km: number, from: string, to: string, isoDate: string): PriceEstimate[] {
     if (!km || km < 8) return [];
@@ -65,7 +65,7 @@ function estimatePrices(km: number, from: string, to: string, isoDate: string): 
 
     // ČD (eJízdenka with early purchase ~35% off, base ~1.2 Kč/km)
     const cdBase = Math.max(30, Math.round(1.2 * km / 10) * 10);
-    r.push({ carrier: 'České dráhy', icon: '🚂', currency: 'Kč',
+    r.push({ carrier: 'České dráhy', icon: '🚂', currency: 'Kč', mode: 'train',
         minPrice: Math.round(cdBase * 0.65 / 5) * 5,
         maxPrice: cdBase,
         note: 'eJízdenka',
@@ -74,7 +74,7 @@ function estimatePrices(km: number, from: string, to: string, isoDate: string): 
 
     // RegioJet Bus (~0.58 Kč/km, min 49 Kč)
     const rjBus = Math.max(49, Math.round(0.58 * km / 5) * 5);
-    r.push({ carrier: 'RegioJet Bus', icon: '🟡', currency: 'Kč',
+    r.push({ carrier: 'RegioJet Bus', icon: '🟡', currency: 'Kč', mode: 'bus',
         minPrice: rjBus,
         maxPrice: Math.round(rjBus * 1.4 / 5) * 5,
         bookUrl: `https://www.regiojet.cz/vlaky-a-autobusy/jizdenky-online/?f=${from}&t=${to}&date=${isoDate}`,
@@ -83,7 +83,7 @@ function estimatePrices(km: number, from: string, to: string, isoDate: string): 
     // RegioJet vlak (~0.9 Kč/km, min 79 Kč) — only if plausible route
     if (km > 25) {
         const rjTrain = Math.max(79, Math.round(0.9 * km / 5) * 5);
-        r.push({ carrier: 'RegioJet vlak', icon: '🟡', currency: 'Kč',
+        r.push({ carrier: 'RegioJet vlak', icon: '🟡', currency: 'Kč', mode: 'train',
             minPrice: rjTrain,
             maxPrice: Math.round(rjTrain * 1.3 / 5) * 5,
             bookUrl: `https://www.regiojet.cz/vlaky-a-autobusy/jizdenky-online/?f=${from}&t=${to}&date=${isoDate}`,
@@ -93,7 +93,7 @@ function estimatePrices(km: number, from: string, to: string, isoDate: string): 
     // FlixBus (~0.5 Kč/km, min 99 Kč — often flash sales)
     if (km > 70) {
         const flix = Math.max(99, Math.round(0.5 * km / 5) * 5);
-        r.push({ carrier: 'FlixBus', icon: '🟢', currency: 'Kč',
+        r.push({ carrier: 'FlixBus', icon: '🟢', currency: 'Kč', mode: 'bus',
             minPrice: Math.round(flix * 0.55 / 5) * 5,
             maxPrice: Math.round(flix * 1.8 / 5) * 5,
             note: 'flash výprodeje',
@@ -103,7 +103,7 @@ function estimatePrices(km: number, from: string, to: string, isoDate: string): 
 
     // Car per person (2 people sharing, 7L/100km × 42 Kč/L)
     const carPP = Math.max(30, Math.round(1.47 * km / 10) * 10);
-    r.push({ carrier: 'Auto /os. (2 os.)', icon: '🚗', currency: 'Kč',
+    r.push({ carrier: 'Auto /os. (2 os.)', icon: '🚗', currency: 'Kč', mode: 'car',
         minPrice: carPP,
         note: 'palivo',
         bookUrl: `https://www.google.com/maps/dir/${encodeURIComponent(from)}/${encodeURIComponent(to)}`,
@@ -111,7 +111,7 @@ function estimatePrices(km: number, from: string, to: string, isoDate: string): 
 
     // Plane — only for long routes
     if (km > 350) {
-        r.push({ carrier: 'Letadlo', icon: '✈️', currency: 'EUR',
+        r.push({ carrier: 'Letadlo', icon: '✈️', currency: 'EUR', mode: 'plane',
             minPrice: Math.round(Math.max(30, km * 0.06) / 5) * 5,
             maxPrice: Math.round(Math.max(80, km * 0.18) / 5) * 5,
             note: 'low-cost',
@@ -139,23 +139,26 @@ function buildTransportLinks(from: Waypoint, to: Waypoint, tripDate: string) {
     const fLat = from.latitude, fLng = from.longitude;
     const tLat = to.latitude,   tLng = to.longitude;
     return [
-        { label: 'ČD / IDOS',   icon: '🚂', color: '#e31e24', url: `https://idos.idnes.cz/vlak/spojeni/?f=${f}&t=${t}&date=${iso}&time=0600` },
-        { label: 'RegioJet',    icon: '🟡', color: '#f5c400', url: `https://www.regiojet.cz/vlaky-a-autobusy/jizdenky-online/?f=${from.place_name}&t=${to.place_name}&date=${iso}` },
-        { label: 'FlixBus',     icon: '🟢', color: '#73d700', url: `https://shop.flixbus.cz/search?departureCity=${f}&arrivalCity=${t}&rideDate=${iso}&adult=1` },
-        { label: 'Google Maps', icon: '🗺️', color: '#4285f4',
+        { label: 'ČD / IDOS',   icon: '🚂', mode: 'train' as TransportMode, url: `https://idos.idnes.cz/vlak/spojeni/?f=${f}&t=${t}&date=${iso}&time=0600` },
+        { label: 'RegioJet',    icon: '🟡', mode: 'train' as TransportMode, url: `https://www.regiojet.cz/vlaky-a-autobusy/jizdenky-online/?f=${from.place_name}&t=${to.place_name}&date=${iso}` },
+        { label: 'FlixBus',     icon: '🟢', mode: 'bus' as TransportMode, url: `https://shop.flixbus.cz/search?departureCity=${f}&arrivalCity=${t}&rideDate=${iso}&adult=1` },
+        { label: 'Google Maps', icon: '🗺️', mode: 'car' as TransportMode,
             url: fLat && fLng && tLat && tLng
                 ? `https://www.google.com/maps/dir/${fLat},${fLng}/${tLat},${tLng}/`
                 : `https://www.google.com/maps/dir/?api=1&origin=${f}&destination=${t}&travelmode=driving` },
-        { label: 'Waze',        icon: '🔵', color: '#33ccff',
+        { label: 'Waze',        icon: '🔵', mode: 'car' as TransportMode,
             url: tLat && tLng ? `https://waze.com/ul?navigate=yes&to=${tLat},${tLng}&from=${fLat},${fLng}` : null },
-        { label: 'Mapy.cz',    icon: '📍', color: '#e25400',
+        { label: 'Mapy.cz',    icon: '📍', mode: 'walk' as TransportMode,
             url: fLat && fLng && tLat && tLng
                 ? `https://mapy.cz/zakladni?planovani-trasy&planovani[0][x]=${fLng}&planovani[0][y]=${fLat}&planovani[1][x]=${tLng}&planovani[1][y]=${tLat}`
                 : `https://mapy.cz/` },
-        { label: 'Skyscanner',  icon: '✈️', color: '#0770e3', url: `https://www.skyscanner.cz/letiste/${f}/${t}/${iso.replace(/-/g, '')}/1adults/` },
-        { label: 'IDOS autobus',icon: '🚌', color: '#e07000', url: `https://idos.idnes.cz/autobus/spojeni/?f=${f}&t=${t}&date=${iso}&time=0600` },
-    ].filter(l => l.url !== null) as {label:string;icon:string;color:string;url:string}[];
+        { label: 'Skyscanner',  icon: '✈️', mode: 'plane' as TransportMode, url: `https://www.skyscanner.cz/letiste/${f}/${t}/${iso.replace(/-/g, '')}/1adults/` },
+        { label: 'IDOS autobus',icon: '🚌', mode: 'bus' as TransportMode, url: `https://idos.idnes.cz/autobus/spojeni/?f=${f}&t=${t}&date=${iso}&time=0600` },
+    ].filter(l => l.url !== null) as {label:string;icon:string;mode:TransportMode;url:string}[];
 }
+
+interface WaypointDraft { place_name: string; latitude?: number; longitude?: number; }
+const ALL_TRANSPORT_MODES = Object.keys(TRANSPORT) as TransportMode[];
 
 export default function TripsIndex() {
     const mapRef       = useRef<HTMLDivElement>(null);
@@ -183,6 +186,8 @@ export default function TripsIndex() {
     const [wpLoading,  setWpLoading]  = useState(false);
     const [wpDropdown, setWpDropdown] = useState(false);
     const [wpForm,     setWpForm]     = useState({ place_name: '', latitude: '', longitude: '' });
+    const [pendingWaypoints, setPendingWaypoints] = useState<WaypointDraft[]>([]);
+    const [savingWaypoints, setSavingWaypoints] = useState(false);
 
     const [editNotes, setEditNotes] = useState(false);
     const [notesVal,  setNotesVal]  = useState('');
@@ -201,6 +206,7 @@ export default function TripsIndex() {
     // Live pricing (keyed by "{from}|{to}|{date}")
     const [livePrices,     setLivePrices]     = useState<Record<string, PriceEstimate[] | null>>({});
     const [fetchingPrices, setFetchingPrices] = useState<Record<string, boolean>>({});
+    const [transportFilters, setTransportFilters] = useState<TransportMode[]>(ALL_TRANSPORT_MODES);
 
     const selected = trips.find(t => t.id === selectedId) ?? null;
 
@@ -298,8 +304,12 @@ export default function TripsIndex() {
     }, []);
 
     const selectWpResult = (r: SearchResult) => {
-        setWpSearch(r.name || r.display_name);
-        setWpForm({ place_name: r.name || r.display_name, latitude: r.latitude.toString(), longitude: r.longitude.toString() });
+        const place_name = r.name || r.display_name;
+        setPendingWaypoints(prev => prev.some(w => w.place_name === place_name && w.latitude === r.latitude)
+            ? prev
+            : [...prev, { place_name, latitude: r.latitude, longitude: r.longitude }]);
+        setWpSearch('');
+        setWpForm({ place_name: '', latitude: '', longitude: '' });
         setWpResults([]); setWpDropdown(false);
     };
 
@@ -321,18 +331,32 @@ export default function TripsIndex() {
         if (selectedId === id) { setSelectedId(null); }
     };
 
-    const addWaypoint = async (e: React.FormEvent) => {
+    const queueTypedWaypoint = (e: React.FormEvent) => {
         e.preventDefault();
-        if (!selectedId || !wpForm.place_name) return;
+        const place_name = wpForm.place_name.trim();
+        if (!place_name) return;
+        setPendingWaypoints(prev => [...prev, {
+            place_name,
+            latitude: wpForm.latitude ? parseFloat(wpForm.latitude) : undefined,
+            longitude: wpForm.longitude ? parseFloat(wpForm.longitude) : undefined,
+        }]);
+        setWpForm({ place_name: '', latitude: '', longitude: '' });
+        setWpSearch('');
+        setWpResults([]);
+    };
+
+    const saveWaypoints = async () => {
+        if (!selectedId || pendingWaypoints.length === 0) return;
         setWpError(null);
+        setSavingWaypoints(true);
         try {
             const r = await axios.post(`/api/v1/trips/${selectedId}/waypoints`, {
-                place_name: wpForm.place_name,
-                latitude:   wpForm.latitude ? parseFloat(wpForm.latitude) : undefined,
-                longitude:  wpForm.longitude ? parseFloat(wpForm.longitude) : undefined,
+                waypoints: pendingWaypoints,
             });
-            setTrips(prev => prev.map(t => t.id === selectedId ? { ...t, waypoints: [...t.waypoints, r.data] } : t));
-            setWpForm({ place_name: '', latitude: '', longitude: '' }); setWpSearch(''); setShowWpForm(false);
+            const created = Array.isArray(r.data) ? r.data : [r.data];
+            setTrips(prev => prev.map(t => t.id === selectedId ? { ...t, waypoints: [...t.waypoints, ...created] } : t));
+            setPendingWaypoints([]);
+            setShowWpForm(false);
         } catch (err: any) {
             const msg = err?.response?.data?.message ?? err?.response?.data?.error ?? 'Chyba ukládání';
             if (msg.includes('migrate') || err?.response?.status === 503) {
@@ -340,7 +364,7 @@ export default function TripsIndex() {
             } else {
                 setWpError(`Chyba: ${msg}`);
             }
-        }
+        } finally { setSavingWaypoints(false); }
     };
 
     const removeWaypoint = async (wpId: number) => {
@@ -427,13 +451,29 @@ export default function TripsIndex() {
             const r = await axios.get('/api/v1/trips/transport-prices', {
                 params: { from: from.place_name, to: to.place_name, date: date.substring(0, 10) },
             });
-            setLivePrices(prev => ({ ...prev, [key]: r.data?.length ? r.data : null }));
+            const normalized: PriceEstimate[] = (r.data ?? []).map((price: any) => ({
+                carrier: price.carrier,
+                icon: price.icon,
+                minPrice: price.min_price,
+                maxPrice: price.max_price,
+                currency: price.currency === 'CZK' ? 'Kč' : price.currency,
+                note: price.note,
+                bookUrl: price.book_url,
+                mode: price.carrier?.toLowerCase().includes('vlak') ? 'train' : 'bus',
+            }));
+            setLivePrices(prev => ({ ...prev, [key]: normalized.length ? normalized : null }));
         } catch {
             setLivePrices(prev => ({ ...prev, [key]: null }));
         } finally {
             setFetchingPrices(prev => ({ ...prev, [key]: false }));
         }
     }, [livePrices, fetchingPrices]);
+
+    const toggleTransportFilter = (mode: TransportMode) => {
+        setTransportFilters(prev => prev.includes(mode)
+            ? (prev.length === 1 ? prev : prev.filter(item => item !== mode))
+            : [...prev, mode]);
+    };
 
     // Auto-fetch OSRM routes when selection changes
     useEffect(() => {        if (!selected) return;
@@ -494,10 +534,10 @@ export default function TripsIndex() {
     return (
         <AppLayout>
             <Head title="Cesty" />
-            <div className="flex h-full min-h-0">
+            <div className="flex flex-col lg:flex-row h-full min-h-0">
 
                 {/* ── Left: trip list ──────────────────────────────────── */}
-                <div className="w-72 shrink-0 flex flex-col border-r border-[var(--color-border)] overflow-hidden">
+                <div className={`${selected ? 'hidden lg:flex' : 'flex'} w-full lg:w-72 min-h-0 shrink-0 flex-col border-r border-[var(--color-border)] overflow-hidden`}>
 
                     {/* Header */}
                     <div className="p-4 border-b border-[var(--color-border)] shrink-0">
@@ -605,10 +645,10 @@ export default function TripsIndex() {
 
                 {/* ── Right: trip detail ──────────────────────────────── */}
                 {selected ? (
-                    <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+                    <div className="flex-1 flex flex-col min-h-0 overflow-y-auto xl:overflow-hidden">
 
                         {/* Trip header */}
-                        <div className="px-5 py-3 border-b border-[var(--color-border)] shrink-0">
+                        <div className="px-3 sm:px-5 py-3 border-b border-[var(--color-border)] shrink-0">
                             <div className="flex items-start justify-between gap-3">
                                 <div className="flex-1 min-w-0">
                                     <h2 className="text-base font-bold text-white truncate">{selected.name}</h2>
@@ -629,9 +669,14 @@ export default function TripsIndex() {
                                         </p>
                                     )}
                                 </div>
-                                <button onClick={() => setSelectedId(null)} className="text-[var(--color-text-secondary)] hover:text-white p-1 shrink-0">
-                                    <X size={16}/>
-                                </button>
+                                <div className="flex shrink-0 items-center gap-2">
+                                    <Link href={`/trips/${selected.id}/plan`} className="flex min-h-10 items-center gap-2 rounded-xl bg-[var(--color-accent)] px-3 text-xs font-medium text-white">
+                                        <Calendar size={14}/> Plán dne
+                                    </Link>
+                                    <button onClick={() => setSelectedId(null)} className="flex min-h-10 min-w-10 items-center justify-center rounded-xl text-[var(--color-text-secondary)] hover:bg-white/5 hover:text-white">
+                                        <X size={16}/>
+                                    </button>
+                                </div>
                             </div>
                         </div>
 
@@ -671,13 +716,13 @@ export default function TripsIndex() {
                         )}
 
                         {/* ── Content: map + waypoints | media ── */}
-                        <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+                        <div className="flex-1 min-h-0 flex flex-col overflow-visible xl:overflow-hidden">
 
                             {/* Upper half: map left, waypoints right */}
-                            <div className="flex border-b border-[var(--color-border)] shrink-0" style={{ height: '42%', minHeight: 200 }}>
+                            <div className="flex flex-col xl:flex-row border-b border-[var(--color-border)] shrink-0 xl:h-[52%] xl:min-h-[320px]">
 
                                 {/* Leaflet map */}
-                                <div className="flex-1 relative">
+                                <div className="h-56 sm:h-72 xl:h-auto xl:flex-1 relative shrink-0 xl:shrink">
                                     <div ref={mapRef} className="absolute inset-0"/>
                                     {!mapLoaded && (
                                         <div className="absolute inset-0 flex items-center justify-center bg-[var(--color-bg-secondary)]">
@@ -692,18 +737,43 @@ export default function TripsIndex() {
                                 </div>
 
                                 {/* Waypoints panel */}
-                                <div className="w-64 shrink-0 border-l border-[var(--color-border)] flex flex-col overflow-hidden">
+                                <div className="w-full xl:w-80 shrink-0 border-t xl:border-t-0 xl:border-l border-[var(--color-border)] flex flex-col overflow-hidden max-h-[70vh] xl:max-h-none">
                                     <div className="px-3 py-2 border-b border-[var(--color-border)] flex items-center justify-between shrink-0">
-                                        <p className="text-[10px] font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider">Trasa</p>
+                                        <div>
+                                            <p className="text-[10px] font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider">Trasa</p>
+                                            <p className="text-[9px] text-[var(--color-text-secondary)]/60">{selected.waypoints.length} zastávek</p>
+                                        </div>
                                         <button onClick={() => setShowWpForm(v => !v)} title="Přidat místo"
-                                            className="text-[var(--color-text-secondary)] hover:text-white transition-colors">
-                                            <Plus size={13}/>
+                                            className="min-w-9 min-h-9 flex items-center justify-center rounded-lg bg-[var(--color-accent)] text-white hover:opacity-90 transition-opacity">
+                                            <Plus size={16}/>
                                         </button>
+                                    </div>
+
+                                    <div className="px-3 py-2 border-b border-[var(--color-border)] shrink-0">
+                                        <div className="flex items-center justify-between gap-2 mb-1.5">
+                                            <p className="text-[9px] font-medium text-[var(--color-text-secondary)]">Filtrovat nabídky dopravy</p>
+                                            <button type="button" onClick={() => setTransportFilters(ALL_TRANSPORT_MODES)}
+                                                className="text-[9px] text-[var(--color-accent)] hover:text-white">
+                                                Vybrat vše
+                                            </button>
+                                        </div>
+                                        <div className="flex gap-1.5 overflow-x-auto scrollbar-hide pb-0.5">
+                                            {ALL_TRANSPORT_MODES.map(mode => {
+                                                const active = transportFilters.includes(mode);
+                                                return (
+                                                    <button key={mode} type="button" onClick={() => toggleTransportFilter(mode)}
+                                                        aria-pressed={active} title={TRANSPORT[mode].label}
+                                                        className={`min-w-9 min-h-8 px-2 rounded-lg border text-sm shrink-0 transition-colors ${active ? 'bg-[var(--color-accent)]/20 border-[var(--color-accent)] text-white' : 'border-[var(--color-border)] text-[var(--color-text-secondary)] opacity-50'}`}>
+                                                        {TRANSPORT[mode].icon}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
                                     </div>
 
                                     {/* Add waypoint form */}
                                     {showWpForm && (
-                                        <form onSubmit={addWaypoint} className="p-2 border-b border-[var(--color-border)] space-y-1.5 shrink-0 bg-[var(--color-bg-secondary)]">
+                                        <form onSubmit={queueTypedWaypoint} className="p-3 border-b border-[var(--color-border)] space-y-2 shrink-0 bg-[var(--color-bg-secondary)]">
                                             <div className="relative">
                                                 <Search size={10} className="absolute left-2 top-1/2 -translate-y-1/2 text-[var(--color-text-secondary)] pointer-events-none"/>
                                                 <input
@@ -712,28 +782,46 @@ export default function TripsIndex() {
                                                     onFocus={() => wpResults.length > 0 && setWpDropdown(true)}
                                                     onBlur={() => setTimeout(() => setWpDropdown(false), 150)}
                                                     placeholder="Hledat místo…" autoFocus
-                                                    className="w-full bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded pl-6 pr-1 py-1.5 text-[10px] text-white placeholder-[var(--color-text-secondary)] outline-none focus:border-[var(--color-accent)]"
+                                                    className="w-full min-h-10 bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-lg pl-7 pr-7 py-2 text-xs text-white placeholder-[var(--color-text-secondary)] outline-none focus:border-[var(--color-accent)]"
                                                 />
                                                 {wpLoading && <RefreshCw size={10} className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--color-text-secondary)] animate-spin"/>}
                                                 {wpDropdown && wpResults.length > 0 && (
                                                     <div className="absolute z-50 top-full mt-1 left-0 right-0 bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded shadow-xl max-h-36 overflow-y-auto">
                                                         {wpResults.map((r, i) => (
                                                             <button key={i} type="button" onMouseDown={e => { e.preventDefault(); selectWpResult(r); }}
-                                                                className="w-full text-left px-2 py-1.5 hover:bg-[var(--color-bg-secondary)] border-b border-[var(--color-border)] last:border-0">
-                                                                <p className="text-[10px] font-medium text-white truncate">{r.name || r.display_name}</p>
-                                                                <p className="text-[9px] text-[var(--color-text-secondary)] truncate">{r.country}</p>
+                                                                className="w-full min-h-11 text-left px-3 py-2 hover:bg-[var(--color-bg-secondary)] border-b border-[var(--color-border)] last:border-0">
+                                                                <p className="text-xs font-medium text-white truncate">{r.name || r.display_name}</p>
+                                                                <p className="text-[10px] text-[var(--color-text-secondary)] truncate">{r.country}</p>
                                                             </button>
                                                         ))}
                                                     </div>
                                                 )}
                                             </div>
-                                            <div className="flex gap-1">
+                                            {pendingWaypoints.length > 0 && (
+                                                <div className="space-y-1.5">
+                                                    <p className="text-[9px] text-[var(--color-text-secondary)]">Připravená místa ({pendingWaypoints.length})</p>
+                                                    <div className="flex flex-wrap gap-1.5">
+                                                        {pendingWaypoints.map((place, index) => (
+                                                            <span key={`${place.place_name}-${index}`} className="inline-flex items-center gap-1 rounded-full bg-[var(--color-accent)]/15 border border-[var(--color-accent)]/30 pl-2.5 pr-1 py-1 text-[10px] text-white max-w-full">
+                                                                <span className="truncate">{index + 1}. {place.place_name}</span>
+                                                                <button type="button" aria-label={`Odebrat ${place.place_name}`} onClick={() => setPendingWaypoints(prev => prev.filter((_, i) => i !== index))}
+                                                                    className="w-6 h-6 rounded-full flex items-center justify-center hover:bg-white/10 shrink-0"><X size={11}/></button>
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+                                            <div className="flex flex-wrap gap-2">
                                                 <button type="submit" disabled={!wpForm.place_name}
-                                                    className="flex-1 bg-[var(--color-accent)] text-white text-[10px] py-1 rounded hover:opacity-90 disabled:opacity-40">
-                                                    Přidat
+                                                    className="min-h-10 px-3 border border-[var(--color-border)] text-white text-[10px] rounded-lg hover:border-[var(--color-accent)] disabled:opacity-40">
+                                                    + Zařadit napsané
                                                 </button>
-                                                <button type="button" onClick={() => { setShowWpForm(false); setWpSearch(''); setWpForm({ place_name:'', latitude:'', longitude:'' }); }}
-                                                    className="px-2 text-[10px] border border-[var(--color-border)] text-[var(--color-text-secondary)] rounded hover:text-white">✕</button>
+                                                <button type="button" onClick={saveWaypoints} disabled={pendingWaypoints.length === 0 || savingWaypoints}
+                                                    className="flex-1 min-h-10 bg-[var(--color-accent)] text-white text-[10px] px-3 rounded-lg hover:opacity-90 disabled:opacity-40">
+                                                    {savingWaypoints ? 'Ukládám…' : `Uložit ${pendingWaypoints.length || ''} ${pendingWaypoints.length === 1 ? 'místo' : 'místa'}`}
+                                                </button>
+                                                <button type="button" onClick={() => { setShowWpForm(false); setWpSearch(''); setWpForm({ place_name:'', latitude:'', longitude:'' }); setPendingWaypoints([]); }}
+                                                    className="min-w-10 min-h-10 text-[var(--color-text-secondary)] border border-[var(--color-border)] rounded-lg hover:text-white">✕</button>
                                             </div>
                                         </form>
                                     )}
@@ -865,7 +953,7 @@ export default function TripsIndex() {
                                                                                 const isFetching = fetchingPrices[priceKey] ?? false;
                                                                                 const live  = livePrices[priceKey];
                                                                                 const fallback = roadKm ? estimatePrices(roadKm, wp.place_name, nextWp.place_name, selected.start_date.substring(0,10)) : [];
-                                                                                const prices = live ?? fallback;
+                                                                                const prices = (live ?? fallback).filter(price => transportFilters.includes(price.mode));
                                                                                 const isLive = !!live;
 
                                                                                 return (
@@ -912,7 +1000,11 @@ export default function TripsIndex() {
                                                                                                 )}
                                                                                             </div>
                                                                                         ) : (
-                                                                                            <p className="text-[9px] text-[var(--color-text-secondary)] opacity-60 italic">Zadejte GPS souřadnice zastávek pro ceník.</p>
+                                                                                            <p className="text-[9px] text-[var(--color-text-secondary)] opacity-60 italic">
+                                                                                                {transportFilters.length < ALL_TRANSPORT_MODES.length
+                                                                                                    ? 'Pro vybrané druhy dopravy nejsou dostupné cenové nabídky.'
+                                                                                                    : 'Zadejte GPS souřadnice zastávek pro ceník.'}
+                                                                                            </p>
                                                                                         )}
                                                                                     </div>
                                                                                 );
@@ -922,9 +1014,11 @@ export default function TripsIndex() {
                                                                             <div>
                                                                                 <p className="text-[9px] text-[var(--color-text-secondary)] mb-1">Přímé vyhledávání:</p>
                                                                                 <div className="flex flex-wrap gap-1">
-                                                                                    {buildTransportLinks(wp, nextWp, selected.start_date).map(link => (
+                                                                                    {buildTransportLinks(wp, nextWp, selected.start_date)
+                                                                                        .filter(link => transportFilters.includes(link.mode))
+                                                                                        .map(link => (
                                                                                         <a key={link.label} href={link.url} target="_blank" rel="noopener noreferrer"
-                                                                                            className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] bg-[var(--color-bg-secondary)] border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-white hover:border-white/20 transition-colors">
+                                                                                            className="flex min-h-8 items-center gap-1 px-2 rounded-lg text-[9px] bg-[var(--color-bg-secondary)] border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-white hover:border-white/20 transition-colors">
                                                                                             <span>{link.icon}</span> {link.label}
                                                                                         </a>
                                                                                     ))}
@@ -976,7 +1070,7 @@ export default function TripsIndex() {
                             </div>
 
                             {/* Lower half: notes + photo grid */}
-                            <div className="flex-1 overflow-y-auto min-h-0">
+                            <div className="flex-1 overflow-visible xl:overflow-y-auto min-h-0">
                                 {/* Notes strip — always editable, auto-saves on change + blur */}
                                 <div className="px-4 py-2 border-b border-[var(--color-border)] relative">
                                     <textarea
@@ -995,7 +1089,7 @@ export default function TripsIndex() {
                                 {/* Photo grid */}
                                 <div className="p-4">
                                     {loadingMedia ? (
-                                        <div className="grid grid-cols-8 gap-1.5">
+                                        <div className="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-8 gap-1.5">
                                             {[...Array(16)].map((_, i) => <div key={i} className="aspect-square bg-[var(--color-bg-card)] rounded animate-pulse"/>)}
                                         </div>
                                     ) : tripMedia.length === 0 ? (

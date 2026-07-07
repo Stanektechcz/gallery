@@ -1,0 +1,9 @@
+import AppLayout from '@/Layouts/AppLayout';
+import { Head, useForm } from '@inertiajs/react';
+import { LockKeyhole, ShieldCheck } from 'lucide-react';
+
+export default function VaultGate() {
+    const form = useForm({ password: '' });
+    return <AppLayout><Head title="Soukromý trezor" /><div className="flex min-h-full items-center justify-center p-4"><div className="w-full max-w-sm rounded-3xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-6 text-center shadow-2xl"><div className="mx-auto flex h-20 w-20 items-center justify-center rounded-3xl bg-[var(--color-accent)]/15"><LockKeyhole size={34} className="text-[var(--color-accent)]" /></div><h1 className="mt-5 text-xl font-bold text-white">Soukromý trezor</h1><p className="mt-2 text-sm leading-relaxed text-[var(--color-text-secondary)]">Položky v trezoru se neobjevují v časové ose, hledání ani vzpomínkách. Přístup se po 15 minutách automaticky uzamkne.</p><form onSubmit={event => { event.preventDefault(); form.post('/vault/unlock'); }} className="mt-6"><label className="text-left text-xs text-[var(--color-text-secondary)]">Vaše heslo<input type="password" autoFocus value={form.data.password} onChange={event => form.setData('password', event.target.value)} className="mt-1.5 min-h-12 w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-3 text-base text-white outline-none focus:border-[var(--color-accent)]" /></label>{form.errors.password && <p className="mt-2 text-left text-xs text-red-400">{form.errors.password}</p>}<button disabled={form.processing || !form.data.password} className="mt-4 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[var(--color-accent)] text-sm font-semibold text-white disabled:opacity-40"><ShieldCheck size={16} />{form.processing ? 'Ověřuji…' : 'Odemknout trezor'}</button></form></div></div></AppLayout>;
+}
+

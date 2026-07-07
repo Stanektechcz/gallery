@@ -18,6 +18,7 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
 
     // Search
     Route::get('/search', [SearchController::class, 'search'])->name('api.search');
+    Route::get('/search/suggestions', [SearchController::class, 'suggestions'])->name('api.search.suggestions');
 
     // Resumable upload
     Route::prefix('uploads')->name('api.uploads.')->group(function () {
@@ -56,7 +57,7 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
     });
 
     // Media API
-    Route::prefix('media')->name('api.media.')->group(function () {
+    Route::prefix('media')->name('api.media.')->middleware(\App\Http\Middleware\ProtectVaultMedia::class)->group(function () {
         Route::get('/compare',            [App\Http\Controllers\MediaController::class, 'compare'])->name('compare');
         Route::get('/{uuid}',             [App\Http\Controllers\MediaController::class, 'apiShow'])->name('show');
         Route::patch('/{uuid}',           [App\Http\Controllers\MediaController::class, 'update'])->name('update');
@@ -68,6 +69,13 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
         Route::post('/{uuid}/comments',   [App\Http\Controllers\Api\CommentController::class, 'store'])->name('comments.store');
         Route::delete('/{uuid}/comments/{id}', [App\Http\Controllers\Api\CommentController::class, 'destroy'])->name('comments.destroy');
     });
+
+    // Automatic RAW/burst stacks
+    Route::get('/media-stacks/preview', [App\Http\Controllers\Api\MediaStackController::class, 'preview'])->name('api.media-stacks.preview');
+    Route::post('/media-stacks/apply', [App\Http\Controllers\Api\MediaStackController::class, 'apply'])->name('api.media-stacks.apply');
+    Route::get('/media-stacks/{uuid}', [App\Http\Controllers\Api\MediaStackController::class, 'show'])->name('api.media-stacks.show');
+    Route::patch('/media-stacks/{uuid}/cover', [App\Http\Controllers\Api\MediaStackController::class, 'setCover'])->name('api.media-stacks.cover');
+    Route::delete('/media-stacks/{uuid}', [App\Http\Controllers\Api\MediaStackController::class, 'destroy'])->name('api.media-stacks.destroy');
 
     // People
     Route::apiResource('people', App\Http\Controllers\Api\PersonController::class)->except(['destroy']);
@@ -94,8 +102,15 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
     Route::post('/notifications/{id}/read', fn(string $id) => request()->user()->notifications()->findOrFail($id)->markAsRead());
     Route::post('/notifications/read-all', fn() => request()->user()->unreadNotifications->markAsRead());
 
+    // Personalized memories and feedback
+    Route::get('/memories', [App\Http\Controllers\Api\MemoryController::class, 'index'])->name('api.memories.index');
+    Route::post('/memories/interactions', [App\Http\Controllers\Api\MemoryController::class, 'interact'])->name('api.memories.interact');
+    Route::get('/memories/preferences', [App\Http\Controllers\Api\MemoryController::class, 'preferences'])->name('api.memories.preferences');
+    Route::patch('/memories/preferences', [App\Http\Controllers\Api\MemoryController::class, 'updatePreferences'])->name('api.memories.preferences.update');
+
     // Recovery
     Route::get('/recovery/duplicates',       [App\Http\Controllers\RecoveryController::class, 'findDuplicates'])->name('api.recovery.duplicates');
+    Route::get('/recovery/cleanup',          [App\Http\Controllers\RecoveryController::class, 'cleanupSuggestions'])->name('api.recovery.cleanup');
     Route::delete('/recovery/duplicates/trash', [App\Http\Controllers\RecoveryController::class, 'trashDuplicates'])->name('api.recovery.trash');
 
     // Saved searches
@@ -141,6 +156,15 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
 
     // Trips (Cesty a výlety) — static sub-routes first
     Route::get('/trips/{id}/suggest-media',          [App\Http\Controllers\Api\TripController::class, 'suggestMedia'])->name('api.trips.suggest-media');
+    Route::get('/trips/{id}/plan',                   [App\Http\Controllers\Api\TripPlanController::class, 'show'])->name('api.trips.plan');
+    Route::get('/trips/{id}/now',                    [App\Http\Controllers\Api\TripPlanController::class, 'now'])->name('api.trips.now');
+    Route::post('/trips/{id}/journal',               [App\Http\Controllers\Api\TripPlanController::class, 'addJournalEntry'])->name('api.trips.journal.add');
+    Route::delete('/trips/{id}/journal/{entryId}',   [App\Http\Controllers\Api\TripPlanController::class, 'removeJournalEntry'])->name('api.trips.journal.remove');
+    Route::patch('/trips/{id}/plan/days/{dayId}',    [App\Http\Controllers\Api\TripPlanController::class, 'updateDay'])->name('api.trips.plan.days.update');
+    Route::post('/trips/{id}/plan/days/{dayId}/activities', [App\Http\Controllers\Api\TripPlanController::class, 'addActivity'])->name('api.trips.plan.activities.add');
+    Route::put('/trips/{id}/plan/days/{dayId}/activities/reorder', [App\Http\Controllers\Api\TripPlanController::class, 'reorderActivities'])->name('api.trips.plan.activities.reorder');
+    Route::patch('/trips/{id}/plan/activities/{activityId}', [App\Http\Controllers\Api\TripPlanController::class, 'updateActivity'])->name('api.trips.plan.activities.update');
+    Route::delete('/trips/{id}/plan/activities/{activityId}', [App\Http\Controllers\Api\TripPlanController::class, 'removeActivity'])->name('api.trips.plan.activities.remove');
     Route::get('/trips/{id}/media',                  [App\Http\Controllers\Api\TripController::class, 'media'])->name('api.trips.media');
     Route::post('/trips/{id}/media',                 [App\Http\Controllers\Api\TripController::class, 'addMedia'])->name('api.trips.add-media');
     Route::delete('/trips/{id}/media/{mediaId}',     [App\Http\Controllers\Api\TripController::class, 'removeMedia'])->name('api.trips.remove-media');
@@ -176,4 +200,7 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
     Route::get('/shares',       [App\Http\Controllers\ShareController::class, 'index'])->name('api.shares.index');
     Route::post('/shares',      [App\Http\Controllers\ShareController::class, 'store'])->name('api.shares.store');
     Route::delete('/shares/{id}', [App\Http\Controllers\ShareController::class, 'destroy'])->name('api.shares.destroy');
+    Route::get('/guest-uploads', [App\Http\Controllers\Api\GuestUploadController::class, 'index'])->name('api.guest-uploads.index');
+    Route::post('/guest-uploads/{uuid}/approve', [App\Http\Controllers\Api\GuestUploadController::class, 'approve'])->name('api.guest-uploads.approve');
+    Route::post('/guest-uploads/{uuid}/reject', [App\Http\Controllers\Api\GuestUploadController::class, 'reject'])->name('api.guest-uploads.reject');
 });

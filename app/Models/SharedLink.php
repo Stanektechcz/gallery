@@ -44,6 +44,8 @@ class SharedLink extends Model
         return $this->belongsToMany(MediaItem::class, 'shared_link_media');
     }
 
+    public function guestUploads() { return $this->hasMany(GuestUpload::class); }
+
     public function isExpired(): bool
     {
         return $this->expires_at && $this->expires_at->isPast();

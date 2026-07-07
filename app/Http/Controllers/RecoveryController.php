@@ -134,6 +134,59 @@ class RecoveryController extends Controller
     }
 
     /**
+     * GET /api/v1/recovery/cleanup
+     * Safe, explainable cleanup suggestions. No item is changed automatically.
+     */
+    public function cleanupSuggestions(Request $request): \Illuminate\Http\JsonResponse
+    {
+        $space = $request->user()->gallerySpaces()->first();
+        $base = MediaItem::where('gallery_space_id', $space->id)->whereNull('trashed_at');
+
+        $duplicateRows = DB::table('media_items')
+            ->where('gallery_space_id', $space->id)->whereNull('trashed_at')->whereNotNull('sha256')
+            ->select('sha256', DB::raw('COUNT(*) as count'), DB::raw('SUM(size_bytes) as bytes'))
+            ->groupBy('sha256')->havingRaw('COUNT(*) > 1')->get();
+        $duplicateExtras = $duplicateRows->sum(fn ($row) => max(0, $row->count - 1));
+        $duplicateBytes = $duplicateRows->sum(fn ($row) => $row->count > 0 ? (int) ($row->bytes / $row->count) * ($row->count - 1) : 0);
+
+        $categories = [
+            [
+                'key' => 'duplicates', 'label' => 'Přesné duplicity', 'icon' => '🧬',
+                'count' => $duplicateExtras, 'bytes' => $duplicateBytes,
+                'reason' => 'Soubory mají totožný kryptografický otisk.', 'action' => '/recovery#duplicates',
+            ],
+            [
+                'key' => 'screenshots', 'label' => 'Screenshoty', 'icon' => '📱',
+                'count' => (clone $base)->where(fn ($query) => $query->where('original_filename', 'like', '%screenshot%')->orWhere('original_filename', 'like', '%screen shot%'))->count(),
+                'bytes' => (clone $base)->where(fn ($query) => $query->where('original_filename', 'like', '%screenshot%')->orWhere('original_filename', 'like', '%screen shot%'))->sum('size_bytes'),
+                'reason' => 'Názvy souborů odpovídají screenshotům; před úklidem je vždy zkontrolujte.', 'action' => '/search?q=screenshot',
+            ],
+            [
+                'key' => 'large_videos', 'label' => 'Velká videa', 'icon' => '🎬',
+                'count' => (clone $base)->where('media_type', 'video')->where('size_bytes', '>=', 500 * 1024 * 1024)->count(),
+                'bytes' => (clone $base)->where('media_type', 'video')->where('size_bytes', '>=', 500 * 1024 * 1024)->sum('size_bytes'),
+                'reason' => 'Videa větší než 500 MB mají největší dopad na úložiště.', 'action' => '/search?media_type=video&sort_by=size_bytes',
+            ],
+            [
+                'key' => 'unorganized', 'label' => 'Nezařazené', 'icon' => '📥',
+                'count' => (clone $base)->whereNull('primary_album_id')->whereDoesntHave('albums')->count(),
+                'bytes' => (clone $base)->whereNull('primary_album_id')->whereDoesntHave('albums')->sum('size_bytes'),
+                'reason' => 'Položky nejsou v žádném albu; můžete je roztřídit nebo archivovat.', 'action' => '/inbox',
+            ],
+            [
+                'key' => 'missing_date', 'label' => 'Bez data', 'icon' => '🗓️',
+                'count' => (clone $base)->whereNull('taken_at')->count(), 'bytes' => 0,
+                'reason' => 'Bez data nelze média správně zařadit do časové osy a vzpomínek.', 'action' => '/search?q=&sort_by=uploaded_at',
+            ],
+        ];
+
+        return response()->json([
+            'potential_savings' => $duplicateBytes,
+            'categories' => array_values(array_filter($categories, fn ($category) => $category['count'] > 0)),
+        ]);
+    }
+
+    /**
      * DELETE /api/v1/recovery/duplicates/trash
      * Move duplicate items (all but oldest per group) to trash.
      */

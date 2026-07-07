@@ -25,9 +25,16 @@ class TimelineController extends Controller
             ->where('is_archived', false)
             ->where('is_hidden', false)
             ->where('status', 'ready')
+            ->whereNotExists(function ($query) {
+                $query->selectRaw('1')
+                    ->from('media_stack_items')
+                    ->whereColumn('media_stack_items.media_item_id', 'media_items.id')
+                    ->where('media_stack_items.is_cover', false);
+            })
             ->with([
                 'variants'     => fn($q) => $q->whereIn('type', ['thumbnail', 'placeholder']),
                 'primaryAlbum' => fn($q) => $q->select('id', 'uuid', 'title', 'slug', 'materialized_path', 'parent_id'),
+                'stacks' => fn($q) => $q->withCount('items'),
             ])
             ->select([
                 'id',
@@ -86,6 +93,7 @@ class TimelineController extends Controller
             ->where('gallery_space_id', $space->id)
             ->whereNull('trashed_at')
             ->where('is_archived', false)
+            ->where('is_hidden', false)
             ->where('status', 'ready')
             ->whereNotNull('taken_at')
             ->selectRaw("YEAR(taken_at) as year, MONTH(taken_at) as month, COUNT(*) as count")
@@ -108,6 +116,7 @@ class TimelineController extends Controller
         $points = MediaItem::query()
             ->where('gallery_space_id', $space->id)
             ->whereNull('trashed_at')
+            ->where('is_hidden', false)
             ->where('status', 'ready')
             ->whereNotNull('latitude')
             ->whereNotNull('longitude')
@@ -167,6 +176,7 @@ class TimelineController extends Controller
             ->where('gallery_space_id', $space->id)
             ->whereNull('trashed_at')
             ->where('is_archived', false)
+            ->where('is_hidden', false)
             ->where('status', 'ready')
             ->whereNotNull('taken_at')
             ->whereRaw("MONTH(taken_at) = ? AND DAY(taken_at) = ? AND YEAR(taken_at) < ?", [$month, $day, $today->year])
@@ -199,6 +209,7 @@ class TimelineController extends Controller
             ->where('gallery_space_id', $space->id)
             ->whereNull('trashed_at')
             ->where('is_archived', false)
+            ->where('is_hidden', false)
             ->whereNotNull('taken_at')
             ->whereYear('taken_at',  $year)
             ->whereMonth('taken_at', $month)
@@ -215,6 +226,7 @@ class TimelineController extends Controller
         foreach ($days as $d) {
             $item = MediaItem::where('gallery_space_id', $space->id)
                 ->whereNull('trashed_at')
+                ->where('is_hidden', false)
                 ->whereYear('taken_at', $year)
                 ->whereMonth('taken_at', $month)
                 ->whereDay('taken_at', $d->day)

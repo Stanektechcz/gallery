@@ -1,6 +1,8 @@
 import AppLayout from '@/Layouts/AppLayout';
-import { Head } from '@inertiajs/react';
-import { AlertTriangle, CheckCircle, RefreshCw, XCircle } from 'lucide-react';
+import { Head, Link } from '@inertiajs/react';
+import axios from 'axios';
+import { AlertTriangle, CheckCircle, Layers, RefreshCw, Sparkles, XCircle } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
 interface Check { label: string; ok: boolean; detail?: string }
 interface Props {
@@ -18,6 +20,22 @@ function fmt(b?: number): string {
 
 export default function RecoveryIndex({ checks, media_stats, drive_info }: Props) {
     const allOk = checks.every(c => c.ok);
+    const [cleanup, setCleanup] = useState<{ potential_savings: number; categories: Array<{ key: string; label: string; icon: string; count: number; bytes: number; reason: string; action: string }> } | null>(null);
+    const [stackPreview, setStackPreview] = useState<{ count: number; groups: Array<{ key: string; label: string; type: string; confidence: number; items: unknown[] }> } | null>(null);
+    const [stacking, setStacking] = useState(false);
+    useEffect(() => {
+        axios.get('/api/v1/recovery/cleanup').then(response => setCleanup(response.data)).catch(() => undefined);
+        axios.get('/api/v1/media-stacks/preview').then(response => setStackPreview(response.data)).catch(() => undefined);
+    }, []);
+    const applyStacks = async () => {
+        if (!stackPreview?.count || !confirm(`Seskupit ${stackPreview.count} rozpoznaných sérií? Fotografie se nesmažou.`)) return;
+        setStacking(true);
+        try {
+            const { data } = await axios.post('/api/v1/media-stacks/apply', { candidate_keys: stackPreview.groups.map(group => group.key) });
+            setStackPreview({ count: 0, groups: [] });
+            alert(`Vytvořeno stacků: ${data.created}`);
+        } finally { setStacking(false); }
+    };
 
     return (
         <AppLayout>
@@ -91,6 +109,28 @@ export default function RecoveryIndex({ checks, media_stats, drive_info }: Props
                 </div>
 
                 {/* Actions */}
+                {cleanup && cleanup.categories.length > 0 && (
+                    <div className="mb-4 rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-4">
+                        <div className="mb-3 flex items-center justify-between"><div className="flex items-center gap-2"><Sparkles size={15} className="text-[var(--color-accent)]"/><h2 className="text-sm font-semibold text-white">Chytrý úklid</h2></div>{cleanup.potential_savings > 0 && <span className="text-[10px] text-green-400">až {fmt(cleanup.potential_savings)} k uvolnění</span>}</div>
+                        <p className="mb-3 text-xs text-[var(--color-text-secondary)]">Pouze vysvětlitelné návrhy. Nic se nesmaže bez vaší kontroly.</p>
+                        <div className="grid gap-2 sm:grid-cols-2">{cleanup.categories.map(category => (
+                            <Link key={category.key} href={category.action} className="rounded-xl border border-[var(--color-border)] p-3 transition hover:border-[var(--color-accent)]">
+                                <div className="flex items-center gap-2"><span className="text-xl">{category.icon}</span><div className="min-w-0 flex-1"><p className="text-xs font-medium text-white">{category.label}</p><p className="text-[10px] text-[var(--color-text-secondary)]">{category.count} položek{category.bytes > 0 ? ` · ${fmt(category.bytes)}` : ''}</p></div></div>
+                                <p className="mt-2 text-[10px] leading-relaxed text-[var(--color-text-secondary)]">{category.reason}</p>
+                            </Link>
+                        ))}</div>
+                    </div>
+                )}
+
+                {stackPreview && (
+                    <div className="mb-4 rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-4">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="flex items-start gap-3"><Layers size={18} className="mt-0.5 text-[var(--color-accent)]"/><div><h2 className="text-sm font-semibold text-white">Automatické stacky</h2><p className="mt-1 text-xs text-[var(--color-text-secondary)]">RAW+JPEG a rychlé série zůstanou pohromadě. Nejlepší snímek bude na obálce.</p></div></div>
+                            <button onClick={applyStacks} disabled={!stackPreview.count || stacking} className="min-h-10 shrink-0 rounded-lg bg-[var(--color-accent)] px-4 text-xs font-medium text-white disabled:opacity-40">{stacking ? 'Seskupuji…' : stackPreview.count ? `Seskupit ${stackPreview.count} sérií` : 'Vše seskupeno'}</button>
+                        </div>
+                    </div>
+                )}
+
                 <div className="bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-xl p-4">
                     <h2 className="text-sm font-semibold text-white mb-3">Opravné akce</h2>
                     <div className="space-y-2 text-xs text-[var(--color-text-secondary)]">

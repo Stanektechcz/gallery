@@ -11,6 +11,7 @@ use App\Http\Controllers\MediaController;
 use App\Http\Controllers\MemoriesController;
 use App\Http\Controllers\ShareController;
 use App\Http\Controllers\TrashController;
+use App\Http\Controllers\VaultController;
 use App\Http\Controllers\Admin\AdminController;
 use App\Http\Controllers\Admin\StorageRiskController;
 use Illuminate\Support\Facades\Route;
@@ -35,6 +36,7 @@ Route::post('/reset-password', [PasswordResetController::class, 'update'])->name
 Route::get('/s/{token}', [ShareController::class, 'show'])->name('share.show');
 Route::post('/s/{token}/verify', [ShareController::class, 'verify'])->name('share.verify');
 Route::post('/s/{token}/upload', [ShareController::class, 'guestUpload'])->name('share.guest-upload');
+Route::get('/s/{token}/media/{uuid}/download', [ShareController::class, 'download'])->name('share.download');
 
 // Share Target (PWA Web Share Target)
 Route::post('/share-target',              [MediaController::class, 'shareTarget'])->name('share-target')
@@ -67,7 +69,7 @@ Route::middleware(['auth'])->group(function () {
     });
 
     // Media
-    Route::prefix('media')->name('media.')->group(function () {
+    Route::prefix('media')->name('media.')->middleware(\App\Http\Middleware\ProtectVaultMedia::class)->group(function () {
         Route::get('/{uuid}',           [MediaController::class, 'show'])->name('show');
         Route::patch('/{uuid}',         [MediaController::class, 'update'])->name('update');
         Route::delete('/{uuid}',        [MediaController::class, 'trash'])->name('trash');
@@ -93,6 +95,8 @@ Route::middleware(['auth'])->group(function () {
 
     // Trips (Cesty a výlety)
     Route::get('/trips',    fn() => Inertia::render('Trips/Index'))->name('trips');
+    Route::get('/trips/{id}/plan', fn(int $id) => Inertia::render('Trips/Plan', ['tripId' => $id]))->name('trips.plan');
+    Route::get('/trips/{id}/now', fn(int $id) => Inertia::render('Trips/Now', ['tripId' => $id]))->name('trips.now');
 
     // Tickets (vyhledávání jízdenek)
     Route::get('/tickets', [App\Http\Controllers\TicketController::class, 'index'])->name('tickets');
@@ -133,6 +137,8 @@ Route::middleware(['auth'])->group(function () {
 
     // Recovery Center
     Route::get('/recovery', [App\Http\Controllers\RecoveryController::class, 'index'])->name('recovery');
+    Route::get('/privacy', [App\Http\Controllers\PrivacyController::class, 'index'])->name('privacy');
+    Route::patch('/privacy/legacy', [App\Http\Controllers\PrivacyController::class, 'updateLegacy'])->name('privacy.legacy');
 
     // Export
     Route::post('/export/download', [App\Http\Controllers\ExportController::class, 'download'])->name('export.download');
@@ -152,6 +158,12 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/archive', [ArchiveController::class, 'index'])->name('archive');
     Route::post('/archive/{uuid}/unarchive', [ArchiveController::class, 'unarchive'])->name('archive.unarchive');
     Route::post('/archive/bulk-unarchive', [ArchiveController::class, 'bulkUnarchive'])->name('archive.bulk-unarchive');
+
+    // Private vault (15-minute re-authenticated session)
+    Route::get('/vault', [VaultController::class, 'index'])->name('vault.index');
+    Route::post('/vault/unlock', [VaultController::class, 'unlock'])->middleware('throttle:5,1')->name('vault.unlock');
+    Route::post('/vault/lock', [VaultController::class, 'lock'])->name('vault.lock');
+    Route::post('/vault/media/{uuid}/toggle', [VaultController::class, 'toggle'])->name('vault.toggle');
 
     // Memories
     Route::get('/memories', [MemoriesController::class, 'index'])->name('memories');

@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\MediaItem;
 use App\Models\Album;
 use App\Models\GallerySpace;
+use App\Models\SavedSearch;
+use App\Services\Media\MemoryDiscoveryService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
@@ -12,7 +14,7 @@ use Inertia\Response;
 
 class DashboardController extends Controller
 {
-    public function index(Request $request): Response
+    public function index(Request $request, MemoryDiscoveryService $memoryDiscovery): Response
     {
         $user  = $request->user();
         $space = $user->gallerySpaces()->first();
@@ -39,23 +41,26 @@ class DashboardController extends Controller
         $thisTimeLastYear = MediaItem::where('gallery_space_id', $space->id)
             ->whereBetween('taken_at', [$lastYearStart, $lastYearEnd])
             ->whereNull('trashed_at')
+            ->where('is_hidden', false)
             ->with(['variants' => fn($q) => $q->whereIn('type', ['thumbnail', 'placeholder'])])
-            ->orderByRaw('RAND()')
+            ->inRandomOrder()
             ->limit(8)
             ->get();
 
         // Random memory (any time, random)
         $randomMemory = MediaItem::where('gallery_space_id', $space->id)
             ->whereNull('trashed_at')
+            ->where('is_hidden', false)
             ->where('status', 'ready')
             ->with(['variants' => fn($q) => $q->whereIn('type', ['thumbnail', 'placeholder'])])
-            ->orderByRaw('RAND()')
+            ->inRandomOrder()
             ->limit(1)
             ->first();
 
         // Most recent media (for "Naše poslední vzpomínky")
         $recentMedia = MediaItem::where('gallery_space_id', $space->id)
             ->whereNull('trashed_at')
+            ->where('is_hidden', false)
             ->where('status', 'ready')
             ->with(['variants' => fn($q) => $q->whereIn('type', ['thumbnail', 'placeholder'])])
             ->orderByDesc('taken_at')
@@ -65,6 +70,7 @@ class DashboardController extends Controller
         // Last visited place (most recent media with GPS)
         $lastPlace = MediaItem::where('gallery_space_id', $space->id)
             ->whereNull('trashed_at')
+            ->where('is_hidden', false)
             ->whereNotNull('latitude')
             ->whereNotNull('longitude')
             ->orderByDesc('taken_at')
@@ -81,6 +87,7 @@ class DashboardController extends Controller
         // Stats for current year
         $yearStats = MediaItem::where('gallery_space_id', $space->id)
             ->whereNull('trashed_at')
+            ->where('is_hidden', false)
             ->whereYear('taken_at', $now->year)
             ->selectRaw("COUNT(*) as total, SUM(CASE WHEN media_type='video' THEN 1 ELSE 0 END) as videos, SUM(CASE WHEN media_type='photo' THEN 1 ELSE 0 END) as photos")
             ->first();
@@ -88,6 +95,7 @@ class DashboardController extends Controller
         // GPS / map stats
         $gpsCount     = MediaItem::where('gallery_space_id', $space->id)
             ->whereNull('trashed_at')
+            ->where('is_hidden', false)
             ->whereNotNull('latitude')
             ->count();
 
@@ -100,6 +108,19 @@ class DashboardController extends Controller
             ->whereIn('status', ['pending', 'assembling'])
             ->where('expires_at', '>', now())
             ->count();
+
+        $forYou = $memoryDiscovery->discover($user)->take(3)->values();
+        $pinnedViews = SavedSearch::where('gallery_space_id', $space->id)
+            ->where('user_id', $user->id)
+            ->where('is_pinned', true)
+            ->orderByDesc('last_used_at')
+            ->limit(6)
+            ->get(['id', 'name', 'icon', 'filters_json', 'view_type']);
+        $upcomingTrip = DB::table('trips')
+            ->where('gallery_space_id', $space->id)
+            ->where('end_date', '>=', now()->toDateString())
+            ->orderBy('start_date')
+            ->first(['id', 'name', 'start_date', 'end_date', 'status']);
 
         return Inertia::render('Dashboard/Index', [
             'data' => [
@@ -127,6 +148,9 @@ class DashboardController extends Controller
                     'photos' => (int) ($yearStats?->photos ?? 0),
                     'videos' => (int) ($yearStats?->videos ?? 0),
                 ],
+                'for_you'          => $forYou,
+                'pinned_views'     => $pinnedViews,
+                'upcoming_trip'    => $upcomingTrip,
             ],
         ]);
     }

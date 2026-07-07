@@ -1,0 +1,2 @@
+import { Head, Link } from '@inertiajs/react';
+export default function Expired(){return <main className="flex min-h-screen items-center justify-center bg-[#0d0f14] p-6 text-center text-white"><Head title="Odkaz není dostupný"/><div><div className="text-5xl">⌛</div><h1 className="mt-4 text-xl font-bold">Tento odkaz už není dostupný</h1><p className="mt-2 text-sm text-white/50">Vypršela jeho platnost nebo jej vlastník vypnul.</p><Link href="/login" className="mt-6 inline-block rounded-xl bg-violet-600 px-5 py-3 text-sm">Přejít do galerie</Link></div></main>}
