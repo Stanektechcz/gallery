@@ -27,6 +27,7 @@ import {
     Share2,
     ShieldCheck,
     Tag,
+    Ticket,
     Trash2,
     Users,
     X
@@ -57,6 +58,7 @@ const NAV_COMMANDS: Command[] = [
     { group: 'nav', label: 'Naše cesta',          href: '/journey',   keywords: 'nase cesta journey kronika' },
     { group: 'nav', label: 'Itinerář světa',      href: '/itinerary', keywords: 'itinerar svet travel' },
     { group: 'nav', label: 'Cesty',               href: '/trips',     keywords: 'cesty trips vylety' },
+    { group: 'nav', label: 'Jízdenky',             href: '/tickets',   keywords: 'jizdenky tickets vlak autobus regiojet flixbus cd' },
     { group: 'nav', label: 'Místa',               href: '/places',    keywords: 'mista places lokace' },
     { group: 'nav', label: 'Lidé',                href: '/people',    keywords: 'lide people osoby' },
     { group: 'nav', label: 'Tagy',                href: '/tags',      keywords: 'tagy tags' },
@@ -338,6 +340,7 @@ const navItems = [
     { href: '/albums',    label: 'Alba',         icon: FolderOpen },
     { href: '/calendar',  label: 'Kalendář',    icon: Calendar },
     { href: '/trips',     label: 'Cesty',        icon: Route },
+    { href: '/tickets',   label: 'Jízdenky',     icon: Ticket },
     { href: '/map',       label: 'Mapa',         icon: Map },
     { href: '/search',    label: 'Hledat',       icon: Search },
     { href: '/favorites', label: 'Oblíbené',     icon: Heart },

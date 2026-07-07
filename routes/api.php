@@ -151,6 +151,9 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
     Route::get('/trips/route-distance',              [App\Http\Controllers\Api\TripController::class, 'routeDistance'])->name('api.trips.route-distance');
     Route::get('/trips/transport-prices',            [App\Http\Controllers\Api\TripController::class, 'transportPrices'])->name('api.trips.transport-prices');
     Route::get('/trips',                             [App\Http\Controllers\Api\TripController::class, 'index'])->name('api.trips.index');
+
+    // Unified ticket search (RegioJet + FlixBus + IDOS)
+    Route::get('/tickets/search',                    [App\Http\Controllers\Api\TicketController::class, 'search'])->name('api.tickets.search');
     Route::post('/trips',                            [App\Http\Controllers\Api\TripController::class, 'store'])->name('api.trips.store');
     Route::get('/trips/{id}',                        [App\Http\Controllers\Api\TripController::class, 'show'])->name('api.trips.show');
     Route::patch('/trips/{id}',                      [App\Http\Controllers\Api\TripController::class, 'update'])->name('api.trips.update');

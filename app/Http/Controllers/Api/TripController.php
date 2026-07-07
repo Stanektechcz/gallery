@@ -478,9 +478,15 @@ class TripController extends Controller
 
         $prices = Cache::remember($key, 3600 * 3, function () use ($v) {
             $all = [];
-            try { $all = array_merge($all, $this->regiojetPrices($v['from'], $v['to'], $v['date'])); } catch (\Throwable $e) {}
-            try { $all = array_merge($all, $this->flixbusPrices($v['from'], $v['to'], $v['date'])); } catch (\Throwable $e) {}
-            usort($all, fn ($a, $b) => ($a['min_price'] ?? 9999) <=> ($b['min_price'] ?? 9999));
+            try {
+                $all = array_merge($all, $this->regiojetPrices($v['from'], $v['to'], $v['date']));
+            } catch (\Throwable $e) {
+            }
+            try {
+                $all = array_merge($all, $this->flixbusPrices($v['from'], $v['to'], $v['date']));
+            } catch (\Throwable $e) {
+            }
+            usort($all, fn($a, $b) => ($a['min_price'] ?? 9999) <=> ($b['min_price'] ?? 9999));
             return $all;
         });
 

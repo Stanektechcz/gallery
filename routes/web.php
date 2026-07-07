@@ -94,6 +94,9 @@ Route::middleware(['auth'])->group(function () {
     // Trips (Cesty a výlety)
     Route::get('/trips',    fn() => Inertia::render('Trips/Index'))->name('trips');
 
+    // Tickets (vyhledávání jízdenek)
+    Route::get('/tickets', [App\Http\Controllers\TicketController::class, 'index'])->name('tickets');
+
     // Map
     Route::get('/map',      fn() => Inertia::render('Map/Index'))->name('map');
 
