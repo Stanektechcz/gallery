@@ -1,6 +1,7 @@
 import AppLayout from '@/Layouts/AppLayout';
 import { Head, Link } from '@inertiajs/react';
 import axios from 'axios';
+import { addLocalizedBaseLayer } from '@/lib/localizedMap';
 import { ExternalLink, FolderOpen, Image, MapPin, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
@@ -65,9 +66,7 @@ export default function MapIndex() {
         });
         mapObj.current = map;
 
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap contributors', maxZoom: 19,
-        }).addTo(map);
+        addLocalizedBaseLayer(L, map);
 
         const allBounds = [...(showPhotos ? points : []).map(p => [p.latitude, p.longitude]), ...(showAlbums ? albums : []).map(a => [a.latitude, a.longitude])];
         if (allBounds.length > 1) {
@@ -286,4 +285,3 @@ export default function MapIndex() {
         </AppLayout>
     );
 }
-

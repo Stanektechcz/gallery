@@ -92,6 +92,7 @@ Route::middleware(['auth'])->group(function () {
     // Print selections / Photo books
     Route::get('/print',               fn() => Inertia::render('Print/Index'))->name('print');
     Route::get('/books/{uuid}/print',  fn() => Inertia::render('Print/ContactSheet'))->name('books.print');
+    Route::get('/curation',            fn() => Inertia::render('Curation/Index'))->name('curation');
 
     // Trips (Cesty a výlety)
     Route::get('/trips',    fn() => Inertia::render('Trips/Index'))->name('trips');
@@ -100,6 +101,7 @@ Route::middleware(['auth'])->group(function () {
 
     // Tickets (vyhledávání jízdenek)
     Route::get('/tickets', [App\Http\Controllers\TicketController::class, 'index'])->name('tickets');
+    Route::get('/jizdenky', [App\Http\Controllers\TicketController::class, 'index'])->name('tickets.cs');
 
     // Map
     Route::get('/map',      fn() => Inertia::render('Map/Index'))->name('map');
@@ -109,6 +111,10 @@ Route::middleware(['auth'])->group(function () {
 
     // Calendar
     Route::get('/calendar', fn() => Inertia::render('Calendar/Index'))->name('calendar');
+    Route::get('/calendar/events/{uuid}', fn(string $uuid) => Inertia::render('Calendar/Show', ['eventUuid' => $uuid]))->name('calendar.events.show');
+    Route::get('/travel-inbox', fn() => Inertia::render('TravelInbox/Index'))->name('travel-inbox');
+    Route::get('/weekly', fn() => Inertia::render('Weekly/Index'))->name('weekly');
+    Route::get('/planning', fn() => Inertia::render('Planning/Index'))->name('planning');
 
     // Stats
     Route::get('/stats',    [App\Http\Controllers\StatsController::class,    'index'])->name('stats');
@@ -178,6 +184,9 @@ Route::middleware(['auth'])->group(function () {
     // Settings
     Route::prefix('settings')->name('settings.')->group(function () {
         Route::get('/storage/google', [GoogleOAuthController::class, 'showConnect'])->name('storage.google');
+        Route::get('/security', [App\Http\Controllers\SecuritySessionController::class, 'index'])->name('security');
+        Route::delete('/security/sessions/{sessionId}', [App\Http\Controllers\SecuritySessionController::class, 'destroy'])->name('security.sessions.destroy');
+        Route::post('/security/sessions/revoke-others', [App\Http\Controllers\SecuritySessionController::class, 'destroyOthers'])->name('security.sessions.revoke-others');
     });
 
     // Admin only
@@ -189,6 +198,9 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/jobs',          [AdminController::class, 'jobs'])->name('jobs');
         Route::get('/audit',         [AdminController::class, 'audit'])->name('audit');
         Route::get('/health',        [AdminController::class, 'health'])->name('health');
+        Route::get('/integrations',  [App\Http\Controllers\Admin\IntegrationController::class, 'index'])->name('integrations.index');
+        Route::put('/integrations/{provider}', [App\Http\Controllers\Admin\IntegrationController::class, 'update'])->name('integrations.update');
+        Route::post('/integrations/{provider}/test', [App\Http\Controllers\Admin\IntegrationController::class, 'test'])->name('integrations.test');
     });
 });
 

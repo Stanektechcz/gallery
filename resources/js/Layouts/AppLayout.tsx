@@ -54,6 +54,10 @@ const NAV_COMMANDS: Command[] = [
     { group: 'nav', label: 'Fotky / Timeline',    href: '/timeline',  keywords: 'fotky timeline chronology' },
     { group: 'nav', label: 'Alba',                href: '/albums',    keywords: 'album folder slozka' },
     { group: 'nav', label: 'Kalendář',            href: '/calendar',  keywords: 'kalendar calendar' },
+    { group: 'nav', label: 'Cestovní inbox',      href: '/travel-inbox', keywords: 'cestovni inbox napady rezervace' },
+    { group: 'nav', label: 'Náš týden',           href: '/weekly', keywords: 'tyden plan ukoly prehled' },
+    { group: 'nav', label: 'Společné plánování',  href: '/planning', keywords: 'planovani wishlist hlasovani sablony' },
+    { group: 'nav', label: 'Integrace dat',        href: '/admin/integrations', keywords: 'api klice pocasi kurzy doprava administrace' },
     { group: 'nav', label: 'Mapa',                href: '/map',       keywords: 'map gps lokace' },
     { group: 'nav', label: 'Oblíbené',            href: '/favorites', keywords: 'oblibene heart srdce' },
     { group: 'nav', label: 'Vzpomínky',           href: '/memories',  keywords: 'vzpominky memories' },
@@ -76,6 +80,7 @@ const NAV_COMMANDS: Command[] = [
     { group: 'nav', label: 'Archiv',              href: '/archive',   keywords: 'archiv' },
     { group: 'nav', label: 'Koš',                 href: '/trash',     keywords: 'kos trash smazat' },
     { group: 'nav', label: 'Sdílené',             href: '/shares',    keywords: 'share sdilene' },
+    { group: 'nav', label: 'Společné výběry',     href: '/curation',  keywords: 'vyber kurator kolekce hlasovani fotky' },
     { group: 'nav', label: 'Nastavení Drive',     href: '/settings/storage/google', keywords: 'settings nastaveni google drive' },
 ];
 
@@ -342,6 +347,9 @@ const navItems = [
     { href: '/timeline',  label: 'Fotky',       icon: Images },
     { href: '/albums',    label: 'Alba',         icon: FolderOpen },
     { href: '/calendar',  label: 'Kalendář',    icon: Calendar },
+    { href: '/travel-inbox', label: 'Cestovní inbox', icon: Inbox },
+    { href: '/weekly', label: 'Náš týden', icon: Sparkles },
+    { href: '/planning', label: 'Plánování', icon: Calendar },
     { href: '/trips',     label: 'Cesty',        icon: Route },
     { href: '/tickets',   label: 'Jízdenky',     icon: Ticket },
     { href: '/map',       label: 'Mapa',         icon: Map },

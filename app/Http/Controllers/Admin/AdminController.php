@@ -7,6 +7,7 @@ use App\Models\AuditLog;
 use App\Models\MediaItem;
 use App\Models\StorageConnection;
 use App\Models\User;
+use App\Notifications\InvitationNotification;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -61,16 +62,24 @@ class AdminController extends Controller
             'role'             => $data['role'],
             'password'         => \Hash::make(Str::random(32)),
             'invitation_token' => $token,
-            'invited_by'       => $request->user()->id,
+            'invited_by'       => true,
+            'invited_by_user_id' => $request->user()->id,
             'is_active'        => true,
         ]);
 
         AuditLog::record('admin.invite', $user, ['email' => $data['email']]);
 
-        // TODO: Send invitation email with token
         $inviteUrl = url("/invite/{$token}");
+        $deliveryNote = '';
+        try {
+            $user->notify(new InvitationNotification($inviteUrl, $request->user()->name));
+        } catch (\Throwable $exception) {
+            report($exception);
+            // Never discard a securely created invite because a mail provider is unavailable.
+            $deliveryNote = " E-mail se nepodařilo odeslat; použijte zabezpečený odkaz: {$inviteUrl}";
+        }
 
-        return back()->with('success', "Pozvánka vytvořena. URL: {$inviteUrl}");
+        return back()->with('success', "Pozvánka vytvořena a odeslána na {$user->email}.{$deliveryNote}");
     }
 
     public function jobs(): Response

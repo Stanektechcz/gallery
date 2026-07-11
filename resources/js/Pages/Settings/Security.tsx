@@ -1,0 +1,13 @@
+import AppLayout from '@/Layouts/AppLayout';
+import { Head, Link } from '@inertiajs/react';
+import axios from 'axios';
+import { Laptop, LogOut, ShieldCheck } from 'lucide-react';
+import { useState } from 'react';
+
+type Session = { id:string; ip_address?:string; user_agent:string; last_activity:string; is_current:boolean };
+export default function SecuritySettings({ sessions }: { sessions: Session[] }) {
+    const [items,setItems]=useState(sessions); const [message,setMessage]=useState('');
+    const revoke=async(id:string)=>{await axios.delete(`/settings/security/sessions/${id}`);setItems(current=>current.filter(item=>item.id!==id));setMessage('Zařízení bylo odhlášeno.');};
+    const revokeOthers=async()=>{await axios.post('/settings/security/sessions/revoke-others');setItems(current=>current.filter(item=>item.is_current));setMessage('Všechna ostatní zařízení byla odhlášena.');};
+    return <AppLayout><Head title="Zabezpečení účtu"/><main className="mx-auto max-w-3xl p-4 sm:p-6"><Link href="/settings/storage/google" className="text-sm text-[var(--color-accent)]">Nastavení</Link><h1 className="mt-3 text-2xl font-bold text-white">Zabezpečení účtu</h1><p className="mt-1 text-sm text-[var(--color-text-secondary)]">Přehled aktivních relací. Neznámé zařízení ihned odhlaste.</p>{message&&<p className="mt-4 rounded-xl bg-green-500/10 p-3 text-sm text-green-200">{message}</p>}<section className="mt-5 rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-4"><div className="flex items-center justify-between"><h2 className="flex items-center gap-2 font-semibold text-white"><ShieldCheck size={17} className="text-[var(--color-accent)]"/>Aktivní zařízení</h2><button onClick={revokeOthers} className="rounded-lg border border-[var(--color-border)] px-3 py-2 text-xs text-white">Odhlásit ostatní</button></div><div className="mt-3 space-y-2">{items.map(item=><div key={item.id} className="flex items-center gap-3 rounded-xl border border-[var(--color-border)] p-3"><Laptop size={17} className="text-[var(--color-accent)]"/><div className="min-w-0 flex-1"><p className="text-sm text-white">{item.user_agent}{item.is_current?' · toto zařízení':''}</p><p className="text-xs text-[var(--color-text-secondary)]">{item.ip_address||'IP není dostupná'} · {new Date(item.last_activity).toLocaleString('cs-CZ')}</p></div>{!item.is_current&&<button onClick={()=>revoke(item.id)} className="rounded-lg p-2 text-red-300" title="Odhlásit zařízení"><LogOut size={16}/></button>}</div>)}{!items.length&&<p className="text-sm text-[var(--color-text-secondary)]">Žádná aktivní relace.</p>}</div></section></main></AppLayout>;
+}

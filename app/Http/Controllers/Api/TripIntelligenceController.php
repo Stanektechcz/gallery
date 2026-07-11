@@ -1,0 +1,166 @@
+<?php
+
+namespace App\Http\Controllers\Api;
+
+use App\Http\Controllers\Controller;
+use App\Models\User;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
+
+class TripIntelligenceController extends Controller
+{
+    public function readiness(Request $request, int $tripId): JsonResponse
+    {
+        $trip = $this->trip($request->user(), $tripId);
+        $limits = DB::table('trip_budget_limits')->where('trip_id', $tripId)->get();
+        $expenses = DB::table('trip_expenses')->where('trip_id', $tripId)->where('state', 'actual')->selectRaw('category, currency, SUM(amount) as total')->groupBy('category', 'currency')->get();
+        $budget = $limits->map(function ($limit) use ($expenses) { $entry = $expenses->first(fn ($row) => $row->category === $limit->category && $row->currency === $limit->currency); $actual = (float) ($entry?->total ?? 0); return ['category' => $limit->category, 'limit' => (float) $limit->amount, 'actual' => $actual, 'currency' => $limit->currency, 'status' => $actual >= $limit->amount ? 'over' : ($actual >= $limit->amount * $limit->warn_percent / 100 ? 'warning' : 'ok')]; });
+        $documents = DB::table('trip_document_checks')->where('trip_id', $tripId)->orderBy('expires_on')->get();
+        $expired = $documents->filter(fn ($document) => $document->expires_on && now()->toDateString() > $document->expires_on)->values();
+        $activities = DB::table('trip_activities as a')->join('trip_days as d', 'd.id', '=', 'a.trip_day_id')->where('d.trip_id', $tripId)->orderBy('d.date')->orderBy('a.starts_at')->select('a.*', 'd.date')->get();
+        $conflicts = $activities->groupBy('date')->flatMap(function ($day) { return $day->values()->zip($day->values()->slice(1))->filter(fn ($pair) => $pair[0]->ends_at && $pair[1]->starts_at && $pair[0]->ends_at > $pair[1]->starts_at)->map(fn ($pair) => ['date' => $pair[0]->date, 'first' => $pair[0]->title, 'second' => $pair[1]->title]); })->values();
+        $packing = DB::table('trip_packing_items')->where('trip_id', $tripId);
+        $unpackedEssentials = (clone $packing)->where('is_essential', true)->where('is_packed', false)->get(['id', 'title', 'category']);
+        return response()->json(['trip' => $trip, 'budget' => $budget, 'documents' => $documents, 'expired_documents' => $expired, 'time_conflicts' => $conflicts, 'settlements' => DB::table('trip_settlements')->where('trip_id', $tripId)->get(), 'packing' => ['total' => (clone $packing)->count(), 'packed' => (clone $packing)->where('is_packed', true)->count(), 'unpacked_essentials' => $unpackedEssentials]]);
+    }
+
+    public function upsertBudgetLimit(Request $request, int $tripId): JsonResponse
+    {
+        $trip = $this->trip($request->user(), $tripId); $data = $request->validate(['category' => 'required|in:transport,accommodation,food,activities,insurance,other', 'amount' => 'required|numeric|min:0|max:999999999', 'currency' => 'nullable|string|size:3', 'warn_percent' => 'nullable|integer|between:1,100']);
+        DB::table('trip_budget_limits')->updateOrInsert(['trip_id' => $tripId, 'category' => $data['category']], ['amount' => $data['amount'], 'currency' => strtoupper($data['currency'] ?? $trip->currency ?? 'CZK'), 'warn_percent' => $data['warn_percent'] ?? 80, 'created_at' => now(), 'updated_at' => now()]);
+        return response()->json(DB::table('trip_budget_limits')->where('trip_id', $tripId)->where('category', $data['category'])->first());
+    }
+
+    public function storeDocument(Request $request, int $tripId): JsonResponse
+    {
+        $this->trip($request->user(), $tripId); $data = $request->validate(['type' => 'required|in:passport,id_card,insurance,ticket,visa,booking,other', 'title' => 'required|string|max:255', 'expires_on' => 'nullable|date', 'status' => 'nullable|in:required,ready,missing,expired', 'reference' => 'nullable|string|max:5000']);
+        $id = DB::table('trip_document_checks')->insertGetId($data + ['trip_id' => $tripId, 'created_by' => $request->user()->id, 'status' => $data['status'] ?? 'required', 'created_at' => now(), 'updated_at' => now()]);
+        return response()->json(DB::table('trip_document_checks')->find($id), 201);
+    }
+
+    public function proposeSettlement(Request $request, int $tripId): JsonResponse
+    {
+        $trip = $this->trip($request->user(), $tripId); $data = $request->validate(['from_user_id' => 'required|integer|different:to_user_id', 'to_user_id' => 'required|integer', 'amount' => 'required|numeric|min:0.01|max:999999999', 'currency' => 'nullable|string|size:3']);
+        foreach ([$data['from_user_id'], $data['to_user_id']] as $id) abort_unless($this->member($trip->gallery_space_id, $id), 422, 'Vyrovnání je možné jen mezi členy prostoru.');
+        $id = DB::table('trip_settlements')->insertGetId($data + ['trip_id' => $tripId, 'currency' => strtoupper($data['currency'] ?? $trip->currency ?? 'CZK'), 'status' => 'suggested', 'created_at' => now(), 'updated_at' => now()]);
+        return response()->json(DB::table('trip_settlements')->find($id), 201);
+    }
+
+    public function settle(Request $request, int $tripId, int $settlementId): JsonResponse
+    {
+        $trip = $this->trip($request->user(), $tripId);
+        $settlement = DB::table('trip_settlements')->where('id', $settlementId)->where('trip_id', $trip->id)->firstOrFail();
+        abort_unless(in_array($request->user()->id, [$settlement->from_user_id, $settlement->to_user_id], true), 403);
+        DB::table('trip_settlements')->where('id', $settlementId)->update(['status' => 'settled', 'settled_at' => now(), 'updated_at' => now()]);
+        return response()->json(DB::table('trip_settlements')->find($settlementId));
+    }
+
+    public function storeCurrencyRate(Request $request): JsonResponse
+    {
+        abort_unless($request->user()->isAdmin(), 403);
+        $data = $request->validate(['base_currency' => 'required|string|size:3', 'quote_currency' => 'required|string|size:3|different:base_currency', 'rate' => 'required|numeric|gt:0|max:999999999', 'effective_on' => 'required|date']);
+        $row = ['base_currency' => strtoupper($data['base_currency']), 'quote_currency' => strtoupper($data['quote_currency']), 'effective_on' => $data['effective_on']];
+        DB::table('currency_rates')->updateOrInsert($row, ['rate' => $data['rate'], 'source' => 'manual', 'created_at' => now(), 'updated_at' => now()]);
+        return response()->json(DB::table('currency_rates')->where($row)->first());
+    }
+
+    public function savedTransportRoutes(Request $request): JsonResponse
+    {
+        return response()->json(DB::table('saved_transport_routes')->whereIn('gallery_space_id', $request->user()->gallerySpaces()->pluck('gallery_spaces.id'))->latest()->get());
+    }
+
+    public function offlinePackage(Request $request, int $tripId): JsonResponse
+    {
+        $trip = $this->trip($request->user(), $tripId);
+        $days = DB::table('trip_days')->where('trip_id', $tripId)->orderBy('sort_order')->get();
+        foreach ($days as $day) $day->activities = DB::table('trip_activities')->where('trip_day_id', $day->id)->orderBy('sort_order')->get();
+        return response()->json([
+            'generated_at' => now()->toIso8601String(), 'trip' => $trip, 'days' => $days,
+            'documents' => DB::table('trip_document_checks')->where('trip_id', $tripId)->where('status', 'ready')->get(),
+            'emergency_card' => DB::table('travel_emergency_cards')->where('trip_id', $tripId)->first(),
+            'selected_route' => DB::table('trip_route_variants')->where('trip_id', $tripId)->where('is_selected', true)->first(),
+        ]);
+    }
+
+    public function saveTransportRoute(Request $request): JsonResponse
+    {
+        $data = $request->validate(['gallery_space_id' => 'required|integer', 'name' => 'required|string|max:160', 'origin' => 'required|string|max:255', 'destination' => 'required|string|max:255', 'preferences' => 'nullable|array']);
+        abort_unless($request->user()->gallerySpaces()->whereKey($data['gallery_space_id'])->exists(), 404);
+        $id = DB::table('saved_transport_routes')->insertGetId(['uuid' => (string) Str::uuid(), 'gallery_space_id' => $data['gallery_space_id'], 'created_by' => $request->user()->id, 'name' => $data['name'], 'origin' => $data['origin'], 'destination' => $data['destination'], 'preferences' => json_encode($data['preferences'] ?? []), 'created_at' => now(), 'updated_at' => now()]);
+        return response()->json(DB::table('saved_transport_routes')->find($id), 201);
+    }
+
+    public function locationConsent(Request $request, int $tripId): JsonResponse
+    {
+        $trip = $this->trip($request->user(), $tripId); $data = $request->validate(['recipient_user_id' => 'required|integer|different:' . $request->user()->id, 'expires_at' => 'required|date|after:now']);
+        abort_unless($this->member($trip->gallery_space_id, $data['recipient_user_id']), 422, 'Příjemce musí být členem prostoru.');
+        DB::table('trip_location_shares')->updateOrInsert(['trip_id' => $tripId, 'owner_user_id' => $request->user()->id, 'recipient_user_id' => $data['recipient_user_id']], ['expires_at' => $data['expires_at'], 'is_active' => true, 'created_at' => now(), 'updated_at' => now()]);
+        return response()->json(['status' => 'active', 'expires_at' => $data['expires_at']]);
+    }
+
+    public function storeTrackPoint(Request $request, int $tripId): JsonResponse
+    {
+        $this->trip($request->user(), $tripId); $data = $request->validate(['latitude' => 'required|numeric|between:-90,90', 'longitude' => 'required|numeric|between:-180,180', 'recorded_at' => 'nullable|date']);
+        $id = DB::table('trip_track_points')->insertGetId($data + ['trip_id' => $tripId, 'user_id' => $request->user()->id, 'recorded_at' => $data['recorded_at'] ?? now(), 'created_at' => now(), 'updated_at' => now()]);
+        return response()->json(DB::table('trip_track_points')->find($id), 201);
+    }
+
+    public function packingItems(Request $request, int $tripId): JsonResponse
+    {
+        $this->trip($request->user(), $tripId);
+        return response()->json(DB::table('trip_packing_items')->where('trip_id', $tripId)->orderBy('is_packed')->orderBy('category')->orderBy('sort_order')->get()->map(fn ($item) => $this->packingPayload($item))->values());
+    }
+
+    public function storePackingItem(Request $request, int $tripId): JsonResponse
+    {
+        $trip = $this->trip($request->user(), $tripId);
+        $data = $request->validate(['title' => 'required|string|max:255', 'category' => 'nullable|in:documents,clothing,hygiene,electronics,health,car,food,other', 'quantity' => 'nullable|integer|min:1|max:99', 'is_essential' => 'nullable|boolean', 'assigned_to' => 'nullable|integer']);
+        if (!empty($data['assigned_to'])) abort_unless($this->member($trip->gallery_space_id, $data['assigned_to']), 422, 'Položku lze přiřadit pouze členovi společného prostoru.');
+        $id = DB::table('trip_packing_items')->insertGetId($data + ['uuid' => (string) Str::uuid(), 'trip_id' => $tripId, 'created_by' => $request->user()->id, 'category' => $data['category'] ?? 'other', 'quantity' => $data['quantity'] ?? 1, 'is_essential' => $data['is_essential'] ?? false, 'sort_order' => ((int) DB::table('trip_packing_items')->where('trip_id', $tripId)->max('sort_order')) + 1, 'created_at' => now(), 'updated_at' => now()]);
+        return response()->json($this->packingPayload(DB::table('trip_packing_items')->find($id)), 201);
+    }
+
+    public function updatePackingItem(Request $request, int $tripId, int $itemId): JsonResponse
+    {
+        $trip = $this->trip($request->user(), $tripId);
+        $item = DB::table('trip_packing_items')->where('id', $itemId)->where('trip_id', $tripId)->firstOrFail();
+        $data = $request->validate(['title' => 'sometimes|string|max:255', 'category' => 'nullable|in:documents,clothing,hygiene,electronics,health,car,food,other', 'quantity' => 'nullable|integer|min:1|max:99', 'is_essential' => 'nullable|boolean', 'assigned_to' => 'nullable|integer', 'is_packed' => 'nullable|boolean', 'sort_order' => 'nullable|integer|min:0']);
+        if (!empty($data['assigned_to'])) abort_unless($this->member($trip->gallery_space_id, $data['assigned_to']), 422, 'Položku lze přiřadit pouze členovi společného prostoru.');
+        if (array_key_exists('is_packed', $data)) $data['packed_at'] = $data['is_packed'] ? now() : null;
+        DB::table('trip_packing_items')->where('id', $item->id)->update($data + ['updated_at' => now()]);
+        return response()->json($this->packingPayload(DB::table('trip_packing_items')->find($item->id)));
+    }
+
+    public function destroyPackingItem(Request $request, int $tripId, int $itemId): JsonResponse
+    {
+        $this->trip($request->user(), $tripId);
+        DB::table('trip_packing_items')->where('id', $itemId)->where('trip_id', $tripId)->delete();
+        return response()->json(['status' => 'deleted']);
+    }
+
+    public function applyPackingTemplate(Request $request, int $tripId): JsonResponse
+    {
+        $this->trip($request->user(), $tripId);
+        $data = $request->validate(['template' => 'required|in:weekend,flight,car,first_aid']);
+        $templates = [
+            'weekend' => [['Občanský průkaz', 'documents', true], ['Nabíječka', 'electronics', true], ['Základní oblečení', 'clothing', true], ['Hygienické potřeby', 'hygiene', false]],
+            'flight' => [['Cestovní doklad', 'documents', true], ['Palubní vstupenka', 'documents', true], ['Powerbanka', 'electronics', true], ['Adaptér do zásuvky', 'electronics', false]],
+            'car' => [['Řidičský průkaz', 'documents', true], ['Dálniční známka', 'car', false], ['Parkovací lístek', 'car', false], ['Voda do auta', 'food', false]],
+            'first_aid' => [['Léky', 'health', true], ['Kartička pojištěnce', 'documents', true], ['Náplasti', 'health', false], ['Dezinfekce', 'health', false]],
+        ];
+        $existing = DB::table('trip_packing_items')->where('trip_id', $tripId)->pluck('title')->map(fn ($title) => mb_strtolower($title))->all();
+        $order = (int) DB::table('trip_packing_items')->where('trip_id', $tripId)->max('sort_order'); $created = 0;
+        foreach ($templates[$data['template']] as [$title, $category, $essential]) {
+            if (in_array(mb_strtolower($title), $existing, true)) continue;
+            DB::table('trip_packing_items')->insert(['uuid' => (string) Str::uuid(), 'trip_id' => $tripId, 'created_by' => $request->user()->id, 'title' => $title, 'category' => $category, 'quantity' => 1, 'is_essential' => $essential, 'is_packed' => false, 'source_template' => $data['template'], 'sort_order' => ++$order, 'created_at' => now(), 'updated_at' => now()]);
+            $created++;
+        }
+        return response()->json(['created' => $created, 'items' => DB::table('trip_packing_items')->where('trip_id', $tripId)->orderBy('sort_order')->get()->map(fn ($item) => $this->packingPayload($item))->values()], 201);
+    }
+
+    private function trip(User $user, int $id): object { return DB::table('trips')->where('id', $id)->whereIn('gallery_space_id', $user->gallerySpaces()->pluck('gallery_spaces.id'))->firstOrFail(); }
+    private function member(int $spaceId, int $userId): bool { return DB::table('gallery_space_user')->where('gallery_space_id', $spaceId)->where('user_id', $userId)->exists(); }
+    private function packingPayload(object $item): array { $payload = (array) $item; $payload['is_packed'] = (bool) $item->is_packed; $payload['is_essential'] = (bool) $item->is_essential; return $payload; }
+}

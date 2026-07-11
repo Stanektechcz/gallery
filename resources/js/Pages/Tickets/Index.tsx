@@ -1,6 +1,7 @@
 import AppLayout from '@/Layouts/AppLayout';
 import { Head } from '@inertiajs/react';
 import axios from 'axios';
+import { localizedCountry } from '@/lib/localizedMap';
 import { ArrowLeftRight, Clock, RefreshCw, Search, Users, X } from 'lucide-react';
 import { useCallback, useRef, useState } from 'react';
 
@@ -40,7 +41,10 @@ function fmtDur(min: number | null): string {
 type SortKey = 'price' | 'departure';
 
 export default function TicketsIndex() {
-    const [form, setForm] = useState({ from: '', to: '', date: todayISO(), adults: 1 });
+    const [form, setForm] = useState(() => {
+        const params = new URLSearchParams(window.location.search);
+        return { from: params.get('from') ?? '', to: params.get('to') ?? '', date: params.get('date') ?? todayISO(), adults: 1 };
+    });
     const [results,  setResults]  = useState<TripResult[] | null>(null);
     const [loading,  setLoading]  = useState(false);
     const [error,    setError]    = useState<string | null>(null);
@@ -50,7 +54,7 @@ export default function TicketsIndex() {
     // Autocomplete for from/to fields
     const [acField, setAcField]   = useState<'from' | 'to' | null>(null);
     const [acQuery, setAcQuery]   = useState('');
-    const [acResults, setAcResults] = useState<{name:string;country:string}[]>([]);
+    const [acResults, setAcResults] = useState<{name:string;country:string;country_code?:string}[]>([]);
     const [acLoading, setAcLoading] = useState(false);
     const acTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -65,7 +69,7 @@ export default function TicketsIndex() {
             try {
                 const r = await axios.get('/api/v1/itinerary/search', { params: { q: val } });
                 const cities = (r.data ?? []).filter((x: any) => ['city','country','landmark'].includes(x.category));
-                setAcResults(cities.map((x: any) => ({ name: x.name || x.display_name, country: x.country })));
+                setAcResults(cities.map((x: any) => ({ name: x.name || x.display_name, country: x.country, country_code: x.country_code })));
             } catch { setAcResults([]); }
             finally { setAcLoading(false); }
         }, 350);
@@ -89,7 +93,8 @@ export default function TicketsIndex() {
             setResults(r.data ?? []);
             setSearched({ from: form.from, to: form.to, date: form.date });
         } catch (err: any) {
-            setError('Nepodařilo se načíst výsledky. Zkuste to prosím znovu.');
+            const status = err?.response?.status;
+            setError(status === 404 ? 'Vyhledávací služba nebyla na serveru nalezena. Obnovte nasazení a cache rout.' : 'Nepodařilo se načíst výsledky. Zkuste to prosím znovu.');
         } finally {
             setLoading(false);
         }
@@ -143,7 +148,7 @@ export default function TicketsIndex() {
                                             <button key={i} type="button" onMouseDown={() => pickAc('from', r.name)}
                                                 className="w-full text-left px-3 py-2 hover:bg-[var(--color-bg-secondary)] flex items-center gap-2 border-b border-[var(--color-border)] last:border-0">
                                                 <span className="text-sm">📍</span>
-                                                <div><p className="text-xs text-white">{r.name}</p><p className="text-[10px] text-[var(--color-text-secondary)]">{r.country}</p></div>
+                                                <div><p className="text-xs text-white">{r.name}</p><p className="text-[10px] text-[var(--color-text-secondary)]">{localizedCountry(r.country, r.country_code)}</p></div>
                                             </button>
                                         ))}
                                     </div>
@@ -170,7 +175,7 @@ export default function TicketsIndex() {
                                             <button key={i} type="button" onMouseDown={() => pickAc('to', r.name)}
                                                 className="w-full text-left px-3 py-2 hover:bg-[var(--color-bg-secondary)] flex items-center gap-2 border-b border-[var(--color-border)] last:border-0">
                                                 <span className="text-sm">📍</span>
-                                                <div><p className="text-xs text-white">{r.name}</p><p className="text-[10px] text-[var(--color-text-secondary)]">{r.country}</p></div>
+                                                <div><p className="text-xs text-white">{r.name}</p><p className="text-[10px] text-[var(--color-text-secondary)]">{localizedCountry(r.country, r.country_code)}</p></div>
                                             </button>
                                         ))}
                                     </div>

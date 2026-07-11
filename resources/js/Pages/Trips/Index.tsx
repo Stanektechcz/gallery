@@ -1,7 +1,8 @@
 import AppLayout from '@/Layouts/AppLayout';
 import { Head, Link } from '@inertiajs/react';
 import axios from 'axios';
-import { Calendar, Camera, GripVertical, MapPin, Plus, RefreshCw, Route, Search, Trash2, X } from 'lucide-react';
+import { addLocalizedBaseLayer, localizedCountry } from '@/lib/localizedMap';
+import { ArrowDown, ArrowUp, Calendar, Camera, GripVertical, MapPin, Plus, RefreshCw, Route, Search, Trash2, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 type TransportMode = 'car'|'train'|'bus'|'plane'|'walk'|'bike'|'boat';
@@ -47,7 +48,7 @@ interface TripMedia {
 }
 interface Suggestion { count: number; samples: TripMedia[]; all_ids: number[]; }
 interface SearchResult {
-    name: string; display_name: string; country: string;
+    name: string; display_name: string; country: string; country_code?: string;
     latitude: number; longitude: number; category: string;
 }
 
@@ -134,14 +135,14 @@ function buildTransportLinks(from: Waypoint, to: Waypoint, tripDate: string) {
     const f = encodeURIComponent(from.place_name);
     const t = encodeURIComponent(to.place_name);
     const iso = tripDate.substring(0, 10);
-    const [y, mo, d] = iso.split('-');
-    const czDate = `${d}.${mo}.${y}`;
     const fLat = from.latitude, fLng = from.longitude;
     const tLat = to.latitude,   tLng = to.longitude;
     return [
+        { label: 'Porovnat vše', icon: '🎫', mode: 'train' as TransportMode, url: `/tickets?from=${f}&to=${t}&date=${iso}` },
         { label: 'ČD / IDOS',   icon: '🚂', mode: 'train' as TransportMode, url: `https://idos.idnes.cz/vlak/spojeni/?f=${f}&t=${t}&date=${iso}&time=0600` },
-        { label: 'RegioJet',    icon: '🟡', mode: 'train' as TransportMode, url: `https://www.regiojet.cz/vlaky-a-autobusy/jizdenky-online/?f=${from.place_name}&t=${to.place_name}&date=${iso}` },
-        { label: 'FlixBus',     icon: '🟢', mode: 'bus' as TransportMode, url: `https://shop.flixbus.cz/search?departureCity=${f}&arrivalCity=${t}&rideDate=${iso}&adult=1` },
+        { label: 'RegioJet',    icon: '🟡', mode: 'train' as TransportMode, url: 'https://regiojet.cz/' },
+        { label: 'FlixBus',     icon: '🟢', mode: 'bus' as TransportMode, url: 'https://www.flixbus.cz/' },
+        { label: 'Leo Express', icon: '⚫', mode: 'train' as TransportMode, url: 'https://www.leoexpress.com/cs/rezervace' },
         { label: 'Google Maps', icon: '🗺️', mode: 'car' as TransportMode,
             url: fLat && fLng && tLat && tLng
                 ? `https://www.google.com/maps/dir/${fLat},${fLng}/${tLat},${tLng}/`
@@ -152,7 +153,7 @@ function buildTransportLinks(from: Waypoint, to: Waypoint, tripDate: string) {
             url: fLat && fLng && tLat && tLng
                 ? `https://mapy.cz/zakladni?planovani-trasy&planovani[0][x]=${fLng}&planovani[0][y]=${fLat}&planovani[1][x]=${tLng}&planovani[1][y]=${tLat}`
                 : `https://mapy.cz/` },
-        { label: 'Skyscanner',  icon: '✈️', mode: 'plane' as TransportMode, url: `https://www.skyscanner.cz/letiste/${f}/${t}/${iso.replace(/-/g, '')}/1adults/` },
+        { label: 'Skyscanner',  icon: '✈️', mode: 'plane' as TransportMode, url: 'https://www.skyscanner.cz/' },
         { label: 'IDOS autobus',icon: '🚌', mode: 'bus' as TransportMode, url: `https://idos.idnes.cz/autobus/spojeni/?f=${f}&t=${t}&date=${iso}&time=0600` },
     ].filter(l => l.url !== null) as {label:string;icon:string;mode:TransportMode;url:string}[];
 }
@@ -238,7 +239,7 @@ export default function TripsIndex() {
         if (mapObj.current) { mapObj.current.remove(); mapObj.current = null; }
         const map = L.map(mapRef.current, { zoomControl: true });
         mapObj.current = map;
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap', maxZoom: 18 }).addTo(map);
+        addLocalizedBaseLayer(L, map);
 
         const bounds: [number, number][] = [];
 
@@ -494,6 +495,25 @@ export default function TripsIndex() {
     const handleDragOver = (e: React.DragEvent, idx: number) => {
         e.preventDefault(); setDragOver(idx);
     };
+    const persistWaypointOrder = async (wps: Waypoint[]) => {
+        if (!selectedId || !selected) return;
+        const previous = selected.waypoints;
+        setWpError(null);
+        setTrips(items => items.map(trip => trip.id === selectedId ? { ...trip, waypoints: wps } : trip));
+        try {
+            await axios.put(`/api/v1/trips/${selectedId}/waypoints/reorder`, { order: wps.map(wp => wp.id) });
+        } catch (error: any) {
+            setTrips(items => items.map(trip => trip.id === selectedId ? { ...trip, waypoints: previous } : trip));
+            setWpError(error?.response?.data?.message ?? 'Pořadí zastávek se nepodařilo uložit.');
+        }
+    };
+    const moveWaypoint = (from: number, direction: -1 | 1) => {
+        const to = from + direction;
+        if (!selected || to < 0 || to >= selected.waypoints.length) return;
+        const wps = [...selected.waypoints];
+        [wps[from], wps[to]] = [wps[to], wps[from]];
+        void persistWaypointOrder(wps);
+    };
     const handleDrop = async (e: React.DragEvent, toIdx: number) => {
         e.preventDefault(); setDragOver(null);
         if (!selectedId || dragIdx.current === null || dragIdx.current === toIdx) return;
@@ -501,9 +521,7 @@ export default function TripsIndex() {
         const wps = [...(selected?.waypoints ?? [])];
         const [moved] = wps.splice(from, 1);
         wps.splice(toIdx, 0, moved);
-        // Optimistic update
-        setTrips(prev => prev.map(t => t.id === selectedId ? { ...t, waypoints: wps } : t));
-        await axios.put(`/api/v1/trips/${selectedId}/waypoints/reorder`, { order: wps.map(w => w.id) });
+        await persistWaypointOrder(wps);
     };
 
     // Compute per-leg stats (OSRM when available, Haversine fallback)
@@ -791,7 +809,7 @@ export default function TripsIndex() {
                                                             <button key={i} type="button" onMouseDown={e => { e.preventDefault(); selectWpResult(r); }}
                                                                 className="w-full min-h-11 text-left px-3 py-2 hover:bg-[var(--color-bg-secondary)] border-b border-[var(--color-border)] last:border-0">
                                                                 <p className="text-xs font-medium text-white truncate">{r.name || r.display_name}</p>
-                                                                <p className="text-[10px] text-[var(--color-text-secondary)] truncate">{r.country}</p>
+                                                                <p className="text-[10px] text-[var(--color-text-secondary)] truncate">{localizedCountry(r.country, r.country_code)}</p>
                                                             </button>
                                                         ))}
                                                     </div>
@@ -866,8 +884,14 @@ export default function TripsIndex() {
                                                                     </p>
                                                                 )}
                                                             </div>
+                                                            <div className="flex shrink-0 gap-0.5">
+                                                                <button type="button" disabled={idx === 0} onClick={() => moveWaypoint(idx, -1)} aria-label={`Posunout ${wp.place_name} nahoru`}
+                                                                    className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--color-text-secondary)] hover:bg-white/5 hover:text-white disabled:opacity-20"><ArrowUp size={13}/></button>
+                                                                <button type="button" disabled={idx === selected.waypoints.length - 1} onClick={() => moveWaypoint(idx, 1)} aria-label={`Posunout ${wp.place_name} dolů`}
+                                                                    className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--color-text-secondary)] hover:bg-white/5 hover:text-white disabled:opacity-20"><ArrowDown size={13}/></button>
+                                                            </div>
                                                             <button onClick={() => removeWaypoint(wp.id)}
-                                                                className="p-0.5 text-[var(--color-text-secondary)] hover:text-red-400 opacity-0 group-hover/wp:opacity-100 transition-all shrink-0">
+                                                                className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--color-text-secondary)] hover:bg-red-500/10 hover:text-red-400 transition-all shrink-0 sm:opacity-0 sm:group-hover/wp:opacity-100">
                                                                 <X size={10}/>
                                                             </button>
                                                         </div>
@@ -953,7 +977,7 @@ export default function TripsIndex() {
                                                                                 const isFetching = fetchingPrices[priceKey] ?? false;
                                                                                 const live  = livePrices[priceKey];
                                                                                 const fallback = roadKm ? estimatePrices(roadKm, wp.place_name, nextWp.place_name, selected.start_date.substring(0,10)) : [];
-                                                                                const prices = (live ?? fallback).filter(price => transportFilters.includes(price.mode));
+                                                                                const prices = (live ?? fallback).filter(price => transportFilters.includes(price.mode) && Boolean(price.bookUrl));
                                                                                 const isLive = !!live;
 
                                                                                 return (
@@ -973,7 +997,7 @@ export default function TripsIndex() {
                                                                                         ) : prices.length > 0 ? (
                                                                                             <div className="space-y-1">
                                                                                                 {prices.map((p, pi) => (
-                                                                                                    <a key={pi} href={p.bookUrl ?? '#'} target="_blank" rel="noopener noreferrer"
+                                                                                                    <a key={pi} href={p.bookUrl!} target="_blank" rel="noopener noreferrer"
                                                                                                         className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-[var(--color-bg-secondary)] hover:bg-white/5 transition-colors group/price">
                                                                                                         <span className="text-base shrink-0">{p.icon}</span>
                                                                                                         <div className="flex-1 min-w-0">

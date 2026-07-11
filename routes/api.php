@@ -19,6 +19,9 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
     // Search
     Route::get('/search', [SearchController::class, 'search'])->name('api.search');
     Route::get('/search/suggestions', [SearchController::class, 'suggestions'])->name('api.search.suggestions');
+    Route::get('/travel-data/weather', [App\Http\Controllers\Api\TravelDataController::class, 'weather'])->name('api.travel-data.weather');
+    Route::get('/travel-data/exchange-rate', [App\Http\Controllers\Api\TravelDataController::class, 'exchangeRate'])->name('api.travel-data.exchange-rate');
+    Route::post('/travel-data/route', [App\Http\Controllers\Api\TravelDataController::class, 'route'])->name('api.travel-data.route');
 
     // Resumable upload
     Route::prefix('uploads')->name('api.uploads.')->group(function () {
@@ -68,6 +71,9 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
         Route::get('/{uuid}/comments',    [App\Http\Controllers\Api\CommentController::class, 'index'])->name('comments.index');
         Route::post('/{uuid}/comments',   [App\Http\Controllers\Api\CommentController::class, 'store'])->name('comments.store');
         Route::delete('/{uuid}/comments/{id}', [App\Http\Controllers\Api\CommentController::class, 'destroy'])->name('comments.destroy');
+        Route::get('/{uuid}/private-note', [App\Http\Controllers\Api\PrivateMemoryNoteController::class, 'show'])->name('private-note.show');
+        Route::put('/{uuid}/private-note', [App\Http\Controllers\Api\PrivateMemoryNoteController::class, 'update'])->name('private-note.update');
+        Route::get('/{uuid}/revisit-suggestions', [App\Http\Controllers\Api\RevisitSuggestionController::class, 'show'])->name('revisit-suggestions.show');
     });
 
     // Automatic RAW/burst stacks
@@ -115,6 +121,97 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
 
     // Saved searches
     Route::apiResource('saved-searches', App\Http\Controllers\Api\SavedSearchController::class);
+
+    Route::prefix('curation-boards')->name('api.curation-boards.')->group(function () {
+        Route::get('/', [App\Http\Controllers\Api\CurationBoardController::class, 'index'])->name('index');
+        Route::post('/', [App\Http\Controllers\Api\CurationBoardController::class, 'store'])->name('store');
+        Route::get('/{uuid}', [App\Http\Controllers\Api\CurationBoardController::class, 'show'])->name('show');
+        Route::patch('/{uuid}', [App\Http\Controllers\Api\CurationBoardController::class, 'update'])->name('update');
+        Route::delete('/{uuid}', [App\Http\Controllers\Api\CurationBoardController::class, 'destroy'])->name('destroy');
+        Route::post('/{uuid}/items', [App\Http\Controllers\Api\CurationBoardController::class, 'addItems'])->name('items.store');
+        Route::patch('/{uuid}/items/{itemId}', [App\Http\Controllers\Api\CurationBoardController::class, 'updateItem'])->name('items.update');
+        Route::delete('/{uuid}/items/{itemId}', [App\Http\Controllers\Api\CurationBoardController::class, 'removeItem'])->name('items.destroy');
+        Route::put('/{uuid}/items/{itemId}/vote', [App\Http\Controllers\Api\CurationBoardController::class, 'vote'])->name('items.vote');
+    });
+
+    // Shared calendar, preparation and memories workflow — static routes before {uuid}
+    Route::prefix('calendar')->name('api.calendar.')->group(function () {
+        Route::get('/events', [App\Http\Controllers\Api\CalendarPlanningController::class, 'index'])->name('events.index');
+        Route::post('/events', [App\Http\Controllers\Api\CalendarPlanningController::class, 'store'])->name('events.store');
+        Route::get('/weekly-overview', [App\Http\Controllers\Api\CalendarPlanningController::class, 'weeklyOverview'])->name('weekly-overview');
+        Route::get('/gifts', [App\Http\Controllers\Api\CalendarAutomationController::class, 'gifts'])->name('gifts.index');
+        Route::post('/gifts', [App\Http\Controllers\Api\CalendarAutomationController::class, 'storeGift'])->name('gifts.store');
+        Route::patch('/gifts/{uuid}', [App\Http\Controllers\Api\CalendarAutomationController::class, 'updateGift'])->name('gifts.update');
+        Route::get('/day-note', [App\Http\Controllers\Api\CalendarAutomationController::class, 'dayNote'])->name('day-note.show');
+        Route::put('/day-note', [App\Http\Controllers\Api\CalendarAutomationController::class, 'updateDayNote'])->name('day-note.update');
+        Route::get('/inbox', [App\Http\Controllers\Api\CalendarPlanningController::class, 'inbox'])->name('inbox.index');
+        Route::post('/inbox', [App\Http\Controllers\Api\CalendarPlanningController::class, 'storeInbox'])->name('inbox.store');
+        Route::patch('/inbox/{uuid}', [App\Http\Controllers\Api\CalendarPlanningController::class, 'updateInbox'])->name('inbox.update');
+        Route::delete('/inbox/{uuid}', [App\Http\Controllers\Api\CalendarPlanningController::class, 'destroyInbox'])->name('inbox.destroy');
+        Route::get('/time-capsules', [App\Http\Controllers\Api\CalendarPlanningController::class, 'timeCapsules'])->name('time-capsules.index');
+        Route::post('/time-capsules', [App\Http\Controllers\Api\CalendarPlanningController::class, 'storeTimeCapsule'])->name('time-capsules.store');
+        Route::post('/push-subscriptions', [App\Http\Controllers\Api\CalendarPlanningController::class, 'storePushSubscription'])->name('push.store');
+        Route::delete('/push-subscriptions', [App\Http\Controllers\Api\CalendarPlanningController::class, 'destroyPushSubscription'])->name('push.destroy');
+        Route::get('/events/{uuid}', [App\Http\Controllers\Api\CalendarPlanningController::class, 'show'])->name('events.show');
+        Route::patch('/events/{uuid}', [App\Http\Controllers\Api\CalendarPlanningController::class, 'update'])->name('events.update');
+        Route::delete('/events/{uuid}', [App\Http\Controllers\Api\CalendarPlanningController::class, 'destroy'])->name('events.destroy');
+        Route::post('/events/{uuid}/response', [App\Http\Controllers\Api\CalendarPlanningController::class, 'respond'])->name('events.response');
+        Route::post('/events/{uuid}/tasks', [App\Http\Controllers\Api\CalendarPlanningController::class, 'storeTask'])->name('tasks.store');
+        Route::patch('/events/{uuid}/tasks/{taskId}', [App\Http\Controllers\Api\CalendarPlanningController::class, 'updateTask'])->name('tasks.update');
+        Route::delete('/events/{uuid}/tasks/{taskId}', [App\Http\Controllers\Api\CalendarPlanningController::class, 'destroyTask'])->name('tasks.destroy');
+        Route::post('/events/{uuid}/attachments', [App\Http\Controllers\Api\CalendarPlanningController::class, 'storeAttachment'])->name('attachments.store');
+        Route::delete('/events/{uuid}/attachments/{attachmentId}', [App\Http\Controllers\Api\CalendarPlanningController::class, 'destroyAttachment'])->name('attachments.destroy');
+        Route::get('/events/{uuid}/media-suggestions', [App\Http\Controllers\Api\CalendarPlanningController::class, 'mediaSuggestions'])->name('media-suggestions');
+        Route::post('/events/{uuid}/media-suggestions', [App\Http\Controllers\Api\CalendarPlanningController::class, 'applyMediaSuggestions'])->name('media-suggestions.apply');
+        Route::post('/events/{uuid}/story', [App\Http\Controllers\Api\CalendarPlanningController::class, 'story'])->name('story');
+
+        // Personal and shared planning tools
+        Route::get('/availability', [App\Http\Controllers\Api\PlanningExpansionController::class, 'availability'])->name('availability');
+        Route::put('/availability', [App\Http\Controllers\Api\PlanningExpansionController::class, 'updateAvailability'])->name('availability.update');
+        Route::get('/templates', [App\Http\Controllers\Api\PlanningExpansionController::class, 'templates'])->name('templates.index');
+        Route::post('/templates', [App\Http\Controllers\Api\PlanningExpansionController::class, 'storeTemplate'])->name('templates.store');
+        Route::post('/templates/{uuid}/apply', [App\Http\Controllers\Api\PlanningExpansionController::class, 'applyTemplate'])->name('templates.apply');
+        Route::get('/wishlists', [App\Http\Controllers\Api\PlanningExpansionController::class, 'wishlists'])->name('wishlists.index');
+        Route::post('/wishlists', [App\Http\Controllers\Api\PlanningExpansionController::class, 'storeWishlist'])->name('wishlists.store');
+        Route::post('/wishlists/{uuid}/items', [App\Http\Controllers\Api\PlanningExpansionController::class, 'storeWishlistItem'])->name('wishlists.items.store');
+        Route::get('/wishlists/{uuid}/suggestions', [App\Http\Controllers\Api\PlanningExpansionController::class, 'wishlistSuggestions'])->name('wishlists.suggestions');
+        Route::get('/polls', [App\Http\Controllers\Api\PlanningExpansionController::class, 'polls'])->name('polls.index');
+        Route::post('/polls', [App\Http\Controllers\Api\PlanningExpansionController::class, 'storePoll'])->name('polls.store');
+        Route::post('/polls/{uuid}/vote', [App\Http\Controllers\Api\PlanningExpansionController::class, 'vote'])->name('polls.vote');
+        Route::get('/partner-rules', [App\Http\Controllers\Api\PlanningExpansionController::class, 'partnerRules'])->name('partner-rules.index');
+        Route::post('/partner-rules', [App\Http\Controllers\Api\PlanningExpansionController::class, 'storePartnerRule'])->name('partner-rules.store');
+        Route::get('/partner-rules/{uuid}/preview', [App\Http\Controllers\Api\PlanningExpansionController::class, 'previewPartnerRule'])->name('partner-rules.preview');
+        Route::get('/events/{uuid}/exceptions', [App\Http\Controllers\Api\PlanningExpansionController::class, 'exceptions'])->name('exceptions.index');
+        Route::post('/events/{uuid}/exceptions', [App\Http\Controllers\Api\PlanningExpansionController::class, 'storeException'])->name('exceptions.store');
+        Route::get('/events/{uuid}/ics', [App\Http\Controllers\Api\PlanningExpansionController::class, 'exportIcs'])->name('events.ics');
+    });
+
+    Route::prefix('trips/{tripId}')->name('api.trip-planning.')->group(function () {
+        Route::get('/planning', [App\Http\Controllers\Api\CalendarPlanningController::class, 'tripPlanning'])->name('index');
+        Route::post('/expenses', [App\Http\Controllers\Api\CalendarPlanningController::class, 'storeExpense'])->name('expenses.store');
+        Route::delete('/expenses/{expenseId}', [App\Http\Controllers\Api\CalendarPlanningController::class, 'destroyExpense'])->name('expenses.destroy');
+        Route::post('/route-variants', [App\Http\Controllers\Api\CalendarPlanningController::class, 'storeRouteVariant'])->name('variants.store');
+        Route::post('/route-variants/{variantId}/select', [App\Http\Controllers\Api\CalendarPlanningController::class, 'selectRouteVariant'])->name('variants.select');
+        Route::get('/emergency-card', [App\Http\Controllers\Api\PlanningExpansionController::class, 'emergencyCard'])->name('emergency-card');
+        Route::put('/emergency-card', [App\Http\Controllers\Api\PlanningExpansionController::class, 'updateEmergencyCard'])->name('emergency-card.update');
+        Route::get('/readiness', [App\Http\Controllers\Api\TripIntelligenceController::class, 'readiness'])->name('readiness');
+        Route::put('/budget-limits', [App\Http\Controllers\Api\TripIntelligenceController::class, 'upsertBudgetLimit'])->name('budget-limits.upsert');
+        Route::post('/documents', [App\Http\Controllers\Api\TripIntelligenceController::class, 'storeDocument'])->name('documents.store');
+        Route::post('/settlements', [App\Http\Controllers\Api\TripIntelligenceController::class, 'proposeSettlement'])->name('settlements.store');
+        Route::post('/settlements/{settlementId}/settle', [App\Http\Controllers\Api\TripIntelligenceController::class, 'settle'])->name('settlements.settle');
+        Route::post('/location-consent', [App\Http\Controllers\Api\TripIntelligenceController::class, 'locationConsent'])->name('location-consent.store');
+        Route::post('/track-points', [App\Http\Controllers\Api\TripIntelligenceController::class, 'storeTrackPoint'])->name('track-points.store');
+        Route::get('/packing-items', [App\Http\Controllers\Api\TripIntelligenceController::class, 'packingItems'])->name('packing.index');
+        Route::post('/packing-items', [App\Http\Controllers\Api\TripIntelligenceController::class, 'storePackingItem'])->name('packing.store');
+        Route::patch('/packing-items/{itemId}', [App\Http\Controllers\Api\TripIntelligenceController::class, 'updatePackingItem'])->name('packing.update');
+        Route::delete('/packing-items/{itemId}', [App\Http\Controllers\Api\TripIntelligenceController::class, 'destroyPackingItem'])->name('packing.destroy');
+        Route::post('/packing-items/apply-template', [App\Http\Controllers\Api\TripIntelligenceController::class, 'applyPackingTemplate'])->name('packing.template');
+        Route::get('/offline-package', [App\Http\Controllers\Api\TripIntelligenceController::class, 'offlinePackage'])->name('offline-package');
+    });
+
+    Route::get('/transport-routes', [App\Http\Controllers\Api\TripIntelligenceController::class, 'savedTransportRoutes'])->name('api.transport-routes.index');
+    Route::post('/transport-routes', [App\Http\Controllers\Api\TripIntelligenceController::class, 'saveTransportRoute'])->name('api.transport-routes.store');
+    Route::post('/currency-rates', [App\Http\Controllers\Api\TripIntelligenceController::class, 'storeCurrencyRate'])->name('api.currency-rates.store');
 
     // Export
     Route::post('/exports', [App\Http\Controllers\Api\ExportController::class, 'create'])->name('api.exports.create');

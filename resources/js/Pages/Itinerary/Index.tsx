@@ -1,6 +1,7 @@
 import AppLayout from '@/Layouts/AppLayout';
 import { Head } from '@inertiajs/react';
 import axios from 'axios';
+import { addLocalizedBaseLayer, localizedCountry } from '@/lib/localizedMap';
 import { Calendar, CalendarClock, Camera, CheckCircle, ExternalLink, Globe, MapPin, Pencil, Plus, RefreshCw, Save, Search, Star, Trash2, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
@@ -73,7 +74,7 @@ export default function ItineraryIndex() {
 
         const map = L.map(mapRef.current, { center: [20, 10], zoom: 2 });
         mapObj.current = map;
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap', maxZoom: 18 }).addTo(map);
+        addLocalizedBaseLayer(L, map);
 
         visited.forEach(area => {
             const r = Math.min(22, 5 + Math.log(area.photo_count) * 3);
@@ -126,7 +127,7 @@ export default function ItineraryIndex() {
 
     const selectResult = (r: SearchResult) => {
         setForm(p => ({
-            ...p, name: r.name || r.display_name, country: r.country,
+            ...p, name: r.name || r.display_name, country: localizedCountry(r.country, r.country_code),
             country_code: r.country_code, latitude: r.latitude.toString(),
             longitude: r.longitude.toString(), category: r.category,
             osm_id: r.osm_id, osm_type: r.osm_type,
@@ -287,7 +288,7 @@ export default function ItineraryIndex() {
                                                     <span className="text-sm shrink-0 mt-0.5">{CAT_EMOJI[r.category]??'📍'}</span>
                                                     <div className="flex-1 min-w-0">
                                                         <p className="text-xs font-medium text-white truncate">{r.name || r.display_name}</p>
-                                                        <p className="text-[10px] text-[var(--color-text-secondary)] truncate">{r.country}{r.type ? ' · ' + (CAT_LABEL[r.type] ?? r.type) : ''}</p>
+                                                        <p className="text-[10px] text-[var(--color-text-secondary)] truncate">{localizedCountry(r.country, r.country_code)}{r.type ? ' · ' + (CAT_LABEL[r.type] ?? r.type) : ''}</p>
                                                     </div>
                                                 </button>
                                             ))}

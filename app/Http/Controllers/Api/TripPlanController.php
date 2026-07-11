@@ -38,11 +38,11 @@ class TripPlanController extends Controller
     {
         $this->trip($request, $id);
         $data = $request->validate([
-            'type' => 'required|in:note,expense,location', 'content' => 'nullable|string|max:5000',
+            'type' => 'required|in:note,voice,expense,location', 'content' => 'nullable|string|max:5000',
             'latitude' => 'nullable|numeric|between:-90,90', 'longitude' => 'nullable|numeric|between:-180,180',
             'amount' => 'nullable|numeric|min:0|max:999999999', 'currency' => 'nullable|string|size:3',
         ]);
-        abort_if($data['type'] === 'note' && blank($data['content'] ?? null), 422, 'Poznámka nesmí být prázdná.');
+        abort_if(in_array($data['type'], ['note', 'voice'], true) && blank($data['content'] ?? null), 422, 'Záznam nesmí být prázdný.');
         $entryId = DB::table('travel_journal_entries')->insertGetId(array_merge($data, [
             'trip_id' => $id, 'user_id' => $request->user()->id, 'recorded_at' => now(), 'created_at' => now(), 'updated_at' => now(),
         ]));

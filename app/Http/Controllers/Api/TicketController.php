@@ -23,7 +23,7 @@ class TicketController extends Controller
         ]);
 
         $adults   = (int) ($v['adults'] ?? 1);
-        $cacheKey = 'tickets:' . md5("{$v['from']}|{$v['to']}|{$v['date']}|{$adults}");
+        $cacheKey = 'tickets:v2:' . md5("{$v['from']}|{$v['to']}|{$v['date']}|{$adults}");
 
         $result = Cache::remember($cacheKey, 3600 * 2, function () use ($v, $adults) {
             $trips = [];
@@ -40,9 +40,19 @@ class TicketController extends Controller
                 \Illuminate\Support\Facades\Log::debug('FlixBus search failed: ' . $e->getMessage());
             }
 
-            // Always include ČD/IDOS as a search link (they don't have a public price API)
+            // Public transport APIs change frequently. Keep every provider usable
+            // even when a live endpoint is unavailable or returns 404.
+            if (! collect($trips)->contains(fn ($trip) => str_contains($trip['carrier'], 'RegioJet'))) {
+                $trips[] = $this->portalEntry('RegioJet', '🟡', 'https://regiojet.cz/', 'Vlak i autobus');
+            }
+            if (! collect($trips)->contains(fn ($trip) => $trip['carrier'] === 'FlixBus')) {
+                $trips[] = $this->portalEntry('FlixBus', '🟢', 'https://www.flixbus.cz/', 'Autobusové spoje');
+            }
             $trips[] = $this->idosEntry($v['from'], $v['to'], $v['date'], 'vlak');
             $trips[] = $this->idosEntry($v['from'], $v['to'], $v['date'], 'autobus');
+            $trips[] = $this->portalEntry('České dráhy', '🔵', 'https://www.cd.cz/spojeni-a-jizdenka/', 'Vyhledat a koupit jízdenku');
+            $trips[] = $this->portalEntry('Leo Express', '⚫', 'https://www.leoexpress.com/cs/rezervace', 'Vlakové a autobusové spoje');
+            $trips[] = $this->portalEntry('Omio', '🟣', 'https://www.omio.com/', 'Porovnání více dopravců');
 
             // Sort: live prices first (ascending), then static links last
             usort($trips, function ($a, $b) {
@@ -118,8 +128,7 @@ class TicketController extends Controller
 
             $isTraIn = in_array('TRAIN', $route['vehicleTypes'] ?? []);
             $seats   = $route['freeSeatsCount'] ?? null;
-            $bookUrl = 'https://www.regiojet.cz/vlaky-a-autobusy/jizdenky-online/?f='
-                . urlencode($from) . '&t=' . urlencode($to) . '&date=' . $date;
+            $bookUrl = 'https://regiojet.cz/';
 
             $trips[] = [
                 'carrier'       => $isTraIn ? 'RegioJet vlak' : 'RegioJet Bus',
@@ -187,9 +196,7 @@ class TicketController extends Controller
 
             $dur = ($dep && $arr) ? (int) round(($arr - $dep) / 60) : null;
 
-            $bookUrl = 'https://shop.flixbus.cz/search?departureCity='
-                . urlencode($from) . '&arrivalCity=' . urlencode($to)
-                . '&rideDate=' . $date . '&adult=' . $adults;
+            $bookUrl = 'https://www.flixbus.cz/';
 
             $results[] = [
                 'carrier'       => 'FlixBus',
@@ -255,6 +262,13 @@ class TicketController extends Controller
         ];
     }
 
+    private function portalEntry(string $carrier, string $icon, string $url, string $note): array
+    {
+        return ['carrier' => $carrier, 'icon' => $icon, 'departure' => null, 'arrival' => null,
+            'duration_min' => null, 'price' => null, 'currency' => 'CZK', 'seats' => null,
+            'transfers' => null, 'source' => 'link', 'note' => $note . ' →', 'book_url' => $url];
+    }
+
     // ─── Helpers ───────────────────────────────────────────────────────────
 
     private function fuzzyCity(array $cities, string $name): ?int
@@ -300,8 +314,13 @@ class TicketController extends Controller
 
         $resp  = curl_exec($ch);
         $errno = curl_errno($ch);
+        $status = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
         curl_close($ch);
 
-        return ($errno || ! $resp) ? '' : $resp;
+        if ($errno || ! $resp || $status >= 400) {
+            throw new \RuntimeException("Dopravní portál vrátil HTTP {$status}");
+        }
+
+        return $resp;
     }
 }

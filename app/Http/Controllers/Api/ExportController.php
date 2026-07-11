@@ -22,21 +22,29 @@ class ExportController extends Controller
 
         // Dispatch export job
         $jobId = (string) \Illuminate\Support\Str::uuid();
-        \App\Jobs\GenerateExportJob::dispatch($request->user(), $data, $jobId)->onQueue('default');
+        \Illuminate\Support\Facades\Cache::put("export_owner_{$jobId}", $request->user()->id, now()->addHour());
+        \App\Jobs\GenerateExportJob::dispatch($request->user()->id, $data, $jobId)->onQueue('default');
 
         return response()->json(['job_id' => $jobId, 'status' => 'queued'], 202);
     }
 
-    public function status(string $id): JsonResponse
+    public function status(Request $request, string $id): JsonResponse
     {
+        $this->ensureOwner($request, $id);
         $status = \Illuminate\Support\Facades\Cache::get("export_status_{$id}", 'unknown');
         return response()->json(['job_id' => $id, 'status' => $status]);
     }
 
-    public function download(string $id): mixed
+    public function download(Request $request, string $id): mixed
     {
+        $this->ensureOwner($request, $id);
         $path = storage_path("app/exports/{$id}.zip");
         if (!file_exists($path)) abort(404);
         return response()->download($path, "gallery-export-{$id}.zip");
+    }
+
+    private function ensureOwner(Request $request, string $id): void
+    {
+        abort_unless(hash_equals((string) $request->user()->id, (string) \Illuminate\Support\Facades\Cache::get("export_owner_{$id}", '')), 404);
     }
 }

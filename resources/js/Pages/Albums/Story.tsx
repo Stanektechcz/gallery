@@ -4,6 +4,7 @@
  */
 
 import axios from 'axios';
+import { addLocalizedBaseLayer } from '@/lib/localizedMap';
 import {
     ChevronDown, ChevronUp, Edit3,
     Plus,
@@ -126,7 +127,7 @@ function MapBlock({ content }: { content: Record<string, any> }) {
             zoomControl: false, attributionControl: false,
             dragging: false, touchZoom: false, scrollWheelZoom: false,
         });
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+        addLocalizedBaseLayer(L, map);
         L.marker([content.latitude, content.longitude]).addTo(map);
         return () => { try { map.remove(); } catch {} };
     }, [ready, content.latitude, content.longitude, content.zoom]);

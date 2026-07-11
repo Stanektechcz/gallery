@@ -127,6 +127,16 @@ export default defineConfig({
                             cacheableResponse: { statuses: [0, 200] },
                         },
                     },
+                    {
+                        urlPattern: /^\/api\/v1\/calendar\/(events|weekly-overview)/,
+                        handler: "NetworkFirst",
+                        options: {
+                            cacheName: "calendar-cache",
+                            networkTimeoutSeconds: 3,
+                            expiration: { maxEntries: 40, maxAgeSeconds: 86400 * 7 },
+                            cacheableResponse: { statuses: [0, 200] },
+                        },
+                    },
                 ],
             },
             devOptions: { enabled: true },

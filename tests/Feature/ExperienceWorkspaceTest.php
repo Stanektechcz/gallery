@@ -69,10 +69,21 @@ class ExperienceWorkspaceTest extends TestCase
             ->assertOk()->assertJsonCount(3, 'days');
         $dayId = $plan->json('days.0.id');
 
-        $this->postJson("/api/v1/trips/{$tripId}/plan/days/{$dayId}/activities", [
+        $first = $this->postJson("/api/v1/trips/{$tripId}/plan/days/{$dayId}/activities", [
             'type' => 'reservation', 'title' => 'Schönbrunn', 'starts_at' => '10:00',
             'ends_at' => '12:00', 'cost' => 780, 'currency' => 'CZK',
         ])->assertCreated()->assertJsonPath('title', 'Schönbrunn');
+        $second = $this->postJson("/api/v1/trips/{$tripId}/plan/days/{$dayId}/activities", [
+            'type' => 'transport', 'title' => 'Přesun do centra', 'starts_at' => '13:00', 'currency' => 'CZK',
+        ])->assertCreated();
+
+        $this->putJson("/api/v1/trips/{$tripId}/plan/days/{$dayId}/activities/reorder", [
+            'order' => [$second->json('id'), $first->json('id')],
+        ])->assertOk()->assertJsonPath('reordered', 2);
+        $this->patchJson("/api/v1/trips/{$tripId}/plan/activities/{$first->json('id')}", [
+            'title' => 'Schönbrunn – nový čas', 'starts_at' => '09:30', 'ends_at' => '11:30',
+        ])->assertOk()->assertJsonPath('title', 'Schönbrunn – nový čas');
+        $this->assertDatabaseHas('trip_activities', ['id' => $second->json('id'), 'sort_order' => 0]);
     }
 
     public function test_memory_engine_returns_on_this_day_and_accepts_feedback(): void

@@ -8,6 +8,7 @@ use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Tests\TestCase;
@@ -64,6 +65,21 @@ class InnovationWorkflowTest extends TestCase
         $this->patchJson('/privacy/legacy', ['status' => 'ready', 'inactivity_months' => 12])->assertUnprocessable();
         $this->patchJson('/privacy/legacy', ['status' => 'ready', 'inactivity_months' => 12, 'contact_name' => 'Eva', 'contact_email' => 'eva@example.test'])->assertOk();
         $this->assertDatabaseHas('legacy_plans', ['user_id' => $this->user->id, 'status' => 'ready']);
+    }
+
+    public function test_ticket_pages_and_provider_fallbacks_never_return_404(): void
+    {
+        $this->get('/tickets')->assertOk()->assertInertia(fn ($page) => $page->component('Tickets/Index'));
+        $this->get('/jizdenky')->assertOk()->assertInertia(fn ($page) => $page->component('Tickets/Index'));
+
+        Cache::put('rj_cities_v2', [], 60);
+        Cache::put('fb_city:' . md5('praha'), [], 60);
+        Cache::put('fb_city:' . md5('brno'), [], 60);
+        $response = $this->getJson('/api/v1/tickets/search?from=Praha&to=Brno&date=2026-08-01&adults=1')->assertOk();
+        $carriers = collect($response->json())->pluck('carrier');
+        $this->assertTrue($carriers->contains('RegioJet'));
+        $this->assertTrue($carriers->contains('FlixBus'));
+        $this->assertTrue($carriers->contains('České dráhy'));
     }
 
     private function media(array $overrides = []): int

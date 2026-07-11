@@ -88,6 +88,9 @@ class TimelineController extends Controller
     {
         $user  = $request->user();
         $space = $user->gallerySpaces()->first();
+        $driver = DB::connection()->getDriverName();
+        $yearSql = $driver === 'sqlite' ? "CAST(strftime('%Y', taken_at) AS INTEGER)" : 'YEAR(taken_at)';
+        $monthSql = $driver === 'sqlite' ? "CAST(strftime('%m', taken_at) AS INTEGER)" : 'MONTH(taken_at)';
 
         $buckets = MediaItem::query()
             ->where('gallery_space_id', $space->id)
@@ -96,8 +99,8 @@ class TimelineController extends Controller
             ->where('is_hidden', false)
             ->where('status', 'ready')
             ->whereNotNull('taken_at')
-            ->selectRaw("YEAR(taken_at) as year, MONTH(taken_at) as month, COUNT(*) as count")
-            ->groupByRaw("YEAR(taken_at), MONTH(taken_at)")
+            ->selectRaw("{$yearSql} as year, {$monthSql} as month, COUNT(*) as count")
+            ->groupByRaw("{$yearSql}, {$monthSql}")
             ->orderByRaw("year DESC, month DESC")
             ->get();
 
@@ -179,9 +182,11 @@ class TimelineController extends Controller
             ->where('is_hidden', false)
             ->where('status', 'ready')
             ->whereNotNull('taken_at')
-            ->whereRaw("MONTH(taken_at) = ? AND DAY(taken_at) = ? AND YEAR(taken_at) < ?", [$month, $day, $today->year])
+            ->whereMonth('taken_at', $month)
+            ->whereDay('taken_at', $day)
+            ->whereYear('taken_at', '<', $today->year)
             ->with(['variants' => fn($q) => $q->where('type', 'thumbnail')])
-            ->orderByRaw("YEAR(taken_at) DESC")
+            ->orderBy('taken_at', 'desc')
             ->limit(50)
             ->get();
 
@@ -204,6 +209,7 @@ class TimelineController extends Controller
 
         $year  = (int) $request->input('year',  now()->year);
         $month = (int) $request->input('month', now()->month);
+        $daySql = DB::connection()->getDriverName() === 'sqlite' ? "CAST(strftime('%d', taken_at) AS INTEGER)" : 'DAY(taken_at)';
 
         $days = MediaItem::query()
             ->where('gallery_space_id', $space->id)
@@ -213,11 +219,11 @@ class TimelineController extends Controller
             ->whereNotNull('taken_at')
             ->whereYear('taken_at',  $year)
             ->whereMonth('taken_at', $month)
-            ->selectRaw("DAY(taken_at) as day,
+            ->selectRaw("{$daySql} as day,
                 COUNT(*) as total,
                 SUM(CASE WHEN media_type='photo' THEN 1 ELSE 0 END) as photos,
                 SUM(CASE WHEN media_type='video' THEN 1 ELSE 0 END) as videos")
-            ->groupByRaw("DAY(taken_at)")
+            ->groupByRaw($daySql)
             ->orderBy('day')
             ->get();
 

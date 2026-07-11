@@ -24,6 +24,8 @@ interface BookItem {
     height?:    number;
     size_bytes?: number;
     media_type: string;
+    print_quality?: 'excellent'|'good'|'low'|'unsupported';
+    recommended_max_cm?: number | null;
     thumb_url?: string;
     full_url:   string;
 }
@@ -112,6 +114,8 @@ function DragGrid({ items, onReorder, onRemove }: {
                     <div className="absolute top-1 left-1 w-5 h-5 bg-black/70 text-white rounded text-[9px] font-bold flex items-center justify-center">
                         {idx + 1}
                     </div>
+
+                    {item.print_quality && item.print_quality !== 'excellent' && <div className={`absolute bottom-1 left-1 rounded px-1 py-0.5 text-[8px] font-medium ${item.print_quality === 'low' || item.print_quality === 'unsupported' ? 'bg-red-500/90 text-white' : 'bg-amber-400/90 text-black'}`} title={item.print_quality === 'unsupported' ? 'Video nelze vytisknout' : `Doporučený maximální kratší rozměr: ${item.recommended_max_cm ?? '?'} cm`}>{item.print_quality === 'unsupported' ? 'Bez tisku' : item.print_quality === 'low' ? 'Nízké rozlišení' : `max. ${item.recommended_max_cm} cm`}</div>}
 
                     {/* Grip */}
                     <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">

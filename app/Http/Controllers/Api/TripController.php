@@ -520,7 +520,7 @@ class TripController extends Controller
             'date' => 'required|date_format:Y-m-d',
         ]);
 
-        $key = 'tp:' . md5("{$v['from']}|{$v['to']}|{$v['date']}");
+        $key = 'tp:v2:' . md5("{$v['from']}|{$v['to']}|{$v['date']}");
 
         $prices = Cache::remember($key, 3600 * 3, function () use ($v) {
             $all = [];
@@ -611,7 +611,7 @@ class TripController extends Controller
                 'currency'  => 'CZK',
                 'source'    => 'live',
                 'note'      => 'základní tarif',
-                'book_url'  => "https://www.regiojet.cz/vlaky-a-autobusy/jizdenky-online/?f={$from}&t={$to}&date={$date}",
+                'book_url'  => 'https://regiojet.cz/',
             ];
         }
         if (isset($best['train'])) {
@@ -622,7 +622,7 @@ class TripController extends Controller
                 'currency'  => 'CZK',
                 'source'    => 'live',
                 'note'      => 'základní tarif',
-                'book_url'  => "https://www.regiojet.cz/vlaky-a-autobusy/jizdenky-online/?f={$from}&t={$to}&date={$date}",
+                'book_url'  => 'https://regiojet.cz/',
             ];
         }
 
@@ -675,7 +675,7 @@ class TripController extends Controller
             'currency'  => 'CZK',
             'source'    => 'live',
             'note'      => 'od nejnižší ceny',
-            'book_url'  => 'https://shop.flixbus.cz/search?departureCity=' . urlencode($from) . '&arrivalCity=' . urlencode($to) . '&rideDate=' . $date . '&adult=1',
+            'book_url'  => 'https://www.flixbus.cz/',
         ]];
     }
 
@@ -744,8 +744,12 @@ class TripController extends Controller
         ]);
         $resp  = curl_exec($ch);
         $errno = curl_errno($ch);
+        $status = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
         curl_close($ch);
-        return ($errno || ! $resp) ? '' : $resp;
+        if ($errno || ! $resp || $status >= 400) {
+            throw new \RuntimeException("Dopravní portál vrátil HTTP {$status}");
+        }
+        return $resp;
     }
 
     /**

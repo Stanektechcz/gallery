@@ -6,6 +6,16 @@ use App\Console\Commands\GalleryStatusCommand;
 use App\Console\Commands\RebuildAlbumsCommand;
 use Illuminate\Support\Facades\Schedule;
 
+Schedule::command('gallery:deliver-reminders --no-interaction')
+    ->everyMinute()
+    ->withoutOverlapping()
+    ->name('calendar-reminders');
+
+Schedule::command('gallery:planning-followups --no-interaction')
+    ->hourly()
+    ->withoutOverlapping()
+    ->name('planning-followups');
+
 // Scheduler tasks
 Schedule::command('gallery:doctor --no-interaction')
     ->everyFiveMinutes()

@@ -22,7 +22,7 @@ class ItineraryController extends Controller
         // Wishlist places — cast lat/lng to float (MySQL DECIMAL comes back as string via PDO)
         $wishlist = DB::table('itinerary_places')
             ->where('gallery_space_id', $space->id)
-            ->orderByRaw("FIELD(priority,'dream','soon','someday')")
+            ->orderByRaw("CASE priority WHEN 'dream' THEN 1 WHEN 'soon' THEN 2 WHEN 'someday' THEN 3 ELSE 4 END")
             ->orderBy('name')
             ->get()
             ->map(function ($place) {
@@ -61,8 +61,11 @@ class ItineraryController extends Controller
             ->where('gallery_space_id', $space->id)
             ->whereNull('trashed_at')
             ->whereNotNull('latitude')
-            ->selectRaw('COUNT(DISTINCT ROUND(latitude, 0), ROUND(longitude, 0)) as unique_areas')
-            ->value('unique_areas') ?? 0;
+            ->whereNotNull('longitude')
+            ->selectRaw('ROUND(latitude, 0) as lat_grid, ROUND(longitude, 0) as lng_grid')
+            ->distinct()
+            ->get()
+            ->count();
 
         return response()->json([
             'wishlist'      => $wishlist,
@@ -210,7 +213,8 @@ class ItineraryController extends Controller
         $url = 'https://nominatim.openstreetmap.org/search?' . http_build_query([
             'format'          => 'json',
             'addressdetails'  => '1',
-            'accept-language' => 'cs',
+            'namedetails'     => '1',
+            'accept-language' => 'cs,en;q=0.8',
             'limit'           => '8',
             'q'               => $q,
         ]);
@@ -250,8 +254,8 @@ class ItineraryController extends Controller
                 default                                                                            => 'other',
             };
 
-            // Prefer Czech/local name: localname > name in address > generic name
-            $name = $item['localname']
+            $names = $item['namedetails'] ?? [];
+            $name = $names['name:cs'] ?? $names['name:en']
                 ?? $addr['city'] ?? $addr['town'] ?? $addr['village']
                 ?? $addr['suburb'] ?? $addr['county'] ?? $addr['state']
                 ?? $item['name'] ?? '';
@@ -261,13 +265,14 @@ class ItineraryController extends Controller
             if (! $name && $displayName) {
                 $name = explode(',', $displayName)[0];
             }
+            $name = $this->latinPlaceName((string) $name);
 
             return [
                 'osm_id'       => (string) ($item['osm_id'] ?? ''),
                 'osm_type'     => $item['osm_type'] ?? '',
                 'display_name' => $displayName,
                 'name'         => trim($name) ?: $displayName,
-                'country'      => $addr['country'] ?? '',
+                'country'      => $this->czechCountryName($cc, $addr['country'] ?? ''),
                 'country_code' => $cc,
                 'latitude'     => (float) ($item['lat'] ?? 0),
                 'longitude'    => (float) ($item['lon'] ?? 0),
@@ -277,6 +282,27 @@ class ItineraryController extends Controller
         }, $results);
 
         return response()->json($mapped);
+    }
+
+    private function czechCountryName(string $countryCode, string $fallback): string
+    {
+        if ($countryCode !== '' && class_exists(\Locale::class)) {
+            $localized = \Locale::getDisplayRegion('-' . $countryCode, 'cs');
+            if (is_string($localized) && $localized !== '') return $localized;
+        }
+
+        return $fallback;
+    }
+
+    private function latinPlaceName(string $name): string
+    {
+        if ($name === '' || preg_match('/\p{Latin}/u', $name)) return $name;
+        if (class_exists(\Transliterator::class)) {
+            $latin = \Transliterator::create('Any-Latin')?->transliterate($name);
+            if (is_string($latin) && $latin !== '') return $latin;
+        }
+
+        return $name;
     }
 
     /**

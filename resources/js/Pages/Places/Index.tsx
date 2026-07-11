@@ -1,6 +1,7 @@
 import AppLayout from '@/Layouts/AppLayout';
 import { Head, router } from '@inertiajs/react';
 import axios from 'axios';
+import { localizedCountry } from '@/lib/localizedMap';
 import {
     MapPin, Plus, RefreshCw, Search, Trash2, X
 } from 'lucide-react';
@@ -76,7 +77,7 @@ export default function PlacesIndex() {
         setNominatimQ(r.name || r.display_name);
         setForm(p => ({
             ...p, name: r.name || r.display_name,
-            country: r.country, latitude: r.latitude.toString(),
+            country: localizedCountry(r.country, r.country_code), latitude: r.latitude.toString(),
             longitude: r.longitude.toString(), osm_id: r.osm_id ?? '',
             osm_type: r.osm_type ?? '',
             type: r.category === 'country' ? 'country' : r.category === 'city' ? 'city' : p.type,
@@ -173,7 +174,7 @@ export default function PlacesIndex() {
                                                 <span className="text-sm shrink-0">{TYPES[r.category]?.emoji ?? '📍'}</span>
                                                 <div className="flex-1 min-w-0">
                                                     <p className="text-xs font-medium text-white truncate">{r.name || r.display_name}</p>
-                                                    <p className="text-[10px] text-[var(--color-text-secondary)] truncate">{r.country}</p>
+                                                    <p className="text-[10px] text-[var(--color-text-secondary)] truncate">{localizedCountry(r.country, r.country_code)}</p>
                                                 </div>
                                             </button>
                                         ))}

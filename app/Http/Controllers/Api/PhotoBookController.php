@@ -323,6 +323,8 @@ class PhotoBookController extends Controller
 
         return $rows->map(function ($r) {
             $m = MediaItem::with('variants')->where('uuid', $r->uuid)->first();
+            $shortSide = min((int) ($r->width ?? 0), (int) ($r->height ?? 0));
+            $quality = $r->media_type === 'video' ? 'unsupported' : ($shortSide >= 3000 ? 'excellent' : ($shortSide >= 1800 ? 'good' : 'low'));
             return [
                 'id'         => $r->id,
                 'sort_order' => $r->sort_order,
@@ -334,6 +336,8 @@ class PhotoBookController extends Controller
                 'height'     => $r->height,
                 'size_bytes' => $r->size_bytes,
                 'media_type' => $r->media_type,
+                'print_quality' => $quality,
+                'recommended_max_cm' => $shortSide > 0 ? round(($shortSide / 300) * 2.54, 1) : null,
                 'thumb_url'  => $m?->thumbnail_url,
                 'full_url'   => "/media/{$r->uuid}/full",
             ];

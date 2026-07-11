@@ -14,7 +14,7 @@ class User extends Authenticatable
 
     protected $fillable = [
         'uuid', 'name', 'email', 'password', 'role', 'avatar_path',
-        'is_active', 'invited_by', 'invitation_token', 'invitation_accepted_at',
+        'is_active', 'invited_by', 'invited_by_user_id', 'invitation_token', 'invitation_accepted_at',
         'preferences', 'last_login_at', 'last_login_ip', 'read_only_mode',
     ];
 
@@ -56,6 +56,7 @@ class User extends Authenticatable
     public function savedSearches()     { return $this->hasMany(SavedSearch::class); }
     public function auditLogs()         { return $this->hasMany(AuditLog::class); }
     public function uploadSessions()    { return $this->hasMany(UploadSession::class); }
+    public function inviter()            { return $this->belongsTo(User::class, 'invited_by_user_id'); }
 
     public function activeStorageConnection(): ?StorageConnection
     {

@@ -8,6 +8,7 @@ import {
     ChevronLeft, ChevronRight, Map as MapIcon, Maximize2, Minimize2,
     Pause, Play, Settings2, Shuffle, SkipForward, Star, X,
 } from 'lucide-react';
+import { addLocalizedBaseLayer } from '@/lib/localizedMap';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 // ── Types ─────────────────────────────────────────────────────────────────
@@ -116,7 +117,7 @@ function GpsTransition({ lat, lng, label, onDone }: {
         if (!ready || !mapRef.current) return;
         const L = (window as any).L;
         const map = L.map(mapRef.current, { zoomControl: false, attributionControl: false }).setView([lat, lng], 12);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+        addLocalizedBaseLayer(L, map);
         L.circleMarker([lat, lng], { radius: 12, fillColor: '#6366f1', color: 'white', weight: 3, fillOpacity: 1 }).addTo(map);
         return () => { try { map.remove(); } catch {} };
     }, [ready, lat, lng]);

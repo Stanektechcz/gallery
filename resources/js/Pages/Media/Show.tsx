@@ -1,6 +1,7 @@
 import AppLayout from '@/Layouts/AppLayout';
 import { Head, Link, router } from '@inertiajs/react';
 import axios from 'axios';
+import { addLocalizedBaseLayer } from '@/lib/localizedMap';
 import { clsx } from 'clsx';
 import {
     Archive,
@@ -185,6 +186,35 @@ function ReactionPanel({ uuid }: { uuid: string }) {
     );
 }
 
+function CurationPanel({ uuid }: { uuid: string }) {
+    const [boards, setBoards] = useState<Array<{ uuid: string; title: string }>>([]);
+    const [selected, setSelected] = useState('');
+    const [message, setMessage] = useState('');
+
+    useEffect(() => {
+        axios.get('/api/v1/curation-boards').then(response => {
+            setBoards(response.data ?? []);
+            setSelected(response.data?.[0]?.uuid ?? '');
+        }).catch(() => {});
+    }, []);
+
+    const add = async () => {
+        if (!selected) { setMessage('Nejdřív vytvořte společný výběr.'); return; }
+        try {
+            await axios.post(`/api/v1/curation-boards/${selected}/items`, { media_uuids: [uuid] });
+            setMessage('Přidáno do společného výběru.');
+        } catch (error: any) {
+            setMessage(error?.response?.data?.message ?? 'Přidání se nepodařilo.');
+        }
+    };
+
+    return <section>
+        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">Společný výběr</h3>
+        {boards.length ? <div className="flex gap-2"><select value={selected} onChange={event => setSelected(event.target.value)} className="min-h-9 min-w-0 flex-1 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-2 text-xs text-white"><option value="">Vyberte kolekci</option>{boards.map(board => <option key={board.uuid} value={board.uuid}>{board.title}</option>)}</select><button onClick={add} className="min-h-9 rounded-lg bg-[var(--color-accent)] px-3 text-xs text-white">Přidat</button></div> : <Link href="/curation" className="text-xs text-[var(--color-accent)] hover:underline">Vytvořit první společný výběr</Link>}
+        {message && <p className="mt-1 text-[10px] text-[var(--color-text-secondary)]">{message}</p>}
+    </section>;
+}
+
 // ── GPS mini-map (lazy Leaflet) ─────────────────────────────────────────
 function GpsMap({ lat, lng }: { lat: number; lng: number }) {
     const mapRef = useRef<HTMLDivElement>(null);
@@ -206,7 +236,7 @@ function GpsMap({ lat, lng }: { lat: number; lng: number }) {
             zoomControl: false, attributionControl: false,
             dragging: false, touchZoom: false, doubleClickZoom: false, scrollWheelZoom: false,
         }).setView([lat, lng], 14);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+        addLocalizedBaseLayer(L, map);
         L.circleMarker([lat, lng], { radius: 9, fillColor: '#6366f1', color: 'white', weight: 2.5, fillOpacity: 1 }).addTo(map);
         return () => { try { map.remove(); } catch { /* ignore */ } };
     }, [ready, lat, lng]);
@@ -585,11 +615,8 @@ export default function MediaShow({ media, breadcrumb, prev, next }: Props) {
                     </Link>
 
                     {/* ← Prev photo */}
-                    <Link href={prev ? `/media/${prev.uuid}` : '#'}
-                        className={clsx('p-1.5 rounded hover:bg-white/10 transition-colors shrink-0', prev ? 'text-white' : 'text-[var(--color-border)] pointer-events-none')}
-                        title="Předchozí (←)">
-                        <ChevronLeft size={13}/>
-                    </Link>
+                    {prev ? <Link href={`/media/${prev.uuid}`} className="p-1.5 rounded text-white hover:bg-white/10 transition-colors shrink-0" title="Předchozí (←)"><ChevronLeft size={13}/></Link>
+                        : <button disabled className="p-1.5 rounded text-[var(--color-border)] shrink-0" title="Žádná předchozí fotografie"><ChevronLeft size={13}/></button>}
 
                     {/* Title (centered) */}
                     <p className="flex-1 text-center text-sm text-white/80 font-medium truncate px-1 min-w-0">
@@ -597,11 +624,8 @@ export default function MediaShow({ media, breadcrumb, prev, next }: Props) {
                     </p>
 
                     {/* Next photo → */}
-                    <Link href={next ? `/media/${next.uuid}` : '#'}
-                        className={clsx('p-1.5 rounded hover:bg-white/10 transition-colors shrink-0', next ? 'text-white' : 'text-[var(--color-border)] pointer-events-none')}
-                        title="Další (→)">
-                        <ChevronRight size={13}/>
-                    </Link>
+                    {next ? <Link href={`/media/${next.uuid}`} className="p-1.5 rounded text-white hover:bg-white/10 transition-colors shrink-0" title="Další (→)"><ChevronRight size={13}/></Link>
+                        : <button disabled className="p-1.5 rounded text-[var(--color-border)] shrink-0" title="Žádná další fotografie"><ChevronRight size={13}/></button>}
 
                     <div className="w-px h-4 bg-[var(--color-border)] mx-0.5"/>
 
@@ -965,6 +989,8 @@ export default function MediaShow({ media, breadcrumb, prev, next }: Props) {
                                     </div>
                                 </section>
                             )}
+
+                            <CurationPanel uuid={item.uuid} />
 
                             {/* Reakce (bod 19) */}
                             <ReactionPanel uuid={item.uuid} />

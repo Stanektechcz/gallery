@@ -21,6 +21,9 @@ class StatsController extends Controller
         }
 
         $base = MediaItem::where('gallery_space_id', $space->id)->whereNull('trashed_at');
+        $driver = DB::connection()->getDriverName();
+        $yearSql = $driver === 'sqlite' ? "CAST(strftime('%Y', taken_at) AS INTEGER)" : 'YEAR(taken_at)';
+        $monthSql = $driver === 'sqlite' ? "CAST(strftime('%m', taken_at) AS INTEGER)" : 'MONTH(taken_at)';
 
         // Totals
         $total   = (clone $base)->count();
@@ -33,8 +36,8 @@ class StatsController extends Controller
         // Per year
         $perYear = (clone $base)
             ->whereNotNull('taken_at')
-            ->selectRaw("YEAR(taken_at) as year, COUNT(*) as total, SUM(CASE WHEN media_type='photo' THEN 1 ELSE 0 END) as photos, SUM(CASE WHEN media_type='video' THEN 1 ELSE 0 END) as videos")
-            ->groupByRaw("YEAR(taken_at)")
+            ->selectRaw("{$yearSql} as year, COUNT(*) as total, SUM(CASE WHEN media_type='photo' THEN 1 ELSE 0 END) as photos, SUM(CASE WHEN media_type='video' THEN 1 ELSE 0 END) as videos")
+            ->groupByRaw($yearSql)
             ->orderByDesc('year')
             ->limit(10)
             ->get();
@@ -43,8 +46,8 @@ class StatsController extends Controller
         $year = now()->year;
         $perMonth = (clone $base)
             ->whereYear('taken_at', $year)
-            ->selectRaw("MONTH(taken_at) as month, COUNT(*) as total")
-            ->groupByRaw("MONTH(taken_at)")
+            ->selectRaw("{$monthSql} as month, COUNT(*) as total")
+            ->groupByRaw($monthSql)
             ->orderBy('month')
             ->get()
             ->keyBy('month');

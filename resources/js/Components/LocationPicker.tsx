@@ -5,6 +5,7 @@
  */
 
 import axios from 'axios';
+import { localizedCountry } from '@/lib/localizedMap';
 import { MapPin, RefreshCw, X } from 'lucide-react';
 import { useCallback, useRef, useState } from 'react';
 
@@ -69,7 +70,7 @@ export default function LocationPicker({ value, onChange, label = 'Lokalita', co
             location_name:          r.name || r.display_name,
             latitude:               r.latitude,
             longitude:              r.longitude,
-            location_country:       r.country,
+            location_country:       localizedCountry(r.country, r.country_code),
             location_country_code:  r.country_code,
         });
     };
@@ -120,7 +121,7 @@ export default function LocationPicker({ value, onChange, label = 'Lokalita', co
                                 <span className="text-base shrink-0 mt-0.5">{CAT_EMOJI[r.category] ?? '📍'}</span>
                                 <div className="flex-1 min-w-0">
                                     <p className="text-sm font-medium text-white truncate">{r.name || r.display_name}</p>
-                                    <p className="text-[10px] text-[var(--color-text-secondary)] truncate">{r.country}</p>
+                                    <p className="text-[10px] text-[var(--color-text-secondary)] truncate">{localizedCountry(r.country, r.country_code)}</p>
                                 </div>
                             </button>
                         ))}

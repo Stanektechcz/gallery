@@ -1,6 +1,7 @@
 import AppLayout from '@/Layouts/AppLayout';
 import { Head, router } from '@inertiajs/react';
 import axios from 'axios';
+import { addLocalizedBaseLayer } from '@/lib/localizedMap';
 import {
     ArrowLeft, Calendar, Camera, ExternalLink,
     FolderOpen, MapPin, RefreshCw, Settings2
@@ -87,7 +88,7 @@ export default function PlaceShow() {
 
         const map = L.map(mapRef.current);
         mapObj.current = map;
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap', maxZoom: 18 }).addTo(map);
+        addLocalizedBaseLayer(L, map);
 
         const bounds: [number, number][] = [];
 
