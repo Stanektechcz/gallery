@@ -8,7 +8,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('currency_rates', function (Blueprint $table) {
+        if (!Schema::hasTable('currency_rates')) Schema::create('currency_rates', function (Blueprint $table) {
             $table->id();
             $table->string('base_currency', 3);
             $table->string('quote_currency', 3);
@@ -19,7 +19,7 @@ return new class extends Migration
             $table->unique(['base_currency', 'quote_currency', 'effective_on']);
         });
 
-        Schema::create('trip_budget_limits', function (Blueprint $table) {
+        if (!Schema::hasTable('trip_budget_limits')) Schema::create('trip_budget_limits', function (Blueprint $table) {
             $table->id();
             $table->foreignId('trip_id')->constrained()->cascadeOnDelete();
             $table->string('category', 32);
@@ -30,7 +30,7 @@ return new class extends Migration
             $table->unique(['trip_id', 'category']);
         });
 
-        Schema::create('trip_settlements', function (Blueprint $table) {
+        if (!Schema::hasTable('trip_settlements')) Schema::create('trip_settlements', function (Blueprint $table) {
             $table->id();
             $table->foreignId('trip_id')->constrained()->cascadeOnDelete();
             $table->foreignId('from_user_id')->constrained('users')->cascadeOnDelete();
@@ -42,7 +42,7 @@ return new class extends Migration
             $table->timestamps();
         });
 
-        Schema::create('trip_document_checks', function (Blueprint $table) {
+        if (!Schema::hasTable('trip_document_checks')) Schema::create('trip_document_checks', function (Blueprint $table) {
             $table->id();
             $table->foreignId('trip_id')->constrained()->cascadeOnDelete();
             $table->foreignId('created_by')->constrained('users')->cascadeOnDelete();
@@ -55,7 +55,7 @@ return new class extends Migration
             $table->index(['trip_id', 'status']);
         });
 
-        Schema::create('saved_transport_routes', function (Blueprint $table) {
+        if (!Schema::hasTable('saved_transport_routes')) Schema::create('saved_transport_routes', function (Blueprint $table) {
             $table->id();
             $table->uuid('uuid')->unique();
             $table->foreignId('gallery_space_id')->constrained()->cascadeOnDelete();
@@ -67,7 +67,7 @@ return new class extends Migration
             $table->timestamps();
         });
 
-        Schema::create('trip_location_shares', function (Blueprint $table) {
+        if (!Schema::hasTable('trip_location_shares')) Schema::create('trip_location_shares', function (Blueprint $table) {
             $table->id();
             $table->foreignId('trip_id')->constrained()->cascadeOnDelete();
             $table->foreignId('owner_user_id')->constrained('users')->cascadeOnDelete();
@@ -79,8 +79,11 @@ return new class extends Migration
             // composite-index name for these columns would be 67 characters.
             $table->unique(['trip_id', 'owner_user_id', 'recipient_user_id'], 'trip_loc_share_owner_unique');
         });
+        elseif (!Schema::hasIndex('trip_location_shares', 'trip_loc_share_owner_unique')) Schema::table('trip_location_shares', function (Blueprint $table) {
+            $table->unique(['trip_id', 'owner_user_id', 'recipient_user_id'], 'trip_loc_share_owner_unique');
+        });
 
-        Schema::create('trip_track_points', function (Blueprint $table) {
+        if (!Schema::hasTable('trip_track_points')) Schema::create('trip_track_points', function (Blueprint $table) {
             $table->id();
             $table->foreignId('trip_id')->constrained()->cascadeOnDelete();
             $table->foreignId('user_id')->constrained()->cascadeOnDelete();
