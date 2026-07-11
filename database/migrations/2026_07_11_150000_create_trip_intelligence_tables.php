@@ -75,7 +75,9 @@ return new class extends Migration
             $table->timestamp('expires_at');
             $table->boolean('is_active')->default(true);
             $table->timestamps();
-            $table->unique(['trip_id', 'owner_user_id', 'recipient_user_id']);
+            // MySQL limits identifier names to 64 characters; Laravel's generated
+            // composite-index name for these columns would be 67 characters.
+            $table->unique(['trip_id', 'owner_user_id', 'recipient_user_id'], 'trip_loc_share_owner_unique');
         });
 
         Schema::create('trip_track_points', function (Blueprint $table) {
