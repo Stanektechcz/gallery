@@ -23,7 +23,7 @@ class TripIntelligenceController extends Controller
         $conflicts = $activities->groupBy('date')->flatMap(function ($day) { return $day->values()->zip($day->values()->slice(1))->filter(fn ($pair) => $pair[0]->ends_at && $pair[1]->starts_at && $pair[0]->ends_at > $pair[1]->starts_at)->map(fn ($pair) => ['date' => $pair[0]->date, 'first' => $pair[0]->title, 'second' => $pair[1]->title]); })->values();
         $packing = DB::table('trip_packing_items')->where('trip_id', $tripId);
         $unpackedEssentials = (clone $packing)->where('is_essential', true)->where('is_packed', false)->get(['id', 'title', 'category']);
-        return response()->json(['trip' => $trip, 'budget' => $budget, 'documents' => $documents, 'expired_documents' => $expired, 'time_conflicts' => $conflicts, 'settlements' => DB::table('trip_settlements')->where('trip_id', $tripId)->get(), 'packing' => ['total' => (clone $packing)->count(), 'packed' => (clone $packing)->where('is_packed', true)->count(), 'unpacked_essentials' => $unpackedEssentials]]);
+        return response()->json(['trip' => $trip, 'budget' => $budget, 'documents' => $documents, 'expired_documents' => $expired, 'time_conflicts' => $conflicts, 'settlements' => DB::table('trip_settlements')->where('trip_id', $tripId)->get(), 'packing' => ['total' => (clone $packing)->count(), 'packed' => (clone $packing)->where('is_packed', true)->count(), 'unpacked_essentials' => $unpackedEssentials], 'vehicle' => $this->vehicleSummary($tripId)]);
     }
 
     public function upsertBudgetLimit(Request $request, int $tripId): JsonResponse
@@ -160,7 +160,40 @@ class TripIntelligenceController extends Controller
         return response()->json(['created' => $created, 'items' => DB::table('trip_packing_items')->where('trip_id', $tripId)->orderBy('sort_order')->get()->map(fn ($item) => $this->packingPayload($item))->values()], 201);
     }
 
+    public function vehicleCosts(Request $request, int $tripId): JsonResponse
+    {
+        $this->trip($request->user(), $tripId);
+        return response()->json(['items' => DB::table('trip_vehicle_costs')->where('trip_id', $tripId)->orderByDesc('occurred_on')->orderByDesc('id')->get(), 'summary' => $this->vehicleSummary($tripId)]);
+    }
+
+    public function storeVehicleCost(Request $request, int $tripId): JsonResponse
+    {
+        $trip = $this->trip($request->user(), $tripId);
+        $data = $this->validatedVehicleCost($request);
+        $id = DB::table('trip_vehicle_costs')->insertGetId($data + ['uuid' => (string) Str::uuid(), 'trip_id' => $tripId, 'created_by' => $request->user()->id, 'currency' => strtoupper($data['currency'] ?? $trip->currency ?? 'CZK'), 'occurred_on' => $data['occurred_on'] ?? now()->toDateString(), 'created_at' => now(), 'updated_at' => now()]);
+        return response()->json(DB::table('trip_vehicle_costs')->find($id), 201);
+    }
+
+    public function updateVehicleCost(Request $request, int $tripId, int $costId): JsonResponse
+    {
+        $this->trip($request->user(), $tripId);
+        $cost = DB::table('trip_vehicle_costs')->where('id', $costId)->where('trip_id', $tripId)->firstOrFail();
+        $data = $this->validatedVehicleCost($request, true);
+        if (isset($data['currency'])) $data['currency'] = strtoupper($data['currency']);
+        DB::table('trip_vehicle_costs')->where('id', $cost->id)->update($data + ['updated_at' => now()]);
+        return response()->json(DB::table('trip_vehicle_costs')->find($cost->id));
+    }
+
+    public function destroyVehicleCost(Request $request, int $tripId, int $costId): JsonResponse
+    {
+        $this->trip($request->user(), $tripId);
+        DB::table('trip_vehicle_costs')->where('id', $costId)->where('trip_id', $tripId)->delete();
+        return response()->json(['status' => 'deleted']);
+    }
+
     private function trip(User $user, int $id): object { return DB::table('trips')->where('id', $id)->whereIn('gallery_space_id', $user->gallerySpaces()->pluck('gallery_spaces.id'))->firstOrFail(); }
     private function member(int $spaceId, int $userId): bool { return DB::table('gallery_space_user')->where('gallery_space_id', $spaceId)->where('user_id', $userId)->exists(); }
     private function packingPayload(object $item): array { $payload = (array) $item; $payload['is_packed'] = (bool) $item->is_packed; $payload['is_essential'] = (bool) $item->is_essential; return $payload; }
+    private function validatedVehicleCost(Request $request, bool $partial = false): array { $prefix = $partial ? 'sometimes|' : 'required|'; return $request->validate(['type' => $prefix . 'in:fuel,parking,vignette,toll,maintenance,other', 'title' => $prefix . 'string|max:255', 'amount' => $prefix . 'numeric|min:0|max:999999999', 'currency' => 'nullable|string|size:3', 'liters' => 'nullable|numeric|min:0|max:9999', 'distance_km' => 'nullable|numeric|min:0|max:9999999', 'odometer_km' => 'nullable|integer|min:0|max:9999999', 'occurred_on' => $partial ? 'nullable|date' : 'nullable|date', 'valid_until' => 'nullable|date', 'notes' => 'nullable|string|max:5000']); }
+    private function vehicleSummary(int $tripId): array { $items = DB::table('trip_vehicle_costs')->where('trip_id', $tripId)->get(); $total = (float) $items->sum('amount'); $distance = (float) $items->sum('distance_km'); $fuel = $items->where('type', 'fuel'); return ['total' => $total, 'distance_km' => $distance, 'fuel_liters' => (float) $fuel->sum('liters'), 'cost_per_km' => $distance > 0 ? round($total / $distance, 2) : null, 'expired_vignettes' => $items->where('type', 'vignette')->filter(fn ($item) => $item->valid_until && $item->valid_until < now()->toDateString())->values()]; }
 }

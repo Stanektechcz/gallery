@@ -206,6 +206,10 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
         Route::patch('/packing-items/{itemId}', [App\Http\Controllers\Api\TripIntelligenceController::class, 'updatePackingItem'])->name('packing.update');
         Route::delete('/packing-items/{itemId}', [App\Http\Controllers\Api\TripIntelligenceController::class, 'destroyPackingItem'])->name('packing.destroy');
         Route::post('/packing-items/apply-template', [App\Http\Controllers\Api\TripIntelligenceController::class, 'applyPackingTemplate'])->name('packing.template');
+        Route::get('/vehicle-costs', [App\Http\Controllers\Api\TripIntelligenceController::class, 'vehicleCosts'])->name('vehicle-costs.index');
+        Route::post('/vehicle-costs', [App\Http\Controllers\Api\TripIntelligenceController::class, 'storeVehicleCost'])->name('vehicle-costs.store');
+        Route::patch('/vehicle-costs/{costId}', [App\Http\Controllers\Api\TripIntelligenceController::class, 'updateVehicleCost'])->name('vehicle-costs.update');
+        Route::delete('/vehicle-costs/{costId}', [App\Http\Controllers\Api\TripIntelligenceController::class, 'destroyVehicleCost'])->name('vehicle-costs.destroy');
         Route::get('/offline-package', [App\Http\Controllers\Api\TripIntelligenceController::class, 'offlinePackage'])->name('offline-package');
     });
 

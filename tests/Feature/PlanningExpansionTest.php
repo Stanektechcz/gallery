@@ -98,6 +98,15 @@ class PlanningExpansionTest extends TestCase
         $this->getJson("/api/v1/trips/{$tripId}/readiness")->assertOk()->assertJsonPath('packing.total', 4)->assertJsonCount(2, 'packing.unpacked_essentials');
     }
 
+    public function test_vehicle_costs_calculate_trip_cost_per_kilometre_and_flag_expired_vignette(): void
+    {
+        $tripId = DB::table('trips')->insertGetId(['gallery_space_id' => $this->space->id, 'created_by' => $this->owner->id, 'name' => 'Autovýlet', 'start_date' => today()->toDateString(), 'end_date' => now()->addDay()->toDateString(), 'currency' => 'CZK', 'created_at' => now(), 'updated_at' => now()]);
+        $this->postJson("/api/v1/trips/{$tripId}/vehicle-costs", ['type' => 'fuel', 'title' => 'Benzín', 'amount' => 500, 'liters' => 20, 'distance_km' => 250])->assertCreated();
+        $this->postJson("/api/v1/trips/{$tripId}/vehicle-costs", ['type' => 'vignette', 'title' => 'Rakouská známka', 'amount' => 250, 'valid_until' => now()->subDay()->toDateString()])->assertCreated();
+        $this->getJson("/api/v1/trips/{$tripId}/vehicle-costs")->assertOk()->assertJsonPath('summary.total', 750)->assertJsonPath('summary.cost_per_km', 3);
+        $this->getJson("/api/v1/trips/{$tripId}/readiness")->assertOk()->assertJsonCount(1, 'vehicle.expired_vignettes');
+    }
+
     public function test_private_memory_note_is_encrypted_and_visible_only_to_its_author(): void
     {
         $uuid = (string) Str::uuid();
