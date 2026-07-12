@@ -48,6 +48,8 @@ class PlaceController extends Controller
             'website_url'   => 'nullable|url|max:512',
             'osm_id'        => 'nullable|string|max:50',
             'osm_type'      => 'nullable|string|max:20',
+            'is_rain_friendly' => 'nullable|boolean', 'is_accessible' => 'nullable|boolean', 'is_photogenic' => 'nullable|boolean', 'opens_early' => 'nullable|boolean',
+            'price_level' => 'nullable|integer|between:1,4', 'estimated_visit_minutes' => 'nullable|integer|between:5,1440', 'personal_rating' => 'nullable|integer|between:1,5', 'next_time_note' => 'nullable|string|max:5000',
         ]);
 
         $place = Place::create(array_merge($v, [
@@ -91,6 +93,8 @@ class PlaceController extends Controller
             'radius_meters' => 'nullable|integer|min:10|max:50000',
             'description'   => 'nullable|string|max:5000',
             'website_url'   => 'nullable|url|max:512',
+            'is_rain_friendly' => 'nullable|boolean', 'is_accessible' => 'nullable|boolean', 'is_photogenic' => 'nullable|boolean', 'opens_early' => 'nullable|boolean',
+            'price_level' => 'nullable|integer|between:1,4', 'estimated_visit_minutes' => 'nullable|integer|between:5,1440', 'personal_rating' => 'nullable|integer|between:1,5', 'next_time_note' => 'nullable|string|max:5000',
         ]);
 
         $place->update(array_filter($v, fn($val) => $val !== null));
@@ -192,6 +196,47 @@ class PlaceController extends Controller
         return response()->json(['linked' => $toLink->count()]);
     }
 
+    /** Add a saved place as a concrete stop in a selected day of a trip. */
+    public function addToTripPlan(Request $request, Place $place): JsonResponse
+    {
+        $space = $request->user()->gallerySpaces()->firstOrFail();
+        $this->authorizePlace($place, $space->id);
+        $data = $request->validate([
+            'trip_id' => 'required|integer',
+            'trip_day_id' => 'required|integer',
+            'type' => 'nullable|in:activity,reservation,stay',
+            'starts_at' => 'nullable|date_format:H:i',
+            'ends_at' => 'nullable|date_format:H:i|after:starts_at',
+            'description' => 'nullable|string|max:5000',
+        ]);
+
+        $trip = DB::table('trips')->where('id', $data['trip_id'])->where('gallery_space_id', $space->id)->first();
+        abort_unless($trip, 404);
+        $day = DB::table('trip_days')->where('id', $data['trip_day_id'])->where('trip_id', $trip->id)->first();
+        abort_unless($day, 422, 'Vybraný den nepatří k této cestě.');
+
+        $activityId = DB::table('trip_activities')->insertGetId([
+            'trip_day_id' => $day->id,
+            'created_by' => $request->user()->id,
+            'type' => $data['type'] ?? 'activity',
+            'title' => $place->name,
+            'description' => $data['description'] ?? $place->next_time_note ?? $place->description,
+            'starts_at' => $data['starts_at'] ?? null,
+            'ends_at' => $data['ends_at'] ?? null,
+            'place_name' => $place->name,
+            'latitude' => $place->latitude,
+            'longitude' => $place->longitude,
+            'status' => 'planned',
+            'currency' => $trip->currency ?? 'CZK',
+            'metadata' => json_encode(['saved_place_id' => $place->id, 'saved_place_type' => $place->type]),
+            'sort_order' => ((int) DB::table('trip_activities')->where('trip_day_id', $day->id)->max('sort_order')) + 1,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        return response()->json(DB::table('trip_activities')->find($activityId), 201);
+    }
+
     // ─── Helpers ───────────────────────────────────────────────────────────
 
     private function authorizePlace(Place $place, int $spaceId): void
@@ -270,6 +315,14 @@ class PlaceController extends Controller
             'description'   => $place->description,
             'website_url'   => $place->website_url,
             'osm_id'        => $place->osm_id,
+            'is_rain_friendly' => (bool) $place->is_rain_friendly,
+            'is_accessible' => (bool) $place->is_accessible,
+            'is_photogenic' => (bool) $place->is_photogenic,
+            'opens_early' => (bool) $place->opens_early,
+            'price_level' => $place->price_level,
+            'estimated_visit_minutes' => $place->estimated_visit_minutes,
+            'personal_rating' => $place->personal_rating,
+            'next_time_note' => $place->next_time_note,
             'photo_count'   => (int) ($stats->photo_count ?? 0),
             'visit_count'   => (int) ($stats->visit_count ?? 0),
             'first_visit'   => $stats->first_visit ?? null,

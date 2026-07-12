@@ -16,6 +16,11 @@ Schedule::command('gallery:planning-followups --no-interaction')
     ->withoutOverlapping()
     ->name('planning-followups');
 
+Schedule::command('gallery:relationship-milestones --no-interaction')
+    ->dailyAt('09:00')
+    ->withoutOverlapping()
+    ->name('relationship-milestones');
+
 // Scheduler tasks
 Schedule::command('gallery:doctor --no-interaction')
     ->everyFiveMinutes()

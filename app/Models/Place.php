@@ -26,6 +26,14 @@ class Place extends Model
         'osm_type',
         'external_id',
         'created_by',
+        'is_rain_friendly',
+        'is_accessible',
+        'is_photogenic',
+        'opens_early',
+        'price_level',
+        'estimated_visit_minutes',
+        'personal_rating',
+        'next_time_note',
     ];
 
     protected function casts(): array
@@ -33,6 +41,10 @@ class Place extends Model
         return [
             'latitude'  => 'float',
             'longitude' => 'float',
+            'is_rain_friendly' => 'boolean',
+            'is_accessible' => 'boolean',
+            'is_photogenic' => 'boolean',
+            'opens_early' => 'boolean',
         ];
     }
 

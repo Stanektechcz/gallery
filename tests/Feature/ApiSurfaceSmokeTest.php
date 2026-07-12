@@ -53,4 +53,41 @@ class ApiSurfaceSmokeTest extends TestCase
         $response = $this->getJson('/api/v1/tickets/search?from=Praha&to=Brno&date=2026-08-01&adults=1')->assertOk();
         $this->assertGreaterThanOrEqual(5, count($response->json()));
     }
+
+    public function test_place_preferences_are_persisted_for_practical_trip_filtering(): void
+    {
+        $place = $this->postJson('/api/v1/places', [
+            'name' => 'Kavárna na deštivé odpoledne',
+            'type' => 'restaurant',
+            'is_rain_friendly' => true,
+            'is_photogenic' => true,
+            'opens_early' => true,
+            'price_level' => 2,
+            'estimated_visit_minutes' => 90,
+            'personal_rating' => 5,
+            'next_time_note' => 'Vzít si knihu.',
+        ])->assertCreated()->json();
+
+        $this->getJson("/api/v1/places/{$place['id']}")
+            ->assertOk()
+            ->assertJsonPath('is_rain_friendly', true)
+            ->assertJsonPath('personal_rating', 5)
+            ->assertJsonPath('next_time_note', 'Vzít si knihu.');
+    }
+
+    public function test_saved_place_can_be_added_directly_to_a_selected_trip_day(): void
+    {
+        $spaceId = (int) $this->app['auth']->user()->gallerySpaces()->value('gallery_spaces.id');
+        $place = $this->postJson('/api/v1/places', ['name' => 'Rozhledna', 'type' => 'custom', 'latitude' => 49.2, 'longitude' => 16.6, 'next_time_note' => 'Vzít dalekohled.'])->assertCreated()->json();
+        $tripId = DB::table('trips')->insertGetId(['gallery_space_id' => $spaceId, 'created_by' => $this->app['auth']->id(), 'name' => 'Moravský výlet', 'start_date' => now()->addWeek()->toDateString(), 'end_date' => now()->addWeek()->addDay()->toDateString(), 'currency' => 'CZK', 'created_at' => now(), 'updated_at' => now()]);
+        $dayId = $this->getJson("/api/v1/trips/{$tripId}/plan")->assertOk()->json('days.0.id');
+
+        $this->postJson("/api/v1/places/{$place['id']}/trip-activities", ['trip_id' => $tripId, 'trip_day_id' => $dayId, 'starts_at' => '10:30'])
+            ->assertCreated()
+            ->assertJsonPath('title', 'Rozhledna')
+            ->assertJsonPath('place_name', 'Rozhledna');
+        $activity = DB::table('trip_activities')->where('trip_day_id', $dayId)->where('title', 'Rozhledna')->first();
+        $this->assertSame('Rozhledna', $activity->place_name);
+        $this->assertSame('10:30', substr((string) $activity->starts_at, 0, 5));
+    }
 }

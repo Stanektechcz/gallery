@@ -1,6 +1,8 @@
 import AppLayout from '@/Layouts/AppLayout';
 import { Head, Link } from '@inertiajs/react';
+import axios from 'axios';
 import { Album, CalendarDays, Clock, FolderOpen, Heart, Map, MapPin, Route, Shuffle, Sparkles, Star, TrendingUp, Upload } from 'lucide-react';
+import { FormEvent, useState } from 'react';
 
 interface MediaCard {
     id: number;
@@ -25,7 +27,8 @@ interface DashboardData {
     year_stats: { year: number; photos: number; videos: number };
     for_you: Array<{ fingerprint: string; title: string; subtitle: string; icon: string; accent: string; count: number; items: MediaCard[] }>;
     pinned_views: Array<{ id: number; name: string; icon?: string; view_type: string }>;
-    upcoming_trip: { id: number; name: string; start_date: string; end_date: string; status: string } | null;
+    upcoming_trip: { id: number; name: string; start_date: string; end_date: string; status: string; finance?:{planned:number;actual:number}; readiness?:{packing_total:number;packing_packed:number;essential_missing:number}; savings_goal?:{target_amount:number;saved_amount:number;monthly_contribution?:number|null;currency:string;percent:number}|null } | null;
+    partner_hub: { space_id:number; milestones: Array<{ uuid:string; title:string; icon:string; days_until:number; next_anniversary:string }>; shared_moments: Array<{ uuid:string; title:string; happened_on?:string|null; is_favorite:boolean }>; next_event?:{uuid:string;title:string;starts_at:string;place_name?:string|null;trip_id?:number|null}|null };
 }
 
 interface Props {
@@ -75,6 +78,8 @@ function DashCard({ icon: Icon, label, children, href, color = 'var(--color-acce
 }
 
 export default function DashboardIndex({ data }: Props) {
+    const [milestone, setMilestone] = useState({ title: '', occurred_on: '' });
+    const [milestoneSaved, setMilestoneSaved] = useState(false);
     if (!data) {
         return (
             <AppLayout>
@@ -88,6 +93,7 @@ export default function DashboardIndex({ data }: Props) {
 
     const hour = new Date().getHours();
     const emoji = hour < 12 ? '☀️' : hour < 18 ? '🌤️' : '🌙';
+    const addMilestone = async (event: FormEvent) => { event.preventDefault(); if (!milestone.title || !milestone.occurred_on) return; await axios.post('/api/v1/relationship-milestones', { gallery_space_id: data.partner_hub.space_id, ...milestone, visibility: 'shared', remind_annually: true }); setMilestone({title:'',occurred_on:''}); setMilestoneSaved(true); setTimeout(() => setMilestoneSaved(false), 2500); };
 
     return (
         <AppLayout>
@@ -138,12 +144,16 @@ export default function DashboardIndex({ data }: Props) {
                     );
                 })()}
 
-                {(data.upcoming_trip || data.pinned_views?.length > 0) && (
+                {(data.upcoming_trip || data.pinned_views?.length > 0 || data.partner_hub?.next_event) && (
                     <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                        {data.partner_hub?.next_event && <DashCard icon={CalendarDays} label="Nejbližší společná akce" href={`/calendar/events/${data.partner_hub.next_event.uuid}`} color="#ec4899"><p className="text-base font-semibold text-white">{data.partner_hub.next_event.title}</p><p className="mt-1 text-xs text-[var(--color-text-secondary)]">{new Date(data.partner_hub.next_event.starts_at).toLocaleDateString('cs-CZ', { day:'numeric', month:'long', hour:'2-digit', minute:'2-digit' })}{data.partner_hub.next_event.place_name ? ` · ${data.partner_hub.next_event.place_name}` : ''}</p><p className="mt-3 text-xs text-pink-200">Otevřít společný plán →</p></DashCard>}
                         {data.upcoming_trip && (
                             <DashCard icon={Route} label="Co následuje" href={`/trips/${data.upcoming_trip.id}/plan`} color="#14b8a6">
                                 <p className="text-base font-semibold text-white">{data.upcoming_trip.name}</p>
                                 <p className="mt-1 text-xs text-[var(--color-text-secondary)]">{new Date(data.upcoming_trip.start_date).toLocaleDateString('cs-CZ')} – {new Date(data.upcoming_trip.end_date).toLocaleDateString('cs-CZ')}</p>
+                                {(data.upcoming_trip.finance?.planned || data.upcoming_trip.finance?.actual) ? <p className="mt-2 text-xs text-[var(--color-text-secondary)]">Rozpočet: plán {data.upcoming_trip.finance?.planned.toLocaleString('cs-CZ')} · skutečnost {data.upcoming_trip.finance?.actual.toLocaleString('cs-CZ')} Kč</p> : <p className="mt-2 text-xs text-[var(--color-text-secondary)]">Rozpočet, balení a cestovní připravenost na jednom místě.</p>}
+                                {data.upcoming_trip.savings_goal && <div className="mt-2"><div className="flex justify-between text-[10px] text-[var(--color-text-secondary)]"><span>Cestovní fond</span><span>{data.upcoming_trip.savings_goal.percent}% · {data.upcoming_trip.savings_goal.saved_amount.toLocaleString('cs-CZ')} / {data.upcoming_trip.savings_goal.target_amount.toLocaleString('cs-CZ')} {data.upcoming_trip.savings_goal.currency}</span></div><div className="mt-1 h-1.5 overflow-hidden rounded-full bg-black/20"><div className="h-full rounded-full bg-teal-400" style={{width:`${data.upcoming_trip.savings_goal.percent}%`}}/></div></div>}
+                                {data.upcoming_trip.readiness && data.upcoming_trip.readiness.packing_total > 0 && <p className={`mt-2 text-xs ${data.upcoming_trip.readiness.essential_missing ? 'text-amber-300' : 'text-[var(--color-text-secondary)]'}`}>Balení: {data.upcoming_trip.readiness.packing_packed}/{data.upcoming_trip.readiness.packing_total}{data.upcoming_trip.readiness.essential_missing ? ` · chybí ${data.upcoming_trip.readiness.essential_missing} důležité` : ''}</p>}
                                 <p className="mt-3 text-xs text-[var(--color-accent)]">Pokračovat v plánování →</p>
                             </DashCard>
                         )}
@@ -154,6 +164,10 @@ export default function DashboardIndex({ data }: Props) {
                         )}
                     </div>
                 )}
+
+                {(data.partner_hub?.milestones?.length > 0 || data.partner_hub?.shared_moments?.length > 0) && <section className="rounded-3xl border border-pink-500/20 bg-gradient-to-br from-pink-500/10 to-[var(--color-bg-card)] p-4 sm:p-5"><div className="flex items-center justify-between"><div><p className="text-xs font-medium uppercase tracking-wider text-pink-200">Náš společný prostor</p><h2 className="mt-1 font-semibold text-white">Co si chceme připomenout</h2></div><Heart size={20} className="text-pink-300"/></div><div className="mt-4 grid gap-3 sm:grid-cols-2">{data.partner_hub.milestones.length > 0 && <div><p className="text-xs text-[var(--color-text-secondary)]">Blížící se výročí</p><div className="mt-2 space-y-1">{data.partner_hub.milestones.map(item => <Link key={item.uuid} href="/milestones" className="flex items-center justify-between rounded-xl bg-black/10 px-3 py-2 text-sm text-white hover:bg-black/20"><span className="truncate">{item.icon} {item.title}</span><span className="ml-2 shrink-0 text-xs text-pink-200">{item.days_until === 0 ? 'dnes' : `za ${item.days_until} d.`}</span></Link>)}</div></div>}{data.partner_hub.shared_moments.length > 0 && <div><p className="text-xs text-[var(--color-text-secondary)]">Vaše vybrané momenty</p><div className="mt-2 space-y-1">{data.partner_hub.shared_moments.map(item => <Link key={item.uuid} href="/shared-memories" className="block truncate rounded-xl bg-black/10 px-3 py-2 text-sm text-white hover:bg-black/20">{item.is_favorite && '♥ '}{item.title}{item.happened_on && <span className="ml-2 text-xs text-[var(--color-text-secondary)]">{new Date(`${item.happened_on}T12:00:00`).toLocaleDateString('cs-CZ')}</span>}</Link>)}</div></div>}</div></section>}
+
+                <form onSubmit={addMilestone} className="flex flex-col gap-2 rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-4 sm:flex-row sm:items-end"><div className="min-w-0 flex-1"><p className="text-xs font-medium text-white">Přidat společný milník</p><p className="mt-1 text-xs text-[var(--color-text-secondary)]">Výročí se následně automaticky objeví v přehledu i kalendáři.</p></div><input required value={milestone.title} onChange={event => setMilestone({...milestone,title:event.target.value})} placeholder="Např. první společný výlet" className="min-h-10 rounded-lg border border-[var(--color-border)] bg-black/10 px-3 text-sm text-white"/><input required type="date" value={milestone.occurred_on} onChange={event => setMilestone({...milestone,occurred_on:event.target.value})} className="min-h-10 rounded-lg border border-[var(--color-border)] bg-black/10 px-3 text-sm text-white"/><button className="min-h-10 rounded-lg bg-[var(--color-accent)] px-4 text-sm text-white">{milestoneSaved ? 'Uloženo ✓' : 'Přidat'}</button></form>
 
                 {/* This time last year */}
                 {data.this_time_last_year.count > 0 && (

@@ -115,6 +115,8 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/travel-inbox', fn() => Inertia::render('TravelInbox/Index'))->name('travel-inbox');
     Route::get('/weekly', fn() => Inertia::render('Weekly/Index'))->name('weekly');
     Route::get('/planning', fn() => Inertia::render('Planning/Index'))->name('planning');
+    Route::get('/milestones', fn() => Inertia::render('Milestones/Index'))->name('milestones');
+    Route::get('/shared-memories', fn() => Inertia::render('SharedMemories/Index'))->name('shared-memories');
 
     // Stats
     Route::get('/stats',    [App\Http\Controllers\StatsController::class,    'index'])->name('stats');

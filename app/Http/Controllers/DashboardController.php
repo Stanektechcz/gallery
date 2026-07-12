@@ -121,6 +121,30 @@ class DashboardController extends Controller
             ->where('end_date', '>=', now()->toDateString())
             ->orderBy('start_date')
             ->first(['id', 'name', 'start_date', 'end_date', 'status']);
+        if ($upcomingTrip) {
+            $totals = DB::table('trip_expenses')->where('trip_id', $upcomingTrip->id)->selectRaw('state, SUM(amount) as total')->groupBy('state')->pluck('total', 'state');
+            $upcomingTrip->finance = ['planned' => (float) ($totals['planned'] ?? 0), 'actual' => (float) ($totals['actual'] ?? 0)];
+            $packing = DB::table('trip_packing_items')->where('trip_id', $upcomingTrip->id);
+            $goal = DB::table('trip_savings_goals')->where('trip_id', $upcomingTrip->id)->first(['target_amount', 'saved_amount', 'monthly_contribution', 'currency']);
+            $upcomingTrip->readiness = ['packing_total' => (clone $packing)->count(), 'packing_packed' => (clone $packing)->where('is_packed', true)->count(), 'essential_missing' => (clone $packing)->where('is_essential', true)->where('is_packed', false)->count()];
+            $upcomingTrip->savings_goal = $goal ? ['target_amount' => (float) $goal->target_amount, 'saved_amount' => (float) $goal->saved_amount, 'monthly_contribution' => $goal->monthly_contribution !== null ? (float) $goal->monthly_contribution : null, 'currency' => $goal->currency, 'percent' => (int) min(100, round(((float) $goal->saved_amount / max(1, (float) $goal->target_amount)) * 100))] : null;
+        }
+        $nextSharedEvent = DB::table('calendar_events as e')
+            ->where('e.gallery_space_id', $space->id)->where('e.starts_at', '>=', now())
+            ->where(fn ($query) => $query->where('e.is_private', false)->orWhere('e.created_by', $user->id)->orWhereExists(fn ($sub) => $sub->selectRaw('1')->from('event_participants as ep')->whereColumn('ep.event_id', 'e.id')->where('ep.user_id', $user->id)))
+            ->orderBy('e.starts_at')->first(['e.uuid', 'e.title', 'e.starts_at', 'e.place_name', 'e.trip_id']);
+        $upcomingMilestones = DB::table('relationship_milestones')
+            ->where('gallery_space_id', $space->id)
+            ->where('remind_annually', true)
+            ->where(fn ($query) => $query->where('visibility', 'shared')->orWhere('created_by', $user->id))
+            ->get(['uuid', 'title', 'icon', 'occurred_on'])
+            ->map(function ($milestone) use ($now) {
+                $original = \Carbon\Carbon::parse($milestone->occurred_on);
+                $next = \Carbon\Carbon::create($now->year, $original->month, min($original->day, \Carbon\Carbon::create($now->year, $original->month, 1)->daysInMonth))->startOfDay();
+                if ($next->lt($now->copy()->startOfDay())) $next->addYear();
+                return ['uuid' => $milestone->uuid, 'title' => $milestone->title, 'icon' => $milestone->icon, 'days_until' => (int) $now->copy()->startOfDay()->diffInDays($next), 'next_anniversary' => $next->toDateString()];
+            })->sortBy('days_until')->take(3)->values();
+        $sharedMoments = DB::table('shared_memory_moments')->where('gallery_space_id', $space->id)->latest('happened_on')->latest()->limit(3)->get(['uuid', 'title', 'happened_on', 'is_favorite']);
 
         return Inertia::render('Dashboard/Index', [
             'data' => [
@@ -151,6 +175,7 @@ class DashboardController extends Controller
                 'for_you'          => $forYou,
                 'pinned_views'     => $pinnedViews,
                 'upcoming_trip'    => $upcomingTrip,
+                'partner_hub'      => ['space_id' => $space->id, 'milestones' => $upcomingMilestones, 'shared_moments' => $sharedMoments, 'next_event' => $nextSharedEvent],
             ],
         ]);
     }

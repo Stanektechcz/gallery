@@ -14,6 +14,8 @@ interface Place {
     photo_count: number; visit_count: number;
     first_visit?: string; last_visit?: string;
     album_count: number; cover_thumb?: string;
+    is_rain_friendly?: boolean; is_accessible?: boolean; is_photogenic?: boolean; opens_early?: boolean;
+    price_level?: number | null; estimated_visit_minutes?: number | null; personal_rating?: number | null;
 }
 interface SearchResult {
     name: string; display_name: string; country: string; country_code: string;
@@ -43,6 +45,7 @@ export default function PlacesIndex() {
     const [places,      setPlaces]      = useState<Place[]>([]);
     const [loading,     setLoading]     = useState(true);
     const [filterType,  setFilterType]  = useState<string>('all');
+    const [quickFilter, setQuickFilter] = useState<'all' | 'rain' | 'photo' | 'early' | 'budget' | 'favorite'>('all');
     const [search,      setSearch]      = useState('');
     const [showCreate,  setShowCreate]  = useState(false);
     const [form,        setForm]        = useState({ ...EMPTY_FORM });
@@ -109,6 +112,11 @@ export default function PlacesIndex() {
 
     const filtered = places.filter(p => {
         if (filterType !== 'all' && p.type !== filterType) return false;
+        if (quickFilter === 'rain' && !p.is_rain_friendly) return false;
+        if (quickFilter === 'photo' && !p.is_photogenic) return false;
+        if (quickFilter === 'early' && !p.opens_early) return false;
+        if (quickFilter === 'budget' && (!p.price_level || p.price_level > 2)) return false;
+        if (quickFilter === 'favorite' && (!p.personal_rating || p.personal_rating < 4)) return false;
         if (search && !p.name.toLowerCase().includes(search.toLowerCase()) &&
             !p.country?.toLowerCase().includes(search.toLowerCase())) return false;
         return true;
@@ -231,6 +239,13 @@ export default function PlacesIndex() {
                     ))}
                 </div>
 
+                <div className="mb-5 flex gap-2 overflow-x-auto pb-1" aria-label="Rychlé kolekce míst">
+                    {([
+                        ['all', 'Všechny nápady'], ['rain', '🌧️ Na déšť'], ['photo', '📸 Fotogenické'],
+                        ['early', '🌅 Brzy ráno'], ['budget', '💸 Do rozpočtu'], ['favorite', '★ Oblíbené'],
+                    ] as const).map(([key, label]) => <button key={key} onClick={() => setQuickFilter(key)} className={`min-h-9 shrink-0 rounded-full px-3 text-xs transition-colors ${quickFilter === key ? 'bg-[var(--color-accent)] text-white' : 'border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-white'}`}>{label}</button>)}
+                </div>
+
                 {/* Places grid */}
                 {loading ? (
                     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
@@ -272,6 +287,8 @@ export default function PlacesIndex() {
                                     {(place.city || place.country) && (
                                         <p className="text-[10px] text-[var(--color-text-secondary)] truncate mt-0.5">{[place.city, place.country].filter(Boolean).join(', ')}</p>
                                     )}
+
+                                    {(place.is_rain_friendly || place.is_photogenic || place.price_level || place.personal_rating) && <p className="mt-1 text-[9px] text-[var(--color-text-secondary)]">{place.is_rain_friendly ? '🌧️ ' : ''}{place.is_photogenic ? '📸 ' : ''}{place.personal_rating ? `★${place.personal_rating}` : ''}{place.price_level ? `${place.personal_rating ? ' · ' : ''}${'€'.repeat(place.price_level)}` : ''}</p>}
 
                                     <div className="flex items-center gap-3 mt-2 text-[10px] text-[var(--color-text-secondary)]">
                                         <span>📸 {place.photo_count}</span>

@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Console\Commands\SendPlanningFollowupsCommand;
+use App\Console\Commands\SendRelationshipMilestoneRemindersCommand;
 use App\Models\GallerySpace;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -105,6 +106,54 @@ class PlanningExpansionTest extends TestCase
         $this->postJson("/api/v1/trips/{$tripId}/vehicle-costs", ['type' => 'vignette', 'title' => 'Rakouská známka', 'amount' => 250, 'valid_until' => now()->subDay()->toDateString()])->assertCreated();
         $this->getJson("/api/v1/trips/{$tripId}/vehicle-costs")->assertOk()->assertJsonPath('summary.total', 750)->assertJsonPath('summary.cost_per_km', 3);
         $this->getJson("/api/v1/trips/{$tripId}/readiness")->assertOk()->assertJsonCount(1, 'vehicle.expired_vignettes');
+    }
+
+    public function test_low_cost_finance_calculates_partner_balance_and_savings_goal(): void
+    {
+        $tripId = DB::table('trips')->insertGetId(['gallery_space_id' => $this->space->id, 'created_by' => $this->owner->id, 'name' => 'Levný výlet', 'start_date' => now()->addWeek()->toDateString(), 'end_date' => now()->addWeek()->addDay()->toDateString(), 'currency' => 'CZK', 'created_at' => now(), 'updated_at' => now()]);
+        $this->postJson("/api/v1/trips/{$tripId}/expenses", ['title' => 'Hotel', 'amount' => 1000, 'paid_by_user_id' => $this->owner->id, 'split' => [['user_id' => $this->owner->id, 'amount' => 500], ['user_id' => $this->partner->id, 'amount' => 500]]])->assertCreated();
+        $summary = $this->getJson("/api/v1/trips/{$tripId}/finance-summary")->assertOk()->assertJsonPath('proposals.0.from_user_id', $this->partner->id)->assertJsonPath('proposals.0.to_user_id', $this->owner->id)->assertJsonPath('proposals.0.amount', 500);
+        $this->putJson("/api/v1/trips/{$tripId}/savings-goal", ['target_amount' => 5000, 'saved_amount' => 1250, 'monthly_contribution' => 500])->assertOk()->assertJsonPath('saved_amount', 1250);
+    }
+
+    public function test_relationship_milestones_share_anniversaries_without_exposing_private_entries(): void
+    {
+        $shared = $this->postJson('/api/v1/relationship-milestones', [
+            'gallery_space_id' => $this->space->id,
+            'title' => 'První společný výlet',
+            'occurred_on' => now()->subYear()->toDateString(),
+            'visibility' => 'shared',
+            'remind_annually' => true,
+        ])->assertCreated()->json();
+        $this->postJson('/api/v1/relationship-milestones', [
+            'gallery_space_id' => $this->space->id,
+            'title' => 'Soukromá poznámka',
+            'occurred_on' => now()->subMonth()->toDateString(),
+            'visibility' => 'private',
+        ])->assertCreated();
+
+        $this->actingAs($this->partner);
+        $this->getJson('/api/v1/relationship-milestones')->assertOk()->assertJsonCount(1)->assertJsonPath('0.uuid', $shared['uuid']);
+        $this->getJson('/api/v1/relationship-milestones/upcoming')->assertOk()->assertJsonPath('0.uuid', $shared['uuid']);
+        $this->deleteJson("/api/v1/relationship-milestones/{$shared['uuid']}")->assertForbidden();
+    }
+
+    public function test_relationship_milestone_reminder_notifies_shared_space_only_once_per_day(): void
+    {
+        $this->postJson('/api/v1/relationship-milestones', ['gallery_space_id' => $this->space->id, 'title' => 'Naše výročí', 'occurred_on' => today()->subYears(2)->toDateString(), 'visibility' => 'shared', 'remind_annually' => true])->assertCreated();
+        $this->artisan(SendRelationshipMilestoneRemindersCommand::class)->assertSuccessful();
+        $this->assertDatabaseHas('notifications', ['notifiable_id' => $this->owner->id]);
+        $this->assertDatabaseHas('notifications', ['notifiable_id' => $this->partner->id]);
+        $this->artisan(SendRelationshipMilestoneRemindersCommand::class)->assertSuccessful();
+        $this->assertSame(2, DB::table('notifications')->count());
+    }
+
+    public function test_shared_memory_moment_keeps_selected_photos_inside_the_partner_space(): void
+    {
+        $mediaId = DB::table('media_items')->insertGetId(['uuid' => (string) Str::uuid(), 'gallery_space_id' => $this->space->id, 'owner_user_id' => $this->owner->id, 'uploaded_by' => $this->owner->id, 'original_filename' => 'vylety.jpg', 'safe_filename' => 'vylety.jpg', 'extension' => 'jpg', 'mime_type' => 'image/jpeg', 'media_type' => 'photo', 'size_bytes' => 1, 'status' => 'ready', 'storage_status' => 'ready', 'created_at' => now(), 'updated_at' => now()]);
+        $moment = $this->postJson('/api/v1/shared-memory-moments', ['gallery_space_id' => $this->space->id, 'title' => 'Naše výlety', 'note' => 'Ještě jednou brzy.', 'happened_on' => today()->toDateString(), 'media_item_ids' => [$mediaId], 'is_favorite' => true])->assertCreated()->json();
+        $this->actingAs($this->partner)->getJson('/api/v1/shared-memory-moments')->assertOk()->assertJsonPath('0.uuid', $moment['uuid'])->assertJsonPath('0.media.0.title', 'vylety.jpg');
+        $this->deleteJson("/api/v1/shared-memory-moments/{$moment['uuid']}")->assertForbidden();
     }
 
     public function test_private_memory_note_is_encrypted_and_visible_only_to_its_author(): void

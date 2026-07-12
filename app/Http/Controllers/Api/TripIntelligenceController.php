@@ -57,6 +57,33 @@ class TripIntelligenceController extends Controller
         return response()->json(DB::table('trip_settlements')->find($settlementId));
     }
 
+    public function financeSummary(Request $request, int $tripId): JsonResponse
+    {
+        $trip = $this->trip($request->user(), $tripId);
+        $members = DB::table('gallery_space_user as g')->join('users as u', 'u.id', '=', 'g.user_id')->where('g.gallery_space_id', $trip->gallery_space_id)->get(['u.id', 'u.name']);
+        $balances = $members->mapWithKeys(fn ($member) => [$member->id => ['user_id' => $member->id, 'name' => $member->name, 'paid' => 0.0, 'owed' => 0.0, 'balance' => 0.0]])->all();
+        $unassigned = [];
+        foreach (DB::table('trip_expenses')->where('trip_id', $tripId)->where('state', 'actual')->get() as $expense) {
+            if (!$expense->paid_by_user_id || !array_key_exists($expense->paid_by_user_id, $balances)) { $unassigned[] = $expense->id; continue; }
+            $balances[$expense->paid_by_user_id]['paid'] += (float) $expense->amount;
+            $shares = json_decode($expense->split ?: '[]', true);
+            if (!$shares) { $equal = round((float) $expense->amount / max(1, count($balances)), 2); $shares = array_map(fn ($id) => ['user_id' => $id, 'amount' => $equal], array_keys($balances)); $shares[array_key_last($shares)]['amount'] += round((float) $expense->amount - array_sum(array_column($shares, 'amount')), 2); }
+            foreach ($shares as $share) if (array_key_exists($share['user_id'], $balances)) $balances[$share['user_id']]['owed'] += (float) $share['amount'];
+        }
+        $balances = collect($balances)->map(function ($row) { $row['paid'] = round($row['paid'], 2); $row['owed'] = round($row['owed'], 2); $row['balance'] = round($row['paid'] - $row['owed'], 2); return $row; })->values();
+        $creditors = $balances->filter(fn ($row) => $row['balance'] > 0.004)->values()->all(); $debtors = $balances->filter(fn ($row) => $row['balance'] < -0.004)->values()->all(); $proposals = [];
+        foreach ($debtors as &$debtor) foreach ($creditors as &$creditor) { if ($debtor['balance'] >= -0.004 || $creditor['balance'] <= 0.004) continue; $amount = round(min(-$debtor['balance'], $creditor['balance']), 2); $proposals[] = ['from_user_id' => $debtor['user_id'], 'to_user_id' => $creditor['user_id'], 'amount' => $amount, 'currency' => $trip->currency ?? 'CZK']; $debtor['balance'] += $amount; $creditor['balance'] -= $amount; }
+        $goal = DB::table('trip_savings_goals')->where('trip_id', $tripId)->first();
+        return response()->json(['members' => $balances, 'proposals' => $proposals, 'unassigned_expense_ids' => $unassigned, 'savings_goal' => $goal]);
+    }
+
+    public function upsertSavingsGoal(Request $request, int $tripId): JsonResponse
+    {
+        $trip = $this->trip($request->user(), $tripId); $data = $request->validate(['target_amount' => 'required|numeric|min:0|max:999999999', 'saved_amount' => 'nullable|numeric|min:0|max:999999999', 'currency' => 'nullable|string|size:3', 'target_date' => 'nullable|date', 'monthly_contribution' => 'nullable|numeric|min:0|max:999999999']);
+        DB::table('trip_savings_goals')->updateOrInsert(['trip_id' => $tripId], $data + ['saved_amount' => $data['saved_amount'] ?? 0, 'currency' => strtoupper($data['currency'] ?? $trip->currency ?? 'CZK'), 'created_at' => now(), 'updated_at' => now()]);
+        return response()->json(DB::table('trip_savings_goals')->where('trip_id', $tripId)->first());
+    }
+
     public function storeCurrencyRate(Request $request): JsonResponse
     {
         abort_unless($request->user()->isAdmin(), 403);

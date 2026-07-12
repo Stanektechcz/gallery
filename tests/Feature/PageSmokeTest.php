@@ -36,7 +36,7 @@ class PageSmokeTest extends TestCase
     public function test_all_static_authenticated_pages_render_without_server_error(): void
     {
         foreach ([
-            '/', '/home', '/timeline', '/albums', '/albums/create', '/compare', '/tv', '/print', '/curation',
+            '/', '/home', '/timeline', '/albums', '/albums/create', '/compare', '/tv', '/print', '/curation', '/milestones', '/shared-memories',
             '/trips', '/tickets', '/jizdenky', '/map', '/search', '/calendar', '/travel-inbox', '/weekly', '/planning', '/stats', '/inbox',
             '/people', '/places', '/activity', '/journey', '/itinerary', '/tags', '/recovery', '/privacy',
             '/favorites', '/trash', '/archive', '/vault', '/memories', '/shares', '/settings/storage/google', '/settings/security',

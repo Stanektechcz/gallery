@@ -63,7 +63,9 @@ class TripPlanController extends Controller
         $trip = $this->trip($request, $id);
         $this->ensureDays($trip);
 
-        $days = DB::table('trip_days')->where('trip_id', $id)->orderBy('sort_order')->get()->map(function ($day) {
+        $inbox = DB::table('travel_inbox_items')->where('trip_id', $id)->where('state', '!=', 'archived')->orderByDesc('id')->get(['uuid', 'title', 'notes', 'source_url', 'kind', 'trip_day_id', 'trip_activity_id']);
+        $days = DB::table('trip_days')->where('trip_id', $id)->orderBy('sort_order')->get()->map(function ($day) use ($inbox) {
+            $day->inbox_items = $inbox->where('trip_day_id', $day->id)->whereNull('trip_activity_id')->values();
             $day->activities = DB::table('trip_activities')->where('trip_day_id', $day->id)->orderBy('sort_order')->get()->map(function ($activity) {
                 $activity->metadata = $activity->metadata ? json_decode($activity->metadata, true) : null;
                 $activity->latitude = $activity->latitude !== null ? (float) $activity->latitude : null;
@@ -71,6 +73,7 @@ class TripPlanController extends Controller
                 $activity->cost = $activity->cost !== null ? (float) $activity->cost : null;
                 return $activity;
             });
+            foreach ($day->activities as $activity) $activity->inbox_items = $inbox->where('trip_activity_id', $activity->id)->values();
             return $day;
         });
 

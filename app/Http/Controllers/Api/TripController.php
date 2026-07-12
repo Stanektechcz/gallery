@@ -120,6 +120,15 @@ class TripController extends Controller
             return response()->json(['error' => 'not found'], 404);
         }
 
+        if (array_key_exists('start_date', $v) || array_key_exists('end_date', $v)) {
+            foreach (DB::table('calendar_events')->where('trip_id', $trip->id)->get() as $event) {
+                $startsAt = Carbon::parse($event->starts_at)->setDateFrom(Carbon::parse($trip->start_date));
+                $updateEvent = ['starts_at' => $startsAt, 'updated_at' => now()];
+                if ($event->ends_at) $updateEvent['ends_at'] = Carbon::parse($event->ends_at)->setDateFrom(Carbon::parse($trip->end_date));
+                DB::table('calendar_events')->where('id', $event->id)->update($updateEvent);
+            }
+        }
+
         return response()->json($this->enrichTrip($trip));
     }
 

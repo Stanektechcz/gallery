@@ -1,7 +1,7 @@
 import AppLayout from '@/Layouts/AppLayout';
 import { Head, Link } from '@inertiajs/react';
 import axios from 'axios';
-import { Bookmark, Clock, EyeOff, Settings2, Sparkles, TimerReset, X } from 'lucide-react';
+import { Bookmark, Clock, EyeOff, Heart, Settings2, Sparkles, TimerReset, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 interface MediaCardData {
@@ -45,7 +45,7 @@ function thumbnail(item?: MediaCardData) {
     return item?.variants.find(variant => variant.type === 'thumbnail')?.url;
 }
 
-function MemoryCard({ memory, onAction }: { memory: Memory; onAction: (memory: Memory, action: 'saved' | 'dismissed' | 'snoozed') => void }) {
+function MemoryCard({ memory, onAction, onShare }: { memory: Memory; onAction: (memory: Memory, action: 'saved' | 'dismissed' | 'snoozed') => void; onShare: (memory: Memory) => void }) {
     const visible = memory.items.slice(0, 5);
 
     return (
@@ -84,6 +84,7 @@ function MemoryCard({ memory, onAction }: { memory: Memory; onAction: (memory: M
                     </div>
                 </div>
                 <div className="flex gap-2">
+                    <button onClick={() => onShare(memory)} title="Uložit pro vás oba" className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-pink-400/30 px-3 text-xs font-medium text-pink-100 hover:bg-pink-500/10 sm:flex-none"><Heart size={15} /> Pro nás</button>
                     <button onClick={() => onAction(memory, 'saved')} title="Uložit vzpomínku"
                         className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-[var(--color-accent)] px-3 text-xs font-medium text-white sm:flex-none">
                         <Bookmark size={15} /> Uložit
@@ -152,10 +153,19 @@ function PreferencesPanel({ onClose }: { onClose: () => void }) {
 export default function MemoriesIndex({ memories: initialMemories, today_label, has_memories }: Props) {
     const [memories, setMemories] = useState(initialMemories);
     const [showSettings, setShowSettings] = useState(false);
+    const [spaceId, setSpaceId] = useState<number | null>(null);
+    const [sharedFingerprint, setSharedFingerprint] = useState('');
+
+    useEffect(() => { axios.get('/api/v1/calendar/events').then(response => setSpaceId(response.data.spaces?.[0]?.id ?? null)).catch(() => {}); }, []);
 
     const action = async (memory: Memory, type: 'saved' | 'dismissed' | 'snoozed') => {
         await axios.post('/api/v1/memories/interactions', { fingerprint: memory.fingerprint, memory_type: memory.type, action: type });
         if (type !== 'saved') setMemories(previous => previous.filter(item => item.fingerprint !== memory.fingerprint));
+    };
+    const share = async (memory: Memory) => {
+        if (!spaceId || sharedFingerprint === memory.fingerprint) return;
+        await axios.post('/api/v1/shared-memory-moments', { gallery_space_id: spaceId, title: memory.title, happened_on: memory.items[0]?.taken_at?.slice(0, 10) || null, media_item_ids: memory.items.map(item => item.id), is_favorite: true });
+        setSharedFingerprint(memory.fingerprint);
     };
 
     return (
@@ -179,7 +189,7 @@ export default function MemoriesIndex({ memories: initialMemories, today_label, 
                             <h2 className="text-lg font-semibold text-white">Vzpomínky právě odpočívají</h2>
                             <p className="mt-2 max-w-sm text-sm">Až najdeme výročí, oblíbené momenty, významnou cestu nebo známé místo, objeví se tady.</p>
                         </div>
-                    ) : memories.map(memory => <MemoryCard key={memory.fingerprint} memory={memory} onAction={action} />)}
+                    ) : memories.map(memory => <MemoryCard key={memory.fingerprint} memory={memory} onAction={action} onShare={share} />)}
                 </main>
                 {showSettings && <PreferencesPanel onClose={() => setShowSettings(false)} />}
             </div>
