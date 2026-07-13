@@ -108,7 +108,7 @@ class AlbumController extends Controller
             if ($type)   $mediaQuery->where('media_type', $type);
             if ($search) $mediaQuery->where('original_filename', 'like', "%{$search}%");
 
-            $media = $mediaQuery->orderBy($sortBy, $sortDir)->paginate(60)->withQueryString();
+            $media = $mediaQuery->orderBy($sortBy, $sortDir)->paginate(48)->withQueryString();
         } else {
             $mediaQuery = MediaItem::query()
                 ->where(function ($q) use ($album) {
@@ -123,7 +123,7 @@ class AlbumController extends Controller
             if ($type)   $mediaQuery->where('media_type', $type);
             if ($search) $mediaQuery->where('original_filename', 'like', "%{$search}%");
 
-            $media = $mediaQuery->orderBy($sortBy, $sortDir)->paginate(60)->withQueryString();
+            $media = $mediaQuery->orderBy($sortBy, $sortDir)->paginate(48)->withQueryString();
         }
 
         // Serialize smart_rules for frontend

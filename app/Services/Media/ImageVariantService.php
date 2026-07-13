@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Intervention\Image\ImageManager;
 use Intervention\Image\Drivers\Gd\Driver as GdDriver;
+use Intervention\Image\Drivers\Imagick\Driver as ImagickDriver;
 
 class ImageVariantService
 {
@@ -23,7 +24,12 @@ class ImageVariantService
 
     public function __construct()
     {
-        $this->manager = new ImageManager(new GdDriver());
+        // GD cannot read HEIC/HEIF. Prefer Imagick whenever it is available;
+        // on a server with libheif support this also creates the same WebP
+        // previews for iPhone photographs as for JPEGs.
+        $this->manager = extension_loaded('imagick')
+            ? new ImageManager(new ImagickDriver())
+            : new ImageManager(new GdDriver());
     }
 
     /**

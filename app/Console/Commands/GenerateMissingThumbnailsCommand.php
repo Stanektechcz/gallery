@@ -6,6 +6,7 @@ use App\Models\MediaItem;
 use App\Models\StorageConnection;
 use App\Services\Storage\GoogleDriveStorageProvider;
 use App\Services\Media\VideoProcessingService;
+use App\Services\Media\ImageVariantService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -15,7 +16,7 @@ class GenerateMissingThumbnailsCommand extends Command
     protected $signature   = 'gallery:thumbnails {--force : Regenerate even existing thumbnails} {--recover : Download from Drive if local file missing}';
     protected $description = 'Generate thumbnails for media items missing them. Use --recover to pull originals from Google Drive.';
 
-    public function handle(VideoProcessingService $videos): int
+    public function handle(VideoProcessingService $videos, ImageVariantService $images): int
     {
         // Do not rely only on the database relation: older deploys created a
         // thumbnail row even when the file write failed. Those rows are the
@@ -34,7 +35,7 @@ class GenerateMissingThumbnailsCommand extends Command
         $fail      = 0;
         $recovered = 0;
 
-        $query->with('variants')->orderBy('id')->each(function (MediaItem $media) use ($bar, &$done, &$fail, &$recovered, $videos) {
+        $query->with('variants')->orderBy('id')->each(function (MediaItem $media) use ($bar, &$done, &$fail, &$recovered, $videos, $images) {
             if (!$this->option('force') && $this->hasUsablePreview($media)) {
                 $bar->advance();
                 return;
@@ -84,7 +85,13 @@ class GenerateMissingThumbnailsCommand extends Command
                     $poster = $videos->generatePoster($media, $sourcePath);
                     if (!$poster) $videos->generateFallbackPoster($media);
                 } else {
-                    $this->makeThumbnail($media, $sourcePath);
+                    // Generate the complete compatible set, not just a tiny
+                    // thumbnail. HEIC/HEIF originals need a high-quality
+                    // WebP/JPEG variant for browser viewing and zooming.
+                    $images->generateAll($media, $sourcePath);
+                    if (!$media->fresh()->variants()->where('type', 'thumbnail')->exists()) {
+                        $this->makeThumbnail($media, $sourcePath);
+                    }
                 }
                 if (!$media->taken_at && $media->media_type === 'photo') {
                     $this->extractExif($media, $sourcePath);

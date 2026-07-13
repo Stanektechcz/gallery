@@ -7,7 +7,7 @@ import AlbumStory from '@/Pages/Albums/Story';
 import { Head, Link, router } from '@inertiajs/react';
 import axios from 'axios';
 import { ArrowUpDown, BookOpen, ChevronRight, Clock, Edit3, Film, FolderOpen, FolderPlus, Grid3X3, Image, MapPin, Search, SortAsc, SortDesc, Trash2, Upload } from 'lucide-react';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 
 interface MediaItem {
     id: number;
@@ -69,6 +69,14 @@ export default function AlbumShow({ album, breadcrumb, children, media, filters:
         location_country_code: '',
     });
     const [savingLocation, setSavingLocation] = useState(false);
+    const galleryItems = useMemo(() => media.data.map(item => {
+        const thumbnail = item.variants?.find(v => v.type === 'thumbnail')
+            ?? item.variants?.find(v => v.type === 'video_poster');
+        const original = item.variants?.find(v => v.type === 'original');
+        const placeholder = item.variants?.find(v => v.type === 'placeholder');
+
+        return { item, displayUrl: thumbnail?.url ?? (item.media_type === 'photo' ? original?.url : null), placeholder };
+    }), [media.data]);
 
     const applyFilter = (patch: Partial<Filters>) => {
         router.get(`/albums/${album.uuid}`, { ...filters, ...patch, search: search || undefined } as any, { preserveScroll: true, preserveState: true });
@@ -329,16 +337,17 @@ export default function AlbumShow({ album, breadcrumb, children, media, filters:
                     <section>
                         <h2 className="text-xs font-medium text-[var(--color-text-secondary)] mb-3 uppercase tracking-wider">Média</h2>
                         <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(150px, 1fr))', gap:'4px' }}>
-                            {media.data.map(item => {
-                                const thumb      = item.variants?.find(v => v.type === (item.media_type === 'video' ? 'video_poster' : 'thumbnail'));
-                                const original   = item.variants?.find(v => v.type === 'original');
-                                const displayUrl = thumb?.url ?? (item.media_type === 'photo' ? original?.url : null);
-                                const placeholder = item.variants?.find(v => v.type === 'placeholder');
+                            {galleryItems.map(({ item, displayUrl, placeholder }) => {
                                 return (
-                                    <Link key={item.id} href={`/media/${item.uuid}`} className="relative group aspect-square rounded overflow-hidden bg-[var(--color-bg-card)]">
+                                    <Link
+                                        key={item.id}
+                                        href={`/media/${item.uuid}`}
+                                        className="relative group aspect-square rounded overflow-hidden bg-[var(--color-bg-card)]"
+                                        style={{ contentVisibility: 'auto', contain: 'layout paint style', containIntrinsicSize: '150px 150px' }}
+                                    >
                                         {placeholder?.dominant_color && !displayUrl && <div className="absolute inset-0" style={{ backgroundColor: placeholder.dominant_color }} />}
                                         {displayUrl
-                                            ? <img src={displayUrl} alt="" loading="lazy" className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                                            ? <img src={displayUrl} alt="" loading="lazy" decoding="async" fetchPriority="low" draggable={false} className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                                             : <div className="absolute inset-0 flex items-center justify-center bg-[var(--color-bg-secondary)]">
                                                 {item.media_type === 'video' ? <Film size={28} className="text-[var(--color-text-secondary)] opacity-60" /> : <Image size={28} className="text-[var(--color-text-secondary)] opacity-60" />}
                                               </div>

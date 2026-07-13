@@ -308,6 +308,55 @@ class MediaController extends Controller
         $media = MediaItem::where('uuid', $uuid)->firstOrFail();
         Gate::authorize('view', $media);
 
+        // HEIC/HEIF and RAW originals are archival files. Browsers generally
+        // cannot render them, so the viewer must prefer an already generated
+        // high-quality web variant instead of returning an unrenderable 200.
+        $needsBrowserVariant = in_array(strtolower($media->extension), [
+            'heic', 'heif', 'dng', 'cr2', 'cr3', 'nef', 'arw', 'raf', 'orf', 'rw2',
+        ], true);
+
+        if ($needsBrowserVariant) {
+            foreach (['large', 'medium', 'small', 'thumbnail'] as $type) {
+                $variant = $media->variants()->where('type', $type)->first();
+                if (!$variant) continue;
+
+                $path = Storage::disk($variant->disk)->path($variant->path);
+                if (file_exists($path)) {
+                    return response()->file($path, [
+                        'Content-Type' => $variant->mime_type ?: 'image/webp',
+                        'Cache-Control' => 'private, max-age=86400',
+                    ]);
+                }
+            }
+
+            // A historical HEIC may have a local original but no generated
+            // large variant yet. Create one on the first detail request so
+            // the user does not have to wait for a maintenance command.
+            $originalForPreview = $media->variants()->where('type', 'original')->first();
+            if ($originalForPreview) {
+                $sourcePath = Storage::disk($originalForPreview->disk)->path($originalForPreview->path);
+                if (file_exists($sourcePath)) {
+                    app(\App\Services\Media\ImageVariantService::class)->generateVariant(
+                        $media,
+                        $sourcePath,
+                        'large',
+                        ['width' => 2560, 'quality' => 88],
+                    );
+
+                    $generated = $media->variants()->where('type', 'large')->first();
+                    if ($generated) {
+                        $generatedPath = Storage::disk($generated->disk)->path($generated->path);
+                        if (file_exists($generatedPath)) {
+                            return response()->file($generatedPath, [
+                                'Content-Type' => $generated->mime_type ?: 'image/webp',
+                                'Cache-Control' => 'private, max-age=86400',
+                            ]);
+                        }
+                    }
+                }
+            }
+        }
+
         // 1. Try local original first
         $original = $media->variants()->where('type', 'original')->first();
         if ($original) {

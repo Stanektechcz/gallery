@@ -161,9 +161,24 @@ class PlanningExpansionController extends Controller
         $polls = DB::table('decision_polls')->whereIn('gallery_space_id', $this->spaceIds($request->user()))->latest()->get();
         $hasCalendarLink = Schema::hasColumn('decision_poll_options', 'calendar_event_id');
         foreach ($polls as $poll) {
-            $groups = ['o.id', 'o.title', 'o.notes', 'o.sort_order', 'o.created_at', 'o.updated_at'];
-            if ($hasCalendarLink) $groups[] = 'o.calendar_event_id';
-            $poll->options = DB::table('decision_poll_options as o')->leftJoin('decision_poll_votes as v', 'v.poll_option_id', '=', 'o.id')->where('o.poll_id', $poll->id)->groupBy(...$groups)->select('o.*', DB::raw('COUNT(v.id) as votes'))->orderBy('o.sort_order')->get();
+            // Do not select o.* beside a GROUP BY. MySQL installations using
+            // ONLY_FULL_GROUP_BY rightfully reject that query (and made the
+            // planning page report partially unavailable tools). Count votes
+            // in a subquery, then join the scalar result to every option.
+            $voteCounts = DB::table('decision_poll_votes')
+                ->select('poll_option_id', DB::raw('COUNT(*) as votes'))
+                ->groupBy('poll_option_id');
+
+            $fields = ['o.id', 'o.poll_id', 'o.title', 'o.notes', 'o.sort_order', 'o.created_at', 'o.updated_at'];
+            if ($hasCalendarLink) $fields[] = 'o.calendar_event_id';
+            $fields[] = DB::raw('COALESCE(vote_counts.votes, 0) as votes');
+
+            $poll->options = DB::table('decision_poll_options as o')
+                ->leftJoinSub($voteCounts, 'vote_counts', 'vote_counts.poll_option_id', '=', 'o.id')
+                ->where('o.poll_id', $poll->id)
+                ->select($fields)
+                ->orderBy('o.sort_order')
+                ->get();
         }
         return response()->json($polls);
     }
