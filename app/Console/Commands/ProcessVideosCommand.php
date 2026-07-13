@@ -67,7 +67,9 @@ class ProcessVideosCommand extends Command
                 }
                 if ($updates) $media->update($updates);
 
-                $videos->generatePoster($media->fresh(), $source);
+                if (!$videos->generatePoster($media->fresh(), $source)) {
+                    $videos->generateFallbackPoster($media->fresh());
+                }
                 if ($this->option('compat') && !$media->variants->firstWhere('type', 'video_compat')) {
                     $videos->generateCompatibilityVariant($media->fresh(), $source);
                 }

@@ -12,6 +12,7 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 
 class GenerateImageVariantsJob implements ShouldQueue
 {
@@ -29,6 +30,14 @@ class GenerateImageVariantsJob implements ShouldQueue
 
         $session = UploadSession::where('resulting_media_id', $media->id)->first();
         $path    = $session?->assembled_path;
+
+        // Older uploads do not retain their temporary assembled upload. Their
+        // local original is still enough to regenerate a missing preview.
+        if (!$path || !file_exists($path)) {
+            $original = $media->variants()->where('type', 'original')->first();
+            $candidate = $original ? Storage::disk($original->disk)->path($original->path) : null;
+            $path = $candidate && file_exists($candidate) ? $candidate : null;
+        }
 
         if (!$path || !file_exists($path)) {
             $media->update(['processing_error' => 'Zdroj pro vytvoření variant nebyl nalezen.']);

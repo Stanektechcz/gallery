@@ -45,12 +45,19 @@ class ImageVariantService
             $image->scaleDown(width: $config['width']);
 
             $ext  = 'webp'; // prefer WebP
-            $dir  = "variants/{$mediaItem->uuid}";
+            // Keep every locally served file in the same directory as its
+            // original. The public file proxy and upload pipeline both use
+            // media/{uuid}; using a second directory here caused variants to
+            // exist in the database while their URLs pointed at missing files.
+            $dir  = "media/{$mediaItem->uuid}";
             $filename = "{$type}.{$ext}";
             $path = "{$dir}/{$filename}";
 
             $encoded = $image->toWebp($config['quality']);
-            Storage::disk('public')->put($path, $encoded->toString());
+            $contents = $encoded->toString();
+            if (!Storage::disk('public')->put($path, $contents, 'public')) {
+                throw new \RuntimeException("Variantu se nepodařilo uložit: {$path}");
+            }
 
             return MediaVariant::updateOrCreate(
                 ['media_item_id' => $mediaItem->id, 'type' => $type],
@@ -59,8 +66,9 @@ class ImageVariantService
                     'path'         => $path,
                     'width'        => $image->width(),
                     'height'       => $image->height(),
-                    'size_bytes'   => strlen($encoded->toString()),
+                    'size_bytes'   => strlen($contents),
                     'format'       => 'webp',
+                    'mime_type'    => 'image/webp',
                     'aspect_ratio' => $image->height() > 0 ? round($image->width() / $image->height(), 4) : null,
                 ]
             );

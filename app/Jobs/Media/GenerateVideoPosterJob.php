@@ -11,6 +11,7 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 
 class GenerateVideoPosterJob implements ShouldQueue
 {
@@ -29,7 +30,16 @@ class GenerateVideoPosterJob implements ShouldQueue
         $session = UploadSession::where('resulting_media_id', $media->id)->first();
         $path    = $session?->assembled_path;
 
+        // Preview repair must also work for videos uploaded before upload
+        // sessions started preserving assembled_path.
         if (!$path || !file_exists($path)) {
+            $original = $media->variants()->where('type', 'original')->first();
+            $candidate = $original ? Storage::disk($original->disk)->path($original->path) : null;
+            $path = $candidate && file_exists($candidate) ? $candidate : null;
+        }
+
+        if (!$path || !file_exists($path)) {
+            $videoService->generateFallbackPoster($media);
             $media->update(['processing_error' => 'Zdroj videa pro vytvoření náhledu nebyl nalezen.']);
             return;
         }
@@ -49,8 +59,11 @@ class GenerateVideoPosterJob implements ShouldQueue
 
             // Generate poster
             $poster = $videoService->generatePoster($media, $path);
-            if (!$poster && !$videoService->isAvailable()) {
-                $media->update(['processing_error' => 'Video je uložené, ale server nemá dostupné FFmpeg/FFprobe pro náhled a technické údaje.']);
+            if (!$poster) {
+                $videoService->generateFallbackPoster($media);
+                if (!$videoService->isAvailable()) {
+                    $media->update(['processing_error' => 'Video je uložené, ale server nemá dostupné FFmpeg/FFprobe pro náhled a technické údaje.']);
+                }
             }
 
             // Generate compatibility variant

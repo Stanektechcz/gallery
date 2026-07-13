@@ -53,7 +53,13 @@ export function MediaCard({ item, selected, onSelect, onAction, badge, href }: P
                 'relative group rounded overflow-hidden bg-[var(--color-bg-card)] cursor-pointer',
                 selected && 'ring-2 ring-[var(--color-accent)]'
             )}
-            style={{ aspectRatio: aspect }}
+            // Let the browser skip paint/layout work for cards outside the
+            // viewport. This is especially important for large shared albums.
+            style={{
+                aspectRatio: aspect,
+                contentVisibility: 'auto',
+                containIntrinsicSize: '160px 160px',
+            }}
             onClick={handleClick}
         >
             {placeholder?.dominant_color && (

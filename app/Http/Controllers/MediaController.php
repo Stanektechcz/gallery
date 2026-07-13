@@ -310,11 +310,11 @@ class MediaController extends Controller
 
         // 1. Try local original first
         $original = $media->variants()->where('type', 'original')->first();
-        if ($original && $original->disk === 'public') {
-            $localPath = Storage::disk('public')->path($original->path);
+        if ($original) {
+            $localPath = Storage::disk($original->disk)->path($original->path);
             if (file_exists($localPath)) {
                 return response()->file($localPath, [
-                    'Content-Type'  => $media->mime_type,
+                    'Content-Type'  => $original->mime_type ?: $media->mime_type,
                     'Cache-Control' => 'private, max-age=86400',
                 ]);
             }
@@ -351,8 +351,8 @@ class MediaController extends Controller
         // 3. Fallback: any local variant
         foreach (['large', 'medium', 'small', 'thumbnail'] as $type) {
             $v = $media->variants()->where('type', $type)->first();
-            if ($v && $v->disk === 'public') {
-                $p = Storage::disk('public')->path($v->path);
+            if ($v) {
+                $p = Storage::disk($v->disk)->path($v->path);
                 if (file_exists($p)) {
                     return response()->file($p, ['Content-Type' => $v->mime_type ?? $media->mime_type]);
                 }

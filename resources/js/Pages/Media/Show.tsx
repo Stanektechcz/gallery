@@ -287,6 +287,19 @@ function ProgressiveImage({ uuid, fullUrl, thumbUrl, alt, width, height, dominan
     // Keep scale in a ref for non-React touch handlers
     const scaleRef = useRef(1);
 
+    // Inertia reuses this viewer while navigating between media. Without a
+    // reset, one failed original kept the fallback thumbnail (and disabled
+    // zoom controls) for every following photo.
+    useEffect(() => {
+        setLoaded(false);
+        setError(false);
+        setScale(1);
+        scaleRef.current = 1;
+        setOffset({ x: 0, y: 0 });
+        setDragging(false);
+        setFullscreen(false);
+    }, [uuid]);
+
     const clampOffset = useCallback((s: number, ox: number, oy: number) => {
         if (s <= 1) return { x: 0, y: 0 };
         const el = containerRef.current;

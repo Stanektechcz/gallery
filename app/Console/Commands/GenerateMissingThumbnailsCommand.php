@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Models\MediaItem;
 use App\Models\StorageConnection;
 use App\Services\Storage\GoogleDriveStorageProvider;
+use App\Services\Media\VideoProcessingService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -14,15 +15,15 @@ class GenerateMissingThumbnailsCommand extends Command
     protected $signature   = 'gallery:thumbnails {--force : Regenerate even existing thumbnails} {--recover : Download from Drive if local file missing}';
     protected $description = 'Generate thumbnails for media items missing them. Use --recover to pull originals from Google Drive.';
 
-    public function handle(): int
+    public function handle(VideoProcessingService $videos): int
     {
-        $query = MediaItem::whereDoesntHave('variants', fn($q) => $q->where('type', 'thumbnail'));
-        if ($this->option('force')) {
-            $query = MediaItem::query();
-        }
+        // Do not rely only on the database relation: older deploys created a
+        // thumbnail row even when the file write failed. Those rows are the
+        // source of repeated /files/... 404s in the gallery.
+        $query = MediaItem::query()->whereNull('trashed_at');
 
         $total = $query->count();
-        $this->info("Found {$total} media items without thumbnails.");
+        $this->info("Checking {$total} media items for usable previews.");
         if ($total === 0) {
             $this->info('Nothing to do.');
             return 0;
@@ -33,10 +34,14 @@ class GenerateMissingThumbnailsCommand extends Command
         $fail      = 0;
         $recovered = 0;
 
-        $query->with('variants')->each(function (MediaItem $media) use ($bar, &$done, &$fail, &$recovered) {
-            if ($this->option('force')) {
-                $media->variants()->where('type', 'thumbnail')->delete();
+        $query->with('variants')->orderBy('id')->each(function (MediaItem $media) use ($bar, &$done, &$fail, &$recovered, $videos) {
+            if (!$this->option('force') && $this->hasUsablePreview($media)) {
+                $bar->advance();
+                return;
             }
+
+            $previewTypes = $media->media_type === 'video' ? ['thumbnail', 'video_poster'] : ['thumbnail'];
+            $media->variants()->whereIn('type', $previewTypes)->delete();
 
             $originalVar = $media->variants()->where('type', 'original')->first();
             $sourcePath  = $originalVar ? Storage::disk($originalVar->disk)->path($originalVar->path) : null;
@@ -57,6 +62,15 @@ class GenerateMissingThumbnailsCommand extends Command
                 }
             }
 
+            if ((!$sourcePath || !file_exists($sourcePath)) && $media->media_type === 'video') {
+                // A visible fallback is still preferable to a broken image and
+                // allows the grid to remain fast while the original is restored.
+                $videos->generateFallbackPoster($media);
+                $done++;
+                $bar->advance();
+                return;
+            }
+
             if (!$sourcePath || !file_exists($sourcePath)) {
                 $this->newLine();
                 $this->warn("  No source for #{$media->id} {$media->original_filename}" . ($media->drive_file_id ? ' (has Drive ID, use --recover)' : ' (no Drive ID)'));
@@ -66,7 +80,12 @@ class GenerateMissingThumbnailsCommand extends Command
             }
 
             try {
-                $this->makeThumbnail($media, $sourcePath);
+                if ($media->media_type === 'video') {
+                    $poster = $videos->generatePoster($media, $sourcePath);
+                    if (!$poster) $videos->generateFallbackPoster($media);
+                } else {
+                    $this->makeThumbnail($media, $sourcePath);
+                }
                 if (!$media->taken_at && $media->media_type === 'photo') {
                     $this->extractExif($media, $sourcePath);
                 }
@@ -84,6 +103,16 @@ class GenerateMissingThumbnailsCommand extends Command
         $this->newLine(2);
         $this->info("Done. Generated: {$done}, Recovered from Drive: {$recovered}, Failed/skipped: {$fail}");
         return 0;
+    }
+
+    private function hasUsablePreview(MediaItem $media): bool
+    {
+        return $media->variants
+            // The gallery grid consumes the canonical thumbnail for photos
+            // and videos alike. A lone video_poster record is not sufficient
+            // when thumbnail points to a deleted historical file.
+            ->where('type', 'thumbnail')
+            ->contains(fn ($variant) => Storage::disk($variant->disk)->exists($variant->path));
     }
 
     private function downloadFromDrive(MediaItem $media): ?string
