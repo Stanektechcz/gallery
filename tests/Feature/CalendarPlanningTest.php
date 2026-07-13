@@ -198,6 +198,14 @@ class CalendarPlanningTest extends TestCase
         $this->assertDatabaseHas('calendar_events', ['id' => $event['id'], 'album_id' => $albumId, 'status' => 'completed']);
         $this->assertDatabaseHas('albums', ['id' => $albumId, 'event_mode' => true, 'media_count' => 1, 'location_name' => 'Brno']);
         $this->assertDatabaseHas('album_media', ['album_id' => $albumId, 'media_item_id' => $mediaId]);
+        $this->getJson("/api/v1/calendar/events/{$event['uuid']}")
+            ->assertOk()
+            ->assertJsonPath('album.uuid', $memory['album']['uuid'])
+            ->assertJsonPath('album.title', 'Shared experience');
+        $this->getJson('/api/v1/shared-memory-moments')
+            ->assertOk()
+            ->assertJsonPath('0.calendar_event.uuid', $event['uuid'])
+            ->assertJsonPath('0.album.uuid', $memory['album']['uuid']);
     }
 
     public function test_calendar_event_can_be_promoted_to_single_trip_workspace(): void

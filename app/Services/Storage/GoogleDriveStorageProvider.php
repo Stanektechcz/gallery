@@ -270,16 +270,10 @@ class GoogleDriveStorageProvider implements StorageProviderInterface
 
     public function createResumableSession(string $remoteName, string $parentId, string $mimeType, int $totalSize): string
     {
-        $meta = new DriveFile(['name' => $remoteName, 'parents' => [$parentId]]);
-
-        $request = $this->service->files->create($meta, [
-            'uploadType' => 'resumable',
-            'mimeType'   => $mimeType,
-        ]);
-
-        // Extract session URI from Location header
-        // The Google client returns the session URI internally; we need to initiate via direct HTTP
-        $httpClient = $this->client->authorize();
+        // The resumable endpoint itself creates the remote file after the last
+        // chunk. Calling files->create first made an empty duplicate for every
+        // video and could leave the real upload without the expected session.
+        $httpClient = $this->getAuthenticatedClient()->authorize();
         $response   = $httpClient->request(
             'POST',
             'https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable',
@@ -303,7 +297,7 @@ class GoogleDriveStorageProvider implements StorageProviderInterface
 
     public function uploadChunk(string $sessionUri, string $data, int $rangeStart, int $rangeEnd, int $totalSize): array
     {
-        $httpClient  = $this->client->authorize();
+        $httpClient  = $this->getAuthenticatedClient()->authorize();
         $contentLen  = strlen($data);
         $response    = $httpClient->request('PUT', $sessionUri, [
             'headers' => [
@@ -330,7 +324,7 @@ class GoogleDriveStorageProvider implements StorageProviderInterface
 
     public function queryResumableStatus(string $sessionUri, int $totalSize): array
     {
-        $httpClient = $this->client->authorize();
+        $httpClient = $this->getAuthenticatedClient()->authorize();
         $response   = $httpClient->request('PUT', $sessionUri, [
             'headers' => [
                 'Content-Length' => 0,

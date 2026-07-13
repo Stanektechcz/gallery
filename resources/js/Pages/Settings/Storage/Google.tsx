@@ -52,6 +52,7 @@ export default function GoogleStorageSettings({ connection, client_configured }:
     const [testing, setTesting] = useState(false);
     const [testResults, setTestResults] = useState<Record<string, any> | null>(null);
     const [disconnecting, setDisconnecting] = useState(false);
+    const [syncing, setSyncing] = useState(false);
 
     const status = connection?.status ?? 'disconnected';
     const info   = statusInfo[status] ?? statusInfo.disconnected;
@@ -76,6 +77,11 @@ export default function GoogleStorageSettings({ connection, client_configured }:
 
     function forceReconnect() {
         window.location.href = '/oauth/google/redirect?force=1';
+    }
+
+    function syncExisting() {
+        setSyncing(true);
+        router.post('/settings/storage/google/sync-existing', {}, { onFinish: () => setSyncing(false) });
     }
 
     return (
@@ -164,6 +170,14 @@ export default function GoogleStorageSettings({ connection, client_configured }:
                                     {testing ? 'Testuji…' : 'Otestovat'}
                                 </button>
                                 <button
+                                    onClick={syncExisting}
+                                    disabled={syncing || status !== 'healthy'}
+                                    className="bg-[var(--color-accent)]/15 hover:bg-[var(--color-accent)]/25 disabled:opacity-50 text-white text-sm px-3 py-2 rounded-lg transition-colors flex items-center gap-2"
+                                >
+                                    <RefreshCw size={14} className={syncing ? 'animate-spin' : ''} />
+                                    {syncing ? 'Zařazuji…' : 'Synchronizovat média'}
+                                </button>
+                                <button
                                     onClick={() => router.post('/settings/storage/google/reconnect')}
                                     className="bg-white/10 hover:bg-white/15 text-white text-sm px-3 py-2 rounded-lg transition-colors flex items-center gap-2"
                                 >
@@ -221,9 +235,9 @@ export default function GoogleStorageSettings({ connection, client_configured }:
                 {/* Info */}
                 <div className="glass rounded-2xl p-5 text-xs text-[var(--color-text-secondary)] space-y-2">
                     <p className="font-medium text-white mb-2">Jak to funguje</p>
-                    <p>Originální soubory jsou uloženy na vašem osobním Google Drive (školní účet Educannet).</p>
-                    <p>Náhledy a varianty jsou uloženy lokálně na serveru pro rychlé načítání galerie.</p>
-                    <p>Google Drive slouží jako dlouhodobé bezpečné úložiště originálů — nikoli jako primární zdroj pro zobrazení galerie.</p>
+                    <p>Originál se po nahrání bezpečně zálohuje na Google Drive po částech; tlačítko „Synchronizovat média“ doplní i starší soubory.</p>
+                    <p>Náhledy, přehrávací kopie videí a lokální cache originálů zůstávají na serveru pro rychlé načítání galerie a plynulé přetáčení.</p>
+                    <p>Google Drive je dlouhodobá záloha originálů, lokální kopie není druhá neprovedená synchronizace.</p>
                     <p className="text-yellow-400 mt-3">⚠ Google Drive patří školnímu účtu — počítejte s tím, že přístup může být zrušen po ukončení studia.</p>
                 </div>
             </div>

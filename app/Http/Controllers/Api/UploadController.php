@@ -4,14 +4,13 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Jobs\Media\CalculateMediaHashesJob;
+use App\Jobs\Media\InitiateDriveResumableUploadJob;
 use App\Models\AuditLog;
 use App\Models\Album;
 use App\Models\MediaItem;
-use App\Models\StorageConnection;
 use App\Models\UploadChunk;
 use App\Models\UploadSession;
 use App\Services\ExifExtractorService;
-use App\Services\Storage\GoogleDriveStorageProvider;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -266,54 +265,6 @@ class UploadController extends Controller
                 throw new \RuntimeException("Size mismatch: expected {$session->total_size}, got {$assembledSize}");
             }
 
-            // Upload to Google Drive (synchronous, best-effort)
-            $driveFileId       = null;
-            $driveParentFolder = null;
-            try {
-                $connection = StorageConnection::whereHas(
-                    'owner',
-                    fn($q) => $q->whereHas(
-                        'gallerySpaces',
-                        fn($q2) => $q2->where('gallery_spaces.id', $session->gallery_space_id)
-                    )
-                )
-                    ->where('provider', 'google_drive')
-                    ->where('connection_status', 'healthy')
-                    ->first();
-
-                if ($connection) {
-                    $provider = new GoogleDriveStorageProvider($connection);
-
-                    // Determine target Drive folder (album folder or root)
-                    $driveFolderId = null;
-                    if ($session->target_album_id) {
-                        $album = Album::find($session->target_album_id);
-                        $driveFolderId = $album?->drive_folder_id;
-
-                        // Create album Drive folder inline if missing
-                        if (!$driveFolderId && $album) {
-                            $parentId  = $album->parent?->drive_folder_id ?? $connection->root_folder_id;
-                            if ($parentId) {
-                                $folder        = $provider->createFolder($album->title, $parentId);
-                                $driveFolderId = $folder['id'];
-                                $album->update(['drive_folder_id' => $driveFolderId, 'sync_status' => 'synced']);
-                            }
-                        }
-                    }
-                    $driveFolderId = $driveFolderId ?? $connection->root_folder_id;
-
-                    if ($driveFolderId) {
-                        $driveFile         = $provider->upload($destPath, $session->original_filename, $driveFolderId, $session->mime_type);
-                        $driveFileId       = $driveFile['id'];
-                        $driveParentFolder = $driveFolderId;
-                        Log::info('Media uploaded to Drive', ['file_id' => $driveFileId]);
-                    }
-                }
-            } catch (\Throwable $driveEx) {
-                // Drive upload is non-fatal — file is already on local disk
-                Log::warning('Drive upload failed (non-fatal)', ['error' => $driveEx->getMessage()]);
-            }
-
             $ext         = strtolower(pathinfo($session->original_filename, PATHINFO_EXTENSION));
             $formatSvc   = new \App\Services\Media\MediaFormatService();
             $isRaw       = \App\Services\Media\MediaFormatService::isRaw($ext);
@@ -333,8 +284,8 @@ class UploadController extends Controller
                 'owner_user_id'       => $session->user_id,
                 'uploaded_by'         => $session->user_id,
                 'primary_album_id'    => $session->target_album_id,
-                'drive_file_id'       => $driveFileId,
-                'drive_parent_folder_id' => $driveParentFolder,
+                'drive_file_id'       => null,
+                'drive_parent_folder_id' => null,
                 'original_filename'   => $session->original_filename,
                 'safe_filename'       => preg_replace('/[^a-zA-Z0-9._-]/', '_', $session->original_filename),
                 'extension'           => $ext,
@@ -345,7 +296,7 @@ class UploadController extends Controller
                 'size_bytes'          => $assembledSize,
                 'sha256'              => $session->sha256,
                 'status'              => 'ready',
-                'storage_status'      => $driveFileId ? 'synced' : 'local_only',
+                'storage_status'      => 'local_only',
                 'uploaded_at'         => now(),
                 'last_verified_at'    => now(),
                 ...$filenameMetadata,
@@ -414,6 +365,15 @@ class UploadController extends Controller
                 'resulting_media_id' => $media->id,
                 'assembled_path'     => $destPath,
             ]);
+
+            // Drive receives large originals in resumable chunks after the
+            // client receives a successful upload response. This avoids
+            // buffering an entire video in PHP and keeps the gallery usable.
+            try {
+                InitiateDriveResumableUploadJob::dispatch($media->id)->onQueue('drive');
+            } catch (\Throwable $driveQueueException) {
+                Log::warning('Drive synchronizaci se nepodařilo zařadit do fronty', ['media_id' => $media->id, 'error' => $driveQueueException->getMessage()]);
+            }
 
             // Metadata a hash jsou doplňkové. Originál, základní metadata i
             // členství v albu už jsou hotové, proto případná nedostupnost

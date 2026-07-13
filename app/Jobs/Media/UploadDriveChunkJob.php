@@ -3,9 +3,9 @@
 namespace App\Jobs\Media;
 
 use App\Models\MediaItem;
-use App\Models\StorageConnection;
 use App\Models\UploadSession;
 use App\Services\Storage\GoogleDriveStorageProvider;
+use App\Services\Storage\DriveConnectionResolver;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -38,15 +38,18 @@ class UploadDriveChunkJob implements ShouldQueue
         $session = $this->uploadSessionId ? UploadSession::find($this->uploadSessionId) : null;
         $path    = $session?->assembled_path;
 
-        if (!$path || !file_exists($path)) {
-            $media->update(['status' => 'failed', 'processing_error' => 'Source file missing for Drive chunk upload']);
+        if (!$path || !is_file($path)) {
+            $original = $media->variants()->where('type', 'original')->first();
+            $candidate = $original ? \Illuminate\Support\Facades\Storage::disk($original->disk)->path($original->path) : null;
+            $path = $candidate && is_file($candidate) ? $candidate : null;
+        }
+
+        if (!$path || !is_file($path)) {
+            $media->update(['processing_error' => 'Zdroj pro synchronizaci do Google Drive nebyl nalezen.']);
             return;
         }
 
-        $connection = StorageConnection::where('owner_user_id', $media->owner_user_id)
-            ->where('provider', 'google_drive')
-            ->whereIn('connection_status', ['healthy', 'refresh_required'])
-            ->first();
+        $connection = app(DriveConnectionResolver::class)->forMedia($media);
 
         if (!$connection) {
             Log::warning("No storage connection for Drive chunk upload, media #{$media->id}");
@@ -109,10 +112,11 @@ class UploadDriveChunkJob implements ShouldQueue
     {
         $media->update([
             'drive_file_id'     => $driveFile['id'] ?? null,
-            'storage_status'    => 'stored',
+            'storage_status'    => 'synced',
             'status'            => 'ready',
             'processing_stage'  => null,
             'processing_progress' => 100,
+            'last_verified_at'  => now(),
         ]);
 
         // Clean up temporary assembled file

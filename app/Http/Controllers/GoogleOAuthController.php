@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\AuditLog;
 use App\Models\StorageConnection;
+use App\Jobs\Media\EnqueueDriveMediaSyncJob;
 use App\Services\Storage\DriveStructureService;
 use App\Services\Storage\GoogleOAuthService;
 use Illuminate\Http\RedirectResponse;
@@ -84,13 +85,20 @@ class GoogleOAuthController extends Controller
             $driveService = new DriveStructureService($connection);
             $structure    = $driveService->initializeRootStructure();
 
+            // A connection may be added after years of local uploads. Queue
+            // those originals immediately instead of synchronising only files
+            // uploaded after the OAuth callback.
+            foreach ($request->user()->gallerySpaces()->pluck('gallery_spaces.id') as $spaceId) {
+                EnqueueDriveMediaSyncJob::dispatch((int) $spaceId)->onQueue('drive');
+            }
+
             AuditLog::record('storage.google.connect', $connection, [
                 'account'   => $connection->account_email,
                 'root_id'   => $structure['root_id'],
             ]);
 
             return redirect()->route('settings.storage.google')
-                ->with('success', "Google Drive připojen. Účet: {$connection->account_email}");
+                ->with('success', "Google Drive připojen. Účet: {$connection->account_email}. Existující média byla zařazena k synchronizaci.");
         } catch (\Throwable $e) {
             Log::error('Google OAuth callback failed', ['error' => $e->getMessage()]);
             return redirect()->route('settings.storage.google')
@@ -147,6 +155,26 @@ class GoogleOAuthController extends Controller
         $results    = $service->runDiagnosticTest();
 
         return response()->json(['tests' => $results]);
+    }
+
+    /** Requeue existing local originals after a repaired/reconnected Drive. */
+    public function syncExisting(Request $request): RedirectResponse
+    {
+        if (!$request->user()->isAdmin()) abort(403);
+
+        $connection = StorageConnection::where('owner_user_id', $request->user()->id)
+            ->where('provider', 'google_drive')
+            ->where('connection_status', 'healthy')
+            ->firstOrFail();
+
+        $spaceIds = $request->user()->gallerySpaces()->pluck('gallery_spaces.id');
+        foreach ($spaceIds as $spaceId) {
+            EnqueueDriveMediaSyncJob::dispatch((int) $spaceId)->onQueue('drive');
+        }
+
+        AuditLog::record('storage.google.sync_existing', $connection, ['space_count' => $spaceIds->count()]);
+
+        return back()->with('success', 'Existující média byla zařazena do bezpečné synchronizace Google Drive.');
     }
 
     /**

@@ -31,7 +31,11 @@ class ExtractMediaMetadataJob implements ShouldQueue
 
         if (!$path || !file_exists($path)) {
             Log::warning("File not found for EXIF extraction, media #{$media->id}");
-            GenerateImageVariantsJob::dispatch($media->id)->onQueue('media');
+            if ($media->media_type === 'video') {
+                GenerateVideoPosterJob::dispatch($media->id)->onQueue('media');
+            } else {
+                GenerateImageVariantsJob::dispatch($media->id)->onQueue('media');
+            }
             return;
         }
 

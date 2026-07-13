@@ -188,10 +188,17 @@ SVG;
         // Try to detect hardware acceleration
         $encoder = $this->selectVideoEncoder();
 
+        // A phone's 4K/HEVC original is kept untouched, but it is a poor
+        // browser stream: many devices cannot decode it and its bitrate makes
+        // seeking stall. The playback copy is capped at 1080p/5 Mb/s, uses a
+        // universally decodable pixel format and moves MP4 metadata to the
+        // beginning so the first frame can play before the full download.
+        $filter = "scale=w='min(1920,iw)':h='min(1080,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2";
         $cmd = sprintf(
-            '%s -y -i %s -c:v %s -preset fast -crf 23 -c:a aac -b:a 128k -movflags +faststart %s 2>/dev/null',
+            '%s -y -i %s -map 0:v:0 -map 0:a? -vf %s -c:v %s -preset fast -b:v 4M -maxrate 5M -bufsize 10M -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart %s 2>/dev/null',
             escapeshellcmd($this->ffmpegPath),
             escapeshellarg($sourcePath),
+            escapeshellarg($filter),
             $encoder,
             escapeshellarg($tmpPath)
         );
@@ -199,8 +206,23 @@ SVG;
         exec($cmd, $out, $exitCode);
 
         if ($exitCode !== 0 || !file_exists($tmpPath)) {
-            Log::warning("FFmpeg compat variant failed for media #{$mediaItem->id}");
-            return null;
+            // Hardware encoders occasionally advertise themselves but reject
+            // one source format. A software H.264 retry is slower to create
+            // yet guarantees a playable result instead of a permanently
+            // stuttering original.
+            @unlink($tmpPath);
+            $cmd = sprintf(
+                '%s -y -i %s -map 0:v:0 -map 0:a? -vf %s -c:v libx264 -preset veryfast -crf 24 -maxrate 5M -bufsize 10M -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart %s 2>/dev/null',
+                escapeshellcmd($this->ffmpegPath),
+                escapeshellarg($sourcePath),
+                escapeshellarg($filter),
+                escapeshellarg($tmpPath)
+            );
+            exec($cmd, $out, $exitCode);
+            if ($exitCode !== 0 || !file_exists($tmpPath)) {
+                Log::warning("FFmpeg compat variant failed for media #{$mediaItem->id}");
+                return null;
+            }
         }
 
         $path = "{$dir}/video_compat.mp4";

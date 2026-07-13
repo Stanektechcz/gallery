@@ -316,22 +316,21 @@ class MediaController extends Controller
         ], true);
 
         if ($needsBrowserVariant) {
-            foreach (['large', 'medium', 'small', 'thumbnail'] as $type) {
-                $variant = $media->variants()->where('type', $type)->first();
-                if (!$variant) continue;
-
-                $path = Storage::disk($variant->disk)->path($variant->path);
+            $browserFull = $media->variants()->where('type', 'browser_full')->first();
+            if ($browserFull) {
+                $path = Storage::disk($browserFull->disk)->path($browserFull->path);
                 if (file_exists($path)) {
                     return response()->file($path, [
-                        'Content-Type' => $variant->mime_type ?: 'image/webp',
+                        'Content-Type' => $browserFull->mime_type ?: 'image/webp',
                         'Cache-Control' => 'private, max-age=86400',
+                        'X-Gallery-Viewer-Variant' => 'browser_full',
                     ]);
                 }
             }
 
-            // A historical HEIC may have a local original but no generated
-            // large variant yet. Create one on the first detail request so
-            // the user does not have to wait for a maintenance command.
+            // Generate a high-resolution browser copy even if an older 2560px
+            // grid preview already exists. Otherwise historical HEIC images
+            // would remain permanently limited to a preview resolution.
             $originalForPreview = $media->variants()->where('type', 'original')->first();
             if ($originalForPreview) {
                 $sourcePath = Storage::disk($originalForPreview->disk)->path($originalForPreview->path);
@@ -339,20 +338,37 @@ class MediaController extends Controller
                     app(\App\Services\Media\ImageVariantService::class)->generateVariant(
                         $media,
                         $sourcePath,
-                        'large',
-                        ['width' => 2560, 'quality' => 88],
+                        'browser_full',
+                        ['width' => 4096, 'quality' => 92],
                     );
 
-                    $generated = $media->variants()->where('type', 'large')->first();
+                    $generated = $media->variants()->where('type', 'browser_full')->first();
                     if ($generated) {
                         $generatedPath = Storage::disk($generated->disk)->path($generated->path);
                         if (file_exists($generatedPath)) {
                             return response()->file($generatedPath, [
                                 'Content-Type' => $generated->mime_type ?: 'image/webp',
                                 'Cache-Control' => 'private, max-age=86400',
+                                'X-Gallery-Viewer-Variant' => 'browser_full',
                             ]);
                         }
                     }
+                }
+            }
+
+            // A source may be unavailable temporarily (for example while a
+            // Drive recovery is pending). A smaller existing preview is still
+            // more useful than a broken detail page.
+            foreach (['large', 'medium', 'small', 'thumbnail'] as $type) {
+                $variant = $media->variants()->where('type', $type)->first();
+                if (!$variant) continue;
+                $path = Storage::disk($variant->disk)->path($variant->path);
+                if (file_exists($path)) {
+                    return response()->file($path, [
+                        'Content-Type' => $variant->mime_type ?: 'image/webp',
+                        'Cache-Control' => 'private, max-age=86400',
+                        'X-Gallery-Viewer-Variant' => $type,
+                    ]);
                 }
             }
         }
@@ -458,11 +474,33 @@ class MediaController extends Controller
         $media = MediaItem::where('uuid', $uuid)->firstOrFail();
         Gate::authorize('view', $media);
 
-        // For videos, prefer the compatibility variant stored locally
+        // For videos, always prefer the compact, fast-start compatibility
+        // file. It is served from the local cache with byte-range support.
         $compat = $media->getVariant('video_compat');
         if ($compat) {
-            $path = storage_path('app/public/' . $compat->path);
-            return response()->file($path, ['Content-Type' => 'video/mp4']);
+            $path = Storage::disk($compat->disk)->path($compat->path);
+            if (is_file($path)) {
+                return response()->file($path, [
+                    'Content-Type' => 'video/mp4',
+                    'Cache-Control' => 'private, max-age=86400',
+                    'Accept-Ranges' => 'bytes',
+                ]);
+            }
+        }
+
+        // A compatibility copy may still be processing. The local original is
+        // preferable to a Drive proxy because the web server can honour seek
+        // ranges and does not buffer the entire video before it starts.
+        $original = $media->getVariant('original');
+        if ($original) {
+            $path = Storage::disk($original->disk)->path($original->path);
+            if (is_file($path)) {
+                return response()->file($path, [
+                    'Content-Type' => $media->mime_type,
+                    'Cache-Control' => 'private, max-age=86400',
+                    'Accept-Ranges' => 'bytes',
+                ]);
+            }
         }
 
         // Stream from Drive

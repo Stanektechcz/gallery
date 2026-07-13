@@ -213,6 +213,7 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/settings/storage/google/disconnect', [GoogleOAuthController::class, 'disconnect'])->name('storage.google.disconnect');
     Route::post('/settings/storage/google/reconnect',  [GoogleOAuthController::class, 'reconnect'])->name('storage.google.reconnect');
     Route::post('/settings/storage/google/test',            [GoogleOAuthController::class, 'test'])->name('storage.google.test');
+    Route::post('/settings/storage/google/sync-existing',   [GoogleOAuthController::class, 'syncExisting'])->name('storage.google.sync-existing');
     Route::post('/settings/storage/google/init-structure',  [GoogleOAuthController::class, 'initStructure'])->name('storage.google.init-structure');
 });
 

@@ -490,6 +490,9 @@ class CalendarPlanningController extends Controller
         $payload['route_variants'] = $event->trip_id ? DB::table('trip_route_variants')->where('trip_id', $event->trip_id)->get() : [];
         $payload['departure_at'] = $event->departure_buffer_minutes ? $event->starts_at->copy()->subMinutes($event->departure_buffer_minutes)->toIso8601String() : null;
         $payload['my_response'] = $viewer ? $event->participants->firstWhere('id', $viewer->id)?->pivot?->response : null;
+        $payload['album'] = $event->album_id
+            ? Album::query()->whereKey($event->album_id)->where('gallery_space_id', $event->gallery_space_id)->first(['uuid', 'title'])
+            : null;
         return $payload;
     }
 

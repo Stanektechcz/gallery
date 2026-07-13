@@ -40,6 +40,27 @@ class SharedMemoryMomentController extends Controller
     {
         $ids = array_values(array_filter(json_decode($item->media_item_ids ?: '[]', true) ?: [], 'is_numeric'));
         $media = MediaItem::whereIn('id', $ids)->with('variants')->get()->map(fn (MediaItem $media) => ['uuid' => $media->uuid, 'title' => $media->display_title ?: $media->original_filename, 'thumbnail_url' => $media->thumbnail_url]);
-        return ['uuid' => $item->uuid, 'gallery_space_id' => $item->gallery_space_id, 'created_by' => $item->created_by, 'trip_id' => $item->trip_id ?? null, 'title' => $item->title, 'note' => $item->note, 'happened_on' => $item->happened_on, 'is_favorite' => (bool) $item->is_favorite, 'media' => $media, 'created_at' => $item->created_at];
+        $source = !empty($item->calendar_event_id)
+            ? DB::table('calendar_events')
+                ->leftJoin('albums', 'albums.id', '=', 'calendar_events.album_id')
+                ->where('calendar_events.id', $item->calendar_event_id)
+                ->where('calendar_events.gallery_space_id', $item->gallery_space_id)
+                ->first(['calendar_events.uuid as event_uuid', 'calendar_events.title as event_title', 'albums.uuid as album_uuid', 'albums.title as album_title'])
+            : null;
+
+        return [
+            'uuid' => $item->uuid,
+            'gallery_space_id' => $item->gallery_space_id,
+            'created_by' => $item->created_by,
+            'trip_id' => $item->trip_id ?? null,
+            'calendar_event' => $source?->event_uuid ? ['uuid' => $source->event_uuid, 'title' => $source->event_title] : null,
+            'album' => $source?->album_uuid ? ['uuid' => $source->album_uuid, 'title' => $source->album_title] : null,
+            'title' => $item->title,
+            'note' => $item->note,
+            'happened_on' => $item->happened_on,
+            'is_favorite' => (bool) $item->is_favorite,
+            'media' => $media,
+            'created_at' => $item->created_at,
+        ];
     }
 }

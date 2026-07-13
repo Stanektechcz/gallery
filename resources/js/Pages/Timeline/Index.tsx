@@ -29,12 +29,12 @@ function MediaCardComponent({ item, size, selected, onFav, onTrash, onSlideshow,
     const dom   = item.variants?.find(v => v.type === 'placeholder')?.dominant_color;
     return (
         <div
-            className={`relative group cursor-pointer rounded overflow-hidden bg-[var(--color-bg-card)] shrink-0 transition-all ${selected ? 'ring-2 ring-[var(--color-accent)] ring-offset-1 ring-offset-[var(--color-bg-primary)]' : ''}`}
-            style={{ width: size, height: size }}
+            className={`relative group cursor-pointer rounded overflow-hidden bg-[var(--color-bg-card)] shrink-0 ${selected ? 'ring-2 ring-[var(--color-accent)] ring-offset-1 ring-offset-[var(--color-bg-primary)]' : ''}`}
+            style={{ width: size, height: size, contentVisibility: 'auto', contain: 'layout paint style', containIntrinsicSize: `${size}px ${size}px` }}
             onClick={e => { if (e.ctrlKey||e.metaKey||e.shiftKey||selected) { e.preventDefault(); onSelect(item.uuid); } else router.visit(`/media/${item.uuid}`); }}
         >
             {dom && <div className="absolute inset-0" style={{ backgroundColor: dom }} />}
-            {thumb && <img src={thumb.url} alt="" loading="lazy" decoding="async" className="absolute inset-0 w-full h-full object-cover" />}
+            {thumb && <img src={thumb.url} alt="" loading="lazy" decoding="async" fetchPriority="low" draggable={false} className="absolute inset-0 w-full h-full object-cover" />}
             <div className={`absolute inset-0 transition-colors ${selected ? 'bg-[var(--color-accent)]/20' : 'bg-black/0 group-hover:bg-black/25'}`} />
             {item.media_type === 'video' && !selected && <div className="absolute top-1.5 right-1.5 bg-black/60 rounded-full p-0.5"><Play size={9} className="text-white fill-white" /></div>}
             {(item.stacks?.[0]?.items_count ?? 0) > 1 && !selected && <div className="absolute top-1.5 right-1.5 bg-black/70 rounded-full px-1.5 py-1 flex items-center gap-1 text-[9px] text-white" title="Seskupené fotografie"><Layers size={10} />{item.stacks![0].items_count}</div>}
@@ -110,7 +110,7 @@ export default function TimelineIndex() {
     const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading } = useInfiniteQuery({
         queryKey: ['timeline'],
         queryFn: async ({ pageParam }) => {
-            const params: Record<string,string> = { per_page: '60' };
+            const params: Record<string,string> = { per_page: '48' };
             if (pageParam) params.cursor = String(pageParam);
             return (await axios.get('/api/v1/timeline', { params })).data;
         },
@@ -121,7 +121,7 @@ export default function TimelineIndex() {
     useEffect(() => {
         const obs = new IntersectionObserver(
             e => { if (e[0].isIntersecting && hasNextPage && !isFetchingNextPage) fetchNextPage(); },
-            { rootMargin: '300px' }
+            { rootMargin: '800px' }
         );
         if (sentinelRef.current) obs.observe(sentinelRef.current);
         return () => obs.disconnect();

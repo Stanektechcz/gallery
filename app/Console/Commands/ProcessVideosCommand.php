@@ -12,7 +12,8 @@ class ProcessVideosCommand extends Command
 {
     protected $signature = 'gallery:videos
         {--all : Process every non-deleted video, not only incomplete ones}
-        {--compat : Also create a web-compatible MP4 copy (slower, but improves playback on mobile)}';
+        {--compat : Also create a web-compatible MP4 copy (slower, but improves playback on mobile)}
+        {--rebuild-compat : Replace an existing compatibility copy with the current fast playback profile}';
 
     protected $description = 'Create video posters, extract technical metadata and optionally build compatible MP4 variants.';
 
@@ -70,7 +71,7 @@ class ProcessVideosCommand extends Command
                 if (!$videos->generatePoster($media->fresh(), $source)) {
                     $videos->generateFallbackPoster($media->fresh());
                 }
-                if ($this->option('compat') && !$media->variants->firstWhere('type', 'video_compat')) {
+                if ($this->option('compat') && ($this->option('rebuild-compat') || !$media->variants->firstWhere('type', 'video_compat'))) {
                     $videos->generateCompatibilityVariant($media->fresh(), $source);
                 }
                 $media->update(['processing_error' => null, 'processing_stage' => 'ready', 'processing_progress' => 100]);
