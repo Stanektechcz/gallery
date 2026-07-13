@@ -121,6 +121,19 @@ class CalendarPlanningTest extends TestCase
             ->assertOk()->assertJsonPath('ideas.0.title', 'Galerie na deštivé rande')->assertJsonPath('ideas.0.reason', 'hodnocení 5/5 · vhodné na déšť · fotogenické');
     }
 
+    public function test_calendar_suggests_private_safe_common_time_slots_for_partners(): void
+    {
+        $date = now()->addDay()->startOfDay();
+        $availability = [['weekday' => $date->dayOfWeek, 'from' => '18:00', 'to' => '21:00']];
+        $this->owner->update(['preferences' => ['planning_availability' => $availability]]);
+        $this->partner->update(['preferences' => ['planning_availability' => $availability]]);
+
+        $response = $this->getJson('/api/v1/calendar/shared-slots?gallery_space_id=' . $this->space->id . '&from=' . $date->toDateString() . '&days=1&duration_minutes=120')
+            ->assertOk()->assertJsonPath('member_count', 2)->assertJsonCount(2, 'member_ids');
+        $this->assertNotEmpty($response->json('slots'));
+        $this->assertArrayNotHasKey('events', $response->json());
+    }
+
     public function test_completed_calendar_event_can_be_saved_as_a_shared_memory_with_selected_media(): void
     {
         $event = $this->postJson('/api/v1/calendar/events', ['gallery_space_id' => $this->space->id, 'title' => 'Nedělní výlet', 'starts_at' => now()->subDay()->toDateTimeString()])->assertCreated()->json();
@@ -128,6 +141,37 @@ class CalendarPlanningTest extends TestCase
         $this->postJson("/api/v1/calendar/events/{$event['uuid']}/shared-memory", ['media_ids' => [$mediaId]])->assertCreated()->assertJsonPath('title', 'Nedělní výlet');
         $this->assertDatabaseHas('calendar_events', ['id' => $event['id'], 'status' => 'completed']);
         $this->assertDatabaseHas('shared_memory_moments', ['calendar_event_id' => $event['id'], 'title' => 'Nedělní výlet']);
+    }
+
+    public function test_calendar_and_trip_memory_actions_share_one_memory_moment(): void
+    {
+        $tripId = DB::table('trips')->insertGetId(['gallery_space_id' => $this->space->id, 'created_by' => $this->owner->id, 'name' => 'Společná Pálava', 'start_date' => now()->subDays(2)->toDateString(), 'end_date' => now()->subDay()->toDateString(), 'currency' => 'CZK', 'created_at' => now(), 'updated_at' => now()]);
+        $event = $this->postJson('/api/v1/calendar/events', ['gallery_space_id' => $this->space->id, 'trip_id' => $tripId, 'title' => 'Pálava', 'starts_at' => now()->subDay()->toDateTimeString()])->assertCreated()->json();
+        $mediaId = DB::table('media_items')->insertGetId(['uuid' => (string) Str::uuid(), 'gallery_space_id' => $this->space->id, 'owner_user_id' => $this->owner->id, 'uploaded_by' => $this->owner->id, 'original_filename' => 'palava.jpg', 'safe_filename' => 'palava.jpg', 'extension' => 'jpg', 'mime_type' => 'image/jpeg', 'media_type' => 'photo', 'size_bytes' => 1, 'status' => 'ready', 'storage_status' => 'ready', 'taken_at' => now()->subDay(), 'created_at' => now(), 'updated_at' => now()]);
+        DB::table('trip_media')->insert(['trip_id' => $tripId, 'media_item_id' => $mediaId, 'added_at' => now()]);
+
+        $this->postJson("/api/v1/trips/{$tripId}/shared-memory", ['media_item_ids' => [$mediaId]])->assertCreated();
+        $this->postJson("/api/v1/calendar/events/{$event['uuid']}/shared-memory", ['media_ids' => [$mediaId]])->assertCreated();
+        $this->assertDatabaseCount('shared_memory_moments', 1);
+        $this->assertDatabaseHas('shared_memory_moments', ['trip_id' => $tripId, 'calendar_event_id' => $event['id']]);
+    }
+
+    public function test_shared_memories_can_be_scheduled_as_a_reminded_evening_for_both_partners(): void
+    {
+        $moment = $this->postJson('/api/v1/shared-memory-moments', ['gallery_space_id' => $this->space->id, 'title' => 'Naše Jeseníky', 'happened_on' => now()->subMonth()->toDateString()])->assertCreated()->json();
+        $event = $this->postJson('/api/v1/calendar/memory-evening', ['gallery_space_id' => $this->space->id, 'scheduled_at' => now()->addWeek()->setTime(19, 0)->toDateTimeString(), 'moment_uuids' => [$moment['uuid']]])
+            ->assertCreated()->assertJsonPath('title', 'Večer se vzpomínkami')->json();
+
+        $this->assertDatabaseHas('calendar_events', ['id' => $event['id'], 'type' => 'event']);
+        $this->assertDatabaseHas('event_participants', ['event_id' => $event['id'], 'user_id' => $this->owner->id, 'response' => 'accepted']);
+        $this->assertDatabaseHas('event_participants', ['event_id' => $event['id'], 'user_id' => $this->partner->id, 'response' => 'pending']);
+        $this->assertDatabaseCount('event_reminders', 2);
+    }
+
+    public function test_weekly_overview_surfaces_shared_gallery_media_from_the_same_day_in_previous_years(): void
+    {
+        $mediaId = DB::table('media_items')->insertGetId(['uuid' => (string) Str::uuid(), 'gallery_space_id' => $this->space->id, 'owner_user_id' => $this->owner->id, 'uploaded_by' => $this->owner->id, 'original_filename' => 'vyroci.jpg', 'safe_filename' => 'vyroci.jpg', 'extension' => 'jpg', 'mime_type' => 'image/jpeg', 'media_type' => 'photo', 'size_bytes' => 1, 'status' => 'ready', 'storage_status' => 'ready', 'taken_at' => now()->subYears(2), 'created_at' => now(), 'updated_at' => now()]);
+        $this->getJson('/api/v1/calendar/weekly-overview')->assertOk()->assertJsonPath('on_this_day.0.id', $mediaId);
     }
 
     public function test_calendar_event_can_be_promoted_to_single_trip_workspace(): void

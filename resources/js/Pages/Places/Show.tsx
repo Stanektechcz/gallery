@@ -6,7 +6,7 @@ import {
     ArrowLeft, Calendar, Camera, ExternalLink,
     FolderOpen, MapPin, RefreshCw, Settings2
 } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { FormEvent, useEffect, useRef, useState } from 'react';
 
 interface PlaceDetail {
     id: number; name: string; type: string;
@@ -352,6 +352,9 @@ export default function PlaceShow() {
                     )}
                 </div>
 
+                 <PlaceVisitPanel placeId={place.id}/>
+                <PlaceWishlistPanel placeId={place.id}/>
+
                 {/* ── Content ──────────────────────────────────────────── */}
                 <div className="flex flex-1 min-h-0 overflow-hidden">
 
@@ -445,4 +448,23 @@ export default function PlaceShow() {
             </div>
         </AppLayout>
     );
+}
+
+function PlaceVisitPanel({ placeId }: { placeId:number }) {
+    type Plan = { uuid:string; state:string; planned_for?:string|null; visited_on?:string|null; reservation_reference?:string|null; reservation_url?:string|null; notes?:string|null; };
+    const [plans, setPlans] = useState<Plan[]>([]); const [form, setForm] = useState({ planned_for:'', reservation_reference:'', reservation_url:'', notes:'' }); const [saving, setSaving] = useState(false); const [memoryUuid, setMemoryUuid] = useState<string|null>(null); const [message, setMessage] = useState('');
+    const load = () => axios.get(`/api/v1/places/${placeId}/plans`).then(response => setPlans(response.data ?? [])).catch(() => setPlans([]));
+    useEffect(() => { load(); }, [placeId]);
+    const add = async (event:FormEvent) => { event.preventDefault(); if (!form.planned_for) return; setSaving(true); setMessage(''); try { await axios.post(`/api/v1/places/${placeId}/plans`, form); setForm({planned_for:'',reservation_reference:'',reservation_url:'',notes:''}); setMessage('Návštěva je v kalendáři a rezervace je u ní uložená.'); load(); } catch (error:any) { setMessage(error?.response?.data?.message ?? 'Návštěvu se nepodařilo naplánovat.'); } finally { setSaving(false); } };
+    const visit = async (plan:Plan) => { await axios.patch(`/api/v1/places/${placeId}/plans/${plan.uuid}`, {state:'visited'}); load(); };
+    const createMemory = async (plan:Plan) => { setMemoryUuid(plan.uuid); setMessage(''); try { await axios.post(`/api/v1/places/${placeId}/plans/${plan.uuid}/shared-memory`); setMessage('Společná vzpomínka z návštěvy je uložená v galerii.'); } catch (error:any) { setMessage(error?.response?.data?.message ?? 'Vzpomínku se nepodařilo vytvořit.'); } finally { setMemoryUuid(null); } };
+    return <section className="border-b border-[var(--color-border)] bg-[var(--color-bg-card)]/50 px-6 py-4"><div className="mx-auto max-w-5xl"><div className="flex flex-wrap items-end justify-between gap-3"><div><h2 className="font-semibold text-white">Návštěvy a rezervace</h2><p className="mt-1 text-xs text-[var(--color-text-secondary)]">Naplánování vytvoří společnou akci v kalendáři; po návštěvě se uzavře i ona.</p></div></div><form onSubmit={add} className="mt-3 grid gap-2 sm:grid-cols-4"><input required type="date" value={form.planned_for} onChange={event => setForm({...form,planned_for:event.target.value})} className="min-h-10 rounded-lg border border-[var(--color-border)] bg-black/10 px-2 text-sm text-white"/><input value={form.reservation_reference} onChange={event => setForm({...form,reservation_reference:event.target.value})} placeholder="Kód rezervace" className="min-h-10 rounded-lg border border-[var(--color-border)] bg-black/10 px-2 text-sm text-white"/><input type="url" value={form.reservation_url} onChange={event => setForm({...form,reservation_url:event.target.value})} placeholder="Odkaz https://" className="min-h-10 rounded-lg border border-[var(--color-border)] bg-black/10 px-2 text-sm text-white"/><button disabled={saving} className="min-h-10 rounded-lg bg-[var(--color-accent)] px-3 text-sm text-white disabled:opacity-50">{saving ? 'Ukládám…' : 'Naplánovat návštěvu'}</button></form>{plans.length > 0 && <div className="mt-3 flex flex-wrap gap-2">{plans.slice(0,5).map(plan => <div key={plan.uuid} className="rounded-lg border border-[var(--color-border)] bg-black/10 px-3 py-2 text-xs text-[var(--color-text-secondary)]"><span className="text-white">{plan.state === 'visited' ? '✓ Navštíveno' : plan.state === 'cancelled' ? 'Zrušeno' : `📅 ${plan.planned_for}`}</span>{plan.reservation_reference && <span className="ml-2">· {plan.reservation_reference}</span>}{plan.reservation_url && <a href={plan.reservation_url} target="_blank" rel="noreferrer" className="ml-2 text-[var(--color-accent)]">Rezervace</a>}{plan.state === 'planned' && <button onClick={() => visit(plan)} className="ml-2 text-emerald-300">Označit jako navštívené</button>}{plan.state === 'visited' && <button disabled={memoryUuid === plan.uuid} onClick={() => createMemory(plan)} className="ml-2 text-pink-200 disabled:opacity-50">{memoryUuid === plan.uuid ? 'Ukládám…' : 'Uložit vzpomínku'}</button>}</div>)}</div>}{message && <p className={`mt-2 text-xs ${message.startsWith('Návštěva je') || message.startsWith('Společná') ? 'text-emerald-300' : 'text-red-300'}`}>{message}</p>}</div></section>;
+}
+
+function PlaceWishlistPanel({ placeId }: { placeId:number }) {
+    type Wishlist = { uuid:string; title:string };
+    const [lists, setLists] = useState<Wishlist[]>([]); const [selected, setSelected] = useState(''); const [saving, setSaving] = useState(false); const [message, setMessage] = useState('');
+    useEffect(() => { axios.get('/api/v1/calendar/wishlists').then(response => { const items = response.data ?? []; setLists(items); setSelected(items[0]?.uuid ?? ''); }).catch(() => setLists([])); }, []);
+    const add = async () => { if (!selected) return; setSaving(true); setMessage(''); try { await axios.post(`/api/v1/places/${placeId}/wishlist-items`, {wishlist_uuid:selected}); setMessage('Místo je mezi společnými přáními a lze ho rovnou převést do kalendáře.'); } catch (error:any) { setMessage(error?.response?.data?.message ?? 'Místo se nepodařilo přidat do přání.'); } finally { setSaving(false); } };
+    return <section className="border-b border-[var(--color-border)] bg-pink-500/5 px-6 py-4"><div className="mx-auto flex max-w-5xl flex-col gap-3 sm:flex-row sm:items-center"><div className="min-w-0 flex-1"><h2 className="font-semibold text-white">Nápad na příště</h2><p className="mt-1 text-xs text-[var(--color-text-secondary)]">Místo, jeho fotky, GPS i vaše poznámka se uloží do společného přání a odtud do kalendáře.</p></div>{lists.length > 0 ? <div className="flex flex-col gap-2 sm:flex-row"><select value={selected} onChange={event => setSelected(event.target.value)} className="min-h-10 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-2 text-sm text-white">{lists.map(list => <option key={list.uuid} value={list.uuid}>{list.title}</option>)}</select><button disabled={saving} onClick={add} className="min-h-10 rounded-lg border border-pink-400/40 px-3 text-sm text-pink-100 disabled:opacity-50">{saving ? 'Přidávám…' : 'Přidat do přání'}</button></div> : <a href="/planning" className="text-sm text-pink-200 underline">Vytvořit společný seznam přání</a>}</div>{message && <p className={`mx-auto mt-2 max-w-5xl text-xs ${message.startsWith('Místo je') ? 'text-emerald-300' : 'text-red-300'}`}>{message}</p>}</section>;
 }

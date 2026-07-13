@@ -8,6 +8,7 @@ use App\Models\GallerySpace;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
@@ -38,16 +39,43 @@ class PlanningExpansionTest extends TestCase
         $this->postJson("/api/v1/calendar/events/{$event['uuid']}/exceptions", ['occurs_at' => now()->addWeek()->toDateTimeString(), 'action' => 'skip'])->assertOk();
 
         $wishlist = $this->postJson('/api/v1/calendar/wishlists', ['gallery_space_id' => $this->space->id, 'title' => 'Přání'])->assertCreated()->json();
-        $this->postJson("/api/v1/calendar/wishlists/{$wishlist['uuid']}/items", ['title' => 'Mikulov', 'priority' => 1])->assertCreated();
+        $wish = $this->postJson("/api/v1/calendar/wishlists/{$wishlist['uuid']}/items", ['title' => 'Mikulov', 'priority' => 1, 'estimated_minutes' => 180])->assertCreated()->json();
         $this->getJson("/api/v1/calendar/wishlists/{$wishlist['uuid']}/suggestions")->assertOk()->assertJsonPath('items.0.title', 'Mikulov');
+        $wishEvent = $this->postJson("/api/v1/calendar/wishlists/{$wishlist['uuid']}/items/{$wish['id']}/plan")->assertCreated()->assertJsonPath('title', 'Mikulov')->assertJsonPath('type', 'outing')->json();
+        $this->assertDatabaseHas('travel_wishlist_items', ['id' => $wish['id'], 'calendar_event_id' => $wishEvent['id'], 'status' => 'planned']);
+        $this->assertDatabaseHas('event_participants', ['event_id' => $wishEvent['id'], 'user_id' => $this->partner->id]);
+        $this->postJson("/api/v1/calendar/wishlists/{$wishlist['uuid']}/items/{$wish['id']}/plan")->assertOk()->assertJsonPath('id', $wishEvent['id']);
 
         $poll = $this->postJson('/api/v1/calendar/polls', ['gallery_space_id' => $this->space->id, 'question' => 'Kam?', 'options' => [['title' => 'Brno'], ['title' => 'Olomouc']]])->assertCreated()->json();
         $optionId = DB::table('decision_poll_options')->where('poll_id', $poll['id'])->value('id');
         $this->postJson("/api/v1/calendar/polls/{$poll['uuid']}/vote", ['option_id' => $optionId])->assertOk();
         $this->getJson('/api/v1/calendar/polls')->assertOk()->assertJsonPath('0.options.0.votes', 1);
+        $pollEvent = $this->postJson("/api/v1/calendar/polls/{$poll['uuid']}/options/{$optionId}/plan")->assertCreated()->assertJsonPath('title', 'Brno')->assertJsonPath('type', 'outing')->json();
+        $this->assertDatabaseHas('decision_poll_options', ['id' => $optionId, 'calendar_event_id' => $pollEvent['id']]);
+        $this->assertDatabaseHas('decision_polls', ['id' => $poll['id'], 'status' => 'decided']);
+        $this->postJson("/api/v1/calendar/polls/{$poll['uuid']}/options/{$optionId}/plan")->assertOk()->assertJsonPath('id', $pollEvent['id']);
 
         $rule = $this->postJson('/api/v1/calendar/partner-rules', ['gallery_space_id' => $this->space->id, 'recipient_user_id' => $this->partner->id, 'name' => 'Letní výlet', 'filters' => ['from' => now()->subDay()->toDateString()]])->assertCreated()->json();
         $this->getJson("/api/v1/calendar/partner-rules/{$rule['uuid']}/preview")->assertOk()->assertJsonPath('notice', 'Náhled nic automaticky nesdílí.');
+    }
+
+    public function test_planning_screen_dependencies_degrade_safely_when_an_optional_migration_is_not_yet_present(): void
+    {
+        Schema::dropIfExists('event_templates');
+        Schema::dropIfExists('travel_wishlist_items');
+        Schema::dropIfExists('travel_wishlists');
+        Schema::dropIfExists('decision_poll_votes');
+        Schema::dropIfExists('decision_poll_options');
+        Schema::dropIfExists('decision_polls');
+
+        $this->getJson('/api/v1/calendar/templates')->assertOk()->assertExactJson([]);
+        $this->getJson('/api/v1/calendar/wishlists')->assertOk()->assertExactJson([]);
+        $this->getJson('/api/v1/calendar/polls')->assertOk()->assertExactJson([]);
+        $this->postJson('/api/v1/calendar/templates', ['gallery_space_id' => $this->space->id, 'title' => 'Víkend'])->assertStatus(503);
+
+        Schema::dropIfExists('calendar_event_exceptions');
+        $this->postJson('/api/v1/calendar/events', ['gallery_space_id' => $this->space->id, 'title' => 'Bez výjimek', 'starts_at' => now()->addWeek()->toDateTimeString(), 'recurrence_rule' => ['frequency' => 'weekly']])->assertCreated();
+        $this->getJson('/api/v1/calendar/events')->assertOk();
     }
 
     public function test_emergency_card_is_available_only_to_trip_space_members(): void
@@ -97,6 +125,18 @@ class PlanningExpansionTest extends TestCase
         $item = DB::table('trip_packing_items')->where('trip_id', $tripId)->where('is_essential', true)->first();
         $this->patchJson("/api/v1/trips/{$tripId}/packing-items/{$item->id}", ['is_packed' => true])->assertOk()->assertJsonPath('is_packed', true);
         $this->getJson("/api/v1/trips/{$tripId}/readiness")->assertOk()->assertJsonPath('packing.total', 4)->assertJsonCount(2, 'packing.unpacked_essentials');
+    }
+
+    public function test_packing_responsibility_is_shared_and_records_who_completed_the_item(): void
+    {
+        $tripId = DB::table('trips')->insertGetId(['gallery_space_id' => $this->space->id, 'created_by' => $this->owner->id, 'name' => 'Společné balení', 'start_date' => now()->addWeek()->toDateString(), 'end_date' => now()->addWeek()->addDay()->toDateString(), 'currency' => 'CZK', 'created_at' => now(), 'updated_at' => now()]);
+        $this->getJson("/api/v1/trips/{$tripId}/packing-members")->assertOk()->assertJsonCount(2);
+        $item = $this->postJson("/api/v1/trips/{$tripId}/packing-items", ['title' => 'Cestovní doklad', 'category' => 'documents', 'is_essential' => true, 'assigned_to' => $this->partner->id])->assertCreated()->assertJsonPath('assigned_to', $this->partner->id)->json();
+        $this->getJson("/api/v1/trips/{$tripId}/readiness")->assertOk()->assertJsonPath('packing.assigned', 1)->assertJsonPath('packing.unassigned_essentials', 0);
+
+        $this->actingAs($this->partner);
+        $this->patchJson("/api/v1/trips/{$tripId}/packing-items/{$item['id']}", ['is_packed' => true])->assertOk()->assertJsonPath('is_packed', true)->assertJsonPath('packed_by', $this->partner->id);
+        $this->getJson("/api/v1/trips/{$tripId}/packing-items")->assertOk()->assertJsonPath('0.packed_by_name', $this->partner->name);
     }
 
     public function test_vehicle_costs_calculate_trip_cost_per_kilometre_and_flag_expired_vignette(): void

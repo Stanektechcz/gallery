@@ -22,7 +22,7 @@ class GenerateImageVariantsJob implements ShouldQueue
 
     public function __construct(private readonly int $mediaItemId) {}
 
-    public function handle(ImageVariantService $variantService, PerceptualHashService $hashService): void
+    public function handle(): void
     {
         $media = MediaItem::find($this->mediaItemId);
         if (!$media) return;
@@ -31,13 +31,17 @@ class GenerateImageVariantsJob implements ShouldQueue
         $path    = $session?->assembled_path;
 
         if (!$path || !file_exists($path)) {
-            $media->update(['status' => 'failed', 'processing_error' => 'Source file missing for variant generation']);
+            $media->update(['processing_error' => 'Zdroj pro vytvoření variant nebyl nalezen.']);
             return;
         }
 
         $media->update(['processing_stage' => 'generating_variants', 'processing_progress' => 10]);
 
         try {
+            // Služby závislé na GD/Imagick řešíme až uvnitř try. Pokud na
+            // serveru nejsou, uložený originál zůstává bezchybný a dostupný.
+            $variantService = app(ImageVariantService::class);
+            $hashService = app(PerceptualHashService::class);
             $variantService->generateAll($media, $path);
 
             // Get dimensions from image if not set
@@ -66,12 +70,13 @@ class GenerateImageVariantsJob implements ShouldQueue
             ]);
 
             // Queue Drive upload
-            InitiateDriveResumableUploadJob::dispatch($media)->onQueue('drive');
+            InitiateDriveResumableUploadJob::dispatch($media->id)->onQueue('drive');
 
         } catch (\Throwable $e) {
             Log::error("Variant generation failed for media #{$media->id}", ['error' => $e->getMessage()]);
-            $media->update(['status' => 'failed', 'processing_error' => $e->getMessage()]);
-            throw $e;
+            // Původní soubor i základní náhled už jsou uložené. Varianty jsou
+            // optimalizace, nikoliv podmínka pro zobrazení média v albu.
+            $media->update(['processing_error' => $e->getMessage()]);
         }
     }
 }

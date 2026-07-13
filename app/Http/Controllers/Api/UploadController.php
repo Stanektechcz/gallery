@@ -16,6 +16,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\DB;
 
 class UploadController extends Controller
 {
@@ -31,7 +32,7 @@ class UploadController extends Controller
         $v = $request->validate(['sha256' => 'required|string|size:64']);
 
         $user  = $request->user();
-        $space = $user->gallerySpaces()->first();
+        $space = $user->gallerySpaces()->firstOrFail();
 
         $existing = MediaItem::where('gallery_space_id', $space->id)
             ->where('sha256', $v['sha256'])
@@ -65,7 +66,16 @@ class UploadController extends Controller
         ]);
 
         $user  = $request->user();
-        $space = $user->gallerySpaces()->first();
+        $space = $user->gallerySpaces()->firstOrFail();
+
+        if (!empty($validated['target_album_id'])) {
+            $album = Album::whereKey($validated['target_album_id'])
+                ->where('gallery_space_id', $space->id)
+                ->whereNull('deleted_at')
+                ->first();
+
+            abort_unless($album, 422, 'Cílové album neexistuje nebo do něj nemáte přístup.');
+        }
 
         $session = UploadSession::create([
             'user_id'          => $user->id,
@@ -104,10 +114,19 @@ class UploadController extends Controller
         }
 
         if (!$request->hasFile('chunk')) {
-            return response()->json(['error' => 'No chunk data'], 422);
+            return response()->json([
+                'error' => 'Blok souboru se nepodařilo přijmout.',
+                'detail' => 'Blok překročil limit serveru nebo se přenos přerušil. Nahrávání používá bezpečné 1MiB bloky; zkuste soubor nahrát znovu.',
+            ], 422);
         }
 
-        $file     = $request->file('chunk');
+        $file = $request->file('chunk');
+        if (!$file || !$file->isValid()) {
+            return response()->json([
+                'error' => 'Blok souboru se nepodařilo přijmout.',
+                'detail' => 'Zkontrolujte limit upload_max_filesize/post_max_size na serveru a zkuste nahrání znovu.',
+            ], 422);
+        }
         $chunkDir = self::CHUNK_DIR . '/' . $session->uuid;
         $path     = $file->storeAs($chunkDir, "chunk_{$index}", self::CHUNK_DISK);
 
@@ -188,6 +207,9 @@ class UploadController extends Controller
             ], 422);
         }
 
+        $media = null;
+        $destPath = null;
+
         // Assemble synchronously — no queue worker required
         try {
             $session->update(['status' => 'assembling']);
@@ -195,7 +217,10 @@ class UploadController extends Controller
             $chunks   = $session->chunks()->orderBy('chunk_index')->get();
             $destDir  = storage_path("app/uploads/{$session->uuid}");
             @mkdir($destDir, 0755, true);
-            $destPath = $destDir . '/' . $session->original_filename;
+            // Název od uživatele patří do metadat, nikdy ale nesmí určovat
+            // cestu na disku (ochrana před ../ i neplatnými znaky Windows).
+            $sourceExtension = preg_replace('/[^a-zA-Z0-9]/', '', strtolower(pathinfo($session->original_filename, PATHINFO_EXTENSION)));
+            $destPath = $destDir . '/source' . ($sourceExtension ? ".{$sourceExtension}" : '');
 
             $destHandle = fopen($destPath, 'wb');
             if (!$destHandle) throw new \RuntimeException("Cannot open output file: {$destPath}");
@@ -318,13 +343,40 @@ class UploadController extends Controller
                 'height'     => null,
             ]);
 
-            // Generate thumbnail synchronously using GD/Imagick (no queue needed)
-            // For RAW files: use extracted preview JPEG if available
-            $thumbSource = $previewPath ?? $destPath;
-            $this->generateThumbnail($media, $thumbSource);
-            if ($previewPath) {
-                @unlink($previewPath);
+            // primary_album_id samotné nestačí pro části systému, které pracují
+            // s explicitním obsahem alba (příběh, událost alba, sdílení). Vždy
+            // proto založíme i členství v album_media a aktualizujeme souhrny.
+            if ($session->target_album_id) {
+                $album = Album::whereKey($session->target_album_id)
+                    ->where('gallery_space_id', $session->gallery_space_id)
+                    ->lockForUpdate()
+                    ->first();
+
+                if ($album) {
+                    DB::table('album_media')->insertOrIgnore([
+                        'album_id' => $album->id,
+                        'media_item_id' => $media->id,
+                        'sort_order' => (int) (DB::table('album_media')->where('album_id', $album->id)->max('sort_order') ?? -1) + 1,
+                        'is_cover' => false,
+                        'added_at' => now(),
+                        'added_by' => $session->user_id,
+                    ]);
+
+                    $album->update([
+                        'media_count' => DB::table('album_media')->where('album_id', $album->id)->count(),
+                        'total_size_bytes' => MediaItem::where('primary_album_id', $album->id)->sum('size_bytes'),
+                    ]);
+                }
             }
+
+            // Generate thumbnail synchronously using GD/Imagick (no queue needed).
+            // U videa neukazujeme originál jako obrázek; poster vytvoří FFmpeg
+            // na pozadí, mezitím rozhraní bezpečně zobrazí ikonu videa.
+            if ($media->media_type === 'photo') {
+                $thumbSource = $previewPath ?? $destPath;
+                $this->generateThumbnail($media, $thumbSource);
+            }
+            if ($previewPath) @unlink($previewPath);
 
             // Extract basic EXIF data synchronously (GPS + date + dimensions + panorama/live photo)
             if ($media->media_type === 'photo') {
@@ -335,10 +387,21 @@ class UploadController extends Controller
                 'status'             => 'completed',
                 'completed_at'       => now(),
                 'resulting_media_id' => $media->id,
+                'assembled_path'     => $destPath,
             ]);
 
-            // Dispatch metadata + hash processing (async, best-effort)
-            CalculateMediaHashesJob::dispatch($media->id)->onQueue('media');
+            // Metadata a hash jsou doplňkové. Originál, základní metadata i
+            // členství v albu už jsou hotové, proto případná nedostupnost
+            // fronty/FFmpeg/GD nikdy nesmí zrušit úspěšné nahrání.
+            try {
+                CalculateMediaHashesJob::dispatch($media->id)->onQueue('media');
+            } catch (\Throwable $processingException) {
+                Log::warning('Deferred media processing could not start', [
+                    'media_id' => $media->id,
+                    'error' => $processingException->getMessage(),
+                ]);
+                $media->update(['processing_error' => 'Doplňkové zpracování bude možné spustit znovu: ' . $processingException->getMessage()]);
+            }
 
             // Cleanup chunk files
             Storage::disk('local')->deleteDirectory("upload_chunks/{$session->uuid}");
@@ -365,8 +428,13 @@ class UploadController extends Controller
                 'uuid'     => $session->uuid,
                 'status'   => 'completed',
                 'media_id' => $media->id,
+                'media_uuid' => $media->uuid,
             ]);
         } catch (\Throwable $e) {
+            if ($media) {
+                Storage::disk('public')->deleteDirectory("media/{$media->uuid}");
+                $media->forceDelete();
+            }
             $session->update(['status' => 'failed']);
             Log::error('Upload assembly failed', ['uuid' => $uuid, 'error' => $e->getMessage()]);
             return response()->json(['error' => 'Assembly failed: ' . $e->getMessage()], 500);

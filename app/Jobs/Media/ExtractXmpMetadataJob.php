@@ -20,11 +20,6 @@ class ExtractXmpMetadataJob implements ShouldQueue
         private readonly array $keywords,
     ) {}
 
-    public static function dispatch(MediaItem $media, array $keywords): void
-    {
-        (new static($media->id, $keywords))->onQueue('media');
-    }
-
     public function handle(): void
     {
         $media = MediaItem::find($this->mediaItemId);

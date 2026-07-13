@@ -173,7 +173,7 @@ class GalleryImportCommand extends Command
                 'resulting_media_id' => $media->id,
             ]);
 
-            CalculateMediaHashesJob::dispatch($media)->onQueue('media');
+            CalculateMediaHashesJob::dispatch($media->id)->onQueue('media');
 
             $this->line("  [OK] Imported: {$filename}");
             $this->stats['imported']++;

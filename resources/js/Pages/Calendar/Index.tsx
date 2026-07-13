@@ -29,9 +29,20 @@ export default function CalendarIndex() {
     const [showCreate, setShowCreate] = useState(false);
     const [showImport, setShowImport] = useState(false);
     const [showIdeas, setShowIdeas] = useState(false);
+    const [showSharedSlots, setShowSharedSlots] = useState(false);
+    const [showAvailability, setShowAvailability] = useState(false);
     const [ideaTheme, setIdeaTheme] = useState('any');
     const [ideas, setIdeas] = useState<any[]>([]);
     const [ideasLoading, setIdeasLoading] = useState(false);
+    const [slotsLoading, setSlotsLoading] = useState(false);
+    const [sharedSlots, setSharedSlots] = useState<{starts_at:string;ends_at:string;duration_minutes:number}[]>([]);
+    const [sharedMemberIds, setSharedMemberIds] = useState<number[]>([]);
+    const [availability, setAvailability] = useState<{weekday:number;from:string;to:string}[]>([]);
+    const [quietHours, setQuietHours] = useState<{from:string;to:string}|null>(null);
+    const [availabilityWeekday, setAvailabilityWeekday] = useState('1');
+    const [availabilityFrom, setAvailabilityFrom] = useState('18:00');
+    const [availabilityTo, setAvailabilityTo] = useState('21:00');
+    const [availabilitySaving, setAvailabilitySaving] = useState(false);
     const [ideaDate, setIdeaDate] = useState(localInput().slice(0, 10));
     const [error, setError] = useState('');
     const [saving, setSaving] = useState(false);
@@ -81,9 +92,10 @@ export default function CalendarIndex() {
                 ...form,
                 gallery_space_id: Number(form.gallery_space_id), trip_id: form.trip_id ? Number(form.trip_id) : null,
                 ends_at: form.ends_at || null, departure_buffer_minutes: form.departure_buffer_minutes ? Number(form.departure_buffer_minutes) : null,
+                participant_ids: sharedMemberIds.length ? sharedMemberIds : undefined,
                 reminders: form.reminder ? [{ minutes_before: Number(form.reminder), channel: 'database' }] : [],
             });
-            setShowCreate(false); setForm(current => ({ ...current, title: '', place_name: '', trip_id: '', ends_at: '' })); await load();
+            setShowCreate(false); setSharedMemberIds([]); setForm(current => ({ ...current, title: '', place_name: '', trip_id: '', ends_at: '' })); await load();
         } catch (reason: any) { setError(reason.response?.data?.message ?? 'Akci se nepodařilo uložit.'); }
         finally { setSaving(false); }
     };
@@ -113,6 +125,33 @@ export default function CalendarIndex() {
         catch (reason:any) { setError(reason.response?.data?.message ?? 'Nápady se nepodařilo načíst.'); }
         finally { setIdeasLoading(false); }
     };
+    const loadSharedSlots = async () => {
+        if (!form.gallery_space_id) return;
+        setSlotsLoading(true); setError('');
+        try { const response = await axios.get('/api/v1/calendar/shared-slots', { params: { gallery_space_id: Number(form.gallery_space_id), from: ideaDate, duration_minutes: 120 } }); setSharedSlots(response.data.slots ?? []); setSharedMemberIds(response.data.member_ids ?? []); }
+        catch (reason:any) { setError(reason.response?.data?.message ?? 'Společné termíny se nepodařilo najít.'); }
+        finally { setSlotsLoading(false); }
+    };
+    const useSharedSlot = (slot:{starts_at:string;ends_at:string}) => {
+        setForm(current => ({ ...current, title: current.title || 'Společný čas', type: 'event', starts_at: localInput(new Date(slot.starts_at)), ends_at: localInput(new Date(slot.ends_at)) }));
+        setShowSharedSlots(false); setShowCreate(true);
+    };
+    const toggleAvailability = async () => {
+        const next = !showAvailability; setShowAvailability(next); if (!next) return;
+        try { const response = await axios.get('/api/v1/calendar/availability'); setAvailability(response.data.availability ?? []); setQuietHours(response.data.quiet_hours ?? null); }
+        catch { setError('Dostupnost se nepodařilo načíst.'); }
+    };
+    const addAvailability = () => {
+        if (availabilityFrom >= availabilityTo) { setError('Konec dostupnosti musí být později než začátek.'); return; }
+        const weekday = Number(availabilityWeekday);
+        setAvailability(current => [...current.filter(item => item.weekday !== weekday), { weekday, from:availabilityFrom, to:availabilityTo }].sort((a,b) => a.weekday - b.weekday));
+    };
+    const saveAvailability = async () => {
+        setAvailabilitySaving(true); setError('');
+        try { await axios.put('/api/v1/calendar/availability', { availability, quiet_hours:quietHours }); await loadSharedSlots(); }
+        catch (reason:any) { setError(reason.response?.data?.message ?? 'Dostupnost se nepodařilo uložit.'); }
+        finally { setAvailabilitySaving(false); }
+    };
     const createFromIdea = async (idea:any) => {
         if (!form.gallery_space_id) return;
         setSaving(true); setError('');
@@ -127,8 +166,9 @@ export default function CalendarIndex() {
                 <div><h1 className="text-xl font-semibold text-white">Kalendář, cesty a společné chvíle</h1><p className="mt-1 text-sm text-[var(--color-text-secondary)]">Akce, rezervace, přípravy i fotky v jednom soukromém přehledu.</p></div>
                 <div className="flex flex-wrap gap-2"><button onClick={enableLocalNotifications} className="inline-flex items-center gap-2 rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm text-[var(--color-text-secondary)] hover:text-white"><Bell size={15}/> Oznámení</button><button onClick={() => { setImportResult(''); setShowImport(true); }} className="inline-flex items-center gap-2 rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm text-[var(--color-text-secondary)] hover:text-white"><Upload size={15}/><span className="hidden sm:inline">Import ICS</span></button><button onClick={() => setShowCreate(true)} className="inline-flex items-center gap-2 rounded-lg bg-[var(--color-accent)] px-3 py-2 text-sm font-medium text-white"><Plus size={16}/> Nová akce</button></div>
             </div>
-            <div className="mb-4 flex justify-end"><button onClick={() => { setShowIdeas(value => !value); if (!showIdeas) loadIdeas(); }} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-pink-400/30 bg-pink-500/10 px-3 text-sm text-pink-100 hover:bg-pink-500/20"><Sparkles size={15}/> Nápad pro nás</button></div>
+            <div className="mb-4 flex flex-wrap justify-end gap-2"><button onClick={() => { setShowSharedSlots(value => !value); if (!showSharedSlots) loadSharedSlots(); }} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-sky-400/30 bg-sky-500/10 px-3 text-sm text-sky-100 hover:bg-sky-500/20"><Bell size={15}/> Společný termín</button><button onClick={() => { setShowIdeas(value => !value); if (!showIdeas) loadIdeas(); }} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-pink-400/30 bg-pink-500/10 px-3 text-sm text-pink-100 hover:bg-pink-500/20"><Sparkles size={15}/> Nápad pro nás</button></div>
             {error && <p role="alert" className="mb-4 rounded-lg border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-200">{error}</p>}
+            {showSharedSlots && <section className="mb-5 rounded-2xl border border-sky-500/25 bg-gradient-to-r from-sky-500/10 to-[var(--color-bg-card)] p-4"><div className="flex items-center justify-between gap-3"><div><h2 className="font-semibold text-white">Kdy máme oba čas?</h2><p className="mt-1 text-sm text-[var(--color-text-secondary)]">Průnik dostupnosti a obsazenosti bez odhalování soukromých akcí.</p></div><input type="date" value={ideaDate} onChange={event => setIdeaDate(event.target.value)} className="min-h-10 rounded-lg border border-[var(--color-border)] bg-black/10 px-2 text-sm text-white"/></div><div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">{slotsLoading ? <p className="text-sm text-[var(--color-text-secondary)]">Hledám společný čas…</p> : sharedSlots.map(slot => <button key={slot.starts_at} onClick={() => useSharedSlot(slot)} className="rounded-xl border border-sky-400/25 bg-black/10 p-3 text-left hover:border-sky-300"><p className="font-medium text-white">{new Date(slot.starts_at).toLocaleDateString('cs-CZ', { weekday:'short', day:'numeric', month:'numeric' })}</p><p className="mt-1 text-xs text-sky-100">{new Date(slot.starts_at).toLocaleTimeString('cs-CZ',{hour:'2-digit',minute:'2-digit'})}–{new Date(slot.ends_at).toLocaleTimeString('cs-CZ',{hour:'2-digit',minute:'2-digit'})}</p></button>)}{!slotsLoading && !sharedSlots.length && <p className="text-sm text-[var(--color-text-secondary)]">V nejbližších dnech jsme nenašli společné okno. Nastavte si níže dostupnost nebo zkuste jiný den.</p>}</div><div className="mt-4 border-t border-sky-400/20 pt-3"><div className="flex items-center justify-between gap-2"><p className="text-xs font-medium text-sky-100">Moje pravidelná dostupnost</p><button onClick={toggleAvailability} className="text-xs text-sky-200 hover:text-white">{showAvailability ? 'Zavřít' : 'Upravit'}</button></div>{showAvailability && <div className="mt-3 space-y-2"><div className="grid gap-2 sm:grid-cols-4"><select value={availabilityWeekday} onChange={event => setAvailabilityWeekday(event.target.value)} className="min-h-10 rounded-lg border border-[var(--color-border)] bg-black/10 px-2 text-sm text-white">{['Ne','Po','Út','St','Čt','Pá','So'].map((day,index) => <option key={day} value={index}>{day}</option>)}</select><input type="time" value={availabilityFrom} onChange={event => setAvailabilityFrom(event.target.value)} className="min-h-10 rounded-lg border border-[var(--color-border)] bg-black/10 px-2 text-sm text-white"/><input type="time" value={availabilityTo} onChange={event => setAvailabilityTo(event.target.value)} className="min-h-10 rounded-lg border border-[var(--color-border)] bg-black/10 px-2 text-sm text-white"/><button onClick={addAvailability} className="min-h-10 rounded-lg border border-sky-400/30 px-3 text-sm text-sky-100">Nastavit den</button></div><div className="flex flex-wrap gap-2">{availability.length ? availability.map(item => <button key={item.weekday} onClick={() => setAvailability(current => current.filter(rule => rule.weekday !== item.weekday))} className="rounded-lg bg-black/15 px-2 py-1 text-xs text-sky-100" title="Odebrat">{['Ne','Po','Út','St','Čt','Pá','So'][item.weekday]} {item.from}–{item.to} ×</button>) : <p className="text-xs text-[var(--color-text-secondary)]">Bez uloženého pravidla používáme pro návrhy šetrné večerní okno 18:00–21:00.</p>}</div><button disabled={availabilitySaving} onClick={saveAvailability} className="min-h-10 rounded-lg bg-sky-600 px-3 text-sm text-white disabled:opacity-50">{availabilitySaving ? 'Ukládám…' : 'Uložit a přepočítat termíny'}</button></div>}</div></section>}
             {showIdeas && <section className="mb-5 rounded-2xl border border-pink-500/25 bg-gradient-to-r from-pink-500/10 to-[var(--color-bg-card)] p-4"><div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><div><h2 className="font-semibold text-white">Nápad na společný čas</h2><p className="mt-1 text-sm text-[var(--color-text-secondary)]">Vychází z vašich uložených míst a osobních preferencí.</p></div><div className="flex flex-wrap gap-2"><input type="date" value={ideaDate} onChange={event => setIdeaDate(event.target.value)} className="min-h-10 rounded-lg border border-[var(--color-border)] bg-black/10 px-2 text-sm text-white"/><select value={ideaTheme} onChange={event => { setIdeaTheme(event.target.value); loadIdeas(event.target.value); }} className="min-h-10 rounded-lg border border-[var(--color-border)] bg-black/10 px-2 text-sm text-white"><option value="any">Cokoliv</option><option value="rain">Na déšť</option><option value="photo">Fotogenické</option><option value="budget">Do rozpočtu</option><option value="early">Brzy ráno</option></select></div></div><div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{ideasLoading ? <p className="text-sm text-[var(--color-text-secondary)]">Hledám ve vašich místech…</p> : ideas.map(idea => <article key={idea.id} className="rounded-xl border border-[var(--color-border)] bg-black/10 p-3"><p className="font-medium text-white">{idea.title}</p><p className="mt-1 text-xs text-[var(--color-text-secondary)]">{idea.place_name || idea.reason}</p>{idea.place_name && <p className="mt-1 text-xs text-pink-200">{idea.reason}</p>}<button disabled={saving} onClick={() => createFromIdea(idea)} className="mt-3 min-h-9 w-full rounded-lg border border-pink-400/30 text-xs text-pink-100 hover:bg-pink-500/10 disabled:opacity-40">Přidat do kalendáře</button></article>)}{!ideasLoading && !ideas.length && <p className="text-sm text-[var(--color-text-secondary)]">Pro tento filtr zatím nemáte uložené místo. Upravte preference u místa a návrh se zde objeví.</p>}</div></section>}
             <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
                 <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-3 sm:p-5">

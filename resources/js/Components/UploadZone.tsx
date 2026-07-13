@@ -1,6 +1,6 @@
 import { uploadManager } from '@/lib/uploadManager';
 import { Upload } from 'lucide-react';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 const ACCEPTED: string[] = [
     // Standard images
@@ -34,6 +34,29 @@ export default function UploadZone({ albumId, onUploadComplete }: Props) {
     const [queued,   setQueued]   = useState(0);
     const inputRef  = useRef<HTMLInputElement>(null);
     const dragCount = useRef(0);
+    const reported = useRef(new Set<string>());
+
+    useEffect(() => {
+        if (!onUploadComplete) return;
+
+        const onChange = (event: Event) => {
+            const uploads = (event as CustomEvent).detail.uploads as Array<{ id: string; albumId: number | null; status: string }>;
+            const completedHere = uploads.some(upload =>
+                upload.albumId === albumId
+                && upload.status === 'done'
+                && !reported.current.has(upload.id),
+            );
+
+            uploads
+                .filter(upload => upload.albumId === albumId && upload.status === 'done')
+                .forEach(upload => reported.current.add(upload.id));
+
+            if (completedHere) onUploadComplete();
+        };
+
+        uploadManager.addEventListener('change', onChange);
+        return () => uploadManager.removeEventListener('change', onChange);
+    }, [albumId, onUploadComplete]);
 
     const process = useCallback((raw: FileList | null) => {
         if (!raw) return;
@@ -69,4 +92,3 @@ export default function UploadZone({ albumId, onUploadComplete }: Props) {
         </div>
     );
 }
-

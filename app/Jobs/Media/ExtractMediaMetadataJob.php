@@ -31,7 +31,7 @@ class ExtractMediaMetadataJob implements ShouldQueue
 
         if (!$path || !file_exists($path)) {
             Log::warning("File not found for EXIF extraction, media #{$media->id}");
-            GenerateImageVariantsJob::dispatch($media)->onQueue('media');
+            GenerateImageVariantsJob::dispatch($media->id)->onQueue('media');
             return;
         }
 
@@ -61,7 +61,7 @@ class ExtractMediaMetadataJob implements ShouldQueue
 
             // Handle XMP keywords → tags (queued separately)
             if (!empty($exifData['xmp_keywords'])) {
-                ExtractXmpMetadataJob::dispatch($media, $exifData['xmp_keywords'])->onQueue('media');
+                ExtractXmpMetadataJob::dispatch($media->id, $exifData['xmp_keywords'])->onQueue('media');
             }
 
         } catch (\Throwable $e) {
@@ -70,9 +70,9 @@ class ExtractMediaMetadataJob implements ShouldQueue
 
         // Continue pipeline regardless of EXIF success
         if ($media->media_type === 'photo') {
-            GenerateImageVariantsJob::dispatch($media)->onQueue('media');
+            GenerateImageVariantsJob::dispatch($media->id)->onQueue('media');
         } else {
-            GenerateVideoPosterJob::dispatch($media)->onQueue('media');
+            GenerateVideoPosterJob::dispatch($media->id)->onQueue('media');
         }
     }
 }

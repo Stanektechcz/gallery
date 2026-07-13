@@ -100,7 +100,7 @@ class AssembleUploadChunksJob implements ShouldQueue
             ]);
 
             // Dispatch processing pipeline
-            CalculateMediaHashesJob::dispatch($media)->onQueue('media');
+            CalculateMediaHashesJob::dispatch($media->id)->onQueue('media');
 
             // Cleanup chunks
             Storage::disk('local')->deleteDirectory("upload_chunks/{$session->uuid}");

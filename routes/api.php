@@ -103,6 +103,11 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
     Route::get('places/{place}/albums',      [App\Http\Controllers\Api\PlaceController::class, 'albums'])->name('api.places.albums');
     Route::post('places/{place}/auto-link',  [App\Http\Controllers\Api\PlaceController::class, 'autoLink'])->name('api.places.auto-link');
     Route::post('places/{place}/trip-activities', [App\Http\Controllers\Api\PlaceController::class, 'addToTripPlan'])->name('api.places.trip-activities.store');
+    Route::post('places/{place}/wishlist-items', [App\Http\Controllers\Api\PlaceController::class, 'addToWishlist'])->name('api.places.wishlist-items.store');
+    Route::get('places/{place}/plans', [App\Http\Controllers\Api\PlaceController::class, 'plans'])->name('api.places.plans.index');
+    Route::post('places/{place}/plans', [App\Http\Controllers\Api\PlaceController::class, 'storePlan'])->name('api.places.plans.store');
+    Route::patch('places/{place}/plans/{uuid}', [App\Http\Controllers\Api\PlaceController::class, 'updatePlan'])->name('api.places.plans.update');
+    Route::post('places/{place}/plans/{uuid}/shared-memory', [App\Http\Controllers\Api\PlaceController::class, 'createPlanMemory'])->name('api.places.plans.shared-memory.store');
 
     // Notifications
     Route::get('/notifications', fn() => request()->user()->notifications()->paginate(20));
@@ -152,7 +157,9 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
         Route::post('/events', [App\Http\Controllers\Api\CalendarPlanningController::class, 'store'])->name('events.store');
         Route::post('/ics-import', [App\Http\Controllers\Api\IcsCalendarImportController::class, 'store'])->name('ics.import');
         Route::get('/date-ideas', [App\Http\Controllers\Api\CalendarPlanningController::class, 'dateIdeas'])->name('date-ideas');
+        Route::get('/shared-slots', [App\Http\Controllers\Api\CalendarPlanningController::class, 'sharedSlots'])->name('shared-slots');
         Route::get('/weekly-overview', [App\Http\Controllers\Api\CalendarPlanningController::class, 'weeklyOverview'])->name('weekly-overview');
+        Route::post('/memory-evening', [App\Http\Controllers\Api\CalendarPlanningController::class, 'scheduleMemoryEvening'])->name('memory-evening.store');
         Route::get('/gifts', [App\Http\Controllers\Api\CalendarAutomationController::class, 'gifts'])->name('gifts.index');
         Route::post('/gifts', [App\Http\Controllers\Api\CalendarAutomationController::class, 'storeGift'])->name('gifts.store');
         Route::patch('/gifts/{uuid}', [App\Http\Controllers\Api\CalendarAutomationController::class, 'updateGift'])->name('gifts.update');
@@ -191,9 +198,11 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
         Route::post('/wishlists', [App\Http\Controllers\Api\PlanningExpansionController::class, 'storeWishlist'])->name('wishlists.store');
         Route::post('/wishlists/{uuid}/items', [App\Http\Controllers\Api\PlanningExpansionController::class, 'storeWishlistItem'])->name('wishlists.items.store');
         Route::get('/wishlists/{uuid}/suggestions', [App\Http\Controllers\Api\PlanningExpansionController::class, 'wishlistSuggestions'])->name('wishlists.suggestions');
+        Route::post('/wishlists/{uuid}/items/{itemId}/plan', [App\Http\Controllers\Api\PlanningExpansionController::class, 'planWishlistItem'])->name('wishlists.items.plan');
         Route::get('/polls', [App\Http\Controllers\Api\PlanningExpansionController::class, 'polls'])->name('polls.index');
         Route::post('/polls', [App\Http\Controllers\Api\PlanningExpansionController::class, 'storePoll'])->name('polls.store');
         Route::post('/polls/{uuid}/vote', [App\Http\Controllers\Api\PlanningExpansionController::class, 'vote'])->name('polls.vote');
+        Route::post('/polls/{uuid}/options/{optionId}/plan', [App\Http\Controllers\Api\PlanningExpansionController::class, 'planPollOption'])->name('polls.options.plan');
         Route::get('/partner-rules', [App\Http\Controllers\Api\PlanningExpansionController::class, 'partnerRules'])->name('partner-rules.index');
         Route::post('/partner-rules', [App\Http\Controllers\Api\PlanningExpansionController::class, 'storePartnerRule'])->name('partner-rules.store');
         Route::get('/partner-rules/{uuid}/preview', [App\Http\Controllers\Api\PlanningExpansionController::class, 'previewPartnerRule'])->name('partner-rules.preview');
@@ -204,6 +213,10 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
 
     Route::prefix('trips/{tripId}')->name('api.trip-planning.')->group(function () {
         Route::get('/planning', [App\Http\Controllers\Api\CalendarPlanningController::class, 'tripPlanning'])->name('index');
+        Route::get('/travel-choices', [App\Http\Controllers\Api\TripTravelController::class, 'choices'])->name('travel-choices.index');
+        Route::post('/booking-search', [App\Http\Controllers\Api\TripTravelController::class, 'bookingSearch'])->name('booking-search');
+        Route::post('/travel-choices/transport', [App\Http\Controllers\Api\TripTravelController::class, 'storeTransport'])->name('travel-choices.transport');
+        Route::post('/travel-choices/accommodation', [App\Http\Controllers\Api\TripTravelController::class, 'storeAccommodation'])->name('travel-choices.accommodation');
         Route::post('/expenses', [App\Http\Controllers\Api\CalendarPlanningController::class, 'storeExpense'])->name('expenses.store');
         Route::delete('/expenses/{expenseId}', [App\Http\Controllers\Api\CalendarPlanningController::class, 'destroyExpense'])->name('expenses.destroy');
         Route::post('/route-variants', [App\Http\Controllers\Api\CalendarPlanningController::class, 'storeRouteVariant'])->name('variants.store');
@@ -220,6 +233,7 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
         Route::post('/location-consent', [App\Http\Controllers\Api\TripIntelligenceController::class, 'locationConsent'])->name('location-consent.store');
         Route::post('/track-points', [App\Http\Controllers\Api\TripIntelligenceController::class, 'storeTrackPoint'])->name('track-points.store');
         Route::get('/packing-items', [App\Http\Controllers\Api\TripIntelligenceController::class, 'packingItems'])->name('packing.index');
+        Route::get('/packing-members', [App\Http\Controllers\Api\TripIntelligenceController::class, 'packingMembers'])->name('packing.members');
         Route::post('/packing-items', [App\Http\Controllers\Api\TripIntelligenceController::class, 'storePackingItem'])->name('packing.store');
         Route::patch('/packing-items/{itemId}', [App\Http\Controllers\Api\TripIntelligenceController::class, 'updatePackingItem'])->name('packing.update');
         Route::delete('/packing-items/{itemId}', [App\Http\Controllers\Api\TripIntelligenceController::class, 'destroyPackingItem'])->name('packing.destroy');
@@ -287,6 +301,10 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
     Route::get('/trips/{id}/media',                  [App\Http\Controllers\Api\TripController::class, 'media'])->name('api.trips.media');
     Route::post('/trips/{id}/media',                 [App\Http\Controllers\Api\TripController::class, 'addMedia'])->name('api.trips.add-media');
     Route::delete('/trips/{id}/media/{mediaId}',     [App\Http\Controllers\Api\TripController::class, 'removeMedia'])->name('api.trips.remove-media');
+    Route::post('/trips/{id}/shared-memory',         [App\Http\Controllers\Api\TripController::class, 'createSharedMemory'])->name('api.trips.shared-memory.store');
+    Route::get('/trips/{id}/reflection',             [App\Http\Controllers\Api\TripController::class, 'reflection'])->name('api.trips.reflection');
+    Route::put('/trips/{id}/reflection',             [App\Http\Controllers\Api\TripController::class, 'upsertReflection'])->name('api.trips.reflection.upsert');
+    Route::post('/trips/{id}/revisit',               [App\Http\Controllers\Api\TripController::class, 'scheduleRevisit'])->name('api.trips.revisit.store');
     Route::put('/trips/{id}/waypoints/reorder',      [App\Http\Controllers\Api\TripController::class, 'reorderWaypoints'])->name('api.trips.waypoints.reorder');
     Route::post('/trips/{id}/waypoints',             [App\Http\Controllers\Api\TripController::class, 'addWaypoint'])->name('api.trips.waypoints.add');
     Route::patch('/trips/{id}/waypoints/{wpId}',     [App\Http\Controllers\Api\TripController::class, 'updateWaypoint'])->name('api.trips.waypoints.update');

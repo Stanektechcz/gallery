@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\CalendarEvent;
 use App\Models\MediaItem;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -10,6 +11,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 
 class TripController extends Controller
 {
@@ -281,6 +283,177 @@ class TripController extends Controller
             ->delete();
 
         return response()->json(['status' => 'removed']);
+    }
+
+    /** Turn linked trip photos into one shared memory, without leaving the trip workspace. */
+    public function createSharedMemory(Request $request, int $id): JsonResponse
+    {
+        $user = $request->user();
+        $space = $user->gallerySpaces()->firstOrFail();
+        $trip = DB::table('trips')->where('id', $id)->where('gallery_space_id', $space->id)->firstOrFail();
+        $data = $request->validate([
+            'title' => 'nullable|string|max:160',
+            'note' => 'nullable|string|max:5000',
+            'media_item_ids' => 'required|array|min:1|max:30',
+            'media_item_ids.*' => 'integer|distinct',
+        ]);
+
+        $mediaIds = $data['media_item_ids'];
+        $linkedMediaCount = DB::table('trip_media')
+            ->join('media_items', 'media_items.id', '=', 'trip_media.media_item_id')
+            ->where('trip_media.trip_id', $trip->id)
+            ->where('media_items.gallery_space_id', $space->id)
+            ->whereNull('media_items.trashed_at')
+            ->whereIn('media_items.id', $mediaIds)
+            ->count();
+        abort_unless($linkedMediaCount === count($mediaIds), 422, 'Pro vzpomínku lze vybrat jen média přiřazená k této cestě.');
+
+        $existing = DB::table('shared_memory_moments')->where('trip_id', $trip->id)->first();
+        if (! $existing) {
+            $eventIds = DB::table('calendar_events')->where('trip_id', $trip->id)->pluck('id');
+            if ($eventIds->isNotEmpty()) $existing = DB::table('shared_memory_moments')->whereIn('calendar_event_id', $eventIds)->first();
+        }
+
+        $row = [
+            'trip_id' => $trip->id,
+            'gallery_space_id' => $space->id,
+            'created_by' => $existing?->created_by ?? $user->id,
+            'title' => $data['title'] ?? $trip->name,
+            'note' => array_key_exists('note', $data) ? $data['note'] : ($existing?->note ?? $trip->description),
+            'happened_on' => $trip->end_date,
+            'media_item_ids' => json_encode($mediaIds),
+            'is_favorite' => true,
+            'updated_at' => now(),
+        ];
+        if ($existing) DB::table('shared_memory_moments')->where('id', $existing->id)->update($row);
+        else DB::table('shared_memory_moments')->insert($row + ['uuid' => (string) Str::uuid(), 'created_at' => now()]);
+
+        return response()->json(DB::table('shared_memory_moments')->where('trip_id', $trip->id)->first(), $existing ? 200 : 201);
+    }
+
+    /** A shared post-trip note, kept next to the itinerary and its gallery memory. */
+    public function reflection(Request $request, int $id): JsonResponse
+    {
+        $space = $request->user()->gallerySpaces()->firstOrFail();
+        $trip = DB::table('trips')->where('id', $id)->where('gallery_space_id', $space->id)->firstOrFail();
+
+        if (! Schema::hasTable('trip_reflections')) {
+            return response()->json(['message' => 'Pro společné ohlédnutí dokončete migrace aplikace.'], 503);
+        }
+
+        $completion = [
+            'activities_total' => DB::table('trip_activities')->join('trip_days', 'trip_days.id', '=', 'trip_activities.trip_day_id')->where('trip_days.trip_id', $trip->id)->count(),
+            'activities_done' => DB::table('trip_activities')->join('trip_days', 'trip_days.id', '=', 'trip_activities.trip_day_id')->where('trip_days.trip_id', $trip->id)->where('trip_activities.status', 'done')->count(),
+            'media_count' => DB::table('trip_media')->where('trip_id', $trip->id)->count(),
+            'has_shared_memory' => DB::table('shared_memory_moments')->where('trip_id', $trip->id)->exists(),
+            'actual_expenses' => (float) DB::table('trip_expenses')->where('trip_id', $trip->id)->where('state', 'actual')->sum('amount'),
+            'currency' => $trip->currency,
+        ];
+
+        return response()->json([
+            'trip' => ['id' => $trip->id, 'name' => $trip->name, 'status' => $trip->status, 'end_date' => $trip->end_date],
+            'reflection' => DB::table('trip_reflections')->where('trip_id', $trip->id)->first(),
+            'completion' => $completion,
+        ]);
+    }
+
+    /** Store one deliberately shared recap, rather than adding another disconnected note. */
+    public function upsertReflection(Request $request, int $id): JsonResponse
+    {
+        $user = $request->user();
+        $space = $user->gallerySpaces()->firstOrFail();
+        $trip = DB::table('trips')->where('id', $id)->where('gallery_space_id', $space->id)->firstOrFail();
+
+        if (! Schema::hasTable('trip_reflections')) {
+            return response()->json(['message' => 'Pro společné ohlédnutí dokončete migrace aplikace.'], 503);
+        }
+
+        $data = $request->validate([
+            'rating' => 'nullable|integer|between:1,5',
+            'highlight' => 'nullable|string|max:2000',
+            'gratitude' => 'nullable|string|max:2000',
+            'next_time' => 'nullable|string|max:2000',
+        ]);
+
+        $existing = DB::table('trip_reflections')->where('trip_id', $trip->id)->first();
+        $row = ['updated_by' => $user->id, 'updated_at' => now()];
+        foreach (['rating', 'highlight', 'gratitude', 'next_time'] as $field) {
+            if (array_key_exists($field, $data)) {
+                $row[$field] = $data[$field];
+            }
+        }
+
+        if ($existing) {
+            DB::table('trip_reflections')->where('id', $existing->id)->update($row);
+            $reflectionId = $existing->id;
+        } else {
+            $reflectionId = DB::table('trip_reflections')->insertGetId($row + [
+                'uuid' => (string) Str::uuid(),
+                'trip_id' => $trip->id,
+                'gallery_space_id' => $space->id,
+                'created_by' => $user->id,
+                'created_at' => now(),
+            ]);
+        }
+
+        return response()->json(DB::table('trip_reflections')->find($reflectionId), $existing ? 200 : 201);
+    }
+
+    /** Continue a finished trip as a new shared date, without turning it into a duplicate trip. */
+    public function scheduleRevisit(Request $request, int $id): JsonResponse
+    {
+        $user = $request->user();
+        $space = $user->gallerySpaces()->firstOrFail();
+        $trip = DB::table('trips')->where('id', $id)->where('gallery_space_id', $space->id)->firstOrFail();
+        if (! Schema::hasColumn('calendar_events', 'source_trip_id')) {
+            return response()->json(['message' => 'Pro plánování návratu dokončete migrace aplikace.'], 503);
+        }
+
+        $data = $request->validate([
+            'starts_at' => 'required|date|after:now',
+            'reminder_minutes' => 'nullable|integer|min:0|max:525600',
+            'title' => 'nullable|string|max:160',
+        ]);
+        $startsAt = Carbon::parse($data['starts_at']);
+        $existing = CalendarEvent::where('gallery_space_id', $space->id)->where('source_trip_id', $trip->id)->where('starts_at', $startsAt)->first();
+        if ($existing) {
+            return response()->json($existing->load('participants:id,name,email', 'reminders'));
+        }
+
+        $reflection = Schema::hasTable('trip_reflections') ? DB::table('trip_reflections')->where('trip_id', $trip->id)->first() : null;
+        $placeName = Schema::hasTable('trip_waypoints')
+            ? DB::table('trip_waypoints')->where('trip_id', $trip->id)->orderBy('sort_order')->value('place_name')
+            : null;
+        $event = CalendarEvent::create([
+            'gallery_space_id' => $space->id,
+            'created_by' => $user->id,
+            'source_trip_id' => $trip->id,
+            'title' => $data['title'] ?? "Návrat: {$trip->name}",
+            'description' => $reflection?->highlight ? "Navazuje na společný zážitek: {$reflection->highlight}" : "Navazuje na vaši cestu „{$trip->name}“.",
+            'type' => 'outing',
+            'status' => 'planned',
+            'starts_at' => $startsAt,
+            'ends_at' => $startsAt->copy()->addHours(2),
+            'timezone' => $trip->timezone ?: 'Europe/Prague',
+            'place_name' => $placeName,
+            'is_private' => false,
+            'metadata' => ['kind' => 'trip_revisit'],
+        ]);
+        $memberIds = DB::table('gallery_space_user')->where('gallery_space_id', $space->id)->pluck('user_id');
+        foreach ($memberIds as $memberId) {
+            $event->participants()->syncWithoutDetaching([(int) $memberId => [
+                'role' => (int) $memberId === $user->id ? 'owner' : 'guest',
+                'response' => (int) $memberId === $user->id ? 'accepted' : 'pending',
+            ]]);
+            $event->reminders()->create([
+                'user_id' => $memberId,
+                'channel' => 'database',
+                'remind_at' => $startsAt->copy()->subMinutes((int) ($data['reminder_minutes'] ?? 10080)),
+                'status' => 'pending',
+            ]);
+        }
+
+        return response()->json($event->load('participants:id,name,email', 'reminders'), 201);
     }
 
     // ─── Waypoints ─────────────────────────────────────────────────────────

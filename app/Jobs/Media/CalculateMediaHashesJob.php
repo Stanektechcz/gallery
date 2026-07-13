@@ -25,26 +25,25 @@ class CalculateMediaHashesJob implements ShouldQueue
         $media = MediaItem::find($this->mediaItemId);
         if (!$media) return;
 
-        $assembled = storage_path("app/uploads/{$media->uploaded_by}_*/{$media->original_filename}");
-
         // Find the assembled file path via upload session
         $session = \App\Models\UploadSession::where('resulting_media_id', $media->id)->first();
         $path    = $session?->assembled_path;
 
         if (!$path || !file_exists($path)) {
             Log::warning("Assembled file not found for media #{$media->id}");
-            $media->update(['status' => 'failed', 'processing_error' => 'Assembled file not found']);
+            // Originál už je úspěšně uložený a zobrazitelný. Selhání doplňkového
+            // zpracování proto nesmí skrýt či zneplatnit celé médium.
+            $media->update(['processing_error' => 'Zdroj pro doplňkové zpracování nebyl nalezen.']);
             return;
         }
 
         $media->update([
-            'status'          => 'extracting_metadata',
             'processing_stage'=> 'hashing',
             'sha256'          => hash_file('sha256', $path),
             'md5'             => hash_file('md5', $path),
         ]);
 
         // Dispatch next job in pipeline
-        ExtractMediaMetadataJob::dispatch($media)->onQueue('media');
+        ExtractMediaMetadataJob::dispatch($media->id)->onQueue('media');
     }
 }

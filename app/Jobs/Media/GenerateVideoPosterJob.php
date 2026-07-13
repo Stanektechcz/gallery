@@ -30,7 +30,7 @@ class GenerateVideoPosterJob implements ShouldQueue
         $path    = $session?->assembled_path;
 
         if (!$path || !file_exists($path)) {
-            $media->update(['status' => 'failed', 'processing_error' => 'Source video missing']);
+            $media->update(['processing_error' => 'Zdroj videa pro vytvoření náhledu nebyl nalezen.']);
             return;
         }
 
@@ -47,14 +47,14 @@ class GenerateVideoPosterJob implements ShouldQueue
             $videoService->generatePoster($media, $path);
 
             // Generate compatibility variant
-            GenerateVideoCompatibilityVariantJob::dispatch($media)->onQueue('media');
+            GenerateVideoCompatibilityVariantJob::dispatch($media->id)->onQueue('media');
 
             // Continue to Drive upload
-            InitiateDriveResumableUploadJob::dispatch($media)->onQueue('drive');
+            InitiateDriveResumableUploadJob::dispatch($media->id)->onQueue('drive');
 
         } catch (\Throwable $e) {
             Log::error("Video processing failed for media #{$media->id}", ['error' => $e->getMessage()]);
-            $media->update(['status' => 'failed', 'processing_error' => $e->getMessage()]);
+            $media->update(['processing_error' => $e->getMessage()]);
         }
     }
 }

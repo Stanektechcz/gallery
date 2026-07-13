@@ -6,7 +6,9 @@
 
 import axios from "axios";
 
-const CHUNK_SIZE = 8 * 1024 * 1024; // 8 MB
+// Musí bezpečně projít i výchozí konfigurací PHP (upload_max_filesize=2M).
+// Multipart obálka má vlastní režii, proto nepoužíváme hranici 2 MiB.
+const CHUNK_SIZE = 1 * 1024 * 1024; // 1 MiB
 const MAX_CONCURRENT = 3;
 const SHA256_LIMIT = 200 * 1024 * 1024; // Only hash files < 200 MB
 
@@ -349,8 +351,7 @@ class UploadManagerClass extends EventTarget {
                 {},
                 { signal: ctrl.signal },
             );
-            item.mediaUuid =
-                completeRes.data.media_uuid ?? completeRes.data.uuid;
+            item.mediaUuid = completeRes.data.media_uuid;
             item.status = "done";
             item.percent = 100;
         } catch (err: any) {

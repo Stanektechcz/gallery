@@ -330,7 +330,7 @@ export default function AlbumShow({ album, breadcrumb, children, media, filters:
                         <h2 className="text-xs font-medium text-[var(--color-text-secondary)] mb-3 uppercase tracking-wider">Média</h2>
                         <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(150px, 1fr))', gap:'4px' }}>
                             {media.data.map(item => {
-                                const thumb      = item.variants?.find(v => v.type === 'thumbnail');
+                                const thumb      = item.variants?.find(v => v.type === (item.media_type === 'video' ? 'video_poster' : 'thumbnail'));
                                 const original   = item.variants?.find(v => v.type === 'original');
                                 const displayUrl = thumb?.url ?? (item.media_type === 'photo' ? original?.url : null);
                                 const placeholder = item.variants?.find(v => v.type === 'placeholder');
@@ -385,4 +385,3 @@ export default function AlbumShow({ album, breadcrumb, children, media, filters:
         </AppLayout>
     );
 }
-

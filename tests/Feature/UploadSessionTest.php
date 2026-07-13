@@ -3,6 +3,8 @@
 namespace Tests\Feature;
 
 use App\Models\GallerySpace;
+use App\Models\Album;
+use App\Models\MediaItem;
 use App\Models\UploadSession;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -151,5 +153,76 @@ class UploadSessionTest extends TestCase
         ]);
 
         $response->assertUnauthorized();
+    }
+
+    /** @test */
+    public function test_completed_photo_is_saved_into_its_album_with_metadata_and_media_uuid(): void
+    {
+        $album = Album::create([
+            'gallery_space_id' => $this->space->id,
+            'title' => 'Víkend v Brně',
+            'slug' => 'vikend-v-brne',
+            'created_by' => $this->user->id,
+        ]);
+        $contents = 'not-a-real-jpeg-but-a-complete-upload';
+
+        $init = $this->actingAs($this->user)->postJson('/api/v1/uploads', [
+            'filename' => 'výlet do Brna.jpg',
+            'mime_type' => 'image/jpeg',
+            'total_size' => strlen($contents),
+            'total_chunks' => 1,
+            'target_album_id' => $album->id,
+        ])->assertCreated();
+
+        $uuid = $init->json('uuid');
+        $this->actingAs($this->user)
+            ->putJson("/api/v1/uploads/{$uuid}/chunks/0", [
+                'chunk' => UploadedFile::fake()->createWithContent('chunk_0', $contents),
+            ])
+            ->assertOk();
+
+        $completed = $this->actingAs($this->user)
+            ->postJson("/api/v1/uploads/{$uuid}/complete")
+            ->assertOk()
+            ->assertJsonPath('status', 'completed')
+            ->assertJsonStructure(['media_id', 'media_uuid']);
+
+        $media = MediaItem::findOrFail($completed->json('media_id'));
+        $this->assertSame($album->id, $media->primary_album_id);
+        $this->assertSame('ready', $media->status);
+        $this->assertSame('výlet do Brna.jpg', $media->original_filename);
+        $this->assertNotNull($media->uploaded_at);
+        $this->assertDatabaseHas('album_media', [
+            'album_id' => $album->id,
+            'media_item_id' => $media->id,
+            'added_by' => $this->user->id,
+        ]);
+        $this->assertSame(1, $album->fresh()->media_count);
+        $this->assertDatabaseHas('upload_sessions', [
+            'uuid' => $uuid,
+            'resulting_media_id' => $media->id,
+            'status' => 'completed',
+        ]);
+        Storage::disk('public')->assertExists("media/{$media->uuid}/original.jpg");
+    }
+
+    /** @test */
+    public function test_user_cannot_start_upload_into_an_album_from_another_gallery_space(): void
+    {
+        $otherOwner = User::factory()->create(['role' => 'owner', 'is_active' => true]);
+        $otherSpace = GallerySpace::create([
+            'uuid' => \Str::uuid(), 'name' => 'Cizí prostor', 'slug' => 'cizi-prostor', 'owner_id' => $otherOwner->id,
+        ]);
+        $otherAlbum = Album::create([
+            'gallery_space_id' => $otherSpace->id,
+            'title' => 'Cizí album',
+            'slug' => 'cizi-album',
+            'created_by' => $otherOwner->id,
+        ]);
+
+        $this->actingAs($this->user)->postJson('/api/v1/uploads', [
+            'filename' => 'test.jpg', 'mime_type' => 'image/jpeg', 'total_size' => 10, 'total_chunks' => 1,
+            'target_album_id' => $otherAlbum->id,
+        ])->assertUnprocessable();
     }
 }

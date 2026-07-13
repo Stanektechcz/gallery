@@ -28,7 +28,7 @@ interface DashboardData {
     for_you: Array<{ fingerprint: string; title: string; subtitle: string; icon: string; accent: string; count: number; items: MediaCard[] }>;
     pinned_views: Array<{ id: number; name: string; icon?: string; view_type: string }>;
     upcoming_trip: { id: number; name: string; start_date: string; end_date: string; status: string; finance?:{planned:number;actual:number}; readiness?:{packing_total:number;packing_packed:number;essential_missing:number}; savings_goal?:{target_amount:number;saved_amount:number;monthly_contribution?:number|null;currency:string;percent:number}|null } | null;
-    partner_hub: { space_id:number; milestones: Array<{ uuid:string; title:string; icon:string; days_until:number; next_anniversary:string }>; shared_moments: Array<{ uuid:string; title:string; happened_on?:string|null; is_favorite:boolean }>; next_event?:{uuid:string;title:string;starts_at:string;place_name?:string|null;trip_id?:number|null}|null };
+    partner_hub: { space_id:number; milestones: Array<{ uuid:string; title:string; icon:string; days_until:number; next_anniversary:string }>; shared_moments: Array<{ uuid:string; title:string; happened_on?:string|null; is_favorite:boolean }>; next_event?:{uuid:string;title:string;starts_at:string;place_name?:string|null;trip_id?:number|null}|null; reflection_prompt?:{id:number;name:string;end_date:string}|null };
 }
 
 interface Props {
@@ -144,9 +144,10 @@ export default function DashboardIndex({ data }: Props) {
                     );
                 })()}
 
-                {(data.upcoming_trip || data.pinned_views?.length > 0 || data.partner_hub?.next_event) && (
+                {(data.upcoming_trip || data.pinned_views?.length > 0 || data.partner_hub?.next_event || data.partner_hub?.reflection_prompt) && (
                     <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                         {data.partner_hub?.next_event && <DashCard icon={CalendarDays} label="Nejbližší společná akce" href={`/calendar/events/${data.partner_hub.next_event.uuid}`} color="#ec4899"><p className="text-base font-semibold text-white">{data.partner_hub.next_event.title}</p><p className="mt-1 text-xs text-[var(--color-text-secondary)]">{new Date(data.partner_hub.next_event.starts_at).toLocaleDateString('cs-CZ', { day:'numeric', month:'long', hour:'2-digit', minute:'2-digit' })}{data.partner_hub.next_event.place_name ? ` · ${data.partner_hub.next_event.place_name}` : ''}</p><p className="mt-3 text-xs text-pink-200">Otevřít společný plán →</p></DashCard>}
+                        {data.partner_hub?.reflection_prompt && <DashCard icon={Heart} label="Dopovědět společný zážitek" href={`/trips/${data.partner_hub.reflection_prompt.id}/plan`} color="#f97316"><p className="text-base font-semibold text-white">{data.partner_hub.reflection_prompt.name}</p><p className="mt-1 text-xs text-[var(--color-text-secondary)]">Výlet skončil {new Date(`${data.partner_hub.reflection_prompt.end_date}T12:00:00`).toLocaleDateString('cs-CZ', { day:'numeric', month:'long' })}. Uložte si, co bylo nejlepší, a tip pro příště.</p><p className="mt-3 text-xs text-orange-200">Přidat společné ohlédnutí →</p></DashCard>}
                         {data.upcoming_trip && (
                             <DashCard icon={Route} label="Co následuje" href={`/trips/${data.upcoming_trip.id}/plan`} color="#14b8a6">
                                 <p className="text-base font-semibold text-white">{data.upcoming_trip.name}</p>

@@ -31,7 +31,7 @@ class InitiateDriveResumableUploadJob implements ShouldQueue
         $path    = $session?->assembled_path;
 
         if (!$path || !file_exists($path)) {
-            $media->update(['status' => 'failed', 'processing_error' => 'Source file missing for Drive upload']);
+            $media->update(['processing_error' => 'Zdroj pro synchronizaci do úložiště nebyl nalezen.']);
             return;
         }
 
@@ -42,8 +42,10 @@ class InitiateDriveResumableUploadJob implements ShouldQueue
             ->first();
 
         if (!$connection) {
-            Log::warning("No active Drive connection for user #{$media->owner_user_id}. Retrying later.");
-            $this->release(300); // retry in 5 min
+            // Lokální originál je plnohodnotné úložiště. Bez připojeného Drivu
+            // nechceme nekonečně hromadit frontu ani znepřístupnit médium.
+            $media->update(['storage_status' => 'local_only']);
+            Log::info("No Drive connection for media #{$media->id}; keeping local copy as authoritative.");
             return;
         }
 

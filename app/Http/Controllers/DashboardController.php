@@ -9,6 +9,7 @@ use App\Models\SavedSearch;
 use App\Services\Media\MemoryDiscoveryService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -145,6 +146,16 @@ class DashboardController extends Controller
                 return ['uuid' => $milestone->uuid, 'title' => $milestone->title, 'icon' => $milestone->icon, 'days_until' => (int) $now->copy()->startOfDay()->diffInDays($next), 'next_anniversary' => $next->toDateString()];
             })->sortBy('days_until')->take(3)->values();
         $sharedMoments = DB::table('shared_memory_moments')->where('gallery_space_id', $space->id)->latest('happened_on')->latest()->limit(3)->get(['uuid', 'title', 'happened_on', 'is_favorite']);
+        $reflectionPrompt = null;
+        if (Schema::hasTable('trip_reflections')) {
+            $reflectionPrompt = DB::table('trips as t')
+                ->leftJoin('trip_reflections as r', 'r.trip_id', '=', 't.id')
+                ->where('t.gallery_space_id', $space->id)
+                ->whereNull('r.id')
+                ->where(fn ($query) => $query->where('t.status', 'completed')->orWhere('t.end_date', '<', now()->toDateString()))
+                ->orderByDesc('t.end_date')
+                ->first(['t.id', 't.name', 't.end_date']);
+        }
 
         return Inertia::render('Dashboard/Index', [
             'data' => [
@@ -175,7 +186,7 @@ class DashboardController extends Controller
                 'for_you'          => $forYou,
                 'pinned_views'     => $pinnedViews,
                 'upcoming_trip'    => $upcomingTrip,
-                'partner_hub'      => ['space_id' => $space->id, 'milestones' => $upcomingMilestones, 'shared_moments' => $sharedMoments, 'next_event' => $nextSharedEvent],
+                'partner_hub'      => ['space_id' => $space->id, 'milestones' => $upcomingMilestones, 'shared_moments' => $sharedMoments, 'next_event' => $nextSharedEvent, 'reflection_prompt' => $reflectionPrompt],
             ],
         ]);
     }

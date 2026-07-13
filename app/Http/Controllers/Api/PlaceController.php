@@ -4,11 +4,14 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Album;
+use App\Models\CalendarEvent;
 use App\Models\MediaItem;
 use App\Models\Place;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 
 class PlaceController extends Controller
 {
@@ -235,6 +238,82 @@ class PlaceController extends Controller
         ]);
 
         return response()->json(DB::table('trip_activities')->find($activityId), 201);
+    }
+
+    /** Keep a saved place connected to a shared wish and its later calendar plan. */
+    public function addToWishlist(Request $request, Place $place): JsonResponse
+    {
+        $space = $request->user()->gallerySpaces()->firstOrFail();
+        $this->authorizePlace($place, $space->id);
+        abort_unless(Schema::hasTable('travel_wishlists') && Schema::hasTable('travel_wishlist_items') && Schema::hasColumn('travel_wishlist_items', 'place_id'), 503, 'Pro přidání místa do přání dokončete migrace aplikace.');
+        $data = $request->validate(['wishlist_uuid' => 'required|uuid', 'priority' => 'nullable|integer|between:1,5']);
+        $wishlist = DB::table('travel_wishlists')->where('uuid', $data['wishlist_uuid'])->where('gallery_space_id', $space->id)->firstOrFail();
+        $existing = DB::table('travel_wishlist_items')->where('wishlist_id', $wishlist->id)->where('place_id', $place->id)->where('status', 'open')->first();
+        if ($existing) return response()->json($existing);
+        $id = DB::table('travel_wishlist_items')->insertGetId([
+            'wishlist_id' => $wishlist->id,
+            'place_id' => $place->id,
+            'created_by' => $request->user()->id,
+            'title' => $place->name,
+            'notes' => $place->next_time_note ?? $place->description,
+            'category' => 'place',
+            'priority' => $data['priority'] ?? max(1, 6 - (int) ($place->personal_rating ?? 3)),
+            'estimated_cost' => null,
+            'currency' => 'CZK',
+            'estimated_minutes' => $place->estimated_visit_minutes,
+            'latitude' => $place->latitude,
+            'longitude' => $place->longitude,
+            'status' => 'open',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        return response()->json(DB::table('travel_wishlist_items')->find($id), 201);
+    }
+
+    /** Planned visits live on a place, while their date and reservation are mirrored into the shared calendar. */
+    public function plans(Request $request, Place $place): JsonResponse
+    {
+        $space = $request->user()->gallerySpaces()->firstOrFail(); $this->authorizePlace($place, $space->id);
+        return response()->json(DB::table('place_plans')->where('place_id', $place->id)->orderByDesc('planned_for')->orderByDesc('id')->get());
+    }
+
+    public function storePlan(Request $request, Place $place): JsonResponse
+    {
+        $space = $request->user()->gallerySpaces()->firstOrFail(); $this->authorizePlace($place, $space->id);
+        $data = $request->validate(['planned_for' => 'required|date', 'reservation_reference' => 'nullable|string|max:255', 'reservation_url' => 'nullable|url|max:2048', 'notes' => 'nullable|string|max:5000']);
+        if (!empty($data['reservation_url']) && !Str::startsWith($data['reservation_url'], 'https://')) abort(422, 'Odkaz na rezervaci musí používat HTTPS.');
+        $event = CalendarEvent::create(['gallery_space_id' => $space->id, 'created_by' => $request->user()->id, 'title' => $place->name, 'description' => $data['notes'] ?? $place->next_time_note ?? $place->description, 'type' => 'outing', 'status' => 'planned', 'starts_at' => $data['planned_for'] . ' 10:00:00', 'ends_at' => $data['planned_for'] . ' 12:00:00', 'timezone' => 'Europe/Prague', 'place_name' => $place->name, 'latitude' => $place->latitude, 'longitude' => $place->longitude, 'color' => '#0ea5e9']);
+        $event->participants()->syncWithoutDetaching([$request->user()->id => ['role' => 'owner', 'response' => 'accepted']]);
+        if (!empty($data['reservation_reference']) || !empty($data['reservation_url'])) $event->attachments()->create(['kind' => 'reservation', 'label' => 'Rezervace · ' . $place->name, 'reference_code' => $data['reservation_reference'] ?? null, 'external_url' => $data['reservation_url'] ?? null]);
+        $id = DB::table('place_plans')->insertGetId($data + ['uuid' => (string) Str::uuid(), 'place_id' => $place->id, 'gallery_space_id' => $space->id, 'created_by' => $request->user()->id, 'calendar_event_id' => $event->id, 'state' => 'planned', 'created_at' => now(), 'updated_at' => now()]);
+        return response()->json(DB::table('place_plans')->find($id), 201);
+    }
+
+    public function updatePlan(Request $request, Place $place, string $uuid): JsonResponse
+    {
+        $space = $request->user()->gallerySpaces()->firstOrFail(); $this->authorizePlace($place, $space->id);
+        $plan = DB::table('place_plans')->where('place_id', $place->id)->where('uuid', $uuid)->where('gallery_space_id', $space->id)->firstOrFail();
+        $data = $request->validate(['state' => 'nullable|in:planned,visited,cancelled', 'visited_on' => 'nullable|date', 'notes' => 'nullable|string|max:5000']);
+        if (($data['state'] ?? null) === 'visited' && empty($data['visited_on'])) $data['visited_on'] = now()->toDateString();
+        DB::table('place_plans')->where('id', $plan->id)->update($data + ['updated_at' => now()]);
+        if ($plan->calendar_event_id && isset($data['state'])) CalendarEvent::where('id', $plan->calendar_event_id)->update(['status' => $data['state'] === 'visited' ? 'completed' : ($data['state'] === 'cancelled' ? 'cancelled' : 'planned'), 'updated_at' => now()]);
+        return response()->json(DB::table('place_plans')->find($plan->id));
+    }
+
+    /** A completed place visit can become one shared gallery moment using its own linked photos. */
+    public function createPlanMemory(Request $request, Place $place, string $uuid): JsonResponse
+    {
+        $space = $request->user()->gallerySpaces()->firstOrFail(); $this->authorizePlace($place, $space->id);
+        $plan = DB::table('place_plans')->where('place_id', $place->id)->where('uuid', $uuid)->where('gallery_space_id', $space->id)->firstOrFail();
+        abort_unless($plan->state === 'visited', 422, 'Vzpomínku lze vytvořit až po označení návštěvy.');
+        $mediaIds = $this->mediaQuery($place, $space->id)->orderBy('taken_at')->limit(30)->pluck('id')->all();
+        abort_if(!$mediaIds, 422, 'K místu zatím nejsou propojené fotografie. Nejdříve je propojte přes GPS nebo přidejte fotografie.');
+        $existing = DB::table('shared_memory_moments')->where('place_plan_id', $plan->id)->first();
+        if (! $existing && $plan->calendar_event_id) $existing = DB::table('shared_memory_moments')->where('calendar_event_id', $plan->calendar_event_id)->first();
+        $row = ['place_plan_id' => $plan->id, 'calendar_event_id' => $plan->calendar_event_id, 'gallery_space_id' => $space->id, 'created_by' => $existing?->created_by ?? $request->user()->id, 'title' => $place->name, 'note' => $plan->notes ?? $place->next_time_note ?? $place->description, 'happened_on' => $plan->visited_on ?? now()->toDateString(), 'media_item_ids' => json_encode($mediaIds), 'is_favorite' => true, 'updated_at' => now()];
+        if ($existing) { DB::table('shared_memory_moments')->where('id', $existing->id)->update($row); $id = $existing->id; }
+        else $id = DB::table('shared_memory_moments')->insertGetId($row + ['uuid' => (string) Str::uuid(), 'created_at' => now()]);
+        return response()->json(DB::table('shared_memory_moments')->find($id), $existing ? 200 : 201);
     }
 
     // ─── Helpers ───────────────────────────────────────────────────────────

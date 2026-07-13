@@ -40,6 +40,6 @@ class SharedMemoryMomentController extends Controller
     {
         $ids = array_values(array_filter(json_decode($item->media_item_ids ?: '[]', true) ?: [], 'is_numeric'));
         $media = MediaItem::whereIn('id', $ids)->with('variants')->get()->map(fn (MediaItem $media) => ['uuid' => $media->uuid, 'title' => $media->display_title ?: $media->original_filename, 'thumbnail_url' => $media->thumbnail_url]);
-        return ['uuid' => $item->uuid, 'gallery_space_id' => $item->gallery_space_id, 'created_by' => $item->created_by, 'title' => $item->title, 'note' => $item->note, 'happened_on' => $item->happened_on, 'is_favorite' => (bool) $item->is_favorite, 'media' => $media, 'created_at' => $item->created_at];
+        return ['uuid' => $item->uuid, 'gallery_space_id' => $item->gallery_space_id, 'created_by' => $item->created_by, 'trip_id' => $item->trip_id ?? null, 'title' => $item->title, 'note' => $item->note, 'happened_on' => $item->happened_on, 'is_favorite' => (bool) $item->is_favorite, 'media' => $media, 'created_at' => $item->created_at];
     }
 }

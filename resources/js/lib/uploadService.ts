@@ -12,7 +12,8 @@ import {
     updateUpload,
 } from "./uploadQueue";
 
-const CHUNK_SIZE = 8 * 1024 * 1024; // 8 MB
+// Bezpečné i pro běžné PHP upload_max_filesize=2M včetně multipart režie.
+const CHUNK_SIZE = 1 * 1024 * 1024; // 1 MiB
 
 export interface UploadProgress {
     id: string;
