@@ -74,7 +74,9 @@ class ProcessVideosCommand extends Command
                 $media->update(['processing_error' => null, 'processing_stage' => 'ready', 'processing_progress' => 100]);
                 $done++;
             } catch (\Throwable $e) {
-                $media->update(['processing_error' => $e->getMessage()]);
+                // Model může obsahovat neuložená nevalidní metadata; pro
+                // zaznamenání chyby proto použijeme čistý nový dotaz.
+                MediaItem::whereKey($media->id)->update(['processing_error' => $e->getMessage()]);
                 $this->newLine();
                 $this->warn("#{$media->id} {$media->original_filename}: {$e->getMessage()}");
                 $failed++;

@@ -61,7 +61,7 @@ class GenerateVideoPosterJob implements ShouldQueue
 
         } catch (\Throwable $e) {
             Log::error("Video processing failed for media #{$media->id}", ['error' => $e->getMessage()]);
-            $media->update(['processing_error' => $e->getMessage()]);
+            MediaItem::whereKey($media->id)->update(['processing_error' => $e->getMessage()]);
         }
     }
 }

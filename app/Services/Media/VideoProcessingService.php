@@ -51,7 +51,10 @@ class VideoProcessingService
             'bitrate'      => (int) ($format['bit_rate'] ?? 0),
             'width'        => (int) ($videoStream['width'] ?? 0),
             'height'       => (int) ($videoStream['height'] ?? 0),
-            'frame_rate'   => $this->parseFrameRate($videoStream['r_frame_rate'] ?? '0/1'),
+            // r_frame_rate může být u HEVC pouze časová základna (např.
+            // 90000/1), nikoliv skutečná frekvence snímků. avg_frame_rate
+            // je správná hodnota pro zobrazení i databázi.
+            'frame_rate'   => $this->parseFrameRate($videoStream['avg_frame_rate'] ?? $videoStream['r_frame_rate'] ?? '0/1'),
             'video_codec'  => $videoStream['codec_name'] ?? null,
             'audio_codec'  => $audioStream['codec_name'] ?? null,
         ];
@@ -195,12 +198,17 @@ class VideoProcessingService
         return 'libx264';
     }
 
-    private function parseFrameRate(string $frStr): float
+    private function parseFrameRate(string $frStr): ?float
     {
         if (str_contains($frStr, '/')) {
             [$num, $den] = explode('/', $frStr);
-            return $den != 0 ? round((int) $num / (int) $den, 3) : 0.0;
+            $value = (float) $den !== 0.0 ? (float) $num / (float) $den : 0.0;
+        } else {
+            $value = (float) $frStr;
         }
-        return (float) $frStr;
+
+        // 1–240 fps pokrývá běžné i slow-motion záznamy. Hodnoty jako
+        // 90 000 jsou transportní časová základna a nesmí se ukládat.
+        return $value > 0 && $value <= 240 ? round($value, 3) : null;
     }
 }
