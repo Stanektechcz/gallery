@@ -294,6 +294,8 @@ class UploadController extends Controller
             $isRaw       = \App\Services\Media\MediaFormatService::isRaw($ext);
             $isVideo     = \App\Services\Media\MediaFormatService::isVideo($ext);
             $mediaType   = ($isVideo || str_starts_with($session->mime_type, 'video/')) ? 'video' : 'photo';
+            $filenameMetadata = (new \App\Services\Media\FilenameMetadataService())
+                ->infer($session->original_filename, $mediaType);
 
             // For RAW files: extract embedded JPEG preview for thumbnailing
             $previewPath = null;
@@ -318,7 +320,10 @@ class UploadController extends Controller
                 'size_bytes'          => $assembledSize,
                 'sha256'              => $session->sha256,
                 'status'              => 'ready',
+                'storage_status'      => $driveFileId ? 'synced' : 'local_only',
                 'uploaded_at'         => now(),
+                'last_verified_at'    => now(),
+                ...$filenameMetadata,
             ]);
 
             // Store original file under public storage so it can be served

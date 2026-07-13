@@ -28,6 +28,8 @@ class VideoProcessingService
      */
     public function extractMetadata(string $path): array
     {
+        if (!$this->isAvailable()) return [];
+
         $cmd = escapeshellcmd($this->ffprobePath)
             . ' -v quiet -print_format json -show_streams -show_format '
             . escapeshellarg($path);
@@ -44,7 +46,7 @@ class VideoProcessingService
 
         $durationSec = (float) ($format['duration'] ?? 0);
 
-        return [
+        $metadata = [
             'duration_ms'  => (int) ($durationSec * 1000),
             'bitrate'      => (int) ($format['bit_rate'] ?? 0),
             'width'        => (int) ($videoStream['width'] ?? 0),
@@ -53,6 +55,16 @@ class VideoProcessingService
             'video_codec'  => $videoStream['codec_name'] ?? null,
             'audio_codec'  => $audioStream['codec_name'] ?? null,
         ];
+
+        $createdAt = $format['tags']['creation_time'] ?? $videoStream['tags']['creation_time'] ?? null;
+        if ($createdAt) {
+            try {
+                $metadata['taken_at'] = \Carbon\Carbon::parse($createdAt);
+            } catch (\Throwable) {
+            }
+        }
+
+        return array_filter($metadata, fn ($value) => $value !== null && $value !== 0 && $value !== 0.0);
     }
 
     /**
@@ -68,11 +80,13 @@ class VideoProcessingService
 
         @mkdir(dirname($tmpPath), 0755, true);
 
+        // Seek before opening the input. This avoids decoding a whole long
+        // recording just to produce its preview.
         $cmd = sprintf(
-            '%s -y -i %s -ss %s -vframes 1 -q:v 2 %s 2>/dev/null',
+            '%s -y -ss %s -i %s -vframes 1 -q:v 2 %s 2>/dev/null',
             escapeshellcmd($this->ffmpegPath),
-            escapeshellarg($sourcePath),
             escapeshellarg((string) $timeSeconds),
+            escapeshellarg($sourcePath),
             escapeshellarg($tmpPath)
         );
 
@@ -87,7 +101,7 @@ class VideoProcessingService
         Storage::disk('public')->put($path, file_get_contents($tmpPath));
         @unlink($tmpPath);
 
-        return MediaVariant::updateOrCreate(
+        $poster = MediaVariant::updateOrCreate(
             ['media_item_id' => $mediaItem->id, 'type' => 'video_poster'],
             [
                 'disk'       => 'public',
@@ -96,6 +110,23 @@ class VideoProcessingService
                 'size_bytes' => Storage::disk('public')->size($path),
             ]
         );
+
+        // Most gallery grids ask only for the canonical thumbnail variant.
+        // Reuse the same tiny JPEG rather than ever loading a video as an img.
+        MediaVariant::updateOrCreate(
+            ['media_item_id' => $mediaItem->id, 'type' => 'thumbnail'],
+            [
+                'disk'       => 'public',
+                'path'       => $path,
+                'format'     => 'jpg',
+                'mime_type'  => 'image/jpeg',
+                'size_bytes' => $poster->size_bytes,
+                'width'      => $poster->width,
+                'height'     => $poster->height,
+            ]
+        );
+
+        return $poster;
     }
 
     /**

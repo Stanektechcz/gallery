@@ -40,11 +40,18 @@ class GenerateVideoPosterJob implements ShouldQueue
             // Extract video metadata
             $videoMeta = $videoService->extractMetadata($path);
             if (!empty($videoMeta)) {
+                if (!empty($videoMeta['taken_at']) && !$media->display_title) {
+                    $date = \Carbon\Carbon::parse($videoMeta['taken_at'])->locale('cs')->isoFormat('D. M. YYYY');
+                    $videoMeta['display_title'] = "Video z {$date}";
+                }
                 $media->update(array_filter($videoMeta));
             }
 
             // Generate poster
-            $videoService->generatePoster($media, $path);
+            $poster = $videoService->generatePoster($media, $path);
+            if (!$poster && !$videoService->isAvailable()) {
+                $media->update(['processing_error' => 'Video je uložené, ale server nemá dostupné FFmpeg/FFprobe pro náhled a technické údaje.']);
+            }
 
             // Generate compatibility variant
             GenerateVideoCompatibilityVariantJob::dispatch($media->id)->onQueue('media');

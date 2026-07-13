@@ -60,6 +60,10 @@ interface MediaItem {
     width?: number;
     height?: number;
     duration_ms?: number;
+    bitrate?: number;
+    frame_rate?: number;
+    video_codec?: string;
+    audio_codec?: string;
     taken_at?: string;
     taken_at_timezone?: string;
     latitude?: number;
@@ -81,6 +85,8 @@ interface MediaItem {
     is_hidden: boolean;
     trashed_at?: string;
     status: string;
+    storage_status?: string;
+    processing_error?: string;
     drive_file_id?: string;
     // Extended format
     is_panorama?: boolean;
@@ -114,6 +120,16 @@ function formatBytes(b: number): string {
 function formatDate(d?: string): string {
     if (!d) return '—';
     return new Date(d).toLocaleString('cs-CZ', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function formatDuration(milliseconds?: number): string {
+    if (!milliseconds) return '—';
+    const seconds = Math.floor(milliseconds / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(minutes / 60);
+    return hours > 0
+        ? `${hours}:${String(minutes % 60).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`
+        : `${minutes}:${String(seconds % 60).padStart(2, '0')}`;
 }
 
 const REACTIONS = [
@@ -806,7 +822,10 @@ export default function MediaShow({ media, breadcrumb, prev, next }: Props) {
                                     <div className="flex justify-between"><span className="text-[var(--color-text-secondary)]">Název</span><span className="text-white truncate ml-2 max-w-36">{item.original_filename}</span></div>
                                     <div className="flex justify-between"><span className="text-[var(--color-text-secondary)]">Velikost</span><span className="text-white">{formatBytes(item.size_bytes)}</span></div>
                                     {item.width && item.height && <div className="flex justify-between"><span className="text-[var(--color-text-secondary)]">Rozlišení</span><span className="text-white">{item.width} × {item.height}</span></div>}
-                                    {item.duration_ms && <div className="flex justify-between"><span className="text-[var(--color-text-secondary)]">Délka</span><span className="text-white">{Math.round(item.duration_ms / 1000)}s</span></div>}
+                                    {item.duration_ms && <div className="flex justify-between"><span className="text-[var(--color-text-secondary)]">Délka</span><span className="text-white">{formatDuration(item.duration_ms)}</span></div>}
+                                    {item.media_type === 'video' && item.video_codec && <div className="flex justify-between"><span className="text-[var(--color-text-secondary)]">Video</span><span className="text-white uppercase">{item.video_codec}{item.frame_rate ? ` · ${Math.round(item.frame_rate)} fps` : ''}</span></div>}
+                                    {item.media_type === 'video' && item.audio_codec && <div className="flex justify-between"><span className="text-[var(--color-text-secondary)]">Zvuk</span><span className="text-white uppercase">{item.audio_codec}</span></div>}
+                                    {item.media_type === 'video' && item.bitrate && <div className="flex justify-between"><span className="text-[var(--color-text-secondary)]">Datový tok</span><span className="text-white">{Math.round(item.bitrate / 1000)} kb/s</span></div>}
                                     {/* Format badges */}
                                     <div className="flex flex-wrap gap-1 pt-0.5">
                                         {item.is_raw && <span className="bg-orange-500/20 text-orange-300 text-[9px] px-1.5 py-0.5 rounded-full font-medium uppercase">{item.raw_format ?? 'RAW'}</span>}
@@ -901,8 +920,16 @@ export default function MediaShow({ media, breadcrumb, prev, next }: Props) {
                                                 Otevřít na Drive ↗
                                             </a>
                                         </>
+                                    ) : item.storage_status === 'local_only' || item.storage_status === 'ready' ? (
+                                        <>
+                                            <div className="flex justify-between">
+                                                <span className="text-[var(--color-text-secondary)]">Stav</span>
+                                                <span className="text-green-400">✓ Bezpečně uloženo lokálně</span>
+                                            </div>
+                                            <p className="text-[10px] leading-relaxed text-[var(--color-text-secondary)]">Google Drive není připojený; originál zůstává k dispozici v galerii.</p>
+                                        </>
                                     ) : (
-                                        <span className="text-[var(--color-text-secondary)]">Nesynchronizováno</span>
+                                        <span className="text-[var(--color-text-secondary)]">Čeká na synchronizaci</span>
                                     )}
                                 </div>
                             </section>
