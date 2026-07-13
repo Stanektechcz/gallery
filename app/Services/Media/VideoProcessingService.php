@@ -77,7 +77,9 @@ class VideoProcessingService
     {
         if (!$this->isAvailable()) return null;
 
-        $dir      = "variants/{$mediaItem->uuid}";
+        // Stejný adresář jako originál. Má ověřená oprávnění z uploadu a
+        // obsah médií jde takto smazat i archivovat jako jeden celek.
+        $dir      = "media/{$mediaItem->uuid}";
         $filename = 'video_poster.jpg';
         $tmpPath  = storage_path("app/temp/poster_{$mediaItem->uuid}.jpg");
 
@@ -101,8 +103,15 @@ class VideoProcessingService
         }
 
         $path = "{$dir}/{$filename}";
-        Storage::disk('public')->put($path, file_get_contents($tmpPath));
+        $stream = fopen($tmpPath, 'rb');
+        $stored = $stream && Storage::disk('public')->put($path, $stream, 'public');
+        if (is_resource($stream)) fclose($stream);
         @unlink($tmpPath);
+
+        if (!$stored) {
+            Log::error("Video poster could not be stored for media #{$mediaItem->id}", ['path' => $path]);
+            return null;
+        }
 
         $poster = MediaVariant::updateOrCreate(
             ['media_item_id' => $mediaItem->id, 'type' => 'video_poster'],
@@ -139,7 +148,7 @@ class VideoProcessingService
     {
         if (!$this->isAvailable()) return null;
 
-        $dir     = "variants/{$mediaItem->uuid}";
+        $dir     = "media/{$mediaItem->uuid}";
         $tmpPath = storage_path("app/temp/compat_{$mediaItem->uuid}.mp4");
 
         @mkdir(dirname($tmpPath), 0755, true);
@@ -163,8 +172,15 @@ class VideoProcessingService
         }
 
         $path = "{$dir}/video_compat.mp4";
-        Storage::disk('public')->put($path, file_get_contents($tmpPath));
+        $stream = fopen($tmpPath, 'rb');
+        $stored = $stream && Storage::disk('public')->put($path, $stream, 'public');
+        if (is_resource($stream)) fclose($stream);
         @unlink($tmpPath);
+
+        if (!$stored) {
+            Log::error("Compatible video could not be stored for media #{$mediaItem->id}", ['path' => $path]);
+            return null;
+        }
 
         return MediaVariant::updateOrCreate(
             ['media_item_id' => $mediaItem->id, 'type' => 'video_compat'],
