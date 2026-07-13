@@ -134,6 +134,8 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
     Route::prefix('relationship-milestones')->name('api.relationship-milestones.')->group(function () {
         Route::get('/', [App\Http\Controllers\Api\RelationshipMilestoneController::class, 'index'])->name('index');
         Route::get('/upcoming', [App\Http\Controllers\Api\RelationshipMilestoneController::class, 'upcoming'])->name('upcoming');
+        Route::get('/relationship-anniversary', [App\Http\Controllers\Api\RelationshipAnniversaryController::class, 'show'])->name('relationship-anniversary.show');
+        Route::put('/relationship-anniversary', [App\Http\Controllers\Api\RelationshipAnniversaryController::class, 'update'])->name('relationship-anniversary.update');
         Route::post('/', [App\Http\Controllers\Api\RelationshipMilestoneController::class, 'store'])->name('store');
         Route::patch('/{uuid}', [App\Http\Controllers\Api\RelationshipMilestoneController::class, 'update'])->name('update');
         Route::delete('/{uuid}', [App\Http\Controllers\Api\RelationshipMilestoneController::class, 'destroy'])->name('destroy');

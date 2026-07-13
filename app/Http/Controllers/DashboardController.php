@@ -146,6 +146,7 @@ class DashboardController extends Controller
                 return ['uuid' => $milestone->uuid, 'title' => $milestone->title, 'icon' => $milestone->icon, 'days_until' => (int) $now->copy()->startOfDay()->diffInDays($next), 'next_anniversary' => $next->toDateString()];
             })->sortBy('days_until')->take(3)->values();
         $sharedMoments = DB::table('shared_memory_moments')->where('gallery_space_id', $space->id)->latest('happened_on')->latest()->limit(3)->get(['uuid', 'title', 'happened_on', 'is_favorite']);
+        $relationshipAnniversary = (array) (($space->settings ?? [])['relationship_anniversary'] ?? []);
         $reflectionPrompt = null;
         if (Schema::hasTable('trip_reflections')) {
             $reflectionPrompt = DB::table('trips as t')
@@ -186,7 +187,7 @@ class DashboardController extends Controller
                 'for_you'          => $forYou,
                 'pinned_views'     => $pinnedViews,
                 'upcoming_trip'    => $upcomingTrip,
-                'partner_hub'      => ['space_id' => $space->id, 'milestones' => $upcomingMilestones, 'shared_moments' => $sharedMoments, 'next_event' => $nextSharedEvent, 'reflection_prompt' => $reflectionPrompt],
+                'partner_hub'      => ['space_id' => $space->id, 'relationship_started_on' => $relationshipAnniversary['started_on'] ?? null, 'milestones' => $upcomingMilestones, 'shared_moments' => $sharedMoments, 'next_event' => $nextSharedEvent, 'reflection_prompt' => $reflectionPrompt],
             ],
         ]);
     }

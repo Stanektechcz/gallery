@@ -174,6 +174,32 @@ class CalendarPlanningTest extends TestCase
         $this->getJson('/api/v1/calendar/weekly-overview')->assertOk()->assertJsonPath('on_this_day.0.id', $mediaId);
     }
 
+    public function test_completed_event_memory_creates_and_populates_the_linked_gallery_album(): void
+    {
+        $event = $this->postJson('/api/v1/calendar/events', [
+            'gallery_space_id' => $this->space->id,
+            'title' => 'Shared experience',
+            'starts_at' => now()->subDay()->toDateTimeString(),
+            'place_name' => 'Brno',
+        ])->assertCreated()->json();
+        $mediaId = DB::table('media_items')->insertGetId([
+            'uuid' => (string) Str::uuid(), 'gallery_space_id' => $this->space->id,
+            'owner_user_id' => $this->owner->id, 'uploaded_by' => $this->owner->id,
+            'original_filename' => 'experience.jpg', 'safe_filename' => 'experience.jpg',
+            'extension' => 'jpg', 'mime_type' => 'image/jpeg', 'media_type' => 'photo',
+            'size_bytes' => 42, 'status' => 'ready', 'storage_status' => 'ready',
+            'taken_at' => now()->subDay(), 'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $memory = $this->postJson("/api/v1/calendar/events/{$event['uuid']}/shared-memory", ['media_ids' => [$mediaId]])
+            ->assertCreated()->assertJsonPath('album.title', 'Shared experience')->json();
+
+        $albumId = DB::table('albums')->where('uuid', $memory['album']['uuid'])->value('id');
+        $this->assertDatabaseHas('calendar_events', ['id' => $event['id'], 'album_id' => $albumId, 'status' => 'completed']);
+        $this->assertDatabaseHas('albums', ['id' => $albumId, 'event_mode' => true, 'media_count' => 1, 'location_name' => 'Brno']);
+        $this->assertDatabaseHas('album_media', ['album_id' => $albumId, 'media_item_id' => $mediaId]);
+    }
+
     public function test_calendar_event_can_be_promoted_to_single_trip_workspace(): void
     {
         $event = $this->postJson('/api/v1/calendar/events', ['gallery_space_id' => $this->space->id, 'title' => 'Víkend v Liberci', 'starts_at' => now()->addMonth()->toDateTimeString(), 'ends_at' => now()->addMonth()->addDays(2)->toDateTimeString(), 'place_name' => 'Liberec'])->assertCreated()->json();

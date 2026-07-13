@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\CalendarEvent;
+use App\Models\Album;
 use App\Models\EventAttachment;
 use App\Models\EventReminder;
 use App\Models\EventTask;
@@ -201,6 +202,7 @@ class CalendarPlanningController extends Controller
         $media = MediaItem::where('gallery_space_id', $event->gallery_space_id)->whereNull('trashed_at')->whereIn('id', $data['media_ids'])->get();
         if ($media->count() !== count(array_unique($data['media_ids']))) abort(422, 'Některá vybraná média nejsou dostupná.');
         foreach ($media as $item) $event->attachments()->firstOrCreate(['media_item_id' => $item->id], ['kind' => 'memory']);
+        if ($event->album_id) $this->syncExperienceAlbum($event, $request->user()->id, $media);
         return response()->json($event->attachments()->with('media:id,uuid,display_title,original_filename')->get());
     }
 
@@ -219,8 +221,11 @@ class CalendarPlanningController extends Controller
         if (! $existing && $event->trip_id) $existing = DB::table('shared_memory_moments')->where('trip_id', $event->trip_id)->first();
         if ($existing) { DB::table('shared_memory_moments')->where('id', $existing->id)->update($row); $memoryId = $existing->id; }
         else $memoryId = DB::table('shared_memory_moments')->insertGetId($row + ['uuid' => (string) Str::uuid(), 'created_at' => now()]);
+        $album = $this->syncExperienceAlbum($event, $request->user()->id, $media);
         $event->update(['status' => 'completed']);
-        return response()->json(DB::table('shared_memory_moments')->find($memoryId), 201);
+        $memory = (array) DB::table('shared_memory_moments')->find($memoryId);
+        $memory['album'] = ['uuid' => $album->uuid, 'title' => $album->title];
+        return response()->json($memory, 201);
     }
 
     /** Promote an ordinary shared calendar event into a trip workspace exactly once. */
@@ -486,6 +491,66 @@ class CalendarPlanningController extends Controller
         $payload['departure_at'] = $event->departure_buffer_minutes ? $event->starts_at->copy()->subMinutes($event->departure_buffer_minutes)->toIso8601String() : null;
         $payload['my_response'] = $viewer ? $event->participants->firstWhere('id', $viewer->id)?->pivot?->response : null;
         return $payload;
+    }
+
+    /**
+     * A completed event, its selected media and its memory must be one shared
+     * experience rather than three disconnected records. The album is created
+     * only once and later media selections are safely merged into it.
+     */
+    private function syncExperienceAlbum(CalendarEvent $event, int $actorId, \Illuminate\Support\Collection $media): Album
+    {
+        $album = $event->album_id
+            ? Album::where('id', $event->album_id)->where('gallery_space_id', $event->gallery_space_id)->first()
+            : null;
+
+        if (!$album) {
+            $album = Album::create([
+                'gallery_space_id' => $event->gallery_space_id,
+                'title' => $event->title,
+                'slug' => Str::slug($event->title),
+                'description' => $event->description,
+                'event_date_start' => $event->starts_at->toDateString(),
+                'event_date_end' => ($event->ends_at ?? $event->starts_at)->toDateString(),
+                'event_mode' => true,
+                'event_start_at' => $event->starts_at,
+                'event_end_at' => $event->ends_at,
+                'event_place_name' => $event->place_name,
+                'event_latitude' => $event->latitude,
+                'event_longitude' => $event->longitude,
+                'location_name' => $event->place_name,
+                'latitude' => $event->latitude,
+                'longitude' => $event->longitude,
+                'visibility' => 'shared',
+                'sort_mode' => 'date_taken',
+                'sort_direction' => 'asc',
+                'created_by' => $actorId,
+                'updated_by' => $actorId,
+                'sync_status' => 'pending',
+            ]);
+            $album->rebuildPaths();
+            $event->update(['album_id' => $album->id]);
+        }
+
+        if ($media->isNotEmpty()) {
+            $pivot = $media->values()->mapWithKeys(fn (MediaItem $item, int $position) => [$item->id => [
+                'sort_order' => $position,
+                'added_at' => now(),
+                'added_by' => $actorId,
+            ]])->all();
+            $album->media()->syncWithoutDetaching($pivot);
+            MediaItem::whereIn('id', $media->pluck('id'))->whereNull('primary_album_id')->update(['primary_album_id' => $album->id]);
+        }
+
+        $albumMedia = $album->media()->get(['media_items.id', 'media_items.size_bytes']);
+        $album->update([
+            'cover_media_id' => $album->cover_media_id ?: $albumMedia->first()?->id,
+            'media_count' => $albumMedia->count(),
+            'total_size_bytes' => (int) $albumMedia->sum('size_bytes'),
+            'updated_by' => $actorId,
+        ]);
+
+        return $album->fresh();
     }
 
     private function occurrences(CalendarEvent $event, Carbon $from, Carbon $to): array
