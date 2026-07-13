@@ -142,6 +142,38 @@ class VideoProcessingService
     }
 
     /**
+     * A visible fallback when FFmpeg is unavailable or a damaged video cannot
+     * yield a frame. It is intentionally small and is later replaced by a
+     * real poster without changing any frontend URLs.
+     */
+    public function generateFallbackPoster(MediaItem $mediaItem): MediaVariant
+    {
+        $path = "media/{$mediaItem->uuid}/video_placeholder.svg";
+        $title = htmlspecialchars($mediaItem->display_title ?: pathinfo($mediaItem->original_filename, PATHINFO_FILENAME), ENT_XML1 | ENT_QUOTES, 'UTF-8');
+        $svg = <<<SVG
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="450" viewBox="0 0 800 450">
+  <rect width="800" height="450" fill="#171725"/>
+  <rect x="330" y="155" width="140" height="140" rx="70" fill="#7c3aed"/>
+  <path d="M388 197v56l48-28z" fill="white"/>
+  <text x="400" y="345" text-anchor="middle" fill="#e9d5ff" font-family="Arial, sans-serif" font-size="20">{$title}</text>
+</svg>
+SVG;
+
+        if (!Storage::disk('public')->put($path, $svg, 'public')) {
+            throw new \RuntimeException("Nepodařilo se uložit náhradní náhled videa: {$path}");
+        }
+
+        $values = [
+            'disk' => 'public', 'path' => $path, 'format' => 'svg',
+            'mime_type' => 'image/svg+xml', 'size_bytes' => strlen($svg),
+            'width' => 800, 'height' => 450,
+        ];
+        $mediaItem->variants()->updateOrCreate(['type' => 'video_poster'], $values);
+
+        return $mediaItem->variants()->updateOrCreate(['type' => 'thumbnail'], $values);
+    }
+
+    /**
      * Generate H.264 + AAC web-compatible variant.
      */
     public function generateCompatibilityVariant(MediaItem $mediaItem, string $sourcePath): ?MediaVariant

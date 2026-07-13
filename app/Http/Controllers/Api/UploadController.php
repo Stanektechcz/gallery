@@ -29,7 +29,10 @@ class UploadController extends Controller
      */
     public function checkDuplicate(Request $request): JsonResponse
     {
-        $v = $request->validate(['sha256' => 'required|string|size:64']);
+        $v = $request->validate([
+            'sha256' => 'required|string|size:64',
+            'target_album_id' => 'nullable|integer|exists:albums,id',
+        ]);
 
         $user  = $request->user();
         $space = $user->gallerySpaces()->firstOrFail();
@@ -37,13 +40,35 @@ class UploadController extends Controller
         $existing = MediaItem::where('gallery_space_id', $space->id)
             ->where('sha256', $v['sha256'])
             ->whereNull('trashed_at')
-            ->first(['uuid', 'original_filename', 'taken_at']);
+            ->first();
 
         if ($existing) {
+            $addedToAlbum = false;
+            if (!empty($v['target_album_id'])) {
+                $album = $this->albumForSpace((int) $v['target_album_id'], $space->id);
+
+                // Duplicitní soubor přeskočíme pouze tehdy, když jej uživatel
+                // v daném albu opravdu uvidí. Samotné primary_album_id nebo
+                // starý pivot nestačí: skrytý/selhaný soubor by jinak blokoval
+                // nový upload a v albu by stále nic nebylo.
+                if (!$this->isVisibleInAlbum($existing, $album)) {
+                    if ($this->isReusableInAlbum($existing)) {
+                        $addedToAlbum = $this->attachToAlbum($existing, $album, $user->id);
+                    } else {
+                        return response()->json([
+                            'exists' => false,
+                            'replacement_required' => true,
+                            'reason' => 'Existující duplicitní soubor není v cílovém albu zobrazitelný; nahrává se nová funkční kopie.',
+                        ]);
+                    }
+                }
+            }
+
             return response()->json([
                 'exists'     => true,
                 'media_uuid' => $existing->uuid,
                 'filename'   => $existing->original_filename,
+                'added_to_album' => $addedToAlbum,
             ]);
         }
 
@@ -352,34 +377,29 @@ class UploadController extends Controller
             // s explicitním obsahem alba (příběh, událost alba, sdílení). Vždy
             // proto založíme i členství v album_media a aktualizujeme souhrny.
             if ($session->target_album_id) {
-                $album = Album::whereKey($session->target_album_id)
-                    ->where('gallery_space_id', $session->gallery_space_id)
-                    ->lockForUpdate()
-                    ->first();
-
-                if ($album) {
-                    DB::table('album_media')->insertOrIgnore([
-                        'album_id' => $album->id,
-                        'media_item_id' => $media->id,
-                        'sort_order' => (int) (DB::table('album_media')->where('album_id', $album->id)->max('sort_order') ?? -1) + 1,
-                        'is_cover' => false,
-                        'added_at' => now(),
-                        'added_by' => $session->user_id,
-                    ]);
-
-                    $album->update([
-                        'media_count' => DB::table('album_media')->where('album_id', $album->id)->count(),
-                        'total_size_bytes' => MediaItem::where('primary_album_id', $album->id)->sum('size_bytes'),
-                    ]);
-                }
+                $this->attachToAlbum($media, $this->albumForSpace($session->target_album_id, $session->gallery_space_id), $session->user_id);
             }
 
-            // Generate thumbnail synchronously using GD/Imagick (no queue needed).
-            // U videa neukazujeme originál jako obrázek; poster vytvoří FFmpeg
-            // na pozadí, mezitím rozhraní bezpečně zobrazí ikonu videa.
+            // Náhled musí být k dispozici hned po odpovědi nahrání; na frontu
+            // zůstává až náročnější kompatibilní MP4 a další metadata.
             if ($media->media_type === 'photo') {
                 $thumbSource = $previewPath ?? $destPath;
                 $this->generateThumbnail($media, $thumbSource);
+            } else {
+                try {
+                    $videoService = new \App\Services\Media\VideoProcessingService();
+                    $videoMetadata = $videoService->extractMetadata($destPath);
+                    if ($videoMetadata) $media->update($videoMetadata);
+                    $poster = $videoService->generatePoster($media, $destPath);
+                    if (!$poster) $videoService->generateFallbackPoster($media);
+                } catch (\Throwable $videoException) {
+                    Log::warning('Immediate video preview failed; creating fallback', ['media_id' => $media->id, 'error' => $videoException->getMessage()]);
+                    try {
+                        (new \App\Services\Media\VideoProcessingService())->generateFallbackPoster($media);
+                    } catch (\Throwable $fallbackException) {
+                        Log::error('Video fallback preview failed', ['media_id' => $media->id, 'error' => $fallbackException->getMessage()]);
+                    }
+                }
             }
             if ($previewPath) @unlink($previewPath);
 
@@ -645,5 +665,58 @@ class UploadController extends Controller
         $session->delete();
 
         return response()->json(['status' => 'cancelled']);
+    }
+
+    private function albumForSpace(int $albumId, int $spaceId): Album
+    {
+        return Album::whereKey($albumId)
+            ->where('gallery_space_id', $spaceId)
+            ->whereNull('deleted_at')
+            ->firstOrFail();
+    }
+
+    /** Returns whether a new membership was created. */
+    private function attachToAlbum(MediaItem $media, Album $album, int $userId): bool
+    {
+        return DB::transaction(function () use ($media, $album, $userId): bool {
+            $alreadyAttached = DB::table('album_media')
+                ->where('album_id', $album->id)
+                ->where('media_item_id', $media->id)
+                ->exists();
+
+            if (!$alreadyAttached) {
+                $sortOrder = (int) (DB::table('album_media')->where('album_id', $album->id)->max('sort_order') ?? -1) + 1;
+                DB::table('album_media')->insert([
+                    'album_id' => $album->id, 'media_item_id' => $media->id,
+                    'sort_order' => $sortOrder, 'is_cover' => false,
+                    'added_at' => now(), 'added_by' => $userId,
+                ]);
+            }
+
+            $album->update([
+                'media_count' => DB::table('album_media')->where('album_id', $album->id)->count(),
+                'total_size_bytes' => MediaItem::where('primary_album_id', $album->id)->sum('size_bytes'),
+            ]);
+
+            return !$alreadyAttached;
+        });
+    }
+
+    private function isReusableInAlbum(MediaItem $media): bool
+    {
+        return in_array($media->status, ['ready', 'received'], true)
+            && !$media->is_hidden
+            && !$media->trashed_at;
+    }
+
+    private function isVisibleInAlbum(MediaItem $media, Album $album): bool
+    {
+        if (!$this->isReusableInAlbum($media)) return false;
+
+        return $media->primary_album_id === $album->id
+            || DB::table('album_media')
+                ->where('album_id', $album->id)
+                ->where('media_item_id', $media->id)
+                ->exists();
     }
 }

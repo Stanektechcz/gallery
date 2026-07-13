@@ -225,4 +225,71 @@ class UploadSessionTest extends TestCase
             'target_album_id' => $otherAlbum->id,
         ])->assertUnprocessable();
     }
+
+    /** @test */
+    public function test_duplicate_is_added_to_the_requested_album_instead_of_disappearing_from_upload_queue(): void
+    {
+        $album = Album::create([
+            'gallery_space_id' => $this->space->id, 'title' => 'Nové album', 'slug' => 'nove-album', 'created_by' => $this->user->id,
+        ]);
+        $media = MediaItem::create([
+            'gallery_space_id' => $this->space->id, 'owner_user_id' => $this->user->id, 'uploaded_by' => $this->user->id,
+            'original_filename' => 'stejna-fotka.jpg', 'safe_filename' => 'stejna-fotka.jpg', 'extension' => 'jpg',
+            'mime_type' => 'image/jpeg', 'media_type' => 'photo', 'size_bytes' => 42,
+            'sha256' => str_repeat('a', 64), 'status' => 'ready', 'storage_status' => 'local_only', 'uploaded_at' => now(),
+        ]);
+
+        $this->actingAs($this->user)->postJson('/api/v1/uploads/check-duplicate', [
+            'sha256' => str_repeat('a', 64), 'target_album_id' => $album->id,
+        ])->assertOk()
+            ->assertJsonPath('exists', true)
+            ->assertJsonPath('media_uuid', $media->uuid)
+            ->assertJsonPath('added_to_album', true);
+
+        $this->assertDatabaseHas('album_media', ['album_id' => $album->id, 'media_item_id' => $media->id]);
+        $this->assertSame(1, $album->fresh()->media_count);
+    }
+
+    /** @test */
+    public function test_video_upload_gets_an_immediate_fallback_thumbnail_when_ffmpeg_is_not_available(): void
+    {
+        $contents = 'minimal-video-payload';
+        $init = $this->actingAs($this->user)->postJson('/api/v1/uploads', [
+            'filename' => '20260627.mp4', 'mime_type' => 'video/mp4',
+            'total_size' => strlen($contents), 'total_chunks' => 1,
+        ])->assertCreated();
+        $uuid = $init->json('uuid');
+        $this->actingAs($this->user)->putJson("/api/v1/uploads/{$uuid}/chunks/0", [
+            'chunk' => UploadedFile::fake()->createWithContent('chunk_0', $contents),
+        ])->assertOk();
+
+        $mediaId = $this->actingAs($this->user)->postJson("/api/v1/uploads/{$uuid}/complete")
+            ->assertOk()->json('media_id');
+        $media = MediaItem::findOrFail($mediaId);
+
+        $this->assertSame('2026-06-27', $media->taken_at?->toDateString());
+        $this->assertSame('Video z 27. 6. 2026', $media->display_title);
+        $this->assertDatabaseHas('media_variants', ['media_item_id' => $media->id, 'type' => 'thumbnail', 'mime_type' => 'image/svg+xml']);
+    }
+
+    /** @test */
+    public function test_duplicate_is_skipped_only_when_it_is_already_visible_in_the_target_album(): void
+    {
+        $album = Album::create(['gallery_space_id' => $this->space->id, 'title' => 'Viditelné', 'slug' => 'viditelne', 'created_by' => $this->user->id]);
+        $media = MediaItem::create([
+            'gallery_space_id' => $this->space->id, 'owner_user_id' => $this->user->id, 'uploaded_by' => $this->user->id,
+            'primary_album_id' => $album->id, 'original_filename' => 'uz-v-albu.jpg', 'safe_filename' => 'uz-v-albu.jpg',
+            'extension' => 'jpg', 'mime_type' => 'image/jpeg', 'media_type' => 'photo', 'size_bytes' => 1,
+            'sha256' => str_repeat('b', 64), 'status' => 'ready', 'storage_status' => 'local_only', 'uploaded_at' => now(),
+        ]);
+
+        $this->actingAs($this->user)->postJson('/api/v1/uploads/check-duplicate', [
+            'sha256' => str_repeat('b', 64), 'target_album_id' => $album->id,
+        ])->assertOk()->assertJsonPath('exists', true)->assertJsonPath('added_to_album', false);
+
+        $media->update(['status' => 'failed']);
+        $this->actingAs($this->user)->postJson('/api/v1/uploads/check-duplicate', [
+            'sha256' => str_repeat('b', 64), 'target_album_id' => $album->id,
+        ])->assertOk()->assertJsonPath('exists', false)->assertJsonPath('replacement_required', true);
+    }
 }

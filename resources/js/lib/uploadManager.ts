@@ -257,7 +257,7 @@ class UploadManagerClass extends EventTarget {
             if (item.sha256) {
                 const dupRes = await axios.post(
                     "/api/v1/uploads/check-duplicate",
-                    { sha256: item.sha256 },
+                    { sha256: item.sha256, target_album_id: item.albumId ?? null },
                     { signal: ctrl.signal },
                 );
                 if (dupRes.data.exists) {

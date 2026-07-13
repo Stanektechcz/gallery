@@ -43,12 +43,12 @@ export default function UploadZone({ albumId, onUploadComplete }: Props) {
             const uploads = (event as CustomEvent).detail.uploads as Array<{ id: string; albumId: number | null; status: string }>;
             const completedHere = uploads.some(upload =>
                 upload.albumId === albumId
-                && upload.status === 'done'
+                && ['done', 'duplicate'].includes(upload.status)
                 && !reported.current.has(upload.id),
             );
 
             uploads
-                .filter(upload => upload.albumId === albumId && upload.status === 'done')
+                .filter(upload => upload.albumId === albumId && ['done', 'duplicate'].includes(upload.status))
                 .forEach(upload => reported.current.add(upload.id));
 
             if (completedHere) onUploadComplete();
