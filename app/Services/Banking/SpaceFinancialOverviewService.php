@@ -65,6 +65,20 @@ class SpaceFinancialOverviewService
             ->get(['link.id', 'link.bank_transaction_id', 'link.trip_id', 'link.status', 'link.confidence', 'link.allocated_amount',
                 'link.category', 'link.timing', 'trip.name as trip_name', 'trip.start_date', 'trip.end_date', 'trip.currency as trip_currency']);
         $linksByTransaction = $links->groupBy('bank_transaction_id');
+        $review = $filters['review'] ?? 'all';
+        if ($review !== 'all') {
+            $linkedIds = $links->where('status', 'confirmed')->pluck('bank_transaction_id')->unique();
+            $suggestedIds = $links->where('status', 'suggested')->pluck('bank_transaction_id')->unique();
+            $rows = $rows->filter(fn (BankTransaction $transaction) => match ($review) {
+                'linked' => $linkedIds->contains($transaction->id),
+                'suggested' => $suggestedIds->contains($transaction->id),
+                'unlinked' => ! $linksByTransaction->has($transaction->id) && $transaction->trip_action !== 'exclude',
+                default => true,
+            })->values();
+            $visibleIds = $rows->pluck('id');
+            $links = $links->whereIn('bank_transaction_id', $visibleIds)->values();
+            $linksByTransaction = $links->groupBy('bank_transaction_id');
+        }
 
         $page = max(1, (int) ($filters['page'] ?? 1));
         $perPage = min(100, max(10, (int) ($filters['per_page'] ?? 40)));
@@ -78,6 +92,7 @@ class SpaceFinancialOverviewService
             'summary' => $this->summary($rows, $links),
             'categories' => $this->categories($rows),
             'cashflow' => $this->cashflow($rows),
+            'daily_cashflow' => $this->dailyCashflow($rows),
             'top_merchants' => $this->merchants($rows),
             'balance_series' => $this->balanceSeries($accounts, $from, $to, $account?->id),
             'trips' => $this->tripSummaries($rows, $links),
@@ -101,7 +116,7 @@ class SpaceFinancialOverviewService
     private function unavailable(): array
     {
         return ['available' => false, 'period' => null, 'accounts' => [], 'summary' => ['currencies' => [], 'transaction_count' => 0,
-            'linked_count' => 0, 'suggested_count' => 0, 'unlinked_count' => 0], 'categories' => [], 'cashflow' => [],
+            'linked_count' => 0, 'suggested_count' => 0, 'unlinked_count' => 0], 'categories' => [], 'cashflow' => [], 'daily_cashflow' => [],
             'top_merchants' => [], 'balance_series' => [], 'trips' => [], 'events' => [], 'trip_options' => [],
             'transactions' => ['data' => [], 'meta' => ['current_page' => 1, 'per_page' => 40, 'total' => 0, 'last_page' => 1]]];
     }
@@ -165,6 +180,29 @@ class SpaceFinancialOverviewService
                     'refunds' => round($items->where('is_refund', true)->sum(fn ($item) => abs((float) $item->amount)), 2),
                     'net' => round($income - $expenses, 2)];
             })->sortBy('month')->values();
+    }
+
+    private function dailyCashflow(Collection $rows): Collection
+    {
+        $running = [];
+
+        return $rows->groupBy(fn (BankTransaction $item) => $item->booked_at->format('Y-m-d').'|'.$item->currency)
+            ->map(function (Collection $items) {
+                $ordinary = $items->where('is_internal_transfer', false);
+                $expenses = $ordinary->filter(fn ($item) => $item->direction === 'debit' && ! $item->is_refund)
+                    ->sum(fn ($item) => abs((float) $item->amount));
+                $income = $ordinary->filter(fn ($item) => $item->direction === 'credit' && ! $item->is_refund)
+                    ->sum(fn ($item) => abs((float) $item->amount));
+
+                return ['date' => $items->first()->booked_at->format('Y-m-d'), 'currency' => $items->first()->currency,
+                    'income' => round($income, 2), 'expenses' => round($expenses, 2), 'net' => round($income - $expenses, 2),
+                    'transactions' => $items->count()];
+            })->sortBy('date')->values()->map(function (array $item) use (&$running) {
+                $running[$item['currency']] = round(($running[$item['currency']] ?? 0) + $item['net'], 2);
+                $item['running_net'] = $running[$item['currency']];
+
+                return $item;
+            });
     }
 
     private function merchants(Collection $rows): Collection

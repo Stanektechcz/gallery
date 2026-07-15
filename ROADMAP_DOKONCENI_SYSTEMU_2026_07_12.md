@@ -320,3 +320,27 @@ Tyto body nelze prohlásit za plně hotové bez následného nastavení a povole
 - Připravení příběhu používá stejné album a stejnou synchronizační službu. Album, přílohy, cesta, příběh a následná společná vzpomínka proto nevytvářejí paralelní nebo rozporné vazby.
 - Rozhraní je responzivní, náhledy používají odložené dekódování a výběr má omezenou rolovací oblast, aby detail akce zůstal plynulý i na telefonu.
 - Pokrytí: integrační test ověřuje návrh HEIC fotografie bez GPS, idempotentní album cesty, oprávnění obou partnerů, upload podle UUID, přílohu události, album, cestovní galerii, primární album a výsledný stav životního cyklu zážitku.
+
+## Dokončená sjednocovací vlna 15. 7. 2026 — responzivní galerie, stabilní import a interaktivní finance
+
+- Aplikace používá jeden hlavní scroll kontejner založený na `100dvh`; mobilní horní lišta a spodní navigace jsou dostupné ihned a nezávisí na délce úvodní galerie.
+- Mobilní menu, vyhledávání, upload, hromadné akce, detail média a informační panel respektují bezpečné okraje zařízení a navzájem se nepřekrývají.
+- Timeline a alba načítají pouze malé náhledy, nikoli originály nebo HEIC zdroje. Karty používají nativní lazy loading, asynchronní dekódování, memoizaci a odložené vykreslení vzdálených skupin.
+- Chybějící náhled používá opravný endpoint; detail fotografie zůstává samostatným místem pro plné rozlišení a mobilní informační panel funguje jako spodní list.
+- Revolut CSV/XLS/XLSX import lze spustit výrazným tlačítkem v horní části financí. Český přiložený XLSX byl ověřen na 36 transakcích bez ztráty řádku.
+- Uložení finanční historie je oddělené od volitelného párování cest. Starší cestovní schéma už nezpůsobí HTTP 500 ani nekonečný neúspěšný opakovaný import; uživatel dostane konkrétní upozornění.
+- Finance obsahují aktuální zůstatek, měnové souhrny, denní i měsíční cash-flow, kategorie, obchodníky, cesty a navázané kalendářní události.
+- Denní vývoj a zůstatkové grafy mají dotykový posuvník, přesnou hodnotu vybraného dne, změnu proti předchozímu bodu a jednotný formát data `dd.mm.rr`.
+- Kontrolní panel umožňuje jedním klepnutím zobrazit propojené, navržené nebo nepřiřazené platby a na stejné obrazovce měnit kategorii, pravidlo párování, cílovou cestu i rozdělenou částku.
+- OpenRouteService používá aktuální GeoJSON kontrakt, raw `Authorization`, správný `Accept` a české navigační instrukce; tím je odstraněna odpověď HTTP 406 způsobená JSON-only hlavičkou.
+- Pokrytí: kompletní sada 197 testů a 2091 kontrol, včetně regresí ORS hlaviček, reálných XLS/XLSX variant, odolného importu, denního cash-flow, filtrů přiřazení a vazeb na kalendář.
+
+## Dokončená sjednocovací vlna 16. 7. 2026 — jednoduchá navigace podle skutečných činností
+
+- Mobilní `Domů` vede výhradně na partnerský dashboard, zatímco chronologická galerie zůstává samostatně pod jasnou položkou `Fotky`.
+- Hlavní nabídka obsahuje jen pět základních cílů; ostatní funkce jsou uspořádané podle činnosti do uzavíratelných skupin `Společně`, `Cestování`, `Knihovna` a `Administrace`.
+- `Cestování` sjednocuje itinerář světa, mapu, cesty a výlety, jízdenky a dopravu i srozumitelně přejmenovaná `Místa a podniky`.
+- `Administrace` je standardně zavřená a skrývá statistiky, aktivitu, recovery centrum, soukromí, zabezpečení, úložiště, systémovou správu i integrace a API. Práva administrátora se nadále kontrolují u každé chráněné položky.
+- Otevřená skupina se automaticky přizpůsobí právě zobrazené stránce a uživatelská volba se uchovává lokálně v prohlížeči.
+- Každý uživatel si může vybrat až šest vlastních rychlých zkratek, měnit jejich pořadí a kdykoli je vymazat; nastavení nezatěžuje server ani společný prostor druhého partnera.
+- Mobilní spodní navigace má pouze čtyři cíle a tlačítko `Více`, takže zůstává čitelná a ovladatelná jednou rukou i na úzkém telefonu.

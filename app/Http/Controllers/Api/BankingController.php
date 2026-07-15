@@ -36,6 +36,7 @@ class BankingController extends Controller
         $data = $request->validate(['gallery_space_id' => 'required|integer', 'from' => 'nullable|date', 'to' => 'nullable|date',
             'account_uuid' => 'nullable|uuid', 'category' => 'nullable|in:all,transport,accommodation,food,activities,insurance,other',
             'direction' => 'nullable|in:all,debit,credit', 'status' => 'nullable|in:all,booked,pending,cancelled',
+            'review' => 'nullable|in:all,linked,suggested,unlinked',
             'query' => 'nullable|string|max:160', 'page' => 'nullable|integer|min:1', 'per_page' => 'nullable|integer|between:10,100']);
         $space = $this->space($request, (int) $data['gallery_space_id']);
 

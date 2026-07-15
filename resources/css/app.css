@@ -85,10 +85,22 @@
         scrollbar-gutter: stable;
         -webkit-overflow-scrolling: touch;
     }
-    .media-timeline-card {
+.media-timeline-card {
         width: var(--media-grid-size);
         height: var(--media-grid-size);
     }
+}
+
+.finance-range {
+    min-height: 28px;
+    accent-color: #a78bfa;
+    cursor: ew-resize;
+    touch-action: pan-x;
+}
+
+.finance-range::-webkit-slider-thumb {
+    min-height: 22px;
+    min-width: 22px;
 }
 
 @media (max-width: 767px) {

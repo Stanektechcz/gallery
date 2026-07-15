@@ -124,8 +124,13 @@ CSV;
             ->assertJsonPath('transactions.meta.total', 4)
             ->assertJsonPath('events.0.title', 'Společný výlet')->json();
         $this->assertNotEmpty($dashboard['cashflow']);
+        $this->assertNotEmpty($dashboard['daily_cashflow']);
+        $this->assertArrayHasKey('running_net', $dashboard['daily_cashflow'][0]);
         $this->assertNotEmpty($dashboard['categories']);
         $this->assertNotEmpty($dashboard['balance_series'][0]['points']);
+
+        $this->getJson('/api/v1/banking/dashboard?gallery_space_id='.$this->space->id.'&from=2026-07-01&to=2026-08-31&review=linked')
+            ->assertOk()->assertJsonPath('transactions.meta.total', 3);
 
         $coffee = BankTransaction::all()->first(fn (BankTransaction $item) => $item->description === 'Coffee Stop');
         $this->assertNotNull($coffee);

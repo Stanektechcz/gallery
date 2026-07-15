@@ -10,6 +10,7 @@ import {
     BookHeart,
     Calendar,
     ChefHat,
+    ChevronDown,
     CircleDollarSign,
     Clapperboard,
     Clock,
@@ -30,6 +31,7 @@ import {
     Route,
     Search,
     Settings,
+    SlidersHorizontal,
     Share2,
     ShieldCheck,
     Sparkles,
@@ -77,7 +79,7 @@ const NAV_COMMANDS: Command[] = [
     { group: 'nav', label: 'Itinerář světa',      href: '/itinerary', keywords: 'itinerar svet travel' },
     { group: 'nav', label: 'Cesty',               href: '/trips',     keywords: 'cesty trips vylety' },
     { group: 'nav', label: 'Jízdenky',             href: '/tickets',   keywords: 'jizdenky tickets vlak autobus regiojet flixbus cd' },
-    { group: 'nav', label: 'Místa',               href: '/places',    keywords: 'mista places lokace' },
+    { group: 'nav', label: 'Místa a podniky',     href: '/places',    keywords: 'mista podniky restaurace kavarny places lokace hodnoceni' },
     { group: 'nav', label: 'Lidé',                href: '/people',    keywords: 'lide people osoby' },
     { group: 'nav', label: 'Tagy',                href: '/tags',      keywords: 'tagy tags' },
     { group: 'nav', label: 'Porovnání',           href: '/compare',   keywords: 'porovnat compare' },
@@ -361,55 +363,190 @@ interface AppLayoutProps {
     title?: string;
 }
 
-const navItems = [
-    { href: '/',          label: 'Domů',        icon: Home },
-    { href: '/timeline',  label: 'Fotky',       icon: Images },
-    { href: '/albums',    label: 'Alba',         icon: FolderOpen },
-    { href: '/calendar',  label: 'Kalendář',    icon: Calendar },
+type NavigationItem = {
+    href: string;
+    label: string;
+    icon: typeof Home;
+    adminOnly?: boolean;
+    exact?: boolean;
+};
+
+type NavigationGroup = {
+    id: 'together' | 'travel' | 'library' | 'administration';
+    label: string;
+    description: string;
+    icon: typeof Home;
+    items: NavigationItem[];
+};
+
+const primaryNavItems: NavigationItem[] = [
+    { href: '/', label: 'Domů', icon: Home, exact: true },
+    { href: '/timeline', label: 'Fotky', icon: Images },
+    { href: '/albums', label: 'Alba', icon: FolderOpen },
+    { href: '/calendar', label: 'Kalendář', icon: Calendar },
     { href: '/weekly', label: 'Náš týden', icon: Sparkles },
-    { href: '/planning', label: 'Plánování', icon: Calendar },
-    { href: '/finances', label: 'Finance', icon: CircleDollarSign },
-    { href: '/watchlist', label: 'Watchlist', icon: Clapperboard },
-    { href: '/date-ideas', label: 'Randíčka', icon: Sparkles },
-    { href: '/anniversary-album', label: 'Výroční album', icon: Images },
-    { href: '/gifts-anniversaries', label: 'Dárky a výročí', icon: Gift },
-    { href: '/recipes',  label: 'Naše kuchařka', icon: ChefHat },
-    { href: '/trips',     label: 'Cesty',        icon: Route },
-    { href: '/tickets',   label: 'Jízdenky',     icon: Ticket },
-    { href: '/map',       label: 'Mapa',         icon: Map },
-    { href: '/search',    label: 'Hledat',       icon: Search },
-    { href: '/favorites', label: 'Oblíbené',     icon: Heart },
-    { href: '/memories',  label: 'Vzpomínky',    icon: Clock },
-    { href: '/journey',    label: 'Naše cesta',   icon: BookHeart },
-    { href: '/itinerary',  label: 'Itinerář světa', icon: Globe },
-    { divider: true },
-    { href: '/people',    label: 'Lidé',         icon: Users },
-    { href: '/places',    label: 'Místa',        icon: MapPin },
-    { href: '/tags',      label: 'Tagy',         icon: Tag },
-    { href: '/inbox',     label: 'Nezařazené',   icon: Inbox },
-    { href: '/activity',  label: 'Aktivita',     icon: Activity },
-    { href: '/stats',     label: 'Statistiky',   icon: BarChart3 },
-    { href: '/recovery',  label: 'Recovery',     icon: ShieldCheck },
-    { href: '/privacy',   label: 'Soukromí',     icon: ShieldCheck },
-    { divider: true },
-    { href: '/archive',   label: 'Archiv',       icon: Archive },
-    { href: '/vault',     label: 'Soukromý trezor', icon: LockKeyhole },
-    { href: '/trash',     label: 'Koš',          icon: Trash2 },
-    { divider: true },
-    { href: '/shares',    label: 'Sdílené',      icon: Share2 },
-    { href: '/print',     label: 'Výběry k tisku', icon: Printer },
-    { href: '/tv',        label: 'TV režim',     icon: Monitor },
-    { href: '/settings/storage/google', label: 'Nastavení', icon: Settings },
-    { href: '/admin/integrations', label: 'Integrace a API', icon: KeyRound, adminOnly: true },
 ];
+
+const navGroups: NavigationGroup[] = [
+    {
+        id: 'together', label: 'Společně', description: 'Plány, zážitky a domácnost', icon: Heart,
+        items: [
+            { href: '/planning', label: 'Plánování a úkoly', icon: Calendar },
+            { href: '/finances', label: 'Společné finance', icon: CircleDollarSign },
+            { href: '/watchlist', label: 'Filmy a seriály', icon: Clapperboard },
+            { href: '/date-ideas', label: 'Nápady na randíčka', icon: Sparkles },
+            { href: '/anniversary-album', label: 'Výroční album', icon: Images },
+            { href: '/gifts-anniversaries', label: 'Dárky a výročí', icon: Gift },
+            { href: '/recipes', label: 'Naše kuchařka', icon: ChefHat },
+            { href: '/memories', label: 'Vzpomínky', icon: Clock },
+            { href: '/journey', label: 'Náš příběh', icon: BookHeart },
+        ],
+    },
+    {
+        id: 'travel', label: 'Cestování', description: 'Od inspirace po jízdenky', icon: Route,
+        items: [
+            { href: '/itinerary', label: 'Itinerář světa', icon: Globe },
+            { href: '/map', label: 'Mapa', icon: Map },
+            { href: '/trips', label: 'Cesty a výlety', icon: Route },
+            { href: '/tickets', label: 'Jízdenky a doprava', icon: Ticket },
+            { href: '/places', label: 'Místa a podniky', icon: MapPin },
+        ],
+    },
+    {
+        id: 'library', label: 'Knihovna', description: 'Organizace a výstupy galerie', icon: FolderOpen,
+        items: [
+            { href: '/search', label: 'Hledat', icon: Search },
+            { href: '/favorites', label: 'Oblíbené', icon: Heart },
+            { href: '/people', label: 'Lidé', icon: Users },
+            { href: '/tags', label: 'Tagy', icon: Tag },
+            { href: '/inbox', label: 'Nezařazené', icon: Inbox },
+            { href: '/archive', label: 'Archiv', icon: Archive },
+            { href: '/vault', label: 'Soukromý trezor', icon: LockKeyhole },
+            { href: '/trash', label: 'Koš', icon: Trash2 },
+            { href: '/shares', label: 'Sdílené', icon: Share2 },
+            { href: '/print', label: 'Výběry k tisku', icon: Printer },
+            { href: '/tv', label: 'TV režim', icon: Monitor },
+        ],
+    },
+    {
+        id: 'administration', label: 'Administrace', description: 'Kontrola, soukromí a integrace', icon: Settings,
+        items: [
+            { href: '/stats', label: 'Statistiky', icon: BarChart3 },
+            { href: '/activity', label: 'Aktivita', icon: Activity },
+            { href: '/recovery', label: 'Recovery centrum', icon: ShieldCheck },
+            { href: '/privacy', label: 'Soukromí a dědictví', icon: ShieldCheck },
+            { href: '/settings/security', label: 'Nastavení a zabezpečení', icon: Settings },
+            { href: '/settings/storage/google', label: 'Úložiště a Google Drive', icon: Archive },
+            { href: '/admin', label: 'Správa systému', icon: ShieldCheck, adminOnly: true, exact: true },
+            { href: '/admin/integrations', label: 'Integrace a API', icon: KeyRound, adminOnly: true },
+        ],
+    },
+];
+
+const allNavItems = [...primaryNavItems, ...navGroups.flatMap(group => group.items)];
+const customizableNavItems = navGroups.flatMap(group => group.items);
+const PINNED_NAV_KEY = 'gallery.navigation.pinned.v1';
+const OPEN_NAV_GROUPS_KEY = 'gallery.navigation.groups.v1';
 
 const mobileNav = [
     { href: '/',          label: 'Domů',     icon: Home },
     { href: '/timeline',  label: 'Fotky',    icon: Images },
-    { href: '/search',    label: 'Hledat',   icon: Search },
+    { href: '/calendar',  label: 'Kalendář', icon: Calendar },
     { href: '/trips',     label: 'Cesty',    icon: Route },
-    { href: '/memories',  label: 'Pro vás',  icon: Sparkles },
 ];
+
+function NavigationCustomizer({
+    open,
+    onClose,
+    pinnedHrefs,
+    onChange,
+    isAdmin,
+}: {
+    open: boolean;
+    onClose: () => void;
+    pinnedHrefs: string[];
+    onChange: (hrefs: string[]) => void;
+    isAdmin: boolean;
+}) {
+    if (!open) return null;
+
+    const available = customizableNavItems.filter(item => !item.adminOnly || isAdmin);
+    const toggle = (href: string) => {
+        if (pinnedHrefs.includes(href)) {
+            onChange(pinnedHrefs.filter(item => item !== href));
+            return;
+        }
+        if (pinnedHrefs.length < 6) onChange([...pinnedHrefs, href]);
+    };
+    const move = (href: string, direction: -1 | 1) => {
+        const index = pinnedHrefs.indexOf(href);
+        const target = index + direction;
+        if (index < 0 || target < 0 || target >= pinnedHrefs.length) return;
+        const next = [...pinnedHrefs];
+        [next[index], next[target]] = [next[target], next[index]];
+        onChange(next);
+    };
+
+    return (
+        <div className="fixed inset-0 z-[850] flex items-end justify-center p-0 sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-label="Přizpůsobit hlavní nabídku">
+            <button type="button" className="absolute inset-0 bg-black/65 backdrop-blur-sm" onClick={onClose} aria-label="Zavřít přizpůsobení nabídky" />
+            <section className="safe-area-pb relative z-10 flex max-h-[88dvh] w-full max-w-xl flex-col overflow-hidden rounded-t-3xl border border-[var(--color-border)] bg-[var(--color-bg-secondary)] shadow-2xl sm:rounded-3xl">
+                <header className="flex items-start justify-between gap-3 border-b border-[var(--color-border)] p-4 sm:p-5">
+                    <div>
+                        <h2 className="text-base font-semibold text-white">Moje rychlé zkratky</h2>
+                        <p className="mt-1 text-xs leading-relaxed text-[var(--color-text-secondary)]">Vyberte až šest často používaných částí. Zobrazí se nad skupinami v postranní nabídce.</p>
+                    </div>
+                    <button type="button" onClick={onClose} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-[var(--color-text-secondary)] hover:bg-white/5 hover:text-white" aria-label="Zavřít">
+                        <X size={19}/>
+                    </button>
+                </header>
+                <div className="min-h-0 flex-1 overflow-y-auto p-3 sm:p-4">
+                    <div className="mb-3 flex items-center justify-between gap-3 rounded-xl bg-white/[0.035] px-3 py-2 text-xs">
+                        <span className="text-[var(--color-text-secondary)]">Vybráno</span>
+                        <strong className="text-white">{pinnedHrefs.length} / 6</strong>
+                    </div>
+                    <div className="space-y-4">
+                        {navGroups.map(group => {
+                            const items = group.items.filter(item => available.some(candidate => candidate.href === item.href));
+                            if (!items.length) return null;
+                            return (
+                                <div key={group.id}>
+                                    <p className="mb-1.5 px-1 text-[10px] font-semibold uppercase tracking-[.16em] text-[var(--color-text-secondary)]">{group.label}</p>
+                                    <div className="space-y-1">
+                                        {items.map(item => {
+                                            const Icon = item.icon;
+                                            const checked = pinnedHrefs.includes(item.href);
+                                            const pinIndex = pinnedHrefs.indexOf(item.href);
+                                            return (
+                                                <div key={item.href} className="flex min-h-12 items-center gap-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-card)] px-2">
+                                                    <button type="button" onClick={() => toggle(item.href)} disabled={!checked && pinnedHrefs.length >= 6} className="flex min-h-11 min-w-0 flex-1 items-center gap-3 px-1 text-left disabled:opacity-40" aria-pressed={checked}>
+                                                        <span className={clsx('flex h-8 w-8 shrink-0 items-center justify-center rounded-lg', checked ? 'bg-[var(--color-accent)]/20 text-[var(--color-accent)]' : 'bg-white/5 text-[var(--color-text-secondary)]')}><Icon size={16}/></span>
+                                                        <span className="min-w-0 flex-1 truncate text-sm text-white">{item.label}</span>
+                                                        <span className={clsx('h-5 w-5 shrink-0 rounded-md border text-center text-xs leading-[18px]', checked ? 'border-[var(--color-accent)] bg-[var(--color-accent)] text-white' : 'border-[var(--color-border)] text-transparent')}>✓</span>
+                                                    </button>
+                                                    {checked && (
+                                                        <div className="flex shrink-0 gap-1 border-l border-[var(--color-border)] pl-2">
+                                                            <button type="button" onClick={() => move(item.href, -1)} disabled={pinIndex === 0} className="h-9 w-8 rounded-lg text-xs text-[var(--color-text-secondary)] hover:bg-white/5 hover:text-white disabled:opacity-25" aria-label={`Posunout ${item.label} výše`}>↑</button>
+                                                            <button type="button" onClick={() => move(item.href, 1)} disabled={pinIndex === pinnedHrefs.length - 1} className="h-9 w-8 rounded-lg text-xs text-[var(--color-text-secondary)] hover:bg-white/5 hover:text-white disabled:opacity-25" aria-label={`Posunout ${item.label} níže`}>↓</button>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+                <footer className="flex gap-2 border-t border-[var(--color-border)] p-3 sm:p-4">
+                    <button type="button" onClick={() => onChange([])} disabled={!pinnedHrefs.length} className="min-h-11 rounded-xl border border-[var(--color-border)] px-4 text-sm text-[var(--color-text-secondary)] disabled:opacity-35">Vymazat zkratky</button>
+                    <button type="button" onClick={onClose} className="min-h-11 flex-1 rounded-xl bg-[var(--color-accent)] px-4 text-sm font-medium text-white">Hotovo</button>
+                </footer>
+            </section>
+        </div>
+    );
+}
 
 export default function AppLayout({ children, title }: AppLayoutProps) {
     const { auth, flash } = usePage().props as any;
@@ -417,15 +554,36 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
     const currentPath = window.location.pathname;
     // Exact match for root; prefix match for all others
     // (prevents '/' highlighting /timeline, /albums, /media/... etc.)
-    const isActive = (href: string) =>
+    const isActive = (href: string, exact = false) =>
         href === '/' || href === '/home'
             ? currentPath === '/' || currentPath === '/home'
-            : currentPath.startsWith(href);
+            : exact ? currentPath === href : currentPath === href || currentPath.startsWith(`${href}/`);
     const [mobileOpen, setMobileOpen] = useState(false);
     const [cmdOpen,    setCmdOpen]    = useState(false);
+    const [navEditorOpen, setNavEditorOpen] = useState(false);
+    const [pinnedHrefs, setPinnedHrefs] = useState<string[]>(() => {
+        try {
+            const value = JSON.parse(localStorage.getItem(PINNED_NAV_KEY) ?? '[]');
+            return Array.isArray(value) ? value.filter(href => typeof href === 'string').slice(0, 6) : [];
+        } catch { return []; }
+    });
+    const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
+        try {
+            const value = JSON.parse(localStorage.getItem(OPEN_NAV_GROUPS_KEY) ?? '{}');
+            return value && typeof value === 'object' ? value : {};
+        } catch { return {}; }
+    });
     const currentLabel = title
-        ?? navItems.find(item => !('divider' in item) && isActive(item.href))?.label
+        ?? [...allNavItems].sort((a, b) => b.href.length - a.href.length).find(item => isActive(item.href, item.exact))?.label
         ?? 'Galerie';
+
+    useEffect(() => { localStorage.setItem(PINNED_NAV_KEY, JSON.stringify(pinnedHrefs)); }, [pinnedHrefs]);
+    useEffect(() => { localStorage.setItem(OPEN_NAV_GROUPS_KEY, JSON.stringify(openGroups)); }, [openGroups]);
+
+    useEffect(() => {
+        const activeGroup = navGroups.find(group => group.items.some(item => isActive(item.href, item.exact)));
+        if (activeGroup) setOpenGroups(previous => previous[activeGroup.id] ? previous : { ...previous, [activeGroup.id]: true });
+    }, [currentPath]);
 
     useEffect(() => {
         const handler = (e: KeyboardEvent) => {
@@ -449,9 +607,100 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
         return () => window.removeEventListener('keydown', close);
     }, [mobileOpen]);
 
+    const pinnedItems = pinnedHrefs
+        .map(href => customizableNavItems.find(item => item.href === href))
+        .filter((item): item is NavigationItem => Boolean(item) && (!item?.adminOnly || isAdmin));
+
+    const renderNavigationItem = (item: NavigationItem, nested = false, closeDrawer = false) => {
+        if (item.adminOnly && !isAdmin) return null;
+        const Icon = item.icon;
+        const active = isActive(item.href, item.exact);
+        return (
+            <Link
+                key={item.href}
+                href={item.href}
+                onClick={closeDrawer ? () => setMobileOpen(false) : undefined}
+                className={clsx(
+                    'mx-2 flex min-h-10 items-center gap-3 rounded-xl px-3 text-sm transition-colors',
+                    nested && 'ml-5 text-[13px]',
+                    active
+                        ? 'bg-[var(--color-accent)] text-white font-medium shadow-sm'
+                        : 'text-[var(--color-text-secondary)] hover:bg-white/5 hover:text-white'
+                )}
+            >
+                <Icon size={nested ? 15 : 16} className="shrink-0" />
+                <span className="min-w-0 flex-1 truncate">{item.label}</span>
+            </Link>
+        );
+    };
+
+    const renderNavigation = (instance: 'desktop' | 'mobile') => {
+        const closeDrawer = instance === 'mobile';
+        return (
+            <>
+                <div className="space-y-0.5">
+                    {primaryNavItems.map(item => renderNavigationItem(item, false, closeDrawer))}
+                </div>
+
+                {pinnedItems.length > 0 && (
+                    <div className="mt-3 border-t border-[var(--color-border)] pt-3">
+                        <p className="mb-1 px-5 text-[9px] font-semibold uppercase tracking-[.16em] text-[var(--color-text-secondary)]">Moje zkratky</p>
+                        <div className="space-y-0.5">{pinnedItems.map(item => renderNavigationItem(item, false, closeDrawer))}</div>
+                    </div>
+                )}
+
+                <div className="mt-3 space-y-1 border-t border-[var(--color-border)] pt-3">
+                    {navGroups.map(group => {
+                        const items = group.items.filter(item => !item.adminOnly || isAdmin);
+                        if (!items.length) return null;
+                        const open = Boolean(openGroups[group.id]);
+                        const active = items.some(item => isActive(item.href, item.exact));
+                        const GroupIcon = group.icon;
+                        return (
+                            <div key={group.id}>
+                                <button
+                                    type="button"
+                                    onClick={() => setOpenGroups(previous => ({ ...previous, [group.id]: !open }))}
+                                    aria-expanded={open}
+                                    aria-controls={`${instance}-nav-${group.id}`}
+                                    className={clsx(
+                                        'mx-2 flex min-h-12 w-[calc(100%-1rem)] items-center gap-3 rounded-xl px-3 text-left transition-colors',
+                                        active ? 'bg-white/[0.055] text-white' : 'text-[var(--color-text-secondary)] hover:bg-white/5 hover:text-white'
+                                    )}
+                                >
+                                    <GroupIcon size={17} className={clsx('shrink-0', active && 'text-[var(--color-accent)]')}/>
+                                    <span className="min-w-0 flex-1">
+                                        <span className="block truncate text-sm font-medium">{group.label}</span>
+                                        <span className="block truncate text-[9px] text-[var(--color-text-secondary)]">{group.description}</span>
+                                    </span>
+                                    <ChevronDown size={15} className={clsx('shrink-0 transition-transform duration-200', open && 'rotate-180')}/>
+                                </button>
+                                {open && (
+                                    <div id={`${instance}-nav-${group.id}`} className="mt-1 space-y-0.5 border-l border-[var(--color-border)] pb-1 ml-5">
+                                        {items.map(item => renderNavigationItem(item, true, closeDrawer))}
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })}
+                </div>
+
+                <button
+                    type="button"
+                    onClick={() => { setMobileOpen(false); setNavEditorOpen(true); }}
+                    className="mx-2 mt-3 flex min-h-11 w-[calc(100%-1rem)] items-center gap-3 rounded-xl border border-dashed border-[var(--color-border)] px-3 text-xs text-[var(--color-text-secondary)] transition-colors hover:border-[var(--color-accent)]/50 hover:bg-white/5 hover:text-white"
+                >
+                    <SlidersHorizontal size={16}/>
+                    Přizpůsobit nabídku
+                </button>
+            </>
+        );
+    };
+
     return (
         <div className="app-shell flex min-h-0 w-full overflow-hidden">
             <CommandPalette open={cmdOpen} onClose={() => setCmdOpen(false)} isAdmin={isAdmin} />
+            <NavigationCustomizer open={navEditorOpen} onClose={() => setNavEditorOpen(false)} pinnedHrefs={pinnedHrefs} onChange={setPinnedHrefs} isAdmin={isAdmin}/>
             {/* Sidebar — Desktop */}
             <aside className="hidden md:flex flex-col w-60 shrink-0 border-r border-[var(--color-border)] bg-[var(--color-bg-secondary)]">
                 {/* Logo */}
@@ -464,29 +713,7 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
 
                 {/* Nav */}
                 <nav className="flex-1 py-3 overflow-y-auto scrollbar-hide">
-                    {navItems.map((item, i) => {
-                        if ('divider' in item) {
-                            return <div key={i} className="h-px bg-[var(--color-border)] mx-3 my-2" />;
-                        }
-                        if ('adminOnly' in item && item.adminOnly && !isAdmin) return null;
-                        const Icon = item.icon;
-                        const active = isActive(item.href);
-                        return (
-                            <Link
-                                key={item.href}
-                                href={item.href}
-                                className={clsx(
-                                    'flex items-center gap-3 mx-2 px-3 py-2 rounded-lg text-sm transition-colors',
-                                    active
-                                        ? 'bg-[var(--color-accent)] text-white font-medium'
-                                        : 'text-[var(--color-text-secondary)] hover:bg-white/5 hover:text-white'
-                                )}
-                            >
-                                <Icon size={16} className="shrink-0" />
-                                {item.label}
-                            </Link>
-                        );
-                    })}
+                    {renderNavigation('desktop')}
                 </nav>
 
                 {/* User + Notifications */}
@@ -525,21 +752,7 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
                             </button>
                         </div>
                         <nav className="flex-1 py-3 overflow-y-auto">
-                            {navItems.map((item, i) => {
-                                if ('divider' in item) return <div key={i} className="h-px bg-[var(--color-border)] mx-3 my-2" />;
-                                if ('adminOnly' in item && item.adminOnly && !isAdmin) return null;
-                                const Icon = item.icon;
-                                const active = isActive(item.href);
-                                return (
-                                    <Link key={item.href} href={item.href} onClick={() => setMobileOpen(false)}
-                                        className={clsx('flex items-center gap-3 mx-2 px-3 py-2.5 rounded-lg text-sm transition-colors',
-                                            active ? 'bg-[var(--color-accent)] text-white font-medium' : 'text-[var(--color-text-secondary)] hover:bg-white/5 hover:text-white'
-                                        )}>
-                                        <Icon size={18} className="shrink-0" />
-                                        {item.label}
-                                    </Link>
-                                );
-                            })}
+                            {renderNavigation('mobile')}
                         </nav>
                         <div className="border-t border-[var(--color-border)] p-4">
                             <div className="flex items-center gap-3">
