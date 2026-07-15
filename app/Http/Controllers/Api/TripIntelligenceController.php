@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Services\Planning\TripBudgetAdvisorService;
+use App\Services\Planning\TripPartnerFinanceService;
 use App\Services\Planning\TripPreparationTimelineService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -62,11 +63,34 @@ class TripIntelligenceController extends Controller
         return response()->json(['preparation' => $snapshot, 'automation' => $preparation->sync($trip, $snapshot)]);
     }
 
-    public function proposeSettlement(Request $request, int $tripId): JsonResponse
+    public function proposeSettlement(Request $request, int $tripId, TripPartnerFinanceService $finance): JsonResponse
     {
-        $trip = $this->trip($request->user(), $tripId); $data = $request->validate(['from_user_id' => 'required|integer|different:to_user_id', 'to_user_id' => 'required|integer', 'amount' => 'required|numeric|min:0.01|max:999999999', 'currency' => 'nullable|string|size:3']);
-        foreach ([$data['from_user_id'], $data['to_user_id']] as $id) abort_unless($this->member($trip->gallery_space_id, $id), 422, 'Vyrovnání je možné jen mezi členy prostoru.');
-        $id = DB::table('trip_settlements')->insertGetId($data + ['trip_id' => $tripId, 'currency' => strtoupper($data['currency'] ?? $trip->currency ?? 'CZK'), 'status' => 'suggested', 'created_at' => now(), 'updated_at' => now()]);
+        $trip = $this->trip($request->user(), $tripId);
+        $data = $request->validate([
+            'from_user_id' => 'required|integer|different:to_user_id', 'to_user_id' => 'required|integer',
+            'amount' => 'required|numeric|min:0.01|max:999999999', 'currency' => 'nullable|string|size:3',
+            'note' => 'nullable|string|max:500',
+        ]);
+        foreach ([$data['from_user_id'], $data['to_user_id']] as $id) {
+            abort_unless($this->member($trip->gallery_space_id, $id), 422, 'Vyrovnání je možné jen mezi členy prostoru.');
+        }
+        $currency = strtoupper($data['currency'] ?? $trip->currency ?? 'CZK');
+        $currencySnapshot = collect($finance->snapshot($trip)['currencies'])->firstWhere('currency', $currency);
+        $proposal = collect($currencySnapshot['proposals'] ?? [])->first(fn ($item) => (int) $item['from_user_id'] === (int) $data['from_user_id']
+            && (int) $item['to_user_id'] === (int) $data['to_user_id']);
+        abort_unless($proposal && (float) $data['amount'] <= (float) $proposal['amount'] + 0.004, 422,
+            'Saldo se mezitím změnilo. Obnovte přehled a použijte aktuální návrh vyrovnání.');
+        $values = ['amount' => round((float) $data['amount'], 2), 'currency' => $currency, 'status' => 'suggested', 'updated_at' => now()];
+        if (Schema::hasColumn('trip_settlements', 'created_by')) $values['created_by'] = $request->user()->id;
+        if (Schema::hasColumn('trip_settlements', 'note')) $values['note'] = $data['note'] ?? null;
+        $existing = DB::table('trip_settlements')->where('trip_id', $tripId)->where('from_user_id', $data['from_user_id'])
+            ->where('to_user_id', $data['to_user_id'])->where('currency', $currency)->where('status', 'suggested')->first();
+        if ($existing) {
+            DB::table('trip_settlements')->where('id', $existing->id)->update($values);
+            return response()->json(DB::table('trip_settlements')->find($existing->id));
+        }
+        $id = DB::table('trip_settlements')->insertGetId($values + ['trip_id' => $tripId, 'from_user_id' => $data['from_user_id'],
+            'to_user_id' => $data['to_user_id'], 'created_at' => now()]);
         return response()->json(DB::table('trip_settlements')->find($id), 201);
     }
 
@@ -79,24 +103,21 @@ class TripIntelligenceController extends Controller
         return response()->json(DB::table('trip_settlements')->find($settlementId));
     }
 
-    public function financeSummary(Request $request, int $tripId, TripBudgetAdvisorService $budgetAdvisor): JsonResponse
+    public function destroySettlement(Request $request, int $tripId, int $settlementId): JsonResponse
     {
         $trip = $this->trip($request->user(), $tripId);
-        $members = DB::table('gallery_space_user as g')->join('users as u', 'u.id', '=', 'g.user_id')->where('g.gallery_space_id', $trip->gallery_space_id)->get(['u.id', 'u.name']);
-        $balances = $members->mapWithKeys(fn ($member) => [$member->id => ['user_id' => $member->id, 'name' => $member->name, 'paid' => 0.0, 'owed' => 0.0, 'balance' => 0.0]])->all();
-        $unassigned = [];
-        foreach (DB::table('trip_expenses')->where('trip_id', $tripId)->where('state', 'actual')->get() as $expense) {
-            if (!$expense->paid_by_user_id || !array_key_exists($expense->paid_by_user_id, $balances)) { $unassigned[] = $expense->id; continue; }
-            $balances[$expense->paid_by_user_id]['paid'] += (float) $expense->amount;
-            $shares = json_decode($expense->split ?: '[]', true);
-            if (!$shares) { $equal = round((float) $expense->amount / max(1, count($balances)), 2); $shares = array_map(fn ($id) => ['user_id' => $id, 'amount' => $equal], array_keys($balances)); $shares[array_key_last($shares)]['amount'] += round((float) $expense->amount - array_sum(array_column($shares, 'amount')), 2); }
-            foreach ($shares as $share) if (array_key_exists($share['user_id'], $balances)) $balances[$share['user_id']]['owed'] += (float) $share['amount'];
-        }
-        $balances = collect($balances)->map(function ($row) { $row['paid'] = round($row['paid'], 2); $row['owed'] = round($row['owed'], 2); $row['balance'] = round($row['paid'] - $row['owed'], 2); return $row; })->values();
-        $creditors = $balances->filter(fn ($row) => $row['balance'] > 0.004)->values()->all(); $debtors = $balances->filter(fn ($row) => $row['balance'] < -0.004)->values()->all(); $proposals = [];
-        foreach ($debtors as &$debtor) foreach ($creditors as &$creditor) { if ($debtor['balance'] >= -0.004 || $creditor['balance'] <= 0.004) continue; $amount = round(min(-$debtor['balance'], $creditor['balance']), 2); $proposals[] = ['from_user_id' => $debtor['user_id'], 'to_user_id' => $creditor['user_id'], 'amount' => $amount, 'currency' => $trip->currency ?? 'CZK']; $debtor['balance'] += $amount; $creditor['balance'] -= $amount; }
+        $settlement = DB::table('trip_settlements')->where('id', $settlementId)->where('trip_id', $trip->id)->firstOrFail();
+        abort_unless(in_array($request->user()->id, [(int) $settlement->from_user_id, (int) $settlement->to_user_id], true), 403);
+        abort_if($settlement->status === 'settled', 409, 'Uhrazené vyrovnání zůstává v historii a nelze je odstranit.');
+        DB::table('trip_settlements')->where('id', $settlementId)->delete();
+        return response()->json(['status' => 'deleted']);
+    }
+
+    public function financeSummary(Request $request, int $tripId, TripBudgetAdvisorService $budgetAdvisor, TripPartnerFinanceService $finance): JsonResponse
+    {
+        $trip = $this->trip($request->user(), $tripId);
         $goal = DB::table('trip_savings_goals')->where('trip_id', $tripId)->first();
-        return response()->json(['members' => $balances, 'proposals' => $proposals, 'unassigned_expense_ids' => $unassigned, 'savings_goal' => $goal, 'advisor' => $budgetAdvisor->snapshot($trip)]);
+        return response()->json($finance->snapshot($trip) + ['savings_goal' => $goal, 'advisor' => $budgetAdvisor->snapshot($trip)]);
     }
 
     public function budgetAdvisor(Request $request, int $tripId, TripBudgetAdvisorService $budgetAdvisor): JsonResponse

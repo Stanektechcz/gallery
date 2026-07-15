@@ -33,6 +33,7 @@ class DateIdeaController extends Controller
 
     public function generate(Request $request): JsonResponse
     {
+        $this->write($request);
         $data = $request->validate([
             'gallery_space_id' => 'required|integer',
             'count' => 'nullable|integer|between:1,6',
@@ -72,6 +73,7 @@ class DateIdeaController extends Controller
 
     public function react(Request $request, string $uuid): JsonResponse
     {
+        $this->write($request);
         $data = $request->validate([
             'reaction' => ['required', Rule::in(['love','maybe','pass'])],
             'rating' => 'nullable|integer|between:1,5',
@@ -85,6 +87,7 @@ class DateIdeaController extends Controller
 
     public function plan(Request $request, string $uuid): JsonResponse
     {
+        $this->write($request);
         $data = $request->validate([
             'starts_at' => 'nullable|date|after:now',
             'create_trip' => 'nullable|boolean',
@@ -145,5 +148,10 @@ class DateIdeaController extends Controller
         return CoupleDateIdea::query()->where('uuid', $uuid)
             ->whereIn('gallery_space_id', $user->gallerySpaces()->pluck('gallery_spaces.id'))
             ->with(['space', 'event'])->firstOrFail();
+    }
+
+    private function write(Request $request): void
+    {
+        abort_if($request->user()->read_only_mode, 403, 'V režimu pouze pro čtení nelze randíčka měnit.');
     }
 }

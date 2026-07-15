@@ -13,6 +13,7 @@ use App\Services\Planning\TripPreparationTimelineService;
 use App\Services\Planning\CoupleExperienceRecommendationService;
 use App\Services\Planning\ExperienceLifecycleService;
 use App\Services\Planning\PartnerCoordinationService;
+use App\Services\Planning\PartnerDecisionService;
 use App\Services\Memories\RelationshipAnniversaryRecapService;
 use App\Services\Banking\TripFinancialInsightService;
 use Illuminate\Http\Request;
@@ -23,7 +24,7 @@ use Inertia\Response;
 
 class DashboardController extends Controller
 {
-    public function index(Request $request, MemoryDiscoveryService $memoryDiscovery, TripPreparationTimelineService $tripPreparation, AlbumCurationAssistantService $albumCuration, CoupleExperienceRecommendationService $experienceRecommendations, ExperienceLifecycleService $experienceLifecycle, PartnerCoordinationService $partnerCoordination, RelationshipAnniversaryRecapService $anniversaryRecaps, UnassignedAlbumSuggestionService $albumSuggestions, TripFinancialInsightService $bankInsights): Response
+    public function index(Request $request, MemoryDiscoveryService $memoryDiscovery, TripPreparationTimelineService $tripPreparation, AlbumCurationAssistantService $albumCuration, CoupleExperienceRecommendationService $experienceRecommendations, ExperienceLifecycleService $experienceLifecycle, PartnerCoordinationService $partnerCoordination, PartnerDecisionService $partnerDecisions, RelationshipAnniversaryRecapService $anniversaryRecaps, UnassignedAlbumSuggestionService $albumSuggestions, TripFinancialInsightService $bankInsights): Response
     {
         $user  = $request->user();
         $space = $user->gallerySpaces()->first();
@@ -154,6 +155,7 @@ class DashboardController extends Controller
         }
         $coordination = $partnerCoordination->snapshot($space, $user, 5);
         $nextActions = $coordination['actions'];
+        $decisions = $partnerDecisions->snapshot($space, $user, 5);
         $upcomingMilestones = DB::table('relationship_milestones')
             ->where('gallery_space_id', $space->id)
             ->where('remind_annually', true)
@@ -284,7 +286,7 @@ class DashboardController extends Controller
                 'pinned_views'     => $pinnedViews,
                 'upcoming_trip'    => $upcomingTrip,
                 'finance_hub'      => $financeHub,
-                'partner_hub'      => ['space_id' => $space->id, 'relationship_started_on' => $relationshipAnniversary['started_on'] ?? null, 'anniversary_recap' => $anniversaryRecap, 'album_suggestion' => $albumSuggestion, 'milestones' => $upcomingMilestones, 'shared_moments' => $sharedMoments, 'next_event' => $nextSharedEvent, 'next_actions' => $nextActions, 'coordination' => $coordination, 'reflection_prompt' => $reflectionPrompt, 'event_reflection_prompt' => $eventReflectionPrompt, 'experience_recommendation' => $experienceRecommendation, 'experience_follow_up' => $experienceFollowUp, 'date_follow_up' => $dateFollowUp, 'recipe' => $recipeHub, 'memory_evening' => $memoryEvening, 'date_idea' => $dateIdea],
+                'partner_hub'      => ['space_id' => $space->id, 'relationship_started_on' => $relationshipAnniversary['started_on'] ?? null, 'anniversary_recap' => $anniversaryRecap, 'album_suggestion' => $albumSuggestion, 'milestones' => $upcomingMilestones, 'shared_moments' => $sharedMoments, 'next_event' => $nextSharedEvent, 'next_actions' => $nextActions, 'coordination' => $coordination, 'decisions' => $decisions, 'reflection_prompt' => $reflectionPrompt, 'event_reflection_prompt' => $eventReflectionPrompt, 'experience_recommendation' => $experienceRecommendation, 'experience_follow_up' => $experienceFollowUp, 'date_follow_up' => $dateFollowUp, 'recipe' => $recipeHub, 'memory_evening' => $memoryEvening, 'date_idea' => $dateIdea],
             ],
         ]);
     }

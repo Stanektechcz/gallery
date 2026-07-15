@@ -162,6 +162,8 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
     Route::get('/coordination/pulse', [App\Http\Controllers\Api\PartnerCoordinationController::class, 'index'])->name('api.coordination.pulse');
     Route::patch('/coordination/actions/{type}/{key}', [App\Http\Controllers\Api\PartnerCoordinationController::class, 'updateAction'])->name('api.coordination.actions.update');
     Route::put('/coordination/check-in', [App\Http\Controllers\Api\PartnerCoordinationController::class, 'checkIn'])->name('api.coordination.check-in');
+    Route::get('/coordination/decisions', [App\Http\Controllers\Api\PartnerDecisionController::class, 'index'])->name('api.coordination.decisions');
+    Route::put('/coordination/decisions/{type}/{key}', [App\Http\Controllers\Api\PartnerDecisionController::class, 'respond'])->name('api.coordination.decisions.respond');
 
     // Shared todo lists are integrated into planning, calendar and the partner pulse.
     Route::get('/todos', [App\Http\Controllers\Api\SharedTodoController::class, 'index'])->name('api.todos.index');
@@ -293,6 +295,7 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
         Route::post('/events/{uuid}/attachments', [App\Http\Controllers\Api\CalendarPlanningController::class, 'storeAttachment'])->name('attachments.store');
         Route::delete('/events/{uuid}/attachments/{attachmentId}', [App\Http\Controllers\Api\CalendarPlanningController::class, 'destroyAttachment'])->name('attachments.destroy');
         Route::get('/events/{uuid}/media-suggestions', [App\Http\Controllers\Api\CalendarPlanningController::class, 'mediaSuggestions'])->name('media-suggestions');
+        Route::post('/events/{uuid}/experience-album', [App\Http\Controllers\Api\CalendarPlanningController::class, 'ensureExperienceAlbum'])->name('experience-album.ensure');
         Route::post('/events/{uuid}/media-suggestions', [App\Http\Controllers\Api\CalendarPlanningController::class, 'applyMediaSuggestions'])->name('media-suggestions.apply');
         Route::post('/events/{uuid}/shared-memory', [App\Http\Controllers\Api\CalendarPlanningController::class, 'createSharedMemory'])->name('shared-memory.store');
         Route::get('/events/{uuid}/reflection', [App\Http\Controllers\Api\CalendarPlanningController::class, 'reflection'])->name('reflection.show');
@@ -334,6 +337,7 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
         Route::post('/travel-choices/transport', [App\Http\Controllers\Api\TripTravelController::class, 'storeTransport'])->name('travel-choices.transport');
         Route::post('/travel-choices/accommodation', [App\Http\Controllers\Api\TripTravelController::class, 'storeAccommodation'])->name('travel-choices.accommodation');
         Route::post('/expenses', [App\Http\Controllers\Api\CalendarPlanningController::class, 'storeExpense'])->name('expenses.store');
+        Route::patch('/expenses/{expenseId}', [App\Http\Controllers\Api\CalendarPlanningController::class, 'updateExpense'])->name('expenses.update');
         Route::delete('/expenses/{expenseId}', [App\Http\Controllers\Api\CalendarPlanningController::class, 'destroyExpense'])->name('expenses.destroy');
         Route::post('/route-variants', [App\Http\Controllers\Api\CalendarPlanningController::class, 'storeRouteVariant'])->name('variants.store');
         Route::post('/route-variants/{variantId}/select', [App\Http\Controllers\Api\CalendarPlanningController::class, 'selectRouteVariant'])->name('variants.select');
@@ -353,6 +357,7 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
         Route::delete('/reservation-imports/{uuid}', [App\Http\Controllers\Api\TripReservationController::class, 'destroy'])->name('reservation-imports.destroy');
         Route::post('/settlements', [App\Http\Controllers\Api\TripIntelligenceController::class, 'proposeSettlement'])->name('settlements.store');
         Route::post('/settlements/{settlementId}/settle', [App\Http\Controllers\Api\TripIntelligenceController::class, 'settle'])->name('settlements.settle');
+        Route::delete('/settlements/{settlementId}', [App\Http\Controllers\Api\TripIntelligenceController::class, 'destroySettlement'])->name('settlements.destroy');
         Route::get('/finance-summary', [App\Http\Controllers\Api\TripIntelligenceController::class, 'financeSummary'])->name('finance-summary');
         Route::put('/savings-goal', [App\Http\Controllers\Api\TripIntelligenceController::class, 'upsertSavingsGoal'])->name('savings-goal.upsert');
         Route::post('/location-consent', [App\Http\Controllers\Api\TripIntelligenceController::class, 'locationConsent'])->name('location-consent.store');

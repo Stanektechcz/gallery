@@ -23,6 +23,7 @@ import {
     Tag,
     Trash2,
     Users,
+    X,
     ZoomIn,
     ZoomOut
 } from 'lucide-react';
@@ -519,7 +520,7 @@ function ProgressiveImage({ uuid, fullUrl, thumbUrl, alt, width, height, dominan
         transformOrigin: 'center',
         transition: dragging ? 'none' : 'transform 0.15s ease',
         cursor: scale > 1 ? (dragging ? 'grabbing' : 'grab') : 'zoom-in',
-        maxHeight: 'calc(100vh - 120px)',
+        maxHeight: 'calc(100dvh - 120px)',
         maxWidth: '100%',
         objectFit: 'contain',
     };
@@ -529,7 +530,7 @@ function ProgressiveImage({ uuid, fullUrl, thumbUrl, alt, width, height, dominan
             ref={containerRef}
             className={clsx(
                 'relative flex items-center justify-center select-none overflow-hidden',
-                fullscreen ? 'fixed inset-0 z-[200] bg-black' : 'w-full h-full'
+                fullscreen ? 'fixed inset-0 z-[900] bg-black' : 'w-full h-full'
             )}
             onWheel={onWheel}
             onMouseDown={onMouseDown}
@@ -732,9 +733,9 @@ export default function MediaShow({ media, breadcrumb, prev, next }: Props) {
         <AppLayout>
             <Head title={item.display_title ?? item.original_filename} />
 
-            <div className="flex flex-col h-full min-h-0">
+            <div className="flex h-full min-h-0 flex-col">
                 {/* ── Top bar ─────────────────────────────────────────────── */}
-                <div className="shrink-0 h-11 px-2 border-b border-[var(--color-border)] flex items-center gap-1 bg-[var(--color-bg-secondary)]">
+                <div className="flex h-11 shrink-0 items-center gap-0.5 overflow-visible border-b border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-1 sm:gap-1 sm:px-2">
 
                     {/* Back to timeline */}
                     <Link href="/timeline" className="p-2 text-[var(--color-text-secondary)] hover:text-white rounded-lg hover:bg-white/10 shrink-0" title="Zpět (Esc)">
@@ -754,7 +755,7 @@ export default function MediaShow({ media, breadcrumb, prev, next }: Props) {
                     {next ? <Link href={`/media/${next.uuid}`} className="p-1.5 rounded text-white hover:bg-white/10 transition-colors shrink-0" title="Další (→)"><ChevronRight size={13}/></Link>
                         : <button disabled className="p-1.5 rounded text-[var(--color-border)] shrink-0" title="Žádná další fotografie"><ChevronRight size={13}/></button>}
 
-                    <div className="w-px h-4 bg-[var(--color-border)] mx-0.5"/>
+                    <div className="mx-0.5 hidden h-4 w-px bg-[var(--color-border)] sm:block"/>
 
                     {/* ❤️ Favorite */}
                     <button onClick={toggleFavorite} disabled={saving}
@@ -765,7 +766,7 @@ export default function MediaShow({ media, breadcrumb, prev, next }: Props) {
                     </button>
 
                     {/* ★ Rating */}
-                    <div className="flex items-center gap-0 shrink-0">
+                    <div className="hidden shrink-0 items-center gap-0 sm:flex">
                         {[1,2,3,4,5].map(n => (
                             <button key={n} onClick={() => setRatingValue(n)}
                                 onMouseEnter={() => setHovR(n)} onMouseLeave={() => setHovR(0)}
@@ -838,7 +839,7 @@ export default function MediaShow({ media, breadcrumb, prev, next }: Props) {
                 </div>
 
                 {/* Main content */}
-                <div className="flex flex-1 min-h-0 overflow-hidden">
+                <div className="relative flex min-h-0 flex-1 overflow-hidden">
                     {/* Media viewer */}
                     <div className="flex-1 flex items-center justify-center bg-black relative overflow-hidden">
                         {/* Prev / Next overlays (shown on hover, useful for mouse) */}
@@ -925,7 +926,8 @@ export default function MediaShow({ media, breadcrumb, prev, next }: Props) {
 
                     {/* Info panel */}
                     {infoOpen && (
-                        <div className="w-72 shrink-0 border-l border-[var(--color-border)] bg-[var(--color-bg-secondary)] overflow-y-auto p-4 space-y-4">
+                        <div className="fixed inset-x-0 bottom-[calc(3.5rem+env(safe-area-inset-bottom,0px))] z-[620] max-h-[72dvh] w-full space-y-4 overflow-y-auto overscroll-contain rounded-t-2xl border-t border-[var(--color-border)] bg-[var(--color-bg-secondary)] p-4 shadow-2xl md:static md:z-auto md:max-h-none md:w-72 md:shrink-0 md:rounded-none md:border-l md:border-t-0 md:shadow-none">
+                            <div className="sticky top-0 z-10 -mx-4 -mt-4 mb-2 flex items-center justify-between border-b border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-4 py-2 md:hidden"><span className="text-sm font-semibold text-white">Informace a vzpomínky</span><button type="button" onClick={()=>setInfo(false)} className="flex h-9 w-9 items-center justify-center rounded-lg text-white" aria-label="Zavřít informace"><X size={18}/></button></div>
                             {/* File */}
                             <section>
                                 <h3 className="text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider mb-2">Soubor</h3>

@@ -159,7 +159,7 @@ export default function UploadPanel() {
         : 'bg-[var(--color-accent)]';
 
     return (
-        <div className="fixed bottom-0 right-4 z-[600] w-80 shadow-2xl rounded-t-xl overflow-hidden border border-[var(--color-border)] border-b-0 bg-[var(--color-bg-card)]">
+        <div className="fixed bottom-[calc(3.5rem+env(safe-area-inset-bottom,0px))] left-2 right-2 z-[680] max-h-[65dvh] overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-card)] shadow-2xl md:bottom-0 md:left-auto md:right-4 md:w-80 md:rounded-b-none md:rounded-t-xl md:border-b-0">
 
             {/* Header */}
             <div className="flex items-center gap-2 px-3 py-2.5 bg-[var(--color-bg-secondary)] border-b border-[var(--color-border)]">

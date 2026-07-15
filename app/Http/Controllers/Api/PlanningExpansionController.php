@@ -24,6 +24,7 @@ class PlanningExpansionController extends Controller
 
     public function storeTemplate(Request $request): JsonResponse
     {
+        $this->write($request);
         $this->requireTables(['event_templates']);
         $data = $request->validate(['gallery_space_id' => 'required|integer', 'title' => 'required|string|max:160', 'type' => 'nullable|in:event,trip,outing,birthday,anniversary,reservation,custom', 'description' => 'nullable|string|max:10000', 'defaults' => 'nullable|array', 'tasks' => 'nullable|array|max:50', 'tasks.*.title' => 'required_with:tasks|string|max:255']);
         $this->space($request->user(), $data['gallery_space_id']);
@@ -33,6 +34,7 @@ class PlanningExpansionController extends Controller
 
     public function applyTemplate(Request $request, string $uuid): JsonResponse
     {
+        $this->write($request);
         $this->requireTables(['event_templates']);
         $template = DB::table('event_templates')->where('uuid', $uuid)->whereIn('gallery_space_id', $this->spaceIds($request->user()))->firstOrFail();
         $data = $request->validate(['starts_at' => 'required|date', 'ends_at' => 'nullable|date|after_or_equal:starts_at', 'title' => 'nullable|string|max:160']);
@@ -59,6 +61,7 @@ class PlanningExpansionController extends Controller
 
     public function storeException(Request $request, string $eventUuid): JsonResponse
     {
+        $this->write($request);
         $this->requireTables(['calendar_event_exceptions']);
         $event = $this->editableEvent($request->user(), $eventUuid);
         $data = $request->validate(['occurs_at' => 'required|date', 'action' => 'required|in:skip,move', 'replacement_starts_at' => 'required_if:action,move|nullable|date', 'replacement_ends_at' => 'nullable|date|after_or_equal:replacement_starts_at', 'replacement_title' => 'nullable|string|max:160']);
@@ -74,6 +77,7 @@ class PlanningExpansionController extends Controller
 
     public function updateAvailability(Request $request): JsonResponse
     {
+        $this->write($request);
         $data = $request->validate(['availability' => 'required|array|max:14', 'availability.*.from' => 'required|date_format:H:i', 'availability.*.to' => 'required|date_format:H:i|after:availability.*.from', 'availability.*.weekday' => 'required|integer|between:0,6', 'quiet_hours' => 'nullable|array', 'quiet_hours.from' => 'required_with:quiet_hours|date_format:H:i', 'quiet_hours.to' => 'required_with:quiet_hours|date_format:H:i']);
         $preferences = $request->user()->preferences ?? [];
         $preferences['planning_availability'] = $data['availability']; $preferences['quiet_hours'] = $data['quiet_hours'] ?? null;
@@ -91,6 +95,7 @@ class PlanningExpansionController extends Controller
 
     public function storeWishlist(Request $request): JsonResponse
     {
+        $this->write($request);
         $this->requireTables(['travel_wishlists']);
         $data = $request->validate(['gallery_space_id' => 'required|integer', 'title' => 'required|string|max:160', 'is_shared' => 'nullable|boolean']);
         $this->space($request->user(), $data['gallery_space_id']);
@@ -100,6 +105,7 @@ class PlanningExpansionController extends Controller
 
     public function storeWishlistItem(Request $request, string $uuid): JsonResponse
     {
+        $this->write($request);
         $this->requireTables(['travel_wishlists', 'travel_wishlist_items']);
         $list = DB::table('travel_wishlists')->where('uuid', $uuid)->whereIn('gallery_space_id', $this->spaceIds($request->user()))->firstOrFail();
         $data = $request->validate(['title' => 'required|string|max:255', 'notes' => 'nullable|string|max:5000', 'category' => 'nullable|in:place,food,experience,stay,photo,other', 'season' => 'nullable|string|max:32', 'priority' => 'nullable|integer|between:1,5', 'estimated_cost' => 'nullable|numeric|min:0|max:999999999', 'currency' => 'nullable|string|size:3', 'estimated_minutes' => 'nullable|integer|min:0|max:10080', 'latitude' => 'nullable|numeric|between:-90,90', 'longitude' => 'nullable|numeric|between:-180,180']);
@@ -124,6 +130,7 @@ class PlanningExpansionController extends Controller
     /** Turn a wish into one shared calendar plan, without creating a disconnected copy of it. */
     public function planWishlistItem(Request $request, string $uuid, int $itemId): JsonResponse
     {
+        $this->write($request);
         $this->requireTables(['travel_wishlists', 'travel_wishlist_items', 'calendar_events', 'event_participants', 'event_reminders']);
         abort_unless(Schema::hasColumn('travel_wishlist_items', 'calendar_event_id'), 503, 'Pro převod přání do kalendáře dokončete migrace aplikace.');
         $list = DB::table('travel_wishlists')->where('uuid', $uuid)->whereIn('gallery_space_id', $this->spaceIds($request->user()))->firstOrFail();
@@ -191,6 +198,7 @@ class PlanningExpansionController extends Controller
 
     public function storePoll(Request $request): JsonResponse
     {
+        $this->write($request);
         $this->requireTables(['decision_polls', 'decision_poll_options', 'decision_poll_votes']);
         $data = $request->validate(['gallery_space_id' => 'required|integer', 'calendar_event_uuid' => 'nullable|uuid', 'question' => 'required|string|max:255', 'closes_at' => 'nullable|date|after:now', 'options' => 'required|array|min:2|max:8', 'options.*.title' => 'required|string|max:255', 'options.*.notes' => 'nullable|string|max:5000']);
         $this->space($request->user(), $data['gallery_space_id']);
@@ -209,6 +217,7 @@ class PlanningExpansionController extends Controller
 
     public function vote(Request $request, string $uuid): JsonResponse
     {
+        $this->write($request);
         $this->requireTables(['decision_polls', 'decision_poll_options', 'decision_poll_votes']);
         $poll = DB::table('decision_polls')->where('uuid', $uuid)->whereIn('gallery_space_id', $this->spaceIds($request->user()))->where('status', 'open')->firstOrFail();
         abort_if($poll->closes_at && Carbon::parse($poll->closes_at)->isPast(), 422, 'Hlasování již skončilo.');
@@ -222,6 +231,7 @@ class PlanningExpansionController extends Controller
     /** A decision becomes a shared date, instead of remaining an orphaned poll result. */
     public function planPollOption(Request $request, string $uuid, int $optionId): JsonResponse
     {
+        $this->write($request);
         $this->requireTables(['decision_polls', 'decision_poll_options', 'decision_poll_votes', 'calendar_events', 'event_participants', 'event_reminders']);
         abort_unless(Schema::hasColumn('decision_poll_options', 'calendar_event_id'), 503, 'Pro převod rozhodnutí do kalendáře dokončete migrace aplikace.');
         $poll = DB::table('decision_polls')->where('uuid', $uuid)->whereIn('gallery_space_id', $this->spaceIds($request->user()))->firstOrFail();
@@ -257,6 +267,7 @@ class PlanningExpansionController extends Controller
 
     public function updateEmergencyCard(Request $request, int $tripId): JsonResponse
     {
+        $this->write($request);
         $trip = $this->trip($request->user(), $tripId);
         $data = $request->validate(['accommodation_name' => 'nullable|string|max:255', 'accommodation_address' => 'nullable|string|max:5000', 'accommodation_phone' => 'nullable|string|max:64', 'insurance_provider' => 'nullable|string|max:255', 'insurance_number' => 'nullable|string|max:255', 'contacts' => 'nullable|array|max:10', 'important_numbers' => 'nullable|array|max:20', 'notes' => 'nullable|string|max:5000']);
         $payload = $data;
@@ -276,6 +287,7 @@ class PlanningExpansionController extends Controller
 
     public function storePartnerRule(Request $request): JsonResponse
     {
+        $this->write($request);
         $data = $request->validate(['gallery_space_id' => 'required|integer', 'recipient_user_id' => 'required|integer|different:' . $request->user()->id, 'name' => 'required|string|max:160', 'is_active' => 'nullable|boolean', 'filters' => 'nullable|array']);
         $space = $this->space($request->user(), $data['gallery_space_id']);
         abort_unless($space->members()->whereKey($data['recipient_user_id'])->exists(), 422, 'Příjemce musí být členem společného prostoru.');
@@ -309,4 +321,5 @@ class PlanningExpansionController extends Controller
     private function trip(User $user, int $id): object { return DB::table('trips')->where('id', $id)->whereIn('gallery_space_id', $this->spaceIds($user))->firstOrFail(); }
     private function event(User $user, string $uuid): CalendarEvent { return CalendarEvent::whereIn('gallery_space_id', $this->spaceIds($user))->where('uuid', $uuid)->where(fn ($q) => $q->where('is_private', false)->orWhere('created_by', $user->id)->orWhereHas('participants', fn ($p) => $p->whereKey($user->id)))->firstOrFail(); }
     private function editableEvent(User $user, string $uuid): CalendarEvent { $event = $this->event($user, $uuid); abort_unless($event->created_by === $user->id || $event->participants()->whereKey($user->id)->wherePivot('role', 'editor')->exists(), 403); return $event; }
+    private function write(Request $request): void { abort_if($request->user()->read_only_mode, 403, 'V režimu pouze pro čtení nelze společné plánování měnit.'); }
 }

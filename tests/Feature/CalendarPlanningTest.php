@@ -652,4 +652,58 @@ class CalendarPlanningTest extends TestCase
         $this->postJson("/api/v1/calendar/events/{$event['uuid']}/attachments", ['kind' => 'reservation', 'label' => 'Hotel Ještěd', 'reference_code' => 'ABC123'])->assertCreated();
         $this->assertDatabaseHas('trip_document_checks', ['trip_id' => $tripId, 'title' => 'Hotel Ještěd', 'reference' => 'ABC123', 'type' => 'booking', 'status' => 'ready']);
     }
+
+    public function test_experience_upload_album_connects_calendar_trip_and_media_without_requiring_gps(): void
+    {
+        $tripId = DB::table('trips')->insertGetId([
+            'gallery_space_id' => $this->space->id, 'created_by' => $this->owner->id,
+            'name' => 'Výlet k přehradě', 'start_date' => now()->toDateString(),
+            'end_date' => now()->toDateString(), 'currency' => 'CZK',
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+        $event = $this->postJson('/api/v1/calendar/events', [
+            'gallery_space_id' => $this->space->id, 'trip_id' => $tripId,
+            'title' => 'Odpoledne u přehrady', 'type' => 'outing',
+            'starts_at' => now()->subHour()->toDateTimeString(),
+            'ends_at' => now()->addHour()->toDateTimeString(),
+            'place_name' => 'Brněnská přehrada', 'latitude' => 49.229, 'longitude' => 16.518,
+            'participant_ids' => [$this->partner->id],
+        ])->assertCreated()->json();
+        $media = MediaItem::create([
+            'uuid' => (string) Str::uuid(), 'gallery_space_id' => $this->space->id,
+            'owner_user_id' => $this->owner->id, 'uploaded_by' => $this->owner->id,
+            'original_filename' => 'prehrada.heic', 'safe_filename' => 'prehrada.heic',
+            'extension' => 'heic', 'mime_type' => 'image/heic', 'media_type' => 'photo',
+            'size_bytes' => 2048, 'status' => 'ready', 'storage_status' => 'local_only',
+            'is_hidden' => false, 'taken_at' => now(), 'uploaded_at' => now(),
+        ]);
+
+        $this->getJson("/api/v1/calendar/events/{$event['uuid']}/media-suggestions")
+            ->assertOk()
+            ->assertJsonPath('candidates.0.uuid', $media->uuid)
+            ->assertJsonPath('candidates.0.confidence', 'medium')
+            ->assertJsonPath('candidates.0.match_reasons.1', 'bez GPS, spárováno podle času');
+
+        $capture = $this->postJson("/api/v1/calendar/events/{$event['uuid']}/experience-album")
+            ->assertCreated()
+            ->assertJsonPath('album.title', 'Odpoledne u přehrady')
+            ->json();
+        $this->postJson("/api/v1/calendar/events/{$event['uuid']}/experience-album")->assertCreated();
+        $this->assertSame(1, DB::table('albums')->where('trip_id', $tripId)->count());
+        $this->assertDatabaseHas('album_user_permissions', ['album_id' => $capture['album']['id'], 'user_id' => $this->owner->id, 'role' => 'editor']);
+        $this->assertDatabaseHas('album_user_permissions', ['album_id' => $capture['album']['id'], 'user_id' => $this->partner->id, 'role' => 'editor']);
+
+        $this->postJson("/api/v1/calendar/events/{$event['uuid']}/media-suggestions", ['media_uuids' => [$media->uuid]])
+            ->assertOk()
+            ->assertJsonPath('capture.album.id', $capture['album']['id'])
+            ->assertJsonPath('capture.attached_media_count', 1);
+        $this->assertDatabaseHas('event_attachments', ['event_id' => $event['id'], 'media_item_id' => $media->id, 'kind' => 'memory']);
+        $this->assertDatabaseHas('album_media', ['album_id' => $capture['album']['id'], 'media_item_id' => $media->id]);
+        $this->assertDatabaseHas('trip_media', ['trip_id' => $tripId, 'media_item_id' => $media->id]);
+        $this->assertDatabaseHas('media_items', ['id' => $media->id, 'primary_album_id' => $capture['album']['id']]);
+        $this->getJson("/api/v1/calendar/events/{$event['uuid']}")
+            ->assertOk()
+            ->assertJsonPath('album.id', $capture['album']['id'])
+            ->assertJsonPath('experience.attached_media_count', 1);
+    }
 }

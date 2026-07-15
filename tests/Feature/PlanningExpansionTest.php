@@ -116,7 +116,7 @@ class PlanningExpansionTest extends TestCase
     {
         $tripId = DB::table('trips')->insertGetId(['gallery_space_id' => $this->space->id, 'created_by' => $this->owner->id, 'name' => 'Vídeň', 'start_date' => now()->addMonth()->toDateString(), 'end_date' => now()->addMonth()->addDays(2)->toDateString(), 'currency' => 'CZK', 'created_at' => now(), 'updated_at' => now()]);
         $this->putJson("/api/v1/trips/{$tripId}/budget-limits", ['category' => 'food', 'amount' => 1500])->assertOk();
-        $this->postJson("/api/v1/trips/{$tripId}/expenses", ['title' => 'Večeře', 'category' => 'food', 'amount' => 1300, 'state' => 'actual'])->assertCreated();
+        $this->postJson("/api/v1/trips/{$tripId}/expenses", ['title' => 'Večeře', 'category' => 'food', 'amount' => 1300, 'state' => 'actual', 'paid_by_user_id' => $this->owner->id])->assertCreated();
         $this->postJson("/api/v1/trips/{$tripId}/documents", ['type' => 'insurance', 'title' => 'Cestovní pojištění', 'status' => 'ready'])->assertCreated();
         $this->postJson("/api/v1/trips/{$tripId}/settlements", ['from_user_id' => $this->partner->id, 'to_user_id' => $this->owner->id, 'amount' => 650])->assertCreated();
         $this->postJson("/api/v1/trips/{$tripId}/location-consent", ['recipient_user_id' => $this->partner->id, 'expires_at' => now()->addDay()->toDateTimeString()])->assertOk();
@@ -165,6 +165,54 @@ class PlanningExpansionTest extends TestCase
         $this->postJson("/api/v1/trips/{$tripId}/expenses", ['title' => 'Hotel', 'amount' => 1000, 'paid_by_user_id' => $this->owner->id, 'split' => [['user_id' => $this->owner->id, 'amount' => 500], ['user_id' => $this->partner->id, 'amount' => 500]]])->assertCreated();
         $summary = $this->getJson("/api/v1/trips/{$tripId}/finance-summary")->assertOk()->assertJsonPath('proposals.0.from_user_id', $this->partner->id)->assertJsonPath('proposals.0.to_user_id', $this->owner->id)->assertJsonPath('proposals.0.amount', 500);
         $this->putJson("/api/v1/trips/{$tripId}/savings-goal", ['target_amount' => 5000, 'saved_amount' => 1250, 'monthly_contribution' => 500])->assertOk()->assertJsonPath('saved_amount', 1250);
+    }
+
+    public function test_partner_expenses_joint_account_and_settlement_share_one_stable_trip_balance(): void
+    {
+        $tripId = DB::table('trips')->insertGetId(['gallery_space_id' => $this->space->id, 'created_by' => $this->owner->id,
+            'name' => 'Finance ve dvou', 'start_date' => now()->addWeek()->toDateString(), 'end_date' => now()->addWeek()->addDay()->toDateString(),
+            'currency' => 'CZK', 'created_at' => now(), 'updated_at' => now()]);
+        $personal = $this->postJson("/api/v1/trips/{$tripId}/expenses", [
+            'title' => 'Hotel', 'category' => 'accommodation', 'amount' => 1000, 'paid_by_user_id' => $this->owner->id,
+            'payment_source' => 'personal', 'split' => [
+                ['user_id' => $this->owner->id, 'amount' => 250],
+                ['user_id' => $this->partner->id, 'amount' => 750],
+            ],
+        ])->assertCreated()->json();
+        $this->postJson("/api/v1/trips/{$tripId}/expenses", [
+            'title' => 'Večeře ze společného účtu', 'category' => 'food', 'amount' => 400, 'payment_source' => 'joint',
+        ])->assertCreated()->assertJsonPath('payment_source', 'joint')->assertJsonPath('paid_by_user_id', null);
+
+        $summary = $this->getJson("/api/v1/trips/{$tripId}/finance-summary")->assertOk()
+            ->assertJsonPath('joint_paid', 400)
+            ->assertJsonPath('proposals.0.from_user_id', $this->partner->id)
+            ->assertJsonPath('proposals.0.to_user_id', $this->owner->id)
+            ->assertJsonPath('proposals.0.amount', 750)
+            ->assertJsonPath('currencies.0.currency', 'CZK')->json();
+        $this->assertSame(750.0, (float) collect($summary['members'])->firstWhere('user_id', $this->owner->id)['balance']);
+
+        $this->patchJson("/api/v1/trips/{$tripId}/expenses/{$personal['id']}", [
+            'split' => [['user_id' => $this->owner->id, 'amount' => 500], ['user_id' => $this->partner->id, 'amount' => 500]],
+        ])->assertOk();
+        $this->getJson("/api/v1/trips/{$tripId}/finance-summary")->assertOk()->assertJsonPath('proposals.0.amount', 500);
+
+        $settlement = $this->postJson("/api/v1/trips/{$tripId}/settlements", [
+            'from_user_id' => $this->partner->id, 'to_user_id' => $this->owner->id, 'amount' => 500, 'currency' => 'CZK',
+            'note' => 'Vyrovnání po návratu',
+        ])->assertCreated()->json();
+        $this->postJson("/api/v1/trips/{$tripId}/settlements", [
+            'from_user_id' => $this->partner->id, 'to_user_id' => $this->owner->id, 'amount' => 500, 'currency' => 'CZK',
+        ])->assertOk();
+        $this->assertDatabaseCount('trip_settlements', 1);
+        $this->getJson("/api/v1/trips/{$tripId}/finance-summary")->assertOk()
+            ->assertJsonPath('proposals.0.settlement_id', $settlement['id'])
+            ->assertJsonPath('proposals.0.status', 'suggested');
+
+        $this->actingAs($this->partner)->postJson("/api/v1/trips/{$tripId}/settlements/{$settlement['id']}/settle")
+            ->assertOk()->assertJsonPath('status', 'settled');
+        $settled = $this->getJson("/api/v1/trips/{$tripId}/finance-summary")->assertOk()->assertJsonPath('currencies.0.settled_total', 500)->json();
+        $this->assertSame([], $settled['proposals']);
+        $this->deleteJson("/api/v1/trips/{$tripId}/settlements/{$settlement['id']}")->assertStatus(409);
     }
 
     public function test_low_cost_advisor_unifies_trip_budget_saved_places_and_calendar_tasks(): void

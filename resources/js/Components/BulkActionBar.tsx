@@ -128,7 +128,7 @@ export function BulkActionBar({
     };
 
     return (
-        <div className="fixed bottom-0 left-0 right-0 z-[500] pointer-events-none">
+        <div className="pointer-events-none fixed bottom-[calc(3.5rem+env(safe-area-inset-bottom,0px))] left-0 right-0 z-[640] md:bottom-0">
             {/* Sub-panel */}
             {panel && (
                 <div className="pointer-events-auto mx-4 mb-1 bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-xl shadow-2xl overflow-hidden">

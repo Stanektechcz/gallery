@@ -74,10 +74,10 @@ export default function AlbumShow({ album, breadcrumb, children, media, filters:
     const galleryItems = useMemo(() => media.data.map(item => {
         const thumbnail = item.variants?.find(v => v.type === 'thumbnail')
             ?? item.variants?.find(v => v.type === 'video_poster');
-        const original = item.variants?.find(v => v.type === 'original');
         const placeholder = item.variants?.find(v => v.type === 'placeholder');
+        const repairablePreview = `/files/media/${item.uuid}/${item.media_type === 'video' ? 'video_poster.jpg' : 'thumbnail.jpg'}`;
 
-        return { item, displayUrl: thumbnail?.url ?? (item.media_type === 'photo' ? original?.url : null), placeholder };
+        return { item, displayUrl: thumbnail?.url ?? repairablePreview, placeholder };
     }), [media.data]);
 
     const applyFilter = (patch: Partial<Filters>) => {
@@ -126,7 +126,7 @@ export default function AlbumShow({ album, breadcrumb, children, media, filters:
     return (
         <AppLayout>
             <Head title={album.title} />
-            <div className="p-4">
+            <div className="p-3 sm:p-4">
 
                 {/* Breadcrumb */}
                 <nav className="flex items-center gap-1 text-xs text-[var(--color-text-secondary)] mb-4 flex-wrap">
@@ -158,7 +158,7 @@ export default function AlbumShow({ album, breadcrumb, children, media, filters:
                 )}
 
                 {/* Header */}
-                <div className="flex items-start justify-between mb-4 gap-3">
+                <div className="mb-4 flex flex-col items-start justify-between gap-3 sm:flex-row">
                     <div className="min-w-0">
                         <h1 className="text-xl font-semibold text-white mb-1 flex items-center gap-2 truncate">
                             {album.title}
@@ -207,18 +207,18 @@ export default function AlbumShow({ album, breadcrumb, children, media, filters:
                             </div>
                         )}
                     </div>
-                    <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
-                        <Link href={`/albums/create?parent=${album.uuid}`} className="flex items-center gap-1.5 rounded-lg bg-[var(--color-bg-card)] border border-[var(--color-border)] text-white hover:border-[var(--color-accent)]/60 px-3 py-2 text-sm font-medium transition-all">
+                    <div className="flex w-full shrink-0 items-center gap-2 overflow-x-auto pb-1 scrollbar-hide sm:w-auto sm:flex-wrap sm:justify-end sm:overflow-visible sm:pb-0">
+                        <Link href={`/albums/create?parent=${album.uuid}`} className="flex shrink-0 items-center gap-1.5 rounded-lg bg-[var(--color-bg-card)] border border-[var(--color-border)] text-white hover:border-[var(--color-accent)]/60 px-3 py-2 text-sm font-medium transition-all">
                             <FolderPlus size={14}/> Podalbu
                         </Link>
                         <button onClick={() => setShowSmartEditor(v=>!v)}
-                            className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-all ${showSmartEditor ? 'bg-[var(--color-accent)] text-white' : 'bg-[var(--color-bg-card)] border border-[var(--color-border)] text-white hover:border-[var(--color-accent)]/60'}`}>
+                            className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-all ${showSmartEditor ? 'bg-[var(--color-accent)] text-white' : 'bg-[var(--color-bg-card)] border border-[var(--color-border)] text-white hover:border-[var(--color-accent)]/60'}`}>
                             ✨ {albumType === 'smart' ? 'Pravidla' : 'Typ alba'}
                         </button>
-                        <button onClick={() => setUploadOpen(v=>!v)} className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-all ${uploadOpen ? 'bg-[var(--color-accent)] text-white' : 'bg-[var(--color-bg-card)] border border-[var(--color-border)] text-white hover:border-[var(--color-accent)]/60'}`}>
+                        <button onClick={() => setUploadOpen(v=>!v)} className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-all ${uploadOpen ? 'bg-[var(--color-accent)] text-white' : 'bg-[var(--color-bg-card)] border border-[var(--color-border)] text-white hover:border-[var(--color-accent)]/60'}`}>
                             <Upload size={14}/> Nahrát
                         </button>
-                        <button onClick={deleteAlbum} disabled={deleting} title="Smazat album" className="flex items-center gap-1.5 rounded-lg bg-[var(--color-bg-card)] border border-[var(--color-border)] text-red-400 hover:border-red-500/60 px-3 py-2 text-sm font-medium transition-all disabled:opacity-50">
+                        <button onClick={deleteAlbum} disabled={deleting} title="Smazat album" className="flex shrink-0 items-center gap-1.5 rounded-lg bg-[var(--color-bg-card)] border border-[var(--color-border)] text-red-400 hover:border-red-500/60 px-3 py-2 text-sm font-medium transition-all disabled:opacity-50">
                             <Trash2 size={14}/> Smazat
                         </button>
                     </div>
@@ -227,7 +227,7 @@ export default function AlbumShow({ album, breadcrumb, children, media, filters:
                 <AlbumCurationAssistant albumUuid={album.uuid} />
 
                 {/* Tab bar: Fotografie | Příběh */}
-                <div className="flex items-center gap-0 mb-4 border-b border-[var(--color-border)]">
+                <div className="mb-4 flex items-center gap-0 overflow-x-auto border-b border-[var(--color-border)] scrollbar-hide">
                     <button onClick={() => setActiveTab('grid')}
                         className={`flex items-center gap-1.5 px-4 py-2.5 text-sm border-b-2 transition-colors -mb-px ${activeTab === 'grid' ? 'border-[var(--color-accent)] text-white' : 'border-transparent text-[var(--color-text-secondary)] hover:text-white'}`}>
                         <Grid3X3 size={14}/> Fotografie
@@ -273,9 +273,9 @@ export default function AlbumShow({ album, breadcrumb, children, media, filters:
                 {activeTab === 'grid' && (<>
 
                 {/* Filter/Sort bar */}
-                <div className="flex flex-wrap items-center gap-2 mb-5 p-3 rounded-xl bg-[var(--color-bg-card)] border border-[var(--color-border)]">
+                <div className="mb-5 flex flex-wrap items-center gap-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-3">
                     {/* Search */}
-                    <form onSubmit={handleSearch} className="flex items-center gap-1.5 flex-1 min-w-[160px]">
+                    <form onSubmit={handleSearch} className="flex w-full min-w-[160px] flex-1 items-center gap-1.5 sm:w-auto">
                         <Search size={13} className="text-[var(--color-text-secondary)]" />
                         <input
                             value={search}
@@ -285,19 +285,19 @@ export default function AlbumShow({ album, breadcrumb, children, media, filters:
                         />
                     </form>
 
-                    <div className="w-px h-4 bg-[var(--color-border)]" />
+                    <div className="hidden h-4 w-px bg-[var(--color-border)] sm:block" />
 
                     {/* Type filter */}
-                    <div className="flex gap-1">
+                    <div className="flex max-w-full gap-1 overflow-x-auto scrollbar-hide">
                         <button onClick={() => applyFilter({type: undefined as any})} className={`px-2 py-1 rounded text-xs transition-colors ${!filters.type ? 'bg-[var(--color-accent)] text-white' : 'text-[var(--color-text-secondary)] hover:text-white'}`}>Vše</button>
                         <button onClick={() => applyFilter({type:'photo'})} className={`px-2 py-1 rounded text-xs transition-colors ${filters.type==='photo' ? 'bg-[var(--color-accent)] text-white' : 'text-[var(--color-text-secondary)] hover:text-white'}`}><Image size={11} className="inline mr-1"/>Fotky</button>
                         <button onClick={() => applyFilter({type:'video'})} className={`px-2 py-1 rounded text-xs transition-colors ${filters.type==='video' ? 'bg-[var(--color-accent)] text-white' : 'text-[var(--color-text-secondary)] hover:text-white'}`}><Film size={11} className="inline mr-1"/>Videa</button>
                     </div>
 
-                    <div className="w-px h-4 bg-[var(--color-border)]" />
+                    <div className="hidden h-4 w-px bg-[var(--color-border)] sm:block" />
 
                     {/* Sort */}
-                    <div className="flex items-center gap-1">
+                    <div className="flex max-w-full items-center gap-1 overflow-x-auto scrollbar-hide">
                         <ArrowUpDown size={12} className="text-[var(--color-text-secondary)]" />
                         <SortBtn value="taken_at" label="Datum" />
                         <SortBtn value="uploaded_at" label="Nahrání" />
@@ -341,7 +341,7 @@ export default function AlbumShow({ album, breadcrumb, children, media, filters:
                 {media.data.length > 0 ? (
                     <section>
                         <h2 className="text-xs font-medium text-[var(--color-text-secondary)] mb-3 uppercase tracking-wider">Média</h2>
-                        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(150px, 1fr))', gap:'4px' }}>
+                        <div className="grid grid-cols-2 gap-1 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8">
                             {galleryItems.map(({ item, displayUrl, placeholder }) => {
                                 return (
                                     <Link
@@ -350,7 +350,7 @@ export default function AlbumShow({ album, breadcrumb, children, media, filters:
                                         className="relative group aspect-square rounded overflow-hidden bg-[var(--color-bg-card)]"
                                         style={{ contentVisibility: 'auto', contain: 'layout paint style', containIntrinsicSize: '150px 150px' }}
                                     >
-                                        {placeholder?.dominant_color && !displayUrl && <div className="absolute inset-0" style={{ backgroundColor: placeholder.dominant_color }} />}
+                                        {placeholder?.dominant_color && <div className="absolute inset-0" style={{ backgroundColor: placeholder.dominant_color }} />}
                                         {displayUrl
                                             ? <img src={displayUrl} alt="" loading="lazy" decoding="async" fetchPriority="low" draggable={false} className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                                             : <div className="absolute inset-0 flex items-center justify-center bg-[var(--color-bg-secondary)]">
@@ -371,7 +371,7 @@ export default function AlbumShow({ album, breadcrumb, children, media, filters:
 
                         {/* Pagination */}
                         {media.last_page > 1 && (
-                            <div className="flex items-center justify-center gap-1 mt-6">
+                            <div className="mt-6 flex items-center justify-start gap-1 overflow-x-auto pb-1 scrollbar-hide sm:justify-center">
                                 {media.links.map((link, i) => (
                                     <button key={i} disabled={!link.url || link.active} onClick={() => link.url && router.get(link.url, {}, { preserveScroll: false })}
                                         className={`px-3 py-1.5 rounded text-xs transition-colors ${link.active ? 'bg-[var(--color-accent)] text-white' : !link.url ? 'text-[var(--color-text-secondary)] opacity-40' : 'bg-[var(--color-bg-card)] border border-[var(--color-border)] text-white hover:border-[var(--color-accent)]/50'}`}

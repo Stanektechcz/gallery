@@ -185,7 +185,7 @@ function CommandPalette({ open, onClose, isAdmin }: { open: boolean; onClose: ()
     };
 
     return (
-        <div className="fixed inset-0 z-[500] flex items-start justify-center pt-[12vh]">
+        <div className="fixed inset-0 z-[800] flex items-start justify-center p-2 pt-[10dvh] sm:p-4 sm:pt-[12vh]">
             <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose}/>
             <div className="relative z-10 w-full max-w-lg bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-2xl shadow-2xl overflow-hidden">
                 {/* Search input */}
@@ -423,6 +423,9 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
             : currentPath.startsWith(href);
     const [mobileOpen, setMobileOpen] = useState(false);
     const [cmdOpen,    setCmdOpen]    = useState(false);
+    const currentLabel = title
+        ?? navItems.find(item => !('divider' in item) && isActive(item.href))?.label
+        ?? 'Galerie';
 
     useEffect(() => {
         const handler = (e: KeyboardEvent) => {
@@ -435,8 +438,19 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
         return () => window.removeEventListener('keydown', handler);
     }, []);
 
+    useEffect(() => {
+        setMobileOpen(false);
+    }, [currentPath]);
+
+    useEffect(() => {
+        if (!mobileOpen) return;
+        const close = (event: KeyboardEvent) => { if (event.key === 'Escape') setMobileOpen(false); };
+        window.addEventListener('keydown', close);
+        return () => window.removeEventListener('keydown', close);
+    }, [mobileOpen]);
+
     return (
-        <div className="flex h-screen overflow-hidden">
+        <div className="app-shell flex min-h-0 w-full overflow-hidden">
             <CommandPalette open={cmdOpen} onClose={() => setCmdOpen(false)} isAdmin={isAdmin} />
             {/* Sidebar — Desktop */}
             <aside className="hidden md:flex flex-col w-60 shrink-0 border-r border-[var(--color-border)] bg-[var(--color-bg-secondary)]">
@@ -494,11 +508,11 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
 
             {/* Mobile Sidebar Overlay */}
             {mobileOpen && (
-                <div className="md:hidden fixed inset-0 z-50 flex">
+                <div className="fixed inset-0 z-[700] flex md:hidden" role="dialog" aria-modal="true" aria-label="Hlavní nabídka">
                     {/* Backdrop */}
                     <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setMobileOpen(false)} />
                     {/* Drawer */}
-                    <aside className="relative z-10 flex flex-col w-72 h-full bg-[var(--color-bg-secondary)] border-r border-[var(--color-border)]">
+                    <aside className="safe-area-pt relative z-10 flex h-full w-72 max-w-[88vw] flex-col border-r border-[var(--color-border)] bg-[var(--color-bg-secondary)] shadow-2xl">
                         <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--color-border)]">
                             <div className="flex items-center gap-3">
                                 <div className="w-8 h-8 rounded-lg bg-[var(--color-accent)] flex items-center justify-center">
@@ -543,7 +557,18 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
             )}
 
             {/* Main content */}
-            <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+                {/* Mobile top bar — menu is reachable before any scrolling. */}
+                <header className="safe-area-pt flex min-h-14 shrink-0 items-center gap-2 border-b border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-2 md:hidden">
+                    <button type="button" onClick={() => setMobileOpen(true)} aria-label="Otevřít hlavní nabídku" aria-expanded={mobileOpen} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-[var(--color-text-secondary)] hover:bg-white/5 hover:text-white">
+                        <Menu size={21}/>
+                    </button>
+                    <p className="min-w-0 flex-1 truncate text-sm font-semibold text-white">{currentLabel}</p>
+                    <button type="button" onClick={() => setCmdOpen(true)} aria-label="Otevřít rychlé hledání" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-[var(--color-text-secondary)] hover:bg-white/5 hover:text-white">
+                        <Search size={19}/>
+                    </button>
+                    <NotificationBell/>
+                </header>
                 {/* Flash messages */}
                 {flash?.success && (
                     <div className="px-4 py-2 bg-green-600/20 border-b border-green-600/30 text-green-400 text-sm">
@@ -557,7 +582,7 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
                 )}
 
                 {/* Content */}
-                <main className="flex-1 overflow-y-auto">
+                <main id="app-scroll-container" className="app-scroll min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain">
                     {children}
                 </main>
 
@@ -565,13 +590,13 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
                 <UploadPanel />
 
                 {/* Mobile Bottom Nav */}
-                <nav className="md:hidden flex items-center border-t border-[var(--color-border)] bg-[var(--color-bg-secondary)] safe-area-pb">
+                <nav className="mobile-bottom-nav safe-area-pb fixed inset-x-0 bottom-0 z-[650] flex shrink-0 items-center border-t border-[var(--color-border)] bg-[var(--color-bg-secondary)]/98 shadow-[0_-8px_30px_rgba(0,0,0,.28)] backdrop-blur-xl md:hidden" aria-label="Rychlá mobilní navigace">
                     {mobileNav.map(item => {
                         const Icon = item.icon;
                         const active = isActive(item.href);
                         return (
                             <Link key={item.href} href={item.href}
-                                className={clsx('flex-1 flex flex-col items-center py-3 gap-0.5 text-[10px] transition-colors',
+                                className={clsx('flex min-h-14 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-0.5 py-1 text-[10px] transition-colors',
                                     active ? 'text-[var(--color-accent)]' : 'text-[var(--color-text-secondary)]'
                                 )}>
                                 <Icon size={20} />
@@ -580,7 +605,8 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
                         );
                     })}
                     <button onClick={() => setMobileOpen(true)}
-                        className="flex-1 flex flex-col items-center py-3 gap-0.5 text-[10px] text-[var(--color-text-secondary)]">
+                        aria-label="Otevřít další části aplikace" aria-expanded={mobileOpen}
+                        className="flex min-h-14 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-0.5 py-1 text-[10px] text-[var(--color-text-secondary)]">
                         <Menu size={20} />
                         Více
                     </button>

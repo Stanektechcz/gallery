@@ -40,16 +40,34 @@ class RevolutStatementImportService
     public function import(GallerySpace $space, User $user, UploadedFile $file): array
     {
         $sha = hash_file('sha256', $file->getRealPath());
-        if ($existing = BankImport::where('gallery_space_id', $space->id)->where('file_sha256', $sha)->first()) {
-            return ['import' => $this->payload($existing), 'duplicate_file' => true];
-        }
         $extension = strtolower($file->getClientOriginalExtension());
         abort_unless(in_array($extension, ['csv', 'xls', 'xlsx'], true), 422, 'Nahrajte výpis Revolut ve formátu CSV, XLS nebo XLSX.');
+        $existing = BankImport::where('gallery_space_id', $space->id)->where('file_sha256', $sha)->first();
+        if ($existing?->status === 'completed') {
+            $hasImportedTransactions = BankTransaction::where('bank_import_id', $existing->id)->exists();
+            $wasFullyDuplicate = (int) $existing->rows_imported === 0 && (int) $existing->rows_duplicate > 0;
+            if ($hasImportedTransactions || $wasFullyDuplicate) {
+                return ['import' => $this->payload($existing), 'duplicate_file' => true, 'retried_import' => false];
+            }
+        }
+        abort_if($existing?->status === 'processing' && $existing->updated_at?->gt(now()->subMinutes(15)), 409, 'Tento výpis se právě zpracovává. Počkejte prosím na dokončení.');
+
         $connection = BankConnection::firstOrCreate(['gallery_space_id' => $space->id, 'provider' => 'revolut_statement', 'status' => 'active'],
             ['connected_by' => $user->id, 'institution_name' => 'Revolut · import výpisu', 'sync_enabled' => false]);
-        $import = BankImport::create(['gallery_space_id' => $space->id, 'bank_connection_id' => $connection->id,
-            'imported_by' => $user->id, 'original_filename' => $file->getClientOriginalName(), 'file_sha256' => $sha,
-            'format' => $extension, 'status' => 'processing']);
+        $retriedImport = (bool) $existing;
+        if ($existing) {
+            $existing->update([
+                'bank_connection_id' => $connection->id, 'bank_account_id' => null, 'imported_by' => $user->id,
+                'original_filename' => $file->getClientOriginalName(), 'format' => $extension, 'status' => 'processing',
+                'rows_total' => 0, 'rows_imported' => 0, 'rows_duplicate' => 0, 'rows_failed' => 0,
+                'period_from' => null, 'period_to' => null, 'error_summary' => null,
+            ]);
+            $import = $existing->fresh();
+        } else {
+            $import = BankImport::create(['gallery_space_id' => $space->id, 'bank_connection_id' => $connection->id,
+                'imported_by' => $user->id, 'original_filename' => $file->getClientOriginalName(), 'file_sha256' => $sha,
+                'format' => $extension, 'status' => 'processing']);
+        }
         try {
             $rows = $extension === 'csv' ? $this->csvRows($file->getRealPath()) : $this->spreadsheetRows($file->getRealPath());
             abort_if(count($rows) < 2, 422, 'Výpis neobsahuje žádné transakce.');
@@ -127,7 +145,7 @@ class RevolutStatementImportService
                 'error_summary' => $counts['failed'] ? "{$counts['failed']} řádků nebylo možné načíst. První chyba: ".mb_substr((string) $firstFailure, 0, 700) : null]);
             $links = $this->reconciliation->reconcileSpace($space);
 
-            return ['import' => $this->payload($import->fresh()), 'duplicate_file' => false, 'trip_links_created' => $links];
+            return ['import' => $this->payload($import->fresh()), 'duplicate_file' => false, 'retried_import' => $retriedImport, 'trip_links_created' => $links];
         } catch (\Throwable $exception) {
             $import->update(['status' => 'failed', 'error_summary' => mb_substr($exception->getMessage(), 0, 1000)]);
             throw $exception;
@@ -143,11 +161,7 @@ class RevolutStatementImportService
         }
         $content = preg_replace('/^\xEF\xBB\xBF/', '', $content);
         $sampleLines = array_slice(preg_split('/\R/u', $content) ?: [], 0, 30);
-        $delimiters = collect([',', ';', "\t"])->mapWithKeys(fn (string $candidate) => [
-            $candidate => collect($sampleLines)->sum(fn (string $line) => substr_count($line, $candidate)),
-        ])->all();
-        arsort($delimiters);
-        $delimiter = array_key_first($delimiters);
+        $delimiter = $this->delimiter($sampleLines);
         $stream = fopen('php://temp', 'r+');
         abort_unless($stream, 500, 'Výpis nelze dočasně zpracovat.');
         fwrite($stream, $content);
@@ -155,7 +169,7 @@ class RevolutStatementImportService
         $rows = [];
         while (($row = fgetcsv($stream, null, $delimiter, '"', '')) !== false) {
             if (! $this->emptyRow($row)) {
-                $rows[] = $row;
+                $rows[] = array_map(fn ($value) => $this->repairText($value), $row);
             }
         }
         fclose($stream);
@@ -174,6 +188,7 @@ class RevolutStatementImportService
             foreach ($spreadsheet->getAllSheets() as $sheet) {
                 // Keep raw Excel serial values; this avoids ambiguous 09/10 dates caused by localized cell formatting.
                 $rows = collect($sheet->toArray(null, true, false, false))->reject(fn (array $row) => $this->emptyRow($row))->values()->all();
+                $rows = $this->expandDelimitedSpreadsheetRows($rows);
                 $score = collect(array_slice($rows, 0, 50))->max(fn (array $row) => count($this->columns($row))) ?? 0;
                 if ($score > $bestScore) {
                     $bestRows = $rows;
@@ -186,6 +201,51 @@ class RevolutStatementImportService
         } catch (\Throwable $exception) {
             abort(422, 'Tabulku XLS/XLSX nelze přečíst. Ověřte, že není chráněná heslem ani poškozená. '.$exception->getMessage());
         }
+    }
+
+    private function expandDelimitedSpreadsheetRows(array $rows): array
+    {
+        $repaired = collect($rows)->map(fn (array $row) => array_map(fn ($value) => $this->repairText($value), $row))->values();
+        $singleCellLines = $repaired->map(function (array $row) {
+            $filled = collect($row)->filter(fn ($value) => trim((string) $value) !== '')->values();
+
+            return $filled->count() === 1 ? (string) $filled->first() : null;
+        })->filter(fn ($value) => $value !== null)->values();
+
+        if ($singleCellLines->count() < max(2, (int) ceil($repaired->count() * 0.6))) {
+            return $repaired->all();
+        }
+        $delimiter = $this->delimiter($singleCellLines->take(30)->all());
+        if ($singleCellLines->sum(fn (string $line) => substr_count($line, $delimiter)) === 0) {
+            return $repaired->all();
+        }
+
+        return $singleCellLines->map(fn (string $line) => str_getcsv($line, $delimiter, '"', ''))->all();
+    }
+
+    private function delimiter(array $lines): string
+    {
+        $delimiters = collect([',', ';', "\t"])->mapWithKeys(fn (string $candidate) => [
+            $candidate => collect($lines)->sum(fn ($line) => substr_count((string) $line, $candidate)),
+        ])->all();
+        arsort($delimiters);
+
+        return (string) array_key_first($delimiters);
+    }
+
+    private function repairText(mixed $value): mixed
+    {
+        if (! is_string($value) || ! preg_match('/[ĂÄĹ]/u', $value)) {
+            return $value;
+        }
+        $repaired = @iconv('UTF-8', 'Windows-1250//IGNORE', $value);
+        if (! is_string($repaired) || ! mb_check_encoding($repaired, 'UTF-8')) {
+            return $value;
+        }
+        $before = preg_match_all('/[ĂÄĹ]/u', $value);
+        $after = preg_match_all('/[ĂÄĹ]/u', $repaired);
+
+        return $after < $before ? $repaired : $value;
     }
 
     private function table(array $rows): array

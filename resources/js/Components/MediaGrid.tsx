@@ -1,6 +1,7 @@
 import { Link, router } from '@inertiajs/react';
 import { clsx } from 'clsx';
 import { Heart, Play, Star } from 'lucide-react';
+import { memo } from 'react';
 
 export interface MediaCardData {
     id: number;
@@ -31,9 +32,10 @@ interface Props {
     href?: string;
 }
 
-export function MediaCard({ item, selected, onSelect, onAction, badge, href }: Props) {
+export const MediaCard = memo(function MediaCard({ item, selected, onSelect, onAction, badge, href }: Props) {
     const thumb       = item.variants.find(v => v.type === 'thumbnail');
     const placeholder = item.variants.find(v => v.type === 'placeholder');
+    const previewUrl  = thumb?.url ?? `/files/media/${item.uuid}/${item.media_type === 'video' ? 'video_poster.jpg' : 'thumbnail.jpg'}`;
     const aspect      = thumb?.aspect_ratio ?? (item.width && item.height ? item.width / item.height : 1);
 
     const handleClick = (e: React.MouseEvent) => {
@@ -60,17 +62,19 @@ export function MediaCard({ item, selected, onSelect, onAction, badge, href }: P
                 contentVisibility: 'auto',
                 containIntrinsicSize: '160px 160px',
             }}
-            onClick={handleClick}
+            onClick={onSelect || !href ? handleClick : undefined}
         >
             {placeholder?.dominant_color && (
                 <div className="absolute inset-0" style={{ backgroundColor: placeholder.dominant_color }} />
             )}
-            {thumb && (
+            {previewUrl && (
                 <img
-                    src={thumb.url}
+                    src={previewUrl}
                     alt=""
                     loading="lazy"
                     decoding="async"
+                    fetchPriority="low"
+                    draggable={false}
                     className="absolute inset-0 w-full h-full object-cover transition-opacity duration-300"
                 />
             )}
@@ -85,7 +89,7 @@ export function MediaCard({ item, selected, onSelect, onAction, badge, href }: P
                         'absolute top-2 left-2 w-5 h-5 rounded border-2 flex items-center justify-center transition-all cursor-pointer z-10',
                         selected
                             ? 'bg-[var(--color-accent)] border-[var(--color-accent)]'
-                            : 'bg-black/40 border-white/60 opacity-0 group-hover:opacity-100'
+                            : 'bg-black/45 border-white/70 opacity-75 md:opacity-0 md:group-hover:opacity-100'
                     )}
                     onClick={handleCheckboxClick}
                 >
@@ -124,7 +128,7 @@ export function MediaCard({ item, selected, onSelect, onAction, badge, href }: P
         return <Link href={href}>{content}</Link>;
     }
     return content;
-}
+});
 
 interface GridProps {
     items: MediaCardData[];
@@ -145,12 +149,12 @@ export function MediaGrid({
     getHref,
     getBadge,
     emptyState,
-    columns = 'repeat(auto-fill, minmax(160px, 1fr))',
+    columns = 'repeat(auto-fill, minmax(min(128px, 100%), 1fr))',
 }: GridProps) {
     if (items.length === 0 && emptyState) return <>{emptyState}</>;
 
     return (
-        <div style={{ display: 'grid', gridTemplateColumns: columns, gap: '4px' }}>
+        <div className="min-w-0" style={{ display: 'grid', gridTemplateColumns: columns, gap: '4px' }}>
             {items.map(item => (
                 <MediaCard
                     key={item.uuid}

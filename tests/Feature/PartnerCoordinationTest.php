@@ -114,6 +114,37 @@ class PartnerCoordinationTest extends TestCase
         ])->assertForbidden();
     }
 
+    public function test_trip_settlement_is_a_shared_action_and_updates_the_original_balance(): void
+    {
+        $sources = $this->sources();
+        $settlementId = DB::table('trip_settlements')->insertGetId([
+            'trip_id' => $sources['trip'], 'created_by' => $this->owner->id,
+            'from_user_id' => $this->partner->id, 'to_user_id' => $this->owner->id,
+            'amount' => 750.50, 'currency' => 'CZK', 'status' => 'suggested',
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $pulse = $this->actingAs($this->partner)->getJson('/api/v1/coordination/pulse?gallery_space_id=' . $this->space->id . '&limit=20')
+            ->assertOk()->assertJsonFragment([
+                'type' => 'settlement', 'source_key' => (string) $settlementId,
+                'settlement_id' => $settlementId, 'assignment_locked' => true,
+                'href' => '/trips/' . $sources['trip'] . '/plan#partner-finance',
+            ]);
+        $action = collect($pulse->json('actions'))->firstWhere('type', 'settlement');
+        $this->assertSame($this->partner->id, $action['assigned_to']['id']);
+
+        $this->patchJson('/api/v1/coordination/actions/settlement/' . $settlementId, [
+            'gallery_space_id' => $this->space->id, 'assigned_to' => $this->owner->id,
+        ])->assertUnprocessable();
+
+        $completed = $this->patchJson('/api/v1/coordination/actions/settlement/' . $settlementId, [
+            'gallery_space_id' => $this->space->id, 'completed' => true,
+        ])->assertOk();
+        $this->assertFalse(collect($completed->json('actions'))->contains(fn ($item) => $item['type'] === 'settlement' && $item['source_key'] === (string) $settlementId));
+        $this->assertDatabaseHas('trip_settlements', ['id' => $settlementId, 'status' => 'settled']);
+        $this->assertNotNull(DB::table('trip_settlements')->find($settlementId)->settled_at);
+    }
+
     private function sources(): array
     {
         $eventId = DB::table('calendar_events')->insertGetId($this->eventRow('Víkend ve Vídni'));

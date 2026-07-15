@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Schema;
 
 class PartnerCoordinationService
 {
-    public const TYPES = ['shared_todo', 'event_task', 'packing_item', 'planning_item', 'trip_document', 'gift'];
+    public const TYPES = ['shared_todo', 'event_task', 'packing_item', 'planning_item', 'trip_document', 'gift', 'settlement'];
 
     public function snapshot(GallerySpace $space, User $viewer, int $limit = 12): array
     {
@@ -22,7 +22,8 @@ class PartnerCoordinationService
             ->concat($this->packingItems($space, $now))
             ->concat($this->planningItems($space))
             ->concat($this->tripDocuments($space, $now))
-            ->concat($this->gifts($space, $now));
+            ->concat($this->gifts($space, $now))
+            ->concat($this->settlements($space));
 
         $snoozed = Schema::hasTable('coordination_action_states')
             ? DB::table('coordination_action_states')->where('gallery_space_id', $space->id)->where('user_id', $viewer->id)
@@ -170,6 +171,31 @@ class PartnerCoordinationService
             ->where(fn ($due) => $due->whereNull('gift.due_date')->orWhere('gift.due_date', '<=', $now->copy()->addDays(90)->toDateString()))->limit(30);
         if (Schema::hasColumn('gift_ideas', 'assigned_to')) $query->leftJoin('users as assignee', 'assignee.id', '=', 'gift.assigned_to');
         return $query->get($select)->map(fn ($gift) => $this->action('gift', $gift->uuid, $gift->title, $gift->occasion ? 'Dárek · ' . $gift->occasion : 'Nápad na dárek', $gift->due_date ? $gift->due_date . ' 18:00:00' : null, 'normal', $gift->assigned_to ?? null, $gift->assignee_name ?? null, '/planning', ['gift_uuid' => $gift->uuid]));
+    }
+
+    private function settlements(GallerySpace $space): Collection
+    {
+        if (! Schema::hasTable('trip_settlements')) return collect();
+
+        return DB::table('trip_settlements as settlement')
+            ->join('trips as trip', 'trip.id', '=', 'settlement.trip_id')
+            ->join('users as debtor', 'debtor.id', '=', 'settlement.from_user_id')
+            ->join('users as creditor', 'creditor.id', '=', 'settlement.to_user_id')
+            ->where('trip.gallery_space_id', $space->id)
+            ->where('settlement.status', 'suggested')
+            ->orderBy('trip.end_date')->orderBy('settlement.id')->limit(30)
+            ->get([
+                'settlement.id', 'settlement.from_user_id', 'settlement.to_user_id', 'settlement.amount', 'settlement.currency',
+                'trip.id as trip_id', 'trip.name as trip_name', 'trip.end_date',
+                'debtor.name as debtor_name', 'creditor.name as creditor_name',
+            ])->map(fn ($settlement) => $this->action(
+                'settlement', $settlement->id,
+                'Vyrovnat ' . number_format((float) $settlement->amount, 2, ',', ' ') . ' ' . $settlement->currency . ' s ' . $settlement->creditor_name,
+                'Finance · ' . $settlement->trip_name,
+                $settlement->end_date . ' 20:00:00', 'high', $settlement->from_user_id, $settlement->debtor_name,
+                '/trips/' . $settlement->trip_id . '/plan#partner-finance',
+                ['trip_id' => (int) $settlement->trip_id, 'settlement_id' => (int) $settlement->id, 'assignment_locked' => true]
+            ));
     }
 
     private function checkIns(GallerySpace $space, User $viewer): Collection

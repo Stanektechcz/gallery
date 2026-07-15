@@ -2,6 +2,7 @@ import AppLayout from '@/Layouts/AppLayout';
 import TripBankFinancePanel from '@/Components/Banking/TripBankFinancePanel';
 import MealPlanPanel from '@/Components/Recipes/MealPlanPanel';
 import TripReservationImportPanel from '@/Components/Trips/TripReservationImportPanel';
+import UnifiedTripFinancePanel from '@/Components/Trips/UnifiedTripFinancePanel';
 import { Head, Link } from '@inertiajs/react';
 import axios from 'axios';
 import { ArrowDown, ArrowLeft, ArrowUp, Check, ChevronDown, Clock3, CloudDownload, Compass, Download, FileText, MapPin, Pencil, Plus, Save, Trash2, Wallet, WifiOff, X } from 'lucide-react';
@@ -135,6 +136,8 @@ export default function TripPlan({ tripId }: { tripId: number }) {
 
                     <TripBankFinancePanel tripId={trip.id} gallerySpaceId={trip.gallery_space_id} currency={trip.currency}/>
 
+                    <UnifiedTripFinancePanel trip={trip}/>
+
                     <TripReservationImportPanel tripId={trip.id} days={days} currency={trip.currency} onChanged={load}/>
 
                     {activeDay && <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_280px]">
@@ -152,12 +155,10 @@ export default function TripPlan({ tripId }: { tripId: number }) {
                         <aside className="space-y-3">
                             <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-4"><p className="text-xs font-semibold text-white">Přehled dne</p><div className="mt-3 space-y-2 text-xs text-[var(--color-text-secondary)]"><div className="flex justify-between"><span>Bloků</span><span className="text-white">{activeDay.activities.length}</span></div><div className="flex justify-between"><span>Dokončeno</span><span className="text-white">{activeDay.activities.filter(item => item.status === 'done').length}</span></div><div className="flex justify-between"><span>Rozpočet</span><span className="text-white">{activeDay.activities.reduce((sum, item) => sum + Number(item.cost ?? 0), 0).toLocaleString('cs-CZ')} {trip.currency}</span></div></div></div>
                             <TripOfflinePackage tripId={trip.id} offlineKey={offlineKey} />
-                             <TripPlanningPanel tripId={trip.id} currency={trip.currency} />
                             <TripTravelPanel trip={trip} days={days} activeDayId={activeDayId} />
                              <TripInboxReferencesPanel tripId={trip.id} gallerySpaceId={trip.gallery_space_id} day={activeDay} onAssigned={load} />
                              <TripMemoryPanel trip={trip} />
                             <TripReflectionPanel trip={trip} />
-                             <LowCostFinancePanel trip={trip} />
                             <TripReadiness tripId={trip.id} />
                             <TripPackingPanel tripId={trip.id} />
                             <VehicleCostPanel tripId={trip.id} currency={trip.currency} />

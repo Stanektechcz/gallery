@@ -5,7 +5,7 @@ import { Head, Link, router } from '@inertiajs/react';
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import { Grid3X3, Heart, Layers, Map, Maximize2, Play, Trash2 } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 const GRID_SIZES = [120, 160, 200, 260];
 const MONTHS_CS = ['Leden','Únor','Březen','Duben','Květen','Červen','Červenec','Srpen','Září','Říjen','Listopad','Prosinec'];
@@ -20,26 +20,27 @@ interface MediaCard {
 }
 interface TimelineGroup { date: string; label: string; month: string; year: string; items: MediaCard[] }
 
-function MediaCardComponent({ item, size, selected, onFav, onTrash, onSlideshow, onSelect }: {
+const MediaCardComponent = memo(function MediaCardComponent({ item, size, selected, onFav, onTrash, onSlideshow, onSelect }: {
     item: MediaCard; size: number; selected: boolean;
     onFav: (uuid: string, cur: boolean) => void; onTrash: (uuid: string) => void;
     onSlideshow: (uuid: string) => void; onSelect: (uuid: string) => void;
 }) {
-    const thumb = item.variants?.find(v => v.type === 'thumbnail') ?? item.variants?.find(v => v.type === 'original');
+    const thumb = item.variants?.find(v => v.type === 'thumbnail');
+    const thumbUrl = thumb?.url ?? `/files/media/${item.uuid}/${item.media_type === 'video' ? 'video_poster.jpg' : 'thumbnail.jpg'}`;
     const dom   = item.variants?.find(v => v.type === 'placeholder')?.dominant_color;
     return (
         <div
-            className={`relative group cursor-pointer rounded overflow-hidden bg-[var(--color-bg-card)] shrink-0 ${selected ? 'ring-2 ring-[var(--color-accent)] ring-offset-1 ring-offset-[var(--color-bg-primary)]' : ''}`}
-            style={{ width: size, height: size, contentVisibility: 'auto', contain: 'layout paint style', containIntrinsicSize: `${size}px ${size}px` }}
+            className={`media-timeline-card relative group cursor-pointer rounded overflow-hidden bg-[var(--color-bg-card)] shrink-0 ${selected ? 'ring-2 ring-[var(--color-accent)] ring-offset-1 ring-offset-[var(--color-bg-primary)]' : ''}`}
+            style={{ '--media-grid-size': `${size}px`, contentVisibility: 'auto', contain: 'layout paint style', containIntrinsicSize: `${size}px ${size}px` } as React.CSSProperties}
             onClick={e => { if (e.ctrlKey||e.metaKey||e.shiftKey||selected) { e.preventDefault(); onSelect(item.uuid); } else router.visit(`/media/${item.uuid}`); }}
         >
             {dom && <div className="absolute inset-0" style={{ backgroundColor: dom }} />}
-            {thumb && <img src={thumb.url} alt="" loading="lazy" decoding="async" fetchPriority="low" draggable={false} className="absolute inset-0 w-full h-full object-cover" />}
+            <img src={thumbUrl} alt="" loading="lazy" decoding="async" fetchPriority="low" draggable={false} className="absolute inset-0 w-full h-full object-cover" />
             <div className={`absolute inset-0 transition-colors ${selected ? 'bg-[var(--color-accent)]/20' : 'bg-black/0 group-hover:bg-black/25'}`} />
             {item.media_type === 'video' && !selected && <div className="absolute top-1.5 right-1.5 bg-black/60 rounded-full p-0.5"><Play size={9} className="text-white fill-white" /></div>}
             {(item.stacks?.[0]?.items_count ?? 0) > 1 && !selected && <div className="absolute top-1.5 right-1.5 bg-black/70 rounded-full px-1.5 py-1 flex items-center gap-1 text-[9px] text-white" title="Seskupené fotografie"><Layers size={10} />{item.stacks![0].items_count}</div>}
             {item.is_favorite && !selected && <Heart size={11} className="absolute top-1.5 left-1.5 text-red-400 fill-red-400" />}
-            <div className={`absolute top-1.5 left-1.5 w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${selected ? 'bg-[var(--color-accent)] border-[var(--color-accent)]' : 'bg-black/40 border-white/60 opacity-0 group-hover:opacity-100'}`}
+            <div className={`absolute top-1.5 left-1.5 w-6 h-6 rounded border-2 flex items-center justify-center transition-all ${selected ? 'bg-[var(--color-accent)] border-[var(--color-accent)]' : 'bg-black/45 border-white/70 opacity-75 md:opacity-0 md:group-hover:opacity-100'}`}
                 onClick={e => { e.stopPropagation(); onSelect(item.uuid); }}>
                 {selected && <span className="text-white text-[10px] font-bold">✓</span>}
             </div>
@@ -61,7 +62,7 @@ function MediaCardComponent({ item, size, selected, onFav, onTrash, onSlideshow,
             )}
         </div>
     );
-}
+});
 
 function groupByDate(items: MediaCard[]): TimelineGroup[] {
     const groups: Record<string, MediaCard[]> = {};
@@ -92,20 +93,19 @@ export default function TimelineIndex() {
     const [slideshowIdx,   setSlideshowIdx]   = useState(0);
     const gridSize = GRID_SIZES[gridSizeIdx];
 
-    const toggleFav = async (uuid: string, cur: boolean) => {
+    const toggleFav = useCallback(async (uuid: string, cur: boolean) => {
         setLocalItems(p => ({ ...p, [uuid]: { is_favorite: !cur } }));
         try { await axios.post(`/api/v1/favorites/${uuid}/toggle`); }
         catch { setLocalItems(p => ({ ...p, [uuid]: { is_favorite: cur } })); }
-    };
-    const trashItem = async (uuid: string) => {
+    }, []);
+    const trashItem = useCallback(async (uuid: string) => {
         if (!confirm('Přesunout do koše?')) return;
         setLocalItems(p => ({ ...p, [uuid]: { ...(p[uuid]??{}), _trashed: true } as any }));
         try { await axios.delete(`/media/${uuid}`); queryClient.invalidateQueries({ queryKey: ['timeline'] }); }
         catch (e: any) { setLocalItems(p => { const n={...p}; delete n[uuid]; return n; }); alert(e?.response?.data?.message??'Chyba'); }
-    };
-    const toggleSelect = (uuid: string) => setSelected(prev => { const n=new Set(prev); n.has(uuid)?n.delete(uuid):n.add(uuid); return n; });
-    const clearSelect  = () => setSelected(new Set());
-    const selectAll    = () => setSelected(new Set(allItems.map(i => i.uuid)));
+    }, [queryClient]);
+    const toggleSelect = useCallback((uuid: string) => setSelected(prev => { const n=new Set(prev); n.has(uuid)?n.delete(uuid):n.add(uuid); return n; }), []);
+    const clearSelect  = useCallback(() => setSelected(new Set()), []);
 
     const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading } = useInfiniteQuery({
         queryKey: ['timeline'],
@@ -116,6 +116,9 @@ export default function TimelineIndex() {
         },
         initialPageParam: undefined as string|undefined,
         getNextPageParam: lp => lp.meta?.next_cursor ?? undefined,
+        staleTime: 60_000,
+        gcTime: 10 * 60_000,
+        refetchOnWindowFocus: false,
     });
 
     useEffect(() => {
@@ -161,11 +164,12 @@ export default function TimelineIndex() {
         for (const g of groups) { const k=g.month||g.year; if(!seen.has(k)){ seen.add(k); list.push({label:k,key:k}); } }
         return list;
     }, [groups]);
+    const selectAll = useCallback(() => setSelected(new Set(allItems.map(i => i.uuid))), [allItems]);
 
-    const startSlideshow = (uuid: string) => {
+    const startSlideshow = useCallback((uuid: string) => {
         setSlideshowItems(allItems);
         setSlideshowIdx(allItems.findIndex(i=>i.uuid===uuid)||0);
-    };
+    }, [allItems]);
 
     // Map Timeline items to SlideshowItem
     const slideshowMapped: SlideshowItem[] = useMemo(() => (slideshowItems ?? []).map(i => ({
@@ -190,15 +194,15 @@ export default function TimelineIndex() {
                 />
             )}
 
-            <div className="flex h-full min-h-0">
-                <div className="flex-1 overflow-y-auto">
+            <div className="flex min-h-full min-w-0">
+                <div className="min-w-0 flex-1">
                     {/* Header */}
-                    <div className="sticky top-0 z-20 px-4 py-2.5 border-b border-[var(--color-border)] bg-[var(--color-bg-primary)]/95 backdrop-blur-sm flex items-center justify-between">
+                    <div className="sticky top-0 z-20 flex flex-col gap-2 border-b border-[var(--color-border)] bg-[var(--color-bg-primary)]/95 px-2 py-2 backdrop-blur-sm sm:flex-row sm:items-center sm:justify-between sm:px-4 sm:py-2.5">
                         <div className="flex items-center gap-3">
                             <h1 className="text-sm font-semibold text-white">Fotky</h1>
                             <span className="text-xs text-[var(--color-text-secondary)]">{allItems.length} položek</span>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex w-full items-center justify-between gap-2 overflow-x-auto scrollbar-hide sm:w-auto sm:justify-end">
                             <div className="flex items-center gap-0.5 bg-[var(--color-bg-card)] rounded-lg p-0.5 border border-[var(--color-border)]">
                                 {GRID_SIZES.map((_,i) => (
                                     <button key={i} onClick={()=>setGridSizeIdx(i)}
@@ -230,8 +234,8 @@ export default function TimelineIndex() {
                     )}
 
                     {isLoading && (
-                        <div style={{display:'grid',gridTemplateColumns:`repeat(auto-fill, minmax(${gridSize}px, 1fr))`,gap:2,padding:16}}>
-                            {Array.from({length:24}).map((_,i)=><div key={i} style={{width:gridSize,height:gridSize}} className="rounded bg-[var(--color-bg-card)] animate-pulse"/>)}
+                        <div className="grid grid-cols-2 gap-0.5 p-2 sm:grid-cols-[repeat(auto-fill,minmax(140px,1fr))] sm:p-4">
+                            {Array.from({length:24}).map((_,i)=><div key={i} className="aspect-square rounded bg-[var(--color-bg-card)] animate-pulse"/>)}
                         </div>
                     )}
 
@@ -244,7 +248,7 @@ export default function TimelineIndex() {
 
                     {Object.entries(sections).map(([monthLabel, dayGroups]) => (
                         <section key={monthLabel} id={`section-${monthLabel.replace(/\s/g,'_')}`}>
-                            <div className="sticky top-[41px] z-10 px-4 py-2 bg-[var(--color-bg-primary)]/95 backdrop-blur border-b border-[var(--color-border)]/50">
+                            <div className="sticky top-[83px] z-10 bg-[var(--color-bg-primary)]/95 px-2 py-2 backdrop-blur border-b border-[var(--color-border)]/50 sm:top-[41px] sm:px-4">
                                 <div className="flex items-center justify-between">
                                     <h2 className="text-sm font-semibold text-white">{monthLabel}</h2>
                                     <button onClick={()=>{
@@ -261,7 +265,7 @@ export default function TimelineIndex() {
                                 </div>
                             </div>
                             {dayGroups.map(group => (
-                                <div key={group.date} className="px-4 pb-4">
+                                <div key={group.date} className="px-2 pb-4 sm:px-4" style={{contentVisibility:'auto',containIntrinsicSize:'auto 420px'}}>
                                     <div className="py-2 flex items-center gap-2">
                                         <span className="text-xs font-medium text-[var(--color-text-secondary)]">{group.label}</span>
                                         <span className="text-xs text-[var(--color-text-secondary)]/60">— {group.items.length} médií</span>

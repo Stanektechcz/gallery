@@ -142,6 +142,11 @@ class TripBankReconciliationService
             'amount' => $link->allocated_amount !== null ? $link->allocated_amount : abs((float) $transaction->amount), 'currency' => $transaction->currency,
             'paid_by' => 'Společný bankovní účet', 'state' => 'actual', 'occurred_at' => $transaction->booked_at,
             'automation_source' => 'bank_transaction', 'automation_key' => $transaction->uuid, 'updated_at' => now()];
+        if (Schema::hasColumn('trip_expenses', 'payment_source')) {
+            $values['payment_source'] = 'joint';
+            $values['paid_by_user_id'] = null;
+            $values['split'] = null;
+        }
         $expenseId = $link->trip_expense_id;
         if ($expenseId && DB::table('trip_expenses')->where('id', $expenseId)->exists()) {
             DB::table('trip_expenses')->where('id', $expenseId)->update($values);

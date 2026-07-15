@@ -286,3 +286,37 @@ Tyto body nelze prohlásit za plně hotové bez následného nastavení a povole
 - Smazání zápisu odstraní databázovou vazbu, privátní zvukový soubor i generovaný příběhový blok. Režim pouze pro čtení a cizí prostor zápis i přehrání blokují.
 - Frontend uvolňuje mikrofon, časovače a dočasné Blob URL při zastavení i opuštění stránky, takže nahrávání nezůstane skrytě aktivní.
 - Pokrytí: integrační test ověřuje nahrání, metadata, privátní soubor, deník, partnerovo přehrání, příběh, ruční přepis, přepnutí na soukromý režim, opětovné sdílení, úplný úklid, odmítnutí neplatného formátu a read-only ochranu.
+
+## Dokončená sjednocovací vlna 15. 7. 2026 — jeden partnerský rozpočet cesty
+
+- Plán cesty má jeden responzivní pracovní prostor pro rozpočet, skutečné výdaje, low-cost limity, cestovní fond, varianty trasy, podíly partnerů a vyrovnání. Dřívější samostatné finanční panely se už v rozhraní neduplikují.
+- Každá skutečná platba rozlišuje osobní platbu, hotovost, jiný zdroj a společný účet. Platby importované ze společného Revolut účtu jsou automaticky neutrální pro dluh mezi partnery, ale zůstávají v celkové útratě cesty.
+- Osobní výdaj lze rozdělit rovným dílem nebo přesnými částkami. Výpočet pracuje v haléřích, zachovává celkovou částku a bezpečně dopočítá minimální počet plateb mezi více členy cesty.
+- Návrh vyrovnání je idempotentní, nelze jej uložit proti aktuálnímu saldu ani zdvojit. Po potvrzení se projeví v novém saldu a zůstane v historii; dokončenou historii nelze omylem smazat.
+- Neuhrazené vyrovnání se stejným zdrojem dat objeví v partnerském pulsu i mezi nejbližšími kroky dashboardu. Je pevně přiřazené plátci, oba účastníci je mohou potvrdit a odkaz vede přímo na finance dané cesty.
+- Úprava automaticky spárované bankovní platby dovoluje zkontrolovat zdroj, plátce a podíly, ale chrání původní bankovní částku a historii před nechtěným přepsáním.
+- Nasazovací migrace bezpečně doplní zdroj platby a metadata vyrovnání, opraví dříve spárované společné bankovní výdaje a používá krátký explicitní název indexu kompatibilní s MySQL.
+- Pokrytí: integrační testy ověřují osobní i společné platby, změnu podílů, minimální saldo, idempotentní návrh, úhradu a historii, ochranu bankovního původu i dokončení vyrovnání z partnerského přehledu.
+
+## Dokončená sjednocovací vlna 15. 7. 2026 — rozhodnout spolu bez přepínání záložek
+
+- Dashboard a stávající stránka společného plánování mají jeden personalizovaný proud nerozhodnutých randíček, filmů a seriálů, navržených termínů sledování a běžných partnerských anket. Nevznikla další hlavní záložka ani paralelní evidence hlasů.
+- Každá volba se zapisuje přímo do původní domény: reakce k randíčku, zájem ve watchlistu, dostupnost navrženého termínu nebo konkrétní možnost ankety. Původní obrazovky proto okamžitě používají stejné výsledky.
+- Proud je pro každého partnera osobní: ukazuje pouze položky, u kterých ještě nehlasoval. Návrh jednoho partnera se automaticky zobrazí druhému, ale soukromý prostor ani cizí uživatel data neuvidí.
+- Termíny s blízkým datem mají přednost před anketami, randíčky a obecnými tituly. Jednotlivé zdroje mají nezávislé fallbacky, takže chybějící migrace jedné funkce nevyřadí celé plánování.
+- Po shodě pokračuje stejný záznam stávajícím postupem do kalendáře, připomínek, účastníků, případné cesty a následně do fotografií, hodnocení a vzpomínky. Panel vždy nabízí i odkaz do plného kontextu původní funkce.
+- Režim pouze pro čtení je sjednocený také pro původní API randíček, šablon, wishlistů, anket, dostupnosti, nouzové karty a partnerských pravidel; nelze jej obejít přímým požadavkem mimo nový panel.
+- Responzivní karty podporují dynamický počet možností ankety, filmové plakáty, český termín, mobilní ovládání a kompaktní dashboard bez dalšího načítání dat po otevření stránky.
+- Pokrytí: integrační test sleduje čtyři zdroje rozhodnutí, personalizované pořadí, zápis do původních tabulek, shodu partnerů, tři navazující kalendářní události, účastníky, dashboard, izolaci prostoru a read-only ochranu.
+
+## Dokončená sjednocovací vlna 15. 7. 2026 — od naplánované akce rovnou ke společnému albu
+
+- Detail stávající kalendářní akce nově obsahuje přímé mobilní nahrávání fotografií, videí, HEIC i RAW souborů. Nevzniká samostatná obrazovka ani další záložka pro sběr médií.
+- Při prvním nahrávání se bezpečně vytvoří právě jedno sdílené album zážitku. U cesty se znovu použije její společné cestovní album a stejné album se propíše ke všem navázaným událostem.
+- Dokončený i duplicitní upload se automaticky připojí k události, albu a případné cestě; média se nekopírují a položka už zařazená v jiném albu může být současně viditelná i v tomto zážitku.
+- Oprávnění alba dostanou všichni členové stejného partnerského prostoru jako editoři. Cizí prostor a uživatel bez práva upravovat událost nemohou album připravit ani do něj přes událost připojit média.
+- Chytré návrhy už tvrdě nevyřazují fotografie bez GPS. Kombinují přesný čas, časové okolí, dostupnou vzdálenost a existující vazbu na cestu, ukazují sílu shody i srozumitelný důvod a odmítají média zjevně vzdálená od akce.
+- Skrytá, smazaná, nezpracovaná a již připojená média do návrhů nevstupují. Výběr existujících souborů zůstává pod kontrolou uživatele.
+- Připravení příběhu používá stejné album a stejnou synchronizační službu. Album, přílohy, cesta, příběh a následná společná vzpomínka proto nevytvářejí paralelní nebo rozporné vazby.
+- Rozhraní je responzivní, náhledy používají odložené dekódování a výběr má omezenou rolovací oblast, aby detail akce zůstal plynulý i na telefonu.
+- Pokrytí: integrační test ověřuje návrh HEIC fotografie bez GPS, idempotentní album cesty, oprávnění obou partnerů, upload podle UUID, přílohu události, album, cestovní galerii, primární album a výsledný stav životního cyklu zážitku.

@@ -151,6 +151,24 @@ class PartnerCoordinationController extends Controller
             DB::table('trip_document_checks')->where('id', $document->id)->update($updates);
             return;
         }
+        if ($type === 'settlement') {
+            $settlement = DB::table('trip_settlements as settlement')->join('trips as trip', 'trip.id', '=', 'settlement.trip_id')
+                ->where('settlement.id', $key)->where('trip.gallery_space_id', $space->id)
+                ->select('settlement.id', 'settlement.from_user_id', 'settlement.to_user_id')->first();
+            abort_unless($settlement, 404);
+            abort_unless(in_array((int) $request->user()->id, [(int) $settlement->from_user_id, (int) $settlement->to_user_id], true), 403, 'Vyrovnání mohou potvrdit pouze jeho účastníci.');
+            if (array_key_exists('assigned_to', $data)) {
+                abort_unless((int) $data['assigned_to'] === (int) $settlement->from_user_id, 422, 'Vyrovnání zůstává přiřazené tomu, kdo platí.');
+            }
+            if (array_key_exists('completed', $data)) {
+                DB::table('trip_settlements')->where('id', $settlement->id)->update([
+                    'status' => $data['completed'] ? 'settled' : 'suggested',
+                    'settled_at' => $data['completed'] ? now() : null,
+                    'updated_at' => now(),
+                ]);
+            }
+            return;
+        }
         $gift = DB::table('gift_ideas')->where('uuid', $key)->where('gallery_space_id', $space->id)->first();
         abort_unless($gift, 404);
         if (array_key_exists('completed', $data)) $updates['status'] = $data['completed'] ? 'purchased' : 'idea';

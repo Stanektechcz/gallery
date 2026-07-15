@@ -19,7 +19,9 @@ use App\Services\Planning\DateIdeaLifecycleService;
 use App\Services\Planning\DateIdeaTripSyncService;
 use App\Services\Planning\CzechPublicHolidayService;
 use App\Services\Planning\ExperienceLifecycleService;
+use App\Services\Planning\ExperienceMediaService;
 use App\Services\Planning\PersonalCelebrationService;
+use App\Services\Planning\TripPartnerFinanceService;
 use App\Services\Memories\MemoryEveningService;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
@@ -42,6 +44,7 @@ class CalendarPlanningController extends Controller
         private readonly PersonalCelebrationService $personalCelebrationService,
         private readonly CoupleExperienceRecommendationService $experienceRecommendations,
         private readonly ExperienceLifecycleService $experienceLifecycle,
+        private readonly ExperienceMediaService $experienceMedia,
         private readonly MemoryEveningService $memoryEvenings,
         private readonly DateIdeaLifecycleService $dateIdeas,
         private readonly DateIdeaTripSyncService $dateIdeaTripSync,
@@ -312,24 +315,62 @@ class CalendarPlanningController extends Controller
     public function mediaSuggestions(Request $request, string $uuid): JsonResponse
     {
         $event = $this->findVisibleEvent($request->user(), $uuid);
-        $from = $event->starts_at->copy()->subHours(6); $to = ($event->ends_at ?? $event->starts_at)->copy()->addHours(12);
-        $attached = $event->attachments()->whereNotNull('media_item_id')->pluck('media_item_id');
-        $query = MediaItem::where('gallery_space_id', $event->gallery_space_id)->whereNull('trashed_at')->whereBetween('taken_at', [$from, $to])->whereNotIn('id', $attached);
-        if ($event->latitude !== null && $event->longitude !== null) $query->whereRaw('ABS(latitude - ?) < 0.15 AND ABS(longitude - ?) < 0.15', [$event->latitude, $event->longitude]);
-        $candidates = $query->with('variants')->latest('taken_at')->limit(48)->get(['id', 'uuid', 'display_title', 'original_filename', 'media_type', 'taken_at'])
-            ->map(fn (MediaItem $media) => ['id' => $media->id, 'uuid' => $media->uuid, 'display_title' => $media->display_title, 'original_filename' => $media->original_filename, 'media_type' => $media->media_type, 'taken_at' => $media->taken_at?->toIso8601String(), 'thumbnail_url' => $media->thumbnail_url]);
-        return response()->json(['candidates' => $candidates]);
+        $album = $event->album_id
+            ? Album::query()->whereKey($event->album_id)->where('gallery_space_id', $event->gallery_space_id)->first()
+            : null;
+
+        return response()->json([
+            'candidates' => $this->experienceMedia->suggestions($event),
+            'capture' => $album ? $this->experienceMedia->payload($event, $album) : [
+                'album' => null,
+                'attached_media_count' => $event->attachments()->whereNotNull('media_item_id')->count(),
+                'trip_id' => $event->trip_id,
+            ],
+        ]);
+    }
+
+    /** Prepare the existing event/trip album before the first mobile upload. */
+    public function ensureExperienceAlbum(Request $request, string $uuid): JsonResponse
+    {
+        $event = $this->findVisibleEvent($request->user(), $uuid);
+        $this->ensureCanEdit($event, $request->user());
+        $album = $this->experienceMedia->ensureAlbum($event, $request->user()->id);
+
+        return response()->json($this->experienceMedia->payload($event, $album), 201);
     }
 
     public function applyMediaSuggestions(Request $request, string $uuid): JsonResponse
     {
         $event = $this->findVisibleEvent($request->user(), $uuid); $this->ensureCanEdit($event, $request->user());
-        $data = $request->validate(['media_ids' => 'required|array|min:1|max:48', 'media_ids.*' => 'integer']);
-        $media = MediaItem::where('gallery_space_id', $event->gallery_space_id)->whereNull('trashed_at')->whereIn('id', $data['media_ids'])->get();
-        if ($media->count() !== count(array_unique($data['media_ids']))) abort(422, 'Některá vybraná média nejsou dostupná.');
-        foreach ($media as $item) $event->attachments()->firstOrCreate(['media_item_id' => $item->id], ['kind' => 'memory']);
-        if ($event->album_id) $this->syncExperienceAlbum($event, $request->user()->id, $media);
-        return response()->json($event->attachments()->with('media:id,uuid,display_title,original_filename')->get());
+        $data = $request->validate([
+            'media_ids' => 'nullable|array|max:48',
+            'media_ids.*' => 'integer|distinct',
+            'media_uuids' => 'nullable|array|max:48',
+            'media_uuids.*' => 'uuid|distinct',
+        ]);
+        $ids = collect($data['media_ids'] ?? [])->unique()->values();
+        $uuids = collect($data['media_uuids'] ?? [])->unique()->values();
+        if ($ids->isEmpty() && $uuids->isEmpty()) abort(422, 'Vyberte alespoň jednu fotografii nebo video.');
+
+        $media = MediaItem::query()
+            ->where('gallery_space_id', $event->gallery_space_id)
+            ->whereNull('trashed_at')
+            ->where(function ($query) use ($ids, $uuids) {
+                if ($ids->isNotEmpty()) $query->whereIn('id', $ids);
+                if ($uuids->isNotEmpty()) $query->{$ids->isNotEmpty() ? 'orWhereIn' : 'whereIn'}('uuid', $uuids);
+            })
+            ->get();
+        if ($media->whereIn('id', $ids)->count() !== $ids->count() || $media->whereIn('uuid', $uuids)->count() !== $uuids->count()) {
+            abort(422, 'Některá vybraná média nejsou dostupná.');
+        }
+
+        $album = $this->experienceMedia->sync($event, $request->user()->id, $media);
+
+        return response()->json([
+            'attachments' => $event->attachments()->with('media:id,uuid,display_title,original_filename')->get(),
+            'capture' => $this->experienceMedia->payload($event, $album),
+            'experience' => $this->experienceLifecycle->status($event->fresh(), $request->user()),
+        ]);
     }
 
     /** Close the loop: an attended event becomes a shared gallery memory. */
@@ -432,7 +473,8 @@ class CalendarPlanningController extends Controller
             ->where('gallery_space_id', $event->gallery_space_id)
             ->whereNull('deleted_at')
             ->orderBy('taken_at')
-            ->get(['id', 'uuid', 'media_type']);
+            ->get(['id', 'uuid', 'gallery_space_id', 'media_type', 'size_bytes', 'trashed_at']);
+        $this->experienceMedia->sync($event, $request->user()->id, $media);
         $reflection = Schema::hasTable('calendar_event_reflections')
             ? DB::table('calendar_event_reflections')->where('calendar_event_id', $event->id)->first()
             : null;
@@ -548,21 +590,63 @@ class CalendarPlanningController extends Controller
         return response()->json(['status' => 'deleted']);
     }
 
-    public function storeExpense(Request $request, int $tripId): JsonResponse
+    public function storeExpense(Request $request, int $tripId, TripPartnerFinanceService $finance): JsonResponse
     {
         $user = $request->user(); $trip = $this->findTrip($user, $tripId);
-        $data = $request->validate(['title' => 'required|string|max:255', 'category' => 'nullable|in:transport,accommodation,food,activities,insurance,other', 'amount' => 'required|numeric|min:0|max:999999999', 'currency' => 'nullable|string|size:3', 'paid_by' => 'nullable|string|max:120', 'paid_by_user_id' => 'nullable|integer', 'state' => 'nullable|in:planned,actual', 'occurred_at' => 'nullable|date', 'split' => 'nullable|array|min:1|max:20', 'split.*.user_id' => 'required_with:split|integer', 'split.*.amount' => 'required_with:split|numeric|min:0', 'event_id' => 'nullable|integer']);
+        $data = $request->validate(['title' => 'required|string|max:255', 'category' => 'nullable|in:transport,accommodation,food,activities,insurance,other', 'amount' => 'required|numeric|min:0|max:999999999', 'currency' => 'nullable|string|size:3', 'paid_by' => 'nullable|string|max:120', 'paid_by_user_id' => 'nullable|integer', 'payment_source' => 'nullable|in:personal,joint,cash,other', 'state' => 'nullable|in:planned,actual', 'occurred_at' => 'nullable|date', 'split' => 'nullable|array|min:1|max:20', 'split.*.user_id' => 'required_with:split|integer', 'split.*.amount' => 'required_with:split|numeric|min:0', 'event_id' => 'nullable|integer']);
         if (!empty($data['event_id'])) CalendarEvent::where('id', $data['event_id'])->where('gallery_space_id', $trip->gallery_space_id)->firstOrFail();
         if (!empty($data['paid_by_user_id'])) abort_unless(DB::table('gallery_space_user')->where('gallery_space_id', $trip->gallery_space_id)->where('user_id', $data['paid_by_user_id'])->exists(), 422, 'Plátce musí být členem společného prostoru.');
         if (!empty($data['split'])) { foreach ($data['split'] as $share) abort_unless(DB::table('gallery_space_user')->where('gallery_space_id', $trip->gallery_space_id)->where('user_id', $share['user_id'])->exists(), 422, 'Podíl patří neznámému uživateli.'); if (round(array_sum(array_column($data['split'], 'amount')), 2) !== round((float) $data['amount'], 2)) abort(422, 'Součet podílů musí odpovídat výdaji.'); $data['split'] = json_encode($data['split']); }
+        if (($data['payment_source'] ?? 'personal') === 'joint') {
+            $data['paid_by_user_id'] = null; $data['paid_by'] = 'Společný účet'; $data['split'] = null;
+        } elseif (! empty($data['paid_by_user_id']) && empty($data['split'])) {
+            $memberIds = DB::table('gallery_space_user')->where('gallery_space_id', $trip->gallery_space_id)->pluck('user_id')->map(fn ($id) => (int) $id)->all();
+            $data['split'] = json_encode($finance->equalShares((float) $data['amount'], $memberIds));
+        }
+        if (! Schema::hasColumn('trip_expenses', 'payment_source')) unset($data['payment_source']);
         $id = DB::table('trip_expenses')->insertGetId($data + ['trip_id' => $tripId, 'created_by' => $user->id, 'currency' => strtoupper($data['currency'] ?? $trip->currency ?? 'CZK'), 'state' => $data['state'] ?? 'actual', 'created_at' => now(), 'updated_at' => now()]);
         return response()->json(DB::table('trip_expenses')->find($id), 201);
+    }
+
+    public function updateExpense(Request $request, int $tripId, int $expenseId, TripPartnerFinanceService $finance): JsonResponse
+    {
+        $trip = $this->findTrip($request->user(), $tripId);
+        $expense = DB::table('trip_expenses')->where('trip_id', $tripId)->where('id', $expenseId)->firstOrFail();
+        $data = $request->validate(['title' => 'sometimes|required|string|max:255', 'category' => 'sometimes|required|in:transport,accommodation,food,activities,insurance,other', 'amount' => 'sometimes|required|numeric|min:0|max:999999999', 'currency' => 'sometimes|required|string|size:3', 'paid_by_user_id' => 'nullable|integer', 'payment_source' => 'sometimes|required|in:personal,joint,cash,other', 'state' => 'sometimes|required|in:planned,actual', 'occurred_at' => 'nullable|date', 'split' => 'nullable|array|min:1|max:20', 'split.*.user_id' => 'required_with:split|integer', 'split.*.amount' => 'required_with:split|numeric|min:0']);
+        if (($expense->automation_source ?? null) === 'bank_transaction') {
+            $forbidden = array_intersect(array_keys($data), ['title', 'amount', 'currency', 'state', 'occurred_at']);
+            abort_if($forbidden !== [], 409, 'Částku a původ bankovní platby upravte v jejím přiřazení, aby historie zůstala konzistentní.');
+        }
+        if (array_key_exists('paid_by_user_id', $data) && $data['paid_by_user_id'] !== null) {
+            abort_unless(DB::table('gallery_space_user')->where('gallery_space_id', $trip->gallery_space_id)->where('user_id', $data['paid_by_user_id'])->exists(), 422, 'Plátce musí být členem společného prostoru.');
+        }
+        $memberIds = DB::table('gallery_space_user')->where('gallery_space_id', $trip->gallery_space_id)->pluck('user_id')->map(fn ($id) => (int) $id)->all();
+        $amount = (float) ($data['amount'] ?? $expense->amount);
+        if (array_key_exists('split', $data) && $data['split'] !== null) {
+            foreach ($data['split'] as $share) abort_unless(in_array((int) $share['user_id'], $memberIds, true), 422, 'Podíl patří neznámému uživateli.');
+            abort_if(abs(array_sum(array_column($data['split'], 'amount')) - $amount) >= 0.01, 422, 'Součet podílů musí odpovídat výdaji.');
+            $data['split'] = json_encode($data['split']);
+        }
+        $source = $data['payment_source'] ?? ($expense->payment_source ?? 'personal');
+        $payerId = array_key_exists('paid_by_user_id', $data) ? $data['paid_by_user_id'] : $expense->paid_by_user_id;
+        if ($source === 'joint') {
+            $data['paid_by_user_id'] = null; $data['paid_by'] = 'Společný účet'; $data['split'] = null;
+        } elseif ($payerId && ! array_key_exists('split', $data) && (array_key_exists('amount', $data) || array_key_exists('paid_by_user_id', $data))) {
+            $data['split'] = json_encode($finance->equalShares($amount, $memberIds));
+        }
+        if (isset($data['currency'])) $data['currency'] = strtoupper($data['currency']);
+        if (! Schema::hasColumn('trip_expenses', 'payment_source')) unset($data['payment_source']);
+        DB::table('trip_expenses')->where('id', $expenseId)->update($data + ['updated_at' => now()]);
+        return response()->json(DB::table('trip_expenses')->find($expenseId));
     }
 
     public function tripPlanning(Request $request, int $tripId): JsonResponse
     {
         $trip = $this->findTrip($request->user(), $tripId);
-        $expenses = DB::table('trip_expenses')->where('trip_id', $tripId)->latest('occurred_at')->latest('id')->get();
+        $expenses = DB::table('trip_expenses')->where('trip_id', $tripId)->latest('occurred_at')->latest('id')->get()->map(function ($expense) {
+            $expense->split = json_decode($expense->split ?: '[]', true) ?: [];
+            return $expense;
+        });
         $totals = $expenses->groupBy('state')->map(fn ($rows) => $rows->sum('amount'));
         return response()->json([
             'expenses' => $expenses,
@@ -763,7 +847,7 @@ class CalendarPlanningController extends Controller
         $payload['departure_at'] = $event->departure_buffer_minutes ? $event->starts_at->copy()->subMinutes($event->departure_buffer_minutes)->toIso8601String() : null;
         $payload['my_response'] = $viewer ? $event->participants->firstWhere('id', $viewer->id)?->pivot?->response : null;
         $payload['album'] = $event->album_id
-            ? Album::query()->whereKey($event->album_id)->where('gallery_space_id', $event->gallery_space_id)->first(['uuid', 'title'])
+            ? Album::query()->whereKey($event->album_id)->where('gallery_space_id', $event->gallery_space_id)->first(['id', 'uuid', 'title'])
             : null;
         $payload['origin'] = $this->originPayload($event, $viewer);
         $payload['experience'] = $this->experienceLifecycle->status($event, $viewer);
@@ -929,57 +1013,7 @@ class CalendarPlanningController extends Controller
      */
     private function syncExperienceAlbum(CalendarEvent $event, int $actorId, \Illuminate\Support\Collection $media): Album
     {
-        $album = $event->album_id
-            ? Album::where('id', $event->album_id)->where('gallery_space_id', $event->gallery_space_id)->first()
-            : null;
-
-        if (!$album) {
-            $album = Album::create([
-                'gallery_space_id' => $event->gallery_space_id,
-                'title' => $event->title,
-                'slug' => Str::slug($event->title),
-                'description' => $event->description,
-                'event_date_start' => $event->starts_at->toDateString(),
-                'event_date_end' => ($event->ends_at ?? $event->starts_at)->toDateString(),
-                'event_mode' => true,
-                'event_start_at' => $event->starts_at,
-                'event_end_at' => $event->ends_at,
-                'event_place_name' => $event->place_name,
-                'event_latitude' => $event->latitude,
-                'event_longitude' => $event->longitude,
-                'location_name' => $event->place_name,
-                'latitude' => $event->latitude,
-                'longitude' => $event->longitude,
-                'visibility' => 'shared',
-                'sort_mode' => 'date_taken',
-                'sort_direction' => 'asc',
-                'created_by' => $actorId,
-                'updated_by' => $actorId,
-                'sync_status' => 'pending',
-            ]);
-            $album->rebuildPaths();
-            $event->update(['album_id' => $album->id]);
-        }
-
-        if ($media->isNotEmpty()) {
-            $pivot = $media->values()->mapWithKeys(fn (MediaItem $item, int $position) => [$item->id => [
-                'sort_order' => $position,
-                'added_at' => now(),
-                'added_by' => $actorId,
-            ]])->all();
-            $album->media()->syncWithoutDetaching($pivot);
-            MediaItem::whereIn('id', $media->pluck('id'))->whereNull('primary_album_id')->update(['primary_album_id' => $album->id]);
-        }
-
-        $albumMedia = $album->media()->get(['media_items.id', 'media_items.size_bytes']);
-        $album->update([
-            'cover_media_id' => $album->cover_media_id ?: $albumMedia->first()?->id,
-            'media_count' => $albumMedia->count(),
-            'total_size_bytes' => (int) $albumMedia->sum('size_bytes'),
-            'updated_by' => $actorId,
-        ]);
-
-        return $album->fresh();
+        return $this->experienceMedia->sync($event, $actorId, $media);
     }
 
     private function occurrences(CalendarEvent $event, Carbon $from, Carbon $to): array

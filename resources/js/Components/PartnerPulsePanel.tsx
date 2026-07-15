@@ -5,7 +5,7 @@ import { FormEvent, useEffect, useMemo, useState } from 'react';
 
 export interface CoordinationAction {
     key: string;
-    type: 'shared_todo' | 'event_task' | 'packing_item' | 'planning_item' | 'trip_document' | 'gift';
+    type: 'shared_todo' | 'event_task' | 'packing_item' | 'planning_item' | 'trip_document' | 'gift' | 'settlement';
     source_key: string;
     title: string;
     context: string;
@@ -13,6 +13,7 @@ export interface CoordinationAction {
     priority: string;
     is_overdue: boolean;
     assigned_to?: { id: number; name: string } | null;
+    assignment_locked?: boolean;
     href: string;
 }
 
@@ -39,7 +40,7 @@ export interface PartnerPulse {
 }
 
 const SOURCE_LABEL: Record<CoordinationAction['type'], string> = {
-    shared_todo: 'společný úkol', event_task: 'kalendář', packing_item: 'balení', planning_item: 'podklad', trip_document: 'doklad', gift: 'dárek',
+    shared_todo: 'společný úkol', event_task: 'kalendář', packing_item: 'balení', planning_item: 'podklad', trip_document: 'doklad', gift: 'dárek', settlement: 'vyrovnání cesty',
 };
 const MOODS: Record<string, string> = { joyful: '😊 Radost', calm: '😌 Klid', tired: '😴 Únava', stressed: '😵 Napětí', excited: '🤩 Těšení', low: '🌧️ Nic moc' };
 const CAPACITY: Record<CheckIn['capacity'], string> = { unavailable: 'Dnes ne', light: 'Jen lehce', normal: 'Normálně', high: 'Mám prostor' };
@@ -90,7 +91,7 @@ export default function PartnerPulsePanel({ spaceId, initialPulse, compact = fal
     return (
         <section className="rounded-3xl border border-teal-400/25 bg-gradient-to-br from-teal-500/10 via-[var(--color-bg-card)] to-pink-500/5 p-4 sm:p-5">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div><p className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-teal-200"><HeartHandshake size={15}/> Partnerský puls</p><h2 className="mt-1 font-semibold text-white">Dnešní kapacita a společná zodpovědnost</h2><p className="mt-1 text-xs text-[var(--color-text-secondary)]">Jeden živý přehled nad úkoly, kalendářem, cestami, doklady, dárky a balením.</p></div>
+                <div><p className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-teal-200"><HeartHandshake size={15}/> Partnerský puls</p><h2 className="mt-1 font-semibold text-white">Dnešní kapacita a společná zodpovědnost</h2><p className="mt-1 text-xs text-[var(--color-text-secondary)]">Jeden živý přehled nad úkoly, kalendářem, cestami, doklady, dárky, financemi a balením.</p></div>
                 <div className="flex flex-wrap gap-1.5 text-[11px]"><Pill value={pulse.summary.mine} label="moje"/><Pill value={pulse.summary.unassigned} label="bez přiřazení" warn={pulse.summary.unassigned > 0}/><Pill value={pulse.summary.overdue} label="po termínu" warn={pulse.summary.overdue > 0}/></div>
             </div>
 
@@ -114,7 +115,7 @@ export default function PartnerPulsePanel({ spaceId, initialPulse, compact = fal
                 {pulse.actions.map(action => <div key={action.key} className="grid gap-2 rounded-xl border border-white/5 bg-black/10 p-3 sm:grid-cols-[auto_minmax(0,1fr)_auto_auto] sm:items-center">
                     <button aria-label={`Dokončit ${action.title}`} disabled={busy === action.key} onClick={() => mutate(action,{completed:true})} className="flex h-9 w-9 items-center justify-center rounded-full border border-teal-300/40 text-teal-200 hover:bg-teal-400/15 disabled:opacity-40"><Check size={16}/></button>
                     <div className="min-w-0"><Link href={action.href} className="block truncate text-sm font-medium text-white hover:text-teal-200">{action.title}</Link><p className={`mt-0.5 truncate text-xs ${action.is_overdue ? 'text-amber-200' : 'text-[var(--color-text-secondary)]'}`}>{SOURCE_LABEL[action.type]} · {action.context}{action.due_at ? ` · ${new Date(action.due_at).toLocaleDateString('cs-CZ',{day:'numeric',month:'short'})}` : ''}</p></div>
-                    <select aria-label={`Přiřadit ${action.title}`} value={action.assigned_to?.id ?? ''} onChange={event => mutate(action,{assigned_to:event.target.value ? Number(event.target.value) : null})} className="min-h-9 max-w-40 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-card)] px-2 text-xs text-white"><option value="">Domluvit kdo</option>{pulse.members.map(member => <option key={member.id} value={member.id}>{member.name}</option>)}</select>
+                    {action.assignment_locked ? <span className="inline-flex min-h-9 max-w-40 items-center rounded-lg border border-[var(--color-border)] px-2 text-xs text-teal-100">Platí {action.assigned_to?.name}</span> : <select aria-label={`Přiřadit ${action.title}`} value={action.assigned_to?.id ?? ''} onChange={event => mutate(action,{assigned_to:event.target.value ? Number(event.target.value) : null})} className="min-h-9 max-w-40 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-card)] px-2 text-xs text-white"><option value="">Domluvit kdo</option>{pulse.members.map(member => <option key={member.id} value={member.id}>{member.name}</option>)}</select>}
                     <button disabled={busy === action.key} onClick={() => mutate(action,{snoozed_until:tomorrow})} className="inline-flex min-h-9 items-center justify-center gap-1 rounded-lg border border-[var(--color-border)] px-2 text-xs text-[var(--color-text-secondary)] hover:text-white"><AlarmClock size={13}/> zítra</button>
                 </div>)}
             </div>}

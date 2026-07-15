@@ -25,6 +25,14 @@
         min-width: 320px;
     }
 
+    html, body, #app {
+        min-height: 100%;
+    }
+
+    *, *::before, *::after {
+        min-width: 0;
+    }
+
     img, video {
         max-width: 100%;
     }
@@ -66,11 +74,44 @@
     .safe-area-pb {
         padding-bottom: env(safe-area-inset-bottom, 0px);
     }
+    .safe-area-pt {
+        padding-top: env(safe-area-inset-top, 0px);
+    }
+    .app-shell {
+        height: 100vh;
+        height: 100dvh;
+    }
+    .app-scroll {
+        scrollbar-gutter: stable;
+        -webkit-overflow-scrolling: touch;
+    }
+    .media-timeline-card {
+        width: var(--media-grid-size);
+        height: var(--media-grid-size);
+    }
 }
 
 @media (max-width: 767px) {
+    .app-scroll {
+        padding-bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px));
+        scrollbar-gutter: auto;
+    }
+
+    .mobile-bottom-nav {
+        min-height: calc(3.5rem + env(safe-area-inset-bottom, 0px));
+    }
+
+    .media-timeline-card {
+        width: min(var(--media-grid-size), calc((100vw - 1.25rem) / 2));
+        height: min(var(--media-grid-size), calc((100vw - 1.25rem) / 2));
+    }
+
     input, select, textarea {
         font-size: max(16px, 1em);
+    }
+
+    button, a, [role="button"] {
+        touch-action: manipulation;
     }
 }
 

@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\BankConnection;
+use App\Models\BankImport;
 use App\Models\BankTransaction;
 use App\Models\GallerySpace;
 use App\Models\IntegrationSetting;
@@ -186,6 +187,63 @@ CSV;
         $this->assertSame(-320.4, (float) BankTransaction::all()->firstWhere('description', 'XLSX nákup')->amount);
         $this->assertSame(-320.4, (float) BankTransaction::all()->firstWhere('description', 'XLS nákup')->amount);
         $this->assertDatabaseCount('bank_transactions', 4);
+    }
+
+    public function test_failed_csv_wrapped_revolut_xlsx_is_retried_and_decoded(): void
+    {
+        $mojibake = static fn (string $value): string => (string) iconv('Windows-1250', 'UTF-8', $value);
+        $spreadsheet = new Spreadsheet;
+        $sheet = $spreadsheet->getActiveSheet();
+        $lines = [
+            'Typ,Produkt,Datum zahájení,Datum dokončení,Popis,Částka,Poplatek,Měna,State,Zůstatek',
+            'Převod,Aktuální,2026-06-27 14:33:36,2026-06-27 14:33:38,Převod od uživatele ADRIAN STANEK,320.00,0.00,CZK,DOKONČENO,320.00',
+            'Platba kartou,Aktuální,2026-06-27 15:03:48,2026-06-28 13:34:51,Můj obchod,-69.70,0.00,CZK,DOKONČENO,250.30',
+        ];
+        foreach ($lines as $index => $line) {
+            $sheet->setCellValue('A'.($index + 1), $mojibake($line));
+        }
+        $path = sys_get_temp_dir().DIRECTORY_SEPARATOR.'revolut-csv-wrapped-'.Str::uuid().'.xlsx';
+        (new Xlsx($spreadsheet))->save($path);
+        $spreadsheet->disconnectWorksheets();
+        $sha = hash_file('sha256', $path);
+        BankImport::create([
+            'gallery_space_id' => $this->space->id,
+            'imported_by' => $this->owner->id,
+            'original_filename' => 'account-statement.xlsx',
+            'file_sha256' => $sha,
+            'format' => 'xlsx',
+            'status' => 'failed',
+            'rows_total' => 0,
+            'rows_imported' => 0,
+            'rows_failed' => 0,
+            'error_summary' => 'Ve výpisu chybí sloupec amount.',
+        ]);
+
+        try {
+            $this->post('/api/v1/banking/imports', [
+                'gallery_space_id' => $this->space->id,
+                'statement' => new UploadedFile($path, 'account-statement.xlsx', null, null, true),
+            ])->assertCreated()
+                ->assertJsonPath('duplicate_file', false)
+                ->assertJsonPath('retried_import', true)
+                ->assertJsonPath('import.rows_imported', 2)
+                ->assertJsonPath('import.rows_failed', 0);
+
+            $this->assertDatabaseCount('bank_imports', 1);
+            $this->assertDatabaseCount('bank_transactions', 2);
+            $this->assertNotNull(BankTransaction::all()->firstWhere('description', 'Převod od uživatele ADRIAN STANEK'));
+            $this->assertNotNull(BankTransaction::all()->firstWhere('description', 'Můj obchod'));
+
+            $this->post('/api/v1/banking/imports', [
+                'gallery_space_id' => $this->space->id,
+                'statement' => new UploadedFile($path, 'account-statement.xlsx', null, null, true),
+            ])->assertOk()
+                ->assertJsonPath('duplicate_file', true)
+                ->assertJsonPath('retried_import', false);
+            $this->assertDatabaseCount('bank_transactions', 2);
+        } finally {
+            @unlink($path);
+        }
     }
 
     public function test_read_only_psd2_connection_syncs_idempotently_and_preserves_historical_balances(): void

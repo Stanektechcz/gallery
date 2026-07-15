@@ -104,7 +104,7 @@ class AlbumController extends Controller
         if ($isSmartAlbum) {
             $smartService = new \App\Services\Media\SmartAlbumService();
             $mediaQuery   = $smartService->buildQuery($album, $space->id)
-                ->with(['variants', 'tags', 'people', 'places'])
+                ->with(['variants' => fn ($query) => $query->whereIn('type', ['thumbnail', 'video_poster', 'placeholder'])])
                 ->where('is_hidden', false)
                 ->whereIn('status', ['ready', 'received']);
 
@@ -118,7 +118,7 @@ class AlbumController extends Controller
                     $q->where('primary_album_id', $album->id)
                         ->orWhereHas('albums', fn($q2) => $q2->where('albums.id', $album->id));
                 })
-                ->with(['variants', 'tags', 'people', 'places'])
+                ->with(['variants' => fn ($query) => $query->whereIn('type', ['thumbnail', 'video_poster', 'placeholder'])])
                 ->whereNull('trashed_at')
                 ->where('is_hidden', false)
                 ->whereIn('status', ['ready', 'received']);
