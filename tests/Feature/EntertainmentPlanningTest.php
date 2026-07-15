@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\GallerySpace;
 use App\Models\IntegrationSetting;
 use App\Models\User;
+use App\Services\Entertainment\CinemaCityProgramService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -59,16 +60,19 @@ class EntertainmentPlanningTest extends TestCase
         $this->actingAs($owner)->postJson('/api/v1/entertainment/cinema/sync', ['days' => 2])->assertOk()->assertJsonPath('count', 2);
         $showing = DB::table('cinema_showings')->where('external_event_id', 'event-1')->first();
         $this->assertNotNull($showing);
+        $programUrl = CinemaCityProgramService::programUrl($start);
         $this->assertSame('2D · Dolby Atmos · Laser', $showing->format);
         $this->assertStringContainsString('suitable-for-all', $showing->attributes);
-        $this->assertSame('https://www.cinemacity.cz/cz/booking-router/launch/event-1?lang=cs', $showing->booking_url);
+        $this->assertSame($programUrl, $showing->booking_url);
+        $this->assertStringNotContainsString('booking-router', $showing->booking_url);
+        $this->assertStringNotContainsString('tickets.rel.cinemacity.cz', $showing->booking_url);
         $this->postJson('/api/v1/entertainment/cinema/showings/'.$showing->uuid, ['gallery_space_id' => $space->id, 'propose' => true])->assertCreated()->assertJsonPath('title', 'Testovací film');
         $this->assertDatabaseHas('viewing_date_proposals', ['cinema_showing_id' => $showing->id, 'venue' => 'cinema']);
         $this->getJson('/api/v1/entertainment?gallery_space_id='.$space->id)->assertOk()
             ->assertJsonPath('cinema.showings.0.title', 'Testovací film')
             ->assertJsonPath('cinema.showings.0.external_film_id', 'film-1')
-            ->assertJsonPath('cinema.showings.0.booking_url', 'https://www.cinemacity.cz/cz/booking-router/launch/event-1?lang=cs')
-            ->assertJsonPath('titles.0.proposals.0.booking_url', 'https://www.cinemacity.cz/cz/booking-router/launch/event-1?lang=cs');
+            ->assertJsonPath('cinema.showings.0.booking_url', $programUrl)
+            ->assertJsonPath('titles.0.proposals.0.booking_url', $programUrl);
     }
 
     public function test_cinema_sync_keeps_a_successful_day_when_another_day_is_temporarily_unavailable(): void

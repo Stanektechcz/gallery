@@ -117,6 +117,7 @@ class CinemaCityProgramService
             $runtime = is_numeric($film['length'] ?? null) ? max(1, min(65535, (int) $film['length'])) : null;
             $matched = $this->matchTitle($title, $releaseYear);
             $eventId = mb_substr((string) $event['id'], 0, 80);
+            $startsAt = Carbon::parse($event['eventDateTime'], 'Europe/Prague');
             $existingUuid = DB::table('cinema_showings')->where('provider', 'cinema_city')->where('cinema_code', self::CINEMA_CODE)->where('external_event_id', $eventId)->value('uuid');
             DB::table('cinema_showings')->updateOrInsert(
                 ['provider' => 'cinema_city', 'cinema_code' => self::CINEMA_CODE, 'external_event_id' => $eventId],
@@ -129,7 +130,7 @@ class CinemaCityProgramService
                     'release_year' => $releaseYear,
                     'runtime_minutes' => $runtime,
                     'poster_url' => $this->https($film['posterLink'] ?? null),
-                    'starts_at' => Carbon::parse($event['eventDateTime'], 'Europe/Prague'),
+                    'starts_at' => $startsAt,
                     'auditorium' => filled($event['auditorium'] ?? null) ? mb_substr((string) $event['auditorium'], 0, 80) : null,
                     'format' => $this->displayFormat($attributes),
                     'original_language' => $this->language(data_get($event, 'languages.original')),
@@ -137,7 +138,7 @@ class CinemaCityProgramService
                     'subtitles_language' => $this->language(data_get($event, 'languages.subtitles')),
                     'sold_out' => (bool) ($event['soldOut'] ?? false),
                     'availability_ratio' => isset($event['availabilityRatio']) ? max(0, min(1, (float) $event['availabilityRatio'])) : null,
-                    'booking_url' => $this->bookingUrl($event, $eventId),
+                    'booking_url' => self::programUrl($startsAt),
                     'source_url' => self::CINEMA_URL,
                     'attributes' => json_encode($attributes, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE),
                     'fetched_at' => now(),
@@ -195,11 +196,16 @@ class CinemaCityProgramService
         return $formats->isEmpty() ? null : mb_substr($formats->implode(' · '), 0, 80);
     }
 
-    private function bookingUrl(array $event, string $eventId): string
+    public static function programUrl(Carbon|string|null $startsAt = null): string
     {
-        $routerUrl = $this->https($event['bookingRouterLaunchLink'] ?? null);
+        if (! $startsAt) {
+            return self::CINEMA_URL;
+        }
+        $day = $startsAt instanceof Carbon ? $startsAt : Carbon::parse($startsAt, 'Europe/Prague');
 
-        return $routerUrl ?: 'https://www.cinemacity.cz/cz/booking-router/launch/'.rawurlencode($eventId).'?lang=cs';
+        // The order API and booking-router are protected by Cinema City's anti-bot layer.
+        // The public programme is stable and lets the visitor choose the already selected time.
+        return self::CINEMA_URL.'#/buy-tickets-by-cinema?in-cinema='.self::CINEMA_CODE.'&at='.$day->toDateString().'&view-mode=list';
     }
 
     private function language(mixed $value): ?string

@@ -87,7 +87,7 @@ class BankingController extends Controller
     public function import(Request $request): JsonResponse
     {
         $this->write($request);
-        $data = $request->validate(['gallery_space_id' => 'required|integer', 'statement' => 'required|file|max:20480|mimes:csv,txt,xlsx']);
+        $data = $request->validate(['gallery_space_id' => 'required|integer', 'statement' => 'required|file|max:51200|mimes:csv,txt,xls,xlsx']);
         $space = $this->space($request, (int) $data['gallery_space_id']);
         $result = $this->imports->import($space, $request->user(), $request->file('statement'));
         AuditLog::record('bank.statement.import', null, ['space_id' => $space->id, 'import_uuid' => $result['import']['uuid'], 'duplicate' => $result['duplicate_file']]);

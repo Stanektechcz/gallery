@@ -14,6 +14,10 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Shared\Date as SpreadsheetDate;
+use PhpOffice\PhpSpreadsheet\Writer\Xls;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use Tests\TestCase;
 
 class BankingIntegrationTest extends TestCase
@@ -136,6 +140,52 @@ CSV;
         $this->space->members()->attach($readonly->id, ['role' => 'viewer', 'joined_at' => now()]);
         $this->actingAs($readonly)->post('/api/v1/banking/imports', ['gallery_space_id' => $this->space->id,
             'statement' => UploadedFile::fake()->createWithContent('readonly.csv', $first)])->assertForbidden();
+    }
+
+    public function test_revolut_import_recognizes_localized_split_amounts_and_real_excel_files(): void
+    {
+        $localized = <<<'CSV'
+Revolut společný účet
+Export vytvořen 17. 9. 2026
+Datum;Popis;Výdaj;Příjem;Měna;Zůstatek
+15.09.2026 08:30;Kavárna;-125,50;;CZK;1874,50
+16.09.2026 12:00;Vrácení platby;;250,00;CZK;2124,50
+CSV;
+        $this->post('/api/v1/banking/imports', [
+            'gallery_space_id' => $this->space->id,
+            'statement' => UploadedFile::fake()->createWithContent('revolut-cz.csv', $localized),
+        ])->assertCreated()->assertJsonPath('import.rows_imported', 2)->assertJsonPath('import.rows_failed', 0);
+
+        $transactions = BankTransaction::all()->keyBy('description');
+        $this->assertSame(-125.5, (float) $transactions['Kavárna']->amount);
+        $this->assertSame(250.0, (float) $transactions['Vrácení platby']->amount);
+
+        foreach (['xlsx', 'xls'] as $offset => $extension) {
+            $spreadsheet = new Spreadsheet;
+            $sheet = $spreadsheet->getActiveSheet();
+            $sheet->fromArray([
+                ['Revolut account statement'],
+                [],
+                ['Completed Date', 'Merchant Name', 'Paid out', 'Paid in', 'Product', 'Balance'],
+                [SpreadsheetDate::PHPToExcel(new \DateTimeImmutable('2026-09-17 18:45:00')), strtoupper($extension).' nákup', '320.40', '', 'Joint CZK', '1804.10'],
+            ]);
+            $sheet->getStyle('A4')->getNumberFormat()->setFormatCode('dd/mm/yyyy hh:mm');
+            $path = sys_get_temp_dir().DIRECTORY_SEPARATOR.'revolut-'.Str::uuid().'.'.$extension;
+            ($extension === 'xlsx' ? new Xlsx($spreadsheet) : new Xls($spreadsheet))->save($path);
+            $spreadsheet->disconnectWorksheets();
+            try {
+                $this->post('/api/v1/banking/imports', [
+                    'gallery_space_id' => $this->space->id,
+                    'statement' => new UploadedFile($path, 'revolut.'.$extension, null, null, true),
+                ])->assertCreated()->assertJsonPath('import.rows_imported', 1)->assertJsonPath('import.rows_failed', 0);
+            } finally {
+                @unlink($path);
+            }
+        }
+
+        $this->assertSame(-320.4, (float) BankTransaction::all()->firstWhere('description', 'XLSX nákup')->amount);
+        $this->assertSame(-320.4, (float) BankTransaction::all()->firstWhere('description', 'XLS nákup')->amount);
+        $this->assertDatabaseCount('bank_transactions', 4);
     }
 
     public function test_read_only_psd2_connection_syncs_idempotently_and_preserves_historical_balances(): void

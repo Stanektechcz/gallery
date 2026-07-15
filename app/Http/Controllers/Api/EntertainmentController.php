@@ -43,7 +43,7 @@ class EntertainmentController extends Controller
         $titleIds = $titles->pluck('id');
         $proposals = DB::table('viewing_date_proposals as proposal')->leftJoin('cinema_showings as showing', 'showing.id', '=', 'proposal.cinema_showing_id')
             ->whereIn('proposal.entertainment_title_id', $titleIds)->where('proposal.starts_at', '>=', now()->subDay())
-            ->orderBy('proposal.starts_at')->get(['proposal.*', 'showing.uuid as showing_uuid', 'showing.external_event_id as showing_event_id', 'showing.booking_url']);
+            ->orderBy('proposal.starts_at')->get(['proposal.*', 'showing.uuid as showing_uuid', 'showing.external_event_id as showing_event_id', 'showing.starts_at as showing_starts_at', 'showing.booking_url']);
         $proposalVotes = DB::table('viewing_proposal_votes')->whereIn('viewing_date_proposal_id', $proposals->pluck('id'))->get()->groupBy('viewing_date_proposal_id');
         $progress = DB::table('entertainment_progress')->whereIn('entertainment_title_id', $titleIds)->get()->groupBy('entertainment_title_id');
         $sessions = DB::table('viewing_sessions')->whereIn('entertainment_title_id', $titleIds)->latest('watched_at')->get()->groupBy('entertainment_title_id');
@@ -349,7 +349,7 @@ class EntertainmentController extends Controller
             'proposals' => $proposals->where('entertainment_title_id', $title->id)->map(function ($proposal) use ($proposalVotes, $viewerId) {
                 $votes = collect($proposalVotes->get($proposal->id, []));
 
-                return ['uuid' => $proposal->uuid, 'starts_at' => Carbon::parse($proposal->starts_at)->toIso8601String(), 'venue' => $proposal->venue, 'place_name' => $proposal->place_name, 'note' => $proposal->note, 'status' => $proposal->status, 'showing_uuid' => $proposal->showing_uuid, 'booking_url' => $proposal->showing_event_id ? $this->cinemaBookingUrl((object) ['external_event_id' => $proposal->showing_event_id, 'booking_url' => $proposal->booking_url]) : $proposal->booking_url, 'votes' => $votes->countBy('response'), 'my_response' => $votes->firstWhere('user_id', $viewerId)?->response, 'event_uuid' => $proposal->calendar_event_id ? CalendarEvent::whereKey($proposal->calendar_event_id)->value('uuid') : null];
+                return ['uuid' => $proposal->uuid, 'starts_at' => Carbon::parse($proposal->starts_at)->toIso8601String(), 'venue' => $proposal->venue, 'place_name' => $proposal->place_name, 'note' => $proposal->note, 'status' => $proposal->status, 'showing_uuid' => $proposal->showing_uuid, 'booking_url' => $proposal->showing_event_id ? $this->cinemaBookingUrl((object) ['starts_at' => $proposal->showing_starts_at ?: $proposal->starts_at]) : $proposal->booking_url, 'votes' => $votes->countBy('response'), 'my_response' => $votes->firstWhere('user_id', $viewerId)?->response, 'event_uuid' => $proposal->calendar_event_id ? CalendarEvent::whereKey($proposal->calendar_event_id)->value('uuid') : null];
             })->values(),
             'progress' => collect($progress->get($title->id, []))->values(),
             'sessions' => collect($sessions->get($title->id, []))->take(5)->values(),
@@ -395,7 +395,7 @@ class EntertainmentController extends Controller
             'subtitles_language' => $item->subtitles_language,
             'sold_out' => (bool) $item->sold_out,
             'availability_ratio' => isset($item->availability_ratio) ? (float) $item->availability_ratio : null,
-            'booking_url' => 'https://www.cinemacity.cz/cz/booking-router/launch/'.rawurlencode((string) $item->external_event_id).'?lang=cs',
+            'booking_url' => CinemaCityProgramService::programUrl($item->starts_at),
             'source_url' => $item->source_url,
         ];
     }
@@ -412,11 +412,8 @@ class EntertainmentController extends Controller
         if (! $showing) {
             return null;
         }
-        if (filled($showing->external_event_id ?? null)) {
-            return 'https://www.cinemacity.cz/cz/booking-router/launch/'.rawurlencode((string) $showing->external_event_id).'?lang=cs';
-        }
 
-        return $showing->booking_url ?? null;
+        return CinemaCityProgramService::programUrl($showing->starts_at ?? null);
     }
 
     private function eventPayload(CalendarEvent $event): array
