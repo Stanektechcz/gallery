@@ -137,7 +137,7 @@ class CinemaCityProgramService
                     'subtitles_language' => $this->language(data_get($event, 'languages.subtitles')),
                     'sold_out' => (bool) ($event['soldOut'] ?? false),
                     'availability_ratio' => isset($event['availabilityRatio']) ? max(0, min(1, (float) $event['availabilityRatio'])) : null,
-                    'booking_url' => $this->https($event['bookingLink'] ?? $event['bookingRouterLaunchLink'] ?? data_get($event, 'compositeBookingLink.bookingUrl.url')),
+                    'booking_url' => $this->bookingUrl($event, $eventId),
                     'source_url' => self::CINEMA_URL,
                     'attributes' => json_encode($attributes, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE),
                     'fetched_at' => now(),
@@ -193,6 +193,13 @@ class CinemaCityProgramService
             ->values();
 
         return $formats->isEmpty() ? null : mb_substr($formats->implode(' · '), 0, 80);
+    }
+
+    private function bookingUrl(array $event, string $eventId): string
+    {
+        $routerUrl = $this->https($event['bookingRouterLaunchLink'] ?? null);
+
+        return $routerUrl ?: 'https://www.cinemacity.cz/cz/booking-router/launch/'.rawurlencode($eventId).'?lang=cs';
     }
 
     private function language(mixed $value): ?string

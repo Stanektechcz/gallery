@@ -33,10 +33,18 @@ class EntertainmentPlanningTest extends TestCase
         $this->assertDatabaseHas('calendar_events', ['uuid' => $event['uuid'], 'type' => 'movie_night']);
         $this->assertDatabaseCount('event_participants', 2);
         $this->assertGreaterThanOrEqual(2, DB::table('event_reminders')->count());
-        $this->postJson('/api/v1/entertainment/'.$title['uuid'].'/sessions', ['rating' => 4.5, 'venue' => 'home'])->assertCreated();
+        $this->postJson('/api/v1/entertainment/'.$title['uuid'].'/sessions', [
+            'rating' => 4.5, 'story_rating' => 5, 'acting_rating' => 4.5, 'visual_rating' => 4,
+            'sound_rating' => 4, 'emotion_rating' => 5, 'pace_rating' => 4, 'recommendation' => 'yes',
+            'review' => 'Výborný společný film.', 'favorite_moment' => 'Finále', 'watch_again' => true, 'venue' => 'home',
+        ])->assertCreated();
         $this->assertDatabaseHas('entertainment_titles', ['uuid' => $title['uuid'], 'status' => 'watched']);
-        $this->assertDatabaseHas('entertainment_reviews', ['rating' => 4.5, 'user_id' => $partner->id]);
-        $this->getJson('/api/v1/entertainment?gallery_space_id='.$space->id)->assertOk()->assertJsonPath('titles.0.joint_score', 4.5)->assertJsonPath('titles.0.proposals.0.event_uuid', $event['uuid']);
+        $this->assertDatabaseHas('entertainment_reviews', ['rating' => 4.5, 'story_rating' => 5, 'recommendation' => 'yes', 'user_id' => $partner->id]);
+        $this->getJson('/api/v1/entertainment?gallery_space_id='.$space->id)->assertOk()
+            ->assertJsonPath('titles.0.joint_score', 4.5)
+            ->assertJsonPath('titles.0.proposals.0.event_uuid', $event['uuid'])
+            ->assertJsonPath('titles.0.reviews.0.story_rating', 5)
+            ->assertJsonPath('titles.0.review_summary.rating', 4.5);
     }
 
     public function test_official_cinema_program_is_cached_and_can_be_proposed(): void
@@ -53,9 +61,14 @@ class EntertainmentPlanningTest extends TestCase
         $this->assertNotNull($showing);
         $this->assertSame('2D · Dolby Atmos · Laser', $showing->format);
         $this->assertStringContainsString('suitable-for-all', $showing->attributes);
+        $this->assertSame('https://www.cinemacity.cz/cz/booking-router/launch/event-1?lang=cs', $showing->booking_url);
         $this->postJson('/api/v1/entertainment/cinema/showings/'.$showing->uuid, ['gallery_space_id' => $space->id, 'propose' => true])->assertCreated()->assertJsonPath('title', 'Testovací film');
         $this->assertDatabaseHas('viewing_date_proposals', ['cinema_showing_id' => $showing->id, 'venue' => 'cinema']);
-        $this->getJson('/api/v1/entertainment?gallery_space_id='.$space->id)->assertOk()->assertJsonPath('cinema.showings.0.title', 'Testovací film');
+        $this->getJson('/api/v1/entertainment?gallery_space_id='.$space->id)->assertOk()
+            ->assertJsonPath('cinema.showings.0.title', 'Testovací film')
+            ->assertJsonPath('cinema.showings.0.external_film_id', 'film-1')
+            ->assertJsonPath('cinema.showings.0.booking_url', 'https://www.cinemacity.cz/cz/booking-router/launch/event-1?lang=cs')
+            ->assertJsonPath('titles.0.proposals.0.booking_url', 'https://www.cinemacity.cz/cz/booking-router/launch/event-1?lang=cs');
     }
 
     public function test_cinema_sync_keeps_a_successful_day_when_another_day_is_temporarily_unavailable(): void
