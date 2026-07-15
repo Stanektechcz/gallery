@@ -111,11 +111,18 @@ CSV;
         $this->assertDatabaseCount('trip_expenses', 3);
         $this->deleteJson("/api/v1/banking/rules/{$exclude['uuid']}")->assertOk();
 
+        DB::table('calendar_events')->insert([
+            'uuid' => (string) Str::uuid(), 'gallery_space_id' => $this->space->id, 'created_by' => $this->owner->id,
+            'trip_id' => $this->tripId, 'title' => 'Společný výlet', 'type' => 'trip', 'status' => 'planned',
+            'starts_at' => '2026-08-10 09:00:00', 'timezone' => 'Europe/Prague', 'created_at' => now(), 'updated_at' => now(),
+        ]);
+
         $dashboard = $this->getJson('/api/v1/banking/dashboard?gallery_space_id='.$this->space->id.'&from=2026-07-01&to=2026-08-31')
             ->assertOk()->assertJsonPath('summary.transaction_count', 4)
             ->assertJsonPath('summary.currencies.0.currency', 'CZK')
             ->assertJsonPath('summary.currencies.0.expenses', 300)
-            ->assertJsonPath('transactions.meta.total', 4)->json();
+            ->assertJsonPath('transactions.meta.total', 4)
+            ->assertJsonPath('events.0.title', 'Společný výlet')->json();
         $this->assertNotEmpty($dashboard['cashflow']);
         $this->assertNotEmpty($dashboard['categories']);
         $this->assertNotEmpty($dashboard['balance_series'][0]['points']);
@@ -244,6 +251,30 @@ CSV;
         } finally {
             @unlink($path);
         }
+    }
+
+    public function test_valid_statement_is_kept_when_optional_trip_reconciliation_fails(): void
+    {
+        $reconciliation = \Mockery::mock(\App\Services\Banking\TripBankReconciliationService::class);
+        $reconciliation->shouldReceive('reconcileSpace')->once()->andThrow(new \RuntimeException('older trip schema'));
+        $this->app->instance(\App\Services\Banking\TripBankReconciliationService::class, $reconciliation);
+
+        $statement = <<<'CSV'
+Type,Product,Completed Date,Description,Amount,Currency,State,Balance
+CARD,Joint Account,2026-07-15 12:00:00,Testovací nákup,-125.50,CZK,COMPLETED,1874.50
+CSV;
+
+        $this->post('/api/v1/banking/imports', [
+            'gallery_space_id' => $this->space->id,
+            'statement' => UploadedFile::fake()->createWithContent('revolut.csv', $statement),
+        ])->assertCreated()
+            ->assertJsonPath('import.status', 'completed')
+            ->assertJsonPath('import.rows_imported', 1)
+            ->assertJsonPath('trip_links_created', 0)
+            ->assertJsonCount(1, 'warnings');
+
+        $this->assertDatabaseHas('bank_imports', ['status' => 'completed', 'rows_imported' => 1]);
+        $this->assertDatabaseHas('bank_transactions', ['amount' => -125.5, 'currency' => 'CZK']);
     }
 
     public function test_read_only_psd2_connection_syncs_idempotently_and_preserves_historical_balances(): void

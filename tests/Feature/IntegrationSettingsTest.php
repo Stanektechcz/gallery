@@ -68,4 +68,28 @@ class IntegrationSettingsTest extends TestCase
         $this->getJson('/api/v1/travel-data/weather?latitude=50.0755&longitude=14.4378')->assertOk()->assertJsonPath('daily.time.0', '2026-07-11');
         $this->getJson('/api/v1/travel-data/exchange-rate?base=EUR&quote=CZK')->assertOk()->assertJsonPath('rate', 25.12);
     }
+
+    public function test_openrouteservice_uses_raw_key_and_accepts_geojson_response(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        $this->actingAs($admin)->putJson('/admin/integrations/openrouteservice', [
+            'is_enabled' => true,
+            'config' => ['api_key' => 'secret-route-key'],
+        ])->assertOk();
+
+        Http::fake([
+            'api.openrouteservice.org/*' => Http::response([
+                'type' => 'FeatureCollection',
+                'features' => [['type' => 'Feature', 'properties' => ['summary' => ['distance' => 1, 'duration' => 1]]]],
+            ], 200, ['Content-Type' => 'application/geo+json']),
+        ]);
+
+        $this->postJson('/admin/integrations/openrouteservice/test')->assertOk()->assertJsonPath('status', 'ok');
+        Http::assertSent(function ($request) {
+            return str_starts_with($request->url(), 'https://api.openrouteservice.org/v2/directions/driving-car/geojson')
+                && in_array('secret-route-key', $request->header('Authorization'), true)
+                && str_contains(implode(',', $request->header('Accept')), 'application/geo+json')
+                && ($request->data()['language'] ?? null) === 'cs';
+        });
+    }
 }

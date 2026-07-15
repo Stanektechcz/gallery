@@ -81,6 +81,7 @@ class SpaceFinancialOverviewService
             'top_merchants' => $this->merchants($rows),
             'balance_series' => $this->balanceSeries($accounts, $from, $to, $account?->id),
             'trips' => $this->tripSummaries($rows, $links),
+            'events' => $this->linkedEvents($space, $links, $from, $to),
             'trip_options' => DB::table('trips')->where('gallery_space_id', $space->id)->orderByDesc('start_date')->limit(100)
                 ->get(['id', 'name', 'start_date', 'end_date', 'currency']),
             'transactions' => [
@@ -101,7 +102,7 @@ class SpaceFinancialOverviewService
     {
         return ['available' => false, 'period' => null, 'accounts' => [], 'summary' => ['currencies' => [], 'transaction_count' => 0,
             'linked_count' => 0, 'suggested_count' => 0, 'unlinked_count' => 0], 'categories' => [], 'cashflow' => [],
-            'top_merchants' => [], 'balance_series' => [], 'trips' => [], 'trip_options' => [],
+            'top_merchants' => [], 'balance_series' => [], 'trips' => [], 'events' => [], 'trip_options' => [],
             'transactions' => ['data' => [], 'meta' => ['current_page' => 1, 'per_page' => 40, 'total' => 0, 'last_page' => 1]]];
     }
 
@@ -219,6 +220,38 @@ class SpaceFinancialOverviewService
             return ['id' => $first->trip_id, 'name' => $first->trip_name, 'start_date' => $first->start_date, 'end_date' => $first->end_date,
                 'spent_by_currency' => $amounts, 'confirmed_count' => $confirmed->count(), 'suggested_count' => $tripLinks->where('status', 'suggested')->count()];
         })->sortByDesc('start_date')->values();
+    }
+
+    private function linkedEvents(GallerySpace $space, Collection $links, Carbon $from, Carbon $to): Collection
+    {
+        if (! Schema::hasTable('calendar_events') || ! Schema::hasColumn('calendar_events', 'trip_id')) {
+            return collect();
+        }
+        $tripIds = $links->pluck('trip_id')->filter()->unique()->values();
+        if ($tripIds->isEmpty()) {
+            return collect();
+        }
+        $hasSourceTrip = Schema::hasColumn('calendar_events', 'source_trip_id');
+        $tripNames = DB::table('trips')->whereIn('id', $tripIds)->pluck('name', 'id');
+        $events = DB::table('calendar_events')->where('gallery_space_id', $space->id)
+            ->whereBetween('starts_at', [$from, $to])
+            ->where(function ($query) use ($tripIds, $hasSourceTrip) {
+                $query->whereIn('trip_id', $tripIds);
+                if ($hasSourceTrip) {
+                    $query->orWhereIn('source_trip_id', $tripIds);
+                }
+            })->orderByDesc('starts_at')->limit(12)
+            ->get($hasSourceTrip
+                ? ['uuid', 'title', 'starts_at', 'type', 'place_name', 'trip_id', 'source_trip_id']
+                : ['uuid', 'title', 'starts_at', 'type', 'place_name', 'trip_id']);
+
+        return $events->map(function ($event) use ($tripNames, $hasSourceTrip) {
+            $tripId = (int) ($event->trip_id ?: ($hasSourceTrip ? $event->source_trip_id : null));
+
+            return ['uuid' => $event->uuid, 'title' => $event->title, 'starts_at' => Carbon::parse($event->starts_at)->toIso8601String(),
+                'type' => $event->type, 'place_name' => $event->place_name, 'trip_id' => $tripId,
+                'trip_name' => $tripNames[$tripId] ?? 'Propojená cesta'];
+        })->values();
     }
 
     private function transaction(BankTransaction $transaction, Collection $links): array

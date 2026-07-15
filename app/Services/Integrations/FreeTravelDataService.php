@@ -87,7 +87,18 @@ class FreeTravelDataService
         $config = $this->config('openrouteservice');
         abort_unless($this->enabled('openrouteservice') && ! empty($config['api_key']), 424, 'OpenRouteService není aktivován.');
 
-        return $this->http()->withToken($config['api_key'])->post("https://api.openrouteservice.org/v2/directions/{$profile}/geojson", ['coordinates' => [[$fromLng, $fromLat], [$toLng, $toLat]]])->throw()->json();
+        // ORS expects the API key as the raw Authorization value. Its GeoJSON
+        // endpoint advertises application/geo+json; forcing acceptJson() alone
+        // makes recent ORS deployments correctly answer HTTP 406.
+        return $this->http()->withHeaders([
+            'Authorization' => trim((string) $config['api_key']),
+            'Accept' => 'application/geo+json, application/json',
+            'Content-Type' => 'application/json',
+        ])->post("https://api.openrouteservice.org/v2/directions/{$profile}/geojson", [
+            'coordinates' => [[$fromLng, $fromLat], [$toLng, $toLat]],
+            'instructions' => true,
+            'language' => 'cs',
+        ])->throw()->json();
     }
 
     public function test(string $provider): void

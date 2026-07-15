@@ -143,9 +143,20 @@ class RevolutStatementImportService
                 'rows_total' => $counts['total'], 'rows_imported' => $counts['imported'], 'rows_duplicate' => $counts['duplicate'],
                 'rows_failed' => $counts['failed'], 'period_from' => $dates->min()?->toDateString(), 'period_to' => $dates->max()?->toDateString(),
                 'error_summary' => $counts['failed'] ? "{$counts['failed']} řádků nebylo možné načíst. První chyba: ".mb_substr((string) $firstFailure, 0, 700) : null]);
-            $links = $this->reconciliation->reconcileSpace($space);
+            $links = 0;
+            $warnings = [];
+            try {
+                $links = $this->reconciliation->reconcileSpace($space);
+            } catch (\Throwable $reconciliationException) {
+                // Import a bank statement independently from optional trip automation.
+                // A server with an older trip schema must not lose an otherwise valid
+                // financial history or force the same statement into an endless retry.
+                report($reconciliationException);
+                $warnings[] = 'Transakce a zůstatky byly bezpečně uložené, ale automatické propojení s cestami se nyní nepodařilo dokončit. Po spuštění migrací je lze znovu spárovat.';
+            }
 
-            return ['import' => $this->payload($import->fresh()), 'duplicate_file' => false, 'retried_import' => $retriedImport, 'trip_links_created' => $links];
+            return ['import' => $this->payload($import->fresh()), 'duplicate_file' => false, 'retried_import' => $retriedImport,
+                'trip_links_created' => $links, 'warnings' => $warnings];
         } catch (\Throwable $exception) {
             $import->update(['status' => 'failed', 'error_summary' => mb_substr($exception->getMessage(), 0, 1000)]);
             throw $exception;

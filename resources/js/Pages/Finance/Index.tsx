@@ -1,10 +1,9 @@
-import BankConnectionManager from '@/Components/Banking/BankConnectionManager';
 import AppLayout from '@/Layouts/AppLayout';
 import usePrimaryGallerySpace from '@/hooks/usePrimaryGallerySpace';
 import { Head, Link } from '@inertiajs/react';
 import axios from 'axios';
-import { ArrowDownLeft, ArrowUpRight, Banknote, Building2, CalendarRange, Link2, RefreshCw, Search, Tags, TrendingDown, TrendingUp, WalletCards } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { ArrowDownLeft, ArrowUpRight, Banknote, Building2, CalendarRange, FileSpreadsheet, Link2, RefreshCw, Search, Tags, TrendingDown, TrendingUp, Upload, WalletCards } from 'lucide-react';
+import { ChangeEvent, useEffect, useMemo, useState } from 'react';
 
 type CurrencySummary = { currency:string; expenses:number; income:number; refunds:number; fees:number; net_change:number; transactions:number };
 type Account = { uuid:string; name:string; institution:string; currency:string; iban_masked?:string|null; is_joint:boolean; current_balance?:number|null; available_balance?:number|null; balance_updated_at?:string|null; history_available_from?:string|null; transactions_count:number };
@@ -14,24 +13,25 @@ type Merchant = { name:string; currency:string; amount:number; count:number };
 type BalanceSeries = { account_uuid:string; name:string; currency:string; points:Array<{date:string;amount:number;source:string}> };
 type TripSummary = { id:number; name:string; start_date:string; end_date:string; spent_by_currency:Record<string,number>; confirmed_count:number; suggested_count:number };
 type TripOption = { id:number; name:string; start_date:string; end_date:string; currency:string };
+type LinkedEvent = { uuid:string; title:string; starts_at:string; type:string; place_name?:string|null; trip_id:number; trip_name:string };
 type TripLink = { id:number; trip_id:number; trip_name:string; status:string; confidence:number; allocated_amount?:number|null; category?:string|null; timing:string };
 type Transaction = { uuid:string; booked_at:string; status:string; direction:'debit'|'credit'; amount:number; currency:string; original_amount?:number|null; original_currency?:string|null; fee_amount?:number|null; balance_after?:number|null; merchant:string; counterparty?:string|null; description?:string|null; category:string; trip_action:string; category_is_manual:boolean; is_internal_transfer:boolean; is_refund:boolean; is_fee:boolean; is_cash_withdrawal:boolean; account:{uuid:string;name:string;currency:string}; trip_links:TripLink[] };
 type Dashboard = {
     available:boolean; period?:{from:string;to:string;days:number}|null; accounts:Account[];
     summary:{currencies:CurrencySummary[];transaction_count:number;linked_count:number;suggested_count:number;unlinked_count:number;internal_transfers?:number;cash_withdrawals?:number};
-    categories:Category[]; cashflow:Cashflow[]; top_merchants:Merchant[]; balance_series:BalanceSeries[]; trips:TripSummary[]; trip_options:TripOption[];
+    categories:Category[]; cashflow:Cashflow[]; top_merchants:Merchant[]; balance_series:BalanceSeries[]; trips:TripSummary[]; events:LinkedEvent[]; trip_options:TripOption[];
     transactions:{data:Transaction[];meta:{current_page:number;per_page:number;total:number;last_page:number}};
 };
 
 type Tab = 'overview'|'transactions';
-const empty:Dashboard={available:true,accounts:[],summary:{currencies:[],transaction_count:0,linked_count:0,suggested_count:0,unlinked_count:0},categories:[],cashflow:[],top_merchants:[],balance_series:[],trips:[],trip_options:[],transactions:{data:[],meta:{current_page:1,per_page:40,total:0,last_page:1}}};
+const empty:Dashboard={available:true,accounts:[],summary:{currencies:[],transaction_count:0,linked_count:0,suggested_count:0,unlinked_count:0},categories:[],cashflow:[],top_merchants:[],balance_series:[],trips:[],events:[],trip_options:[],transactions:{data:[],meta:{current_page:1,per_page:40,total:0,last_page:1}}};
 const input='min-h-10 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-3 text-sm text-white focus:border-emerald-400 focus:outline-none';
 const CATEGORIES:Record<string,string>={transport:'Doprava',accommodation:'Ubytování',food:'Jídlo a pití',activities:'Aktivity',insurance:'Pojištění',other:'Ostatní'};
 
 export default function FinanceIndex(){
     const {spaceId,loading:spaceLoading,error:spaceError,reload:reloadSpace}=usePrimaryGallerySpace();
     const [tab,setTab]=useState<Tab>(()=>window.location.hash==='#transactions'?'transactions':'overview');
-    const [data,setData]=useState<Dashboard>(empty);const [loading,setLoading]=useState(false);const [error,setError]=useState('');const [busy,setBusy]=useState('');
+    const [data,setData]=useState<Dashboard>(empty);const [loading,setLoading]=useState(false);const [error,setError]=useState('');const [notice,setNotice]=useState('');const [busy,setBusy]=useState('');
     const [filters,setFilters]=useState(()=>({from:dateOffset(-89),to:dateOffset(0),account_uuid:'',category:'all',direction:'all',query:'',page:1}));
     const [tripChoice,setTripChoice]=useState<Record<string,string>>({});const [allocations,setAllocations]=useState<Record<string,string>>({});
 
@@ -41,16 +41,18 @@ export default function FinanceIndex(){
     const preset=(days:number)=>setFilters({...filters,from:dateOffset(-(days-1)),to:dateOffset(0),page:1});
     const patchTransaction=async(item:Transaction,payload:Record<string,string>)=>{setBusy(item.uuid);setError('');try{await axios.patch(`/api/v1/banking/transactions/${item.uuid}`,payload);await load();}catch(reason:any){setError(reason?.response?.data?.message??'Transakci se nepodařilo upravit.');}finally{setBusy('');}};
     const linkTrip=async(item:Transaction)=>{const tripId=Number(tripChoice[item.uuid]);if(!tripId)return;setBusy(item.uuid);setError('');try{await axios.post(`/api/v1/banking/transactions/${item.uuid}/trip`,{trip_id:tripId,allocated_amount:allocations[item.uuid]?Number(allocations[item.uuid]):Math.abs(item.amount),category:item.category});setTripChoice({...tripChoice,[item.uuid]:''});await load();}catch(reason:any){setError(reason?.response?.data?.message??'Platbu se nepodařilo přiřadit k cestě.');}finally{setBusy('');}};
+    const quickImport=async(event:ChangeEvent<HTMLInputElement>)=>{const file=event.target.files?.[0];event.target.value='';if(!file||!spaceId)return;setBusy('import');setError('');setNotice('');try{const form=new FormData();form.append('gallery_space_id',String(spaceId));form.append('statement',file);const response=await axios.post('/api/v1/banking/imports',form);await load(1);const imported=response.data.import;setNotice(response.data.duplicate_file?'Tento výpis už je bezpečně uložený; data nebyla zdvojena.':`Import dokončen: ${imported.rows_imported} nových transakcí, ${imported.rows_duplicate} duplicit přeskočeno.${response.data.warnings?.length?` ${response.data.warnings.join(' ')}`:''}`);}catch(reason:any){setError(reason?.response?.data?.message??'Výpis se nepodařilo importovat.');}finally{setBusy('');}};
     return <AppLayout><Head title="Společné finance"/><main className="mx-auto max-w-7xl p-4 sm:p-6">
-        <header className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start"><div><p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-emerald-200"><WalletCards size={15}/>Společné finance</p><h1 className="mt-1 text-2xl font-semibold text-white">Přehled společných financí</h1><p className="mt-1 max-w-3xl text-sm leading-relaxed text-[var(--color-text-secondary)]">Zůstatky, příjmy, výdaje, obchodníci, kategorie a skutečné náklady cest. Nový export z Revolutu nahrajete rovnou v přehledu.</p></div><Link href="/trips" className="inline-flex min-h-9 w-fit items-center rounded-full border border-[var(--color-border)] px-3 text-xs text-white">Rozpočty cest →</Link></header>
+        <header className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start"><div><p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-emerald-200"><WalletCards size={15}/>Společné finance</p><h1 className="mt-1 text-2xl font-semibold text-white">Přehled společných financí</h1><p className="mt-1 max-w-3xl text-sm leading-relaxed text-[var(--color-text-secondary)]">Zůstatky, příjmy, výdaje, obchodníci, kategorie a skutečné náklady cest. Nový export z Revolutu nahrajete jedním krokem.</p></div><div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row"><label className={`inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 text-sm font-semibold text-white shadow-lg shadow-emerald-950/20 ${busy==='import'?'pointer-events-none opacity-60':''}`}><Upload size={16} className={busy==='import'?'animate-pulse':''}/>{busy==='import'?'Importuji výpis…':'Nahrát Revolut export'}<input type="file" accept=".csv,.xls,.xlsx,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" disabled={!!busy||!spaceId} onChange={quickImport} className="hidden"/></label><Link href="/trips" className="inline-flex min-h-11 items-center justify-center rounded-xl border border-[var(--color-border)] px-4 text-sm text-white">Rozpočty cest →</Link></div></header>
 
         <nav className="mt-5 flex gap-1 overflow-x-auto rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-1" aria-label="Části financí">{([['overview','Přehled a import'],['transactions',`Transakce${data.summary.transaction_count?` · ${data.summary.transaction_count}`:''}`]] as Array<[Tab,string]>).map(([value,label])=><button key={value} type="button" onClick={()=>chooseTab(value)} className={`min-h-10 shrink-0 rounded-xl px-4 text-sm ${tab===value?'bg-emerald-500 text-white':'text-[var(--color-text-secondary)] hover:bg-white/5 hover:text-white'}`}>{label}</button>)}</nav>
         {(spaceError||error)&&<div role="alert" className="mt-4 rounded-xl border border-red-400/20 bg-red-500/10 p-3 text-sm text-red-100">{spaceError||error}<button type="button" onClick={()=>spaceError?reloadSpace():load()} className="ml-2 underline">Načíst znovu</button></div>}
+        {notice&&<div role="status" className="mt-4 rounded-xl border border-emerald-400/20 bg-emerald-500/10 p-3 text-sm text-emerald-100">{notice}</div>}
         {(spaceLoading||loading)&&<div className="mt-4 h-1 overflow-hidden rounded-full bg-white/5"><div className="h-full w-1/3 animate-pulse rounded-full bg-emerald-400"/></div>}
         {!spaceLoading&&spaceId&&<>
             {!data.available?<MigrationNotice/>:<>
                 <FilterBar filters={filters} accounts={data.accounts} onChange={value=>setFilters({...filters,...value,page:1})} onPreset={preset} onRefresh={()=>load()}/>
-                {tab==='overview'?<><div className="mt-5"><BankConnectionManager gallerySpaceId={spaceId} compact importOnly onChanged={()=>load(1)}/></div><Overview data={data}/></>:<Transactions data={data} busy={busy} tripChoice={tripChoice} allocations={allocations} onTripChoice={(uuid,value)=>setTripChoice({...tripChoice,[uuid]:value})} onAllocation={(uuid,value)=>setAllocations({...allocations,[uuid]:value})} onPatch={patchTransaction} onLink={linkTrip} onPage={page=>load(page)}/>}
+                {tab==='overview'?<Overview data={data}/>:<Transactions data={data} busy={busy} tripChoice={tripChoice} allocations={allocations} onTripChoice={(uuid,value)=>setTripChoice({...tripChoice,[uuid]:value})} onAllocation={(uuid,value)=>setAllocations({...allocations,[uuid]:value})} onPatch={patchTransaction} onLink={linkTrip} onPage={page=>load(page)}/>}
             </>}
         </>}
     </main></AppLayout>;
@@ -61,8 +63,10 @@ function FilterBar({filters,accounts,onChange,onPreset,onRefresh}:{filters:any;a
 }
 
 function Overview({data}:{data:Dashboard}){
-    return <div className="mt-5 space-y-5"><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><AccountBalance accounts={data.accounts}/>{data.summary.currencies.map(item=><CurrencyCard key={item.currency} item={item}/>)}</div><div className="grid gap-5 xl:grid-cols-2"><BalanceChart series={data.balance_series}/><CashflowChart rows={data.cashflow}/><CategoryChart rows={data.categories}/><MerchantList rows={data.top_merchants}/></div><TravelOverview trips={data.trips} summary={data.summary}/></div>;
+    return <div className="mt-5 space-y-5"><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><AccountBalance accounts={data.accounts}/>{data.summary.currencies.map(item=><CurrencyCard key={item.currency} item={item}/>)}</div><div className="grid gap-5 xl:grid-cols-2"><BalanceChart series={data.balance_series}/><CashflowChart rows={data.cashflow}/><CategoryChart rows={data.categories}/><MerchantList rows={data.top_merchants}/></div><TravelOverview trips={data.trips} summary={data.summary}/><LinkedEvents events={data.events}/></div>;
 }
+
+function LinkedEvents({events}:{events:LinkedEvent[]}){return <section className="rounded-2xl border border-sky-400/20 bg-gradient-to-br from-sky-500/10 to-[var(--color-bg-card)] p-4"><div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-start"><div><h2 className="flex items-center gap-2 font-semibold text-white"><CalendarRange size={17} className="text-sky-300"/>Události propojené s placenými cestami</h2><p className="mt-1 text-xs text-[var(--color-text-secondary)]">Finanční historie se přes cestu promítá také do společného kalendáře a přípravy akcí.</p></div><Link href="/calendar" className="text-xs text-sky-200">Otevřít kalendář →</Link></div><div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{events.map(item=><Link key={item.uuid} href={`/calendar/events/${item.uuid}`} className="rounded-xl border border-sky-300/15 bg-black/10 p-3 hover:border-sky-300/35"><p className="truncate font-medium text-white">{item.title}</p><p className="mt-1 text-[10px] text-[var(--color-text-secondary)]">{new Date(item.starts_at).toLocaleString('cs-CZ')} · {item.trip_name}{item.place_name?` · ${item.place_name}`:''}</p></Link>)}{!events.length&&<Empty text="Jakmile bude platba přiřazená k cestě s událostí, zobrazí se zde společný kontext."/>}</div></section>}
 
 function AccountBalance({accounts}:{accounts:Account[]}){
     const grouped=useMemo(()=>Object.entries(accounts.reduce<Record<string,number>>((out,item)=>{if(item.current_balance!=null)out[item.currency]=(out[item.currency]??0)+item.current_balance;return out;},{})),[accounts]);

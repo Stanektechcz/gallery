@@ -66,9 +66,10 @@ export default function BankConnectionManager({ gallerySpaceId, returnTripId, co
             const form=new FormData();form.append('gallery_space_id',String(gallerySpaceId));form.append('statement',file);
             const response=await axios.post('/api/v1/banking/imports',form);
             await load();onChanged?.();
-            setMessage(response.data.duplicate_file
+            const baseMessage=response.data.duplicate_file
                 ? 'Tento úspěšně zpracovaný výpis už je v historii; žádná data se nezdvojila.'
-                : `${response.data.retried_import?'Předchozí neúspěšný import byl opraven. ':''}Hotovo: ${response.data.import.rows_imported} nových transakcí, ${response.data.import.rows_duplicate} duplicit přeskočeno${response.data.import.rows_failed?`, ${response.data.import.rows_failed} řádků vyžaduje kontrolu`:''}.`);
+                : `${response.data.retried_import?'Předchozí neúspěšný import byl opraven. ':''}Hotovo: ${response.data.import.rows_imported} nových transakcí, ${response.data.import.rows_duplicate} duplicit přeskočeno${response.data.import.rows_failed?`, ${response.data.import.rows_failed} řádků vyžaduje kontrolu`:''}.`;
+            setMessage(`${baseMessage}${response.data.warnings?.length?` ${response.data.warnings.join(' ')}`:''}`);
         }catch(reason:any){setError(reason.response?.data?.message??'Výpis se nepodařilo importovat.');}
         finally{setBusy('');}
     };
