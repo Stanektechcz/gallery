@@ -6,6 +6,7 @@ use App\Models\AuditLog;
 use App\Models\MediaItem;
 use App\Models\GuestUpload;
 use App\Models\SharedLink;
+use App\Services\Sharing\SharedContentService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -18,11 +19,17 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ShareController extends Controller
 {
+    public function __construct(private readonly SharedContentService $sharedContent) {}
+
     public function index(Request $request): Response
     {
         $shares = SharedLink::where('created_by', $request->user()->id)
             ->orderBy('created_at', 'desc')
-            ->paginate(20);
+            ->paginate(20)
+            ->through(fn (SharedLink $link) => array_merge($link->toArray(), [
+                'has_password' => $link->password_hash !== null,
+                'target' => $this->sharedContent->summary($link),
+            ]));
 
         return Inertia::render('Shares/Index', ['shares' => $shares]);
     }
@@ -30,8 +37,9 @@ class ShareController extends Controller
     public function store(Request $request): \Illuminate\Http\JsonResponse
     {
         $data = $request->validate([
-            'target_type'       => 'required|in:album,media,selection',
+            'target_type'       => 'required|in:album,media,selection,recipe,place_review',
             'target_id'         => 'nullable|integer',
+            'target_uuid'       => 'nullable|uuid|required_if:target_type,recipe,place_review',
             'name'              => 'nullable|string|max:200',
             'password'          => 'nullable|string|min:4',
             'expires_at'        => 'nullable|date|after:now',
@@ -43,7 +51,15 @@ class ShareController extends Controller
             'media_ids.*'       => 'integer|exists:media_items,id',
         ]);
 
-        $spaceId = $request->user()->gallerySpaces()->first()->id;
+        $spaceId = $request->user()->gallerySpaces()->firstOrFail()->id;
+        $targetId = $data['target_id'] ?? null;
+        $defaultName = null;
+        if (in_array($data['target_type'], SharedContentService::CONTENT_TYPES, true)) {
+            $target = $this->sharedContent->resolveForSharing($request->user(), $data['target_type'], $data['target_uuid']);
+            $spaceId = $target['gallery_space_id'];
+            $targetId = $target['id'];
+            $defaultName = $target['name'];
+        }
         $mediaIds = collect($data['media_ids'] ?? [])->map(fn ($id) => (int) $id)->unique()->values();
         $validMediaIds = MediaItem::where('gallery_space_id', $spaceId)
             ->where('is_hidden', false)->whereNull('trashed_at')->whereIn('id', $mediaIds)->pluck('id');
@@ -63,13 +79,14 @@ class ShareController extends Controller
             'created_by'        => $request->user()->id,
             'gallery_space_id'  => $spaceId,
             'target_type'       => $data['target_type'],
-            'target_id'         => $data['target_id'] ?? null,
-            'name'              => $data['name'] ?? null,
+            'target_id'         => $targetId,
+            'name'              => $data['name'] ?? $defaultName,
             'password_hash'     => isset($data['password']) ? Hash::make($data['password']) : null,
             'expires_at'        => $data['expires_at'] ?? null,
-            'allow_download'    => $data['allow_download'] ?? true,
-            'allow_guest_upload' => $data['allow_guest_upload'] ?? false,
-            'hide_gps'          => $data['hide_gps'] ?? false,
+            'allow_download'    => in_array($data['target_type'], SharedContentService::CONTENT_TYPES, true) ? false : ($data['allow_download'] ?? true),
+            'allow_guest_upload' => in_array($data['target_type'], SharedContentService::CONTENT_TYPES, true) ? false : ($data['allow_guest_upload'] ?? false),
+            'hide_gps'          => in_array($data['target_type'], SharedContentService::CONTENT_TYPES, true) ? true : ($data['hide_gps'] ?? false),
+            'show_metadata'     => ! in_array($data['target_type'], SharedContentService::CONTENT_TYPES, true),
             'max_uses'          => $data['max_uses'] ?? null,
         ]);
 
@@ -80,8 +97,10 @@ class ShareController extends Controller
         AuditLog::record('share.create', $link, ['token' => $link->token, 'target_type' => $link->target_type]);
 
         return response()->json([
+            'id'    => $link->id,
             'token' => $link->token,
             'url'   => route('share.show', $link->token),
+            'expires_at' => $link->expires_at?->toIso8601String(),
         ]);
     }
 
@@ -100,6 +119,17 @@ class ShareController extends Controller
         // Increment use count
         $link->increment('use_count');
         DB::table('share_access_logs')->insert(['shared_link_id' => $link->id, 'action' => 'view', 'ip_hash' => hash('sha256', (string) $request->ip() . config('app.key')), 'user_agent_family' => Str::limit((string) $request->userAgent(), 80, ''), 'created_at' => now()]);
+
+        if (in_array($link->target_type, SharedContentService::CONTENT_TYPES, true)) {
+            return Inertia::render('Shares/Content', [
+                'link' => [
+                    'token' => $link->token,
+                    'name' => $link->name,
+                    'expires_at' => $link->expires_at?->toIso8601String(),
+                ],
+                'content' => $this->sharedContent->publicPayload($link),
+            ]);
+        }
 
         $media = match ($link->target_type) {
             'album'     => MediaItem::where('primary_album_id', $link->target_id)->where('is_hidden', false)->with('variants')->limit(100)->get(),

@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Services\Planning\TripBudgetAdvisorService;
+use App\Services\Planning\TripPreparationTimelineService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -12,19 +14,22 @@ use Illuminate\Support\Str;
 
 class TripIntelligenceController extends Controller
 {
-    public function readiness(Request $request, int $tripId): JsonResponse
+    public function readiness(Request $request, int $tripId, TripBudgetAdvisorService $budgetAdvisor, TripPreparationTimelineService $preparation): JsonResponse
     {
         $trip = $this->trip($request->user(), $tripId);
         $limits = DB::table('trip_budget_limits')->where('trip_id', $tripId)->get();
         $expenses = DB::table('trip_expenses')->where('trip_id', $tripId)->where('state', 'actual')->selectRaw('category, currency, SUM(amount) as total')->groupBy('category', 'currency')->get();
         $budget = $limits->map(function ($limit) use ($expenses) { $entry = $expenses->first(fn ($row) => $row->category === $limit->category && $row->currency === $limit->currency); $actual = (float) ($entry?->total ?? 0); return ['category' => $limit->category, 'limit' => (float) $limit->amount, 'actual' => $actual, 'currency' => $limit->currency, 'status' => $actual >= $limit->amount ? 'over' : ($actual >= $limit->amount * $limit->warn_percent / 100 ? 'warning' : 'ok')]; });
-        $documents = DB::table('trip_document_checks')->where('trip_id', $tripId)->orderBy('expires_on')->get();
+        $documentsQuery = DB::table('trip_document_checks as document')->where('document.trip_id', $tripId)->orderBy('document.expires_on');
+        $documents = Schema::hasColumn('trip_document_checks', 'assigned_to')
+            ? $documentsQuery->leftJoin('users as assignee', 'assignee.id', '=', 'document.assigned_to')->get(['document.*', 'assignee.name as assignee_name'])
+            : $documentsQuery->get(['document.*']);
         $expired = $documents->filter(fn ($document) => $document->expires_on && now()->toDateString() > $document->expires_on)->values();
         $activities = DB::table('trip_activities as a')->join('trip_days as d', 'd.id', '=', 'a.trip_day_id')->where('d.trip_id', $tripId)->orderBy('d.date')->orderBy('a.starts_at')->select('a.*', 'd.date')->get();
         $conflicts = $activities->groupBy('date')->flatMap(function ($day) { return $day->values()->zip($day->values()->slice(1))->filter(fn ($pair) => $pair[0]->ends_at && $pair[1]->starts_at && $pair[0]->ends_at > $pair[1]->starts_at)->map(fn ($pair) => ['date' => $pair[0]->date, 'first' => $pair[0]->title, 'second' => $pair[1]->title]); })->values();
         $packing = DB::table('trip_packing_items')->where('trip_id', $tripId);
         $unpackedEssentials = DB::table('trip_packing_items as item')->leftJoin('users as assignee', 'assignee.id', '=', 'item.assigned_to')->where('item.trip_id', $tripId)->where('item.is_essential', true)->where('item.is_packed', false)->get(['item.id', 'item.title', 'item.category', 'item.assigned_to', 'assignee.name as assignee_name']);
-        return response()->json(['trip' => $trip, 'budget' => $budget, 'documents' => $documents, 'expired_documents' => $expired, 'time_conflicts' => $conflicts, 'settlements' => DB::table('trip_settlements')->where('trip_id', $tripId)->get(), 'packing' => ['total' => (clone $packing)->count(), 'packed' => (clone $packing)->where('is_packed', true)->count(), 'assigned' => (clone $packing)->whereNotNull('assigned_to')->count(), 'unassigned_essentials' => (clone $packing)->where('is_essential', true)->whereNull('assigned_to')->where('is_packed', false)->count(), 'unpacked_essentials' => $unpackedEssentials], 'vehicle' => $this->vehicleSummary($tripId)]);
+        return response()->json(['trip' => $trip, 'budget' => $budget, 'budget_advisor' => $budgetAdvisor->snapshot($trip), 'preparation' => $preparation->snapshot($trip), 'documents' => $documents, 'expired_documents' => $expired, 'time_conflicts' => $conflicts, 'settlements' => DB::table('trip_settlements')->where('trip_id', $tripId)->get(), 'packing' => ['total' => (clone $packing)->count(), 'packed' => (clone $packing)->where('is_packed', true)->count(), 'assigned' => (clone $packing)->whereNotNull('assigned_to')->count(), 'unassigned_essentials' => (clone $packing)->where('is_essential', true)->whereNull('assigned_to')->where('is_packed', false)->count(), 'unpacked_essentials' => $unpackedEssentials], 'vehicle' => $this->vehicleSummary($tripId)]);
     }
 
     public function upsertBudgetLimit(Request $request, int $tripId): JsonResponse
@@ -34,11 +39,27 @@ class TripIntelligenceController extends Controller
         return response()->json(DB::table('trip_budget_limits')->where('trip_id', $tripId)->where('category', $data['category'])->first());
     }
 
-    public function storeDocument(Request $request, int $tripId): JsonResponse
+    public function storeDocument(Request $request, int $tripId, TripPreparationTimelineService $preparation): JsonResponse
     {
-        $this->trip($request->user(), $tripId); $data = $request->validate(['type' => 'required|in:passport,id_card,insurance,ticket,visa,booking,other', 'title' => 'required|string|max:255', 'expires_on' => 'nullable|date', 'status' => 'nullable|in:required,ready,missing,expired', 'reference' => 'nullable|string|max:5000']);
+        $trip = $this->trip($request->user(), $tripId); $data = $request->validate(['type' => 'required|in:passport,id_card,insurance,ticket,visa,booking,other', 'title' => 'required|string|max:255', 'expires_on' => 'nullable|date', 'status' => 'nullable|in:required,ready,missing,expired', 'reference' => 'nullable|string|max:5000', 'assigned_to' => 'nullable|integer']);
+        if (!empty($data['assigned_to'])) abort_unless($this->member($trip->gallery_space_id, (int) $data['assigned_to']), 422, 'Doklad lze přiřadit pouze členovi společného prostoru.');
+        if (!Schema::hasColumn('trip_document_checks', 'assigned_to')) unset($data['assigned_to']);
         $id = DB::table('trip_document_checks')->insertGetId($data + ['trip_id' => $tripId, 'created_by' => $request->user()->id, 'status' => $data['status'] ?? 'required', 'created_at' => now(), 'updated_at' => now()]);
+        if ($preparation->canSync()) $preparation->sync($trip);
         return response()->json(DB::table('trip_document_checks')->find($id), 201);
+    }
+
+    public function preparationTimeline(Request $request, int $tripId, TripPreparationTimelineService $preparation): JsonResponse
+    {
+        return response()->json($preparation->snapshot($this->trip($request->user(), $tripId)));
+    }
+
+    public function syncPreparationTimeline(Request $request, int $tripId, TripPreparationTimelineService $preparation): JsonResponse
+    {
+        $trip = $this->trip($request->user(), $tripId);
+        abort_unless($preparation->canSync(), 503, 'Pro automatickou přípravu dokončete migrace aplikace.');
+        $snapshot = $preparation->snapshot($trip);
+        return response()->json(['preparation' => $snapshot, 'automation' => $preparation->sync($trip, $snapshot)]);
     }
 
     public function proposeSettlement(Request $request, int $tripId): JsonResponse
@@ -58,7 +79,7 @@ class TripIntelligenceController extends Controller
         return response()->json(DB::table('trip_settlements')->find($settlementId));
     }
 
-    public function financeSummary(Request $request, int $tripId): JsonResponse
+    public function financeSummary(Request $request, int $tripId, TripBudgetAdvisorService $budgetAdvisor): JsonResponse
     {
         $trip = $this->trip($request->user(), $tripId);
         $members = DB::table('gallery_space_user as g')->join('users as u', 'u.id', '=', 'g.user_id')->where('g.gallery_space_id', $trip->gallery_space_id)->get(['u.id', 'u.name']);
@@ -75,7 +96,40 @@ class TripIntelligenceController extends Controller
         $creditors = $balances->filter(fn ($row) => $row['balance'] > 0.004)->values()->all(); $debtors = $balances->filter(fn ($row) => $row['balance'] < -0.004)->values()->all(); $proposals = [];
         foreach ($debtors as &$debtor) foreach ($creditors as &$creditor) { if ($debtor['balance'] >= -0.004 || $creditor['balance'] <= 0.004) continue; $amount = round(min(-$debtor['balance'], $creditor['balance']), 2); $proposals[] = ['from_user_id' => $debtor['user_id'], 'to_user_id' => $creditor['user_id'], 'amount' => $amount, 'currency' => $trip->currency ?? 'CZK']; $debtor['balance'] += $amount; $creditor['balance'] -= $amount; }
         $goal = DB::table('trip_savings_goals')->where('trip_id', $tripId)->first();
-        return response()->json(['members' => $balances, 'proposals' => $proposals, 'unassigned_expense_ids' => $unassigned, 'savings_goal' => $goal]);
+        return response()->json(['members' => $balances, 'proposals' => $proposals, 'unassigned_expense_ids' => $unassigned, 'savings_goal' => $goal, 'advisor' => $budgetAdvisor->snapshot($trip)]);
+    }
+
+    public function budgetAdvisor(Request $request, int $tripId, TripBudgetAdvisorService $budgetAdvisor): JsonResponse
+    {
+        return response()->json($budgetAdvisor->snapshot($this->trip($request->user(), $tripId)));
+    }
+
+    public function updateBudgetPlan(Request $request, int $tripId, TripBudgetAdvisorService $budgetAdvisor): JsonResponse
+    {
+        $trip = $this->trip($request->user(), $tripId);
+        abort_unless(Schema::hasColumn('trips', 'budget_profile') && Schema::hasColumn('trips', 'daily_budget_limit'), 503, 'Pro low-cost plán dokončete migrace aplikace.');
+        $data = $request->validate([
+            'budget_profile' => 'sometimes|required|in:economy,balanced,comfort',
+            'budget' => 'sometimes|nullable|numeric|min:0|max:999999999',
+            'daily_budget_limit' => 'sometimes|nullable|numeric|min:0|max:999999999',
+            'apply_defaults' => 'nullable|boolean',
+            'replace_limits' => 'nullable|boolean',
+            'sync_calendar_tasks' => 'nullable|boolean',
+        ]);
+        $update = collect($data)->only(['budget_profile', 'budget', 'daily_budget_limit'])->all();
+        if ($update !== []) {
+            DB::table('trips')->where('id', $tripId)->update($update + ['updated_at' => now()]);
+        }
+        $trip = $this->trip($request->user(), $tripId);
+        $limitsApplied = ! empty($data['apply_defaults'])
+            ? $budgetAdvisor->applyDefaultLimits($trip, (bool) ($data['replace_limits'] ?? false))
+            : 0;
+        $snapshot = $budgetAdvisor->snapshot($trip);
+        $tasks = ! empty($data['sync_calendar_tasks'])
+            ? $budgetAdvisor->syncCalendarTasks($trip, $snapshot)
+            : ['event_uuid' => null, 'created' => 0, 'updated' => 0];
+
+        return response()->json(['advisor' => $snapshot, 'automation' => ['limits_applied' => $limitsApplied, 'calendar_tasks' => $tasks]]);
     }
 
     public function upsertSavingsGoal(Request $request, int $tripId): JsonResponse
@@ -99,16 +153,26 @@ class TripIntelligenceController extends Controller
         return response()->json(DB::table('saved_transport_routes')->whereIn('gallery_space_id', $request->user()->gallerySpaces()->pluck('gallery_spaces.id'))->latest()->get());
     }
 
-    public function offlinePackage(Request $request, int $tripId): JsonResponse
+    public function offlinePackage(Request $request, int $tripId, TripPreparationTimelineService $preparation): JsonResponse
     {
         $trip = $this->trip($request->user(), $tripId);
         $days = DB::table('trip_days')->where('trip_id', $tripId)->orderBy('sort_order')->get();
         foreach ($days as $day) $day->activities = DB::table('trip_activities')->where('trip_day_id', $day->id)->orderBy('sort_order')->get();
+        $reservations = Schema::hasTable('trip_reservation_imports')
+            ? DB::table('trip_reservation_imports')->where('trip_id', $tripId)->where('status', 'confirmed')->orderBy('confirmed_at')->get()
+                ->map(function ($item) use ($tripId) {
+                    $data = json_decode($item->confirmed_data ?: '{}', true) ?: [];
+                    return $data + ['uuid' => $item->uuid, 'original_name' => $item->original_name,
+                        'document_url' => $item->storage_path ? "/api/v1/trips/{$tripId}/reservation-imports/{$item->uuid}/download" : null];
+                })->values()
+            : collect();
         return response()->json([
             'generated_at' => now()->toIso8601String(), 'trip' => $trip, 'days' => $days,
             'documents' => DB::table('trip_document_checks')->where('trip_id', $tripId)->where('status', 'ready')->get(),
+            'reservations' => $reservations,
             'emergency_card' => DB::table('travel_emergency_cards')->where('trip_id', $tripId)->first(),
             'selected_route' => DB::table('trip_route_variants')->where('trip_id', $tripId)->where('is_selected', true)->first(),
+            'preparation' => $preparation->snapshot($trip),
         ]);
     }
 
@@ -200,28 +264,31 @@ class TripIntelligenceController extends Controller
         return response()->json(['items' => DB::table('trip_vehicle_costs')->where('trip_id', $tripId)->orderByDesc('occurred_on')->orderByDesc('id')->get(), 'summary' => $this->vehicleSummary($tripId)]);
     }
 
-    public function storeVehicleCost(Request $request, int $tripId): JsonResponse
+    public function storeVehicleCost(Request $request, int $tripId, TripPreparationTimelineService $preparation): JsonResponse
     {
         $trip = $this->trip($request->user(), $tripId);
         $data = $this->validatedVehicleCost($request);
         $id = DB::table('trip_vehicle_costs')->insertGetId($data + ['uuid' => (string) Str::uuid(), 'trip_id' => $tripId, 'created_by' => $request->user()->id, 'currency' => strtoupper($data['currency'] ?? $trip->currency ?? 'CZK'), 'occurred_on' => $data['occurred_on'] ?? now()->toDateString(), 'created_at' => now(), 'updated_at' => now()]);
+        if ($preparation->canSync()) $preparation->sync($trip);
         return response()->json(DB::table('trip_vehicle_costs')->find($id), 201);
     }
 
-    public function updateVehicleCost(Request $request, int $tripId, int $costId): JsonResponse
+    public function updateVehicleCost(Request $request, int $tripId, int $costId, TripPreparationTimelineService $preparation): JsonResponse
     {
-        $this->trip($request->user(), $tripId);
+        $trip = $this->trip($request->user(), $tripId);
         $cost = DB::table('trip_vehicle_costs')->where('id', $costId)->where('trip_id', $tripId)->firstOrFail();
         $data = $this->validatedVehicleCost($request, true);
         if (isset($data['currency'])) $data['currency'] = strtoupper($data['currency']);
         DB::table('trip_vehicle_costs')->where('id', $cost->id)->update($data + ['updated_at' => now()]);
+        if ($preparation->canSync()) $preparation->sync($trip);
         return response()->json(DB::table('trip_vehicle_costs')->find($cost->id));
     }
 
-    public function destroyVehicleCost(Request $request, int $tripId, int $costId): JsonResponse
+    public function destroyVehicleCost(Request $request, int $tripId, int $costId, TripPreparationTimelineService $preparation): JsonResponse
     {
-        $this->trip($request->user(), $tripId);
+        $trip = $this->trip($request->user(), $tripId);
         DB::table('trip_vehicle_costs')->where('id', $costId)->where('trip_id', $tripId)->delete();
+        if ($preparation->canSync()) $preparation->sync($trip);
         return response()->json(['status' => 'deleted']);
     }
 

@@ -61,6 +61,7 @@ function QuoteBlock({ content }: { content: Record<string, any> }) {
             {content.author && (
                 <cite className="text-sm text-[var(--color-text-secondary)] mt-1 block not-italic">— {content.author}</cite>
             )}
+            {content.audio_url && <div className="mt-3 not-italic"><audio controls preload="metadata" src={content.audio_url} className="h-10 w-full max-w-md" aria-label={`Hlasová vzpomínka${content.author ? ` · ${content.author}` : ''}`}/>{content.audio_duration_ms > 0 && <p className="mt-1 text-[10px] text-[var(--color-text-secondary)]">Původní hlasový moment · {Math.max(1, Math.round(content.audio_duration_ms / 1000))} s</p>}</div>}
         </blockquote>
     );
 }

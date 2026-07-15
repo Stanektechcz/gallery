@@ -1,0 +1,213 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Models\BankConnection;
+use App\Models\BankTransaction;
+use App\Models\GallerySpace;
+use App\Models\IntegrationSetting;
+use App\Models\User;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\Request as ClientRequest;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Str;
+use Tests\TestCase;
+
+class BankingIntegrationTest extends TestCase
+{
+    use RefreshDatabase;
+
+    private User $owner;
+
+    private User $partner;
+
+    private GallerySpace $space;
+
+    private int $tripId;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        Cache::flush();
+        $this->owner = User::factory()->create(['role' => 'owner']);
+        $this->partner = User::factory()->create(['role' => 'partner']);
+        $this->space = GallerySpace::create(['uuid' => (string) Str::uuid(), 'name' => 'Naše finance', 'slug' => 'nase-finance', 'owner_id' => $this->owner->id]);
+        $this->space->members()->attach($this->owner->id, ['role' => 'owner', 'can_delete' => true, 'can_share' => true, 'joined_at' => now()]);
+        $this->space->members()->attach($this->partner->id, ['role' => 'editor', 'can_delete' => true, 'can_share' => true, 'joined_at' => now()]);
+        $this->tripId = DB::table('trips')->insertGetId(['gallery_space_id' => $this->space->id, 'created_by' => $this->owner->id,
+            'name' => 'Brno ve dvou', 'start_date' => '2026-08-10', 'end_date' => '2026-08-12', 'status' => 'planned',
+            'timezone' => 'Europe/Prague', 'currency' => 'CZK', 'created_at' => now(), 'updated_at' => now()]);
+        $dayId = DB::table('trip_days')->insertGetId(['trip_id' => $this->tripId, 'date' => '2026-08-10', 'sort_order' => 0, 'created_at' => now(), 'updated_at' => now()]);
+        DB::table('trip_activities')->insert(['trip_day_id' => $dayId, 'created_by' => $this->owner->id, 'type' => 'stay',
+            'title' => 'Ubytování', 'place_name' => 'Booking.com', 'status' => 'planned', 'currency' => 'CZK', 'sort_order' => 0,
+            'created_at' => now(), 'updated_at' => now()]);
+        $this->actingAs($this->owner);
+    }
+
+    public function test_revolut_statement_history_is_encrypted_deduplicated_and_linked_to_trip_budget(): void
+    {
+        $rule = $this->postJson('/api/v1/banking/rules', ['gallery_space_id' => $this->space->id, 'field' => 'merchant',
+            'operator' => 'contains', 'pattern' => 'Infinit', 'category' => 'activities', 'trip_action' => 'include', 'priority' => 200])
+            ->assertCreated()->assertJsonPath('category', 'activities')->json();
+        $first = <<<'CSV'
+Type,Product,Started Date,Completed Date,Description,Amount,Fee,Currency,State,Balance
+CARD,Joint Account,2026-07-20 10:00:00,2026-07-20 10:05:00,Booking.com Hotel,-200,0,CZK,COMPLETED,1000
+CARD,Joint Account,2026-08-10 12:00:00,2026-08-10 12:01:00,Infinit Restaurant,-50,0,CZK,COMPLETED,950
+CSV;
+        $response = $this->post('/api/v1/banking/imports', ['gallery_space_id' => $this->space->id,
+            'statement' => UploadedFile::fake()->createWithContent('revolut-cervenec.csv', $first)]);
+        $response->assertCreated()->assertJsonPath('import.rows_imported', 2)->assertJsonPath('trip_links_created', 2);
+
+        $this->assertDatabaseCount('bank_transactions', 2);
+        $this->assertDatabaseCount('trip_expenses', 2);
+        $this->assertDatabaseHas('trip_expenses', ['trip_id' => $this->tripId, 'title' => 'Booking.com Hotel', 'category' => 'accommodation',
+            'amount' => 200, 'state' => 'actual', 'automation_source' => 'bank_transaction']);
+        $this->assertDatabaseHas('trip_expenses', ['trip_id' => $this->tripId, 'title' => 'Infinit Restaurant', 'category' => 'activities']);
+        $bankExpenseId = DB::table('trip_expenses')->where('automation_source', 'bank_transaction')->value('id');
+        $this->deleteJson("/api/v1/trips/{$this->tripId}/expenses/{$bankExpenseId}")->assertStatus(409)
+            ->assertJsonPath('message', 'Bankovní výdaj upravte nebo vyřaďte v Revolut přehledu cesty, aby zůstala zachována historie.');
+        $raw = DB::table('bank_transactions')->orderBy('id')->first();
+        $this->assertNotSame('Booking.com Hotel', $raw->merchant_name);
+        $this->assertNotSame('Booking.com Hotel', $raw->description);
+        $this->assertSame('Booking.com Hotel', BankTransaction::firstOrFail()->merchant_name);
+        $this->assertSame('Booking.com Hotel', BankTransaction::firstOrFail()->description);
+
+        $second = $first."\nMUSEUM,Joint Account,2026-08-11 14:00:00,2026-08-11 14:01:00,Museum Brno,-20,0,CZK,COMPLETED,930\n";
+        $this->post('/api/v1/banking/imports', ['gallery_space_id' => $this->space->id,
+            'statement' => UploadedFile::fake()->createWithContent('revolut-srpen.csv', $second)])
+            ->assertCreated()->assertJsonPath('import.rows_imported', 1)->assertJsonPath('import.rows_duplicate', 2);
+        $this->assertDatabaseCount('bank_transactions', 3);
+        $this->assertDatabaseCount('trip_expenses', 3);
+
+        $this->post('/api/v1/banking/imports', ['gallery_space_id' => $this->space->id,
+            'statement' => UploadedFile::fake()->createWithContent('stejny-soubor.csv', $second)])
+            ->assertOk()->assertJsonPath('duplicate_file', true);
+        $this->assertDatabaseCount('bank_transactions', 3);
+
+        $snapshot = $this->getJson("/api/v1/trips/{$this->tripId}/banking-finance")->assertOk()
+            ->assertJsonPath('connected', true)->assertJsonPath('summary.spent_by_currency.CZK', 270)->json();
+        $this->assertCount(3, $snapshot['transactions']);
+        $linkId = $snapshot['transactions'][0]['link_id'];
+        $this->patchJson("/api/v1/trips/{$this->tripId}/banking-finance/{$linkId}", ['category' => 'activities'])
+            ->assertOk()->assertJsonPath('transactions.0.category', 'activities');
+        $this->assertDatabaseHas('trip_bank_transactions', ['id' => $linkId, 'category' => 'activities', 'linked_by' => $this->owner->id]);
+
+        $exclude = $this->postJson('/api/v1/banking/rules', ['gallery_space_id' => $this->space->id, 'field' => 'merchant',
+            'operator' => 'contains', 'pattern' => 'Coffee', 'category' => 'food', 'trip_action' => 'exclude', 'priority' => 300])
+            ->assertCreated()->json();
+        $withExcluded = $second."COFFEE,Joint Account,2026-08-12 09:00:00,2026-08-12 09:01:00,Coffee Stop,-30,0,CZK,COMPLETED,900\n";
+        $this->post('/api/v1/banking/imports', ['gallery_space_id' => $this->space->id,
+            'statement' => UploadedFile::fake()->createWithContent('revolut-komplet.csv', $withExcluded)])->assertCreated()->assertJsonPath('import.rows_imported', 1);
+        $this->assertDatabaseCount('bank_transactions', 4);
+        $this->assertDatabaseCount('trip_bank_transactions', 3);
+        $this->assertDatabaseCount('trip_expenses', 3);
+        $this->deleteJson("/api/v1/banking/rules/{$exclude['uuid']}")->assertOk();
+
+        $this->actingAs($this->partner)->getJson("/api/v1/trips/{$this->tripId}/banking-finance")->assertOk();
+        $this->actingAs($this->owner)->getJson('/api/v1/banking?gallery_space_id='.$this->space->id)
+            ->assertOk()->assertJsonPath('rules.0.pattern', 'Infinit');
+        $this->deleteJson("/api/v1/banking/rules/{$rule['uuid']}")->assertOk()->assertJsonPath('deleted', true);
+        $outsider = User::factory()->create(['role' => 'partner']);
+        $this->actingAs($outsider)->getJson("/api/v1/trips/{$this->tripId}/banking-finance")->assertNotFound();
+        $readonly = User::factory()->create(['role' => 'partner', 'read_only_mode' => true]);
+        $this->space->members()->attach($readonly->id, ['role' => 'viewer', 'joined_at' => now()]);
+        $this->actingAs($readonly)->post('/api/v1/banking/imports', ['gallery_space_id' => $this->space->id,
+            'statement' => UploadedFile::fake()->createWithContent('readonly.csv', $first)])->assertForbidden();
+    }
+
+    public function test_read_only_psd2_connection_syncs_idempotently_and_preserves_historical_balances(): void
+    {
+        $setting = new IntegrationSetting(['provider' => 'gocardless_bank_data', 'is_enabled' => true, 'updated_by' => $this->owner->id]);
+        $setting->replaceConfig(['secret_id' => 'test-id', 'secret_key' => 'test-secret']);
+        $setting->save();
+        $callback = null;
+        Http::fake(function (ClientRequest $request) use (&$callback) {
+            $url = $request->url();
+            $method = $request->method();
+            if (str_contains($url, '/token/new/')) {
+                return Http::response(['access' => 'read-only-token', 'access_expires' => 3600]);
+            }
+            if (str_contains($url, '/institutions/')) {
+                return Http::response([['id' => 'REVOLUT_REVOGB21', 'name' => 'Revolut',
+                    'bic' => 'REVOGB21', 'transaction_total_days' => 730, 'max_access_valid_for_days' => 90]]);
+            }
+            if (str_contains($url, '/agreements/enduser/')) {
+                return Http::response(['id' => 'agreement-1'], 201);
+            }
+            if (str_contains($url, '/requisitions/') && $method === 'POST') {
+                $callback = $request->data()['redirect'] ?? null;
+
+                return Http::response(['id' => 'requisition-1', 'link' => 'https://ob.gocardless.com/authorize/read-only'], 201);
+            }
+            if (str_contains($url, '/requisitions/requisition-1/')) {
+                return Http::response(['id' => 'requisition-1', 'status' => 'LN', 'accounts' => ['account-1']]);
+            }
+            if (str_contains($url, '/accounts/account-1/details/')) {
+                return Http::response(['account' => ['currency' => 'CZK', 'iban' => 'CZ6508000000001234567899',
+                    'name' => 'Společný Revolut', 'ownerName' => ['Adrian', 'Markétka'], 'accountType' => 'joint_current']]);
+            }
+            if (str_contains($url, '/accounts/account-1/balances/')) {
+                return Http::response(['balances' => [[
+                    'balanceType' => 'closingBooked', 'balanceAmount' => ['amount' => '960', 'currency' => 'CZK']]]]);
+            }
+            if (str_contains($url, '/accounts/account-1/transactions/')) {
+                return Http::response(['transactions' => ['booked' => [
+                    $this->apiTransaction('booking-1', '2026-07-20T10:05:00+02:00', 200, 'DBIT', 'Booking.com Hotel', 1000),
+                    $this->apiTransaction('food-1', '2026-08-10T12:01:00+02:00', 50, 'DBIT', 'Infinit Restaurant', 950),
+                    $this->apiTransaction('exchange-1', '2026-08-11T10:00:00+02:00', 100, 'DBIT', 'Exchanged to EUR between your accounts', 850),
+                    $this->apiTransaction('refund-1', '2026-08-11T13:00:00+02:00', 10, 'CRDT', 'Refund Infinit Restaurant', 860),
+                ], 'pending' => []]]);
+            }
+
+            return Http::response(['message' => "Unexpected request {$method} {$url}"], 500);
+        });
+
+        $this->postJson('/api/v1/banking/connections', ['gallery_space_id' => $this->space->id,
+            'institution_id' => 'REVOLUT_REVOGB21', 'country' => 'CZ', 'return_trip_id' => $this->tripId])
+            ->assertCreated()->assertJsonPath('authorization_url', 'https://ob.gocardless.com/authorize/read-only');
+        $this->assertNotNull($callback);
+        $parts = parse_url($callback);
+        $callbackPath = ($parts['path'] ?? '').(isset($parts['query']) ? '?'.$parts['query'] : '');
+        $this->get($callbackPath)->assertRedirect("/trips/{$this->tripId}/plan#bank-finance");
+
+        $connection = BankConnection::firstOrFail();
+        $this->assertSame('active', $connection->status);
+        $this->assertNull($connection->oauth_state_hash);
+        $this->assertDatabaseCount('bank_transactions', 4);
+        $this->assertDatabaseCount('trip_expenses', 2);
+        $this->assertDatabaseHas('bank_accounts', ['iban_last4' => '7899', 'is_joint' => true]);
+        $rawAccount = DB::table('bank_accounts')->first();
+        $this->assertStringNotContainsString('Adrian', (string) $rawAccount->owner_name);
+        $this->assertStringNotContainsString('account-1', (string) $rawAccount->encrypted_external_id);
+
+        $snapshot = $this->getJson("/api/v1/trips/{$this->tripId}/banking-finance")->assertOk()
+            ->assertJsonPath('summary.spent_by_currency.CZK', 250)
+            ->assertJsonPath('summary.refunds_by_currency.CZK', 10)
+            ->assertJsonPath('summary.internal_transfers', 0)
+            ->assertJsonPath('summary.suggested_count', 1)
+            ->assertJsonPath('balances.0.before.amount', 1000)
+            ->assertJsonPath('balances.0.after.amount', 860)->json();
+        $this->assertSame(0.9, $snapshot['transactions'][0]['confidence']);
+
+        $this->postJson("/api/v1/banking/connections/{$connection->uuid}/sync")->assertOk()
+            ->assertJsonPath('transactions_inserted', 0)->assertJsonPath('transactions_updated', 4);
+        $this->assertDatabaseCount('bank_transactions', 4);
+        $this->assertDatabaseCount('trip_expenses', 2);
+        Http::assertSent(fn (ClientRequest $request) => str_contains($request->url(), '/agreements/enduser/')
+            && ($request->data()['access_scope'] ?? []) === ['balances', 'details', 'transactions']);
+        Http::assertNotSent(fn (ClientRequest $request) => str_contains($request->url(), 'payment'));
+    }
+
+    private function apiTransaction(string $id, string $date, float $amount, string $indicator, string $description, float $balance): array
+    {
+        return ['transactionId' => $id, 'bookingDateTime' => $date, 'valueDate' => substr($date, 0, 10),
+            'creditDebitIndicator' => $indicator, 'transactionAmount' => ['amount' => (string) $amount, 'currency' => 'CZK'],
+            'remittanceInformationUnstructured' => $description, 'merchantName' => $description,
+            'proprietaryBankTransactionCode' => ['code' => 'CARD_PAYMENT', 'issuer' => 'Revolut'],
+            'bankTransactionCode' => ['domain' => 'PMNT', 'family' => 'CCRD'],
+            'balanceAfterTransaction' => ['balanceAmount' => ['amount' => (string) $balance, 'currency' => 'CZK']]];
+    }
+}

@@ -41,4 +41,12 @@ return [
         'redirect'      => env('GOOGLE_DRIVE_REDIRECT_URI', 'https://gallery.stanektech.cz/oauth/google/callback'),
     ],
 
+    // Optional local, free tools for reading travel confirmations. Imports
+    // always remain editable and require an explicit user confirmation.
+    'travel_documents' => [
+        'pdftotext_path' => env('PDFTOTEXT_PATH', 'pdftotext'),
+        'tesseract_path' => env('TESSERACT_PATH', 'tesseract'),
+        'tesseract_languages' => env('TESSERACT_LANGUAGES', 'ces+eng'),
+    ],
+
 ];

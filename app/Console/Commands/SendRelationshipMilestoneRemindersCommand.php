@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\DB;
 class SendRelationshipMilestoneRemindersCommand extends Command
 {
     protected $signature = 'gallery:relationship-milestones {--limit=100}';
-    protected $description = 'Send one useful annual anniversary reminder to the appropriate partner(s).';
+    protected $description = 'Send annual milestone and birthday reminders to the appropriate partner(s).';
 
     public function handle(): int
     {
@@ -42,14 +42,18 @@ class SendRelationshipMilestoneRemindersCommand extends Command
             if ($days > 1) $when = "za {$days} dn\u{00ED}";
             foreach (array_unique($recipientIds) as $recipientId) {
                 if ($user = User::find($recipientId)) {
-                    $user->notify(new GalleryNotification('relationship.milestone', "Výročí „{$milestone->title}“ je {$when}.", '/milestones', $milestone->icon ?: '❤️'));
+                    $isBirthday = ($milestone->kind ?? 'milestone') === 'birthday';
+                    $message = $isBirthday
+                        ? "{$milestone->title} jsou {$when}. Je čas doladit přání nebo dárek."
+                        : "Výročí „{$milestone->title}“ je {$when}.";
+                    $user->notify(new GalleryNotification($isBirthday ? 'relationship.birthday' : 'relationship.milestone', $message, '/milestones', $milestone->icon ?: ($isBirthday ? '🎂' : '❤️')));
                     $sent++;
                 }
             }
             DB::table('relationship_milestones')->where('id', $milestone->id)->update(['last_reminded_on' => $today->toDateString(), 'updated_at' => now()]);
         }
 
-        $this->info("Odesláno připomínek výročí: {$sent}.");
+        $this->info("Odesláno připomínek osobních dnů: {$sent}.");
         return self::SUCCESS;
     }
 }

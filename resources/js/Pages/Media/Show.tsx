@@ -43,6 +43,7 @@ interface Tag { id: number; name: string; slug: string; color?: string }
 interface Person { id: number; name: string }
 interface Place { id: number; name: string; city?: string; country?: string; latitude?: number; longitude?: number }
 interface Album { id: number; uuid: string; title: string }
+interface ExperienceLinks { events:Array<{uuid:string;title:string;starts_at?:string|null;trip_id?:number|null}>; trips:Array<{id:number;name:string;start_date?:string|null;end_date?:string|null}>; memories:Array<{uuid:string;title:string;happened_on?:string|null}>; }
 
 interface MediaItem {
     id: number;
@@ -101,6 +102,7 @@ interface MediaItem {
     people: Person[];
     places: Place[];
     albums?: Album[];
+    experience_links?: ExperienceLinks;
 }
 
 interface Props {
@@ -228,6 +230,102 @@ function CurationPanel({ uuid }: { uuid: string }) {
         <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">Společný výběr</h3>
         {boards.length ? <div className="flex gap-2"><select value={selected} onChange={event => setSelected(event.target.value)} className="min-h-9 min-w-0 flex-1 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-2 text-xs text-white"><option value="">Vyberte kolekci</option>{boards.map(board => <option key={board.uuid} value={board.uuid}>{board.title}</option>)}</select><button onClick={add} className="min-h-9 rounded-lg bg-[var(--color-accent)] px-3 text-xs text-white">Přidat</button></div> : <Link href="/curation" className="text-xs text-[var(--color-accent)] hover:underline">Vytvořit první společný výběr</Link>}
         {message && <p className="mt-1 text-[10px] text-[var(--color-text-secondary)]">{message}</p>}
+    </section>;
+}
+
+function AddToEventPanel({ uuid, mediaId }: { uuid: string; mediaId: number }) {
+    const [events, setEvents] = useState<Array<{uuid:string;title:string;starts_at:string;place_name?:string|null;already_linked:boolean}>>([]);
+    const [loaded, setLoaded] = useState(false); const [loading, setLoading] = useState(false); const [message, setMessage] = useState('');
+    const load = async () => { setLoading(true); setMessage(''); try { const response = await axios.get(`/api/v1/media/${uuid}/event-suggestions`); setEvents(response.data.events ?? []); setLoaded(true); } catch { setMessage('Vhodné akce se nepodařilo načíst.'); } finally { setLoading(false); } };
+    const attach = async (event:{uuid:string;title:string}) => { setLoading(true); setMessage(''); try { await axios.post(`/api/v1/calendar/events/${event.uuid}/media-suggestions`, {media_ids:[mediaId]}); setMessage(`Připojeno k akci „${event.title}“.`); setEvents(current => current.map(item => item.uuid === event.uuid ? {...item,already_linked:true} : item)); router.reload({only:['media']}); } catch (error:any) { setMessage(error?.response?.data?.message ?? 'Médium se nepodařilo připojit k akci.'); } finally { setLoading(false); } };
+    return <section><h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">Přidat ke společné akci</h3>{!loaded ? <button onClick={load} disabled={loading} className="min-h-9 rounded-lg border border-pink-400/30 px-3 text-xs text-pink-100 disabled:opacity-40">{loading ? 'Hledám…' : 'Najít akci podle data'}</button> : <div className="space-y-1.5">{events.map(event => <div key={event.uuid} className="flex items-center justify-between gap-2 rounded-lg border border-[var(--color-border)] p-2"><div className="min-w-0"><p className="truncate text-xs text-white">{event.title}</p><p className="text-[10px] text-[var(--color-text-secondary)]">{new Date(event.starts_at).toLocaleDateString('cs-CZ')}{event.place_name ? ` · ${event.place_name}` : ''}</p></div><button disabled={loading || event.already_linked} onClick={() => attach(event)} className={`shrink-0 rounded px-2 py-1 text-[10px] ${event.already_linked ? 'bg-emerald-500/10 text-emerald-200' : 'border border-pink-400/30 text-pink-100'}`}>{event.already_linked ? 'Připojeno ✓' : 'Přidat'}</button></div>)}{!events.length && <p className="text-xs text-[var(--color-text-secondary)]">V okolí data média není žádná akce, kterou můžete upravit.</p>}</div>}{message && <p className="mt-2 text-[10px] text-[var(--color-text-secondary)]">{message}</p>}</section>;
+}
+
+function MilestonePanel({ mediaId, gallerySpaceId, takenAt }: { mediaId: number; gallerySpaceId: number; takenAt?: string }) {
+    const [milestones, setMilestones] = useState<Array<{ uuid: string; title: string; occurred_on: string; media_item_id?: number | null }>>([]);
+    const [selected, setSelected] = useState('');
+    const [title, setTitle] = useState('');
+    const [occurredOn, setOccurredOn] = useState(takenAt?.slice(0, 10) ?? new Date().toISOString().slice(0, 10));
+    const [loading, setLoading] = useState(false);
+    const [message, setMessage] = useState('');
+
+    const load = async () => {
+        try {
+            const response = await axios.get('/api/v1/relationship-milestones');
+            const items = response.data ?? [];
+            setMilestones(items);
+            setSelected(current => current || items.find((item: any) => !item.media_item_id)?.uuid || '');
+        } catch { setMessage('Milníky se nepodařilo načíst.'); }
+    };
+
+    useEffect(() => { load(); }, []);
+
+    const attach = async () => {
+        if (!selected) { setMessage('Nejdřív vytvořte milník nebo vyberte existující.'); return; }
+        setLoading(true); setMessage('');
+        try {
+            const response = await axios.patch(`/api/v1/relationship-milestones/${selected}`, { media_item_id: mediaId });
+            setMessage(`Vzpomínka je připojena k milníku „${response.data.title}“.`);
+            await load();
+        } catch (error: any) { setMessage(error?.response?.data?.message ?? 'Vzpomínku se nepodařilo připojit.'); }
+        finally { setLoading(false); }
+    };
+
+    const create = async () => {
+        if (!title.trim()) { setMessage('Doplňte název společného milníku.'); return; }
+        setLoading(true); setMessage('');
+        try {
+            const response = await axios.post('/api/v1/relationship-milestones', {
+                gallery_space_id: gallerySpaceId, title: title.trim(), occurred_on: occurredOn,
+                media_item_id: mediaId, visibility: 'shared', remind_annually: true,
+            });
+            setMessage(`Vznikl společný milník „${response.data.title}“.`);
+            setTitle(''); await load();
+        } catch (error: any) { setMessage(error?.response?.data?.message ?? 'Milník se nepodařilo uložit.'); }
+        finally { setLoading(false); }
+    };
+
+    const linked = milestones.filter(item => item.media_item_id === mediaId);
+    const available = milestones.filter(item => item.media_item_id !== mediaId);
+
+    return <section>
+        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">Naše milníky</h3>
+        {linked.length > 0 && <div className="mb-2 space-y-1">{linked.map(item => <p key={item.uuid} className="rounded-lg bg-pink-500/10 px-2 py-1 text-xs text-pink-100">{item.title} · {new Date(item.occurred_on).toLocaleDateString('cs-CZ')}</p>)}</div>}
+        {available.length > 0 && <div className="flex gap-2"><select value={selected} onChange={event => setSelected(event.target.value)} className="min-h-9 min-w-0 flex-1 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-2 text-xs text-white"><option value="">Vybrat existující milník</option>{available.map(item => <option key={item.uuid} value={item.uuid}>{item.title}</option>)}</select><button onClick={attach} disabled={loading || !selected} className="min-h-9 rounded-lg border border-pink-400/30 px-3 text-xs text-pink-100 disabled:opacity-40">Připojit</button></div>}
+        <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_auto]"><input value={title} onChange={event => setTitle(event.target.value)} placeholder="Nový společný milník" className="min-h-9 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-2 text-xs text-white"/><input type="date" value={occurredOn} onChange={event => setOccurredOn(event.target.value)} className="min-h-9 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-2 text-xs text-white"/></div>
+        <button onClick={create} disabled={loading || !title.trim()} className="mt-2 min-h-9 rounded-lg bg-[var(--color-accent)] px-3 text-xs text-white disabled:opacity-40">Vytvořit z této vzpomínky</button>
+        {message && <p className="mt-1 text-[10px] text-[var(--color-text-secondary)]">{message}</p>}
+    </section>;
+}
+
+function RevisitFromMediaPanel({ uuid, title, places }: { uuid: string; title: string; places: Place[] }) {
+    const [loaded, setLoaded] = useState(false);
+    const [candidates, setCandidates] = useState<Array<{uuid:string;display_title?:string|null;original_filename:string;taken_at?:string|null}>>([]);
+    const [prompt, setPrompt] = useState(''); const [message, setMessage] = useState('');
+    const [form, setForm] = useState({ title: `Znovu spolu: ${title}`, place_name: places[0]?.name ?? '', starts_at: '', reminder_minutes: '10080' });
+    const [saving, setSaving] = useState(false); const [eventUuid, setEventUuid] = useState('');
+
+    const load = async () => {
+        setMessage('');
+        try {
+            const response = await axios.get(`/api/v1/media/${uuid}/revisit-suggestions`);
+            setCandidates(response.data.candidates ?? []); setPrompt(response.data.prompt ?? response.data.message ?? ''); setLoaded(true);
+        } catch (error: any) { setMessage(error?.response?.data?.message ?? 'Návrh návratu se nepodařilo načíst.'); }
+    };
+    const schedule = async () => {
+        if (!form.starts_at) { setMessage('Vyberte termín společného návratu.'); return; }
+        setSaving(true); setMessage('');
+        try {
+            const response = await axios.post(`/api/v1/media/${uuid}/revisit-suggestions`, { ...form, reminder_minutes: Number(form.reminder_minutes || 0) });
+            setEventUuid(response.data.uuid); setMessage('Společný návrat je v kalendáři pro oba a původní vzpomínka je k němu připojená.');
+        } catch (error: any) { setMessage(error?.response?.data?.message ?? 'Společný návrat se nepodařilo naplánovat.'); }
+        finally { setSaving(false); }
+    };
+
+    return <section>
+        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">Vrátit se na toto místo</h3>
+        {!loaded ? <button onClick={load} className="min-h-9 rounded-lg border border-teal-400/30 px-3 text-xs text-teal-100">Navrhnout společný návrat</button> : <div className="space-y-2"><p className="text-xs text-[var(--color-text-secondary)]">{prompt || 'Vytvořte nový společný zážitek z této vzpomínky.'}</p>{candidates.length > 0 && <p className="text-[10px] text-[var(--color-text-secondary)]">Ve stejném okolí už máte {candidates.length} dalších vzpomínek. <Link href={`/media/${candidates[0].uuid}`} className="text-[var(--color-accent)] hover:underline">Otevřít poslední →</Link></p>}<input value={form.title} onChange={event => setForm(current => ({...current,title:event.target.value}))} maxLength={160} aria-label="Název společné akce" className="min-h-9 w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-2 text-xs text-white"/><div className="grid gap-2 sm:grid-cols-2"><input value={form.place_name} onChange={event => setForm(current => ({...current,place_name:event.target.value}))} maxLength={255} placeholder="Místo" className="min-h-9 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-2 text-xs text-white"/><input type="datetime-local" value={form.starts_at} onChange={event => setForm(current => ({...current,starts_at:event.target.value}))} aria-label="Termín návratu" className="min-h-9 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-2 text-xs text-white"/></div><div className="flex gap-2"><input type="number" min="0" max="525600" value={form.reminder_minutes} onChange={event => setForm(current => ({...current,reminder_minutes:event.target.value}))} aria-label="Minut předem" title="Minut předem" className="min-h-9 w-28 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-2 text-xs text-white"/><button disabled={saving} onClick={schedule} className="min-h-9 rounded-lg border border-teal-400/30 px-3 text-xs text-teal-100 disabled:opacity-40">{saving ? 'Plánuji…' : 'Přidat do kalendáře'}</button></div></div>}
+        {message && <p className={`mt-2 text-[10px] ${eventUuid ? 'text-emerald-300' : 'text-[var(--color-text-secondary)]'}`}>{message}{eventUuid && <Link href={`/calendar/events/${eventUuid}`} className="ml-1 underline">Otevřít akci</Link>}</p>}
     </section>;
 }
 
@@ -1012,6 +1110,24 @@ export default function MediaShow({ media, breadcrumb, prev, next }: Props) {
                                     </div>
                                 </section>
                             )}
+
+                            {item.experience_links && (item.experience_links.events.length > 0 || item.experience_links.trips.length > 0 || item.experience_links.memories.length > 0) && (
+                                <section>
+                                    <h3 className="text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider mb-2 flex items-center gap-1"><Heart size={10}/> Souvislosti</h3>
+                                    <p className="mb-2 text-[10px] text-[var(--color-text-secondary)]">Toto médium je propojené s vašimi společnými zážitky.</p>
+                                    <div className="flex flex-wrap gap-1">
+                                        {item.experience_links.events.map(event => <Link key={`event-${event.uuid}`} href={`/calendar/events/${event.uuid}`} className="text-[10px] bg-pink-500/10 border border-pink-400/25 text-pink-100 px-2 py-1 rounded-full hover:bg-pink-500/20">📅 {event.title}</Link>)}
+                                        {item.experience_links.trips.map(trip => <Link key={`trip-${trip.id}`} href={`/trips/${trip.id}/plan`} className="text-[10px] bg-teal-500/10 border border-teal-400/25 text-teal-100 px-2 py-1 rounded-full hover:bg-teal-500/20">🧭 {trip.name}</Link>)}
+                                        {item.experience_links.memories.map(memory => <Link key={`memory-${memory.uuid}`} href="/shared-memories" className="text-[10px] bg-orange-500/10 border border-orange-400/25 text-orange-100 px-2 py-1 rounded-full hover:bg-orange-500/20">♥ {memory.title}</Link>)}
+                                    </div>
+                                </section>
+                            )}
+
+                            <AddToEventPanel uuid={item.uuid} mediaId={item.id} />
+
+                            <MilestonePanel mediaId={item.id} gallerySpaceId={item.gallery_space_id} takenAt={item.taken_at} />
+
+                            <RevisitFromMediaPanel uuid={item.uuid} title={item.display_title || item.original_filename} places={item.places ?? []} />
 
                             {/* Places — linked places */}
                             {item.places && item.places.length > 0 && (

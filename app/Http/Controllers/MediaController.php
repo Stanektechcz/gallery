@@ -8,6 +8,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -59,6 +60,7 @@ class MediaController extends Controller
         $mediaData['is_my_favorite']     = $isMyFav;
         $mediaData['is_shared_favorite'] = $isShared;
         $mediaData['my_rating']          = $myRating;
+        $mediaData['experience_links']   = $this->experienceLinks($media, $user);
 
         return Inertia::render('Media/Show', [
             'media'      => $mediaData,
@@ -72,7 +74,39 @@ class MediaController extends Controller
     {
         $media = MediaItem::where('uuid', $uuid)->with(['variants', 'tags', 'people', 'places'])->firstOrFail();
         Gate::authorize('view', $media);
-        return response()->json($media);
+        $payload = $media->toArray();
+        $payload['experience_links'] = $this->experienceLinks($media, $request->user());
+        return response()->json($payload);
+    }
+
+    /** Suggest only editable shared events around a photo's or video's actual time. */
+    public function eventSuggestions(Request $request, string $uuid): JsonResponse
+    {
+        $media = MediaItem::where('uuid', $uuid)->firstOrFail();
+        Gate::authorize('view', $media);
+        if (! $media->taken_at || ! Schema::hasTable('calendar_events')) return response()->json(['events' => []]);
+
+        $from = $media->taken_at->copy()->subDay();
+        $to = $media->taken_at->copy()->addDay();
+        $events = DB::table('calendar_events as event')
+            ->where('event.gallery_space_id', $media->gallery_space_id)
+            ->whereNotIn('event.status', ['cancelled'])
+            ->where('event.starts_at', '<=', $to)
+            ->whereRaw('COALESCE(event.ends_at, event.starts_at) >= ?', [$from])
+            ->where(function ($query) use ($request) {
+                $query->where('event.created_by', $request->user()->id)
+                    ->orWhereExists(fn ($participants) => $participants->selectRaw('1')->from('event_participants as participant')->whereColumn('participant.event_id', 'event.id')->where('participant.user_id', $request->user()->id)->where('participant.role', 'editor'));
+            })
+            // Keep the SQL portable for MySQL in production and SQLite in tests.
+            // The narrow date window bounds the small in-memory sort below.
+            ->orderBy('event.starts_at')
+            ->limit(24)->get(['event.id', 'event.uuid', 'event.title', 'event.starts_at', 'event.place_name', 'event.trip_id'])
+            ->sortBy(fn ($event) => abs(\Carbon\Carbon::parse($event->starts_at)->getTimestamp() - $media->taken_at->getTimestamp()))
+            ->take(8)
+            ->values();
+
+        $linked = Schema::hasTable('event_attachments') ? DB::table('event_attachments')->where('media_item_id', $media->id)->whereIn('event_id', $events->pluck('id'))->pluck('event_id')->flip() : collect();
+        return response()->json(['events' => $events->map(fn ($event) => ['uuid' => $event->uuid, 'title' => $event->title, 'starts_at' => $event->starts_at, 'place_name' => $event->place_name, 'trip_id' => $event->trip_id, 'already_linked' => $linked->has($event->id)])->values()]);
     }
 
     /**
@@ -767,5 +801,40 @@ class MediaController extends Controller
             ->orderBy('taken_at', 'asc')->select(['id', 'uuid'])->first();
 
         return ['prev' => $prev, 'next' => $next];
+    }
+
+    /** Return only the shared-plan contexts that the current viewer may open. */
+    private function experienceLinks(MediaItem $media, \App\Models\User $user): array
+    {
+        $empty = ['events' => [], 'trips' => [], 'memories' => []];
+        if (! Schema::hasTable('event_attachments') || ! Schema::hasTable('calendar_events')) return $empty;
+
+        $events = DB::table('event_attachments as attachment')
+            ->join('calendar_events as event', 'event.id', '=', 'attachment.event_id')
+            ->where('attachment.media_item_id', $media->id)
+            ->where('event.gallery_space_id', $media->gallery_space_id)
+            ->where(function ($query) use ($user) {
+                $query->where('event.is_private', false)
+                    ->orWhere('event.created_by', $user->id)
+                    ->orWhereExists(fn ($participants) => $participants->selectRaw('1')->from('event_participants as participant')->whereColumn('participant.event_id', 'event.id')->where('participant.user_id', $user->id));
+            })
+            ->orderByDesc('event.starts_at')->limit(8)
+            ->get(['event.uuid', 'event.title', 'event.starts_at', 'event.trip_id']);
+
+        $tripIds = $events->pluck('trip_id')->filter();
+        if (Schema::hasTable('trip_media')) {
+            $tripIds = $tripIds->merge(DB::table('trip_media')->where('media_item_id', $media->id)->pluck('trip_id'));
+        }
+        $trips = $tripIds->isEmpty() ? collect() : DB::table('trips')->where('gallery_space_id', $media->gallery_space_id)->whereIn('id', $tripIds->unique()->values())->orderByDesc('end_date')->get(['id', 'name', 'start_date', 'end_date']);
+
+        $memories = collect();
+        if (Schema::hasTable('shared_memory_moments')) {
+            $memories = DB::table('shared_memory_moments')->where('gallery_space_id', $media->gallery_space_id)->latest('happened_on')->latest('id')
+                ->get(['uuid', 'title', 'happened_on', 'media_item_ids'])
+                ->filter(fn ($memory) => in_array($media->id, array_map('intval', json_decode($memory->media_item_ids ?: '[]', true) ?: []), true))
+                ->take(8)->map(fn ($memory) => ['uuid' => $memory->uuid, 'title' => $memory->title, 'happened_on' => $memory->happened_on])->values();
+        }
+
+        return ['events' => $events->values()->all(), 'trips' => $trips->values()->all(), 'memories' => $memories->all()];
     }
 }

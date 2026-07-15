@@ -14,6 +14,9 @@ class FreeTravelDataService
         'nominatim' => ['name' => 'Nominatim / OpenStreetMap', 'free' => true, 'credentials' => ['contact_email'], 'docs_url' => 'https://operations.osmfoundation.org/policies/nominatim/', 'signup_url' => 'https://www.openstreetmap.org/'],
         'openrouteservice' => ['name' => 'OpenRouteService', 'free' => true, 'credentials' => ['api_key'], 'docs_url' => 'https://openrouteservice.org/dev/#/signup', 'signup_url' => 'https://openrouteservice.org/dev/#/signup'],
         'transportapi' => ['name' => 'TransportAPI', 'free' => true, 'credentials' => ['app_id', 'app_key'], 'docs_url' => 'https://developer.transportapi.com/', 'signup_url' => 'https://developer.transportapi.com/'],
+        'tmdb' => ['name' => 'TMDB · filmy a seriály', 'free' => true, 'credentials' => ['api_key'], 'docs_url' => 'https://developer.themoviedb.org/docs/getting-started', 'signup_url' => 'https://www.themoviedb.org/signup'],
+        'cinema_city' => ['name' => 'Cinema City Velký Špalíček', 'free' => true, 'credentials' => [], 'docs_url' => 'https://www.cinemacity.cz/cinemas/velkyspalicek/1035', 'signup_url' => 'https://www.cinemacity.cz/cinemas/velkyspalicek/1035'],
+        'gocardless_bank_data' => ['name' => 'GoCardless · Revolut PSD2 (pouze čtení)', 'free' => true, 'credentials' => ['secret_id', 'secret_key'], 'docs_url' => 'https://developer.gocardless.com/bank-account-data/quick-start-guide/', 'signup_url' => 'https://bankaccountdata.gocardless.com/'],
     ];
 
     public function provider(string $provider): array { abort_unless(isset(self::PROVIDERS[$provider]), 404); return self::PROVIDERS[$provider]; }
@@ -48,7 +51,23 @@ class FreeTravelDataService
             'nominatim' => $this->http()->withHeaders(['User-Agent' => $this->nominatimAgent()])->get('https://nominatim.openstreetmap.org/search', ['q' => 'Praha', 'format' => 'jsonv2', 'limit' => 1])->throw(),
             'openrouteservice' => $this->route(50.0755, 14.4378, 49.1951, 16.6068),
             'transportapi' => $this->testTransportApi(),
+            'tmdb' => $this->testTmdb(),
+            'cinema_city' => $this->testCinemaCity(),
+            'gocardless_bank_data' => app(\App\Services\Banking\GoCardlessBankDataClient::class)->test(),
         };
+    }
+
+    private function testTmdb(): void
+    {
+        $config = $this->config('tmdb');
+        abort_unless($this->enabled('tmdb') && ! empty($config['api_key']), 424, 'TMDB není aktivováno.');
+        $this->http()->get('https://api.themoviedb.org/3/configuration', ['api_key' => $config['api_key']])->throw();
+    }
+
+    private function testCinemaCity(): void
+    {
+        $this->http()->withHeaders(['User-Agent' => 'StanektechGallery/1.0 cinema-planner'])
+            ->get('https://www.cinemacity.cz/cz/data-api-service/v1/quickbook/10101/film-events/in-cinema/1035/at-date/' . now('Europe/Prague')->toDateString(), ['attr' => ''])->throw();
     }
 
     private function testTransportApi(): void

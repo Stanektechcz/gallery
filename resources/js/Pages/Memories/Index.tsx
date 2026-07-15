@@ -1,7 +1,8 @@
 import AppLayout from '@/Layouts/AppLayout';
+import MemoryEveningPanel from '@/Components/MemoryEveningPanel';
 import { Head, Link } from '@inertiajs/react';
 import axios from 'axios';
-import { Bookmark, Clock, EyeOff, Heart, Settings2, Sparkles, TimerReset, X } from 'lucide-react';
+import { Bookmark, CalendarHeart, Clock, EyeOff, Heart, Settings2, Sparkles, TimerReset, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 interface MediaCardData {
@@ -45,7 +46,7 @@ function thumbnail(item?: MediaCardData) {
     return item?.variants.find(variant => variant.type === 'thumbnail')?.url;
 }
 
-function MemoryCard({ memory, onAction, onShare }: { memory: Memory; onAction: (memory: Memory, action: 'saved' | 'dismissed' | 'snoozed') => void; onShare: (memory: Memory) => void }) {
+function MemoryCard({ memory, onAction, onShare, onPlan }: { memory: Memory; onAction: (memory: Memory, action: 'saved' | 'dismissed' | 'snoozed') => void; onShare: (memory: Memory) => void; onPlan:(memory:Memory)=>void }) {
     const visible = memory.items.slice(0, 5);
 
     return (
@@ -83,7 +84,8 @@ function MemoryCard({ memory, onAction, onShare }: { memory: Memory; onAction: (
                         <p>{memory.reason}</p>
                     </div>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
+                    <button onClick={()=>onPlan(memory)} title="Naplánovat společný večer" className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-violet-400/30 px-3 text-xs font-medium text-violet-100 hover:bg-violet-500/10 sm:flex-none"><CalendarHeart size={15}/> Večer</button>
                     <button onClick={() => onShare(memory)} title="Uložit pro vás oba" className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-pink-400/30 px-3 text-xs font-medium text-pink-100 hover:bg-pink-500/10 sm:flex-none"><Heart size={15} /> Pro nás</button>
                     <button onClick={() => onAction(memory, 'saved')} title="Uložit vzpomínku"
                         className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-[var(--color-accent)] px-3 text-xs font-medium text-white sm:flex-none">
@@ -155,6 +157,7 @@ export default function MemoriesIndex({ memories: initialMemories, today_label, 
     const [showSettings, setShowSettings] = useState(false);
     const [spaceId, setSpaceId] = useState<number | null>(null);
     const [sharedFingerprint, setSharedFingerprint] = useState('');
+    const [planningMemory,setPlanningMemory]=useState<Memory|null>(null);
 
     useEffect(() => { axios.get('/api/v1/calendar/events').then(response => setSpaceId(response.data.spaces?.[0]?.id ?? null)).catch(() => {}); }, []);
 
@@ -183,13 +186,14 @@ export default function MemoriesIndex({ memories: initialMemories, today_label, 
                 </header>
 
                 <main className="mx-auto max-w-5xl space-y-6 p-3 pb-24 sm:p-6">
+                    <MemoryEveningPanel spaceId={spaceId} source={planningMemory} onClose={()=>setPlanningMemory(null)}/>
                     {!has_memories || memories.length === 0 ? (
                         <div className="flex min-h-[60vh] flex-col items-center justify-center text-center text-[var(--color-text-secondary)]">
                             <div className="mb-4 flex h-20 w-20 items-center justify-center rounded-3xl bg-[var(--color-accent)]/10"><Sparkles size={34} className="text-[var(--color-accent)]" /></div>
                             <h2 className="text-lg font-semibold text-white">Vzpomínky právě odpočívají</h2>
                             <p className="mt-2 max-w-sm text-sm">Až najdeme výročí, oblíbené momenty, významnou cestu nebo známé místo, objeví se tady.</p>
                         </div>
-                    ) : memories.map(memory => <MemoryCard key={memory.fingerprint} memory={memory} onAction={action} onShare={share} />)}
+                    ) : memories.map(memory => <MemoryCard key={memory.fingerprint} memory={memory} onAction={action} onShare={share} onPlan={setPlanningMemory} />)}
                 </main>
                 {showSettings && <PreferencesPanel onClose={() => setShowSettings(false)} />}
             </div>

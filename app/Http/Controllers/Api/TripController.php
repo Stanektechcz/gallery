@@ -3,8 +3,13 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Album;
+use App\Models\AuditLog;
 use App\Models\CalendarEvent;
 use App\Models\MediaItem;
+use App\Services\Planning\TripPreparationTimelineService;
+use App\Services\Media\AlbumCurationAssistantService;
+use App\Services\Travel\TransportSearchService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -15,6 +20,12 @@ use Illuminate\Support\Str;
 
 class TripController extends Controller
 {
+    public function __construct(
+        private readonly TransportSearchService $transportSearch,
+        private readonly TripPreparationTimelineService $tripPreparation,
+        private readonly AlbumCurationAssistantService $albumCuration,
+    ) {}
+
     // ─── Trips CRUD ────────────────────────────────────────────────────────
 
     /**
@@ -130,6 +141,7 @@ class TripController extends Controller
                 DB::table('calendar_events')->where('id', $event->id)->update($updateEvent);
             }
         }
+        if ($this->tripPreparation->canSync()) $this->tripPreparation->sync($trip);
 
         return response()->json($this->enrichTrip($trip));
     }
@@ -176,6 +188,7 @@ class TripController extends Controller
                     'id'            => $p->id,
                     'uuid'          => $p->uuid,
                     'file_name'     => $p->file_name,
+                    'media_type'    => $p->media_type,
                     'thumbnail_url' => $p->thumbnail_url,
                     'taken_at'      => $p->taken_at,
                     'latitude'      => $p->latitude,
@@ -308,27 +321,126 @@ class TripController extends Controller
             ->count();
         abort_unless($linkedMediaCount === count($mediaIds), 422, 'Pro vzpomínku lze vybrat jen média přiřazená k této cestě.');
 
-        $existing = DB::table('shared_memory_moments')->where('trip_id', $trip->id)->first();
-        if (! $existing) {
-            $eventIds = DB::table('calendar_events')->where('trip_id', $trip->id)->pluck('id');
-            if ($eventIds->isNotEmpty()) $existing = DB::table('shared_memory_moments')->whereIn('calendar_event_id', $eventIds)->first();
+        [$memory, $created] = $this->upsertTripMemory($trip, $space->id, $user->id, $data['title'] ?? $trip->name, $data['note'] ?? null, $mediaIds);
+
+        return response()->json($memory, $created ? 201 : 200);
+    }
+
+    /** Return the one album that closes the trip → gallery → memory loop. */
+    public function recapAlbum(Request $request, int $id): JsonResponse
+    {
+        $space = $request->user()->gallerySpaces()->firstOrFail();
+        $trip = DB::table('trips')->where('id', $id)->where('gallery_space_id', $space->id)->firstOrFail();
+        if (! Schema::hasColumn('albums', 'trip_id')) {
+            return response()->json(['message' => 'Pro cestovní album dokončete migrace aplikace.'], 503);
         }
 
-        $row = [
-            'trip_id' => $trip->id,
-            'gallery_space_id' => $space->id,
-            'created_by' => $existing?->created_by ?? $user->id,
-            'title' => $data['title'] ?? $trip->name,
-            'note' => array_key_exists('note', $data) ? $data['note'] : ($existing?->note ?? $trip->description),
-            'happened_on' => $trip->end_date,
-            'media_item_ids' => json_encode($mediaIds),
-            'is_favorite' => true,
-            'updated_at' => now(),
-        ];
-        if ($existing) DB::table('shared_memory_moments')->where('id', $existing->id)->update($row);
-        else DB::table('shared_memory_moments')->insert($row + ['uuid' => (string) Str::uuid(), 'created_at' => now()]);
+        $album = Album::query()->where('trip_id', $trip->id)->where('gallery_space_id', $space->id)->first();
+        return response()->json(['album' => $album ? $this->recapAlbumPayload($album) : null]);
+    }
 
-        return response()->json(DB::table('shared_memory_moments')->where('trip_id', $trip->id)->first(), $existing ? 200 : 201);
+    /**
+     * Build or synchronize an editable story album from deliberately selected
+     * trip media. Existing hand-edited story blocks are never overwritten.
+     */
+    public function createRecapAlbum(Request $request, int $id): JsonResponse
+    {
+        $user = $request->user();
+        $space = $user->gallerySpaces()->firstOrFail();
+        $trip = DB::table('trips')->where('id', $id)->where('gallery_space_id', $space->id)->firstOrFail();
+        if (! Schema::hasColumn('albums', 'trip_id')) {
+            return response()->json(['message' => 'Pro cestovní album dokončete migrace aplikace.'], 503);
+        }
+        $data = $request->validate([
+            'title' => 'nullable|string|max:255',
+            'note' => 'nullable|string|max:5000',
+            'media_item_ids' => 'required|array|min:1|max:200',
+            'media_item_ids.*' => 'required|integer|distinct',
+            'cover_media_id' => 'nullable|integer',
+        ]);
+
+        $requestedIds = collect($data['media_item_ids'])->map(fn ($mediaId) => (int) $mediaId)->values();
+        $mediaById = MediaItem::query()
+            ->where('gallery_space_id', $space->id)
+            ->whereNull('trashed_at')
+            ->where('is_hidden', false)
+            ->whereIn('id', $requestedIds)
+            ->get()
+            ->keyBy('id');
+        $linkedIds = DB::table('trip_media')->where('trip_id', $trip->id)->whereIn('media_item_id', $requestedIds)->pluck('media_item_id')->map(fn ($mediaId) => (int) $mediaId);
+        if ($mediaById->count() !== $requestedIds->count() || $linkedIds->count() !== $requestedIds->count()) {
+            abort(422, 'Do cestovního alba lze vložit jen dostupná média přiřazená k této cestě.');
+        }
+        $orderedMedia = $requestedIds->map(fn ($mediaId) => $mediaById->get($mediaId));
+        if (! empty($data['cover_media_id']) && ! $requestedIds->contains((int) $data['cover_media_id'])) {
+            abort(422, 'Titulní fotografie musí být součástí vybraných médií.');
+        }
+        $cover = ! empty($data['cover_media_id'])
+            ? $mediaById->get((int) $data['cover_media_id'])
+            : $orderedMedia->sortByDesc(fn (MediaItem $media) => ($media->media_type === 'photo' ? 1_000_000_000_000 : 0) + ($media->is_favorite ? 100_000_000_000 : 0) + ((int) $media->rating * 10_000_000_000) + ((int) $media->width * (int) $media->height))->first();
+
+        [$album, $created, $storyCreated, $journalBlocksAdded, $memory] = DB::transaction(function () use ($user, $space, $trip, $data, $orderedMedia, $cover) {
+            DB::table('trips')->where('id', $trip->id)->lockForUpdate()->first();
+            $album = Album::withTrashed()->where('trip_id', $trip->id)->where('gallery_space_id', $space->id)->first();
+            $created = ! $album;
+            $title = trim((string) ($data['title'] ?? '')) ?: $trip->name;
+            $description = array_key_exists('note', $data) && $data['note'] !== null ? $data['note'] : ($trip->description ?: 'Společné cestovní album.');
+            $albumData = [
+                'trip_id' => $trip->id,
+                'title' => $title,
+                'slug' => Str::slug($title),
+                'description' => $description,
+                'cover_media_id' => $cover->id,
+                'event_date_start' => $trip->start_date,
+                'event_date_end' => $trip->end_date,
+                'story_mode' => true,
+                'event_mode' => true,
+                'event_start_at' => $trip->start_date . ' 00:00:00',
+                'event_end_at' => $trip->end_date . ' 23:59:59',
+                'visibility' => 'shared',
+                'sort_mode' => 'date_taken',
+                'sort_direction' => 'asc',
+                'updated_by' => $user->id,
+                'sync_status' => 'pending',
+            ];
+            if ($album) {
+                if ($album->trashed()) $album->restore();
+                $album->update($albumData);
+            } else {
+                $album = Album::create($albumData + [
+                    'gallery_space_id' => $space->id,
+                    'created_by' => $user->id,
+                    'icon' => '🧭',
+                    'color' => '#c026d3',
+                ]);
+            }
+            $album->rebuildPaths();
+
+            $sync = [];
+            foreach ($orderedMedia as $sortOrder => $media) {
+                $sync[$media->id] = ['sort_order' => $sortOrder, 'is_cover' => $media->id === $cover->id, 'added_at' => now(), 'added_by' => $user->id];
+            }
+            $album->media()->sync($sync);
+            $album->update(['media_count' => count($sync), 'total_size_bytes' => $orderedMedia->sum('size_bytes')]);
+
+            $permissionRows = DB::table('gallery_space_user')->where('gallery_space_id', $space->id)->pluck('user_id')->map(fn ($userId) => [
+                'album_id' => $album->id, 'user_id' => $userId, 'role' => 'editor', 'inherited' => false, 'created_at' => now(), 'updated_at' => now(),
+            ])->all();
+            if ($permissionRows) DB::table('album_user_permissions')->upsert($permissionRows, ['album_id', 'user_id'], ['role', 'inherited', 'updated_at']);
+            CalendarEvent::where('gallery_space_id', $space->id)->where('trip_id', $trip->id)->update(['album_id' => $album->id, 'updated_at' => now()]);
+
+            $storyCreated = DB::table('album_story_blocks')->where('album_id', $album->id)->doesntExist();
+            $journalBlocksAdded = $storyCreated
+                ? $this->createTripStoryBlocks($album, $trip, $orderedMedia, $user->id)
+                : $this->appendMissingJournalStoryBlocks($album, $trip, $user->id);
+            [$memory] = $this->upsertTripMemory($trip, $space->id, $user->id, $title, $description, $orderedMedia->take(30)->pluck('id')->all());
+            AuditLog::record($created ? 'trip.recap_album.create' : 'trip.recap_album.sync', $album, ['trip_id' => $trip->id, 'media_count' => count($sync), 'story_created' => $storyCreated, 'journal_blocks_added' => $journalBlocksAdded]);
+
+            return [$album->fresh(), $created, $storyCreated, $journalBlocksAdded, $memory];
+        });
+
+        $payload = $this->recapAlbumPayload($album) + ['story_created' => $storyCreated, 'journal_blocks_added' => $journalBlocksAdded, 'memory_uuid' => $memory->uuid];
+        return response()->json($payload, $created ? 201 : 200);
     }
 
     /** A shared post-trip note, kept next to the itinerary and its gallery memory. */
@@ -346,6 +458,7 @@ class TripController extends Controller
             'activities_done' => DB::table('trip_activities')->join('trip_days', 'trip_days.id', '=', 'trip_activities.trip_day_id')->where('trip_days.trip_id', $trip->id)->where('trip_activities.status', 'done')->count(),
             'media_count' => DB::table('trip_media')->where('trip_id', $trip->id)->count(),
             'has_shared_memory' => DB::table('shared_memory_moments')->where('trip_id', $trip->id)->exists(),
+            'has_recap_album' => Schema::hasColumn('albums', 'trip_id') && DB::table('albums')->where('trip_id', $trip->id)->whereNull('deleted_at')->exists(),
             'actual_expenses' => (float) DB::table('trip_expenses')->where('trip_id', $trip->id)->where('state', 'actual')->sum('amount'),
             'currency' => $trip->currency,
         ];
@@ -700,23 +813,16 @@ class TripController extends Controller
             'from' => 'required|string|max:120',
             'to'   => 'required|string|max:120',
             'date' => 'required|date_format:Y-m-d',
+            'from_lat' => 'nullable|numeric|between:-90,90', 'from_lng' => 'nullable|numeric|between:-180,180',
+            'to_lat' => 'nullable|numeric|between:-90,90', 'to_lng' => 'nullable|numeric|between:-180,180',
         ]);
 
-        $key = 'tp:v2:' . md5("{$v['from']}|{$v['to']}|{$v['date']}");
-
-        $prices = Cache::remember($key, 3600 * 3, function () use ($v) {
-            $all = [];
-            try {
-                $all = array_merge($all, $this->regiojetPrices($v['from'], $v['to'], $v['date']));
-            } catch (\Throwable $e) {
-            }
-            try {
-                $all = array_merge($all, $this->flixbusPrices($v['from'], $v['to'], $v['date']));
-            } catch (\Throwable $e) {
-            }
-            usort($all, fn($a, $b) => ($a['min_price'] ?? 9999) <=> ($b['min_price'] ?? 9999));
-            return $all;
-        });
+        $results = $this->transportSearch->search($v + ['adults' => 1, 'mode' => 'all']);
+        $prices = collect($results)->whereNotNull('price')->map(fn (array $item) => [
+            'carrier' => $item['carrier'], 'icon' => $item['icon'], 'min_price' => $item['price_per_pax'] ?? $item['price'],
+            'currency' => $item['currency'], 'source' => $item['source'], 'note' => $item['note'] ?? null,
+            'book_url' => $item['book_url'], 'mode' => $item['mode'] ?? null,
+        ])->values();
 
         return response()->json($prices);
     }
@@ -952,6 +1058,181 @@ class TripController extends Controller
     }
 
     // ─── Helpers ───────────────────────────────────────────────────────────
+
+    private function upsertTripMemory(object $trip, int $spaceId, int $userId, string $title, ?string $note, array $mediaIds): array
+    {
+        $existing = DB::table('shared_memory_moments')->where('trip_id', $trip->id)->first();
+        $eventIds = DB::table('calendar_events')->where('trip_id', $trip->id)->where('gallery_space_id', $spaceId)->orderBy('starts_at')->pluck('id');
+        if (! $existing && $eventIds->isNotEmpty()) {
+            $existing = DB::table('shared_memory_moments')->whereIn('calendar_event_id', $eventIds)->first();
+        }
+        $calendarEventId = $existing?->calendar_event_id;
+        if (! $calendarEventId) {
+            $usedEventIds = DB::table('shared_memory_moments')->whereIn('calendar_event_id', $eventIds)->pluck('calendar_event_id');
+            $calendarEventId = $eventIds->diff($usedEventIds)->first();
+        }
+
+        $row = [
+            'trip_id' => $trip->id,
+            'calendar_event_id' => $calendarEventId ?: null,
+            'gallery_space_id' => $spaceId,
+            'created_by' => $existing?->created_by ?? $userId,
+            'title' => $title,
+            'note' => $note ?? $existing?->note ?? $trip->description,
+            'happened_on' => $trip->end_date,
+            'media_item_ids' => json_encode(array_values($mediaIds)),
+            'is_favorite' => true,
+            'updated_at' => now(),
+        ];
+        if ($existing) {
+            DB::table('shared_memory_moments')->where('id', $existing->id)->update($row);
+            $id = $existing->id;
+        } else {
+            $id = DB::table('shared_memory_moments')->insertGetId($row + ['uuid' => (string) Str::uuid(), 'created_at' => now()]);
+        }
+
+        return [DB::table('shared_memory_moments')->find($id), ! $existing];
+    }
+
+    private function createTripStoryBlocks(Album $album, object $trip, $media, int $userId): int
+    {
+        $blocks = [];
+        $journalBlocks = 0;
+        $add = function (string $type, array $content) use (&$blocks, $album, $userId) {
+            $blocks[] = [
+                'album_id' => $album->id,
+                'created_by' => $userId,
+                'type' => $type,
+                'content' => json_encode($content, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                'sort_order' => count($blocks),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ];
+        };
+
+        $add('heading', ['text' => $album->title, 'level' => 1]);
+        $dateLabel = Carbon::parse($trip->start_date)->format('d. m. Y') . ' – ' . Carbon::parse($trip->end_date)->format('d. m. Y');
+        $add('text', ['body' => $dateLabel . ($trip->description ? "\n\n" . $trip->description : '')]);
+
+        $reflection = Schema::hasTable('trip_reflections') ? DB::table('trip_reflections')->where('trip_id', $trip->id)->first() : null;
+        if ($reflection?->highlight) $add('quote', ['quote' => $reflection->highlight, 'author' => 'Náš nejhezčí moment']);
+        $reflectionNotes = array_values(array_filter([
+            $reflection?->gratitude ? 'Za co jsme rádi: ' . $reflection->gratitude : null,
+            $reflection?->next_time ? 'Příště: ' . $reflection->next_time : null,
+        ]));
+        if ($reflectionNotes) $add('text', ['body' => implode("\n\n", $reflectionNotes)]);
+
+        $firstWaypoint = DB::table('trip_waypoints')->where('trip_id', $trip->id)->whereNotNull('latitude')->whereNotNull('longitude')->orderBy('sort_order')->first();
+        if ($firstWaypoint) $add('map', ['latitude' => (float) $firstWaypoint->latitude, 'longitude' => (float) $firstWaypoint->longitude, 'zoom' => 11, 'label' => $firstWaypoint->place_name]);
+
+        $days = DB::table('trip_days')->where('trip_id', $trip->id)->orderBy('sort_order')->orderBy('date')->get();
+        $journal = $this->storyJournalEntries((int) $trip->id);
+        $usedMediaIds = collect();
+        $usedJournalIds = collect();
+        foreach ($days as $index => $day) {
+            $activities = DB::table('trip_activities')->where('trip_day_id', $day->id)->orderBy('sort_order')->get();
+            $dayMedia = $media->filter(fn (MediaItem $item) => $item->taken_at?->toDateString() === $day->date);
+            if ($activities->isEmpty() && $dayMedia->isEmpty() && ! $day->notes) continue;
+            $add('heading', ['text' => ($day->title ?: 'Den ' . ($index + 1)) . ' · ' . Carbon::parse($day->date)->format('d. m. Y'), 'level' => 2]);
+            $activityLines = $activities->map(fn ($activity) => '• ' . ($activity->starts_at ? substr((string) $activity->starts_at, 0, 5) . ' ' : '') . $activity->title)->all();
+            $dayText = array_values(array_filter([$day->notes, $activityLines ? implode("\n", $activityLines) : null]));
+            if ($dayText) $add('text', ['body' => implode("\n\n", $dayText)]);
+            foreach ($journal->where('trip_day_id', $day->id) as $entry) {
+                $this->addJournalStoryBlock($add, $entry);
+                $journalBlocks++;
+                $usedJournalIds->push($entry->id);
+            }
+            $photos = $dayMedia->where('media_type', 'photo')->take(9);
+            if ($photos->isNotEmpty()) {
+                $add('photo', ['media_uuids' => $photos->pluck('uuid')->all(), 'layout' => $photos->count() === 1 ? 'single' : ($photos->count() <= 4 ? 'grid2' : 'grid3'), 'caption' => $day->title]);
+                $usedMediaIds = $usedMediaIds->merge($photos->pluck('id'));
+            }
+        }
+
+        $remainingPhotos = $media->where('media_type', 'photo')->reject(fn (MediaItem $item) => $usedMediaIds->contains($item->id))->take(9);
+        if ($remainingPhotos->isNotEmpty()) $add('photo', ['media_uuids' => $remainingPhotos->pluck('uuid')->all(), 'layout' => $remainingPhotos->count() === 1 ? 'single' : 'grid3', 'caption' => 'Další společné momenty']);
+        $video = $media->firstWhere('media_type', 'video');
+        if ($video) $add('video', ['media_uuid' => $video->uuid, 'caption' => 'Video z cesty']);
+
+        $remainingJournal = $journal->reject(fn ($entry) => $usedJournalIds->contains($entry->id));
+        if ($remainingJournal->isNotEmpty()) {
+            $add('heading', ['text' => 'Naše zápisky z cesty', 'level' => 2]);
+            foreach ($remainingJournal as $entry) {
+                $this->addJournalStoryBlock($add, $entry);
+                $journalBlocks++;
+            }
+        }
+
+        if ($blocks) DB::table('album_story_blocks')->insert($blocks);
+        return $journalBlocks;
+    }
+
+    private function appendMissingJournalStoryBlocks(Album $album, object $trip, int $userId): int
+    {
+        $existingIds = DB::table('album_story_blocks')->where('album_id', $album->id)->pluck('content')
+            ->map(fn ($content) => json_decode($content ?: '{}', true) ?: [])
+            ->pluck('source_journal_entry_id')->filter(fn ($id) => is_numeric($id))->map(fn ($id) => (int) $id);
+        $missing = $this->storyJournalEntries((int) $trip->id)->reject(fn ($entry) => $existingIds->contains((int) $entry->id));
+        if ($missing->isEmpty()) return 0;
+
+        $sortOrder = ((int) DB::table('album_story_blocks')->where('album_id', $album->id)->max('sort_order')) + 1;
+        $rows = [];
+        $add = function (string $type, array $content) use (&$rows, &$sortOrder, $album, $userId) {
+            $rows[] = ['album_id' => $album->id, 'created_by' => $userId, 'type' => $type, 'content' => json_encode($content, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), 'sort_order' => $sortOrder++, 'created_at' => now(), 'updated_at' => now()];
+        };
+        $add('heading', ['text' => 'Nové zápisky z cesty', 'level' => 2, 'source' => 'travel_journal']);
+        foreach ($missing as $entry) $this->addJournalStoryBlock($add, $entry);
+        DB::table('album_story_blocks')->insert($rows);
+        return $missing->count();
+    }
+
+    private function storyJournalEntries(int $tripId)
+    {
+        if (! Schema::hasColumn('travel_journal_entries', 'visibility')) return collect();
+        $query = DB::table('travel_journal_entries as entry')
+            ->join('users', 'users.id', '=', 'entry.user_id')
+            ->where('entry.trip_id', $tripId)
+            ->where('entry.visibility', 'shared')
+            ->where('entry.is_story_worthy', true)
+            ->whereIn('entry.type', ['note', 'voice', 'location'])
+            ->orderBy('entry.recorded_at');
+        if (Schema::hasTable('travel_journal_recordings')) {
+            return $query->leftJoin('travel_journal_recordings as recording', 'recording.journal_entry_id', '=', 'entry.id')
+                ->get(['entry.*', 'users.name as user_name', 'recording.uuid as recording_uuid', 'recording.duration_ms as recording_duration_ms', 'recording.mime_type as recording_mime_type']);
+        }
+        return $query->get(['entry.*', 'users.name as user_name']);
+    }
+
+    private function addJournalStoryBlock(callable $add, object $entry): void
+    {
+        $source = ['source' => 'travel_journal', 'source_journal_entry_id' => (int) $entry->id, 'recorded_at' => $entry->recorded_at, 'mood' => $entry->mood];
+        if ($entry->type === 'location' && $entry->latitude !== null && $entry->longitude !== null) {
+            $add('map', $source + ['latitude' => (float) $entry->latitude, 'longitude' => (float) $entry->longitude, 'zoom' => 14, 'label' => $entry->content ?: 'Místo z cestovního deníku']);
+            return;
+        }
+        $content = $source + ['quote' => $entry->content, 'author' => $entry->user_name];
+        if ($entry->type === 'voice' && ! empty($entry->recording_uuid)) {
+            $content += ['audio_url' => "/api/v1/trips/{$entry->trip_id}/journal/{$entry->id}/recording", 'audio_duration_ms' => (int) ($entry->recording_duration_ms ?? 0), 'audio_mime_type' => $entry->recording_mime_type ?? null];
+        }
+        $add('quote', $content);
+    }
+
+    private function recapAlbumPayload(Album $album): array
+    {
+        $memory = DB::table('shared_memory_moments')->where('trip_id', $album->trip_id)->first(['uuid', 'title']);
+        return [
+            'id' => $album->id,
+            'uuid' => $album->uuid,
+            'trip_id' => $album->trip_id,
+            'title' => $album->title,
+            'media_count' => (int) $album->media_count,
+            'cover_media_id' => $album->cover_media_id,
+            'story_blocks_count' => DB::table('album_story_blocks')->where('album_id', $album->id)->count(),
+            'memory' => $memory ? ['uuid' => $memory->uuid, 'title' => $memory->title] : null,
+            'curation' => $this->albumCuration->health($album),
+            'updated_at' => $album->updated_at?->toIso8601String(),
+        ];
+    }
 
     private function tripBelongsToSpace(int $tripId, int $spaceId): bool
     {

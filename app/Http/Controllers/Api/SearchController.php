@@ -7,11 +7,15 @@ use App\Http\Controllers\Controller;
 use App\Models\MediaItem;
 use App\Models\Person;
 use App\Models\Place;
+use App\Models\Recipe;
+use App\Models\EntertainmentTitle;
+use App\Models\SharedTodo;
 use App\Models\SavedSearch;
 use App\Models\Tag;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class SearchController extends Controller
 {
@@ -190,6 +194,23 @@ class SearchController extends Controller
             ->concat(DB::table('trips')->where('gallery_space_id', $space->id)->where('name', 'like', $like)->limit($limit)->get()->map(fn ($item) => [
                 'type' => 'trip', 'id' => $item->id, 'label' => $item->name, 'url' => "/trips?trip={$item->id}", 'icon' => '🗺️',
             ]))
+            ->concat(Schema::hasTable('recipes') ? Recipe::where('gallery_space_id', $space->id)
+                ->where(fn ($query) => $query->where('status', 'published')->orWhere('created_by', $request->user()->id))
+                ->where(fn ($query) => $query->where('title', 'like', $like)->orWhere('cuisine', 'like', $like)->orWhereHas('ingredients', fn ($ingredients) => $ingredients->where('name', 'like', $like)))
+                ->limit($limit)->get()->map(fn ($item) => [
+                    'type' => 'recipe', 'id' => $item->id, 'label' => $item->title, 'url' => "/recipes/{$item->uuid}", 'icon' => '🍳',
+                ]) : [])
+            ->concat(Schema::hasTable('shared_todos') ? SharedTodo::where('gallery_space_id', $space->id)
+                ->whereNotIn('status', ['completed', 'cancelled'])
+                ->where(fn ($query) => $query->where('title', 'like', $like)->orWhere('description', 'like', $like))
+                ->limit($limit)->get()->map(fn ($item) => [
+                    'type' => 'todo', 'id' => $item->id, 'label' => $item->title, 'url' => '/planning#todos', 'icon' => '✅',
+                ]) : [])
+            ->concat(Schema::hasTable('entertainment_titles') ? EntertainmentTitle::where('gallery_space_id', $space->id)
+                ->where(fn ($query) => $query->where('title', 'like', $like)->orWhere('original_title', 'like', $like))
+                ->limit($limit)->get()->map(fn ($item) => [
+                    'type' => 'entertainment', 'id' => $item->id, 'label' => $item->title, 'url' => '/planning#watchlist', 'icon' => $item->media_type === 'series' ? '📺' : '🎬',
+                ]) : [])
             ->concat(SavedSearch::where('gallery_space_id', $space->id)
                 ->where(fn ($query) => $query->where('user_id', $request->user()->id)->orWhere('is_shared', true))
                 ->where('name', 'like', $like)->limit($limit)->get()->map(fn ($item) => [

@@ -131,14 +131,14 @@ function fmtRange(start: string, end: string): string {
     return `${s.getDate()}. ${MONTHS_CS[s.getMonth()]} – ${e.getDate()}. ${MONTHS_CS[e.getMonth()]} ${e.getFullYear()}`;
 }
 
-function buildTransportLinks(from: Waypoint, to: Waypoint, tripDate: string) {
+function buildTransportLinks(from: Waypoint, to: Waypoint, tripDate: string, tripId?:number) {
     const f = encodeURIComponent(from.place_name);
     const t = encodeURIComponent(to.place_name);
     const iso = tripDate.substring(0, 10);
     const fLat = from.latitude, fLng = from.longitude;
     const tLat = to.latitude,   tLng = to.longitude;
     return [
-        { label: 'Porovnat vše', icon: '🎫', mode: 'train' as TransportMode, url: `/tickets?from=${f}&to=${t}&date=${iso}` },
+        { label: 'Porovnat vše', icon: '🎫', mode: 'train' as TransportMode, url: `/tickets?from=${f}&to=${t}&date=${iso}${tripId?`&trip_id=${tripId}`:''}${fLat!=null&&fLng!=null?`&from_lat=${fLat}&from_lng=${fLng}`:''}${tLat!=null&&tLng!=null?`&to_lat=${tLat}&to_lng=${tLng}`:''}` },
         { label: 'ČD / IDOS',   icon: '🚂', mode: 'train' as TransportMode, url: `https://idos.idnes.cz/vlak/spojeni/?f=${f}&t=${t}&date=${iso}&time=0600` },
         { label: 'RegioJet',    icon: '🟡', mode: 'train' as TransportMode, url: 'https://regiojet.cz/' },
         { label: 'FlixBus',     icon: '🟢', mode: 'bus' as TransportMode, url: 'https://www.flixbus.cz/' },
@@ -450,7 +450,7 @@ export default function TripsIndex() {
         setFetchingPrices(prev => ({ ...prev, [key]: true }));
         try {
             const r = await axios.get('/api/v1/trips/transport-prices', {
-                params: { from: from.place_name, to: to.place_name, date: date.substring(0, 10) },
+                params: { from: from.place_name, to: to.place_name, date: date.substring(0, 10), from_lat: from.latitude, from_lng: from.longitude, to_lat: to.latitude, to_lng: to.longitude },
             });
             const normalized: PriceEstimate[] = (r.data ?? []).map((price: any) => ({
                 carrier: price.carrier,
@@ -460,7 +460,7 @@ export default function TripsIndex() {
                 currency: price.currency === 'CZK' ? 'Kč' : price.currency,
                 note: price.note,
                 bookUrl: price.book_url,
-                mode: price.carrier?.toLowerCase().includes('vlak') ? 'train' : 'bus',
+                mode: price.mode ?? (price.carrier?.toLowerCase().includes('vlak') ? 'train' : 'bus'),
             }));
             setLivePrices(prev => ({ ...prev, [key]: normalized.length ? normalized : null }));
         } catch {
@@ -1038,7 +1038,7 @@ export default function TripsIndex() {
                                                                             <div>
                                                                                 <p className="text-[9px] text-[var(--color-text-secondary)] mb-1">Přímé vyhledávání:</p>
                                                                                 <div className="flex flex-wrap gap-1">
-                                                                                    {buildTransportLinks(wp, nextWp, selected.start_date)
+                                                                                    {buildTransportLinks(wp, nextWp, selected.start_date, selected.id)
                                                                                         .filter(link => transportFilters.includes(link.mode))
                                                                                         .map(link => (
                                                                                         <a key={link.label} href={link.url} target="_blank" rel="noopener noreferrer"

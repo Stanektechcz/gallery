@@ -1,4 +1,5 @@
 import AlbumEvent from '@/Components/AlbumEvent';
+import AlbumCurationAssistant from '@/Components/AlbumCurationAssistant';
 import LocationPicker from '@/Components/LocationPicker';
 import SmartAlbumEditor from '@/Components/SmartAlbumEditor';
 import UploadZone from '@/Components/UploadZone';
@@ -12,6 +13,7 @@ import { useMemo, useState } from 'react';
 interface MediaItem {
     id: number;
     uuid: string;
+    trip_id?: number | null;
     media_type: string;
     taken_at: string | null;
     size_bytes: number;
@@ -55,7 +57,7 @@ export default function AlbumShow({ album, breadcrumb, children, media, filters:
     const [uploadOpen, setUploadOpen] = useState(false);
     const [search, setSearch]         = useState(filters.search ?? '');
     const [deleting, setDeleting]     = useState(false);
-    const [activeTab, setActiveTab]   = useState<'grid' | 'story'>('grid');
+    const [activeTab, setActiveTab]   = useState<'grid' | 'story'>(album.story_mode ? 'story' : 'grid');
     const [storyEdit, setStoryEdit]   = useState(false);
     const [isStoryMode, setIsStoryMode] = useState(album.story_mode ?? false);
     const [showSmartEditor, setShowSmartEditor] = useState(false);
@@ -169,6 +171,7 @@ export default function AlbumShow({ album, breadcrumb, children, media, filters:
                             {album.media_count > 0 && <span className="flex items-center gap-1"><Image size={12}/>{album.media_count} médií</span>}
                             {album.descendant_count > 0 && <span className="flex items-center gap-1"><FolderOpen size={12}/>{album.descendant_count} alb</span>}
                             {album.event_date_start && <span className="flex items-center gap-1"><Clock size={12}/>{new Date(album.event_date_start).toLocaleDateString('cs-CZ')}</span>}
+                            {album.trip_id && <Link href={`/trips/${album.trip_id}/plan`} className="flex items-center gap-1 rounded-full border border-fuchsia-400/25 bg-fuchsia-500/10 px-2 py-1 text-fuchsia-100 hover:bg-fuchsia-500/20">🧭 Otevřít cestu a itinerář</Link>}
                             {/* Location display */}
                             {album.location_name ? (
                                 <button onClick={() => setShowLocationEdit(v=>!v)}
@@ -220,6 +223,8 @@ export default function AlbumShow({ album, breadcrumb, children, media, filters:
                         </button>
                     </div>
                 </div>
+
+                <AlbumCurationAssistant albumUuid={album.uuid} />
 
                 {/* Tab bar: Fotografie | Příběh */}
                 <div className="flex items-center gap-0 mb-4 border-b border-[var(--color-border)]">

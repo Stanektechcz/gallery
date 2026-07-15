@@ -56,6 +56,8 @@ class User extends Authenticatable
     public function savedSearches()     { return $this->hasMany(SavedSearch::class); }
     public function auditLogs()         { return $this->hasMany(AuditLog::class); }
     public function uploadSessions()    { return $this->hasMany(UploadSession::class); }
+    public function createdRecipes()    { return $this->hasMany(Recipe::class, 'created_by'); }
+    public function cookingSessions()   { return $this->hasMany(RecipeCookingSession::class, 'created_by'); }
     public function inviter()            { return $this->belongsTo(User::class, 'invited_by_user_id'); }
 
     public function activeStorageConnection(): ?StorageConnection

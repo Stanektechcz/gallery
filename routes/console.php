@@ -21,6 +21,17 @@ Schedule::command('gallery:relationship-milestones --no-interaction')
     ->withoutOverlapping()
     ->name('relationship-milestones');
 
+Schedule::command('gallery:sync-cinema --days=10 --no-interaction')
+    ->dailyAt('06:15')
+    ->withoutOverlapping()
+    ->name('cinema-city-program');
+
+// PSD2 providers commonly limit unattended account access to four reads per day.
+Schedule::command('gallery:sync-banking --no-interaction')
+    ->everySixHours()
+    ->withoutOverlapping()
+    ->name('read-only-bank-sync');
+
 // Scheduler tasks
 Schedule::command('gallery:doctor --no-interaction')
     ->everyFiveMinutes()

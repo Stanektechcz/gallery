@@ -12,6 +12,7 @@ use App\Jobs\Drive\RenameDriveFolderJob;
 use App\Models\Album;
 use App\Models\GallerySpace;
 use App\Services\AlbumService;
+use App\Services\Media\UnassignedAlbumSuggestionService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
@@ -49,7 +50,7 @@ class AlbumController extends Controller
         ]);
     }
 
-    public function index(Request $request): Response
+    public function index(Request $request, UnassignedAlbumSuggestionService $suggestions): Response
     {
         $space = $request->user()->gallerySpaces()->first();
 
@@ -63,6 +64,8 @@ class AlbumController extends Controller
         return Inertia::render('Albums/Index', [
             'albums'      => $albums,
             'gallerySpace' => $space,
+            'albumSuggestions' => $suggestions->suggestions($space, $request->user()),
+            'albumSuggestionsAvailable' => $suggestions->available(),
         ]);
     }
 

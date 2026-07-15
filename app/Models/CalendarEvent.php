@@ -37,4 +37,5 @@ class CalendarEvent extends Model
     public function tasks() { return $this->hasMany(EventTask::class, 'event_id')->orderBy('sort_order'); }
     public function attachments() { return $this->hasMany(EventAttachment::class, 'event_id'); }
     public function reminders() { return $this->hasMany(EventReminder::class, 'event_id'); }
+    public function recipeCookingSessions() { return $this->hasMany(RecipeCookingSession::class, 'calendar_event_id'); }
 }

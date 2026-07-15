@@ -12,14 +12,15 @@ use Inertia\Response;
 
 class IntegrationController extends Controller
 {
-    public function index(FreeTravelDataService $service): Response
+    public function index(Request $request, FreeTravelDataService $service): Response
     {
         $settings = IntegrationSetting::all()->keyBy('provider');
         $providers = collect(FreeTravelDataService::PROVIDERS)->map(function (array $definition, string $provider) use ($settings) {
             $setting = $settings->get($provider);
             return $definition + ['provider' => $provider, 'is_enabled' => $definition['credentials'] === [] ? true : (bool) $setting?->is_enabled, 'is_configured' => $definition['credentials'] === [] || !empty($setting?->encrypted_config), 'last_tested_at' => $setting?->last_tested_at?->toIso8601String(), 'last_status' => $setting?->last_status, 'last_error' => $setting?->last_error];
         })->values();
-        return Inertia::render('Admin/Integrations', compact('providers'));
+        $gallerySpaceId = $request->user()->gallerySpaces()->value('gallery_spaces.id');
+        return Inertia::render('Admin/Integrations', compact('providers', 'gallerySpaceId'));
     }
 
     public function update(Request $request, string $provider, FreeTravelDataService $service): JsonResponse

@@ -5,8 +5,10 @@ namespace App\Console\Commands;
 use App\Models\EventReminder;
 use App\Models\User;
 use App\Notifications\EventReminderNotification;
+use App\Notifications\GalleryNotification;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class DeliverPlanningRemindersCommand extends Command
 {
@@ -36,14 +38,32 @@ class DeliverPlanningRemindersCommand extends Command
             }
         }
 
+        $todoReminders = collect();
+        if (Schema::hasTable('shared_todos')) {
+            $todoReminders = DB::table('shared_todos')->whereNotIn('status', ['completed', 'cancelled'])
+                ->whereNull('calendar_event_id')->whereNotNull('remind_at')->where('remind_at', '<=', now())
+                ->where(fn ($query) => $query->whereNull('last_reminded_at')->orWhereColumn('last_reminded_at', '<', 'remind_at'))
+                ->orderBy('remind_at')->limit((int) $this->option('limit'))->get();
+            foreach ($todoReminders as $todo) {
+                $claimed = DB::table('shared_todos')->where('id', $todo->id)
+                    ->where(fn ($query) => $query->whereNull('last_reminded_at')->orWhereColumn('last_reminded_at', '<', 'remind_at'))
+                    ->update(['last_reminded_at' => now(), 'updated_at' => now()]);
+                if (! $claimed) continue;
+                $recipient = User::find($todo->assigned_to ?: $todo->created_by);
+                $recipient?->notify(new GalleryNotification('todo.reminder', 'Připomínka úkolu: ' . $todo->title, '/planning#todos', '✅', ['todo_uuid' => $todo->uuid]));
+            }
+        }
+
         $capsules = DB::table('time_capsules')->where('status', 'sealed')->where('deliver_at', '<=', now())->limit((int) $this->option('limit'))->get();
         foreach ($capsules as $capsule) {
             if (!DB::table('time_capsules')->where('id', $capsule->id)->where('status', 'sealed')->update(['status' => 'delivered', 'delivered_at' => now(), 'updated_at' => now()])) continue;
             $recipient = User::find($capsule->recipient_user_id ?: $capsule->created_by);
-            if ($recipient) $recipient->notify(new \App\Notifications\GalleryNotification('memory.capsule', "Časová kapsle je připravená: {$capsule->title}", '/memories', '💌', ['capsule_uuid' => $capsule->uuid]));
+            $eventUuid = $capsule->event_id ? DB::table('calendar_events')->where('id', $capsule->event_id)->value('uuid') : null;
+            $url = $eventUuid ? "/calendar/events/{$eventUuid}?capsule={$capsule->uuid}" : '/memories';
+            if ($recipient) $recipient->notify(new \App\Notifications\GalleryNotification('memory.capsule', "Časová kapsle je připravená: {$capsule->title}", $url, '💌', ['capsule_uuid' => $capsule->uuid]));
         }
 
-        $this->info("Zpracováno připomínek: {$reminders->count()}, kapslí: {$capsules->count()}.");
+        $this->info("Zpracováno připomínek: {$reminders->count()}, úkolů: {$todoReminders->count()}, kapslí: {$capsules->count()}.");
         return self::SUCCESS;
     }
 }

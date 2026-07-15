@@ -29,6 +29,8 @@ interface SharedLink {
     hide_gps: boolean;
     show_metadata: boolean;
     password_hash: string | null;
+    has_password: boolean;
+    target?: { type:string; label:string; title:string; uuid?:string|null };
     max_uses: number | null;
     use_count: number;
     expires_at: string | null;
@@ -184,7 +186,7 @@ export default function SharesIndex({ shares }: Props) {
                                                 <div className="flex items-center gap-2 mb-1">
                                                     <LinkIcon size={13} className="text-[var(--color-accent)] shrink-0" />
                                                     <p className="text-sm font-medium text-white truncate">
-                                                        {link.name || `Sdílený ${link.target_type}`}
+                                                        {link.name || link.target?.title || `Sdílený ${link.target_type}`}
                                                     </p>
                                                     {expired && (
                                                         <span className="text-[10px] bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded">Vypršel</span>
@@ -193,7 +195,8 @@ export default function SharesIndex({ shares }: Props) {
                                                         <span className="text-[10px] bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded">Aktivní</span>
                                                     )}
                                                 </div>
-                                                <p className="text-xs text-[var(--color-text-secondary)] font-mono truncate">{url}</p>
+                                                <p className="text-[10px] text-violet-300">{link.target?.label || 'Sdílený obsah'}{link.target?.title && link.target.title !== link.name ? ` · ${link.target.title}` : ''}</p>
+                                                <p className="mt-0.5 truncate font-mono text-xs text-[var(--color-text-secondary)]">{url}</p>
                                             </div>
                                             <div className="flex items-center gap-1 shrink-0">
                                                 <button
@@ -225,12 +228,12 @@ export default function SharesIndex({ shares }: Props) {
 
                                         {/* Link properties */}
                                         <div className="flex flex-wrap gap-2">
-                                            {link.password_hash && (
+                                            {link.has_password && (
                                                 <span className="flex items-center gap-1 text-[10px] bg-white/5 text-[var(--color-text-secondary)] px-2 py-0.5 rounded-full">
                                                     <Lock size={9} /> Zaheslováno
                                                 </span>
                                             )}
-                                            {link.allow_download ? (
+                                            {!['recipe','place_review'].includes(link.target_type) && (link.allow_download ? (
                                                 <span className="flex items-center gap-1 text-[10px] bg-white/5 text-[var(--color-text-secondary)] px-2 py-0.5 rounded-full">
                                                     <Download size={9} /> Stahování povoleno
                                                 </span>
@@ -238,7 +241,7 @@ export default function SharesIndex({ shares }: Props) {
                                                 <span className="flex items-center gap-1 text-[10px] bg-white/5 text-[var(--color-text-secondary)] px-2 py-0.5 rounded-full">
                                                     <EyeOff size={9} /> Bez stahování
                                                 </span>
-                                            )}
+                                            ))}
                                             {link.allow_guest_upload && (
                                                 <span className="flex items-center gap-1 text-[10px] bg-white/5 text-[var(--color-text-secondary)] px-2 py-0.5 rounded-full">
                                                     <Upload size={9} /> Host může nahrát

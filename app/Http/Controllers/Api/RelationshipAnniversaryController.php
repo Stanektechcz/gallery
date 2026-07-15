@@ -136,8 +136,11 @@ class RelationshipAnniversaryController extends Controller
             ]);
             $event->save();
             $event->participants()->syncWithoutDetaching(collect($members)->mapWithKeys(fn ($memberId) => [$memberId => [
-                'role' => $memberId === $userId ? 'owner' : 'guest',
-                'response' => $memberId === $userId ? 'accepted' : 'pending',
+                // Relationship anniversaries are maintained by both partners.
+                // An editor role lets either partner add a task, a reservation or
+                // a memory without having to duplicate the calendar event.
+                'role' => $memberId === $userId ? 'owner' : 'editor',
+                'response' => 'accepted',
             ]])->all());
 
             // The recurring annual reminder is calculated from the source date

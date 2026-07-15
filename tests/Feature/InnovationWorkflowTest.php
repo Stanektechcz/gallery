@@ -10,6 +10,7 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
@@ -47,6 +48,26 @@ class InnovationWorkflowTest extends TestCase
         $this->assertDatabaseHas('travel_journal_entries', ['trip_id' => $trip, 'content' => 'Výhled z kopce']);
     }
 
+    public function test_trip_now_expense_is_shared_with_the_trip_budget_and_can_be_undone_with_its_journal_entry(): void
+    {
+        $partner = User::factory()->create(['role' => 'partner', 'is_active' => true]);
+        $this->space->members()->attach($partner->id, ['role' => 'editor', 'can_delete' => true, 'can_share' => true, 'joined_at' => now()]);
+        $trip = DB::table('trips')->insertGetId(['gallery_space_id' => $this->space->id, 'created_by' => $this->user->id, 'name' => 'Výlet pro dva', 'start_date' => today(), 'end_date' => today(), 'status' => 'active', 'currency' => 'CZK', 'created_at' => now(), 'updated_at' => now()]);
+
+        $journal = $this->postJson("/api/v1/trips/{$trip}/journal", ['type' => 'expense', 'content' => 'Společná večeře', 'amount' => 640, 'currency' => 'CZK', 'category' => 'food', 'expense_share' => 'shared'])
+            ->assertCreated()->json();
+
+        $expense = DB::table('trip_expenses')->where('trip_id', $trip)->where('title', 'Společná večeře')->first();
+        $this->assertNotNull($expense);
+        $this->assertSame($this->user->id, $expense->paid_by_user_id);
+        $this->assertSame(640.0, (float) $expense->amount);
+        $this->assertCount(2, json_decode($expense->split, true));
+        $this->getJson("/api/v1/trips/{$trip}/finance-summary")->assertOk()->assertJsonPath('members.0.paid', 640);
+
+        $this->deleteJson("/api/v1/trips/{$trip}/journal/{$journal['id']}")->assertNoContent();
+        $this->assertDatabaseMissing('trip_expenses', ['id' => $expense->id]);
+    }
+
     public function test_guest_upload_waits_for_owner_approval(): void
     {
         Storage::fake('local'); Storage::fake('public');
@@ -80,6 +101,44 @@ class InnovationWorkflowTest extends TestCase
         $this->assertTrue($carriers->contains('RegioJet'));
         $this->assertTrue($carriers->contains('FlixBus'));
         $this->assertTrue($carriers->contains('České dráhy'));
+    }
+
+    public function test_transport_search_uses_coordinates_for_real_timetable_and_keeps_purchase_fallbacks(): void
+    {
+        Cache::put('rj_cities_v2', [], 60);
+        Http::fake([
+            'api.transitous.org/*' => Http::response([
+                'itineraries' => [[
+                    'id' => 'connection-1', 'duration' => 5400, 'startTime' => '2026-08-01T08:05:00+02:00',
+                    'endTime' => '2026-08-01T09:35:00+02:00', 'transfers' => 0,
+                    'legs' => [[
+                        'mode' => 'RAIL', 'startTime' => '2026-08-01T08:05:00+02:00', 'endTime' => '2026-08-01T09:35:00+02:00',
+                        'agencyName' => 'České dráhy', 'displayName' => 'R 890', 'realTime' => true, 'cancelled' => false,
+                        'from' => ['name' => 'Praha hl.n.'], 'to' => ['name' => 'Brno hl.n.'],
+                    ]],
+                ]],
+            ], 200),
+        ]);
+
+        $response = $this->getJson('/api/v1/tickets/search?' . http_build_query([
+            'from' => 'Praha', 'to' => 'Brno', 'date' => '2026-08-01', 'time' => '08:00', 'adults' => 2,
+            'from_lat' => 50.083, 'from_lng' => 14.435, 'to_lat' => 49.19, 'to_lng' => 16.612,
+            'mode' => 'train', 'max_transfers' => 1, 'min_transfer_minutes' => 8,
+        ]))->assertOk();
+
+        $response->assertJsonPath('0.source', 'schedule')
+            ->assertJsonPath('0.provider', 'Transitous')
+            ->assertJsonPath('0.carrier', 'České dráhy R 890')
+            ->assertJsonPath('0.duration_min', 90)
+            ->assertJsonPath('0.is_realtime', true)
+            ->assertJsonPath('0.legs.0.from', 'Praha hl.n.');
+        $this->assertTrue(collect($response->json())->contains(fn (array $item) => $item['source'] === 'link'));
+
+        Http::assertSent(fn ($request) => str_contains($request->url(), '/api/v6/plan')
+            && $request['fromPlace'] === '50.083000,14.435000'
+            && (int) $request['maxTransfers'] === 1
+            && (int) $request['minTransferTime'] === 8
+            && $request['transitModes'] === 'RAIL');
     }
 
     private function media(array $overrides = []): int

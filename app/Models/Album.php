@@ -15,6 +15,8 @@ class Album extends Model
     protected $fillable = [
         'uuid',
         'gallery_space_id',
+        'trip_id',
+        'anniversary_year',
         'parent_id',
         'title',
         'slug',
@@ -72,6 +74,7 @@ class Album extends Model
             'event_mode'          => 'boolean',
             'event_latitude'      => 'float',
             'event_longitude'     => 'float',
+            'anniversary_year'    => 'integer',
         ];
     }
 

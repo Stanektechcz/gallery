@@ -50,6 +50,7 @@ Route::delete('/share-target',            [MediaController::class, 'clearShareTa
 
 // ── Authenticated ───────────────────────────────────────
 Route::middleware(['auth'])->group(function () {
+    Route::get('/banking/callback', [App\Http\Controllers\BankingOAuthController::class, 'callback'])->name('banking.callback');
 
     // Dashboard / Timeline
     Route::get('/',         [App\Http\Controllers\DashboardController::class, 'index'])->name('dashboard');
@@ -115,6 +116,8 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/travel-inbox', fn() => Inertia::render('TravelInbox/Index'))->name('travel-inbox');
     Route::get('/weekly', fn() => Inertia::render('Weekly/Index'))->name('weekly');
     Route::get('/planning', fn() => Inertia::render('Planning/Index'))->name('planning');
+    Route::get('/recipes', fn() => Inertia::render('Recipes/Index'))->name('recipes.index');
+    Route::get('/recipes/{uuid}', fn(string $uuid) => Inertia::render('Recipes/Show', ['recipeUuid' => $uuid]))->name('recipes.show');
     Route::get('/milestones', fn() => Inertia::render('Milestones/Index'))->name('milestones');
     Route::get('/shared-memories', fn() => Inertia::render('SharedMemories/Index'))->name('shared-memories');
 

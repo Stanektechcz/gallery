@@ -26,6 +26,7 @@ class Place extends Model
         'osm_type',
         'external_id',
         'created_by',
+        'review_album_id',
         'is_rain_friendly',
         'is_accessible',
         'is_photogenic',
@@ -63,5 +64,15 @@ class Place extends Model
     {
         return $this->belongsToMany(Album::class, 'album_place')
             ->withPivot('is_primary');
+    }
+
+    public function reviews()
+    {
+        return $this->hasMany(PlaceReview::class);
+    }
+
+    public function reviewAlbum()
+    {
+        return $this->belongsTo(Album::class, 'review_album_id');
     }
 }

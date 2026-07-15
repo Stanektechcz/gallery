@@ -29,7 +29,7 @@ class CreateDriveFolderJob implements ShouldQueue, ShouldBeUnique
 
     public static function dispatch(Album $album): void
     {
-        (new static($album->id))->onQueue('drive');
+        \Illuminate\Support\Facades\Bus::dispatch((new static($album->id))->onQueue('drive'));
     }
 
     public function handle(): void

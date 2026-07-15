@@ -238,7 +238,7 @@ class ItineraryController extends Controller
                     'archaeological_site',
                     'landmark'
                 ])                             => 'landmark',
-                in_array($type, ['restaurant', 'cafe', 'bar', 'fast_food', 'pub'])                => 'restaurant',
+                in_array($type, ['restaurant', 'cafe', 'bar', 'fast_food', 'pub', 'biergarten', 'food_court', 'ice_cream', 'bakery', 'nightclub']) => 'restaurant',
                 in_array($type, ['museum', 'gallery', 'theatre', 'cinema'])                       => 'museum',
                 in_array($type, [
                     'nature_reserve',
@@ -255,7 +255,7 @@ class ItineraryController extends Controller
             };
 
             $names = $item['namedetails'] ?? [];
-            $name = $names['name:cs'] ?? $names['name:en']
+            $name = $names['name:cs'] ?? $names['name:en'] ?? $item['name']
                 ?? $addr['city'] ?? $addr['town'] ?? $addr['village']
                 ?? $addr['suburb'] ?? $addr['county'] ?? $addr['state']
                 ?? $item['name'] ?? '';
@@ -274,6 +274,8 @@ class ItineraryController extends Controller
                 'name'         => trim($name) ?: $displayName,
                 'country'      => $this->czechCountryName($cc, $addr['country'] ?? ''),
                 'country_code' => $cc,
+                'city'         => $this->latinPlaceName((string) ($addr['city'] ?? $addr['town'] ?? $addr['village'] ?? '')),
+                'address'      => trim(implode(', ', array_filter([$addr['road'] ?? null, $addr['house_number'] ?? null, $addr['suburb'] ?? null]))),
                 'latitude'     => (float) ($item['lat'] ?? 0),
                 'longitude'    => (float) ($item['lon'] ?? 0),
                 'category'     => $category,

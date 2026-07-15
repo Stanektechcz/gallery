@@ -34,7 +34,10 @@ class MediaFileController extends Controller
             abort(404);
         }
 
-        $mimeType = Storage::disk('public')->mimeType($path) ?: 'application/octet-stream';
+        // Do not make finfo inspect a multi-gigabyte video before range streaming can
+        // begin. Known gallery formats have an unambiguous extension; finfo remains a
+        // fallback only for uncommon files.
+        $mimeType = $this->mimeTypeForPath($path);
         $size     = Storage::disk('public')->size($path);
         $lastMod  = Storage::disk('public')->lastModified($path);
 
@@ -79,6 +82,19 @@ class MediaFileController extends Controller
             'ETag'           => $etag,
             'Last-Modified'  => gmdate('D, d M Y H:i:s', $lastMod) . ' GMT',
         ]));
+    }
+
+    private function mimeTypeForPath(string $path): string
+    {
+        $extension = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+        $known = [
+            'mp4' => 'video/mp4', 'm4v' => 'video/x-m4v', 'mov' => 'video/quicktime', 'webm' => 'video/webm',
+            'mkv' => 'video/x-matroska', 'avi' => 'video/x-msvideo', 'm3u8' => 'application/vnd.apple.mpegurl', 'ts' => 'video/mp2t',
+            'jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'png' => 'image/png', 'webp' => 'image/webp',
+            'gif' => 'image/gif', 'avif' => 'image/avif', 'heic' => 'image/heic', 'heif' => 'image/heif', 'svg' => 'image/svg+xml',
+        ];
+
+        return $known[$extension] ?? (Storage::disk('public')->mimeType($path) ?: 'application/octet-stream');
     }
 
     /**

@@ -158,7 +158,13 @@ class PlanningExpansionController extends Controller
     public function polls(Request $request): JsonResponse
     {
         if (! $this->tablesExist(['decision_polls', 'decision_poll_options', 'decision_poll_votes'])) return response()->json([]);
-        $polls = DB::table('decision_polls')->whereIn('gallery_space_id', $this->spaceIds($request->user()))->latest()->get();
+        $data = $request->validate(['event_uuid' => 'nullable|uuid']);
+        $event = !empty($data['event_uuid']) ? $this->event($request->user(), $data['event_uuid']) : null;
+        if ($event && !Schema::hasColumn('decision_polls', 'calendar_event_id')) return response()->json([]);
+        $polls = DB::table('decision_polls')
+            ->whereIn('gallery_space_id', $this->spaceIds($request->user()))
+            ->when($event, fn ($query) => $query->where('calendar_event_id', $event->id))
+            ->latest()->get();
         $hasCalendarLink = Schema::hasColumn('decision_poll_options', 'calendar_event_id');
         foreach ($polls as $poll) {
             // Do not select o.* beside a GROUP BY. MySQL installations using
@@ -186,9 +192,18 @@ class PlanningExpansionController extends Controller
     public function storePoll(Request $request): JsonResponse
     {
         $this->requireTables(['decision_polls', 'decision_poll_options', 'decision_poll_votes']);
-        $data = $request->validate(['gallery_space_id' => 'required|integer', 'question' => 'required|string|max:255', 'closes_at' => 'nullable|date|after:now', 'options' => 'required|array|min:2|max:8', 'options.*.title' => 'required|string|max:255', 'options.*.notes' => 'nullable|string|max:5000']);
+        $data = $request->validate(['gallery_space_id' => 'required|integer', 'calendar_event_uuid' => 'nullable|uuid', 'question' => 'required|string|max:255', 'closes_at' => 'nullable|date|after:now', 'options' => 'required|array|min:2|max:8', 'options.*.title' => 'required|string|max:255', 'options.*.notes' => 'nullable|string|max:5000']);
         $this->space($request->user(), $data['gallery_space_id']);
-        $id = DB::transaction(function () use ($data, $request) { $id = DB::table('decision_polls')->insertGetId(['uuid' => (string) Str::uuid(), 'gallery_space_id' => $data['gallery_space_id'], 'created_by' => $request->user()->id, 'question' => $data['question'], 'closes_at' => $data['closes_at'] ?? null, 'status' => 'open', 'created_at' => now(), 'updated_at' => now()]); foreach ($data['options'] as $order => $option) DB::table('decision_poll_options')->insert(['poll_id' => $id, 'title' => $option['title'], 'notes' => $option['notes'] ?? null, 'sort_order' => $order, 'created_at' => now(), 'updated_at' => now()]); return $id; });
+        $event = !empty($data['calendar_event_uuid']) ? $this->editableEvent($request->user(), $data['calendar_event_uuid']) : null;
+        if ($event && $event->gallery_space_id !== (int) $data['gallery_space_id']) abort(422, 'Akce musí patřit do stejného společného prostoru.');
+        if ($event && !Schema::hasColumn('decision_polls', 'calendar_event_id')) abort(503, 'Pro rozhodování přímo v akci dokončete migrace aplikace.');
+        $id = DB::transaction(function () use ($data, $request, $event) {
+            $row = ['uuid' => (string) Str::uuid(), 'gallery_space_id' => $data['gallery_space_id'], 'created_by' => $request->user()->id, 'question' => $data['question'], 'closes_at' => $data['closes_at'] ?? null, 'status' => 'open', 'created_at' => now(), 'updated_at' => now()];
+            if ($event) $row['calendar_event_id'] = $event->id;
+            $id = DB::table('decision_polls')->insertGetId($row);
+            foreach ($data['options'] as $order => $option) DB::table('decision_poll_options')->insert(['poll_id' => $id, 'title' => $option['title'], 'notes' => $option['notes'] ?? null, 'sort_order' => $order, 'created_at' => now(), 'updated_at' => now()]);
+            return $id;
+        });
         return response()->json(DB::table('decision_polls')->find($id), 201);
     }
 
@@ -212,6 +227,15 @@ class PlanningExpansionController extends Controller
         $poll = DB::table('decision_polls')->where('uuid', $uuid)->whereIn('gallery_space_id', $this->spaceIds($request->user()))->firstOrFail();
         $option = DB::table('decision_poll_options')->where('id', $optionId)->where('poll_id', $poll->id)->firstOrFail();
         if ($option->calendar_event_id) return response()->json(CalendarEvent::findOrFail($option->calendar_event_id)->load('participants:id,name,email', 'reminders'));
+        if (!empty($poll->calendar_event_id)) {
+            $event = CalendarEvent::whereKey($poll->calendar_event_id)->where('gallery_space_id', $poll->gallery_space_id)->firstOrFail();
+            abort_unless($event->created_by === $request->user()->id || $event->participants()->whereKey($request->user()->id)->wherePivot('role', 'editor')->exists(), 403, 'Akci může upravovat jen autor nebo editor.');
+            DB::transaction(function () use ($poll, $option, $event) {
+                DB::table('decision_poll_options')->where('id', $option->id)->update(['calendar_event_id' => $event->id, 'updated_at' => now()]);
+                DB::table('decision_polls')->where('id', $poll->id)->update(['status' => 'decided', 'updated_at' => now()]);
+            });
+            return response()->json($event->load('participants:id,name,email', 'reminders'));
+        }
         abort_if($poll->status === 'decided', 422, 'Toto hlasování už je převedené na společnou akci.');
         $data = $request->validate(['starts_at' => 'nullable|date|after:now']);
         $startsAt = isset($data['starts_at']) ? Carbon::parse($data['starts_at']) : $this->nextFreeSaturday($poll->gallery_space_id);

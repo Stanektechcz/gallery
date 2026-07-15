@@ -1,4 +1,5 @@
 import AppLayout from '@/Layouts/AppLayout';
+import AlbumSuggestionPanel, { AlbumSuggestion } from '@/Components/AlbumSuggestionPanel';
 import { Head, Link } from '@inertiajs/react';
 import { FolderOpen, Image } from 'lucide-react';
 
@@ -19,6 +20,9 @@ interface AlbumNode {
 
 interface Props {
     albums: AlbumNode[];
+    gallerySpace: { id: number };
+    albumSuggestions: AlbumSuggestion[];
+    albumSuggestionsAvailable: boolean;
 }
 
 function AlbumCard({ album }: { album: AlbumNode }) {
@@ -75,7 +79,7 @@ function AlbumCard({ album }: { album: AlbumNode }) {
     );
 }
 
-export default function AlbumsIndex({ albums }: Props) {
+export default function AlbumsIndex({ albums, gallerySpace, albumSuggestions, albumSuggestionsAvailable }: Props) {
     return (
         <AppLayout>
             <Head title="Alba" />
@@ -91,6 +95,8 @@ export default function AlbumsIndex({ albums }: Props) {
                         + Nové album
                     </Link>
                 </div>
+
+                <AlbumSuggestionPanel gallerySpaceId={gallerySpace.id} initialSuggestions={albumSuggestions} available={albumSuggestionsAvailable} />
 
                 {albums.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-64 text-[var(--color-text-secondary)]">

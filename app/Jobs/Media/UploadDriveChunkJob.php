@@ -20,7 +20,9 @@ class UploadDriveChunkJob implements ShouldQueue
     public int $tries   = 10;
     public int $timeout = 600;
 
-    private const CHUNK_SIZE = 8 * 1024 * 1024; // 8 MB
+    private const MIN_CHUNK_MB = 8;
+    private const MAX_CHUNK_MB = 256;
+    private const CHUNK_ALIGNMENT = 256 * 1024;
 
     public function __construct(
         private readonly int    $mediaItemId,
@@ -73,7 +75,7 @@ class UploadDriveChunkJob implements ShouldQueue
             // Read and upload next chunk
             $handle = fopen($path, 'rb');
             fseek($handle, $startByte);
-            $chunk    = fread($handle, self::CHUNK_SIZE);
+            $chunk    = fread($handle, $this->chunkSize());
             fclose($handle);
 
             if ($chunk === false || strlen($chunk) === 0) {
@@ -131,6 +133,16 @@ class UploadDriveChunkJob implements ShouldQueue
         $media->rebuildSearchText();
 
         Log::info("Media #{$media->id} uploaded to Drive: {$driveFile['id']}");
+    }
+
+    private function chunkSize(): int
+    {
+        $megabytes = (int) config('gallery.drive_upload_chunk_mb', 64);
+        $megabytes = min(self::MAX_CHUNK_MB, max(self::MIN_CHUNK_MB, $megabytes));
+        $bytes = $megabytes * 1024 * 1024;
+
+        // Google Drive requires all non-final chunks to be 256 KB aligned.
+        return intdiv($bytes, self::CHUNK_ALIGNMENT) * self::CHUNK_ALIGNMENT;
     }
 
     public static function dispatch(MediaItem $media, ?UploadSession $session, string $uri, int $start, int $total): \Illuminate\Foundation\Bus\PendingDispatch

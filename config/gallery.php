@@ -27,6 +27,9 @@ return [
     // Upload limits
     'max_chunk_size_mb'  => env('GALLERY_MAX_CHUNK_MB', 64),
     'max_upload_size_gb' => env('GALLERY_MAX_UPLOAD_GB', 32),
+    // Server-to-Drive resumable upload chunk. Keep this below PHP/proxy
+    // request limits; the job clamps it to 8–256 MB and 256 KB alignment.
+    'drive_upload_chunk_mb' => env('GOOGLE_DRIVE_UPLOAD_CHUNK_MB', 64),
 
     // Supported photo extensions
     'photo_extensions' => ['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif', 'heic', 'heif', 'tiff', 'tif'],
@@ -39,6 +42,18 @@ return [
     'geocoding_provider' => env('GEOCODING_PROVIDER', 'nominatim'),
     'geocoding_api_key'  => env('GEOCODING_API_KEY', null),
     'geocoding_rate_limit_per_second' => env('GEOCODING_RATE_LIMIT', 1),
+
+    // Unified transport search. Transitous is a volunteer, best-effort source;
+    // keep requests cached and always send a contact URL in the User-Agent.
+    'transport' => [
+        'transitous_enabled' => env('TRANSITOUS_ENABLED', true),
+        'transitous_url' => env('TRANSITOUS_URL', 'https://api.transitous.org/api/v6/plan'),
+        'transitous_geocode_url' => env('TRANSITOUS_GEOCODE_URL', 'https://api.transitous.org/api/v1/geocode'),
+        'transitous_timeout' => env('TRANSITOUS_TIMEOUT', 8),
+        'regiojet_enabled' => env('REGIOJET_SEARCH_ENABLED', true),
+        'cache_minutes' => env('TRANSPORT_SEARCH_CACHE_MINUTES', 15),
+        'contact' => env('TRANSPORT_API_CONTACT', env('APP_URL')),
+    ],
 
     // Google Cast (optional feature)
     'google_cast_enabled' => env('GOOGLE_CAST_ENABLED', false),

@@ -59,6 +59,11 @@ class GallerySpace extends Model
         return $this->hasMany(MediaItem::class);
     }
 
+    public function recipes()
+    {
+        return $this->hasMany(Recipe::class);
+    }
+
     public function tags()
     {
         return $this->hasMany(Tag::class);

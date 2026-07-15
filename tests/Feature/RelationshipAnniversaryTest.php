@@ -34,9 +34,12 @@ class RelationshipAnniversaryTest extends TestCase
         $this->assertDatabaseHas('relationship_milestones', ['gallery_space_id' => $space->id, 'title' => 'Začátek našeho vztahu', 'occurred_on' => today()->toDateString()]);
         $this->assertSame(3, DB::table('calendar_events')->where('gallery_space_id', $space->id)->where('type', 'anniversary')->count());
         $this->assertDatabaseCount('event_participants', 6);
+        $this->assertDatabaseHas('event_participants', ['event_id' => DB::table('calendar_events')->where('uuid', $annual['uuid'])->value('id'), 'user_id' => $partner->id, 'role' => 'editor', 'response' => 'accepted']);
         $this->assertGreaterThan(0, DB::table('event_reminders')->count());
 
         $this->actingAs($partner)->getJson('/api/v1/relationship-milestones/relationship-anniversary?gallery_space_id=' . $space->id)
             ->assertOk()->assertJsonPath('started_on', today()->toDateString())->assertJsonCount(3, 'events');
+        $this->patchJson("/api/v1/calendar/events/{$annual['uuid']}", ['description' => 'Společně vybereme oblíbenou vzpomínku.'])
+            ->assertOk()->assertJsonPath('description', 'Společně vybereme oblíbenou vzpomínku.');
     }
 }

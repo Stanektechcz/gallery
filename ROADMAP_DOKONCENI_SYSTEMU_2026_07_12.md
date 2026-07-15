@@ -1,6 +1,6 @@
 # Roadmap dokončení systému galerie, cest a vzpomínek
 
-Stav: 12. 7. 2026. Tento dokument je pracovní plán pro další implementaci. Rozlišuje funkce nasazené, rozpracované a nezapočaté. „Částečně“ znamená, že existuje bezpečné datové jádro nebo prototyp, ale chybí uživatelský postup, automatizace, integrace či dostatečné testy.
+Stav aktualizován: 14. 7. 2026. Tento dokument je pracovní plán pro další implementaci. Rozlišuje funkce nasazené, rozpracované a nezapočaté. „Částečně“ znamená, že existuje bezpečné datové jádro nebo prototyp, ale chybí uživatelský postup, automatizace, integrace či dostatečné testy.
 
 ## Priorita a pravidla
 
@@ -14,13 +14,13 @@ Stav: 12. 7. 2026. Tento dokument je pracovní plán pro další implementaci. R
 
 | Doména | Stav | Co existuje | Co chybí pro plnou funkčnost |
 |---|---|---|---|
-| Kalendář a společné plánování | Částečně | Akce, opakování s výjimkami, dostupnost, šablony, RSVP, úkoly, dárky, ankety, ICS export | ICS import, veřejné svátky ČR, drag-and-drop série, historie změn, odložení připomínek, PWA widget |
+| Kalendář a společné plánování | Částečně | Akce, opakování s výjimkami, dostupnost, šablony, RSVP, úkoly, dárky, ankety, ICS export i partnerský import, české svátky a automatické návrhy prodlouženého volna propojené s cestou | Drag-and-drop série, historie změn, odložení připomínek, PWA widget |
 | Cesty a itinerář | Částečně | Cesty, dny, aktivity, pořadí, rozpočty, doklady, balení, auto, nouzová karta, offline JSON | OCR rezervací, QR/PDF offline balíček, reálné časy přesunů, check-in a živé dopravní změny |
 | Finance | Částečně | Výdaje, limity, kurzy, ruční vyrovnání, automobilové náklady | Podíly/procenta, automatické saldo, kauce, kredity, CSV/XLSX, fond cesty, detekce duplicit |
 | Doprava a mapy | Částečně | Vyhledání jízdenek s fallbackem, filtry, uložené relace, české mapy | Stabilní živé zpoždění/nástupiště, emise/pohodlí, výjezd podle dopravy, aktivní sdílení polohy |
-| Galerie a výběry | Částečně | Deduplikace, série, smart alba, kurátorské výběry, fotoknihy, varování kvality tisku | Výběr nejlepší fotky s vysvětlením, doporučení alb, OCR, úprava času, kontrola zálohy média |
-| Vzpomínky a příběhy | Částečně | Vzpomínky, cesta, časové kapsle, soukromé poznámky, základ příběhu | Hlasový deník, kapitoly cesty, citace, mapa/hudba v příběhu, výroční album, večer se vzpomínkami |
-| Místa | Rozpracováno | Evidence míst, GPS, média, osobní preference pro déšť/cenu/délku/hodnocení | Filtry a kolekce míst, voda/toalety/otevírací doba, rezervace u místa, návrh výletu z okolí |
+| Galerie a výběry | Částečně | Deduplikace, série, smart alba, vysvětlený výběr nejlepšího záběru, ručně potvrzená titulní fotografie, partnerský shortlist s hlasováním, kontrola cloudové kopie a oprava náhledů, fotoknihy, varování kvality tisku | Doporučení nových alb napříč nezařazenými médii, OCR, hromadná úprava času a provozní test obnovy zálohy |
+| Vzpomínky a příběhy | Pokročilé | Vzpomínky, časové kapsle, soukromé poznámky, skutečný hlasový deník s GPS a ručním přepisem, partnerská viditelnost, kapitoly cesty podle dnů, citace, mapa, výroční album a večer se vzpomínkami | Hudební odkazy v příběhu a další kurátorské šablony |
+| Místa | Částečně | Evidence míst a podniků, český našeptávač, GPS, média, preference, rezervace, výlet z výběru míst a partnerské hodnocení návštěv včetně obsluhy, jídel, pití, nabídky, cen a fotografií | Otevírací doba, voda/toalety, pokročilé tematické kolekce a návrh výletu z širšího okolí |
 | Sdílení a rodina | Částečně | Odkazy, hesla, expirace, hostující upload a schvalování | Schvalování hostujících komentářů, přehled stažení, žádost o přístup, rodinné skupiny, pravidla podle místa/data |
 | Mobilní režim | Částečně | PWA, Share Target, „Právě teď“, responzivní obrazovky | Offline fronta, haptika, zástupce, widget, sken dokumentu, privátní obrazovka |
 | Provoz a bezpečnost | Částečně | Hlavičky, relace, audit části akcí, export s vlastnickou kontrolou | Passkeys, 2FA, obnovovací kódy, Web Push/VAPID, test obnovy zálohy, monitoring výkonu |
@@ -90,7 +90,6 @@ Cíl: rychle navrhnout levnou cestu bez klamavých „živých“ cen. Systém m
 
 ### P0 — nejvyšší praktický přínos
 
-- ICS import a deduplikace kalendářů.
 - Podílové výdaje a automatické vyrovnání mezi partnery.
 - OCR/ruční schválení dat z PDF a e-mailových rezervací.
 - Propojení inboxu s dnem a aktivitou v obou směrech.
@@ -101,11 +100,10 @@ Cíl: rychle navrhnout levnou cestu bez klamavých „živých“ cen. Systém m
 
 ### P1 — výrazné rozšíření zážitku
 
-- Hlasový deník s lokálním záznamem, ručním přepisem a GPS.
+- **Dokončeno 15. 7. 2026:** hlasový deník se skutečným lokálním záznamem, ručním přepisem, GPS, soukromým i partnerským režimem a napojením na příběh.
 - Kapitoly příběhu podle dnů, citace z deníku, mapa a hudební odkaz.
 - Automatické výroční album a večer se vzpomínkami.
-- Výběr nejlepší fotografie ze série s vysvětlením.
-- Doporučení alb a titulní fotografie vždy s ručním schválením.
+- Doporučení nových alb napříč nezařazenými médii; titulní fotografie i výběr ze série už mají vysvětlení a ruční schválení přímo v albu.
 - Úprava chybného času fotoaparátu hromadně.
 - Sdílená rodinná skupina, žádost o přístup a přehled stažení.
 - Mobilní kamera do akce a sken dokumentu.
@@ -137,3 +135,154 @@ Tyto body nelze prohlásit za plně hotové bez následného nastavení a povole
 3. Dokončit inteligentní galerii a příběhy.
 4. Dokončit rodinné sdílení a mobilní offline workflow.
 5. Nasadit bezpečnostní a provozní funkce po konfiguraci infrastruktury.
+
+## Dokončená sjednocovací vlna 14. 7. 2026 — od hodnocení k dalšímu zážitku
+
+- Hodnocení podniků, uložená místa, společná přání, preference ceny a historie návštěv nyní vytvářejí jeden vysvětlitelný žebříček návrhů.
+- Návrh rozlišuje návrat na oblíbené místo a první návštěvu, zohledňuje shodu partnerů, přání vrátit se, dobu od poslední návštěvy, low-cost profil, déšť, fotogeničnost a rozpracované plány.
+- Doporučení nikdy znovu nenabízí podnik, který už má aktivní společný plán.
+- U doporučení je vidět důvod, průměrné hodnocení, poznámka pro příště a konkrétní jídlo nebo pití, které si chcete dát znovu.
+- Stejný návrh je bez nové záložky dostupný na dashboardu, v existujícím kalendáři a přímo u hodnocení podniku.
+- Jedno potvrzení vytvoří idempotentně propojenou událost, plán návštěvy, oba účastníky, připomínky, místo, délku návštěvy, kontext doporučení a případnou rezervaci.
+- Kalendář už při použití nápadu nevytváří osiřelou událost bez vazby na místo a plán návštěvy.
+- Pokrytí: integrační testy pořadí doporučení, low-cost filtru, shody partnerů, položky „dát si znovu“, dashboardu, účastníků, připomínek a ochrany proti duplicitnímu naplánování.
+
+## Dokončená sjednocovací vlna 15. 7. 2026 — životní cyklus společného zážitku
+
+- Detail existující kalendářní akce ukazuje jeden postup: uskutečnění, média, společná vzpomínka, ohlédnutí a případné hodnocení podniku.
+- Uložení vzpomínky automaticky uzavře kalendářní akci i plán návštěvy a zachová skutečné datum návštěvy.
+- Vybrané fotografie a videa se současně propojí s akcí, albem zážitku a navštíveným podnikem; není nutné je přidávat na více místech.
+- Album zážitku získá výchozí podnik a vazbu do mapy míst.
+- Společná vzpomínka nese vazbu na kalendářní akci i konkrétní plán návštěvy.
+- Poznámka „příště“ ze společného ohlédnutí se bezpečně přenese k podniku, pokud tam ještě není přesnější poznámka.
+- Dashboard zobrazuje nejnovější nedokončený zážitek, procento dokončení a další konkrétní krok pro právě přihlášeného partnera.
+- Hodnocení podniku označí uskutečněnou návštěvu i související minulou událost jako dokončenou.
+- Uložení vzpomínky z detailu podniku používá stejný kalendářní proces; původní izolovaná cesta zůstává pouze jako kompatibilní fallback pro starší záznamy bez události.
+- Pokrytí: integrační test sleduje jeden zážitek od plánu přes ohlédnutí, média, album a vzpomínku až po rozdílný stav hodnocení každého partnera.
+
+## Dokončená produktová vlna 15. 7. 2026 — společná kuchařka a deník vaření
+
+- Vlastní sdílené recepty obsahují kategorie, kuchyni, obtížnost, popis, dietní štítky, vybavení, zdroj, cenu, výživové hodnoty, uchovávání, ohřev a praktické tipy.
+- Suroviny jsou rozdělené do sekcí a podporují přesné desetinné množství, jednotku, přípravu, náhrady, volitelnost, položku ze spíže a vypnutí škálování.
+- Změna počtu porcí okamžitě přepočítá suroviny, celkovou cenu i nákupní seznam; textové hodnoty jako „dle chuti“ zůstávají beze změny.
+- Postup má samostatné kroky s teplotou, vybavením, tipem, časovačem, zvukovým a vibračním upozorněním.
+- Kuchařský režim nabízí velké responzivní rozhraní, celou obrazovku a Wake Lock pro nevypínání displeje s bezpečným obnovením po návratu do aplikace.
+- Vaření lze naplánovat přímo z receptu; systém vytvoří propojenou událost, oba účastníky a databázovou připomínku.
+- Každé skutečné vaření má vlastní neměnnou historii: datum, autor, porce, délku, cenu, čtyři hodnocení, úspěchy, chyby, změny, zlepšení, partnerův pohled, zbytky a rozhodnutí, zda recept zopakovat.
+- Při zahájení vaření se uloží snapshot přepočítaného receptu, takže historie zůstane srozumitelná i po pozdější úpravě surovin.
+- Recept automaticky získá společné album. Titulní fotografie, průběh i výsledek vaření zůstávají propojené s původní galerií a konkrétním záznamem vaření.
+- Kuchařka je dostupná v hlavní navigaci a příkazové paletě; nejbližší nebo doporučené vaření se propisuje na dashboard a událost v kalendáři odkazuje zpět na recept.
+- Pokrytí: integrační test ověřuje vytvoření receptu, škálování porcí, nákupní seznam, album, titulní fotografii, kalendář, oba účastníky, připomínky, kuchařský režim backendu, deník, hodnocení a přístup partnera.
+
+## Dokončená sjednocovací vlna 15. 7. 2026 — jídlo napříč kalendářem a cestou
+
+- Recept už není izolovaná funkce: lze jej přidat přímo do existující kalendářní akce nebo konkrétního dne cesty bez další hlavní záložky.
+- Jedno naplánování vytvoří propojený záznam jídla, vaření, kalendářní kontext a u cesty také blok itineráře, oba účastníky a připomínky.
+- Společný nákup slučuje shodné suroviny z více receptů, respektuje počet porcí, jednotku, textové množství, volitelnost a stav domácí zásoby.
+- Zaškrtnutí a odpovědnost se neukládají do paralelního seznamu: u akce vznikne existující společný úkol, u cesty položka existujícího balicího seznamu v kategorii jídlo.
+- Odhad ceny receptu se přepočítá podle porcí a kurzu a vstupuje do kategorie Jídlo ve stejném low-cost rozpočtu, denním limitu a varování cesty.
+- Panel ukazuje vyčerpání rozpočtu na jídlo, průběh nákupu, rozdělení mezi partnery a umí zkopírovat pouze zbývající položky.
+- Cestovní obrazovka „Právě teď“ zobrazí recept daného dne a otevře jeho mobilní kuchařský postup.
+- Dokončení nebo zrušení vaření aktualizuje jídelní plán. Běžná rodičovská akce se kvůli uvaření automaticky neuzavře; uzavírají se pouze události vytvořené samotným plánem vaření.
+- Odebrání jídla uklidí generovaný blok, událost i již nepotřebné nákupní úkoly/balicí položky, aniž smaže původní akci partnerů.
+- Pokrytí: dva integrační scénáře ověřují škálování, nákup, přiřazení, itinerář, kalendář, cestovní režim, balení, rozpočet, dokončení vaření i bezpečný úklid vazeb.
+
+## Dokončená sjednocovací vlna 15. 7. 2026 — partnerský puls a sdílená zodpovědnost
+
+- Dashboard a týdenní přehled používají jednu koordinační vrstvu nad původními úkoly kalendáře, balením, cestovním inboxem, doklady a dárky; nevzniká další samostatná agenda ani kopie úkolů.
+- Dokončení nebo přiřazení v pulsu mění přímo zdrojovou položku a zachovává odkaz do jejího plného kontextu.
+- Stejná zodpovědnost je viditelná a upravitelná také přímo v existujícím panelu dárků a v připravenosti konkrétní cesty; všechny obrazovky pracují s totožným stavem.
+- Otevřené kroky lze přiřadit pouze aktivním členům stejného společného prostoru. Přehled ukazuje moje, nepřiřazené, zpožděné a týdenní kroky i rozložení zátěže mezi partnery.
+- Osobní odložení skryje položku jen přihlášenému uživateli, nemění skutečný stav úkolu a nezkresluje partnerovu pracovní zátěž.
+- Denní partnerský check-in obsahuje náladu, energii, kapacitu a dnešní zaměření. Může být sdílený nebo soukromý a ovlivňuje doporučení pro rozdělení úkolů.
+- Doporučení upozorní nejprve na nepřiřazené kroky a nízkou kapacitu partnera, následně na nevyvážené rozdělení práce.
+- Soukromé kalendářní akce a jejich úkoly zůstávají skryté partnerům bez oprávnění; režim pouze pro čtení blokuje všechny změny.
+- Týdenní přehled už nenačítá všechny zdroje metodou „všechno nebo nic“ — dostupné části zůstanou funkční i při dočasném výpadku jedné služby.
+- Rozhraní je responzivní: rychlý puls je vložený na dashboardu, plná správa zodpovědnosti je součástí existujícího týdenního plánování.
+- Pokrytí: integrační testy ověřují všech pět zdrojů, ochranu soukromé akce, přiřazení, dokončení, osobní odložení, sdílený i soukromý check-in, cizího uživatele a režim pouze pro čtení.
+
+## Dokončená sjednocovací vlna 15. 7. 2026 — partnerský večer se vzpomínkami
+
+- Návrhy „Tento den“, výročí cest, oblíbené momenty, místa a měsíční výběry lze naplánovat přímo ve stávající stránce Vzpomínky; nevznikla další hlavní záložka.
+- Systém najde nejbližší společný večer bez kolize, vytvoří jednu kalendářní akci, oba účastníky, připomínky a volitelné každoroční opakování.
+- Fotografie a videa se nekopírují. Jediný sdílený kurátorský výběr zachovává původní galerii a zaznamená hlas každého partnera u konkrétního momentu.
+- Každý partner doplní vlastní náladu a pohled. Rozhraní funguje jako mobilní společný rituál se spuštěním, průběžným výběrem a jednoznačným dokončením.
+- Dokončení atomicky vytvoří sdílené album, titulní fotografii, společnou vzpomínku, oba partnerské pohledy, přílohy kalendářní akce a frontu synchronizace alba na Drive.
+- Stejný stav je vidět na dashboardu, v detailu kalendářní akce a ve Vzpomínkách. Původní API pro plánování již uložených vzpomínek zůstává kompatibilní a při dostupných médiích používá nový životní cyklus.
+- Oprávnění jsou omezena na členy společného prostoru; režim pouze pro čtení blokuje hlasování, spuštění, hodnocení i dokončení.
+- Pokrytí: integrační test sleduje celý tok galerie → kalendář → oba partneři → výběr → ohlédnutí → album → Drive → společná vzpomínka a ověřuje idempotenci i izolaci cizího prostoru.
+
+## Dokončená sjednocovací vlna 15. 7. 2026 — cestovní podklady přímo v itineráři
+
+- Cestovní inbox už není samostatnou hlavní záložkou. Zachycené odkazy, rezervace a poznámky se spravují přímo v konkrétní cestě a dni.
+- V plánu dne lze nový podklad rovnou vytvořit, ponechat jej jako referenci nebo jej jedním krokem převést na upravitelnou aktivitu itineráře.
+- Rezervace se automaticky stane typem „Rezervace“, poznámka typem „Poznámka“ a ostatní podklady běžnou aktivitou; následně lze doplnit čas, místo a cenu.
+- Zdrojový odkaz a původní poznámka zůstávají viditelné přímo u aktivity. Nedochází ke kopírování ani ztrátě kontextu.
+- Převod je idempotentní a opakované volání nevytvoří další blok ani nepřepíše ruční úpravy programu.
+- Podklad přiřazený jiné cestě nelze přesunout skrytým API voláním; den, aktivita, cesta i společný prostor se ověřují společně.
+- Podklady vytvořené přímo u cesty dostávají stav „přiřazeno“, zatímco obecné nápady zůstávají v inboxu do jejich použití.
+- Plán cesty nově funguje správně i v případě, že je uživatel členem více partnerských prostorů.
+- Původní stránka cestovního inboxu zůstává jako kompatibilní cesta pro starší odkazy, ale není samostatnou položkou hlavní navigace.
+- Pokrytí: integrační test ověřuje zachycení rezervace, převod, zdroj u aktivity, idempotenci, zachování ruční úpravy a izolaci jiné cesty.
+
+## Dokončená sjednocovací vlna 15. 7. 2026 — výroční rekapitulace vztahu
+
+- Datum začátku vztahu nyní určuje přesné období jednotlivých roků vztahu; výroční výběr se neřídí nepřesným kalendářním rokem.
+- Aplikace navrhne oblíbené a hodnocené fotografie a videa a současně zachová zastoupení různých měsíců. Výběr, pořadí i titulní médium vždy potvrzuje uživatel.
+- Jedno potvrzení vytvoří nebo synchronizuje právě jedno společné výroční album, oprávnění obou partnerů, příběh členěný podle měsíců a oblíbenou společnou vzpomínku.
+- Album je propojené s opakovanou výroční událostí v kalendáři, dostupné ze vzpomínek a navržené na dashboardu pouze do chvíle potvrzení.
+- Opakované uložení nevytváří duplicity. Aktualizuje média, titulní fotografii a vzpomínku, ale nepřepisuje ručně upravené bloky příběhu.
+- Výběr nepřijme skrytá, smazaná ani časově nesouvisející média a režim pouze pro čtení blokuje zápis.
+- Pokrytí: integrační test období druhého roku vztahu, návrhu médií, alba, příběhu, vzpomínky, kalendáře, partnerských oprávnění, dashboardu a idempotentní synchronizace.
+
+## Dokončená sjednocovací vlna 15. 7. 2026 — chytré zařazení společných zážitků
+
+- Nezařazené fotografie a videa se automaticky seskupují do souvislých zážitků podle času a výrazné změny polohy; skrytá, smazaná a již zařazená média do návrhů nevstupují.
+- Každý návrh je vysvětlitelný: systém ukáže vazbu na sdílenou událost, cestu nebo uložené místo, případně jasně uvede, že rozhodl společný časový úsek.
+- Návrhy jsou přímo na stránce stávajících alb a jako nejbližší akce na dashboardu. Nevznikla nová hlavní záložka ani paralelní galerie.
+- Před potvrzením lze změnit název a popis, vyřadit jednotlivé snímky či videa a zvolit titulní médium. Automatika nikdy nepřesune obsah bez souhlasu uživatele.
+- Potvrzení doplní existující album události nebo cesty, pokud už existuje; jinak vytvoří jedno sdílené album s oprávněním obou partnerů.
+- Ve stejné transakci se média propojí s událostí, cestou a místem, vytvoří se příběhové bloky a volitelná společná vzpomínka. Nové album se následně zařadí do synchronizace na Drive.
+- Odmítnuté a přijaté návrhy se uchovávají pomocí stabilního otisku a znovu se nenabízejí. Opakované potvrzení je idempotentní a nezdvojí album ani média.
+- MySQL indexy používají explicitní krátké názvy, aby migrace nepřekročila limit délky identifikátorů.
+- Dashboard používá odlehčený výpočet bez načítání stovek náhledů; plná média se načtou až na stránce alb.
+- Pokrytí: integrační testy ověřují rozpoznání události, vyloučení skrytých a osamocených médií, dashboard, album, příběh, vzpomínku, partnerská oprávnění, přílohy kalendáře, idempotenci, odmítnutí i ochranu proti vložení cizího média.
+
+## Dokončená sjednocovací vlna 15. 7. 2026 — společný Revolut účet a skutečné finance cest
+
+- Revolut je připojen přes read-only PSD2 GoCardless Bank Account Data; alternativou a historickou zálohou zůstává plnohodnotný import CSV/XLSX.
+- Účty, zůstatkové snapshoty, transakce, importy, kategorie a vazby na cesty mají stabilní databázovou historii. API synchronizace ani překrývající se výpisy nevytvářejí duplicity.
+- Citlivé externí identifikátory, majitelé účtu, protistrany, obchodníci, popisy a původní payloady jsou šifrované; IBAN je uložen pouze maskovaně.
+- Platby se párují podle období, druhu, itineráře, rezervace a uloženého místa. Potvrzená platba vytváří skutečný výdaj ve stávajícím rozpočtu, kalendářní připravenosti a low-cost limitech.
+- Vlastní převody nevytvářejí výdaj, vratky mají vlastní souhrn, platby před/po cestě se rozlišují a nejisté návrhy vyžadují potvrzení.
+- V plánu cesty je zůstatek před/po výletu, denní graf, kategorie, obchodníci, vratky, poplatky a transakce k rozhodnutí. Dashboard používá stejný stav a není vytvořena další hlavní záložka.
+- Administrace obsahuje klíče, test poskytovatele, bankovní souhlas, ruční synchronizaci, importy a pravidla „navrhnout / zahrnout / vyloučit“.
+- Ruční rozhodnutí se nesmí automaticky přepsat. Bankovní výdaj nelze smazat mimo bankovní panel; vyřazení odstraní rozpočtovou vazbu, ale uchová původní historii.
+- Synchronizace běží každých šest hodin ve frontě, používá zámky proti souběhu, bezpečně obnovuje token a při odpojení odvolává poskytovatelský souhlas, pokud je dostupný.
+- Pokrytí: OAuth stav a scope, šifrování, společný účet, API idempotence, výpisová deduplikace, zůstatky před/po cestě, pravidla, vratka, vlastní převod, oprávnění partnerů a režim pouze pro čtení.
+
+## Dokončená sjednocovací vlna 15. 7. 2026 — rezervace jako součást celé cesty
+
+- Detail cesty obsahuje jeden responzivní vstup pro PDF, fotografii, e-mail i vložený text jízdenky, ubytování, pojištění nebo jiné rezervace; nevznikla další hlavní záložka.
+- PDF a obrázky lze zpracovat bez placené služby lokálními nástroji `pdftotext` a Tesseract (`ces+eng`). Pokud na serveru nejsou dostupné nebo soubor text neobsahuje, zůstane vždy plně funkční ruční kontrola.
+- Parser navrhuje typ, poskytovatele, kód, začátek a konec, trasu, místo, cenu a měnu. Ukazuje jistotu a výřez zdroje, ale bez výslovného potvrzení uživatele nic dalšího nevytvoří.
+- Potvrzení atomicky propojí existující kontrolu dokladů, cestovní inbox, konkrétní den a blok itineráře, kalendářní rezervaci, oba partnery, privátní přílohu a databázová/push připomenutí.
+- Cena rezervace se stane plánovanou cenou bloku itineráře, čímž vstupuje do stejného přehledu dne a low-cost plánování; nevzniká falešný skutečný výdaj.
+- Potvrzená data jsou součástí existující offline cestovní karty a jejího tisknutelného HTML/PDF výstupu včetně časů, trasy, místa, kódu a ceny.
+- Původní soubor je uložen v privátním lokálním úložišti pod náhodným názvem, rozpoznaný zdrojový text je v databázi šifrovaný a soubor se stahuje pouze přes autorizovaný endpoint člena společného prostoru.
+- Shodný soubor nebo text se v rámci jedné cesty deduplikuje podle SHA-256. Opakované potvrzení aktualizuje stejné navázané záznamy a nevytváří nové aktivity, události, doklady ani remindery.
+- Nepotvrzený import lze bezpečně zahodit; potvrzený nelze smazat bez kontroly navázaných dat.
+- Pokrytí: integrační test ověřuje parser, ochranu proti falešné ceně z data, deduplikaci, doklad, itinerář, inbox, kalendář, oba partnery, remindery, offline kartu, idempotenci a izolaci cizího uživatele.
+
+## Dokončená sjednocovací vlna 15. 7. 2026 — skutečné hlasové vzpomínky na cestě
+
+- Režim „Právě teď“ už nezaměňuje textový diktát za hlasovou vzpomínku. Nabízí zvlášť skutečné nahrávání zvuku, diktování textu a uložení samotné polohy.
+- Nahrávání používá vestavěný `MediaRecorder`, podporuje běžné mobilní formáty WebM/Opus, MP4/M4A, OGG, MP3 a WAV, ukazuje délku, nabízí náhled před uložením a bezpečně zastaví mikrofon po deseti minutách.
+- Před uložením lze doplnit ruční přepis nebo popis, náladu a aktuální GPS polohu. Stejná volba „mezi námi / jen pro mě“ řídí deník, přístup partnera i výsledný příběh.
+- Audio je uložené pod náhodným názvem v privátním úložišti. Streamování podporuje prohlížečové přehrávání a rozsahové požadavky, ale vždy znovu ověří členství v cestě a soukromé vlastnictví.
+- Společná nahrávka se přehrává přímo v existujícím cestovním deníku a jako hlasový moment v příběhu existujícího rekapitulačního alba. Nevznikla další audio galerie ani hlavní záložka.
+- Pokud rekapitulační album vznikne až později, úvodní generování příběhu přenese i dříve uložené hlasové momenty. Novější nahrávky se do existujícího příběhu doplňují průběžně.
+- Změna přepisu, viditelnosti nebo zařazení do příběhu aktualizuje stejný generovaný blok. Soukromý záznam se z příběhu odstraní, ale zůstane vlastníkovi; opětovné sdílení jej bezpečně obnoví.
+- Smazání zápisu odstraní databázovou vazbu, privátní zvukový soubor i generovaný příběhový blok. Režim pouze pro čtení a cizí prostor zápis i přehrání blokují.
+- Frontend uvolňuje mikrofon, časovače a dočasné Blob URL při zastavení i opuštění stránky, takže nahrávání nezůstane skrytě aktivní.
+- Pokrytí: integrační test ověřuje nahrání, metadata, privátní soubor, deník, partnerovo přehrání, příběh, ruční přepis, přepnutí na soukromý režim, opětovné sdílení, úplný úklid, odmítnutí neplatného formátu a read-only ochranu.

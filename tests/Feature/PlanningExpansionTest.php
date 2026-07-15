@@ -85,6 +85,17 @@ class PlanningExpansionTest extends TestCase
         $this->getJson("/api/v1/trips/{$tripId}/emergency-card")->assertOk()->assertJsonPath('accommodation_name', 'Hotel');
     }
 
+    public function test_planning_a_saved_place_invites_every_partner_into_the_linked_calendar_event(): void
+    {
+        $place = $this->postJson('/api/v1/places', ['name' => 'Infinit Maximus', 'type' => 'business', 'city' => 'Brno'])->assertCreated()->json();
+        $plan = $this->postJson("/api/v1/places/{$place['id']}/plans", ['planned_for' => now()->addWeek()->toDateString(), 'notes' => 'Vzít si župan.'])->assertCreated()->json();
+
+        $this->assertDatabaseHas('event_participants', ['event_id' => $plan['calendar_event_id'], 'user_id' => $this->owner->id, 'role' => 'owner']);
+        $this->assertDatabaseHas('event_participants', ['event_id' => $plan['calendar_event_id'], 'user_id' => $this->partner->id, 'role' => 'editor']);
+        $eventUuid = DB::table('calendar_events')->where('id', $plan['calendar_event_id'])->value('uuid');
+        $this->actingAs($this->partner)->getJson("/api/v1/calendar/events/{$eventUuid}")->assertOk()->assertJsonPath('title', 'Infinit Maximus');
+    }
+
     public function test_skipped_recurrence_exception_is_not_returned_by_calendar(): void
     {
         $startsAt = now()->addDays(10)->setTime(18, 0);
@@ -156,6 +167,147 @@ class PlanningExpansionTest extends TestCase
         $this->putJson("/api/v1/trips/{$tripId}/savings-goal", ['target_amount' => 5000, 'saved_amount' => 1250, 'monthly_contribution' => 500])->assertOk()->assertJsonPath('saved_amount', 1250);
     }
 
+    public function test_low_cost_advisor_unifies_trip_budget_saved_places_and_calendar_tasks(): void
+    {
+        $start = now()->addMonth()->startOfDay();
+        $tripId = DB::table('trips')->insertGetId([
+            'gallery_space_id' => $this->space->id,
+            'created_by' => $this->owner->id,
+            'name' => 'Úsporná Vídeň',
+            'start_date' => $start->toDateString(),
+            'end_date' => $start->copy()->addDays(2)->toDateString(),
+            'budget' => 3000,
+            'currency' => 'CZK',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $eventUuid = (string) Str::uuid();
+        $eventId = DB::table('calendar_events')->insertGetId([
+            'uuid' => $eventUuid,
+            'gallery_space_id' => $this->space->id,
+            'created_by' => $this->owner->id,
+            'trip_id' => $tripId,
+            'title' => 'Úsporná Vídeň',
+            'type' => 'trip',
+            'status' => 'planned',
+            'starts_at' => $start,
+            'ends_at' => $start->copy()->addDays(2),
+            'timezone' => 'Europe/Prague',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $this->postJson('/api/v1/places', ['name' => 'Levná vyhlídka', 'type' => 'custom', 'city' => 'Vídeň', 'price_level' => 1])->assertCreated();
+        $this->postJson("/api/v1/trips/{$tripId}/expenses", ['title' => 'Apartmán', 'category' => 'accommodation', 'amount' => 1800, 'state' => 'planned'])->assertCreated();
+        $this->postJson("/api/v1/trips/{$tripId}/expenses", ['title' => 'Jídlo', 'category' => 'food', 'amount' => 900, 'state' => 'actual', 'occurred_at' => $start])->assertCreated();
+
+        $response = $this->putJson("/api/v1/trips/{$tripId}/budget-plan", [
+            'budget_profile' => 'economy',
+            'budget' => 3000,
+            'daily_budget_limit' => 1000,
+            'apply_defaults' => true,
+            'sync_calendar_tasks' => true,
+        ])->assertOk()
+            ->assertJsonPath('advisor.profile', 'economy')
+            ->assertJsonPath('advisor.days_count', 3)
+            ->assertJsonPath('advisor.projected', 2700)
+            ->assertJsonPath('advisor.categories.1.category', 'accommodation')
+            ->assertJsonPath('advisor.categories.1.limit', 1050)
+            ->assertJsonPath('advisor.saved_place_suggestions.0.name', 'Levná vyhlídka')
+            ->assertJsonPath('automation.limits_applied', 6)
+            ->assertJsonPath('automation.calendar_tasks.event_uuid', $eventUuid);
+
+        $this->assertSame('over', $response->json('advisor.status'));
+        $this->assertDatabaseHas('trips', ['id' => $tripId, 'budget_profile' => 'economy', 'daily_budget_limit' => 1000]);
+        $this->assertDatabaseHas('event_tasks', ['event_id' => $eventId, 'title' => 'Zkontrolovat rozpočet: Ubytování']);
+        $taskCount = DB::table('event_tasks')->where('event_id', $eventId)->count();
+
+        $this->putJson("/api/v1/trips/{$tripId}/budget-plan", ['apply_defaults' => true, 'sync_calendar_tasks' => true])->assertOk()->assertJsonPath('automation.limits_applied', 0);
+        $this->assertSame($taskCount, DB::table('event_tasks')->where('event_id', $eventId)->count(), 'Automatizace nesmí při opakovaném spuštění duplikovat úkoly.');
+        $this->getJson("/api/v1/trips/{$tripId}/budget-advisor")->assertOk()->assertJsonPath('projected', 2700);
+        $this->getJson("/api/v1/trips/{$tripId}/readiness")->assertOk()->assertJsonPath('budget_advisor.profile', 'economy');
+    }
+
+    public function test_preparation_timeline_connects_transport_stay_documents_vehicle_and_partner_reminders(): void
+    {
+        $start = now()->addDays(30)->setTime(8, 0)->startOfMinute();
+        $end = $start->copy()->addDays(2)->setTime(20, 0);
+        $tripId = DB::table('trips')->insertGetId([
+            'gallery_space_id' => $this->space->id,
+            'created_by' => $this->owner->id,
+            'name' => 'Propojená cesta',
+            'start_date' => $start->toDateString(),
+            'end_date' => $end->toDateString(),
+            'timezone' => 'Europe/Prague',
+            'currency' => 'CZK',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $dayId = DB::table('trip_days')->insertGetId(['trip_id' => $tripId, 'date' => $start->toDateString(), 'title' => 'Den 1', 'sort_order' => 0, 'created_at' => now(), 'updated_at' => now()]);
+        $eventId = DB::table('calendar_events')->insertGetId([
+            'uuid' => (string) Str::uuid(),
+            'gallery_space_id' => $this->space->id,
+            'created_by' => $this->owner->id,
+            'trip_id' => $tripId,
+            'title' => 'Propojená cesta',
+            'type' => 'trip',
+            'status' => 'planned',
+            'starts_at' => $start,
+            'ends_at' => $end,
+            'timezone' => 'Europe/Prague',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $transport = $this->postJson("/api/v1/trips/{$tripId}/travel-choices/transport", [
+            'title' => 'Vlak s přestupem',
+            'provider' => 'Transitous',
+            'amount' => 1200,
+            'estimated_minutes' => 180,
+            'transport_modes' => ['train'],
+            'details' => [
+                'departure' => $start->toIso8601String(),
+                'arrival' => $start->copy()->addHours(3)->toIso8601String(),
+                'legs' => [
+                    ['from' => 'Brno', 'to' => 'Břeclav', 'departure' => $start->toIso8601String(), 'arrival' => $start->copy()->addHour()->toIso8601String()],
+                    ['from' => 'Břeclav', 'to' => 'Vídeň', 'departure' => $start->copy()->addHour()->addMinutes(8)->toIso8601String(), 'arrival' => $start->copy()->addHours(3)->toIso8601String()],
+                ],
+            ],
+        ])->assertCreated()->json();
+        $this->postJson("/api/v1/trips/{$tripId}/travel-choices/accommodation", [
+            'trip_day_id' => $dayId,
+            'title' => 'Hotel Central',
+            'amount' => 2500,
+            'reference' => 'BOOK-123',
+            'checkin' => $start->toDateString(),
+            'checkout' => $end->toDateString(),
+        ])->assertCreated();
+        $document = $this->postJson("/api/v1/trips/{$tripId}/documents", ['type' => 'id_card', 'title' => 'Občanský průkaz', 'status' => 'ready', 'expires_on' => $start->copy()->addDay()->toDateString()])->assertCreated()->json();
+        $vignette = $this->postJson("/api/v1/trips/{$tripId}/vehicle-costs", ['type' => 'vignette', 'title' => 'Rakouská známka', 'amount' => 300, 'valid_until' => $start->copy()->addDay()->toDateString()])->assertCreated()->json();
+
+        $timeline = $this->getJson("/api/v1/trips/{$tripId}/preparation-timeline")
+            ->assertOk()
+            ->assertJsonPath('summary.selected_transport', 1)
+            ->assertJsonPath('summary.selected_accommodation', 1)
+            ->assertJsonPath('connection_checks.0.minutes', 8)
+            ->assertJsonPath('connection_checks.0.risk', 'critical')
+            ->json();
+        $actionKeys = collect($timeline['actions'])->pluck('key');
+        $this->assertTrue($actionKeys->contains("transfer_{$transport['id']}_0"));
+        $this->assertTrue($actionKeys->contains("document_expiry_{$document['id']}"));
+        $this->assertTrue($actionKeys->contains("vignette_expiry_{$vignette['id']}"));
+        $this->assertDatabaseHas('event_tasks', ['event_id' => $eventId, 'automation_source' => 'trip_preparation', 'automation_key' => "transfer_{$transport['id']}_0"]);
+        $this->assertDatabaseHas('event_reminders', ['event_id' => $eventId, 'user_id' => $this->owner->id, 'automation_key' => 'trip_start_1440']);
+        $this->assertDatabaseHas('event_reminders', ['event_id' => $eventId, 'user_id' => $this->partner->id, 'automation_key' => 'trip_start_1440']);
+
+        $taskCount = DB::table('event_tasks')->where('event_id', $eventId)->where('automation_source', 'trip_preparation')->count();
+        $reminderCount = DB::table('event_reminders')->where('event_id', $eventId)->where('automation_source', 'trip_preparation')->count();
+        $this->postJson("/api/v1/trips/{$tripId}/preparation-timeline/sync")->assertOk()->assertJsonPath('preparation.connection_checks.0.risk', 'critical');
+        $this->assertSame($taskCount, DB::table('event_tasks')->where('event_id', $eventId)->where('automation_source', 'trip_preparation')->count());
+        $this->assertSame($reminderCount, DB::table('event_reminders')->where('event_id', $eventId)->where('automation_source', 'trip_preparation')->count());
+        $this->getJson("/api/v1/trips/{$tripId}/readiness")->assertOk()->assertJsonPath('preparation.summary.risky_connections', 1);
+        $this->getJson("/api/v1/trips/{$tripId}/offline-package")->assertOk()->assertJsonPath('preparation.connection_checks.0.risk', 'critical');
+    }
+
     public function test_relationship_milestones_share_anniversaries_without_exposing_private_entries(): void
     {
         $shared = $this->postJson('/api/v1/relationship-milestones', [
@@ -210,6 +362,9 @@ class PlanningExpansionTest extends TestCase
         $gift = $this->postJson('/api/v1/calendar/gifts', ['gallery_space_id' => $this->space->id, 'title' => 'Kniha', 'due_date' => now()->toDateString(), 'reminder_days' => [0]])->assertCreated()->json();
         $this->putJson('/api/v1/calendar/day-note', ['gallery_space_id' => $this->space->id, 'content' => 'Nezapomenout na květiny'])->assertOk();
         $this->getJson('/api/v1/calendar/day-note?gallery_space_id=' . $this->space->id)->assertOk()->assertJsonPath('content', 'Nezapomenout na květiny');
+        $tomorrow = now()->addDay()->toDateString();
+        $this->putJson('/api/v1/calendar/day-note', ['gallery_space_id' => $this->space->id, 'date' => $tomorrow, 'content' => 'Koupit lístky na zítřek'])->assertOk();
+        $this->getJson('/api/v1/calendar/day-note?gallery_space_id=' . $this->space->id . '&date=' . $tomorrow)->assertOk()->assertJsonPath('content', 'Koupit lístky na zítřek');
         $this->assertDatabaseMissing('shared_day_notes', ['encrypted_content' => 'Nezapomenout na květiny']);
         $this->artisan(SendPlanningFollowupsCommand::class)->assertSuccessful();
         $this->assertDatabaseHas('gift_ideas', ['id' => $gift['id']]);

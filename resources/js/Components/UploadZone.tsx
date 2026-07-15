@@ -27,7 +27,7 @@ function ok(file: File): boolean {
             'mp4','mov','webm','m4v','mkv','avi','mts','m2ts'].includes(ext);
 }
 
-interface Props { albumId: number | null; onUploadComplete?: () => void; }
+interface Props { albumId: number | null; onUploadComplete?: (mediaUuids?: string[]) => void; }
 
 export default function UploadZone({ albumId, onUploadComplete }: Props) {
     const [dragging, setDragging] = useState(false);
@@ -40,8 +40,8 @@ export default function UploadZone({ albumId, onUploadComplete }: Props) {
         if (!onUploadComplete) return;
 
         const onChange = (event: Event) => {
-            const uploads = (event as CustomEvent).detail.uploads as Array<{ id: string; albumId: number | null; status: string }>;
-            const completedHere = uploads.some(upload =>
+            const uploads = (event as CustomEvent).detail.uploads as Array<{ id: string; albumId: number | null; status: string; mediaUuid?: string }>;
+            const newlyCompleted = uploads.filter(upload =>
                 upload.albumId === albumId
                 && ['done', 'duplicate'].includes(upload.status)
                 && !reported.current.has(upload.id),
@@ -51,7 +51,7 @@ export default function UploadZone({ albumId, onUploadComplete }: Props) {
                 .filter(upload => upload.albumId === albumId && ['done', 'duplicate'].includes(upload.status))
                 .forEach(upload => reported.current.add(upload.id));
 
-            if (completedHere) onUploadComplete();
+            if (newlyCompleted.length) onUploadComplete(newlyCompleted.map(upload => upload.mediaUuid).filter((uuid): uuid is string => Boolean(uuid)));
         };
 
         uploadManager.addEventListener('change', onChange);
@@ -83,10 +83,10 @@ export default function UploadZone({ albumId, onUploadComplete }: Props) {
             ].join(' ')}>
             <Upload size={28} className={dragging ? 'text-[var(--color-accent)]' : 'text-[var(--color-text-secondary)]'}/>
             <p className="text-sm text-white font-medium">
-                {dragging ? 'PusĹĄte soubory sem' : queued ? `âś“ ${queued} souborĹŻ pĹ™idĂˇno` : 'PĹ™etĂˇhnÄ›te nebo kliknÄ›te'}
+                {dragging ? 'Pusťte soubory sem' : queued ? `✓ ${queued} souborů přidáno` : 'Přetáhněte nebo klikněte'}
             </p>
             <p className="text-xs text-[var(--color-text-secondary)]">Fotky, videa, RAW · JPG PNG HEIC AVIF CR2 NEF ARW DNG MP4 MOV MKV…</p>
-            <p className="text-[10px] text-[var(--color-text-secondary)] opacity-60">Kontrola duplicit Â· pokraÄŤovĂˇnĂ­ po vĂ˝padku</p>
+            <p className="text-[10px] text-[var(--color-text-secondary)] opacity-60">Kontrola duplicit · pokračování po výpadku</p>
             <input ref={inputRef} type="file" multiple accept={ACCEPTED.join(',')} className="sr-only"
                 onChange={e => { process(e.target.files); (e.target as HTMLInputElement).value = ''; }}/>
         </div>
