@@ -10,8 +10,10 @@ use App\Models\BankTransaction;
 use App\Models\GallerySpace;
 use App\Services\Banking\BankingIntegrationService;
 use App\Services\Banking\RevolutStatementImportService;
+use App\Services\Banking\SpaceFinancialOverviewService;
 use App\Services\Banking\TripBankReconciliationService;
 use App\Services\Banking\TripFinancialInsightService;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -19,13 +21,25 @@ use Illuminate\Support\Facades\DB;
 class BankingController extends Controller
 {
     public function __construct(private readonly BankingIntegrationService $banking, private readonly RevolutStatementImportService $imports,
-        private readonly TripFinancialInsightService $insights, private readonly TripBankReconciliationService $reconciliation) {}
+        private readonly TripFinancialInsightService $insights, private readonly TripBankReconciliationService $reconciliation,
+        private readonly SpaceFinancialOverviewService $financialOverview) {}
 
     public function overview(Request $request): JsonResponse
     {
         $space = $this->space($request, $request->integer('gallery_space_id'));
 
         return response()->json($this->insights->spaceOverview($space));
+    }
+
+    public function dashboard(Request $request): JsonResponse
+    {
+        $data = $request->validate(['gallery_space_id' => 'required|integer', 'from' => 'nullable|date', 'to' => 'nullable|date',
+            'account_uuid' => 'nullable|uuid', 'category' => 'nullable|in:all,transport,accommodation,food,activities,insurance,other',
+            'direction' => 'nullable|in:all,debit,credit', 'status' => 'nullable|in:all,booked,pending,cancelled',
+            'query' => 'nullable|string|max:160', 'page' => 'nullable|integer|min:1', 'per_page' => 'nullable|integer|between:10,100']);
+        $space = $this->space($request, (int) $data['gallery_space_id']);
+
+        return response()->json($this->financialOverview->dashboard($space, $data));
     }
 
     public function institutions(Request $request): JsonResponse
@@ -102,6 +116,65 @@ class BankingController extends Controller
         return response()->json(['deleted' => true]);
     }
 
+    public function updateTransaction(Request $request, string $uuid): JsonResponse
+    {
+        $this->write($request);
+        $data = $request->validate(['category' => 'sometimes|required|in:transport,accommodation,food,activities,insurance,other',
+            'trip_action' => 'sometimes|required|in:suggest,include,exclude']);
+        $transaction = $this->transaction($request, $uuid);
+        $updates = $data;
+        if (array_key_exists('category', $data)) {
+            $updates['category_is_manual'] = true;
+        }
+        $transaction->update($updates);
+
+        $links = DB::table('trip_bank_transactions')->where('bank_transaction_id', $transaction->id)->get();
+        foreach ($links as $link) {
+            $linkUpdates = [];
+            if (isset($data['category'])) {
+                $linkUpdates['category'] = $data['category'];
+            }
+            if (($data['trip_action'] ?? null) === 'exclude') {
+                $linkUpdates['status'] = 'excluded';
+            }
+            if ($linkUpdates) {
+                $this->reconciliation->updateLink($link, $transaction, $linkUpdates, $request->user()->id);
+            }
+        }
+        if (($data['trip_action'] ?? null) !== 'exclude') {
+            $this->reconciliation->reconcile($transaction->account->connection->space, $transaction);
+        }
+        AuditLog::record('bank.transaction.update', $transaction, $data);
+
+        return response()->json(['updated' => true, 'uuid' => $transaction->uuid]);
+    }
+
+    public function linkTransactionToTrip(Request $request, string $uuid): JsonResponse
+    {
+        $this->write($request);
+        $data = $request->validate(['trip_id' => 'required|integer', 'allocated_amount' => 'nullable|numeric|min:0|max:999999999',
+            'category' => 'nullable|in:transport,accommodation,food,activities,insurance,other']);
+        $transaction = $this->transaction($request, $uuid);
+        $spaceId = $transaction->account->connection->gallery_space_id;
+        $trip = DB::table('trips')->where('id', $data['trip_id'])->where('gallery_space_id', $spaceId)->firstOrFail();
+        $date = $transaction->booked_at->copy()->startOfDay();
+        $timing = $date->lt(Carbon::parse($trip->start_date)) ? 'before' : ($date->gt(Carbon::parse($trip->end_date)) ? 'after' : 'during');
+        $existing = DB::table('trip_bank_transactions')->where('trip_id', $trip->id)->where('bank_transaction_id', $transaction->id)->first();
+        if (! $existing) {
+            $id = DB::table('trip_bank_transactions')->insertGetId(['trip_id' => $trip->id, 'bank_transaction_id' => $transaction->id,
+                'linked_by' => $request->user()->id, 'status' => 'suggested', 'confidence' => 100,
+                'reason' => 'Ručně přiřazeno ve finančním přehledu.', 'category' => $data['category'] ?? $transaction->category,
+                'timing' => $timing, 'created_at' => now(), 'updated_at' => now()]);
+            $existing = DB::table('trip_bank_transactions')->find($id);
+        }
+        $transaction->update(['trip_action' => 'include']);
+        $updated = $this->reconciliation->updateLink($existing, $transaction, ['status' => 'confirmed',
+            'category' => $data['category'] ?? $transaction->category, 'allocated_amount' => $data['allocated_amount'] ?? abs((float) $transaction->amount)], $request->user()->id);
+        AuditLog::record('bank.transaction.trip-link', $transaction, ['trip_id' => $trip->id, 'link_id' => $updated->id]);
+
+        return response()->json(['linked' => true, 'trip_id' => $trip->id, 'link_id' => $updated->id], 201);
+    }
+
     public function trip(Request $request, int $tripId): JsonResponse
     {
         $trip = DB::table('trips')->where('id', $tripId)->whereIn('gallery_space_id', $request->user()->gallerySpaces()->pluck('gallery_spaces.id'))->firstOrFail();
@@ -141,6 +214,12 @@ class BankingController extends Controller
     private function connection(Request $request, string $uuid): BankConnection
     {
         return BankConnection::where('uuid', $uuid)->whereIn('gallery_space_id', $request->user()->gallerySpaces()->pluck('gallery_spaces.id'))->firstOrFail();
+    }
+
+    private function transaction(Request $request, string $uuid): BankTransaction
+    {
+        return BankTransaction::where('uuid', $uuid)->whereHas('account.connection', fn ($query) => $query
+            ->whereIn('gallery_space_id', $request->user()->gallerySpaces()->pluck('gallery_spaces.id')))->firstOrFail();
     }
 
     private function write(Request $request): void

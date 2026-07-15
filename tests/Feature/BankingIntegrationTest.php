@@ -106,12 +106,32 @@ CSV;
         $this->assertDatabaseCount('trip_expenses', 3);
         $this->deleteJson("/api/v1/banking/rules/{$exclude['uuid']}")->assertOk();
 
+        $dashboard = $this->getJson('/api/v1/banking/dashboard?gallery_space_id='.$this->space->id.'&from=2026-07-01&to=2026-08-31')
+            ->assertOk()->assertJsonPath('summary.transaction_count', 4)
+            ->assertJsonPath('summary.currencies.0.currency', 'CZK')
+            ->assertJsonPath('summary.currencies.0.expenses', 300)
+            ->assertJsonPath('transactions.meta.total', 4)->json();
+        $this->assertNotEmpty($dashboard['cashflow']);
+        $this->assertNotEmpty($dashboard['categories']);
+        $this->assertNotEmpty($dashboard['balance_series'][0]['points']);
+
+        $coffee = BankTransaction::all()->first(fn (BankTransaction $item) => $item->description === 'Coffee Stop');
+        $this->assertNotNull($coffee);
+        $this->patchJson("/api/v1/banking/transactions/{$coffee->uuid}", ['category' => 'activities'])
+            ->assertOk()->assertJsonPath('updated', true);
+        $this->assertDatabaseHas('bank_transactions', ['id' => $coffee->id, 'category' => 'activities', 'category_is_manual' => true]);
+        $this->postJson("/api/v1/banking/transactions/{$coffee->uuid}/trip", ['trip_id' => $this->tripId, 'allocated_amount' => 30])
+            ->assertCreated()->assertJsonPath('linked', true);
+        $this->assertDatabaseHas('trip_bank_transactions', ['trip_id' => $this->tripId, 'bank_transaction_id' => $coffee->id, 'status' => 'confirmed']);
+        $this->assertDatabaseHas('trip_expenses', ['trip_id' => $this->tripId, 'title' => 'Coffee Stop', 'amount' => 30, 'automation_source' => 'bank_transaction']);
+
         $this->actingAs($this->partner)->getJson("/api/v1/trips/{$this->tripId}/banking-finance")->assertOk();
         $this->actingAs($this->owner)->getJson('/api/v1/banking?gallery_space_id='.$this->space->id)
             ->assertOk()->assertJsonPath('rules.0.pattern', 'Infinit');
         $this->deleteJson("/api/v1/banking/rules/{$rule['uuid']}")->assertOk()->assertJsonPath('deleted', true);
         $outsider = User::factory()->create(['role' => 'partner']);
         $this->actingAs($outsider)->getJson("/api/v1/trips/{$this->tripId}/banking-finance")->assertNotFound();
+        $this->actingAs($outsider)->getJson('/api/v1/banking/dashboard?gallery_space_id='.$this->space->id)->assertNotFound();
         $readonly = User::factory()->create(['role' => 'partner', 'read_only_mode' => true]);
         $this->space->members()->attach($readonly->id, ['role' => 'viewer', 'joined_at' => now()]);
         $this->actingAs($readonly)->post('/api/v1/banking/imports', ['gallery_space_id' => $this->space->id,

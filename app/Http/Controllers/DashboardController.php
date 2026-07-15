@@ -251,6 +251,7 @@ class DashboardController extends Controller
                     'status' => $row->status];
             }
         }
+        $financeHub = $bankInsights->spaceOverview($space);
 
         return Inertia::render('Dashboard/Index', [
             'data' => [
@@ -282,6 +283,7 @@ class DashboardController extends Controller
                 'for_you'          => $forYou,
                 'pinned_views'     => $pinnedViews,
                 'upcoming_trip'    => $upcomingTrip,
+                'finance_hub'      => $financeHub,
                 'partner_hub'      => ['space_id' => $space->id, 'relationship_started_on' => $relationshipAnniversary['started_on'] ?? null, 'anniversary_recap' => $anniversaryRecap, 'album_suggestion' => $albumSuggestion, 'milestones' => $upcomingMilestones, 'shared_moments' => $sharedMoments, 'next_event' => $nextSharedEvent, 'next_actions' => $nextActions, 'coordination' => $coordination, 'reflection_prompt' => $reflectionPrompt, 'event_reflection_prompt' => $eventReflectionPrompt, 'experience_recommendation' => $experienceRecommendation, 'experience_follow_up' => $experienceFollowUp, 'date_follow_up' => $dateFollowUp, 'recipe' => $recipeHub, 'memory_evening' => $memoryEvening, 'date_idea' => $dateIdea],
             ],
         ]);

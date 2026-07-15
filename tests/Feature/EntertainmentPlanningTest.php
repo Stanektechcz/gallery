@@ -44,6 +44,7 @@ class EntertainmentPlanningTest extends TestCase
             'films' => [['id' => 'film-1', 'name' => 'Testovací film', 'length' => 118, 'releaseYear' => 2026, 'posterLink' => 'https://example.com/poster.jpg']],
             'events' => [['id' => 'event-1', 'filmId' => 'film-1', 'eventDateTime' => $start->toIso8601String(), 'auditorium' => 'Sál 2', 'attributeIds' => ['2D'], 'languages' => ['original' => 'en', 'subtitles' => 'cs'], 'bookingLink' => 'https://www.cinemacity.cz/booking/event-1', 'soldOut' => false, 'availabilityRatio' => .65]],
         ]])]);
+        $this->actingAs($owner)->get('/api/v1/entertainment/cinema/sync')->assertRedirect('/watchlist');
         $this->actingAs($owner)->postJson('/api/v1/entertainment/cinema/sync', ['days' => 2])->assertOk()->assertJsonPath('count', 2);
         $showing = DB::table('cinema_showings')->where('external_event_id', 'event-1')->first(); $this->assertNotNull($showing);
         $this->postJson('/api/v1/entertainment/cinema/showings/' . $showing->uuid, ['gallery_space_id' => $space->id, 'propose' => true])->assertCreated()->assertJsonPath('title', 'Testovací film');

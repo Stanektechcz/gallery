@@ -1,4 +1,5 @@
 import BankConnectionManager from '@/Components/Banking/BankConnectionManager';
+import { Link } from '@inertiajs/react';
 import axios from 'axios';
 import { ArrowDownRight, ArrowUpRight, ChevronDown, ChevronUp, CircleDollarSign, Link2, RefreshCw, ShieldCheck, WalletCards } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -41,6 +42,7 @@ export default function TripBankFinancePanel({tripId,gallerySpaceId,currency}:{t
             {data.merchants.length>0&&<div className="mt-4 flex flex-wrap gap-2">{data.merchants.map(item=><span key={`${item.name}-${item.currency}`} className="rounded-full border border-white/10 bg-black/10 px-3 py-1.5 text-[10px] text-[var(--color-text-secondary)]">{item.name} · <strong className="text-white">{money(item.amount,item.currency)}</strong> · {item.count}×</span>)}</div>}
             <div className="mt-4 flex flex-col gap-2 border-t border-white/10 pt-4 sm:flex-row sm:items-center sm:justify-between"><p className="flex items-start gap-2 text-[10px] leading-relaxed text-[var(--color-text-secondary)]"><ShieldCheck size={14} className="shrink-0 text-emerald-300"/>Původní historie zůstává v databázi. Ruční potvrzení a kategorie automatická synchronizace nepřepíše.</p><button onClick={()=>setManager(value=>!value)} className="min-h-9 rounded-lg border border-white/10 px-3 text-xs text-emerald-100">{manager?'Skrýt správu':'Synchronizace a výpisy'}</button></div>
             {manager&&<div className="mt-3"><BankConnectionManager gallerySpaceId={gallerySpaceId} returnTripId={tripId} compact onChanged={load}/></div>}
+            <Link href="/finances" className="mt-3 inline-flex text-xs text-emerald-200 hover:text-white">Otevřít celkové finance, transakce a grafy →</Link>
         </div>}
     </section>;
 }

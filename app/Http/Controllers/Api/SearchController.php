@@ -209,7 +209,7 @@ class SearchController extends Controller
             ->concat(Schema::hasTable('entertainment_titles') ? EntertainmentTitle::where('gallery_space_id', $space->id)
                 ->where(fn ($query) => $query->where('title', 'like', $like)->orWhere('original_title', 'like', $like))
                 ->limit($limit)->get()->map(fn ($item) => [
-                    'type' => 'entertainment', 'id' => $item->id, 'label' => $item->title, 'url' => '/planning#watchlist', 'icon' => $item->media_type === 'series' ? '📺' : '🎬',
+                    'type' => 'entertainment', 'id' => $item->id, 'label' => $item->title, 'url' => '/watchlist', 'icon' => $item->media_type === 'series' ? '📺' : '🎬',
                 ]) : [])
             ->concat(SavedSearch::where('gallery_space_id', $space->id)
                 ->where(fn ($query) => $query->where('user_id', $request->user()->id)->orWhere('is_shared', true))

@@ -5,7 +5,7 @@ import { FormEvent, useEffect, useState } from 'react';
 
 type AnniversaryEvent = { uuid: string; title: string; starts_at: string; recurrence_rule?: { frequency?: string } | null };
 
-export default function RelationshipAnniversarySettings({ spaceId }: { spaceId?: number }) {
+export default function RelationshipAnniversarySettings({ spaceId, showRecap = true }: { spaceId?: number; showRecap?: boolean }) {
     const [startedOn, setStartedOn] = useState('');
     const [events, setEvents] = useState<AnniversaryEvent[]>([]);
     const [saving, setSaving] = useState(false);
@@ -76,6 +76,6 @@ export default function RelationshipAnniversarySettings({ spaceId }: { spaceId?:
         {notice && <p className="mt-3 text-sm text-emerald-200">{notice}</p>}
         {error && <p className="mt-3 text-sm text-red-200">{error}</p>}
         {events.length > 0 && <div className="mt-3 flex flex-wrap gap-2">{events.map(item => <span key={item.uuid} className="rounded-lg border border-pink-300/20 bg-black/10 px-3 py-2 text-xs text-pink-100">❤️ {item.title} · {new Date(item.starts_at).toLocaleDateString('cs-CZ')}{item.recurrence_rule?.frequency === 'yearly' ? ' · každý rok' : ''}</span>)}</div>}
-        <AnniversaryRecapPanel spaceId={spaceId} startedOn={startedOn} refreshKey={recapVersion}/>
+        {showRecap && <AnniversaryRecapPanel spaceId={spaceId} startedOn={startedOn} refreshKey={recapVersion}/>}
     </section>;
 }

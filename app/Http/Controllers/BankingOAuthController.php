@@ -18,11 +18,11 @@ class BankingOAuthController extends Controller
             AuditLog::record('bank.connection.complete', $connection, collect($result)->except('connection')->all());
             $tripId = data_get($connection->encrypted_metadata, 'return_trip_id');
 
-            return redirect($tripId ? "/trips/{$tripId}/plan#bank-finance" : '/admin/integrations#banking')->with('success', 'Společný Revolut účet byl bezpečně připojen.');
+            return redirect($tripId ? "/trips/{$tripId}/plan#bank-finance" : '/finances#connection')->with('success', 'Společný Revolut účet byl bezpečně připojen.');
         } catch (\Throwable $exception) {
             report($exception);
 
-            return redirect('/admin/integrations#banking')->with('error', 'Připojení Revolutu se nepodařilo dokončit. Zkontrolujte stav souhlasu a zkuste připojení znovu.');
+            return redirect('/finances#connection')->with('error', 'Připojení Revolutu se nepodařilo dokončit. Zkontrolujte stav souhlasu a zkuste připojení znovu.');
         }
     }
 }

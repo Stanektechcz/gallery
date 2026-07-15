@@ -35,6 +35,7 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
 
     // Read-only banking and persistent Revolut history
     Route::get('/banking', [App\Http\Controllers\Api\BankingController::class, 'overview'])->name('api.banking.overview');
+    Route::get('/banking/dashboard', [App\Http\Controllers\Api\BankingController::class, 'dashboard'])->name('api.banking.dashboard');
     Route::get('/banking/institutions', [App\Http\Controllers\Api\BankingController::class, 'institutions'])->name('api.banking.institutions');
     Route::post('/banking/connections', [App\Http\Controllers\Api\BankingController::class, 'connect'])->name('api.banking.connections.store');
     Route::post('/banking/connections/{uuid}/sync', [App\Http\Controllers\Api\BankingController::class, 'sync'])->name('api.banking.connections.sync');
@@ -42,6 +43,8 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
     Route::post('/banking/imports', [App\Http\Controllers\Api\BankingController::class, 'import'])->name('api.banking.imports.store');
     Route::post('/banking/rules', [App\Http\Controllers\Api\BankingController::class, 'storeRule'])->name('api.banking.rules.store');
     Route::delete('/banking/rules/{uuid}', [App\Http\Controllers\Api\BankingController::class, 'destroyRule'])->name('api.banking.rules.destroy');
+    Route::patch('/banking/transactions/{uuid}', [App\Http\Controllers\Api\BankingController::class, 'updateTransaction'])->name('api.banking.transactions.update');
+    Route::post('/banking/transactions/{uuid}/trip', [App\Http\Controllers\Api\BankingController::class, 'linkTransactionToTrip'])->name('api.banking.transactions.trip');
     Route::get('/trips/{tripId}/banking-finance', [App\Http\Controllers\Api\BankingController::class, 'trip'])->name('api.trips.banking-finance');
     Route::patch('/trips/{tripId}/banking-finance/{linkId}', [App\Http\Controllers\Api\BankingController::class, 'updateTripLink'])->name('api.trips.banking-finance.update');
 
@@ -175,6 +178,9 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
     Route::get('/entertainment', [App\Http\Controllers\Api\EntertainmentController::class, 'index'])->name('api.entertainment.index');
     Route::get('/entertainment/search', [App\Http\Controllers\Api\EntertainmentController::class, 'search'])->name('api.entertainment.search');
     Route::post('/entertainment', [App\Http\Controllers\Api\EntertainmentController::class, 'store'])->name('api.entertainment.store');
+    // A stale client used to open the synchronization URL as a page. Keep GET
+    // side-effect free and return the user to the dedicated watchlist instead.
+    Route::get('/entertainment/cinema/sync', fn () => redirect('/watchlist', 303))->name('api.entertainment.cinema.sync.legacy');
     Route::post('/entertainment/cinema/sync', [App\Http\Controllers\Api\EntertainmentController::class, 'syncCinema'])->name('api.entertainment.cinema.sync');
     Route::post('/entertainment/cinema/showings/{showingUuid}', [App\Http\Controllers\Api\EntertainmentController::class, 'importShowing'])->name('api.entertainment.cinema.showings.import');
     Route::patch('/entertainment/{uuid}', [App\Http\Controllers\Api\EntertainmentController::class, 'update'])->name('api.entertainment.update');

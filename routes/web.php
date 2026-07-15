@@ -116,6 +116,12 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/travel-inbox', fn() => Inertia::render('TravelInbox/Index'))->name('travel-inbox');
     Route::get('/weekly', fn() => Inertia::render('Weekly/Index'))->name('weekly');
     Route::get('/planning', fn() => Inertia::render('Planning/Index'))->name('planning');
+    Route::get('/finances', fn() => Inertia::render('Finance/Index'))->name('finances');
+    Route::get('/finance', fn() => Inertia::render('Finance/Index'))->name('finance');
+    Route::get('/watchlist', fn() => Inertia::render('Watchlist/Index'))->name('watchlist');
+    Route::get('/date-ideas', fn() => Inertia::render('DateIdeas/Index'))->name('date-ideas');
+    Route::get('/anniversary-album', fn() => Inertia::render('AnniversaryAlbum/Index'))->name('anniversary-album');
+    Route::get('/gifts-anniversaries', fn() => Inertia::render('GiftsAnniversaries/Index'))->name('gifts-anniversaries');
     Route::get('/recipes', fn() => Inertia::render('Recipes/Index'))->name('recipes.index');
     Route::get('/recipes/{uuid}', fn(string $uuid) => Inertia::render('Recipes/Show', ['recipeUuid' => $uuid]))->name('recipes.show');
     Route::get('/milestones', fn() => Inertia::render('Milestones/Index'))->name('milestones');
