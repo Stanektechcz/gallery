@@ -20,6 +20,7 @@ import {
     Home,
     Images,
     Inbox,
+    KeyRound,
     Map,
     MapPin,
     LockKeyhole,
@@ -51,6 +52,7 @@ interface Command {
     href?:    string;
     action?:  () => void;
     icon?:    string;
+    adminOnly?: boolean;
 }
 
 const NAV_COMMANDS: Command[] = [
@@ -66,7 +68,8 @@ const NAV_COMMANDS: Command[] = [
     { group: 'nav', label: 'Výroční album',        href: '/anniversary-album', keywords: 'vyroci album fotky rekapitulace vztah' },
     { group: 'nav', label: 'Dárky a výročí',       href: '/gifts-anniversaries', keywords: 'darek vyroci vztah pripominka' },
     { group: 'nav', label: 'Naše kuchařka',       href: '/recipes', keywords: 'recepty vareni jidlo kucharka porce suroviny' },
-    { group: 'nav', label: 'Integrace dat',        href: '/admin/integrations', keywords: 'api klice pocasi kurzy doprava administrace' },
+    { group: 'nav', label: 'Administrace',         href: '/admin', keywords: 'admin sprava system', adminOnly: true },
+    { group: 'nav', label: 'Integrace a API klíče', href: '/admin/integrations', keywords: 'api klice gocardless revolut tmdb kino pocasi kurzy doprava administrace', adminOnly: true },
     { group: 'nav', label: 'Mapa',                href: '/map',       keywords: 'map gps lokace' },
     { group: 'nav', label: 'Oblíbené',            href: '/favorites', keywords: 'oblibene heart srdce' },
     { group: 'nav', label: 'Vzpomínky',           href: '/memories',  keywords: 'vzpominky memories' },
@@ -112,7 +115,7 @@ const GROUP_LABELS: Record<CommandGroup, string> = {
     search: 'Hledat',
 };
 
-function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void }) {
+function CommandPalette({ open, onClose, isAdmin }: { open: boolean; onClose: () => void; isAdmin: boolean }) {
     const [query,    setQuery]    = useState('');
     const [activeIdx, setActive]  = useState(0);
     const inputRef = useRef<HTMLInputElement>(null);
@@ -120,7 +123,7 @@ function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void 
     useEffect(() => { if (!open) { setQuery(''); setActive(0); } }, [open]);
     useEffect(() => { if (open) inputRef.current?.focus(); }, [open]);
 
-    const allCommands: Command[] = [...NAV_COMMANDS, ...ACTION_COMMANDS];
+    const allCommands: Command[] = [...NAV_COMMANDS, ...ACTION_COMMANDS].filter(command => !command.adminOnly || isAdmin);
 
     // If query starts with known search triggers, add search command
     const searchCmd: Command | null = query.trim().length >= 2 ? {
@@ -397,6 +400,7 @@ const navItems = [
     { href: '/print',     label: 'Výběry k tisku', icon: Printer },
     { href: '/tv',        label: 'TV režim',     icon: Monitor },
     { href: '/settings/storage/google', label: 'Nastavení', icon: Settings },
+    { href: '/admin/integrations', label: 'Integrace a API', icon: KeyRound, adminOnly: true },
 ];
 
 const mobileNav = [
@@ -409,6 +413,7 @@ const mobileNav = [
 
 export default function AppLayout({ children, title }: AppLayoutProps) {
     const { auth, flash } = usePage().props as any;
+    const isAdmin = ['owner', 'admin'].includes(auth?.user?.role);
     const currentPath = window.location.pathname;
     // Exact match for root; prefix match for all others
     // (prevents '/' highlighting /timeline, /albums, /media/... etc.)
@@ -432,7 +437,7 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
 
     return (
         <div className="flex h-screen overflow-hidden">
-            <CommandPalette open={cmdOpen} onClose={() => setCmdOpen(false)} />
+            <CommandPalette open={cmdOpen} onClose={() => setCmdOpen(false)} isAdmin={isAdmin} />
             {/* Sidebar — Desktop */}
             <aside className="hidden md:flex flex-col w-60 shrink-0 border-r border-[var(--color-border)] bg-[var(--color-bg-secondary)]">
                 {/* Logo */}
@@ -449,6 +454,7 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
                         if ('divider' in item) {
                             return <div key={i} className="h-px bg-[var(--color-border)] mx-3 my-2" />;
                         }
+                        if ('adminOnly' in item && item.adminOnly && !isAdmin) return null;
                         const Icon = item.icon;
                         const active = isActive(item.href);
                         return (
@@ -507,6 +513,7 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
                         <nav className="flex-1 py-3 overflow-y-auto">
                             {navItems.map((item, i) => {
                                 if ('divider' in item) return <div key={i} className="h-px bg-[var(--color-border)] mx-3 my-2" />;
+                                if ('adminOnly' in item && item.adminOnly && !isAdmin) return null;
                                 const Icon = item.icon;
                                 const active = isActive(item.href);
                                 return (
