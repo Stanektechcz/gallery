@@ -7,6 +7,7 @@ use App\Models\IntegrationSetting;
 use App\Models\User;
 use App\Services\Entertainment\CinemaCityProgramService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
@@ -54,25 +55,27 @@ class EntertainmentPlanningTest extends TestCase
         $start = now('Europe/Prague')->addDays(2)->setTime(19, 30);
         Http::fake(['www.cinemacity.cz/cz/data-api-service/*' => Http::response(['body' => [
             'films' => [['id' => 'film-1', 'name' => 'Testovací film', 'length' => 118, 'releaseYear' => 2026, 'posterLink' => 'https://example.com/poster.jpg']],
-            'events' => [['id' => 'event-1', 'filmId' => 'film-1', 'eventDateTime' => $start->toIso8601String(), 'auditorium' => 'Sál 2', 'attributeIds' => ['2d', 'adventure', 'animation', 'dolby-atmos', 'first-subbed-lang-cs', 'laser-barco', 'original-lang-en', 'subbed', 'suitable-for-all'], 'languages' => ['original' => 'en', 'subtitles' => 'cs'], 'bookingLink' => 'https://www.cinemacity.cz/booking/event-1', 'soldOut' => false, 'availabilityRatio' => .65]],
+            'events' => [['id' => 'event-1', 'filmId' => 'film-1', 'eventDateTime' => $start->format('Y-m-d\TH:i:s'), 'auditorium' => 'Sál 2', 'attributeIds' => ['2d', 'adventure', 'animation', 'dolby-atmos', 'first-subbed-lang-cs', 'laser-barco', 'original-lang-en', 'subbed', 'suitable-for-all'], 'languages' => ['original' => 'en', 'subtitles' => 'cs'], 'bookingLink' => 'https://tickets.cinemacity.cz/api/order/event-1?lang=cs', 'bookingRouterLaunchLink' => 'https://www.cinemacity.cz/cz/booking-router/launch/event-1?lang=cs', 'compositeBookingLink' => ['blockOnlineSales' => false], 'soldOut' => false, 'availabilityRatio' => .65]],
         ]])]);
         $this->actingAs($owner)->get('/api/v1/entertainment/cinema/sync')->assertRedirect('/watchlist');
         $this->actingAs($owner)->postJson('/api/v1/entertainment/cinema/sync', ['days' => 2])->assertOk()->assertJsonPath('count', 2);
         $showing = DB::table('cinema_showings')->where('external_event_id', 'event-1')->first();
         $this->assertNotNull($showing);
-        $programUrl = CinemaCityProgramService::programUrl($start);
+        $bookingUrl = CinemaCityProgramService::bookingRouterUrl('event-1');
         $this->assertSame('2D · Dolby Atmos · Laser', $showing->format);
         $this->assertStringContainsString('suitable-for-all', $showing->attributes);
-        $this->assertSame($programUrl, $showing->booking_url);
-        $this->assertStringNotContainsString('booking-router', $showing->booking_url);
+        $this->assertSame($start->copy()->utc()->format('Y-m-d H:i:s'), $showing->starts_at);
+        $this->assertSame('19:30', Carbon::parse($showing->starts_at, 'UTC')->timezone('Europe/Prague')->format('H:i'));
+        $this->assertSame($bookingUrl, $showing->booking_url);
+        $this->assertStringContainsString('booking-router/launch/event-1', $showing->booking_url);
         $this->assertStringNotContainsString('tickets.rel.cinemacity.cz', $showing->booking_url);
         $this->postJson('/api/v1/entertainment/cinema/showings/'.$showing->uuid, ['gallery_space_id' => $space->id, 'propose' => true])->assertCreated()->assertJsonPath('title', 'Testovací film');
         $this->assertDatabaseHas('viewing_date_proposals', ['cinema_showing_id' => $showing->id, 'venue' => 'cinema']);
         $this->getJson('/api/v1/entertainment?gallery_space_id='.$space->id)->assertOk()
             ->assertJsonPath('cinema.showings.0.title', 'Testovací film')
             ->assertJsonPath('cinema.showings.0.external_film_id', 'film-1')
-            ->assertJsonPath('cinema.showings.0.booking_url', $programUrl)
-            ->assertJsonPath('titles.0.proposals.0.booking_url', $programUrl);
+            ->assertJsonPath('cinema.showings.0.booking_url', $bookingUrl)
+            ->assertJsonPath('titles.0.proposals.0.booking_url', $bookingUrl);
     }
 
     public function test_cinema_sync_keeps_a_successful_day_when_another_day_is_temporarily_unavailable(): void

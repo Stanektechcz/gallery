@@ -117,7 +117,11 @@ class CinemaCityProgramService
             $runtime = is_numeric($film['length'] ?? null) ? max(1, min(65535, (int) $film['length'])) : null;
             $matched = $this->matchTitle($title, $releaseYear);
             $eventId = mb_substr((string) $event['id'], 0, 80);
-            $startsAt = Carbon::parse($event['eventDateTime'], 'Europe/Prague');
+            // Cinema City returns a Prague wall-clock value without an offset
+            // (for example 2026-07-16T11:00:00). Store all instants in UTC so
+            // the API can safely emit ISO-8601 and the browser does not add the
+            // Prague offset for a second time.
+            $startsAt = $this->startsAt((string) $event['eventDateTime']);
             $existingUuid = DB::table('cinema_showings')->where('provider', 'cinema_city')->where('cinema_code', self::CINEMA_CODE)->where('external_event_id', $eventId)->value('uuid');
             DB::table('cinema_showings')->updateOrInsert(
                 ['provider' => 'cinema_city', 'cinema_code' => self::CINEMA_CODE, 'external_event_id' => $eventId],
@@ -138,7 +142,7 @@ class CinemaCityProgramService
                     'subtitles_language' => $this->language(data_get($event, 'languages.subtitles')),
                     'sold_out' => (bool) ($event['soldOut'] ?? false),
                     'availability_ratio' => isset($event['availabilityRatio']) ? max(0, min(1, (float) $event['availabilityRatio'])) : null,
-                    'booking_url' => self::programUrl($startsAt),
+                    'booking_url' => $this->bookingUrl($event, $eventId),
                     'source_url' => self::CINEMA_URL,
                     'attributes' => json_encode($attributes, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE),
                     'fetched_at' => now(),
@@ -201,11 +205,45 @@ class CinemaCityProgramService
         if (! $startsAt) {
             return self::CINEMA_URL;
         }
-        $day = $startsAt instanceof Carbon ? $startsAt : Carbon::parse($startsAt, 'Europe/Prague');
+        $day = ($startsAt instanceof Carbon ? $startsAt->copy() : Carbon::parse($startsAt, 'UTC'))
+            ->timezone('Europe/Prague');
 
         // The order API and booking-router are protected by Cinema City's anti-bot layer.
         // The public programme is stable and lets the visitor choose the already selected time.
         return self::CINEMA_URL.'#/buy-tickets-by-cinema?in-cinema='.self::CINEMA_CODE.'&at='.$day->toDateString().'&view-mode=list';
+    }
+
+    public static function bookingRouterUrl(string $eventId): string
+    {
+        return 'https://www.cinemacity.cz/cz/booking-router/launch/'.rawurlencode($eventId).'?lang=cs';
+    }
+
+    private function startsAt(string $value): Carbon
+    {
+        // Values with an explicit offset are respected. Offset-less values are
+        // defined by Cinema City as local cinema time (Europe/Prague).
+        $hasOffset = (bool) preg_match('/(?:Z|[+-]\d{2}:?\d{2})$/i', $value);
+
+        return Carbon::parse($value, $hasOffset ? null : 'Europe/Prague')->utc();
+    }
+
+    private function bookingUrl(array $event, string $eventId): ?string
+    {
+        if ((bool) ($event['soldOut'] ?? false) || (bool) data_get($event, 'compositeBookingLink.blockOnlineSales', false)) {
+            return null;
+        }
+
+        $provided = $this->https($event['bookingRouterLaunchLink'] ?? null);
+        if ($provided) {
+            $parts = parse_url($provided);
+            $host = Str::lower((string) ($parts['host'] ?? ''));
+            $path = (string) ($parts['path'] ?? '');
+            if ($host === 'www.cinemacity.cz' && preg_match('#^/cz/booking-router/launch/[^/]+$#', $path)) {
+                return $provided;
+            }
+        }
+
+        return self::bookingRouterUrl($eventId);
     }
 
     private function language(mixed $value): ?string
