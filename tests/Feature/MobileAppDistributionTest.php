@@ -9,6 +9,13 @@ use Tests\TestCase;
 
 class MobileAppDistributionTest extends TestCase
 {
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        config()->set('mobile.android.bundled_path', null);
+    }
+
     public function test_public_installation_centre_is_available_without_login(): void
     {
         Storage::fake('local');
@@ -50,6 +57,26 @@ class MobileAppDistributionTest extends TestCase
 
         $this->get('/app/android/download')
             ->assertRedirect(route('mobile-app.index', ['apk' => 'preparing']));
+    }
+
+    public function test_repository_release_is_used_when_runtime_storage_is_not_visible(): void
+    {
+        Storage::fake('local');
+        config()->set('mobile.android.bundled_path', 'release-assets/android/maki-gallery-1.0.0.apk');
+
+        $sha256 = hash_file('sha256', base_path('release-assets/android/maki-gallery-1.0.0.apk'));
+
+        $this->get('/app')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('android.available', true)
+                ->where('android.sha256', $sha256)
+                ->where('android.size_bytes', 1640985));
+
+        $this->get('/app/android/download')
+            ->assertOk()
+            ->assertDownload('maki-gallery-1.0.0.apk')
+            ->assertHeader('X-Content-Type-Options', 'nosniff');
     }
 
     public function test_asset_links_are_published_only_after_release_fingerprint_is_configured(): void
