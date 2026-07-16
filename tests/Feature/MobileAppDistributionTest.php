@@ -97,7 +97,7 @@ class MobileAppDistributionTest extends TestCase
 
         $this->artisan('gallery:publish-android-app', ['apk' => $missing, '--app-version' => '1.0.0'])
             ->expectsOutputToContain('Tento příkaz APK nevytváří')
-            ->expectsOutputToContain('Nahrajte jej na server')
+            ->expectsOutputToContain('release-assets/android/maki-gallery-1.0.0.apk')
             ->assertFailed();
     }
 

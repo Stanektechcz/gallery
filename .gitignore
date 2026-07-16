@@ -36,5 +36,6 @@ Thumbs.db
 *.jks
 *.apk
 *.aab
+!/release-assets/android/*.apk
 /android-twa/*
 !/android-twa/twa-manifest.json

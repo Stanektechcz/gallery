@@ -23,9 +23,9 @@ class PublishAndroidAppCommand extends Command
             $this->error("APK soubor '{$providedPath}' neexistuje nebo jej nelze číst.");
             $this->newLine();
             $this->line('Tento příkaz APK nevytváří; publikuje již sestavený a podepsaný soubor.');
-            $this->line('1. Stáhněte app-release-signed.apk z GitHub Actions „Build signed Android app“.');
-            $this->line('2. Nahrajte jej na server, například do /root/app-release-signed.apk.');
-            $this->line('3. Příkaz spusťte znovu se skutečnou absolutní cestou k tomuto souboru.');
+            $this->line('1. Aktualizujte repozitář příkazem git pull --ff-only.');
+            $this->line('2. Ověřte soubor release-assets/android/maki-gallery-1.0.0.apk.');
+            $this->line('3. Spusťte příkaz s cestou $PWD/release-assets/android/maki-gallery-1.0.0.apk.');
             return self::FAILURE;
         }
 

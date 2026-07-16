@@ -59,22 +59,21 @@ Otisk `SHA-256 digest` release certifikátu vložte na server do `ANDROID_APP_SH
 
 ## Zveřejnění na serveru
 
-Podepsané APK přeneste na server mimo Git a spusťte:
+Podepsané APK verze 1.0.0 je dostupné přímo v repozitáři v `release-assets/android/`. Po `git pull --ff-only` jej publikujte z kořene projektu:
 
 ```bash
-php artisan gallery:publish-android-app /bezpecna/cesta/app-release-signed.apk --app-version=1.0.0
+sha256sum -c release-assets/android/SHA256SUMS.txt
+php artisan gallery:publish-android-app "$PWD/release-assets/android/maki-gallery-1.0.0.apk" --app-version=1.0.0
 php artisan config:clear
 ```
 
 Příkaz APK zpřístupní přes Laravel storage, uloží verzi, velikost a SHA-256 a vypíše stabilní odkaz. Podpisový klíč ani hesla se na aplikační server neposílají.
 
-`/bezpecna/cesta/app-release-signed.apk` je pouze příklad. Soubor je nejprve nutné z Actions stáhnout a na server přenést, například:
+Pro další verze lze nový soubor stáhnout z Actions a publikovat přímo, případně jej nejprve přidat do této release složky:
 
 ```bash
-scp maki-gallery-1.0.0.apk root@vmi2254765:/root/app-release-signed.apk
-ssh root@vmi2254765
 cd /www/wwwroot/gallery.stanektech.cz
-php artisan gallery:publish-android-app /root/app-release-signed.apk --app-version=1.0.0
+php artisan gallery:publish-android-app "$PWD/release-assets/android/maki-gallery-1.0.0.apk" --app-version=1.0.0
 ```
 
 Alternativně lze nastavit `ANDROID_APP_DOWNLOAD_URL` na důvěryhodný HTTPS release/CDN odkaz. Stabilní aplikační URL pak na tento soubor bezpečně přesměruje.
