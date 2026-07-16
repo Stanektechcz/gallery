@@ -100,4 +100,13 @@ class MobileAppDistributionTest extends TestCase
             ->expectsOutputToContain('Nahrajte jej na server')
             ->assertFailed();
     }
+
+    public function test_android_workflow_uses_node_24_compatible_official_actions(): void
+    {
+        $workflow = (string) file_get_contents(base_path('.github/workflows/build-android-app.yml'));
+
+        $this->assertStringContainsString('actions/checkout@v5', $workflow);
+        $this->assertStringContainsString('actions/upload-artifact@v6', $workflow);
+        $this->assertStringNotContainsString('actions/checkout@v4', $workflow);
+    }
 }

@@ -6,6 +6,15 @@ Web nabízí instalační centrum na `/app` a stabilní APK odkaz `/app/android/
 
 ### Automaticky přes GitHub Actions
 
+Nejrychlejší první nastavení na Windows provede připravený skript. Release klíč vytvoří mimo repozitář v uživatelském `LocalAppData`, heslo uloží pomocí Windows DPAPI, nastaví GitHub secrets a může rovnou spustit build:
+
+```powershell
+gh auth login
+powershell -ExecutionPolicy Bypass -File scripts/setup-android-signing.ps1 -RunWorkflow -VersionName 1.0.0 -VersionCode 1
+```
+
+Po skončení společně zazálohujte adresář vypsaný skriptem. Soubor `password.dpapi` lze dešifrovat jen pod stejným Windows účtem, proto je vhodné mít vedle této pracovní zálohy také vlastní bezpečnou správu přístupových údajů.
+
 Repozitář obsahuje workflow **Build signed Android app** a konfiguraci `android-twa/twa-manifest.json`. Před prvním spuštěním nastavte v GitHub repozitáři `Settings → Secrets and variables → Actions`:
 
 - `ANDROID_KEYSTORE_BASE64` – celý release keystore zakódovaný pomocí `base64`;
