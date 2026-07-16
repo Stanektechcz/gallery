@@ -30,7 +30,7 @@ return new class extends Migration
                             'starts_at' => $utcStart->format('Y-m-d H:i:s'),
                             'booking_url' => $showing->sold_out
                                 ? null
-                                : CinemaCityProgramService::bookingRouterUrl((string) $showing->external_event_id),
+                                : CinemaCityProgramService::programUrl($utcStart, $showing->external_film_id),
                             'updated_at' => now(),
                         ]);
 

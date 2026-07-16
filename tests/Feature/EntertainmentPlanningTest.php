@@ -61,14 +61,15 @@ class EntertainmentPlanningTest extends TestCase
         $this->actingAs($owner)->postJson('/api/v1/entertainment/cinema/sync', ['days' => 2])->assertOk()->assertJsonPath('count', 2);
         $showing = DB::table('cinema_showings')->where('external_event_id', 'event-1')->first();
         $this->assertNotNull($showing);
-        $bookingUrl = CinemaCityProgramService::bookingRouterUrl('event-1');
+        $bookingUrl = CinemaCityProgramService::programUrl($start, 'film-1');
         $this->assertSame('2D · Dolby Atmos · Laser', $showing->format);
         $this->assertStringContainsString('suitable-for-all', $showing->attributes);
         $this->assertSame($start->copy()->utc()->format('Y-m-d H:i:s'), $showing->starts_at);
         $this->assertSame('19:30', Carbon::parse($showing->starts_at, 'UTC')->timezone('Europe/Prague')->format('H:i'));
         $this->assertSame($bookingUrl, $showing->booking_url);
-        $this->assertStringContainsString('booking-router/launch/event-1', $showing->booking_url);
-        $this->assertStringNotContainsString('tickets.rel.cinemacity.cz', $showing->booking_url);
+        $this->assertStringContainsString('for-movie=film-1', $showing->booking_url);
+        $this->assertStringNotContainsString('booking-router', $showing->booking_url);
+        $this->assertStringNotContainsString('tickets.', $showing->booking_url);
         $this->postJson('/api/v1/entertainment/cinema/showings/'.$showing->uuid, ['gallery_space_id' => $space->id, 'propose' => true])->assertCreated()->assertJsonPath('title', 'Testovací film');
         $this->assertDatabaseHas('viewing_date_proposals', ['cinema_showing_id' => $showing->id, 'venue' => 'cinema']);
         $this->getJson('/api/v1/entertainment?gallery_space_id='.$space->id)->assertOk()
