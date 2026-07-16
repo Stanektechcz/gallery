@@ -1,0 +1,120 @@
+name: Build signed Android app
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_name:
+        description: Public version, for example 1.0.0
+        required: true
+        default: 1.0.0
+        type: string
+      version_code:
+        description: Increasing Android version code
+        required: true
+        default: 1
+        type: number
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build Maki APK and AAB
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      BUBBLEWRAP_IMAGE: ghcr.io/googlechromelabs/bubblewrap:latest
+      BUBBLEWRAP_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      BUBBLEWRAP_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      VERSION_NAME: ${{ inputs.version_name }}
+      VERSION_CODE: ${{ inputs.version_code }}
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Validate version and signing secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$VERSION_NAME" =~ ^[0-9A-Za-z][0-9A-Za-z._+-]{0,63}$ ]] || { echo "::error::Invalid version_name"; exit 1; }
+          [[ "$VERSION_CODE" =~ ^[1-9][0-9]*$ ]] || { echo "::error::version_code must be a positive integer"; exit 1; }
+          for name in ANDROID_KEYSTORE_BASE64 BUBBLEWRAP_KEYSTORE_PASSWORD BUBBLEWRAP_KEY_PASSWORD ANDROID_KEY_ALIAS; do
+            [[ -n "${!name:-}" ]] || { echo "::error::Missing GitHub secret $name"; exit 1; }
+          done
+
+      - name: Restore release keystore and set version
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android-twa/maki-release.keystore
+          chmod 600 android-twa/maki-release.keystore
+          node <<'NODE'
+          const fs = require('fs');
+          const path = 'android-twa/twa-manifest.json';
+          const manifest = JSON.parse(fs.readFileSync(path, 'utf8'));
+          manifest.appVersion = process.env.VERSION_NAME;
+          manifest.appVersionCode = Number(process.env.VERSION_CODE);
+          manifest.signingKey.alias = process.env.ANDROID_KEY_ALIAS;
+          fs.writeFileSync(path, JSON.stringify(manifest, null, 2) + '\n');
+          NODE
+
+      - name: Generate Android project
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker pull "$BUBBLEWRAP_IMAGE"
+          docker run --rm \
+            -v "$PWD/android-twa:/app" \
+            -w /app \
+            "$BUBBLEWRAP_IMAGE" \
+            update --skipVersionUpgrade --manifest=./twa-manifest.json
+
+      - name: Build and sign APK and App Bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            -e BUBBLEWRAP_KEYSTORE_PASSWORD \
+            -e BUBBLEWRAP_KEY_PASSWORD \
+            -v "$PWD/android-twa:/app" \
+            -w /app \
+            "$BUBBLEWRAP_IMAGE" \
+            build --skipPwaValidation \
+              --manifest=./twa-manifest.json \
+              --signingKeyPath=./maki-release.keystore \
+              --signingKeyAlias="$ANDROID_KEY_ALIAS"
+
+      - name: Prepare verified build artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s android-twa/app-release-signed.apk
+          test -s android-twa/app-release-bundle.aab
+          mkdir -p android-artifacts
+          cp android-twa/app-release-signed.apk "android-artifacts/maki-gallery-${VERSION_NAME}.apk"
+          cp android-twa/app-release-bundle.aab "android-artifacts/maki-gallery-${VERSION_NAME}.aab"
+          sha256sum android-artifacts/* > android-artifacts/SHA256SUMS.txt
+          docker run --rm --entrypoint sh \
+            -e BUBBLEWRAP_KEYSTORE_PASSWORD \
+            -e ANDROID_KEY_ALIAS \
+            -v "$PWD/android-twa:/app" \
+            -v "$PWD/android-artifacts:/artifacts" \
+            "$BUBBLEWRAP_IMAGE" \
+            -c 'keytool -list -v -keystore /app/maki-release.keystore -alias "${ANDROID_KEY_ALIAS:-maki}" -storepass "$BUBBLEWRAP_KEYSTORE_PASSWORD" | grep "SHA256:" > /artifacts/ANDROID_CERTIFICATE_FINGERPRINT.txt'
+          test -s android-artifacts/ANDROID_CERTIFICATE_FINGERPRINT.txt
+
+      - name: Upload signed Android build
+        uses: actions/upload-artifact@v4
+        with:
+          name: maki-android-${{ inputs.version_name }}
+          path: android-artifacts/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Remove signing material
+        if: always()
+        shell: bash
+        run: rm -f android-twa/maki-release.keystore

@@ -1,0 +1,46 @@
+{
+  "packageId": "cz.stanektech.maki",
+  "host": "gallery.stanektech.cz",
+  "name": "Maki – naše společné zážitky",
+  "launcherName": "Maki",
+  "display": "standalone",
+  "themeColor": "#1A1A2E",
+  "themeColorDark": "#0F1020",
+  "navigationColor": "#0F1020",
+  "navigationColorDark": "#0F1020",
+  "navigationDividerColor": "#00000000",
+  "navigationDividerColorDark": "#00000000",
+  "backgroundColor": "#1A1A2E",
+  "enableNotifications": true,
+  "startUrl": "/",
+  "iconUrl": "https://gallery.stanektech.cz/icons/pwa-512x512.png",
+  "maskableIconUrl": "https://gallery.stanektech.cz/icons/pwa-maskable-512x512.png",
+  "splashScreenFadeOutDuration": 300,
+  "signingKey": {
+    "path": "./maki-release.keystore",
+    "alias": "maki"
+  },
+  "appVersionCode": 1,
+  "appVersion": "1.0.0",
+  "generatorApp": "bubblewrap-cli",
+  "webManifestUrl": "https://gallery.stanektech.cz/manifest.webmanifest",
+  "fallbackType": "customtabs",
+  "features": {
+    "locationDelegation": {
+      "enabled": true
+    }
+  },
+  "alphaDependencies": {
+    "enabled": false
+  },
+  "enableSiteSettingsShortcut": true,
+  "isChromeOSOnly": false,
+  "isMetaQuest": false,
+  "fullScopeUrl": "https://gallery.stanektech.cz/",
+  "minSdkVersion": 23,
+  "orientation": "any",
+  "fingerprints": [],
+  "additionalTrustedOrigins": [],
+  "retainedBundles": [],
+  "launchHandlerClientMode": "navigate-existing"
+}

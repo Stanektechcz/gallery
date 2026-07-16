@@ -19,7 +19,13 @@ class PublishAndroidAppCommand extends Command
     {
         $source = realpath((string) $this->argument('apk'));
         if ($source === false || ! is_file($source) || ! is_readable($source)) {
-            $this->error('APK soubor neexistuje nebo jej nelze číst.');
+            $providedPath = (string) $this->argument('apk');
+            $this->error("APK soubor '{$providedPath}' neexistuje nebo jej nelze číst.");
+            $this->newLine();
+            $this->line('Tento příkaz APK nevytváří; publikuje již sestavený a podepsaný soubor.');
+            $this->line('1. Stáhněte app-release-signed.apk z GitHub Actions „Build signed Android app“.');
+            $this->line('2. Nahrajte jej na server, například do /root/app-release-signed.apk.');
+            $this->line('3. Příkaz spusťte znovu se skutečnou absolutní cestou k tomuto souboru.');
             return self::FAILURE;
         }
 

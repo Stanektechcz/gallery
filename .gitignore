@@ -30,3 +30,11 @@ Thumbs.db
 /storage/app/
 /storage/framework/cache/
 /storage/logs/
+
+# Android release signing material and generated Bubblewrap project.
+*.keystore
+*.jks
+*.apk
+*.aab
+/android-twa/*
+!/android-twa/twa-manifest.json

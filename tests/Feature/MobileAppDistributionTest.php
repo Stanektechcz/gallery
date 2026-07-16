@@ -90,4 +90,14 @@ class MobileAppDistributionTest extends TestCase
             @unlink($apk);
         }
     }
+
+    public function test_publish_command_explains_that_missing_example_path_must_be_uploaded_first(): void
+    {
+        $missing = storage_path('app/definitely-missing-app-release-signed.apk');
+
+        $this->artisan('gallery:publish-android-app', ['apk' => $missing, '--app-version' => '1.0.0'])
+            ->expectsOutputToContain('Tento příkaz APK nevytváří')
+            ->expectsOutputToContain('Nahrajte jej na server')
+            ->assertFailed();
+    }
 }

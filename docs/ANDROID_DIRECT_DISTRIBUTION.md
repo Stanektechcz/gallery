@@ -4,6 +4,32 @@ Web nabízí instalační centrum na `/app` a stabilní APK odkaz `/app/android/
 
 ## Bezpečné první sestavení
 
+### Automaticky přes GitHub Actions
+
+Repozitář obsahuje workflow **Build signed Android app** a konfiguraci `android-twa/twa-manifest.json`. Před prvním spuštěním nastavte v GitHub repozitáři `Settings → Secrets and variables → Actions`:
+
+- `ANDROID_KEYSTORE_BASE64` – celý release keystore zakódovaný pomocí `base64`;
+- `ANDROID_KEYSTORE_PASSWORD` – heslo keystore;
+- `ANDROID_KEY_PASSWORD` – heslo klíče;
+- `ANDROID_KEY_ALIAS` – standardně `maki`.
+
+Workflow spusťte v záložce Actions pomocí **Run workflow**, zadejte `version_name` a vždy rostoucí `version_code`. Výsledný artefakt obsahuje podepsané APK, AAB, kontrolní součty a otisk certifikátu. Keystore se do Gitu ani výsledného artefaktu nepřidává.
+
+Pokud release keystore ještě neexistuje, vytvořte jej jednou na důvěryhodném počítači s JDK 17 a bezpečně jej zazálohujte:
+
+```bash
+keytool -genkeypair -v -keystore maki-release.keystore -alias maki -keyalg RSA -keysize 2048 -validity 10000
+base64 -w 0 maki-release.keystore
+```
+
+Na PowerShellu lze druhý příkaz nahradit:
+
+```powershell
+[Convert]::ToBase64String([IO.File]::ReadAllBytes('maki-release.keystore'))
+```
+
+### Ručně pomocí Bubblewrap
+
 Na vývojovém počítači s Java JDK a Android SDK nainstalujte aktuální Bubblewrap CLI a inicializujte Trusted Web Activity z produkčního manifestu:
 
 ```bash
@@ -32,6 +58,15 @@ php artisan config:clear
 ```
 
 Příkaz APK zpřístupní přes Laravel storage, uloží verzi, velikost a SHA-256 a vypíše stabilní odkaz. Podpisový klíč ani hesla se na aplikační server neposílají.
+
+`/bezpecna/cesta/app-release-signed.apk` je pouze příklad. Soubor je nejprve nutné z Actions stáhnout a na server přenést, například:
+
+```bash
+scp maki-gallery-1.0.0.apk root@vmi2254765:/root/app-release-signed.apk
+ssh root@vmi2254765
+cd /www/wwwroot/gallery.stanektech.cz
+php artisan gallery:publish-android-app /root/app-release-signed.apk --app-version=1.0.0
+```
 
 Alternativně lze nastavit `ANDROID_APP_DOWNLOAD_URL` na důvěryhodný HTTPS release/CDN odkaz. Stabilní aplikační URL pak na tento soubor bezpečně přesměruje.
 
