@@ -76,7 +76,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          docker run --rm \
+          docker run --rm -i \
             -e BUBBLEWRAP_KEYSTORE_PASSWORD \
             -e BUBBLEWRAP_KEY_PASSWORD \
             -v "$PWD/android-twa:/app" \
@@ -85,7 +85,7 @@ jobs:
             build --skipPwaValidation \
               --manifest=./twa-manifest.json \
               --signingKeyPath=./maki-release.keystore \
-              --signingKeyAlias="$ANDROID_KEY_ALIAS"
+              --signingKeyAlias="$ANDROID_KEY_ALIAS" < <(yes)
 
       - name: Prepare verified build artifacts
         shell: bash
@@ -103,7 +103,7 @@ jobs:
             -v "$PWD/android-twa:/app" \
             -v "$PWD/android-artifacts:/artifacts" \
             "$BUBBLEWRAP_IMAGE" \
-            -c 'keytool -list -v -keystore /app/maki-release.keystore -alias "${ANDROID_KEY_ALIAS:-maki}" -storepass "$BUBBLEWRAP_KEYSTORE_PASSWORD" | grep "SHA256:" > /artifacts/ANDROID_CERTIFICATE_FINGERPRINT.txt'
+            -c 'keytool -list -v -storetype PKCS12 -keystore /app/maki-release.keystore -alias "${ANDROID_KEY_ALIAS:-maki}" -storepass "$BUBBLEWRAP_KEYSTORE_PASSWORD" | grep "SHA256:" > /artifacts/ANDROID_CERTIFICATE_FINGERPRINT.txt'
           test -s android-artifacts/ANDROID_CERTIFICATE_FINGERPRINT.txt
 
       - name: Upload signed Android build

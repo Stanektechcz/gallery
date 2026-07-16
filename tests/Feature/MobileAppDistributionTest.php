@@ -107,6 +107,8 @@ class MobileAppDistributionTest extends TestCase
 
         $this->assertStringContainsString('actions/checkout@v5', $workflow);
         $this->assertStringContainsString('actions/upload-artifact@v6', $workflow);
+        $this->assertStringContainsString('docker run --rm -i', $workflow);
+        $this->assertStringContainsString('--signingKeyAlias="$ANDROID_KEY_ALIAS" < <(yes)', $workflow);
         $this->assertStringNotContainsString('actions/checkout@v4', $workflow);
     }
 }

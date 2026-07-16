@@ -16,20 +16,26 @@ function Find-Keytool {
 
     $java = Get-Command java -ErrorAction SilentlyContinue
     if ($java) {
-        # Java intentionally writes version/property diagnostics to stderr. Windows
-        # PowerShell 5.1 otherwise promotes this successful output to NativeCommandError
-        # when the script uses ErrorActionPreference=Stop.
+        $javaItem = Get-Item -LiteralPath $java.Source -Force
+        $javaTarget = @($javaItem.Target) | Select-Object -First 1
+        if ($javaTarget) {
+            $candidate = Join-Path (Split-Path -Parent ([string] $javaTarget)) 'keytool.exe'
+            if (Test-Path -LiteralPath $candidate) { return $candidate }
+        }
+
+        # Java intentionally writes version/property diagnostics to stderr. Merge
+        # both streams inside cmd.exe before PowerShell sees them. This avoids both
+        # NativeCommandError and the stdout/stderr pipe deadlock of Windows PS 5.1.
         $startInfo = [Diagnostics.ProcessStartInfo]::new()
-        $startInfo.FileName = $java.Source
-        $startInfo.Arguments = '-XshowSettings:properties -version'
+        $startInfo.FileName = $env:ComSpec
+        $startInfo.Arguments = "/d /s /c `"`"$($java.Source)`" -XshowSettings:properties -version 2>&1`""
         $startInfo.UseShellExecute = $false
         $startInfo.CreateNoWindow = $true
         $startInfo.RedirectStandardOutput = $true
-        $startInfo.RedirectStandardError = $true
         $process = [Diagnostics.Process]::new()
         $process.StartInfo = $startInfo
         [void] $process.Start()
-        $settings = $process.StandardOutput.ReadToEnd() + [Environment]::NewLine + $process.StandardError.ReadToEnd()
+        $settings = $process.StandardOutput.ReadToEnd()
         $process.WaitForExit()
         $match = [regex]::Match($settings, '(?m)^\s*java\.home\s*=\s*(.+?)\s*$')
         if ($match.Success) {
@@ -135,7 +141,7 @@ try {
     $previousErrorPreference = $ErrorActionPreference
     try {
         $ErrorActionPreference = 'Continue'
-        & $keytool -list -keystore $keystorePath -alias $Alias -storepass $password 2>&1 | Write-Verbose
+        & $keytool -list -storetype PKCS12 -keystore $keystorePath -alias $Alias -storepass $password 2>&1 | Write-Verbose
         $keytoolExitCode = $LASTEXITCODE
     } finally {
         $ErrorActionPreference = $previousErrorPreference
