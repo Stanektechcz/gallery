@@ -16,7 +16,21 @@ function Find-Keytool {
 
     $java = Get-Command java -ErrorAction SilentlyContinue
     if ($java) {
-        $settings = (& $java.Source -XshowSettings:properties -version 2>&1 | Out-String)
+        # Java intentionally writes version/property diagnostics to stderr. Windows
+        # PowerShell 5.1 otherwise promotes this successful output to NativeCommandError
+        # when the script uses ErrorActionPreference=Stop.
+        $startInfo = [Diagnostics.ProcessStartInfo]::new()
+        $startInfo.FileName = $java.Source
+        $startInfo.Arguments = '-XshowSettings:properties -version'
+        $startInfo.UseShellExecute = $false
+        $startInfo.CreateNoWindow = $true
+        $startInfo.RedirectStandardOutput = $true
+        $startInfo.RedirectStandardError = $true
+        $process = [Diagnostics.Process]::new()
+        $process.StartInfo = $startInfo
+        [void] $process.Start()
+        $settings = $process.StandardOutput.ReadToEnd() + [Environment]::NewLine + $process.StandardError.ReadToEnd()
+        $process.WaitForExit()
         $match = [regex]::Match($settings, '(?m)^\s*java\.home\s*=\s*(.+?)\s*$')
         if ($match.Success) {
             $candidate = Join-Path $match.Groups[1].Value.Trim() 'bin\keytool.exe'
@@ -85,18 +99,25 @@ if ((Test-Path -LiteralPath $keystorePath) -xor (Test-Path -LiteralPath $passwor
 
 if (-not (Test-Path -LiteralPath $keystorePath)) {
     $password = New-RandomPassword
-    & $keytool -genkeypair -noprompt `
-        -storetype PKCS12 `
-        -keystore $keystorePath `
-        -alias $Alias `
-        -keyalg RSA `
-        -keysize 3072 `
-        -sigalg SHA256withRSA `
-        -validity 10000 `
-        -storepass $password `
-        -keypass $password `
-        -dname 'CN=Maki Gallery, OU=Android, O=Stanektech, L=Brno, C=CZ'
-    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $keystorePath)) {
+    $previousErrorPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        & $keytool -genkeypair -noprompt `
+            -storetype PKCS12 `
+            -keystore $keystorePath `
+            -alias $Alias `
+            -keyalg RSA `
+            -keysize 3072 `
+            -sigalg SHA256withRSA `
+            -validity 10000 `
+            -storepass $password `
+            -keypass $password `
+            -dname 'CN=Maki Gallery, OU=Android, O=Stanektech, L=Brno, C=CZ' 2>&1 | Write-Verbose
+        $keytoolExitCode = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previousErrorPreference
+    }
+    if ($keytoolExitCode -ne 0 -or -not (Test-Path -LiteralPath $keystorePath)) {
         throw 'Release keystore se nepodařilo vytvořit.'
     }
 
@@ -111,8 +132,15 @@ if (-not (Test-Path -LiteralPath $keystorePath)) {
 }
 
 try {
-    & $keytool -list -keystore $keystorePath -alias $Alias -storepass $password | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw 'Release keystore nebo jeho lokální heslo nejsou platné.' }
+    $previousErrorPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        & $keytool -list -keystore $keystorePath -alias $Alias -storepass $password 2>&1 | Write-Verbose
+        $keytoolExitCode = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previousErrorPreference
+    }
+    if ($keytoolExitCode -ne 0) { throw 'Release keystore nebo jeho lokální heslo nejsou platné.' }
 
     $keystoreBase64 = [Convert]::ToBase64String([IO.File]::ReadAllBytes($keystorePath))
     Set-RepositorySecret 'ANDROID_KEYSTORE_BASE64' $keystoreBase64
