@@ -3,8 +3,9 @@
 
 <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="theme-color" content="#1a1a2e">
+    <meta name="color-scheme" content="dark">
 
     <title inertia>{{ config('app.name', 'Stanektech Gallery') }}</title>
 
@@ -18,8 +19,10 @@
     <!-- Security headers -->
     <meta name="referrer" content="strict-origin-when-cross-origin">
 
-    <!-- Favicons (placeholder paths — replace with actual icons) -->
-    <link rel="icon" type="image/png" href="/favicon.ico">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="icon" href="/favicon.ico" sizes="any">
+    <link rel="icon" type="image/svg+xml" href="/icons/maki-app.svg">
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
 
     @routes
     @viteReactRefresh

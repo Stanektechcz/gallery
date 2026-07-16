@@ -2,6 +2,7 @@
 
 namespace App\Notifications;
 
+use App\Services\Notifications\NotificationPreferenceService;
 use Illuminate\Notifications\Notification;
 
 /**
@@ -20,17 +21,27 @@ class GalleryNotification extends Notification
 
     public function via(object $notifiable): array
     {
+        if ($notifiable instanceof \App\Models\User
+            && ! app(NotificationPreferenceService::class)->allows($notifiable, $this->type, ['extra' => $this->extra, 'link' => $this->link])) {
+            return [];
+        }
+
         return ['database'];
     }
 
     public function toDatabase(object $notifiable): array
     {
+        $metadata = app(NotificationPreferenceService::class)->metadata($this->type, ['extra' => $this->extra, 'link' => $this->link]);
+
         return [
             'type'    => $this->type,
             'message' => $this->message,
             'link'    => $this->link,
             'icon'    => $this->icon ?? $this->defaultIcon(),
             'extra'   => $this->extra,
+            'category' => $metadata['category'],
+            'priority' => $metadata['priority'],
+            'context_key' => $metadata['context_key'],
         ];
     }
 
@@ -43,6 +54,13 @@ class GalleryNotification extends Notification
             'drive.reconnect'  => '⚠️',
             'export.ready'     => '📦',
             'album.created'    => '📁',
+            'calendar.task.assigned', 'todo.assigned' => '✅',
+            'calendar.task.overdue' => '⚠️',
+            'memory.capsule' => '💌',
+            'relationship.birthday' => '🎂',
+            'relationship.milestone' => '❤️',
+            'gift.reminder' => '🎁',
+            'finance.imported', 'bank.synced' => '💳',
             default            => '🔔',
         };
     }
@@ -60,7 +78,10 @@ class GalleryNotification extends Notification
     ): void {
         $members = $space->members()->where('users.id', '!=', $exceptUserId)->get();
         foreach ($members as $member) {
-            $member->notify(new self($type, $message, $link, null, $extra));
+            $member->notify(new self($type, $message, $link, null, $extra + [
+                'gallery_space_id' => $space->id,
+                'actor_user_id' => $exceptUserId,
+            ]));
         }
     }
 }

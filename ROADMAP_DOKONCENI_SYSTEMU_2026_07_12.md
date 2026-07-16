@@ -1,6 +1,6 @@
 # Roadmap dokončení systému galerie, cest a vzpomínek
 
-Stav aktualizován: 14. 7. 2026. Tento dokument je pracovní plán pro další implementaci. Rozlišuje funkce nasazené, rozpracované a nezapočaté. „Částečně“ znamená, že existuje bezpečné datové jádro nebo prototyp, ale chybí uživatelský postup, automatizace, integrace či dostatečné testy.
+Stav aktualizován: 16. 7. 2026. Tento dokument je pracovní plán pro další implementaci. Rozlišuje funkce nasazené, rozpracované a nezapočaté. „Částečně“ znamená, že existuje bezpečné datové jádro nebo prototyp, ale chybí uživatelský postup, automatizace, integrace či dostatečné testy.
 
 ## Priorita a pravidla
 
@@ -14,7 +14,7 @@ Stav aktualizován: 14. 7. 2026. Tento dokument je pracovní plán pro další i
 
 | Doména | Stav | Co existuje | Co chybí pro plnou funkčnost |
 |---|---|---|---|
-| Kalendář a společné plánování | Částečně | Akce, opakování s výjimkami, dostupnost, šablony, RSVP, úkoly, dárky, ankety, ICS export i partnerský import, české svátky a automatické návrhy prodlouženého volna propojené s cestou | Drag-and-drop série, historie změn, odložení připomínek, PWA widget |
+| Kalendář a společné plánování | Pokročilé | Akce, opakování s výjimkami, dostupnost, šablony, RSVP, úkoly, dárky, ankety, ICS export i partnerský import, české svátky, návrhy prodlouženého volna a osobní akční připomínky s odložením i historií | Drag-and-drop série, úplná historie změn celé akce, PWA widget |
 | Cesty a itinerář | Částečně | Cesty, dny, aktivity, pořadí, rozpočty, doklady, balení, auto, nouzová karta, offline JSON | OCR rezervací, QR/PDF offline balíček, reálné časy přesunů, check-in a živé dopravní změny |
 | Finance | Částečně | Výdaje, limity, kurzy, ruční vyrovnání, automobilové náklady | Podíly/procenta, automatické saldo, kauce, kredity, CSV/XLSX, fond cesty, detekce duplicit |
 | Doprava a mapy | Částečně | Vyhledání jízdenek s fallbackem, filtry, uložené relace, české mapy | Stabilní živé zpoždění/nástupiště, emise/pohodlí, výjezd podle dopravy, aktivní sdílení polohy |
@@ -22,7 +22,7 @@ Stav aktualizován: 14. 7. 2026. Tento dokument je pracovní plán pro další i
 | Vzpomínky a příběhy | Pokročilé | Vzpomínky, časové kapsle, soukromé poznámky, skutečný hlasový deník s GPS a ručním přepisem, partnerská viditelnost, kapitoly cesty podle dnů, citace, mapa, výroční album a večer se vzpomínkami | Hudební odkazy v příběhu a další kurátorské šablony |
 | Místa | Částečně | Evidence míst a podniků, český našeptávač, GPS, média, preference, rezervace, výlet z výběru míst a partnerské hodnocení návštěv včetně obsluhy, jídel, pití, nabídky, cen a fotografií | Otevírací doba, voda/toalety, pokročilé tematické kolekce a návrh výletu z širšího okolí |
 | Sdílení a rodina | Částečně | Odkazy, hesla, expirace, hostující upload a schvalování | Schvalování hostujících komentářů, přehled stažení, žádost o přístup, rodinné skupiny, pravidla podle místa/data |
-| Mobilní režim | Částečně | PWA, Share Target, „Právě teď“, responzivní obrazovky | Offline fronta, haptika, zástupce, widget, sken dokumentu, privátní obrazovka |
+| Mobilní režim | Částečně | PWA, Share Target, „Právě teď“, responzivní obrazovky a důležitá upozornění zařízení při aktivní aplikaci | Offline fronta, haptika, zástupce, widget, sken dokumentu, privátní obrazovka a plný Web Push na pozadí |
 | Provoz a bezpečnost | Částečně | Hlavičky, relace, audit části akcí, export s vlastnickou kontrolou | Passkeys, 2FA, obnovovací kódy, Web Push/VAPID, test obnovy zálohy, monitoring výkonu |
 
 ## Rozpracované bloky, které je nutné uzavřít
@@ -344,3 +344,26 @@ Tyto body nelze prohlásit za plně hotové bez následného nastavení a povole
 - Otevřená skupina se automaticky přizpůsobí právě zobrazené stránce a uživatelská volba se uchovává lokálně v prohlížeči.
 - Každý uživatel si může vybrat až šest vlastních rychlých zkratek, měnit jejich pořadí a kdykoli je vymazat; nastavení nezatěžuje server ani společný prostor druhého partnera.
 - Mobilní spodní navigace má pouze čtyři cíle a tlačítko `Více`, takže zůstává čitelná a ovladatelná jednou rukou i na úzkém telefonu.
+
+## Dokončená sjednocovací vlna 16. 7. 2026 — akční připomínky napříč společnými zážitky
+
+- Připomínky z cest, rezervací, receptů, randíček, výročí i ručně vytvořených kalendářních akcí používají jeden stavový cyklus a jednu historii doručení.
+- Přihlášený uživatel může svou připomínku odložit o hodinu nebo den, označit ji jako vyřízenou či skrýt. Osobní odložení nemění termín akce ani připomínku partnera.
+- Akce jsou dostupné přímo v notifikačním zvonku, detailu původní události i na partnerském dashboardu; nevznikla nová hlavní záložka ani paralelní seznam.
+- Detail akce dovoluje přidat vlastní připomínku z bezpečných předvoleb od 15 minut do 30 dnů a zobrazuje její historii. Historie cizí osobní připomínky zůstává skrytá.
+- Odložení nebo vyřízení automaticky označí související upozornění jako přečtené. Po odložení se připomínka znovu doručí stejným plánovacím příkazem a nezůstane ve falešném stavu `doručeno`.
+- Úprava připomínek ve formuláři kalendáře nemaže automatické připomínky cesty, rezervace, receptu ani osobní termíny; nahrazuje pouze položky vytvořené stejným formulářem.
+- Zápis je transakční, chráněný příjemcem, omezený počtem odložení a blokovaný v režimu pouze pro čtení. Druhý partner ani člen cizího prostoru nemůže osobní připomínku změnit.
+- Pokrytí: regresní test sleduje doručení, identitu ve zvonku, zákaz partnerského zásahu, odložení, opětovné doručení, dashboard, vyřízení, historii a read-only ochranu; samostatný test chrání automatické a osobní připomínky při úpravě akce.
+
+## Dokončená sjednocovací vlna 16. 7. 2026 — partnerské notifikační centrum bez další záložky
+
+- Jeden globální zvonek sjednocuje upozornění z kalendáře, úkolů, cest, dopravy, míst, galerie, vzpomínek, vztahu, výročí, financí i systémové správy. Zdrojová data zůstávají v původních funkcích a notifikace vždy odkazuje zpět do jejich kontextu.
+- Každé upozornění má automaticky odvozenou oblast a prioritu `nízká / běžná / důležitá / kritická`. Starší databázové notifikace se klasifikují při načtení, takže migrace nevyžaduje riskantní hromadný přepis historie.
+- Zvoněk nabízí pohledy `Vše`, `Důležité` a `Nepřečtené`, filtr podle oblasti, globální počty a výrazné označení důležitých a kritických událostí. Na úzkém telefonu používá bezpečnou šířku i omezenou výšku s vlastním rolováním.
+- Běžné upozornění lze osobně odložit o hodinu a později znovu zobrazit nebo archivovat. Kalendářní připomínka používá svůj úplný životní cyklus odložení a vyřízení a související notifikace se po dokončení automaticky archivuje.
+- Každý partner má vlastní volby oblastí a nejnižší zobrazované priority. Nastavení jednoho partnera nikdy nemění partnerova upozornění; kritické bezpečnostní notifikace systém doručí vždy.
+- Tichý interval je propojený se stávajícím nastavením dostupnosti v kalendáři. V tichém režimu zůstane upozornění bezpečně ve zvonku, ale aktivní prohlížeč ani PWA nevyvolá systémové okno.
+- Uživatel může po výslovném souhlasu prohlížeče zapnout systémová upozornění zařízení pro nové důležité události. Opakované načtení stejné notifikace nevytváří další okno; úplný push při zavřené aplikaci nadále vyžaduje VAPID infrastrukturu uvedenou v provozním backlogu.
+- Veškeré operace používají uživatelův vlastní vztah notifikací, takže nelze přečíst, odložit ani archivovat upozornění druhého partnera. API funguje ve čtecím režimu i před migrací; pouze nové stavové akce vrátí srozumitelnou servisní odpověď do dokončení databázové aktualizace.
+- Pokrytí: integrační testy ověřují prioritu a kategorii, důležitý filtr, filtrování oblastí, osobní odložení a návrat, archivaci, označení všeho jako přečtené, izolaci partnerů, tichý režim přes půlnoc, vypnutí kategorií a povinné doručení kritického bezpečnostního upozornění.

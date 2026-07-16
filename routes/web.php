@@ -8,6 +8,7 @@ use App\Http\Controllers\Auth\PasswordResetController;
 use App\Http\Controllers\FavoritesController;
 use App\Http\Controllers\GoogleOAuthController;
 use App\Http\Controllers\MediaController;
+use App\Http\Controllers\MobileAppController;
 use App\Http\Controllers\MemoriesController;
 use App\Http\Controllers\ShareController;
 use App\Http\Controllers\TrashController;
@@ -31,6 +32,12 @@ Route::get('/forgot-password', [PasswordResetController::class, 'request'])->nam
 Route::post('/forgot-password', [PasswordResetController::class, 'email'])->name('password.email');
 Route::get('/reset-password/{token}', [PasswordResetController::class, 'reset'])->name('password.reset');
 Route::post('/reset-password', [PasswordResetController::class, 'update'])->name('password.update');
+
+// Public mobile application centre and stable direct Android download link.
+Route::get('/app', [MobileAppController::class, 'index'])->name('mobile-app.index');
+Route::redirect('/aplikace', '/app')->name('mobile-app.cs');
+Route::get('/app/android/download', [MobileAppController::class, 'download'])->name('mobile-app.android.download');
+Route::get('/.well-known/assetlinks.json', [MobileAppController::class, 'assetLinks'])->name('mobile-app.asset-links');
 
 // Public shared links
 Route::get('/s/{token}', [ShareController::class, 'show'])->name('share.show');

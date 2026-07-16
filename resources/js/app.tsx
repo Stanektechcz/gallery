@@ -3,6 +3,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import axios from 'axios';
 import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import { createRoot } from 'react-dom/client';
+import PwaLifecycle from './Components/PwaLifecycle';
+import { PwaInstallProvider } from './Contexts/PwaInstallContext';
 import '../css/app.css';
 
 // Configure Axios for Sanctum stateful auth (cookie-based for web)
@@ -29,7 +31,10 @@ createInertiaApp({
         const root = createRoot(el);
         root.render(
             <QueryClientProvider client={queryClient}>
-                <App {...props} />
+                <PwaInstallProvider>
+                    <PwaLifecycle />
+                    <App {...props} />
+                </PwaInstallProvider>
             </QueryClientProvider>
         );
     },
@@ -38,4 +43,3 @@ createInertiaApp({
         showSpinner: true,
     },
 });
-

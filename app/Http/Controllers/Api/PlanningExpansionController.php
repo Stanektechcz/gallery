@@ -80,7 +80,13 @@ class PlanningExpansionController extends Controller
         $this->write($request);
         $data = $request->validate(['availability' => 'required|array|max:14', 'availability.*.from' => 'required|date_format:H:i', 'availability.*.to' => 'required|date_format:H:i|after:availability.*.from', 'availability.*.weekday' => 'required|integer|between:0,6', 'quiet_hours' => 'nullable|array', 'quiet_hours.from' => 'required_with:quiet_hours|date_format:H:i', 'quiet_hours.to' => 'required_with:quiet_hours|date_format:H:i']);
         $preferences = $request->user()->preferences ?? [];
-        $preferences['planning_availability'] = $data['availability']; $preferences['quiet_hours'] = $data['quiet_hours'] ?? null;
+        $quietHours = $data['quiet_hours'] ?? null;
+        $preferences['planning_availability'] = $data['availability']; $preferences['quiet_hours'] = $quietHours;
+        $notificationPreferences = (array) ($preferences['notifications'] ?? []);
+        $notificationPreferences['quiet'] = $quietHours
+            ? ['enabled' => true, 'from' => $quietHours['from'], 'to' => $quietHours['to']]
+            : ['enabled' => false, 'from' => data_get($notificationPreferences, 'quiet.from', '22:00'), 'to' => data_get($notificationPreferences, 'quiet.to', '07:00')];
+        $preferences['notifications'] = $notificationPreferences;
         $request->user()->update(['preferences' => $preferences]);
         return response()->json(['availability' => $preferences['planning_availability'], 'quiet_hours' => $preferences['quiet_hours']]);
     }

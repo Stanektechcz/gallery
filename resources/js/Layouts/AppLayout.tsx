@@ -1,4 +1,5 @@
 import UploadPanel from '@/Components/UploadPanel';
+import AppInstallButton from '@/Components/AppInstallButton';
 import { Link, router, usePage } from '@inertiajs/react';
 import axios from 'axios';
 import { clsx } from 'clsx';
@@ -247,28 +248,82 @@ interface GalleryNotif {
     id:         string;
     read_at:    string | null;
     created_at: string;
+    category: string;
+    category_label: string;
+    priority: 'low' | 'normal' | 'high' | 'critical';
+    context_key?: string | null;
+    snoozed_until?: string | null;
     data: {
         type:    string;
         message: string;
         link?:   string;
         icon?:   string;
+        extra?: {
+            reminder_id?: number;
+            actionable?: boolean;
+            event_uuid?: string;
+            starts_at?: string;
+            [key: string]: unknown;
+        };
     };
+}
+
+interface NotificationPreferences {
+    categories: Record<string, boolean>;
+    priority_floor: 'low' | 'normal' | 'high' | 'critical';
+    quiet: { enabled:boolean; from:string; to:string };
+    browser_notifications: boolean;
+}
+
+interface NotificationMeta {
+    total: number;
+    unread: number;
+    important: number;
+    critical: number;
+    quiet_now: boolean;
+    categories: Record<string, number>;
 }
 
 function NotificationBell() {
     const [notifs,     setNotifs]     = useState<GalleryNotif[]>([]);
     const [open,       setOpen]       = useState(false);
     const [loading,    setLoading]    = useState(false);
+    const [actionBusy, setActionBusy] = useState('');
+    const [actionError, setActionError] = useState('');
+    const [focus, setFocus] = useState<'all'|'important'|'unread'>('all');
+    const [categoryFilter, setCategoryFilter] = useState('all');
+    const [showSettings, setShowSettings] = useState(false);
+    const [preferences, setPreferences] = useState<NotificationPreferences|null>(null);
+    const [preferenceDraft, setPreferenceDraft] = useState<NotificationPreferences|null>(null);
+    const [categories, setCategories] = useState<Record<string,string>>({});
+    const [meta, setMeta] = useState<NotificationMeta>({total:0,unread:0,important:0,critical:0,quiet_now:false,categories:{}});
     const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
     const load = useCallback(async () => {
         setLoading(true);
         try {
-            const r = await axios.get('/api/v1/notifications');
-            setNotifs(r.data?.data ?? r.data ?? []);
+            const r = await axios.get('/api/v1/notifications', {params:{focus,category:categoryFilter==='all'?undefined:categoryFilter,limit:30}});
+            const items:GalleryNotif[] = r.data?.data ?? [];
+            const nextPreferences:NotificationPreferences|null = r.data?.preferences ?? null;
+            setNotifs(items);
+            setMeta(r.data?.meta ?? {total:items.length,unread:items.filter(item=>!item.read_at).length,important:0,critical:0,quiet_now:false,categories:{}});
+            setCategories(r.data?.categories ?? {});
+            if (nextPreferences) {
+                setPreferences(nextPreferences);
+                setPreferenceDraft(current => current ?? nextPreferences);
+            }
+            if (nextPreferences?.browser_notifications && !r.data?.meta?.quiet_now && 'Notification' in window && Notification.permission === 'granted') {
+                const seen = new Set<string>(JSON.parse(sessionStorage.getItem('maki-notified') ?? '[]'));
+                items.filter(item => !item.read_at && ['high','critical'].includes(item.priority) && !seen.has(item.id)).slice(0,3).forEach(item => {
+                    const notification = new Notification(item.category_label || 'Maki Gallery', {body:item.data.message,tag:item.context_key ?? item.id,icon:'/favicon.ico'});
+                    notification.onclick = () => { window.focus(); if (item.data.link) router.visit(item.data.link); notification.close(); };
+                    seen.add(item.id);
+                });
+                sessionStorage.setItem('maki-notified', JSON.stringify(Array.from(seen).slice(-100)));
+            }
         } catch { /* ignore */ }
         finally { setLoading(false); }
-    }, []);
+    }, [focus, categoryFilter]);
 
     // Load on mount + every 60s
     useEffect(() => {
@@ -278,21 +333,71 @@ function NotificationBell() {
     }, [load]);
 
     const markRead = async (id: string) => {
+        const wasUnread = notifs.some(notification => notification.id === id && !notification.read_at);
         await axios.post(`/api/v1/notifications/${id}/read`).catch(() => {});
         setNotifs(prev => prev.map(n => n.id === id ? { ...n, read_at: new Date().toISOString() } : n));
+        if (wasUnread) setMeta(current => ({...current,unread:Math.max(0,current.unread-1)}));
     };
 
     const markAllRead = async () => {
-        await axios.post('/api/v1/notifications/read-all').catch(() => {});
-        setNotifs(prev => prev.map(n => ({ ...n, read_at: n.read_at ?? new Date().toISOString() })));
+        await axios.post('/api/v1/notifications/read-all', categoryFilter === 'all' ? {} : {category:categoryFilter}).catch(() => {});
+        setNotifs(prev => focus === 'unread' ? [] : prev.map(n => ({ ...n, read_at: n.read_at ?? new Date().toISOString() })));
+        if (categoryFilter === 'all') setMeta(current => ({...current,unread:0}));
+        else await load();
     };
 
-    const unread = notifs.filter(n => !n.read_at).length;
+    const unread = meta.unread;
 
     const handleClick = (n: GalleryNotif) => {
         markRead(n.id);
         if (n.data.link) router.visit(n.data.link);
         setOpen(false);
+    };
+
+    const reminderAction = async (notification: GalleryNotif, action: 'snooze' | 'acknowledge', minutes?: number) => {
+        const reminderId = notification.data.extra?.reminder_id;
+        if (!reminderId) return;
+        setActionBusy(`${notification.id}:${action}:${minutes ?? 0}`);
+        setActionError('');
+        try {
+            await axios.post(`/api/v1/reminders/${reminderId}/${action}`, minutes ? { minutes } : {});
+            setNotifs(current => current.filter(item => item.id !== notification.id));
+            await load();
+        } catch (reason: any) {
+            setActionError(reason.response?.data?.message ?? 'Připomínku se nepodařilo změnit.');
+        } finally {
+            setActionBusy('');
+        }
+    };
+
+    const manageNotification = async (notification:GalleryNotif, action:'snooze'|'archive', minutes = 60) => {
+        setActionBusy(`${notification.id}:${action}`); setActionError('');
+        try {
+            await axios.post(`/api/v1/notifications/${notification.id}/${action}`, action === 'snooze' ? {minutes} : {});
+            setNotifs(current => current.filter(item => item.id !== notification.id));
+            await load();
+        } catch (reason:any) { setActionError(reason.response?.data?.message ?? 'Notifikaci se nepodařilo změnit.'); }
+        finally { setActionBusy(''); }
+    };
+
+    const savePreferences = async () => {
+        if (!preferenceDraft) return;
+        setActionBusy('preferences'); setActionError('');
+        try {
+            const response = await axios.patch('/api/v1/notifications/preferences', preferenceDraft);
+            setPreferences(response.data.preferences); setPreferenceDraft(response.data.preferences);
+            setMeta(current => ({...current,quiet_now:response.data.quiet_now ?? current.quiet_now}));
+            setShowSettings(false); await load();
+        } catch (reason:any) { setActionError(reason.response?.data?.message ?? 'Nastavení upozornění se nepodařilo uložit.'); }
+        finally { setActionBusy(''); }
+    };
+
+    const enableBrowserNotifications = async () => {
+        if (!preferenceDraft) return;
+        if (!('Notification' in window)) { setActionError('Tento prohlížeč systémová upozornění nepodporuje.'); return; }
+        const permission = await Notification.requestPermission();
+        if (permission !== 'granted') { setActionError('Prohlížeč nepovolil systémová upozornění.'); return; }
+        setPreferenceDraft({...preferenceDraft,browser_notifications:true});
     };
 
     const fmtTime = (d: string) => {
@@ -305,7 +410,7 @@ function NotificationBell() {
 
     return (
         <div className="relative">
-            <button onClick={() => setOpen(v => !v)}
+            <button type="button" aria-label="Otevřít partnerská upozornění" aria-expanded={open} onClick={() => setOpen(v => !v)}
                 className={`relative p-2 rounded-lg hover:bg-white/10 transition-colors ${open ? 'text-white bg-white/10' : 'text-[var(--color-text-secondary)]'}`}>
                 <Bell size={18}/>
                 {unread > 0 && (
@@ -318,38 +423,47 @@ function NotificationBell() {
             {open && (
                 <>
                     <div className="fixed inset-0 z-40" onClick={() => setOpen(false)}/>
-                    <div className="absolute right-0 top-full mt-2 w-80 bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-xl shadow-2xl overflow-hidden z-50">
+                    <div className="absolute right-0 top-full mt-2 w-[min(25rem,calc(100vw-1rem))] bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-xl shadow-2xl overflow-hidden z-50">
                         <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--color-border)]">
-                            <h3 className="text-sm font-semibold text-white">Notifikace</h3>
-                            {unread > 0 && (
-                                <button onClick={markAllRead} className="text-[10px] text-[var(--color-accent)] hover:underline">
-                                    Označit vše jako přečtené
-                                </button>
-                            )}
+                            <div><h3 className="text-sm font-semibold text-white">Pro nás dva</h3><p className="mt-0.5 text-[10px] text-[var(--color-text-secondary)]">Plány, cesty, vzpomínky i společné finance</p></div>
+                            <div className="flex items-center gap-1">{meta.quiet_now&&<span title="Tichý režim je aktivní" className="rounded-full bg-violet-500/15 px-2 py-1 text-[9px] text-violet-100">ticho</span>}<button aria-label="Nastavení upozornění" onClick={()=>setShowSettings(value=>!value)} className={`rounded-lg p-2 ${showSettings?'bg-white/10 text-white':'text-[var(--color-text-secondary)] hover:text-white'}`}><Settings size={15}/></button></div>
                         </div>
 
-                        <div className="max-h-80 overflow-y-auto">
+                        <div className="border-b border-[var(--color-border)] px-3 py-2"><div className="flex items-center gap-1 overflow-x-auto">{([['all','Vše',meta.total],['important','Důležité',meta.important],['unread','Nepřečtené',meta.unread]] as const).map(([value,label,count])=><button key={value} onClick={()=>setFocus(value)} className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] ${focus===value?'bg-[var(--color-accent)] text-white':'bg-white/5 text-[var(--color-text-secondary)]'}`}>{label} · {count}</button>)}<div className="flex-1"/>{unread>0&&<button onClick={markAllRead} className="shrink-0 text-[10px] text-[var(--color-accent)] hover:underline">Přečíst vše</button>}</div><select aria-label="Filtrovat druh upozornění" value={categoryFilter} onChange={event=>setCategoryFilter(event.target.value)} className="mt-2 min-h-8 w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-2 text-[10px] text-white"><option value="all">Všechny oblasti</option>{Object.entries(categories).filter(([key])=>(meta.categories[key]??0)>0).map(([key,label])=><option key={key} value={key}>{label} · {meta.categories[key]??0}</option>)}</select></div>
+
+                        {actionError && <p className="border-b border-[var(--color-border)] bg-red-500/10 px-4 py-2 text-[10px] text-red-200">{actionError}</p>}
+
+                        {showSettings&&preferenceDraft&&<div className="max-h-[60dvh] overflow-y-auto border-b border-[var(--color-border)] bg-black/10 p-4"><p className="text-xs font-medium text-white">Co mi má systém připomínat</p><div className="mt-2 grid grid-cols-2 gap-1.5">{Object.entries(categories).map(([key,label])=><label key={key} className="flex min-w-0 items-center gap-2 rounded-lg bg-white/5 p-2 text-[10px] text-[var(--color-text-secondary)]"><input type="checkbox" checked={preferenceDraft.categories[key]??true} disabled={key==='system'} onChange={event=>setPreferenceDraft({...preferenceDraft,categories:{...preferenceDraft.categories,[key]:event.target.checked}})}/><span className="truncate">{label}</span></label>)}</div><label className="mt-3 block text-[10px] text-[var(--color-text-secondary)]">Nejnižší zobrazovaná priorita<select value={preferenceDraft.priority_floor} onChange={event=>setPreferenceDraft({...preferenceDraft,priority_floor:event.target.value as NotificationPreferences['priority_floor']})} className="mt-1 min-h-9 w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-2 text-xs text-white"><option value="low">Všechna upozornění</option><option value="normal">Běžná a důležitá</option><option value="high">Jen důležitá</option><option value="critical">Jen kritická</option></select></label><label className="mt-3 flex items-center justify-between gap-3 text-xs text-white"><span>Tichý režim</span><input type="checkbox" checked={preferenceDraft.quiet.enabled} onChange={event=>setPreferenceDraft({...preferenceDraft,quiet:{...preferenceDraft.quiet,enabled:event.target.checked}})}/></label>{preferenceDraft.quiet.enabled&&<div className="mt-2 grid grid-cols-2 gap-2"><label className="text-[10px] text-[var(--color-text-secondary)]">Od<input type="time" value={preferenceDraft.quiet.from} onChange={event=>setPreferenceDraft({...preferenceDraft,quiet:{...preferenceDraft.quiet,from:event.target.value}})} className="mt-1 w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-secondary)] p-2 text-xs text-white"/></label><label className="text-[10px] text-[var(--color-text-secondary)]">Do<input type="time" value={preferenceDraft.quiet.to} onChange={event=>setPreferenceDraft({...preferenceDraft,quiet:{...preferenceDraft.quiet,to:event.target.value}})} className="mt-1 w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-secondary)] p-2 text-xs text-white"/></label></div>}<div className="mt-3 flex items-center justify-between gap-3"><div><p className="text-xs text-white">Upozornění zařízení</p><p className="text-[10px] text-[var(--color-text-secondary)]">Jen důležité, mimo tichý režim</p></div><button onClick={preferenceDraft.browser_notifications?()=>setPreferenceDraft({...preferenceDraft,browser_notifications:false}):enableBrowserNotifications} className={`rounded-lg px-2.5 py-1.5 text-[10px] ${preferenceDraft.browser_notifications?'bg-emerald-500/15 text-emerald-100':'border border-[var(--color-border)] text-[var(--color-text-secondary)]'}`}>{preferenceDraft.browser_notifications?'Zapnuto':'Povolit'}</button></div><button disabled={actionBusy==='preferences'} onClick={savePreferences} className="mt-4 min-h-9 w-full rounded-lg bg-[var(--color-accent)] text-xs font-medium text-white disabled:opacity-40">{actionBusy==='preferences'?'Ukládám…':'Uložit moje nastavení'}</button></div>}
+
+                        <div className="max-h-[min(28rem,65dvh)] overflow-y-auto">
                             {notifs.length === 0 ? (
                                 <div className="px-4 py-8 text-center text-[var(--color-text-secondary)]">
                                     <Bell size={24} className="mx-auto mb-2 opacity-30"/>
-                                    <p className="text-sm">Žádné notifikace</p>
+                                    <p className="text-sm">{loading?'Načítám upozornění…':'V této části je vše vyřízené'}</p>
                                 </div>
-                            ) : notifs.map(n => (
-                                <button key={n.id}
-                                    onClick={() => handleClick(n)}
-                                    className={`w-full text-left px-4 py-3 border-b border-[var(--color-border)] last:border-0 hover:bg-white/5 transition-colors flex items-start gap-3 ${!n.read_at ? 'bg-[var(--color-accent)]/5' : ''}`}>
-                                    <span className="text-xl shrink-0 mt-0.5">{n.data.icon ?? '🔔'}</span>
-                                    <div className="flex-1 min-w-0">
-                                        <p className={`text-xs leading-relaxed ${!n.read_at ? 'text-white font-medium' : 'text-[var(--color-text-secondary)]'}`}>
-                                            {n.data.message}
-                                        </p>
-                                        <p className="text-[10px] text-[var(--color-text-secondary)] mt-0.5">{fmtTime(n.created_at)}</p>
-                                    </div>
-                                    {!n.read_at && (
-                                        <div className="w-2 h-2 rounded-full bg-[var(--color-accent)] shrink-0 mt-1.5"/>
-                                    )}
-                                </button>
-                            ))}
+                            ) : notifs.map(n => {
+                                const actionableReminder = n.data.type === 'calendar.reminder'
+                                    && n.data.extra?.actionable
+                                    && !!n.data.extra?.reminder_id;
+                                const startsAt = n.data.extra?.starts_at ? new Date(n.data.extra.starts_at).getTime() : 0;
+                                const canSnoozeTomorrow = !startsAt || startsAt > Date.now() + 24 * 60 * 60 * 1000;
+                                return <article key={n.id} className={`border-b border-[var(--color-border)] last:border-0 ${!n.read_at ? 'bg-[var(--color-accent)]/5' : ''}`}>
+                                    <button onClick={() => handleClick(n)} className="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-white/5">
+                                        <span className="mt-0.5 shrink-0 text-xl">{n.data.icon ?? '🔔'}</span>
+                                        <div className="min-w-0 flex-1">
+                                            <p className={`text-xs leading-relaxed ${!n.read_at ? 'font-medium text-white' : 'text-[var(--color-text-secondary)]'}`}>{n.data.message}</p>
+                                            <p className="mt-1 flex flex-wrap items-center gap-1.5 text-[9px] text-[var(--color-text-secondary)]"><span>{n.category_label}</span><span>·</span><span>{fmtTime(n.created_at)}</span>{['high','critical'].includes(n.priority)&&<span className={`rounded-full px-1.5 py-0.5 ${n.priority==='critical'?'bg-red-500/15 text-red-200':'bg-amber-500/15 text-amber-100'}`}>{n.priority==='critical'?'kritické':'důležité'}</span>}</p>
+                                        </div>
+                                        {!n.read_at && <div className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-[var(--color-accent)]"/>}
+                                    </button>
+                                    {actionableReminder && <div className="flex flex-wrap gap-1.5 px-4 pb-3 pl-12">
+                                        <button disabled={!!actionBusy} onClick={() => reminderAction(n, 'snooze', 60)} className="min-h-8 rounded-lg border border-[var(--color-border)] px-2.5 text-[10px] text-[var(--color-text-secondary)] hover:text-white disabled:opacity-40">Za 1 hodinu</button>
+                                        {canSnoozeTomorrow && <button disabled={!!actionBusy} onClick={() => reminderAction(n, 'snooze', 1440)} className="min-h-8 rounded-lg border border-[var(--color-border)] px-2.5 text-[10px] text-[var(--color-text-secondary)] hover:text-white disabled:opacity-40">Zítra</button>}
+                                        <button disabled={!!actionBusy} onClick={() => reminderAction(n, 'acknowledge')} className="min-h-8 rounded-lg bg-emerald-500/15 px-2.5 text-[10px] text-emerald-100 disabled:opacity-40">Vyřízeno</button>
+                                    </div>}
+                                    {!actionableReminder&&<div className="flex flex-wrap gap-1.5 px-4 pb-3 pl-12"><button disabled={!!actionBusy} onClick={()=>manageNotification(n,'snooze',60)} className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-[var(--color-border)] px-2 text-[10px] text-[var(--color-text-secondary)] disabled:opacity-40"><Clock size={11}/> Připomenout za hodinu</button><button disabled={!!actionBusy} onClick={()=>manageNotification(n,'archive')} className="ml-auto inline-flex min-h-8 items-center gap-1 rounded-lg px-2 text-[10px] text-[var(--color-text-secondary)] hover:bg-white/5 disabled:opacity-40"><Archive size={11}/> Archivovat</button></div>}
+                                </article>;
+                            })}
                         </div>
                     </div>
                 </>
@@ -728,6 +842,7 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
                                 <p className="text-xs text-[var(--color-text-secondary)] truncate">{auth?.user?.role}</p>
                             </div>
                         </div>
+                        <AppInstallButton/>
                         <NotificationBell/>
                     </div>
                 </div>
@@ -780,6 +895,7 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
                     <button type="button" onClick={() => setCmdOpen(true)} aria-label="Otevřít rychlé hledání" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-[var(--color-text-secondary)] hover:bg-white/5 hover:text-white">
                         <Search size={19}/>
                     </button>
+                    <AppInstallButton/>
                     <NotificationBell/>
                 </header>
                 {/* Flash messages */}

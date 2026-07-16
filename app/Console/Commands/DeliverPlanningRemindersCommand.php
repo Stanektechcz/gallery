@@ -28,7 +28,7 @@ class DeliverPlanningRemindersCommand extends Command
                 if (!$recipient || !$reminder->event) throw new \RuntimeException('Chybí příjemce nebo akce.');
                 // Web Push needs a VAPID sender configured by the deployment. Until then the
                 // PWA receives the same secure in-app reminder and can show a local notification.
-                $recipient->notify(new EventReminderNotification($reminder->event, $reminder->channel));
+                $recipient->notify(new EventReminderNotification($reminder->event, $reminder->channel, $reminder->id));
                 $reminder->update(['status' => 'delivered', 'delivered_at' => now(), 'last_error' => null]);
                 DB::table('reminder_delivery_logs')->insert(['event_reminder_id' => $reminder->id, 'channel' => $reminder->channel, 'status' => 'delivered', 'created_at' => now()]);
             } catch (\Throwable $exception) {

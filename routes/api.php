@@ -194,9 +194,17 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
     Route::post('/entertainment/date-proposals/{proposalUuid}/select', [App\Http\Controllers\Api\EntertainmentController::class, 'selectDate'])->name('api.entertainment.date-proposals.select');
 
     // Notifications
-    Route::get('/notifications', fn() => request()->user()->notifications()->paginate(20));
-    Route::post('/notifications/{id}/read', fn(string $id) => request()->user()->notifications()->findOrFail($id)->markAsRead());
-    Route::post('/notifications/read-all', fn() => request()->user()->unreadNotifications->markAsRead());
+    Route::get('/notifications', [App\Http\Controllers\Api\NotificationCenterController::class, 'index'])->name('api.notifications.index');
+    Route::get('/notifications/preferences', [App\Http\Controllers\Api\NotificationCenterController::class, 'preferences'])->name('api.notifications.preferences');
+    Route::patch('/notifications/preferences', [App\Http\Controllers\Api\NotificationCenterController::class, 'updatePreferences'])->name('api.notifications.preferences.update');
+    Route::post('/notifications/read-all', [App\Http\Controllers\Api\NotificationCenterController::class, 'readAll'])->name('api.notifications.read-all');
+    Route::post('/notifications/{id}/read', [App\Http\Controllers\Api\NotificationCenterController::class, 'read'])->name('api.notifications.read');
+    Route::post('/notifications/{id}/snooze', [App\Http\Controllers\Api\NotificationCenterController::class, 'snooze'])->name('api.notifications.snooze');
+    Route::post('/notifications/{id}/archive', [App\Http\Controllers\Api\NotificationCenterController::class, 'archive'])->name('api.notifications.archive');
+    Route::post('/reminders/events/{eventUuid}', [App\Http\Controllers\Api\ReminderActionController::class, 'store'])->name('api.reminders.store');
+    Route::post('/reminders/{reminderId}/snooze', [App\Http\Controllers\Api\ReminderActionController::class, 'snooze'])->whereNumber('reminderId')->name('api.reminders.snooze');
+    Route::post('/reminders/{reminderId}/acknowledge', [App\Http\Controllers\Api\ReminderActionController::class, 'acknowledge'])->whereNumber('reminderId')->name('api.reminders.acknowledge');
+    Route::post('/reminders/{reminderId}/dismiss', [App\Http\Controllers\Api\ReminderActionController::class, 'dismiss'])->whereNumber('reminderId')->name('api.reminders.dismiss');
 
     // Personalized memories and feedback
     Route::get('/memories', [App\Http\Controllers\Api\MemoryController::class, 'index'])->name('api.memories.index');

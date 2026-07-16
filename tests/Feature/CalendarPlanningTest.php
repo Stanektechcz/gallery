@@ -10,6 +10,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
 class CalendarPlanningTest extends TestCase
@@ -71,6 +72,165 @@ class CalendarPlanningTest extends TestCase
         DB::table('time_capsules')->update(['deliver_at' => now()->subMinute()]);
         $this->artisan(DeliverPlanningRemindersCommand::class)->assertSuccessful();
         $this->assertDatabaseHas('time_capsules', ['title' => 'Naše vzpomínka', 'status' => 'delivered']);
+    }
+
+    public function test_delivered_reminder_can_be_snoozed_and_acknowledged_only_by_its_recipient(): void
+    {
+        $event = $this->postJson('/api/v1/calendar/events', [
+            'gallery_space_id' => $this->space->id,
+            'title' => 'Společná snídaně',
+            'starts_at' => now()->addMinute()->toDateTimeString(),
+            'reminders' => [['minutes_before' => 1, 'channel' => 'database']],
+        ])->assertCreated()->json();
+        $reminderId = (int) DB::table('event_reminders')->where('event_id', $event['id'])->value('id');
+
+        $this->artisan(DeliverPlanningRemindersCommand::class)->assertSuccessful();
+        $notification = DB::table('notifications')->where('notifiable_id', $this->owner->id)->latest('created_at')->first();
+        $notificationData = json_decode($notification->data, true, flags: JSON_THROW_ON_ERROR);
+        $this->assertSame($reminderId, $notificationData['extra']['reminder_id']);
+        $this->assertTrue($notificationData['extra']['actionable']);
+
+        $this->actingAs($this->partner)
+            ->postJson("/api/v1/reminders/{$reminderId}/snooze", ['minutes' => 60])
+            ->assertNotFound();
+
+        $this->actingAs($this->owner)
+            ->postJson("/api/v1/reminders/{$reminderId}/snooze", ['minutes' => 60])
+            ->assertOk()
+            ->assertJsonPath('status', 'pending')
+            ->assertJsonPath('snooze_count', 1)
+            ->assertJsonPath('history.0.status', 'snoozed');
+        $this->assertNotNull(DB::table('notifications')->where('id', $notification->id)->value('read_at'));
+        $this->assertNotNull(DB::table('notifications')->where('id', $notification->id)->value('archived_at'));
+
+        $this->travel(61)->minutes();
+        $this->artisan(DeliverPlanningRemindersCommand::class)->assertSuccessful();
+        $this->get('/')->assertOk()->assertInertia(fn (Assert $page) => $page
+            ->component('Dashboard/Index')
+            ->where('data.partner_hub.reminders.0.id', $reminderId)
+            ->where('data.partner_hub.reminders.0.status', 'delivered'));
+
+        $this->postJson("/api/v1/reminders/{$reminderId}/acknowledge")
+            ->assertOk()->assertJsonPath('status', 'acknowledged');
+        $this->getJson("/api/v1/calendar/events/{$event['uuid']}")
+            ->assertOk()
+            ->assertJsonPath('reminders.0.status', 'acknowledged')
+            ->assertJsonPath('reminders.0.history.0.status', 'acknowledged');
+
+        $this->owner->update(['read_only_mode' => true]);
+        $this->postJson("/api/v1/reminders/{$reminderId}/dismiss")->assertForbidden();
+    }
+
+    public function test_personal_and_automated_reminders_survive_calendar_form_edits(): void
+    {
+        $event = $this->postJson('/api/v1/calendar/events', [
+            'gallery_space_id' => $this->space->id,
+            'title' => 'Víkend ve Vídni',
+            'starts_at' => now()->addDays(10)->toDateTimeString(),
+            'participant_ids' => [$this->partner->id],
+        ])->assertCreated()->json();
+
+        $manual = $this->postJson("/api/v1/reminders/events/{$event['uuid']}", [
+            'minutes_before' => 1440,
+            'channel' => 'database',
+        ])->assertCreated()->assertJsonPath('status', 'pending')->json();
+        DB::table('event_reminders')->insert([
+            'event_id' => $event['id'], 'user_id' => $this->owner->id, 'channel' => 'database',
+            'remind_at' => now()->addDays(8), 'original_remind_at' => now()->addDays(8),
+            'status' => 'pending', 'automation_source' => 'trip_preparation',
+            'automation_key' => 'trip-document-passport', 'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $this->patchJson("/api/v1/calendar/events/{$event['uuid']}", [
+            'reminders' => [['minutes_before' => 60, 'channel' => 'database']],
+        ])->assertOk();
+
+        $this->assertDatabaseHas('event_reminders', ['id' => $manual['id'], 'automation_source' => 'manual']);
+        $this->assertDatabaseHas('event_reminders', ['event_id' => $event['id'], 'automation_source' => 'trip_preparation']);
+        $this->assertDatabaseHas('event_reminders', ['event_id' => $event['id'], 'automation_source' => 'calendar_form']);
+        $this->assertSame(3, DB::table('event_reminders')->where('event_id', $event['id'])->count());
+
+        $this->actingAs($this->partner)
+            ->postJson("/api/v1/reminders/{$manual['id']}/acknowledge")
+            ->assertNotFound();
+    }
+
+    public function test_partner_space_editor_can_manage_event_and_all_linked_schedule_data(): void
+    {
+        $startsAt = now()->addMonth()->startOfHour();
+        $tripId = DB::table('trips')->insertGetId([
+            'gallery_space_id' => $this->space->id, 'created_by' => $this->owner->id, 'name' => 'Původní cesta',
+            'start_date' => $startsAt->toDateString(), 'end_date' => $startsAt->copy()->addDay()->toDateString(),
+            'currency' => 'CZK', 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        $event = $this->postJson('/api/v1/calendar/events', [
+            'gallery_space_id' => $this->space->id, 'title' => 'Původní akce', 'starts_at' => $startsAt->toIso8601String(),
+            'ends_at' => $startsAt->copy()->addDay()->toIso8601String(), 'trip_id' => $tripId,
+            'participant_ids' => [$this->partner->id],
+            'reminders' => [['minutes_before' => 60, 'channel' => 'database', 'user_id' => $this->owner->id]],
+        ])->assertCreated()->json();
+        $automatedReminder = DB::table('event_reminders')->insertGetId([
+            'event_id' => $event['id'], 'user_id' => $this->partner->id, 'channel' => 'database',
+            'remind_at' => $startsAt->copy()->subDay(), 'original_remind_at' => $startsAt->copy()->subDay(),
+            'status' => 'pending', 'automation_source' => 'trip_preparation', 'automation_key' => 'documents',
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $newStart = $startsAt->copy()->addWeek()->setTime(18, 30);
+        $response = $this->actingAs($this->partner)->patchJson("/api/v1/calendar/events/{$event['uuid']}", [
+            'title' => 'Večer v Olomouci', 'description' => 'Společná večeře a procházka.', 'status' => 'confirmed',
+            'starts_at' => $newStart->toIso8601String(), 'ends_at' => $newStart->copy()->addHours(4)->toIso8601String(),
+            'place_name' => 'Horní náměstí, Olomouc', 'latitude' => 49.5938, 'longitude' => 17.2509,
+            'departure_buffer_minutes' => 45, 'color' => '#db2777', 'participant_ids' => [$this->owner->id, $this->partner->id],
+            'reminders' => [['minutes_before' => 120, 'channel' => 'database', 'user_id' => $this->partner->id]],
+        ])->assertOk()
+            ->assertJsonPath('title', 'Večer v Olomouci')
+            ->assertJsonPath('can_edit', true)
+            ->assertJsonPath('calendar_form_reminders.0.minutes_before', 120)
+            ->assertJsonCount(2, 'available_participants');
+
+        $this->assertDatabaseHas('calendar_events', [
+            'id' => $event['id'], 'title' => 'Večer v Olomouci', 'status' => 'confirmed',
+            'place_name' => 'Horní náměstí, Olomouc', 'departure_buffer_minutes' => 45, 'color' => '#db2777',
+        ]);
+        $this->assertDatabaseHas('trips', [
+            'id' => $tripId, 'start_date' => $newStart->toDateString(), 'end_date' => $newStart->toDateString(),
+        ]);
+        $this->assertDatabaseHas('event_reminders', [
+            'event_id' => $event['id'], 'user_id' => $this->partner->id, 'automation_source' => 'calendar_form',
+            'remind_at' => $newStart->copy()->subMinutes(120)->format('Y-m-d H:i:s'),
+        ]);
+        $this->assertDatabaseHas('event_reminders', [
+            'id' => $automatedReminder, 'remind_at' => $newStart->copy()->subDay()->format('Y-m-d H:i:s'),
+        ]);
+        $this->assertDatabaseHas('audit_logs', ['action' => 'calendar.event.update', 'subject_id' => $event['id']]);
+        $this->assertDatabaseHas('notifications', ['notifiable_id' => $this->owner->id]);
+        $this->assertSame($response->json('viewer_id'), $this->partner->id);
+    }
+
+    public function test_participant_removal_and_cancellation_revoke_access_and_pending_delivery(): void
+    {
+        $event = $this->actingAs($this->owner)->postJson('/api/v1/calendar/events', [
+            'gallery_space_id' => $this->space->id, 'title' => 'Soukromé překvapení',
+            'starts_at' => now()->addWeek()->toIso8601String(), 'participant_ids' => [$this->partner->id],
+            'reminders' => [['minutes_before' => 60, 'channel' => 'database', 'user_id' => $this->partner->id]],
+        ])->assertCreated()->json();
+
+        $this->patchJson("/api/v1/calendar/events/{$event['uuid']}", [
+            'participant_ids' => [], 'is_private' => true,
+        ])->assertOk()->assertJsonPath('is_private', true);
+
+        $this->assertDatabaseMissing('event_participants', ['event_id' => $event['id'], 'user_id' => $this->partner->id]);
+        $this->assertDatabaseMissing('event_reminders', ['event_id' => $event['id'], 'user_id' => $this->partner->id, 'status' => 'pending']);
+        $this->assertDatabaseHas('notifications', ['notifiable_id' => $this->partner->id]);
+        $this->actingAs($this->partner)->getJson("/api/v1/calendar/events/{$event['uuid']}")->assertNotFound();
+
+        $this->actingAs($this->owner)->postJson("/api/v1/reminders/events/{$event['uuid']}", [
+            'minutes_before' => 60, 'channel' => 'database',
+        ])->assertCreated();
+        $this->patchJson("/api/v1/calendar/events/{$event['uuid']}", ['status' => 'cancelled'])
+            ->assertOk()->assertJsonPath('status', 'cancelled');
+        $this->assertDatabaseHas('event_reminders', ['event_id' => $event['id'], 'user_id' => $this->owner->id, 'status' => 'dismissed']);
     }
 
     public function test_travel_inbox_item_can_be_safely_assigned_to_a_trip_day_and_activity(): void

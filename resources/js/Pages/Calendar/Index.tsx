@@ -1,12 +1,13 @@
 import AppLayout from '@/Layouts/AppLayout';
+import CalendarEventEditor from '@/Components/CalendarEventEditor';
 import LocationPicker, { LocationValue } from '@/Components/LocationPicker';
 import { Head, Link } from '@inertiajs/react';
 import axios from 'axios';
-import { Bell, CalendarDays, ChevronLeft, ChevronRight, Film, Image, MapPin, Plus, Route, Save, Sparkles, Upload } from 'lucide-react';
+import { Bell, CalendarDays, ChevronLeft, ChevronRight, Film, Image, MapPin, Pencil, Plus, Route, Save, Sparkles, Upload } from 'lucide-react';
 import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from 'react';
 
 interface DayData { day: number; total: number; photos: number; videos: number; thumb?: { uuid: string; thumb?: string } | null; }
-interface EventItem { uuid: string; title: string; type: string; starts_at: string; ends_at?: string | null; occurrence_start?: string; all_day: boolean; color?: string | null; place_name?: string | null; open_tasks_count?: number; has_conflict?: boolean; }
+interface EventItem { uuid: string; title: string; type: string; starts_at: string; ends_at?: string | null; occurrence_start?: string; all_day: boolean; color?: string | null; place_name?: string | null; open_tasks_count?: number; has_conflict?: boolean; can_edit?: boolean; }
 interface Space { id: number; name: string; }
 interface Trip { id: number; name: string; gallery_space_id: number; }
 interface Milestone { uuid:string; title:string; icon:string; occurrence_date:string; kind?:string; person_name?:string|null; relationship?:string|null; is_highlighted?:boolean; }
@@ -46,6 +47,7 @@ export default function CalendarIndex() {
     const [selectedDay, setSelectedDay] = useState<number | null>(null);
     const [loading, setLoading] = useState(true);
     const [showCreate, setShowCreate] = useState(false);
+    const [editingEventUuid, setEditingEventUuid] = useState<string|null>(null);
     const [showImport, setShowImport] = useState(false);
     const [showIdeas, setShowIdeas] = useState(false);
     const [showSharedSlots, setShowSharedSlots] = useState(false);
@@ -289,7 +291,7 @@ export default function CalendarIndex() {
                         {selectedNameDays.map(item=><section key={item.id} className="rounded-xl border border-amber-300/25 bg-amber-500/10 p-3"><p className="text-xs font-medium text-amber-100">🎈 Zvýrazněný svátek</p><p className="mt-1 text-sm font-medium text-white">{item.name} <span className="text-xs font-normal text-[var(--color-text-secondary)]">({item.official_name})</span></p></section>)}
                         {selectedMilestones.map(item=><section key={item.uuid} className="rounded-xl border border-pink-300/20 bg-pink-500/10 p-3"><p className="text-xs font-medium text-pink-100">{item.kind==='birthday'?'Narozeniny blízkého':'Společné výročí'}</p><p className="mt-1 text-sm font-medium text-white">{item.icon} {item.title}</p></section>)}
                         <section className="rounded-xl border border-pink-400/20 bg-pink-500/5 p-3"><div className="flex items-start justify-between gap-2"><div><p className="text-xs font-medium text-pink-100">Společná poznámka dne</p><p className="mt-1 text-[10px] text-[var(--color-text-secondary)]">Soukromý vzkaz, nákupní seznam nebo detail k vašemu společnému plánu.</p></div>{dayNoteLoading && <span className="text-[10px] text-[var(--color-text-secondary)]">Načítám…</span>}</div><textarea value={dayNote} onChange={event => setDayNote(event.target.value)} maxLength={10000} rows={3} placeholder="Co je pro tento den důležité?" className="mt-3 w-full resize-none rounded-lg border border-[var(--color-border)] bg-black/10 p-2 text-xs text-white placeholder-[var(--color-text-secondary)]"/><button type="button" disabled={dayNoteSaving || dayNoteLoading} onClick={saveDayNote} className="mt-2 inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-pink-300/35 px-3 text-xs text-pink-100 disabled:opacity-50"><Save size={13}/>{dayNoteSaving ? 'Ukládám…' : 'Uložit pro nás'}</button>{dayNoteMessage && <p className={`mt-2 text-[10px] ${dayNoteMessage.startsWith('Společná') ? 'text-emerald-200' : 'text-red-200'}`}>{dayNoteMessage}</p>}</section>
-                        {selectedEvents.length > 0 && <div><p className="mb-2 text-xs font-medium uppercase tracking-wide text-[var(--color-text-secondary)]">Plán</p>{selectedEvents.map(item => <Link key={item.uuid} href={`/calendar/events/${item.uuid}`} className="mb-2 block rounded-lg border border-[var(--color-border)] p-3 hover:border-[var(--color-accent)]"><p className="text-sm font-medium text-white">{item.title}</p><p className="mt-1 text-xs text-[var(--color-text-secondary)]">{TYPE_LABEL[item.type] ?? 'Akce'}{item.place_name ? ` · ${item.place_name}` : ''}{item.open_tasks_count ? ` · ${item.open_tasks_count} úkolů` : ''}{item.has_conflict ? ' · kolize v plánu' : ''}</p></Link>)}</div>}
+                        {selectedEvents.length > 0 && <div><p className="mb-2 text-xs font-medium uppercase tracking-wide text-[var(--color-text-secondary)]">Plán</p>{selectedEvents.map(item => <article key={`${item.uuid}-${item.occurrence_start ?? ''}`} className="mb-2 rounded-lg border border-[var(--color-border)] p-3 hover:border-[var(--color-accent)]"><div className="flex items-start gap-2"><Link href={`/calendar/events/${item.uuid}`} className="min-w-0 flex-1"><p className="truncate text-sm font-medium text-white">{item.title}</p><p className="mt-1 text-xs text-[var(--color-text-secondary)]">{TYPE_LABEL[item.type] ?? 'Akce'}{item.place_name ? ` · ${item.place_name}` : ''}{item.open_tasks_count ? ` · ${item.open_tasks_count} úkolů` : ''}{item.has_conflict ? ' · kolize v plánu' : ''}</p></Link>{item.can_edit && <button type="button" onClick={() => setEditingEventUuid(item.uuid)} aria-label={`Upravit akci ${item.title}`} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-[var(--color-text-secondary)] hover:bg-white/5 hover:text-white"><Pencil size={15}/></button>}</div></article>)}</div>}
                         {selectedMedia && <div><p className="mb-2 text-xs font-medium uppercase tracking-wide text-[var(--color-text-secondary)]">Vzpomínky</p><p className="text-sm text-[var(--color-text-secondary)]">{selectedMedia.photos} fotek {selectedMedia.videos ? `a ${selectedMedia.videos} videí` : ''}</p><Link href={`/timeline?date=${range.from.slice(0, 8)}${String(selectedDay).padStart(2, '0')}`} className="mt-2 inline-flex text-sm text-[var(--color-accent)]">Zobrazit média →</Link></div>}
                         {!selectedEvents.length && !selectedMedia && !selectedHoliday && !selectedNameDays.length && !selectedMilestones.length && <p className="text-sm text-[var(--color-text-secondary)]">Tento den je zatím volný. Můžete jej využít pro společný plán.</p>}
                     </div> : <div className="mt-3 space-y-3 text-sm text-[var(--color-text-secondary)]"><p><Sparkles className="mr-2 inline text-[var(--color-accent)]" size={15}/>Fotky se zobrazují spolu s akcemi.</p><Link href="/travel-inbox" className="block text-[var(--color-accent)]">Cestovní inbox →</Link><Link href="/weekly" className="block text-[var(--color-accent)]">Týdenní společný přehled →</Link></div>}
@@ -321,6 +323,13 @@ export default function CalendarIndex() {
                     <div className="mt-4 flex justify-end gap-2"><button type="button" onClick={() => setShowImport(false)} className="rounded-lg px-3 py-2 text-sm text-[var(--color-text-secondary)]">Zrušit</button><button disabled={importing || !ics.trim()} className="rounded-lg bg-[var(--color-accent)] px-4 py-2 text-sm font-medium text-white disabled:opacity-50">{importing ? 'Importuji…' : 'Importovat a propojit'}</button></div>
                 </form>
             </div>}
+            <CalendarEventEditor
+                eventUuid={editingEventUuid}
+                open={Boolean(editingEventUuid)}
+                onClose={() => setEditingEventUuid(null)}
+                onSaved={load}
+                onDeleted={load}
+            />
         </main>
     </AppLayout>;
 }

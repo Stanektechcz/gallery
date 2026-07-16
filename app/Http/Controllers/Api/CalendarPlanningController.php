@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\CalendarEvent;
 use App\Models\Album;
+use App\Models\AuditLog;
 use App\Models\EventAttachment;
 use App\Models\EventReminder;
 use App\Models\EventTask;
@@ -21,6 +22,7 @@ use App\Services\Planning\CzechPublicHolidayService;
 use App\Services\Planning\ExperienceLifecycleService;
 use App\Services\Planning\ExperienceMediaService;
 use App\Services\Planning\PersonalCelebrationService;
+use App\Services\Planning\ReminderActionService;
 use App\Services\Planning\TripPartnerFinanceService;
 use App\Services\Memories\MemoryEveningService;
 use Carbon\Carbon;
@@ -48,6 +50,7 @@ class CalendarPlanningController extends Controller
         private readonly MemoryEveningService $memoryEvenings,
         private readonly DateIdeaLifecycleService $dateIdeas,
         private readonly DateIdeaTripSyncService $dateIdeaTripSync,
+        private readonly ReminderActionService $reminderActions,
     ) {}
 
     public function index(Request $request): JsonResponse
@@ -94,7 +97,7 @@ class CalendarPlanningController extends Controller
             })->values();
 
         return response()->json([
-            'events' => $events->flatMap(fn (CalendarEvent $event) => $this->occurrences($event, $from, $to)),
+            'events' => $events->flatMap(fn (CalendarEvent $event) => $this->occurrences($event, $from, $to, $user)),
             'milestones' => $milestones,
             'holidays' => $this->holidayService->between($from, $to),
             'holiday_opportunities' => $this->holidayService->opportunities($from, $to),
@@ -221,23 +224,45 @@ class CalendarPlanningController extends Controller
         $user = $request->user();
         $event = $this->findVisibleEvent($user, $uuid);
         $this->ensureCanEdit($event, $user);
-        $data = $this->validatedEvent($request, true);
+        $data = $this->validatedEvent($request, true, $event);
         $spaceId = (int) ($data['gallery_space_id'] ?? $event->gallery_space_id);
         $this->ownedSpace($user, $spaceId);
         $data['gallery_space_id'] = $spaceId;
         $this->validateTripAndAlbum($data + ['trip_id' => $event->trip_id, 'album_id' => $event->album_id], $spaceId);
-        $event->update(collect($data)->except(['participant_ids', 'reminders'])->all());
-        $this->syncTripSchedule($event);
-        if (array_key_exists('participant_ids', $data)) $this->syncParticipants($event, $data['participant_ids'], $user);
-        if (array_key_exists('reminders', $data)) $this->syncReminders($event, $data['reminders'], $user);
+        $before = $event->only(['title', 'description', 'type', 'status', 'starts_at', 'ends_at', 'all_day', 'place_name', 'latitude', 'longitude', 'color', 'is_private', 'trip_id']);
+        $originalStartsAt = $event->starts_at->copy();
 
-        return response()->json($this->eventPayload($event->fresh(), $user));
+        DB::transaction(function () use ($event, $data, $user, $originalStartsAt): void {
+            $event->update(collect($data)->except(['participant_ids', 'reminders'])->all());
+            $this->reschedulePendingReminders($event, $originalStartsAt);
+            $this->syncTripSchedule($event);
+            if (array_key_exists('participant_ids', $data)) $this->replaceParticipants($event, $data['participant_ids'], $user);
+            if ($event->status === 'cancelled') {
+                $event->reminders()->where('status', 'pending')->update(['status' => 'dismissed', 'dismissed_at' => now(), 'updated_at' => now()]);
+            } elseif (array_key_exists('reminders', $data)) {
+                $this->syncReminders($event, $data['reminders'], $user);
+            }
+        });
+
+        $event->refresh();
+        $changes = collect($event->only(array_keys($before)))
+            ->filter(fn ($value, $key) => $this->comparableEventValue($value) !== $this->comparableEventValue($before[$key] ?? null))
+            ->keys()->values()->all();
+        AuditLog::record('calendar.event.update', $event, ['changed_fields' => $changes]);
+        $notificationType = $event->status === 'cancelled' ? 'calendar.cancelled' : 'calendar.updated';
+        $notificationText = $event->status === 'cancelled' ? "Akce byla zrušena: {$event->title}" : "Akce byla upravena: {$event->title}";
+        $this->notifyParticipants($event, $user, $notificationType, $notificationText);
+
+        return response()->json($this->eventPayload($event, $user));
     }
 
     public function destroy(Request $request, string $uuid): JsonResponse
     {
         $event = $this->findVisibleEvent($request->user(), $uuid);
         $this->ensureCanEdit($event, $request->user());
+        $title = $event->title;
+        $this->notifyParticipants($event, $request->user(), 'calendar.deleted', "Akce byla odstraněna: {$title}");
+        AuditLog::record('calendar.event.delete', $event, ['title' => $title, 'trip_id' => $event->trip_id, 'album_id' => $event->album_id]);
         $event->delete();
         return response()->json(['status' => 'deleted']);
     }
@@ -822,30 +847,55 @@ class CalendarPlanningController extends Controller
         return response()->json(['status' => 'deleted']);
     }
 
-    private function validatedEvent(Request $request, bool $partial): array
+    private function validatedEvent(Request $request, bool $partial, ?CalendarEvent $existing = null): array
     {
         $rule = fn (string $required) => $partial ? 'sometimes' : $required;
         $data = $request->validate([
             'gallery_space_id' => $rule('required') . '|integer', 'trip_id' => 'nullable|integer', 'album_id' => 'nullable|integer',
             'title' => $rule('required') . '|string|max:160', 'description' => 'nullable|string|max:10000', 'type' => 'nullable|' . Rule::in(self::TYPES), 'status' => 'nullable|in:planned,confirmed,completed,cancelled',
-            'starts_at' => $rule('required') . '|date', 'ends_at' => 'nullable|date|after_or_equal:starts_at', 'all_day' => 'nullable|boolean', 'timezone' => 'nullable|timezone',
+            'starts_at' => $rule('required') . '|date', 'ends_at' => 'nullable|date', 'all_day' => 'nullable|boolean', 'timezone' => 'nullable|timezone',
             'place_name' => 'nullable|string|max:255', 'latitude' => 'nullable|numeric|between:-90,90', 'longitude' => 'nullable|numeric|between:-180,180', 'departure_buffer_minutes' => 'nullable|integer|min:0|max:1440',
             'recurrence_rule' => 'nullable|array', 'recurrence_rule.frequency' => 'nullable|in:daily,weekly,monthly,yearly', 'recurrence_rule.interval' => 'nullable|integer|min:1|max:52', 'recurrence_rule.until' => 'nullable|date',
             'color' => 'nullable|regex:/^#[0-9A-Fa-f]{6}$/', 'is_private' => 'nullable|boolean', 'metadata' => 'nullable|array',
             'participant_ids' => 'nullable|array|max:30', 'participant_ids.*' => 'integer', 'reminders' => 'nullable|array|max:12', 'reminders.*.minutes_before' => 'required_with:reminders|integer|min:0|max:525600', 'reminders.*.channel' => 'required_with:reminders|' . Rule::in(self::CHANNELS), 'reminders.*.user_id' => 'nullable|integer',
         ]);
+        $effectiveStart = isset($data['starts_at']) ? Carbon::parse($data['starts_at']) : $existing?->starts_at;
+        $effectiveEnd = array_key_exists('ends_at', $data) ? ($data['ends_at'] ? Carbon::parse($data['ends_at']) : null) : $existing?->ends_at;
+        if ($effectiveStart && $effectiveEnd && $effectiveEnd->lt($effectiveStart)) abort(422, 'Konec akce nesmí být před jejím začátkem.');
         if (isset($data['starts_at']) && isset($data['recurrence_rule']['until']) && Carbon::parse($data['recurrence_rule']['until'])->lt(Carbon::parse($data['starts_at'])->startOfDay())) abort(422, 'Konec opakování nesmí být před začátkem akce.');
         return $data;
     }
 
     private function eventPayload(CalendarEvent $event, ?User $viewer = null): array
     {
-        $event->load(['participants:id,name,email', 'tasks.assignee:id,name', 'attachments.media:id,uuid,display_title,original_filename', 'reminders']);
+        $event->load(['creator:id,name', 'participants:id,name,email', 'tasks.assignee:id,name', 'attachments.media:id,uuid,display_title,original_filename', 'reminders.user:id,name']);
         $payload = $event->toArray();
+        $payload['reminders'] = $event->reminders->map(function (EventReminder $reminder) use ($event, $viewer): array {
+            $reminder->setRelation('event', $event);
+            $canSeeHistory = $viewer && ((int) $reminder->user_id === (int) $viewer->id
+                || ($reminder->user_id === null && (int) $event->created_by === (int) $viewer->id));
+
+            return $this->reminderActions->payload($reminder, $viewer ?? $event->creator, (bool) $canSeeHistory);
+        })->values()->all();
         $payload['budget'] = $event->trip_id ? DB::table('trip_expenses')->where('trip_id', $event->trip_id)->selectRaw("state, SUM(amount) as total")->groupBy('state')->pluck('total', 'state') : [];
         $payload['route_variants'] = $event->trip_id ? DB::table('trip_route_variants')->where('trip_id', $event->trip_id)->get() : [];
         $payload['departure_at'] = $event->departure_buffer_minutes ? $event->starts_at->copy()->subMinutes($event->departure_buffer_minutes)->toIso8601String() : null;
         $payload['my_response'] = $viewer ? $event->participants->firstWhere('id', $viewer->id)?->pivot?->response : null;
+        $payload['can_edit'] = $viewer ? $this->canEdit($event, $viewer) : false;
+        $payload['is_creator'] = $viewer ? (int) $event->created_by === (int) $viewer->id : false;
+        $payload['viewer_id'] = $viewer?->id;
+        $payload['available_participants'] = $event->space->members()->orderBy('users.name')->get(['users.id', 'users.name'])
+            ->map(fn (User $member) => ['id' => $member->id, 'name' => $member->name, 'space_role' => $member->pivot->role])->values();
+        $payload['available_trips'] = DB::table('trips')->where('gallery_space_id', $event->gallery_space_id)
+            ->orderByDesc('start_date')->get(['id', 'name', 'start_date', 'end_date']);
+        $payload['calendar_form_reminders'] = $event->reminders
+            ->where('automation_source', 'calendar_form')
+            ->map(fn (EventReminder $reminder) => [
+                'id' => $reminder->id,
+                'user_id' => $reminder->user_id,
+                'channel' => $reminder->channel,
+                'minutes_before' => max(0, (int) round(($event->starts_at->getTimestamp() - $reminder->remind_at->getTimestamp()) / 60)),
+            ])->values();
         $payload['album'] = $event->album_id
             ? Album::query()->whereKey($event->album_id)->where('gallery_space_id', $event->gallery_space_id)->first(['id', 'uuid', 'title'])
             : null;
@@ -1016,9 +1066,14 @@ class CalendarPlanningController extends Controller
         return $this->experienceMedia->sync($event, $actorId, $media);
     }
 
-    private function occurrences(CalendarEvent $event, Carbon $from, Carbon $to): array
+    private function occurrences(CalendarEvent $event, Carbon $from, Carbon $to, ?User $viewer = null): array
     {
-        $rule = $event->recurrence_rule; if (empty($rule['frequency'])) return [$event->toArray()];
+        $rule = $event->recurrence_rule;
+        if (empty($rule['frequency'])) {
+            $row = $event->toArray();
+            $row['can_edit'] = $viewer ? $this->canEdit($event, $viewer) : false;
+            return [$row];
+        }
         $cursor = $event->starts_at->copy(); $until = !empty($rule['until']) ? Carbon::parse($rule['until'])->endOfDay() : $to;
         $interval = max(1, (int) ($rule['interval'] ?? 1)); $duration = $event->ends_at ? $event->ends_at->diffInSeconds($event->starts_at) : null; $items = [];
         $exceptions = Schema::hasTable('calendar_event_exceptions') ? DB::table('calendar_event_exceptions')->where('event_id', $event->id)->get()->keyBy(fn ($exception) => Carbon::parse($exception->occurs_at)->format('Y-m-d H:i:s')) : collect();
@@ -1027,7 +1082,7 @@ class CalendarPlanningController extends Controller
             if ($cursor->gte($from) && (!$exception || $exception->action !== 'skip')) {
                 $startsAt = $exception?->replacement_starts_at ? Carbon::parse($exception->replacement_starts_at) : $cursor;
                 $endsAt = $exception?->replacement_ends_at ? Carbon::parse($exception->replacement_ends_at) : ($duration ? $startsAt->copy()->addSeconds($duration) : null);
-                $row = $event->toArray(); $row['title'] = $exception?->replacement_title ?: $event->title; $row['occurrence_start'] = $startsAt->toIso8601String(); $row['occurrence_end'] = $endsAt?->toIso8601String(); $row['is_exception'] = (bool) $exception; $items[] = $row;
+                $row = $event->toArray(); $row['title'] = $exception?->replacement_title ?: $event->title; $row['occurrence_start'] = $startsAt->toIso8601String(); $row['occurrence_end'] = $endsAt?->toIso8601String(); $row['is_exception'] = (bool) $exception; $row['can_edit'] = $viewer ? $this->canEdit($event, $viewer) : false; $items[] = $row;
             }
             $cursor = match ($rule['frequency']) { 'daily' => $cursor->addDays($interval), 'weekly' => $cursor->addWeeks($interval), 'monthly' => $cursor->addMonthsNoOverflow($interval), default => $cursor->addYearsNoOverflow($interval) };
         }
@@ -1038,15 +1093,104 @@ class CalendarPlanningController extends Controller
     private function ownedSpace(User $user, int $id): GallerySpace { return $user->gallerySpaces()->whereKey($id)->firstOrFail(); }
     private function visibleEvents(User $user): Builder { return CalendarEvent::whereIn('gallery_space_id', $this->spaceIds($user))->where(fn (Builder $q) => $q->where('is_private', false)->orWhere('created_by', $user->id)->orWhereHas('participants', fn (Builder $p) => $p->whereKey($user->id))); }
     private function findVisibleEvent(User $user, string $uuid): CalendarEvent { return $this->visibleEvents($user)->where('uuid', $uuid)->firstOrFail(); }
-    private function ensureCanEdit(CalendarEvent $event, User $user): void { if ($event->created_by !== $user->id && !$event->participants()->whereKey($user->id)->wherePivot('role', 'editor')->exists()) abort(403, 'Akci může upravovat jen autor nebo editor.'); }
+    private function canEdit(CalendarEvent $event, User $user): bool
+    {
+        if ((int) $event->created_by === (int) $user->id) return true;
+        if ($event->participants()->whereKey($user->id)->wherePivotIn('role', ['owner', 'editor'])->exists()) return true;
+
+        return $user->gallerySpaces()->whereKey($event->gallery_space_id)
+            ->wherePivotIn('role', ['owner', 'editor'])->exists();
+    }
+    private function ensureCanEdit(CalendarEvent $event, User $user): void { abort_unless($this->canEdit($event, $user), 403, 'Akci může upravovat jen autor nebo editor společného prostoru.'); }
     private function ensureParticipant(CalendarEvent $event, ?int $userId): void { if ($userId && !$event->participants()->whereKey($userId)->exists()) abort(422, 'Úkol lze přiřadit pouze účastníkovi akce.'); }
     private function notifyTaskAssignee(CalendarEvent $event, EventTask $task, int $actorId): void { if (! $task->assigned_to || $task->assigned_to === $actorId) return; User::find($task->assigned_to)?->notify(new GalleryNotification('calendar.task.assigned', "Nový společný úkol: {$task->title} ({$event->title})", '/calendar/events/' . $event->uuid, '✅')); }
     private function findTrip(User $user, int $id): object { return DB::table('trips')->where('id', $id)->whereIn('gallery_space_id', $this->spaceIds($user))->firstOrFail(); }
     private function validateTripAndAlbum(array $data, int $spaceId): void { if (!empty($data['trip_id'])) DB::table('trips')->where('id', $data['trip_id'])->where('gallery_space_id', $spaceId)->firstOrFail(); if (!empty($data['album_id'])) DB::table('albums')->where('id', $data['album_id'])->where('gallery_space_id', $spaceId)->firstOrFail(); }
-    private function syncTripSchedule(CalendarEvent $event): void { if (!$event->trip_id) return; DB::table('trips')->where('id', $event->trip_id)->where('gallery_space_id', $event->gallery_space_id)->update(['start_date' => $event->starts_at->toDateString(), 'end_date' => ($event->ends_at ?? $event->starts_at)->toDateString(), 'updated_at' => now()]); }
+    private function syncTripSchedule(CalendarEvent $event): void
+    {
+        if (!$event->trip_id) return;
+        $end = $event->ends_at ?? $event->starts_at;
+        DB::table('trips')->where('id', $event->trip_id)->where('gallery_space_id', $event->gallery_space_id)->update([
+            'start_date' => $event->starts_at->toDateString(), 'end_date' => $end->toDateString(), 'updated_at' => now(),
+        ]);
+
+        // A simple event-created trip starts with one waypoint. Keep that
+        // location useful without overwriting a later, carefully built route.
+        $waypoints = DB::table('trip_waypoints')->where('trip_id', $event->trip_id)->orderBy('sort_order')->get();
+        if ($waypoints->count() === 1 && $event->place_name) {
+            DB::table('trip_waypoints')->where('id', $waypoints->first()->id)->update([
+                'place_name' => $event->place_name, 'latitude' => $event->latitude, 'longitude' => $event->longitude,
+                'arrived_at' => $event->starts_at->toDateString(), 'departed_at' => $end->toDateString(), 'updated_at' => now(),
+            ]);
+        }
+    }
     private function validateInboxLinks(array $data, int $spaceId): array { if (!empty($data['trip_id'])) DB::table('trips')->where('id', $data['trip_id'])->where('gallery_space_id', $spaceId)->firstOrFail(); if (!empty($data['event_id'])) CalendarEvent::where('id', $data['event_id'])->where('gallery_space_id', $spaceId)->firstOrFail(); $day = !empty($data['trip_day_id']) ? DB::table('trip_days as d')->join('trips as t', 't.id', '=', 'd.trip_id')->where('d.id', $data['trip_day_id'])->where('t.gallery_space_id', $spaceId)->select('d.trip_id')->firstOrFail() : null; if ($day && !empty($data['trip_id']) && (int) $data['trip_id'] !== (int) $day->trip_id) abort(422, 'Den itineráře musí patřit ke zvolené cestě.'); if ($day && empty($data['trip_id'])) $data['trip_id'] = $day->trip_id; if (!empty($data['trip_activity_id'])) { $activity = DB::table('trip_activities as a')->join('trip_days as d', 'd.id', '=', 'a.trip_day_id')->join('trips as t', 't.id', '=', 'd.trip_id')->where('a.id', $data['trip_activity_id'])->where('t.gallery_space_id', $spaceId)->select('a.trip_day_id', 'd.trip_id')->firstOrFail(); if ($day && (int) $activity->trip_day_id !== (int) $data['trip_day_id']) abort(422, 'Aktivita nepatří do vybraného dne.'); if (!empty($data['trip_id']) && (int) $activity->trip_id !== (int) $data['trip_id']) abort(422, 'Aktivita nepatří ke zvolené cestě.'); if (empty($data['trip_id'])) $data['trip_id'] = $activity->trip_id; } return $data; }
     private function intersectTimeRanges(array $left, array $right): array { $result = []; foreach ($left as $a) foreach ($right as $b) { $start = $a['start']->greaterThan($b['start']) ? $a['start']->copy() : $b['start']->copy(); $end = $a['end']->lessThan($b['end']) ? $a['end']->copy() : $b['end']->copy(); if ($start->lt($end)) $result[] = ['start' => $start, 'end' => $end]; } return $result; }
     private function syncParticipants(CalendarEvent $event, array $ids, User $actor): void { $valid = User::whereIn('id', $ids)->whereHas('gallerySpaces', fn (Builder $q) => $q->where('gallery_spaces.id', $event->gallery_space_id))->pluck('id')->all(); if (count(array_unique($ids)) !== count($valid)) abort(422, 'Všichni účastníci musí být členy společného prostoru.'); $event->participants()->syncWithoutDetaching(collect($valid)->reject(fn ($id) => $id === $actor->id)->mapWithKeys(fn ($id) => [$id => ['role' => 'guest', 'response' => 'pending']])->all()); }
-    private function syncReminders(CalendarEvent $event, array $reminders, User $actor): void { if (!$reminders) { $event->reminders()->delete(); return; } $event->reminders()->delete(); foreach ($reminders as $reminder) { $recipient = $reminder['user_id'] ?? $actor->id; $this->ensureParticipant($event, $recipient); $event->reminders()->create(['user_id' => $recipient, 'channel' => $reminder['channel'], 'remind_at' => $event->starts_at->copy()->subMinutes((int) $reminder['minutes_before']), 'status' => 'pending']); } }
+    private function replaceParticipants(CalendarEvent $event, array $ids, User $actor): void
+    {
+        $ids = collect($ids)->map(fn ($id) => (int) $id)->push((int) $event->created_by)->unique()->values();
+        $valid = User::whereIn('id', $ids)->whereHas('gallerySpaces', fn (Builder $q) => $q->where('gallery_spaces.id', $event->gallery_space_id))->pluck('id')->map(fn ($id) => (int) $id);
+        if ($ids->count() !== $valid->count()) abort(422, 'Všichni účastníci musí být členy společného prostoru.');
+
+        $existing = $event->participants()->get()->keyBy('id');
+        $sync = $valid->mapWithKeys(function (int $id) use ($event, $existing) {
+            $current = $existing->get($id)?->pivot;
+            return [$id => [
+                'role' => $id === (int) $event->created_by ? 'owner' : ($current?->role ?? 'guest'),
+                'response' => $id === (int) $event->created_by ? 'accepted' : ($current?->response ?? 'pending'),
+            ]];
+        })->all();
+        $removed = $existing->keys()->map(fn ($id) => (int) $id)->diff($valid);
+        $event->participants()->sync($sync);
+        if ($removed->isNotEmpty()) {
+            $event->reminders()->whereIn('user_id', $removed)->where('status', 'pending')->delete();
+            User::whereIn('id', $removed)->get()->each(fn (User $member) => $member->notify(new GalleryNotification(
+                'calendar.participant.removed',
+                "Už nejste účastníkem akce: {$event->title}",
+                '/calendar',
+                '📅'
+            )));
+        }
+    }
+    private function reschedulePendingReminders(CalendarEvent $event, Carbon $originalStartsAt): void
+    {
+        $delta = $event->starts_at->getTimestamp() - $originalStartsAt->getTimestamp();
+        if ($delta === 0) return;
+        $event->reminders()->where('status', 'pending')->whereNull('snoozed_until')->get()->each(function (EventReminder $reminder) use ($delta): void {
+            $reminder->remind_at = $reminder->remind_at->copy()->addSeconds($delta);
+            if ($reminder->original_remind_at) $reminder->original_remind_at = $reminder->original_remind_at->copy()->addSeconds($delta);
+            $reminder->save();
+        });
+    }
+    private function comparableEventValue(mixed $value): mixed
+    {
+        if ($value instanceof \DateTimeInterface) return $value->format('c');
+        if (is_bool($value)) return (int) $value;
+        return $value;
+    }
+    private function syncReminders(CalendarEvent $event, array $reminders, User $actor): void
+    {
+        // Editing a calendar form must never erase reminders created by trips,
+        // reservations, recipes or a partner's personal reminder.
+        // Legacy reminders without provenance are deliberately preserved: they
+        // may have originated in an older trip/recipe/reservation workflow.
+        $event->reminders()->where('automation_source', 'calendar_form')->delete();
+        foreach ($reminders as $reminder) {
+            $recipient = $reminder['user_id'] ?? $actor->id;
+            $this->ensureParticipant($event, $recipient);
+            $minutes = (int) $reminder['minutes_before'];
+            $remindAt = $event->starts_at->copy()->subMinutes($minutes);
+            $event->reminders()->create([
+                'user_id' => $recipient,
+                'channel' => $reminder['channel'],
+                'remind_at' => $remindAt,
+                'original_remind_at' => $remindAt,
+                'status' => 'pending',
+                'automation_source' => 'calendar_form',
+                'automation_key' => "calendar-form-{$reminder['channel']}-{$minutes}",
+            ]);
+        }
+    }
     private function notifyParticipants(CalendarEvent $event, User $actor, string $type, string $message): void { foreach ($event->participants()->where('users.id', '!=', $actor->id)->get() as $user) $user->notify(new GalleryNotification($type, $message, '/calendar/events/' . $event->uuid, '📅')); }
 }

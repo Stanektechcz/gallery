@@ -1,11 +1,13 @@
 import AppLayout from '@/Layouts/AppLayout';
+import CalendarEventEditor from '@/Components/CalendarEventEditor';
 import EventReflection from '@/Components/EventReflection';
 import DateExperiencePanel, { DateExperience } from '@/Components/DateExperiencePanel';
 import MealPlanPanel from '@/Components/Recipes/MealPlanPanel';
+import ReminderActionPanel, { ActionableReminder } from '@/Components/ReminderActionPanel';
 import UploadZone from '@/Components/UploadZone';
 import { Head, Link } from '@inertiajs/react';
 import axios from 'axios';
-import { Camera, Check, ChevronLeft, FileText, Heart, MapPin, Plus, Route, Sparkles, Vote } from 'lucide-react';
+import { Camera, Check, ChevronLeft, FileText, Heart, MapPin, Pencil, Plus, Route, Sparkles, Vote } from 'lucide-react';
 import { FormEvent, useEffect, useState } from 'react';
 
 interface Participant { id:number; name:string; }
@@ -22,9 +24,11 @@ interface EventDetail {
     source_trip_id?:number|null; album?:{id:number;uuid:string;title:string}|null;
     origin?:{kind:string;label:string;milestone?:{uuid:string;title:string;icon:string;occurred_on:string}|null;media?:{uuid:string;title:string;thumbnail_url?:string|null;media_type:string}|null;event?:{uuid:string;title:string}|null;recipe?:{uuid:string;title:string;category:string}|null;memory_evening?:{uuid:string;title:string;status:string}|null;places?:Array<{id:number;name:string;type:string;city?:string|null;country?:string|null}>;moments?:Array<{uuid:string;title:string;happened_on?:string|null;media?:{uuid:string;title:string;thumbnail_url?:string|null;media_type:string}|null}>}|null;
     my_response?:'accepted'|'tentative'|'declined'|null; participants:Participant[]; tasks:Task[]; attachments:Attachment[]; planning_items:PlanningItem[];
+    reminders:ActionableReminder[];
     route_variants?:Array<{id:number;title:string;is_selected:boolean;estimated_minutes?:number}>;
     experience:ExperienceLifecycle;
     date_idea?:DateExperience|null;
+    can_edit:boolean;
 }
 interface Readiness {
     budget:Array<{category:string;status:string}>; documents:Array<{title:string;status:string}>;
@@ -47,6 +51,7 @@ export default function CalendarShow({ eventUuid }: { eventUuid:string }) {
     const [story, setStory] = useState(''); const [storyAlbum, setStoryAlbum] = useState<{uuid:string;title:string}|null>(null); const [notice, setNotice] = useState(''); const [working, setWorking] = useState(false);
     const [polls, setPolls] = useState<DecisionPoll[]>([]); const [pollDraft, setPollDraft] = useState({question:'', first:'', second:''}); const [pollBusy, setPollBusy] = useState(false);
     const [capsules, setCapsules] = useState<TimeCapsule[]>([]); const [capsuleDraft, setCapsuleDraft] = useState({title:'', message:'', deliver_at:'', recipient_user_id:''}); const [capsuleBusy, setCapsuleBusy] = useState(false);
+    const [showEditor, setShowEditor] = useState(false);
 
     const loadPolls = async () => {
         try { setPolls((await axios.get('/api/v1/calendar/polls', {params:{event_uuid:eventUuid}})).data ?? []); }
@@ -193,6 +198,7 @@ export default function CalendarShow({ eventUuid }: { eventUuid:string }) {
             {event.description && <p className="mt-3 whitespace-pre-wrap text-sm text-[var(--color-text-secondary)]">{event.description}</p>}
             {event.origin && <div className="mt-3 flex flex-wrap items-center gap-2 rounded-xl border border-pink-400/20 bg-pink-500/5 p-2 text-xs"><span className="text-pink-100">♥ {event.origin.label}</span>{event.origin.media && <Link href={`/media/${event.origin.media.uuid}`} className="inline-flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-black/10 py-1 pr-2 text-[var(--color-text-secondary)] hover:text-white">{event.origin.media.thumbnail_url?<img src={event.origin.media.thumbnail_url} alt="" className="h-7 w-7 rounded object-cover"/>:<span className="flex h-7 w-7 items-center justify-center">{event.origin.media.media_type==='video'?'🎬':'📷'}</span>}<span className="max-w-40 truncate">{event.origin.media.title}</span></Link>}{event.origin.milestone && <Link href="/milestones" className="rounded-lg border border-pink-400/25 px-2 py-1 text-pink-100 hover:bg-pink-500/10">{event.origin.milestone.icon} {event.origin.milestone.title}</Link>}{event.origin.event && <Link href={`/calendar/events/${event.origin.event.uuid}`} className="rounded-lg border border-pink-400/25 px-2 py-1 text-pink-100 hover:bg-pink-500/10">↗ {event.origin.event.title}</Link>}{event.origin.recipe&&<Link href={`/recipes/${event.origin.recipe.uuid}`} className="rounded-lg border border-amber-400/25 bg-amber-500/10 px-2 py-1 text-amber-100">🍳 {event.origin.recipe.title}</Link>}{event.origin.memory_evening&&<Link href="/memories#memory-evenings" className="rounded-lg border border-pink-400/25 bg-pink-500/10 px-2 py-1 text-pink-100">💞 Otevřít společný výběr</Link>}{event.origin.places?.map((place,index) => <Link key={place.id} href={`/places/${place.id}`} className="rounded-lg border border-sky-400/25 bg-sky-500/5 px-2 py-1 text-sky-100 hover:bg-sky-500/10"><span className="mr-1 inline-flex h-4 w-4 items-center justify-center rounded-full bg-sky-500 text-[9px] text-white">{index+1}</span>{place.name}</Link>)}{event.origin.moments?.map(moment => moment.media?<Link key={moment.uuid} href={`/media/${moment.media.uuid}`} className="inline-flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-black/10 py-1 pr-2 text-[var(--color-text-secondary)] hover:text-white">{moment.media.thumbnail_url?<img src={moment.media.thumbnail_url} alt="" className="h-7 w-7 rounded object-cover"/>:<span className="flex h-7 w-7 items-center justify-center">📷</span>}<span className="max-w-36 truncate">{moment.title}</span></Link>:<Link key={moment.uuid} href="/shared-memories" className="rounded-lg border border-pink-400/25 px-2 py-1 text-pink-100">{moment.title}</Link>)}</div>}
             <div className="mt-4 flex flex-wrap gap-2">
+                {event.can_edit && <button type="button" onClick={() => setShowEditor(true)} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[var(--color-border)] px-3 text-sm text-white hover:bg-white/5"><Pencil size={15}/> Upravit akci</button>}
                 {event.source_trip_id && <Link href={`/trips/${event.source_trip_id}/plan`} className="inline-flex min-h-10 items-center rounded-lg bg-orange-500/10 px-3 text-xs text-orange-200 hover:bg-orange-500/20">↗ Navazuje na společnou cestu</Link>}
                 {event.album && <Link href={`/albums/${event.album.uuid}`} className="inline-flex min-h-10 items-center rounded-lg bg-pink-500/10 px-3 text-xs text-pink-100 hover:bg-pink-500/20">♥ Otevřít album zážitku</Link>}
                 <button disabled={working} onClick={createStory} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[var(--color-border)] px-3 text-sm text-white disabled:opacity-40"><Sparkles size={15}/>{working ? 'Připravuji…' : 'Připravit příběh'}</button>
@@ -203,6 +209,7 @@ export default function CalendarShow({ eventUuid }: { eventUuid:string }) {
             {story && <div className="mt-3 rounded-lg bg-[var(--color-accent)]/10 p-3 text-sm text-[var(--color-text-secondary)]"><p>{story}</p>{storyAlbum && <Link href={`/albums/${storyAlbum.uuid}/story`} className="mt-2 inline-block text-sm text-[var(--color-accent)] hover:underline">Otevřít a upravit příběh v albu →</Link>}</div>}
         </header>
         {event.date_idea&&<DateExperiencePanel idea={event.date_idea} eventUuid={eventUuid} isFuture={isFuture} experience={event.experience} onChanged={load}/>}
+        <div className="mt-5"><ReminderActionPanel initialItems={event.reminders ?? []} eventUuid={eventUuid}/></div>
         <div className="mt-5"><MealPlanPanel eventUuid={eventUuid} onChanged={load}/></div>
         {!isFuture && <section className="mt-5 rounded-2xl border border-pink-400/25 bg-gradient-to-br from-pink-500/10 to-[var(--color-bg-card)] p-4 sm:p-5"><div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><p className="text-xs font-medium uppercase tracking-wide text-pink-200">Od plánu ke vzpomínce</p><h2 className="mt-1 font-semibold text-white">Dokončení společného zážitku</h2><p className="mt-1 text-xs text-[var(--color-text-secondary)]">Fotografie, návštěva podniku, album, hodnocení a ohlédnutí zůstávají součástí této jediné akce.</p></div><span className="shrink-0 rounded-full bg-pink-500/15 px-3 py-1.5 text-sm font-semibold text-pink-100">{event.experience.progress_percent}%</span></div><div className="mt-4 h-2 overflow-hidden rounded-full bg-black/20"><div className="h-full rounded-full bg-gradient-to-r from-pink-500 to-orange-400 transition-all" style={{width:`${event.experience.progress_percent}%`}}/></div><div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">{event.experience.steps.map(step=><div key={step.key} className={`rounded-xl border p-2.5 text-xs ${step.complete?'border-emerald-400/20 bg-emerald-500/10 text-emerald-100':'border-[var(--color-border)] bg-black/10 text-[var(--color-text-secondary)]'}`}><span className="mr-1">{step.complete?'✓':'○'}</span>{step.label}</div>)}</div><div className="mt-4 flex flex-wrap gap-2">{event.experience.attached_media_count===0&&<button disabled={working} onClick={getSuggestions} className="min-h-10 rounded-lg border border-sky-400/30 bg-sky-500/10 px-3 text-xs text-sky-100 disabled:opacity-50">Najít fotografie a videa</button>}{!event.experience.memory&&<button disabled={working} onClick={saveSharedMemory} className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-pink-600 px-3 text-xs font-medium text-white disabled:opacity-50"><Heart size={14}/>{working?'Ukládám…':'Uložit společnou vzpomínku'}</button>}{event.experience.place&&event.experience.memory&&!event.experience.place.my_review_complete&&<Link href={`/places/${event.experience.place.id}#reviews`} className="inline-flex min-h-10 items-center rounded-lg border border-orange-400/30 bg-orange-500/10 px-3 text-xs text-orange-100">Ohodnotit {event.experience.place.name}</Link>}{!event.experience.reflection_exists&&<a href="#event-reflection" className="inline-flex min-h-10 items-center rounded-lg border border-amber-400/30 bg-amber-500/10 px-3 text-xs text-amber-100">Dopsat, jaké to bylo</a>}{event.experience.memory&&<Link href="/shared-memories" className="inline-flex min-h-10 items-center rounded-lg border border-pink-400/25 px-3 text-xs text-pink-100">Otevřít společné vzpomínky</Link>}</div>{event.experience.place_plan&&<p className="mt-3 text-[10px] text-[var(--color-text-secondary)]">Návštěva {event.experience.place?.name} · {event.experience.place_plan.state==='visited'?'označena jako uskutečněná':'čeká na dokončení'}{event.experience.place?.review_count?` · ${event.experience.place.review_count} hodnocení`:''}</p>}</section>}
         <div className="mt-5 grid gap-5 lg:grid-cols-2">
@@ -227,5 +234,5 @@ export default function CalendarShow({ eventUuid }: { eventUuid:string }) {
             </section>
             <div id="event-reflection" className="scroll-mt-20"><EventReflection eventUuid={eventUuid} disabled={isFuture}/></div>
         </div>
-    </main></AppLayout>;
+    </main><CalendarEventEditor eventUuid={eventUuid} open={showEditor} onClose={() => setShowEditor(false)} onSaved={load} onDeleted={() => { window.location.assign('/calendar'); }}/></AppLayout>;
 }

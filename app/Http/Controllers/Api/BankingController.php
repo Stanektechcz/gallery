@@ -8,6 +8,7 @@ use App\Models\BankCategoryRule;
 use App\Models\BankConnection;
 use App\Models\BankTransaction;
 use App\Models\GallerySpace;
+use App\Notifications\GalleryNotification;
 use App\Services\Banking\BankingIntegrationService;
 use App\Services\Banking\RevolutStatementImportService;
 use App\Services\Banking\SpaceFinancialOverviewService;
@@ -92,6 +93,17 @@ class BankingController extends Controller
         $space = $this->space($request, (int) $data['gallery_space_id']);
         $result = $this->imports->import($space, $request->user(), $request->file('statement'));
         AuditLog::record('bank.statement.import', null, ['space_id' => $space->id, 'import_uuid' => $result['import']['uuid'], 'duplicate' => $result['duplicate_file']]);
+        if (! $result['duplicate_file'] && (int) ($result['import']['rows_imported'] ?? 0) > 0) {
+            $count = (int) $result['import']['rows_imported'];
+            GalleryNotification::notifySpace(
+                $space,
+                $request->user()->id,
+                'finance.imported',
+                $request->user()->name." doplnil/a společné finance o {$count} transakcí.",
+                '/finances',
+                ['import_uuid' => $result['import']['uuid'], 'rows_imported' => $count, 'priority' => 'normal']
+            );
+        }
 
         return response()->json($result, $result['duplicate_file'] ? 200 : 201);
     }

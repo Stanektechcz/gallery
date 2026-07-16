@@ -8,7 +8,11 @@ use Illuminate\Notifications\Notification;
 
 class EventReminderNotification extends Notification
 {
-    public function __construct(public readonly CalendarEvent $event, public readonly string $channel) {}
+    public function __construct(
+        public readonly CalendarEvent $event,
+        public readonly string $channel,
+        public readonly ?int $reminderId = null,
+    ) {}
 
     public function via(object $notifiable): array
     {
@@ -22,7 +26,16 @@ class EventReminderNotification extends Notification
             'message' => "Připomínka: {$this->event->title}",
             'link' => '/calendar/events/' . $this->event->uuid,
             'icon' => '⏰',
-            'extra' => ['event_uuid' => $this->event->uuid, 'starts_at' => $this->event->starts_at?->toIso8601String(), 'channel' => $this->channel],
+            'category' => 'planning',
+            'priority' => 'high',
+            'context_key' => 'event:' . $this->event->uuid,
+            'extra' => [
+                'event_uuid' => $this->event->uuid,
+                'starts_at' => $this->event->starts_at?->toIso8601String(),
+                'channel' => $this->channel,
+                'reminder_id' => $this->reminderId,
+                'actionable' => $this->reminderId !== null,
+            ],
         ];
     }
 
