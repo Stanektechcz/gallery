@@ -118,7 +118,9 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/search',   fn() => Inertia::render('Search/Index'))->name('search');
 
     // Calendar
-    Route::get('/calendar', fn() => Inertia::render('Calendar/Index'))->name('calendar');
+    Route::get('/calendar', fn() => Inertia::render('Calendar/Index', [
+        'today' => now('Europe/Prague')->toDateString(),
+    ]))->name('calendar');
     Route::get('/calendar/events/{uuid}', fn(string $uuid) => Inertia::render('Calendar/Show', ['eventUuid' => $uuid]))->name('calendar.events.show');
     Route::get('/travel-inbox', fn() => Inertia::render('TravelInbox/Index'))->name('travel-inbox');
     Route::get('/weekly', fn() => Inertia::render('Weekly/Index'))->name('weekly');

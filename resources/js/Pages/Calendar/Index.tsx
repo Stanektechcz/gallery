@@ -29,8 +29,8 @@ const normalizeEventColor = (value: string) => {
     return `#${rgb.slice(1).map(component => Number(component).toString(16).padStart(2, '0')).join('')}`;
 };
 
-export default function CalendarIndex() {
-    const initial = new Date();
+export default function CalendarIndex({ today }: { today: string }) {
+    const initial = useMemo(() => new Date(`${today}T12:00:00`), [today]);
     const [year, setYear] = useState(initial.getFullYear());
     const [month, setMonth] = useState(initial.getMonth() + 1);
     const [days, setDays] = useState<DayData[]>([]);
