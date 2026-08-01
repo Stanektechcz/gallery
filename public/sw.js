@@ -1,5 +1,5 @@
 /* Maki root service worker: web remains the source of truth. */
-const VERSION = 'maki-shell-v1';
+const VERSION = 'maki-shell-v2';
 const SHELL_CACHE = `${VERSION}:static`;
 const SHELL_FILES = [
     '/offline.html',
@@ -44,7 +44,7 @@ self.addEventListener('fetch', event => {
     // Authenticated HTML is always fetched from the server. Offline mode uses
     // a public shell only, never an old page containing another user's data.
     if (request.mode === 'navigate') {
-        event.respondWith(fetch(request).catch(() => caches.match('/offline.html')));
+        event.respondWith(fetch(request, { cache: 'no-store' }).catch(() => caches.match('/offline.html')));
         return;
     }
 
