@@ -11,8 +11,8 @@ return new class extends Migration
     {
         DB::transaction(function (): void {
             CalendarEvent::query()
-                ->where('starts_at', '>=', '2026-08-01 00:00:00')
-                ->where('starts_at', '<', '2026-09-01 00:00:00')
+                ->where('starts_at', '>=', '2025-08-01 00:00:00')
+                ->where('starts_at', '<', '2025-09-01 00:00:00')
                 ->orderBy('id')
                 ->eachById(function (CalendarEvent $event): void {
                     $event->starts_at = $event->starts_at->copy()->subMonthNoOverflow();
