@@ -15,7 +15,7 @@ interface NameDay { id:string; date:string; name:string; official_name:string; t
 interface Holiday { date:string; title:string; weekday_label:string; is_weekend:boolean; source:string; }
 interface HolidayOpportunity { id:string; title:string; start_date:string; end_date:string; duration_days:number; leave_days:string[]; leave_days_count:number; holiday_dates:string[]; holiday_titles:string[]; }
 
-const MONTHS = ['Leden','Únor','Březen','Duben','Červen','Červenec','Srpen','Září','Říjen','Listopad','Prosinec'];
+const MONTHS = ['Leden','Únor','Březen','Duben','Květen','Červen','Červenec','Srpen','Září','Říjen','Listopad','Prosinec'];
 const DAYS = ['Po','Út','St','Čt','Pá','So','Ne'];
 const TYPE_LABEL: Record<string, string> = { event: 'Akce', trip: 'Cesta', outing: 'Výlet', birthday: 'Narozeniny', anniversary: 'Výročí', reservation: 'Rezervace', custom: 'Vlastní' };
 const localInput = (date = new Date()) => new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
