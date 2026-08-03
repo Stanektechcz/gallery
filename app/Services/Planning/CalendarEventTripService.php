@@ -5,10 +5,12 @@ namespace App\Services\Planning;
 use App\Models\CalendarEvent;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 /** Keeps a calendar event and its trip workspace as one shared planning object. */
 class CalendarEventTripService
 {
+    public function __construct(private readonly LifeEventService $lifeEvents) {}
     /** @return array{0: object, 1: bool} */
     public function createFromEvent(CalendarEvent $event, int $actorId): array
     {
@@ -18,7 +20,8 @@ class CalendarEventTripService
 
         return DB::transaction(function () use ($event, $actorId) {
             $end = $event->ends_at ?? $event->starts_at;
-            $tripId = DB::table('trips')->insertGetId([
+            $source = $event->created_from ?? (is_array($event->metadata) ? ($event->metadata['source'] ?? 'calendar') : 'calendar');
+            $tripRow = [
                 'gallery_space_id' => $event->gallery_space_id,
                 'created_by' => $actorId,
                 'name' => $event->title,
@@ -33,7 +36,10 @@ class CalendarEventTripService
                 'currency' => 'CZK',
                 'created_at' => now(),
                 'updated_at' => now(),
-            ]);
+            ];
+            if (Schema::hasColumn('trips', 'created_from')) $tripRow['created_from'] = $source;
+            if (Schema::hasColumn('trips', 'source_reference')) $tripRow['source_reference'] = $event->uuid;
+            $tripId = DB::table('trips')->insertGetId($tripRow);
 
             $event->update(['trip_id' => $tripId, 'type' => 'trip']);
 
@@ -54,7 +60,10 @@ class CalendarEventTripService
             $this->createDays($tripId, $event->starts_at, $end);
             $this->createPreparationTasks($event);
 
-            return [DB::table('trips')->find($tripId), true];
+            $trip = DB::table('trips')->find($tripId);
+            $this->lifeEvents->record($event->gallery_space_id, $actorId, 'trip.created', $trip->name, $source, 'trip', $tripId, $event->starts_at, ['calendar_event_id' => $event->id]);
+
+            return [$trip, true];
         });
     }
 

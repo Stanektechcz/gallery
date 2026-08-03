@@ -10,6 +10,7 @@ use App\Models\MediaItem;
 use App\Models\MemoryEvening;
 use App\Models\User;
 use App\Notifications\GalleryNotification;
+use App\Services\Planning\CalendarEventCreationService;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -18,6 +19,8 @@ use Illuminate\Support\Str;
 
 class MemoryEveningService
 {
+    public function __construct(private readonly CalendarEventCreationService $calendarEvents) {}
+
     public function schedule(GallerySpace $space, User $actor, array $data, Collection $media): MemoryEvening
     {
         $scheduled = ! empty($data['scheduled_for']) ? Carbon::parse($data['scheduled_for']) : $this->nextFreeEvening($space);
@@ -40,17 +43,16 @@ class MemoryEveningService
             ]);
 
             $eventTitle = str_starts_with($data['title'], 'Večer se vzpomínkami') ? $data['title'] : 'Večer se vzpomínkami · ' . $data['title'];
-            $event = CalendarEvent::create([
-                'gallery_space_id' => $space->id, 'created_by' => $actor->id, 'title' => $eventTitle,
+            $event = $this->calendarEvents->create($space, $actor, [
+                'title' => $eventTitle,
                 'description' => $data['description'] ?? 'Společně si projdeme vybrané fotografie a videa, zvolíme nejoblíbenější momenty a doplníme vlastní pohled.',
                 'type' => 'memory_evening', 'status' => 'planned', 'starts_at' => $scheduled, 'ends_at' => $scheduled->copy()->addMinutes(90),
                 'timezone' => 'Europe/Prague', 'color' => '#ec4899', 'is_private' => false,
                 'recurrence_rule' => ($data['repeat_annually'] ?? false) ? ['frequency' => 'yearly', 'interval' => 1] : null,
                 'metadata' => array_filter(['kind' => 'memory_evening', 'memory_evening' => true, 'memory_evening_uuid' => $eveningUuid, 'fingerprint' => $data['fingerprint'], 'board_uuid' => $boardUuid, 'memory_moment_uuids' => $data['source_moment_uuids'] ?? null, 'href' => '/memories#memory-evenings'], fn ($value) => $value !== null),
             ]);
-            $members = DB::table('gallery_space_user')->where('gallery_space_id', $space->id)->pluck('user_id');
+            $members = $event->participants()->pluck('users.id');
             foreach ($members as $memberId) {
-                DB::table('event_participants')->insertOrIgnore(['event_id' => $event->id, 'user_id' => $memberId, 'role' => (int) $memberId === $actor->id ? 'organizer' : 'guest', 'response' => (int) $memberId === $actor->id ? 'accepted' : 'pending', 'created_at' => now(), 'updated_at' => now()]);
                 foreach ([1440, 30] as $minutes) {
                     $remindAt = $scheduled->copy()->subMinutes($minutes);
                     if ($remindAt->isFuture()) DB::table('event_reminders')->insert(['event_id' => $event->id, 'user_id' => $memberId, 'channel' => 'database', 'remind_at' => $remindAt, 'status' => 'pending', 'created_at' => now(), 'updated_at' => now()]);

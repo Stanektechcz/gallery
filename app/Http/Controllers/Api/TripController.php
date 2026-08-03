@@ -8,6 +8,7 @@ use App\Models\AuditLog;
 use App\Models\CalendarEvent;
 use App\Models\MediaItem;
 use App\Services\Planning\TripPreparationTimelineService;
+use App\Services\Planning\CalendarEventCreationService;
 use App\Services\Media\AlbumCurationAssistantService;
 use App\Services\Travel\TransportSearchService;
 use Illuminate\Http\JsonResponse;
@@ -24,6 +25,7 @@ class TripController extends Controller
         private readonly TransportSearchService $transportSearch,
         private readonly TripPreparationTimelineService $tripPreparation,
         private readonly AlbumCurationAssistantService $albumCuration,
+        private readonly CalendarEventCreationService $calendarEvents,
     ) {}
 
     // ─── Trips CRUD ────────────────────────────────────────────────────────
@@ -537,27 +539,15 @@ class TripController extends Controller
         $placeName = Schema::hasTable('trip_waypoints')
             ? DB::table('trip_waypoints')->where('trip_id', $trip->id)->orderBy('sort_order')->value('place_name')
             : null;
-        $event = CalendarEvent::create([
-            'gallery_space_id' => $space->id,
-            'created_by' => $user->id,
-            'source_trip_id' => $trip->id,
-            'title' => $data['title'] ?? "Návrat: {$trip->name}",
+        $event = $this->calendarEvents->create($space, $user, [
+            'source_trip_id' => $trip->id, 'title' => $data['title'] ?? "Návrat: {$trip->name}",
             'description' => $reflection?->highlight ? "Navazuje na společný zážitek: {$reflection->highlight}" : "Navazuje na vaši cestu „{$trip->name}“.",
-            'type' => 'outing',
-            'status' => 'planned',
-            'starts_at' => $startsAt,
-            'ends_at' => $startsAt->copy()->addHours(2),
-            'timezone' => $trip->timezone ?: 'Europe/Prague',
-            'place_name' => $placeName,
-            'is_private' => false,
+            'type' => 'outing', 'status' => 'planned', 'starts_at' => $startsAt, 'ends_at' => $startsAt->copy()->addHours(2),
+            'timezone' => $trip->timezone ?: 'Europe/Prague', 'place_name' => $placeName, 'is_private' => false,
             'metadata' => ['kind' => 'trip_revisit'],
         ]);
-        $memberIds = DB::table('gallery_space_user')->where('gallery_space_id', $space->id)->pluck('user_id');
+        $memberIds = $event->participants()->pluck('users.id');
         foreach ($memberIds as $memberId) {
-            $event->participants()->syncWithoutDetaching([(int) $memberId => [
-                'role' => (int) $memberId === $user->id ? 'owner' : 'guest',
-                'response' => (int) $memberId === $user->id ? 'accepted' : 'pending',
-            ]]);
             $event->reminders()->create([
                 'user_id' => $memberId,
                 'channel' => 'database',

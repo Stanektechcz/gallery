@@ -8,6 +8,7 @@ use App\Models\CalendarEvent;
 use App\Models\MediaItem;
 use App\Models\Place;
 use App\Services\Planning\PlaceVisitPlanningService;
+use App\Services\Planning\CalendarEventCreationService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -18,6 +19,8 @@ use Illuminate\Validation\ValidationException;
 
 class PlaceController extends Controller
 {
+    public function __construct(private readonly CalendarEventCreationService $calendarEvents) {}
+
     /**
      * GET /api/v1/places
      * List all places for the current gallery space, enriched with visit stats.
@@ -43,6 +46,7 @@ class PlaceController extends Controller
         $v = $request->validate([
             'name'          => 'required|string|max:200',
             'type'          => 'nullable|in:country,city,business,restaurant,museum,hotel,home,custom',
+            'lifecycle_status' => 'nullable|in:idea,planned,visited,favorite,avoid',
             'country'       => 'nullable|string|max:100',
             'country_code'  => 'nullable|string|max:3',
             'city'          => 'nullable|string|max:100',
@@ -64,6 +68,7 @@ class PlaceController extends Controller
             'created_by'       => $request->user()->id,
             'radius_meters'    => $v['radius_meters'] ?? 500,
             'type'             => $v['type'] ?? 'custom',
+            'lifecycle_status' => $v['lifecycle_status'] ?? 'idea',
         ]));
 
         return response()->json($this->withStats($place, $space->id), 201);
@@ -91,6 +96,7 @@ class PlaceController extends Controller
         $v = $request->validate([
             'name'          => 'nullable|string|max:200',
             'type'          => 'nullable|in:country,city,business,restaurant,museum,hotel,home,custom',
+            'lifecycle_status' => 'nullable|in:idea,planned,visited,favorite,avoid',
             'country'       => 'nullable|string|max:100',
             'city'          => 'nullable|string|max:100',
             'address'       => 'nullable|string|max:255',
@@ -269,28 +275,15 @@ class PlaceController extends Controller
                 'updated_at' => $now,
             ]);
 
-            $event = CalendarEvent::create([
-                'gallery_space_id' => $space->id,
-                'created_by' => $request->user()->id,
-                'trip_id' => $tripId,
-                'title' => $title,
-                'description' => 'Itinerář: ' . $placeNames,
-                'type' => 'outing',
-                'status' => 'planned',
-                'starts_at' => $startsAt,
-                'ends_at' => $endsAt,
-                'timezone' => 'Europe/Prague',
-                'place_name' => $placeNames,
-                'latitude' => $places->first()->latitude,
-                'longitude' => $places->first()->longitude,
-                'color' => '#0ea5e9',
-                'is_private' => false,
+            $event = $this->calendarEvents->create($space, $request->user(), [
+                'trip_id' => $tripId, 'title' => $title, 'description' => 'Itinerář: ' . $placeNames,
+                'type' => 'outing', 'status' => 'planned', 'starts_at' => $startsAt, 'ends_at' => $endsAt,
+                'timezone' => 'Europe/Prague', 'place_name' => $placeNames,
+                'latitude' => $places->first()->latitude, 'longitude' => $places->first()->longitude,
+                'color' => '#0ea5e9', 'is_private' => false,
                 'metadata' => [
-                    'kind' => 'place_selection_outing',
-                    'place_ids' => $places->pluck('id')->all(),
-                    'place_selection_key' => $selectionKey,
-                    'transfer_minutes' => $transferMinutes,
-                    'duration_minutes' => $durationMinutes,
+                    'kind' => 'place_selection_outing', 'place_ids' => $places->pluck('id')->all(),
+                    'place_selection_key' => $selectionKey, 'transfer_minutes' => $transferMinutes, 'duration_minutes' => $durationMinutes,
                 ],
             ]);
 
@@ -340,7 +333,7 @@ class PlaceController extends Controller
                 $cursor = $activityEnd->addMinutes($transferMinutes);
             }
 
-            $memberIds = DB::table('gallery_space_user')->where('gallery_space_id', $space->id)->pluck('user_id');
+            $memberIds = $event->participants()->pluck('users.id');
             $participants = $memberIds->mapWithKeys(fn ($userId) => [$userId => [
                 'role' => (int) $userId === (int) $request->user()->id ? 'owner' : 'editor',
                 'response' => 'accepted',
@@ -491,6 +484,46 @@ class PlaceController extends Controller
         return response()->json(DB::table('shared_memory_moments')->find($id), $existing ? 200 : 201);
     }
 
+    /** Return only the shared note and the current user's own private note. */
+    public function notes(Request $request, Place $place): JsonResponse
+    {
+        $space = $request->user()->gallerySpaces()->firstOrFail();
+        $this->authorizePlace($place, $space->id);
+        abort_unless(Schema::hasTable('place_notes'), 503, 'Poznámky budou dostupné po dokončení aktualizace databáze.');
+
+        $shared = DB::table('place_notes')->where('place_id', $place->id)->where('gallery_space_id', $space->id)->where('visibility', 'shared')->orderByDesc('updated_at')->first();
+        $mine = DB::table('place_notes')->where('place_id', $place->id)->where('gallery_space_id', $space->id)->where('visibility', 'personal')->where('user_id', $request->user()->id)->orderByDesc('updated_at')->first();
+
+        return response()->json(['shared' => $shared, 'mine' => $mine]);
+    }
+
+    /** Store one of the two deliberately separated note scopes. */
+    public function saveNotes(Request $request, Place $place): JsonResponse
+    {
+        $space = $request->user()->gallerySpaces()->firstOrFail();
+        $this->authorizePlace($place, $space->id);
+        abort_unless(Schema::hasTable('place_notes'), 503, 'Poznámky budou dostupné po dokončení aktualizace databáze.');
+        $data = $request->validate(['visibility' => 'required|in:shared,personal', 'content' => 'nullable|string|max:10000']);
+        $user = $request->user();
+        $content = trim((string) ($data['content'] ?? ''));
+        $scopeKey = $data['visibility'] === 'personal' ? 'personal:'.$user->id : 'shared';
+        $query = DB::table('place_notes')->where('place_id', $place->id)->where('scope_key', $scopeKey);
+        if ($content === '') {
+            $query->delete();
+            return response()->json(['note' => null]);
+        }
+
+        $now = now();
+        DB::table('place_notes')->upsert([[
+            'place_id' => $place->id, 'gallery_space_id' => $space->id, 'scope_key' => $scopeKey,
+            'user_id' => $data['visibility'] === 'personal' ? $user->id : null,
+            'visibility' => $data['visibility'], 'content' => $content,
+            'created_by' => $user->id, 'updated_by' => $user->id,
+            'created_at' => $now, 'updated_at' => $now,
+        ]], ['place_id', 'scope_key'], ['content', 'updated_by', 'updated_at']);
+
+        return response()->json(['note' => $query->first()]);
+    }
     // ─── Helpers ───────────────────────────────────────────────────────────
 
     private function authorizePlace(Place $place, int $spaceId): void
@@ -583,6 +616,7 @@ class PlaceController extends Controller
             'id'            => $place->id,
             'name'          => $place->name,
             'type'          => $place->type ?? 'custom',
+            'lifecycle_status' => $place->lifecycle_status ?? 'idea',
             'country'       => $place->country,
             'country_code'  => $place->country_code,
             'city'          => $place->city,

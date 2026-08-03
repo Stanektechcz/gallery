@@ -12,6 +12,7 @@ use Illuminate\Support\Str;
 
 class PlaceVisitPlanningService
 {
+    public function __construct(private readonly CalendarEventCreationService $calendarEvents) {}
     /**
      * Create one shared place plan, calendar event, participants and reminders.
      * Repeating the same request for the same start is idempotent.
@@ -42,8 +43,7 @@ class PlaceVisitPlanningService
             $description = $data['notes'] ?? $place->next_time_note ?? $place->description;
             if ($recommendedItem && !$description) $description = "Příště si dát: {$recommendedItem}.";
 
-            $event = CalendarEvent::create([
-                'gallery_space_id' => $space->id,
+            $event = $this->calendarEvents->create($space, $user, [
                 'created_by' => $user->id,
                 'title' => !empty($data['from_recommendation']) ? "Rande · {$place->name}" : $place->name,
                 'description' => $description,

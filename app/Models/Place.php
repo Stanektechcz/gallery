@@ -10,6 +10,7 @@ class Place extends Model
         'gallery_space_id',
         'name',
         'type',
+        'lifecycle_status',
         'country',
         'country_code',
         'region',

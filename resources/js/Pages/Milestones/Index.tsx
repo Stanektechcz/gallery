@@ -66,7 +66,7 @@ export default function Milestones() {
         finally { setCelebrationBusy(false); }
     };
 
-    return <AppLayout><Head title="Osobní dny"/><main className="mx-auto max-w-5xl p-4 sm:p-6">
+    return <AppLayout><Head title="Osobní dny"/><main className="w-full p-4 sm:p-6 lg:p-8">
         <header className="mb-6"><p className="text-sm text-[var(--color-text-secondary)]">Společné zážitky a blízcí</p><h1 className="text-2xl font-bold text-white">Milníky, narozeniny a svátky</h1><p className="mt-1 text-sm text-[var(--color-text-secondary)]">Jeden přehled pro vaše výročí i důležité dny rodiny a přátel. Vše se automaticky propisuje do kalendáře.</p></header>
         {error&&<p className="mb-4 rounded-xl bg-red-500/10 p-3 text-sm text-red-200">{error}</p>}
 

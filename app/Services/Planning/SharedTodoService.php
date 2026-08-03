@@ -12,6 +12,8 @@ use Illuminate\Support\Facades\DB;
 
 class SharedTodoService
 {
+    public function __construct(private readonly CalendarEventCreationService $calendarEvents) {}
+
     public function ensureDefaultList(GallerySpace $space, User $user): SharedTodoList
     {
         return SharedTodoList::firstOrCreate(
@@ -20,6 +22,27 @@ class SharedTodoService
         );
     }
 
+
+    public function create(GallerySpace $space, User $user, array $attributes, ?SharedTodoList $list = null, ?SharedTodo $parent = null, string $source = 'manual', ?string $sourceReference = null): SharedTodo
+    {
+        $list ??= $this->ensureDefaultList($space, $user);
+        $metadata = array_merge(['source' => $source], (array) ($attributes['metadata'] ?? []));
+        $attributes += [
+            'gallery_space_id' => $space->id,
+            'list_id' => $list->id,
+            'parent_id' => $parent?->id,
+            'created_by' => $user->id,
+            'status' => 'open',
+            'sort_order' => ((int) SharedTodo::where('list_id', $list->id)->where('parent_id', $parent?->id)->max('sort_order')) + 1,
+        ];
+        $attributes['metadata'] = $metadata;
+        if (\Illuminate\Support\Facades\Schema::hasColumn('shared_todos', 'created_from')) {
+            $attributes['created_from'] = $source;
+            $attributes['source_reference'] = $sourceReference;
+        }
+
+        return SharedTodo::create($attributes);
+    }
     public function complete(SharedTodo $todo, User $user, bool $completed): ?SharedTodo
     {
         $todo->update([
@@ -47,19 +70,13 @@ class SharedTodoService
         $startsAt ??= $todo->starts_at ?: $todo->due_at ?: now()->addDay()->setTime(18, 0);
         $duration = max(15, (int) ($todo->estimate_minutes ?: 60));
         return DB::transaction(function () use ($todo, $actor, $startsAt, $duration) {
-            $event = CalendarEvent::create([
-                'gallery_space_id' => $todo->gallery_space_id, 'created_by' => $actor->id, 'trip_id' => $todo->trip_id,
-                'title' => 'Úkol · ' . $todo->title, 'description' => $todo->description,
+            $space = GallerySpace::findOrFail($todo->gallery_space_id);
+            $event = $this->calendarEvents->create($space, $actor, [
+                'trip_id' => $todo->trip_id, 'title' => 'Úkol · ' . $todo->title, 'description' => $todo->description,
                 'type' => 'todo', 'status' => 'planned', 'starts_at' => $startsAt, 'ends_at' => $startsAt->copy()->addMinutes($duration),
                 'timezone' => 'Europe/Prague', 'place_name' => $todo->location, 'color' => '#14b8a6', 'is_private' => false,
                 'metadata' => ['kind' => 'shared_todo', 'todo_uuid' => $todo->uuid, 'href' => '/planning#todos'],
             ]);
-            foreach (DB::table('gallery_space_user')->where('gallery_space_id', $todo->gallery_space_id)->pluck('user_id') as $memberId) {
-                DB::table('event_participants')->insertOrIgnore([
-                    'event_id' => $event->id, 'user_id' => $memberId, 'role' => (int) $memberId === $actor->id ? 'organizer' : 'guest',
-                    'response' => (int) $memberId === $actor->id ? 'accepted' : 'pending', 'created_at' => now(), 'updated_at' => now(),
-                ]);
-            }
             if ($todo->remind_at && $todo->remind_at->isFuture()) {
                 DB::table('event_reminders')->insertOrIgnore(['event_id' => $event->id, 'user_id' => $todo->assigned_to ?: $actor->id, 'channel' => 'database', 'remind_at' => $todo->remind_at, 'status' => 'pending', 'created_at' => now(), 'updated_at' => now()]);
             }

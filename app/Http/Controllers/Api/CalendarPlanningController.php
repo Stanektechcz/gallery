@@ -15,6 +15,9 @@ use App\Models\Place;
 use App\Models\User;
 use App\Notifications\GalleryNotification;
 use App\Services\Planning\CalendarEventTripService;
+use App\Services\Planning\CalendarEventCreationService;
+use App\Services\Planning\CalendarEventLifecycleService;
+use App\Services\Planning\CalendarEventRevisionService;
 use App\Services\Planning\CoupleExperienceRecommendationService;
 use App\Services\Planning\DateIdeaLifecycleService;
 use App\Services\Planning\DateIdeaTripSyncService;
@@ -24,6 +27,7 @@ use App\Services\Planning\ExperienceMediaService;
 use App\Services\Planning\PersonalCelebrationService;
 use App\Services\Planning\ReminderActionService;
 use App\Services\Planning\TripPartnerFinanceService;
+use App\Services\Planning\TravelInboxService;
 use App\Services\Memories\MemoryEveningService;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
@@ -42,6 +46,8 @@ class CalendarPlanningController extends Controller
 
     public function __construct(
         private readonly CalendarEventTripService $tripService,
+        private readonly CalendarEventCreationService $eventCreation,
+        private readonly CalendarEventLifecycleService $eventLifecycle,
         private readonly CzechPublicHolidayService $holidayService,
         private readonly PersonalCelebrationService $personalCelebrationService,
         private readonly CoupleExperienceRecommendationService $experienceRecommendations,
@@ -51,6 +57,7 @@ class CalendarPlanningController extends Controller
         private readonly DateIdeaLifecycleService $dateIdeas,
         private readonly DateIdeaTripSyncService $dateIdeaTripSync,
         private readonly ReminderActionService $reminderActions,
+        private readonly CalendarEventRevisionService $revisions,
     ) {}
 
     public function index(Request $request): JsonResponse
@@ -59,8 +66,9 @@ class CalendarPlanningController extends Controller
         $from = Carbon::parse($data['from'] ?? now()->startOfMonth())->startOfDay();
         $to = Carbon::parse($data['to'] ?? now()->endOfMonth())->endOfDay();
         $user = $request->user();
+        $this->eventLifecycle->completeElapsedPlans($this->spaceIds($user));
 
-        $events = $this->visibleEvents($user)
+        $events = $this->visibleEvents($user)->whereNotIn('status', ['completed', 'cancelled'])
             ->where('starts_at', '<=', $to)
             ->where(fn (Builder $q) => $q->whereNull('ends_at')->where('starts_at', '>=', $from)->orWhere('ends_at', '>=', $from))
             ->withCount(['tasks as open_tasks_count' => fn (Builder $q) => $q->whereNull('completed_at')])
@@ -108,15 +116,82 @@ class CalendarPlanningController extends Controller
         ]);
     }
 
+    /** Export only events visible to the current member; private partner details never leak into the file. */
+    public function exportIcs(Request $request)
+    {
+        $data = $request->validate([
+            'from' => 'required|date', 'to' => 'required|date|after_or_equal:from|before_or_equal:' . now()->addYear()->toDateString(),
+            'gallery_space_id' => 'nullable|integer',
+        ]);
+        $user = $request->user();
+        $from = Carbon::parse($data['from'], 'Europe/Prague')->startOfDay();
+        $to = Carbon::parse($data['to'], 'Europe/Prague')->endOfDay();
+        abort_if($from->diffInDays($to) > 366, 422, 'Export kalendáře může mít nejvýše 367 dní.');
+        if (! empty($data['gallery_space_id'])) $this->ownedSpace($user, (int) $data['gallery_space_id']);
+
+        $events = $this->visibleEvents($user)
+            ->when(! empty($data['gallery_space_id']), fn (Builder $query) => $query->where('gallery_space_id', (int) $data['gallery_space_id']))
+            ->whereNotIn('status', ['completed', 'cancelled'])
+            ->where('starts_at', '<=', $to)
+            ->where(fn (Builder $query) => $query->whereNull('ends_at')->where('starts_at', '>=', $from)->orWhere('ends_at', '>=', $from))
+            ->orderBy('starts_at')->limit(2000)->get();
+
+        $escape = static fn (?string $value): string => str_replace(["\\", "\r\n", "\n", ",", ";"], ["\\\\", "\\n", "\\n", "\\,", "\\;"], (string) $value);
+        $calendar = [
+            'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//MAKI Gallery//Shared Planning//CS',
+            'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', 'X-WR-CALNAME:MAKI · společný plán',
+        ];
+        foreach ($events as $event) {
+            $timezone = $event->timezone ?: 'Europe/Prague';
+            $calendar[] = 'BEGIN:VEVENT';
+            $calendar[] = 'UID:' . $event->uuid . '@maki-gallery';
+            $calendar[] = 'DTSTAMP:' . now('UTC')->format('Ymd\\THis\\Z');
+            if ($event->all_day) {
+                $start = $event->starts_at->copy()->setTimezone($timezone)->startOfDay();
+                $end = ($event->ends_at ?: $event->starts_at)->copy()->setTimezone($timezone)->startOfDay()->addDay();
+                $calendar[] = 'DTSTART;VALUE=DATE:' . $start->format('Ymd');
+                $calendar[] = 'DTEND;VALUE=DATE:' . $end->format('Ymd');
+            } else {
+                $start = $event->starts_at->copy()->setTimezone($timezone);
+                $end = ($event->ends_at ?: $event->starts_at->copy()->addHour())->copy()->setTimezone($timezone);
+                $calendar[] = 'DTSTART;TZID=' . $escape($timezone) . ':' . $start->format('Ymd\\THis');
+                $calendar[] = 'DTEND;TZID=' . $escape($timezone) . ':' . $end->format('Ymd\\THis');
+            }
+            $calendar[] = 'SUMMARY:' . $escape($event->title);
+            if ($event->description) $calendar[] = 'DESCRIPTION:' . $escape($event->description);
+            if ($event->place_name) $calendar[] = 'LOCATION:' . $escape($event->place_name);
+            $calendar[] = 'STATUS:' . ($event->status === 'confirmed' ? 'CONFIRMED' : 'TENTATIVE');
+            $calendar[] = 'END:VEVENT';
+        }
+        $calendar[] = 'END:VCALENDAR';
+        $name = 'maki-kalendar-' . $from->format('Y-m-d') . '-' . $to->format('Y-m-d') . '.ics';
+        return response(implode("\r\n", $calendar) . "\r\n", 200, [
+            'Content-Type' => 'text/calendar; charset=utf-8',
+            'Content-Disposition' => 'attachment; filename="' . $name . '"',
+            'Cache-Control' => 'no-store, private',
+        ]);
+    }
     public function store(Request $request): JsonResponse
     {
         $user = $request->user();
         $createTrip = $request->boolean('create_trip');
         $data = $this->validatedEvent($request, false);
+        $clientRequestId = $data['client_request_id'] ?? null;
+        unset($data['client_request_id']);
         $space = $this->ownedSpace($user, (int) $data['gallery_space_id']);
+        if ($clientRequestId && Schema::hasColumn('calendar_events', 'source_reference')) {
+            $existing = CalendarEvent::query()
+                ->where('gallery_space_id', $space->id)
+                ->where('created_by', $user->id)
+                ->where('source_reference', $clientRequestId)
+                ->first();
+            if ($existing) return response()->json($this->eventPayload($existing, $user));
+            $data['created_from'] = 'mobile';
+            $data['source_reference'] = $clientRequestId;
+        }
         $this->validateTripAndAlbum($data, $space->id);
 
-        $event = CalendarEvent::create($data + ['created_by' => $user->id]);
+        $event = $this->eventCreation->create($space, $user, $data, [$user->id]);
         $this->syncTripSchedule($event);
         $event->participants()->syncWithoutDetaching([$user->id => ['role' => 'owner', 'response' => 'accepted']]);
         $this->syncParticipants($event, $data['participant_ids'] ?? [], $user);
@@ -156,9 +231,7 @@ class CalendarPlanningController extends Controller
             $leaveText = $opportunity['leave_days_count']
                 ? 'Stačí domluvit ' . $opportunity['leave_days_count'] . ' ' . ($opportunity['leave_days_count'] === 1 ? 'den' : 'dny') . ' volna.'
                 : 'Není potřeba čerpat dovolenou.';
-            $event = CalendarEvent::create([
-                'gallery_space_id' => $space->id,
-                'created_by' => $user->id,
+            $event = $this->eventCreation->create($space, $user, [
                 'title' => $opportunity['title'],
                 'description' => implode(', ', $opportunity['holiday_titles']) . ". {$leaveText}",
                 'type' => 'trip',
@@ -181,7 +254,7 @@ class CalendarPlanningController extends Controller
             $memberIds = $space->members()->pluck('users.id')->map(fn ($id) => (int) $id)->push($user->id)->unique();
             foreach ($memberIds as $memberId) {
                 $isOwner = (int) $memberId === (int) $user->id;
-                $event->participants()->attach($memberId, [
+                $event->participants()->syncWithoutDetaching([$memberId => [
                     'role' => $isOwner ? 'owner' : 'guest',
                     'response' => $isOwner ? 'accepted' : 'pending',
                 ]);
@@ -219,17 +292,58 @@ class CalendarPlanningController extends Controller
         return response()->json($this->eventPayload($event, $user));
     }
 
+    public function history(Request $request, string $uuid): JsonResponse
+    {
+        $event = $this->findVisibleEvent($request->user(), $uuid);
+        return response()->json(['available' => $this->revisions->available(), 'revisions' => $this->revisions->history($event)->values()]);
+    }
+
+    public function restoreRevision(Request $request, string $uuid, string $revisionUuid): JsonResponse
+    {
+        $user = $request->user();
+        $event = $this->findVisibleEvent($user, $uuid);
+        $this->ensureCanEdit($event, $user);
+        abort_unless($this->revisions->available(), 503, 'Pro historii úprav dokončete migrace aplikace.');
+        $revision = $this->revisions->revision($event, $revisionUuid);
+        abort_unless($revision, 404, 'Požadovaná verze akce nebyla nalezena.');
+        $restore = $this->revisions->restoreData($revision);
+        abort_if($restore === [], 422, 'Uložená verze akce je nečitelná a nelze ji obnovit.');
+
+        $before = $this->revisions->snapshot($event);
+        $changed = collect($restore)->filter(fn ($value, $key) => $this->comparableEventValue($value) !== $this->comparableEventValue($before[$key] ?? null))->keys()->values()->all();
+        abort_if($changed === [], 422, 'Tato verze už odpovídá aktuální podobě akce.');
+        $originalStartsAt = $event->starts_at->copy();
+        DB::transaction(function () use ($event, $restore, $originalStartsAt): void {
+            $event->update($restore);
+            $this->reschedulePendingReminders($event, $originalStartsAt);
+            $this->syncTripSchedule($event);
+        });
+        $event->refresh();
+        $this->revisions->record($event, $user->id, 'restore', $before, $changed);
+        AuditLog::record('calendar.event.restore', $event, ['revision_uuid' => $revisionUuid, 'changed_fields' => $changed]);
+        $this->notifyParticipants($event, $user, 'calendar.restored', "Akce byla vrácena k předchozí verzi: {$event->title}");
+
+        return response()->json($this->eventPayload($event, $user));
+    }
     public function update(Request $request, string $uuid): JsonResponse
     {
         $user = $request->user();
         $event = $this->findVisibleEvent($user, $uuid);
         $this->ensureCanEdit($event, $user);
         $data = $this->validatedEvent($request, true, $event);
+        if (array_key_exists('metadata', $data)) {
+            $data['metadata'] = array_merge(is_array($event->metadata) ? $event->metadata : [], $data['metadata'] ?? []);
+        }
+        if ($event->status === 'completed' && in_array($data['status'] ?? null, ['planned', 'confirmed'], true)) {
+            $metadata = array_merge(is_array($event->metadata) ? $event->metadata : [], $data['metadata'] ?? []);
+            unset($metadata['auto_completed_at'], $metadata['auto_completed_reason']);
+            $data['metadata'] = $metadata;
+        }
         $spaceId = (int) ($data['gallery_space_id'] ?? $event->gallery_space_id);
         $this->ownedSpace($user, $spaceId);
         $data['gallery_space_id'] = $spaceId;
         $this->validateTripAndAlbum($data + ['trip_id' => $event->trip_id, 'album_id' => $event->album_id], $spaceId);
-        $before = $event->only(['title', 'description', 'type', 'status', 'starts_at', 'ends_at', 'all_day', 'place_name', 'latitude', 'longitude', 'color', 'is_private', 'trip_id']);
+        $revisionSnapshot = $this->revisions->snapshot($event);
         $originalStartsAt = $event->starts_at->copy();
 
         DB::transaction(function () use ($event, $data, $user, $originalStartsAt): void {
@@ -245,9 +359,10 @@ class CalendarPlanningController extends Controller
         });
 
         $event->refresh();
-        $changes = collect($event->only(array_keys($before)))
-            ->filter(fn ($value, $key) => $this->comparableEventValue($value) !== $this->comparableEventValue($before[$key] ?? null))
+        $changes = collect($this->revisions->snapshot($event))
+            ->filter(fn ($value, $key) => $this->comparableEventValue($value) !== $this->comparableEventValue($revisionSnapshot[$key] ?? null))
             ->keys()->values()->all();
+        if ($changes !== []) $this->revisions->record($event, $user->id, 'update', $revisionSnapshot, $changes);
         AuditLog::record('calendar.event.update', $event, ['changed_fields' => $changes]);
         $notificationType = $event->status === 'cancelled' ? 'calendar.cancelled' : 'calendar.updated';
         $notificationText = $event->status === 'cancelled' ? "Akce byla zrušena: {$event->title}" : "Akce byla upravena: {$event->title}";
@@ -458,8 +573,9 @@ class CalendarPlanningController extends Controller
         $reflection = Schema::hasTable('calendar_event_reflections')
             ? DB::table('calendar_event_reflections')->where('calendar_event_id', $source->id)->first() : null;
         $metadata = ['kind' => 'event_revisit', 'source_event_uuid' => $source->uuid];
-        $event = CalendarEvent::create([
-            'gallery_space_id' => $source->gallery_space_id, 'created_by' => $request->user()->id,
+        $members = $source->participants()->pluck('users.id')->all();
+        if (!$members) $members = DB::table('gallery_space_user')->where('gallery_space_id', $source->gallery_space_id)->pluck('user_id')->all();
+        $event = $this->eventCreation->create($source->space, $request->user(), [
             'title' => $data['title'] ?? "Znovu spolu: {$source->title}",
             'description' => $reflection?->highlight ? "Navazuje na společný zážitek: {$reflection->highlight}" : "Navazuje na váš společný zážitek „{$source->title}“.",
             'type' => $source->type === 'trip' ? 'outing' : $source->type, 'status' => 'planned',
@@ -467,9 +583,7 @@ class CalendarPlanningController extends Controller
             'timezone' => $source->timezone ?: 'Europe/Prague', 'place_name' => $source->place_name,
             'latitude' => $source->latitude, 'longitude' => $source->longitude, 'color' => $source->color ?: '#ec4899',
             'is_private' => false, 'metadata' => $metadata,
-        ]);
-        $members = $source->participants()->pluck('users.id')->all();
-        if (!$members) $members = DB::table('gallery_space_user')->where('gallery_space_id', $source->gallery_space_id)->pluck('user_id')->all();
+        ], $members);
         foreach ($members as $memberId) {
             $event->participants()->syncWithoutDetaching([(int) $memberId => ['role' => (int) $memberId === $request->user()->id ? 'owner' : 'guest', 'response' => (int) $memberId === $request->user()->id ? 'accepted' : 'pending']]);
             $event->reminders()->create(['user_id' => $memberId, 'channel' => 'database', 'remind_at' => $startsAt->copy()->subMinutes((int) ($data['reminder_minutes'] ?? 10080)), 'status' => 'pending']);
@@ -587,16 +701,15 @@ class CalendarPlanningController extends Controller
         return response()->json(DB::table('travel_inbox_items')->whereIn('gallery_space_id', $this->spaceIds($user))->when($request->query('state'), fn ($q, $state) => $q->where('state', $state))->latest()->get());
     }
 
-    public function storeInbox(Request $request): JsonResponse
+    public function storeInbox(Request $request, TravelInboxService $travelInbox): JsonResponse
     {
         $user = $request->user();
         $data = $request->validate(['gallery_space_id' => 'required|integer', 'title' => 'required|string|max:255', 'notes' => 'nullable|string|max:5000', 'source_url' => 'nullable|url|max:2048', 'kind' => 'nullable|in:link,note,reservation,idea,file', 'trip_id' => 'nullable|integer', 'trip_day_id' => 'nullable|integer', 'trip_activity_id' => 'nullable|integer', 'event_id' => 'nullable|integer']);
         $space = $this->ownedSpace($user, (int) $data['gallery_space_id']);
         if (!empty($data['source_url']) && !Str::startsWith($data['source_url'], 'https://')) abort(422, 'Odkazy musí používat HTTPS.');
         $data = $this->validateInboxLinks($data, $space->id);
-        $state = ! empty($data['trip_id']) || ! empty($data['event_id']) ? 'assigned' : 'inbox';
-        $id = DB::table('travel_inbox_items')->insertGetId($data + ['uuid' => (string) Str::uuid(), 'added_by' => $user->id, 'state' => $state, 'created_at' => now(), 'updated_at' => now()]);
-        return response()->json(DB::table('travel_inbox_items')->find($id), 201);
+        $item = $travelInbox->create($space->id, $user->id, $data, 'manual');
+        return response()->json($item, 201);
     }
 
     public function updateInbox(Request $request, string $uuid): JsonResponse
@@ -672,10 +785,15 @@ class CalendarPlanningController extends Controller
             $expense->split = json_decode($expense->split ?: '[]', true) ?: [];
             return $expense;
         });
+        $sharedExpenses = Schema::hasTable('shared_expenses')
+            ? DB::table('shared_expenses')->where('trip_id', $tripId)->latest('occurred_at')->latest('id')->get(['uuid', 'title', 'category', 'amount', 'currency', 'occurred_at', 'source'])
+            : collect();
         $totals = $expenses->groupBy('state')->map(fn ($rows) => $rows->sum('amount'));
+        $sharedActual = $sharedExpenses->where('currency', strtoupper($trip->currency ?? 'CZK'))->sum('amount');
         return response()->json([
             'expenses' => $expenses,
-            'totals' => ['planned' => (float) ($totals['planned'] ?? 0), 'actual' => (float) ($totals['actual'] ?? 0), 'budget' => (float) ($trip->budget ?? 0), 'currency' => $trip->currency ?? 'CZK'],
+            'shared_expenses' => $sharedExpenses,
+            'totals' => ['planned' => (float) ($totals['planned'] ?? 0), 'actual' => (float) ($totals['actual'] ?? 0) + (float) $sharedActual, 'budget' => (float) ($trip->budget ?? 0), 'currency' => $trip->currency ?? 'CZK'],
             'members' => DB::table('gallery_space_user as membership')->join('users', 'users.id', '=', 'membership.user_id')->where('membership.gallery_space_id', $trip->gallery_space_id)->orderBy('users.name')->get(['users.id', 'users.name']),
             'route_variants' => DB::table('trip_route_variants')->where('trip_id', $tripId)->latest()->get(),
         ]);
@@ -765,7 +883,7 @@ class CalendarPlanningController extends Controller
             $startsAt = Carbon::parse($data['scheduled_at']);
             $existing = CalendarEvent::query()->where('gallery_space_id', $space->id)->where('starts_at', $startsAt)->where('metadata->memory_evening', true)->first();
             if ($existing) return response()->json($this->eventPayload($existing, $user));
-            $event = CalendarEvent::create(['gallery_space_id' => $space->id, 'created_by' => $user->id, 'title' => $data['title'] ?? 'Večer se vzpomínkami',
+            $event = $this->eventCreation->create($space, $user, ['title' => $data['title'] ?? 'Večer se vzpomínkami',
                 'description' => 'Společný návrat k zážitkům: ' . $moments->pluck('title')->implode(' · '), 'type' => 'event', 'status' => 'planned',
                 'starts_at' => $startsAt, 'ends_at' => $startsAt->copy()->addHours(2), 'timezone' => 'Europe/Prague', 'color' => '#ec4899',
                 'metadata' => ['memory_moment_uuids' => $moments->pluck('uuid')->values()->all(), 'memory_evening' => true]]);
@@ -787,8 +905,9 @@ class CalendarPlanningController extends Controller
 
     public function weeklyOverview(Request $request): JsonResponse
     {
-        $user = $request->user(); $from = now()->startOfWeek(); $to = now()->endOfWeek();
-        $events = $this->visibleEvents($user)->whereBetween('starts_at', [$from, $to])->orderBy('starts_at')->get();
+        $user = $request->user(); $from = now()->startOfDay(); $to = now()->endOfWeek();
+        $this->eventLifecycle->completeElapsedPlans($this->spaceIds($user));
+        $events = $this->visibleEvents($user)->whereNotIn('status', ['completed', 'cancelled'])->whereBetween('starts_at', [$from, $to])->orderBy('starts_at')->get();
         $eventIds = $events->pluck('id');
         $unseen = MediaItem::whereIn('gallery_space_id', $this->spaceIds($user))->whereNull('trashed_at')->where('taken_at', '<', now()->subYear())->where('is_favorite', false)->latest('taken_at')->limit(6)->get(['uuid', 'display_title', 'taken_at']);
         $onThisDay = MediaItem::whereIn('gallery_space_id', $this->spaceIds($user))->whereNull('trashed_at')->whereNotNull('taken_at')->whereYear('taken_at', '<', now()->year)->whereMonth('taken_at', now()->month)->whereDay('taken_at', now()->day)->orderByDesc('taken_at')->limit(12)->get(['id', 'uuid', 'display_title', 'original_filename', 'taken_at']);
@@ -856,7 +975,7 @@ class CalendarPlanningController extends Controller
             'starts_at' => $rule('required') . '|date', 'ends_at' => 'nullable|date', 'all_day' => 'nullable|boolean', 'timezone' => 'nullable|timezone',
             'place_name' => 'nullable|string|max:255', 'latitude' => 'nullable|numeric|between:-90,90', 'longitude' => 'nullable|numeric|between:-180,180', 'departure_buffer_minutes' => 'nullable|integer|min:0|max:1440',
             'recurrence_rule' => 'nullable|array', 'recurrence_rule.frequency' => 'nullable|in:daily,weekly,monthly,yearly', 'recurrence_rule.interval' => 'nullable|integer|min:1|max:52', 'recurrence_rule.until' => 'nullable|date',
-            'color' => 'nullable|regex:/^#[0-9A-Fa-f]{6}$/', 'is_private' => 'nullable|boolean', 'metadata' => 'nullable|array',
+            'color' => 'nullable|regex:/^#[0-9A-Fa-f]{6}$/', 'is_private' => 'nullable|boolean', 'metadata' => 'nullable|array', 'client_request_id' => 'nullable|uuid',
             'participant_ids' => 'nullable|array|max:30', 'participant_ids.*' => 'integer', 'reminders' => 'nullable|array|max:12', 'reminders.*.minutes_before' => 'required_with:reminders|integer|min:0|max:525600', 'reminders.*.channel' => 'required_with:reminders|' . Rule::in(self::CHANNELS), 'reminders.*.user_id' => 'nullable|integer',
         ]);
         $effectiveStart = isset($data['starts_at']) ? Carbon::parse($data['starts_at']) : $existing?->starts_at;
@@ -878,6 +997,10 @@ class CalendarPlanningController extends Controller
             return $this->reminderActions->payload($reminder, $viewer ?? $event->creator, (bool) $canSeeHistory);
         })->values()->all();
         $payload['budget'] = $event->trip_id ? DB::table('trip_expenses')->where('trip_id', $event->trip_id)->selectRaw("state, SUM(amount) as total")->groupBy('state')->pluck('total', 'state') : [];
+        if ($event->trip_id && Schema::hasTable('shared_expenses')) {
+            $currency = DB::table('trips')->where('id', $event->trip_id)->value('currency') ?? 'CZK';
+            $payload['budget']['actual'] = (float) ($payload['budget']['actual'] ?? 0) + (float) DB::table('shared_expenses')->where('trip_id', $event->trip_id)->where('currency', $currency)->sum('amount');
+        }
         $payload['route_variants'] = $event->trip_id ? DB::table('trip_route_variants')->where('trip_id', $event->trip_id)->get() : [];
         $payload['departure_at'] = $event->departure_buffer_minutes ? $event->starts_at->copy()->subMinutes($event->departure_buffer_minutes)->toIso8601String() : null;
         $payload['my_response'] = $viewer ? $event->participants->firstWhere('id', $viewer->id)?->pivot?->response : null;

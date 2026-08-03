@@ -4,13 +4,15 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Schema;
+use App\Services\Planning\LifeEventService;
 
 class SharedTodo extends Model
 {
     protected $fillable = [
         'uuid', 'series_uuid', 'gallery_space_id', 'list_id', 'parent_id', 'created_by', 'assigned_to', 'completed_by',
         'calendar_event_id', 'trip_id', 'title', 'description', 'status', 'priority', 'starts_at', 'due_at', 'remind_at',
-        'last_reminded_at', 'estimate_minutes', 'location', 'recurrence', 'tags', 'metadata', 'sort_order', 'completed_at',
+        'last_reminded_at', 'estimate_minutes', 'location', 'recurrence', 'tags', 'metadata', 'created_from', 'source_reference', 'sort_order', 'completed_at',
     ];
 
     protected function casts(): array
@@ -26,6 +28,13 @@ class SharedTodo extends Model
         static::creating(function (SharedTodo $todo) {
             $todo->uuid ??= (string) Str::uuid();
             $todo->series_uuid ??= $todo->uuid;
+            $metadata = is_array($todo->metadata) ? $todo->metadata : [];
+            if (Schema::hasColumn('shared_todos', 'created_from')) $todo->created_from ??= $metadata['source'] ?? 'manual';
+        });
+        static::created(function (SharedTodo $todo): void {
+            $metadata = is_array($todo->metadata) ? $todo->metadata : [];
+            $kind = ($metadata['kind'] ?? null) === 'shopping' ? 'shopping.item.created' : 'planning.todo.created';
+            app(LifeEventService::class)->record($todo->gallery_space_id, $todo->created_by, $kind, $todo->title, $metadata['source'] ?? 'planning', self::class, $todo->id, $todo->due_at, ['priority' => $todo->priority, 'list_id' => $todo->list_id]);
         });
     }
 

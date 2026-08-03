@@ -1,4 +1,5 @@
 import { usePwaInstall } from '@/Contexts/PwaInstallContext';
+import PwaStoragePanel from '@/Components/Pwa/PwaStoragePanel';
 import { Head, Link, usePage } from '@inertiajs/react';
 import {
     BellRing,
@@ -200,6 +201,8 @@ export default function MobileAppIndex({ android, apkStatus }: PageProps) {
                         ))}
                     </div>
                 </section>
+
+                {isAuthenticated && <section className="relative z-[1] mx-auto w-full max-w-5xl px-4 pb-2 sm:px-6"><PwaStoragePanel /></section>}
 
                 <section id="installation-help" className="relative z-[1] mx-auto w-full max-w-5xl scroll-mt-6 px-4 py-16 sm:px-6 lg:py-24">
                     <div className="text-center"><p className="text-xs font-bold uppercase tracking-[.25em] text-violet-300">Dvě bezpečné možnosti</p><h2 className="mt-3 text-2xl font-black sm:text-3xl">Instalace, která vám vyhovuje</h2><p className="mx-auto mt-3 max-w-2xl text-sm leading-relaxed text-white/55">Obě varianty zobrazují stejná živá data. Webová instalace je nejrychlejší; podepsané APK lze stáhnout přímo ze sdíleného odkazu.</p></div>

@@ -1,6 +1,7 @@
 import AppLayout from '@/Layouts/AppLayout';
 import { Head, router } from '@inertiajs/react';
 import PlaceReviewPanel from '@/Components/PlaceReviewPanel';
+import PlaceNotesPanel from '@/Components/Places/PlaceNotesPanel';
 import axios from 'axios';
 import { addLocalizedBaseLayer } from '@/lib/localizedMap';
 import {
@@ -9,8 +10,12 @@ import {
 } from 'lucide-react';
 import { FormEvent, useEffect, useRef, useState } from 'react';
 
+type LifecycleStatus = 'idea' | 'planned' | 'visited' | 'favorite' | 'avoid';
+const LIFECYCLE: Record<LifecycleStatus, string> = {
+    idea: 'Nápad', planned: 'Plánujeme', visited: 'Navštíveno', favorite: 'Oblíbené', avoid: 'Už ne',
+};
 interface PlaceDetail {
-    id: number; name: string; type: string;
+    id: number; name: string; type: string; lifecycle_status?: LifecycleStatus;
     country?: string; country_code?: string; city?: string; address?: string;
     latitude?: number; longitude?: number; radius_meters: number;
     description?: string; website_url?: string;
@@ -63,7 +68,7 @@ export default function PlaceShow() {
     const [autoLinking, setAutoLinking] = useState(false);
     const [tab,        setTab]        = useState<'photos' | 'albums'>('photos');
     const [editMode,   setEditMode]   = useState(false);
-    const [editForm,   setEditForm]   = useState({ description: '', website_url: '', radius_meters: '500', is_rain_friendly: false, is_accessible: false, is_photogenic: false, opens_early: false, price_level: '', estimated_visit_minutes: '', personal_rating: '', next_time_note: '' });
+    const [editForm,   setEditForm]   = useState({ lifecycle_status: 'idea' as LifecycleStatus, description: '', website_url: '', radius_meters: '500', is_rain_friendly: false, is_accessible: false, is_photogenic: false, opens_early: false, price_level: '', estimated_visit_minutes: '', personal_rating: '', next_time_note: '' });
     const [showTripPlanner, setShowTripPlanner] = useState(false);
     const [trips, setTrips] = useState<TripOption[]>([]);
     const [tripDays, setTripDays] = useState<TripDayOption[]>([]);
@@ -84,6 +89,7 @@ export default function PlaceShow() {
             setMedia(mR.data ?? []);
             setAlbums(aR.data ?? []);
             setEditForm({
+                lifecycle_status: pR.data.lifecycle_status ?? 'idea',
                 description:   pR.data.description ?? '',
                 website_url:   pR.data.website_url ?? '',
                 radius_meters: String(pR.data.radius_meters ?? 500),
@@ -170,6 +176,7 @@ export default function PlaceShow() {
 
     const saveEdit = async () => {
         const r = await axios.patch(`/api/v1/places/${placeId}`, {
+            lifecycle_status: editForm.lifecycle_status,
             description:   editForm.description || null,
             website_url:   editForm.website_url || null,
             radius_meters: editForm.radius_meters ? parseInt(editForm.radius_meters) : 500,
@@ -260,6 +267,9 @@ export default function PlaceShow() {
                                 <span className="text-xs bg-[var(--color-bg-card)] border border-[var(--color-border)] px-2 py-0.5 rounded-full text-[var(--color-text-secondary)]">
                                     {typeInfo.label}
                                 </span>
+                                <span className="text-xs bg-[var(--color-accent)]/15 border border-[var(--color-accent)]/25 px-2 py-0.5 rounded-full text-white">
+                                    {LIFECYCLE[place.lifecycle_status ?? 'idea']}
+                                </span>
                             </div>
                             {(place.city || place.country) && (
                                 <p className="text-sm text-[var(--color-text-secondary)] mt-0.5 flex items-center gap-1">
@@ -339,6 +349,7 @@ export default function PlaceShow() {
                                 <span className="text-xs text-[var(--color-text-secondary)] whitespace-nowrap">GPS poloměr</span>
                             </div>
                             <div className="col-span-full grid grid-cols-2 gap-2 sm:grid-cols-4">{[['is_rain_friendly','🌧️ Déšť'],['is_accessible','♿ Bezbariérové'],['is_photogenic','📸 Fotogenické'],['opens_early','🌅 Brzy otevřeno']].map(([key,label]) => <label key={key} className="flex items-center gap-1.5 text-xs text-[var(--color-text-secondary)]"><input type="checkbox" checked={Boolean((editForm as any)[key])} onChange={event => setEditForm(p => ({...p,[key]:event.target.checked}))}/>{label}</label>)}</div>
+                            <select value={editForm.lifecycle_status} onChange={event => setEditForm(p => ({...p,lifecycle_status:event.target.value as LifecycleStatus}))} className="col-span-full min-h-10 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-3 text-xs text-white"><option value="idea">Nápad</option><option value="planned">Plánujeme</option><option value="visited">Navštíveno</option><option value="favorite">Oblíbené</option><option value="avoid">Už ne</option></select>
                             <div className="col-span-full grid grid-cols-3 gap-2"><input value={editForm.personal_rating} onChange={event => setEditForm(p => ({...p,personal_rating:event.target.value}))} type="number" min="1" max="5" placeholder="Hodnocení 1–5" className="min-h-10 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-3 text-xs text-white"/><input value={editForm.price_level} onChange={event => setEditForm(p => ({...p,price_level:event.target.value}))} type="number" min="1" max="4" placeholder="Cena 1–4" className="min-h-10 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-3 text-xs text-white"/><input value={editForm.estimated_visit_minutes} onChange={event => setEditForm(p => ({...p,estimated_visit_minutes:event.target.value}))} type="number" min="5" max="1440" placeholder="Délka v min" className="min-h-10 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-3 text-xs text-white"/></div>
                             <textarea value={editForm.next_time_note} onChange={event => setEditForm(p => ({...p,next_time_note:event.target.value}))} placeholder="Co příště objednat nebo nezapomenout…" rows={2} className="col-span-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-3 py-2 text-sm text-white"/>
                             <div className="col-span-full flex gap-2">
@@ -354,6 +365,7 @@ export default function PlaceShow() {
                     )}
                 </div>
 
+                <PlaceNotesPanel placeId={place.id} />
                  <div id="reviews" className="scroll-mt-20"><PlaceReviewPanel placeId={place.id} placeName={place.name}/></div>
                  <PlaceVisitPanel placeId={place.id}/>
                 <PlaceWishlistPanel placeId={place.id}/>

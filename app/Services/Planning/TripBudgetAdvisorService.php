@@ -75,6 +75,20 @@ class TripBudgetAdvisorService
             }
         }
 
+        if (Schema::hasTable('shared_expenses')) {
+            foreach (DB::table('shared_expenses')->where('trip_id', $trip->id)->get() as $expense) {
+                $amount = $this->convert((float) $expense->amount, $expense->currency, $currency, $expense->occurred_at, $rateCache);
+                if ($amount === null) {
+                    $unconverted[] = ['source' => 'shared_expense', 'id' => $expense->id, 'title' => $expense->title, 'currency' => $expense->currency];
+                    continue;
+                }
+                $category = array_key_exists($expense->category, $categories) ? $expense->category : 'other';
+                $categories[$category]['actual'] += $amount;
+                $date = $expense->occurred_at ? Carbon::parse($expense->occurred_at)->toDateString() : null;
+                if ($date && isset($daily[$date])) $daily[$date]['actual'] += $amount;
+            }
+        }
+
         if (Schema::hasTable('trip_vehicle_costs')) {
             foreach (DB::table('trip_vehicle_costs')->where('trip_id', $trip->id)->get() as $cost) {
                 $amount = $this->convert((float) $cost->amount, $cost->currency, $currency, $cost->occurred_on, $rateCache);

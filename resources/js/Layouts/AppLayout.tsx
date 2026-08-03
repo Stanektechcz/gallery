@@ -1,5 +1,7 @@
 import UploadPanel from '@/Components/UploadPanel';
 import AppInstallButton from '@/Components/AppInstallButton';
+import InterfaceDensityControl from '@/Components/InterfaceDensityControl';
+import WorkspaceAssistant from '@/Components/WorkspaceAssistant';
 import { Link, router, usePage } from '@inertiajs/react';
 import axios from 'axios';
 import { clsx } from 'clsx';
@@ -14,6 +16,7 @@ import {
     ChevronDown,
     CircleDollarSign,
     Clapperboard,
+    Film,
     Clock,
     FolderOpen,
     Globe,
@@ -36,6 +39,7 @@ import {
     Share2,
     ShieldCheck,
     Sparkles,
+    Star,
     Tag,
     Ticket,
     Trash2,
@@ -88,7 +92,7 @@ const NAV_COMMANDS: Command[] = [
     { group: 'nav', label: 'TV Režim',            href: '/tv',        keywords: 'tv televize mode' },
     { group: 'nav', label: 'Výběry k tisku',      href: '/print',     keywords: 'tisk print fotokniha' },
     { group: 'nav', label: 'Statistiky',          href: '/stats',     keywords: 'statistiky stats' },
-    { group: 'nav', label: 'Nezařazené',          href: '/inbox',     keywords: 'nezarazene inbox' },
+    { group: 'nav', label: 'Akční inbox',          href: '/inbox',     keywords: 'inbox akce ukoly darky cesty nezarazene' },
     { group: 'nav', label: 'Aktivita',            href: '/activity',  keywords: 'aktivita activity' },
     { group: 'nav', label: 'Recovery Center',     href: '/recovery',  keywords: 'recovery zdravi' },
     { group: 'nav', label: 'Soukromí a dědictví', href: '/privacy',   keywords: 'privacy soukromi dedictvi legacy' },
@@ -97,6 +101,7 @@ const NAV_COMMANDS: Command[] = [
     { group: 'nav', label: 'Sdílené',             href: '/shares',    keywords: 'share sdilene' },
     { group: 'nav', label: 'Společné výběry',     href: '/curation',  keywords: 'vyber kurator kolekce hlasovani fotky' },
     { group: 'nav', label: 'Nastavení Drive',     href: '/settings/storage/google', keywords: 'settings nastaveni google drive' },
+    { group: 'nav', label: 'Automatizace',         href: '/settings/automations', keywords: 'automatizace automaticky plan kalendar ukoly' },
 ];
 
 const ACTION_COMMANDS: Command[] = [
@@ -230,10 +235,14 @@ function CommandPalette({ open, onClose, isAdmin }: { open: boolean; onClose: ()
                 </div>
 
                 {/* Footer hint */}
-                <div className="px-4 py-2 border-t border-[var(--color-border)] flex items-center gap-4 text-[10px] text-[var(--color-text-secondary)]">
+                <div className="px-4 py-2 border-t border-[var(--color-border)] flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] text-[var(--color-text-secondary)]">
                     <span>↑↓ Navigace</span>
                     <span>↵ Otevřít</span>
                     <span>ESC Zavřít</span>
+                    <span>/ Chat</span>
+                    <span>N Nový zápis</span>
+                    <span>G C Kalendář</span>
+                    <span>G T Cesty</span>
                     <div className="flex-1"/>
                     <span>Ctrl+K</span>
                 </div>
@@ -507,7 +516,11 @@ const navGroups: NavigationGroup[] = [
         items: [
             { href: '/planning', label: 'Plánování a úkoly', icon: Calendar },
             { href: '/finances', label: 'Společné finance', icon: CircleDollarSign },
-            { href: '/watchlist', label: 'Filmy a seriály', icon: Clapperboard },
+            { href: '/watchlist/movies', label: 'Filmy a seriály', icon: Clapperboard },
+            { href: '/watchlist/movies', label: '↳ Filmy', icon: Film },
+            { href: '/watchlist/series', label: '↳ Seriály', icon: Tv },
+            { href: '/watchlist/movies/tierlist', label: '↳ Tierlist filmů', icon: Star },
+            { href: '/watchlist/series/tierlist', label: '↳ Tierlist seriálů', icon: Star },
             { href: '/date-ideas', label: 'Nápady na randíčka', icon: Sparkles },
             { href: '/anniversary-album', label: 'Výroční album', icon: Images },
             { href: '/gifts-anniversaries', label: 'Dárky a výročí', icon: Gift },
@@ -533,7 +546,7 @@ const navGroups: NavigationGroup[] = [
             { href: '/favorites', label: 'Oblíbené', icon: Heart },
             { href: '/people', label: 'Lidé', icon: Users },
             { href: '/tags', label: 'Tagy', icon: Tag },
-            { href: '/inbox', label: 'Nezařazené', icon: Inbox },
+            { href: '/inbox', label: 'Akční inbox', icon: Inbox },
             { href: '/archive', label: 'Archiv', icon: Archive },
             { href: '/vault', label: 'Soukromý trezor', icon: LockKeyhole },
             { href: '/trash', label: 'Koš', icon: Trash2 },
@@ -551,6 +564,7 @@ const navGroups: NavigationGroup[] = [
             { href: '/privacy', label: 'Soukromí a dědictví', icon: ShieldCheck },
             { href: '/settings/security', label: 'Nastavení a zabezpečení', icon: Settings },
             { href: '/settings/storage/google', label: 'Úložiště a Google Drive', icon: Archive },
+            { href: '/settings/automations', label: 'Automatizace', icon: Power },
             { href: '/admin', label: 'Správa systému', icon: ShieldCheck, adminOnly: true, exact: true },
             { href: '/admin/integrations', label: 'Integrace a API', icon: KeyRound, adminOnly: true },
         ],
@@ -674,6 +688,7 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
             : exact ? currentPath === href : currentPath === href || currentPath.startsWith(`${href}/`);
     const [mobileOpen, setMobileOpen] = useState(false);
     const [cmdOpen,    setCmdOpen]    = useState(false);
+    const navigationPrefix = useRef<number | null>(null);
     const [navEditorOpen, setNavEditorOpen] = useState(false);
     const [pinnedHrefs, setPinnedHrefs] = useState<string[]>(() => {
         try {
@@ -701,10 +716,37 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
 
     useEffect(() => {
         const handler = (e: KeyboardEvent) => {
-            if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
                 e.preventDefault();
                 setCmdOpen(v => !v);
+                return;
             }
+            const target = e.target as HTMLElement | null;
+            const isTyping = Boolean(target?.closest('input, textarea, select, [contenteditable="true"]'));
+            if (isTyping || e.ctrlKey || e.metaKey || e.altKey) return;
+            const key = e.key.toLowerCase();
+            if (key === '/') {
+                e.preventDefault();
+                window.dispatchEvent(new CustomEvent('maki:assistant-open'));
+                return;
+            }
+            if (key === 'n') {
+                e.preventDefault();
+                window.dispatchEvent(new CustomEvent('maki:assistant-open', { detail: { prefill: '/přidat ' } }));
+                return;
+            }
+            if (key === 'escape') {
+                window.dispatchEvent(new CustomEvent('maki:assistant-close'));
+                navigationPrefix.current = null;
+                return;
+            }
+            if (navigationPrefix.current && Date.now() - navigationPrefix.current < 900) {
+                if (key === 'c') { e.preventDefault(); router.visit('/calendar'); }
+                if (key === 't') { e.preventDefault(); router.visit('/trips'); }
+                navigationPrefix.current = null;
+                return;
+            }
+            if (key === 'g') navigationPrefix.current = Date.now();
         };
         window.addEventListener('keydown', handler);
         return () => window.removeEventListener('keydown', handler);
@@ -842,6 +884,7 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
                                 <p className="text-xs text-[var(--color-text-secondary)] truncate">{auth?.user?.role}</p>
                             </div>
                         </div>
+                        <InterfaceDensityControl initial={auth?.user?.interface_density}/>
                         <AppInstallButton/>
                         <NotificationBell/>
                     </div>
@@ -878,6 +921,7 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
                                     <p className="text-sm font-medium text-white">{auth?.user?.name}</p>
                                     <p className="text-xs text-[var(--color-text-secondary)]">{auth?.user?.email}</p>
                                 </div>
+                                <InterfaceDensityControl initial={auth?.user?.interface_density}/>
                             </div>
                         </div>
                     </aside>
@@ -916,7 +960,7 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
                 </main>
 
                 {/* Global upload manager panel */}
-                <UploadPanel />
+                <UploadPanel />`r`n                <WorkspaceAssistant />
 
                 {/* Mobile Bottom Nav */}
                 <nav className="mobile-bottom-nav safe-area-pb fixed inset-x-0 bottom-0 z-[650] flex shrink-0 items-center border-t border-[var(--color-border)] bg-[var(--color-bg-secondary)]/98 shadow-[0_-8px_30px_rgba(0,0,0,.28)] backdrop-blur-xl md:hidden" aria-label="Rychlá mobilní navigace">

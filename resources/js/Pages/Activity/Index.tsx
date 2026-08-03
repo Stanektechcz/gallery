@@ -31,6 +31,7 @@ const EVENT_ICONS: Record<string, string> = {
     'storage.google.disconnect': '🔌',
     'storage.google.reconnect':  '🔄',
     'storage.google.init_structure': '⚙️',
+    'assistant.apply':           '✨',
 };
 
 const EVENT_LABELS: Record<string, string> = {
@@ -45,6 +46,7 @@ const EVENT_LABELS: Record<string, string> = {
     'storage.google.disconnect': 'odpojil/a Google Drive',
     'storage.google.reconnect':  'obnovil/a token Drive',
     'storage.google.init_structure': 'inicializoval/a Drive strukturu',
+    'assistant.apply':           'potvrdil/a zápis pomocníka',
 };
 
 function timeAgo(d: string): string {
@@ -61,7 +63,7 @@ export default function ActivityIndex({ logs }: Props) {
     return (
         <AppLayout>
             <Head title="Aktivita" />
-            <div className="p-4 max-w-2xl mx-auto">
+            <main className="w-full max-w-none p-4 sm:p-6 xl:p-8">
                 <div className="flex items-center gap-3 mb-6">
                     <div className="w-9 h-9 rounded-lg bg-[var(--color-accent)]/20 flex items-center justify-center">
                         <Activity size={18} className="text-[var(--color-accent)]" />
@@ -103,7 +105,7 @@ export default function ActivityIndex({ logs }: Props) {
                         ))}
                     </div>
                 )}
-            </div>
+            </main>
         </AppLayout>
     );
 }

@@ -20,9 +20,9 @@ class PartnerCoordinationService
             ->concat($this->sharedTodos($space, $now))
             ->concat($this->eventTasks($space, $viewer, $now))
             ->concat($this->packingItems($space, $now))
-            ->concat($this->planningItems($space))
+            ->concat($this->planningItems($space, $now))
             ->concat($this->tripDocuments($space, $now))
-            ->concat($this->gifts($space, $now))
+            ->concat($this->gifts($space, $viewer, $now))
             ->concat($this->settlements($space));
 
         $snoozed = Schema::hasTable('coordination_action_states')
@@ -110,7 +110,7 @@ class PartnerCoordinationService
         if (! Schema::hasTable('event_tasks')) return collect();
         return DB::table('event_tasks as task')->join('calendar_events as event', 'event.id', '=', 'task.event_id')
             ->leftJoin('users as assignee', 'assignee.id', '=', 'task.assigned_to')
-            ->where('event.gallery_space_id', $space->id)->whereNull('task.completed_at')->where('event.status', '!=', 'cancelled')
+            ->where('event.gallery_space_id', $space->id)->whereNull('task.completed_at')->whereNotIn('event.status', ['cancelled', 'completed'])->whereRaw('COALESCE(event.ends_at, event.starts_at) >= ?', [$now->copy()->startOfDay()])
             ->where(function ($query) use ($viewer) {
                 $query->where('event.is_private', false)->orWhere('event.created_by', $viewer->id)
                     ->orWhereExists(fn ($participants) => $participants->selectRaw('1')->from('event_participants as participant')
@@ -135,13 +135,20 @@ class PartnerCoordinationService
             ->map(fn ($item) => $this->action('packing_item', $item->id, $item->title, 'Balení · ' . $item->trip_name, $item->start_date . ' 08:00:00', $item->is_essential ? 'high' : 'normal', $item->assigned_to, $item->assignee_name, '/trips/' . $item->trip_id . '/plan', ['trip_id' => (int) $item->trip_id, 'packing_item_id' => (int) $item->id]));
     }
 
-    private function planningItems(GallerySpace $space): Collection
+    private function planningItems(GallerySpace $space, Carbon $now): Collection
     {
         if (! Schema::hasTable('travel_inbox_items')) return collect();
         $select = ['item.uuid', 'item.title', 'item.state', 'event.uuid as event_uuid', 'event.title as event_title', 'event.starts_at', 'trip.id as trip_id', 'trip.name as trip_name', 'trip.start_date'];
         if (Schema::hasColumn('travel_inbox_items', 'assigned_to')) $select = array_merge($select, ['item.assigned_to', 'assignee.name as assignee_name']);
         $query = DB::table('travel_inbox_items as item')->leftJoin('calendar_events as event', 'event.id', '=', 'item.event_id')->leftJoin('trips as trip', 'trip.id', '=', 'item.trip_id')
             ->where('item.gallery_space_id', $space->id)->whereIn('item.state', ['inbox', 'assigned'])
+            // Unassigned inputs are current by definition. Linked items remain active
+            // only for an ongoing or upcoming event/trip, never as stale travel history.
+            ->where(function ($active) use ($now) {
+                $active->where(fn ($unlinked) => $unlinked->whereNull('item.trip_id')->whereNull('item.event_id'))
+                    ->orWhere('trip.end_date', '>=', $now->toDateString())
+                    ->orWhereRaw('COALESCE(event.ends_at, event.starts_at) >= ?', [$now->copy()->startOfDay()]);
+            })
             ->whereNull('item.trip_activity_id')->latest('item.updated_at')->limit(50);
         if (Schema::hasColumn('travel_inbox_items', 'assigned_to')) $query->leftJoin('users as assignee', 'assignee.id', '=', 'item.assigned_to');
         return $query->get($select)->map(function ($item) {
@@ -162,13 +169,16 @@ class PartnerCoordinationService
         return $query->get($select)->map(fn ($document) => $this->action('trip_document', $document->id, $document->title, 'Doklady · ' . $document->trip_name, ($document->expires_on ?: $document->start_date) . ' 08:00:00', 'high', $document->assigned_to ?? null, $document->assignee_name ?? null, '/trips/' . $document->trip_id . '/plan', ['trip_id' => (int) $document->trip_id, 'document_id' => (int) $document->id]));
     }
 
-    private function gifts(GallerySpace $space, Carbon $now): Collection
+    private function gifts(GallerySpace $space, User $viewer, Carbon $now): Collection
     {
         if (! Schema::hasTable('gift_ideas')) return collect();
         $select = ['gift.uuid', 'gift.title', 'gift.occasion', 'gift.due_date'];
         if (Schema::hasColumn('gift_ideas', 'assigned_to')) $select = array_merge($select, ['gift.assigned_to', 'assignee.name as assignee_name']);
         $query = DB::table('gift_ideas as gift')->where('gift.gallery_space_id', $space->id)->whereNotIn('gift.status', ['purchased', 'archived'])
             ->where(fn ($due) => $due->whereNull('gift.due_date')->orWhere('gift.due_date', '<=', $now->copy()->addDays(90)->toDateString()))->limit(30);
+        if (Schema::hasColumn('gift_ideas', 'visibility') && Schema::hasColumn('gift_ideas', 'private_to_user_id')) {
+            $query->where(fn ($visible) => $visible->where('gift.visibility', 'shared')->orWhere('gift.private_to_user_id', $viewer->id));
+        }
         if (Schema::hasColumn('gift_ideas', 'assigned_to')) $query->leftJoin('users as assignee', 'assignee.id', '=', 'gift.assigned_to');
         return $query->get($select)->map(fn ($gift) => $this->action('gift', $gift->uuid, $gift->title, $gift->occasion ? 'Dárek · ' . $gift->occasion : 'Nápad na dárek', $gift->due_date ? $gift->due_date . ' 18:00:00' : null, 'normal', $gift->assigned_to ?? null, $gift->assignee_name ?? null, '/planning', ['gift_uuid' => $gift->uuid]));
     }

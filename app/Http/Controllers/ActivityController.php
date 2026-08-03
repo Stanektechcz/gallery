@@ -38,6 +38,7 @@ class ActivityController extends Controller
     private function describe(AuditLog $log): string
     {
         $data = $log->payload ?? [];
+        if ($log->action === 'assistant.apply' && !empty($data['created']) && is_array($data['created'])) return implode(' · ', $data['created']);
         if (isset($data['filename'])) return $data['filename'];
         if (isset($data['title']))    return $data['title'];
         if (isset($data['via']))      return $data['via'];

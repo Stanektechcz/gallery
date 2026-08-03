@@ -5,10 +5,12 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\CalendarEvent;
+use App\Models\GallerySpace;
 use App\Models\MediaItem;
 use App\Models\Recipe;
 use App\Models\RecipeCookingSession;
 use App\Services\Recipes\RecipeService;
+use App\Services\Planning\CalendarEventCreationService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -18,7 +20,7 @@ use Illuminate\Validation\ValidationException;
 
 class RecipeCookingController extends Controller
 {
-    public function __construct(private readonly RecipeService $recipes) {}
+    public function __construct(private readonly RecipeService $recipes, private readonly CalendarEventCreationService $calendarEvents) {}
 
     public function schedule(Request $request, string $uuid): JsonResponse
     {
@@ -33,8 +35,7 @@ class RecipeCookingController extends Controller
             ]);
             if ($data['add_to_calendar'] ?? true) {
                 $duration = max(30, (int) $recipe->prep_minutes + (int) $recipe->cook_minutes + (int) $recipe->rest_minutes);
-                $event = CalendarEvent::create([
-                    'gallery_space_id' => $recipe->gallery_space_id, 'created_by' => $request->user()->id,
+                $event = $this->calendarEvents->create(GallerySpace::findOrFail($recipe->gallery_space_id), $request->user(), [
                     'album_id' => $recipe->album_id, 'title' => 'Vaření · ' . $recipe->title,
                     'description' => 'Společné vaření receptu pro ' . $data['servings'] . ' porcí.' . (! empty($data['notes']) ? "\n\n" . $data['notes'] : ''),
                     'type' => 'meal', 'status' => 'planned', 'starts_at' => $planned, 'ends_at' => $planned->copy()->addMinutes($duration),

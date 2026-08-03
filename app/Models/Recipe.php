@@ -6,6 +6,8 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Schema;
+use App\Services\Planning\LifeEventService;
 
 class Recipe extends Model
 {
@@ -17,7 +19,7 @@ class Recipe extends Model
         'base_servings', 'prep_minutes', 'cook_minutes', 'rest_minutes', 'estimated_cost', 'currency',
         'calories_per_serving', 'protein_per_serving', 'carbs_per_serving', 'fat_per_serving',
         'dietary_tags', 'occasion_tags', 'equipment', 'source_name', 'source_url', 'tips',
-        'storage_notes', 'reheating_notes', 'is_favorite',
+        'storage_notes', 'reheating_notes', 'is_favorite', 'created_from', 'source_reference',
     ];
 
     protected function casts(): array
@@ -31,7 +33,13 @@ class Recipe extends Model
 
     protected static function booted(): void
     {
-        static::creating(fn (self $recipe) => $recipe->uuid ??= (string) Str::uuid());
+        static::creating(function (self $recipe): void {
+            $recipe->uuid ??= (string) Str::uuid();
+            $origin = $recipe->source_name === 'Chat' ? 'assistant' : ($recipe->source_url ? 'import' : 'manual');
+            if (Schema::hasColumn('recipes', 'created_from')) $recipe->created_from ??= $origin;
+            if (Schema::hasColumn('recipes', 'source_reference') && ! $recipe->source_reference && $recipe->source_url) $recipe->source_reference = $recipe->source_url;
+        });
+        static::created(fn (self $recipe) => app(LifeEventService::class)->record($recipe->gallery_space_id, $recipe->created_by, 'recipe.created', $recipe->title, $recipe->created_from ?: ($recipe->source_name === 'Chat' ? 'assistant' : ($recipe->source_url ? 'import' : 'manual')), self::class, $recipe->id, now('Europe/Prague')));
     }
 
     public function space() { return $this->belongsTo(GallerySpace::class, 'gallery_space_id'); }

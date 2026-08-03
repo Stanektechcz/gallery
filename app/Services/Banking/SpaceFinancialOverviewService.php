@@ -13,6 +13,8 @@ use Illuminate\Support\Str;
 
 class SpaceFinancialOverviewService
 {
+    public function __construct(private readonly SharedExpenseSettlementService $sharedSettlements) {}
+
     public function dashboard(GallerySpace $space, array $filters): array
     {
         if (! $this->available()) {
@@ -97,6 +99,9 @@ class SpaceFinancialOverviewService
             'balance_series' => $this->balanceSeries($accounts, $from, $to, $account?->id),
             'trips' => $this->tripSummaries($rows, $links),
             'events' => $this->linkedEvents($space, $links, $from, $to),
+            'manual_expenses' => $this->manualExpenses($space, $from, $to),
+            'members' => $this->sharedSettlements->members($space->id),
+            'shared_settlements' => $this->sharedSettlements->snapshot($space->id, $from->toDateTimeString(), $to->toDateTimeString()),
             'trip_options' => DB::table('trips')->where('gallery_space_id', $space->id)->orderByDesc('start_date')->limit(100)
                 ->get(['id', 'name', 'start_date', 'end_date', 'currency']),
             'transactions' => [
@@ -117,7 +122,7 @@ class SpaceFinancialOverviewService
     {
         return ['available' => false, 'period' => null, 'accounts' => [], 'summary' => ['currencies' => [], 'transaction_count' => 0,
             'linked_count' => 0, 'suggested_count' => 0, 'unlinked_count' => 0], 'categories' => [], 'cashflow' => [], 'daily_cashflow' => [],
-            'top_merchants' => [], 'balance_series' => [], 'trips' => [], 'events' => [], 'trip_options' => [],
+            'top_merchants' => [], 'balance_series' => [], 'trips' => [], 'events' => [], 'manual_expenses' => [], 'members' => [], 'shared_settlements' => [], 'trip_options' => [],
             'transactions' => ['data' => [], 'meta' => ['current_page' => 1, 'per_page' => 40, 'total' => 0, 'last_page' => 1]]];
     }
 
@@ -258,6 +263,23 @@ class SpaceFinancialOverviewService
             return ['id' => $first->trip_id, 'name' => $first->trip_name, 'start_date' => $first->start_date, 'end_date' => $first->end_date,
                 'spent_by_currency' => $amounts, 'confirmed_count' => $confirmed->count(), 'suggested_count' => $tripLinks->where('status', 'suggested')->count()];
         })->sortByDesc('start_date')->values();
+    }
+
+    private function manualExpenses(GallerySpace $space, Carbon $from, Carbon $to): Collection
+    {
+        if (! Schema::hasTable('shared_expenses')) return collect();
+
+        return DB::table('shared_expenses as expense')
+            ->leftJoin('calendar_events as event', 'event.id', '=', 'expense.calendar_event_id')
+            ->leftJoin('trips as trip', 'trip.id', '=', 'expense.trip_id')
+            ->where('expense.gallery_space_id', $space->id)
+            ->whereBetween('expense.occurred_at', [$from, $to])
+            ->orderByDesc('expense.occurred_at')->orderByDesc('expense.id')->limit(12)
+            ->get(['expense.uuid', 'expense.title', 'expense.category', 'expense.amount', 'expense.currency', 'expense.occurred_at', 'expense.source', 'expense.paid_by_user_id', 'expense.split_mode', 'expense.split', 'event.uuid as event_uuid', 'event.title as event_title', 'trip.id as trip_id', 'trip.name as trip_name'])
+            ->map(fn ($item) => ['uuid' => $item->uuid, 'title' => $item->title, 'category' => $item->category,
+                'amount' => (float) $item->amount, 'currency' => $item->currency, 'occurred_at' => $item->occurred_at,
+                'source' => $item->source, 'paid_by_user_id' => $item->paid_by_user_id ? (int) $item->paid_by_user_id : null, 'split_mode' => $item->split_mode ?? 'equal', 'split' => json_decode($item->split ?? '[]', true) ?: [], 'event_uuid' => $item->event_uuid, 'event_title' => $item->event_title,
+                'trip_id' => $item->trip_id ? (int) $item->trip_id : null, 'trip_name' => $item->trip_name])->values();
     }
 
     private function linkedEvents(GallerySpace $space, Collection $links, Carbon $from, Carbon $to): Collection

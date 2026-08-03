@@ -178,6 +178,7 @@ class TripIntelligenceController extends Controller
     {
         $trip = $this->trip($request->user(), $tripId);
         $days = DB::table('trip_days')->where('trip_id', $tripId)->orderBy('sort_order')->get();
+        $watchlist = Schema::hasTable('trip_watchlist_items') ? $this->tripWatchlistRows($tripId) : collect();
         foreach ($days as $day) $day->activities = DB::table('trip_activities')->where('trip_day_id', $day->id)->orderBy('sort_order')->get();
         $reservations = Schema::hasTable('trip_reservation_imports')
             ? DB::table('trip_reservation_imports')->where('trip_id', $tripId)->where('status', 'confirmed')->orderBy('confirmed_at')->get()
@@ -188,7 +189,7 @@ class TripIntelligenceController extends Controller
                 })->values()
             : collect();
         return response()->json([
-            'generated_at' => now()->toIso8601String(), 'trip' => $trip, 'days' => $days,
+            'generated_at' => now()->toIso8601String(), 'trip' => $trip, 'watchlist' => $watchlist, 'days' => $days,
             'documents' => DB::table('trip_document_checks')->where('trip_id', $tripId)->where('status', 'ready')->get(),
             'reservations' => $reservations,
             'emergency_card' => DB::table('travel_emergency_cards')->where('trip_id', $tripId)->first(),
@@ -313,6 +314,54 @@ class TripIntelligenceController extends Controller
         return response()->json(['status' => 'deleted']);
     }
 
+    /** A deliberate watchlist for a trip; the application only tracks preparation, never downloads streaming content. */
+    public function tripWatchlist(Request $request, int $tripId): JsonResponse
+    {
+        $trip = $this->trip($request->user(), $tripId);
+        abort_unless(Schema::hasTable('trip_watchlist_items'), 503, 'Seznam titulů pro cestu bude dostupný po dokončení aktualizace databáze.');
+        $available = DB::table('entertainment_titles')->where('gallery_space_id', $trip->gallery_space_id)->whereNotIn('status', ['watched', 'dropped'])
+            ->orderByRaw("CASE status WHEN 'scheduled' THEN 0 WHEN 'watching' THEN 1 WHEN 'shortlisted' THEN 2 ELSE 3 END")->orderBy('title')->limit(100)
+            ->get(['uuid', 'title', 'media_type', 'runtime_minutes', 'watch_provider', 'poster_url', 'status']);
+        return response()->json(['items' => $this->tripWatchlistRows($tripId), 'available' => $available]);
+    }
+
+    public function storeTripWatchlist(Request $request, int $tripId): JsonResponse
+    {
+        $trip = $this->trip($request->user(), $tripId);
+        abort_unless(Schema::hasTable('trip_watchlist_items'), 503, 'Seznam titulů pro cestu bude dostupný po dokončení aktualizace databáze.');
+        $data = $request->validate(['entertainment_uuid' => 'required|uuid', 'watch_provider' => 'nullable|string|max:120', 'offline_status' => 'nullable|in:later,ready,unavailable', 'note' => 'nullable|string|max:3000']);
+        $title = DB::table('entertainment_titles')->where('uuid', $data['entertainment_uuid'])->where('gallery_space_id', $trip->gallery_space_id)->firstOrFail();
+        DB::table('trip_watchlist_items')->updateOrInsert(['trip_id' => $tripId, 'entertainment_title_id' => $title->id], [
+            'gallery_space_id' => $trip->gallery_space_id, 'added_by' => $request->user()->id, 'watch_provider' => $data['watch_provider'] ?? $title->watch_provider,
+            'offline_status' => $data['offline_status'] ?? 'later', 'note' => $data['note'] ?? null, 'updated_at' => now(), 'created_at' => now(),
+        ]);
+        return response()->json($this->tripWatchlistRows($tripId)->firstWhere('entertainment_uuid', $title->uuid), 201);
+    }
+
+    public function updateTripWatchlist(Request $request, int $tripId, int $itemId): JsonResponse
+    {
+        $this->trip($request->user(), $tripId);
+        abort_unless(Schema::hasTable('trip_watchlist_items'), 503, 'Seznam titulů pro cestu bude dostupný po dokončení aktualizace databáze.');
+        $data = $request->validate(['watch_provider' => 'nullable|string|max:120', 'offline_status' => 'nullable|in:later,ready,unavailable', 'note' => 'nullable|string|max:3000', 'sort_order' => 'nullable|integer|min:0|max:10000']);
+        $item = DB::table('trip_watchlist_items')->where('id', $itemId)->where('trip_id', $tripId)->firstOrFail();
+        DB::table('trip_watchlist_items')->where('id', $item->id)->update($data + ['updated_at' => now()]);
+        return response()->json($this->tripWatchlistRows($tripId)->firstWhere('id', $item->id));
+    }
+
+    public function destroyTripWatchlist(Request $request, int $tripId, int $itemId): JsonResponse
+    {
+        $this->trip($request->user(), $tripId);
+        abort_unless(Schema::hasTable('trip_watchlist_items'), 503, 'Seznam titulů pro cestu bude dostupný po dokončení aktualizace databáze.');
+        DB::table('trip_watchlist_items')->where('id', $itemId)->where('trip_id', $tripId)->delete();
+        return response()->json(['status' => 'deleted']);
+    }
+
+    private function tripWatchlistRows(int $tripId): \Illuminate\Support\Collection
+    {
+        return DB::table('trip_watchlist_items as item')->join('entertainment_titles as title', 'title.id', '=', 'item.entertainment_title_id')
+            ->leftJoin('users as author', 'author.id', '=', 'item.added_by')->where('item.trip_id', $tripId)->orderBy('item.sort_order')->orderBy('item.created_at')
+            ->get(['item.*', 'title.uuid as entertainment_uuid', 'title.title', 'title.media_type', 'title.runtime_minutes', 'title.poster_url', 'author.name as added_by_name']);
+    }
     private function trip(User $user, int $id): object { return DB::table('trips')->where('id', $id)->whereIn('gallery_space_id', $user->gallerySpaces()->pluck('gallery_spaces.id'))->firstOrFail(); }
     private function member(int $spaceId, int $userId): bool { return DB::table('gallery_space_user')->where('gallery_space_id', $spaceId)->where('user_id', $userId)->exists(); }
     private function packingRows(int $tripId): \Illuminate\Support\Collection { $query = DB::table('trip_packing_items as item')->leftJoin('users as assignee', 'assignee.id', '=', 'item.assigned_to')->where('item.trip_id', $tripId)->orderBy('item.is_packed')->orderBy('item.category')->orderBy('item.sort_order'); if (Schema::hasColumn('trip_packing_items', 'packed_by')) $query->leftJoin('users as packer', 'packer.id', '=', 'item.packed_by')->select(['item.*', 'assignee.name as assignee_name', 'packer.name as packed_by_name']); else $query->select(['item.*', 'assignee.name as assignee_name']); return $query->get(); }

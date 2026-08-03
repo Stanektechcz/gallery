@@ -37,6 +37,7 @@ interface EditableCalendarEvent {
     recurrence_rule?: { frequency?: string; interval?: number; until?: string | null } | null;
     color?: string | null;
     is_private: boolean;
+    metadata?: { auto_completed_at?: string; auto_completed_reason?: string; keep_open_after_end?: boolean } | null;
     trip_id?: number | null;
     created_by: number;
     viewer_id?: number | null;
@@ -66,6 +67,7 @@ interface EventForm {
     recurrence_until: string;
     color: string;
     is_private: boolean;
+    keep_open_after_end: boolean;
     trip_id: string;
 }
 
@@ -87,7 +89,7 @@ const toIso = (value: string) => value ? new Date(value).toISOString() : null;
 const emptyForm: EventForm = {
     title: '', description: '', type: 'event', status: 'planned', starts_at: '', ends_at: '', all_day: false,
     timezone: 'Europe/Prague', place_name: '', latitude: '', longitude: '', departure_buffer_minutes: '',
-    recurrence_frequency: '', recurrence_interval: '1', recurrence_until: '', color: '#7567e8', is_private: false, trip_id: '',
+    recurrence_frequency: '', recurrence_interval: '1', recurrence_until: '', color: '#7567e8', is_private: false, keep_open_after_end: false, trip_id: '',
 };
 
 export default function CalendarEventEditor({ eventUuid, open, onClose, onSaved, onDeleted }: {
@@ -118,7 +120,7 @@ export default function CalendarEventEditor({ eventUuid, open, onClose, onSaved,
             departure_buffer_minutes: data.departure_buffer_minutes === null || data.departure_buffer_minutes === undefined ? '' : String(data.departure_buffer_minutes),
             recurrence_frequency: data.recurrence_rule?.frequency ?? '', recurrence_interval: String(data.recurrence_rule?.interval ?? 1),
             recurrence_until: data.recurrence_rule?.until?.slice(0, 10) ?? '', color: data.color ?? '#7567e8',
-            is_private: Boolean(data.is_private), trip_id: data.trip_id ? String(data.trip_id) : '',
+            is_private: Boolean(data.is_private), keep_open_after_end: Boolean(data.metadata?.keep_open_after_end), trip_id: data.trip_id ? String(data.trip_id) : '',
         });
         setParticipantIds(data.participants.map(person => person.id));
         setReminders((data.calendar_form_reminders ?? []).map(reminder => ({
@@ -188,7 +190,7 @@ export default function CalendarEventEditor({ eventUuid, open, onClose, onSaved,
                 place_name: form.place_name.trim() || null, latitude: form.latitude === '' ? null : Number(form.latitude),
                 longitude: form.longitude === '' ? null : Number(form.longitude),
                 departure_buffer_minutes: form.departure_buffer_minutes === '' ? null : Number(form.departure_buffer_minutes),
-                color: form.color, is_private: form.is_private, trip_id: form.trip_id ? Number(form.trip_id) : null,
+                color: form.color, is_private: form.is_private, metadata: { keep_open_after_end: form.keep_open_after_end }, trip_id: form.trip_id ? Number(form.trip_id) : null,
                 recurrence_rule: form.recurrence_frequency ? {
                     frequency: form.recurrence_frequency, interval: Number(form.recurrence_interval || 1), until: form.recurrence_until || null,
                 } : null,
@@ -241,6 +243,7 @@ export default function CalendarEventEditor({ eventUuid, open, onClose, onSaved,
                 <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-5">
                     {error && <p role="alert" className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">{error}</p>}
                     {loading ? <p className="py-16 text-center text-sm text-[var(--color-text-secondary)]">Načítám všechny vazby akce…</p> : event && !event.can_edit ? <p className="py-16 text-center text-sm text-amber-200">Tuto akci můžete zobrazit, ale nemáte oprávnění ji měnit.</p> : event ? <div className="grid gap-4 lg:grid-cols-2">
+                        {event.status === 'completed' && event.metadata?.auto_completed_at && <section className="rounded-2xl border border-amber-400/25 bg-amber-500/10 p-4 lg:col-span-2"><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm font-medium text-amber-100">Automaticky uzavřeno po termínu</p><p className="mt-1 text-xs text-amber-200/80">{event.metadata.auto_completed_reason ?? 'Termín už skončil.'} Pokud se akce neuskutečnila, můžete ji znovu otevřít a upravit termín.</p></div><button type="button" onClick={() => setForm(current => ({ ...current, status: 'planned' }))} className="min-h-10 rounded-xl border border-amber-300/40 px-3 text-xs font-medium text-amber-100 hover:bg-amber-300/10">Znovu otevřít</button></div></section>}
                         <section className={`${sectionClass} lg:col-span-2`}>
                             <h3 className="font-medium text-white">Základní informace</h3>
                             <div className="mt-3 grid gap-3 sm:grid-cols-2">
@@ -254,6 +257,7 @@ export default function CalendarEventEditor({ eventUuid, open, onClose, onSaved,
                         <section className={sectionClass}>
                             <h3 className="flex items-center gap-2 font-medium text-white"><CalendarClock size={16} className="text-[var(--color-accent)]"/>Termín a opakování</h3>
                             <label className="mt-3 flex min-h-11 items-center gap-2 rounded-xl border border-[var(--color-border)] px-3 text-sm text-white"><input type="checkbox" checked={form.all_day} onChange={change => setForm({...form, all_day:change.target.checked})}/>Celodenní akce</label>
+                            <label className="mt-3 flex items-start gap-3 rounded-xl border border-amber-400/20 bg-amber-500/5 p-3 text-sm text-amber-100"><input className="mt-0.5" type="checkbox" checked={form.keep_open_after_end} onChange={change => setForm({...form, keep_open_after_end:change.target.checked})}/><span><strong className="block">Ponechat otevřené i po termínu</strong><span className="text-xs text-amber-100/70">Vypnuté je výchozí nastavení: minulá akce se automaticky označí jako dokončená a zmizí z aktuálního týdne.</span></span></label>
                             <div className="mt-3 grid gap-3 sm:grid-cols-2">
                                 <label className="text-xs text-[var(--color-text-secondary)]">Začátek<input required type={form.all_day ? 'date' : 'datetime-local'} value={form.all_day ? form.starts_at.slice(0,10) : form.starts_at} onChange={change => setForm({...form, starts_at: form.all_day ? `${change.target.value}T00:00` : change.target.value})} className={inputClass}/></label>
                                 <label className="text-xs text-[var(--color-text-secondary)]">Konec<input type={form.all_day ? 'date' : 'datetime-local'} value={form.all_day ? form.ends_at.slice(0,10) : form.ends_at} onChange={change => setForm({...form, ends_at: form.all_day && change.target.value ? `${change.target.value}T23:59` : change.target.value})} className={inputClass}/></label>

@@ -11,6 +11,7 @@ use App\Models\RecipeCookingSession;
 use App\Models\User;
 use App\Services\Recipes\MealPlanService;
 use App\Services\Recipes\RecipeService;
+use App\Services\Planning\CalendarEventCreationService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -20,7 +21,7 @@ use Illuminate\Support\Str;
 
 class MealPlanController extends Controller
 {
-    public function __construct(private readonly MealPlanService $mealPlans, private readonly RecipeService $recipes) {}
+    public function __construct(private readonly MealPlanService $mealPlans, private readonly RecipeService $recipes, private readonly CalendarEventCreationService $calendarEvents) {}
 
     public function eventIndex(Request $request, string $uuid): JsonResponse
     {
@@ -67,9 +68,9 @@ class MealPlanController extends Controller
                 'gallery_space_id' => $trip->gallery_space_id, 'trip_id' => $trip->id, 'trip_day_id' => $day->id,
             ]);
             $duration = max(30, (int) $recipe->prep_minutes + (int) $recipe->cook_minutes + (int) $recipe->rest_minutes);
-            $event = CalendarEvent::create([
-                'gallery_space_id' => $trip->gallery_space_id, 'created_by' => $request->user()->id, 'trip_id' => $trip->id,
-                'album_id' => $album->id, 'title' => 'Jídlo na cestě · ' . $recipe->title,
+            $space = $request->user()->gallerySpaces()->whereKey($trip->gallery_space_id)->firstOrFail();
+            $event = $this->calendarEvents->create($space, $request->user(), [
+                'trip_id' => $trip->id, 'album_id' => $album->id, 'title' => 'Jídlo na cestě · ' . $recipe->title,
                 'description' => 'Součást jídelního plánu cesty „' . $trip->name . '“ pro ' . $data['servings'] . ' porcí.' . (! empty($data['notes']) ? "\n\n" . $data['notes'] : ''),
                 'type' => 'meal', 'status' => 'planned', 'starts_at' => $plannedFor, 'ends_at' => $plannedFor->copy()->addMinutes($duration),
                 'timezone' => 'Europe/Prague', 'color' => '#f59e0b', 'is_private' => false,
@@ -90,9 +91,8 @@ class MealPlanController extends Controller
                 'created_at' => now(), 'updated_at' => now(),
             ]);
             $meal->update(['calendar_event_id' => $event->id, 'cooking_session_id' => $session->id, 'trip_activity_id' => $activityId]);
-            $members = DB::table('gallery_space_user')->where('gallery_space_id', $trip->gallery_space_id)->pluck('user_id');
+            $members = $event->participants()->pluck('users.id');
             foreach ($members as $memberId) {
-                DB::table('event_participants')->insertOrIgnore(['event_id' => $event->id, 'user_id' => $memberId, 'role' => (int) $memberId === (int) $request->user()->id ? 'organizer' : 'guest', 'response' => (int) $memberId === (int) $request->user()->id ? 'accepted' : 'pending', 'created_at' => now(), 'updated_at' => now()]);
                 if ($plannedFor->isAfter(now()->addHours(2))) DB::table('event_reminders')->insert(['event_id' => $event->id, 'user_id' => $memberId, 'channel' => 'database', 'remind_at' => $plannedFor->copy()->subHours(2), 'status' => 'pending', 'created_at' => now(), 'updated_at' => now()]);
             }
             return $meal;

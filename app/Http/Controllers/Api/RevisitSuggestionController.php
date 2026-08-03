@@ -6,14 +6,16 @@ use App\Http\Controllers\Controller;
 use App\Models\CalendarEvent;
 use App\Models\EventAttachment;
 use App\Models\EventReminder;
-use App\Models\User;
 use Carbon\Carbon;
 use App\Models\MediaItem;
+use App\Services\Planning\CalendarEventCreationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class RevisitSuggestionController extends Controller
 {
+    public function __construct(private readonly CalendarEventCreationService $calendarEvents) {}
+
     public function show(Request $request, string $uuid): JsonResponse
     {
         $spaceIds = $request->user()->gallerySpaces()->pluck('gallery_spaces.id');
@@ -57,30 +59,18 @@ class RevisitSuggestionController extends Controller
 
         $nearestPlace = $source->places()->orderByDesc('media_place.is_primary')->first();
         $title = $data['title'] ?: 'Znovu spolu: ' . ($nearestPlace?->name ?: ($source->display_title ?: 'náš oblíbený okamžik'));
-        $event = CalendarEvent::create([
-            'gallery_space_id' => $source->gallery_space_id,
-            'created_by' => $user->id,
+        $space = $user->gallerySpaces()->whereKey($source->gallery_space_id)->firstOrFail();
+        $event = $this->calendarEvents->create($space, $user, [
             'title' => $title,
             'description' => 'Naplánováno přímo z galerie, abyste si mohli znovu vytvořit společnou vzpomínku.',
-            'type' => 'outing',
-            'status' => 'planned',
-            'starts_at' => $startsAt,
-            'ends_at' => $startsAt->copy()->addHours(2),
-            'timezone' => 'Europe/Prague',
-            'place_name' => $data['place_name'] ?? $nearestPlace?->name,
-            'latitude' => $source->latitude,
-            'longitude' => $source->longitude,
-            'color' => '#ec4899',
-            'is_private' => false,
+            'type' => 'outing', 'status' => 'planned', 'starts_at' => $startsAt, 'ends_at' => $startsAt->copy()->addHours(2),
+            'timezone' => 'Europe/Prague', 'place_name' => $data['place_name'] ?? $nearestPlace?->name,
+            'latitude' => $source->latitude, 'longitude' => $source->longitude, 'color' => '#ec4899', 'is_private' => false,
             'metadata' => ['kind' => 'media_revisit', 'source_media_uuid' => $source->uuid],
         ]);
 
-        $members = User::query()->whereHas('gallerySpaces', fn ($query) => $query->where('gallery_spaces.id', $source->gallery_space_id))->get(['users.id']);
+        $members = $event->participants()->get(['users.id']);
         foreach ($members as $member) {
-            $event->participants()->syncWithoutDetaching([$member->id => [
-                'role' => $member->id === $user->id ? 'owner' : 'guest',
-                'response' => $member->id === $user->id ? 'accepted' : 'pending',
-            ]]);
             EventReminder::create([
                 'event_id' => $event->id,
                 'user_id' => $member->id,

@@ -1,4 +1,5 @@
 import { router } from '@inertiajs/react';
+import { flushWorkspaceWrites, workspaceWriteSummary } from '@/lib/workspaceWriteQueue';
 import { usePwaInstall } from '@/Contexts/PwaInstallContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { Download, RefreshCw, WifiOff, X } from 'lucide-react';
@@ -16,18 +17,24 @@ export default function PwaLifecycle() {
     const [online, setOnline] = useState(() => navigator.onLine);
     const [updateRegistration, setUpdateRegistration] = useState<ServiceWorkerRegistration | null>(null);
     const [refreshing, setRefreshing] = useState(false);
+    const [offlineWrites, setOfflineWrites] = useState({ pending: 0, needsAttention: 0 });
     const reloading = useRef(false);
 
     useEffect(() => {
+        let active = true;
+        const refreshWriteState = async () => { const summary = await workspaceWriteSummary(); if (active) setOfflineWrites(summary); };
         const becameOnline = () => {
             setOnline(true);
-            void queryClient.invalidateQueries();
+            void flushWorkspaceWrites().then(async () => { await refreshWriteState(); await queryClient.invalidateQueries(); });
         };
-        const becameOffline = () => setOnline(false);
+        const becameOffline = () => { setOnline(false); void refreshWriteState(); };
         window.addEventListener('online', becameOnline);
         window.addEventListener('offline', becameOffline);
+        void refreshWriteState();
+        if (navigator.onLine) void flushWorkspaceWrites().then(refreshWriteState);
 
         return () => {
+            active = false;
             window.removeEventListener('online', becameOnline);
             window.removeEventListener('offline', becameOffline);
         };
@@ -120,7 +127,7 @@ export default function PwaLifecycle() {
         });
     }, [queryClient]);
 
-    if (online && !showInstallBanner && !updateRegistration) return null;
+    if (online && !showInstallBanner && !updateRegistration && offlineWrites.pending === 0 && offlineWrites.needsAttention === 0) return null;
 
     return (
         <aside
@@ -132,13 +139,19 @@ export default function PwaLifecycle() {
                     <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/15 text-amber-300"><WifiOff size={19}/></span>
                     <div className="min-w-0 flex-1">
                         <p className="text-sm font-semibold text-white">Jste offline</p>
-                        <p className="text-xs text-[var(--color-text-secondary)]">Rozpracovaná data zůstanou na zařízení. Po připojení načteme aktuální stav.</p>
+                        <p className="text-xs text-[var(--color-text-secondary)]">Rozpracovaná data zůstanou na zařízení.{offlineWrites.pending ? ` Čeká ${offlineWrites.pending} zápisů.` : ''}</p>
                     </div>
-                    {navigator.onLine && (
-                        <button type="button" onClick={refreshAfterReconnect} disabled={refreshing} className="min-h-10 rounded-xl bg-[var(--color-accent)] px-3 text-xs font-medium text-white disabled:opacity-60">
-                            Obnovit
-                        </button>
-                    )}
+                </div>
+            ) : offlineWrites.needsAttention > 0 ? (
+                <div className="flex items-center gap-3">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-500/15 text-red-200">!</span>
+                    <div className="min-w-0 flex-1"><p className="text-sm font-semibold text-white">Offline zápis vyžaduje kontrolu</p><p className="text-xs text-[var(--color-text-secondary)]">{offlineWrites.needsAttention} položek se nepodařilo bezpečně sloučit.</p></div>
+                    <button type="button" onClick={() => router.visit('/calendar')} className="min-h-10 rounded-xl border border-red-300/30 px-3 text-xs text-red-100">Otevřít</button>
+                </div>
+            ) : offlineWrites.pending > 0 ? (
+                <div className="flex items-center gap-3">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/15 text-amber-200">⌛</span>
+                    <div className="min-w-0 flex-1"><p className="text-sm font-semibold text-white">Čeká synchronizace</p><p className="text-xs text-[var(--color-text-secondary)]">{offlineWrites.pending} {offlineWrites.pending === 1 ? 'zápis je bezpečně uložený v zařízení' : 'zápisů je bezpečně uloženo v zařízení'}.</p></div>
                 </div>
             ) : updateRegistration ? (
                 <div className="flex items-center gap-3">

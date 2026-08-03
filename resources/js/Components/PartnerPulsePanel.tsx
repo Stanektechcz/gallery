@@ -83,6 +83,15 @@ export default function PartnerPulsePanel({ spaceId, initialPulse, compact = fal
         } catch (reason: any) { setError(reason.response?.data?.message ?? 'Dnešní check-in se nepodařilo uložit.'); }
         finally { setBusy(''); }
     };
+    const shareEnergy = async (energy: number) => {
+        setCheckIn(current => ({ ...current, energy: String(energy), is_shared: true }));
+        setBusy('check-in'); setError('');
+        try {
+            const response = await axios.put<PartnerPulse>('/api/v1/coordination/check-in', { gallery_space_id: pulse?.space.id ?? spaceId, ...checkIn, energy, mood: checkIn.mood || null, focus: checkIn.focus || null, is_shared: true });
+            setPulse(response.data);
+        } catch (reason: any) { setError(reason.response?.data?.message ?? 'Energii se nepodařilo sdílet.'); }
+        finally { setBusy(''); }
+    };
     const tomorrow = useMemo(() => { const date = new Date(); date.setDate(date.getDate() + 1); date.setHours(8, 0, 0, 0); return date.toISOString(); }, []);
 
     if (loading && !pulse) return <section className="flex min-h-28 items-center justify-center rounded-3xl border border-teal-400/20 bg-[var(--color-bg-card)]"><LoaderCircle className="animate-spin text-teal-300" size={22}/></section>;
@@ -103,7 +112,7 @@ export default function PartnerPulsePanel({ spaceId, initialPulse, compact = fal
 
             {pulse.check_in_available && <form onSubmit={saveCheckIn} className="mt-4 grid gap-2 rounded-2xl border border-white/5 bg-black/10 p-3 sm:grid-cols-2 lg:grid-cols-5">
                 <select aria-label="Dnešní nálada" value={checkIn.mood} onChange={event => setCheckIn(current => ({...current, mood:event.target.value}))} className="min-h-10 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-card)] px-2 text-xs text-white"><option value="">Jak se mám?</option>{Object.entries(MOODS).map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select>
-                <label className="flex min-h-10 items-center gap-2 rounded-lg border border-[var(--color-border)] px-2 text-xs text-[var(--color-text-secondary)]">Energie <input aria-label="Energie" type="range" min="1" max="5" value={checkIn.energy} onChange={event => setCheckIn(current => ({...current, energy:event.target.value}))} className="min-w-0 flex-1"/><span className="text-white">{checkIn.energy}/5</span></label>
+                <div className="flex min-h-10 items-center gap-1 rounded-lg border border-[var(--color-border)] px-2"><span className="mr-1 text-xs text-[var(--color-text-secondary)]">Energie</span>{[1,2,3,4,5].map(value => <button key={value} type="button" aria-label={`Sdílet energii ${value} z 5`} disabled={busy === 'check-in'} onClick={() => shareEnergy(value)} className={`h-7 min-w-7 rounded-md text-xs ${Number(checkIn.energy) === value ? 'bg-teal-500 text-white' : 'bg-white/5 text-teal-100 hover:bg-teal-500/20'}`}>{value}</button>)}</div>
                 <select aria-label="Dnešní kapacita" value={checkIn.capacity} onChange={event => setCheckIn(current => ({...current, capacity:event.target.value as CheckIn['capacity']}))} className="min-h-10 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-card)] px-2 text-xs text-white">{Object.entries(CAPACITY).map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select>
                 <input value={checkIn.focus} onChange={event => setCheckIn(current => ({...current, focus:event.target.value}))} placeholder="Na co se dnes soustředím" className="min-h-10 rounded-lg border border-[var(--color-border)] bg-transparent px-3 text-xs text-white placeholder:text-[var(--color-text-secondary)]"/>
                 <button disabled={busy === 'check-in'} className="min-h-10 rounded-lg bg-teal-500 px-3 text-xs font-medium text-white disabled:opacity-50">{busy === 'check-in' ? 'Ukládám…' : pulse.my_check_in ? 'Aktualizovat stav' : 'Sdílet dnešní stav'}</button>

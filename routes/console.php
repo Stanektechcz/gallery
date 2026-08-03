@@ -11,6 +11,11 @@ Schedule::command('gallery:deliver-reminders --no-interaction')
     ->withoutOverlapping()
     ->name('calendar-reminders');
 
+// Old plans should never remain in current views simply because nobody opened the calendar.
+Schedule::command('gallery:close-elapsed-events --no-interaction')
+    ->dailyAt('00:05')
+    ->withoutOverlapping()
+    ->name('close-elapsed-calendar-events');
 Schedule::command('gallery:planning-followups --no-interaction')
     ->hourly()
     ->withoutOverlapping()

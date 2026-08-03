@@ -7,8 +7,16 @@ import {
 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+type LifecycleStatus = 'idea' | 'planned' | 'visited' | 'favorite' | 'avoid';
+const LIFECYCLE: Record<LifecycleStatus, { label: string; className: string }> = {
+    idea: { label: 'Nápad', className: 'bg-slate-500/20 text-slate-100' },
+    planned: { label: 'Plánujeme', className: 'bg-sky-500/20 text-sky-100' },
+    visited: { label: 'Navštíveno', className: 'bg-emerald-500/20 text-emerald-100' },
+    favorite: { label: 'Oblíbené', className: 'bg-amber-500/20 text-amber-100' },
+    avoid: { label: 'Už ne', className: 'bg-rose-500/20 text-rose-100' },
+};
 interface Place {
-    id: number; name: string; type: string; country?: string; city?: string;
+    id: number; name: string; type: string; lifecycle_status?: LifecycleStatus; country?: string; city?: string;
     latitude?: number; longitude?: number; radius_meters: number;
     description?: string; website_url?: string;
     photo_count: number; visit_count: number;
@@ -42,7 +50,7 @@ const TYPES: Record<string, { emoji: string; label: string }> = {
 const EMPTY_FORM = {
     name: '', type: 'city', country: '', city: '', address: '',
     latitude: '', longitude: '', radius_meters: '500',
-    description: '', website_url: '', osm_id: '', osm_type: '',
+    description: '', website_url: '', osm_id: '', osm_type: '', lifecycle_status: 'idea' as LifecycleStatus,
 };
 
 const nextSaturdayMorning = () => {
@@ -60,6 +68,7 @@ export default function PlacesIndex() {
     const [places,      setPlaces]      = useState<Place[]>([]);
     const [loading,     setLoading]     = useState(true);
     const [filterType,  setFilterType]  = useState<string>('all');
+    const [filterLifecycle, setFilterLifecycle] = useState<LifecycleStatus | 'all'>('all');
     const [quickFilter, setQuickFilter] = useState<'all' | 'rain' | 'photo' | 'early' | 'budget' | 'favorite'>('all');
     const [search,      setSearch]      = useState('');
     const [showCreate,  setShowCreate]  = useState(false);
@@ -174,6 +183,7 @@ export default function PlacesIndex() {
 
     const filtered = places.filter(p => {
         if (filterType !== 'all' && p.type !== filterType) return false;
+        if (filterLifecycle !== 'all' && (p.lifecycle_status ?? 'idea') !== filterLifecycle) return false;
         if (quickFilter === 'rain' && !p.is_rain_friendly) return false;
         if (quickFilter === 'photo' && !p.is_photogenic) return false;
         if (quickFilter === 'early' && !p.opens_early) return false;
@@ -194,7 +204,7 @@ export default function PlacesIndex() {
     return (
         <AppLayout>
             <Head title="Místa" />
-            <div className="p-6 max-w-6xl mx-auto">
+            <div className="w-full px-4 py-5 sm:px-6 lg:px-8">
 
                 {/* Header */}
                 <div className="flex items-center justify-between mb-6 gap-4 flex-wrap">
@@ -261,6 +271,11 @@ export default function PlacesIndex() {
                             <select value={form.type} onChange={e => setForm(p => ({ ...p, type: e.target.value }))}
                                 className="bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-[var(--color-accent)]">
                                 {Object.entries(TYPES).map(([k, v]) => <option key={k} value={k}>{v.emoji} {v.label}</option>)}
+                            </select>
+
+                            <select value={form.lifecycle_status} onChange={e => setForm(p => ({ ...p, lifecycle_status: e.target.value as LifecycleStatus }))}
+                                className="bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-[var(--color-accent)]" aria-label="Stav místa">
+                                {Object.entries(LIFECYCLE).map(([value, status]) => <option key={value} value={value}>{status.label}</option>)}
                             </select>
 
                             <input value={form.country} onChange={e => setForm(p => ({ ...p, country: e.target.value }))}
@@ -348,6 +363,11 @@ export default function PlacesIndex() {
                     ))}
                 </div>
 
+                <div className="mb-3 flex gap-2 overflow-x-auto pb-1" aria-label="Stav míst">
+                    <button onClick={() => setFilterLifecycle('all')} className={`min-h-9 shrink-0 rounded-full px-3 text-xs transition-colors ${filterLifecycle === 'all' ? 'bg-[var(--color-accent)] text-white' : 'border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-white'}`}>Všechny stavy</button>
+                    {(Object.entries(LIFECYCLE) as [LifecycleStatus, typeof LIFECYCLE.idea][]).map(([value, status]) => <button key={value} onClick={() => setFilterLifecycle(filterLifecycle === value ? 'all' : value)} className={`min-h-9 shrink-0 rounded-full border px-3 text-xs transition-colors ${filterLifecycle === value ? 'border-[var(--color-accent)] bg-[var(--color-accent)]/15 text-white' : 'border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-white'}`}>{status.label}</button>)}
+                </div>
+
                 <div className="mb-5 flex gap-2 overflow-x-auto pb-1" aria-label="Rychlé kolekce míst">
                     {([
                         ['all', 'Všechny nápady'], ['rain', '🌧️ Na déšť'], ['photo', '📸 Fotogenické'],
@@ -396,6 +416,7 @@ export default function PlacesIndex() {
                                 {/* Info */}
                                 <div className="p-3">
                                     <h3 className="text-sm font-semibold text-white truncate">{place.name}</h3>
+                                    <span className={`mt-1 inline-flex rounded-full px-1.5 py-0.5 text-[9px] ${LIFECYCLE[place.lifecycle_status ?? 'idea'].className}`}>{LIFECYCLE[place.lifecycle_status ?? 'idea'].label}</span>
                                     {(place.city || place.country) && (
                                         <p className="text-[10px] text-[var(--color-text-secondary)] truncate mt-0.5">{[place.city, place.country].filter(Boolean).join(', ')}</p>
                                     )}

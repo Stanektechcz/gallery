@@ -2,6 +2,7 @@ import AppLayout from '@/Layouts/AppLayout';
 import TripBankFinancePanel from '@/Components/Banking/TripBankFinancePanel';
 import MealPlanPanel from '@/Components/Recipes/MealPlanPanel';
 import TripReservationImportPanel from '@/Components/Trips/TripReservationImportPanel';
+import TripWatchlistPanel from '@/Components/Trips/TripWatchlistPanel';
 import UnifiedTripFinancePanel from '@/Components/Trips/UnifiedTripFinancePanel';
 import { Head, Link } from '@inertiajs/react';
 import axios from 'axios';
@@ -115,7 +116,7 @@ export default function TripPlan({ tripId }: { tripId: number }) {
             <Head title={`Plán · ${trip.name}`} />
             <div className="min-h-full pb-24">
                 <header className="sticky top-0 z-20 border-b border-[var(--color-border)] bg-[var(--color-bg-primary)]/90 px-3 py-3 backdrop-blur-xl sm:px-6">
-                    <div className="mx-auto flex max-w-6xl items-center gap-3">
+                    <div className="flex w-full items-center gap-3">
                         <Link href="/trips" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-white"><ArrowLeft size={18} /></Link>
                         <div className="min-w-0 flex-1"><p className="text-[10px] uppercase tracking-wider text-[var(--color-text-secondary)]">Workspace cesty</p><h1 className="truncate font-semibold text-white">{trip.name}</h1></div>
                         <div className="relative hidden sm:block"><select disabled={offlineFallback} value={trip.status} onChange={event => updateStatus(event.target.value)} className="min-h-10 appearance-none rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-card)] pl-3 pr-9 text-xs text-white disabled:opacity-50"><option value="draft">Návrh</option><option value="planned">Naplánováno</option><option value="active">Probíhá</option><option value="completed">Dokončeno</option><option value="archived">Archivováno</option></select><ChevronDown size={13} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2" /></div>
@@ -125,7 +126,7 @@ export default function TripPlan({ tripId }: { tripId: number }) {
                     </div>
                 </header>
 
-                <main className="mx-auto max-w-6xl p-3 sm:p-6">
+                <main className="w-full p-3 sm:p-6 lg:p-8">
                     {offlineFallback && <div className="mb-4 flex items-start gap-2 rounded-2xl border border-amber-400/25 bg-amber-500/10 p-3 text-xs text-amber-100"><WifiOff size={16} className="mt-0.5 shrink-0"/><span><strong>Pracujete z uložené cestovní karty.</strong> Změny jsou při výpadku připojení vypnuté; po návratu online se načte aktuální plán.</span></div>}
                     <div className={offlineFallback ? 'pointer-events-none select-none opacity-75' : ''}>
                     <div className="mb-5 flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
@@ -155,6 +156,7 @@ export default function TripPlan({ tripId }: { tripId: number }) {
                         <aside className="space-y-3">
                             <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-4"><p className="text-xs font-semibold text-white">Přehled dne</p><div className="mt-3 space-y-2 text-xs text-[var(--color-text-secondary)]"><div className="flex justify-between"><span>Bloků</span><span className="text-white">{activeDay.activities.length}</span></div><div className="flex justify-between"><span>Dokončeno</span><span className="text-white">{activeDay.activities.filter(item => item.status === 'done').length}</span></div><div className="flex justify-between"><span>Rozpočet</span><span className="text-white">{activeDay.activities.reduce((sum, item) => sum + Number(item.cost ?? 0), 0).toLocaleString('cs-CZ')} {trip.currency}</span></div></div></div>
                             <TripOfflinePackage tripId={trip.id} offlineKey={offlineKey} />
+                            <TripWatchlistPanel tripId={trip.id} />
                             <TripTravelPanel trip={trip} days={days} activeDayId={activeDayId} />
                              <TripInboxReferencesPanel tripId={trip.id} gallerySpaceId={trip.gallery_space_id} day={activeDay} onAssigned={load} />
                              <TripMemoryPanel trip={trip} />

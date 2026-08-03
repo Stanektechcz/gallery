@@ -8,6 +8,7 @@ use App\Models\MediaItem;
 use App\Models\Recipe;
 use App\Models\User;
 use App\Services\Recipes\RecipeService;
+use App\Services\Recipes\RecipeImportService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -16,7 +17,14 @@ use Illuminate\Validation\ValidationException;
 
 class RecipeController extends Controller
 {
-    public function __construct(private readonly RecipeService $recipes) {}
+    public function __construct(private readonly RecipeService $recipes, private readonly RecipeImportService $imports) {}
+
+    public function import(Request $request): JsonResponse
+    {
+        $this->available(); $this->write($request);
+        $data = $request->validate(['url' => 'required|string|url|max:2048']);
+        return response()->json(['draft' => $this->imports->import($data['url'])]);
+    }
 
     public function index(Request $request): JsonResponse
     {

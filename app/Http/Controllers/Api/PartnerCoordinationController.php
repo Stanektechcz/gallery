@@ -171,6 +171,7 @@ class PartnerCoordinationController extends Controller
         }
         $gift = DB::table('gift_ideas')->where('uuid', $key)->where('gallery_space_id', $space->id)->first();
         abort_unless($gift, 404);
+        if (Schema::hasColumn('gift_ideas', 'visibility') && Schema::hasColumn('gift_ideas', 'private_to_user_id') && ($gift->visibility ?? 'shared') === 'private' && (int) $gift->private_to_user_id !== (int) $request->user()->id) abort(404);
         if (array_key_exists('completed', $data)) $updates['status'] = $data['completed'] ? 'purchased' : 'idea';
         DB::table('gift_ideas')->where('id', $gift->id)->update($updates);
     }

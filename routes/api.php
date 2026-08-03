@@ -19,6 +19,8 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
     // Search
     Route::get('/search', [SearchController::class, 'search'])->name('api.search');
     Route::get('/search/suggestions', [SearchController::class, 'suggestions'])->name('api.search.suggestions');
+    Route::post('/assistant/preview', [App\Http\Controllers\Api\WorkspaceAssistantController::class, 'preview']);
+    Route::post('/assistant/apply', [App\Http\Controllers\Api\WorkspaceAssistantController::class, 'apply']);
     Route::get('/travel-data/weather', [App\Http\Controllers\Api\TravelDataController::class, 'weather'])->name('api.travel-data.weather');
     Route::get('/travel-data/exchange-rate', [App\Http\Controllers\Api\TravelDataController::class, 'exchangeRate'])->name('api.travel-data.exchange-rate');
     Route::post('/travel-data/route', [App\Http\Controllers\Api\TravelDataController::class, 'route'])->name('api.travel-data.route');
@@ -33,7 +35,14 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
         Route::delete('/{uuid}',                     [UploadController::class, 'cancel'])->name('cancel');
     });
 
+    Route::patch('/user-preferences', [App\Http\Controllers\Api\UserPreferenceController::class, 'update'])->name('api.user-preferences.update');
+    Route::get('/automations', [App\Http\Controllers\Api\AutomationRegistryController::class, 'index'])->name('api.automations.index');
+    Route::patch('/automations/{key}', [App\Http\Controllers\Api\AutomationRegistryController::class, 'update'])->name('api.automations.update');
+
     // Read-only banking and persistent Revolut history
+    Route::post('/shared-expenses', [App\Http\Controllers\Api\SharedExpenseController::class, 'store'])->name('api.shared-expenses.store');
+    Route::patch('/shared-expenses/{uuid}', [App\Http\Controllers\Api\SharedExpenseController::class, 'update'])->name('api.shared-expenses.update');
+    Route::delete('/shared-expenses/{uuid}', [App\Http\Controllers\Api\SharedExpenseController::class, 'destroy'])->name('api.shared-expenses.destroy');
     Route::get('/banking', [App\Http\Controllers\Api\BankingController::class, 'overview'])->name('api.banking.overview');
     Route::get('/banking/dashboard', [App\Http\Controllers\Api\BankingController::class, 'dashboard'])->name('api.banking.dashboard');
     Route::get('/banking/institutions', [App\Http\Controllers\Api\BankingController::class, 'institutions'])->name('api.banking.institutions');
@@ -112,11 +121,16 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
 
     // People
     Route::apiResource('people', App\Http\Controllers\Api\PersonController::class)->except(['destroy']);
+    Route::get('people/{person}/notes', [App\Http\Controllers\Api\PersonController::class, 'notes']);
+    Route::put('people/{person}/notes', [App\Http\Controllers\Api\PersonController::class, 'saveNotes']);
     Route::delete('people/{id}', [App\Http\Controllers\Api\PersonController::class, 'destroy']);
 
     // Tags
     Route::apiResource('tags', App\Http\Controllers\Api\TagController::class)->except(['destroy']);
     Route::delete('tags/{id}', [App\Http\Controllers\Api\TagController::class, 'destroy']);
+    Route::get('tags/{id}/connections', [App\Http\Controllers\Api\TagController::class, 'connections']);
+    Route::post('tags/{id}/connections', [App\Http\Controllers\Api\TagController::class, 'attach']);
+    Route::delete('tags/{id}/connections/{entityType}/{entityId}', [App\Http\Controllers\Api\TagController::class, 'detach']);
 
     // Places
     Route::post('places/plan-selection', [App\Http\Controllers\Api\PlaceController::class, 'planSelection'])->name('api.places.plan-selection');
@@ -127,6 +141,8 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
         'update'  => 'api.places.update',
     ]);
     Route::delete('places/{place}',          [App\Http\Controllers\Api\PlaceController::class, 'destroy'])->name('api.places.destroy');
+    Route::get('places/{place}/notes',       [App\Http\Controllers\Api\PlaceController::class, 'notes'])->name('api.places.notes');
+    Route::put('places/{place}/notes',       [App\Http\Controllers\Api\PlaceController::class, 'saveNotes'])->name('api.places.notes.save');
     Route::get('places/{place}/media',       [App\Http\Controllers\Api\PlaceController::class, 'media'])->name('api.places.media');
     Route::get('places/{place}/albums',      [App\Http\Controllers\Api\PlaceController::class, 'albums'])->name('api.places.albums');
     Route::post('places/{place}/auto-link',  [App\Http\Controllers\Api\PlaceController::class, 'autoLink'])->name('api.places.auto-link');
@@ -144,6 +160,7 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
 
     // Shared recipe book, cooking mode and cooking journal
     Route::get('/recipes', [App\Http\Controllers\Api\RecipeController::class, 'index'])->name('api.recipes.index');
+    Route::post('/recipes/import', [App\Http\Controllers\Api\RecipeController::class, 'import'])->name('api.recipes.import');
     Route::post('/recipes', [App\Http\Controllers\Api\RecipeController::class, 'store'])->name('api.recipes.store');
     Route::get('/recipes/{uuid}', [App\Http\Controllers\Api\RecipeController::class, 'show'])->name('api.recipes.show');
     Route::put('/recipes/{uuid}', [App\Http\Controllers\Api\RecipeController::class, 'update'])->name('api.recipes.update');
@@ -272,6 +289,7 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
         Route::get('/events', [App\Http\Controllers\Api\CalendarPlanningController::class, 'index'])->name('events.index');
         Route::post('/events', [App\Http\Controllers\Api\CalendarPlanningController::class, 'store'])->name('events.store');
         Route::post('/ics-import', [App\Http\Controllers\Api\IcsCalendarImportController::class, 'store'])->name('ics.import');
+        Route::get('/ics-export', [App\Http\Controllers\Api\CalendarPlanningController::class, 'exportIcs'])->name('ics.export');
         Route::post('/holiday-plan', [App\Http\Controllers\Api\CalendarPlanningController::class, 'planHoliday'])->name('holiday-plan.store');
         Route::get('/date-ideas', [App\Http\Controllers\Api\CalendarPlanningController::class, 'dateIdeas'])->name('date-ideas');
         Route::get('/shared-slots', [App\Http\Controllers\Api\CalendarPlanningController::class, 'sharedSlots'])->name('shared-slots');
@@ -280,6 +298,10 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
         Route::get('/gifts', [App\Http\Controllers\Api\CalendarAutomationController::class, 'gifts'])->name('gifts.index');
         Route::post('/gifts', [App\Http\Controllers\Api\CalendarAutomationController::class, 'storeGift'])->name('gifts.store');
         Route::patch('/gifts/{uuid}', [App\Http\Controllers\Api\CalendarAutomationController::class, 'updateGift'])->name('gifts.update');
+        Route::get('/gift-budgets', [App\Http\Controllers\Api\GiftBudgetController::class, 'index'])->name('gift-budgets.index');
+        Route::post('/gift-budgets', [App\Http\Controllers\Api\GiftBudgetController::class, 'store'])->name('gift-budgets.store');
+        Route::patch('/gift-budgets/{uuid}', [App\Http\Controllers\Api\GiftBudgetController::class, 'update'])->name('gift-budgets.update');
+        Route::delete('/gift-budgets/{uuid}', [App\Http\Controllers\Api\GiftBudgetController::class, 'destroy'])->name('gift-budgets.destroy');
         Route::get('/day-note', [App\Http\Controllers\Api\CalendarAutomationController::class, 'dayNote'])->name('day-note.show');
         Route::put('/day-note', [App\Http\Controllers\Api\CalendarAutomationController::class, 'updateDayNote'])->name('day-note.update');
         Route::get('/inbox', [App\Http\Controllers\Api\CalendarPlanningController::class, 'inbox'])->name('inbox.index');
@@ -291,6 +313,8 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
         Route::post('/push-subscriptions', [App\Http\Controllers\Api\CalendarPlanningController::class, 'storePushSubscription'])->name('push.store');
         Route::delete('/push-subscriptions', [App\Http\Controllers\Api\CalendarPlanningController::class, 'destroyPushSubscription'])->name('push.destroy');
         Route::get('/events/{uuid}', [App\Http\Controllers\Api\CalendarPlanningController::class, 'show'])->name('events.show');
+        Route::get('/events/{uuid}/history', [App\Http\Controllers\Api\CalendarPlanningController::class, 'history'])->name('events.history');
+        Route::post('/events/{uuid}/history/{revisionUuid}/restore', [App\Http\Controllers\Api\CalendarPlanningController::class, 'restoreRevision'])->name('events.history.restore');
         Route::patch('/events/{uuid}', [App\Http\Controllers\Api\CalendarPlanningController::class, 'update'])->name('events.update');
         Route::delete('/events/{uuid}', [App\Http\Controllers\Api\CalendarPlanningController::class, 'destroy'])->name('events.destroy');
         Route::get('/events/{uuid}/meal-plan', [App\Http\Controllers\Api\MealPlanController::class, 'eventIndex'])->name('events.meal-plan.index');
@@ -380,6 +404,10 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
         Route::post('/vehicle-costs', [App\Http\Controllers\Api\TripIntelligenceController::class, 'storeVehicleCost'])->name('vehicle-costs.store');
         Route::patch('/vehicle-costs/{costId}', [App\Http\Controllers\Api\TripIntelligenceController::class, 'updateVehicleCost'])->name('vehicle-costs.update');
         Route::delete('/vehicle-costs/{costId}', [App\Http\Controllers\Api\TripIntelligenceController::class, 'destroyVehicleCost'])->name('vehicle-costs.destroy');
+        Route::get('/watchlist', [App\Http\Controllers\Api\TripIntelligenceController::class, 'tripWatchlist'])->name('watchlist.index');
+        Route::post('/watchlist', [App\Http\Controllers\Api\TripIntelligenceController::class, 'storeTripWatchlist'])->name('watchlist.store');
+        Route::patch('/watchlist/{itemId}', [App\Http\Controllers\Api\TripIntelligenceController::class, 'updateTripWatchlist'])->name('watchlist.update');
+        Route::delete('/watchlist/{itemId}', [App\Http\Controllers\Api\TripIntelligenceController::class, 'destroyTripWatchlist'])->name('watchlist.destroy');
         Route::get('/offline-package', [App\Http\Controllers\Api\TripIntelligenceController::class, 'offlinePackage'])->name('offline-package');
     });
 

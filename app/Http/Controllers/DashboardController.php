@@ -3,19 +3,16 @@
 namespace App\Http\Controllers;
 
 use App\Models\MediaItem;
-use App\Models\Album;
 use App\Models\GallerySpace;
 use App\Models\SavedSearch;
-use App\Services\Media\MemoryDiscoveryService;
-use App\Services\Media\AlbumCurationAssistantService;
 use App\Services\Media\UnassignedAlbumSuggestionService;
 use App\Services\Planning\TripPreparationTimelineService;
+use App\Services\Planning\CalendarEventLifecycleService;
 use App\Services\Planning\CoupleExperienceRecommendationService;
 use App\Services\Planning\ExperienceLifecycleService;
 use App\Services\Planning\PartnerCoordinationService;
 use App\Services\Planning\PartnerDecisionService;
 use App\Services\Planning\ReminderActionService;
-use App\Services\Memories\RelationshipAnniversaryRecapService;
 use App\Services\Banking\TripFinancialInsightService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -25,7 +22,7 @@ use Inertia\Response;
 
 class DashboardController extends Controller
 {
-    public function index(Request $request, MemoryDiscoveryService $memoryDiscovery, TripPreparationTimelineService $tripPreparation, AlbumCurationAssistantService $albumCuration, CoupleExperienceRecommendationService $experienceRecommendations, ExperienceLifecycleService $experienceLifecycle, PartnerCoordinationService $partnerCoordination, PartnerDecisionService $partnerDecisions, RelationshipAnniversaryRecapService $anniversaryRecaps, UnassignedAlbumSuggestionService $albumSuggestions, TripFinancialInsightService $bankInsights, ReminderActionService $reminderActions): Response
+    public function index(Request $request, TripPreparationTimelineService $tripPreparation, CoupleExperienceRecommendationService $experienceRecommendations, ExperienceLifecycleService $experienceLifecycle, PartnerCoordinationService $partnerCoordination, PartnerDecisionService $partnerDecisions, UnassignedAlbumSuggestionService $albumSuggestions, TripFinancialInsightService $bankInsights, ReminderActionService $reminderActions, CalendarEventLifecycleService $eventLifecycle): Response
     {
         $user  = $request->user();
         $space = $user->gallerySpaces()->first();
@@ -35,6 +32,7 @@ class DashboardController extends Controller
         }
 
         $now   = now();
+        $eventLifecycle->completeElapsedPlans([$space->id]);
         $hour  = $now->hour;
         $name  = $user->name;
 
@@ -46,82 +44,12 @@ class DashboardController extends Controller
             default    => "Dobrou noc",
         };
 
-        // This day last year
-        $lastYearStart = $now->copy()->subYear()->startOfDay();
-        $lastYearEnd   = $now->copy()->subYear()->endOfDay();
-        $thisTimeLastYear = MediaItem::where('gallery_space_id', $space->id)
-            ->whereBetween('taken_at', [$lastYearStart, $lastYearEnd])
-            ->whereNull('trashed_at')
-            ->where('is_hidden', false)
-            ->with(['variants' => fn($q) => $q->whereIn('type', ['thumbnail', 'placeholder'])])
-            ->inRandomOrder()
-            ->limit(8)
-            ->get();
-
-        // Random memory (any time, random)
-        $randomMemory = MediaItem::where('gallery_space_id', $space->id)
-            ->whereNull('trashed_at')
-            ->where('is_hidden', false)
-            ->where('status', 'ready')
-            ->with(['variants' => fn($q) => $q->whereIn('type', ['thumbnail', 'placeholder'])])
-            ->inRandomOrder()
-            ->limit(1)
-            ->first();
-
-        // Most recent media (for "Naše poslední vzpomínky")
-        $recentMedia = MediaItem::where('gallery_space_id', $space->id)
-            ->whereNull('trashed_at')
-            ->where('is_hidden', false)
-            ->where('status', 'ready')
-            ->with(['variants' => fn($q) => $q->whereIn('type', ['thumbnail', 'placeholder'])])
-            ->orderByDesc('taken_at')
-            ->limit(10)
-            ->get();
-
-        // Last visited place (most recent media with GPS)
-        $lastPlace = MediaItem::where('gallery_space_id', $space->id)
-            ->whereNull('trashed_at')
-            ->where('is_hidden', false)
-            ->whereNotNull('latitude')
-            ->whereNotNull('longitude')
-            ->orderByDesc('taken_at')
-            ->first(['latitude', 'longitude', 'taken_at']);
-
-        // Most recently active album
-        $lastAlbum = Album::where('gallery_space_id', $space->id)
-            ->whereNull('deleted_at')
-            ->whereHas('primaryMedia')
-            ->withMax('primaryMedia', 'uploaded_at')
-            ->orderByDesc('primary_media_max_uploaded_at')
-            ->first(['id', 'uuid', 'gallery_space_id', 'title', 'event_date_start', 'album_type', 'smart_rules']);
-        $lastAlbumHealth = $lastAlbum ? $albumCuration->health($lastAlbum) : null;
-
-        // Stats for current year
-        $yearStats = MediaItem::where('gallery_space_id', $space->id)
-            ->whereNull('trashed_at')
-            ->where('is_hidden', false)
-            ->whereYear('taken_at', $now->year)
-            ->selectRaw("COUNT(*) as total, SUM(CASE WHEN media_type='video' THEN 1 ELSE 0 END) as videos, SUM(CASE WHEN media_type='photo' THEN 1 ELSE 0 END) as photos")
-            ->first();
-
-        // GPS / map stats
-        $gpsCount     = MediaItem::where('gallery_space_id', $space->id)
-            ->whereNull('trashed_at')
-            ->where('is_hidden', false)
-            ->whereNotNull('latitude')
-            ->count();
-
-        // Estimate unique countries (rough: distinct lat/lng buckets)
-        $countryEstimate = min(10, (int) ceil($gpsCount / 20));
-
         // Pending uploads (upload sessions not completed)
         $pendingCount = DB::table('upload_sessions')
             ->where('user_id', $user->id)
             ->whereIn('status', ['pending', 'assembling'])
             ->where('expires_at', '>', now())
             ->count();
-
-        $forYou = $memoryDiscovery->discover($user)->take(3)->values();
         $pinnedViews = SavedSearch::where('gallery_space_id', $space->id)
             ->where('user_id', $user->id)
             ->where('is_pinned', true)
@@ -132,10 +60,11 @@ class DashboardController extends Controller
             ->where('gallery_space_id', $space->id)
             ->where('end_date', '>=', now()->toDateString())
             ->orderBy('start_date')
-            ->first(['id', 'gallery_space_id', 'name', 'start_date', 'end_date', 'status', 'timezone']);
+            ->first(['id', 'gallery_space_id', 'name', 'start_date', 'end_date', 'status', 'timezone', 'currency']);
         if ($upcomingTrip) {
             $totals = DB::table('trip_expenses')->where('trip_id', $upcomingTrip->id)->selectRaw('state, SUM(amount) as total')->groupBy('state')->pluck('total', 'state');
-            $upcomingTrip->finance = ['planned' => (float) ($totals['planned'] ?? 0), 'actual' => (float) ($totals['actual'] ?? 0)];
+            $manualTripActual = Schema::hasTable('shared_expenses') ? (float) DB::table('shared_expenses')->where('trip_id', $upcomingTrip->id)->where('currency', strtoupper($upcomingTrip->currency ?? 'CZK'))->sum('amount') : 0.0;
+            $upcomingTrip->finance = ['planned' => (float) ($totals['planned'] ?? 0), 'actual' => (float) ($totals['actual'] ?? 0) + $manualTripActual];
             $packing = DB::table('trip_packing_items')->where('trip_id', $upcomingTrip->id);
             $goal = DB::table('trip_savings_goals')->where('trip_id', $upcomingTrip->id)->first(['target_amount', 'saved_amount', 'monthly_contribution', 'currency']);
             $upcomingTrip->readiness = ['packing_total' => (clone $packing)->count(), 'packing_packed' => (clone $packing)->where('is_packed', true)->count(), 'essential_missing' => (clone $packing)->where('is_essential', true)->where('is_packed', false)->count()];
@@ -168,9 +97,6 @@ class DashboardController extends Controller
                 if ($next->lt($now->copy()->startOfDay())) $next->addYear();
                 return ['uuid' => $milestone->uuid, 'title' => $milestone->title, 'icon' => $milestone->icon, 'kind' => $milestone->kind, 'relationship' => $milestone->relationship, 'person_name' => $milestone->person_name, 'is_highlighted' => (bool) $milestone->is_highlighted, 'days_until' => (int) $now->copy()->startOfDay()->diffInDays($next), 'next_anniversary' => $next->toDateString()];
             })->sortBy('days_until')->take(3)->values();
-        $sharedMoments = DB::table('shared_memory_moments')->where('gallery_space_id', $space->id)->latest('happened_on')->latest()->limit(3)->get(['uuid', 'title', 'happened_on', 'is_favorite']);
-        $relationshipAnniversary = (array) (($space->settings ?? [])['relationship_anniversary'] ?? []);
-        $anniversaryRecap = $anniversaryRecaps->prompt($space);
         $albumSuggestion = $albumSuggestions->prompt($space, $user);
         $reflectionPrompt = null;
         if (Schema::hasTable('trip_reflections')) {
@@ -256,39 +182,33 @@ class DashboardController extends Controller
         }
         $financeHub = $bankInsights->spaceOverview($space);
         $actionableReminders = Schema::hasTable('event_reminders') ? $reminderActions->dashboard($user, $space->id) : [];
+        $visibleGiftCount = 0;
+        if (Schema::hasTable('gift_ideas')) {
+            $giftQuery = DB::table('gift_ideas')->where('gallery_space_id', $space->id)->whereIn('status', ['idea', 'planned']);
+            if (Schema::hasColumn('gift_ideas', 'visibility') && Schema::hasColumn('gift_ideas', 'private_to_user_id')) {
+                $giftQuery->where(fn ($visible) => $visible->where('visibility', 'shared')->orWhere('private_to_user_id', $user->id));
+            }
+            $visibleGiftCount = $giftQuery->count();
+        }
+        $actionInbox = collect([
+            ['key' => 'media', 'label' => 'Fotky k zařazení', 'count' => MediaItem::where('gallery_space_id', $space->id)->whereNull('primary_album_id')->whereNull('trashed_at')->where('is_hidden', false)->whereIn('status', ['ready', 'received'])->count(), 'href' => '/inbox', 'tone' => 'violet'],
+            ['key' => 'event-tasks', 'label' => 'Úkoly k aktuálním akcím', 'count' => Schema::hasTable('event_tasks') ? DB::table('event_tasks as task')->join('calendar_events as event', 'event.id', '=', 'task.event_id')->where('event.gallery_space_id', $space->id)->whereNull('task.completed_at')->whereNotIn('event.status', ['completed', 'cancelled'])->where(fn ($query) => $query->where('event.starts_at', '>=', $now->copy()->startOfDay())->orWhere('event.ends_at', '>=', $now))->count() : 0, 'href' => '/inbox', 'tone' => 'teal'],
+            ['key' => 'travel', 'label' => 'Cestovní podklady', 'count' => Schema::hasTable('travel_inbox_items') ? DB::table('travel_inbox_items as item')->leftJoin('trips as trip', 'trip.id', '=', 'item.trip_id')->leftJoin('calendar_events as event', 'event.id', '=', 'item.event_id')->where('item.gallery_space_id', $space->id)->whereIn('item.state', ['inbox', 'assigned'])->where(function ($active) use ($now) { $active->where(fn ($unlinked) => $unlinked->whereNull('item.trip_id')->whereNull('item.event_id'))->orWhere('trip.end_date', '>=', $now->toDateString())->orWhereRaw('COALESCE(event.ends_at, event.starts_at) >= ?', [$now->copy()->startOfDay()]); })->count() : 0, 'href' => '/inbox', 'tone' => 'sky'],
+            ['key' => 'gifts', 'label' => 'Dárky k rozhodnutí', 'count' => $visibleGiftCount, 'href' => '/inbox', 'tone' => 'pink'],
+            ['key' => 'todos', 'label' => 'Otevřené společné úkoly', 'count' => Schema::hasTable('shared_todos') ? DB::table('shared_todos')->where('gallery_space_id', $space->id)->where('status', 'open')->count() : 0, 'href' => '/inbox', 'tone' => 'emerald'],
+        ])->filter(fn (array $item) => $item['count'] > 0)->values();
 
         return Inertia::render('Dashboard/Index', [
             'data' => [
+                'generated_at'     => now('Europe/Prague')->toIso8601String(),
                 'greeting'         => $greeting,
                 'user_name'        => $name,
-                'this_time_last_year' => [
-                    'count' => $thisTimeLastYear->count(),
-                    'date'  => $lastYearStart->format('j. n.'),
-                    'items' => $thisTimeLastYear,
-                ],
-                'recent_media'     => $recentMedia,
-                'random_memory'    => $randomMemory,
-                'last_album'       => $lastAlbum ? [
-                    'uuid'  => $lastAlbum->uuid,
-                    'title' => $lastAlbum->title,
-                    'date'  => $lastAlbum->event_date_start?->format('j. n.'),
-                    'curation' => $lastAlbumHealth,
-                ] : null,
                 'pending_uploads'  => $pendingCount,
-                'map_stats'        => [
-                    'locations' => $gpsCount,
-                    'countries' => $countryEstimate,
-                ],
-                'year_stats'       => [
-                    'year'   => $now->year,
-                    'photos' => (int) ($yearStats?->photos ?? 0),
-                    'videos' => (int) ($yearStats?->videos ?? 0),
-                ],
-                'for_you'          => $forYou,
                 'pinned_views'     => $pinnedViews,
                 'upcoming_trip'    => $upcomingTrip,
                 'finance_hub'      => $financeHub,
-                'partner_hub'      => ['space_id' => $space->id, 'relationship_started_on' => $relationshipAnniversary['started_on'] ?? null, 'anniversary_recap' => $anniversaryRecap, 'album_suggestion' => $albumSuggestion, 'milestones' => $upcomingMilestones, 'shared_moments' => $sharedMoments, 'next_event' => $nextSharedEvent, 'next_actions' => $nextActions, 'reminders' => $actionableReminders, 'coordination' => $coordination, 'decisions' => $decisions, 'reflection_prompt' => $reflectionPrompt, 'event_reflection_prompt' => $eventReflectionPrompt, 'experience_recommendation' => $experienceRecommendation, 'experience_follow_up' => $experienceFollowUp, 'date_follow_up' => $dateFollowUp, 'recipe' => $recipeHub, 'memory_evening' => $memoryEvening, 'date_idea' => $dateIdea],
+                'action_inbox'     => $actionInbox,
+                'partner_hub'      => ['space_id' => $space->id, 'album_suggestion' => $albumSuggestion, 'milestones' => $upcomingMilestones, 'next_event' => $nextSharedEvent, 'next_actions' => $nextActions, 'reminders' => $actionableReminders, 'coordination' => $coordination, 'decisions' => $decisions, 'reflection_prompt' => $reflectionPrompt, 'event_reflection_prompt' => $eventReflectionPrompt, 'experience_recommendation' => $experienceRecommendation, 'experience_follow_up' => $experienceFollowUp, 'date_follow_up' => $dateFollowUp, 'recipe' => $recipeHub, 'memory_evening' => $memoryEvening, 'date_idea' => $dateIdea],
             ],
         ]);
     }

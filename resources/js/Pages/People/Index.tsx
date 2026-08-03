@@ -1,7 +1,7 @@
 import AppLayout from '@/Layouts/AppLayout';
 import { Head, Link } from '@inertiajs/react';
 import axios from 'axios';
-import { Film, Image, User } from 'lucide-react';
+import { Image, User } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 interface Person {
@@ -61,8 +61,8 @@ export default function PeopleIndex() {
                                 </div>
                                 <p className="text-sm font-medium text-white truncate">{person.name}</p>
                                 <div className="flex items-center justify-center gap-3 mt-1 text-[10px] text-[var(--color-text-secondary)]">
-                                    {person.photo_count ? <span className="flex items-center gap-0.5"><Image size={10}/>{person.photo_count}</span> : null}
-                                    {person.video_count ? <span className="flex items-center gap-0.5"><Film size={10}/>{person.video_count}</span> : null}
+                                    {person.media_count ? <span className="flex items-center gap-0.5"><Image size={10}/>{person.media_count}</span> : null}
+
                                 </div>
                             </Link>
                         ))}

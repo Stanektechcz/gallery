@@ -18,6 +18,7 @@ interface PlanningItem { uuid:string; title:string; notes?:string|null; source_u
 interface DecisionPoll { uuid:string; question:string; status:'open'|'decided'; options:Array<{id:number;title:string;votes:number;calendar_event_id?:number|null}>; }
 interface TimeCapsule { uuid:string; title:string; message?:string|null; deliver_at:string; status:'sealed'|'delivered'; recipient_user_id?:number|null; }
 interface ExperienceLifecycle { phase:'planned'|'follow_up'|'remembered'; progress_percent:number; next_action:string; attached_media_count:number; reflection_exists:boolean; steps:Array<{key:string;label:string;complete:boolean}>; memory?:{uuid:string;title:string}|null; place_plan?:{uuid:string;state:string;planned_for?:string|null;visited_on?:string|null}|null; place?:{id:number;name:string;type?:string|null;review_count:number;my_review_complete:boolean}|null; }
+interface EventRevision { uuid:string; action:'update'|'restore'; changed_fields:string[]; created_at:string; actor_name:string; snapshot:Record<string,unknown>; }
 interface EventDetail {
     id:number; uuid:string; title:string; description?:string|null; type:string; status:string; starts_at:string;
     gallery_space_id:number; ends_at?:string|null; place_name?:string|null; departure_at?:string|null; trip_id?:number|null;
@@ -51,7 +52,7 @@ export default function CalendarShow({ eventUuid }: { eventUuid:string }) {
     const [story, setStory] = useState(''); const [storyAlbum, setStoryAlbum] = useState<{uuid:string;title:string}|null>(null); const [notice, setNotice] = useState(''); const [working, setWorking] = useState(false);
     const [polls, setPolls] = useState<DecisionPoll[]>([]); const [pollDraft, setPollDraft] = useState({question:'', first:'', second:''}); const [pollBusy, setPollBusy] = useState(false);
     const [capsules, setCapsules] = useState<TimeCapsule[]>([]); const [capsuleDraft, setCapsuleDraft] = useState({title:'', message:'', deliver_at:'', recipient_user_id:''}); const [capsuleBusy, setCapsuleBusy] = useState(false);
-    const [showEditor, setShowEditor] = useState(false);
+    const [showEditor, setShowEditor] = useState(false); const [revisions,setRevisions]=useState<EventRevision[]>([]); const [historyAvailable,setHistoryAvailable]=useState(false); const [historyLoading,setHistoryLoading]=useState(false); const [restoringRevision,setRestoringRevision]=useState('');
 
     const loadPolls = async () => {
         try { setPolls((await axios.get('/api/v1/calendar/polls', {params:{event_uuid:eventUuid}})).data ?? []); }
@@ -61,6 +62,12 @@ export default function CalendarShow({ eventUuid }: { eventUuid:string }) {
         try { setCapsules((await axios.get('/api/v1/calendar/time-capsules', {params:{event_uuid:eventUuid}})).data ?? []); }
         catch { setCapsules([]); }
     };
+    const loadHistory = async () => {
+        setHistoryLoading(true);
+        try { const response=await axios.get(`/api/v1/calendar/events/${eventUuid}/history`); setHistoryAvailable(Boolean(response.data?.available)); setRevisions(response.data?.revisions ?? []); }
+        catch { setHistoryAvailable(false); setRevisions([]); }
+        finally { setHistoryLoading(false); }
+    };
 
     const load = async () => {
         setLoading(true);
@@ -68,7 +75,7 @@ export default function CalendarShow({ eventUuid }: { eventUuid:string }) {
             const response = await axios.get(`/api/v1/calendar/events/${eventUuid}`);
             setEvent(response.data);
             setCaptureAlbumId(response.data.album?.id ?? null);
-            await Promise.all([loadPolls(), loadCapsules()]);
+            await Promise.all([loadPolls(), loadCapsules(), loadHistory()]);
             if (response.data.trip_id) {
                 try { setReadiness((await axios.get(`/api/v1/trips/${response.data.trip_id}/readiness`)).data); }
                 catch { setReadiness(null); }
@@ -171,6 +178,13 @@ export default function CalendarShow({ eventUuid }: { eventUuid:string }) {
     };
     const votePoll = async (pollUuid:string, optionId:number) => { setPollBusy(true); try { await axios.post(`/api/v1/calendar/polls/${pollUuid}/vote`, {option_id:optionId}); await loadPolls(); } catch (reason:any) { setError(reason.response?.data?.message ?? 'Hlas se nepodařilo uložit.'); } finally { setPollBusy(false); } };
     const decidePoll = async (pollUuid:string, optionId:number) => { setPollBusy(true); try { const response = await axios.post(`/api/v1/calendar/polls/${pollUuid}/options/${optionId}/plan`); setNotice(`Volba je potvrzená přímo u akce „${response.data.title}“.`); await loadPolls(); } catch (reason:any) { setError(reason.response?.data?.message ?? 'Volbu se nepodařilo potvrdit.'); } finally { setPollBusy(false); } };
+    const restoreRevision = async (revision:EventRevision) => {
+        if (!window.confirm(`Vrátit akci k verzi z ${new Date(revision.created_at).toLocaleString('cs-CZ')}? Současný stav se před návratem automaticky uloží do historie.`)) return;
+        setRestoringRevision(revision.uuid); setError('');
+        try { const response=await axios.post(`/api/v1/calendar/events/${eventUuid}/history/${revision.uuid}/restore`); setEvent(response.data); setNotice('Akce byla vrácena k vybrané verzi. Původní současný stav zůstal bezpečně v historii.'); await load(); }
+        catch (reason:any) { setError(reason.response?.data?.message ?? 'Verzi akce se nepodařilo obnovit.'); }
+        finally { setRestoringRevision(''); }
+    };
     const sealCapsule = async (form:FormEvent) => {
         form.preventDefault(); if (!event || !capsuleDraft.title.trim() || !capsuleDraft.deliver_at) return;
         setCapsuleBusy(true); setError('');
@@ -189,7 +203,7 @@ export default function CalendarShow({ eventUuid }: { eventUuid:string }) {
     const requiredDocuments = readiness?.documents.filter(document => document.status !== 'ready').length ?? 0;
     const budgetWarnings = readiness?.budget_advisor?.warnings.length ?? readiness?.budget.filter(item => item.status !== 'ok').length ?? 0;
 
-    return <AppLayout><Head title={event.title}/><main className="mx-auto max-w-5xl p-4 sm:p-6">
+    return <AppLayout><Head title={event.title}/><main className="w-full p-4 sm:p-6 lg:p-8">
         <Link href="/calendar" className="mb-4 inline-flex items-center gap-1 text-sm text-[var(--color-accent)]"><ChevronLeft size={16}/> Kalendář</Link>
         <header className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-5">
             <p className="text-xs font-medium uppercase tracking-wide text-[var(--color-accent)]">{event.type}{event.status === 'completed' ? ' · dokončeno' : ''}</p>
@@ -208,6 +222,7 @@ export default function CalendarShow({ eventUuid }: { eventUuid:string }) {
             {notice && <p className="mt-3 rounded-lg bg-green-500/10 p-3 text-sm text-green-100">{notice}</p>}
             {story && <div className="mt-3 rounded-lg bg-[var(--color-accent)]/10 p-3 text-sm text-[var(--color-text-secondary)]"><p>{story}</p>{storyAlbum && <Link href={`/albums/${storyAlbum.uuid}/story`} className="mt-2 inline-block text-sm text-[var(--color-accent)] hover:underline">Otevřít a upravit příběh v albu →</Link>}</div>}
         </header>
+        {event.can_edit&&historyAvailable&&<section className="mt-5 rounded-2xl border border-violet-400/25 bg-violet-500/5 p-4"><div className="flex items-start justify-between gap-3"><div><h2 className="font-semibold text-white">Historie změn</h2><p className="mt-1 text-xs text-[var(--color-text-secondary)]">Každé obnovení také uloží současný stav, takže se můžete bezpečně vracet v obou směrech.</p></div>{historyLoading&&<span className="text-xs text-[var(--color-text-secondary)]">Načítám…</span>}</div><div className="mt-3 space-y-2">{revisions.map(revision=><article key={revision.uuid} className="rounded-xl border border-violet-300/15 bg-black/10 p-3"><div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm text-white">{revision.action==='restore'?'Návrat k předchozí verzi':'Úprava akce'} <span className="text-xs text-[var(--color-text-secondary)]">· {revision.actor_name}</span></p><p className="mt-1 text-xs text-violet-100">{new Date(revision.created_at).toLocaleString('cs-CZ')} · {(revision.changed_fields.length?revision.changed_fields.map(field=>({title:'název',description:'popis',type:'typ',status:'stav',starts_at:'začátek',ends_at:'konec',all_day:'celý den',timezone:'časové pásmo',place_name:'místo',latitude:'poloha',longitude:'poloha',departure_buffer_minutes:'rezerva odjezdu',recurrence_rule:'opakování',color:'barva',is_private:'soukromí',trip_id:'cesta',album_id:'album',metadata:'podrobnosti'}[field]??field)).join(', '):'uložený stav')}</p></div><button type="button" disabled={Boolean(restoringRevision)} onClick={()=>restoreRevision(revision)} className="min-h-9 shrink-0 rounded-lg border border-violet-300/35 px-3 text-xs text-violet-100 disabled:opacity-50">{restoringRevision===revision.uuid?'Obnovuji…':'Vrátit tuto verzi'}</button></div></article>)}{!historyLoading&&!revisions.length&&<p className="rounded-xl border border-dashed border-violet-300/25 p-3 text-sm text-[var(--color-text-secondary)]">Zatím neexistuje žádná starší verze. Při další úpravě se tu objeví stav, ke kterému se můžete vrátit.</p>}</div></section>}
         {event.date_idea&&<DateExperiencePanel idea={event.date_idea} eventUuid={eventUuid} isFuture={isFuture} experience={event.experience} onChanged={load}/>}
         <div className="mt-5"><ReminderActionPanel initialItems={event.reminders ?? []} eventUuid={eventUuid}/></div>
         <div className="mt-5"><MealPlanPanel eventUuid={eventUuid} onChanged={load}/></div>

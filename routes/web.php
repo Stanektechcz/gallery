@@ -128,6 +128,10 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/finances', fn() => Inertia::render('Finance/Index'))->name('finances');
     Route::get('/finance', fn() => Inertia::render('Finance/Index'))->name('finance');
     Route::get('/watchlist', fn() => Inertia::render('Watchlist/Index'))->name('watchlist');
+    Route::get('/watchlist/movies', fn() => Inertia::render('Watchlist/Index'))->name('watchlist.movies');
+    Route::get('/watchlist/series', fn() => Inertia::render('Watchlist/Index'))->name('watchlist.series');
+    Route::get('/watchlist/movies/tierlist', fn() => Inertia::render('Watchlist/Index'))->name('watchlist.movies.tierlist');
+    Route::get('/watchlist/series/tierlist', fn() => Inertia::render('Watchlist/Index'))->name('watchlist.series.tierlist');
     Route::get('/date-ideas', fn() => Inertia::render('DateIdeas/Index'))->name('date-ideas');
     Route::get('/anniversary-album', fn() => Inertia::render('AnniversaryAlbum/Index'))->name('anniversary-album');
     Route::get('/gifts-anniversaries', fn() => Inertia::render('GiftsAnniversaries/Index'))->name('gifts-anniversaries');
@@ -144,6 +148,7 @@ Route::middleware(['auth'])->group(function () {
 
     // People
     Route::get('/people',   fn() => Inertia::render('People/Index'))->name('people');
+    Route::get('/people/{person}', fn() => Inertia::render('People/Show'))->name('people.show');
 
     // Places (Místa jako plnohodnotné stránky)
     Route::get('/places',      fn() => Inertia::render('Places/Index'))->name('places');
@@ -205,6 +210,7 @@ Route::middleware(['auth'])->group(function () {
     Route::prefix('settings')->name('settings.')->group(function () {
         Route::get('/storage/google', [GoogleOAuthController::class, 'showConnect'])->name('storage.google');
         Route::get('/security', [App\Http\Controllers\SecuritySessionController::class, 'index'])->name('security');
+        Route::get('/automations', fn() => Inertia::render('Settings/Automations'))->name('automations');
         Route::delete('/security/sessions/{sessionId}', [App\Http\Controllers\SecuritySessionController::class, 'destroy'])->name('security.sessions.destroy');
         Route::post('/security/sessions/revoke-others', [App\Http\Controllers\SecuritySessionController::class, 'destroyOthers'])->name('security.sessions.revoke-others');
     });

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\CalendarEvent;
 use App\Notifications\GalleryNotification;
 use App\Services\Planning\CalendarEventTripService;
+use App\Services\Planning\CalendarEventCreationService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -15,7 +16,7 @@ use Illuminate\Support\Str;
 /** Imports a deliberately small, safe subset of ICS without contacting third parties. */
 class IcsCalendarImportController extends Controller
 {
-    public function __construct(private readonly CalendarEventTripService $tripService) {}
+    public function __construct(private readonly CalendarEventTripService $tripService, private readonly CalendarEventCreationService $calendarEvents) {}
 
     public function store(Request $request): JsonResponse
     {
@@ -53,35 +54,17 @@ class IcsCalendarImportController extends Controller
                     $recurrenceWarnings++;
                 }
 
-                $event = CalendarEvent::create([
-                    'gallery_space_id' => $space->id,
-                    'created_by' => $request->user()->id,
-                    'title' => $row['title'],
-                    'description' => $row['description'],
-                    'type' => $row['type'],
-                    'status' => $row['status'],
-                    'starts_at' => $row['starts_at'],
-                    'ends_at' => $row['ends_at'],
-                    'all_day' => $row['all_day'],
-                    'timezone' => $row['timezone'],
-                    'place_name' => $row['place_name'],
-                    'recurrence_rule' => $recurrence,
+                $event = $this->calendarEvents->create($space, $request->user(), [
+                    'title' => $row['title'], 'description' => $row['description'], 'type' => $row['type'], 'status' => $row['status'],
+                    'starts_at' => $row['starts_at'], 'ends_at' => $row['ends_at'], 'all_day' => $row['all_day'], 'timezone' => $row['timezone'],
+                    'place_name' => $row['place_name'], 'recurrence_rule' => $recurrence,
                     'metadata' => [
-                        'kind' => 'ics_import',
-                        'ics_uid' => $row['uid'],
-                        'ics_imported_at' => now()->toIso8601String(),
-                        'ics_rrule' => $row['rrule'] ?? null,
-                        'ics_categories' => $row['categories'],
+                        'kind' => 'ics_import', 'ics_uid' => $row['uid'], 'ics_imported_at' => now()->toIso8601String(),
+                        'ics_rrule' => $row['rrule'] ?? null, 'ics_categories' => $row['categories'],
                     ],
-                ]);
+                ], $memberIds->all());
 
                 foreach ($memberIds as $memberId) {
-                    $isOwner = (int) $memberId === (int) $request->user()->id;
-                    $event->participants()->attach($memberId, [
-                        'role' => $isOwner ? 'owner' : 'guest',
-                        'response' => $isOwner ? 'accepted' : 'pending',
-                    ]);
-
                     if (array_key_exists('reminder_minutes', $data) && $data['reminder_minutes'] !== null) {
                         $event->reminders()->create([
                             'user_id' => $memberId,

@@ -83,16 +83,22 @@ class SharedTodoController extends Controller
     {
         $this->write($request); $this->available();
         $data = $this->validatedTask($request);
+        $clientRequestId = $data['client_request_id'] ?? null;
+        unset($data['client_request_id']);
         $space = $this->space($request, (int) $data['gallery_space_id']);
+        if ($clientRequestId && Schema::hasColumn('shared_todos', 'source_reference')) {
+            $existing = SharedTodo::query()->where('gallery_space_id', $space->id)->where('created_by', $request->user()->id)->where('source_reference', $clientRequestId)->first();
+            if ($existing) return response()->json($this->payload($existing->load(['assignee:id,name', 'creator:id,name', 'list:id,uuid,title,color,icon', 'children.assignee:id,name', 'comments.user:id,name'])));
+        }
         $list = ! empty($data['list_uuid']) ? $this->listInSpace($space, $data['list_uuid']) : $this->todos->ensureDefaultList($space, $request->user());
         $parent = ! empty($data['parent_uuid']) ? SharedTodo::where('uuid', $data['parent_uuid'])->where('gallery_space_id', $space->id)->firstOrFail() : null;
         $this->validateLinks($space, $data);
         $dependencies = $data['dependency_uuids'] ?? [];
         $createCalendar = (bool) ($data['create_calendar_event'] ?? false);
-        $attributes = collect($data)->except(['list_uuid', 'parent_uuid', 'event_uuid', 'dependency_uuids', 'create_calendar_event'])->all();
+        $attributes = collect($data)->except(['list_uuid', 'parent_uuid', 'event_uuid', 'dependency_uuids', 'create_calendar_event', 'client_request_id'])->all();
         $attributes['calendar_event_id'] = ! empty($data['event_uuid']) ? CalendarEvent::where('uuid', $data['event_uuid'])->where('gallery_space_id', $space->id)->value('id') : null;
         $attributes += ['created_by' => $request->user()->id, 'list_id' => $list->id, 'parent_id' => $parent?->id, 'status' => 'open', 'sort_order' => ((int) SharedTodo::where('list_id', $list->id)->where('parent_id', $parent?->id)->max('sort_order')) + 1];
-        $todo = SharedTodo::create($attributes);
+        $todo = $this->todos->create($space, $request->user(), $attributes, $list, $parent, $clientRequestId ? 'mobile' : 'manual', $clientRequestId);
         $this->syncDependencies($todo, $dependencies);
         if ($createCalendar) $this->todos->schedule($todo, $request->user(), ! empty($data['starts_at']) ? Carbon::parse($data['starts_at']) : null);
         $this->notifyAssignment($todo, $request->user()->id);
@@ -165,7 +171,7 @@ class SharedTodoController extends Controller
             'recurrence' => 'nullable|array', 'recurrence.frequency' => 'required_with:recurrence|in:daily,weekly,monthly,yearly',
             'recurrence.interval' => 'nullable|integer|between:1,365', 'recurrence.until' => 'nullable|date',
             'dependency_uuids' => 'nullable|array|max:20', 'dependency_uuids.*' => 'uuid', 'completed' => 'sometimes|boolean',
-            'create_calendar_event' => 'nullable|boolean',
+            'create_calendar_event' => 'nullable|boolean', 'client_request_id' => 'nullable|uuid',
         ]);
     }
 

@@ -1,84 +1,82 @@
 import AppLayout from '@/Layouts/AppLayout';
 import { Head, Link } from '@inertiajs/react';
 import axios from 'axios';
-import { Tag } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { FolderTree, Link2, LoaderCircle, Plus, Tag, X } from 'lucide-react';
+import { FormEvent, useEffect, useState } from 'react';
 
-interface TagItem { id: number; name: string; slug: string; color?: string; depth: number; media_count?: number; children?: TagItem[] }
+interface TagItem { id: number; name: string; slug: string; color?: string; depth: number; parent_id?: number | null; media_count?: number; albums_count?: number; connections_count?: number; children?: TagItem[] }
+interface Connection { entity_type: string; label: string; items: Array<{ id: number; title: string; url: string }> }
 
-function TagRow({ tag, level = 0 }: { tag: TagItem; level?: number }) {
-    return (
-        <>
-            <Link href={`/search?tag_id=${tag.id}`}
-                className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-[var(--color-bg-card)] transition-colors group">
-                <div style={{ marginLeft: level * 16 }} className="flex items-center gap-2 flex-1 min-w-0">
-                    <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: tag.color || 'var(--color-accent)' }} />
-                    <span className="text-sm text-white truncate">{tag.name}</span>
-                    {level > 0 && <span className="text-[10px] text-[var(--color-text-secondary)]">/{tag.slug}</span>}
-                </div>
-                {tag.media_count ? (
-                    <span className="text-xs text-[var(--color-text-secondary)] shrink-0">{tag.media_count}</span>
-                ) : null}
-            </Link>
-            {tag.children?.map(c => <TagRow key={c.id} tag={c} level={level + 1} />)}
-        </>
-    );
+function TagRow({ tag, level = 0, onOpen }: { tag: TagItem; level?: number; onOpen: (tag: TagItem) => void }) {
+    return <div className="flex items-center gap-2 rounded-xl px-2 py-1.5 hover:bg-white/5">
+        <Link href={`/search?tag_ids=${tag.id}`} className="flex min-w-0 flex-1 items-center gap-2 py-1.5" style={{ marginLeft: level * 16 }}>
+            <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: tag.color || 'var(--color-accent)' }} />
+            <span className="truncate text-sm text-white">{tag.name}</span>
+        </Link>
+        <button type="button" onClick={() => onOpen(tag)} className="inline-flex min-h-9 shrink-0 items-center gap-1 rounded-lg border border-[var(--color-border)] px-2 text-[10px] text-[var(--color-text-secondary)] hover:border-[var(--color-accent)] hover:text-white" title="Zobrazit vazby štítku">
+            <Link2 size={12} />{tag.connections_count ?? ((tag.media_count ?? 0) + (tag.albums_count ?? 0))}
+        </button>
+        {tag.children?.map(child => <TagRow key={child.id} tag={child} level={level + 1} onOpen={onOpen} />)}
+    </div>;
 }
 
 export default function TagsIndex() {
     const [tags, setTags] = useState<TagItem[]>([]);
     const [loading, setLoading] = useState(true);
+    const [name, setName] = useState('');
+    const [saving, setSaving] = useState(false);
+    const [message, setMessage] = useState('');
+    const [active, setActive] = useState<TagItem | null>(null);
+    const [connections, setConnections] = useState<Connection[]>([]);
+    const [loadingConnections, setLoadingConnections] = useState(false);
 
-    useEffect(() => {
-        axios.get('/api/v1/tags').then(r => {
-            setTags(r.data.data ?? r.data ?? []);
-        }).finally(() => setLoading(false));
-    }, []);
-
-    // Build tree from flat list
-    const buildTree = (items: TagItem[]): TagItem[] => {
-        const map: Record<number, TagItem> = {};
-        items.forEach(t => { map[t.id] = { ...t, children: [] }; });
-        const roots: TagItem[] = [];
-        items.forEach(t => {
-            if (t.depth === 0) roots.push(map[t.id]);
-            // Note: simple flat display since parent_id not always available
-        });
-        return roots.length > 0 ? roots : items.map(t => ({ ...t, children: [] }));
+    const load = async () => {
+        setLoading(true);
+        try { const response = await axios.get('/api/v1/tags'); setTags(response.data.data ?? response.data ?? []); }
+        finally { setLoading(false); }
     };
+    useEffect(() => { void load(); }, []);
 
-    const tree = buildTree(tags);
+    const create = async (event: FormEvent) => {
+        event.preventDefault();
+        if (!name.trim() || saving) return;
+        setSaving(true); setMessage('');
+        try { await axios.post('/api/v1/tags', { name: name.trim() }); setName(''); setMessage('Štítek je připravený pro celý společný systém.'); await load(); }
+        catch (error: any) { setMessage(error.response?.data?.message ?? 'Štítek se nepodařilo vytvořit.'); }
+        finally { setSaving(false); }
+    };
+    const open = async (tag: TagItem) => {
+        setActive(tag); setConnections([]); setLoadingConnections(true);
+        try { const response = await axios.get(`/api/v1/tags/${tag.id}/connections`); setConnections(response.data.connections ?? []); }
+        finally { setLoadingConnections(false); }
+    };
+    const map: Record<number, TagItem> = {};
+    tags.forEach(tag => { map[tag.id] = { ...tag, children: [] }; });
+    const roots: TagItem[] = [];
+    tags.forEach(tag => { if (tag.parent_id && map[tag.parent_id]) map[tag.parent_id].children?.push(map[tag.id]); else roots.push(map[tag.id]); });
 
-    return (
-        <AppLayout>
-            <Head title="Tagy" />
-            <div className="p-4">
-                <div className="flex items-center gap-3 mb-6">
-                    <div className="w-9 h-9 rounded-lg bg-[var(--color-accent)]/20 flex items-center justify-center">
-                        <Tag size={18} className="text-[var(--color-accent)]" />
-                    </div>
-                    <div>
-                        <h1 className="text-lg font-semibold text-white">Tagy</h1>
-                        <p className="text-xs text-[var(--color-text-secondary)]">{tags.length} tagů</p>
-                    </div>
-                </div>
-
-                {loading ? (
-                    <div className="space-y-2">
-                        {Array.from({length:8}).map((_,i) => <div key={i} className="h-9 bg-[var(--color-bg-card)] rounded-lg animate-pulse"/>)}
-                    </div>
-                ) : tree.length === 0 ? (
-                    <div className="text-center py-12 text-[var(--color-text-secondary)]">
-                        <Tag size={40} className="mx-auto mb-3 opacity-30" />
-                        <p>Žádné tagy</p>
-                        <p className="text-sm mt-1">Přidejte tagy k fotografiím v detailu fotografie</p>
-                    </div>
-                ) : (
-                    <div className="bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-xl p-2">
-                        {tree.map(t => <TagRow key={t.id} tag={t} />)}
-                    </div>
-                )}
+    return <AppLayout>
+        <Head title="Společné štítky" />
+        <main className="min-h-full px-3 py-4 pb-24 sm:px-6 sm:py-7">
+            <header className="mx-auto max-w-6xl">
+                <div className="flex items-center gap-2 text-[var(--color-accent)]"><FolderTree size={16}/><span className="text-xs font-semibold uppercase tracking-wider">Společný kontext</span></div>
+                <h1 className="mt-1 text-2xl font-bold text-white">Štítky napříč systémem</h1>
+                <p className="mt-1 max-w-2xl text-sm text-[var(--color-text-secondary)]">Jeden štítek může spojit fotky, kalendář, cesty, recepty, filmy, úkoly i finance. V chatu jej přidáte jako <code>#léto2026</code>.</p>
+                <form onSubmit={create} className="mt-5 flex max-w-xl gap-2">
+                    <label className="sr-only" htmlFor="new-tag">Nový štítek</label><input id="new-tag" value={name} onChange={event => setName(event.target.value)} maxLength={100} placeholder="Např. léto 2026" className="min-h-11 min-w-0 flex-1 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-card)] px-3 text-sm text-white outline-none focus:border-[var(--color-accent)]" />
+                    <button disabled={saving || !name.trim()} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[var(--color-accent)] px-4 text-sm font-semibold text-white disabled:opacity-40"><Plus size={16}/>{saving ? 'Vytvářím…' : 'Přidat štítek'}</button>
+                </form>
+                {message && <p className="mt-2 text-xs text-[var(--color-text-secondary)]">{message}</p>}
+            </header>
+            <div className="mx-auto mt-6 grid max-w-6xl gap-5 xl:grid-cols-[minmax(0,0.8fr)_minmax(340px,1.2fr)]">
+                <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-3">
+                    <div className="mb-2 flex items-center justify-between px-2"><h2 className="text-sm font-semibold text-white">Vaše štítky</h2><span className="text-xs text-[var(--color-text-secondary)]">{tags.length}</span></div>
+                    {loading ? <div className="flex min-h-40 items-center justify-center text-[var(--color-text-secondary)]"><LoaderCircle size={18} className="animate-spin"/></div> : roots.length ? roots.map(tag => <TagRow key={tag.id} tag={tag} onOpen={open}/>) : <div className="px-4 py-12 text-center"><Tag size={34} className="mx-auto text-white/20"/><p className="mt-3 text-sm text-white">Ještě nemáte žádný štítek.</p><p className="mt-1 text-xs text-[var(--color-text-secondary)]">Vytvořte jej zde nebo napište do chatu třeba <code>#společně</code>.</p></div>}
+                </section>
+                <section className="min-h-52 rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-4">
+                    {!active ? <div className="flex min-h-44 flex-col items-center justify-center text-center"><Link2 size={30} className="text-white/20"/><h2 className="mt-3 text-sm font-semibold text-white">Vyberte štítek</h2><p className="mt-1 max-w-sm text-xs text-[var(--color-text-secondary)]">Uvidíte vše, co s ním souvisí, i mimo galerii fotografií.</p></div> : <><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="text-xs text-[var(--color-text-secondary)]">Vazby štítku</p><h2 className="mt-1 flex items-center gap-2 text-lg font-semibold text-white"><span className="h-3 w-3 rounded-full" style={{ backgroundColor: active.color || 'var(--color-accent)' }}/>{active.name}</h2></div><button type="button" onClick={() => setActive(null)} aria-label="Zavřít vazby" className="grid h-9 w-9 place-items-center rounded-lg text-[var(--color-text-secondary)] hover:bg-white/5 hover:text-white"><X size={17}/></button></div>{loadingConnections ? <div className="flex min-h-36 items-center justify-center"><LoaderCircle size={18} className="animate-spin text-[var(--color-text-secondary)]"/></div> : connections.length ? <div className="mt-4 space-y-4">{connections.map(group => <div key={group.entity_type}><h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--color-text-secondary)]">{group.label}</h3><div className="mt-2 flex flex-wrap gap-2">{group.items.map(item => <Link key={`${group.entity_type}-${item.id}`} href={item.url} className="max-w-full truncate rounded-lg border border-[var(--color-border)] px-3 py-2 text-xs text-white hover:border-[var(--color-accent)]">{item.title}</Link>)}</div></div>)}</div> : <p className="mt-6 rounded-xl border border-dashed border-[var(--color-border)] p-4 text-center text-xs text-[var(--color-text-secondary)]">Tento štítek zatím nemá žádné vazby. Přidejte ho k zápisu v chatu například jako <code>#{active.slug}</code>.</p>}</>}
+                </section>
             </div>
-        </AppLayout>
-    );
+        </main>
+    </AppLayout>;
 }

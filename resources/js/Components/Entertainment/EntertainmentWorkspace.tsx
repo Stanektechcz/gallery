@@ -150,7 +150,7 @@ function emptyReview(): ReviewDraft {
     return { watched_at: todayInput(), venue: 'home', rating: 0, story_rating: '', acting_rating: '', visual_rating: '', sound_rating: '', emotion_rating: '', pace_rating: '', recommendation: 'yes', review: '', favorite_moment: '', note: '', watch_again: false };
 }
 
-export default function EntertainmentWorkspace({ spaceId }: { spaceId: number }) {
+export default function EntertainmentWorkspace({ spaceId, initialType = 'movie', tierlist = false }: { spaceId: number; initialType?: 'movie' | 'series'; tierlist?: boolean }) {
     const [data, setData] = useState<Data>({ titles: [], members: [], cinema: { name: '', source_url: '', showings: [] }, integrations: { tmdb_configured: false }, summary: {} });
     const [loading, setLoading] = useState(true);
     const [busy, setBusy] = useState<string | null>(null);
@@ -158,8 +158,8 @@ export default function EntertainmentWorkspace({ spaceId }: { spaceId: number })
     const [notice, setNotice] = useState('');
     const [query, setQuery] = useState('');
     const [results, setResults] = useState<SearchResult[]>([]);
-    const [manualType, setManualType] = useState<'movie' | 'series'>('movie');
-    const [filters, setFilters] = useState({ search: '', type: 'all', status: 'active', priority: 'all', score: 'all', sort: 'score' });
+    const [manualType, setManualType] = useState<'movie' | 'series'>(initialType);
+    const [filters, setFilters] = useState({ search: '', type: initialType, status: tierlist ? 'watched' : 'active', priority: 'all', score: 'all', sort: 'score' });
     const [expanded, setExpanded] = useState<string | null>(null);
     const [preferences, setPreferences] = useState<Record<string, PreferenceDraft>>({});
     const [homeSuggestions, setHomeSuggestions] = useState<Record<string, Array<{ starts_at: string; venue: string; label?: string }>>>({});
@@ -227,6 +227,15 @@ export default function EntertainmentWorkspace({ spaceId }: { spaceId: number })
         });
     }, [data.titles, filters]);
 
+    const tierBuckets = useMemo(() => {
+        const buckets: Record<string, Title[]> = { 'S · nezapomenutelné': [], 'A · skvělé': [], 'B · rádi znovu': [], 'C · dobré': [], 'D · slabší': [] };
+        data.titles.filter(title => title.media_type === initialType && (title.review_summary?.rating ?? 0) > 0).forEach(title => {
+            const score = title.review_summary?.rating ?? 0;
+            const key = score >= 4.5 ? 'S · nezapomenutelné' : score >= 4 ? 'A · skvělé' : score >= 3 ? 'B · rádi znovu' : score >= 2 ? 'C · dobré' : 'D · slabší';
+            buckets[key].push(title);
+        });
+        return Object.entries(buckets);
+    }, [data.titles, initialType]);
     const selectedDayShowings = cinemaDays.find(([key]) => key === selectedDay)?.[1] ?? [];
     const cinemaGroups = useMemo(() => {
         const groups = new Map<string, { key: string; title: string; poster_url?: string | null; runtime_minutes?: number | null; release_year?: number | null; showings: Showing[] }>();
@@ -279,6 +288,10 @@ export default function EntertainmentWorkspace({ spaceId }: { spaceId: number })
 
     if (loading) return <div className="space-y-4"><div className="h-44 animate-pulse rounded-2xl bg-white/5"/><div className="h-96 animate-pulse rounded-2xl bg-white/5"/></div>;
 
+    if (tierlist) return <div className="space-y-5">
+        <section className={`${card} p-4 sm:p-5`}><p className="text-xs font-semibold uppercase tracking-wider text-violet-200">Společné hodnocení</p><h2 className="mt-1 text-xl font-semibold text-white">Tierlist {initialType === 'series' ? 'seriálů' : 'filmů'}</h2><p className="mt-1 text-sm text-[var(--color-text-secondary)]">Tituly se řadí podle průměru všech uložených osobních hodnocení. U každého zůstává vidět, kdo hodnotil a kdy jste jej viděli.</p></section>
+        {tierBuckets.map(([tier, titles]) => <section key={tier} className={`${card} overflow-hidden`}><div className="border-b border-[var(--color-border)] bg-violet-500/10 px-4 py-3 text-sm font-semibold text-violet-100">{tier}</div><div className="grid gap-3 p-3 sm:grid-cols-2 xl:grid-cols-3">{titles.length ? titles.map(title => <article key={title.uuid} className="flex gap-3 rounded-xl bg-black/10 p-3">{title.poster_url ? <img src={title.poster_url} alt="" className="h-20 w-14 rounded-lg object-cover"/> : <div className="grid h-20 w-14 place-items-center rounded-lg bg-violet-500/10"><Film size={18}/></div>}<div className="min-w-0"><p className="truncate font-medium text-white">{title.title}</p><p className="mt-1 text-sm text-amber-200">★ {title.review_summary?.rating?.toFixed(1)} / 5</p><p className="mt-1 text-xs text-[var(--color-text-secondary)]">{title.reviews.map(review => `${review.user.name}: ${review.rating}/5 · ${dateTime(review.watched_at)}`).join(' | ')}</p></div></article>) : <p className="p-3 text-sm text-[var(--color-text-secondary)]">Zatím žádné ohodnocené tituly v této kategorii.</p>}</div></section>)}
+    </div>;
     return <div className="space-y-8">
         {error && <div className="flex items-start gap-2 rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-100"><CircleAlert size={17} className="mt-0.5 shrink-0"/><span>{error}</span><button type="button" onClick={() => setError('')} className="ml-auto text-xs underline">Skrýt</button></div>}
         {notice && <div className="flex items-start gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-3 text-sm text-emerald-100"><Check size={17} className="mt-0.5 shrink-0"/><span>{notice}</span><button type="button" onClick={() => setNotice('')} className="ml-auto text-xs underline">Skrýt</button></div>}

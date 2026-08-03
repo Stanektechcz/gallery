@@ -18,6 +18,9 @@
         -moz-osx-font-smoothing: grayscale;
     }
 
+    html[data-interface-density="comfortable"] { font-size: 17px; }
+    html[data-interface-density="standard"] { font-size: 16px; }
+    html[data-interface-density="compact"] { font-size: 14px; }
     body {
         background-color: var(--color-bg-primary);
         color: var(--color-text-primary);

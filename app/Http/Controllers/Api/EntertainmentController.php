@@ -9,6 +9,7 @@ use App\Models\EntertainmentVote;
 use App\Models\GallerySpace;
 use App\Services\Entertainment\CinemaCityProgramService;
 use App\Services\Entertainment\EntertainmentMetadataService;
+use App\Services\Planning\CalendarEventCreationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -21,6 +22,7 @@ class EntertainmentController extends Controller
     public function __construct(
         private readonly EntertainmentMetadataService $metadata,
         private readonly CinemaCityProgramService $cinema,
+        private readonly CalendarEventCreationService $calendarEvents,
     ) {}
 
     public function index(Request $request): JsonResponse
@@ -203,17 +205,15 @@ class EntertainmentController extends Controller
         $event = DB::transaction(function () use ($request, $proposal, $title, $showing) {
             $start = Carbon::parse($proposal->starts_at);
             $duration = $title->runtime_minutes ?: ($title->media_type === 'series' ? 90 : 150);
-            $event = CalendarEvent::create([
-                'gallery_space_id' => $title->gallery_space_id, 'created_by' => $request->user()->id,
+            $event = $this->calendarEvents->create(GallerySpace::findOrFail($title->gallery_space_id), $request->user(), [
                 'title' => ($title->media_type === 'series' ? 'Seriálový večer · ' : 'Filmový večer · ').$title->title,
                 'description' => $proposal->note ?: $title->overview, 'type' => $title->media_type === 'series' ? 'series_night' : 'movie_night',
                 'status' => 'planned', 'starts_at' => $start, 'ends_at' => $start->copy()->addMinutes($duration), 'timezone' => 'Europe/Prague',
                 'place_name' => $proposal->place_name, 'color' => '#8b5cf6', 'is_private' => false,
                 'metadata' => ['entertainment_uuid' => $title->uuid, 'proposal_uuid' => $proposal->uuid, 'booking_url' => $this->cinemaBookingUrl($showing), 'source' => 'entertainment_planner'],
             ]);
-            $members = DB::table('gallery_space_user')->where('gallery_space_id', $title->gallery_space_id)->pluck('user_id');
+            $members = $event->participants()->pluck('users.id');
             foreach ($members as $memberId) {
-                DB::table('event_participants')->insertOrIgnore(['event_id' => $event->id, 'user_id' => $memberId, 'role' => (int) $memberId === $request->user()->id ? 'organizer' : 'guest', 'response' => (int) $memberId === $request->user()->id ? 'accepted' : 'pending', 'created_at' => now(), 'updated_at' => now()]);
                 foreach ([1440, 120] as $minutes) {
                     if ($start->copy()->subMinutes($minutes)->isFuture()) {
                         DB::table('event_reminders')->insert(['event_id' => $event->id, 'user_id' => $memberId, 'channel' => 'database', 'remind_at' => $start->copy()->subMinutes($minutes), 'status' => 'pending', 'created_at' => now(), 'updated_at' => now()]);

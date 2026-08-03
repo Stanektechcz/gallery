@@ -13,6 +13,7 @@ class DateIdeaPlanningService
 {
     public function __construct(
         private readonly CalendarEventTripService $tripService,
+        private readonly CalendarEventCreationService $calendarEvents,
         private readonly DateIdeaTripSyncService $tripSync,
     ) {}
 
@@ -41,8 +42,7 @@ class DateIdeaPlanningService
             $createTrip = (bool) ($options['create_trip'] ?? ($plan['is_trip_recommended'] ?? false));
             $timeline = collect($plan['blocks'] ?? [])->map(fn (array $block) => ($block['icon'] ?? '•').' '.($block['title'] ?? 'Zastávka'))->join(' → ');
 
-            $event = CalendarEvent::create([
-                'gallery_space_id' => $locked->gallery_space_id,
+            $event = $this->calendarEvents->create($locked->space()->firstOrFail(), $actor, [
                 'created_by' => $actor->id,
                 'title' => $locked->title,
                 'description' => trim($locked->summary."\n\nProgram: {$timeline}\n\nOdhad pro dva: ".number_format($locked->estimated_cost, 0, ',', ' ')." {$locked->currency}."),
@@ -74,7 +74,7 @@ class DateIdeaPlanningService
 
             foreach ($members->unique('id') as $member) {
                 $isActor = (int) $member->id === (int) $actor->id;
-                $event->participants()->attach($member->id, [
+                $event->participants()->syncWithoutDetaching([$member->id => [
                     'role' => $isActor ? 'owner' : 'guest',
                     'response' => $isActor ? 'accepted' : 'pending',
                 ]);

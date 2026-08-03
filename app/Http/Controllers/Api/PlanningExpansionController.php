@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\CalendarEvent;
 use App\Models\MediaItem;
 use App\Models\User;
+use App\Services\Planning\CalendarEventCreationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -16,6 +17,7 @@ use Illuminate\Support\Str;
 /** Optional planning tools with explicit consent; no external data is silently imported. */
 class PlanningExpansionController extends Controller
 {
+    public function __construct(private readonly CalendarEventCreationService $calendarEvents) {}
     public function templates(Request $request): JsonResponse
     {
         if (! $this->tablesExist(['event_templates'])) return response()->json([]);
@@ -39,15 +41,13 @@ class PlanningExpansionController extends Controller
         $template = DB::table('event_templates')->where('uuid', $uuid)->whereIn('gallery_space_id', $this->spaceIds($request->user()))->firstOrFail();
         $data = $request->validate(['starts_at' => 'required|date', 'ends_at' => 'nullable|date|after_or_equal:starts_at', 'title' => 'nullable|string|max:160']);
         $defaults = json_decode($template->defaults ?: '{}', true) ?: [];
-        $event = CalendarEvent::create([
-            'gallery_space_id' => $template->gallery_space_id, 'created_by' => $request->user()->id,
+        $event = $this->calendarEvents->create($this->space($request->user(), (int) $template->gallery_space_id), $request->user(), [
             'title' => $data['title'] ?? $template->title, 'description' => $template->description,
             'type' => $template->type, 'starts_at' => $data['starts_at'], 'ends_at' => $data['ends_at'] ?? null,
             'timezone' => $defaults['timezone'] ?? 'Europe/Prague', 'place_name' => $defaults['place_name'] ?? null,
             'departure_buffer_minutes' => $defaults['departure_buffer_minutes'] ?? null,
             'color' => $defaults['color'] ?? null,
         ]);
-        $event->participants()->attach($request->user()->id, ['role' => 'owner', 'response' => 'accepted']);
         foreach (json_decode($template->tasks ?: '[]', true) ?: [] as $order => $task) $event->tasks()->create(['title' => $task['title'], 'priority' => $task['priority'] ?? 'normal', 'sort_order' => $order]);
         return response()->json($event->load('tasks'), 201);
     }
@@ -144,8 +144,7 @@ class PlanningExpansionController extends Controller
         if ($item->calendar_event_id) return response()->json(CalendarEvent::findOrFail($item->calendar_event_id)->load('participants:id,name,email', 'reminders'));
         $data = $request->validate(['starts_at' => 'nullable|date|after:now']);
         $startsAt = isset($data['starts_at']) ? Carbon::parse($data['starts_at']) : $this->nextFreeSaturday($list->gallery_space_id);
-        $event = CalendarEvent::create([
-            'gallery_space_id' => $list->gallery_space_id,
+        $event = $this->calendarEvents->create($this->space($request->user(), (int) $list->gallery_space_id), $request->user(), [
             'created_by' => $request->user()->id,
             'title' => $item->title,
             'description' => $item->notes ?: 'Vzniklo ze společného seznamu přání.',
@@ -255,7 +254,7 @@ class PlanningExpansionController extends Controller
         abort_if($poll->status === 'decided', 422, 'Toto hlasování už je převedené na společnou akci.');
         $data = $request->validate(['starts_at' => 'nullable|date|after:now']);
         $startsAt = isset($data['starts_at']) ? Carbon::parse($data['starts_at']) : $this->nextFreeSaturday($poll->gallery_space_id);
-        $event = CalendarEvent::create(['gallery_space_id' => $poll->gallery_space_id, 'created_by' => $request->user()->id, 'title' => $option->title, 'description' => "Vzniklo ze společného rozhodnutí: {$poll->question}", 'type' => 'outing', 'status' => 'planned', 'starts_at' => $startsAt, 'ends_at' => $startsAt->copy()->addHours(2), 'timezone' => 'Europe/Prague', 'is_private' => false, 'metadata' => ['source' => 'poll']]);
+        $event = $this->calendarEvents->create($this->space($request->user(), (int) $poll->gallery_space_id), $request->user(), [ 'title' => $option->title, 'description' => "Vzniklo ze společného rozhodnutí: {$poll->question}", 'type' => 'outing', 'status' => 'planned', 'starts_at' => $startsAt, 'ends_at' => $startsAt->copy()->addHours(2), 'timezone' => 'Europe/Prague', 'is_private' => false, 'metadata' => ['source' => 'poll']]);
         foreach (DB::table('gallery_space_user')->where('gallery_space_id', $poll->gallery_space_id)->pluck('user_id') as $memberId) {
             $event->participants()->syncWithoutDetaching([(int) $memberId => ['role' => (int) $memberId === $request->user()->id ? 'owner' : 'guest', 'response' => (int) $memberId === $request->user()->id ? 'accepted' : 'pending']]);
             $event->reminders()->create(['user_id' => $memberId, 'channel' => 'database', 'remind_at' => $startsAt->copy()->subDays(7), 'status' => 'pending']);
