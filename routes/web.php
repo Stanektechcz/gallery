@@ -148,7 +148,7 @@ Route::middleware(['auth'])->group(function () {
 
     // People
     Route::get('/people',   fn() => Inertia::render('People/Index'))->name('people');
-    Route::get('/people/{person}', fn() => Inertia::render('People/Show'))->name('people.show');
+    Route::get('/people/{person}', fn() => Inertia::render('People/Show'))->name('people.show-page');
 
     // Places (Místa jako plnohodnotné stránky)
     Route::get('/places',      fn() => Inertia::render('Places/Index'))->name('places');

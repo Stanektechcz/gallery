@@ -254,9 +254,11 @@ class CalendarPlanningController extends Controller
             $memberIds = $space->members()->pluck('users.id')->map(fn ($id) => (int) $id)->push($user->id)->unique();
             foreach ($memberIds as $memberId) {
                 $isOwner = (int) $memberId === (int) $user->id;
-                $event->participants()->syncWithoutDetaching([$memberId => [
-                    'role' => $isOwner ? 'owner' : 'guest',
-                    'response' => $isOwner ? 'accepted' : 'pending',
+                $event->participants()->syncWithoutDetaching([
+                    $memberId => [
+                        'role' => $isOwner ? 'owner' : 'guest',
+                        'response' => $isOwner ? 'accepted' : 'pending',
+                    ],
                 ]);
                 $event->reminders()->create([
                     'user_id' => $memberId,
