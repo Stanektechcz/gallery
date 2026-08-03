@@ -20,7 +20,7 @@ class PasswordResetController extends Controller
     {
         $request->validate(['email' => 'required|email']);
         Password::sendResetLink($request->only('email'));
-        return back()->with('status', 'Odkaz pro obnovení hesla byl odeslán.');
+        return back()->with('success', 'Odkaz pro obnovení hesla byl odeslán.');
     }
 
     public function reset(Request $request, string $token): Response
