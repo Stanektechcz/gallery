@@ -1,1 +1,0 @@
-import{a as e}from"./app-KJX2Ui_7.js";var t=e(`arrow-up-right`,[[`path`,{d:`M7 7h10v10`,key:`1tivn9`}],[`path`,{d:`M7 17 17 7`,key:`1vkiza`}]]);export{t};

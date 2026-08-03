@@ -32,6 +32,44 @@ class CalendarPlanningTest extends TestCase
         $this->actingAs($this->owner);
     }
 
+    public function test_elapsed_events_are_auto_completed_but_stay_visible_in_the_calendar(): void
+    {
+        $past = $this->postJson('/api/v1/calendar/events', [
+            'gallery_space_id' => $this->space->id, 'title' => 'Loňský výlet',
+            'starts_at' => now()->subDays(10)->setTime(9, 0)->toDateTimeString(),
+        ])->assertCreated()->json();
+
+        $from = now()->subDays(20)->toDateString();
+        $to = now()->addDay()->toDateString();
+        $calendar = $this->getJson("/api/v1/calendar/events?from={$from}&to={$to}")->assertOk()->json();
+
+        // Elapsed plans get closed out...
+        $this->assertDatabaseHas('calendar_events', ['id' => $past['id'], 'status' => 'completed']);
+
+        // ...but the couple's own history must not vanish from their calendar.
+        $uuids = collect($calendar['events'])->pluck('uuid')->all();
+        $this->assertContains($past['uuid'], $uuids, 'A completed past event disappeared from the calendar.');
+
+        $row = collect($calendar['events'])->firstWhere('uuid', $past['uuid']);
+        $this->assertSame('completed', $row['status']);
+        $this->assertFalse($row['has_conflict'], 'A finished event must not be flagged as clashing.');
+    }
+
+    public function test_cancelled_events_stay_hidden_from_the_calendar(): void
+    {
+        $event = $this->postJson('/api/v1/calendar/events', [
+            'gallery_space_id' => $this->space->id, 'title' => 'Zrušená večeře',
+            'starts_at' => now()->addDays(3)->setTime(19, 0)->toDateTimeString(),
+        ])->assertCreated()->json();
+        DB::table('calendar_events')->where('id', $event['id'])->update(['status' => 'cancelled']);
+
+        $from = now()->toDateString();
+        $to = now()->addDays(10)->toDateString();
+        $calendar = $this->getJson("/api/v1/calendar/events?from={$from}&to={$to}")->assertOk()->json();
+
+        $this->assertNotContains($event['uuid'], collect($calendar['events'])->pluck('uuid')->all());
+    }
+
     public function test_shared_event_workflow_keeps_data_inside_the_gallery_space(): void
     {
         $event = $this->postJson('/api/v1/calendar/events', [

@@ -68,15 +68,23 @@ class CalendarPlanningController extends Controller
         $user = $request->user();
         $this->eventLifecycle->completeElapsedPlans($this->spaceIds($user));
 
-        $events = $this->visibleEvents($user)->whereNotIn('status', ['completed', 'cancelled'])
+        // Elapsed plans are auto-completed above, so excluding 'completed' here would erase the
+        // couple's own history from the calendar. Only cancelled events stay hidden.
+        $events = $this->visibleEvents($user)->whereNotIn('status', ['cancelled'])
             ->where('starts_at', '<=', $to)
             ->where(fn(Builder $q) => $q->whereNull('ends_at')->where('starts_at', '>=', $from)->orWhere('ends_at', '>=', $from))
             ->withCount(['tasks as open_tasks_count' => fn(Builder $q) => $q->whereNull('completed_at')])
             ->orderBy('starts_at')->get();
         // The warning is advisory only; it never blocks a shared plan or changes dates.
-        $events->each(function (CalendarEvent $event) use ($events) {
+        // A finished event cannot clash with anything, so it is neither flagged nor a source.
+        $openEvents = $events->where('status', '!=', 'completed');
+        $events->each(function (CalendarEvent $event) use ($openEvents) {
+            if ($event->status === 'completed') {
+                $event->setAttribute('has_conflict', false);
+                return;
+            }
             $eventEnd = $event->ends_at ?? $event->starts_at;
-            $event->setAttribute('has_conflict', $events->contains(fn(CalendarEvent $other) => $other->id !== $event->id
+            $event->setAttribute('has_conflict', $openEvents->contains(fn(CalendarEvent $other) => $other->id !== $event->id
                 && $other->gallery_space_id === $event->gallery_space_id
                 && $other->starts_at->lte($eventEnd)
                 && ($other->ends_at ?? $other->starts_at)->gte($event->starts_at)));
