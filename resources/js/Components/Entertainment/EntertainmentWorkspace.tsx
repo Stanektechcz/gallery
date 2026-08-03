@@ -159,7 +159,8 @@ export default function EntertainmentWorkspace({ spaceId, initialType = 'movie',
     const [query, setQuery] = useState('');
     const [results, setResults] = useState<SearchResult[]>([]);
     const [manualType, setManualType] = useState<'movie' | 'series'>(initialType);
-    const [filters, setFilters] = useState({ search: '', type: initialType, status: tierlist ? 'watched' : 'active', priority: 'all', score: 'all', sort: 'score' });
+    // `type` widens to string so the "Filmy i seriály" ('all') option stays selectable.
+    const [filters, setFilters] = useState<{ search: string; type: 'all' | 'movie' | 'series'; status: string; priority: string; score: string; sort: string }>({ search: '', type: initialType, status: tierlist ? 'watched' : 'active', priority: 'all', score: 'all', sort: 'score' });
     const [expanded, setExpanded] = useState<string | null>(null);
     const [preferences, setPreferences] = useState<Record<string, PreferenceDraft>>({});
     const [homeSuggestions, setHomeSuggestions] = useState<Record<string, Array<{ starts_at: string; venue: string; label?: string }>>>({});
@@ -315,7 +316,7 @@ export default function EntertainmentWorkspace({ spaceId, initialType = 'movie',
                 <div className="mb-3 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-[var(--color-text-secondary)]"><ListFilter size={15}/> Filtry watchlistu <span className="ml-auto normal-case tracking-normal text-white">{visibleTitles.length} výsledků</span></div>
                 <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
                     <input value={filters.search} onChange={event => setFilters({ ...filters, search: event.target.value })} placeholder="Hledat v seznamu" className={field}/>
-                    <select value={filters.type} onChange={event => setFilters({ ...filters, type: event.target.value })} className={field}><option value="all">Filmy i seriály</option><option value="movie">Jen filmy</option><option value="series">Jen seriály</option></select>
+                    <select value={filters.type} onChange={event => setFilters({ ...filters, type: event.target.value as 'all' | 'movie' | 'series' })} className={field}><option value="all">Filmy i seriály</option><option value="movie">Jen filmy</option><option value="series">Jen seriály</option></select>
                     <select value={filters.status} onChange={event => setFilters({ ...filters, status: event.target.value })} className={field}><option value="active">Aktivní seznam</option><option value="all">Všechny stavy</option>{Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
                     <select value={filters.priority} onChange={event => setFilters({ ...filters, priority: event.target.value })} className={field}><option value="all">Všechny priority</option>{Object.entries(priorityLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
                     <select value={filters.score} onChange={event => setFilters({ ...filters, score: event.target.value })} className={field}><option value="all">Jakékoliv skóre</option><option value="4">Společně alespoň 4★</option><option value="3">Společně alespoň 3★</option></select>

@@ -1,4 +1,4 @@
-import { createInertiaApp } from '@inertiajs/react';
+import { createInertiaApp, type ResolvedComponent } from '@inertiajs/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import axios from 'axios';
 import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
@@ -25,8 +25,14 @@ const queryClient = new QueryClient({
 
 createInertiaApp({
     title: (title) => title ? `${title} – ${appName}` : appName,
-    resolve: (name) =>
-        resolvePageComponent(`./Pages/${name}.tsx`, import.meta.glob('./Pages/**/*.tsx')),
+    resolve: async (name) => {
+        const page = await resolvePageComponent<{ default: ResolvedComponent }>(
+            `./Pages/${name}.tsx`,
+            import.meta.glob<{ default: ResolvedComponent }>('./Pages/**/*.tsx'),
+        );
+
+        return page.default;
+    },
     setup({ el, App, props }) {
         const root = createRoot(el);
         root.render(

@@ -4,11 +4,11 @@ import axios from 'axios';
 import { Image, User } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
+// Mirrors PersonController::personPayload().
 interface Person {
     id: number;
     name: string;
-    photo_count?: number;
-    video_count?: number;
+    media_count?: number;
     latest_thumb?: string;
 }
 

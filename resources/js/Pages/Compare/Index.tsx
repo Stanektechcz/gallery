@@ -248,7 +248,7 @@ export default function CompareIndex() {
         const next = items.filter(i => i.uuid !== uuid);
         setItems(next);
         const newUuids = next.map(i => i.uuid).join(',');
-        router.replace(`/compare?uuids=${newUuids}`, { preserveScroll: true });
+        router.replace({ url: `/compare?uuids=${newUuids}`, preserveScroll: true });
     };
 
     const toggleFavorite = async (uuid: string) => {

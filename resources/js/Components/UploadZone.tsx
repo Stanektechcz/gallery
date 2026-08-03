@@ -27,7 +27,7 @@ function ok(file: File): boolean {
             'mp4','mov','webm','m4v','mkv','avi','mts','m2ts'].includes(ext);
 }
 
-interface Props { albumId: number | null; onUploadComplete?: (mediaUuids?: string[]) => void; }
+interface Props { albumId: number | null; onUploadComplete?: (mediaUuids: string[]) => void; }
 
 export default function UploadZone({ albumId, onUploadComplete }: Props) {
     const [dragging, setDragging] = useState(false);

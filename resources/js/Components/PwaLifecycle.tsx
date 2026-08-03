@@ -122,7 +122,7 @@ export default function PwaLifecycle() {
     const refreshAfterReconnect = useCallback(() => {
         setRefreshing(true);
         void queryClient.invalidateQueries().finally(() => {
-            router.reload({ preserveScroll: true, preserveState: true });
+            router.reload();
             window.setTimeout(() => setRefreshing(false), 1200);
         });
     }, [queryClient]);

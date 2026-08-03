@@ -6,6 +6,7 @@ use App\Models\MediaItem;
 use App\Models\GallerySpace;
 use App\Models\SavedSearch;
 use App\Services\Media\UnassignedAlbumSuggestionService;
+use App\Services\Memories\RelationshipAnniversaryRecapService;
 use App\Services\Planning\TripPreparationTimelineService;
 use App\Services\Planning\CalendarEventLifecycleService;
 use App\Services\Planning\CoupleExperienceRecommendationService;
@@ -22,7 +23,7 @@ use Inertia\Response;
 
 class DashboardController extends Controller
 {
-    public function index(Request $request, TripPreparationTimelineService $tripPreparation, CoupleExperienceRecommendationService $experienceRecommendations, ExperienceLifecycleService $experienceLifecycle, PartnerCoordinationService $partnerCoordination, PartnerDecisionService $partnerDecisions, UnassignedAlbumSuggestionService $albumSuggestions, TripFinancialInsightService $bankInsights, ReminderActionService $reminderActions, CalendarEventLifecycleService $eventLifecycle): Response
+    public function index(Request $request, TripPreparationTimelineService $tripPreparation, CoupleExperienceRecommendationService $experienceRecommendations, ExperienceLifecycleService $experienceLifecycle, PartnerCoordinationService $partnerCoordination, PartnerDecisionService $partnerDecisions, UnassignedAlbumSuggestionService $albumSuggestions, TripFinancialInsightService $bankInsights, ReminderActionService $reminderActions, CalendarEventLifecycleService $eventLifecycle, RelationshipAnniversaryRecapService $anniversaryRecaps): Response
     {
         $user  = $request->user();
         $space = $user->gallerySpaces()->first();
@@ -180,6 +181,7 @@ class DashboardController extends Controller
                     'status' => $row->status];
             }
         }
+        $anniversaryRecap = $anniversaryRecaps->prompt($space);
         $financeHub = $bankInsights->spaceOverview($space);
         $actionableReminders = Schema::hasTable('event_reminders') ? $reminderActions->dashboard($user, $space->id) : [];
         $visibleGiftCount = 0;
@@ -208,7 +210,7 @@ class DashboardController extends Controller
                 'upcoming_trip'    => $upcomingTrip,
                 'finance_hub'      => $financeHub,
                 'action_inbox'     => $actionInbox,
-                'partner_hub'      => ['space_id' => $space->id, 'album_suggestion' => $albumSuggestion, 'milestones' => $upcomingMilestones, 'next_event' => $nextSharedEvent, 'next_actions' => $nextActions, 'reminders' => $actionableReminders, 'coordination' => $coordination, 'decisions' => $decisions, 'reflection_prompt' => $reflectionPrompt, 'event_reflection_prompt' => $eventReflectionPrompt, 'experience_recommendation' => $experienceRecommendation, 'experience_follow_up' => $experienceFollowUp, 'date_follow_up' => $dateFollowUp, 'recipe' => $recipeHub, 'memory_evening' => $memoryEvening, 'date_idea' => $dateIdea],
+                'partner_hub'      => ['space_id' => $space->id, 'album_suggestion' => $albumSuggestion, 'milestones' => $upcomingMilestones, 'next_event' => $nextSharedEvent, 'next_actions' => $nextActions, 'reminders' => $actionableReminders, 'coordination' => $coordination, 'decisions' => $decisions, 'reflection_prompt' => $reflectionPrompt, 'event_reflection_prompt' => $eventReflectionPrompt, 'experience_recommendation' => $experienceRecommendation, 'experience_follow_up' => $experienceFollowUp, 'date_follow_up' => $dateFollowUp, 'recipe' => $recipeHub, 'memory_evening' => $memoryEvening, 'date_idea' => $dateIdea, 'anniversary_recap' => $anniversaryRecap],
             ],
         ]);
     }

@@ -102,6 +102,7 @@ export default function TripPlan({ tripId }: { tripId: number }) {
         setTrip(previous => previous ? { ...previous, status } : previous);
     };
     const toggleOffline = async () => {
+        if (!trip) return;
         const next = !trip.is_offline_available;
         await axios.patch(`/api/v1/trips/${tripId}`, { is_offline_available: next });
         if (next) await storeOfflinePackage(); else window.localStorage.removeItem(offlineKey);

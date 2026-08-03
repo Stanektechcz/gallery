@@ -77,7 +77,7 @@ class DateIdeaPlanningService
                 $event->participants()->syncWithoutDetaching([$member->id => [
                     'role' => $isActor ? 'owner' : 'guest',
                     'response' => $isActor ? 'accepted' : 'pending',
-                ]);
+                ]]);
                 $event->reminders()->create([
                     'user_id' => $member->id,
                     'channel' => 'database',

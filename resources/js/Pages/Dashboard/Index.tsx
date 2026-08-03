@@ -58,9 +58,9 @@ export default function DashboardIndex({ data }: Props) {
     const [plannedExperience, setPlannedExperience] = useState<{uuid:string;title:string}|null>(null);
     const [dashboardRefreshing, setDashboardRefreshing] = useState(false);
     useEffect(() => { setNextActions(data?.partner_hub?.next_actions ?? []); }, [data?.partner_hub?.next_actions]);
-    const refreshDashboard = () => router.reload({ only: ['data'], preserveScroll: true, preserveState: true, onStart: () => setDashboardRefreshing(true), onFinish: () => setDashboardRefreshing(false) });
+    const refreshDashboard = () => router.reload({ only: ['data'], onStart: () => setDashboardRefreshing(true), onFinish: () => setDashboardRefreshing(false) });
     useEffect(() => {
-        const refreshWhenVisible = () => { if (document.visibilityState === 'visible' && navigator.onLine) router.reload({ only: ['data'], preserveScroll: true, preserveState: true }); };
+        const refreshWhenVisible = () => { if (document.visibilityState === 'visible' && navigator.onLine) router.reload({ only: ['data'] }); };
         const timer = window.setInterval(refreshWhenVisible, 120_000);
         window.addEventListener('focus', refreshWhenVisible);
         return () => { window.clearInterval(timer); window.removeEventListener('focus', refreshWhenVisible); };

@@ -1,22 +1,29 @@
 /// <reference types="vite/client" />
 /// <reference types="vite-plugin-pwa/client" />
 
-// Inertia global types
-declare module "@inertiajs/react" {
-    interface PageProps {
-        auth: {
-            user: App.User | null;
+// This file must stay a module (see the `export {}` at the bottom). Without it,
+// `declare module "…"` below would be an *ambient* declaration that replaces the
+// package's own types instead of augmenting them.
+
+// Inertia shared props — augments the config interface Inertia 3 exposes for this.
+declare module "@inertiajs/core" {
+    interface InertiaConfig {
+        sharedPageProps: {
+            auth: {
+                user: App.User | null;
+            };
+            flash?: {
+                success?: string;
+                error?: string;
+                warning?: string;
+            };
+            ziggy?: Record<string, unknown>;
         };
-        flash?: {
-            success?: string;
-            error?: string;
-            warning?: string;
-        };
-        ziggy?: Record<string, unknown>;
     }
 }
 
-declare namespace App {
+declare global {
+namespace App {
     interface User {
         id: number;
         uuid: string;
@@ -175,3 +182,6 @@ declare namespace App {
         };
     }
 }
+}
+
+export {};

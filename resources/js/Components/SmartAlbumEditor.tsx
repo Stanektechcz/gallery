@@ -42,10 +42,10 @@ export default function SmartAlbumEditor({
 }: {
     albumUuid:   string;
     initialRules?: SmartRules | null;
-    albumType:   string;
-    onSaved:     (type: string, rules: SmartRules) => void;
+    albumType:   'physical' | 'smart';
+    onSaved:     (type: 'physical' | 'smart', rules: SmartRules) => void;
 }) {
-    const [type,    setType]    = useState(initType ?? 'physical');
+    const [type,    setType]    = useState<'physical' | 'smart'>(initType ?? 'physical');
     const [rules,   setRules]   = useState<SmartRules>(initialRules ?? DEFAULT_EMPTY);
     const [preview, setPreview] = useState<Preview | null>(null);
     const [loading, setLoading] = useState(false);
@@ -96,10 +96,10 @@ export default function SmartAlbumEditor({
 
             {/* Type toggle */}
             <div className="flex gap-2 mb-4">
-                {[
+                {([
                     { k: 'physical', label: '📁 Klasické', desc: 'Fotky přidávate ručně' },
                     { k: 'smart',    label: '✨ Dynamické', desc: 'Automaticky dle pravidel' },
-                ].map(({ k, label, desc }) => (
+                ] as const).map(({ k, label, desc }) => (
                     <button key={k} onClick={() => setType(k)}
                         className={`flex-1 text-left px-3 py-2.5 rounded-xl border-2 transition-colors ${type === k ? 'border-[var(--color-accent)] bg-[var(--color-accent)]/10' : 'border-[var(--color-border)] hover:border-[var(--color-accent)]/40'}`}>
                         <p className={`text-sm font-semibold ${type === k ? 'text-[var(--color-accent)]' : 'text-white'}`}>{label}</p>

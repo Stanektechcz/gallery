@@ -35,6 +35,7 @@ interface PageProps {
     android: AndroidPackage;
     apkStatus: string;
     auth?: { user?: { name?: string } | null };
+    [key: string]: unknown;
 }
 
 function formatBytes(bytes: number | null): string | null {

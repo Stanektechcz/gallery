@@ -1,6 +1,6 @@
 import AlbumEvent from '@/Components/AlbumEvent';
 import AlbumCurationAssistant from '@/Components/AlbumCurationAssistant';
-import LocationPicker from '@/Components/LocationPicker';
+import LocationPicker, { type LocationValue } from '@/Components/LocationPicker';
 import SmartAlbumEditor from '@/Components/SmartAlbumEditor';
 import UploadZone from '@/Components/UploadZone';
 import AppLayout from '@/Layouts/AppLayout';
@@ -25,6 +25,7 @@ interface MediaItem {
 interface Album {
     id: number;
     uuid: string;
+    trip_id?: number | null;
     title: string;
     description?: string;
     event_date_start?: string;
@@ -61,9 +62,9 @@ export default function AlbumShow({ album, breadcrumb, children, media, filters:
     const [storyEdit, setStoryEdit]   = useState(false);
     const [isStoryMode, setIsStoryMode] = useState(album.story_mode ?? false);
     const [showSmartEditor, setShowSmartEditor] = useState(false);
-    const [albumType, setAlbumType]   = useState(album.album_type ?? 'physical');
+    const [albumType, setAlbumType]   = useState<'physical' | 'smart'>(album.album_type ?? 'physical');
     const [showLocationEdit, setShowLocationEdit] = useState(false);
-    const [locationVal, setLocationVal] = useState({
+    const [locationVal, setLocationVal] = useState<LocationValue>({
         location_name:         album.location_name ?? '',
         latitude:              album.latitude ?? '' as number | '',
         longitude:             album.longitude ?? '' as number | '',
