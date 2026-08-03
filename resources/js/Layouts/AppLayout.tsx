@@ -1,6 +1,6 @@
-import UploadPanel from '@/Components/UploadPanel';
 import AppInstallButton from '@/Components/AppInstallButton';
 import InterfaceDensityControl from '@/Components/InterfaceDensityControl';
+import UploadPanel from '@/Components/UploadPanel';
 import WorkspaceAssistant from '@/Components/WorkspaceAssistant';
 import { Link, router, usePage } from '@inertiajs/react';
 import axios from 'axios';
@@ -16,33 +16,35 @@ import {
     ChevronDown,
     CircleDollarSign,
     Clapperboard,
-    Film,
     Clock,
+    Film,
     FolderOpen,
-    Globe,
     Gift,
+    Globe,
     Heart,
     Home,
     Images,
     Inbox,
     KeyRound,
+    LockKeyhole,
     Map,
     MapPin,
-    LockKeyhole,
     Menu,
     Monitor,
+    Power,
     Printer,
     Route,
     Search,
     Settings,
-    SlidersHorizontal,
     Share2,
     ShieldCheck,
+    SlidersHorizontal,
     Sparkles,
     Star,
     Tag,
     Ticket,
     Trash2,
+    Tv,
     Users,
     X
 } from 'lucide-react';
