@@ -95,6 +95,38 @@ class SaasRegistrationTest extends TestCase
         $this->assertSame(0, MediaItem::count(), 'A new customer must start with an empty gallery.');
     }
 
+    public function test_onboarding_reflects_real_state_and_can_be_dismissed(): void
+    {
+        $this->post('/registrace', [
+            'name' => 'Nováček', 'email' => 'novacek@example.cz', 'space_name' => 'Začínáme',
+            'password' => 'tajneheslo1', 'password_confirmation' => 'tajneheslo1',
+        ])->assertRedirect('/');
+        SpaceContext::forget();
+
+        $user = User::where('email', 'novacek@example.cz')->firstOrFail();
+        $space = GallerySpace::where('owner_id', $user->id)->firstOrFail();
+
+        $checklist = $this->getJson('/api/v1/onboarding')->assertOk()->json();
+        $this->assertTrue($checklist['visible']);
+        // Naming the space is done by registering; the rest is not.
+        $this->assertTrue(collect($checklist['steps'])->firstWhere('key', 'space')['done']);
+        $this->assertFalse(collect($checklist['steps'])->firstWhere('key', 'media')['done']);
+        $this->assertSame(3, $checklist['remaining']);
+
+        // Uploading a photo elsewhere ticks the step off without any client-side flag.
+        MediaItem::create([
+            'uuid' => (string) Str::uuid(), 'gallery_space_id' => $space->id,
+            'owner_user_id' => $user->id, 'uploaded_by' => $user->id,
+            'original_filename' => 'prvni.jpg', 'safe_filename' => 'prvni.jpg', 'extension' => 'jpg',
+            'mime_type' => 'image/jpeg', 'media_type' => 'photo', 'size_bytes' => 1024,
+            'status' => 'ready', 'storage_status' => 'ready', 'taken_at' => now(),
+        ]);
+        $this->assertTrue(collect($this->getJson('/api/v1/onboarding')->json('steps'))->firstWhere('key', 'media')['done']);
+
+        $this->postJson('/api/v1/onboarding/dismiss')->assertOk();
+        $this->assertFalse($this->getJson('/api/v1/onboarding')->json('visible'));
+    }
+
     public function test_the_member_limit_of_the_plan_is_enforced_on_invitations(): void
     {
         $owner = User::factory()->create(['role' => 'owner', 'is_active' => true]);

@@ -2,6 +2,7 @@ import AppLayout from '@/Layouts/AppLayout';
 import PartnerPulsePanel, { CoordinationAction, PartnerPulse } from '@/Components/PartnerPulsePanel';
 import PartnerDecisionPanel, { PartnerDecisionSnapshot } from '@/Components/PartnerDecisionPanel';
 import ReminderActionPanel, { ActionableReminder } from '@/Components/ReminderActionPanel';
+import OnboardingChecklist from '@/Components/OnboardingChecklist';
 import { Head, Link, router } from '@inertiajs/react';
 import axios from 'axios';
 import { Album, CalendarDays, Check, ChefHat, Clock, FolderOpen, Heart, Images, Map, MapPin, RefreshCw, Route, Sparkles, Star, TrendingUp, Upload } from 'lucide-react';
@@ -109,6 +110,8 @@ export default function DashboardIndex({ data }: Props) {
             <Head title="Domů" />
 
             <div className="w-full p-4 sm:p-6 lg:p-8 space-y-5 pb-8">
+                <OnboardingChecklist />
+
                 {/* Greeting */}
                 <div className="flex flex-col gap-3 pt-2 sm:flex-row sm:items-start sm:justify-between">
                     <div><h1 className="text-2xl font-bold text-white">{data.greeting}, {data.user_name} {emoji}</h1><p className="mt-1 text-sm text-[var(--color-text-secondary)]">{new Date().toLocaleDateString('cs-CZ', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}{data.generated_at ? ` · aktualizováno ${new Date(data.generated_at).toLocaleTimeString('cs-CZ', { hour: '2-digit', minute: '2-digit' })}` : ''}</p></div>

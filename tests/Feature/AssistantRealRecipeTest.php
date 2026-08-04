@@ -70,6 +70,44 @@ class AssistantRealRecipeTest extends TestCase
         }
     }
 
+    /**
+     * Values longer than the columns must be truncated, not passed through. On SQLite this
+     * would silently pass either way; on the production MySQL an over-long value is a 500.
+     */
+    public function test_over_long_values_are_cut_to_the_column_widths(): void
+    {
+        [$user, $space] = $this->couple();
+        $this->actingAs($user);
+
+        $longTitle = str_repeat('Velmi dlouhý název receptu ', 20);       // ~540 chars
+        $longSection = str_repeat('Nekonečná sekce těsta ', 12);          // ~260
+        $longIngredient = str_repeat('velmi podrobná surovina ', 15);     // ~360
+        $longStep = str_repeat('nesmírně upovídaný krok ', 15);           // ~360
+
+        $message = <<<RECIPE
+        {$longTitle}
+        Suroviny
+        {$longSection}
+
+        * 600 g {$longIngredient}
+
+        Postup
+        1. {$longStep}
+        RECIPE;
+
+        $plan = $this->postJson('/api/v1/assistant/preview', ['message' => $message])->assertOk()->json();
+
+        $this->assertSame(180, mb_strlen($plan['recipe']));
+        $this->assertSame(100, mb_strlen($plan['recipe_details']['ingredient_rows'][0]['section']));
+        $this->assertLessThanOrEqual(180, mb_strlen($plan['recipe_details']['ingredient_rows'][0]['name']));
+        $this->assertLessThanOrEqual(180, mb_strlen($plan['recipe_details']['step_rows'][0]['title']));
+
+        // And it still saves rather than erroring.
+        $this->postJson('/api/v1/assistant/apply', ['message' => $message, 'selected_actions' => ['recipe']])
+            ->assertCreated();
+        $this->assertSame(1, Recipe::where('gallery_space_id', $space->id)->count());
+    }
+
     /** @return array{0:User,1:GallerySpace} */
     private function couple(): array
     {

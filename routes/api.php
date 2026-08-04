@@ -197,6 +197,10 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
     Route::post('/todos/{uuid}/comments', [App\Http\Controllers\Api\SharedTodoController::class, 'comment'])->name('api.todos.comments.store');
     Route::delete('/todos/{uuid}', [App\Http\Controllers\Api\SharedTodoController::class, 'destroy'])->name('api.todos.destroy');
 
+    // First-run checklist for a newly registered customer.
+    Route::get('/onboarding', [App\Http\Controllers\Api\OnboardingController::class, 'show'])->name('api.onboarding.show');
+    Route::post('/onboarding/dismiss', [App\Http\Controllers\Api\OnboardingController::class, 'dismiss'])->name('api.onboarding.dismiss');
+
     // Plan and add-on modules for the current space.
     Route::get('/billing/overview', [App\Http\Controllers\Api\BillingController::class, 'overview'])->name('api.billing.overview');
     Route::put('/billing/plan', [App\Http\Controllers\Api\BillingController::class, 'setPlan'])->name('api.billing.plan.set');

@@ -569,6 +569,7 @@ const navGroups: NavigationGroup[] = [
             { href: '/recovery', label: 'Recovery centrum', icon: ShieldCheck },
             { href: '/privacy', label: 'Soukromí a dědictví', icon: ShieldCheck },
             { href: '/settings/security', label: 'Nastavení a zabezpečení', icon: Settings },
+            { href: '/settings/predplatne', label: 'Předplatné a moduly', icon: CircleDollarSign },
             { href: '/settings/storage/google', label: 'Úložiště a Google Drive', icon: Archive },
             { href: '/settings/automations', label: 'Automatizace', icon: Power },
             { href: '/admin', label: 'Správa systému', icon: ShieldCheck, adminOnly: true, exact: true },

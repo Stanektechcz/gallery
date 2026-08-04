@@ -32,6 +32,18 @@ class WorkspaceAssistantController extends Controller
 {
     private const ACTION_KEYS = ['activities', 'titles', 'recipe', 'expense', 'trip', 'gift', 'milestone', 'todo', 'itinerary'];
 
+    /**
+     * Column widths from 2026_07_15_090000_create_recipe_system.php. Tests run on SQLite,
+     * which ignores VARCHAR limits, so an over-long value only shows up on MySQL as a
+     * "Data too long for column" error — a 500 for the user. Truncating to the real widths
+     * is what keeps a long title or section from breaking the whole save.
+     */
+    private const RECIPE_TITLE_MAX = 180;        // recipes.title
+    private const INGREDIENT_NAME_MAX = 180;     // recipe_ingredients.name
+    private const INGREDIENT_SECTION_MAX = 100;  // recipe_ingredients.section
+    private const INGREDIENT_UNIT_MAX = 32;      // recipe_ingredients.unit
+    private const STEP_TITLE_MAX = 180;          // recipe_steps.title
+
     public function __construct(
         private readonly CalendarEventCreationService $calendarEvents,
         private readonly CalendarEventTripService $tripService,
@@ -82,7 +94,7 @@ class WorkspaceAssistantController extends Controller
         $title = '';
         foreach ($lines as $line) {
             $line = trim($line);
-            if ($line !== '' && ! $isIngredientsHeading($line) && ! $isStepsHeading($line)) { $title = mb_substr($line, 0, 255); break; }
+            if ($line !== '' && ! $isIngredientsHeading($line) && ! $isStepsHeading($line)) { $title = mb_substr($line, 0, self::RECIPE_TITLE_MAX); break; }
         }
 
         $ingredientEnd = $stepsAt !== null && ($ingredientsAt === null || $stepsAt > $ingredientsAt) ? $stepsAt : count($lines);
@@ -110,7 +122,7 @@ class WorkspaceAssistantController extends Controller
             if ($line === '') continue;
             // A line without a bullet inside the ingredients block is a group heading.
             if (! preg_match('/^\s*(?:[*\-–•·]|\d+[.)])\s+(.*)$/u', $line, $bullet)) {
-                $section = mb_substr(rtrim($line, ':'), 0, 120);
+                $section = mb_substr(rtrim($line, ":"), 0, self::INGREDIENT_SECTION_MAX);
                 continue;
             }
             $label = trim($bullet[1]);
@@ -122,10 +134,10 @@ class WorkspaceAssistantController extends Controller
             // "600 g polohrubé mouky", "3–5 g citronové kůry", "2 žloutky"
             if (preg_match('/^(?:přibližně\s+|cca\s+|asi\s+)?(\d+(?:[.,]\d+)?)(?:\s*[-–]\s*\d+(?:[.,]\d+)?)?\s*([\p{L}]{1,12})?\s+(.*)$/u', $label, $parts)) {
                 $quantity = $this->numberFrom($parts[1]);
-                $unit = trim($parts[2] ?? '') !== '' ? mb_substr($parts[2], 0, 24) : null;
+                $unit = trim($parts[2] ?? '') !== '' ? mb_substr($parts[2], 0, self::INGREDIENT_UNIT_MAX) : null;
                 $name = trim($parts[3]);
             }
-            $rows[] = ['label' => mb_substr($label, 0, 255), 'section' => $section, 'name' => mb_substr($name !== '' ? $name : $label, 0, 190), 'quantity' => $quantity, 'unit' => $unit, 'optional' => $optional];
+            $rows[] = ['label' => mb_substr($label, 0, self::INGREDIENT_NAME_MAX), 'section' => $section, 'name' => mb_substr($name !== '' ? $name : $label, 0, self::INGREDIENT_NAME_MAX), 'quantity' => $quantity, 'unit' => $unit, 'optional' => $optional];
             if (count($rows) >= 120) break;
         }
 
@@ -140,7 +152,7 @@ class WorkspaceAssistantController extends Controller
             $trimmed = trim($line);
             if ($trimmed === '') continue;
             if (preg_match('/^(\d{1,2})[.)]\s*(.*)$/u', $trimmed, $numbered)) {
-                $rows[] = ['title' => mb_substr(trim($numbered[2]), 0, 190), 'instruction' => ''];
+                $rows[] = ['title' => mb_substr(trim($numbered[2]), 0, self::STEP_TITLE_MAX), 'instruction' => ''];
                 continue;
             }
             if ($rows === []) continue;   // prose before the first numbered step is a lead-in
@@ -154,7 +166,7 @@ class WorkspaceAssistantController extends Controller
         // A step whose title is empty but which has body text still needs a usable name.
         foreach ($rows as $index => $row) {
             if ($row['title'] === '' && $row['instruction'] !== '') {
-                $rows[$index]['title'] = mb_substr(trim(strtok($row['instruction'], "\n")), 0, 190);
+                $rows[$index]['title'] = mb_substr(trim(strtok($row['instruction'], "\n")), 0, self::STEP_TITLE_MAX);
             }
         }
 
@@ -586,6 +598,8 @@ class WorkspaceAssistantController extends Controller
         if ($recipe === '' && $blocks['ingredients'] && $blocks['steps']) $recipe = $blocks['title'];
         // A '/recept' command with the whole text pasted after it: keep only the first line as the name.
         if ($recipe !== '' && str_contains($recipe, "\n")) $recipe = trim(strtok($recipe, "\n"));
+        // recipes.title is varchar(180); an over-long name would be a 500 on MySQL.
+        if ($recipe !== '') $recipe = mb_substr($recipe, 0, self::RECIPE_TITLE_MAX);
 
         preg_match('/(?:ingredience|suroviny)\s*:\s*([^\n]+)/ui', $message, $ingredientsMatch);
         preg_match('/(?:postup|kroky)\s*:\s*([^\n]+)/ui', $message, $stepsMatch);

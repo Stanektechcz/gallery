@@ -107,7 +107,15 @@ export default function PricingIndex() {
                         </>
                     )}
 
-                    <p className="mt-12 text-center text-xs text-[var(--color-text-secondary)]">
+                    {!loading && plans.length > 0 && (
+                        <div className="mt-10 text-center">
+                            <Link href="/registrace" className="inline-flex min-h-11 items-center rounded-xl bg-[var(--color-accent)] px-6 text-sm font-medium text-white transition-colors hover:bg-[var(--color-accent-hover)]">
+                                Založit galerii
+                            </Link>
+                        </div>
+                    )}
+
+                    <p className="mt-8 text-center text-xs text-[var(--color-text-secondary)]">
                         Ceny jsou uvedeny včetně DPH. Platby zatím nejsou spuštěné — tarify a moduly aktivuje správce.
                         {' '}<Link href="/login" className="text-[var(--color-accent)] hover:underline">Přihlásit se</Link>
                     </p>
