@@ -47,11 +47,118 @@ class WorkspaceAssistantController extends Controller
 
     public function preview(Request $request)
     {
-        $data = $request->validate(['message' => 'required|string|min:2|max:4000']);
+        $data = $request->validate(['message' => 'required|string|min:2|max:20000']);
         $plan = $this->plan($data['message']);
         $plan['titles'] = $this->withDatabaseMatches($plan['titles']);
 
         return response()->json($plan);
+    }
+
+    /**
+     * Parse a recipe pasted as ordinary prose: a title line, a "Suroviny" section of
+     * bullets (optionally grouped by sub-headings) and a "Postup" section of numbered
+     * steps that each run over several lines. The older single-line
+     * "suroviny: a, b, c" form is handled by the caller and stays supported.
+     *
+     * @return array{title:string, ingredients:list<string>, steps:list<string>, ingredient_rows:list<array<string,mixed>>, step_rows:list<array<string,mixed>>}
+     */
+    private function recipeBlocks(string $message): array
+    {
+        $empty = ['title' => '', 'ingredients' => [], 'steps' => [], 'ingredient_rows' => [], 'step_rows' => []];
+        $lines = preg_split('/\R/u', $message) ?: [];
+        if (count($lines) < 3) return $empty;
+
+        $isIngredientsHeading = static fn (string $line) => (bool) preg_match('/^\s*(?:ingredience|suroviny)\s*:?\s*$/ui', $line);
+        $isStepsHeading = static fn (string $line) => (bool) preg_match('/^\s*(?:přesný\s+postup|presny\s+postup|postup|kroky|příprava\s+krok|instrukce)\s*:?\s*$/ui', $line);
+
+        $ingredientsAt = null;
+        $stepsAt = null;
+        foreach ($lines as $index => $line) {
+            if ($ingredientsAt === null && $isIngredientsHeading($line)) $ingredientsAt = $index;
+            if ($stepsAt === null && $isStepsHeading($line)) $stepsAt = $index;
+        }
+        if ($ingredientsAt === null && $stepsAt === null) return $empty;
+
+        $title = '';
+        foreach ($lines as $line) {
+            $line = trim($line);
+            if ($line !== '' && ! $isIngredientsHeading($line) && ! $isStepsHeading($line)) { $title = mb_substr($line, 0, 255); break; }
+        }
+
+        $ingredientEnd = $stepsAt !== null && ($ingredientsAt === null || $stepsAt > $ingredientsAt) ? $stepsAt : count($lines);
+        $ingredientRows = $ingredientsAt !== null
+            ? $this->parseIngredientLines(array_slice($lines, $ingredientsAt + 1, $ingredientEnd - $ingredientsAt - 1))
+            : [];
+        $stepRows = $stepsAt !== null ? $this->parseStepLines(array_slice($lines, $stepsAt + 1)) : [];
+
+        return [
+            'title' => $title,
+            'ingredients' => array_map(static fn (array $row) => $row['label'], $ingredientRows),
+            'steps' => array_map(static fn (array $row) => trim($row['title'] . ($row['instruction'] !== '' ? ' — ' . $row['instruction'] : '')), $stepRows),
+            'ingredient_rows' => $ingredientRows,
+            'step_rows' => $stepRows,
+        ];
+    }
+
+    /** @return list<array{label:string,section:?string,name:string,quantity:?float,unit:?string,optional:bool}> */
+    private function parseIngredientLines(array $lines): array
+    {
+        $rows = [];
+        $section = null;
+        foreach ($lines as $line) {
+            $line = trim($line);
+            if ($line === '') continue;
+            // A line without a bullet inside the ingredients block is a group heading.
+            if (! preg_match('/^\s*(?:[*\-–•·]|\d+[.)])\s+(.*)$/u', $line, $bullet)) {
+                $section = mb_substr(rtrim($line, ':'), 0, 120);
+                continue;
+            }
+            $label = trim($bullet[1]);
+            if ($label === '') continue;
+            $optional = (bool) preg_match('/voliteln|nepovinn/ui', $label);
+            $quantity = null;
+            $unit = null;
+            $name = $label;
+            // "600 g polohrubé mouky", "3–5 g citronové kůry", "2 žloutky"
+            if (preg_match('/^(?:přibližně\s+|cca\s+|asi\s+)?(\d+(?:[.,]\d+)?)(?:\s*[-–]\s*\d+(?:[.,]\d+)?)?\s*([\p{L}]{1,12})?\s+(.*)$/u', $label, $parts)) {
+                $quantity = $this->numberFrom($parts[1]);
+                $unit = trim($parts[2] ?? '') !== '' ? mb_substr($parts[2], 0, 24) : null;
+                $name = trim($parts[3]);
+            }
+            $rows[] = ['label' => mb_substr($label, 0, 255), 'section' => $section, 'name' => mb_substr($name !== '' ? $name : $label, 0, 190), 'quantity' => $quantity, 'unit' => $unit, 'optional' => $optional];
+            if (count($rows) >= 120) break;
+        }
+
+        return $rows;
+    }
+
+    /** @return list<array{title:string,instruction:string}> */
+    private function parseStepLines(array $lines): array
+    {
+        $rows = [];
+        foreach ($lines as $line) {
+            $trimmed = trim($line);
+            if ($trimmed === '') continue;
+            if (preg_match('/^(\d{1,2})[.)]\s*(.*)$/u', $trimmed, $numbered)) {
+                $rows[] = ['title' => mb_substr(trim($numbered[2]), 0, 190), 'instruction' => ''];
+                continue;
+            }
+            if ($rows === []) continue;   // prose before the first numbered step is a lead-in
+            $last = count($rows) - 1;
+            // Bullets inside a step are part of its instruction.
+            $text = preg_replace('/^\s*[*\-–•·]\s+/u', '• ', $trimmed);
+            $rows[$last]['instruction'] = trim($rows[$last]['instruction'] === '' ? $text : $rows[$last]['instruction'] . "\n" . $text);
+            if (count($rows) >= 60) break;
+        }
+
+        // A step whose title is empty but which has body text still needs a usable name.
+        foreach ($rows as $index => $row) {
+            if ($row['title'] === '' && $row['instruction'] !== '') {
+                $rows[$index]['title'] = mb_substr(trim(strtok($row['instruction'], "\n")), 0, 190);
+            }
+        }
+
+        return array_values(array_filter($rows, static fn (array $row) => $row['title'] !== '' || $row['instruction'] !== ''));
     }
 
     /**
@@ -139,7 +246,7 @@ class WorkspaceAssistantController extends Controller
     public function apply(Request $request)
     {
         $data = $request->validate([
-            'message' => 'required|string|min:2|max:4000', 'request_id' => 'nullable|uuid',
+            'message' => 'required|string|min:2|max:20000', 'request_id' => 'nullable|uuid',
             'selected_actions' => 'nullable|array|max:9', 'selected_actions.*' => 'string',
             'media_uuids' => 'nullable|array|max:100', 'media_uuids.*' => 'uuid',
             // Which movie-database entry the user picked for each detected title.
@@ -220,17 +327,41 @@ class WorkspaceAssistantController extends Controller
                 ], static fn ($value) => $value !== null && $value !== ''));
                 $recipe->updated_by = $user->id;
                 $recipe->save();
-                foreach ($plan['recipe_details']['ingredients'] as $index => $ingredient) {
-                    RecipeIngredient::firstOrCreate(
-                        ['recipe_id' => $recipe->id, 'name' => $ingredient],
-                        ['sort_order' => $index, 'is_scalable' => true]
-                    );
+                // A structured paste keeps its groups, amounts and step titles; the plain
+                // single-line form still lands as a bare name.
+                $ingredientRows = $plan['recipe_details']['ingredient_rows'] ?? [];
+                if ($ingredientRows) {
+                    foreach ($ingredientRows as $index => $row) {
+                        RecipeIngredient::firstOrCreate(
+                            ['recipe_id' => $recipe->id, 'name' => $row['name']],
+                            ['section' => $row['section'], 'quantity' => $row['quantity'], 'unit' => $row['unit'],
+                             'is_optional' => $row['optional'], 'sort_order' => $index, 'is_scalable' => $row['quantity'] !== null]
+                        );
+                    }
+                } else {
+                    foreach ($plan['recipe_details']['ingredients'] as $index => $ingredient) {
+                        RecipeIngredient::firstOrCreate(
+                            ['recipe_id' => $recipe->id, 'name' => $ingredient],
+                            ['sort_order' => $index, 'is_scalable' => true]
+                        );
+                    }
                 }
-                foreach ($plan['recipe_details']['steps'] as $index => $step) {
-                    RecipeStep::firstOrCreate(
-                        ['recipe_id' => $recipe->id, 'instruction' => $step],
-                        ['sort_order' => $index]
-                    );
+
+                $stepRows = $plan['recipe_details']['step_rows'] ?? [];
+                if ($stepRows) {
+                    foreach ($stepRows as $index => $row) {
+                        RecipeStep::firstOrCreate(
+                            ['recipe_id' => $recipe->id, 'sort_order' => $index],
+                            ['title' => $row['title'], 'instruction' => $row['instruction'] !== '' ? $row['instruction'] : $row['title']]
+                        );
+                    }
+                } else {
+                    foreach ($plan['recipe_details']['steps'] as $index => $step) {
+                        RecipeStep::firstOrCreate(
+                            ['recipe_id' => $recipe->id, 'instruction' => $step],
+                            ['sort_order' => $index]
+                        );
+                    }
                 }
                 $universalTags->assignNames($space, $user, 'recipe', (int) $recipe->id, $plan['tags']);
                 $created[] = 'Recept: ' . $plan['recipe'] . (($plan['recipe_details']['ingredients'] || $plan['recipe_details']['steps']) ? ' včetně surovin a postupu' : '');
@@ -449,12 +580,20 @@ class WorkspaceAssistantController extends Controller
         }
 
         preg_match('/recept\s*:\s*([^\n]+)/ui', $message, $recipeMatch);
-        $recipe = in_array($command['name'], ['/recept', '/recepty'], true) ? $command['body'] : trim($recipeMatch[1] ?? '');
+        $recipe = in_array($command['name'], ['/recept', '/recepty'], true) ? trim($command['body']) : trim($recipeMatch[1] ?? '');
+        $blocks = $this->recipeBlocks($message);
+        // A pasted recipe carries its own headings, so the first line is the title.
+        if ($recipe === '' && $blocks['ingredients'] && $blocks['steps']) $recipe = $blocks['title'];
+        // A '/recept' command with the whole text pasted after it: keep only the first line as the name.
+        if ($recipe !== '' && str_contains($recipe, "\n")) $recipe = trim(strtok($recipe, "\n"));
+
         preg_match('/(?:ingredience|suroviny)\s*:\s*([^\n]+)/ui', $message, $ingredientsMatch);
         preg_match('/(?:postup|kroky)\s*:\s*([^\n]+)/ui', $message, $stepsMatch);
         $recipeDetails = [
-            'ingredients' => array_values(array_filter(array_map('trim', preg_split('/[,;]/u', $ingredientsMatch[1] ?? '')))),
-            'steps' => array_values(array_filter(array_map('trim', preg_split('/[;]|→|->/u', $stepsMatch[1] ?? '')))),
+            'ingredients' => $blocks['ingredients'] ?: array_values(array_filter(array_map('trim', preg_split('/[,;]/u', $ingredientsMatch[1] ?? '')))),
+            'steps' => $blocks['steps'] ?: array_values(array_filter(array_map('trim', preg_split('/[;]|→|->/u', $stepsMatch[1] ?? '')))),
+            'ingredient_rows' => $blocks['ingredient_rows'],
+            'step_rows' => $blocks['step_rows'],
             'servings' => null,
             'prep_minutes' => null,
             'cook_minutes' => null,
