@@ -5,6 +5,10 @@ use App\Http\Controllers\Api\TimelineController;
 use App\Http\Controllers\Api\UploadController;
 use Illuminate\Support\Facades\Route;
 
+// The pricing page is public, so the catalogue it renders has to be reachable without a session.
+Route::get('v1/public/billing/catalogue', [App\Http\Controllers\Api\BillingController::class, 'catalogue'])
+    ->name('api.public.billing.catalogue');
+
 Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
 
     // Timeline
@@ -192,6 +196,28 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
     Route::post('/todos/{uuid}/schedule', [App\Http\Controllers\Api\SharedTodoController::class, 'schedule'])->name('api.todos.schedule');
     Route::post('/todos/{uuid}/comments', [App\Http\Controllers\Api\SharedTodoController::class, 'comment'])->name('api.todos.comments.store');
     Route::delete('/todos/{uuid}', [App\Http\Controllers\Api\SharedTodoController::class, 'destroy'])->name('api.todos.destroy');
+
+    // Plan and add-on modules for the current space.
+    Route::get('/billing/overview', [App\Http\Controllers\Api\BillingController::class, 'overview'])->name('api.billing.overview');
+    Route::put('/billing/plan', [App\Http\Controllers\Api\BillingController::class, 'setPlan'])->name('api.billing.plan.set');
+    Route::put('/billing/modules/{code}', [App\Http\Controllers\Api\BillingController::class, 'setModule'])->name('api.billing.modules.set');
+
+    // Voice messages between members. Included in every plan.
+    Route::get('/voice-notes', [App\Http\Controllers\Api\VoiceNoteController::class, 'index'])->name('api.voice-notes.index');
+    Route::post('/voice-notes', [App\Http\Controllers\Api\VoiceNoteController::class, 'store'])->name('api.voice-notes.store');
+    Route::get('/voice-notes/{uuid}/stream', [App\Http\Controllers\Api\VoiceNoteController::class, 'stream'])->name('api.voice-notes.stream');
+    Route::post('/voice-notes/{uuid}/listened', [App\Http\Controllers\Api\VoiceNoteController::class, 'markListened'])->name('api.voice-notes.listened');
+    Route::patch('/voice-notes/{uuid}', [App\Http\Controllers\Api\VoiceNoteController::class, 'update'])->name('api.voice-notes.update');
+    Route::delete('/voice-notes/{uuid}', [App\Http\Controllers\Api\VoiceNoteController::class, 'destroy'])->name('api.voice-notes.destroy');
+
+    // First paid add-on: everything below is gated by the entitlement middleware.
+    Route::middleware('module:burps')->group(function () {
+        Route::get('/burps', [App\Http\Controllers\Api\BurpController::class, 'index'])->name('api.burps.index');
+        Route::post('/burps', [App\Http\Controllers\Api\BurpController::class, 'store'])->name('api.burps.store');
+        Route::get('/burps/{uuid}/stream', [App\Http\Controllers\Api\BurpController::class, 'stream'])->name('api.burps.stream');
+        Route::put('/burps/{uuid}/rating', [App\Http\Controllers\Api\BurpController::class, 'rate'])->name('api.burps.rate');
+        Route::delete('/burps/{uuid}', [App\Http\Controllers\Api\BurpController::class, 'destroy'])->name('api.burps.destroy');
+    });
 
     // One shared watchlist with votes, free evenings, cinema showings and calendar events.
     Route::get('/entertainment', [App\Http\Controllers\Api\EntertainmentController::class, 'index'])->name('api.entertainment.index');

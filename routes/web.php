@@ -33,6 +33,9 @@ Route::post('/forgot-password', [PasswordResetController::class, 'email'])->name
 Route::get('/reset-password/{token}', [PasswordResetController::class, 'reset'])->name('password.reset');
 Route::post('/reset-password', [PasswordResetController::class, 'update'])->name('password.update');
 
+// Public pricing page. Reachable without an account so the offering can be shared.
+Route::get('/cenik', fn() => Inertia::render('Pricing/Index'))->name('pricing');
+
 // Public mobile application centre and stable direct Android download link.
 Route::get('/app', [MobileAppController::class, 'index'])->name('mobile-app.index');
 Route::redirect('/aplikace', '/app')->name('mobile-app.cs');
@@ -122,6 +125,10 @@ Route::middleware(['auth'])->group(function () {
         'today' => now('Europe/Prague')->toDateString(),
     ]))->name('calendar');
     Route::get('/calendar/events/{uuid}', fn(string $uuid) => Inertia::render('Calendar/Show', ['eventUuid' => $uuid]))->name('calendar.events.show');
+    // Voice messages, the burp module and the space's own plan overview.
+    Route::get('/hlasovky', fn() => Inertia::render('VoiceNotes/Index'))->name('voice-notes');
+    Route::get('/krkance', fn() => Inertia::render('Burps/Index'))->name('burps');
+    Route::get('/settings/predplatne', fn() => Inertia::render('Settings/Subscription'))->name('settings.subscription');
     Route::get('/travel-inbox', fn() => Inertia::render('TravelInbox/Index'))->name('travel-inbox');
     Route::get('/weekly', fn() => Inertia::render('Weekly/Index'))->name('weekly');
     Route::get('/planning', fn() => Inertia::render('Planning/Index'))->name('planning');
