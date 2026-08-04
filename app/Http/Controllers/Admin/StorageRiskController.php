@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\MediaItem;
 use App\Models\StorageConnection;
 use App\Models\UploadSession;
+use App\Support\SpaceContext;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -15,8 +16,10 @@ class StorageRiskController extends Controller
     {
         $connection = StorageConnection::where('provider', 'google_drive')->first();
 
-        $originalsOnDrive = MediaItem::whereNotNull('drive_file_id')->count();
-        $totalOriginalSize = MediaItem::whereNotNull('drive_file_id')->sum('size_bytes');
+        // Operator view: counts cover the whole installation, not just this admin's spaces.
+        $onDrive = fn () => MediaItem::withoutGlobalScope(SpaceContext::SCOPE)->whereNotNull('drive_file_id');
+        $originalsOnDrive = $onDrive()->count();
+        $totalOriginalSize = $onDrive()->sum('size_bytes');
         $pendingUploads   = UploadSession::whereIn('status', ['pending', 'assembling'])->count();
         $failedUploads    = UploadSession::where('status', 'failed')->count();
 

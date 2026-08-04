@@ -10,7 +10,7 @@ use App\Services\Planning\LifeEventService;
 
 class CalendarEvent extends Model
 {
-    use HasFactory;
+    use HasFactory, \App\Models\Concerns\BelongsToGallerySpace;
 
     protected $fillable = [
         'uuid', 'gallery_space_id', 'created_by', 'trip_id', 'source_trip_id', 'album_id', 'title',

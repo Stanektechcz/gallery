@@ -10,7 +10,7 @@ use Illuminate\Support\Str;
 
 class Album extends Model
 {
-    use HasFactory, SoftDeletes;
+    use HasFactory, SoftDeletes, \App\Models\Concerns\BelongsToGallerySpace;
 
     protected $fillable = [
         'uuid',

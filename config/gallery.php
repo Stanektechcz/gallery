@@ -70,4 +70,8 @@ return [
 
     'default_space_name' => env('GALLERY_DEFAULT_SPACE', 'Naše galerie'),
 
+    // Public sign-up. Off by default so the instance stays invitation-only until
+    // the operator deliberately opens it as a service.
+    'registration_open' => (bool) env('GALLERY_REGISTRATION_OPEN', false),
+
 ];

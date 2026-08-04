@@ -7,6 +7,8 @@ use Illuminate\Support\Str;
 
 class Burp extends Model
 {
+    use \App\Models\Concerns\BelongsToGallerySpace;
+
     protected $fillable = ['uuid', 'gallery_space_id', 'created_by', 'title', 'occasion', 'duration_ms', 'path', 'mime_type', 'size_bytes', 'happened_at'];
     protected function casts(): array { return ['happened_at' => 'datetime']; }
     protected static function booted(): void { static::creating(fn (self $burp) => $burp->uuid ??= (string) Str::uuid()); }

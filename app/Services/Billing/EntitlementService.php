@@ -5,9 +5,11 @@ namespace App\Services\Billing;
 use App\Models\BillingModule;
 use App\Models\BillingPlan;
 use App\Models\GallerySpace;
+use App\Models\MediaItem;
 use App\Models\SpaceModule;
 use App\Models\SpaceSubscription;
 use App\Models\User;
+use App\Support\SpaceContext;
 use Illuminate\Support\Facades\Schema;
 
 /**
@@ -83,7 +85,53 @@ class EntitlementService
                 'is_included' => in_array($module->code, $this->alwaysIncluded(), true),
             ])->values()->all(),
             'active_modules' => array_values(array_unique([...$active, ...$this->alwaysIncluded()])),
+            'usage' => ['members' => $this->memberUsage($space), 'storage' => $this->storageUsage($space)],
         ];
+    }
+
+    /** Members currently in the space, and whether the plan allows one more. */
+    public function memberUsage(GallerySpace $space): array
+    {
+        $used = $space->members()->count();
+        $limit = $this->plan($space)?->member_limit;
+
+        return ['used' => $used, 'limit' => $limit, 'can_add' => $limit === null || $used < $limit];
+    }
+
+    public function canAddMember(GallerySpace $space): bool
+    {
+        return $this->memberUsage($space)['can_add'];
+    }
+
+    /**
+     * Storage the space occupies, against its plan. The global space scope is lifted
+     * because this sums one named space, which may not be the caller's own.
+     */
+    public function storageUsage(GallerySpace $space): array
+    {
+        $usedBytes = (int) MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
+            ->where('gallery_space_id', $space->id)
+            ->whereNull('trashed_at')
+            ->sum('size_bytes');
+
+        $limitMb = $this->plan($space)?->storage_limit_mb;
+        $limitBytes = $limitMb === null ? null : $limitMb * 1024 * 1024;
+
+        return [
+            'used_bytes' => $usedBytes,
+            'limit_bytes' => $limitBytes,
+            'limit_mb' => $limitMb,
+            'remaining_bytes' => $limitBytes === null ? null : max(0, $limitBytes - $usedBytes),
+            'percent' => $limitBytes ? min(100, (int) round($usedBytes / $limitBytes * 100)) : null,
+        ];
+    }
+
+    /** True when the space can still take a file of this size. */
+    public function canStore(GallerySpace $space, int $bytes): bool
+    {
+        $usage = $this->storageUsage($space);
+
+        return $usage['limit_bytes'] === null || $usage['used_bytes'] + $bytes <= $usage['limit_bytes'];
     }
 
     public function enableModule(GallerySpace $space, BillingModule $module, ?User $actor = null): SpaceModule

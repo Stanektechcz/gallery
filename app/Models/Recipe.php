@@ -11,7 +11,7 @@ use App\Services\Planning\LifeEventService;
 
 class Recipe extends Model
 {
-    use HasFactory, SoftDeletes;
+    use HasFactory, SoftDeletes, \App\Models\Concerns\BelongsToGallerySpace;
 
     protected $fillable = [
         'uuid', 'gallery_space_id', 'created_by', 'updated_by', 'cover_media_id', 'album_id',

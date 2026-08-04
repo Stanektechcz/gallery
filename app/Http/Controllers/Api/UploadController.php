@@ -92,6 +92,16 @@ class UploadController extends Controller
         $user  = $request->user();
         $space = $user->gallerySpaces()->firstOrFail();
 
+        // Refuse before a single chunk is accepted, rather than half way through.
+        $entitlements = app(\App\Services\Billing\EntitlementService::class);
+        if (! $entitlements->canStore($space, (int) $validated['total_size'])) {
+            $usage = $entitlements->storageUsage($space);
+            abort(402, sprintf(
+                'Tarif má limit %d GB a ten by se tímhle souborem překročil. Uvolněte místo nebo přejděte na vyšší tarif — viz /cenik.',
+                (int) round(($usage['limit_mb'] ?? 0) / 1000)
+            ));
+        }
+
         if (!empty($validated['target_album_id'])) {
             $album = Album::whereKey($validated['target_album_id'])
                 ->where('gallery_space_id', $space->id)

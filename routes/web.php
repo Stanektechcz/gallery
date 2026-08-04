@@ -36,6 +36,10 @@ Route::post('/reset-password', [PasswordResetController::class, 'update'])->name
 // Public pricing page. Reachable without an account so the offering can be shared.
 Route::get('/cenik', fn() => Inertia::render('Pricing/Index'))->name('pricing');
 
+// Public sign-up, gated by config('gallery.registration_open').
+Route::get('/registrace', [App\Http\Controllers\Auth\RegistrationController::class, 'show'])->name('register');
+Route::post('/registrace', [App\Http\Controllers\Auth\RegistrationController::class, 'store'])->name('register.store');
+
 // Public mobile application centre and stable direct Android download link.
 Route::get('/app', [MobileAppController::class, 'index'])->name('mobile-app.index');
 Route::redirect('/aplikace', '/app')->name('mobile-app.cs');

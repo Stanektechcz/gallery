@@ -9,7 +9,7 @@ use Illuminate\Support\Str;
 
 class MediaItem extends Model
 {
-    use HasFactory, SoftDeletes;
+    use HasFactory, SoftDeletes, \App\Models\Concerns\BelongsToGallerySpace;
 
     protected $fillable = [
         'uuid',

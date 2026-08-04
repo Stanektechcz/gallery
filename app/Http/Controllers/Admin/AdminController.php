@@ -8,6 +8,8 @@ use App\Models\MediaItem;
 use App\Models\StorageConnection;
 use App\Models\User;
 use App\Notifications\InvitationNotification;
+use App\Services\Billing\EntitlementService;
+use App\Support\SpaceContext;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -17,17 +19,22 @@ use Inertia\Response;
 
 class AdminController extends Controller
 {
+    public function __construct(private readonly EntitlementService $entitlements) {}
+
     public function dashboard(): Response
     {
+        // Operator view: these figures cover the whole installation, so the per-space
+        // global scope has to be lifted deliberately rather than by accident.
+        $media = fn () => MediaItem::withoutGlobalScope(SpaceContext::SCOPE);
         $stats = [
             'users'       => User::count(),
-            'media_total' => MediaItem::count(),
-            'photos'      => MediaItem::where('media_type', 'photo')->count(),
-            'videos'      => MediaItem::where('media_type', 'video')->count(),
-            'ready'       => MediaItem::where('status', 'ready')->count(),
-            'failed'      => MediaItem::where('status', 'failed')->count(),
-            'trashed'     => MediaItem::whereNotNull('trashed_at')->count(),
-            'albums'      => \App\Models\Album::count(),
+            'media_total' => $media()->count(),
+            'photos'      => $media()->where('media_type', 'photo')->count(),
+            'videos'      => $media()->where('media_type', 'video')->count(),
+            'ready'       => $media()->where('status', 'ready')->count(),
+            'failed'      => $media()->where('status', 'failed')->count(),
+            'trashed'     => $media()->whereNotNull('trashed_at')->count(),
+            'albums'      => \App\Models\Album::withoutGlobalScope(SpaceContext::SCOPE)->count(),
         ];
 
         $connection = StorageConnection::where('provider', 'google_drive')->first();
@@ -53,6 +60,13 @@ class AdminController extends Controller
             'email' => 'required|email|unique:users,email',
             'role'  => 'required|in:partner,viewer,admin',
         ]);
+
+        // The plan caps how many people may share a space.
+        $space = $request->user()->gallerySpaces()->orderByDesc('is_default')->first();
+        if ($space) {
+            $usage = $this->entitlements->memberUsage($space);
+            abort_if(! $usage['can_add'], 402, "Tarif má limit {$usage['limit']} členů. Pro další místa je potřeba vyšší tarif — viz /cenik.");
+        }
 
         $token = Str::random(60);
         $user  = User::create([

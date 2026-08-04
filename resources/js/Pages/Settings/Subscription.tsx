@@ -17,14 +17,23 @@ interface ModuleRow {
     is_active: boolean; is_included: boolean;
 }
 
+interface Usage {
+    members: { used: number; limit: number | null; can_add: boolean };
+    storage: { used_bytes: number; limit_mb: number | null; percent: number | null };
+}
+
 const price = (minor: number, currency: string) =>
     minor === 0 ? 'zdarma' : `${new Intl.NumberFormat('cs-CZ').format(Math.round(minor / 100))} ${currency} / měsíc`;
+
+const gigabytes = (bytes: number) =>
+    bytes >= 1024 ** 3 ? `${(bytes / 1024 ** 3).toFixed(1)} GB` : `${Math.max(1, Math.round(bytes / 1024 / 1024))} MB`;
 
 export default function Subscription() {
     const role = usePage().props.auth?.user?.role;
     const isAdmin = role === 'owner' || role === 'admin';
 
     const [plan, setPlan] = useState<Plan | null>(null);
+    const [usage, setUsage] = useState<Usage | null>(null);
     const [modules, setModules] = useState<ModuleRow[]>([]);
     const [available, setAvailable] = useState(true);
     const [loading, setLoading] = useState(true);
@@ -36,6 +45,7 @@ export default function Subscription() {
             const response = await axios.get('/api/v1/billing/overview');
             setAvailable(response.data.available !== false);
             setPlan(response.data.plan ?? null);
+            setUsage(response.data.usage ?? null);
             setModules(response.data.modules ?? []);
         } catch (reason: any) {
             setError(reason?.response?.data?.message ?? 'Přehled se nepodařilo načíst.');
@@ -49,6 +59,7 @@ export default function Subscription() {
         try {
             const response = await axios.put(`/api/v1/billing/modules/${module.code}`, { enabled: !module.is_active });
             setPlan(response.data.plan ?? null);
+            setUsage(response.data.usage ?? null);
             setModules(response.data.modules ?? []);
         } catch (reason: any) {
             setError(reason?.response?.data?.message ?? 'Modul se nepodařilo přepnout.');
@@ -88,10 +99,36 @@ export default function Subscription() {
                                 <h2 className="mt-1 text-lg font-semibold text-white">{plan.name}</h2>
                                 {plan.tagline && <p className="mt-1 text-xs text-[var(--color-text-secondary)]">{plan.tagline}</p>}
                                 <p className="mt-3 font-semibold text-white">{price(plan.price_monthly, plan.currency)}</p>
-                                <dl className="mt-3 grid grid-cols-2 gap-2 text-xs text-[var(--color-text-secondary)]">
-                                    <div><dt>Členů</dt><dd className="text-white">{plan.member_limit ?? 'neomezeně'}</dd></div>
-                                    <div><dt>Prostor</dt><dd className="text-white">{plan.storage_limit_mb == null ? 'neomezeně' : `${Math.round(plan.storage_limit_mb / 1000)} GB`}</dd></div>
-                                </dl>
+
+                                {usage && (
+                                    <div className="mt-4 space-y-3 border-t border-white/10 pt-3">
+                                        <div>
+                                            <div className="flex justify-between text-xs">
+                                                <span className="text-[var(--color-text-secondary)]">Členové</span>
+                                                <span className="text-white">{usage.members.used} z {usage.members.limit ?? '∞'}</span>
+                                            </div>
+                                            {!usage.members.can_add && (
+                                                <p className="mt-1 text-[10px] text-amber-200">Limit tarifu je vyčerpaný, dalšího člena nelze pozvat.</p>
+                                            )}
+                                        </div>
+                                        <div>
+                                            <div className="flex justify-between text-xs">
+                                                <span className="text-[var(--color-text-secondary)]">Obsazené místo</span>
+                                                <span className="text-white">
+                                                    {gigabytes(usage.storage.used_bytes)}{usage.storage.limit_mb != null ? ` z ${Math.round(usage.storage.limit_mb / 1000)} GB` : ''}
+                                                </span>
+                                            </div>
+                                            {usage.storage.percent != null && (
+                                                <div className="mt-1 h-2 overflow-hidden rounded-full bg-white/10">
+                                                    <div
+                                                        className={`h-full rounded-full ${usage.storage.percent > 90 ? 'bg-red-400' : usage.storage.percent > 75 ? 'bg-amber-400' : 'bg-emerald-400'}`}
+                                                        style={{ width: `${usage.storage.percent}%` }}
+                                                    />
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
                             </section>
                         )}
 

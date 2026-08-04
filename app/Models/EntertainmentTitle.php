@@ -8,6 +8,8 @@ use Illuminate\Support\Facades\Schema;
 
 class EntertainmentTitle extends Model
 {
+    use \App\Models\Concerns\BelongsToGallerySpace;
+
     protected $fillable = [
         'uuid', 'gallery_space_id', 'added_by', 'album_id', 'media_type', 'title', 'original_title', 'external_source',
         'external_id', 'release_date', 'release_year', 'runtime_minutes', 'seasons_count', 'overview', 'poster_url',
