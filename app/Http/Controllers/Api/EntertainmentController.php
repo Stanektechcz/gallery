@@ -121,7 +121,18 @@ class EntertainmentController extends Controller
     {
         $this->write($request);
         $title = $this->title($request, $uuid);
-        $data = $request->validate(['status' => 'nullable|in:proposed,shortlisted,scheduled,watching,watched,paused,dropped', 'priority' => 'nullable|in:low,normal,high,urgent', 'watch_provider' => 'nullable|string|max:120', 'notes' => 'nullable|string|max:5000']);
+        $data = $request->validate([
+            'status' => 'nullable|in:proposed,shortlisted,scheduled,watching,watched,paused,dropped',
+            'priority' => 'nullable|in:low,normal,high,urgent',
+            'watch_provider' => 'nullable|string|max:120', 'notes' => 'nullable|string|max:5000',
+            // Descriptive fields stay editable so a manually added or mis-matched title can be corrected.
+            'title' => 'sometimes|string|max:255', 'original_title' => 'nullable|string|max:255',
+            'media_type' => 'sometimes|in:movie,series',
+            'release_year' => 'nullable|integer|between:1880,2200', 'runtime_minutes' => 'nullable|integer|between:1,1440',
+            'seasons_count' => 'nullable|integer|between:1,500', 'overview' => 'nullable|string|max:10000',
+            'poster_url' => 'nullable|url:https|max:2048', 'trailer_url' => 'nullable|url:https|max:2048',
+            'genres' => 'nullable|array|max:30', 'genres.*' => 'string|max:80',
+        ]);
         if (($data['status'] ?? null) === 'watching' && ! $title->started_at) {
             $data['started_at'] = now();
         }
@@ -131,6 +142,35 @@ class EntertainmentController extends Controller
         $title->update($data);
 
         return response()->json($this->basicTitle($title->fresh()));
+    }
+
+    /** Pull fresh metadata from the movie database, or attach a title that was added by hand. */
+    public function refreshMetadata(Request $request, string $uuid): JsonResponse
+    {
+        $this->write($request);
+        $title = $this->title($request, $uuid);
+        $data = $request->validate(['external_id' => 'nullable|string|max:64', 'media_type' => 'nullable|in:movie,series']);
+
+        $externalId = $data['external_id'] ?? $title->external_id;
+        abort_unless(filled($externalId), 422, 'Vyberte film z databáze, ze které se mají údaje doplnit.');
+        $mediaType = $data['media_type'] ?? $title->media_type;
+
+        $details = $this->metadata->details($mediaType === 'series' ? 'tv' : 'movie', (int) $externalId);
+        // Never let a metadata refresh overwrite the couple's own planning fields.
+        $title->fill(collect($details)->except(['status', 'priority', 'notes', 'watch_provider'])->all());
+        $title->save();
+
+        return response()->json($this->basicTitle($title->fresh()));
+    }
+
+    public function destroy(Request $request, string $uuid): JsonResponse
+    {
+        $this->write($request);
+        $title = $this->title($request, $uuid);
+        // Votes, proposals, sessions and reviews are removed by the schema's cascade.
+        $title->delete();
+
+        return response()->json(['deleted' => true]);
     }
 
     public function vote(Request $request, string $uuid): JsonResponse

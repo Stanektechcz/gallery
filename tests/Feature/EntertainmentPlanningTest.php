@@ -101,6 +101,107 @@ class EntertainmentPlanningTest extends TestCase
         $this->assertDatabaseHas('cinema_sync_runs', ['status' => 'partial', 'showings_count' => 1]);
     }
 
+    public function test_title_can_be_edited_and_removed_from_the_watchlist(): void
+    {
+        [$owner, , $space] = $this->couple();
+        $this->actingAs($owner);
+        $title = $this->postJson('/api/v1/entertainment', [
+            'gallery_space_id' => $space->id, 'media_type' => 'movie', 'title' => 'Nepresny nazev',
+        ])->assertCreated()->json();
+
+        // Descriptive fields must be correctable, not just status and priority.
+        $this->patchJson('/api/v1/entertainment/'.$title['uuid'], [
+            'title' => 'Přesný název', 'release_year' => 2011, 'runtime_minutes' => 112,
+            'genres' => ['drama', 'komedie'], 'notes' => 'Doporučila máma.', 'watch_provider' => 'Netflix',
+        ])->assertOk()
+            ->assertJsonPath('title', 'Přesný název')
+            ->assertJsonPath('release_year', 2011)
+            ->assertJsonPath('genres.1', 'komedie');
+
+        // A vote must not block deletion — the schema cascades it away.
+        $this->putJson('/api/v1/entertainment/'.$title['uuid'].'/vote', ['interest' => 4])->assertOk();
+        $this->deleteJson('/api/v1/entertainment/'.$title['uuid'])->assertOk()->assertJsonPath('deleted', true);
+        $this->assertDatabaseMissing('entertainment_titles', ['uuid' => $title['uuid']]);
+        $this->assertDatabaseCount('entertainment_votes', 0);
+    }
+
+    public function test_a_title_from_another_space_cannot_be_removed(): void
+    {
+        [$owner, , $space] = $this->couple();
+        $intruder = User::factory()->create(['role' => 'partner', 'is_active' => true]);
+        $title = $this->actingAs($owner)->postJson('/api/v1/entertainment', [
+            'gallery_space_id' => $space->id, 'media_type' => 'movie', 'title' => 'Náš film',
+        ])->assertCreated()->json();
+
+        $this->actingAs($intruder)->deleteJson('/api/v1/entertainment/'.$title['uuid'])->assertNotFound();
+        $this->assertDatabaseHas('entertainment_titles', ['uuid' => $title['uuid']]);
+    }
+
+    public function test_manually_added_title_can_be_filled_in_from_the_movie_database(): void
+    {
+        [$owner, , $space] = $this->couple();
+        $this->tmdb();
+        Http::fake([
+            'api.themoviedb.org/3/movie/603*' => Http::response(['id' => 603, 'title' => 'Matrix', 'overview' => 'Sci-fi klasika.', 'release_date' => '1999-03-31', 'runtime' => 136, 'poster_path' => '/matrix.jpg', 'genres' => [['name' => 'Sci-fi']], 'videos' => ['results' => []]]),
+        ]);
+        $title = $this->actingAs($owner)->postJson('/api/v1/entertainment', [
+            'gallery_space_id' => $space->id, 'media_type' => 'movie', 'title' => 'Matrix', 'notes' => 'Klasika na pátek.',
+        ])->assertCreated()->json();
+        $this->assertNull($title['runtime_minutes']);
+
+        $this->postJson('/api/v1/entertainment/'.$title['uuid'].'/refresh-metadata', ['external_id' => '603'])
+            ->assertOk()
+            ->assertJsonPath('runtime_minutes', 136)
+            ->assertJsonPath('release_year', 1999)
+            // Our own planning fields survive the refresh.
+            ->assertJsonPath('notes', 'Klasika na pátek.');
+    }
+
+    public function test_chat_fills_a_film_from_the_database_and_honours_an_explicit_choice(): void
+    {
+        [$owner, , $space] = $this->couple();
+        $this->tmdb();
+        Http::fake([
+            'api.themoviedb.org/3/search/*' => Http::response(['results' => [
+                ['id' => 603, 'media_type' => 'movie', 'title' => 'Matrix', 'release_date' => '1999-03-31', 'poster_path' => '/m.jpg'],
+                ['id' => 604, 'media_type' => 'movie', 'title' => 'Matrix Reloaded', 'release_date' => '2003-05-15', 'poster_path' => '/m2.jpg'],
+            ]]),
+            'api.themoviedb.org/3/movie/604*' => Http::response(['id' => 604, 'title' => 'Matrix Reloaded', 'release_date' => '2003-05-15', 'runtime' => 138, 'poster_path' => '/m2.jpg', 'genres' => [['name' => 'Sci-fi']], 'videos' => ['results' => []]]),
+            'api.themoviedb.org/3/movie/603*' => Http::response(['id' => 603, 'title' => 'Matrix', 'release_date' => '1999-03-31', 'runtime' => 136, 'poster_path' => '/m.jpg', 'genres' => [['name' => 'Sci-fi']], 'videos' => ['results' => []]]),
+        ]);
+        $this->actingAs($owner);
+
+        // The preview offers candidates to pick from.
+        $preview = $this->postJson('/api/v1/assistant/preview', ['message' => '/film Matrix'])->assertOk()->json();
+        $this->assertSame('Matrix', $preview['titles'][0]['title']);
+        $this->assertSame('603', $preview['titles'][0]['candidates'][0]['external_id']);
+        $this->assertCount(2, $preview['titles'][0]['candidates']);
+
+        // An explicit choice wins over the automatic top hit.
+        $this->postJson('/api/v1/assistant/apply', [
+            'message' => '/film Matrix', 'selected_actions' => ['titles'],
+            'title_choices' => [['title' => 'Matrix', 'external_id' => '604', 'media_type' => 'movie']],
+        ])->assertCreated();
+
+        $this->assertDatabaseHas('entertainment_titles', [
+            'gallery_space_id' => $space->id, 'external_source' => 'tmdb', 'external_id' => '604', 'runtime_minutes' => 138,
+        ]);
+    }
+
+    public function test_chat_still_saves_a_film_when_the_movie_database_is_not_configured(): void
+    {
+        [$owner, , $space] = $this->couple();
+        $this->actingAs($owner);
+
+        $preview = $this->postJson('/api/v1/assistant/preview', ['message' => '/film Neznámý snímek'])->assertOk()->json();
+        $this->assertSame([], $preview['titles'][0]['candidates']);
+
+        $this->postJson('/api/v1/assistant/apply', ['message' => '/film Neznámý snímek', 'selected_actions' => ['titles']])->assertCreated();
+        $this->assertDatabaseHas('entertainment_titles', [
+            'gallery_space_id' => $space->id, 'title' => 'Neznámý snímek', 'external_source' => 'manual',
+        ]);
+    }
+
     private function tmdb(): void
     {
         $setting = new IntegrationSetting(['provider' => 'tmdb', 'is_enabled' => true]);

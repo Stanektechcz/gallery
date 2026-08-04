@@ -203,6 +203,8 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
     Route::post('/entertainment/cinema/sync', [App\Http\Controllers\Api\EntertainmentController::class, 'syncCinema'])->name('api.entertainment.cinema.sync');
     Route::post('/entertainment/cinema/showings/{showingUuid}', [App\Http\Controllers\Api\EntertainmentController::class, 'importShowing'])->name('api.entertainment.cinema.showings.import');
     Route::patch('/entertainment/{uuid}', [App\Http\Controllers\Api\EntertainmentController::class, 'update'])->name('api.entertainment.update');
+    Route::post('/entertainment/{uuid}/refresh-metadata', [App\Http\Controllers\Api\EntertainmentController::class, 'refreshMetadata'])->name('api.entertainment.refresh-metadata');
+    Route::delete('/entertainment/{uuid}', [App\Http\Controllers\Api\EntertainmentController::class, 'destroy'])->name('api.entertainment.destroy');
     Route::put('/entertainment/{uuid}/vote', [App\Http\Controllers\Api\EntertainmentController::class, 'vote'])->name('api.entertainment.vote');
     Route::get('/entertainment/{uuid}/date-suggestions', [App\Http\Controllers\Api\EntertainmentController::class, 'dateSuggestions'])->name('api.entertainment.date-suggestions');
     Route::post('/entertainment/{uuid}/date-proposals', [App\Http\Controllers\Api\EntertainmentController::class, 'proposeDate'])->name('api.entertainment.date-proposals.store');

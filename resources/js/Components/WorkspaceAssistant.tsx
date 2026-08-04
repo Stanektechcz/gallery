@@ -5,11 +5,13 @@ import UploadZone from '@/Components/UploadZone';
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import { flushAssistantActions, pendingAssistantActionCount, queueAssistantAction } from '@/lib/assistantActionQueue';
 
+/** A match offered by the movie database for a title detected in the message. */
+type TitleCandidate = { external_id: string | null; title: string | null; media_type: string; release_year?: number | null; poster_url?: string | null; overview?: string | null };
 type Plan = {
     date: string;
     activity_date: string;
     activities: string[];
-    titles: { title: string; type: string }[];
+    titles: { title: string; type: string; candidates?: TitleCandidate[] }[];
     recipe: string;
     recipe_details?: { ingredients:string[]; steps:string[]; servings?:number|null; prep_minutes?:number|null; cook_minutes?:number|null; source_url?:string|null; notes?:string|null };
     expense?: { amount: number; currency: string } | null;
@@ -24,7 +26,7 @@ type Plan = {
     clarification?: { kind: string; question: string } | null;
 };
 type ActionKey = 'activities' | 'titles' | 'recipe' | 'expense' | 'trip' | 'gift' | 'milestone' | 'todo' | 'itinerary';
-type Message = { role: 'assistant' | 'user'; text: string; plan?: Plan; source?: string; mediaUuids?: string[]; applied?: boolean; syncState?: 'queued' | 'synced'; requestId?: string };
+type Message = { role: 'assistant' | 'user'; text: string; plan?: Plan; source?: string; mediaUuids?: string[]; applied?: boolean; syncState?: 'queued' | 'synced'; requestId?: string; titleChoices?: Record<string, string> };
 const initialMessages: Message[] = [{ role: 'assistant', text: 'Ahoj, připravím zápis do společného systému a vždy nejdřív ukážu náhled. Můžete psát přirozeně, nebo použít rychlé bubliny.' }];
 const CHAT_STORAGE_KEY = 'maki-assistant-messages';
 
@@ -246,7 +248,13 @@ export default function WorkspaceAssistant() {
                 await queueForLater();
                 return;
             }
-            const response = await axios.post('/api/v1/assistant/apply', { message: message.source, request_id: requestId, selected_actions: selected, media_uuids: message.mediaUuids ?? [] });
+            // 'manual' keeps the plain name; anything else is the chosen movie-database entry.
+            const titleChoices = Object.entries(message.titleChoices ?? {}).map(([title, choice]) => ({
+                title,
+                external_id: choice === 'manual' ? null : choice,
+                media_type: message.plan?.titles.find(item => item.title === title)?.type ?? 'movie',
+            }));
+            const response = await axios.post('/api/v1/assistant/apply', { message: message.source, request_id: requestId, selected_actions: selected, media_uuids: message.mediaUuids ?? [], title_choices: titleChoices });
             const created = (response.data.created as string[]).join(' · ');
             markApplied('synced');
             setMessages((value) => [...value, { role: 'assistant', text: `Hotovo. Uloženo: ${created}.` }]);
@@ -287,6 +295,25 @@ export default function WorkspaceAssistant() {
                         <p>{message.text}</p>
                         {message.plan && !message.plan.search && !message.applied && (options.length > 0 || hasMedia) && <div className="mt-3 border-t border-white/10 pt-3">
                             {hasMedia && <p className="mb-2 rounded-lg bg-violet-500/10 px-2 py-1.5 text-[10px] text-violet-100">{message.mediaUuids?.length} přiložených fotek → společné album</p>}{options.length > 1 && <div className="mb-3"><p className="mb-2 text-[10px] font-medium uppercase tracking-wide text-[var(--color-text-secondary)]">Co chcete uložit?</p><div className="flex flex-wrap gap-1.5">{options.map((option) => <button key={option.key} type="button" aria-pressed={selected.includes(option.key)} onClick={() => setSelectedActions((current) => { const currentSelection = current[index] ?? options.map((item) => item.key); const next = currentSelection.includes(option.key) ? currentSelection.filter((item) => item !== option.key) : [...currentSelection, option.key]; return { ...current, [index]: next }; })} className={`min-h-8 rounded-lg border px-2.5 text-[10px] ${selected.includes(option.key) ? 'border-emerald-300/45 bg-emerald-500/15 text-emerald-100' : 'border-[var(--color-border)] text-[var(--color-text-secondary)]'}`}><span>{selected.includes(option.key) ? '✓ ' : ''}{option.label}</span><span className="opacity-65">→ {option.module}</span></button>)}</div></div>}
+                            {selected.includes('titles') && message.plan.titles.some(item => item.candidates?.length) && <div className="mb-3">
+                                <p className="mb-2 text-[10px] font-medium uppercase tracking-wide text-[var(--color-text-secondary)]">Který film to je?</p>
+                                {message.plan.titles.filter(item => item.candidates?.length).map(item => {
+                                    const chosen = message.titleChoices?.[item.title] ?? item.candidates![0].external_id ?? 'manual';
+                                    const choose = (value: string) => setMessages(current => current.map(entry => entry === message
+                                        ? { ...entry, titleChoices: { ...(entry.titleChoices ?? {}), [item.title]: value } }
+                                        : entry));
+                                    return <div key={item.title} className="mb-2">
+                                        <p className="mb-1 text-[10px] text-[var(--color-text-secondary)]">„{item.title}"</p>
+                                        <div className="flex flex-wrap gap-1.5">
+                                            {item.candidates!.map(candidate => <button key={candidate.external_id ?? candidate.title} type="button" aria-pressed={chosen === candidate.external_id} onClick={() => choose(candidate.external_id ?? 'manual')} className={`flex min-h-9 items-center gap-1.5 rounded-lg border px-2 text-[10px] ${chosen === candidate.external_id ? 'border-violet-300/50 bg-violet-500/20 text-violet-50' : 'border-[var(--color-border)] text-[var(--color-text-secondary)]'}`}>
+                                                {candidate.poster_url && <img src={candidate.poster_url} alt="" loading="lazy" className="h-8 w-6 rounded object-cover"/>}
+                                                <span className="max-w-40 truncate">{candidate.title}{candidate.release_year ? ` (${candidate.release_year})` : ''}</span>
+                                            </button>)}
+                                            <button type="button" aria-pressed={chosen === 'manual'} onClick={() => choose('manual')} className={`min-h-9 rounded-lg border px-2 text-[10px] ${chosen === 'manual' ? 'border-white/50 bg-white/10 text-white' : 'border-[var(--color-border)] text-[var(--color-text-secondary)]'}`}>Jen název</button>
+                                        </div>
+                                    </div>;
+                                })}
+                            </div>}
                             <button disabled={saving || !canApply} onClick={() => apply(message, selected)} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-emerald-500 px-3 text-xs font-medium text-white disabled:opacity-40">
                                 {saving ? <LoaderCircle size={14} className="animate-spin" /> : <Check size={14} />} Potvrdit vybrané a uložit
                             </button>

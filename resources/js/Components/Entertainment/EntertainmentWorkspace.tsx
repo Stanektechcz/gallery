@@ -16,12 +16,14 @@ import {
     ListFilter,
     LoaderCircle,
     MessageSquareText,
+    Pencil,
     Plus,
     RefreshCw,
     Search,
     Sparkles,
     Star,
     TicketCheck,
+    Trash2,
     Tv,
     Users,
 } from 'lucide-react';
@@ -75,6 +77,9 @@ type Title = {
     status: string;
     priority: string;
     watch_provider?: string | null;
+    notes?: string | null;
+    external_id?: string | null;
+    external_source?: string | null;
     created_at?: string;
     joint_score?: number | null;
     votes: Vote[];
@@ -263,6 +268,23 @@ export default function EntertainmentWorkspace({ spaceId, initialType = 'movie',
 
     const addManual = () => query.trim() && add({ title: query.trim(), media_type: manualType, external_source: 'manual' });
     const patchTitle = async (title: Title, payload: Record<string, unknown>) => { setBusy(`title:${title.uuid}`); try { await axios.patch(`/api/v1/entertainment/${title.uuid}`, payload); await load(); } catch (reason: any) { setError(reason?.response?.data?.message ?? 'Změnu se nepodařilo uložit.'); } finally { setBusy(null); } };
+    const removeTitle = async (title: Title) => {
+        if (!window.confirm(`Opravdu odebrat „${title.title}“ ze seznamu? Smažou se i preference, návrhy termínů a hodnocení.`)) return;
+        setBusy(`remove:${title.uuid}`);
+        try {
+            await axios.delete(`/api/v1/entertainment/${title.uuid}`);
+            setNotice(`„${title.title}“ je odebráno ze seznamu.`);
+            await load();
+        } catch (reason: any) { setError(reason?.response?.data?.message ?? 'Titul se nepodařilo odebrat.'); } finally { setBusy(null); }
+    };
+    const refreshMetadata = async (title: Title) => {
+        setBusy(`refresh:${title.uuid}`);
+        try {
+            await axios.post(`/api/v1/entertainment/${title.uuid}/refresh-metadata`, {});
+            setNotice(`Údaje o „${title.title}“ jsou doplněné z filmové databáze.`);
+            await load();
+        } catch (reason: any) { setError(reason?.response?.data?.message ?? 'Údaje se nepodařilo doplnit.'); } finally { setBusy(null); }
+    };
     const preference = (title: Title): PreferenceDraft => preferences[title.uuid] ?? { interest: title.my_vote?.interest ?? 3, cinema_preferred: title.my_vote?.cinema_preferred ?? false, note: title.my_vote?.note ?? '' };
     const setPreference = (title: Title, update: Partial<PreferenceDraft>) => setPreferences(current => ({ ...current, [title.uuid]: { ...preference(title), ...update } }));
     const savePreference = async (title: Title) => { setBusy(`vote:${title.uuid}`); try { await axios.put(`/api/v1/entertainment/${title.uuid}/vote`, preference(title)); setNotice(`Tvoje preference pro „${title.title}“ jsou uložené.`); await load(); } catch (reason: any) { setError(reason?.response?.data?.message ?? 'Hodnocení zájmu se nepodařilo uložit.'); } finally { setBusy(null); } };
@@ -325,7 +347,7 @@ export default function EntertainmentWorkspace({ spaceId, initialType = 'movie',
             </div>
 
             <div className="mt-4 grid gap-4 xl:grid-cols-2">
-                {visibleTitles.map(title => <WatchCard key={title.uuid} title={title} expanded={expanded === title.uuid} toggle={() => setExpanded(expanded === title.uuid ? null : title.uuid)} busy={busy} preference={preference(title)} setPreference={update => setPreference(title, update)} savePreference={() => savePreference(title)} patchTitle={payload => patchTitle(title, payload)} homeSuggestions={homeSuggestions[title.uuid] ?? []} findHomeDates={() => findHomeDates(title)} proposeHome={suggestion => proposeHome(title, suggestion)} voteProposal={voteProposal} selectProposal={selectProposal} reviewOpen={reviewOpen === title.uuid} toggleReview={() => setReviewOpen(reviewOpen === title.uuid ? null : title.uuid)} review={reviewDraft(title)} setReview={update => setReview(title, update)} recordReview={() => recordReview(title)}/>) }
+                {visibleTitles.map(title => <WatchCard key={title.uuid} title={title} expanded={expanded === title.uuid} toggle={() => setExpanded(expanded === title.uuid ? null : title.uuid)} busy={busy} preference={preference(title)} setPreference={update => setPreference(title, update)} savePreference={() => savePreference(title)} patchTitle={payload => patchTitle(title, payload)} removeTitle={() => removeTitle(title)} refreshMetadata={() => refreshMetadata(title)} homeSuggestions={homeSuggestions[title.uuid] ?? []} findHomeDates={() => findHomeDates(title)} proposeHome={suggestion => proposeHome(title, suggestion)} voteProposal={voteProposal} selectProposal={selectProposal} reviewOpen={reviewOpen === title.uuid} toggleReview={() => setReviewOpen(reviewOpen === title.uuid ? null : title.uuid)} review={reviewDraft(title)} setReview={update => setReview(title, update)} recordReview={() => recordReview(title)}/>) }
                 {!visibleTitles.length && <div className="rounded-2xl border border-dashed border-[var(--color-border)] p-10 text-center text-sm text-[var(--color-text-secondary)] xl:col-span-2"><Filter size={24} className="mx-auto mb-2 opacity-50"/>Filtrům neodpovídá žádný titul.</div>}
             </div>
         </section>
@@ -348,22 +370,81 @@ export default function EntertainmentWorkspace({ spaceId, initialType = 'movie',
     </div>;
 }
 
-function WatchCard({ title, expanded, toggle, busy, preference, setPreference, savePreference, patchTitle, homeSuggestions, findHomeDates, proposeHome, voteProposal, selectProposal, reviewOpen, toggleReview, review, setReview, recordReview }: {
-    title: Title; expanded: boolean; toggle: () => void; busy: string | null; preference: PreferenceDraft; setPreference: (update: Partial<PreferenceDraft>) => void; savePreference: () => void; patchTitle: (payload: Record<string, unknown>) => void; homeSuggestions: Array<{ starts_at: string; venue: string; label?: string }>; findHomeDates: () => void; proposeHome: (suggestion: { starts_at: string; venue: string }) => void; voteProposal: (uuid: string, response: string) => void; selectProposal: (uuid: string) => void; reviewOpen: boolean; toggleReview: () => void; review: ReviewDraft; setReview: (update: Partial<ReviewDraft>) => void; recordReview: () => void;
+function WatchCard({ title, expanded, toggle, busy, preference, setPreference, savePreference, patchTitle, removeTitle, refreshMetadata, homeSuggestions, findHomeDates, proposeHome, voteProposal, selectProposal, reviewOpen, toggleReview, review, setReview, recordReview }: {
+    title: Title; expanded: boolean; toggle: () => void; busy: string | null; preference: PreferenceDraft; setPreference: (update: Partial<PreferenceDraft>) => void; savePreference: () => void; patchTitle: (payload: Record<string, unknown>) => void; removeTitle: () => void; refreshMetadata: () => void; homeSuggestions: Array<{ starts_at: string; venue: string; label?: string }>; findHomeDates: () => void; proposeHome: (suggestion: { starts_at: string; venue: string }) => void; voteProposal: (uuid: string, response: string) => void; selectProposal: (uuid: string) => void; reviewOpen: boolean; toggleReview: () => void; review: ReviewDraft; setReview: (update: Partial<ReviewDraft>) => void; recordReview: () => void;
 }) {
     const homeProposals = title.proposals.filter(proposal => proposal.venue !== 'cinema' && proposal.status !== 'declined');
+    const [editing, setEditing] = useState(false);
     return <article className={`${card} overflow-hidden`}>
         <div className="flex gap-3 p-3 sm:p-4">{title.poster_url ? <img src={title.poster_url} alt={`Plakát ${title.title}`} loading="lazy" className="h-40 w-28 shrink-0 rounded-xl object-cover"/> : <span className="grid h-40 w-28 shrink-0 place-items-center rounded-xl bg-violet-500/10">{title.media_type === 'series' ? <Tv/> : <Film/>}</span>}<div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold text-white">{title.title}</h3><span className="rounded bg-violet-500/15 px-2 py-0.5 text-[10px] text-violet-100">{title.media_type === 'series' ? 'seriál' : 'film'}</span><span className="rounded bg-white/5 px-2 py-0.5 text-[10px] text-[var(--color-text-secondary)]">{priorityLabels[title.priority] ?? title.priority}</span></div><p className="mt-1 text-xs text-[var(--color-text-secondary)]">{title.release_year ?? 'rok neuveden'}{title.runtime_minutes ? ` · ${title.runtime_minutes} min` : ''}{title.seasons_count ? ` · ${title.seasons_count} sérií` : ''}</p><p className="mt-2 line-clamp-3 text-xs leading-relaxed text-[var(--color-text-secondary)]">{title.overview || 'Bez anotace. Doplňte společné preference a rozhodněte, zda stojí za večer ve dvou.'}</p><div className="mt-3 flex flex-wrap items-center gap-2">{title.joint_score ? <span className="inline-flex items-center gap-1 rounded-lg bg-amber-500/10 px-2 py-1 text-xs text-amber-100"><Star size={13} className="fill-amber-300 text-amber-300"/> shoda {title.joint_score}/5</span> : <span className="rounded-lg bg-white/5 px-2 py-1 text-xs text-[var(--color-text-secondary)]">čeká na hodnocení</span>}{title.review_summary?.rating ? <span className="rounded-lg bg-emerald-500/10 px-2 py-1 text-xs text-emerald-100">po zhlédnutí {title.review_summary.rating}/5</span> : null}</div></div></div>
         <div className="border-t border-[var(--color-border)] px-3 py-2 sm:px-4"><button type="button" onClick={toggle} className="flex w-full items-center justify-between text-left text-xs text-white"><span>{expanded ? 'Skrýt preference a plánování' : 'Preference, domácí termín a hodnocení'}</span>{expanded ? <ChevronUp size={16}/> : <ChevronDown size={16}/>}</button></div>
         {expanded && <div className="space-y-4 border-t border-[var(--color-border)] p-3 sm:p-4">
             <div className="rounded-xl border border-violet-400/20 bg-violet-500/5 p-3"><div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><p className="text-xs font-medium text-white">Moje preference</p><div className="mt-2 flex items-center gap-1">{[1, 2, 3, 4, 5].map(value => <button type="button" key={value} onClick={() => setPreference({ interest: value })} aria-label={`Zájem ${value} z 5`}><Star size={22} className={value <= preference.interest ? 'fill-amber-300 text-amber-300' : 'text-slate-600'}/></button>)}</div></div><label className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] px-3 py-2 text-xs text-white"><input type="checkbox" checked={preference.cinema_preferred} onChange={event => setPreference({ cinema_preferred: event.target.checked })}/> raději v kině</label></div><textarea value={preference.note} onChange={event => setPreference({ note: event.target.value })} placeholder="Proč to chci vidět, očekávání nebo poznámka pro partnera…" rows={2} className={`${field} mt-3 h-auto w-full py-2`}/><button type="button" onClick={savePreference} disabled={busy !== null} className="mt-2 rounded-lg bg-violet-500 px-3 py-2 text-xs font-medium text-white disabled:opacity-40">Uložit moje preference</button><div className="mt-3 space-y-1">{title.votes.map(vote => <p key={vote.user.id} className="text-xs text-[var(--color-text-secondary)]"><b className="text-white">{vote.user.name}</b> · {vote.interest}/5{vote.cinema_preferred ? ' · chce kino' : ''}{vote.note ? ` · ${vote.note}` : ''}</p>)}</div></div>
             <div className="grid gap-2 sm:grid-cols-2"><label className="text-xs text-[var(--color-text-secondary)]">Stav<select value={title.status} onChange={event => patchTitle({ status: event.target.value })} className={`${field} mt-1 w-full`}>{Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label className="text-xs text-[var(--color-text-secondary)]">Priorita<select value={title.priority} onChange={event => patchTitle({ priority: event.target.value })} className={`${field} mt-1 w-full`}>{Object.entries(priorityLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label></div>
+
+            <div className="flex flex-wrap items-center gap-2 rounded-xl border border-[var(--color-border)] bg-black/10 p-3">
+                <button type="button" onClick={() => setEditing(value => !value)} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-[var(--color-border)] px-3 text-xs text-white hover:bg-white/5"><Pencil size={13}/>{editing ? 'Zavřít úpravy' : 'Upravit údaje'}</button>
+                <button type="button" onClick={refreshMetadata} disabled={busy !== null} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-sky-400/30 px-3 text-xs text-sky-100 disabled:opacity-40"><RefreshCw size={13} className={busy === `refresh:${title.uuid}` ? 'animate-spin' : ''}/>Doplnit z databáze</button>
+                <button type="button" onClick={removeTitle} disabled={busy !== null} className="ml-auto inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-red-400/30 px-3 text-xs text-red-100 hover:bg-red-500/10 disabled:opacity-40"><Trash2 size={13}/>Odebrat ze seznamu</button>
+            </div>
+            {editing && <TitleEditor title={title} busy={busy === `title:${title.uuid}`} save={payload => { patchTitle(payload); setEditing(false); }}/>}
             <div className="rounded-xl border border-teal-400/20 bg-teal-500/5 p-3"><div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-xs font-medium text-white">Domácí filmový večer</p><p className="mt-1 text-[10px] text-[var(--color-text-secondary)]">Kino se vybírá samostatně v programu níže.</p></div><button type="button" onClick={findHomeDates} disabled={busy !== null} className="rounded-lg border border-teal-400/30 px-3 py-2 text-xs text-teal-100"><Sparkles size={13} className="mr-1 inline"/>Najít volné večery</button></div>{homeSuggestions.length > 0 && <div className="mt-3 flex flex-wrap gap-2">{homeSuggestions.map(suggestion => <button type="button" key={suggestion.starts_at} onClick={() => proposeHome(suggestion)} className="rounded-lg bg-teal-500/15 px-3 py-2 text-xs text-teal-100">{suggestion.label ?? dateTime(suggestion.starts_at)}</button>)}</div>}{homeProposals.map(proposal => <div key={proposal.uuid} className="mt-3 flex flex-col gap-2 rounded-lg bg-black/15 p-2 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-xs text-white">{dateTime(proposal.starts_at)} · doma</p><p className="text-[10px] text-[var(--color-text-secondary)]">ano {proposal.votes?.yes ?? 0} · možná {proposal.votes?.maybe ?? 0} · ne {proposal.votes?.no ?? 0}</p></div><ProposalActions proposal={proposal} vote={response => voteProposal(proposal.uuid, response)} select={() => selectProposal(proposal.uuid)}/></div>)}</div>
             <button type="button" onClick={toggleReview} className="flex w-full items-center justify-between rounded-xl border border-emerald-400/20 bg-emerald-500/5 p-3 text-left"><span><b className="block text-xs text-white">Zapsat zhlédnutí a podrobné hodnocení</b><small className="text-[10px] text-[var(--color-text-secondary)]">Příběh, herectví, obraz, zvuk, emoce, tempo a společná vzpomínka</small></span>{reviewOpen ? <ChevronUp size={16}/> : <MessageSquareText size={16}/>}</button>
             {reviewOpen && <ReviewForm title={title} draft={review} setDraft={setReview} save={recordReview} busy={busy === `review:${title.uuid}`}/>} 
             {title.reviews.length > 0 && <div><p className="text-xs font-medium text-white">Naše hodnocení po zhlédnutí</p><div className="mt-2 space-y-2">{title.reviews.map((item, index) => <ReviewCard key={`${item.user.id}-${item.uuid ?? index}`} review={item}/>)}</div></div>}
         </div>}
     </article>;
+}
+
+/** Corrects a title that was added by hand or matched to the wrong film. */
+function TitleEditor({ title, busy, save }: { title: Title; busy: boolean; save: (payload: Record<string, unknown>) => void }) {
+    const [draft, setDraft] = useState({
+        title: title.title,
+        original_title: title.original_title ?? '',
+        media_type: title.media_type,
+        release_year: title.release_year ? String(title.release_year) : '',
+        runtime_minutes: title.runtime_minutes ? String(title.runtime_minutes) : '',
+        seasons_count: title.seasons_count ? String(title.seasons_count) : '',
+        genres: (title.genres ?? []).join(', '),
+        overview: title.overview ?? '',
+        watch_provider: title.watch_provider ?? '',
+        notes: title.notes ?? '',
+    });
+    const set = (update: Partial<typeof draft>) => setDraft(current => ({ ...current, ...update }));
+    const number = (value: string) => value.trim() === '' ? null : Number(value);
+
+    const submit = () => {
+        if (!draft.title.trim()) return;
+        save({
+            title: draft.title.trim(),
+            original_title: draft.original_title.trim() || null,
+            media_type: draft.media_type,
+            release_year: number(draft.release_year),
+            runtime_minutes: number(draft.runtime_minutes),
+            seasons_count: number(draft.seasons_count),
+            genres: draft.genres.split(',').map(item => item.trim()).filter(Boolean),
+            overview: draft.overview.trim() || null,
+            watch_provider: draft.watch_provider.trim() || null,
+            notes: draft.notes.trim() || null,
+        });
+    };
+
+    return <div className="rounded-xl border border-[var(--color-border)] bg-black/15 p-3">
+        <p className="text-xs font-medium text-white">Úprava údajů</p>
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            <label className="text-[10px] text-[var(--color-text-secondary)]">Název<input value={draft.title} onChange={event => set({ title: event.target.value })} required className={`${field} mt-1 w-full`}/></label>
+            <label className="text-[10px] text-[var(--color-text-secondary)]">Původní název<input value={draft.original_title} onChange={event => set({ original_title: event.target.value })} className={`${field} mt-1 w-full`}/></label>
+            <label className="text-[10px] text-[var(--color-text-secondary)]">Typ<select value={draft.media_type} onChange={event => set({ media_type: event.target.value as Title['media_type'] })} className={`${field} mt-1 w-full`}><option value="movie">Film</option><option value="series">Seriál</option></select></label>
+            <label className="text-[10px] text-[var(--color-text-secondary)]">Rok<input type="number" min="1880" max="2200" value={draft.release_year} onChange={event => set({ release_year: event.target.value })} className={`${field} mt-1 w-full`}/></label>
+            <label className="text-[10px] text-[var(--color-text-secondary)]">Délka (min)<input type="number" min="1" max="1440" value={draft.runtime_minutes} onChange={event => set({ runtime_minutes: event.target.value })} className={`${field} mt-1 w-full`}/></label>
+            <label className="text-[10px] text-[var(--color-text-secondary)]">Počet sérií<input type="number" min="1" max="500" value={draft.seasons_count} onChange={event => set({ seasons_count: event.target.value })} className={`${field} mt-1 w-full`}/></label>
+            <label className="text-[10px] text-[var(--color-text-secondary)] sm:col-span-2">Žánry (oddělené čárkou)<input value={draft.genres} onChange={event => set({ genres: event.target.value })} placeholder="drama, komedie" className={`${field} mt-1 w-full`}/></label>
+            <label className="text-[10px] text-[var(--color-text-secondary)] sm:col-span-2">Kde to dávají<input value={draft.watch_provider} onChange={event => set({ watch_provider: event.target.value })} placeholder="Netflix, HBO Max…" className={`${field} mt-1 w-full`}/></label>
+        </div>
+        <textarea value={draft.overview} onChange={event => set({ overview: event.target.value })} rows={3} placeholder="Anotace" className={`${field} mt-2 h-auto w-full py-2`}/>
+        <textarea value={draft.notes} onChange={event => set({ notes: event.target.value })} rows={2} placeholder="Naše poznámka" className={`${field} mt-2 h-auto w-full py-2`}/>
+        <button type="button" onClick={submit} disabled={busy || !draft.title.trim()} className="mt-3 inline-flex min-h-10 items-center gap-2 rounded-xl bg-violet-500 px-4 text-sm font-medium text-white disabled:opacity-40">{busy ? <LoaderCircle size={15} className="animate-spin"/> : <Check size={15}/>} Uložit úpravy</button>
+    </div>;
 }
 
 function ReviewForm({ title, draft, setDraft, save, busy }: { title: Title; draft: ReviewDraft; setDraft: (update: Partial<ReviewDraft>) => void; save: () => void; busy: boolean }) {

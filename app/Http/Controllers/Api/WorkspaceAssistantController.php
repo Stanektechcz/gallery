@@ -13,6 +13,7 @@ use App\Models\RecipeIngredient;
 use App\Models\RecipeStep;
 use App\Models\SharedTodo;
 use App\Services\Banking\SharedExpenseWriteService;
+use App\Services\Entertainment\EntertainmentMetadataService;
 use App\Services\Planning\CalendarEventCreationService;
 use App\Services\Planning\CalendarEventTripService;
 use App\Services\Planning\GiftIdeaService;
@@ -41,18 +42,113 @@ class WorkspaceAssistantController extends Controller
         private readonly TravelInboxService $travelInbox,
         private readonly LifeEventService $lifeEvents,
         private readonly UniversalTagService $universalTags,
+        private readonly EntertainmentMetadataService $titleMetadata,
     ) {}
 
     public function preview(Request $request)
     {
         $data = $request->validate(['message' => 'required|string|min:2|max:4000']);
+        $plan = $this->plan($data['message']);
+        $plan['titles'] = $this->withDatabaseMatches($plan['titles']);
 
-        return response()->json($this->plan($data['message']));
+        return response()->json($plan);
+    }
+
+    /**
+     * Decide which movie-database entry backs each detected title and fetch its details.
+     * An explicit choice wins; otherwise the top search hit is used automatically. A choice
+     * of 'manual' (null external_id) keeps the plain name, as does an unconfigured or
+     * unreachable database — the title is still saved either way.
+     *
+     * @param  list<array{title:string,type:string}>  $titles
+     * @param  list<array{title:string,external_id?:?string,media_type?:string}>  $choices
+     * @return list<array{title:string,type:string,external_id:?string,details:array<string,mixed>}>
+     */
+    private function resolveTitles(array $titles, array $choices): array
+    {
+        $chosen = collect($choices)->keyBy(fn (array $choice) => mb_strtolower(trim($choice['title'])));
+        $configured = $this->titleMetadata->configured();
+
+        return array_map(function (array $title) use ($chosen, $configured) {
+            $type = $title['type'];
+            $key = mb_strtolower(trim($title['title']));
+            $choice = $chosen->get($key);
+            $externalId = null;
+
+            if ($choice) {
+                $externalId = $choice['external_id'] ?? null;   // explicit pick, possibly 'manual' => null
+                $type = $choice['media_type'] ?? $type;
+            } elseif ($configured) {
+                try {
+                    $best = collect($this->titleMetadata->search($title['title'], $type === 'series' ? 'tv' : 'movie'))->first();
+                    $externalId = $best['external_id'] ?? null;
+                    $type = $best['media_type'] ?? $type;
+                } catch (\Throwable $exception) {
+                    report($exception);
+                }
+            }
+
+            $details = [];
+            if (filled($externalId) && $configured) {
+                try {
+                    $details = collect($this->titleMetadata->details($type === 'series' ? 'tv' : 'movie', (int) $externalId))
+                        ->except('community_rating')->all();
+                } catch (\Throwable $exception) {
+                    report($exception);
+                    $externalId = null;   // fall back to a plain entry rather than losing the title
+                }
+            }
+
+            return ['title' => $title['title'], 'type' => $type, 'external_id' => filled($externalId) ? (string) $externalId : null, 'details' => $details];
+        }, $titles);
+    }
+
+    /**
+     * Offer movie-database candidates for each detected title so the chat can fill in
+     * poster, year and runtime instead of storing a bare name. The first candidate is
+     * the automatic pick; the user may choose another in the preview.
+     *
+     * @param  list<array{title:string,type:string}>  $titles
+     * @return list<array<string,mixed>>
+     */
+    private function withDatabaseMatches(array $titles): array
+    {
+        if ($titles === [] || ! $this->titleMetadata->configured()) {
+            return array_map(fn (array $title) => $title + ['candidates' => []], $titles);
+        }
+
+        return array_map(function (array $title) {
+            try {
+                $matches = $this->titleMetadata->search($title['title'], $title['type'] === 'series' ? 'tv' : 'movie');
+            } catch (\Throwable $exception) {
+                report($exception);
+                $matches = [];
+            }
+
+            return $title + ['candidates' => collect($matches)->take(5)->map(fn (array $item) => [
+                'external_id' => $item['external_id'] ?? null,
+                'title' => $item['title'] ?? null,
+                'media_type' => $item['media_type'] ?? $title['type'],
+                'release_year' => $item['release_year'] ?? null,
+                'poster_url' => $item['poster_url'] ?? null,
+                'overview' => $item['overview'] ?? null,
+            ])->values()->all()];
+        }, $titles);
     }
 
     public function apply(Request $request)
     {
-        $data = $request->validate(['message' => 'required|string|min:2|max:4000', 'request_id' => 'nullable|uuid', 'selected_actions' => 'nullable|array|max:9', 'selected_actions.*' => 'string', 'media_uuids' => 'nullable|array|max:100', 'media_uuids.*' => 'uuid']);
+        $data = $request->validate([
+            'message' => 'required|string|min:2|max:4000', 'request_id' => 'nullable|uuid',
+            'selected_actions' => 'nullable|array|max:9', 'selected_actions.*' => 'string',
+            'media_uuids' => 'nullable|array|max:100', 'media_uuids.*' => 'uuid',
+            // Which movie-database entry the user picked for each detected title.
+            // 'manual' keeps the plain name; omitting a title falls back to the automatic pick.
+            'title_choices' => 'nullable|array|max:20',
+            'title_choices.*.title' => 'required|string|max:255',
+            'title_choices.*.external_id' => 'nullable|string|max:64',
+            'title_choices.*.media_type' => 'nullable|in:movie,series',
+        ]);
         $user = $request->user();
         $space = $user->gallerySpaces()->orderByDesc('is_default')->firstOrFail();
         if (!empty($data['request_id']) && Schema::hasTable('assistant_action_receipts')) {
@@ -72,6 +168,9 @@ class WorkspaceAssistantController extends Controller
         abort_if($plan['search'], 422, 'Vyhledávání se otevírá přímo bez ukládání.');
         abort_unless($this->hasActions($plan) || $mediaUuids, 422, 'Nerozpoznal jsem položku, kterou lze uložit.');
 
+        // Resolved outside the transaction: this may call the movie database over HTTP.
+        $resolvedTitles = $this->resolveTitles($plan['titles'], $data['title_choices'] ?? []);
+
         $created = [];
         $lifeEvents = $this->lifeEvents;
         $calendarEvents = $this->calendarEvents;
@@ -83,13 +182,20 @@ class WorkspaceAssistantController extends Controller
         $travelInbox = $this->travelInbox;
         $universalTags = $this->universalTags;
 
-        DB::transaction(function () use ($plan, $data, $mediaUuids, $user, $space, &$created, $lifeEvents, $calendarEvents, $tripService, $expenses, $todoService, $gifts, $milestones, $travelInbox, $universalTags) {
+        DB::transaction(function () use ($plan, $data, $mediaUuids, $user, $space, &$created, $lifeEvents, $calendarEvents, $tripService, $expenses, $todoService, $gifts, $milestones, $travelInbox, $universalTags, $resolvedTitles) {
             $activityEventId = null;
-            foreach ($plan['titles'] as $title) {
+            foreach ($resolvedTitles as $title) {
+                $lookup = $title['external_id']
+                    ? ['gallery_space_id' => $space->id, 'external_source' => 'tmdb', 'external_id' => $title['external_id']]
+                    : ['gallery_space_id' => $space->id, 'external_source' => 'manual', 'external_id' => null, 'title' => $title['title']];
                 $entertainmentTitle = EntertainmentTitle::firstOrCreate(
-                    ['gallery_space_id' => $space->id, 'external_source' => 'manual', 'external_id' => null, 'title' => $title['title']],
-                    ['added_by' => $user->id, 'media_type' => $title['type'], 'status' => 'proposed', 'priority' => 'normal']
+                    $lookup,
+                    $title['details'] + ['added_by' => $user->id, 'media_type' => $title['type'], 'title' => $title['title'], 'status' => 'proposed', 'priority' => 'normal']
                 );
+                // An entry added earlier as a bare name gets its details filled in now.
+                if (! $entertainmentTitle->wasRecentlyCreated && $title['details'] && blank($entertainmentTitle->external_id)) {
+                    $entertainmentTitle->fill($title['details'])->save();
+                }
                 if ($entertainmentTitle->wasRecentlyCreated) {
                     if (Schema::hasColumn('entertainment_titles', 'created_from')) {
                         $entertainmentTitle->update(['created_from' => 'assistant', 'source_reference' => $data['request_id'] ?? null]);
