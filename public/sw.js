@@ -1,5 +1,9 @@
 /* Maki root service worker: web remains the source of truth. */
-const VERSION = 'maki-shell-v2';
+/*
+ * v3 drops every v2 entry. The static cache key never changed, so build assets from
+ * every past deployment accumulated in it — three generations of app.js were still held.
+ */
+const VERSION = 'maki-shell-v3';
 const SHELL_CACHE = `${VERSION}:static`;
 const SHELL_FILES = [
     '/offline.html',
@@ -44,7 +48,24 @@ self.addEventListener('fetch', event => {
     // Authenticated HTML is always fetched from the server. Offline mode uses
     // a public shell only, never an old page containing another user's data.
     if (request.mode === 'navigate') {
-        event.respondWith(fetch(request, { cache: 'no-store' }).catch(() => caches.match('/offline.html')));
+        /*
+         * The request is passed through untouched, and deliberately so.
+         *
+         * Supplying an init object — this used to pass { cache: 'no-store' } — rebuilds
+         * the Request, and 'navigate' mode cannot survive that: it degrades to 'cors'.
+         * A navigation carries redirect: 'manual', so any redirecting URL answers with an
+         * opaqueredirect, which respondWith() only accepts for a genuine navigation. The
+         * rebuilt request was no longer one, so the promise rejected, fell into the catch
+         * below, and served the offline page.
+         *
+         * Every redirecting address was affected: the site root while it redirected to
+         * the login form, sign-up while registration is closed, any page behind auth for
+         * a signed-out visitor, and the return from the payment gateway.
+         *
+         * Freshness does not depend on this: authenticated HTML is never put in the cache
+         * and the response headers govern the browser's own caching.
+         */
+        event.respondWith(fetch(request).catch(() => caches.match('/offline.html')));
         return;
     }
 
