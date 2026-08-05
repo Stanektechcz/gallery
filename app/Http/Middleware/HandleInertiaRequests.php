@@ -58,6 +58,9 @@ class HandleInertiaRequests extends Middleware
             // Which features this space may see. Lazily resolved so it costs nothing on
             // pages that never read it, and degrades to null before the migrations run.
             'features' => fn () => $this->activeFeatures($request),
+            // Public half of the VAPID pair; null until the deployment configures it, and
+            // the toggle then says so instead of failing on a click.
+            'push_public_key' => config('push.public_key'),
             'ziggy' => fn() => [
                 ...(new \Tighten\Ziggy\Ziggy)->toArray(),
                 'location' => $request->url(),

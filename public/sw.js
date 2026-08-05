@@ -87,3 +87,42 @@ self.addEventListener('fetch', event => {
         return response;
     })());
 });
+
+/*
+ * Push delivery. The payload is JSON produced by WebPushService; anything unexpected
+ * still shows a generic notification rather than being dropped silently.
+ */
+self.addEventListener('push', event => {
+    let data = { title: 'Maki', body: 'Máte novou připomínku.', url: '/', tag: 'maki' };
+    try {
+        if (event.data) data = { ...data, ...event.data.json() };
+    } catch (error) {
+        if (event.data) data.body = event.data.text();
+    }
+
+    event.waitUntil(self.registration.showNotification(data.title, {
+        body: data.body,
+        icon: '/icons/pwa-192x192.png',
+        badge: '/icons/pwa-192x192.png',
+        // Same tag replaces an earlier notification instead of stacking.
+        tag: data.tag,
+        data: { url: data.url },
+    }));
+});
+
+self.addEventListener('notificationclick', event => {
+    event.notification.close();
+    const target = event.notification.data?.url || '/';
+
+    event.waitUntil((async () => {
+        const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+        // Reuse an open tab where possible rather than piling up new ones.
+        for (const client of windows) {
+            if (new URL(client.url).origin === self.location.origin) {
+                await client.focus();
+                return client.navigate(target);
+            }
+        }
+        return self.clients.openWindow(target);
+    })());
+});

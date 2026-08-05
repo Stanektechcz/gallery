@@ -1,4 +1,5 @@
 import AppLayout from '@/Layouts/AppLayout';
+import PushNotificationToggle from '@/Components/PushNotificationToggle';
 import { Head, usePage } from '@inertiajs/react';
 import axios from 'axios';
 import { Check, LoaderCircle, Moon, Palette, RotateCcw, Sun } from 'lucide-react';
@@ -50,6 +51,8 @@ function contrast(a: string, b: string): number {
 const isHex = (value: string) => /^#[0-9a-fA-F]{6}$/.test(value);
 
 export default function Appearance() {
+    const page = usePage().props as { push_public_key?: string | null };
+    const pushPublicKey = page.push_public_key ?? null;
     const stored = (usePage().props.auth?.user as { theme_palette?: Record<Mode, Palette> } | undefined)?.theme_palette;
 
     const [mode, setMode] = useState<Mode>('dark');
@@ -176,6 +179,14 @@ export default function Appearance() {
                             </div>
                         ))}
                     </div>
+                </section>
+
+                <section className="mt-8">
+                    <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">Upozornění</h2>
+                    <p className="mt-1 mb-3 text-xs text-[var(--color-text-secondary)]">
+                        Připomínky na akce a úkoly, i když aplikaci nemáte otevřenou.
+                    </p>
+                    <PushNotificationToggle publicKey={pushPublicKey} />
                 </section>
 
                 <div className="mt-6 flex flex-wrap items-center gap-2">

@@ -26,9 +26,16 @@ class DeliverPlanningRemindersCommand extends Command
             try {
                 $recipient = $reminder->user ?: $reminder->event?->creator;
                 if (!$recipient || !$reminder->event) throw new \RuntimeException('Chybí příjemce nebo akce.');
-                // Web Push needs a VAPID sender configured by the deployment. Until then the
-                // PWA receives the same secure in-app reminder and can show a local notification.
                 $recipient->notify(new EventReminderNotification($reminder->event, $reminder->channel, $reminder->id));
+
+                // Push is the convenience on top: the in-app notification above is the
+                // reliable channel, so a push failure must never fail the reminder.
+                app(\App\Services\Notifications\WebPushService::class)->sendToUser($recipient, [
+                    'title' => $reminder->event->title ?: 'Připomínka',
+                    'body'  => $this->pushBody($reminder->event),
+                    'url'   => '/calendar/events/' . $reminder->event->uuid,
+                    'tag'   => 'event-' . $reminder->event->uuid,
+                ]);
                 $reminder->update(['status' => 'delivered', 'delivered_at' => now(), 'last_error' => null]);
                 DB::table('reminder_delivery_logs')->insert(['event_reminder_id' => $reminder->id, 'channel' => $reminder->channel, 'status' => 'delivered', 'created_at' => now()]);
             } catch (\Throwable $exception) {
@@ -65,5 +72,24 @@ class DeliverPlanningRemindersCommand extends Command
 
         $this->info("Zpracováno připomínek: {$reminders->count()}, úkolů: {$todoReminders->count()}, kapslí: {$capsules->count()}.");
         return self::SUCCESS;
+    }
+
+    /**
+     * Short line for the notification. Only the time and place — a push shows on a lock
+     * screen, so it deliberately carries no private detail beyond what is already in the
+     * event's own title.
+     */
+    private function pushBody(mixed $event): string
+    {
+        $parts = [];
+
+        if ($event->starts_at) {
+            $parts[] = $event->starts_at->timezone('Europe/Prague')->format('j. n. H:i');
+        }
+        if (! empty($event->place_name)) {
+            $parts[] = $event->place_name;
+        }
+
+        return $parts === [] ? 'Blíží se naplánovaná akce.' : implode(' · ', $parts);
     }
 }
