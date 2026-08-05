@@ -1,3 +1,4 @@
+import { useViewportSafePanel } from '@/lib/useViewportSafePanel';
 import axios from 'axios';
 import { Check, Monitor, Moon, Sun } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -29,6 +30,7 @@ function applyTheme(theme: Theme): void {
 export default function ThemeControl({ initial }: { initial?: unknown }) {
     const [open, setOpen] = useState(false);
     const [busy, setBusy] = useState(false);
+    const panel = useViewportSafePanel(open);
     const [theme, setTheme] = useState<Theme>(() => {
         const stored = typeof localStorage !== 'undefined' ? localStorage.getItem('maki-theme') : null;
         return valid(initial) ? initial : (valid(stored) ? stored : 'system');
@@ -74,7 +76,7 @@ export default function ThemeControl({ initial }: { initial?: unknown }) {
             {open && (
                 <>
                     <button type="button" aria-label="Zavřít nabídku vzhledu" onClick={() => setOpen(false)} className="fixed inset-0 z-40 cursor-default" />
-                    <div className="absolute bottom-full right-0 z-50 mb-2 w-60 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-2 shadow-2xl">
+                    <div ref={panel.ref} style={panel.style} className="absolute bottom-full z-50 mb-2 w-60 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-2 shadow-2xl">
                         <p className="px-2 py-1 text-xs font-medium text-[var(--color-text-primary)]">Vzhled</p>
                         {options.map(option => {
                             const Icon = option.icon;
