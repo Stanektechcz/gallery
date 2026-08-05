@@ -1,4 +1,5 @@
 import AppInstallButton from '@/Components/AppInstallButton';
+import { useViewportSafePanel } from '@/lib/useViewportSafePanel';
 import InterfaceDensityControl from '@/Components/InterfaceDensityControl';
 import ThemeControl from '@/Components/ThemeControl';
 import UploadPanel from '@/Components/UploadPanel';
@@ -301,6 +302,9 @@ interface NotificationMeta {
 function NotificationBell() {
     const [notifs,     setNotifs]     = useState<GalleryNotif[]>([]);
     const [open,       setOpen]       = useState(false);
+    // The bell lives in the sidebar footer, so the panel opens upwards and is kept
+    // inside the viewport on both axes.
+    const panel = useViewportSafePanel(open, 'above');
     const [loading,    setLoading]    = useState(false);
     const [actionBusy, setActionBusy] = useState('');
     const [actionError, setActionError] = useState('');
@@ -437,7 +441,7 @@ function NotificationBell() {
             {open && (
                 <>
                     <div className="fixed inset-0 z-40" onClick={() => setOpen(false)}/>
-                    <div className="absolute right-0 top-full mt-2 w-[min(25rem,calc(100vw-1rem))] bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-xl shadow-2xl overflow-hidden z-50">
+                    <div ref={panel.ref} style={panel.style} className="absolute w-[min(25rem,calc(100vw-1rem))] bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-xl shadow-2xl overflow-hidden z-50">
                         <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--color-border)]">
                             <div><h3 className="text-sm font-semibold text-[var(--color-text-primary)]">Pro nás dva</h3><p className="mt-0.5 text-[10px] text-[var(--color-text-secondary)]">Plány, cesty, vzpomínky i společné finance</p></div>
                             <div className="flex items-center gap-1">{meta.quiet_now&&<span title="Tichý režim je aktivní" className="rounded-full bg-violet-500/15 px-2 py-1 text-[9px] text-violet-100">ticho</span>}<button aria-label="Nastavení upozornění" onClick={()=>setShowSettings(value=>!value)} className={`rounded-lg p-2 ${showSettings?'bg-[var(--color-surface-muted)] text-[var(--color-text-primary)]':'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}><Settings size={15}/></button></div>
