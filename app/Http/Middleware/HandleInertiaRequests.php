@@ -47,6 +47,7 @@ class HandleInertiaRequests extends Middleware
                     'is_active'  => $request->user()->is_active,
                     'interface_density' => (is_array($request->user()->preferences) ? ($request->user()->preferences['interface_density'] ?? null) : null),
                     'theme' => (is_array($request->user()->preferences) ? ($request->user()->preferences['theme'] ?? null) : null),
+                    'theme_palette' => \App\Support\ThemePalette::forUser($request->user()),
                 ] : null,
             ],
             'flash' => [

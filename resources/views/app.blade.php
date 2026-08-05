@@ -25,6 +25,11 @@
         })();
     </script>
 
+    {{-- A member's own colours, rendered server-side so the stock palette never flashes first. --}}
+    @if ($paletteCss = \App\Support\ThemePalette::css(auth()->user()))
+        <style id="maki-palette">{!! $paletteCss !!}</style>
+    @endif
+
     <title inertia>{{ config('app.name', 'Stanektech Gallery') }}</title>
 
     <!-- PWA Meta -->

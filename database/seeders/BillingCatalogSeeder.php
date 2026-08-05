@@ -49,8 +49,9 @@ class BillingCatalogSeeder extends Seeder
             ['code' => 'stats',        'name' => 'Statistiky',            'category' => 'Nadstavba', 'icon' => '📊', 'route' => '/stats',     'tagline' => 'Přehledy o tom, co a kdy jste nasbírali.'],
             ['code' => 'automations',  'name' => 'Automatizace',          'category' => 'Nadstavba', 'icon' => '⚙️', 'route' => '/automations', 'tagline' => 'Pravidelné úlohy, které běží za vás.'],
 
-            // Paid add-on.
+            // Paid add-ons.
             ['code' => 'burps',        'name' => 'Hodnocení krkanců',     'category' => 'Doplňky',   'icon' => '🎺', 'route' => '/krkance',   'tagline' => 'Ano, myslíme to vážně. A je to zábava.'],
+            ['code' => 'farts',        'name' => 'Hodnocení prdů',        'category' => 'Doplňky',   'icon' => '💨', 'route' => '/prdy',      'tagline' => 'Hlasitost, aroma, nenápadnost a načasování.'],
         ];
     }
 
@@ -130,6 +131,21 @@ class BillingCatalogSeeder extends Seeder
                 'description' => 'Zaznamenejte krkanec, nechte ho ohodnotit protějškem podle hlasitosti, délky, umění a překvapení, a sledujte žebříček i měsíčního šampiona.',
                 'price_monthly' => 4_900, 'sort_order' => 10,
                 'grants' => ['burps'],
+            ],
+            [
+                'code' => 'farts', 'name' => 'Hodnocení prdů', 'icon' => '💨',
+                'tagline' => 'Sesterský modul ke krkancům, s vlastními kritérii.',
+                'description' => 'Zaznamenejte úlovek nahrávkou nebo připojenou hlasovkou a nechte ho ohodnotit podle hlasitosti, aroma, nenápadnosti a načasování. Vlastní žebříček i šampion měsíce.',
+                'price_monthly' => 4_900, 'sort_order' => 20,
+                'grants' => ['farts'],
+            ],
+            [
+                // Cheaper together than the two bought separately.
+                'code' => 'zvukove_hratky', 'name' => 'Zvukové hrátky', 'icon' => '🔊',
+                'tagline' => 'Krkance i prdy v jednom balíčku.',
+                'description' => 'Oba doplňkové moduly dohromady, se společným nahráváním zvuku a napojením na hlasovky.',
+                'price_monthly' => 7_900, 'sort_order' => 30,
+                'grants' => ['burps', 'farts'],
             ],
         ];
 

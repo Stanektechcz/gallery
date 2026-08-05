@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Burp;
 use App\Models\BurpRating;
 use App\Models\GallerySpace;
+use App\Models\VoiceNote;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -29,7 +30,7 @@ class BurpController extends Controller
         $user = $request->user();
         $space = $this->space($request, $request->integer('gallery_space_id') ?: null);
 
-        $burps = Burp::with(['author:id,name', 'ratings.user:id,name'])
+        $burps = Burp::with(['author:id,name', 'ratings.user:id,name', 'voiceNote'])
             ->where('gallery_space_id', $space->id)
             ->orderByDesc('happened_at')->orderByDesc('id')
             ->limit(200)->get();
@@ -53,18 +54,24 @@ class BurpController extends Controller
             'happened_at' => 'nullable|date',
             'duration_ms' => 'nullable|integer|between:100,120000',
             'audio' => 'nullable|file|max:10240|mimetypes:' . implode(',', self::ALLOWED_MIME),
+            // Attach an existing recording rather than making a new one.
+            'voice_note_uuid' => 'nullable|uuid',
         ]);
 
         $space = $this->space($request, $data['gallery_space_id'] ?? null);
         $path = null;
         $mime = null;
         $size = null;
+        $voiceNoteId = null;
         if ($request->hasFile('audio')) {
             $file = $request->file('audio');
             $path = $file->store("burps/{$space->id}", self::DISK);
             abort_unless($path, 500, 'Nahrávku se nepodařilo uložit.');
             $mime = $file->getClientMimeType();
             $size = $file->getSize();
+        } elseif (! empty($data['voice_note_uuid'])) {
+            $note = VoiceNote::where('uuid', $data['voice_note_uuid'])->where('gallery_space_id', $space->id)->firstOrFail();
+            $voiceNoteId = $note->id;
         }
 
         $burp = Burp::create([
@@ -74,10 +81,11 @@ class BurpController extends Controller
             'occasion' => $data['occasion'] ?? null,
             'duration_ms' => $data['duration_ms'] ?? null,
             'path' => $path, 'mime_type' => $mime, 'size_bytes' => $size,
+            'voice_note_id' => $voiceNoteId,
             'happened_at' => isset($data['happened_at']) ? Carbon::parse($data['happened_at']) : now(),
         ]);
 
-        return response()->json($this->payload($burp->fresh(['author', 'ratings.user']), $request->user()->id), 201);
+        return response()->json($this->payload($burp->fresh(['author', 'ratings.user', 'voiceNote']), $request->user()->id), 201);
     }
 
     /** One rating per person per burp; rating your own is not allowed. */
@@ -98,17 +106,18 @@ class BurpController extends Controller
             collect($data)->only([...self::CRITERIA, 'comment'])->all() + ['score' => $score]
         );
 
-        return response()->json($this->payload($burp->fresh(['author', 'ratings.user']), $request->user()->id));
+        return response()->json($this->payload($burp->fresh(['author', 'ratings.user', 'voiceNote']), $request->user()->id));
     }
 
     public function stream(Request $request, string $uuid): StreamedResponse
     {
         $this->available();
         $burp = $this->burp($request, $uuid);
-        abort_unless($burp->path && Storage::disk(self::DISK)->exists($burp->path), 404);
+        $path = $burp->path ?: $burp->voiceNote?->path;
+        abort_unless($path && Storage::disk(self::DISK)->exists($path), 404);
 
-        return Storage::disk(self::DISK)->response($burp->path, null, [
-            'Content-Type' => $burp->mime_type ?? 'audio/webm',
+        return Storage::disk(self::DISK)->response($path, null, [
+            'Content-Type' => $burp->mime_type ?: $burp->voiceNote?->mime_type ?: 'audio/webm',
             'Cache-Control' => 'private, max-age=3600',
             'X-Content-Type-Options' => 'nosniff',
         ]);
@@ -121,6 +130,7 @@ class BurpController extends Controller
         $burp = $this->burp($request, $uuid);
         abort_unless($burp->created_by === $request->user()->id, 403, 'Smazat záznam může jen jeho autor.');
 
+        // Only its own file is removed; an attached voice note belongs to its library.
         if ($burp->path) Storage::disk(self::DISK)->delete($burp->path);
         $burp->delete();   // ratings cascade
 
@@ -139,8 +149,9 @@ class BurpController extends Controller
             'duration_ms' => $burp->duration_ms,
             'happened_at' => optional($burp->happened_at)->toIso8601String(),
             'author' => ['id' => $burp->author?->id, 'name' => $burp->author?->name],
-            'has_audio' => (bool) $burp->path,
-            'stream_url' => $burp->path ? "/api/v1/burps/{$burp->uuid}/stream" : null,
+            'has_audio' => (bool) ($burp->path || $burp->voice_note_id),
+            'from_voice_note' => $burp->voiceNote ? ['uuid' => $burp->voiceNote->uuid, 'title' => $burp->voiceNote->title] : null,
+            'stream_url' => ($burp->path || $burp->voice_note_id) ? "/api/v1/burps/{$burp->uuid}/stream" : null,
             'average_score' => $ratings->count() ? round($ratings->avg('score'), 2) : null,
             'ratings' => $ratings->map(fn (BurpRating $rating) => [
                 'user' => ['id' => $rating->user?->id, 'name' => $rating->user?->name],
@@ -188,7 +199,7 @@ class BurpController extends Controller
 
     private function burp(Request $request, string $uuid): Burp
     {
-        return Burp::with(['author:id,name', 'ratings.user:id,name'])->where('uuid', $uuid)
+        return Burp::with(['author:id,name', 'ratings.user:id,name', 'voiceNote'])->where('uuid', $uuid)
             ->whereIn('gallery_space_id', $request->user()->gallerySpaces()->pluck('gallery_spaces.id'))
             ->firstOrFail();
     }

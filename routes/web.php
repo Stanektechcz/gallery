@@ -149,6 +149,8 @@ Route::middleware(['auth'])->group(function () {
     // Voice messages, the burp module and the space's own plan overview.
     Route::get('/hlasovky', fn() => Inertia::render('VoiceNotes/Index'))->name('voice-notes');
     Route::get('/krkance', fn() => Inertia::render('Burps/Index'))->name('burps');
+    Route::get('/prdy', fn() => Inertia::render('Farts/Index'))->name('farts');
+    Route::get('/settings/vzhled', fn() => Inertia::render('Settings/Appearance'))->name('settings.appearance');
     Route::get('/settings/predplatne', fn() => Inertia::render('Settings/Subscription'))->name('settings.subscription');
     Route::get('/travel-inbox', fn() => Inertia::render('TravelInbox/Index'))->name('travel-inbox');
     Route::get('/weekly', fn() => Inertia::render('Weekly/Index'))->name('weekly');

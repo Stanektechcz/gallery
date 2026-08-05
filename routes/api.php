@@ -224,6 +224,15 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
     Route::patch('/voice-notes/{uuid}', [App\Http\Controllers\Api\VoiceNoteController::class, 'update'])->name('api.voice-notes.update');
     Route::delete('/voice-notes/{uuid}', [App\Http\Controllers\Api\VoiceNoteController::class, 'destroy'])->name('api.voice-notes.destroy');
 
+    // Companion module with its own criteria, gated separately from burps.
+    Route::middleware('module:farts')->group(function () {
+        Route::get('/farts', [App\Http\Controllers\Api\FartController::class, 'index'])->name('api.farts.index');
+        Route::post('/farts', [App\Http\Controllers\Api\FartController::class, 'store'])->name('api.farts.store');
+        Route::get('/farts/{uuid}/stream', [App\Http\Controllers\Api\FartController::class, 'stream'])->name('api.farts.stream');
+        Route::put('/farts/{uuid}/rating', [App\Http\Controllers\Api\FartController::class, 'rate'])->name('api.farts.rate');
+        Route::delete('/farts/{uuid}', [App\Http\Controllers\Api\FartController::class, 'destroy'])->name('api.farts.destroy');
+    });
+
     // First paid add-on: everything below is gated by the entitlement middleware.
     Route::middleware('module:burps')->group(function () {
         Route::get('/burps', [App\Http\Controllers\Api\BurpController::class, 'index'])->name('api.burps.index');

@@ -34,6 +34,7 @@ import {
     Menu,
     Mic,
     Monitor,
+    Palette,
     Power,
     Printer,
     Route,
@@ -50,6 +51,7 @@ import {
     Trophy,
     Tv,
     Users,
+    Wind,
     X
 } from 'lucide-react';
 import { ReactNode, useCallback, useEffect, useRef, useState } from 'react';
@@ -534,6 +536,7 @@ const navGroups: NavigationGroup[] = [
             { href: '/watchlist/series/tierlist', label: '↳ Tierlist seriálů', icon: Star, feature: 'watchlist' },
             { href: '/hlasovky', label: 'Hlasovky', icon: Mic, feature: 'voice_notes' },
             { href: '/krkance', label: 'Hodnocení krkanců', icon: Trophy, feature: 'burps' },
+            { href: '/prdy', label: 'Hodnocení prdů', icon: Wind, feature: 'farts' },
             { href: '/date-ideas', label: 'Nápady na randíčka', icon: Sparkles, feature: 'date_ideas' },
             { href: '/anniversary-album', label: 'Výroční album', icon: Images },
             { href: '/gifts-anniversaries', label: 'Dárky a výročí', icon: Gift },
@@ -576,6 +579,7 @@ const navGroups: NavigationGroup[] = [
             { href: '/recovery', label: 'Recovery centrum', icon: ShieldCheck },
             { href: '/privacy', label: 'Soukromí a dědictví', icon: ShieldCheck },
             { href: '/settings/security', label: 'Nastavení a zabezpečení', icon: Settings },
+            { href: '/settings/vzhled', label: 'Vzhled a barvy', icon: Palette },
             { href: '/settings/predplatne', label: 'Předplatné a moduly', icon: CircleDollarSign },
             { href: '/settings/storage/google', label: 'Úložiště a Google Drive', icon: Archive },
             { href: '/settings/automations', label: 'Automatizace', icon: Power },
