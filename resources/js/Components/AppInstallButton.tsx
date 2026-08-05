@@ -23,7 +23,7 @@ export default function AppInstallButton({ compact = true, className = '' }: { c
             disabled={installing}
             aria-label={label}
             title={label}
-            className={`relative inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-xl border border-[var(--color-border)] bg-white/[0.035] text-[var(--color-text-secondary)] transition hover:border-[var(--color-accent)]/45 hover:bg-[var(--color-accent)]/10 hover:text-white disabled:opacity-60 ${compact ? 'h-10 w-10 p-0' : 'px-3 text-xs font-medium'} ${className}`}
+            className={`relative inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-xl border border-[var(--color-border)] bg-white/[0.035] text-[var(--color-text-secondary)] transition hover:border-[var(--color-accent)]/45 hover:bg-[var(--color-accent)]/10 hover:text-[var(--color-text-primary)] disabled:opacity-60 ${compact ? 'h-10 w-10 p-0' : 'px-3 text-xs font-medium'} ${className}`}
         >
             <Icon size={18} className={installing ? 'animate-spin' : ''}/>
             {!compact && <span>{installed ? 'Nainstalováno' : canInstall ? 'Nainstalovat' : 'Aplikace'}</span>}

@@ -83,7 +83,7 @@ export default function VoiceNotesIndex() {
             <Head title="Hlasovky" />
             <main className="mx-auto max-w-3xl p-4 sm:p-6">
                 <p className="text-xs uppercase tracking-widest text-[var(--color-accent)]">Zvuk</p>
-                <h1 className="mt-1 flex items-center gap-2 text-2xl font-bold text-white sm:text-3xl">
+                <h1 className="mt-1 flex items-center gap-2 text-2xl font-bold text-[var(--color-text-primary)] sm:text-3xl">
                     <Mic size={24} className="text-[var(--color-accent)]" /> Hlasovky
                 </h1>
                 <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
@@ -100,7 +100,7 @@ export default function VoiceNotesIndex() {
                     {!loading && notes.map(note => (
                         <article key={note.uuid} className={`rounded-2xl border p-4 ${note.heard ? 'border-[var(--color-border)] bg-[var(--color-bg-card)]' : 'border-[var(--color-accent)]/35 bg-[var(--color-accent)]/5'}`}>
                             <div className="flex flex-wrap items-baseline justify-between gap-2">
-                                <p className="font-medium text-white">
+                                <p className="font-medium text-[var(--color-text-primary)]">
                                     {note.title || 'Bez názvu'}
                                     {!note.heard && <span className="ml-2 rounded-full bg-[var(--color-accent)]/20 px-2 py-0.5 text-[10px] text-[var(--color-accent)]">nové</span>}
                                 </p>
@@ -132,7 +132,7 @@ export default function VoiceNotesIndex() {
                     {!loading && !notes.length && (
                         <div className="rounded-2xl border border-dashed border-[var(--color-border)] bg-[var(--color-bg-card)] p-8 text-center">
                             <Check className="mx-auto text-[var(--color-accent)]" size={22} />
-                            <p className="mt-3 font-medium text-white">Zatím tu není žádná hlasovka</p>
+                            <p className="mt-3 font-medium text-[var(--color-text-primary)]">Zatím tu není žádná hlasovka</p>
                             <p className="mt-1 text-sm text-[var(--color-text-secondary)]">Nahrajte první vzkaz tlačítkem nahoře.</p>
                         </div>
                     )}

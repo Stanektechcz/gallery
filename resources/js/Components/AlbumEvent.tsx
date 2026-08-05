@@ -67,7 +67,7 @@ function EventEditPanel({
             setForm(p => ({ ...p, [field]: e.target.value })),
     });
 
-    const cls = 'w-full bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm text-white placeholder-[var(--color-text-secondary)] outline-none focus:border-[var(--color-accent)]';
+    const cls = 'w-full bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] outline-none focus:border-[var(--color-accent)]';
 
     const save = async () => {
         setSaving(true);
@@ -88,7 +88,7 @@ function EventEditPanel({
 
     return (
         <div className="bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-xl p-4 space-y-3">
-            <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+            <h3 className="text-sm font-semibold text-[var(--color-text-primary)] flex items-center gap-2">
                 <Calendar size={14} className="text-[var(--color-accent)]"/> Nastavení události
             </h3>
 
@@ -97,7 +97,7 @@ function EventEditPanel({
                 <input type="checkbox" checked={form.event_mode}
                     onChange={e => setForm(p => ({ ...p, event_mode: e.target.checked }))}
                     className="w-4 h-4 rounded accent-[var(--color-accent)]"/>
-                <span className="text-sm text-white">Událost aktivní</span>
+                <span className="text-sm text-[var(--color-text-primary)]">Událost aktivní</span>
             </label>
 
             {form.event_mode && (
@@ -134,12 +134,12 @@ function EventEditPanel({
 
             <div className="flex gap-2 pt-1">
                 <button onClick={save} disabled={saving}
-                    className="flex-1 bg-[var(--color-accent)] text-white text-sm py-2 rounded-lg hover:opacity-90 disabled:opacity-40 flex items-center justify-center gap-1.5">
+                    className="flex-1 bg-[var(--color-accent)] text-[var(--color-text-primary)] text-sm py-2 rounded-lg hover:opacity-90 disabled:opacity-40 flex items-center justify-center gap-1.5">
                     {saving ? <Loader2 size={13} className="animate-spin"/> : <Check size={13}/>}
                     Uložit
                 </button>
                 <button onClick={onClose}
-                    className="px-4 text-sm border border-[var(--color-border)] text-[var(--color-text-secondary)] rounded-lg hover:text-white">
+                    className="px-4 text-sm border border-[var(--color-border)] text-[var(--color-text-secondary)] rounded-lg hover:text-[var(--color-text-primary)]">
                     Zrušit
                 </button>
             </div>
@@ -246,7 +246,7 @@ export default function AlbumEvent({ albumUuid }: { albumUuid: string }) {
                         </div>
                         <div className="flex gap-1 shrink-0">
                             <button onClick={() => setShowDetails(v => !v)}
-                                className="p-1.5 text-[var(--color-text-secondary)] hover:text-white transition-colors"
+                                className="p-1.5 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors"
                                 title="Podrobnosti">
                                 {showDetails ? <ChevronUp size={14}/> : <ChevronDown size={14}/>}
                             </button>
@@ -256,7 +256,7 @@ export default function AlbumEvent({ albumUuid }: { albumUuid: string }) {
                                 <Settings2 size={14}/>
                             </button>
                             <button onClick={detect} disabled={detecting} title="Znovu detekovat média"
-                                className="p-1.5 text-[var(--color-text-secondary)] hover:text-white transition-colors disabled:opacity-40">
+                                className="p-1.5 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors disabled:opacity-40">
                                 <RefreshCw size={13} className={detecting ? 'animate-spin' : ''}/>
                             </button>
                         </div>
@@ -267,16 +267,16 @@ export default function AlbumEvent({ albumUuid }: { albumUuid: string }) {
                         <div className="px-4 pb-3 border-t border-[var(--color-border)] pt-3 grid grid-cols-2 gap-2 text-xs">
                             <div>
                                 <p className="text-[var(--color-text-secondary)]">Začátek</p>
-                                <p className="text-white">{fmtDt(eventData.event_start_at) ?? '—'}</p>
+                                <p className="text-[var(--color-text-primary)]">{fmtDt(eventData.event_start_at) ?? '—'}</p>
                             </div>
                             <div>
                                 <p className="text-[var(--color-text-secondary)]">Konec</p>
-                                <p className="text-white">{fmtDt(eventData.event_end_at) ?? '—'}</p>
+                                <p className="text-[var(--color-text-primary)]">{fmtDt(eventData.event_end_at) ?? '—'}</p>
                             </div>
                             {eventData.event_latitude && (
                                 <div className="col-span-2">
                                     <p className="text-[var(--color-text-secondary)]">GPS</p>
-                                    <p className="text-white font-mono">{eventData.event_latitude?.toFixed(5)}°, {eventData.event_longitude?.toFixed(5)}° · poloměr {eventData.event_gps_radius} m</p>
+                                    <p className="text-[var(--color-text-primary)] font-mono">{eventData.event_latitude?.toFixed(5)}°, {eventData.event_longitude?.toFixed(5)}° · poloměr {eventData.event_gps_radius} m</p>
                                 </div>
                             )}
                         </div>
@@ -303,7 +303,7 @@ export default function AlbumEvent({ albumUuid }: { albumUuid: string }) {
                                 </div>
                             </div>
                             <div>
-                                <p className="text-sm font-semibold text-white">
+                                <p className="text-sm font-semibold text-[var(--color-text-primary)]">
                                     Nalezeno {detected.count} médií z tohoto období
                                 </p>
                                 <p className="text-xs text-[var(--color-text-secondary)] mt-0.5 flex items-center gap-2">
@@ -329,12 +329,12 @@ export default function AlbumEvent({ albumUuid }: { albumUuid: string }) {
 
                         <div className="flex gap-2 shrink-0">
                             <button onClick={collectAll} disabled={collecting}
-                                className="flex items-center gap-1.5 bg-[var(--color-accent)] text-white text-sm px-4 py-2 rounded-lg hover:opacity-90 disabled:opacity-40">
+                                className="flex items-center gap-1.5 bg-[var(--color-accent)] text-[var(--color-text-primary)] text-sm px-4 py-2 rounded-lg hover:opacity-90 disabled:opacity-40">
                                 {collecting ? <Loader2 size={13} className="animate-spin"/> : <Check size={13}/>}
                                 Přidat do alba
                             </button>
                             <button onClick={() => setDetected(null)}
-                                className="text-xs text-[var(--color-text-secondary)] hover:text-white border border-[var(--color-border)] px-3 py-2 rounded-lg transition-colors">
+                                className="text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] border border-[var(--color-border)] px-3 py-2 rounded-lg transition-colors">
                                 Přeskočit
                             </button>
                         </div>

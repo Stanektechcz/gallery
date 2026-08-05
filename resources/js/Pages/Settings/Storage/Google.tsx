@@ -89,7 +89,7 @@ export default function GoogleStorageSettings({ connection, client_configured }:
             <Head title="Google Drive — Nastavení" />
 
             <div className="max-w-2xl mx-auto px-4 py-8">
-                <h1 className="text-xl font-semibold text-white mb-6 flex items-center gap-3">
+                <h1 className="text-xl font-semibold text-[var(--color-text-primary)] mb-6 flex items-center gap-3">
                     <HardDrive size={22} className="text-[var(--color-accent)]" />
                     Google Drive úložiště
                 </h1>
@@ -108,7 +108,7 @@ export default function GoogleStorageSettings({ connection, client_configured }:
                     <div className="flex items-center gap-3 mb-4">
                         <StatusIcon size={20} className={info.color} />
                         <div>
-                            <p className="text-sm font-medium text-white">{info.label}</p>
+                            <p className="text-sm font-medium text-[var(--color-text-primary)]">{info.label}</p>
                             {connection?.account_email && (
                                 <p className="text-xs text-[var(--color-text-secondary)]">{connection.account_email}</p>
                             )}
@@ -119,23 +119,23 @@ export default function GoogleStorageSettings({ connection, client_configured }:
                         <div className="grid grid-cols-2 gap-3 text-xs text-[var(--color-text-secondary)] mb-4">
                             <div>
                                 <p className="mb-0.5">Root složka</p>
-                                <p className="text-white">{connection.root_folder ?? '—'}</p>
+                                <p className="text-[var(--color-text-primary)]">{connection.root_folder ?? '—'}</p>
                             </div>
                             <div>
                                 <p className="mb-0.5">Kvóta</p>
-                                <p className="text-white">
+                                <p className="text-[var(--color-text-primary)]">
                                     {formatBytes(connection.quota_used)} / {formatBytes(connection.quota_total)}
                                 </p>
                             </div>
                             <div>
                                 <p className="mb-0.5">Poslední OK</p>
-                                <p className="text-white">
+                                <p className="text-[var(--color-text-primary)]">
                                     {connection.last_ok ? new Date(connection.last_ok).toLocaleString('cs-CZ') : '—'}
                                 </p>
                             </div>
                             <div>
                                 <p className="mb-0.5">Připojeno</p>
-                                <p className="text-white">
+                                <p className="text-[var(--color-text-primary)]">
                                     {connection.connected_at ? new Date(connection.connected_at).toLocaleString('cs-CZ') : '—'}
                                 </p>
                             </div>
@@ -154,7 +154,7 @@ export default function GoogleStorageSettings({ connection, client_configured }:
                             <button
                                 onClick={connectDrive}
                                 disabled={!client_configured}
-                                className="bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] disabled:opacity-50 text-white text-sm px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
+                                className="bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] disabled:opacity-50 text-[var(--color-text-primary)] text-sm px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
                             >
                                 <ExternalLink size={14} />
                                 Připojit Google Drive
@@ -164,7 +164,7 @@ export default function GoogleStorageSettings({ connection, client_configured }:
                                 <button
                                     onClick={runTest}
                                     disabled={testing}
-                                    className="bg-white/10 hover:bg-white/15 text-white text-sm px-3 py-2 rounded-lg transition-colors flex items-center gap-2"
+                                    className="bg-[var(--color-surface-muted)] hover:bg-white/15 text-[var(--color-text-primary)] text-sm px-3 py-2 rounded-lg transition-colors flex items-center gap-2"
                                 >
                                     <TestTube2 size={14} className={testing ? 'animate-spin' : ''} />
                                     {testing ? 'Testuji…' : 'Otestovat'}
@@ -172,21 +172,21 @@ export default function GoogleStorageSettings({ connection, client_configured }:
                                 <button
                                     onClick={syncExisting}
                                     disabled={syncing || status !== 'healthy'}
-                                    className="bg-[var(--color-accent)]/15 hover:bg-[var(--color-accent)]/25 disabled:opacity-50 text-white text-sm px-3 py-2 rounded-lg transition-colors flex items-center gap-2"
+                                    className="bg-[var(--color-accent)]/15 hover:bg-[var(--color-accent)]/25 disabled:opacity-50 text-[var(--color-text-primary)] text-sm px-3 py-2 rounded-lg transition-colors flex items-center gap-2"
                                 >
                                     <RefreshCw size={14} className={syncing ? 'animate-spin' : ''} />
                                     {syncing ? 'Zařazuji…' : 'Synchronizovat média'}
                                 </button>
                                 <button
                                     onClick={() => router.post('/settings/storage/google/reconnect')}
-                                    className="bg-white/10 hover:bg-white/15 text-white text-sm px-3 py-2 rounded-lg transition-colors flex items-center gap-2"
+                                    className="bg-[var(--color-surface-muted)] hover:bg-white/15 text-[var(--color-text-primary)] text-sm px-3 py-2 rounded-lg transition-colors flex items-center gap-2"
                                 >
                                     <RefreshCw size={14} />
                                     Obnovit token
                                 </button>
                                 <button
                                     onClick={forceReconnect}
-                                    className="bg-white/10 hover:bg-white/15 text-white text-sm px-3 py-2 rounded-lg transition-colors"
+                                    className="bg-[var(--color-surface-muted)] hover:bg-white/15 text-[var(--color-text-primary)] text-sm px-3 py-2 rounded-lg transition-colors"
                                 >
                                     Reautorizovat
                                 </button>
@@ -209,7 +209,7 @@ export default function GoogleStorageSettings({ connection, client_configured }:
                 {/* Test results */}
                 {testResults && (
                     <div className="glass rounded-2xl p-5 mb-6">
-                        <h3 className="text-sm font-medium text-white mb-3">Výsledky testu</h3>
+                        <h3 className="text-sm font-medium text-[var(--color-text-primary)] mb-3">Výsledky testu</h3>
                         <div className="space-y-2">
                             {Object.entries(testResults).map(([key, result]: [string, any]) => (
                                 <div key={key} className="flex items-center gap-2 text-xs">
@@ -218,7 +218,7 @@ export default function GoogleStorageSettings({ connection, client_configured }:
                                     ) : (
                                         <XCircle size={14} className="text-red-400 shrink-0" />
                                     )}
-                                    <span className={result.pass ? 'text-white' : 'text-red-300'}>
+                                    <span className={result.pass ? 'text-[var(--color-text-primary)]' : 'text-red-300'}>
                                         {key.replace(/_/g, ' ')}
                                     </span>
                                     {result.detail && (
@@ -234,7 +234,7 @@ export default function GoogleStorageSettings({ connection, client_configured }:
 
                 {/* Info */}
                 <div className="glass rounded-2xl p-5 text-xs text-[var(--color-text-secondary)] space-y-2">
-                    <p className="font-medium text-white mb-2">Jak to funguje</p>
+                    <p className="font-medium text-[var(--color-text-primary)] mb-2">Jak to funguje</p>
                     <p>Originál se po nahrání bezpečně zálohuje na Google Drive po částech; tlačítko „Synchronizovat média“ doplní i starší soubory.</p>
                     <p>Náhledy, přehrávací kopie videí a lokální cache originálů zůstávají na serveru pro rychlé načítání galerie a plynulé přetáčení.</p>
                     <p>Google Drive je dlouhodobá záloha originálů, lokální kopie není druhá neprovedená synchronizace.</p>

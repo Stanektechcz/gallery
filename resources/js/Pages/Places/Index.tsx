@@ -209,7 +209,7 @@ export default function PlacesIndex() {
                 {/* Header */}
                 <div className="flex items-center justify-between mb-6 gap-4 flex-wrap">
                     <div>
-                        <h1 className="text-xl font-bold text-white flex items-center gap-2">
+                        <h1 className="text-xl font-bold text-[var(--color-text-primary)] flex items-center gap-2">
                             <MapPin size={20} className="text-[var(--color-accent)]"/> Místa
                         </h1>
                         <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">
@@ -222,14 +222,14 @@ export default function PlacesIndex() {
                             <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-secondary)] pointer-events-none"/>
                             <input value={search} onChange={e => setSearch(e.target.value)}
                                 placeholder="Hledat místo…"
-                                className="w-full min-w-44 bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-lg pl-8 pr-3 py-2 text-sm text-white placeholder-[var(--color-text-secondary)] outline-none focus:border-[var(--color-accent)] sm:w-52"/>
+                                className="w-full min-w-44 bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-lg pl-8 pr-3 py-2 text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] outline-none focus:border-[var(--color-accent)] sm:w-52"/>
                         </div>
                         <button onClick={() => { setPlanningMode(value => !value); setPlanningError(''); setPlannedOuting(null); }}
-                            className={`flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm transition-colors ${planningMode ? 'border-sky-400 bg-sky-500/15 text-sky-100' : 'border-[var(--color-border)] text-white hover:border-sky-400/60'}`}>
+                            className={`flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm transition-colors ${planningMode ? 'border-sky-400 bg-sky-500/15 text-sky-100' : 'border-[var(--color-border)] text-[var(--color-text-primary)] hover:border-sky-400/60'}`}>
                             <CalendarDays size={14}/> {planningMode ? 'Ukončit výběr' : 'Naplánovat výlet'}
                         </button>
                         <button onClick={() => setShowCreate(v => !v)}
-                            className="flex items-center gap-1.5 bg-[var(--color-accent)] text-white text-sm px-3 py-2 rounded-lg hover:opacity-90">
+                            className="flex items-center gap-1.5 bg-[var(--color-accent)] text-[var(--color-text-primary)] text-sm px-3 py-2 rounded-lg hover:opacity-90">
                             <Plus size={14}/> Najít podnik nebo místo
                         </button>
                     </div>
@@ -238,7 +238,7 @@ export default function PlacesIndex() {
                 {/* Create form */}
                 {showCreate && (
                     <form onSubmit={createPlace} className="mb-6 bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-xl p-4">
-                        <h2 className="text-sm font-semibold text-white mb-1">Vyhledat konkrétní podnik nebo místo</h2>
+                        <h2 className="text-sm font-semibold text-[var(--color-text-primary)] mb-1">Vyhledat konkrétní podnik nebo místo</h2>
                         <p className="mb-3 text-xs text-[var(--color-text-secondary)]">Našeptávač hledá restaurace, kavárny, bary, hotely i další místa; název lze zadat také ručně.</p>
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                             {/* Nominatim search / name */}
@@ -248,9 +248,9 @@ export default function PlacesIndex() {
                                     onFocus={() => nominatimRes.length > 0 && setShowNomDrop(true)}
                                     onBlur={() => setTimeout(() => setShowNomDrop(false), 150)}
                                     placeholder="Např. Infinit Maximus, kavárna nebo restaurace *" required
-                                    className="w-full bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-lg pl-7 pr-7 py-2 text-sm text-white placeholder-[var(--color-text-secondary)] outline-none focus:border-[var(--color-accent)]"/>
+                                    className="w-full bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-lg pl-7 pr-7 py-2 text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] outline-none focus:border-[var(--color-accent)]"/>
                                 {nominatimLoad && <RefreshCw size={11} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--color-text-secondary)] animate-spin"/>}
-                                {nominatimQ && !nominatimLoad && <button type="button" onMouseDown={e => e.preventDefault()} onClick={() => { setNominatimQ(''); setForm(p=>({...p,name:''})); setNominatimRes([]); setShowNomDrop(false); }} className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--color-text-secondary)] hover:text-white"><X size={11}/></button>}
+                                {nominatimQ && !nominatimLoad && <button type="button" onMouseDown={e => e.preventDefault()} onClick={() => { setNominatimQ(''); setForm(p=>({...p,name:''})); setNominatimRes([]); setShowNomDrop(false); }} className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"><X size={11}/></button>}
 
                                 {showNomDrop && nominatimRes.length > 0 && (
                                     <div className="absolute z-50 top-full mt-1 left-0 right-0 bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-lg shadow-2xl overflow-hidden max-h-48 overflow-y-auto">
@@ -259,7 +259,7 @@ export default function PlacesIndex() {
                                                 className="w-full text-left px-3 py-2 hover:bg-[var(--color-bg-secondary)] border-b border-[var(--color-border)] last:border-0 flex items-start gap-2">
                                                 <span className="text-sm shrink-0">{TYPES[r.category]?.emoji ?? '📍'}</span>
                                                 <div className="flex-1 min-w-0">
-                                                    <p className="text-xs font-medium text-white truncate">{r.name || r.display_name}</p>
+                                                    <p className="text-xs font-medium text-[var(--color-text-primary)] truncate">{r.name || r.display_name}</p>
                                                     <p className="text-[10px] text-[var(--color-text-secondary)] truncate">{[r.address, r.city, localizedCountry(r.country, r.country_code)].filter(Boolean).join(' · ')}</p>
                                                 </div>
                                             </button>
@@ -269,41 +269,41 @@ export default function PlacesIndex() {
                             </div>
 
                             <select value={form.type} onChange={e => setForm(p => ({ ...p, type: e.target.value }))}
-                                className="bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-[var(--color-accent)]">
+                                className="bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm text-[var(--color-text-primary)] outline-none focus:border-[var(--color-accent)]">
                                 {Object.entries(TYPES).map(([k, v]) => <option key={k} value={k}>{v.emoji} {v.label}</option>)}
                             </select>
 
                             <select value={form.lifecycle_status} onChange={e => setForm(p => ({ ...p, lifecycle_status: e.target.value as LifecycleStatus }))}
-                                className="bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-[var(--color-accent)]" aria-label="Stav místa">
+                                className="bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm text-[var(--color-text-primary)] outline-none focus:border-[var(--color-accent)]" aria-label="Stav místa">
                                 {Object.entries(LIFECYCLE).map(([value, status]) => <option key={value} value={value}>{status.label}</option>)}
                             </select>
 
                             <input value={form.country} onChange={e => setForm(p => ({ ...p, country: e.target.value }))}
-                                placeholder="Země" className="bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm text-white placeholder-[var(--color-text-secondary)] outline-none focus:border-[var(--color-accent)]"/>
+                                placeholder="Země" className="bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] outline-none focus:border-[var(--color-accent)]"/>
 
                             <input value={form.latitude} onChange={e => setForm(p => ({ ...p, latitude: e.target.value }))} type="number" step="any"
-                                placeholder="Zeměpisná šířka" className="bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm text-white placeholder-[var(--color-text-secondary)] outline-none focus:border-[var(--color-accent)]"/>
+                                placeholder="Zeměpisná šířka" className="bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] outline-none focus:border-[var(--color-accent)]"/>
 
                             <input value={form.longitude} onChange={e => setForm(p => ({ ...p, longitude: e.target.value }))} type="number" step="any"
-                                placeholder="Zeměpisná délka" className="bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm text-white placeholder-[var(--color-text-secondary)] outline-none focus:border-[var(--color-accent)]"/>
+                                placeholder="Zeměpisná délka" className="bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] outline-none focus:border-[var(--color-accent)]"/>
 
                             <input value={form.radius_meters} onChange={e => setForm(p => ({ ...p, radius_meters: e.target.value }))} type="number" min="10" max="50000"
-                                placeholder="Poloměr (m, výchozí 500)" className="bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm text-white placeholder-[var(--color-text-secondary)] outline-none focus:border-[var(--color-accent)]"/>
+                                placeholder="Poloměr (m, výchozí 500)" className="bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] outline-none focus:border-[var(--color-accent)]"/>
 
                             <textarea value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))}
                                 placeholder="Popis (volitelně)…" rows={2}
-                                className="col-span-full bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm text-white placeholder-[var(--color-text-secondary)] outline-none focus:border-[var(--color-accent)] resize-none"/>
+                                className="col-span-full bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] outline-none focus:border-[var(--color-accent)] resize-none"/>
 
                             <input value={form.website_url} onChange={e => setForm(p => ({ ...p, website_url: e.target.value }))} type="url"
-                                placeholder="Web (https://…)" className="col-span-full sm:col-span-1 bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm text-white placeholder-[var(--color-text-secondary)] outline-none focus:border-[var(--color-accent)]"/>
+                                placeholder="Web (https://…)" className="col-span-full sm:col-span-1 bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] outline-none focus:border-[var(--color-accent)]"/>
                         </div>
                         <div className="flex gap-2 mt-3">
                             <button type="submit" disabled={creating || !form.name}
-                                className="bg-[var(--color-accent)] text-white text-sm px-4 py-2 rounded-lg hover:opacity-90 disabled:opacity-40">
+                                className="bg-[var(--color-accent)] text-[var(--color-text-primary)] text-sm px-4 py-2 rounded-lg hover:opacity-90 disabled:opacity-40">
                                 {creating ? 'Vytvářím…' : 'Vytvořit místo'}
                             </button>
                             <button type="button" onClick={() => { setShowCreate(false); setNominatimQ(''); setForm({ ...EMPTY_FORM }); }}
-                                className="border border-[var(--color-border)] text-[var(--color-text-secondary)] text-sm px-4 py-2 rounded-lg hover:text-white">Zrušit</button>
+                                className="border border-[var(--color-border)] text-[var(--color-text-secondary)] text-sm px-4 py-2 rounded-lg hover:text-[var(--color-text-primary)]">Zrušit</button>
                         </div>
                     </form>
                 )}
@@ -312,35 +312,35 @@ export default function PlacesIndex() {
                     <form onSubmit={createOuting} className="mb-6 rounded-2xl border border-sky-400/30 bg-gradient-to-br from-sky-500/10 to-[var(--color-bg-card)] p-4 sm:p-5">
                         <div className="flex flex-wrap items-start justify-between gap-2">
                             <div>
-                                <h2 className="flex items-center gap-2 font-semibold text-white"><CalendarDays size={17} className="text-sky-300"/> Výlet z vašich míst</h2>
+                                <h2 className="flex items-center gap-2 font-semibold text-[var(--color-text-primary)]"><CalendarDays size={17} className="text-sky-300"/> Výlet z vašich míst</h2>
                                 <p className="mt-1 text-xs text-[var(--color-text-secondary)]">Klepněte na 1–8 míst v pořadí návštěvy. Vznikne sdílená událost, cesta, časový plán a připomínka pro oba.</p>
                             </div>
                             <span className="rounded-full bg-sky-500/15 px-2.5 py-1 text-xs text-sky-100">Vybráno {selectedPlaceIds.length}/8</span>
                         </div>
 
                         {selectedPlaces.length > 0 ? <div className="mt-4 space-y-2">
-                            {selectedPlaces.map((place, index) => <div key={place.id} className="flex items-center gap-2 rounded-xl border border-[var(--color-border)] bg-black/10 p-2">
+                            {selectedPlaces.map((place, index) => <div key={place.id} className="flex items-center gap-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-muted)] p-2">
                                 <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-sky-500 text-xs font-bold text-white">{index + 1}</span>
-                                <span className="min-w-0 flex-1 truncate text-sm text-white">{TYPES[place.type]?.emoji} {place.name}</span>
+                                <span className="min-w-0 flex-1 truncate text-sm text-[var(--color-text-primary)]">{TYPES[place.type]?.emoji} {place.name}</span>
                                 <span className="hidden text-[10px] text-[var(--color-text-secondary)] sm:inline">{place.estimated_visit_minutes || 90} min</span>
-                                <button type="button" disabled={index === 0} onClick={() => movePlace(place.id, -1)} aria-label="Posunout výše" className="rounded p-1 text-[var(--color-text-secondary)] hover:text-white disabled:opacity-20"><ArrowUp size={14}/></button>
-                                <button type="button" disabled={index === selectedPlaces.length - 1} onClick={() => movePlace(place.id, 1)} aria-label="Posunout níže" className="rounded p-1 text-[var(--color-text-secondary)] hover:text-white disabled:opacity-20"><ArrowDown size={14}/></button>
+                                <button type="button" disabled={index === 0} onClick={() => movePlace(place.id, -1)} aria-label="Posunout výše" className="rounded p-1 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] disabled:opacity-20"><ArrowUp size={14}/></button>
+                                <button type="button" disabled={index === selectedPlaces.length - 1} onClick={() => movePlace(place.id, 1)} aria-label="Posunout níže" className="rounded p-1 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] disabled:opacity-20"><ArrowDown size={14}/></button>
                                 <button type="button" onClick={() => togglePlace(place.id)} aria-label="Odebrat místo" className="rounded p-1 text-[var(--color-text-secondary)] hover:text-red-300"><X size={14}/></button>
                             </div>)}
                         </div> : <div className="mt-4 rounded-xl border border-dashed border-sky-400/30 px-3 py-5 text-center text-sm text-[var(--color-text-secondary)]">Níže vyberte první místo výletu.</div>}
 
                         <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                             <label className="text-xs text-[var(--color-text-secondary)]">Název výletu
-                                <input value={outing.title} onChange={e => setOuting(current => ({...current, title: e.target.value}))} maxLength={160} placeholder="Doplní se automaticky" className="mt-1 w-full rounded-lg border border-[var(--color-border)] bg-black/10 px-3 py-2 text-sm text-white outline-none focus:border-sky-400"/>
+                                <input value={outing.title} onChange={e => setOuting(current => ({...current, title: e.target.value}))} maxLength={160} placeholder="Doplní se automaticky" className="mt-1 w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-muted)] px-3 py-2 text-sm text-[var(--color-text-primary)] outline-none focus:border-sky-400"/>
                             </label>
                             <label className="text-xs text-[var(--color-text-secondary)]">Začátek
-                                <input required type="datetime-local" value={outing.starts_at} onChange={e => setOuting(current => ({...current, starts_at: e.target.value}))} className="mt-1 w-full rounded-lg border border-[var(--color-border)] bg-black/10 px-3 py-2 text-sm text-white outline-none focus:border-sky-400"/>
+                                <input required type="datetime-local" value={outing.starts_at} onChange={e => setOuting(current => ({...current, starts_at: e.target.value}))} className="mt-1 w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-muted)] px-3 py-2 text-sm text-[var(--color-text-primary)] outline-none focus:border-sky-400"/>
                             </label>
                             <label className="text-xs text-[var(--color-text-secondary)]">Přesun mezi místy
-                                <select value={outing.transfer_minutes} onChange={e => setOuting(current => ({...current, transfer_minutes: e.target.value}))} className="mt-1 w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-3 py-2 text-sm text-white outline-none focus:border-sky-400"><option value="15">15 minut</option><option value="30">30 minut</option><option value="45">45 minut</option><option value="60">60 minut</option><option value="90">90 minut</option></select>
+                                <select value={outing.transfer_minutes} onChange={e => setOuting(current => ({...current, transfer_minutes: e.target.value}))} className="mt-1 w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-3 py-2 text-sm text-[var(--color-text-primary)] outline-none focus:border-sky-400"><option value="15">15 minut</option><option value="30">30 minut</option><option value="45">45 minut</option><option value="60">60 minut</option><option value="90">90 minut</option></select>
                             </label>
                             <label className="text-xs text-[var(--color-text-secondary)]">Připomenout oběma
-                                <select value={outing.reminder_minutes} onChange={e => setOuting(current => ({...current, reminder_minutes: e.target.value}))} className="mt-1 w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-3 py-2 text-sm text-white outline-none focus:border-sky-400"><option value="120">2 hodiny předem</option><option value="1440">Den předem</option><option value="10080">Týden předem</option></select>
+                                <select value={outing.reminder_minutes} onChange={e => setOuting(current => ({...current, reminder_minutes: e.target.value}))} className="mt-1 w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-3 py-2 text-sm text-[var(--color-text-primary)] outline-none focus:border-sky-400"><option value="120">2 hodiny předem</option><option value="1440">Den předem</option><option value="10080">Týden předem</option></select>
                             </label>
                         </div>
                         {planningError && <p className="mt-3 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-200">{planningError}</p>}
@@ -352,27 +352,27 @@ export default function PlacesIndex() {
                 {/* Type filter chips */}
                 <div className="flex gap-2 mb-5 overflow-x-auto pb-1">
                     <button onClick={() => setFilterType('all')}
-                        className={`text-xs px-3 py-1.5 rounded-full whitespace-nowrap transition-colors ${filterType === 'all' ? 'bg-[var(--color-accent)] text-white' : 'border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-white'}`}>
+                        className={`text-xs px-3 py-1.5 rounded-full whitespace-nowrap transition-colors ${filterType === 'all' ? 'bg-[var(--color-accent)] text-[var(--color-text-primary)]' : 'border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}>
                         Vše ({places.length})
                     </button>
                     {Object.entries(TYPES).filter(([k]) => typeCounts[k]).map(([k, v]) => (
                         <button key={k} onClick={() => setFilterType(k === filterType ? 'all' : k)}
-                            className={`text-xs px-3 py-1.5 rounded-full whitespace-nowrap transition-colors ${filterType === k ? 'bg-[var(--color-accent)] text-white' : 'border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-white'}`}>
+                            className={`text-xs px-3 py-1.5 rounded-full whitespace-nowrap transition-colors ${filterType === k ? 'bg-[var(--color-accent)] text-[var(--color-text-primary)]' : 'border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}>
                             {v.emoji} {v.label} ({typeCounts[k]})
                         </button>
                     ))}
                 </div>
 
                 <div className="mb-3 flex gap-2 overflow-x-auto pb-1" aria-label="Stav míst">
-                    <button onClick={() => setFilterLifecycle('all')} className={`min-h-9 shrink-0 rounded-full px-3 text-xs transition-colors ${filterLifecycle === 'all' ? 'bg-[var(--color-accent)] text-white' : 'border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-white'}`}>Všechny stavy</button>
-                    {(Object.entries(LIFECYCLE) as [LifecycleStatus, typeof LIFECYCLE.idea][]).map(([value, status]) => <button key={value} onClick={() => setFilterLifecycle(filterLifecycle === value ? 'all' : value)} className={`min-h-9 shrink-0 rounded-full border px-3 text-xs transition-colors ${filterLifecycle === value ? 'border-[var(--color-accent)] bg-[var(--color-accent)]/15 text-white' : 'border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-white'}`}>{status.label}</button>)}
+                    <button onClick={() => setFilterLifecycle('all')} className={`min-h-9 shrink-0 rounded-full px-3 text-xs transition-colors ${filterLifecycle === 'all' ? 'bg-[var(--color-accent)] text-[var(--color-text-primary)]' : 'border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}>Všechny stavy</button>
+                    {(Object.entries(LIFECYCLE) as [LifecycleStatus, typeof LIFECYCLE.idea][]).map(([value, status]) => <button key={value} onClick={() => setFilterLifecycle(filterLifecycle === value ? 'all' : value)} className={`min-h-9 shrink-0 rounded-full border px-3 text-xs transition-colors ${filterLifecycle === value ? 'border-[var(--color-accent)] bg-[var(--color-accent)]/15 text-[var(--color-text-primary)]' : 'border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}>{status.label}</button>)}
                 </div>
 
                 <div className="mb-5 flex gap-2 overflow-x-auto pb-1" aria-label="Rychlé kolekce míst">
                     {([
                         ['all', 'Všechny nápady'], ['rain', '🌧️ Na déšť'], ['photo', '📸 Fotogenické'],
                         ['early', '🌅 Brzy ráno'], ['budget', '💸 Do rozpočtu'], ['favorite', '★ Oblíbené'],
-                    ] as const).map(([key, label]) => <button key={key} onClick={() => setQuickFilter(key)} className={`min-h-9 shrink-0 rounded-full px-3 text-xs transition-colors ${quickFilter === key ? 'bg-[var(--color-accent)] text-white' : 'border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-white'}`}>{label}</button>)}
+                    ] as const).map(([key, label]) => <button key={key} onClick={() => setQuickFilter(key)} className={`min-h-9 shrink-0 rounded-full px-3 text-xs transition-colors ${quickFilter === key ? 'bg-[var(--color-accent)] text-[var(--color-text-primary)]' : 'border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}>{label}</button>)}
                 </div>
 
                 {/* Places grid */}
@@ -415,7 +415,7 @@ export default function PlacesIndex() {
 
                                 {/* Info */}
                                 <div className="p-3">
-                                    <h3 className="text-sm font-semibold text-white truncate">{place.name}</h3>
+                                    <h3 className="text-sm font-semibold text-[var(--color-text-primary)] truncate">{place.name}</h3>
                                     <span className={`mt-1 inline-flex rounded-full px-1.5 py-0.5 text-[9px] ${LIFECYCLE[place.lifecycle_status ?? 'idea'].className}`}>{LIFECYCLE[place.lifecycle_status ?? 'idea'].label}</span>
                                     {(place.city || place.country) && (
                                         <p className="text-[10px] text-[var(--color-text-secondary)] truncate mt-0.5">{[place.city, place.country].filter(Boolean).join(', ')}</p>

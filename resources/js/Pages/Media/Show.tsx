@@ -183,13 +183,13 @@ function ReactionPanel({ uuid }: { uuid: string }) {
                     const who = details.filter(d => d.reaction === r.key);
                     return (
                         <button key={r.key} onClick={() => react(r.key)} title={r.label}
-                            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-full border text-xs transition-all ${mine === r.key ? 'bg-[var(--color-accent)]/20 border-[var(--color-accent)] text-white' : 'border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[var(--color-accent)]/50 hover:text-white'}`}>
+                            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-full border text-xs transition-all ${mine === r.key ? 'bg-[var(--color-accent)]/20 border-[var(--color-accent)] text-[var(--color-text-primary)]' : 'border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[var(--color-accent)]/50 hover:text-[var(--color-text-primary)]'}`}>
                             <span className="text-sm">{r.emoji}</span>
                             {who.length > 0 && (
                                 <span className="flex items-center gap-0.5">
                                     {who.map(d => (
                                         <span key={d.user_id}
-                                            className={`inline-flex w-4 h-4 rounded-full items-center justify-center text-[9px] font-bold ${d.is_me ? 'bg-[var(--color-accent)] text-white' : 'bg-white/20 text-white'}`}
+                                            className={`inline-flex w-4 h-4 rounded-full items-center justify-center text-[9px] font-bold ${d.is_me ? 'bg-[var(--color-accent)] text-[var(--color-text-primary)]' : 'bg-white/20 text-[var(--color-text-primary)]'}`}
                                             title={d.name}>
                                             {d.initial}
                                         </span>
@@ -229,7 +229,7 @@ function CurationPanel({ uuid }: { uuid: string }) {
 
     return <section>
         <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">Společný výběr</h3>
-        {boards.length ? <div className="flex gap-2"><select value={selected} onChange={event => setSelected(event.target.value)} className="min-h-9 min-w-0 flex-1 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-2 text-xs text-white"><option value="">Vyberte kolekci</option>{boards.map(board => <option key={board.uuid} value={board.uuid}>{board.title}</option>)}</select><button onClick={add} className="min-h-9 rounded-lg bg-[var(--color-accent)] px-3 text-xs text-white">Přidat</button></div> : <Link href="/curation" className="text-xs text-[var(--color-accent)] hover:underline">Vytvořit první společný výběr</Link>}
+        {boards.length ? <div className="flex gap-2"><select value={selected} onChange={event => setSelected(event.target.value)} className="min-h-9 min-w-0 flex-1 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-2 text-xs text-[var(--color-text-primary)]"><option value="">Vyberte kolekci</option>{boards.map(board => <option key={board.uuid} value={board.uuid}>{board.title}</option>)}</select><button onClick={add} className="min-h-9 rounded-lg bg-[var(--color-accent)] px-3 text-xs text-[var(--color-text-primary)]">Přidat</button></div> : <Link href="/curation" className="text-xs text-[var(--color-accent)] hover:underline">Vytvořit první společný výběr</Link>}
         {message && <p className="mt-1 text-[10px] text-[var(--color-text-secondary)]">{message}</p>}
     </section>;
 }
@@ -239,7 +239,7 @@ function AddToEventPanel({ uuid, mediaId }: { uuid: string; mediaId: number }) {
     const [loaded, setLoaded] = useState(false); const [loading, setLoading] = useState(false); const [message, setMessage] = useState('');
     const load = async () => { setLoading(true); setMessage(''); try { const response = await axios.get(`/api/v1/media/${uuid}/event-suggestions`); setEvents(response.data.events ?? []); setLoaded(true); } catch { setMessage('Vhodné akce se nepodařilo načíst.'); } finally { setLoading(false); } };
     const attach = async (event:{uuid:string;title:string}) => { setLoading(true); setMessage(''); try { await axios.post(`/api/v1/calendar/events/${event.uuid}/media-suggestions`, {media_ids:[mediaId]}); setMessage(`Připojeno k akci „${event.title}“.`); setEvents(current => current.map(item => item.uuid === event.uuid ? {...item,already_linked:true} : item)); router.reload({only:['media']}); } catch (error:any) { setMessage(error?.response?.data?.message ?? 'Médium se nepodařilo připojit k akci.'); } finally { setLoading(false); } };
-    return <section><h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">Přidat ke společné akci</h3>{!loaded ? <button onClick={load} disabled={loading} className="min-h-9 rounded-lg border border-pink-400/30 px-3 text-xs text-pink-100 disabled:opacity-40">{loading ? 'Hledám…' : 'Najít akci podle data'}</button> : <div className="space-y-1.5">{events.map(event => <div key={event.uuid} className="flex items-center justify-between gap-2 rounded-lg border border-[var(--color-border)] p-2"><div className="min-w-0"><p className="truncate text-xs text-white">{event.title}</p><p className="text-[10px] text-[var(--color-text-secondary)]">{new Date(event.starts_at).toLocaleDateString('cs-CZ')}{event.place_name ? ` · ${event.place_name}` : ''}</p></div><button disabled={loading || event.already_linked} onClick={() => attach(event)} className={`shrink-0 rounded px-2 py-1 text-[10px] ${event.already_linked ? 'bg-emerald-500/10 text-emerald-200' : 'border border-pink-400/30 text-pink-100'}`}>{event.already_linked ? 'Připojeno ✓' : 'Přidat'}</button></div>)}{!events.length && <p className="text-xs text-[var(--color-text-secondary)]">V okolí data média není žádná akce, kterou můžete upravit.</p>}</div>}{message && <p className="mt-2 text-[10px] text-[var(--color-text-secondary)]">{message}</p>}</section>;
+    return <section><h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">Přidat ke společné akci</h3>{!loaded ? <button onClick={load} disabled={loading} className="min-h-9 rounded-lg border border-pink-400/30 px-3 text-xs text-pink-100 disabled:opacity-40">{loading ? 'Hledám…' : 'Najít akci podle data'}</button> : <div className="space-y-1.5">{events.map(event => <div key={event.uuid} className="flex items-center justify-between gap-2 rounded-lg border border-[var(--color-border)] p-2"><div className="min-w-0"><p className="truncate text-xs text-[var(--color-text-primary)]">{event.title}</p><p className="text-[10px] text-[var(--color-text-secondary)]">{new Date(event.starts_at).toLocaleDateString('cs-CZ')}{event.place_name ? ` · ${event.place_name}` : ''}</p></div><button disabled={loading || event.already_linked} onClick={() => attach(event)} className={`shrink-0 rounded px-2 py-1 text-[10px] ${event.already_linked ? 'bg-emerald-500/10 text-emerald-200' : 'border border-pink-400/30 text-pink-100'}`}>{event.already_linked ? 'Připojeno ✓' : 'Přidat'}</button></div>)}{!events.length && <p className="text-xs text-[var(--color-text-secondary)]">V okolí data média není žádná akce, kterou můžete upravit.</p>}</div>}{message && <p className="mt-2 text-[10px] text-[var(--color-text-secondary)]">{message}</p>}</section>;
 }
 
 function MilestonePanel({ mediaId, gallerySpaceId, takenAt }: { mediaId: number; gallerySpaceId: number; takenAt?: string }) {
@@ -292,9 +292,9 @@ function MilestonePanel({ mediaId, gallerySpaceId, takenAt }: { mediaId: number;
     return <section>
         <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">Naše milníky</h3>
         {linked.length > 0 && <div className="mb-2 space-y-1">{linked.map(item => <p key={item.uuid} className="rounded-lg bg-pink-500/10 px-2 py-1 text-xs text-pink-100">{item.title} · {new Date(item.occurred_on).toLocaleDateString('cs-CZ')}</p>)}</div>}
-        {available.length > 0 && <div className="flex gap-2"><select value={selected} onChange={event => setSelected(event.target.value)} className="min-h-9 min-w-0 flex-1 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-2 text-xs text-white"><option value="">Vybrat existující milník</option>{available.map(item => <option key={item.uuid} value={item.uuid}>{item.title}</option>)}</select><button onClick={attach} disabled={loading || !selected} className="min-h-9 rounded-lg border border-pink-400/30 px-3 text-xs text-pink-100 disabled:opacity-40">Připojit</button></div>}
-        <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_auto]"><input value={title} onChange={event => setTitle(event.target.value)} placeholder="Nový společný milník" className="min-h-9 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-2 text-xs text-white"/><input type="date" value={occurredOn} onChange={event => setOccurredOn(event.target.value)} className="min-h-9 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-2 text-xs text-white"/></div>
-        <button onClick={create} disabled={loading || !title.trim()} className="mt-2 min-h-9 rounded-lg bg-[var(--color-accent)] px-3 text-xs text-white disabled:opacity-40">Vytvořit z této vzpomínky</button>
+        {available.length > 0 && <div className="flex gap-2"><select value={selected} onChange={event => setSelected(event.target.value)} className="min-h-9 min-w-0 flex-1 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-2 text-xs text-[var(--color-text-primary)]"><option value="">Vybrat existující milník</option>{available.map(item => <option key={item.uuid} value={item.uuid}>{item.title}</option>)}</select><button onClick={attach} disabled={loading || !selected} className="min-h-9 rounded-lg border border-pink-400/30 px-3 text-xs text-pink-100 disabled:opacity-40">Připojit</button></div>}
+        <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_auto]"><input value={title} onChange={event => setTitle(event.target.value)} placeholder="Nový společný milník" className="min-h-9 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-2 text-xs text-[var(--color-text-primary)]"/><input type="date" value={occurredOn} onChange={event => setOccurredOn(event.target.value)} className="min-h-9 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-2 text-xs text-[var(--color-text-primary)]"/></div>
+        <button onClick={create} disabled={loading || !title.trim()} className="mt-2 min-h-9 rounded-lg bg-[var(--color-accent)] px-3 text-xs text-[var(--color-text-primary)] disabled:opacity-40">Vytvořit z této vzpomínky</button>
         {message && <p className="mt-1 text-[10px] text-[var(--color-text-secondary)]">{message}</p>}
     </section>;
 }
@@ -325,7 +325,7 @@ function RevisitFromMediaPanel({ uuid, title, places }: { uuid: string; title: s
 
     return <section>
         <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">Vrátit se na toto místo</h3>
-        {!loaded ? <button onClick={load} className="min-h-9 rounded-lg border border-teal-400/30 px-3 text-xs text-teal-100">Navrhnout společný návrat</button> : <div className="space-y-2"><p className="text-xs text-[var(--color-text-secondary)]">{prompt || 'Vytvořte nový společný zážitek z této vzpomínky.'}</p>{candidates.length > 0 && <p className="text-[10px] text-[var(--color-text-secondary)]">Ve stejném okolí už máte {candidates.length} dalších vzpomínek. <Link href={`/media/${candidates[0].uuid}`} className="text-[var(--color-accent)] hover:underline">Otevřít poslední →</Link></p>}<input value={form.title} onChange={event => setForm(current => ({...current,title:event.target.value}))} maxLength={160} aria-label="Název společné akce" className="min-h-9 w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-2 text-xs text-white"/><div className="grid gap-2 sm:grid-cols-2"><input value={form.place_name} onChange={event => setForm(current => ({...current,place_name:event.target.value}))} maxLength={255} placeholder="Místo" className="min-h-9 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-2 text-xs text-white"/><input type="datetime-local" value={form.starts_at} onChange={event => setForm(current => ({...current,starts_at:event.target.value}))} aria-label="Termín návratu" className="min-h-9 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-2 text-xs text-white"/></div><div className="flex gap-2"><input type="number" min="0" max="525600" value={form.reminder_minutes} onChange={event => setForm(current => ({...current,reminder_minutes:event.target.value}))} aria-label="Minut předem" title="Minut předem" className="min-h-9 w-28 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-2 text-xs text-white"/><button disabled={saving} onClick={schedule} className="min-h-9 rounded-lg border border-teal-400/30 px-3 text-xs text-teal-100 disabled:opacity-40">{saving ? 'Plánuji…' : 'Přidat do kalendáře'}</button></div></div>}
+        {!loaded ? <button onClick={load} className="min-h-9 rounded-lg border border-teal-400/30 px-3 text-xs text-teal-100">Navrhnout společný návrat</button> : <div className="space-y-2"><p className="text-xs text-[var(--color-text-secondary)]">{prompt || 'Vytvořte nový společný zážitek z této vzpomínky.'}</p>{candidates.length > 0 && <p className="text-[10px] text-[var(--color-text-secondary)]">Ve stejném okolí už máte {candidates.length} dalších vzpomínek. <Link href={`/media/${candidates[0].uuid}`} className="text-[var(--color-accent)] hover:underline">Otevřít poslední →</Link></p>}<input value={form.title} onChange={event => setForm(current => ({...current,title:event.target.value}))} maxLength={160} aria-label="Název společné akce" className="min-h-9 w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-2 text-xs text-[var(--color-text-primary)]"/><div className="grid gap-2 sm:grid-cols-2"><input value={form.place_name} onChange={event => setForm(current => ({...current,place_name:event.target.value}))} maxLength={255} placeholder="Místo" className="min-h-9 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-2 text-xs text-[var(--color-text-primary)]"/><input type="datetime-local" value={form.starts_at} onChange={event => setForm(current => ({...current,starts_at:event.target.value}))} aria-label="Termín návratu" className="min-h-9 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-2 text-xs text-[var(--color-text-primary)]"/></div><div className="flex gap-2"><input type="number" min="0" max="525600" value={form.reminder_minutes} onChange={event => setForm(current => ({...current,reminder_minutes:event.target.value}))} aria-label="Minut předem" title="Minut předem" className="min-h-9 w-28 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-2 text-xs text-[var(--color-text-primary)]"/><button disabled={saving} onClick={schedule} className="min-h-9 rounded-lg border border-teal-400/30 px-3 text-xs text-teal-100 disabled:opacity-40">{saving ? 'Plánuji…' : 'Přidat do kalendáře'}</button></div></div>}
         {message && <p className={`mt-2 text-[10px] ${eventUuid ? 'text-emerald-300' : 'text-[var(--color-text-secondary)]'}`}>{message}{eventUuid && <Link href={`/calendar/events/${eventUuid}`} className="ml-1 underline">Otevřít akci</Link>}</p>}
     </section>;
 }
@@ -361,7 +361,7 @@ function GpsMap({ lat, lng }: { lat: number; lng: number }) {
             className="block w-full h-28 rounded-lg overflow-hidden group relative">
             {!ready && <div className="w-full h-full bg-[var(--color-bg-secondary)] animate-pulse rounded-lg"/>}
             <div ref={mapRef} className="w-full h-full"/>
-            <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/30">
+            <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-[var(--color-surface-muted)]">
                 <span className="text-[10px] text-white bg-black/50 px-2 py-0.5 rounded">Otevřít mapy ↗</span>
             </div>
         </a>
@@ -578,20 +578,20 @@ function ProgressiveImage({ uuid, fullUrl, thumbUrl, alt, width, height, dominan
             {/* Zoom controls */}
             {loaded && (
                 <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1 bg-black/60 backdrop-blur rounded-full px-2 py-1">
-                    <button onClick={() => zoom(-0.5)} className="p-1.5 text-white/80 hover:text-white transition-colors" title="Oddálit (-)">
+                    <button onClick={() => zoom(-0.5)} className="p-1.5 text-[var(--color-text-primary)]/80 hover:text-[var(--color-text-primary)] transition-colors" title="Oddálit (-)">
                         <ZoomOut size={14} />
                     </button>
-                    <span className="text-white/70 text-xs w-10 text-center">{Math.round(scale * 100)}%</span>
-                    <button onClick={() => zoom(0.5)} className="p-1.5 text-white/80 hover:text-white transition-colors" title="Přiblížit (+)">
+                    <span className="text-[var(--color-text-primary)]/70 text-xs w-10 text-center">{Math.round(scale * 100)}%</span>
+                    <button onClick={() => zoom(0.5)} className="p-1.5 text-[var(--color-text-primary)]/80 hover:text-[var(--color-text-primary)] transition-colors" title="Přiblížit (+)">
                         <ZoomIn size={14} />
                     </button>
                     {scale > 1 && (
-                        <button onClick={reset} className="p-1.5 text-white/80 hover:text-white transition-colors" title="Původní velikost (0)">
+                        <button onClick={reset} className="p-1.5 text-[var(--color-text-primary)]/80 hover:text-[var(--color-text-primary)] transition-colors" title="Původní velikost (0)">
                             <RotateCcw size={14} />
                         </button>
                     )}
                     <div className="w-px h-4 bg-white/20 mx-0.5" />
-                    <button onClick={() => setFullscreen(v => !v)} className="p-1.5 text-white/80 hover:text-white transition-colors" title="Celá obrazovka (F)">
+                    <button onClick={() => setFullscreen(v => !v)} className="p-1.5 text-[var(--color-text-primary)]/80 hover:text-[var(--color-text-primary)] transition-colors" title="Celá obrazovka (F)">
                         {fullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
                     </button>
                 </div>
@@ -738,21 +738,21 @@ export default function MediaShow({ media, breadcrumb, prev, next }: Props) {
                 <div className="flex h-11 shrink-0 items-center gap-0.5 overflow-visible border-b border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-1 sm:gap-1 sm:px-2">
 
                     {/* Back to timeline */}
-                    <Link href="/timeline" className="p-2 text-[var(--color-text-secondary)] hover:text-white rounded-lg hover:bg-white/10 shrink-0" title="Zpět (Esc)">
+                    <Link href="/timeline" className="p-2 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] rounded-lg hover:bg-[var(--color-surface-hover)] shrink-0" title="Zpět (Esc)">
                         <ChevronLeft size={16}/>
                     </Link>
 
                     {/* ← Prev photo */}
-                    {prev ? <Link href={`/media/${prev.uuid}`} className="p-1.5 rounded text-white hover:bg-white/10 transition-colors shrink-0" title="Předchozí (←)"><ChevronLeft size={13}/></Link>
+                    {prev ? <Link href={`/media/${prev.uuid}`} className="p-1.5 rounded text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] transition-colors shrink-0" title="Předchozí (←)"><ChevronLeft size={13}/></Link>
                         : <button disabled className="p-1.5 rounded text-[var(--color-border)] shrink-0" title="Žádná předchozí fotografie"><ChevronLeft size={13}/></button>}
 
                     {/* Title (centered) */}
-                    <p className="flex-1 text-center text-sm text-white/80 font-medium truncate px-1 min-w-0">
+                    <p className="flex-1 text-center text-sm text-[var(--color-text-primary)]/80 font-medium truncate px-1 min-w-0">
                         {item.display_title ?? item.original_filename}
                     </p>
 
                     {/* Next photo → */}
-                    {next ? <Link href={`/media/${next.uuid}`} className="p-1.5 rounded text-white hover:bg-white/10 transition-colors shrink-0" title="Další (→)"><ChevronRight size={13}/></Link>
+                    {next ? <Link href={`/media/${next.uuid}`} className="p-1.5 rounded text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] transition-colors shrink-0" title="Další (→)"><ChevronRight size={13}/></Link>
                         : <button disabled className="p-1.5 rounded text-[var(--color-border)] shrink-0" title="Žádná další fotografie"><ChevronRight size={13}/></button>}
 
                     <div className="mx-0.5 hidden h-4 w-px bg-[var(--color-border)] sm:block"/>
@@ -760,7 +760,7 @@ export default function MediaShow({ media, breadcrumb, prev, next }: Props) {
                     {/* ❤️ Favorite */}
                     <button onClick={toggleFavorite} disabled={saving}
                         title={isShared ? 'Společné oblíbené ❤️❤️' : isMine ? 'Odebrat z oblíbených (F)' : 'Přidat do oblíbených (F)'}
-                        className={clsx('flex items-center gap-0.5 p-2 rounded-lg hover:bg-white/10 transition-colors shrink-0', isMine ? 'text-red-400' : 'text-[var(--color-text-secondary)]')}>
+                        className={clsx('flex items-center gap-0.5 p-2 rounded-lg hover:bg-[var(--color-surface-hover)] transition-colors shrink-0', isMine ? 'text-red-400' : 'text-[var(--color-text-secondary)]')}>
                         <Heart size={15} className={isMine ? 'fill-red-400' : ''}/>
                         {isShared && <Heart size={11} className="fill-red-400 text-red-400 -ml-1.5"/>}
                     </button>
@@ -779,11 +779,11 @@ export default function MediaShow({ media, breadcrumb, prev, next }: Props) {
 
                     {/* 💬 Comments (opens info panel) */}
                     <button onClick={() => setInfo(v => { if (!v) return true; return v; })}
-                        className={clsx('relative p-2 rounded-lg hover:bg-white/10 transition-colors shrink-0', infoOpen ? 'text-white' : 'text-[var(--color-text-secondary)]')}
+                        className={clsx('relative p-2 rounded-lg hover:bg-[var(--color-surface-hover)] transition-colors shrink-0', infoOpen ? 'text-[var(--color-text-primary)]' : 'text-[var(--color-text-secondary)]')}
                         title="Komentáře">
                         <MessageSquare size={15}/>
                         {comments.length > 0 && (
-                            <span className="absolute top-0.5 right-0.5 text-[9px] bg-[var(--color-accent)] text-white rounded-full w-3.5 h-3.5 flex items-center justify-center font-bold leading-none">
+                            <span className="absolute top-0.5 right-0.5 text-[9px] bg-[var(--color-accent)] text-[var(--color-text-primary)] rounded-full w-3.5 h-3.5 flex items-center justify-center font-bold leading-none">
                                 {comments.length}
                             </span>
                         )}
@@ -791,7 +791,7 @@ export default function MediaShow({ media, breadcrumb, prev, next }: Props) {
 
                     {/* ℹ Info panel toggle */}
                     <button onClick={() => setInfo(!infoOpen)}
-                        className={clsx('p-2 rounded-lg hover:bg-white/10 transition-colors shrink-0', infoOpen ? 'text-white bg-white/10' : 'text-[var(--color-text-secondary)]')}
+                        className={clsx('p-2 rounded-lg hover:bg-[var(--color-surface-hover)] transition-colors shrink-0', infoOpen ? 'text-[var(--color-text-primary)] bg-[var(--color-surface-muted)]' : 'text-[var(--color-text-secondary)]')}
                         title="Info panel (I)">
                         <Info size={15}/>
                     </button>
@@ -799,7 +799,7 @@ export default function MediaShow({ media, breadcrumb, prev, next }: Props) {
                     {/* ⋯ More */}
                     <div className="relative shrink-0">
                         <button onClick={() => setMoreOpen(v => !v)}
-                            className="p-2 rounded-lg hover:bg-white/10 text-[var(--color-text-secondary)] hover:text-white transition-colors"
+                            className="p-2 rounded-lg hover:bg-[var(--color-surface-hover)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors"
                             title="Další akce">
                             <MoreHorizontal size={15}/>
                         </button>
@@ -807,20 +807,20 @@ export default function MediaShow({ media, breadcrumb, prev, next }: Props) {
                             <div className="absolute right-0 top-full mt-1 w-48 bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-xl shadow-2xl overflow-hidden z-50"
                                 onMouseLeave={() => setMoreOpen(false)}>
                                 <button onClick={() => { downloadItem(); setMoreOpen(false); }}
-                                    className="w-full text-left px-4 py-2.5 text-xs text-[var(--color-text-secondary)] hover:text-white hover:bg-white/5 flex items-center gap-2">
+                                    className="w-full text-left px-4 py-2.5 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] flex items-center gap-2">
                                     <Download size={12}/> Stáhnout z Drive
                                 </button>
                                 <button onClick={() => { downloadLocal(); setMoreOpen(false); }}
-                                    className="w-full text-left px-4 py-2.5 text-xs text-[var(--color-text-secondary)] hover:text-white hover:bg-white/5 flex items-center gap-2">
+                                    className="w-full text-left px-4 py-2.5 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] flex items-center gap-2">
                                     <ExternalLink size={12}/> Stáhnout lokálně
                                 </button>
                                 <div className="border-t border-[var(--color-border)]"/>
                                 <button onClick={() => { archiveItem(); setMoreOpen(false); }}
-                                    className="w-full text-left px-4 py-2.5 text-xs text-[var(--color-text-secondary)] hover:text-white hover:bg-white/5 flex items-center gap-2">
+                                    className="w-full text-left px-4 py-2.5 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] flex items-center gap-2">
                                     <Archive size={12}/> Archivovat
                                 </button>
                                 <button onClick={() => { toggleVault(); setMoreOpen(false); }}
-                                    className="w-full text-left px-4 py-2.5 text-xs text-[var(--color-text-secondary)] hover:text-white hover:bg-white/5 flex items-center gap-2">
+                                    className="w-full text-left px-4 py-2.5 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] flex items-center gap-2">
                                     <LockKeyhole size={12}/> {item.is_hidden ? 'Odebrat z trezoru' : 'Přesunout do trezoru'}
                                 </button>
                                 <button onClick={() => { trashItem(); setMoreOpen(false); }}
@@ -927,18 +927,18 @@ export default function MediaShow({ media, breadcrumb, prev, next }: Props) {
                     {/* Info panel */}
                     {infoOpen && (
                         <div className="fixed inset-x-0 bottom-[calc(3.5rem+env(safe-area-inset-bottom,0px))] z-[620] max-h-[72dvh] w-full space-y-4 overflow-y-auto overscroll-contain rounded-t-2xl border-t border-[var(--color-border)] bg-[var(--color-bg-secondary)] p-4 shadow-2xl md:static md:z-auto md:max-h-none md:w-72 md:shrink-0 md:rounded-none md:border-l md:border-t-0 md:shadow-none">
-                            <div className="sticky top-0 z-10 -mx-4 -mt-4 mb-2 flex items-center justify-between border-b border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-4 py-2 md:hidden"><span className="text-sm font-semibold text-white">Informace a vzpomínky</span><button type="button" onClick={()=>setInfo(false)} className="flex h-9 w-9 items-center justify-center rounded-lg text-white" aria-label="Zavřít informace"><X size={18}/></button></div>
+                            <div className="sticky top-0 z-10 -mx-4 -mt-4 mb-2 flex items-center justify-between border-b border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-4 py-2 md:hidden"><span className="text-sm font-semibold text-[var(--color-text-primary)]">Informace a vzpomínky</span><button type="button" onClick={()=>setInfo(false)} className="flex h-9 w-9 items-center justify-center rounded-lg text-[var(--color-text-primary)]" aria-label="Zavřít informace"><X size={18}/></button></div>
                             {/* File */}
                             <section>
                                 <h3 className="text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider mb-2">Soubor</h3>
                                 <div className="space-y-1.5 text-xs">
-                                    <div className="flex justify-between"><span className="text-[var(--color-text-secondary)]">Název</span><span className="text-white truncate ml-2 max-w-36">{item.original_filename}</span></div>
-                                    <div className="flex justify-between"><span className="text-[var(--color-text-secondary)]">Velikost</span><span className="text-white">{formatBytes(item.size_bytes)}</span></div>
-                                    {item.width && item.height && <div className="flex justify-between"><span className="text-[var(--color-text-secondary)]">Rozlišení</span><span className="text-white">{item.width} × {item.height}</span></div>}
-                                    {item.duration_ms && <div className="flex justify-between"><span className="text-[var(--color-text-secondary)]">Délka</span><span className="text-white">{formatDuration(item.duration_ms)}</span></div>}
-                                    {item.media_type === 'video' && item.video_codec && <div className="flex justify-between"><span className="text-[var(--color-text-secondary)]">Video</span><span className="text-white uppercase">{item.video_codec}{item.frame_rate ? ` · ${Math.round(item.frame_rate)} fps` : ''}</span></div>}
-                                    {item.media_type === 'video' && item.audio_codec && <div className="flex justify-between"><span className="text-[var(--color-text-secondary)]">Zvuk</span><span className="text-white uppercase">{item.audio_codec}</span></div>}
-                                    {item.media_type === 'video' && item.bitrate && <div className="flex justify-between"><span className="text-[var(--color-text-secondary)]">Datový tok</span><span className="text-white">{Math.round(item.bitrate / 1000)} kb/s</span></div>}
+                                    <div className="flex justify-between"><span className="text-[var(--color-text-secondary)]">Název</span><span className="text-[var(--color-text-primary)] truncate ml-2 max-w-36">{item.original_filename}</span></div>
+                                    <div className="flex justify-between"><span className="text-[var(--color-text-secondary)]">Velikost</span><span className="text-[var(--color-text-primary)]">{formatBytes(item.size_bytes)}</span></div>
+                                    {item.width && item.height && <div className="flex justify-between"><span className="text-[var(--color-text-secondary)]">Rozlišení</span><span className="text-[var(--color-text-primary)]">{item.width} × {item.height}</span></div>}
+                                    {item.duration_ms && <div className="flex justify-between"><span className="text-[var(--color-text-secondary)]">Délka</span><span className="text-[var(--color-text-primary)]">{formatDuration(item.duration_ms)}</span></div>}
+                                    {item.media_type === 'video' && item.video_codec && <div className="flex justify-between"><span className="text-[var(--color-text-secondary)]">Video</span><span className="text-[var(--color-text-primary)] uppercase">{item.video_codec}{item.frame_rate ? ` · ${Math.round(item.frame_rate)} fps` : ''}</span></div>}
+                                    {item.media_type === 'video' && item.audio_codec && <div className="flex justify-between"><span className="text-[var(--color-text-secondary)]">Zvuk</span><span className="text-[var(--color-text-primary)] uppercase">{item.audio_codec}</span></div>}
+                                    {item.media_type === 'video' && item.bitrate && <div className="flex justify-between"><span className="text-[var(--color-text-secondary)]">Datový tok</span><span className="text-[var(--color-text-primary)]">{Math.round(item.bitrate / 1000)} kb/s</span></div>}
                                     {/* Format badges */}
                                     <div className="flex flex-wrap gap-1 pt-0.5">
                                         {item.is_raw && <span className="bg-orange-500/20 text-orange-300 text-[9px] px-1.5 py-0.5 rounded-full font-medium uppercase">{item.raw_format ?? 'RAW'}</span>}
@@ -956,7 +956,7 @@ export default function MediaShow({ media, breadcrumb, prev, next }: Props) {
                                     <h3 className="text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider mb-2 flex items-center gap-1">
                                         <Clock size={10} /> Datum
                                     </h3>
-                                    <p className="text-xs text-white">{formatDate(item.taken_at)}</p>
+                                    <p className="text-xs text-[var(--color-text-primary)]">{formatDate(item.taken_at)}</p>
                                 </section>
                             )}
 
@@ -967,13 +967,13 @@ export default function MediaShow({ media, breadcrumb, prev, next }: Props) {
                                         <Camera size={10} /> Fotoaparát
                                     </h3>
                                     <div className="space-y-1 text-xs">
-                                        {item.camera_make && <div className="flex justify-between"><span className="text-[var(--color-text-secondary)]">Výrobce</span><span className="text-white">{item.camera_make}</span></div>}
-                                        {item.camera_model && <div className="flex justify-between"><span className="text-[var(--color-text-secondary)]">Model</span><span className="text-white">{item.camera_model}</span></div>}
-                                        {item.lens_model && <div className="flex justify-between"><span className="text-[var(--color-text-secondary)]">Objektiv</span><span className="text-white truncate ml-2 max-w-32">{item.lens_model}</span></div>}
-                                        {item.aperture && <div className="flex justify-between"><span className="text-[var(--color-text-secondary)]">Clona</span><span className="text-white">{item.aperture}</span></div>}
-                                        {item.shutter_speed && <div className="flex justify-between"><span className="text-[var(--color-text-secondary)]">Čas závěrky</span><span className="text-white">{item.shutter_speed}</span></div>}
-                                        {item.iso && <div className="flex justify-between"><span className="text-[var(--color-text-secondary)]">ISO</span><span className="text-white">{item.iso}</span></div>}
-                                        {item.focal_length && <div className="flex justify-between"><span className="text-[var(--color-text-secondary)]">Ohnisko</span><span className="text-white">{item.focal_length}</span></div>}
+                                        {item.camera_make && <div className="flex justify-between"><span className="text-[var(--color-text-secondary)]">Výrobce</span><span className="text-[var(--color-text-primary)]">{item.camera_make}</span></div>}
+                                        {item.camera_model && <div className="flex justify-between"><span className="text-[var(--color-text-secondary)]">Model</span><span className="text-[var(--color-text-primary)]">{item.camera_model}</span></div>}
+                                        {item.lens_model && <div className="flex justify-between"><span className="text-[var(--color-text-secondary)]">Objektiv</span><span className="text-[var(--color-text-primary)] truncate ml-2 max-w-32">{item.lens_model}</span></div>}
+                                        {item.aperture && <div className="flex justify-between"><span className="text-[var(--color-text-secondary)]">Clona</span><span className="text-[var(--color-text-primary)]">{item.aperture}</span></div>}
+                                        {item.shutter_speed && <div className="flex justify-between"><span className="text-[var(--color-text-secondary)]">Čas závěrky</span><span className="text-[var(--color-text-primary)]">{item.shutter_speed}</span></div>}
+                                        {item.iso && <div className="flex justify-between"><span className="text-[var(--color-text-secondary)]">ISO</span><span className="text-[var(--color-text-primary)]">{item.iso}</span></div>}
+                                        {item.focal_length && <div className="flex justify-between"><span className="text-[var(--color-text-secondary)]">Ohnisko</span><span className="text-[var(--color-text-primary)]">{item.focal_length}</span></div>}
                                     </div>
                                 </section>
                             )}
@@ -989,16 +989,16 @@ export default function MediaShow({ media, breadcrumb, prev, next }: Props) {
                                     <div className="mt-2 space-y-1 text-xs">
                                         <div className="flex justify-between">
                                             <span className="text-[var(--color-text-secondary)]">Šířka</span>
-                                            <span className="text-white font-mono">{item.latitude.toFixed(6)}°</span>
+                                            <span className="text-[var(--color-text-primary)] font-mono">{item.latitude.toFixed(6)}°</span>
                                         </div>
                                         <div className="flex justify-between">
                                             <span className="text-[var(--color-text-secondary)]">Délka</span>
-                                            <span className="text-white font-mono">{item.longitude.toFixed(6)}°</span>
+                                            <span className="text-[var(--color-text-primary)] font-mono">{item.longitude.toFixed(6)}°</span>
                                         </div>
                                         {item.altitude != null && (
                                             <div className="flex justify-between">
                                                 <span className="text-[var(--color-text-secondary)]">Nadm. výška</span>
-                                                <span className="text-white">{Math.round(item.altitude)} m</span>
+                                                <span className="text-[var(--color-text-primary)]">{Math.round(item.altitude)} m</span>
                                             </div>
                                         )}
                                     </div>
@@ -1055,7 +1055,7 @@ export default function MediaShow({ media, breadcrumb, prev, next }: Props) {
                                     </h3>
                                     <div className="flex flex-wrap gap-1">
                                         {item.tags.map(tag => (
-                                            <span key={tag.id} className="text-[10px] bg-white/10 text-white px-2 py-0.5 rounded-full">
+                                            <span key={tag.id} className="text-[10px] bg-[var(--color-surface-muted)] text-[var(--color-text-primary)] px-2 py-0.5 rounded-full">
                                                 {tag.name}
                                             </span>
                                         ))}
@@ -1084,7 +1084,7 @@ export default function MediaShow({ media, breadcrumb, prev, next }: Props) {
                             {item.description && (
                                 <section>
                                     <h3 className="text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider mb-2">Popis</h3>
-                                    <p className="text-xs text-white leading-relaxed">{item.description}</p>
+                                    <p className="text-xs text-[var(--color-text-primary)] leading-relaxed">{item.description}</p>
                                 </section>
                             )}
 
@@ -1140,7 +1140,7 @@ export default function MediaShow({ media, breadcrumb, prev, next }: Props) {
                                     <div className="flex flex-wrap gap-1">
                                         {item.places.map(place => (
                                             <Link key={place.id} href={`/places/${place.id}`}
-                                                className="text-[10px] bg-[var(--color-bg-secondary)] border border-[var(--color-border)] text-white px-2 py-0.5 rounded-full hover:border-[var(--color-accent)] transition-colors">
+                                                className="text-[10px] bg-[var(--color-bg-secondary)] border border-[var(--color-border)] text-[var(--color-text-primary)] px-2 py-0.5 rounded-full hover:border-[var(--color-accent)] transition-colors">
                                                 📍 {place.name}{place.city ? ` · ${place.city}` : ''}
                                             </Link>
                                         ))}
@@ -1160,7 +1160,7 @@ export default function MediaShow({ media, breadcrumb, prev, next }: Props) {
                                     <div className="space-y-2">
                                         {memberRatings.map(m => (
                                             <div key={m.user_id} className="flex items-center gap-2">
-                                                <span className={`text-[10px] w-16 truncate ${m.is_me ? 'text-white font-medium' : 'text-[var(--color-text-secondary)]'}`}>{m.name}</span>
+                                                <span className={`text-[10px] w-16 truncate ${m.is_me ? 'text-[var(--color-text-primary)] font-medium' : 'text-[var(--color-text-secondary)]'}`}>{m.name}</span>
                                                 <div className="flex gap-0.5">
                                                     {[1,2,3,4,5].map(n => (
                                                         <span key={n}>
@@ -1183,7 +1183,7 @@ export default function MediaShow({ media, breadcrumb, prev, next }: Props) {
                                     {comments.map(c => (
                                         <div key={c.id} className={`p-2 rounded-lg text-xs ${c.is_private ? 'bg-yellow-500/10 border border-yellow-500/20' : 'bg-[var(--color-bg-secondary)]'}`}>
                                             <div className="flex items-center justify-between mb-1">
-                                                <span className="font-medium text-white">{c.user_name}</span>
+                                                <span className="font-medium text-[var(--color-text-primary)]">{c.user_name}</span>
                                                 {c.is_private && <span className="text-[9px] text-yellow-400">soukromé</span>}
                                             </div>
                                             <p className="text-[var(--color-text-secondary)] leading-relaxed">{c.body}</p>
@@ -1200,14 +1200,14 @@ export default function MediaShow({ media, breadcrumb, prev, next }: Props) {
                                 }} className="space-y-2">
                                     <textarea value={commentText} onChange={e => setCommentText(e.target.value)}
                                         placeholder="Přidat komentář…" rows={2}
-                                        className="w-full bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-lg px-2 py-1.5 text-xs text-white placeholder-[var(--color-text-secondary)] outline-none focus:border-[var(--color-accent)] resize-none" />
+                                        className="w-full bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-lg px-2 py-1.5 text-xs text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] outline-none focus:border-[var(--color-accent)] resize-none" />
                                     <div className="flex items-center justify-between">
                                         <label className="flex items-center gap-1.5 text-xs text-[var(--color-text-secondary)] cursor-pointer">
                                             <input type="checkbox" checked={commentPrivate} onChange={e => setCommentPrivate(e.target.checked)} className="w-3 h-3" />
                                             Soukromá poznámka
                                         </label>
                                         <button type="submit" disabled={!commentText.trim()}
-                                            className="text-xs bg-[var(--color-accent)] text-white px-2.5 py-1 rounded-lg disabled:opacity-40 hover:opacity-90">
+                                            className="text-xs bg-[var(--color-accent)] text-[var(--color-text-primary)] px-2.5 py-1 rounded-lg disabled:opacity-40 hover:opacity-90">
                                             Přidat
                                         </button>
                                     </div>

@@ -120,16 +120,16 @@ export default function BurpsIndex() {
                 <main className="mx-auto max-w-2xl p-4 sm:p-6">
                     <div className="rounded-2xl border border-violet-400/30 bg-violet-500/5 p-8 text-center">
                         <span className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-violet-500/15 text-2xl">🎺</span>
-                        <h1 className="mt-4 text-xl font-bold text-white">Hodnocení krkanců</h1>
+                        <h1 className="mt-4 text-xl font-bold text-[var(--color-text-primary)]">Hodnocení krkanců</h1>
                         <p className="mx-auto mt-2 max-w-md text-sm text-[var(--color-text-secondary)]">
                             Tenhle doplňkový modul zatím nemáte aktivní. Zaznamenávejte krkance, nechte je ohodnotit
                             protějškem podle hlasitosti, délky, umění a překvapení a sledujte žebříček i šampiona měsíce.
                         </p>
                         <div className="mt-5 flex flex-wrap justify-center gap-2">
-                            <Link href="/cenik" className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-[var(--color-accent)] px-4 text-sm font-medium text-white">
+                            <Link href="/cenik" className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-[var(--color-accent)] px-4 text-sm font-medium text-[var(--color-text-primary)]">
                                 <Lock size={15} /> Zobrazit ceník
                             </Link>
-                            <Link href="/settings/predplatne" className="inline-flex min-h-10 items-center rounded-xl border border-[var(--color-border)] px-4 text-sm text-white">
+                            <Link href="/settings/predplatne" className="inline-flex min-h-10 items-center rounded-xl border border-[var(--color-border)] px-4 text-sm text-[var(--color-text-primary)]">
                                 Správa předplatného
                             </Link>
                         </div>
@@ -144,7 +144,7 @@ export default function BurpsIndex() {
             <Head title="Hodnocení krkanců" />
             <main className="mx-auto max-w-3xl p-4 sm:p-6">
                 <p className="text-xs uppercase tracking-widest text-violet-300">Doplňkový modul</p>
-                <h1 className="mt-1 flex items-center gap-2 text-2xl font-bold text-white sm:text-3xl">🎺 Hodnocení krkanců</h1>
+                <h1 className="mt-1 flex items-center gap-2 text-2xl font-bold text-[var(--color-text-primary)] sm:text-3xl">🎺 Hodnocení krkanců</h1>
                 <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
                     Zaznamenejte úlovek a nechte ho ohodnotit. Vlastní krkanec si ohodnotit nemůžete — to by nebylo fér.
                 </p>
@@ -156,7 +156,7 @@ export default function BurpsIndex() {
                         <Crown size={22} className="shrink-0 text-amber-300" />
                         <div>
                             <p className="text-xs uppercase tracking-wide text-amber-200">Šampion měsíce</p>
-                            <p className="font-semibold text-white">{champion.user.name} · {champion.score}/5</p>
+                            <p className="font-semibold text-[var(--color-text-primary)]">{champion.user.name} · {champion.score}/5</p>
                             {champion.title && <p className="text-xs text-[var(--color-text-secondary)]">{champion.title}</p>}
                         </div>
                     </div>
@@ -167,17 +167,17 @@ export default function BurpsIndex() {
                     onChange={event => setOccasion(event.target.value)}
                     maxLength={120}
                     placeholder="Příležitost, nepovinné — třeba „po nedělním obědě“"
-                    className="mt-5 w-full rounded-lg border border-[var(--color-border)] bg-white/5 px-3 py-2.5 text-sm text-white focus:border-[var(--color-accent)] focus:outline-none"
+                    className="mt-5 w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-muted)] px-3 py-2.5 text-sm text-[var(--color-text-primary)] focus:border-[var(--color-accent)] focus:outline-none"
                 />
                 <AudioRecorder onRecorded={upload} busy={busy === 'upload'} label="Zaznamenat krkanec" maxSeconds={60} />
 
                 {leaderboard.length > 0 && (
                     <section className="mt-6 rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-4">
-                        <h2 className="flex items-center gap-2 font-semibold text-white"><Trophy size={17} className="text-amber-300" /> Žebříček</h2>
+                        <h2 className="flex items-center gap-2 font-semibold text-[var(--color-text-primary)]"><Trophy size={17} className="text-amber-300" /> Žebříček</h2>
                         <div className="mt-3 space-y-2">
                             {leaderboard.map((row, index) => (
                                 <div key={row.user.id ?? index} className="flex items-center justify-between text-sm">
-                                    <span className="text-white">{index + 1}. {row.user.name}</span>
+                                    <span className="text-[var(--color-text-primary)]">{index + 1}. {row.user.name}</span>
                                     <span className="text-xs text-[var(--color-text-secondary)]">
                                         průměr {row.average_score}/5 · nejlepší {row.best_score}/5 · {row.burps}×
                                     </span>
@@ -195,7 +195,7 @@ export default function BurpsIndex() {
                         return (
                             <article key={burp.uuid} className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-4">
                                 <div className="flex flex-wrap items-baseline justify-between gap-2">
-                                    <p className="font-medium text-white">{burp.title || 'Bez názvu'}</p>
+                                    <p className="font-medium text-[var(--color-text-primary)]">{burp.title || 'Bez názvu'}</p>
                                     <p className="text-xs text-[var(--color-text-secondary)]">
                                         {burp.author.name} · {when(burp.happened_at)}{burp.occasion ? ` · ${burp.occasion}` : ''}
                                     </p>
@@ -209,7 +209,7 @@ export default function BurpsIndex() {
 
                                 {burp.can_rate && (
                                     <div className="mt-3 rounded-xl border border-violet-400/20 bg-violet-500/5 p-3">
-                                        <p className="text-xs font-medium text-white">{burp.my_rating ? 'Upravit hodnocení' : 'Ohodnotit'}</p>
+                                        <p className="text-xs font-medium text-[var(--color-text-primary)]">{burp.my_rating ? 'Upravit hodnocení' : 'Ohodnotit'}</p>
                                         <div className="mt-2 grid gap-2 sm:grid-cols-2">
                                             {CRITERIA.map(([key, label]) => (
                                                 <label key={key} className="text-[10px] text-[var(--color-text-secondary)]">
@@ -233,7 +233,7 @@ export default function BurpsIndex() {
                                             onChange={event => setDraft(burp, { comment: event.target.value })}
                                             maxLength={400}
                                             placeholder="Komentář, nepovinné"
-                                            className="mt-2 w-full rounded-lg border border-[var(--color-border)] bg-white/5 px-3 py-2 text-xs text-white focus:border-[var(--color-accent)] focus:outline-none"
+                                            className="mt-2 w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-muted)] px-3 py-2 text-xs text-[var(--color-text-primary)] focus:border-[var(--color-accent)] focus:outline-none"
                                         />
                                         <button
                                             type="button"
@@ -250,7 +250,7 @@ export default function BurpsIndex() {
                                     <div className="mt-3 space-y-1">
                                         {burp.ratings.map(rating => (
                                             <p key={rating.user.id ?? rating.score} className="text-xs text-[var(--color-text-secondary)]">
-                                                <b className="text-white">{rating.user.name}</b> · {rating.score}/5
+                                                <b className="text-[var(--color-text-primary)]">{rating.user.name}</b> · {rating.score}/5
                                                 {rating.comment ? ` · ${rating.comment}` : ''}
                                             </p>
                                         ))}

@@ -91,7 +91,7 @@ export default function SmartAlbumEditor({
         <div className="bg-[var(--color-bg-card)] border border-[var(--color-accent)]/30 rounded-xl p-4 mb-5">
             <div className="flex items-center gap-2 mb-4">
                 <Sparkles size={15} className="text-[var(--color-accent)]"/>
-                <h3 className="text-sm font-semibold text-white">Typ alba</h3>
+                <h3 className="text-sm font-semibold text-[var(--color-text-primary)]">Typ alba</h3>
             </div>
 
             {/* Type toggle */}
@@ -102,7 +102,7 @@ export default function SmartAlbumEditor({
                 ] as const).map(({ k, label, desc }) => (
                     <button key={k} onClick={() => setType(k)}
                         className={`flex-1 text-left px-3 py-2.5 rounded-xl border-2 transition-colors ${type === k ? 'border-[var(--color-accent)] bg-[var(--color-accent)]/10' : 'border-[var(--color-border)] hover:border-[var(--color-accent)]/40'}`}>
-                        <p className={`text-sm font-semibold ${type === k ? 'text-[var(--color-accent)]' : 'text-white'}`}>{label}</p>
+                        <p className={`text-sm font-semibold ${type === k ? 'text-[var(--color-accent)]' : 'text-[var(--color-text-primary)]'}`}>{label}</p>
                         <p className="text-[10px] text-[var(--color-text-secondary)] mt-0.5">{desc}</p>
                     </button>
                 ))}
@@ -116,7 +116,7 @@ export default function SmartAlbumEditor({
                         <div className="flex gap-1">
                             {['all', 'any'].map(m => (
                                 <button key={m} onClick={() => setRules(r => ({ ...r, match: m as any }))}
-                                    className={`text-xs px-2 py-1 rounded-lg transition-colors ${rules.match === m ? 'bg-[var(--color-accent)] text-white' : 'border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-white'}`}>
+                                    className={`text-xs px-2 py-1 rounded-lg transition-colors ${rules.match === m ? 'bg-[var(--color-accent)] text-[var(--color-text-primary)]' : 'border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}>
                                     {m === 'all' ? 'VŠECHNA pravidla' : 'ALESPOŇ JEDNO pravidlo'}
                                 </button>
                             ))}
@@ -132,7 +132,7 @@ export default function SmartAlbumEditor({
                                     {/* Field */}
                                     <select value={cond.field}
                                         onChange={e => { const m = fieldMeta(e.target.value); updateCondition(idx, { field: e.target.value, op: m.op, value: m.type === 'bool' ? true : m.type === 'number' ? 4 : '' }); }}
-                                        className="bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-lg px-2 py-1.5 text-xs text-white outline-none focus:border-[var(--color-accent)]">
+                                        className="bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-lg px-2 py-1.5 text-xs text-[var(--color-text-primary)] outline-none focus:border-[var(--color-accent)]">
                                         {FIELDS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
                                     </select>
 
@@ -140,14 +140,14 @@ export default function SmartAlbumEditor({
                                     {meta.type === 'bool' ? (
                                         <select value={String(cond.value)}
                                             onChange={e => updateCondition(idx, { value: e.target.value === 'true' })}
-                                            className="bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-lg px-2 py-1.5 text-xs text-white outline-none focus:border-[var(--color-accent)]">
+                                            className="bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-lg px-2 py-1.5 text-xs text-[var(--color-text-primary)] outline-none focus:border-[var(--color-accent)]">
                                             <option value="true">Ano</option>
                                             <option value="false">Ne</option>
                                         </select>
                                     ) : meta.type === 'select' ? (
                                         <select value={String(cond.value)}
                                             onChange={e => updateCondition(idx, { value: e.target.value })}
-                                            className="bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-lg px-2 py-1.5 text-xs text-white outline-none focus:border-[var(--color-accent)]">
+                                            className="bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-lg px-2 py-1.5 text-xs text-[var(--color-text-primary)] outline-none focus:border-[var(--color-accent)]">
                                             {meta.options!.map(o => <option key={o} value={o}>{o}</option>)}
                                         </select>
                                     ) : (
@@ -155,7 +155,7 @@ export default function SmartAlbumEditor({
                                             onChange={e => updateCondition(idx, { value: meta.type === 'number' ? parseInt(e.target.value) || 0 : e.target.value })}
                                             type={meta.type === 'number' ? 'number' : meta.type === 'date' ? 'date' : 'text'}
                                             placeholder={meta.placeholder}
-                                            className="bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-lg px-2 py-1.5 text-xs text-white placeholder-[var(--color-text-secondary)] outline-none focus:border-[var(--color-accent)] w-28"/>
+                                            className="bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-lg px-2 py-1.5 text-xs text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] outline-none focus:border-[var(--color-accent)] w-28"/>
                                     )}
 
                                     <button onClick={() => removeCondition(idx)} className="p-1 text-[var(--color-text-secondary)] hover:text-red-400 transition-colors">
@@ -174,13 +174,13 @@ export default function SmartAlbumEditor({
                     {/* Preview */}
                     <div className="mb-4">
                         <button onClick={loadPreview} disabled={loading || rules.conditions.length === 0}
-                            className="flex items-center gap-1.5 text-xs border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-white px-3 py-1.5 rounded-lg transition-colors disabled:opacity-40">
+                            className="flex items-center gap-1.5 text-xs border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] px-3 py-1.5 rounded-lg transition-colors disabled:opacity-40">
                             <RefreshCw size={11} className={loading ? 'animate-spin' : ''}/> Náhled
                         </button>
 
                         {preview && (
                             <div className="mt-2 flex items-center gap-2 flex-wrap">
-                                <span className="text-xs text-white font-medium">
+                                <span className="text-xs text-[var(--color-text-primary)] font-medium">
                                     {preview.count} fotografií splňuje podmínky
                                 </span>
                                 {preview.samples.map(s => (
@@ -195,7 +195,7 @@ export default function SmartAlbumEditor({
 
             <div className="flex gap-2">
                 <button onClick={save} disabled={saving}
-                    className="flex items-center gap-1.5 bg-[var(--color-accent)] text-white text-sm px-4 py-2 rounded-lg hover:opacity-90 disabled:opacity-40">
+                    className="flex items-center gap-1.5 bg-[var(--color-accent)] text-[var(--color-text-primary)] text-sm px-4 py-2 rounded-lg hover:opacity-90 disabled:opacity-40">
                     {saving ? <Loader2 size={13} className="animate-spin"/> : <Check size={13}/>}
                     Uložit
                 </button>

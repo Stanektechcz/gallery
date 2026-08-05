@@ -31,7 +31,7 @@ export default function PeopleIndex() {
                         <User size={18} className="text-[var(--color-accent)]" />
                     </div>
                     <div>
-                        <h1 className="text-lg font-semibold text-white">Lidé</h1>
+                        <h1 className="text-lg font-semibold text-[var(--color-text-primary)]">Lidé</h1>
                         <p className="text-xs text-[var(--color-text-secondary)]">{people.length} osob</p>
                     </div>
                 </div>
@@ -59,7 +59,7 @@ export default function PeopleIndex() {
                                         : <span className="text-xl font-bold text-[var(--color-accent)]">{person.name[0]?.toUpperCase()}</span>
                                     }
                                 </div>
-                                <p className="text-sm font-medium text-white truncate">{person.name}</p>
+                                <p className="text-sm font-medium text-[var(--color-text-primary)] truncate">{person.name}</p>
                                 <div className="flex items-center justify-center gap-3 mt-1 text-[10px] text-[var(--color-text-secondary)]">
                                     {person.media_count ? <span className="flex items-center gap-0.5"><Image size={10}/>{person.media_count}</span> : null}
 

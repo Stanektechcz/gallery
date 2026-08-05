@@ -97,7 +97,7 @@ export default function MobileAppIndex({ android, apkStatus }: PageProps) {
                 <meta name="description" content="Nainstalujte si Maki do telefonu nebo tabletu – partnerskou galerii, kalendář, cestování a společné zážitky."/>
             </Head>
 
-            <main className="relative min-h-screen overflow-hidden bg-[#0f1020] text-white">
+            <main className="relative min-h-screen overflow-hidden bg-[#0f1020] text-[var(--color-text-primary)]">
                 <div aria-hidden="true" className="pointer-events-none absolute inset-0">
                     <div className="absolute -left-32 -top-32 h-96 w-96 rounded-full bg-violet-600/25 blur-3xl"/>
                     <div className="absolute right-[-8rem] top-[28rem] h-[30rem] w-[30rem] rounded-full bg-fuchsia-500/15 blur-3xl"/>
@@ -109,11 +109,11 @@ export default function MobileAppIndex({ android, apkStatus }: PageProps) {
                         <img src="/icons/maki-app.svg" alt="" className="h-11 w-11 rounded-xl shadow-lg shadow-violet-500/20"/>
                         <div>
                             <p className="text-sm font-bold tracking-wide">Maki</p>
-                            <p className="text-[10px] text-white/50">naše společné zážitky</p>
+                            <p className="text-[10px] text-[var(--color-text-primary)]/50">naše společné zážitky</p>
                         </div>
                     </Link>
                     <div className="flex items-center gap-2">
-                        <button type="button" onClick={() => void share()} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 text-xs font-medium text-white/75 backdrop-blur transition hover:bg-white/10 hover:text-white">
+                        <button type="button" onClick={() => void share()} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-muted)] px-3 text-xs font-medium text-[var(--color-text-primary)]/75 backdrop-blur transition hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]">
                             {shareState === 'idle' ? <Share2 size={16}/> : <Check size={16} className="text-emerald-300"/>}
                             <span className="hidden sm:inline">{shareState === 'copied' ? 'Odkaz zkopírován' : shareState === 'shared' ? 'Sdíleno' : 'Sdílet aplikaci'}</span>
                         </button>
@@ -131,7 +131,7 @@ export default function MobileAppIndex({ android, apkStatus }: PageProps) {
                         <h1 className="text-balance text-4xl font-black leading-[1.05] tracking-[-0.04em] sm:text-5xl lg:text-6xl">
                             Všechny naše zážitky <span className="bg-gradient-to-r from-violet-300 via-fuchsia-300 to-rose-300 bg-clip-text text-transparent">krásně v kapse.</span>
                         </h1>
-                        <p className="mt-6 max-w-xl text-base leading-relaxed text-white/65 sm:text-lg">
+                        <p className="mt-6 max-w-xl text-base leading-relaxed text-[var(--color-text-primary)]/65 sm:text-lg">
                             Galerie, cesty, společný kalendář, vzpomínky, finance, recepty i plány pro dva. Aplikace je propojená s webem, takže vždy vidíte stejná aktuální data.
                         </p>
 
@@ -148,16 +148,16 @@ export default function MobileAppIndex({ android, apkStatus }: PageProps) {
                                 {installing ? 'Otevírám instalaci…' : installed ? 'Otevřít nainstalovanou aplikaci' : canInstall ? 'Nainstalovat jedním klepnutím' : 'Jak aplikaci nainstalovat'}
                             </button>
                             {android.available ? (
-                                <a href={android.download_url} className="inline-flex min-h-14 items-center justify-center gap-2 rounded-2xl border border-white/15 bg-white/[0.06] px-6 text-sm font-semibold backdrop-blur transition hover:-translate-y-0.5 hover:bg-white/10">
+                                <a href={android.download_url} className="inline-flex min-h-14 items-center justify-center gap-2 rounded-2xl border border-[var(--color-border)] bg-white/[0.06] px-6 text-sm font-semibold backdrop-blur transition hover:-translate-y-0.5 hover:bg-[var(--color-surface-hover)]">
                                     <Smartphone size={20}/> Stáhnout Android APK
                                 </a>
                             ) : (
-                                <a href={android.download_url} className="inline-flex min-h-14 items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.03] px-6 text-sm font-medium text-white/45 transition hover:bg-white/[0.06] hover:text-white/70">
+                                <a href={android.download_url} className="inline-flex min-h-14 items-center justify-center gap-2 rounded-2xl border border-[var(--color-border)] bg-white/[0.03] px-6 text-sm font-medium text-[var(--color-text-primary)]/45 transition hover:bg-white/[0.06] hover:text-[var(--color-text-primary)]/70">
                                     <Smartphone size={20}/> Přímé APK · čeká na podpis
                                 </a>
                             )}
                         </div>
-                        <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-[11px] text-white/45">
+                        <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-[11px] text-[var(--color-text-primary)]/45">
                             <span className="inline-flex items-center gap-1.5"><ShieldCheck size={13}/> Soukromá data zůstávají chráněná</span>
                             <span className="inline-flex items-center gap-1.5"><Cloud size={13}/> Aktuální stav webu bez dvojí správy</span>
                             <span className="inline-flex items-center gap-1.5"><BellRing size={13}/> Partnerská upozornění</span>
@@ -166,23 +166,23 @@ export default function MobileAppIndex({ android, apkStatus }: PageProps) {
 
                     <div className="relative mx-auto w-full max-w-md lg:justify-self-end">
                         <div aria-hidden="true" className="absolute inset-8 rounded-[4rem] bg-violet-500/25 blur-3xl"/>
-                        <div className="relative mx-auto w-[min(20rem,82vw)] rounded-[3rem] border border-white/20 bg-[#070711] p-2.5 shadow-2xl shadow-black/60">
-                            <div className="overflow-hidden rounded-[2.45rem] border border-white/10 bg-gradient-to-b from-[#20203d] to-[#111122]">
-                                <div className="flex items-center justify-between px-5 pb-3 pt-4 text-[9px] text-white/55"><span>9:41</span><span className="h-2 w-20 rounded-full bg-black/50"/><span>● 5G</span></div>
+                        <div className="relative mx-auto w-[min(20rem,82vw)] rounded-[3rem] border border-[var(--color-border)] bg-[#070711] p-2.5 shadow-2xl shadow-black/60">
+                            <div className="overflow-hidden rounded-[2.45rem] border border-[var(--color-border)] bg-gradient-to-b from-[#20203d] to-[#111122]">
+                                <div className="flex items-center justify-between px-5 pb-3 pt-4 text-[9px] text-[var(--color-text-primary)]/55"><span>9:41</span><span className="h-2 w-20 rounded-full bg-black/50"/><span>● 5G</span></div>
                                 <div className="px-4 pb-5">
                                     <div className="flex items-center justify-between">
-                                        <div><p className="text-[10px] text-white/50">Dobré ráno, vy dva</p><p className="mt-0.5 text-lg font-bold">Náš dnešek <Heart size={14} className="inline fill-rose-400 text-rose-400"/></p></div>
+                                        <div><p className="text-[10px] text-[var(--color-text-primary)]/50">Dobré ráno, vy dva</p><p className="mt-0.5 text-lg font-bold">Náš dnešek <Heart size={14} className="inline fill-rose-400 text-rose-400"/></p></div>
                                         <img src="/icons/maki-app.svg" alt="" className="h-9 w-9 rounded-xl"/>
                                     </div>
                                     <div className="mt-4 rounded-2xl bg-gradient-to-br from-violet-500 to-fuchsia-500 p-4 shadow-lg shadow-violet-900/30">
-                                        <p className="text-[9px] font-medium uppercase tracking-widest text-white/70">Nejbližší společný plán</p>
+                                        <p className="text-[9px] font-medium uppercase tracking-widest text-[var(--color-text-primary)]/70">Nejbližší společný plán</p>
                                         <p className="mt-2 text-base font-bold">Víkend v Rakousku</p>
-                                        <p className="mt-1 text-[10px] text-white/75">Za 12 dní · trasa i rozpočet připraveny</p>
+                                        <p className="mt-1 text-[10px] text-[var(--color-text-primary)]/75">Za 12 dní · trasa i rozpočet připraveny</p>
                                         <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/20"><div className="h-full w-3/4 rounded-full bg-white"/></div>
                                     </div>
                                     <div className="mt-3 grid grid-cols-2 gap-3">
-                                        <div className="rounded-2xl border border-white/8 bg-white/5 p-3"><p className="text-[9px] text-white/45">Spolu už</p><p className="mt-1 text-lg font-bold">1 482 dní</p><p className="text-[9px] text-rose-200">a pořád počítáme ♥</p></div>
-                                        <div className="rounded-2xl border border-white/8 bg-white/5 p-3"><p className="text-[9px] text-white/45">Dnešní plán</p><p className="mt-1 text-sm font-bold">Společná večeře</p><p className="mt-2 text-[9px] text-emerald-200">19:00 · potvrzeno</p></div>
+                                        <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-muted)] p-3"><p className="text-[9px] text-[var(--color-text-primary)]/45">Spolu už</p><p className="mt-1 text-lg font-bold">1 482 dní</p><p className="text-[9px] text-rose-200">a pořád počítáme ♥</p></div>
+                                        <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-muted)] p-3"><p className="text-[9px] text-[var(--color-text-primary)]/45">Dnešní plán</p><p className="mt-1 text-sm font-bold">Společná večeře</p><p className="mt-2 text-[9px] text-emerald-200">19:00 · potvrzeno</p></div>
                                     </div>
                                     <div className="mt-3"><div className="mb-2 flex items-center justify-between"><p className="text-xs font-semibold">Poslední vzpomínky</p><span className="text-[9px] text-violet-200">Zobrazit vše</span></div><div className="grid grid-cols-3 gap-1.5"><div className="aspect-square rounded-xl bg-gradient-to-br from-amber-300/80 to-rose-500/70"/><div className="aspect-square rounded-xl bg-gradient-to-br from-sky-300/80 to-indigo-500/70"/><div className="aspect-square rounded-xl bg-gradient-to-br from-emerald-300/70 to-cyan-600/70"/></div></div>
                                 </div>
@@ -191,13 +191,13 @@ export default function MobileAppIndex({ android, apkStatus }: PageProps) {
                     </div>
                 </section>
 
-                <section className="relative z-[1] border-y border-white/8 bg-white/[0.025]">
+                <section className="relative z-[1] border-y border-[var(--color-border)] bg-white/[0.025]">
                     <div className="mx-auto grid w-full max-w-7xl gap-3 px-4 py-12 sm:grid-cols-2 sm:px-6 lg:grid-cols-4 lg:px-8">
                         {BENEFITS.map(({ icon: Icon, title, text }) => (
-                            <article key={title} className="rounded-2xl border border-white/8 bg-white/[0.035] p-5 backdrop-blur">
+                            <article key={title} className="rounded-2xl border border-[var(--color-border)] bg-white/[0.035] p-5 backdrop-blur">
                                 <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-400/12 text-violet-200"><Icon size={19}/></span>
                                 <h2 className="mt-4 text-sm font-bold">{title}</h2>
-                                <p className="mt-2 text-xs leading-relaxed text-white/50">{text}</p>
+                                <p className="mt-2 text-xs leading-relaxed text-[var(--color-text-primary)]/50">{text}</p>
                             </article>
                         ))}
                     </div>
@@ -206,36 +206,36 @@ export default function MobileAppIndex({ android, apkStatus }: PageProps) {
                 {isAuthenticated && <section className="relative z-[1] mx-auto w-full max-w-5xl px-4 pb-2 sm:px-6"><PwaStoragePanel /></section>}
 
                 <section id="installation-help" className="relative z-[1] mx-auto w-full max-w-5xl scroll-mt-6 px-4 py-16 sm:px-6 lg:py-24">
-                    <div className="text-center"><p className="text-xs font-bold uppercase tracking-[.25em] text-violet-300">Dvě bezpečné možnosti</p><h2 className="mt-3 text-2xl font-black sm:text-3xl">Instalace, která vám vyhovuje</h2><p className="mx-auto mt-3 max-w-2xl text-sm leading-relaxed text-white/55">Obě varianty zobrazují stejná živá data. Webová instalace je nejrychlejší; podepsané APK lze stáhnout přímo ze sdíleného odkazu.</p></div>
+                    <div className="text-center"><p className="text-xs font-bold uppercase tracking-[.25em] text-violet-300">Dvě bezpečné možnosti</p><h2 className="mt-3 text-2xl font-black sm:text-3xl">Instalace, která vám vyhovuje</h2><p className="mx-auto mt-3 max-w-2xl text-sm leading-relaxed text-[var(--color-text-primary)]/55">Obě varianty zobrazují stejná živá data. Webová instalace je nejrychlejší; podepsané APK lze stáhnout přímo ze sdíleného odkazu.</p></div>
                     <div className="mt-10 grid gap-5 md:grid-cols-2">
                         <article className="rounded-3xl border border-violet-300/20 bg-gradient-to-b from-violet-400/10 to-white/[0.025] p-6 sm:p-8">
                             <div className="flex items-start justify-between gap-4"><span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-400/15 text-violet-200"><Download size={22}/></span><span className="rounded-full bg-emerald-400/12 px-2.5 py-1 text-[10px] font-semibold text-emerald-200">Doporučeno</span></div>
                             <h3 className="mt-5 text-lg font-bold">Instalace z webu</h3>
-                            <ol className="mt-4 space-y-3 text-xs leading-relaxed text-white/60">
-                                <li className="flex gap-3"><span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white/8 text-[10px] text-white">1</span><span>Otevřete tento odkaz v Chrome na telefonu nebo tabletu.</span></li>
-                                <li className="flex gap-3"><span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white/8 text-[10px] text-white">2</span><span>Klepněte na „Nainstalovat jedním klepnutím“. Pokud tlačítko není aktivní, v menu Chrome zvolte „Nainstalovat aplikaci“.</span></li>
-                                <li className="flex gap-3"><span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white/8 text-[10px] text-white">3</span><span>Maki se objeví mezi aplikacemi a bude se sama aktualizovat společně s webem.</span></li>
+                            <ol className="mt-4 space-y-3 text-xs leading-relaxed text-[var(--color-text-primary)]/60">
+                                <li className="flex gap-3"><span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white/8 text-[10px] text-[var(--color-text-primary)]">1</span><span>Otevřete tento odkaz v Chrome na telefonu nebo tabletu.</span></li>
+                                <li className="flex gap-3"><span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white/8 text-[10px] text-[var(--color-text-primary)]">2</span><span>Klepněte na „Nainstalovat jedním klepnutím“. Pokud tlačítko není aktivní, v menu Chrome zvolte „Nainstalovat aplikaci“.</span></li>
+                                <li className="flex gap-3"><span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white/8 text-[10px] text-[var(--color-text-primary)]">3</span><span>Maki se objeví mezi aplikacemi a bude se sama aktualizovat společně s webem.</span></li>
                             </ol>
                             <button type="button" onClick={() => void installWebApp()} disabled={installing} className="mt-6 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-violet-500 px-4 text-sm font-semibold transition hover:bg-violet-400 disabled:opacity-50"><Download size={18}/>{canInstall ? 'Nainstalovat Maki' : installed ? 'Maki je nainstalovaná' : 'Zobrazit nabídku prohlížeče'}</button>
                         </article>
-                        <article className="rounded-3xl border border-white/10 bg-white/[0.025] p-6 sm:p-8">
-                            <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/8 text-white/75"><Smartphone size={22}/></span>
+                        <article className="rounded-3xl border border-[var(--color-border)] bg-white/[0.025] p-6 sm:p-8">
+                            <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/8 text-[var(--color-text-primary)]/75"><Smartphone size={22}/></span>
                             <h3 className="mt-5 text-lg font-bold">Přímý Android APK</h3>
-                            <p className="mt-3 text-xs leading-relaxed text-white/55">Pro instalaci přímo ze souboru. Android může při prvním stažení požádat o povolení instalace aplikací z tohoto zdroje. Balíček musí být podepsán naším stálým release certifikátem.</p>
-                            <dl className="mt-5 space-y-2 rounded-2xl bg-black/15 p-4 text-[11px]">
-                                <div className="flex justify-between gap-3"><dt className="text-white/40">Verze</dt><dd className="font-medium">{android.version}</dd></div>
-                                {size && <div className="flex justify-between gap-3"><dt className="text-white/40">Velikost</dt><dd className="font-medium">{size}</dd></div>}
-                                <div className="flex justify-between gap-3"><dt className="text-white/40">Balíček</dt><dd className="truncate font-mono text-[10px] text-white/70">{android.package_name}</dd></div>
-                                <div className="flex justify-between gap-3"><dt className="text-white/40">Propojení webu</dt><dd className={android.verified_origin ? 'text-emerald-200' : 'text-amber-200'}>{android.verified_origin ? 'ověřeno' : 'čeká na certifikát'}</dd></div>
+                            <p className="mt-3 text-xs leading-relaxed text-[var(--color-text-primary)]/55">Pro instalaci přímo ze souboru. Android může při prvním stažení požádat o povolení instalace aplikací z tohoto zdroje. Balíček musí být podepsán naším stálým release certifikátem.</p>
+                            <dl className="mt-5 space-y-2 rounded-2xl bg-[var(--color-surface-muted)] p-4 text-[11px]">
+                                <div className="flex justify-between gap-3"><dt className="text-[var(--color-text-primary)]/40">Verze</dt><dd className="font-medium">{android.version}</dd></div>
+                                {size && <div className="flex justify-between gap-3"><dt className="text-[var(--color-text-primary)]/40">Velikost</dt><dd className="font-medium">{size}</dd></div>}
+                                <div className="flex justify-between gap-3"><dt className="text-[var(--color-text-primary)]/40">Balíček</dt><dd className="truncate font-mono text-[10px] text-[var(--color-text-primary)]/70">{android.package_name}</dd></div>
+                                <div className="flex justify-between gap-3"><dt className="text-[var(--color-text-primary)]/40">Propojení webu</dt><dd className={android.verified_origin ? 'text-emerald-200' : 'text-amber-200'}>{android.verified_origin ? 'ověřeno' : 'čeká na certifikát'}</dd></div>
                             </dl>
-                            <a href={android.download_url} className={`mt-6 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border px-4 text-sm font-semibold transition ${android.available ? 'border-white/15 bg-white/8 hover:bg-white/12' : 'border-white/8 bg-white/[0.025] text-white/45 hover:text-white/70'}`}><Smartphone size={18}/>{android.available ? 'Stáhnout podepsané APK' : 'APK ještě není na serveru'}</a>
-                            {android.sha256 && <p className="mt-3 break-all text-[9px] leading-relaxed text-white/30">SHA-256: {android.sha256}</p>}
+                            <a href={android.download_url} className={`mt-6 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border px-4 text-sm font-semibold transition ${android.available ? 'border-[var(--color-border)] bg-white/8 hover:bg-white/12' : 'border-[var(--color-border)] bg-white/[0.025] text-[var(--color-text-primary)]/45 hover:text-[var(--color-text-primary)]/70'}`}><Smartphone size={18}/>{android.available ? 'Stáhnout podepsané APK' : 'APK ještě není na serveru'}</a>
+                            {android.sha256 && <p className="mt-3 break-all text-[9px] leading-relaxed text-[var(--color-text-primary)]/30">SHA-256: {android.sha256}</p>}
                         </article>
                     </div>
 
-                    <div className="mt-8 flex flex-col items-center justify-between gap-4 rounded-2xl border border-white/8 bg-white/[0.025] p-4 sm:flex-row sm:px-5">
-                        <div className="flex items-center gap-3"><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-400/12 text-rose-200"><Heart size={18}/></span><div><p className="text-xs font-semibold">Pošlete Maki partnerovi</p><p className="mt-0.5 text-[10px] text-white/45">Odkaz /app funguje na telefonu, tabletu i počítači.</p></div></div>
-                        <button type="button" onClick={() => void share()} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 text-xs font-medium hover:bg-white/10 sm:w-auto">{shareState === 'idle' ? <Copy size={15}/> : <Check size={15} className="text-emerald-300"/>}{shareState === 'idle' ? 'Sdílet instalační odkaz' : 'Odkaz je připravený'}</button>
+                    <div className="mt-8 flex flex-col items-center justify-between gap-4 rounded-2xl border border-[var(--color-border)] bg-white/[0.025] p-4 sm:flex-row sm:px-5">
+                        <div className="flex items-center gap-3"><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-400/12 text-rose-200"><Heart size={18}/></span><div><p className="text-xs font-semibold">Pošlete Maki partnerovi</p><p className="mt-0.5 text-[10px] text-[var(--color-text-primary)]/45">Odkaz /app funguje na telefonu, tabletu i počítači.</p></div></div>
+                        <button type="button" onClick={() => void share()} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-muted)] px-4 text-xs font-medium hover:bg-[var(--color-surface-hover)] sm:w-auto">{shareState === 'idle' ? <Copy size={15}/> : <Check size={15} className="text-emerald-300"/>}{shareState === 'idle' ? 'Sdílet instalační odkaz' : 'Odkaz je připravený'}</button>
                     </div>
                 </section>
             </main>

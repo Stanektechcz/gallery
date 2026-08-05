@@ -68,7 +68,7 @@ export default function ActivityIndex({ logs }: Props) {
                     <div className="w-9 h-9 rounded-lg bg-[var(--color-accent)]/20 flex items-center justify-center">
                         <Activity size={18} className="text-[var(--color-accent)]" />
                     </div>
-                    <h1 className="text-lg font-semibold text-white">Aktivita</h1>
+                    <h1 className="text-lg font-semibold text-[var(--color-text-primary)]">Aktivita</h1>
                 </div>
 
                 {logs.data.length === 0 ? (
@@ -82,7 +82,7 @@ export default function ActivityIndex({ logs }: Props) {
                             <div key={log.id} className="flex items-start gap-3 px-3 py-2.5 rounded-lg hover:bg-[var(--color-bg-card)] transition-colors">
                                 <span className="text-lg shrink-0 mt-0.5">{EVENT_ICONS[log.event] ?? '📋'}</span>
                                 <div className="flex-1 min-w-0">
-                                    <p className="text-sm text-white">
+                                    <p className="text-sm text-[var(--color-text-primary)]">
                                         <span className="font-medium text-[var(--color-accent)]">{log.user_name}</span>
                                         {' '}{EVENT_LABELS[log.event] ?? log.event}
                                         {log.description && <span className="text-[var(--color-text-secondary)]"> — {log.description}</span>}
@@ -99,7 +99,7 @@ export default function ActivityIndex({ logs }: Props) {
                         {logs.links.map((link, i) => (
                             <button key={i} disabled={!link.url || link.active}
                                 onClick={() => link.url && (window.location.href = link.url)}
-                                className={`px-3 py-1.5 rounded text-xs ${link.active ? 'bg-[var(--color-accent)] text-white' : !link.url ? 'opacity-40 text-[var(--color-text-secondary)]' : 'bg-[var(--color-bg-card)] border border-[var(--color-border)] text-white'}`}
+                                className={`px-3 py-1.5 rounded text-xs ${link.active ? 'bg-[var(--color-accent)] text-[var(--color-text-primary)]' : !link.url ? 'opacity-40 text-[var(--color-text-secondary)]' : 'bg-[var(--color-bg-card)] border border-[var(--color-border)] text-[var(--color-text-primary)]'}`}
                                 dangerouslySetInnerHTML={{ __html: link.label }}
                             />
                         ))}

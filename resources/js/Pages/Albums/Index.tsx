@@ -59,7 +59,7 @@ function AlbumCard({ album }: { album: AlbumNode }) {
 
             {/* Info */}
             <div className="p-3">
-                <h3 className="font-medium text-sm text-white truncate">{album.title}</h3>
+                <h3 className="font-medium text-sm text-[var(--color-text-primary)] truncate">{album.title}</h3>
                 <div className="flex items-center gap-3 mt-1 text-xs text-[var(--color-text-secondary)]">
                     {album.media_count > 0 && (
                         <span className="flex items-center gap-1">
@@ -87,10 +87,10 @@ export default function AlbumsIndex({ albums, gallerySpace, albumSuggestions, al
             <div className="p-4">
                 {/* Header */}
                 <div className="flex items-center justify-between mb-6">
-                    <h1 className="text-lg font-semibold text-white">Alba</h1>
+                    <h1 className="text-lg font-semibold text-[var(--color-text-primary)]">Alba</h1>
                     <Link
                         href="/albums/create"
-                        className="bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] text-white text-sm px-3 py-1.5 rounded-lg transition-colors"
+                        className="bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] text-[var(--color-text-primary)] text-sm px-3 py-1.5 rounded-lg transition-colors"
                     >
                         + Nové album
                     </Link>

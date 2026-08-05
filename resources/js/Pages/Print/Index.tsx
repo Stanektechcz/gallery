@@ -119,7 +119,7 @@ function DragGrid({ items, onReorder, onRemove }: {
 
                     {/* Grip */}
                     <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <GripVertical size={13} className="text-white drop-shadow"/>
+                        <GripVertical size={13} className="text-[var(--color-text-primary)] drop-shadow"/>
                     </div>
 
                     {/* Remove button */}
@@ -132,7 +132,7 @@ function DragGrid({ items, onReorder, onRemove }: {
 
                     {/* Filename on hover */}
                     <div className="absolute inset-x-0 bottom-0 translate-y-full group-hover:translate-y-0 transition-transform bg-black/80 px-1 py-0.5">
-                        <p className="text-[8px] text-white truncate">{item.filename}</p>
+                        <p className="text-[8px] text-[var(--color-text-primary)] truncate">{item.filename}</p>
                     </div>
                 </div>
             ))}
@@ -235,11 +235,11 @@ export default function PrintIndex() {
                 <div className="w-64 shrink-0 flex flex-col border-r border-[var(--color-border)] overflow-hidden">
                     <div className="p-4 border-b border-[var(--color-border)] shrink-0">
                         <div className="flex items-center justify-between mb-2">
-                            <h1 className="text-sm font-semibold text-white flex items-center gap-2">
+                            <h1 className="text-sm font-semibold text-[var(--color-text-primary)] flex items-center gap-2">
                                 <Printer size={16} className="text-[var(--color-accent)]"/> Výběry
                             </h1>
                             <button onClick={() => setShowCreate(v=>!v)}
-                                className="flex items-center gap-1 bg-[var(--color-accent)] text-white text-xs px-2.5 py-1.5 rounded-lg hover:opacity-90">
+                                className="flex items-center gap-1 bg-[var(--color-accent)] text-[var(--color-text-primary)] text-xs px-2.5 py-1.5 rounded-lg hover:opacity-90">
                                 <Plus size={12}/> Nový
                             </button>
                         </div>
@@ -251,23 +251,23 @@ export default function PrintIndex() {
                             <input required value={createForm.name}
                                 onChange={e => setCreateForm(p=>({...p,name:e.target.value}))}
                                 placeholder="Název výběru *" autoFocus
-                                className="w-full bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-[var(--color-text-secondary)] outline-none focus:border-[var(--color-accent)]"/>
+                                className="w-full bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-lg px-2.5 py-1.5 text-xs text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] outline-none focus:border-[var(--color-accent)]"/>
                             <select value={createForm.purpose}
                                 onChange={e => setCreateForm(p=>({...p,purpose:e.target.value}))}
-                                className="w-full bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-lg px-2.5 py-1.5 text-xs text-white outline-none focus:border-[var(--color-accent)]">
+                                className="w-full bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-lg px-2.5 py-1.5 text-xs text-[var(--color-text-primary)] outline-none focus:border-[var(--color-accent)]">
                                 {Object.entries(PURPOSE_LABELS).map(([k,v]) => <option key={k} value={k}>{v}</option>)}
                             </select>
                             <input value={createForm.target_count}
                                 onChange={e => setCreateForm(p=>({...p,target_count:e.target.value}))}
                                 placeholder="Cílový počet (např. 50)" type="number" min="1" max="500"
-                                className="w-full bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-[var(--color-text-secondary)] outline-none focus:border-[var(--color-accent)]"/>
+                                className="w-full bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-lg px-2.5 py-1.5 text-xs text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] outline-none focus:border-[var(--color-accent)]"/>
                             <div className="flex gap-2">
                                 <button type="submit" disabled={creating}
-                                    className="flex-1 bg-[var(--color-accent)] text-white text-xs py-1.5 rounded-lg hover:opacity-90 disabled:opacity-40">
+                                    className="flex-1 bg-[var(--color-accent)] text-[var(--color-text-primary)] text-xs py-1.5 rounded-lg hover:opacity-90 disabled:opacity-40">
                                     Vytvořit
                                 </button>
                                 <button type="button" onClick={()=>setShowCreate(false)}
-                                    className="px-3 text-xs border border-[var(--color-border)] text-[var(--color-text-secondary)] rounded-lg hover:text-white">
+                                    className="px-3 text-xs border border-[var(--color-border)] text-[var(--color-text-secondary)] rounded-lg hover:text-[var(--color-text-primary)]">
                                     ✕
                                 </button>
                             </div>
@@ -297,7 +297,7 @@ export default function PrintIndex() {
                                     }
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                    <p className="text-xs font-semibold text-white truncate">{book.name}</p>
+                                    <p className="text-xs font-semibold text-[var(--color-text-primary)] truncate">{book.name}</p>
                                     <p className="text-[10px] text-[var(--color-text-secondary)]">{PURPOSE_LABELS[book.purpose]}</p>
                                     <p className="text-[10px] text-[var(--color-accent)] font-medium">
                                         {book.item_count}{book.target_count ? ` / ${book.target_count}` : ''} fotografií
@@ -319,7 +319,7 @@ export default function PrintIndex() {
                         <div className="px-5 py-3 border-b border-[var(--color-border)] shrink-0">
                             <div className="flex items-start justify-between gap-3">
                                 <div className="flex-1 min-w-0">
-                                    <h2 className="text-base font-bold text-white">{selected.name}</h2>
+                                    <h2 className="text-base font-bold text-[var(--color-text-primary)]">{selected.name}</h2>
                                     <div className="flex items-center gap-3 mt-1 text-xs text-[var(--color-text-secondary)]">
                                         <span>{PURPOSE_LABELS[selected.purpose]}</span>
                                         <span className="text-[var(--color-accent)] font-medium">
@@ -341,17 +341,17 @@ export default function PrintIndex() {
                                 {/* Export buttons */}
                                 <div className="flex flex-wrap gap-2 shrink-0">
                                     <button onClick={openContactSheet}
-                                        className="flex items-center gap-1.5 text-xs border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-white px-3 py-1.5 rounded-lg transition-colors">
+                                        className="flex items-center gap-1.5 text-xs border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] px-3 py-1.5 rounded-lg transition-colors">
                                         <Printer size={12}/> Contact sheet
                                     </button>
                                     <button onClick={exportFileList}
                                         disabled={exporting === 'filelist'}
-                                        className="flex items-center gap-1.5 text-xs border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-white px-3 py-1.5 rounded-lg transition-colors disabled:opacity-40">
+                                        className="flex items-center gap-1.5 text-xs border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] px-3 py-1.5 rounded-lg transition-colors disabled:opacity-40">
                                         <FileText size={12}/> Seznam souborů
                                     </button>
                                     <button onClick={exportZip}
                                         disabled={exporting === 'zip' || items.length === 0}
-                                        className="flex items-center gap-1.5 text-xs bg-[var(--color-accent)] text-white px-3 py-1.5 rounded-lg hover:opacity-90 disabled:opacity-40">
+                                        className="flex items-center gap-1.5 text-xs bg-[var(--color-accent)] text-[var(--color-text-primary)] px-3 py-1.5 rounded-lg hover:opacity-90 disabled:opacity-40">
                                         <Download size={12}/> ZIP originálů
                                     </button>
                                 </div>

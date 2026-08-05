@@ -138,29 +138,29 @@ export default function PwaLifecycle() {
                 <div className="flex items-center gap-3">
                     <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/15 text-amber-300"><WifiOff size={19}/></span>
                     <div className="min-w-0 flex-1">
-                        <p className="text-sm font-semibold text-white">Jste offline</p>
+                        <p className="text-sm font-semibold text-[var(--color-text-primary)]">Jste offline</p>
                         <p className="text-xs text-[var(--color-text-secondary)]">Rozpracovaná data zůstanou na zařízení.{offlineWrites.pending ? ` Čeká ${offlineWrites.pending} zápisů.` : ''}</p>
                     </div>
                 </div>
             ) : offlineWrites.needsAttention > 0 ? (
                 <div className="flex items-center gap-3">
                     <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-500/15 text-red-200">!</span>
-                    <div className="min-w-0 flex-1"><p className="text-sm font-semibold text-white">Offline zápis vyžaduje kontrolu</p><p className="text-xs text-[var(--color-text-secondary)]">{offlineWrites.needsAttention} položek se nepodařilo bezpečně sloučit.</p></div>
+                    <div className="min-w-0 flex-1"><p className="text-sm font-semibold text-[var(--color-text-primary)]">Offline zápis vyžaduje kontrolu</p><p className="text-xs text-[var(--color-text-secondary)]">{offlineWrites.needsAttention} položek se nepodařilo bezpečně sloučit.</p></div>
                     <button type="button" onClick={() => router.visit('/calendar')} className="min-h-10 rounded-xl border border-red-300/30 px-3 text-xs text-red-100">Otevřít</button>
                 </div>
             ) : offlineWrites.pending > 0 ? (
                 <div className="flex items-center gap-3">
                     <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/15 text-amber-200">⌛</span>
-                    <div className="min-w-0 flex-1"><p className="text-sm font-semibold text-white">Čeká synchronizace</p><p className="text-xs text-[var(--color-text-secondary)]">{offlineWrites.pending} {offlineWrites.pending === 1 ? 'zápis je bezpečně uložený v zařízení' : 'zápisů je bezpečně uloženo v zařízení'}.</p></div>
+                    <div className="min-w-0 flex-1"><p className="text-sm font-semibold text-[var(--color-text-primary)]">Čeká synchronizace</p><p className="text-xs text-[var(--color-text-secondary)]">{offlineWrites.pending} {offlineWrites.pending === 1 ? 'zápis je bezpečně uložený v zařízení' : 'zápisů je bezpečně uloženo v zařízení'}.</p></div>
                 </div>
             ) : updateRegistration ? (
                 <div className="flex items-center gap-3">
                     <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--color-accent)]/15 text-[var(--color-accent)]"><RefreshCw size={19} className={refreshing ? 'animate-spin' : ''}/></span>
                     <div className="min-w-0 flex-1">
-                        <p className="text-sm font-semibold text-white">Je dostupná nová verze</p>
+                        <p className="text-sm font-semibold text-[var(--color-text-primary)]">Je dostupná nová verze</p>
                         <p className="text-xs text-[var(--color-text-secondary)]">Aktualizace zachová stejná data a načte nejnovější web.</p>
                     </div>
-                    <button type="button" onClick={applyUpdate} disabled={refreshing} className="min-h-10 rounded-xl bg-[var(--color-accent)] px-3 text-xs font-medium text-white disabled:opacity-60">
+                    <button type="button" onClick={applyUpdate} disabled={refreshing} className="min-h-10 rounded-xl bg-[var(--color-accent)] px-3 text-xs font-medium text-[var(--color-text-primary)] disabled:opacity-60">
                         Aktualizovat
                     </button>
                 </div>
@@ -168,11 +168,11 @@ export default function PwaLifecycle() {
                 <div className="flex items-center gap-3">
                     <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--color-accent)]/15 text-[var(--color-accent)]"><Download size={19}/></span>
                     <div className="min-w-0 flex-1">
-                        <p className="text-sm font-semibold text-white">Nainstalovat Maki do zařízení</p>
+                        <p className="text-sm font-semibold text-[var(--color-text-primary)]">Nainstalovat Maki do zařízení</p>
                         <p className="text-xs text-[var(--color-text-secondary)]">Celá partnerská aplikace na ploše telefonu i tabletu, vždy napojená na aktuální web.</p>
                     </div>
-                    <button type="button" onClick={() => void install()} disabled={installing} className="min-h-10 rounded-xl bg-[var(--color-accent)] px-3 text-xs font-medium text-white disabled:opacity-60">{installing ? 'Instaluji…' : 'Nainstalovat'}</button>
-                    <button type="button" onClick={dismissInstallBanner} aria-label="Skrýt nabídku instalace" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-[var(--color-text-secondary)] hover:bg-white/5 hover:text-white"><X size={18}/></button>
+                    <button type="button" onClick={() => void install()} disabled={installing} className="min-h-10 rounded-xl bg-[var(--color-accent)] px-3 text-xs font-medium text-[var(--color-text-primary)] disabled:opacity-60">{installing ? 'Instaluji…' : 'Nainstalovat'}</button>
+                    <button type="button" onClick={dismissInstallBanner} aria-label="Skrýt nabídku instalace" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]"><X size={18}/></button>
                 </div>
             ) : null}
         </aside>

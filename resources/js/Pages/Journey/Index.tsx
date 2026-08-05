@@ -118,7 +118,7 @@ export default function JourneyIndex() {
                 {/* Header */}
                 <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
                     <div>
-                        <h1 className="text-xl font-bold text-white flex items-center gap-2">
+                        <h1 className="text-xl font-bold text-[var(--color-text-primary)] flex items-center gap-2">
                             Naše cesta <Heart size={18} className="text-red-400 fill-red-400"/>
                         </h1>
                         <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">
@@ -127,11 +127,11 @@ export default function JourneyIndex() {
                     </div>
                     <div className="flex gap-2">
                         <button onClick={loadSuggestions} disabled={loadingSuggest}
-                            className="flex items-center gap-1.5 border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-white text-sm px-3 py-2 rounded-lg transition-colors disabled:opacity-40">
+                            className="flex items-center gap-1.5 border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] text-sm px-3 py-2 rounded-lg transition-colors disabled:opacity-40">
                             <Camera size={14}/> Auto-detekce z fotek
                         </button>
                         <button onClick={() => setShowForm(v=>!v)}
-                            className="flex items-center gap-1.5 bg-[var(--color-accent)] text-white text-sm px-3 py-2 rounded-lg hover:opacity-90">
+                            className="flex items-center gap-1.5 bg-[var(--color-accent)] text-[var(--color-text-primary)] text-sm px-3 py-2 rounded-lg hover:opacity-90">
                             <Plus size={14}/> Přidat
                         </button>
                     </div>
@@ -140,22 +140,22 @@ export default function JourneyIndex() {
                 {/* Manual add form */}
                 {showForm && (
                     <form onSubmit={submit} className="mb-6 bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-xl p-4 space-y-3">
-                        <h2 className="text-sm font-semibold text-white">Nová vzpomínka</h2>
+                        <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">Nová vzpomínka</h2>
                         <input required value={form.title} onChange={e=>setForm(p=>({...p,title:e.target.value}))}
-                            placeholder="Nadpis *" className="w-full bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm text-white placeholder-[var(--color-text-secondary)] outline-none focus:border-[var(--color-accent)]"/>
+                            placeholder="Nadpis *" className="w-full bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] outline-none focus:border-[var(--color-accent)]"/>
                         <textarea value={form.story} onChange={e=>setForm(p=>({...p,story:e.target.value}))}
-                            placeholder="Příběh…" rows={3} className="w-full bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm text-white placeholder-[var(--color-text-secondary)] outline-none focus:border-[var(--color-accent)] resize-none"/>
+                            placeholder="Příběh…" rows={3} className="w-full bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] outline-none focus:border-[var(--color-accent)] resize-none"/>
                         <div className="grid grid-cols-2 gap-3">
                             <input required type="date" value={form.event_date} onChange={e=>setForm(p=>({...p,event_date:e.target.value}))}
-                                className="bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-[var(--color-accent)]"/>
+                                className="bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm text-[var(--color-text-primary)] outline-none focus:border-[var(--color-accent)]"/>
                             <input value={form.place_name} onChange={e=>setForm(p=>({...p,place_name:e.target.value}))}
-                                placeholder="Místo" className="bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm text-white placeholder-[var(--color-text-secondary)] outline-none focus:border-[var(--color-accent)]"/>
+                                placeholder="Místo" className="bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] outline-none focus:border-[var(--color-accent)]"/>
                         </div>
                         <div className="grid grid-cols-2 gap-3">
                             <input value={form.latitude} onChange={e=>setForm(p=>({...p,latitude:e.target.value}))} type="number" step="any"
-                                placeholder="Zeměpisná šířka" className="bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm text-white placeholder-[var(--color-text-secondary)] outline-none focus:border-[var(--color-accent)]"/>
+                                placeholder="Zeměpisná šířka" className="bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] outline-none focus:border-[var(--color-accent)]"/>
                             <input value={form.longitude} onChange={e=>setForm(p=>({...p,longitude:e.target.value}))} type="number" step="any"
-                                placeholder="Zeměpisná délka" className="bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm text-white placeholder-[var(--color-text-secondary)] outline-none focus:border-[var(--color-accent)]"/>
+                                placeholder="Zeměpisná délka" className="bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] outline-none focus:border-[var(--color-accent)]"/>
                         </div>
                         <div className="flex gap-2 flex-wrap">
                             {EMOTIONS.map(em => (
@@ -164,10 +164,10 @@ export default function JourneyIndex() {
                             ))}
                         </div>
                         <input value={form.song_link} onChange={e=>setForm(p=>({...p,song_link:e.target.value}))}
-                            placeholder="Odkaz na písničku (Spotify, YouTube…)" className="w-full bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm text-white placeholder-[var(--color-text-secondary)] outline-none focus:border-[var(--color-accent)]"/>
+                            placeholder="Odkaz na písničku (Spotify, YouTube…)" className="w-full bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] outline-none focus:border-[var(--color-accent)]"/>
                         <div className="flex gap-2">
-                            <button type="submit" className="flex-1 bg-[var(--color-accent)] text-white text-sm py-2 rounded-lg hover:opacity-90">Uložit vzpomínku</button>
-                            <button type="button" onClick={()=>setShowForm(false)} className="px-4 text-sm border border-[var(--color-border)] text-[var(--color-text-secondary)] rounded-lg hover:text-white">Zrušit</button>
+                            <button type="submit" className="flex-1 bg-[var(--color-accent)] text-[var(--color-text-primary)] text-sm py-2 rounded-lg hover:opacity-90">Uložit vzpomínku</button>
+                            <button type="button" onClick={()=>setShowForm(false)} className="px-4 text-sm border border-[var(--color-border)] text-[var(--color-text-secondary)] rounded-lg hover:text-[var(--color-text-primary)]">Zrušit</button>
                         </div>
                     </form>
                 )}
@@ -177,7 +177,7 @@ export default function JourneyIndex() {
                     <div className="mb-6 bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-xl overflow-hidden">
                         <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--color-border)]">
                             <div>
-                                <h2 className="text-sm font-semibold text-white flex items-center gap-2">
+                                <h2 className="text-sm font-semibold text-[var(--color-text-primary)] flex items-center gap-2">
                                     <Camera size={15} className="text-[var(--color-accent)]"/> Auto-detekce z fotek
                                 </h2>
                                 {!loadingSuggest && suggestions.length > 0 && (
@@ -193,7 +193,7 @@ export default function JourneyIndex() {
                                         <button onClick={()=>setSelected(new Set())} className="text-xs text-[var(--color-text-secondary)] hover:underline">Žádný</button>
                                     </>
                                 )}
-                                <button onClick={()=>setShowSuggest(false)} className="text-[var(--color-text-secondary)] hover:text-white"><X size={16}/></button>
+                                <button onClick={()=>setShowSuggest(false)} className="text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"><X size={16}/></button>
                             </div>
                         </div>
 
@@ -216,7 +216,7 @@ export default function JourneyIndex() {
                                         <div className="flex items-start gap-3">
                                             <button onClick={()=>toggleSelected(s.key)}
                                                 className={`mt-1 w-4 h-4 rounded border shrink-0 flex items-center justify-center transition-colors ${selected.has(s.key) ? 'bg-[var(--color-accent)] border-[var(--color-accent)]' : 'border-[var(--color-border)] hover:border-[var(--color-accent)]'}`}>
-                                                {selected.has(s.key) && <CheckCircle size={12} className="text-white"/>}
+                                                {selected.has(s.key) && <CheckCircle size={12} className="text-[var(--color-text-primary)]"/>}
                                             </button>
                                             <div className="flex gap-1 shrink-0">
                                                 {s.thumb_urls.slice(0, 3).map((url, i) => (
@@ -236,7 +236,7 @@ export default function JourneyIndex() {
                                                     onChange={e=>setImportTitles(p=>({...p,[s.key]:e.target.value}))}
                                                     onFocus={()=>!selected.has(s.key)&&toggleSelected(s.key)}
                                                     placeholder="Název vzpomínky…"
-                                                    className="w-full bg-transparent text-xs text-white placeholder-[var(--color-text-secondary)] outline-none border-b border-transparent focus:border-[var(--color-border)] pb-0.5"
+                                                    className="w-full bg-transparent text-xs text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] outline-none border-b border-transparent focus:border-[var(--color-border)] pb-0.5"
                                                 />
                                             </div>
                                             <div className="flex gap-0.5 shrink-0">
@@ -257,7 +257,7 @@ export default function JourneyIndex() {
                             <div className="px-4 py-3 border-t border-[var(--color-border)] flex justify-between items-center">
                                 <p className="text-xs text-[var(--color-text-secondary)]">{selected.size} vzpomínek bude přidáno</p>
                                 <button onClick={importSelected} disabled={importing}
-                                    className="flex items-center gap-1.5 bg-[var(--color-accent)] text-white text-xs px-4 py-2 rounded-lg hover:opacity-90 disabled:opacity-40">
+                                    className="flex items-center gap-1.5 bg-[var(--color-accent)] text-[var(--color-text-primary)] text-xs px-4 py-2 rounded-lg hover:opacity-90 disabled:opacity-40">
                                     {importing ? <RefreshCw size={12} className="animate-spin"/> : <CheckCircle size={12}/>}
                                     Importovat {selected.size}
                                 </button>
@@ -304,9 +304,9 @@ export default function JourneyIndex() {
                                                                 </p>
                                                                 {editingId === ev.id ? (
                                                                     <input autoFocus value={editForm.title} onChange={e=>setEditForm(p=>({...p,title:e.target.value}))}
-                                                                        className="w-full bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded px-2 py-1 text-sm text-white outline-none focus:border-[var(--color-accent)] mb-1"/>
+                                                                        className="w-full bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded px-2 py-1 text-sm text-[var(--color-text-primary)] outline-none focus:border-[var(--color-accent)] mb-1"/>
                                                                 ) : (
-                                                                    <h3 className="text-sm font-semibold text-white">{ev.title}</h3>
+                                                                    <h3 className="text-sm font-semibold text-[var(--color-text-primary)]">{ev.title}</h3>
                                                                 )}
                                                                 {(ev.place_name || ev.place_display_name) && (
                                                                     <p className="flex items-center gap-1 text-xs text-[var(--color-text-secondary)] mt-1">
@@ -316,7 +316,7 @@ export default function JourneyIndex() {
                                                                 {editingId === ev.id ? (
                                                                     <textarea value={editForm.story} onChange={e=>setEditForm(p=>({...p,story:e.target.value}))}
                                                                         placeholder="Příběh…" rows={3}
-                                                                        className="w-full mt-2 bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded px-2 py-1 text-xs text-white placeholder-[var(--color-text-secondary)] outline-none focus:border-[var(--color-accent)] resize-none"/>
+                                                                        className="w-full mt-2 bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded px-2 py-1 text-xs text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] outline-none focus:border-[var(--color-accent)] resize-none"/>
                                                                 ) : ev.story ? (
                                                                     <p className="text-xs text-[var(--color-text-secondary)] mt-2 leading-relaxed">{ev.story}</p>
                                                                 ) : null}
@@ -330,13 +330,13 @@ export default function JourneyIndex() {
                                                             <div className="flex flex-col gap-1 shrink-0">
                                                                 {editingId === ev.id ? (
                                                                     <>
-                                                                        <button onClick={()=>saveEdit(ev.id)} className="text-[10px] bg-[var(--color-accent)] text-white px-2 py-1 rounded hover:opacity-90">Uložit</button>
-                                                                        <button onClick={()=>setEditingId(null)} className="text-[10px] border border-[var(--color-border)] text-[var(--color-text-secondary)] px-2 py-1 rounded hover:text-white">Zrušit</button>
+                                                                        <button onClick={()=>saveEdit(ev.id)} className="text-[10px] bg-[var(--color-accent)] text-[var(--color-text-primary)] px-2 py-1 rounded hover:opacity-90">Uložit</button>
+                                                                        <button onClick={()=>setEditingId(null)} className="text-[10px] border border-[var(--color-border)] text-[var(--color-text-secondary)] px-2 py-1 rounded hover:text-[var(--color-text-primary)]">Zrušit</button>
                                                                     </>
                                                                 ) : (
                                                                     <>
                                                                         <button onClick={()=>{setEditingId(ev.id);setEditForm({title:ev.title,story:ev.story??'',emotion:ev.emotion??'❤️',song_link:ev.song_link??''});}}
-                                                                            className="text-[10px] border border-[var(--color-border)] text-[var(--color-text-secondary)] px-2 py-1 rounded hover:text-white">✏️</button>
+                                                                            className="text-[10px] border border-[var(--color-border)] text-[var(--color-text-secondary)] px-2 py-1 rounded hover:text-[var(--color-text-primary)]">✏️</button>
                                                                         <button onClick={()=>del(ev.id)} className="p-1.5 text-[var(--color-text-secondary)] hover:text-red-400 transition-colors">
                                                                             <Trash2 size={13}/>
                                                                         </button>
@@ -351,7 +351,7 @@ export default function JourneyIndex() {
                                                                 ))}
                                                                 {ev.photo_count > 5 && (
                                                                     <button onClick={()=>togglePhotos(ev.id)}
-                                                                        className="w-12 h-12 bg-[var(--color-bg-secondary)] rounded-lg flex items-center justify-center text-[10px] text-[var(--color-text-secondary)] hover:text-white transition-colors">
+                                                                        className="w-12 h-12 bg-[var(--color-bg-secondary)] rounded-lg flex items-center justify-center text-[10px] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors">
                                                                         +{ev.photo_count - 5}
                                                                     </button>
                                                                 )}
@@ -362,7 +362,7 @@ export default function JourneyIndex() {
                                                         <div className="border-t border-[var(--color-border)] p-3">
                                                             <div className="flex items-center justify-between mb-2">
                                                                 <p className="text-[10px] text-[var(--color-text-secondary)]">Všechny fotky z tohoto dne</p>
-                                                                <button onClick={()=>setExpandedId(null)} className="text-[var(--color-text-secondary)] hover:text-white"><X size={13}/></button>
+                                                                <button onClick={()=>setExpandedId(null)} className="text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"><X size={13}/></button>
                                                             </div>
                                                             <div className="flex gap-1.5 flex-wrap">
                                                                 {eventPhotos[ev.id].map((p: any) => (

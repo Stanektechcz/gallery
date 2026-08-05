@@ -67,7 +67,7 @@ export default function TvIndex() {
                         <Tv size={40} className="text-[var(--color-accent)]"/>
                     </div>
 
-                    <h1 className="text-3xl font-bold text-white mb-2">TV Režim</h1>
+                    <h1 className="text-3xl font-bold text-[var(--color-text-primary)] mb-2">TV Režim</h1>
                     <p className="text-[var(--color-text-secondary)] mb-8">
                         Spustí prezentaci fotografií na celou obrazovku — ideální pro televizi, rodinné oslavy nebo návštěvy.
                     </p>
@@ -85,7 +85,7 @@ export default function TvIndex() {
                                     onChange={() => setSource(opt.key as any)}
                                     className="accent-[var(--color-accent)] w-4 h-4"/>
                                 <div>
-                                    <p className="text-sm text-white">{opt.label}</p>
+                                    <p className="text-sm text-[var(--color-text-primary)]">{opt.label}</p>
                                     <p className="text-[10px] text-[var(--color-text-secondary)]">{opt.desc}</p>
                                 </div>
                             </label>
@@ -102,13 +102,13 @@ export default function TvIndex() {
 
                     {/* Info */}
                     <div className="bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-xl p-3 mb-6 text-left text-xs text-[var(--color-text-secondary)]">
-                        <p className="text-white font-medium mb-1 flex items-center gap-1.5"><Monitor size={12}/> Ovládání</p>
+                        <p className="text-[var(--color-text-primary)] font-medium mb-1 flex items-center gap-1.5"><Monitor size={12}/> Ovládání</p>
                         <p>← → šipky — navigace · Mezerník — přehrávání</p>
                         <p>F — celá obrazovka · Esc — zavřít TV režim</p>
                     </div>
 
                     <button onClick={() => setStarted(true)} disabled={loading || items.length === 0}
-                        className="w-full bg-[var(--color-accent)] text-white text-lg py-4 rounded-2xl hover:opacity-90 disabled:opacity-40 font-semibold flex items-center justify-center gap-3 transition-opacity">
+                        className="w-full bg-[var(--color-accent)] text-[var(--color-text-primary)] text-lg py-4 rounded-2xl hover:opacity-90 disabled:opacity-40 font-semibold flex items-center justify-center gap-3 transition-opacity">
                         {loading
                             ? <><Loader2 size={20} className="animate-spin"/> Načítám…</>
                             : <><Tv size={20}/> Spustit TV režim ({items.length} fotek)</>

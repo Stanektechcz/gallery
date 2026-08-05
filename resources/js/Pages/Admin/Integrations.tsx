@@ -166,16 +166,16 @@ export default function Integrations({ providers, gallerySpaceId }: { providers:
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                     <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
-                            <span className="grid h-9 w-9 place-items-center rounded-xl bg-white/5 text-[var(--color-accent)]"><CategoryIcon size={18}/></span>
-                            <h2 className="font-semibold text-white">{item.name}</h2>
+                            <span className="grid h-9 w-9 place-items-center rounded-xl bg-[var(--color-surface-muted)] text-[var(--color-accent)]"><CategoryIcon size={18}/></span>
+                            <h2 className="font-semibold text-[var(--color-text-primary)]">{item.name}</h2>
                             {item.free && <span className="rounded-full bg-green-500/15 px-2 py-0.5 text-[10px] text-green-300">bezplatné</span>}
-                            <span className={`rounded-full px-2 py-0.5 text-[10px] ${item.is_enabled && item.is_configured ? 'bg-emerald-500/15 text-emerald-200' : item.missing_credentials.length ? 'bg-amber-500/15 text-amber-200' : 'bg-white/5 text-[var(--color-text-secondary)]'}`}>
+                            <span className={`rounded-full px-2 py-0.5 text-[10px] ${item.is_enabled && item.is_configured ? 'bg-emerald-500/15 text-emerald-200' : item.missing_credentials.length ? 'bg-amber-500/15 text-amber-200' : 'bg-[var(--color-surface-muted)] text-[var(--color-text-secondary)]'}`}>
                                 {item.is_enabled && item.is_configured ? 'aktivní' : item.missing_credentials.length ? 'chybí konfigurace' : 'neaktivní'}
                             </span>
                         </div>
                         <p className="mt-3 max-w-3xl text-sm leading-relaxed text-[var(--color-text-secondary)]">{item.description}</p>
                         <div className="mt-3 flex flex-wrap gap-2">
-                            {item.capabilities.map(capability => <span key={capability} className="rounded-lg border border-[var(--color-border)] bg-black/10 px-2 py-1 text-[11px] text-slate-300">{capability}</span>)}
+                            {item.capabilities.map(capability => <span key={capability} className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-muted)] px-2 py-1 text-[11px] text-slate-300">{capability}</span>)}
                         </div>
                     </div>
                     <div className="flex shrink-0 flex-wrap items-center gap-2">
@@ -183,14 +183,14 @@ export default function Integrations({ providers, gallerySpaceId }: { providers:
                             {item.last_status === 'ok' ? <CheckCircle2 size={14}/> : item.last_status === 'failed' ? <CircleAlert size={14}/> : <RefreshCw size={14}/>}
                             {item.last_status === 'ok' ? 'ověřeno' : item.last_status === 'failed' ? 'chyba testu' : 'neověřeno'}
                         </span>
-                        <button type="button" onClick={() => test(item)} disabled={busy !== null || !canTest} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-[var(--color-border)] px-3 text-xs text-white disabled:cursor-not-allowed disabled:opacity-40">
+                        <button type="button" onClick={() => test(item)} disabled={busy !== null || !canTest} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-[var(--color-border)] px-3 text-xs text-[var(--color-text-primary)] disabled:cursor-not-allowed disabled:opacity-40">
                             {testing ? <LoaderCircle size={14} className="animate-spin"/> : <RefreshCw size={14}/>} Test připojení
                         </button>
                     </div>
                 </div>
 
                 {item.credentials.length > 0 ? (
-                    <div className="mt-5 rounded-xl border border-[var(--color-border)] bg-black/10 p-3 sm:p-4">
+                    <div className="mt-5 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-muted)] p-3 sm:p-4">
                         <div className="grid gap-4 sm:grid-cols-2">
                             {item.credentials.map(key => {
                                 const meta = item.credential_meta[key] ?? { label: key, type: 'text' as const };
@@ -207,7 +207,7 @@ export default function Integrations({ providers, gallerySpaceId }: { providers:
                                             value={values[item.provider]?.[key] ?? ''}
                                             onChange={event => change(item.provider, key, event.target.value)}
                                             placeholder={stored ? 'Nová hodnota pouze při změně' : meta.placeholder ?? 'Vložte hodnotu'}
-                                            className="mt-1 min-h-11 w-full rounded-xl border border-[var(--color-border)] bg-black/20 px-3 text-sm text-white outline-none focus:border-[var(--color-accent)]"
+                                            className="mt-1 min-h-11 w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-muted)] px-3 text-sm text-[var(--color-text-primary)] outline-none focus:border-[var(--color-accent)]"
                                         />
                                         {meta.help && <span className="mt-1 block leading-relaxed">{meta.help}</span>}
                                     </label>
@@ -218,11 +218,11 @@ export default function Integrations({ providers, gallerySpaceId }: { providers:
                             <p className="inline-flex items-center gap-1 text-xs text-[var(--color-text-secondary)]"><ShieldCheck size={14}/> Hodnoty jsou v databázi šifrované a API je nikdy nevrací.</p>
                             <div className="flex flex-wrap gap-2">
                                 {item.is_configured && (
-                                    <button type="button" onClick={() => save(item, !item.is_enabled)} disabled={busy !== null || pending} className="min-h-10 rounded-xl border border-[var(--color-border)] px-3 text-xs text-white disabled:opacity-40">
+                                    <button type="button" onClick={() => save(item, !item.is_enabled)} disabled={busy !== null || pending} className="min-h-10 rounded-xl border border-[var(--color-border)] px-3 text-xs text-[var(--color-text-primary)] disabled:opacity-40">
                                         {item.is_enabled ? 'Deaktivovat' : 'Aktivovat'}
                                     </button>
                                 )}
-                                <button type="button" onClick={() => save(item, item.is_enabled || !item.is_configured)} disabled={busy !== null || !pending} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-[var(--color-accent)] px-4 text-xs font-medium text-white disabled:cursor-not-allowed disabled:opacity-40">
+                                <button type="button" onClick={() => save(item, item.is_enabled || !item.is_configured)} disabled={busy !== null || !pending} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-[var(--color-accent)] px-4 text-xs font-medium text-[var(--color-text-primary)] disabled:cursor-not-allowed disabled:opacity-40">
                                     {saving ? <LoaderCircle size={14} className="animate-spin"/> : <Save size={14}/>} {item.is_configured ? 'Uložit změny' : 'Uložit a aktivovat'}
                                 </button>
                             </div>
@@ -237,7 +237,7 @@ export default function Integrations({ providers, gallerySpaceId }: { providers:
                 {item.provider === 'cinema_city' && (
                     <div className="mt-4 grid gap-3 rounded-xl border border-violet-400/20 bg-violet-500/5 p-3 sm:grid-cols-[1fr_auto] sm:items-center">
                         <div>
-                            <p className="text-sm font-medium text-white">Program Velkého Špalíčku</p>
+                            <p className="text-sm font-medium text-[var(--color-text-primary)]">Program Velkého Špalíčku</p>
                             <p className="mt-1 text-xs text-[var(--color-text-secondary)]">
                                 Budoucích projekcí: {item.runtime?.showings_count ?? 0} · poslední synchronizace: {formatDate(item.runtime?.last_sync_at)}
                                 {item.runtime?.last_sync_status ? ` · stav ${item.runtime.last_sync_status}` : ''}
@@ -252,7 +252,7 @@ export default function Integrations({ providers, gallerySpaceId }: { providers:
 
                 <div className="mt-4 flex flex-col gap-3 border-t border-[var(--color-border)] pt-4 sm:flex-row sm:items-end sm:justify-between">
                     <details className="text-xs text-[var(--color-text-secondary)]">
-                        <summary className="cursor-pointer text-white">Jak integraci zprovoznit</summary>
+                        <summary className="cursor-pointer text-[var(--color-text-primary)]">Jak integraci zprovoznit</summary>
                         <ol className="mt-2 list-decimal space-y-1 pl-5">{item.setup_steps.map(step => <li key={step}>{step}</li>)}</ol>
                     </details>
                     <div className="flex flex-wrap gap-3 text-xs">
@@ -273,22 +273,22 @@ export default function Integrations({ providers, gallerySpaceId }: { providers:
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                     <div>
                         <p className="text-xs uppercase tracking-widest text-[var(--color-accent)]">Administrace</p>
-                        <h1 className="text-2xl font-bold text-white sm:text-3xl">Integrace a API klíče</h1>
+                        <h1 className="text-2xl font-bold text-[var(--color-text-primary)] sm:text-3xl">Integrace a API klíče</h1>
                         <p className="mt-2 max-w-3xl text-sm leading-relaxed text-[var(--color-text-secondary)]">Na jednom místě nastavíte Revolut, globální databázi filmů, program kina, mapy, trasy, počasí i kurzy. Klíče aplikace ukládá výhradně šifrovaně.</p>
                     </div>
                     <Link href="/admin" className="text-sm text-[var(--color-accent)]">Přehled administrace</Link>
                 </div>
 
                 <div className="mt-5 grid gap-3 sm:grid-cols-3">
-                    <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-3"><p className="text-xs text-[var(--color-text-secondary)]">Připravené integrace</p><p className="mt-1 text-2xl font-semibold text-white">{readyCount}/{items.length}</p></div>
-                    <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-3"><p className="text-xs text-[var(--color-text-secondary)]">Úspěšně otestované</p><p className="mt-1 text-2xl font-semibold text-white">{verifiedCount}</p></div>
+                    <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-3"><p className="text-xs text-[var(--color-text-secondary)]">Připravené integrace</p><p className="mt-1 text-2xl font-semibold text-[var(--color-text-primary)]">{readyCount}/{items.length}</p></div>
+                    <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-3"><p className="text-xs text-[var(--color-text-secondary)]">Úspěšně otestované</p><p className="mt-1 text-2xl font-semibold text-[var(--color-text-primary)]">{verifiedCount}</p></div>
                     <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-3"><p className="text-xs text-[var(--color-text-secondary)]">Uložení klíčů</p><p className="mt-1 inline-flex items-center gap-2 text-sm font-medium text-emerald-200"><ShieldCheck size={18}/> šifrované</p></div>
                 </div>
 
                 {notice && <div role="status" className={`mt-4 rounded-xl border p-3 text-sm ${notice.tone === 'success' ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-100' : notice.tone === 'error' ? 'border-red-500/25 bg-red-500/10 text-red-100' : 'border-amber-500/25 bg-amber-500/10 text-amber-100'}`}>{notice.text}</div>}
 
                 <div className="mt-7">
-                    <h2 className="text-lg font-semibold text-white">Klíčové integrace</h2>
+                    <h2 className="text-lg font-semibold text-[var(--color-text-primary)]">Klíčové integrace</h2>
                     <p className="mt-1 text-xs text-[var(--color-text-secondary)]">Revolut, TMDB a program kina jsou zvýrazněné jako první.</p>
                     <div className="mt-3 space-y-4">{featured.map(renderProvider)}</div>
                 </div>
@@ -298,7 +298,7 @@ export default function Integrations({ providers, gallerySpaceId }: { providers:
                 )}
 
                 <div className="mt-8">
-                    <h2 className="text-lg font-semibold text-white">Cestování, místa a kurzy</h2>
+                    <h2 className="text-lg font-semibold text-[var(--color-text-primary)]">Cestování, místa a kurzy</h2>
                     <p className="mt-1 text-xs text-[var(--color-text-secondary)]">Podpůrné zdroje využívané automaticky napříč plánováním.</p>
                     <div className="mt-3 space-y-4">{supporting.map(renderProvider)}</div>
                 </div>

@@ -46,7 +46,7 @@ export default function AlbumsCreate({ allAlbums, parentAlbum }: Props) {
                 {/* Back link */}
                 <Link
                     href={parentAlbum ? `/albums/${parentAlbum.uuid}` : '/albums'}
-                    className="flex items-center gap-1.5 text-sm text-[var(--color-text-secondary)] hover:text-white mb-6 transition-colors"
+                    className="flex items-center gap-1.5 text-sm text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] mb-6 transition-colors"
                 >
                     <ChevronLeft size={16} />
                     {parentAlbum ? `Zpět do „${parentAlbum.title}"` : 'Zpět na alba'}
@@ -56,7 +56,7 @@ export default function AlbumsCreate({ allAlbums, parentAlbum }: Props) {
                     <div className="w-9 h-9 rounded-lg bg-[var(--color-accent)]/20 flex items-center justify-center">
                         <FolderPlus size={18} className="text-[var(--color-accent)]" />
                     </div>
-                    <h1 className="text-lg font-semibold text-white">Nové album</h1>
+                    <h1 className="text-lg font-semibold text-[var(--color-text-primary)]">Nové album</h1>
                 </div>
 
                 <form onSubmit={submit} className="space-y-4">
@@ -71,7 +71,7 @@ export default function AlbumsCreate({ allAlbums, parentAlbum }: Props) {
                             onChange={e => setData('title', e.target.value)}
                             placeholder="Např. Dovolená 2026"
                             autoFocus
-                            className="w-full rounded-lg bg-[var(--color-bg-card)] border border-[var(--color-border)] text-white placeholder-[var(--color-text-secondary)] px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-accent)] transition-colors"
+                            className="w-full rounded-lg bg-[var(--color-bg-card)] border border-[var(--color-border)] text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-accent)] transition-colors"
                         />
                         {errors.title && <p className="text-red-400 text-xs mt-1">{errors.title}</p>}
                     </div>
@@ -84,7 +84,7 @@ export default function AlbumsCreate({ allAlbums, parentAlbum }: Props) {
                         <select
                             value={data.parent_id}
                             onChange={e => setData('parent_id', e.target.value ? Number(e.target.value) : '')}
-                            className="w-full rounded-lg bg-[var(--color-bg-card)] border border-[var(--color-border)] text-white px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-accent)] transition-colors"
+                            className="w-full rounded-lg bg-[var(--color-bg-card)] border border-[var(--color-border)] text-[var(--color-text-primary)] px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-accent)] transition-colors"
                         >
                             <option value="">— Kořenové album —</option>
                             {allAlbums.map(a => (
@@ -104,7 +104,7 @@ export default function AlbumsCreate({ allAlbums, parentAlbum }: Props) {
                             onChange={e => setData('description', e.target.value)}
                             rows={3}
                             placeholder="Volitelný popis alba…"
-                            className="w-full rounded-lg bg-[var(--color-bg-card)] border border-[var(--color-border)] text-white placeholder-[var(--color-text-secondary)] px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-accent)] transition-colors resize-none"
+                            className="w-full rounded-lg bg-[var(--color-bg-card)] border border-[var(--color-border)] text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-accent)] transition-colors resize-none"
                         />
                     </div>
 
@@ -137,7 +137,7 @@ export default function AlbumsCreate({ allAlbums, parentAlbum }: Props) {
                                 type="date"
                                 value={data.event_date_start}
                                 onChange={e => setData('event_date_start', e.target.value)}
-                                className="w-full rounded-lg bg-[var(--color-bg-card)] border border-[var(--color-border)] text-white px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-accent)] transition-colors"
+                                className="w-full rounded-lg bg-[var(--color-bg-card)] border border-[var(--color-border)] text-[var(--color-text-primary)] px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-accent)] transition-colors"
                             />
                             {errors.event_date_start && <p className="text-red-400 text-xs mt-1">{errors.event_date_start}</p>}
                         </div>
@@ -149,7 +149,7 @@ export default function AlbumsCreate({ allAlbums, parentAlbum }: Props) {
                                 type="date"
                                 value={data.event_date_end}
                                 onChange={e => setData('event_date_end', e.target.value)}
-                                className="w-full rounded-lg bg-[var(--color-bg-card)] border border-[var(--color-border)] text-white px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-accent)] transition-colors"
+                                className="w-full rounded-lg bg-[var(--color-bg-card)] border border-[var(--color-border)] text-[var(--color-text-primary)] px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-accent)] transition-colors"
                             />
                             {errors.event_date_end && <p className="text-red-400 text-xs mt-1">{errors.event_date_end}</p>}
                         </div>
@@ -164,7 +164,7 @@ export default function AlbumsCreate({ allAlbums, parentAlbum }: Props) {
                             <select
                                 value={data.visibility}
                                 onChange={e => setData('visibility', e.target.value as 'private'|'shared'|'public')}
-                                className="w-full rounded-lg bg-[var(--color-bg-card)] border border-[var(--color-border)] text-white px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-accent)] transition-colors"
+                                className="w-full rounded-lg bg-[var(--color-bg-card)] border border-[var(--color-border)] text-[var(--color-text-primary)] px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-accent)] transition-colors"
                             >
                                 <option value="private">Soukromé</option>
                                 <option value="shared">Sdílené</option>
@@ -178,7 +178,7 @@ export default function AlbumsCreate({ allAlbums, parentAlbum }: Props) {
                             <select
                                 value={data.sort_mode}
                                 onChange={e => setData('sort_mode', e.target.value)}
-                                className="w-full rounded-lg bg-[var(--color-bg-card)] border border-[var(--color-border)] text-white px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-accent)] transition-colors"
+                                className="w-full rounded-lg bg-[var(--color-bg-card)] border border-[var(--color-border)] text-[var(--color-text-primary)] px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-accent)] transition-colors"
                             >
                                 <option value="date_taken">Datum pořízení</option>
                                 <option value="date_uploaded">Datum nahrání</option>
@@ -207,7 +207,7 @@ export default function AlbumsCreate({ allAlbums, parentAlbum }: Props) {
                                 <button
                                     type="button"
                                     onClick={() => setData('color', '')}
-                                    className="text-xs text-[var(--color-text-secondary)] hover:text-white ml-1"
+                                    className="text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] ml-1"
                                 >
                                     Zrušit
                                 </button>
@@ -220,14 +220,14 @@ export default function AlbumsCreate({ allAlbums, parentAlbum }: Props) {
                         <button
                             type="submit"
                             disabled={processing || !data.title.trim()}
-                            className="flex items-center gap-2 bg-[var(--color-accent)] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium px-5 py-2.5 rounded-lg transition-opacity"
+                            className="flex items-center gap-2 bg-[var(--color-accent)] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed text-[var(--color-text-primary)] text-sm font-medium px-5 py-2.5 rounded-lg transition-opacity"
                         >
                             {processing && <Loader2 size={14} className="animate-spin" />}
                             Vytvořit album
                         </button>
                         <Link
                             href={parentAlbum ? `/albums/${parentAlbum.uuid}` : '/albums'}
-                            className="text-sm text-[var(--color-text-secondary)] hover:text-white px-4 py-2.5 rounded-lg border border-[var(--color-border)] hover:border-[var(--color-accent)]/50 transition-colors"
+                            className="text-sm text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] px-4 py-2.5 rounded-lg border border-[var(--color-border)] hover:border-[var(--color-accent)]/50 transition-colors"
                         >
                             Zrušit
                         </Link>

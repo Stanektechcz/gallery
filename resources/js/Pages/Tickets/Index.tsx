@@ -139,7 +139,7 @@ export default function TicketsIndex() {
 
                     {/* Header */}
                     <div className="mb-6">
-                        <h1 className="text-xl font-bold text-white flex items-center gap-2">
+                        <h1 className="text-xl font-bold text-[var(--color-text-primary)] flex items-center gap-2">
                             🎫 Vyhledávání jízdenek
                         </h1>
                         <p className="text-xs text-[var(--color-text-secondary)] mt-1">
@@ -159,7 +159,7 @@ export default function TicketsIndex() {
                                     onChange={e => handleAcInput('from', e.target.value)}
                                     onBlur={() => setTimeout(() => { if (acField === 'from') { setAcField(null); setAcResults([]); } }, 200)}
                                     placeholder="Praha, Brno, Vídeň…"
-                                    className="w-full bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-xl px-3 py-2.5 text-sm text-white placeholder-[var(--color-text-secondary)] outline-none focus:border-[var(--color-accent)] transition-colors"
+                                    className="w-full bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-xl px-3 py-2.5 text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] outline-none focus:border-[var(--color-accent)] transition-colors"
                                 />
                                 {acField === 'from' && acResults.length > 0 && (
                                     <div className="absolute z-50 top-full mt-1 left-0 right-0 bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-xl shadow-2xl overflow-hidden max-h-48 overflow-y-auto">
@@ -167,7 +167,7 @@ export default function TicketsIndex() {
                                             <button key={i} type="button" onMouseDown={() => pickAc('from', r)}
                                                 className="w-full text-left px-3 py-2 hover:bg-[var(--color-bg-secondary)] flex items-center gap-2 border-b border-[var(--color-border)] last:border-0">
                                                 <span className="text-sm">📍</span>
-                                                <div><p className="text-xs text-white">{r.name}</p><p className="text-[10px] text-[var(--color-text-secondary)]">{localizedCountry(r.country, r.country_code)}</p></div>
+                                                <div><p className="text-xs text-[var(--color-text-primary)]">{r.name}</p><p className="text-[10px] text-[var(--color-text-secondary)]">{localizedCountry(r.country, r.country_code)}</p></div>
                                             </button>
                                         ))}
                                     </div>
@@ -175,7 +175,7 @@ export default function TicketsIndex() {
                             </div>
 
                             <button type="button" onClick={swap} title="Prohodit"
-                                className="mt-5 p-2 rounded-lg text-[var(--color-text-secondary)] hover:text-white hover:bg-[var(--color-bg-secondary)] transition-colors shrink-0">
+                                className="mt-5 p-2 rounded-lg text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-secondary)] transition-colors shrink-0">
                                 <ArrowLeftRight size={16}/>
                             </button>
 
@@ -186,7 +186,7 @@ export default function TicketsIndex() {
                                     onChange={e => handleAcInput('to', e.target.value)}
                                     onBlur={() => setTimeout(() => { if (acField === 'to') { setAcField(null); setAcResults([]); } }, 200)}
                                     placeholder="Brno, Vídeň, Berlín…"
-                                    className="w-full bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-xl px-3 py-2.5 text-sm text-white placeholder-[var(--color-text-secondary)] outline-none focus:border-[var(--color-accent)] transition-colors"
+                                    className="w-full bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-xl px-3 py-2.5 text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] outline-none focus:border-[var(--color-accent)] transition-colors"
                                 />
                                 {acField === 'to' && acResults.length > 0 && (
                                     <div className="absolute z-50 top-full mt-1 left-0 right-0 bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-xl shadow-2xl overflow-hidden max-h-48 overflow-y-auto">
@@ -194,7 +194,7 @@ export default function TicketsIndex() {
                                             <button key={i} type="button" onMouseDown={() => pickAc('to', r)}
                                                 className="w-full text-left px-3 py-2 hover:bg-[var(--color-bg-secondary)] flex items-center gap-2 border-b border-[var(--color-border)] last:border-0">
                                                 <span className="text-sm">📍</span>
-                                                <div><p className="text-xs text-white">{r.name}</p><p className="text-[10px] text-[var(--color-text-secondary)]">{localizedCountry(r.country, r.country_code)}</p></div>
+                                                <div><p className="text-xs text-[var(--color-text-primary)]">{r.name}</p><p className="text-[10px] text-[var(--color-text-secondary)]">{localizedCountry(r.country, r.country_code)}</p></div>
                                             </button>
                                         ))}
                                     </div>
@@ -208,7 +208,7 @@ export default function TicketsIndex() {
                                 <label className="text-[9px] text-[var(--color-text-secondary)] uppercase tracking-wider block mb-1">Datum odjezdu</label>
                                 <input type="date" value={form.date} min={todayISO()}
                                     onChange={e => setForm(p => ({ ...p, date: e.target.value }))}
-                                    className="w-full bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-[var(--color-accent)] transition-colors"/>
+                                    className="w-full bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-xl px-3 py-2.5 text-sm text-[var(--color-text-primary)] outline-none focus:border-[var(--color-accent)] transition-colors"/>
                             </div>
 
                             <div className="w-32">
@@ -216,23 +216,23 @@ export default function TicketsIndex() {
                                 <div className="relative">
                                     <Users size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-secondary)] pointer-events-none"/>
                                     <select value={form.adults} onChange={e => setForm(p => ({ ...p, adults: parseInt(e.target.value) }))}
-                                        className="w-full bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-xl pl-8 pr-3 py-2.5 text-sm text-white outline-none focus:border-[var(--color-accent)] transition-colors appearance-none">
+                                        className="w-full bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-xl pl-8 pr-3 py-2.5 text-sm text-[var(--color-text-primary)] outline-none focus:border-[var(--color-accent)] transition-colors appearance-none">
                                         {[1,2,3,4,5,6].map(n => <option key={n} value={n}>{n} {n===1?'dospělý':'dospělí'}</option>)}
                                     </select>
                                 </div>
                             </div>
 
                             <button type="submit" disabled={loading || !form.from || !form.to}
-                                className="flex items-center gap-2 bg-[var(--color-accent)] text-white px-5 py-2.5 rounded-xl font-medium text-sm hover:opacity-90 disabled:opacity-40 transition-all shrink-0">
+                                className="flex items-center gap-2 bg-[var(--color-accent)] text-[var(--color-text-primary)] px-5 py-2.5 rounded-xl font-medium text-sm hover:opacity-90 disabled:opacity-40 transition-all shrink-0">
                                 {loading ? <RefreshCw size={15} className="animate-spin"/> : <Search size={15}/>}
                                 {loading ? 'Hledám…' : 'Hledat spoje'}
                             </button>
                         </div>
                         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                            <div><label className="mb-1 block text-[9px] uppercase tracking-wider text-[var(--color-text-secondary)]">Čas odjezdu</label><input type="time" value={form.time} onChange={e=>setForm(p=>({...p,time:e.target.value}))} className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-3 py-2 text-sm text-white"/></div>
-                            <div><label className="mb-1 block text-[9px] uppercase tracking-wider text-[var(--color-text-secondary)]">Doprava</label><select value={form.mode} onChange={e=>setForm(p=>({...p,mode:e.target.value}))} className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-3 py-2 text-sm text-white"><option value="all">Všechny metody</option><option value="train">Vlak</option><option value="bus">Autobus</option><option value="tram">Tramvaj</option><option value="metro">Metro</option><option value="ferry">Trajekt</option></select></div>
-                            <div><label className="mb-1 block text-[9px] uppercase tracking-wider text-[var(--color-text-secondary)]">Max. přestupů</label><select value={form.max_transfers} onChange={e=>setForm(p=>({...p,max_transfers:Number(e.target.value)}))} className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-3 py-2 text-sm text-white">{[0,1,2,3,4,5,6].map(value=><option key={value} value={value}>{value}</option>)}</select></div>
-                            <div><label className="mb-1 block text-[9px] uppercase tracking-wider text-[var(--color-text-secondary)]">Rezerva na přestup</label><select value={form.min_transfer_minutes} onChange={e=>setForm(p=>({...p,min_transfer_minutes:Number(e.target.value)}))} className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-3 py-2 text-sm text-white">{[0,5,10,15,20,30].map(value=><option key={value} value={value}>{value} min</option>)}</select></div>
+                            <div><label className="mb-1 block text-[9px] uppercase tracking-wider text-[var(--color-text-secondary)]">Čas odjezdu</label><input type="time" value={form.time} onChange={e=>setForm(p=>({...p,time:e.target.value}))} className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-3 py-2 text-sm text-[var(--color-text-primary)]"/></div>
+                            <div><label className="mb-1 block text-[9px] uppercase tracking-wider text-[var(--color-text-secondary)]">Doprava</label><select value={form.mode} onChange={e=>setForm(p=>({...p,mode:e.target.value}))} className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-3 py-2 text-sm text-[var(--color-text-primary)]"><option value="all">Všechny metody</option><option value="train">Vlak</option><option value="bus">Autobus</option><option value="tram">Tramvaj</option><option value="metro">Metro</option><option value="ferry">Trajekt</option></select></div>
+                            <div><label className="mb-1 block text-[9px] uppercase tracking-wider text-[var(--color-text-secondary)]">Max. přestupů</label><select value={form.max_transfers} onChange={e=>setForm(p=>({...p,max_transfers:Number(e.target.value)}))} className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-3 py-2 text-sm text-[var(--color-text-primary)]">{[0,1,2,3,4,5,6].map(value=><option key={value} value={value}>{value}</option>)}</select></div>
+                            <div><label className="mb-1 block text-[9px] uppercase tracking-wider text-[var(--color-text-secondary)]">Rezerva na přestup</label><select value={form.min_transfer_minutes} onChange={e=>setForm(p=>({...p,min_transfer_minutes:Number(e.target.value)}))} className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-3 py-2 text-sm text-[var(--color-text-primary)]">{[0,5,10,15,20,30].map(value=><option key={value} value={value}>{value} min</option>)}</select></div>
                         </div>
                     </form>
 
@@ -240,7 +240,7 @@ export default function TicketsIndex() {
                     {error && (
                         <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3 mb-4 flex items-center gap-2">
                             <span className="text-red-400 text-sm">⚠️ {error}</span>
-                            <button onClick={() => setError(null)} className="ml-auto text-red-400 hover:text-white"><X size={14}/></button>
+                            <button onClick={() => setError(null)} className="ml-auto text-red-400 hover:text-[var(--color-text-primary)]"><X size={14}/></button>
                         </div>
                     )}
 
@@ -248,7 +248,7 @@ export default function TicketsIndex() {
                     {searched && (
                         <div className="mb-3 flex items-center justify-between flex-wrap gap-2">
                             <div>
-                                <p className="text-sm font-medium text-white">
+                                <p className="text-sm font-medium text-[var(--color-text-primary)]">
                                     {searched.from} → {searched.to}
                                     <span className="text-[var(--color-text-secondary)] font-normal ml-2">{fmtDate(searched.date)}</span>
                                 </p>
@@ -264,7 +264,7 @@ export default function TicketsIndex() {
                             <div className="flex gap-1">
                                 {(['price','departure'] as SortKey[]).map(k => (
                                     <button key={k} onClick={() => setSortBy(k)}
-                                        className={`px-3 py-1 rounded-lg text-xs transition-colors ${sortBy===k ? 'bg-[var(--color-accent)] text-white' : 'text-[var(--color-text-secondary)] hover:text-white border border-[var(--color-border)]'}`}>
+                                        className={`px-3 py-1 rounded-lg text-xs transition-colors ${sortBy===k ? 'bg-[var(--color-accent)] text-[var(--color-text-primary)]' : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] border border-[var(--color-border)]'}`}>
                                         {k === 'price' ? '⬆ Cena' : '⬆ Odjezd'}
                                     </button>
                                 ))}
@@ -286,7 +286,7 @@ export default function TicketsIndex() {
                         sorted.length === 0 ? (
                             <div className="text-center py-12 text-[var(--color-text-secondary)]">
                                 <p className="text-3xl mb-3">🚫</p>
-                                <p className="text-sm font-medium text-white">Žádné spoje nenalezeny</p>
+                                <p className="text-sm font-medium text-[var(--color-text-primary)]">Žádné spoje nenalezeny</p>
                                 <p className="text-xs mt-1">Zkuste změnit datum nebo jiný název města</p>
                             </div>
                         ) : (
@@ -299,13 +299,13 @@ export default function TicketsIndex() {
                                             {/* Carrier */}
                                             <div className="text-2xl shrink-0">{trip.icon}</div>
                                             <div className="flex-1 min-w-0">
-                                                <div className="flex flex-wrap items-center gap-1.5"><p className="text-sm font-semibold text-white">{trip.carrier}</p>{trip.is_recommended&&<span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[9px] text-emerald-200">doporučeno</span>}<span className={`rounded-full px-2 py-0.5 text-[9px] ${trip.source==='live'?'bg-emerald-500/15 text-emerald-200':trip.source==='schedule'?'bg-sky-500/15 text-sky-200':'bg-white/5 text-[var(--color-text-secondary)]'}`}>{trip.source==='live'?'živá cena':trip.source==='schedule'?(trip.is_realtime?'aktuální provoz':'jízdní řád'):'externí hledání'}</span></div>
+                                                <div className="flex flex-wrap items-center gap-1.5"><p className="text-sm font-semibold text-[var(--color-text-primary)]">{trip.carrier}</p>{trip.is_recommended&&<span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[9px] text-emerald-200">doporučeno</span>}<span className={`rounded-full px-2 py-0.5 text-[9px] ${trip.source==='live'?'bg-emerald-500/15 text-emerald-200':trip.source==='schedule'?'bg-sky-500/15 text-sky-200':'bg-[var(--color-surface-muted)] text-[var(--color-text-secondary)]'}`}>{trip.source==='live'?'živá cena':trip.source==='schedule'?(trip.is_realtime?'aktuální provoz':'jízdní řád'):'externí hledání'}</span></div>
 
                                                 {trip.source !== 'link' && trip.departure ? (
                                                     <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                                                        <span className="text-sm font-mono text-white font-medium">{fmtTime(trip.departure)}</span>
+                                                        <span className="text-sm font-mono text-[var(--color-text-primary)] font-medium">{fmtTime(trip.departure)}</span>
                                                         <span className="text-[var(--color-text-secondary)] text-xs">→</span>
-                                                        <span className="text-sm font-mono text-white font-medium">{fmtTime(trip.arrival)}</span>
+                                                        <span className="text-sm font-mono text-[var(--color-text-primary)] font-medium">{fmtTime(trip.arrival)}</span>
                                                         {trip.duration_min && (
                                                             <span className="text-xs text-[var(--color-text-secondary)] flex items-center gap-0.5">
                                                                 <Clock size={10}/>{fmtDur(trip.duration_min)}
@@ -343,11 +343,11 @@ export default function TicketsIndex() {
                                                     <p className="text-xs text-[var(--color-text-secondary)]">cenu ověří prodejce</p>
                                                 )}
                                                 <a href={trip.book_url} target="_blank" rel="noopener noreferrer"
-                                                    className={`inline-flex items-center gap-1 mt-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${trip.price !== null ? 'bg-[var(--color-accent)] text-white hover:opacity-90' : 'bg-[var(--color-bg-secondary)] border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-white'}`}>
+                                                    className={`inline-flex items-center gap-1 mt-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${trip.price !== null ? 'bg-[var(--color-accent)] text-[var(--color-text-primary)] hover:opacity-90' : 'bg-[var(--color-bg-secondary)] border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}>
                                                     {trip.price !== null ? '🎫 Koupit' : '🔍 Hledat'}
                                                     <span className="text-[10px] opacity-70">↗</span>
                                                 </a>
-                                                {tripId&&<button type="button" disabled={savingResult===trip.result_id} onClick={()=>saveToTrip(trip)} className="mt-1.5 block w-full rounded-lg border border-[var(--color-accent)]/40 px-2 py-1.5 text-[10px] text-white disabled:opacity-40">{savingResult===trip.result_id?'Ukládám…':savedResult===trip.result_id?'✓ V cestě':'Přidat do cesty'}</button>}
+                                                {tripId&&<button type="button" disabled={savingResult===trip.result_id} onClick={()=>saveToTrip(trip)} className="mt-1.5 block w-full rounded-lg border border-[var(--color-accent)]/40 px-2 py-1.5 text-[10px] text-[var(--color-text-primary)] disabled:opacity-40">{savingResult===trip.result_id?'Ukládám…':savedResult===trip.result_id?'✓ V cestě':'Přidat do cesty'}</button>}
                                             </div>
                                         </div>
                                     </div>
@@ -361,7 +361,7 @@ export default function TicketsIndex() {
                     {!loading && results === null && !error && (
                         <div className="text-center py-16 text-[var(--color-text-secondary)]">
                             <p className="text-5xl mb-4">🎫</p>
-                            <p className="text-sm font-medium text-white">Vyhledejte spoje</p>
+                            <p className="text-sm font-medium text-[var(--color-text-primary)]">Vyhledejte spoje</p>
                             <p className="text-xs mt-2 leading-relaxed max-w-xs mx-auto">
                                 Vyberte obě místa z našeptávače. Pak zobrazíme skutečné jízdní řády, živé ceny RegioJet a bezpečné odkazy na nákup u dalších dopravců.
                             </p>

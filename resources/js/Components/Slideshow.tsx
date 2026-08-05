@@ -128,8 +128,8 @@ function GpsTransition({ lat, lng, label, onDone }: {
                 {!ready && <div className="w-full h-full bg-gray-800 animate-pulse"/>}
                 <div ref={mapRef} className="w-full h-full"/>
             </div>
-            {label && <p className="mt-4 text-white text-lg font-medium flex items-center gap-2"><MapIcon size={18}/> {label}</p>}
-            <p className="text-white/50 text-xs mt-1">Přejíždíme…</p>
+            {label && <p className="mt-4 text-[var(--color-text-primary)] text-lg font-medium flex items-center gap-2"><MapIcon size={18}/> {label}</p>}
+            <p className="text-[var(--color-text-primary)]/50 text-xs mt-1">Přejíždíme…</p>
         </div>
     );
 }
@@ -143,16 +143,16 @@ function SettingsPanel({ config, onChange }: {
     const toggle = (key: keyof SlideshowConfig) => set({ [key]: !config[key] } as any);
 
     return (
-        <div className="absolute bottom-16 right-4 z-[410] w-64 bg-black/90 backdrop-blur-xl rounded-2xl p-4 border border-white/10 text-white shadow-2xl">
-            <p className="text-xs font-semibold uppercase tracking-wider text-white/50 mb-3">Nastavení</p>
+        <div className="absolute bottom-16 right-4 z-[410] w-64 bg-black/90 backdrop-blur-xl rounded-2xl p-4 border border-[var(--color-border)] text-white shadow-2xl">
+            <p className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-primary)]/50 mb-3">Nastavení</p>
 
             {/* Interval */}
             <div className="mb-3">
-                <p className="text-xs text-white/60 mb-1.5">Interval</p>
+                <p className="text-xs text-[var(--color-text-primary)]/60 mb-1.5">Interval</p>
                 <div className="flex gap-1 flex-wrap">
                     {INTERVALS.map(s => (
                         <button key={s} onClick={() => set({ interval: s })}
-                            className={`px-2 py-1 rounded-lg text-xs transition-colors ${config.interval === s ? 'bg-[var(--color-accent)] text-white' : 'bg-white/10 hover:bg-white/20'}`}>
+                            className={`px-2 py-1 rounded-lg text-xs transition-colors ${config.interval === s ? 'bg-[var(--color-accent)] text-[var(--color-text-primary)]' : 'bg-[var(--color-surface-muted)] hover:bg-white/20'}`}>
                             {s}s
                         </button>
                     ))}
@@ -161,11 +161,11 @@ function SettingsPanel({ config, onChange }: {
 
             {/* Mode */}
             <div className="mb-3">
-                <p className="text-xs text-white/60 mb-1.5">Režim</p>
+                <p className="text-xs text-[var(--color-text-primary)]/60 mb-1.5">Režim</p>
                 <div className="grid grid-cols-2 gap-1">
                     {(Object.entries(MODE_LABELS) as [SlideshowMode, string][]).map(([key, label]) => (
                         <button key={key} onClick={() => set({ mode: key })}
-                            className={`px-2 py-1.5 rounded-lg text-xs transition-colors ${config.mode === key ? 'bg-[var(--color-accent)] text-white' : 'bg-white/10 hover:bg-white/20'}`}>
+                            className={`px-2 py-1.5 rounded-lg text-xs transition-colors ${config.mode === key ? 'bg-[var(--color-accent)] text-[var(--color-text-primary)]' : 'bg-[var(--color-surface-muted)] hover:bg-white/20'}`}>
                             {label}
                         </button>
                     ))}
@@ -180,7 +180,7 @@ function SettingsPanel({ config, onChange }: {
                 { key: 'tvMode',       label: 'Televizní režim' },
             ].map(({ key, label }) => (
                 <label key={key} className="flex items-center justify-between py-1.5 cursor-pointer">
-                    <span className="text-xs text-white/80">{label}</span>
+                    <span className="text-xs text-[var(--color-text-primary)]/80">{label}</span>
                     <input type="checkbox" checked={(config as any)[key]}
                         onChange={() => toggle(key as keyof SlideshowConfig)}
                         className="w-4 h-4 rounded accent-[var(--color-accent)]"/>
@@ -347,16 +347,16 @@ export default function Slideshow({ items: rawItems, initialIndex = 0, tvMode: i
                 <div className={`absolute bottom-0 left-0 right-0 transition-opacity duration-300 ${showControls || isTv ? 'opacity-100' : 'opacity-0'}`}>
                     <div className={`px-6 py-4 bg-gradient-to-t from-black/90 via-black/50 to-transparent ${isTv ? 'pb-8' : ''}`}>
                         {displayTitle && (
-                            <p className={`text-white font-semibold ${isTv ? 'text-4xl mb-2' : 'text-lg'}`}>{displayTitle}</p>
+                            <p className={`text-[var(--color-text-primary)] font-semibold ${isTv ? 'text-4xl mb-2' : 'text-lg'}`}>{displayTitle}</p>
                         )}
                         {dateStr && (
-                            <p className={`text-white/70 ${isTv ? 'text-2xl' : 'text-sm'}`}>{dateStr}</p>
+                            <p className={`text-[var(--color-text-primary)]/70 ${isTv ? 'text-2xl' : 'text-sm'}`}>{dateStr}</p>
                         )}
                         {item.people && item.people.length > 0 && (
-                            <p className={`text-white/50 mt-1 ${isTv ? 'text-xl' : 'text-xs'}`}>{item.people.join(', ')}</p>
+                            <p className={`text-[var(--color-text-primary)]/50 mt-1 ${isTv ? 'text-xl' : 'text-xs'}`}>{item.people.join(', ')}</p>
                         )}
                         {item.location && !displayTitle && (
-                            <p className={`text-white/60 ${isTv ? 'text-xl' : 'text-xs'} mt-0.5`}>📍 {item.location}</p>
+                            <p className={`text-[var(--color-text-primary)]/60 ${isTv ? 'text-xl' : 'text-xs'} mt-0.5`}>📍 {item.location}</p>
                         )}
                     </div>
                 </div>
@@ -367,7 +367,7 @@ export default function Slideshow({ items: rawItems, initialIndex = 0, tvMode: i
                 <div className="absolute bottom-8 right-6">
                     <div className="flex gap-1">
                         {[1,2,3,4,5].map(n => (
-                            <Star key={n} size={20} className={n <= item.rating! ? 'text-yellow-400 fill-yellow-400' : 'text-white/20'}/>
+                            <Star key={n} size={20} className={n <= item.rating! ? 'text-yellow-400 fill-yellow-400' : 'text-[var(--color-text-primary)]/20'}/>
                         ))}
                     </div>
                 </div>
@@ -401,27 +401,27 @@ export default function Slideshow({ items: rawItems, initialIndex = 0, tvMode: i
 
                     {/* Top bar */}
                     <div className="absolute top-0 left-0 right-0 flex items-center justify-between px-4 py-3 bg-gradient-to-b from-black/70 to-transparent">
-                        <div className="flex items-center gap-2 text-white/70 text-sm">
+                        <div className="flex items-center gap-2 text-[var(--color-text-primary)]/70 text-sm">
                             <span>{currentIdx + 1} / {total}</span>
                             {config.mode !== 'classic' && (
-                                <span className="text-[10px] border border-white/20 px-2 py-0.5 rounded-full">{MODE_LABELS[config.mode]}</span>
+                                <span className="text-[10px] border border-[var(--color-border)] px-2 py-0.5 rounded-full">{MODE_LABELS[config.mode]}</span>
                             )}
                         </div>
                         <div className="flex gap-1">
                             <button onClick={e => { e.stopPropagation(); setConfig(c => ({ ...c, shuffle: !c.shuffle })); }}
-                                className={`p-2 rounded-full transition-colors ${config.shuffle ? 'text-[var(--color-accent)] bg-[var(--color-accent)]/20' : 'text-white/60 hover:text-white hover:bg-white/10'}`}>
+                                className={`p-2 rounded-full transition-colors ${config.shuffle ? 'text-[var(--color-accent)] bg-[var(--color-accent)]/20' : 'text-[var(--color-text-primary)]/60 hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)]'}`}>
                                 <Shuffle size={16}/>
                             </button>
                             <button onClick={e => { e.stopPropagation(); setShowConfig(v => !v); }}
-                                className={`p-2 rounded-full transition-colors ${showConfig ? 'text-[var(--color-accent)] bg-[var(--color-accent)]/20' : 'text-white/60 hover:text-white hover:bg-white/10'}`}>
+                                className={`p-2 rounded-full transition-colors ${showConfig ? 'text-[var(--color-accent)] bg-[var(--color-accent)]/20' : 'text-[var(--color-text-primary)]/60 hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)]'}`}>
                                 <Settings2 size={16}/>
                             </button>
                             <button onClick={e => { e.stopPropagation(); setFullscreen(v => !v); }}
-                                className="p-2 rounded-full text-white/60 hover:text-white hover:bg-white/10 transition-colors">
+                                className="p-2 rounded-full text-[var(--color-text-primary)]/60 hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] transition-colors">
                                 {fullscreen ? <Minimize2 size={16}/> : <Maximize2 size={16}/>}
                             </button>
                             <button onClick={e => { e.stopPropagation(); onClose(); }}
-                                className="p-2 rounded-full text-white/60 hover:text-white hover:bg-white/10 transition-colors">
+                                className="p-2 rounded-full text-[var(--color-text-primary)]/60 hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] transition-colors">
                                 <X size={16}/>
                             </button>
                         </div>
@@ -437,18 +437,18 @@ export default function Slideshow({ items: rawItems, initialIndex = 0, tvMode: i
 
                         <div className="flex items-center gap-3">
                             <button onClick={e => { e.stopPropagation(); setPlaying(v => !v); }}
-                                className="p-2 rounded-full text-white hover:bg-white/10 transition-colors">
+                                className="p-2 rounded-full text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] transition-colors">
                                 {playing ? <Pause size={18}/> : <Play size={18}/>}
                             </button>
                             <button onClick={e => { e.stopPropagation(); next(); }}
-                                className="p-2 rounded-full text-white/60 hover:text-white hover:bg-white/10 transition-colors">
+                                className="p-2 rounded-full text-[var(--color-text-primary)]/60 hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] transition-colors">
                                 <SkipForward size={15}/>
                             </button>
-                            <span className="text-white/50 text-xs">{config.interval}s</span>
+                            <span className="text-[var(--color-text-primary)]/50 text-xs">{config.interval}s</span>
                             <div className="flex-1"/>
                             {item.rating && item.rating > 0 && (
                                 <div className="flex gap-0.5">
-                                    {[1,2,3,4,5].map(n => <Star key={n} size={11} className={n <= item.rating! ? 'text-yellow-400 fill-yellow-400' : 'text-white/20'}/>)}
+                                    {[1,2,3,4,5].map(n => <Star key={n} size={11} className={n <= item.rating! ? 'text-yellow-400 fill-yellow-400' : 'text-[var(--color-text-primary)]/20'}/>)}
                                 </div>
                             )}
                         </div>

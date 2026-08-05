@@ -143,14 +143,14 @@ export default function MapIndex() {
             <div className="relative h-full flex flex-col">
                 {/* Header */}
                 <div className="px-4 py-3 border-b border-[var(--color-border)] flex items-center justify-between shrink-0">
-                    <h1 className="text-sm font-semibold text-white">Mapa</h1>
+                    <h1 className="text-sm font-semibold text-[var(--color-text-primary)]">Mapa</h1>
                     <div className="flex items-center gap-3 text-xs text-[var(--color-text-secondary)]">
                         <button onClick={() => setShowPhotos(v=>!v)}
-                            className={`flex items-center gap-1 px-2 py-1 rounded-lg transition-colors ${showPhotos ? 'bg-[var(--color-accent)]/20 text-[var(--color-accent)]' : 'hover:text-white'}`}>
+                            className={`flex items-center gap-1 px-2 py-1 rounded-lg transition-colors ${showPhotos ? 'bg-[var(--color-accent)]/20 text-[var(--color-accent)]' : 'hover:text-[var(--color-text-primary)]'}`}>
                             <Image size={11}/> Fotky ({points.length})
                         </button>
                         <button onClick={() => setShowAlbums(v=>!v)}
-                            className={`flex items-center gap-1 px-2 py-1 rounded-lg transition-colors ${showAlbums ? 'bg-green-500/20 text-green-400' : 'hover:text-white'}`}>
+                            className={`flex items-center gap-1 px-2 py-1 rounded-lg transition-colors ${showAlbums ? 'bg-green-500/20 text-green-400' : 'hover:text-[var(--color-text-primary)]'}`}>
                             <FolderOpen size={11}/> Alba ({albums.length})
                         </button>
                     </div>
@@ -173,7 +173,7 @@ export default function MapIndex() {
                         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                             <div className="bg-[var(--color-bg-secondary)]/90 backdrop-blur rounded-xl p-6 text-center">
                                 <MapPin size={32} className="mx-auto mb-2 text-[var(--color-text-secondary)]" />
-                                <p className="text-white font-medium">Žádné fotky s GPS</p>
+                                <p className="text-[var(--color-text-primary)] font-medium">Žádné fotky s GPS</p>
                                 <p className="text-xs text-[var(--color-text-secondary)] mt-1">Nahrajte fotky s GPS daty (HEIC z mobilu)</p>
                             </div>
                         </div>
@@ -198,7 +198,7 @@ export default function MapIndex() {
                                     </button>
                                 </div>
                                 <div className="p-3 space-y-2">
-                                    <p className="text-xs text-white font-medium">
+                                    <p className="text-xs text-[var(--color-text-primary)] font-medium">
                                         {selected.taken_at
                                             ? new Date(selected.taken_at).toLocaleDateString('cs-CZ', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
                                             : 'Neznámé datum'}
@@ -215,13 +215,13 @@ export default function MapIndex() {
                                     )}
                                     <div className="flex gap-2 pt-1">
                                         <Link href={`/media/${selected.uuid}`}
-                                            className="flex-1 flex items-center justify-center gap-1.5 bg-[var(--color-accent)] text-white text-xs py-1.5 rounded-lg hover:opacity-90"
+                                            className="flex-1 flex items-center justify-center gap-1.5 bg-[var(--color-accent)] text-[var(--color-text-primary)] text-xs py-1.5 rounded-lg hover:opacity-90"
                                             onClick={() => setSelected(null)}>
                                             <ExternalLink size={11} /> Otevřít
                                         </Link>
                                         <a href={`https://maps.google.com/maps?q=${selected.latitude},${selected.longitude}`}
                                             target="_blank" rel="noopener noreferrer"
-                                            className="flex items-center justify-center gap-1.5 border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-white text-xs py-1.5 px-3 rounded-lg transition-colors">
+                                            className="flex items-center justify-center gap-1.5 border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] text-xs py-1.5 px-3 rounded-lg transition-colors">
                                             <MapPin size={11} /> GMaps
                                         </a>
                                     </div>
@@ -252,7 +252,7 @@ export default function MapIndex() {
                                     </div>
                                 </div>
                                 <div className="p-3 space-y-1.5">
-                                    <p className="text-sm text-white font-semibold">{selectedAlbum.title}</p>
+                                    <p className="text-sm text-[var(--color-text-primary)] font-semibold">{selectedAlbum.title}</p>
                                     {(selectedAlbum.location_name || selectedAlbum.location_country) && (
                                         <p className="text-xs text-[var(--color-text-secondary)] flex items-center gap-1">
                                             <MapPin size={10}/> {selectedAlbum.location_name}{selectedAlbum.location_country ? `, ${selectedAlbum.location_country}` : ''}
@@ -266,13 +266,13 @@ export default function MapIndex() {
                                     <p className="text-[10px] text-[var(--color-text-secondary)]">📸 {selectedAlbum.media_count} médií</p>
                                     <div className="flex gap-2 pt-1">
                                         <Link href={`/albums/${selectedAlbum.uuid}`}
-                                            className="flex-1 flex items-center justify-center gap-1.5 bg-[var(--color-accent)] text-white text-xs py-1.5 rounded-lg hover:opacity-90"
+                                            className="flex-1 flex items-center justify-center gap-1.5 bg-[var(--color-accent)] text-[var(--color-text-primary)] text-xs py-1.5 rounded-lg hover:opacity-90"
                                             onClick={() => setSelectedAlbum(null)}>
                                             <FolderOpen size={11}/> Otevřít album
                                         </Link>
                                         <a href={`https://maps.google.com/maps?q=${selectedAlbum.latitude},${selectedAlbum.longitude}`}
                                             target="_blank" rel="noopener noreferrer"
-                                            className="flex items-center justify-center gap-1.5 border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-white text-xs py-1.5 px-3 rounded-lg transition-colors">
+                                            className="flex items-center justify-center gap-1.5 border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] text-xs py-1.5 px-3 rounded-lg transition-colors">
                                             <MapPin size={11}/> GMaps
                                         </a>
                                     </div>

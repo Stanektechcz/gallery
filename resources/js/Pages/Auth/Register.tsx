@@ -16,7 +16,7 @@ export default function Register() {
         post('/registrace');
     }
 
-    const field = 'w-full rounded-lg border border-[var(--color-border)] bg-white/5 px-3 py-2.5 text-sm text-white transition-colors focus:border-[var(--color-accent)] focus:outline-none';
+    const field = 'w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-muted)] px-3 py-2.5 text-sm text-[var(--color-text-primary)] transition-colors focus:border-[var(--color-accent)] focus:outline-none';
 
     return (
         <>
@@ -25,9 +25,9 @@ export default function Register() {
                 <div className="w-full max-w-sm">
                     <div className="mb-8 flex flex-col items-center">
                         <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--color-accent)] shadow-lg shadow-[var(--color-accent)]/30">
-                            <Images size={28} className="text-white" />
+                            <Images size={28} className="text-[var(--color-text-primary)]" />
                         </div>
-                        <h1 className="text-xl font-semibold text-white">Založit galerii</h1>
+                        <h1 className="text-xl font-semibold text-[var(--color-text-primary)]">Založit galerii</h1>
                         <p className="mt-1 text-center text-sm text-[var(--color-text-secondary)]">
                             Vytvoříme vám vlastní prostor. Za chvíli můžete nahrávat.
                         </p>
@@ -64,7 +64,7 @@ export default function Register() {
                             {errors.password_confirmation && <p className="mt-1 text-xs text-red-400">{errors.password_confirmation}</p>}
                         </div>
 
-                        <button type="submit" disabled={processing} className="w-full rounded-lg bg-[var(--color-accent)] py-2.5 text-sm font-medium text-white transition-colors hover:bg-[var(--color-accent-hover)] disabled:opacity-60">
+                        <button type="submit" disabled={processing} className="w-full rounded-lg bg-[var(--color-accent)] py-2.5 text-sm font-medium text-[var(--color-text-primary)] transition-colors hover:bg-[var(--color-accent-hover)] disabled:opacity-60">
                             {processing ? 'Zakládám…' : 'Založit galerii'}
                         </button>
                     </form>

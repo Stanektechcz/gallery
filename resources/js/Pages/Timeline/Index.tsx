@@ -36,28 +36,28 @@ const MediaCardComponent = memo(function MediaCardComponent({ item, size, select
         >
             {dom && <div className="absolute inset-0" style={{ backgroundColor: dom }} />}
             <img src={thumbUrl} alt="" loading="lazy" decoding="async" fetchPriority="low" draggable={false} className="absolute inset-0 w-full h-full object-cover" />
-            <div className={`absolute inset-0 transition-colors ${selected ? 'bg-[var(--color-accent)]/20' : 'bg-black/0 group-hover:bg-black/25'}`} />
-            {item.media_type === 'video' && !selected && <div className="absolute top-1.5 right-1.5 bg-black/60 rounded-full p-0.5"><Play size={9} className="text-white fill-white" /></div>}
+            <div className={`absolute inset-0 transition-colors ${selected ? 'bg-[var(--color-accent)]/20' : 'bg-black/0 group-hover:bg-[var(--color-surface-muted)]'}`} />
+            {item.media_type === 'video' && !selected && <div className="absolute top-1.5 right-1.5 bg-black/60 rounded-full p-0.5"><Play size={9} className="text-[var(--color-text-primary)] fill-white" /></div>}
             {(item.stacks?.[0]?.items_count ?? 0) > 1 && !selected && <div className="absolute top-1.5 right-1.5 bg-black/70 rounded-full px-1.5 py-1 flex items-center gap-1 text-[9px] text-white" title="Seskupené fotografie"><Layers size={10} />{item.stacks![0].items_count}</div>}
             {item.is_favorite && !selected && <Heart size={11} className="absolute top-1.5 left-1.5 text-red-400 fill-red-400" />}
             <div className={`absolute top-1.5 left-1.5 w-6 h-6 rounded border-2 flex items-center justify-center transition-all ${selected ? 'bg-[var(--color-accent)] border-[var(--color-accent)]' : 'bg-black/45 border-white/70 opacity-75 md:opacity-0 md:group-hover:opacity-100'}`}
                 onClick={e => { e.stopPropagation(); onSelect(item.uuid); }}>
-                {selected && <span className="text-white text-[10px] font-bold">✓</span>}
+                {selected && <span className="text-[var(--color-text-primary)] text-[10px] font-bold">✓</span>}
             </div>
             {!selected && (
                 <div className="absolute bottom-0 left-0 right-0 p-1 flex justify-between opacity-0 group-hover:opacity-100 transition-opacity">
                     <button onClick={e => { e.stopPropagation(); onFav(item.uuid, item.is_favorite); }} className="w-6 h-6 rounded-full bg-black/60 flex items-center justify-center hover:bg-black/80">
-                        <Heart size={10} className={item.is_favorite ? 'text-red-400 fill-red-400' : 'text-white'} />
+                        <Heart size={10} className={item.is_favorite ? 'text-red-400 fill-red-400' : 'text-[var(--color-text-primary)]'} />
                     </button>
                     <div className="flex gap-1">
-                        <button onClick={e => { e.stopPropagation(); onSlideshow(item.uuid); }} className="w-6 h-6 rounded-full bg-black/60 flex items-center justify-center hover:bg-black/80"><Maximize2 size={10} className="text-white" /></button>
-                        <button onClick={e => { e.stopPropagation(); onTrash(item.uuid); }} className="w-6 h-6 rounded-full bg-black/60 flex items-center justify-center hover:bg-red-500/80"><Trash2 size={10} className="text-white" /></button>
+                        <button onClick={e => { e.stopPropagation(); onSlideshow(item.uuid); }} className="w-6 h-6 rounded-full bg-black/60 flex items-center justify-center hover:bg-black/80"><Maximize2 size={10} className="text-[var(--color-text-primary)]" /></button>
+                        <button onClick={e => { e.stopPropagation(); onTrash(item.uuid); }} className="w-6 h-6 rounded-full bg-black/60 flex items-center justify-center hover:bg-red-500/80"><Trash2 size={10} className="text-[var(--color-text-primary)]" /></button>
                     </div>
                 </div>
             )}
             {item.primary_album && !selected && (
                 <div className="absolute bottom-0 left-0 right-0 px-1.5 py-1 bg-gradient-to-t from-black/70 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
-                    <span className="text-[9px] text-white/80 truncate block">{item.primary_album.title}</span>
+                    <span className="text-[9px] text-[var(--color-text-primary)]/80 truncate block">{item.primary_album.title}</span>
                 </div>
             )}
         </div>
@@ -199,20 +199,20 @@ export default function TimelineIndex() {
                     {/* Header */}
                     <div className="sticky top-0 z-20 flex flex-col gap-2 border-b border-[var(--color-border)] bg-[var(--color-bg-primary)]/95 px-2 py-2 backdrop-blur-sm sm:flex-row sm:items-center sm:justify-between sm:px-4 sm:py-2.5">
                         <div className="flex items-center gap-3">
-                            <h1 className="text-sm font-semibold text-white">Fotky</h1>
+                            <h1 className="text-sm font-semibold text-[var(--color-text-primary)]">Fotky</h1>
                             <span className="text-xs text-[var(--color-text-secondary)]">{allItems.length} položek</span>
                         </div>
                         <div className="flex w-full items-center justify-between gap-2 overflow-x-auto scrollbar-hide sm:w-auto sm:justify-end">
                             <div className="flex items-center gap-0.5 bg-[var(--color-bg-card)] rounded-lg p-0.5 border border-[var(--color-border)]">
                                 {GRID_SIZES.map((_,i) => (
                                     <button key={i} onClick={()=>setGridSizeIdx(i)}
-                                        className={`px-2 py-1 rounded text-xs transition-colors ${i===gridSizeIdx?'bg-[var(--color-accent)] text-white':'text-[var(--color-text-secondary)] hover:text-white'}`}
+                                        className={`px-2 py-1 rounded text-xs transition-colors ${i===gridSizeIdx?'bg-[var(--color-accent)] text-[var(--color-text-primary)]':'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}
                                     >{i===0?'XS':i===1?'S':i===2?'M':'L'}</button>
                                 ))}
                             </div>
-                            <Link href="/map" className="p-1.5 rounded-lg border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-white transition-colors" title="Mapa"><Map size={14} /></Link>
+                            <Link href="/map" className="p-1.5 rounded-lg border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors" title="Mapa"><Map size={14} /></Link>
                             <button onClick={()=>allItems.length&&startSlideshow(allItems[0].uuid)} disabled={!allItems.length}
-                                className="p-1.5 rounded-lg border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-white transition-colors disabled:opacity-40" title="Slideshow">
+                                className="p-1.5 rounded-lg border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors disabled:opacity-40" title="Slideshow">
                                 <Maximize2 size={14} />
                             </button>
                             <Grid3X3 size={14} className="text-[var(--color-accent)]" />
@@ -250,7 +250,7 @@ export default function TimelineIndex() {
                         <section key={monthLabel} id={`section-${monthLabel.replace(/\s/g,'_')}`}>
                             <div className="sticky top-[83px] z-10 bg-[var(--color-bg-primary)]/95 px-2 py-2 backdrop-blur border-b border-[var(--color-border)]/50 sm:top-[41px] sm:px-4">
                                 <div className="flex items-center justify-between">
-                                    <h2 className="text-sm font-semibold text-white">{monthLabel}</h2>
+                                    <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">{monthLabel}</h2>
                                     <button onClick={()=>{
                                         const uuids = dayGroups.flatMap(g=>g.items.map(i=>i.uuid));
                                         setSelected(prev=>{
@@ -259,7 +259,7 @@ export default function TimelineIndex() {
                                             uuids.forEach(u => allIn?n.delete(u):n.add(u));
                                             return n;
                                         });
-                                    }} className="text-[10px] text-[var(--color-text-secondary)] hover:text-white transition-colors">
+                                    }} className="text-[10px] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors">
                                         vybrat měsíc
                                     </button>
                                 </div>
@@ -295,7 +295,7 @@ export default function TimelineIndex() {
                         {scrubBuckets.map(b => (
                             <button key={b.key}
                                 onClick={() => document.getElementById(`section-${b.key.replace(/\s/g,'_')}`)?.scrollIntoView({behavior:'smooth',block:'start'})}
-                                className="text-[9px] text-[var(--color-text-secondary)] hover:text-white py-1 leading-tight text-center w-full" title={b.label}
+                                className="text-[9px] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] py-1 leading-tight text-center w-full" title={b.label}
                             >
                                 {b.label.split(' ')[0].substring(0,3)}<br/>
                                 <span className="text-[8px]">{b.label.split(' ')[1]}</span>

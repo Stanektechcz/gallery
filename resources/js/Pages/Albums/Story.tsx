@@ -42,7 +42,7 @@ const BLOCK_TYPES: Array<{ type: BlockType; emoji: string; label: string }> = [
 
 function HeadingBlock({ content }: { content: Record<string, any> }) {
     const level = content.level ?? 2;
-    const cls = level === 1 ? 'text-3xl font-bold text-white' : level === 2 ? 'text-2xl font-bold text-white' : 'text-xl font-semibold text-white';
+    const cls = level === 1 ? 'text-3xl font-bold text-[var(--color-text-primary)]' : level === 2 ? 'text-2xl font-bold text-[var(--color-text-primary)]' : 'text-xl font-semibold text-[var(--color-text-primary)]';
     return <div className={`${cls} leading-tight`}>{content.text || 'Nadpis'}</div>;
 }
 
@@ -57,7 +57,7 @@ function TextBlock({ content }: { content: Record<string, any> }) {
 function QuoteBlock({ content }: { content: Record<string, any> }) {
     return (
         <blockquote className="border-l-4 border-[var(--color-accent)] pl-5 py-1 my-1">
-            <p className="text-lg italic text-white leading-relaxed">„{content.quote || ''}"</p>
+            <p className="text-lg italic text-[var(--color-text-primary)] leading-relaxed">„{content.quote || ''}"</p>
             {content.author && (
                 <cite className="text-sm text-[var(--color-text-secondary)] mt-1 block not-italic">— {content.author}</cite>
             )}
@@ -142,7 +142,7 @@ function MapBlock({ content }: { content: Record<string, any> }) {
             <a href={`https://www.google.com/maps?q=${content.latitude},${content.longitude}`} target="_blank" rel="noopener noreferrer"
                 className="block rounded-xl overflow-hidden group relative">
                 <div ref={mapRef} className="h-48 w-full pointer-events-none"/>
-                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/20">
+                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-[var(--color-surface-muted)]">
                     <span className="text-xs text-white bg-black/60 px-2 py-1 rounded">Otevřít Google Maps ↗</span>
                 </div>
             </a>
@@ -181,8 +181,8 @@ function EditableBlock({
         <div className="relative group/block">
             {/* Action toolbar */}
             <div className="absolute -right-10 top-0 flex flex-col gap-0.5 opacity-0 group-hover/block:opacity-100 transition-opacity">
-                {!isFirst  && <button onClick={() => onMoveUp(block.id)}   className="p-1 rounded bg-[var(--color-bg-card)] border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-white"><ChevronUp size={12}/></button>}
-                {!isLast   && <button onClick={() => onMoveDown(block.id)} className="p-1 rounded bg-[var(--color-bg-card)] border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-white"><ChevronDown size={12}/></button>}
+                {!isFirst  && <button onClick={() => onMoveUp(block.id)}   className="p-1 rounded bg-[var(--color-bg-card)] border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"><ChevronUp size={12}/></button>}
+                {!isLast   && <button onClick={() => onMoveDown(block.id)} className="p-1 rounded bg-[var(--color-bg-card)] border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"><ChevronDown size={12}/></button>}
                 {block.type !== 'divider' && <button onClick={() => setEditing(v=>!v)} className="p-1 rounded bg-[var(--color-bg-card)] border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-accent)]"><Edit3 size={12}/></button>}
                 <button onClick={() => onDelete(block.id)} className="p-1 rounded bg-[var(--color-bg-card)] border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-red-400"><Trash2 size={12}/></button>
             </div>
@@ -223,12 +223,12 @@ function BlockEditor({ type, draft, setDraft, albumMedia, onSave, onCancel }: {
             setDraft({ ...draft, [key]: e.target.value }),
     });
 
-    const fieldCls = 'w-full bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm text-white placeholder-[var(--color-text-secondary)] outline-none focus:border-[var(--color-accent)]';
+    const fieldCls = 'w-full bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] outline-none focus:border-[var(--color-accent)]';
 
     const actions = (
         <div className="flex gap-2 mt-3">
-            <button onClick={onSave}   className="bg-[var(--color-accent)] text-white text-xs px-4 py-1.5 rounded-lg hover:opacity-90">Uložit</button>
-            <button onClick={onCancel} className="border border-[var(--color-border)] text-[var(--color-text-secondary)] text-xs px-4 py-1.5 rounded-lg hover:text-white">Zrušit</button>
+            <button onClick={onSave}   className="bg-[var(--color-accent)] text-[var(--color-text-primary)] text-xs px-4 py-1.5 rounded-lg hover:opacity-90">Uložit</button>
+            <button onClick={onCancel} className="border border-[var(--color-border)] text-[var(--color-text-secondary)] text-xs px-4 py-1.5 rounded-lg hover:text-[var(--color-text-primary)]">Zrušit</button>
         </div>
     );
 
@@ -339,7 +339,7 @@ function AddBlockMenu({ onAdd, afterIndex }: { onAdd: (type: BlockType, afterInd
                         {BLOCK_TYPES.map(bt => (
                             <button key={bt.type}
                                 onClick={() => { onAdd(bt.type, afterIndex); setOpen(false); }}
-                                className="flex items-center gap-2 px-3 py-2.5 text-xs text-[var(--color-text-secondary)] hover:text-white hover:bg-[var(--color-bg-secondary)] transition-colors border-b border-r border-[var(--color-border)] last:border-r-0">
+                                className="flex items-center gap-2 px-3 py-2.5 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-secondary)] transition-colors border-b border-r border-[var(--color-border)] last:border-r-0">
                                 <span className="text-base w-5 text-center">{bt.emoji}</span>
                                 {bt.label}
                             </button>
@@ -428,7 +428,7 @@ export default function AlbumStory({ albumUuid, albumMedia, editMode, coverDate,
         <div className="max-w-2xl mx-auto px-4 py-8 space-y-6">
             {/* Story header */}
             <header className="mb-8">
-                <h1 className="text-3xl font-bold text-white mb-1">{title}</h1>
+                <h1 className="text-3xl font-bold text-[var(--color-text-primary)] mb-1">{title}</h1>
                 {coverDate && <p className="text-sm text-[var(--color-text-secondary)]">{new Date(coverDate).toLocaleDateString('cs-CZ', { day: 'numeric', month: 'long', year: 'numeric' })}</p>}
             </header>
 

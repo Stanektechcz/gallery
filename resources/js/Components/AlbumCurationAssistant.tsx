@@ -74,7 +74,7 @@ export default function AlbumCurationAssistant({ albumUuid }: { albumUuid: strin
                     {safe ? <ShieldCheck size={21}/> : <ShieldAlert size={21}/>}
                 </span>
                 <span className="min-w-0 flex-1">
-                    <span className="flex flex-wrap items-center gap-2 text-sm font-semibold text-white">
+                    <span className="flex flex-wrap items-center gap-2 text-sm font-semibold text-[var(--color-text-primary)]">
                         Společný výběr a bezpečí alba
                         {data.board && <span className="rounded-full bg-fuchsia-500/15 px-2 py-0.5 text-[10px] text-fuchsia-100">partnerské hlasování aktivní</span>}
                     </span>
@@ -88,16 +88,16 @@ export default function AlbumCurationAssistant({ albumUuid }: { albumUuid: strin
             </button>
 
             {expanded && (
-                <div className="border-t border-white/10 p-4">
-                    {message && <p className="mb-3 rounded-lg bg-white/5 px-3 py-2 text-xs text-cyan-100">{message}</p>}
+                <div className="border-t border-[var(--color-border)] p-4">
+                    {message && <p className="mb-3 rounded-lg bg-[var(--color-surface-muted)] px-3 py-2 text-xs text-cyan-100">{message}</p>}
 
                     <div className="grid gap-3 md:grid-cols-3">
-                        <div className="rounded-xl border border-white/10 bg-black/10 p-3">
+                        <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-muted)] p-3">
                             <div className="mb-2 flex items-center justify-between gap-2">
-                                <span className="flex items-center gap-1.5 text-xs font-medium text-white"><ShieldCheck size={14}/> Originály</span>
+                                <span className="flex items-center gap-1.5 text-xs font-medium text-[var(--color-text-primary)]"><ShieldCheck size={14}/> Originály</span>
                                 <span className={`text-xs font-semibold ${safe ? 'text-emerald-300' : 'text-amber-200'}`}>{data.backup.coverage_percent} %</span>
                             </div>
-                            <div className="h-1.5 overflow-hidden rounded-full bg-white/10"><div className={`h-full rounded-full ${safe ? 'bg-emerald-400' : 'bg-amber-400'}`} style={{ width: `${data.backup.coverage_percent}%` }}/></div>
+                            <div className="h-1.5 overflow-hidden rounded-full bg-[var(--color-surface-muted)]"><div className={`h-full rounded-full ${safe ? 'bg-emerald-400' : 'bg-amber-400'}`} style={{ width: `${data.backup.coverage_percent}%` }}/></div>
                             <p className="mt-2 text-[11px] text-[var(--color-text-secondary)]">{data.backup.cloud_backed} v cloudu · {data.backup.local_only} jen lokálně{data.backup.uploading ? ` · ${data.backup.uploading} se nahrává` : ''}</p>
                             {data.backup.local_only > 0 && data.backup.can_sync && (
                                 <button onClick={() => run('backup', () => axios.post(`/api/v1/albums/${albumUuid}/backup`), 'Záloha byla zařazena.')} disabled={busy !== null} className="mt-3 flex items-center gap-1.5 rounded-lg bg-cyan-500/15 px-2.5 py-1.5 text-xs text-cyan-100 hover:bg-cyan-500/25 disabled:opacity-40">
@@ -107,8 +107,8 @@ export default function AlbumCurationAssistant({ albumUuid }: { albumUuid: strin
                             {data.backup.local_only > 0 && !data.backup.can_sync && <p className="mt-2 text-[11px] text-amber-200">Pro automatickou zálohu připojte Google Drive v nastavení.</p>}
                         </div>
 
-                        <div className="rounded-xl border border-white/10 bg-black/10 p-3">
-                            <span className="flex items-center gap-1.5 text-xs font-medium text-white"><ImageOff size={14}/> Kvalita zpracování</span>
+                        <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-muted)] p-3">
+                            <span className="flex items-center gap-1.5 text-xs font-medium text-[var(--color-text-primary)]"><ImageOff size={14}/> Kvalita zpracování</span>
                             <p className="mt-2 text-[11px] text-[var(--color-text-secondary)]">{data.quality.missing_preview ? `${data.quality.missing_preview} bez náhledu` : 'Všechny náhledy připravené'} · {data.quality.processing_failed ? `${data.quality.processing_failed} chyb` : 'bez chyb'}</p>
                             {data.quality.missing_preview > 0 && (
                                 <button onClick={() => run('previews', () => axios.post(`/api/v1/albums/${albumUuid}/repair-previews`), 'Oprava náhledů byla zařazena.')} disabled={busy !== null} className="mt-3 flex items-center gap-1.5 rounded-lg bg-amber-500/15 px-2.5 py-1.5 text-xs text-amber-100 hover:bg-amber-500/25 disabled:opacity-40">
@@ -118,12 +118,12 @@ export default function AlbumCurationAssistant({ albumUuid }: { albumUuid: strin
                             {(data.quality.missing_taken_at > 0 || data.quality.missing_dimensions > 0) && <p className="mt-2 text-[11px] text-[var(--color-text-secondary)]">Metadata: {data.quality.missing_taken_at} bez data, {data.quality.missing_dimensions} bez rozměrů.</p>}
                         </div>
 
-                        <div className="rounded-xl border border-white/10 bg-black/10 p-3">
-                            <span className="flex items-center gap-1.5 text-xs font-medium text-white"><Sparkles size={14}/> Titulní záběr</span>
+                        <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-muted)] p-3">
+                            <span className="flex items-center gap-1.5 text-xs font-medium text-[var(--color-text-primary)]"><Sparkles size={14}/> Titulní záběr</span>
                             {cover ? (
                                 <div className="mt-2 flex gap-2">
-                                    <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-white/5">{cover.thumbnail_url ? <img src={cover.thumbnail_url} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover"/> : <Sparkles className="m-4 text-fuchsia-200" size={22}/>}</div>
-                                    <div className="min-w-0"><p className="truncate text-xs text-white">{cover.title}</p><p className="mt-1 line-clamp-2 text-[10px] text-[var(--color-text-secondary)]">{cover.reasons.slice(0, 3).join(' · ') || 'Nejlepší dostupný záběr'}</p></div>
+                                    <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-[var(--color-surface-muted)]">{cover.thumbnail_url ? <img src={cover.thumbnail_url} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover"/> : <Sparkles className="m-4 text-fuchsia-200" size={22}/>}</div>
+                                    <div className="min-w-0"><p className="truncate text-xs text-[var(--color-text-primary)]">{cover.title}</p><p className="mt-1 line-clamp-2 text-[10px] text-[var(--color-text-secondary)]">{cover.reasons.slice(0, 3).join(' · ') || 'Nejlepší dostupný záběr'}</p></div>
                                 </div>
                             ) : <p className="mt-2 text-[11px] text-[var(--color-text-secondary)]">Zatím není co doporučit.</p>}
                             {cover && data.album.current_cover_media_id !== cover.id && (
@@ -134,9 +134,9 @@ export default function AlbumCurationAssistant({ albumUuid }: { albumUuid: strin
                         </div>
                     </div>
 
-                    <div className="mt-4 rounded-xl border border-white/10 bg-black/10 p-3">
+                    <div className="mt-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-muted)] p-3">
                         <div className="flex flex-wrap items-center justify-between gap-2">
-                            <div><h3 className="text-sm font-medium text-white">Náš společný výběr</h3><p className="text-[11px] text-[var(--color-text-secondary)]">Asistent vynechá opakované záběry ze stejné série; konečné slovo máte vždy vy dva.</p></div>
+                            <div><h3 className="text-sm font-medium text-[var(--color-text-primary)]">Náš společný výběr</h3><p className="text-[11px] text-[var(--color-text-secondary)]">Asistent vynechá opakované záběry ze stejné série; konečné slovo máte vždy vy dva.</p></div>
                             {!data.board && data.shortlist.length > 0 && (
                                 <button onClick={() => run('shortlist', () => axios.post(`/api/v1/albums/${albumUuid}/curation-shortlist`), 'Společný výběr je připraven.')} disabled={busy !== null} className="flex items-center gap-1.5 rounded-lg bg-fuchsia-500 px-3 py-2 text-xs font-medium text-white hover:bg-fuchsia-400 disabled:opacity-40">
                                     <Heart size={13}/> {busy === 'shortlist' ? 'Připravuji…' : 'Připravit partnerský výběr'}
@@ -146,12 +146,12 @@ export default function AlbumCurationAssistant({ albumUuid }: { albumUuid: strin
 
                         <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
                             {(data.board?.items ?? data.shortlist.slice(0, 8)).map((item: any) => (
-                                <div key={item.media_uuid ?? item.uuid} className="w-28 shrink-0 overflow-hidden rounded-lg border border-white/10 bg-white/5">
-                                    <a href={`/media/${item.media_uuid ?? item.uuid}`} className="block aspect-square bg-black/20">{item.thumbnail_url ? <img src={item.thumbnail_url} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover"/> : <Sparkles className="m-auto mt-8 text-white/30" size={24}/>}</a>
+                                <div key={item.media_uuid ?? item.uuid} className="w-28 shrink-0 overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-muted)]">
+                                    <a href={`/media/${item.media_uuid ?? item.uuid}`} className="block aspect-square bg-[var(--color-surface-muted)]">{item.thumbnail_url ? <img src={item.thumbnail_url} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover"/> : <Sparkles className="m-auto mt-8 text-[var(--color-text-primary)]/30" size={24}/>}</a>
                                     {data.board ? (
                                         <div className="flex items-center justify-between gap-1 p-1.5">
-                                            <button title="Chci do výběru" onClick={() => run(`vote-${item.id}`, () => axios.put(`/api/v1/curation-boards/${data.board!.uuid}/items/${item.id}/vote`, { is_selected: true }), 'Hlas byl uložen.')} disabled={busy !== null} className={`flex items-center gap-1 rounded px-1.5 py-1 text-[10px] ${item.votes.my_vote === true ? 'bg-emerald-500/25 text-emerald-200' : 'text-[var(--color-text-secondary)] hover:bg-white/10'}`}><ThumbsUp size={11}/>{item.votes.selected}</button>
-                                            <button title="Nezařazovat" onClick={() => run(`vote-${item.id}`, () => axios.put(`/api/v1/curation-boards/${data.board!.uuid}/items/${item.id}/vote`, { is_selected: false }), 'Hlas byl uložen.')} disabled={busy !== null} className={`flex items-center gap-1 rounded px-1.5 py-1 text-[10px] ${item.votes.my_vote === false ? 'bg-rose-500/25 text-rose-200' : 'text-[var(--color-text-secondary)] hover:bg-white/10'}`}><ThumbsDown size={11}/>{item.votes.not_selected}</button>
+                                            <button title="Chci do výběru" onClick={() => run(`vote-${item.id}`, () => axios.put(`/api/v1/curation-boards/${data.board!.uuid}/items/${item.id}/vote`, { is_selected: true }), 'Hlas byl uložen.')} disabled={busy !== null} className={`flex items-center gap-1 rounded px-1.5 py-1 text-[10px] ${item.votes.my_vote === true ? 'bg-emerald-500/25 text-emerald-200' : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)]'}`}><ThumbsUp size={11}/>{item.votes.selected}</button>
+                                            <button title="Nezařazovat" onClick={() => run(`vote-${item.id}`, () => axios.put(`/api/v1/curation-boards/${data.board!.uuid}/items/${item.id}/vote`, { is_selected: false }), 'Hlas byl uložen.')} disabled={busy !== null} className={`flex items-center gap-1 rounded px-1.5 py-1 text-[10px] ${item.votes.my_vote === false ? 'bg-rose-500/25 text-rose-200' : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)]'}`}><ThumbsDown size={11}/>{item.votes.not_selected}</button>
                                         </div>
                                     ) : <p className="truncate p-1.5 text-[10px] text-[var(--color-text-secondary)]">Skóre {item.score}</p>}
                                 </div>

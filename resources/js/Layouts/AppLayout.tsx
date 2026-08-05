@@ -1,5 +1,6 @@
 import AppInstallButton from '@/Components/AppInstallButton';
 import InterfaceDensityControl from '@/Components/InterfaceDensityControl';
+import ThemeControl from '@/Components/ThemeControl';
 import UploadPanel from '@/Components/UploadPanel';
 import WorkspaceAssistant from '@/Components/WorkspaceAssistant';
 import { Link, router, usePage } from '@inertiajs/react';
@@ -188,7 +189,7 @@ function CommandPalette({ open, onClose, isAdmin }: { open: boolean; onClose: ()
             <button key={`${cmd.group}-${cmd.label}`}
                 onClick={() => go(cmd)}
                 onMouseEnter={() => setActive(idx)}
-                className={`w-full text-left px-4 py-2 text-sm flex items-center gap-3 transition-colors ${isActive ? 'bg-[var(--color-accent)]/15 text-white' : 'text-[var(--color-text-secondary)] hover:text-white'}`}>
+                className={`w-full text-left px-4 py-2 text-sm flex items-center gap-3 transition-colors ${isActive ? 'bg-[var(--color-accent)]/15 text-[var(--color-text-primary)]' : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}>
                 {cmd.icon && <span className="text-base w-5 text-center shrink-0">{cmd.icon}</span>}
                 <span className="flex-1">{cmd.label}</span>
                 {isActive && <kbd className="text-[10px] text-[var(--color-text-secondary)] border border-[var(--color-border)] rounded px-1.5 py-0.5 shrink-0">↵</kbd>}
@@ -209,7 +210,7 @@ function CommandPalette({ open, onClose, isAdmin }: { open: boolean; onClose: ()
                         onChange={e => { setQuery(e.target.value); setActive(0); }}
                         onKeyDown={handleKey}
                         placeholder="Přejdi na stránku, hledej, proveď akci…"
-                        className="flex-1 bg-transparent text-white text-sm outline-none placeholder-[var(--color-text-secondary)]"
+                        className="flex-1 bg-transparent text-[var(--color-text-primary)] text-sm outline-none placeholder-[var(--color-text-secondary)]"
                     />
                     <kbd className="text-[10px] text-[var(--color-text-secondary)] border border-[var(--color-border)] rounded px-1.5 py-0.5 shrink-0">ESC</kbd>
                 </div>
@@ -424,10 +425,10 @@ function NotificationBell() {
     return (
         <div className="relative">
             <button type="button" aria-label="Otevřít partnerská upozornění" aria-expanded={open} onClick={() => setOpen(v => !v)}
-                className={`relative p-2 rounded-lg hover:bg-white/10 transition-colors ${open ? 'text-white bg-white/10' : 'text-[var(--color-text-secondary)]'}`}>
+                className={`relative p-2 rounded-lg hover:bg-[var(--color-surface-hover)] transition-colors ${open ? 'text-[var(--color-text-primary)] bg-[var(--color-surface-muted)]' : 'text-[var(--color-text-secondary)]'}`}>
                 <Bell size={18}/>
                 {unread > 0 && (
-                    <span className="absolute top-0.5 right-0.5 w-4 h-4 bg-[var(--color-accent)] text-white text-[9px] font-bold rounded-full flex items-center justify-center">
+                    <span className="absolute top-0.5 right-0.5 w-4 h-4 bg-[var(--color-accent)] text-[var(--color-text-primary)] text-[9px] font-bold rounded-full flex items-center justify-center">
                         {unread > 9 ? '9+' : unread}
                     </span>
                 )}
@@ -438,15 +439,15 @@ function NotificationBell() {
                     <div className="fixed inset-0 z-40" onClick={() => setOpen(false)}/>
                     <div className="absolute right-0 top-full mt-2 w-[min(25rem,calc(100vw-1rem))] bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-xl shadow-2xl overflow-hidden z-50">
                         <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--color-border)]">
-                            <div><h3 className="text-sm font-semibold text-white">Pro nás dva</h3><p className="mt-0.5 text-[10px] text-[var(--color-text-secondary)]">Plány, cesty, vzpomínky i společné finance</p></div>
-                            <div className="flex items-center gap-1">{meta.quiet_now&&<span title="Tichý režim je aktivní" className="rounded-full bg-violet-500/15 px-2 py-1 text-[9px] text-violet-100">ticho</span>}<button aria-label="Nastavení upozornění" onClick={()=>setShowSettings(value=>!value)} className={`rounded-lg p-2 ${showSettings?'bg-white/10 text-white':'text-[var(--color-text-secondary)] hover:text-white'}`}><Settings size={15}/></button></div>
+                            <div><h3 className="text-sm font-semibold text-[var(--color-text-primary)]">Pro nás dva</h3><p className="mt-0.5 text-[10px] text-[var(--color-text-secondary)]">Plány, cesty, vzpomínky i společné finance</p></div>
+                            <div className="flex items-center gap-1">{meta.quiet_now&&<span title="Tichý režim je aktivní" className="rounded-full bg-violet-500/15 px-2 py-1 text-[9px] text-violet-100">ticho</span>}<button aria-label="Nastavení upozornění" onClick={()=>setShowSettings(value=>!value)} className={`rounded-lg p-2 ${showSettings?'bg-[var(--color-surface-muted)] text-[var(--color-text-primary)]':'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}><Settings size={15}/></button></div>
                         </div>
 
-                        <div className="border-b border-[var(--color-border)] px-3 py-2"><div className="flex items-center gap-1 overflow-x-auto">{([['all','Vše',meta.total],['important','Důležité',meta.important],['unread','Nepřečtené',meta.unread]] as const).map(([value,label,count])=><button key={value} onClick={()=>setFocus(value)} className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] ${focus===value?'bg-[var(--color-accent)] text-white':'bg-white/5 text-[var(--color-text-secondary)]'}`}>{label} · {count}</button>)}<div className="flex-1"/>{unread>0&&<button onClick={markAllRead} className="shrink-0 text-[10px] text-[var(--color-accent)] hover:underline">Přečíst vše</button>}</div><select aria-label="Filtrovat druh upozornění" value={categoryFilter} onChange={event=>setCategoryFilter(event.target.value)} className="mt-2 min-h-8 w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-2 text-[10px] text-white"><option value="all">Všechny oblasti</option>{Object.entries(categories).filter(([key])=>(meta.categories[key]??0)>0).map(([key,label])=><option key={key} value={key}>{label} · {meta.categories[key]??0}</option>)}</select></div>
+                        <div className="border-b border-[var(--color-border)] px-3 py-2"><div className="flex items-center gap-1 overflow-x-auto">{([['all','Vše',meta.total],['important','Důležité',meta.important],['unread','Nepřečtené',meta.unread]] as const).map(([value,label,count])=><button key={value} onClick={()=>setFocus(value)} className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] ${focus===value?'bg-[var(--color-accent)] text-[var(--color-text-primary)]':'bg-[var(--color-surface-muted)] text-[var(--color-text-secondary)]'}`}>{label} · {count}</button>)}<div className="flex-1"/>{unread>0&&<button onClick={markAllRead} className="shrink-0 text-[10px] text-[var(--color-accent)] hover:underline">Přečíst vše</button>}</div><select aria-label="Filtrovat druh upozornění" value={categoryFilter} onChange={event=>setCategoryFilter(event.target.value)} className="mt-2 min-h-8 w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-2 text-[10px] text-[var(--color-text-primary)]"><option value="all">Všechny oblasti</option>{Object.entries(categories).filter(([key])=>(meta.categories[key]??0)>0).map(([key,label])=><option key={key} value={key}>{label} · {meta.categories[key]??0}</option>)}</select></div>
 
                         {actionError && <p className="border-b border-[var(--color-border)] bg-red-500/10 px-4 py-2 text-[10px] text-red-200">{actionError}</p>}
 
-                        {showSettings&&preferenceDraft&&<div className="max-h-[60dvh] overflow-y-auto border-b border-[var(--color-border)] bg-black/10 p-4"><p className="text-xs font-medium text-white">Co mi má systém připomínat</p><div className="mt-2 grid grid-cols-2 gap-1.5">{Object.entries(categories).map(([key,label])=><label key={key} className="flex min-w-0 items-center gap-2 rounded-lg bg-white/5 p-2 text-[10px] text-[var(--color-text-secondary)]"><input type="checkbox" checked={preferenceDraft.categories[key]??true} disabled={key==='system'} onChange={event=>setPreferenceDraft({...preferenceDraft,categories:{...preferenceDraft.categories,[key]:event.target.checked}})}/><span className="truncate">{label}</span></label>)}</div><label className="mt-3 block text-[10px] text-[var(--color-text-secondary)]">Nejnižší zobrazovaná priorita<select value={preferenceDraft.priority_floor} onChange={event=>setPreferenceDraft({...preferenceDraft,priority_floor:event.target.value as NotificationPreferences['priority_floor']})} className="mt-1 min-h-9 w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-2 text-xs text-white"><option value="low">Všechna upozornění</option><option value="normal">Běžná a důležitá</option><option value="high">Jen důležitá</option><option value="critical">Jen kritická</option></select></label><label className="mt-3 flex items-center justify-between gap-3 text-xs text-white"><span>Tichý režim</span><input type="checkbox" checked={preferenceDraft.quiet.enabled} onChange={event=>setPreferenceDraft({...preferenceDraft,quiet:{...preferenceDraft.quiet,enabled:event.target.checked}})}/></label>{preferenceDraft.quiet.enabled&&<div className="mt-2 grid grid-cols-2 gap-2"><label className="text-[10px] text-[var(--color-text-secondary)]">Od<input type="time" value={preferenceDraft.quiet.from} onChange={event=>setPreferenceDraft({...preferenceDraft,quiet:{...preferenceDraft.quiet,from:event.target.value}})} className="mt-1 w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-secondary)] p-2 text-xs text-white"/></label><label className="text-[10px] text-[var(--color-text-secondary)]">Do<input type="time" value={preferenceDraft.quiet.to} onChange={event=>setPreferenceDraft({...preferenceDraft,quiet:{...preferenceDraft.quiet,to:event.target.value}})} className="mt-1 w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-secondary)] p-2 text-xs text-white"/></label></div>}<div className="mt-3 flex items-center justify-between gap-3"><div><p className="text-xs text-white">Upozornění zařízení</p><p className="text-[10px] text-[var(--color-text-secondary)]">Jen důležité, mimo tichý režim</p></div><button onClick={preferenceDraft.browser_notifications?()=>setPreferenceDraft({...preferenceDraft,browser_notifications:false}):enableBrowserNotifications} className={`rounded-lg px-2.5 py-1.5 text-[10px] ${preferenceDraft.browser_notifications?'bg-emerald-500/15 text-emerald-100':'border border-[var(--color-border)] text-[var(--color-text-secondary)]'}`}>{preferenceDraft.browser_notifications?'Zapnuto':'Povolit'}</button></div><button disabled={actionBusy==='preferences'} onClick={savePreferences} className="mt-4 min-h-9 w-full rounded-lg bg-[var(--color-accent)] text-xs font-medium text-white disabled:opacity-40">{actionBusy==='preferences'?'Ukládám…':'Uložit moje nastavení'}</button></div>}
+                        {showSettings&&preferenceDraft&&<div className="max-h-[60dvh] overflow-y-auto border-b border-[var(--color-border)] bg-[var(--color-surface-muted)] p-4"><p className="text-xs font-medium text-[var(--color-text-primary)]">Co mi má systém připomínat</p><div className="mt-2 grid grid-cols-2 gap-1.5">{Object.entries(categories).map(([key,label])=><label key={key} className="flex min-w-0 items-center gap-2 rounded-lg bg-[var(--color-surface-muted)] p-2 text-[10px] text-[var(--color-text-secondary)]"><input type="checkbox" checked={preferenceDraft.categories[key]??true} disabled={key==='system'} onChange={event=>setPreferenceDraft({...preferenceDraft,categories:{...preferenceDraft.categories,[key]:event.target.checked}})}/><span className="truncate">{label}</span></label>)}</div><label className="mt-3 block text-[10px] text-[var(--color-text-secondary)]">Nejnižší zobrazovaná priorita<select value={preferenceDraft.priority_floor} onChange={event=>setPreferenceDraft({...preferenceDraft,priority_floor:event.target.value as NotificationPreferences['priority_floor']})} className="mt-1 min-h-9 w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-2 text-xs text-[var(--color-text-primary)]"><option value="low">Všechna upozornění</option><option value="normal">Běžná a důležitá</option><option value="high">Jen důležitá</option><option value="critical">Jen kritická</option></select></label><label className="mt-3 flex items-center justify-between gap-3 text-xs text-[var(--color-text-primary)]"><span>Tichý režim</span><input type="checkbox" checked={preferenceDraft.quiet.enabled} onChange={event=>setPreferenceDraft({...preferenceDraft,quiet:{...preferenceDraft.quiet,enabled:event.target.checked}})}/></label>{preferenceDraft.quiet.enabled&&<div className="mt-2 grid grid-cols-2 gap-2"><label className="text-[10px] text-[var(--color-text-secondary)]">Od<input type="time" value={preferenceDraft.quiet.from} onChange={event=>setPreferenceDraft({...preferenceDraft,quiet:{...preferenceDraft.quiet,from:event.target.value}})} className="mt-1 w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-secondary)] p-2 text-xs text-[var(--color-text-primary)]"/></label><label className="text-[10px] text-[var(--color-text-secondary)]">Do<input type="time" value={preferenceDraft.quiet.to} onChange={event=>setPreferenceDraft({...preferenceDraft,quiet:{...preferenceDraft.quiet,to:event.target.value}})} className="mt-1 w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-secondary)] p-2 text-xs text-[var(--color-text-primary)]"/></label></div>}<div className="mt-3 flex items-center justify-between gap-3"><div><p className="text-xs text-[var(--color-text-primary)]">Upozornění zařízení</p><p className="text-[10px] text-[var(--color-text-secondary)]">Jen důležité, mimo tichý režim</p></div><button onClick={preferenceDraft.browser_notifications?()=>setPreferenceDraft({...preferenceDraft,browser_notifications:false}):enableBrowserNotifications} className={`rounded-lg px-2.5 py-1.5 text-[10px] ${preferenceDraft.browser_notifications?'bg-emerald-500/15 text-emerald-100':'border border-[var(--color-border)] text-[var(--color-text-secondary)]'}`}>{preferenceDraft.browser_notifications?'Zapnuto':'Povolit'}</button></div><button disabled={actionBusy==='preferences'} onClick={savePreferences} className="mt-4 min-h-9 w-full rounded-lg bg-[var(--color-accent)] text-xs font-medium text-[var(--color-text-primary)] disabled:opacity-40">{actionBusy==='preferences'?'Ukládám…':'Uložit moje nastavení'}</button></div>}
 
                         <div className="max-h-[min(28rem,65dvh)] overflow-y-auto">
                             {notifs.length === 0 ? (
@@ -461,20 +462,20 @@ function NotificationBell() {
                                 const startsAt = n.data.extra?.starts_at ? new Date(n.data.extra.starts_at).getTime() : 0;
                                 const canSnoozeTomorrow = !startsAt || startsAt > Date.now() + 24 * 60 * 60 * 1000;
                                 return <article key={n.id} className={`border-b border-[var(--color-border)] last:border-0 ${!n.read_at ? 'bg-[var(--color-accent)]/5' : ''}`}>
-                                    <button onClick={() => handleClick(n)} className="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-white/5">
+                                    <button onClick={() => handleClick(n)} className="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-[var(--color-surface-hover)]">
                                         <span className="mt-0.5 shrink-0 text-xl">{n.data.icon ?? '🔔'}</span>
                                         <div className="min-w-0 flex-1">
-                                            <p className={`text-xs leading-relaxed ${!n.read_at ? 'font-medium text-white' : 'text-[var(--color-text-secondary)]'}`}>{n.data.message}</p>
+                                            <p className={`text-xs leading-relaxed ${!n.read_at ? 'font-medium text-[var(--color-text-primary)]' : 'text-[var(--color-text-secondary)]'}`}>{n.data.message}</p>
                                             <p className="mt-1 flex flex-wrap items-center gap-1.5 text-[9px] text-[var(--color-text-secondary)]"><span>{n.category_label}</span><span>·</span><span>{fmtTime(n.created_at)}</span>{['high','critical'].includes(n.priority)&&<span className={`rounded-full px-1.5 py-0.5 ${n.priority==='critical'?'bg-red-500/15 text-red-200':'bg-amber-500/15 text-amber-100'}`}>{n.priority==='critical'?'kritické':'důležité'}</span>}</p>
                                         </div>
                                         {!n.read_at && <div className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-[var(--color-accent)]"/>}
                                     </button>
                                     {actionableReminder && <div className="flex flex-wrap gap-1.5 px-4 pb-3 pl-12">
-                                        <button disabled={!!actionBusy} onClick={() => reminderAction(n, 'snooze', 60)} className="min-h-8 rounded-lg border border-[var(--color-border)] px-2.5 text-[10px] text-[var(--color-text-secondary)] hover:text-white disabled:opacity-40">Za 1 hodinu</button>
-                                        {canSnoozeTomorrow && <button disabled={!!actionBusy} onClick={() => reminderAction(n, 'snooze', 1440)} className="min-h-8 rounded-lg border border-[var(--color-border)] px-2.5 text-[10px] text-[var(--color-text-secondary)] hover:text-white disabled:opacity-40">Zítra</button>}
+                                        <button disabled={!!actionBusy} onClick={() => reminderAction(n, 'snooze', 60)} className="min-h-8 rounded-lg border border-[var(--color-border)] px-2.5 text-[10px] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] disabled:opacity-40">Za 1 hodinu</button>
+                                        {canSnoozeTomorrow && <button disabled={!!actionBusy} onClick={() => reminderAction(n, 'snooze', 1440)} className="min-h-8 rounded-lg border border-[var(--color-border)] px-2.5 text-[10px] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] disabled:opacity-40">Zítra</button>}
                                         <button disabled={!!actionBusy} onClick={() => reminderAction(n, 'acknowledge')} className="min-h-8 rounded-lg bg-emerald-500/15 px-2.5 text-[10px] text-emerald-100 disabled:opacity-40">Vyřízeno</button>
                                     </div>}
-                                    {!actionableReminder&&<div className="flex flex-wrap gap-1.5 px-4 pb-3 pl-12"><button disabled={!!actionBusy} onClick={()=>manageNotification(n,'snooze',60)} className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-[var(--color-border)] px-2 text-[10px] text-[var(--color-text-secondary)] disabled:opacity-40"><Clock size={11}/> Připomenout za hodinu</button><button disabled={!!actionBusy} onClick={()=>manageNotification(n,'archive')} className="ml-auto inline-flex min-h-8 items-center gap-1 rounded-lg px-2 text-[10px] text-[var(--color-text-secondary)] hover:bg-white/5 disabled:opacity-40"><Archive size={11}/> Archivovat</button></div>}
+                                    {!actionableReminder&&<div className="flex flex-wrap gap-1.5 px-4 pb-3 pl-12"><button disabled={!!actionBusy} onClick={()=>manageNotification(n,'snooze',60)} className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-[var(--color-border)] px-2 text-[10px] text-[var(--color-text-secondary)] disabled:opacity-40"><Clock size={11}/> Připomenout za hodinu</button><button disabled={!!actionBusy} onClick={()=>manageNotification(n,'archive')} className="ml-auto inline-flex min-h-8 items-center gap-1 rounded-lg px-2 text-[10px] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] disabled:opacity-40"><Archive size={11}/> Archivovat</button></div>}
                                 </article>;
                             })}
                         </div>
@@ -631,17 +632,17 @@ function NavigationCustomizer({
             <section className="safe-area-pb relative z-10 flex max-h-[88dvh] w-full max-w-xl flex-col overflow-hidden rounded-t-3xl border border-[var(--color-border)] bg-[var(--color-bg-secondary)] shadow-2xl sm:rounded-3xl">
                 <header className="flex items-start justify-between gap-3 border-b border-[var(--color-border)] p-4 sm:p-5">
                     <div>
-                        <h2 className="text-base font-semibold text-white">Moje rychlé zkratky</h2>
+                        <h2 className="text-base font-semibold text-[var(--color-text-primary)]">Moje rychlé zkratky</h2>
                         <p className="mt-1 text-xs leading-relaxed text-[var(--color-text-secondary)]">Vyberte až šest často používaných částí. Zobrazí se nad skupinami v postranní nabídce.</p>
                     </div>
-                    <button type="button" onClick={onClose} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-[var(--color-text-secondary)] hover:bg-white/5 hover:text-white" aria-label="Zavřít">
+                    <button type="button" onClick={onClose} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]" aria-label="Zavřít">
                         <X size={19}/>
                     </button>
                 </header>
                 <div className="min-h-0 flex-1 overflow-y-auto p-3 sm:p-4">
                     <div className="mb-3 flex items-center justify-between gap-3 rounded-xl bg-white/[0.035] px-3 py-2 text-xs">
                         <span className="text-[var(--color-text-secondary)]">Vybráno</span>
-                        <strong className="text-white">{pinnedHrefs.length} / 6</strong>
+                        <strong className="text-[var(--color-text-primary)]">{pinnedHrefs.length} / 6</strong>
                     </div>
                     <div className="space-y-4">
                         {navGroups.map(group => {
@@ -658,14 +659,14 @@ function NavigationCustomizer({
                                             return (
                                                 <div key={item.href} className="flex min-h-12 items-center gap-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-card)] px-2">
                                                     <button type="button" onClick={() => toggle(item.href)} disabled={!checked && pinnedHrefs.length >= 6} className="flex min-h-11 min-w-0 flex-1 items-center gap-3 px-1 text-left disabled:opacity-40" aria-pressed={checked}>
-                                                        <span className={clsx('flex h-8 w-8 shrink-0 items-center justify-center rounded-lg', checked ? 'bg-[var(--color-accent)]/20 text-[var(--color-accent)]' : 'bg-white/5 text-[var(--color-text-secondary)]')}><Icon size={16}/></span>
-                                                        <span className="min-w-0 flex-1 truncate text-sm text-white">{item.label}</span>
-                                                        <span className={clsx('h-5 w-5 shrink-0 rounded-md border text-center text-xs leading-[18px]', checked ? 'border-[var(--color-accent)] bg-[var(--color-accent)] text-white' : 'border-[var(--color-border)] text-transparent')}>✓</span>
+                                                        <span className={clsx('flex h-8 w-8 shrink-0 items-center justify-center rounded-lg', checked ? 'bg-[var(--color-accent)]/20 text-[var(--color-accent)]' : 'bg-[var(--color-surface-muted)] text-[var(--color-text-secondary)]')}><Icon size={16}/></span>
+                                                        <span className="min-w-0 flex-1 truncate text-sm text-[var(--color-text-primary)]">{item.label}</span>
+                                                        <span className={clsx('h-5 w-5 shrink-0 rounded-md border text-center text-xs leading-[18px]', checked ? 'border-[var(--color-accent)] bg-[var(--color-accent)] text-[var(--color-text-primary)]' : 'border-[var(--color-border)] text-transparent')}>✓</span>
                                                     </button>
                                                     {checked && (
                                                         <div className="flex shrink-0 gap-1 border-l border-[var(--color-border)] pl-2">
-                                                            <button type="button" onClick={() => move(item.href, -1)} disabled={pinIndex === 0} className="h-9 w-8 rounded-lg text-xs text-[var(--color-text-secondary)] hover:bg-white/5 hover:text-white disabled:opacity-25" aria-label={`Posunout ${item.label} výše`}>↑</button>
-                                                            <button type="button" onClick={() => move(item.href, 1)} disabled={pinIndex === pinnedHrefs.length - 1} className="h-9 w-8 rounded-lg text-xs text-[var(--color-text-secondary)] hover:bg-white/5 hover:text-white disabled:opacity-25" aria-label={`Posunout ${item.label} níže`}>↓</button>
+                                                            <button type="button" onClick={() => move(item.href, -1)} disabled={pinIndex === 0} className="h-9 w-8 rounded-lg text-xs text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)] disabled:opacity-25" aria-label={`Posunout ${item.label} výše`}>↑</button>
+                                                            <button type="button" onClick={() => move(item.href, 1)} disabled={pinIndex === pinnedHrefs.length - 1} className="h-9 w-8 rounded-lg text-xs text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)] disabled:opacity-25" aria-label={`Posunout ${item.label} níže`}>↓</button>
                                                         </div>
                                                     )}
                                                 </div>
@@ -679,7 +680,7 @@ function NavigationCustomizer({
                 </div>
                 <footer className="flex gap-2 border-t border-[var(--color-border)] p-3 sm:p-4">
                     <button type="button" onClick={() => onChange([])} disabled={!pinnedHrefs.length} className="min-h-11 rounded-xl border border-[var(--color-border)] px-4 text-sm text-[var(--color-text-secondary)] disabled:opacity-35">Vymazat zkratky</button>
-                    <button type="button" onClick={onClose} className="min-h-11 flex-1 rounded-xl bg-[var(--color-accent)] px-4 text-sm font-medium text-white">Hotovo</button>
+                    <button type="button" onClick={onClose} className="min-h-11 flex-1 rounded-xl bg-[var(--color-accent)] px-4 text-sm font-medium text-[var(--color-text-primary)]">Hotovo</button>
                 </footer>
             </section>
         </div>
@@ -794,8 +795,8 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
                     'mx-2 flex min-h-10 items-center gap-3 rounded-xl px-3 text-sm transition-colors',
                     nested && 'ml-5 text-[13px]',
                     active
-                        ? 'bg-[var(--color-accent)] text-white font-medium shadow-sm'
-                        : 'text-[var(--color-text-secondary)] hover:bg-white/5 hover:text-white'
+                        ? 'bg-[var(--color-accent)] text-[var(--color-text-primary)] font-medium shadow-sm'
+                        : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]'
                 )}
             >
                 <Icon size={nested ? 15 : 16} className="shrink-0" />
@@ -835,7 +836,7 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
                                     aria-controls={`${instance}-nav-${group.id}`}
                                     className={clsx(
                                         'mx-2 flex min-h-12 w-[calc(100%-1rem)] items-center gap-3 rounded-xl px-3 text-left transition-colors',
-                                        active ? 'bg-white/[0.055] text-white' : 'text-[var(--color-text-secondary)] hover:bg-white/5 hover:text-white'
+                                        active ? 'bg-white/[0.055] text-[var(--color-text-primary)]' : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]'
                                     )}
                                 >
                                     <GroupIcon size={17} className={clsx('shrink-0', active && 'text-[var(--color-accent)]')}/>
@@ -858,7 +859,7 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
                 <button
                     type="button"
                     onClick={() => { setMobileOpen(false); setNavEditorOpen(true); }}
-                    className="mx-2 mt-3 flex min-h-11 w-[calc(100%-1rem)] items-center gap-3 rounded-xl border border-dashed border-[var(--color-border)] px-3 text-xs text-[var(--color-text-secondary)] transition-colors hover:border-[var(--color-accent)]/50 hover:bg-white/5 hover:text-white"
+                    className="mx-2 mt-3 flex min-h-11 w-[calc(100%-1rem)] items-center gap-3 rounded-xl border border-dashed border-[var(--color-border)] px-3 text-xs text-[var(--color-text-secondary)] transition-colors hover:border-[var(--color-accent)]/50 hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]"
                 >
                     <SlidersHorizontal size={16}/>
                     Přizpůsobit nabídku
@@ -876,9 +877,9 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
                 {/* Logo */}
                 <div className="flex items-center gap-3 px-5 py-4 border-b border-[var(--color-border)]">
                     <div className="w-8 h-8 rounded-lg bg-[var(--color-accent)] flex items-center justify-center">
-                        <Images size={16} className="text-white" />
+                        <Images size={16} className="text-[var(--color-text-primary)]" />
                     </div>
-                    <span className="font-semibold text-sm text-white truncate">Stanektech Gallery</span>
+                    <span className="font-semibold text-sm text-[var(--color-text-primary)] truncate">Stanektech Gallery</span>
                 </div>
 
                 {/* Nav */}
@@ -889,16 +890,16 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
                 {/* User + Notifications */}
                 <div className="border-t border-[var(--color-border)] p-3">
                     <div className="flex items-center gap-2">
-                        <div className="flex items-center gap-2 flex-1 px-2 py-2 rounded-lg hover:bg-white/5 cursor-pointer min-w-0">
+                        <div className="flex items-center gap-2 flex-1 px-2 py-2 rounded-lg hover:bg-[var(--color-surface-hover)] cursor-pointer min-w-0">
                             <div className="w-7 h-7 rounded-full bg-[var(--color-accent)]/30 flex items-center justify-center text-xs font-bold text-[var(--color-accent)] shrink-0">
                                 {auth?.user?.name?.[0]?.toUpperCase() ?? '?'}
                             </div>
                             <div className="flex-1 min-w-0">
-                                <p className="text-xs font-medium text-white truncate">{auth?.user?.name}</p>
+                                <p className="text-xs font-medium text-[var(--color-text-primary)] truncate">{auth?.user?.name}</p>
                                 <p className="text-xs text-[var(--color-text-secondary)] truncate">{auth?.user?.role}</p>
                             </div>
                         </div>
-                        <InterfaceDensityControl initial={auth?.user?.interface_density}/>
+                        <ThemeControl initial={auth?.user?.theme}/><InterfaceDensityControl initial={auth?.user?.interface_density}/>
                         <AppInstallButton/>
                         <NotificationBell/>
                     </div>
@@ -915,11 +916,11 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
                         <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--color-border)]">
                             <div className="flex items-center gap-3">
                                 <div className="w-8 h-8 rounded-lg bg-[var(--color-accent)] flex items-center justify-center">
-                                    <Images size={16} className="text-white" />
+                                    <Images size={16} className="text-[var(--color-text-primary)]" />
                                 </div>
-                                <span className="font-semibold text-sm text-white">Stanektech Gallery</span>
+                                <span className="font-semibold text-sm text-[var(--color-text-primary)]">Stanektech Gallery</span>
                             </div>
-                            <button onClick={() => setMobileOpen(false)} className="text-[var(--color-text-secondary)] hover:text-white p-1">
+                            <button onClick={() => setMobileOpen(false)} className="text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] p-1">
                                 <X size={20} />
                             </button>
                         </div>
@@ -932,10 +933,10 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
                                     {auth?.user?.name?.[0]?.toUpperCase() ?? '?'}
                                 </div>
                                 <div>
-                                    <p className="text-sm font-medium text-white">{auth?.user?.name}</p>
+                                    <p className="text-sm font-medium text-[var(--color-text-primary)]">{auth?.user?.name}</p>
                                     <p className="text-xs text-[var(--color-text-secondary)]">{auth?.user?.email}</p>
                                 </div>
-                                <InterfaceDensityControl initial={auth?.user?.interface_density}/>
+                                <ThemeControl initial={auth?.user?.theme}/><InterfaceDensityControl initial={auth?.user?.interface_density}/>
                             </div>
                         </div>
                     </aside>
@@ -946,11 +947,11 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
             <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
                 {/* Mobile top bar — menu is reachable before any scrolling. */}
                 <header className="safe-area-pt flex min-h-14 shrink-0 items-center gap-2 border-b border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-2 md:hidden">
-                    <button type="button" onClick={() => setMobileOpen(true)} aria-label="Otevřít hlavní nabídku" aria-expanded={mobileOpen} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-[var(--color-text-secondary)] hover:bg-white/5 hover:text-white">
+                    <button type="button" onClick={() => setMobileOpen(true)} aria-label="Otevřít hlavní nabídku" aria-expanded={mobileOpen} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]">
                         <Menu size={21}/>
                     </button>
-                    <p className="min-w-0 flex-1 truncate text-sm font-semibold text-white">{currentLabel}</p>
-                    <button type="button" onClick={() => setCmdOpen(true)} aria-label="Otevřít rychlé hledání" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-[var(--color-text-secondary)] hover:bg-white/5 hover:text-white">
+                    <p className="min-w-0 flex-1 truncate text-sm font-semibold text-[var(--color-text-primary)]">{currentLabel}</p>
+                    <button type="button" onClick={() => setCmdOpen(true)} aria-label="Otevřít rychlé hledání" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]">
                         <Search size={19}/>
                     </button>
                     <AppInstallButton/>

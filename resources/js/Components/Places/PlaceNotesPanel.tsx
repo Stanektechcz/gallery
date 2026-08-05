@@ -47,7 +47,7 @@ export default function PlaceNotesPanel({ placeId }: { placeId: number }) {
     return (
         <section className="border-b border-[var(--color-border)] bg-[var(--color-bg-primary)] px-6 py-5">
             <div className="mb-4">
-                <h2 className="text-sm font-semibold text-white">Poznámky k místu</h2>
+                <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">Poznámky k místu</h2>
                 <p className="mt-1 text-xs text-[var(--color-text-secondary)]">Společné tipy pro vás oba i vlastní soukromé poznámky bez míchání obsahu.</p>
             </div>
             {loading ? <div className="text-sm text-[var(--color-text-secondary)]">Načítám poznámky…</div> : (
@@ -67,12 +67,12 @@ function NoteEditor({ icon, title, hint, value, onChange, saving, onSave, privat
 }) {
     return (
         <div className={`rounded-xl border p-4 ${privateNote ? 'border-violet-500/30 bg-violet-500/5' : 'border-[var(--color-border)] bg-[var(--color-bg-card)]'}`}>
-            <div className="flex items-center gap-2 text-sm font-medium text-white">{icon}{title}</div>
+            <div className="flex items-center gap-2 text-sm font-medium text-[var(--color-text-primary)]">{icon}{title}</div>
             <p className="mt-1 text-[11px] leading-relaxed text-[var(--color-text-secondary)]">{hint}</p>
-            <textarea value={value} onChange={event => onChange(event.target.value)} rows={4} maxLength={10000} placeholder={privateNote ? 'Například co si chcete pamatovat jen vy…' : 'Například co zde příště vyzkoušet…'} className="mt-3 w-full resize-y rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-3 py-2 text-sm text-white outline-none placeholder:text-[var(--color-text-secondary)] focus:border-[var(--color-accent)]" />
+            <textarea value={value} onChange={event => onChange(event.target.value)} rows={4} maxLength={10000} placeholder={privateNote ? 'Například co si chcete pamatovat jen vy…' : 'Například co zde příště vyzkoušet…'} className="mt-3 w-full resize-y rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-3 py-2 text-sm text-[var(--color-text-primary)] outline-none placeholder:text-[var(--color-text-secondary)] focus:border-[var(--color-accent)]" />
             <div className="mt-2 flex items-center justify-between gap-3">
                 <span className="text-[11px] text-[var(--color-text-secondary)]">{value.length}/10 000</span>
-                <button onClick={onSave} disabled={saving} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-[var(--color-accent)] px-3 text-xs font-medium text-white disabled:opacity-50"><Save size={13} />{saving ? 'Ukládám…' : 'Uložit'}</button>
+                <button onClick={onSave} disabled={saving} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-[var(--color-accent)] px-3 text-xs font-medium text-[var(--color-text-primary)] disabled:opacity-50"><Save size={13} />{saving ? 'Ukládám…' : 'Uložit'}</button>
             </div>
         </div>
     );

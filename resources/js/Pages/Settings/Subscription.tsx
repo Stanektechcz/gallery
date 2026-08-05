@@ -123,7 +123,7 @@ export default function Subscription() {
             <Head title="Předplatné" />
             <main className="mx-auto max-w-4xl p-4 sm:p-6">
                 <p className="text-xs uppercase tracking-widest text-[var(--color-accent)]">Nastavení</p>
-                <h1 className="mt-1 text-2xl font-bold text-white sm:text-3xl">Předplatné a funkce</h1>
+                <h1 className="mt-1 text-2xl font-bold text-[var(--color-text-primary)] sm:text-3xl">Předplatné a funkce</h1>
                 <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
                     Vyberte si, co chcete používat. <Link href="/cenik" className="text-[var(--color-accent)] hover:underline">Ceník</Link>
                 </p>
@@ -155,28 +155,28 @@ export default function Subscription() {
                         {plan && (
                             <section className="mt-6 rounded-2xl border border-[var(--color-accent)]/35 bg-[var(--color-accent)]/5 p-5">
                                 <p className="text-xs uppercase tracking-wide text-[var(--color-accent)]">Aktuální tarif</p>
-                                <h2 className="mt-1 text-lg font-semibold text-white">{plan.name}</h2>
+                                <h2 className="mt-1 text-lg font-semibold text-[var(--color-text-primary)]">{plan.name}</h2>
                                 {plan.tagline && <p className="mt-1 text-xs text-[var(--color-text-secondary)]">{plan.tagline}</p>}
-                                <p className="mt-3 font-semibold text-white">
+                                <p className="mt-3 font-semibold text-[var(--color-text-primary)]">
                                     {money(plan.price_monthly, plan.currency)}
                                     {plan.price_monthly > 0 && <span className="text-sm font-normal text-[var(--color-text-secondary)]"> / měsíc</span>}
                                 </p>
 
                                 {usage && (
-                                    <div className="mt-4 space-y-3 border-t border-white/10 pt-3">
+                                    <div className="mt-4 space-y-3 border-t border-[var(--color-border)] pt-3">
                                         <div className="flex justify-between text-xs">
                                             <span className="text-[var(--color-text-secondary)]">Členové</span>
-                                            <span className="text-white">{usage.members.used} z {usage.members.limit ?? '∞'}</span>
+                                            <span className="text-[var(--color-text-primary)]">{usage.members.used} z {usage.members.limit ?? '∞'}</span>
                                         </div>
                                         <div>
                                             <div className="flex justify-between text-xs">
                                                 <span className="text-[var(--color-text-secondary)]">Obsazené místo</span>
-                                                <span className="text-white">
+                                                <span className="text-[var(--color-text-primary)]">
                                                     {gigabytes(usage.storage.used_bytes)}{usage.storage.limit_mb != null ? ` z ${Math.round(usage.storage.limit_mb / 1000)} GB` : ''}
                                                 </span>
                                             </div>
                                             {usage.storage.percent != null && (
-                                                <div className="mt-1 h-2 overflow-hidden rounded-full bg-white/10">
+                                                <div className="mt-1 h-2 overflow-hidden rounded-full bg-[var(--color-surface-muted)]">
                                                     <div className={`h-full rounded-full ${usage.storage.percent > 90 ? 'bg-red-400' : usage.storage.percent > 75 ? 'bg-amber-400' : 'bg-emerald-400'}`} style={{ width: `${usage.storage.percent}%` }} />
                                                 </div>
                                             )}
@@ -190,7 +190,7 @@ export default function Subscription() {
                         <section className="mt-8">
                             <div className="flex items-center gap-2">
                                 <Sparkles size={17} className="text-violet-300" />
-                                <h2 className="font-semibold text-white">Vaše funkce</h2>
+                                <h2 className="font-semibold text-[var(--color-text-primary)]">Vaše funkce</h2>
                             </div>
                             <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
                                 Co vypnete, zmizí z menu. Kdykoliv se to dá vrátit — o data nepřijdete.
@@ -204,13 +204,13 @@ export default function Subscription() {
                                             {rows.map(feature => (
                                                 <div
                                                     key={feature.code}
-                                                    className={`flex items-start gap-3 rounded-xl border p-3 ${feature.entitled ? 'border-[var(--color-border)] bg-[var(--color-bg-card)]' : 'border-[var(--color-border)] bg-black/10 opacity-70'}`}
+                                                    className={`flex items-start gap-3 rounded-xl border p-3 ${feature.entitled ? 'border-[var(--color-border)] bg-[var(--color-bg-card)]' : 'border-[var(--color-border)] bg-[var(--color-surface-muted)] opacity-70'}`}
                                                 >
                                                     <span className="mt-0.5 text-lg">{feature.icon}</span>
                                                     <div className="min-w-0 flex-1">
                                                         <div className="flex flex-wrap items-center gap-2">
-                                                            <span className="font-medium text-white">{feature.name}</span>
-                                                            {feature.is_core && <span className="rounded-full bg-white/5 px-2 py-0.5 text-[10px] text-[var(--color-text-secondary)]">základ</span>}
+                                                            <span className="font-medium text-[var(--color-text-primary)]">{feature.name}</span>
+                                                            {feature.is_core && <span className="rounded-full bg-[var(--color-surface-muted)] px-2 py-0.5 text-[10px] text-[var(--color-text-secondary)]">základ</span>}
                                                             {!feature.entitled && <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] text-amber-200"><Lock size={9} /> ve vyšším tarifu</span>}
                                                         </div>
                                                         {feature.tagline && <p className="mt-0.5 text-xs text-[var(--color-text-secondary)]">{feature.tagline}</p>}
@@ -243,11 +243,11 @@ export default function Subscription() {
                         {isAdmin && upgrades.length > 0 && (
                             <section className="mt-10">
                                 <div className="flex flex-wrap items-center justify-between gap-3">
-                                    <h2 className="font-semibold text-white">Změnit tarif</h2>
+                                    <h2 className="font-semibold text-[var(--color-text-primary)]">Změnit tarif</h2>
                                     <div className="inline-flex rounded-xl border border-[var(--color-border)] p-1">
                                         {(['monthly', 'yearly'] as Period[]).map(value => (
                                             <button key={value} type="button" onClick={() => setPeriod(value)} aria-pressed={period === value}
-                                                className={`min-h-8 rounded-lg px-3 text-xs ${period === value ? 'bg-[var(--color-accent)] text-white' : 'text-[var(--color-text-secondary)]'}`}>
+                                                className={`min-h-8 rounded-lg px-3 text-xs ${period === value ? 'bg-[var(--color-accent)] text-[var(--color-text-primary)]' : 'text-[var(--color-text-secondary)]'}`}>
                                                 {value === 'monthly' ? 'Měsíčně' : 'Ročně'}
                                             </button>
                                         ))}
@@ -261,9 +261,9 @@ export default function Subscription() {
                                             : candidate.price_monthly;
                                         return (
                                             <article key={candidate.code} className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-4">
-                                                <h3 className="font-semibold text-white">{candidate.name}</h3>
+                                                <h3 className="font-semibold text-[var(--color-text-primary)]">{candidate.name}</h3>
                                                 {candidate.tagline && <p className="mt-1 text-xs text-[var(--color-text-secondary)]">{candidate.tagline}</p>}
-                                                <p className="mt-3 font-semibold text-white">
+                                                <p className="mt-3 font-semibold text-[var(--color-text-primary)]">
                                                     {money(price, candidate.currency)}
                                                     {price > 0 && <span className="text-xs font-normal text-[var(--color-text-secondary)]"> / {period === 'yearly' ? 'rok' : 'měsíc'}</span>}
                                                 </p>
@@ -274,7 +274,7 @@ export default function Subscription() {
                                                     type="button"
                                                     onClick={() => buy('plan', candidate.code)}
                                                     disabled={busy !== null || price === 0 || !gateway?.configured}
-                                                    className="mt-3 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl bg-[var(--color-accent)] px-4 text-sm font-medium text-white disabled:opacity-40"
+                                                    className="mt-3 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl bg-[var(--color-accent)] px-4 text-sm font-medium text-[var(--color-text-primary)] disabled:opacity-40"
                                                 >
                                                     {busy === `buy:${candidate.code}` ? <LoaderCircle size={14} className="animate-spin" /> : <CreditCard size={14} />}
                                                     {price === 0 ? 'Zdarma' : 'Přejít na tarif'}
@@ -289,7 +289,7 @@ export default function Subscription() {
                         {/* Add-ons */}
                         {modules.length > 0 && (
                             <section className="mt-10">
-                                <h2 className="font-semibold text-white">Doplňkové moduly</h2>
+                                <h2 className="font-semibold text-[var(--color-text-primary)]">Doplňkové moduly</h2>
                                 <div className="mt-3 space-y-3">
                                     {modules.map(module => (
                                         <article key={module.code} className={`rounded-2xl border p-4 ${module.is_active ? 'border-emerald-400/30 bg-emerald-500/5' : 'border-[var(--color-border)] bg-[var(--color-bg-card)]'}`}>
@@ -297,18 +297,18 @@ export default function Subscription() {
                                                 <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-violet-500/10 text-xl">{module.icon}</span>
                                                 <div className="min-w-0 flex-1">
                                                     <div className="flex flex-wrap items-center gap-2">
-                                                        <h3 className="font-semibold text-white">{module.name}</h3>
+                                                        <h3 className="font-semibold text-[var(--color-text-primary)]">{module.name}</h3>
                                                         {module.is_active && <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] text-emerald-200">aktivní</span>}
                                                     </div>
                                                     {module.description && <p className="mt-1.5 text-sm leading-relaxed text-[var(--color-text-secondary)]">{module.description}</p>}
-                                                    <p className="mt-2 text-sm font-medium text-white">{money(module.price_monthly, module.currency)} <span className="text-xs font-normal text-[var(--color-text-secondary)]">/ měsíc</span></p>
+                                                    <p className="mt-2 text-sm font-medium text-[var(--color-text-primary)]">{money(module.price_monthly, module.currency)} <span className="text-xs font-normal text-[var(--color-text-secondary)]">/ měsíc</span></p>
 
                                                     {isAdmin && !module.is_active && (
                                                         <button
                                                             type="button"
                                                             onClick={() => buy('module', module.code)}
                                                             disabled={busy !== null || !gateway?.configured}
-                                                            className="mt-3 inline-flex min-h-10 items-center gap-2 rounded-xl bg-[var(--color-accent)] px-4 text-sm font-medium text-white disabled:opacity-40"
+                                                            className="mt-3 inline-flex min-h-10 items-center gap-2 rounded-xl bg-[var(--color-accent)] px-4 text-sm font-medium text-[var(--color-text-primary)] disabled:opacity-40"
                                                         >
                                                             {busy === `buy:${module.code}` ? <LoaderCircle size={14} className="animate-spin" /> : <CreditCard size={14} />} Koupit modul
                                                         </button>

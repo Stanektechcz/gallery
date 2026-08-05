@@ -55,14 +55,14 @@ export default function FavoritesIndex({ my_items, shared_items, partner_items, 
                 {/* Header */}
                 <div className="shrink-0 px-5 py-3 border-b border-[var(--color-border)]">
                     <div className="flex items-center justify-between gap-4">
-                        <h1 className="text-sm font-semibold text-white flex items-center gap-2">
+                        <h1 className="text-sm font-semibold text-[var(--color-text-primary)] flex items-center gap-2">
                             <Heart size={16} className="text-red-400 fill-red-400"/> Oblíbené
                         </h1>
                         {/* Tabs */}
                         <div className="flex gap-1">
                             {TABS.map(t => (
                                 <button key={t.key} onClick={() => { setTab(t.key); setSelected(new Set()); }}
-                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-colors ${tab === t.key ? 'bg-[var(--color-accent)] text-white' : 'border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-white'}`}>
+                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-colors ${tab === t.key ? 'bg-[var(--color-accent)] text-[var(--color-text-primary)]' : 'border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}>
                                     {t.label}
                                     <span className={`text-[10px] ${tab === t.key ? 'opacity-80' : 'opacity-60'}`}>({t.count})</span>
                                 </button>
@@ -93,7 +93,7 @@ export default function FavoritesIndex({ my_items, shared_items, partner_items, 
                         emptyState={
                             <div className="flex flex-col items-center justify-center h-64 text-[var(--color-text-secondary)]">
                                 <Heart size={48} className="mb-3 opacity-20"/>
-                                <p className="text-sm font-medium text-white mb-1">
+                                <p className="text-sm font-medium text-[var(--color-text-primary)] mb-1">
                                     {tab === 'my' ? 'Žádné vlastní oblíbené' : tab === 'shared' ? 'Žádná společná oblíbená' : `${partner?.name ?? 'Partner'} zatím nic neoznačil/a`}
                                 </p>
                                 <p className="text-xs opacity-60">

@@ -234,7 +234,7 @@ export default function ItineraryIndex() {
                     <div className="p-4 border-b border-[var(--color-border)] shrink-0">
                         <div className="flex items-center gap-2 mb-3">
                             <Globe size={18} className="text-[var(--color-accent)]" />
-                            <h1 className="text-sm font-semibold text-white">Světový itinerář</h1>
+                            <h1 className="text-sm font-semibold text-[var(--color-text-primary)]">Světový itinerář</h1>
                         </div>
                         <div className="grid grid-cols-3 gap-2 mb-3">
                             {[{val:visited.length,label:'navštíveno',cls:'text-green-400'},{val:dreamCount,label:'snů',cls:'text-pink-400'},{val:wishlist.length,label:'celkem',cls:'text-[var(--color-accent)]'}].map(({val,label,cls})=>(
@@ -246,11 +246,11 @@ export default function ItineraryIndex() {
                         </div>
                         <div className="flex gap-2">
                             <button onClick={() => { setShowForm(v=>!v); setSearchQuery(''); setForm({...EMPTY_FORM}); setShowDropdown(false); }}
-                                className="flex-1 flex items-center justify-center gap-1.5 bg-[var(--color-accent)] text-white text-xs py-1.5 rounded-lg hover:opacity-90">
+                                className="flex-1 flex items-center justify-center gap-1.5 bg-[var(--color-accent)] text-[var(--color-text-primary)] text-xs py-1.5 rounded-lg hover:opacity-90">
                                 <Plus size={12}/> Přidat místo
                             </button>
                             <button onClick={autoCheck} disabled={checking}
-                                className="flex items-center gap-1.5 border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-white text-xs px-2.5 py-1.5 rounded-lg transition-colors disabled:opacity-40"
+                                className="flex items-center gap-1.5 border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] text-xs px-2.5 py-1.5 rounded-lg transition-colors disabled:opacity-40"
                                 title="Automaticky označit navštívená místa z fotek">
                                 <RefreshCw size={12} className={checking?'animate-spin':''}/> Auto
                             </button>
@@ -272,11 +272,11 @@ export default function ItineraryIndex() {
                                         onFocus={() => searchResults.length > 0 && setShowDropdown(true)}
                                         onBlur={() => setTimeout(() => setShowDropdown(false), 150)}
                                         placeholder="Hledat město, stát, místo světa…"
-                                        className="w-full bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-lg pl-7 pr-7 py-1.5 text-xs text-white placeholder-[var(--color-text-secondary)] outline-none focus:border-[var(--color-accent)]"
+                                        className="w-full bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-lg pl-7 pr-7 py-1.5 text-xs text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] outline-none focus:border-[var(--color-accent)]"
                                     />
                                     {searchLoading
                                         ? <RefreshCw size={11} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--color-text-secondary)] animate-spin"/>
-                                        : searchQuery && <button type="button" onMouseDown={e=>e.preventDefault()} onClick={()=>{setSearchQuery('');setForm(p=>({...p,name:''}));setSearchResults([]);setShowDropdown(false);}} className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--color-text-secondary)] hover:text-white"><X size={11}/></button>
+                                        : searchQuery && <button type="button" onMouseDown={e=>e.preventDefault()} onClick={()=>{setSearchQuery('');setForm(p=>({...p,name:''}));setSearchResults([]);setShowDropdown(false);}} className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"><X size={11}/></button>
                                     }
 
                                     {/* Dropdown */}
@@ -287,7 +287,7 @@ export default function ItineraryIndex() {
                                                     className="w-full text-left px-3 py-2 hover:bg-[var(--color-bg-secondary)] transition-colors border-b border-[var(--color-border)] last:border-0 flex items-start gap-2">
                                                     <span className="text-sm shrink-0 mt-0.5">{CAT_EMOJI[r.category]??'📍'}</span>
                                                     <div className="flex-1 min-w-0">
-                                                        <p className="text-xs font-medium text-white truncate">{r.name || r.display_name}</p>
+                                                        <p className="text-xs font-medium text-[var(--color-text-primary)] truncate">{r.name || r.display_name}</p>
                                                         <p className="text-[10px] text-[var(--color-text-secondary)] truncate">{localizedCountry(r.country, r.country_code)}{r.type ? ' · ' + (CAT_LABEL[r.type] ?? r.type) : ''}</p>
                                                     </div>
                                                 </button>
@@ -299,21 +299,21 @@ export default function ItineraryIndex() {
                                 {/* Coords (auto-filled from search, manually editable) */}
                                 <div className="grid grid-cols-2 gap-2">
                                     <input type="number" step="any" value={form.latitude} onChange={e=>setForm(p=>({...p,latitude:e.target.value}))}
-                                        placeholder="Šířka (lat)" className="bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-[var(--color-text-secondary)] outline-none focus:border-[var(--color-accent)]"/>
+                                        placeholder="Šířka (lat)" className="bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-lg px-2.5 py-1.5 text-xs text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] outline-none focus:border-[var(--color-accent)]"/>
                                     <input type="number" step="any" value={form.longitude} onChange={e=>setForm(p=>({...p,longitude:e.target.value}))}
-                                        placeholder="Délka (lng)" className="bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-[var(--color-text-secondary)] outline-none focus:border-[var(--color-accent)]"/>
+                                        placeholder="Délka (lng)" className="bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-lg px-2.5 py-1.5 text-xs text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] outline-none focus:border-[var(--color-accent)]"/>
                                 </div>
 
                                 <input value={form.country} onChange={e=>setForm(p=>({...p,country:e.target.value}))}
-                                    placeholder="Země" className="w-full bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-[var(--color-text-secondary)] outline-none focus:border-[var(--color-accent)]"/>
+                                    placeholder="Země" className="w-full bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-lg px-2.5 py-1.5 text-xs text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] outline-none focus:border-[var(--color-accent)]"/>
 
                                 <div className="grid grid-cols-2 gap-2">
                                     <select value={form.category} onChange={e=>setForm(p=>({...p,category:e.target.value}))}
-                                        className="bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-lg px-2 py-1.5 text-xs text-white outline-none focus:border-[var(--color-accent)]">
+                                        className="bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-lg px-2 py-1.5 text-xs text-[var(--color-text-primary)] outline-none focus:border-[var(--color-accent)]">
                                         {CATEGORIES.map(c => <option key={c} value={c}>{CAT_EMOJI[c]} {CAT_LABEL[c] ?? c}</option>)}
                                     </select>
                                     <select value={form.priority} onChange={e=>setForm(p=>({...p,priority:e.target.value}))}
-                                        className="bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-lg px-2 py-1.5 text-xs text-white outline-none focus:border-[var(--color-accent)]">
+                                        className="bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-lg px-2 py-1.5 text-xs text-[var(--color-text-primary)] outline-none focus:border-[var(--color-accent)]">
                                         <option value="dream">✨ Sen</option>
                                         <option value="soon">🎯 Brzy</option>
                                         <option value="someday">🌍 Jednou</option>
@@ -322,23 +322,23 @@ export default function ItineraryIndex() {
 
                                 <textarea value={form.notes} onChange={e=>setForm(p=>({...p,notes:e.target.value}))}
                                     placeholder="Poznámky…" rows={2}
-                                    className="w-full bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-[var(--color-text-secondary)] outline-none focus:border-[var(--color-accent)] resize-none"/>
+                                    className="w-full bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-lg px-2.5 py-1.5 text-xs text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] outline-none focus:border-[var(--color-accent)] resize-none"/>
 
                                 <textarea value={form.description} onChange={e=>setForm(p=>({...p,description:e.target.value}))}
                                     placeholder="Popis místa, proč chceme jet…" rows={2}
-                                    className="w-full bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-[var(--color-text-secondary)] outline-none focus:border-[var(--color-accent)] resize-none"/>
+                                    className="w-full bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-lg px-2.5 py-1.5 text-xs text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] outline-none focus:border-[var(--color-accent)] resize-none"/>
 
                                 <input value={form.website_url} onChange={e=>setForm(p=>({...p,website_url:e.target.value}))}
                                     placeholder="Web (https://…)" type="url"
-                                    className="w-full bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-[var(--color-text-secondary)] outline-none focus:border-[var(--color-accent)]"/>
+                                    className="w-full bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-lg px-2.5 py-1.5 text-xs text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] outline-none focus:border-[var(--color-accent)]"/>
 
                                 <div className="flex gap-2">
                                     <button type="submit" disabled={!form.name && !searchQuery}
-                                        className="flex-1 bg-[var(--color-accent)] text-white text-xs py-1.5 rounded-lg hover:opacity-90 disabled:opacity-40">
+                                        className="flex-1 bg-[var(--color-accent)] text-[var(--color-text-primary)] text-xs py-1.5 rounded-lg hover:opacity-90 disabled:opacity-40">
                                         Přidat do itineráře
                                     </button>
                                     <button type="button" onClick={()=>setShowForm(false)}
-                                        className="px-3 text-xs border border-[var(--color-border)] text-[var(--color-text-secondary)] rounded-lg hover:text-white">Zrušit</button>
+                                        className="px-3 text-xs border border-[var(--color-border)] text-[var(--color-text-secondary)] rounded-lg hover:text-[var(--color-text-primary)]">Zrušit</button>
                                 </div>
                             </form>
                         </div>
@@ -348,7 +348,7 @@ export default function ItineraryIndex() {
                     <div className="flex gap-1 px-3 py-2 border-b border-[var(--color-border)] shrink-0 overflow-x-auto">
                         {([['all','Vše'],['dream','✨ Sny'],['soon','🎯 Brzy'],['someday','🌍 Jednou'],['planned','📅 Plán'],['visited','✅ Splněno']] as const).map(([key,label]) => (
                             <button key={key} onClick={()=>setFilter(key as any)}
-                                className={`px-2 py-1 rounded-lg text-[10px] whitespace-nowrap transition-colors ${filter===key?'bg-[var(--color-accent)] text-white':'text-[var(--color-text-secondary)] hover:text-white'}`}>
+                                className={`px-2 py-1 rounded-lg text-[10px] whitespace-nowrap transition-colors ${filter===key?'bg-[var(--color-accent)] text-[var(--color-text-primary)]':'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}>
                                 {label}
                             </button>
                         ))}
@@ -368,7 +368,7 @@ export default function ItineraryIndex() {
                                     <div className="flex items-start gap-2">
                                         <span className="text-base mt-0.5 shrink-0">{place.visited ? '✅' : (CAT_EMOJI[place.category]??'📍')}</span>
                                         <div className="flex-1 min-w-0">
-                                            <p className="text-xs font-medium text-white truncate">{place.name}</p>
+                                            <p className="text-xs font-medium text-[var(--color-text-primary)] truncate">{place.name}</p>
                                             {place.country && <p className="text-[10px] text-[var(--color-text-secondary)]">{place.country}</p>}
                                             <p className="text-[10px]" style={{ color: place.visited ? '#22c55e' : PRIORITY_COLORS[place.priority] }}>
                                                 {place.visited ? `✅ ${place.visited_at ?? 'Navštíveno'}` : PRIORITY_LABELS[place.priority]}
@@ -393,7 +393,7 @@ export default function ItineraryIndex() {
                                             <div className="flex gap-1">
                                                 {(['dream','soon','someday'] as const).map(p => (
                                                     <button key={p} onClick={() => updatePlace(place.id, { priority: p })}
-                                                        className={`flex-1 text-[9px] py-1 rounded-lg border transition-colors ${place.priority===p ? 'border-transparent text-white' : 'border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-white'}`}
+                                                        className={`flex-1 text-[9px] py-1 rounded-lg border transition-colors ${place.priority===p ? 'border-transparent text-[var(--color-text-primary)]' : 'border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}
                                                         style={place.priority===p ? { background: PRIORITY_COLORS[p] } : {}}>
                                                         {PRIORITY_LABELS[p]}
                                                     </button>
@@ -406,7 +406,7 @@ export default function ItineraryIndex() {
                                                 {editField === `planned_${place.id}` ? (
                                                     <div className="flex gap-1 flex-1">
                                                         <input type="date" value={editVal} onChange={e=>setEditVal(e.target.value)}
-                                                            className="flex-1 bg-[var(--color-bg-secondary)] border border-[var(--color-accent)] rounded px-2 py-0.5 text-[10px] text-white outline-none"/>
+                                                            className="flex-1 bg-[var(--color-bg-secondary)] border border-[var(--color-accent)] rounded px-2 py-0.5 text-[10px] text-[var(--color-text-primary)] outline-none"/>
                                                         <button onClick={() => updatePlace(place.id, { planned_date: editVal || undefined } as any)}
                                                             className="text-[10px] text-green-400 hover:text-green-300 px-1" disabled={saving}>
                                                             <Save size={10}/>
@@ -415,7 +415,7 @@ export default function ItineraryIndex() {
                                                     </div>
                                                 ) : (
                                                     <button onClick={() => { setEditField(`planned_${place.id}`); setEditVal(place.planned_date ?? ''); }}
-                                                        className="flex items-center gap-1 text-[10px] text-[var(--color-text-secondary)] hover:text-white">
+                                                        className="flex items-center gap-1 text-[10px] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]">
                                                         {place.planned_date
                                                             ? <><Calendar size={9}/> {new Date(place.planned_date).toLocaleDateString('cs-CZ')}</>
                                                             : <><Plus size={9}/> Přidat datum plánu</>
@@ -429,10 +429,10 @@ export default function ItineraryIndex() {
                                             {editField === `notes_${place.id}` ? (
                                                 <div className="space-y-1">
                                                     <textarea value={editVal} onChange={e=>setEditVal(e.target.value)} rows={3} autoFocus
-                                                        className="w-full bg-[var(--color-bg-secondary)] border border-[var(--color-accent)] rounded-lg px-2 py-1 text-[10px] text-white outline-none resize-none"/>
+                                                        className="w-full bg-[var(--color-bg-secondary)] border border-[var(--color-accent)] rounded-lg px-2 py-1 text-[10px] text-[var(--color-text-primary)] outline-none resize-none"/>
                                                     <div className="flex gap-1">
                                                         <button onClick={() => updatePlace(place.id, { notes: editVal })} disabled={saving}
-                                                            className="flex items-center gap-1 text-[10px] bg-[var(--color-accent)] text-white px-2 py-0.5 rounded hover:opacity-90 disabled:opacity-40">
+                                                            className="flex items-center gap-1 text-[10px] bg-[var(--color-accent)] text-[var(--color-text-primary)] px-2 py-0.5 rounded hover:opacity-90 disabled:opacity-40">
                                                             <Save size={9}/> Uložit
                                                         </button>
                                                         <button onClick={() => setEditField(null)} className="text-[10px] text-[var(--color-text-secondary)] px-1">Zrušit</button>
@@ -440,7 +440,7 @@ export default function ItineraryIndex() {
                                                 </div>
                                             ) : (
                                                 <button onClick={() => { setEditField(`notes_${place.id}`); setEditVal(place.notes ?? ''); }}
-                                                    className="w-full text-left text-[10px] text-[var(--color-text-secondary)] hover:text-white flex items-start gap-1">
+                                                    className="w-full text-left text-[10px] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] flex items-start gap-1">
                                                     <Pencil size={9} className="mt-0.5 shrink-0"/>
                                                     {place.notes ? <span className="italic">💬 {place.notes}</span> : <span className="opacity-60">Přidat poznámku…</span>}
                                                 </button>
@@ -464,7 +464,7 @@ export default function ItineraryIndex() {
                                                 )}
                                                 {place.latitude && place.longitude && (
                                                     <a href={`https://www.google.com/maps/search/?api=1&query=${place.latitude},${place.longitude}`} target="_blank" rel="noopener noreferrer"
-                                                        className="flex items-center gap-1 text-[10px] text-[var(--color-text-secondary)] hover:text-white">
+                                                        className="flex items-center gap-1 text-[10px] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]">
                                                         <MapPin size={10}/> Google Maps
                                                     </a>
                                                 )}
@@ -525,7 +525,7 @@ export default function ItineraryIndex() {
                                                 {CAT_EMOJI[place.category] ?? '📍'}
                                             </div>
                                             <div className="flex-1 min-w-0 bg-[var(--color-bg-card)] rounded-lg p-2">
-                                                <p className="text-xs font-medium text-white truncate">{place.name}</p>
+                                                <p className="text-xs font-medium text-[var(--color-text-primary)] truncate">{place.name}</p>
                                                 {place.country && <p className="text-[9px] text-[var(--color-text-secondary)]">{place.country}</p>}
                                                 {place.planned_date && (
                                                     <p className="text-[9px] text-[var(--color-accent)] flex items-center gap-1 mt-0.5">

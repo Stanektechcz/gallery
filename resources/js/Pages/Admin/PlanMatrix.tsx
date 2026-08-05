@@ -65,7 +65,7 @@ export default function PlanMatrix() {
             <Head title="Nabídka tarifů" />
             <main className="mx-auto max-w-6xl p-4 sm:p-6">
                 <p className="text-xs uppercase tracking-widest text-[var(--color-accent)]">Správa systému</p>
-                <h1 className="mt-1 flex items-center gap-2 text-2xl font-bold text-white sm:text-3xl">
+                <h1 className="mt-1 flex items-center gap-2 text-2xl font-bold text-[var(--color-text-primary)] sm:text-3xl">
                     <SlidersHorizontal size={22} className="text-[var(--color-accent)]" /> Co obsahují tarify
                 </h1>
                 <p className="mt-2 max-w-3xl text-sm text-[var(--color-text-secondary)]">
@@ -86,7 +86,7 @@ export default function PlanMatrix() {
                                         <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[var(--color-text-secondary)]">Funkce</th>
                                         {plans.map(plan => (
                                             <th key={plan.code} className="px-3 py-3 text-center">
-                                                <span className="block font-semibold text-white">{plan.name}</span>
+                                                <span className="block font-semibold text-[var(--color-text-primary)]">{plan.name}</span>
                                                 <span className="block text-[10px] font-normal text-[var(--color-text-secondary)]">
                                                     {money(plan.price_monthly, plan.currency)} · {plan.member_limit ?? '∞'} členů
                                                 </span>
@@ -97,7 +97,7 @@ export default function PlanMatrix() {
                                 <tbody>
                                     {grouped.map(([category, rows]) => (
                                         <>
-                                            <tr key={`h-${category}`} className="bg-black/15">
+                                            <tr key={`h-${category}`} className="bg-[var(--color-surface-muted)]">
                                                 <td colSpan={plans.length + 1} className="px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-[var(--color-accent)]">
                                                     {category}
                                                 </td>
@@ -107,8 +107,8 @@ export default function PlanMatrix() {
                                                     <td className="px-4 py-2.5">
                                                         <span className="flex items-center gap-2">
                                                             <span>{feature.icon}</span>
-                                                            <span className="text-white">{feature.name}</span>
-                                                            {feature.is_core && <span className="rounded-full bg-white/5 px-2 py-0.5 text-[10px] text-[var(--color-text-secondary)]">vždy</span>}
+                                                            <span className="text-[var(--color-text-primary)]">{feature.name}</span>
+                                                            {feature.is_core && <span className="rounded-full bg-[var(--color-surface-muted)] px-2 py-0.5 text-[10px] text-[var(--color-text-secondary)]">vždy</span>}
                                                         </span>
                                                     </td>
                                                     {plans.map(plan => {
@@ -125,7 +125,7 @@ export default function PlanMatrix() {
                                                                     onClick={() => toggle('plan', plan.code, feature.code, plan.feature_codes)}
                                                                     className={`grid h-7 w-7 place-items-center rounded-lg border transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${on ? 'border-emerald-400/40 bg-emerald-500/20 text-emerald-200' : 'border-[var(--color-border)] text-transparent hover:border-[var(--color-accent)]/50'}`}
                                                                 >
-                                                                    {busy === key ? <LoaderCircle size={13} className="animate-spin text-white" /> : <Check size={14} />}
+                                                                    {busy === key ? <LoaderCircle size={13} className="animate-spin text-[var(--color-text-primary)]" /> : <Check size={14} />}
                                                                 </button>
                                                             </td>
                                                         );
@@ -139,14 +139,14 @@ export default function PlanMatrix() {
                         </div>
 
                         <section className="mt-8">
-                            <h2 className="font-semibold text-white">Doplňkové moduly</h2>
+                            <h2 className="font-semibold text-[var(--color-text-primary)]">Doplňkové moduly</h2>
                             <p className="mt-1 text-sm text-[var(--color-text-secondary)]">Modul odemyká funkce nad rámec tarifu, za samostatný poplatek.</p>
                             <div className="mt-3 space-y-3">
                                 {modules.map(module => (
                                     <article key={module.code} className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-4">
                                         <div className="flex flex-wrap items-center gap-2">
                                             <span className="text-lg">{module.icon}</span>
-                                            <h3 className="font-semibold text-white">{module.name}</h3>
+                                            <h3 className="font-semibold text-[var(--color-text-primary)]">{module.name}</h3>
                                             <span className="text-xs text-[var(--color-text-secondary)]">{money(module.price_monthly, module.currency)} / měsíc</span>
                                         </div>
                                         <div className="mt-3 flex flex-wrap gap-2">

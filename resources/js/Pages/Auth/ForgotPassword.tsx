@@ -18,9 +18,9 @@ export default function ForgotPassword() {
                 <div className="w-full max-w-sm">
                     <div className="flex flex-col items-center mb-8">
                         <div className="w-14 h-14 rounded-2xl bg-[var(--color-accent)] flex items-center justify-center mb-4 shadow-lg shadow-[var(--color-accent)]/30">
-                            <KeyRound size={28} className="text-white" />
+                            <KeyRound size={28} className="text-[var(--color-text-primary)]" />
                         </div>
-                        <h1 className="text-xl font-semibold text-white">Zapomenuté heslo</h1>
+                        <h1 className="text-xl font-semibold text-[var(--color-text-primary)]">Zapomenuté heslo</h1>
                         <p className="text-sm text-[var(--color-text-secondary)] mt-1 text-center">
                             Pošleme vám odkaz pro nastavení nového hesla.
                         </p>
@@ -41,7 +41,7 @@ export default function ForgotPassword() {
                                 onChange={e => setData('email', e.target.value)}
                                 required
                                 autoFocus
-                                className="w-full bg-white/5 border border-[var(--color-border)] rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-[var(--color-accent)] transition-colors"
+                                className="w-full bg-[var(--color-surface-muted)] border border-[var(--color-border)] rounded-lg px-3 py-2.5 text-[var(--color-text-primary)] text-sm focus:outline-none focus:border-[var(--color-accent)] transition-colors"
                                 placeholder="vas@email.cz"
                             />
                             {errors.email && <p className="text-red-400 text-xs mt-1">{errors.email}</p>}
@@ -50,7 +50,7 @@ export default function ForgotPassword() {
                         <button
                             type="submit"
                             disabled={processing}
-                            className="w-full bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] disabled:opacity-60 text-white font-medium py-2.5 rounded-lg text-sm transition-colors"
+                            className="w-full bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] disabled:opacity-60 text-[var(--color-text-primary)] font-medium py-2.5 rounded-lg text-sm transition-colors"
                         >
                             {processing ? 'Odesílám...' : 'Odeslat odkaz'}
                         </button>

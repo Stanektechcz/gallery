@@ -31,7 +31,7 @@ export default function AdminAudit({ logs }: Props) {
             <Head title="Audit log" />
             <main className="mx-auto max-w-6xl p-4 sm:p-6">
                 <p className="text-xs uppercase tracking-widest text-[var(--color-accent)]">Správa systému</p>
-                <h1 className="mt-1 text-2xl font-bold text-white sm:text-3xl">Audit log</h1>
+                <h1 className="mt-1 text-2xl font-bold text-[var(--color-text-primary)] sm:text-3xl">Audit log</h1>
                 <p className="mt-2 max-w-3xl text-sm text-[var(--color-text-secondary)]">
                     Záznam bezpečnostně významných akcí. Celkem {logs.total} záznamů.
                 </p>
@@ -51,7 +51,7 @@ export default function AdminAudit({ logs }: Props) {
                             {logs.data.map(entry => (
                                 <tr key={entry.id} className="border-b border-[var(--color-border)] last:border-0">
                                     <td className="px-4 py-3">
-                                        <span className="inline-flex items-center gap-1.5 font-mono text-xs text-white">
+                                        <span className="inline-flex items-center gap-1.5 font-mono text-xs text-[var(--color-text-primary)]">
                                             <ScrollText size={12} className="text-[var(--color-accent)]" />{entry.action}
                                         </span>
                                     </td>
@@ -79,11 +79,11 @@ export default function AdminAudit({ logs }: Props) {
                 {logs.last_page > 1 && (
                     <div className="mt-4 flex items-center justify-between">
                         {logs.prev_page_url
-                            ? <Link href={logs.prev_page_url} className="rounded-lg border border-[var(--color-border)] px-4 py-2 text-xs text-white hover:bg-white/5">← Novější</Link>
+                            ? <Link href={logs.prev_page_url} className="rounded-lg border border-[var(--color-border)] px-4 py-2 text-xs text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)]">← Novější</Link>
                             : <span />}
                         <span className="text-xs text-[var(--color-text-secondary)]">Strana {logs.current_page} z {logs.last_page}</span>
                         {logs.next_page_url
-                            ? <Link href={logs.next_page_url} className="rounded-lg border border-[var(--color-border)] px-4 py-2 text-xs text-white hover:bg-white/5">Starší →</Link>
+                            ? <Link href={logs.next_page_url} className="rounded-lg border border-[var(--color-border)] px-4 py-2 text-xs text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)]">Starší →</Link>
                             : <span />}
                     </div>
                 )}

@@ -82,7 +82,7 @@ export default function LocationPicker({ value, onChange, label = 'Lokalita', co
         onChange({ location_name: '', latitude: '', longitude: '', location_country: '', location_country_code: '' });
     };
 
-    const inputCls = `w-full rounded-lg bg-[var(--color-bg-card)] border border-[var(--color-border)] text-white placeholder-[var(--color-text-secondary)] px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-accent)] transition-colors pl-7 pr-7`;
+    const inputCls = `w-full rounded-lg bg-[var(--color-bg-card)] border border-[var(--color-border)] text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-accent)] transition-colors pl-7 pr-7`;
 
     return (
         <div className={`relative ${className}`}>
@@ -106,7 +106,7 @@ export default function LocationPicker({ value, onChange, label = 'Lokalita', co
                 {loading && <RefreshCw size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--color-text-secondary)] animate-spin"/>}
                 {!loading && query && (
                     <button type="button" onMouseDown={e => e.preventDefault()} onClick={clear}
-                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--color-text-secondary)] hover:text-white">
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]">
                         <X size={12}/>
                     </button>
                 )}
@@ -120,7 +120,7 @@ export default function LocationPicker({ value, onChange, label = 'Lokalita', co
                                 className="w-full text-left px-3 py-2.5 hover:bg-[var(--color-bg-secondary)] border-b border-[var(--color-border)] last:border-0 flex items-start gap-2 transition-colors">
                                 <span className="text-base shrink-0 mt-0.5">{CAT_EMOJI[r.category] ?? '📍'}</span>
                                 <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-medium text-white truncate">{r.name || r.display_name}</p>
+                                    <p className="text-sm font-medium text-[var(--color-text-primary)] truncate">{r.name || r.display_name}</p>
                                     <p className="text-[10px] text-[var(--color-text-secondary)] truncate">{localizedCountry(r.country, r.country_code)}</p>
                                 </div>
                             </button>
@@ -150,14 +150,14 @@ export default function LocationPicker({ value, onChange, label = 'Lokalita', co
                         value={value.latitude ?? ''}
                         onChange={e => onChange({ ...value, latitude: e.target.value ? parseFloat(e.target.value) : '' })}
                         placeholder="Zeměpisná šířka"
-                        className="rounded-lg bg-[var(--color-bg-card)] border border-[var(--color-border)] text-white placeholder-[var(--color-text-secondary)] px-3 py-1.5 text-xs focus:outline-none focus:border-[var(--color-accent)] transition-colors"
+                        className="rounded-lg bg-[var(--color-bg-card)] border border-[var(--color-border)] text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] px-3 py-1.5 text-xs focus:outline-none focus:border-[var(--color-accent)] transition-colors"
                     />
                     <input
                         type="number" step="any"
                         value={value.longitude ?? ''}
                         onChange={e => onChange({ ...value, longitude: e.target.value ? parseFloat(e.target.value) : '' })}
                         placeholder="Zeměpisná délka"
-                        className="rounded-lg bg-[var(--color-bg-card)] border border-[var(--color-border)] text-white placeholder-[var(--color-text-secondary)] px-3 py-1.5 text-xs focus:outline-none focus:border-[var(--color-accent)] transition-colors"
+                        className="rounded-lg bg-[var(--color-bg-card)] border border-[var(--color-border)] text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] px-3 py-1.5 text-xs focus:outline-none focus:border-[var(--color-accent)] transition-colors"
                     />
                 </div>
             )}

@@ -151,7 +151,7 @@ function ComparePanel({
                 onTouchEnd={onTouchEnd}
             >
                 {/* Label badge */}
-                <div className="absolute top-2 left-2 z-10 w-6 h-6 rounded-full bg-[var(--color-accent)] text-white text-xs font-bold flex items-center justify-center shadow">
+                <div className="absolute top-2 left-2 z-10 w-6 h-6 rounded-full bg-[var(--color-accent)] text-[var(--color-text-primary)] text-xs font-bold flex items-center justify-center shadow">
                     {label}
                 </div>
 
@@ -164,10 +164,10 @@ function ComparePanel({
                 {/* Zoom controls */}
                 {effectiveZoom.scale > 1 && (
                     <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-10 flex items-center gap-1 bg-black/70 backdrop-blur rounded-full px-2 py-0.5">
-                        <button onClick={() => zoomBy(-0.5)} className="p-1 text-white/70 hover:text-white"><ZoomOut size={11}/></button>
-                        <span className="text-white/60 text-[10px] w-8 text-center">{Math.round(effectiveZoom.scale * 100)}%</span>
-                        <button onClick={() => zoomBy(0.5)} className="p-1 text-white/70 hover:text-white"><ZoomIn size={11}/></button>
-                        <button onClick={reset} className="p-1 text-white/70 hover:text-white"><RotateCcw size={10}/></button>
+                        <button onClick={() => zoomBy(-0.5)} className="p-1 text-[var(--color-text-primary)]/70 hover:text-[var(--color-text-primary)]"><ZoomOut size={11}/></button>
+                        <span className="text-[var(--color-text-primary)]/60 text-[10px] w-8 text-center">{Math.round(effectiveZoom.scale * 100)}%</span>
+                        <button onClick={() => zoomBy(0.5)} className="p-1 text-[var(--color-text-primary)]/70 hover:text-[var(--color-text-primary)]"><ZoomIn size={11}/></button>
+                        <button onClick={reset} className="p-1 text-[var(--color-text-primary)]/70 hover:text-[var(--color-text-primary)]"><RotateCcw size={10}/></button>
                     </div>
                 )}
 
@@ -193,7 +193,7 @@ function ComparePanel({
                 <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0">
                         <Link href={`/media/${item.uuid}`}
-                            className="text-xs font-medium text-white truncate block hover:text-[var(--color-accent)] transition-colors">
+                            className="text-xs font-medium text-[var(--color-text-primary)] truncate block hover:text-[var(--color-accent)] transition-colors">
                             {item.display_title ?? item.filename}
                         </Link>
                         <div className="flex items-center gap-2 mt-0.5 flex-wrap">
@@ -278,13 +278,13 @@ export default function CompareIndex() {
 
                 {/* Top bar */}
                 <div className="shrink-0 h-11 px-3 border-b border-[var(--color-border)] bg-[var(--color-bg-secondary)] flex items-center gap-3">
-                    <Link href="/timeline" className="p-1.5 text-[var(--color-text-secondary)] hover:text-white rounded hover:bg-white/10">
+                    <Link href="/timeline" className="p-1.5 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] rounded hover:bg-[var(--color-surface-hover)]">
                         <ArrowLeft size={16}/>
                     </Link>
 
                     <div className="flex items-center gap-2">
                         <Layers size={15} className="text-[var(--color-accent)]"/>
-                        <h1 className="text-sm font-semibold text-white">Porovnání</h1>
+                        <h1 className="text-sm font-semibold text-[var(--color-text-primary)]">Porovnání</h1>
                         {items.length > 0 && (
                             <span className="text-xs text-[var(--color-text-secondary)]">{items.length} fotografie</span>
                         )}
@@ -294,7 +294,7 @@ export default function CompareIndex() {
 
                     {/* Sync zoom toggle */}
                     <button onClick={() => setSyncEnabled(v => !v)}
-                        className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border transition-colors ${syncEnabled ? 'bg-[var(--color-accent)]/20 border-[var(--color-accent)] text-[var(--color-accent)]' : 'border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-white'}`}>
+                        className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border transition-colors ${syncEnabled ? 'bg-[var(--color-accent)]/20 border-[var(--color-accent)] text-[var(--color-accent)]' : 'border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}>
                         {syncEnabled ? <Link2 size={13}/> : <Link2Off size={13}/>}
                         Synchronní zoom
                     </button>
@@ -302,7 +302,7 @@ export default function CompareIndex() {
                     {/* Reset zoom */}
                     {(sharedZoom.scale > 1 || localZooms.some(z => z.scale > 1)) && (
                         <button onClick={resetAll}
-                            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-white transition-colors">
+                            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors">
                             <RotateCcw size={12}/> Reset
                         </button>
                     )}
@@ -331,7 +331,7 @@ export default function CompareIndex() {
                                 Nebo přidejte UUID do URL: <code className="text-[var(--color-accent)]">?uuids=uuid1,uuid2</code>
                             </p>
                             <Link href="/timeline"
-                                className="mt-4 inline-flex items-center gap-2 bg-[var(--color-accent)] text-white text-sm px-4 py-2 rounded-lg hover:opacity-90">
+                                className="mt-4 inline-flex items-center gap-2 bg-[var(--color-accent)] text-[var(--color-text-primary)] text-sm px-4 py-2 rounded-lg hover:opacity-90">
                                 <Plus size={14}/> Vybrat fotografie
                             </Link>
                         </div>

@@ -560,11 +560,11 @@ export default function TripsIndex() {
                     {/* Header */}
                     <div className="p-4 border-b border-[var(--color-border)] shrink-0">
                         <div className="flex items-center justify-between mb-2">
-                            <h1 className="text-sm font-semibold text-white flex items-center gap-2">
+                            <h1 className="text-sm font-semibold text-[var(--color-text-primary)] flex items-center gap-2">
                                 <Route size={16} className="text-[var(--color-accent)]"/> Cesty
                             </h1>
                             <button onClick={() => setShowCreate(v => !v)}
-                                className="flex items-center gap-1 bg-[var(--color-accent)] text-white text-xs px-2.5 py-1.5 rounded-lg hover:opacity-90">
+                                className="flex items-center gap-1 bg-[var(--color-accent)] text-[var(--color-text-primary)] text-xs px-2.5 py-1.5 rounded-lg hover:opacity-90">
                                 <Plus size={12}/> Nová
                             </button>
                         </div>
@@ -578,29 +578,29 @@ export default function TripsIndex() {
                         <form onSubmit={createTrip} className="p-3 border-b border-[var(--color-border)] space-y-2 bg-[var(--color-bg-secondary)] shrink-0">
                             <input required value={createForm.name} onChange={e => setCreateForm(p => ({ ...p, name: e.target.value }))}
                                 placeholder="Název cesty *" autoFocus
-                                className="w-full bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-[var(--color-text-secondary)] outline-none focus:border-[var(--color-accent)]"/>
+                                className="w-full bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-lg px-2.5 py-1.5 text-xs text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] outline-none focus:border-[var(--color-accent)]"/>
                             <div className="grid grid-cols-2 gap-2">
                                 <div>
                                     <label className="text-[9px] text-[var(--color-text-secondary)] block mb-0.5">Od</label>
                                     <input required type="date" value={createForm.start_date} onChange={e => setCreateForm(p => ({ ...p, start_date: e.target.value }))}
-                                        className="w-full bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-lg px-2 py-1.5 text-xs text-white outline-none focus:border-[var(--color-accent)]"/>
+                                        className="w-full bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-lg px-2 py-1.5 text-xs text-[var(--color-text-primary)] outline-none focus:border-[var(--color-accent)]"/>
                                 </div>
                                 <div>
                                     <label className="text-[9px] text-[var(--color-text-secondary)] block mb-0.5">Do</label>
                                     <input required type="date" value={createForm.end_date} onChange={e => setCreateForm(p => ({ ...p, end_date: e.target.value }))}
-                                        className="w-full bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-lg px-2 py-1.5 text-xs text-white outline-none focus:border-[var(--color-accent)]"/>
+                                        className="w-full bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-lg px-2 py-1.5 text-xs text-[var(--color-text-primary)] outline-none focus:border-[var(--color-accent)]"/>
                                 </div>
                             </div>
                             <textarea value={createForm.description} onChange={e => setCreateForm(p => ({ ...p, description: e.target.value }))}
                                 placeholder="Popis (volitelně)…" rows={2}
-                                className="w-full bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-[var(--color-text-secondary)] outline-none focus:border-[var(--color-accent)] resize-none"/>
+                                className="w-full bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-lg px-2.5 py-1.5 text-xs text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] outline-none focus:border-[var(--color-accent)] resize-none"/>
                             <div className="flex gap-2">
                                 <button type="submit" disabled={creating}
-                                    className="flex-1 bg-[var(--color-accent)] text-white text-xs py-1.5 rounded-lg hover:opacity-90 disabled:opacity-40">
+                                    className="flex-1 bg-[var(--color-accent)] text-[var(--color-text-primary)] text-xs py-1.5 rounded-lg hover:opacity-90 disabled:opacity-40">
                                     {creating ? 'Vytvářím…' : 'Vytvořit cestu'}
                                 </button>
                                 <button type="button" onClick={() => setShowCreate(false)}
-                                    className="px-3 text-xs border border-[var(--color-border)] text-[var(--color-text-secondary)] rounded-lg hover:text-white">Zrušit</button>
+                                    className="px-3 text-xs border border-[var(--color-border)] text-[var(--color-text-secondary)] rounded-lg hover:text-[var(--color-text-primary)]">Zrušit</button>
                             </div>
                         </form>
                     )}
@@ -632,7 +632,7 @@ export default function TripsIndex() {
 
                                     <div className="flex-1 min-w-0">
                                         <div className="flex items-start justify-between gap-1">
-                                            <p className="text-xs font-semibold text-white truncate">{trip.name}</p>
+                                            <p className="text-xs font-semibold text-[var(--color-text-primary)] truncate">{trip.name}</p>
                                             <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
                                                 <span className="text-[10px] text-[var(--color-text-secondary)]">{trip.duration_days}d</span>
                                                 <button onClick={() => deleteTrip(trip.id)}
@@ -669,7 +669,7 @@ export default function TripsIndex() {
                         <div className="px-3 sm:px-5 py-3 border-b border-[var(--color-border)] shrink-0">
                             <div className="flex items-start justify-between gap-3">
                                 <div className="flex-1 min-w-0">
-                                    <h2 className="text-base font-bold text-white truncate">{selected.name}</h2>
+                                    <h2 className="text-base font-bold text-[var(--color-text-primary)] truncate">{selected.name}</h2>
                                     <p className="text-xs text-[var(--color-text-secondary)] mt-0.5 flex items-center gap-3 flex-wrap">
                                         <span className="flex items-center gap-1"><Calendar size={11}/>{fmtRange(selected.start_date, selected.end_date)}</span>
                                         <span>{selected.duration_days} {selected.duration_days === 1 ? 'den' : selected.duration_days < 5 ? 'dny' : 'dní'}</span>
@@ -688,10 +688,10 @@ export default function TripsIndex() {
                                     )}
                                 </div>
                                 <div className="flex shrink-0 items-center gap-2">
-                                    <Link href={`/trips/${selected.id}/plan`} className="flex min-h-10 items-center gap-2 rounded-xl bg-[var(--color-accent)] px-3 text-xs font-medium text-white">
+                                    <Link href={`/trips/${selected.id}/plan`} className="flex min-h-10 items-center gap-2 rounded-xl bg-[var(--color-accent)] px-3 text-xs font-medium text-[var(--color-text-primary)]">
                                         <Calendar size={14}/> Plán dne
                                     </Link>
-                                    <button onClick={() => setSelectedId(null)} className="flex min-h-10 min-w-10 items-center justify-center rounded-xl text-[var(--color-text-secondary)] hover:bg-white/5 hover:text-white">
+                                    <button onClick={() => setSelectedId(null)} className="flex min-h-10 min-w-10 items-center justify-center rounded-xl text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]">
                                         <X size={16}/>
                                     </button>
                                 </div>
@@ -705,7 +705,7 @@ export default function TripsIndex() {
                                     <div className="flex items-center gap-3">
                                         <Camera size={18} className="text-[var(--color-accent)] shrink-0"/>
                                         <div>
-                                            <p className="text-xs font-medium text-white">
+                                            <p className="text-xs font-medium text-[var(--color-text-primary)]">
                                                 Nalezli jsme {suggestion.count} fotografií pořízených {fmtRange(selected.start_date, selected.end_date)}.
                                                 Přidat je do cesty?
                                             </p>
@@ -720,12 +720,12 @@ export default function TripsIndex() {
                                     </div>
                                     <div className="flex gap-2 shrink-0">
                                         <button onClick={addAllMedia} disabled={addingMedia}
-                                            className="text-xs bg-[var(--color-accent)] text-white px-3 py-1.5 rounded-lg hover:opacity-90 disabled:opacity-40 flex items-center gap-1.5">
+                                            className="text-xs bg-[var(--color-accent)] text-[var(--color-text-primary)] px-3 py-1.5 rounded-lg hover:opacity-90 disabled:opacity-40 flex items-center gap-1.5">
                                             {addingMedia && <RefreshCw size={11} className="animate-spin"/>}
                                             Přidat vše
                                         </button>
                                         <button onClick={() => setSuggestion(null)}
-                                            className="text-xs border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-white px-3 py-1.5 rounded-lg">
+                                            className="text-xs border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] px-3 py-1.5 rounded-lg">
                                             Přeskočit
                                         </button>
                                     </div>
@@ -762,7 +762,7 @@ export default function TripsIndex() {
                                             <p className="text-[9px] text-[var(--color-text-secondary)]/60">{selected.waypoints.length} zastávek</p>
                                         </div>
                                         <button onClick={() => setShowWpForm(v => !v)} title="Přidat místo"
-                                            className="min-w-9 min-h-9 flex items-center justify-center rounded-lg bg-[var(--color-accent)] text-white hover:opacity-90 transition-opacity">
+                                            className="min-w-9 min-h-9 flex items-center justify-center rounded-lg bg-[var(--color-accent)] text-[var(--color-text-primary)] hover:opacity-90 transition-opacity">
                                             <Plus size={16}/>
                                         </button>
                                     </div>
@@ -771,7 +771,7 @@ export default function TripsIndex() {
                                         <div className="flex items-center justify-between gap-2 mb-1.5">
                                             <p className="text-[9px] font-medium text-[var(--color-text-secondary)]">Filtrovat nabídky dopravy</p>
                                             <button type="button" onClick={() => setTransportFilters(ALL_TRANSPORT_MODES)}
-                                                className="text-[9px] text-[var(--color-accent)] hover:text-white">
+                                                className="text-[9px] text-[var(--color-accent)] hover:text-[var(--color-text-primary)]">
                                                 Vybrat vše
                                             </button>
                                         </div>
@@ -781,7 +781,7 @@ export default function TripsIndex() {
                                                 return (
                                                     <button key={mode} type="button" onClick={() => toggleTransportFilter(mode)}
                                                         aria-pressed={active} title={TRANSPORT[mode].label}
-                                                        className={`min-w-9 min-h-8 px-2 rounded-lg border text-sm shrink-0 transition-colors ${active ? 'bg-[var(--color-accent)]/20 border-[var(--color-accent)] text-white' : 'border-[var(--color-border)] text-[var(--color-text-secondary)] opacity-50'}`}>
+                                                        className={`min-w-9 min-h-8 px-2 rounded-lg border text-sm shrink-0 transition-colors ${active ? 'bg-[var(--color-accent)]/20 border-[var(--color-accent)] text-[var(--color-text-primary)]' : 'border-[var(--color-border)] text-[var(--color-text-secondary)] opacity-50'}`}>
                                                         {TRANSPORT[mode].icon}
                                                     </button>
                                                 );
@@ -800,7 +800,7 @@ export default function TripsIndex() {
                                                     onFocus={() => wpResults.length > 0 && setWpDropdown(true)}
                                                     onBlur={() => setTimeout(() => setWpDropdown(false), 150)}
                                                     placeholder="Hledat místo…" autoFocus
-                                                    className="w-full min-h-10 bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-lg pl-7 pr-7 py-2 text-xs text-white placeholder-[var(--color-text-secondary)] outline-none focus:border-[var(--color-accent)]"
+                                                    className="w-full min-h-10 bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-lg pl-7 pr-7 py-2 text-xs text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] outline-none focus:border-[var(--color-accent)]"
                                                 />
                                                 {wpLoading && <RefreshCw size={10} className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--color-text-secondary)] animate-spin"/>}
                                                 {wpDropdown && wpResults.length > 0 && (
@@ -808,7 +808,7 @@ export default function TripsIndex() {
                                                         {wpResults.map((r, i) => (
                                                             <button key={i} type="button" onMouseDown={e => { e.preventDefault(); selectWpResult(r); }}
                                                                 className="w-full min-h-11 text-left px-3 py-2 hover:bg-[var(--color-bg-secondary)] border-b border-[var(--color-border)] last:border-0">
-                                                                <p className="text-xs font-medium text-white truncate">{r.name || r.display_name}</p>
+                                                                <p className="text-xs font-medium text-[var(--color-text-primary)] truncate">{r.name || r.display_name}</p>
                                                                 <p className="text-[10px] text-[var(--color-text-secondary)] truncate">{localizedCountry(r.country, r.country_code)}</p>
                                                             </button>
                                                         ))}
@@ -820,10 +820,10 @@ export default function TripsIndex() {
                                                     <p className="text-[9px] text-[var(--color-text-secondary)]">Připravená místa ({pendingWaypoints.length})</p>
                                                     <div className="flex flex-wrap gap-1.5">
                                                         {pendingWaypoints.map((place, index) => (
-                                                            <span key={`${place.place_name}-${index}`} className="inline-flex items-center gap-1 rounded-full bg-[var(--color-accent)]/15 border border-[var(--color-accent)]/30 pl-2.5 pr-1 py-1 text-[10px] text-white max-w-full">
+                                                            <span key={`${place.place_name}-${index}`} className="inline-flex items-center gap-1 rounded-full bg-[var(--color-accent)]/15 border border-[var(--color-accent)]/30 pl-2.5 pr-1 py-1 text-[10px] text-[var(--color-text-primary)] max-w-full">
                                                                 <span className="truncate">{index + 1}. {place.place_name}</span>
                                                                 <button type="button" aria-label={`Odebrat ${place.place_name}`} onClick={() => setPendingWaypoints(prev => prev.filter((_, i) => i !== index))}
-                                                                    className="w-6 h-6 rounded-full flex items-center justify-center hover:bg-white/10 shrink-0"><X size={11}/></button>
+                                                                    className="w-6 h-6 rounded-full flex items-center justify-center hover:bg-[var(--color-surface-hover)] shrink-0"><X size={11}/></button>
                                                             </span>
                                                         ))}
                                                     </div>
@@ -831,15 +831,15 @@ export default function TripsIndex() {
                                             )}
                                             <div className="flex flex-wrap gap-2">
                                                 <button type="submit" disabled={!wpForm.place_name}
-                                                    className="min-h-10 px-3 border border-[var(--color-border)] text-white text-[10px] rounded-lg hover:border-[var(--color-accent)] disabled:opacity-40">
+                                                    className="min-h-10 px-3 border border-[var(--color-border)] text-[var(--color-text-primary)] text-[10px] rounded-lg hover:border-[var(--color-accent)] disabled:opacity-40">
                                                     + Zařadit napsané
                                                 </button>
                                                 <button type="button" onClick={saveWaypoints} disabled={pendingWaypoints.length === 0 || savingWaypoints}
-                                                    className="flex-1 min-h-10 bg-[var(--color-accent)] text-white text-[10px] px-3 rounded-lg hover:opacity-90 disabled:opacity-40">
+                                                    className="flex-1 min-h-10 bg-[var(--color-accent)] text-[var(--color-text-primary)] text-[10px] px-3 rounded-lg hover:opacity-90 disabled:opacity-40">
                                                     {savingWaypoints ? 'Ukládám…' : `Uložit ${pendingWaypoints.length || ''} ${pendingWaypoints.length === 1 ? 'místo' : 'místa'}`}
                                                 </button>
                                                 <button type="button" onClick={() => { setShowWpForm(false); setWpSearch(''); setWpForm({ place_name:'', latitude:'', longitude:'' }); setPendingWaypoints([]); }}
-                                                    className="min-w-10 min-h-10 text-[var(--color-text-secondary)] border border-[var(--color-border)] rounded-lg hover:text-white">✕</button>
+                                                    className="min-w-10 min-h-10 text-[var(--color-text-secondary)] border border-[var(--color-border)] rounded-lg hover:text-[var(--color-text-primary)]">✕</button>
                                             </div>
                                         </form>
                                     )}
@@ -849,7 +849,7 @@ export default function TripsIndex() {
                                         <div className="mx-2 mt-1 bg-red-500/10 border border-red-500/30 rounded-lg p-2 text-[10px] text-red-400 flex items-start gap-1.5 shrink-0">
                                             <span className="shrink-0">⚠️</span>
                                             <span>{wpError}</span>
-                                            <button onClick={() => setWpError(null)} className="ml-auto shrink-0 hover:text-white"><X size={10}/></button>
+                                            <button onClick={() => setWpError(null)} className="ml-auto shrink-0 hover:text-[var(--color-text-primary)]"><X size={10}/></button>
                                         </div>
                                     )}
 
@@ -873,11 +873,11 @@ export default function TripsIndex() {
                                                             className={`flex items-center gap-1.5 px-2 py-2 group/wp transition-colors ${dragOver === idx ? 'bg-[var(--color-accent)]/10 border-t-2 border-[var(--color-accent)]' : 'hover:bg-[var(--color-bg-secondary)]'}`}
                                                         >
                                                             <GripVertical size={12} className="text-[var(--color-text-secondary)] opacity-40 group-hover/wp:opacity-80 cursor-grab shrink-0"/>
-                                                            <div className="w-5 h-5 shrink-0 rounded-full bg-[var(--color-accent)] text-white text-[9px] font-bold flex items-center justify-center">
+                                                            <div className="w-5 h-5 shrink-0 rounded-full bg-[var(--color-accent)] text-[var(--color-text-primary)] text-[9px] font-bold flex items-center justify-center">
                                                                 {idx + 1}
                                                             </div>
                                                             <div className="flex-1 min-w-0">
-                                                                <p className="text-[10px] font-medium text-white truncate">{wp.place_name}</p>
+                                                                <p className="text-[10px] font-medium text-[var(--color-text-primary)] truncate">{wp.place_name}</p>
                                                                 {wp.latitude && (
                                                                     <p className="text-[9px] text-[var(--color-text-secondary)]">
                                                                         {Number(wp.latitude).toFixed(2)}°, {Number(wp.longitude).toFixed(2)}°
@@ -886,9 +886,9 @@ export default function TripsIndex() {
                                                             </div>
                                                             <div className="flex shrink-0 gap-0.5">
                                                                 <button type="button" disabled={idx === 0} onClick={() => moveWaypoint(idx, -1)} aria-label={`Posunout ${wp.place_name} nahoru`}
-                                                                    className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--color-text-secondary)] hover:bg-white/5 hover:text-white disabled:opacity-20"><ArrowUp size={13}/></button>
+                                                                    className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)] disabled:opacity-20"><ArrowUp size={13}/></button>
                                                                 <button type="button" disabled={idx === selected.waypoints.length - 1} onClick={() => moveWaypoint(idx, 1)} aria-label={`Posunout ${wp.place_name} dolů`}
-                                                                    className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--color-text-secondary)] hover:bg-white/5 hover:text-white disabled:opacity-20"><ArrowDown size={13}/></button>
+                                                                    className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)] disabled:opacity-20"><ArrowDown size={13}/></button>
                                                             </div>
                                                             <button onClick={() => removeWaypoint(wp.id)}
                                                                 className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--color-text-secondary)] hover:bg-red-500/10 hover:text-red-400 transition-all shrink-0 sm:opacity-0 sm:group-hover/wp:opacity-100">
@@ -945,7 +945,7 @@ export default function TripsIndex() {
                                                                                 </p>
                                                                                 <div className="flex gap-2 text-[9px]">
                                                                                     {leg?.km && <span className="text-[var(--color-text-secondary)]">✈ vzduch: {fmtDist(leg.km)}</span>}
-                                                                                    {leg?.osrm && <span className="text-white font-medium">🛣 silnice: {leg.osrm.distance_km}km · {fmtTime(leg.osrm.duration_min/60)}</span>}
+                                                                                    {leg?.osrm && <span className="text-[var(--color-text-primary)] font-medium">🛣 silnice: {leg.osrm.distance_km}km · {fmtTime(leg.osrm.duration_min/60)}</span>}
                                                                                     {leg?.fetching && <span className="text-[var(--color-text-secondary)] animate-pulse">počítám…</span>}
                                                                                 </div>
                                                                             </div>
@@ -963,7 +963,7 @@ export default function TripsIndex() {
                                                                                                     fetchLegRoute(wp, nextWp, om);
                                                                                                 }
                                                                                             }}
-                                                                                            className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] border transition-colors ${nextWp.transport_mode === m ? 'bg-[var(--color-accent)] border-transparent text-white' : 'border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-white'}`}>
+                                                                                            className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] border transition-colors ${nextWp.transport_mode === m ? 'bg-[var(--color-accent)] border-transparent text-[var(--color-text-primary)]' : 'border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}>
                                                                                             <span>{TRANSPORT[m].icon}</span> {TRANSPORT[m].label}
                                                                                         </button>
                                                                                     ))}
@@ -998,10 +998,10 @@ export default function TripsIndex() {
                                                                                             <div className="space-y-1">
                                                                                                 {prices.map((p, pi) => (
                                                                                                     <a key={pi} href={p.bookUrl!} target="_blank" rel="noopener noreferrer"
-                                                                                                        className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-[var(--color-bg-secondary)] hover:bg-white/5 transition-colors group/price">
+                                                                                                        className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-[var(--color-bg-secondary)] hover:bg-[var(--color-surface-hover)] transition-colors group/price">
                                                                                                         <span className="text-base shrink-0">{p.icon}</span>
                                                                                                         <div className="flex-1 min-w-0">
-                                                                                                            <p className="text-[10px] font-medium text-white truncate">{p.carrier}</p>
+                                                                                                            <p className="text-[10px] font-medium text-[var(--color-text-primary)] truncate">{p.carrier}</p>
                                                                                                             {p.note && <p className="text-[9px] text-[var(--color-text-secondary)]">{p.note}</p>}
                                                                                                         </div>
                                                                                                         <div className="text-right shrink-0">
@@ -1042,7 +1042,7 @@ export default function TripsIndex() {
                                                                                         .filter(link => transportFilters.includes(link.mode))
                                                                                         .map(link => (
                                                                                         <a key={link.label} href={link.url} target="_blank" rel="noopener noreferrer"
-                                                                                            className="flex min-h-8 items-center gap-1 px-2 rounded-lg text-[9px] bg-[var(--color-bg-secondary)] border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-white hover:border-white/20 transition-colors">
+                                                                                            className="flex min-h-8 items-center gap-1 px-2 rounded-lg text-[9px] bg-[var(--color-bg-secondary)] border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:border-[var(--color-border)] transition-colors">
                                                                                             <span>{link.icon}</span> {link.label}
                                                                                         </a>
                                                                                     ))}
@@ -1066,7 +1066,7 @@ export default function TripsIndex() {
                                             <div className="flex items-center justify-between text-[10px]">
                                                 <span className="text-[var(--color-text-secondary)] flex items-center gap-1"><MapPin size={9}/> {selected.waypoints.length} zastávek</span>
                                                 {totalKm !== null && (
-                                                    <span className="text-white font-medium">📏 {fmtDist(totalKm)}</span>
+                                                    <span className="text-[var(--color-text-primary)] font-medium">📏 {fmtDist(totalKm)}</span>
                                                 )}
                                             </div>
                                             {totalTime !== null && (
@@ -1083,7 +1083,7 @@ export default function TripsIndex() {
                                                             <span className="truncate">{selected.waypoints[i].place_name}</span>
                                                             <span className="text-[var(--color-border)]">→</span>
                                                             <span className="truncate">{selected.waypoints[i+1].place_name}</span>
-                                                            <span className="ml-auto shrink-0 font-medium text-white">{fmtDist(leg.km!)}</span>
+                                                            <span className="ml-auto shrink-0 font-medium text-[var(--color-text-primary)]">{fmtDist(leg.km!)}</span>
                                                         </div>
                                                     ))}
                                                 </div>
@@ -1103,7 +1103,7 @@ export default function TripsIndex() {
                                         onChange={e => handleNotesChange(e.target.value)}
                                         onBlur={e => { handleNotesBlur(e.target.value); setEditNotes(false); }}
                                         rows={2} placeholder="+ Přidat poznámky k cestě…"
-                                        className="w-full bg-transparent text-xs text-[var(--color-text-secondary)] placeholder-[var(--color-text-secondary)]/40 outline-none resize-none hover:text-white focus:text-white transition-colors"
+                                        className="w-full bg-transparent text-xs text-[var(--color-text-secondary)] placeholder-[var(--color-text-secondary)]/40 outline-none resize-none hover:text-[var(--color-text-primary)] focus:text-[var(--color-text-primary)] transition-colors"
                                     />
                                     {savingNotes && (
                                         <span className="absolute right-4 top-2 text-[9px] text-[var(--color-text-secondary)] animate-pulse">ukládám…</span>

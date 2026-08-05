@@ -20,7 +20,7 @@ function StatCard({ icon: Icon, label, value, sub, color = 'var(--color-accent)'
                 </div>
                 <span className="text-xs text-[var(--color-text-secondary)]">{label}</span>
             </div>
-            <p className="text-2xl font-bold text-white">{typeof value === 'number' ? value.toLocaleString('cs-CZ') : value}</p>
+            <p className="text-2xl font-bold text-[var(--color-text-primary)]">{typeof value === 'number' ? value.toLocaleString('cs-CZ') : value}</p>
             {sub && <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">{sub}</p>}
         </div>
     );
@@ -40,7 +40,7 @@ export default function StatsIndex({ stats }: { stats: any }) {
         <AppLayout>
             <Head title="Statistiky" />
             <div className="p-4 max-w-4xl mx-auto space-y-6 pb-8">
-                <h1 className="text-xl font-bold text-white">Statistiky galerie</h1>
+                <h1 className="text-xl font-bold text-[var(--color-text-primary)]">Statistiky galerie</h1>
 
                 {/* Top cards */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -57,7 +57,7 @@ export default function StatsIndex({ stats }: { stats: any }) {
                 {/* Per year bar chart */}
                 {stats.per_year?.length > 0 && (
                     <div className="bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-xl p-4">
-                        <h2 className="text-sm font-semibold text-white mb-4">Fotky podle roku</h2>
+                        <h2 className="text-sm font-semibold text-[var(--color-text-primary)] mb-4">Fotky podle roku</h2>
                         <div className="space-y-2">
                             {stats.per_year.map((y: any) => (
                                 <div key={y.year} className="flex items-center gap-3">
@@ -68,7 +68,7 @@ export default function StatsIndex({ stats }: { stats: any }) {
                                             style={{ width: `${(y.total / maxYear) * 100}%` }}
                                         />
                                     </div>
-                                    <span className="text-xs text-white w-14 text-right shrink-0">{y.total.toLocaleString('cs-CZ')}</span>
+                                    <span className="text-xs text-[var(--color-text-primary)] w-14 text-right shrink-0">{y.total.toLocaleString('cs-CZ')}</span>
                                 </div>
                             ))}
                         </div>
@@ -78,7 +78,7 @@ export default function StatsIndex({ stats }: { stats: any }) {
                 {/* Per month (current year) */}
                 {stats.per_month?.length > 0 && (
                     <div className="bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-xl p-4">
-                        <h2 className="text-sm font-semibold text-white mb-4">Fotky v roce {stats.year} po měsících</h2>
+                        <h2 className="text-sm font-semibold text-[var(--color-text-primary)] mb-4">Fotky v roce {stats.year} po měsících</h2>
                         <div className="flex items-end gap-1 h-24">
                             {Array.from({ length: 12 }, (_, i) => {
                                 const m = stats.per_month?.find((p: any) => p.month === i + 1);
@@ -105,12 +105,12 @@ export default function StatsIndex({ stats }: { stats: any }) {
                     {/* Cameras */}
                     {stats.cameras?.length > 0 && (
                         <div className="bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-xl p-4">
-                            <h2 className="text-sm font-semibold text-white mb-3 flex items-center gap-2"><Camera size={14} /> Fotoaparáty</h2>
+                            <h2 className="text-sm font-semibold text-[var(--color-text-primary)] mb-3 flex items-center gap-2"><Camera size={14} /> Fotoaparáty</h2>
                             <div className="space-y-2">
                                 {stats.cameras.map((c: any) => (
                                     <div key={c.camera_model} className="flex items-center justify-between text-xs">
                                         <span className="text-[var(--color-text-secondary)] truncate max-w-[70%]">{c.camera_model}</span>
-                                        <span className="text-white font-medium">{c.count.toLocaleString('cs-CZ')}</span>
+                                        <span className="text-[var(--color-text-primary)] font-medium">{c.count.toLocaleString('cs-CZ')}</span>
                                     </div>
                                 ))}
                             </div>
@@ -120,12 +120,12 @@ export default function StatsIndex({ stats }: { stats: any }) {
                     {/* Formats */}
                     {stats.formats?.length > 0 && (
                         <div className="bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-xl p-4">
-                            <h2 className="text-sm font-semibold text-white mb-3">Formáty souborů</h2>
+                            <h2 className="text-sm font-semibold text-[var(--color-text-primary)] mb-3">Formáty souborů</h2>
                             <div className="space-y-2">
                                 {stats.formats.map((f: any) => (
                                     <div key={f.ext} className="flex items-center justify-between text-xs">
                                         <span className="text-[var(--color-text-secondary)] font-mono">{f.ext}</span>
-                                        <span className="text-white font-medium">{f.count.toLocaleString('cs-CZ')}</span>
+                                        <span className="text-[var(--color-text-primary)] font-medium">{f.count.toLocaleString('cs-CZ')}</span>
                                     </div>
                                 ))}
                             </div>

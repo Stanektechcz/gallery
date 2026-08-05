@@ -146,12 +146,12 @@ export default function SharesIndex({ shares }: Props) {
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                             <Share2 size={16} className="text-[var(--color-accent)]" />
-                            <h1 className="text-sm font-semibold text-white">Sdílené odkazy</h1>
+                            <h1 className="text-sm font-semibold text-[var(--color-text-primary)]">Sdílené odkazy</h1>
                             <span className="text-xs text-[var(--color-text-secondary)]">{items.length} odkazů</span>
                         </div>
                         <button
                             onClick={() => setShowCreate(true)}
-                            className="flex items-center gap-1.5 bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] text-white text-sm px-3 py-1.5 rounded-lg transition-colors"
+                            className="flex items-center gap-1.5 bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] text-[var(--color-text-primary)] text-sm px-3 py-1.5 rounded-lg transition-colors"
                         >
                             <Plus size={14} /> Nový odkaz
                         </button>
@@ -159,15 +159,15 @@ export default function SharesIndex({ shares }: Props) {
                 </div>
 
                 <div className="p-4 max-w-2xl mx-auto">
-                    {guestUploads.length > 0 && <section className="mb-5 rounded-2xl border border-[var(--color-accent)]/30 bg-[var(--color-bg-card)] p-4"><div className="mb-3 flex items-center gap-2"><Upload size={16} className="text-[var(--color-accent)]"/><h2 className="text-sm font-semibold text-white">Čeká na schválení</h2><span className="rounded-full bg-[var(--color-accent)]/15 px-2 py-0.5 text-[10px] text-[var(--color-accent)]">{guestUploads.length}</span></div><div className="space-y-2">{guestUploads.map(upload => <div key={upload.uuid} className="flex flex-col gap-2 rounded-xl border border-[var(--color-border)] p-3 sm:flex-row sm:items-center"><div className="min-w-0 flex-1"><p className="truncate text-xs font-medium text-white">{upload.original_filename}</p><p className="text-[10px] text-[var(--color-text-secondary)]">{upload.contributor_name || 'Anonymní host'} · {Math.round(upload.size_bytes/1024/1024*10)/10} MB</p></div><div className="flex gap-2"><button onClick={() => reviewUpload(upload.uuid,'approve')} className="min-h-10 flex-1 rounded-lg bg-green-500/15 px-3 text-xs text-green-400">Přijmout</button><button onClick={() => reviewUpload(upload.uuid,'reject')} className="min-h-10 flex-1 rounded-lg bg-red-500/10 px-3 text-xs text-red-400">Odmítnout</button></div></div>)}</div></section>}
+                    {guestUploads.length > 0 && <section className="mb-5 rounded-2xl border border-[var(--color-accent)]/30 bg-[var(--color-bg-card)] p-4"><div className="mb-3 flex items-center gap-2"><Upload size={16} className="text-[var(--color-accent)]"/><h2 className="text-sm font-semibold text-[var(--color-text-primary)]">Čeká na schválení</h2><span className="rounded-full bg-[var(--color-accent)]/15 px-2 py-0.5 text-[10px] text-[var(--color-accent)]">{guestUploads.length}</span></div><div className="space-y-2">{guestUploads.map(upload => <div key={upload.uuid} className="flex flex-col gap-2 rounded-xl border border-[var(--color-border)] p-3 sm:flex-row sm:items-center"><div className="min-w-0 flex-1"><p className="truncate text-xs font-medium text-[var(--color-text-primary)]">{upload.original_filename}</p><p className="text-[10px] text-[var(--color-text-secondary)]">{upload.contributor_name || 'Anonymní host'} · {Math.round(upload.size_bytes/1024/1024*10)/10} MB</p></div><div className="flex gap-2"><button onClick={() => reviewUpload(upload.uuid,'approve')} className="min-h-10 flex-1 rounded-lg bg-green-500/15 px-3 text-xs text-green-400">Přijmout</button><button onClick={() => reviewUpload(upload.uuid,'reject')} className="min-h-10 flex-1 rounded-lg bg-red-500/10 px-3 text-xs text-red-400">Odmítnout</button></div></div>)}</div></section>}
                     {items.length === 0 ? (
                         <div className="flex flex-col items-center justify-center h-64 text-[var(--color-text-secondary)]">
                             <Share2 size={48} className="mb-3 opacity-20" />
-                            <p className="text-lg font-medium text-white mb-1">Žádné sdílené odkazy</p>
+                            <p className="text-lg font-medium text-[var(--color-text-primary)] mb-1">Žádné sdílené odkazy</p>
                             <p className="text-sm">Vytvořte odkaz pro sdílení alb nebo fotek</p>
                             <button
                                 onClick={() => setShowCreate(true)}
-                                className="mt-4 flex items-center gap-2 bg-[var(--color-accent)] text-white text-sm px-4 py-2 rounded-lg"
+                                className="mt-4 flex items-center gap-2 bg-[var(--color-accent)] text-[var(--color-text-primary)] text-sm px-4 py-2 rounded-lg"
                             >
                                 <Plus size={14} /> Vytvořit první odkaz
                             </button>
@@ -185,7 +185,7 @@ export default function SharesIndex({ shares }: Props) {
                                             <div className="flex-1 min-w-0">
                                                 <div className="flex items-center gap-2 mb-1">
                                                     <LinkIcon size={13} className="text-[var(--color-accent)] shrink-0" />
-                                                    <p className="text-sm font-medium text-white truncate">
+                                                    <p className="text-sm font-medium text-[var(--color-text-primary)] truncate">
                                                         {link.name || link.target?.title || `Sdílený ${link.target_type}`}
                                                     </p>
                                                     {expired && (
@@ -202,7 +202,7 @@ export default function SharesIndex({ shares }: Props) {
                                                 <button
                                                     onClick={() => copyLink(link.token)}
                                                     title="Kopírovat odkaz"
-                                                    className="p-1.5 rounded-lg hover:bg-white/10 text-[var(--color-text-secondary)] hover:text-white transition-colors"
+                                                    className="p-1.5 rounded-lg hover:bg-[var(--color-surface-hover)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors"
                                                 >
                                                     {copied === link.token
                                                         ? <CheckCircle size={14} className="text-green-400" />
@@ -212,7 +212,7 @@ export default function SharesIndex({ shares }: Props) {
                                                 <button
                                                     onClick={() => openLink(link.token)}
                                                     title="Otevřít odkaz"
-                                                    className="p-1.5 rounded-lg hover:bg-white/10 text-[var(--color-text-secondary)] hover:text-white transition-colors"
+                                                    className="p-1.5 rounded-lg hover:bg-[var(--color-surface-hover)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors"
                                                 >
                                                     <ExternalLink size={14} />
                                                 </button>
@@ -229,38 +229,38 @@ export default function SharesIndex({ shares }: Props) {
                                         {/* Link properties */}
                                         <div className="flex flex-wrap gap-2">
                                             {link.has_password && (
-                                                <span className="flex items-center gap-1 text-[10px] bg-white/5 text-[var(--color-text-secondary)] px-2 py-0.5 rounded-full">
+                                                <span className="flex items-center gap-1 text-[10px] bg-[var(--color-surface-muted)] text-[var(--color-text-secondary)] px-2 py-0.5 rounded-full">
                                                     <Lock size={9} /> Zaheslováno
                                                 </span>
                                             )}
                                             {!['recipe','place_review'].includes(link.target_type) && (link.allow_download ? (
-                                                <span className="flex items-center gap-1 text-[10px] bg-white/5 text-[var(--color-text-secondary)] px-2 py-0.5 rounded-full">
+                                                <span className="flex items-center gap-1 text-[10px] bg-[var(--color-surface-muted)] text-[var(--color-text-secondary)] px-2 py-0.5 rounded-full">
                                                     <Download size={9} /> Stahování povoleno
                                                 </span>
                                             ) : (
-                                                <span className="flex items-center gap-1 text-[10px] bg-white/5 text-[var(--color-text-secondary)] px-2 py-0.5 rounded-full">
+                                                <span className="flex items-center gap-1 text-[10px] bg-[var(--color-surface-muted)] text-[var(--color-text-secondary)] px-2 py-0.5 rounded-full">
                                                     <EyeOff size={9} /> Bez stahování
                                                 </span>
                                             ))}
                                             {link.allow_guest_upload && (
-                                                <span className="flex items-center gap-1 text-[10px] bg-white/5 text-[var(--color-text-secondary)] px-2 py-0.5 rounded-full">
+                                                <span className="flex items-center gap-1 text-[10px] bg-[var(--color-surface-muted)] text-[var(--color-text-secondary)] px-2 py-0.5 rounded-full">
                                                     <Upload size={9} /> Host může nahrát
                                                 </span>
                                             )}
                                             {link.hide_gps && (
-                                                <span className="flex items-center gap-1 text-[10px] bg-white/5 text-[var(--color-text-secondary)] px-2 py-0.5 rounded-full">
+                                                <span className="flex items-center gap-1 text-[10px] bg-[var(--color-surface-muted)] text-[var(--color-text-secondary)] px-2 py-0.5 rounded-full">
                                                     <EyeOff size={9} /> GPS skryto
                                                 </span>
                                             )}
                                             {link.expires_at && (
-                                                <span className={clsx('flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full', expired ? 'bg-red-500/10 text-red-400' : 'bg-white/5 text-[var(--color-text-secondary)]')}>
+                                                <span className={clsx('flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full', expired ? 'bg-red-500/10 text-red-400' : 'bg-[var(--color-surface-muted)] text-[var(--color-text-secondary)]')}>
                                                     <Clock size={9} /> {expired ? 'Vypršelo' : 'Vyprší'} {formatDate(link.expires_at)}
                                                 </span>
                                             )}
-                                            <span className="flex items-center gap-1 text-[10px] bg-white/5 text-[var(--color-text-secondary)] px-2 py-0.5 rounded-full">
+                                            <span className="flex items-center gap-1 text-[10px] bg-[var(--color-surface-muted)] text-[var(--color-text-secondary)] px-2 py-0.5 rounded-full">
                                                 <Eye size={9} /> {link.use_count}{link.max_uses ? `/${link.max_uses}` : ''} zobrazení
                                             </span>
-                                            <span className="flex items-center gap-1 text-[10px] bg-white/5 text-[var(--color-text-secondary)] px-2 py-0.5 rounded-full">
+                                            <span className="flex items-center gap-1 text-[10px] bg-[var(--color-surface-muted)] text-[var(--color-text-secondary)] px-2 py-0.5 rounded-full">
                                                 Vytvořeno {formatDate(link.created_at)}
                                             </span>
                                         </div>
@@ -276,8 +276,8 @@ export default function SharesIndex({ shares }: Props) {
                     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-4">
                         <div className="glass rounded-2xl p-6 w-full max-w-md shadow-2xl max-h-[90vh] overflow-y-auto">
                             <div className="flex items-center justify-between mb-5">
-                                <h2 className="text-base font-semibold text-white">Nový sdílený odkaz</h2>
-                                <button onClick={() => setShowCreate(false)} className="text-[var(--color-text-secondary)] hover:text-white p-1">✕</button>
+                                <h2 className="text-base font-semibold text-[var(--color-text-primary)]">Nový sdílený odkaz</h2>
+                                <button onClick={() => setShowCreate(false)} className="text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] p-1">✕</button>
                             </div>
 
                             <form onSubmit={createLink} className="space-y-4">
@@ -288,7 +288,7 @@ export default function SharesIndex({ shares }: Props) {
                                         value={form.name}
                                         onChange={e => setF('name', e.target.value)}
                                         placeholder="Např. Fotky z dovolené"
-                                        className="w-full bg-white/5 border border-[var(--color-border)] rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-[var(--color-accent)]"
+                                        className="w-full bg-[var(--color-surface-muted)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-[var(--color-text-primary)] text-sm focus:outline-none focus:border-[var(--color-accent)]"
                                     />
                                 </div>
 
@@ -299,7 +299,7 @@ export default function SharesIndex({ shares }: Props) {
                                         value={form.password}
                                         onChange={e => setF('password', e.target.value)}
                                         placeholder="Ponechte prázdné pro veřejný odkaz"
-                                        className="w-full bg-white/5 border border-[var(--color-border)] rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-[var(--color-accent)]"
+                                        className="w-full bg-[var(--color-surface-muted)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-[var(--color-text-primary)] text-sm focus:outline-none focus:border-[var(--color-accent)]"
                                     />
                                 </div>
 
@@ -309,7 +309,7 @@ export default function SharesIndex({ shares }: Props) {
                                         type="datetime-local"
                                         value={form.expires_at}
                                         onChange={e => setF('expires_at', e.target.value)}
-                                        className="w-full bg-white/5 border border-[var(--color-border)] rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-[var(--color-accent)]"
+                                        className="w-full bg-[var(--color-surface-muted)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-[var(--color-text-primary)] text-sm focus:outline-none focus:border-[var(--color-accent)]"
                                     />
                                 </div>
 
@@ -321,7 +321,7 @@ export default function SharesIndex({ shares }: Props) {
                                         onChange={e => setF('max_uses', e.target.value)}
                                         placeholder="Neomezeno"
                                         min="1"
-                                        className="w-full bg-white/5 border border-[var(--color-border)] rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-[var(--color-accent)]"
+                                        className="w-full bg-[var(--color-surface-muted)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-[var(--color-text-primary)] text-sm focus:outline-none focus:border-[var(--color-accent)]"
                                     />
                                 </div>
 
@@ -341,7 +341,7 @@ export default function SharesIndex({ shares }: Props) {
                                                 onClick={() => setF(key, !form[key])}
                                                 className={clsx(
                                                     'w-10 h-5 rounded-full transition-colors cursor-pointer relative',
-                                                    form[key] ? 'bg-[var(--color-accent)]' : 'bg-white/10'
+                                                    form[key] ? 'bg-[var(--color-accent)]' : 'bg-[var(--color-surface-muted)]'
                                                 )}
                                             >
                                                 <div className={clsx(
@@ -354,10 +354,10 @@ export default function SharesIndex({ shares }: Props) {
                                 </div>
 
                                 <div className="flex gap-3 pt-2">
-                                    <button type="button" onClick={() => setShowCreate(false)} className="flex-1 bg-white/10 hover:bg-white/15 text-white text-sm py-2.5 rounded-lg">
+                                    <button type="button" onClick={() => setShowCreate(false)} className="flex-1 bg-[var(--color-surface-muted)] hover:bg-white/15 text-[var(--color-text-primary)] text-sm py-2.5 rounded-lg">
                                         Zrušit
                                     </button>
-                                    <button type="submit" disabled={creating} className="flex-1 bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] disabled:opacity-50 text-white text-sm py-2.5 rounded-lg flex items-center justify-center gap-2">
+                                    <button type="submit" disabled={creating} className="flex-1 bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] disabled:opacity-50 text-[var(--color-text-primary)] text-sm py-2.5 rounded-lg flex items-center justify-center gap-2">
                                         {creating ? (
                                             <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                                         ) : (

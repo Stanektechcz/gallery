@@ -118,7 +118,7 @@ export function BulkActionBar({
                 ) : filtered.map((item, i) => (
                     <button key={item.id ?? item.uuid ?? i}
                         onClick={() => onPick(item)}
-                        className="w-full text-left px-4 py-2.5 hover:bg-[var(--color-bg-secondary)] border-b border-[var(--color-border)] last:border-0 text-sm text-white truncate">
+                        className="w-full text-left px-4 py-2.5 hover:bg-[var(--color-bg-secondary)] border-b border-[var(--color-border)] last:border-0 text-sm text-[var(--color-text-primary)] truncate">
                         {item.name || item.title}
                         {item.country ? <span className="text-[var(--color-text-secondary)] ml-1">· {item.country}</span> : null}
                     </button>
@@ -146,9 +146,9 @@ export function BulkActionBar({
                                     else setPlaceSearch(v);
                                 }}
                                 placeholder={panel === 'album' || panel === 'move' ? 'Hledat album…' : panel === 'tag' ? 'Hledat tag…' : panel === 'person' ? 'Hledat osobu…' : 'Hledat místo…'}
-                                className="flex-1 bg-transparent text-sm text-white placeholder-[var(--color-text-secondary)] outline-none"
+                                className="flex-1 bg-transparent text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] outline-none"
                             />
-                            <button onClick={() => setPanel(null)} className="text-[var(--color-text-secondary)] hover:text-white"><X size={14}/></button>
+                            <button onClick={() => setPanel(null)} className="text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"><X size={14}/></button>
                         </div>
                     )}
 
@@ -162,7 +162,7 @@ export function BulkActionBar({
                         <div className="p-3 flex flex-wrap gap-2 max-h-48 overflow-y-auto">
                             {tags.filter(t => !tagSearch || t.name.toLowerCase().includes(tagSearch.toLowerCase())).map(tag => (
                                 <button key={tag.id} onClick={() => bulk('tag', { tag_id: tag.id })}
-                                    className="px-3 py-1.5 rounded-full text-xs border border-[var(--color-border)] text-white hover:bg-[var(--color-accent)] hover:border-[var(--color-accent)] transition-colors">
+                                    className="px-3 py-1.5 rounded-full text-xs border border-[var(--color-border)] text-[var(--color-text-primary)] hover:bg-[var(--color-accent)] hover:border-[var(--color-accent)] transition-colors">
                                     {tag.name}
                                 </button>
                             ))}
@@ -185,31 +185,31 @@ export function BulkActionBar({
                     {panel === 'date' && (
                         <div className="p-4">
                             <div className="flex items-center justify-between mb-4">
-                                <h3 className="text-sm font-semibold text-white">Posunout datum pořízení</h3>
-                                <button onClick={() => setPanel(null)} className="text-[var(--color-text-secondary)] hover:text-white"><X size={14}/></button>
+                                <h3 className="text-sm font-semibold text-[var(--color-text-primary)]">Posunout datum pořízení</h3>
+                                <button onClick={() => setPanel(null)} className="text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"><X size={14}/></button>
                             </div>
                             <div className="flex items-center gap-4 mb-4">
                                 <button onClick={() => setHourOffset(h => Math.max(-720, h - 1))}
-                                    className="w-9 h-9 rounded-full border border-[var(--color-border)] text-white hover:bg-white/10 flex items-center justify-center text-lg font-bold">−</button>
+                                    className="w-9 h-9 rounded-full border border-[var(--color-border)] text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] flex items-center justify-center text-lg font-bold">−</button>
                                 <div className="flex-1 text-center">
-                                    <p className="text-2xl font-mono text-white font-bold">{hourOffset > 0 ? '+' : ''}{hourOffset}<span className="text-sm ml-1 text-[var(--color-text-secondary)]">h</span></p>
+                                    <p className="text-2xl font-mono text-[var(--color-text-primary)] font-bold">{hourOffset > 0 ? '+' : ''}{hourOffset}<span className="text-sm ml-1 text-[var(--color-text-secondary)]">h</span></p>
                                     <p className="text-[10px] text-[var(--color-text-secondary)] mt-0.5">
                                         {hourOffset === 0 ? 'Bez posunu' : `${Math.abs(hourOffset)} hodin ${hourOffset > 0 ? 'dopředu' : 'dozadu'}`}
                                     </p>
                                 </div>
                                 <button onClick={() => setHourOffset(h => Math.min(720, h + 1))}
-                                    className="w-9 h-9 rounded-full border border-[var(--color-border)] text-white hover:bg-white/10 flex items-center justify-center text-lg font-bold">+</button>
+                                    className="w-9 h-9 rounded-full border border-[var(--color-border)] text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] flex items-center justify-center text-lg font-bold">+</button>
                             </div>
                             <div className="flex justify-center gap-2 mb-4">
                                 {[-24, -12, -1, 1, 12, 24].map(h => (
                                     <button key={h} onClick={() => setHourOffset(h)}
-                                        className={`px-2.5 py-1 text-xs rounded-lg border transition-colors ${hourOffset === h ? 'bg-[var(--color-accent)] border-[var(--color-accent)] text-white' : 'border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-white'}`}>
+                                        className={`px-2.5 py-1 text-xs rounded-lg border transition-colors ${hourOffset === h ? 'bg-[var(--color-accent)] border-[var(--color-accent)] text-[var(--color-text-primary)]' : 'border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}>
                                         {h > 0 ? '+' : ''}{h}h
                                     </button>
                                 ))}
                             </div>
                             <button onClick={() => bulk('shift_date', { hours_offset: hourOffset })} disabled={hourOffset === 0}
-                                className="w-full bg-[var(--color-accent)] text-white text-sm py-2 rounded-lg hover:opacity-90 disabled:opacity-40">
+                                className="w-full bg-[var(--color-accent)] text-[var(--color-text-primary)] text-sm py-2 rounded-lg hover:opacity-90 disabled:opacity-40">
                                 Posunout u {count} médií
                             </button>
                         </div>
@@ -218,8 +218,8 @@ export function BulkActionBar({
                     {panel === 'rating' && (
                         <div className="p-4">
                             <div className="flex items-center justify-between mb-4">
-                                <h3 className="text-sm font-semibold text-white">Nastavit hodnocení</h3>
-                                <button onClick={() => setPanel(null)} className="text-[var(--color-text-secondary)] hover:text-white"><X size={14}/></button>
+                                <h3 className="text-sm font-semibold text-[var(--color-text-primary)]">Nastavit hodnocení</h3>
+                                <button onClick={() => setPanel(null)} className="text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"><X size={14}/></button>
                             </div>
                             <div className="flex justify-center gap-3 mb-4">
                                 {[1,2,3,4,5].map(n => (
@@ -233,7 +233,7 @@ export function BulkActionBar({
                                 ))}
                             </div>
                             <button onClick={() => bulk('rate', { rating: 0 })}
-                                className="w-full text-xs text-[var(--color-text-secondary)] hover:text-white py-1 border border-[var(--color-border)] rounded-lg">
+                                className="w-full text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] py-1 border border-[var(--color-border)] rounded-lg">
                                 Odebrat hodnocení
                             </button>
                         </div>
@@ -247,13 +247,13 @@ export function BulkActionBar({
                 <div className="flex items-center gap-3 mb-2.5">
                     <span className="text-xs font-bold text-[var(--color-accent)]">{count} vybráno</span>
                     <button onClick={onSelectAll}
-                        className="text-[10px] text-[var(--color-text-secondary)] hover:text-white underline underline-offset-2">
+                        className="text-[10px] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] underline underline-offset-2">
                         Vybrat vše ({totalCount})
                     </button>
                     <div className="flex-1"/>
                     {loading && <span className="text-[10px] text-[var(--color-text-secondary)] animate-pulse">Zpracovávám…</span>}
                     <button onClick={onClearAll}
-                        className="flex items-center gap-1 text-[10px] text-[var(--color-text-secondary)] hover:text-white border border-[var(--color-border)] px-2 py-1 rounded-lg transition-colors">
+                        className="flex items-center gap-1 text-[10px] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] border border-[var(--color-border)] px-2 py-1 rounded-lg transition-colors">
                         <X size={10}/> Zrušit výběr
                     </button>
                 </div>
@@ -281,7 +281,7 @@ export function BulkActionBar({
                                 window.open('/print', '_blank');
                             }
                         }}
-                        className="flex items-center gap-1.5 whitespace-nowrap text-xs px-3 py-1.5 rounded-lg border transition-all shrink-0 text-[var(--color-text-secondary)] bg-[var(--color-bg-card)] border-[var(--color-border)] hover:text-white hover:border-orange-400/50">
+                        className="flex items-center gap-1.5 whitespace-nowrap text-xs px-3 py-1.5 rounded-lg border transition-all shrink-0 text-[var(--color-text-secondary)] bg-[var(--color-bg-card)] border-[var(--color-border)] hover:text-[var(--color-text-primary)] hover:border-orange-400/50">
                         <Printer size={12}/>
                         Do výběru
                     </a>
@@ -306,7 +306,7 @@ export function BulkActionBar({
                             <button key={a.key} onClick={handleClick} disabled={loading}
                                 className={`flex items-center gap-1.5 whitespace-nowrap text-xs px-3 py-1.5 rounded-lg border transition-all shrink-0 disabled:opacity-40 ${
                                     isActive
-                                        ? 'bg-[var(--color-accent)] border-[var(--color-accent)] text-white'
+                                        ? 'bg-[var(--color-accent)] border-[var(--color-accent)] text-[var(--color-text-primary)]'
                                         : `text-[var(--color-text-secondary)] bg-[var(--color-bg-card)] border-[var(--color-border)] ${a.cls}`
                                 }`}>
                                 <Icon size={12}/>

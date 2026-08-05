@@ -46,6 +46,7 @@ class HandleInertiaRequests extends Middleware
                     'role'       => $request->user()->role,
                     'is_active'  => $request->user()->is_active,
                     'interface_density' => (is_array($request->user()->preferences) ? ($request->user()->preferences['interface_density'] ?? null) : null),
+                    'theme' => (is_array($request->user()->preferences) ? ($request->user()->preferences['theme'] ?? null) : null),
                 ] : null,
             ],
             'flash' => [

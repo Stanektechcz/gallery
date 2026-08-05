@@ -46,13 +46,13 @@ export default function OnboardingChecklist() {
                         <Sparkles size={19} />
                     </span>
                     <div>
-                        <h2 className="font-semibold text-white">Začínáme</h2>
+                        <h2 className="font-semibold text-[var(--color-text-primary)]">Začínáme</h2>
                         <p className="mt-1 text-xs text-[var(--color-text-secondary)]">
                             Zbývají {remaining} {remaining === 1 ? 'krok' : remaining < 5 ? 'kroky' : 'kroků'} k rozjeté galerii.
                         </p>
                     </div>
                 </div>
-                <button type="button" onClick={dismiss} aria-label="Skrýt začátečnický průvodce" className="shrink-0 rounded-lg p-2 text-[var(--color-text-secondary)] hover:bg-white/5 hover:text-white">
+                <button type="button" onClick={dismiss} aria-label="Skrýt začátečnický průvodce" className="shrink-0 rounded-lg p-2 text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]">
                     <X size={16} />
                 </button>
             </div>
@@ -65,7 +65,7 @@ export default function OnboardingChecklist() {
                                 {step.done ? <Check size={16} /> : <Circle size={16} />}
                             </span>
                             <span className="min-w-0">
-                                <span className={`block text-sm font-medium ${step.done ? 'text-[var(--color-text-secondary)] line-through' : 'text-white'}`}>{step.title}</span>
+                                <span className={`block text-sm font-medium ${step.done ? 'text-[var(--color-text-secondary)] line-through' : 'text-[var(--color-text-primary)]'}`}>{step.title}</span>
                                 {!step.done && <span className="block text-xs text-[var(--color-text-secondary)]">{step.description}</span>}
                             </span>
                         </span>
@@ -74,7 +74,7 @@ export default function OnboardingChecklist() {
                     return (
                         <li key={step.key}>
                             {step.href && !step.done
-                                ? <Link href={step.href} className="block rounded-xl border border-[var(--color-border)] bg-black/10 p-3 transition-colors hover:border-[var(--color-accent)]/40">{body}</Link>
+                                ? <Link href={step.href} className="block rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-muted)] p-3 transition-colors hover:border-[var(--color-accent)]/40">{body}</Link>
                                 : <div className="rounded-xl border border-transparent p-3">{body}</div>}
                         </li>
                     );

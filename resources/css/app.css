@@ -1,15 +1,60 @@
 @import "tailwindcss";
 
 @layer base {
+    /*
+     * Dark is the original identity and stays the default. Light is a full counterpart,
+     * not an inversion: the violet is darkened so it holds contrast on a pale ground, and
+     * the neutrals keep a slight violet bias so they read as chosen rather than generic.
+     *
+     * The three surface tokens exist because the interface used raw bg-black/10,
+     * bg-white/5 and border-white/10 for sunken panels, hover states and hairlines. Those
+     * are only legible on a dark ground, so they became tokens instead.
+     */
     :root {
         --color-bg-primary: #0f0f1a;
         --color-bg-secondary: #1a1a2e;
         --color-bg-card: #16213e;
         --color-accent: #6c63ff;
         --color-accent-hover: #7c74ff;
+        --color-accent-contrast: #ffffff;
         --color-text-primary: #f0f0f5;
         --color-text-secondary: #9ca3af;
         --color-border: #2d2d4e;
+        --color-surface-muted: rgb(0 0 0 / 0.18);
+        --color-surface-hover: rgb(255 255 255 / 0.06);
+        color-scheme: dark;
+    }
+
+    :root[data-theme="light"] {
+        --color-bg-primary: #f6f5fb;
+        --color-bg-secondary: #ffffff;
+        --color-bg-card: #ffffff;
+        --color-accent: #5b51e8;
+        --color-accent-hover: #4a3fd6;
+        --color-accent-contrast: #ffffff;
+        --color-text-primary: #16151f;
+        --color-text-secondary: #5b5770;
+        --color-border: #e2dfec;
+        --color-surface-muted: rgb(91 81 232 / 0.05);
+        --color-surface-hover: rgb(91 81 232 / 0.08);
+        color-scheme: light;
+    }
+
+    /* Nothing chosen yet: follow the operating system. */
+    @media (prefers-color-scheme: light) {
+        :root:not([data-theme]) {
+            --color-bg-primary: #f6f5fb;
+            --color-bg-secondary: #ffffff;
+            --color-bg-card: #ffffff;
+            --color-accent: #5b51e8;
+            --color-accent-hover: #4a3fd6;
+            --color-text-primary: #16151f;
+            --color-text-secondary: #5b5770;
+            --color-border: #e2dfec;
+            --color-surface-muted: rgb(91 81 232 / 0.05);
+            --color-surface-hover: rgb(91 81 232 / 0.08);
+            color-scheme: light;
+        }
     }
 
     html {

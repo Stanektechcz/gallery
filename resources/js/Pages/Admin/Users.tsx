@@ -41,14 +41,14 @@ export default function AdminUsers({ users }: Props) {
         post('/admin/users/invite', { onSuccess: () => reset() });
     }
 
-    const field = 'w-full rounded-lg border border-[var(--color-border)] bg-white/5 px-3 py-2.5 text-sm text-white focus:border-[var(--color-accent)] focus:outline-none';
+    const field = 'w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-muted)] px-3 py-2.5 text-sm text-[var(--color-text-primary)] focus:border-[var(--color-accent)] focus:outline-none';
 
     return (
         <AppLayout>
             <Head title="Uživatelé" />
             <main className="mx-auto max-w-6xl p-4 sm:p-6">
                 <p className="text-xs uppercase tracking-widest text-[var(--color-accent)]">Správa systému</p>
-                <h1 className="mt-1 text-2xl font-bold text-white sm:text-3xl">Uživatelé</h1>
+                <h1 className="mt-1 text-2xl font-bold text-[var(--color-text-primary)] sm:text-3xl">Uživatelé</h1>
                 <p className="mt-2 max-w-3xl text-sm text-[var(--color-text-secondary)]">
                     Přehled účtů a pozvánky do galerie. Nový účet vzniká pozvánkou, heslo si nastaví sám příjemce.
                 </p>
@@ -63,7 +63,7 @@ export default function AdminUsers({ users }: Props) {
                 <section className="mt-6 rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-5">
                     <div className="flex items-center gap-2">
                         <UserPlus size={17} className="text-[var(--color-accent)]" />
-                        <h2 className="font-semibold text-white">Pozvat nového uživatele</h2>
+                        <h2 className="font-semibold text-[var(--color-text-primary)]">Pozvat nového uživatele</h2>
                     </div>
                     <form onSubmit={submit} className="mt-4 grid gap-3 sm:grid-cols-[1fr_1fr_180px_auto]">
                         <div>
@@ -85,7 +85,7 @@ export default function AdminUsers({ users }: Props) {
                         <button
                             type="submit"
                             disabled={processing}
-                            className="min-h-11 rounded-lg bg-[var(--color-accent)] px-5 text-sm font-medium text-white transition-colors hover:bg-[var(--color-accent-hover)] disabled:opacity-60"
+                            className="min-h-11 rounded-lg bg-[var(--color-accent)] px-5 text-sm font-medium text-[var(--color-text-primary)] transition-colors hover:bg-[var(--color-accent-hover)] disabled:opacity-60"
                         >
                             {processing ? 'Odesílám…' : 'Odeslat pozvánku'}
                         </button>
@@ -95,7 +95,7 @@ export default function AdminUsers({ users }: Props) {
                 <section className="mt-6">
                     <div className="mb-3 flex items-center gap-2">
                         <UsersIcon size={17} className="text-[var(--color-accent)]" />
-                        <h2 className="font-semibold text-white">Účty ({users.length})</h2>
+                        <h2 className="font-semibold text-[var(--color-text-primary)]">Účty ({users.length})</h2>
                     </div>
 
                     <div className="overflow-x-auto rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)]">
@@ -113,7 +113,7 @@ export default function AdminUsers({ users }: Props) {
                                 {users.map(user => (
                                     <tr key={user.id} className="border-b border-[var(--color-border)] last:border-0">
                                         <td className="px-4 py-3">
-                                            <p className="font-medium text-white">{user.name}</p>
+                                            <p className="font-medium text-[var(--color-text-primary)]">{user.name}</p>
                                             <p className="flex items-center gap-1 text-xs text-[var(--color-text-secondary)]">
                                                 <Mail size={11} />{user.email}
                                             </p>

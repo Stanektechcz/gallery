@@ -79,10 +79,10 @@ export default function UploadZone({ albumId, onUploadComplete }: Props) {
         <div onDragEnter={onDE} onDragLeave={onDL} onDragOver={onDO} onDrop={onDrop}
             onClick={() => inputRef.current?.click()}
             className={['flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed cursor-pointer transition-all select-none py-8 px-4',
-                dragging ? 'border-[var(--color-accent)] bg-[var(--color-accent)]/10' : 'border-[var(--color-border)] hover:border-[var(--color-accent)]/60 hover:bg-white/5',
+                dragging ? 'border-[var(--color-accent)] bg-[var(--color-accent)]/10' : 'border-[var(--color-border)] hover:border-[var(--color-accent)]/60 hover:bg-[var(--color-surface-hover)]',
             ].join(' ')}>
             <Upload size={28} className={dragging ? 'text-[var(--color-accent)]' : 'text-[var(--color-text-secondary)]'}/>
-            <p className="text-sm text-white font-medium">
+            <p className="text-sm text-[var(--color-text-primary)] font-medium">
                 {dragging ? 'Pusťte soubory sem' : queued ? `✓ ${queued} souborů přidáno` : 'Přetáhněte nebo klikněte'}
             </p>
             <p className="text-xs text-[var(--color-text-secondary)]">Fotky, videa, RAW · JPG PNG HEIC AVIF CR2 NEF ARW DNG MP4 MOV MKV…</p>

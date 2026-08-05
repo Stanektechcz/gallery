@@ -63,13 +63,13 @@ export default function Landing() {
                 <header className="mx-auto flex max-w-6xl items-center justify-between px-4 py-5">
                     <span className="flex items-center gap-2.5">
                         <span className="grid h-9 w-9 place-items-center rounded-xl bg-[var(--color-accent)]">
-                            <Images size={19} className="text-white" />
+                            <Images size={19} className="text-[var(--color-text-primary)]" />
                         </span>
-                        <span className="font-semibold text-white">Stanektech Gallery</span>
+                        <span className="font-semibold text-[var(--color-text-primary)]">Stanektech Gallery</span>
                     </span>
                     <nav className="flex items-center gap-2">
-                        <Link href="/login" className="rounded-lg px-3 py-2 text-sm text-[var(--color-text-secondary)] hover:text-white">Přihlásit se</Link>
-                        <Link href="/registrace" className="rounded-lg bg-[var(--color-accent)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--color-accent-hover)]">Vyzkoušet zdarma</Link>
+                        <Link href="/login" className="rounded-lg px-3 py-2 text-sm text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]">Přihlásit se</Link>
+                        <Link href="/registrace" className="rounded-lg bg-[var(--color-accent)] px-4 py-2 text-sm font-medium text-[var(--color-text-primary)] hover:bg-[var(--color-accent-hover)]">Vyzkoušet zdarma</Link>
                     </nav>
                 </header>
 
@@ -79,7 +79,7 @@ export default function Landing() {
                         <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--color-accent)]/30 bg-[var(--color-accent)]/10 px-3 py-1 text-xs text-[var(--color-accent)]">
                             <Sparkles size={13} /> Především pro dvojice
                         </span>
-                        <h1 className="mt-5 text-4xl font-bold leading-[1.1] text-white sm:text-5xl">
+                        <h1 className="mt-5 text-4xl font-bold leading-[1.1] text-[var(--color-text-primary)] sm:text-5xl">
                             Váš společný život<br />na jednom místě
                         </h1>
                         <p className="mt-5 max-w-2xl text-lg leading-relaxed text-[var(--color-text-secondary)]">
@@ -88,10 +88,10 @@ export default function Landing() {
                             si vyberou vlastní tarif.
                         </p>
                         <div className="mt-8 flex flex-wrap gap-3">
-                            <Link href="/registrace" className="inline-flex min-h-12 items-center gap-2 rounded-xl bg-[var(--color-accent)] px-6 font-medium text-white hover:bg-[var(--color-accent-hover)]">
+                            <Link href="/registrace" className="inline-flex min-h-12 items-center gap-2 rounded-xl bg-[var(--color-accent)] px-6 font-medium text-[var(--color-text-primary)] hover:bg-[var(--color-accent-hover)]">
                                 Založit galerii zdarma <ArrowRight size={17} />
                             </Link>
-                            <a href="#cenik" className="inline-flex min-h-12 items-center rounded-xl border border-[var(--color-border)] px-6 text-white hover:bg-white/5">
+                            <a href="#cenik" className="inline-flex min-h-12 items-center rounded-xl border border-[var(--color-border)] px-6 text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)]">
                                 Prohlédnout tarify
                             </a>
                         </div>
@@ -103,7 +103,7 @@ export default function Landing() {
 
                 {/* What you get */}
                 <section className="mx-auto max-w-6xl px-4 py-14">
-                    <h2 className="text-2xl font-bold text-white sm:text-3xl">Co všechno v tom je</h2>
+                    <h2 className="text-2xl font-bold text-[var(--color-text-primary)] sm:text-3xl">Co všechno v tom je</h2>
                     <p className="mt-2 max-w-2xl text-sm text-[var(--color-text-secondary)]">
                         Funkce si zapínáte sami. Co nepoužíváte, zmizí z rozhraní — a kdykoliv se dá vrátit.
                     </p>
@@ -118,7 +118,7 @@ export default function Landing() {
                                     {rows.map(feature => (
                                         <article key={feature.code} className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-4">
                                             <span className="text-xl">{feature.icon}</span>
-                                            <h4 className="mt-2 font-semibold text-white">{feature.name}</h4>
+                                            <h4 className="mt-2 font-semibold text-[var(--color-text-primary)]">{feature.name}</h4>
                                             {feature.tagline && <p className="mt-1 text-sm leading-relaxed text-[var(--color-text-secondary)]">{feature.tagline}</p>}
                                         </article>
                                     ))}
@@ -132,7 +132,7 @@ export default function Landing() {
                 <section id="cenik" className="mx-auto max-w-6xl scroll-mt-6 px-4 py-14">
                     <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
                         <div>
-                            <h2 className="text-2xl font-bold text-white sm:text-3xl">Tarify</h2>
+                            <h2 className="text-2xl font-bold text-[var(--color-text-primary)] sm:text-3xl">Tarify</h2>
                             <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
                                 Začněte zdarma. Přejít výš i zpět můžete kdykoliv.
                             </p>
@@ -144,7 +144,7 @@ export default function Landing() {
                                     type="button"
                                     onClick={() => setPeriod(value)}
                                     aria-pressed={period === value}
-                                    className={`min-h-9 rounded-lg px-4 text-sm ${period === value ? 'bg-[var(--color-accent)] text-white' : 'text-[var(--color-text-secondary)]'}`}
+                                    className={`min-h-9 rounded-lg px-4 text-sm ${period === value ? 'bg-[var(--color-accent)] text-[var(--color-text-primary)]' : 'text-[var(--color-text-secondary)]'}`}
                                 >
                                     {value === 'monthly' ? 'Měsíčně' : 'Ročně · 2 měsíce zdarma'}
                                 </button>
@@ -159,13 +159,13 @@ export default function Landing() {
                                 className={`flex flex-col rounded-2xl border p-5 ${plan.highlight ? 'border-[var(--color-accent)]/50 bg-[var(--color-accent)]/5' : 'border-[var(--color-border)] bg-[var(--color-bg-card)]'}`}
                             >
                                 <div className="flex items-center gap-2">
-                                    <h3 className="text-lg font-semibold text-white">{plan.name}</h3>
-                                    {plan.highlight && <span className="rounded-full bg-[var(--color-accent)] px-2 py-0.5 text-[10px] font-medium text-white">Nejoblíbenější</span>}
+                                    <h3 className="text-lg font-semibold text-[var(--color-text-primary)]">{plan.name}</h3>
+                                    {plan.highlight && <span className="rounded-full bg-[var(--color-accent)] px-2 py-0.5 text-[10px] font-medium text-[var(--color-text-primary)]">Nejoblíbenější</span>}
                                 </div>
                                 <span className="mt-1 text-[10px] uppercase tracking-wide text-[var(--color-text-secondary)]">{GROUP_LABEL[plan.group_type] ?? plan.group_type}</span>
                                 {plan.tagline && <p className="mt-2 text-xs text-[var(--color-text-secondary)]">{plan.tagline}</p>}
 
-                                <p className="mt-4 text-3xl font-bold text-white">
+                                <p className="mt-4 text-3xl font-bold text-[var(--color-text-primary)]">
                                     {money(priceOf(plan), plan.currency)}
                                     {priceOf(plan) > 0 && <span className="text-sm font-normal text-[var(--color-text-secondary)]"> / {period === 'yearly' ? 'rok' : 'měsíc'}</span>}
                                 </p>
@@ -179,14 +179,14 @@ export default function Landing() {
                                 </ul>
 
                                 <dl className="mt-5 border-t border-[var(--color-border)] pt-3 text-xs text-[var(--color-text-secondary)]">
-                                    <div className="flex justify-between"><dt>Členů</dt><dd className="text-white">{plan.member_limit ?? 'neomezeně'}</dd></div>
-                                    <div className="mt-1 flex justify-between"><dt>Prostor</dt><dd className="text-white">{storage(plan.storage_limit_mb)}</dd></div>
-                                    <div className="mt-1 flex justify-between"><dt>Funkcí</dt><dd className="text-white">{plan.feature_codes.length}</dd></div>
+                                    <div className="flex justify-between"><dt>Členů</dt><dd className="text-[var(--color-text-primary)]">{plan.member_limit ?? 'neomezeně'}</dd></div>
+                                    <div className="mt-1 flex justify-between"><dt>Prostor</dt><dd className="text-[var(--color-text-primary)]">{storage(plan.storage_limit_mb)}</dd></div>
+                                    <div className="mt-1 flex justify-between"><dt>Funkcí</dt><dd className="text-[var(--color-text-primary)]">{plan.feature_codes.length}</dd></div>
                                 </dl>
 
                                 <Link
                                     href={`/registrace?tarif=${plan.code}&obdobi=${period}`}
-                                    className={`mt-5 inline-flex min-h-11 items-center justify-center rounded-xl px-4 text-sm font-medium ${plan.highlight ? 'bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-hover)]' : 'border border-[var(--color-border)] text-white hover:bg-white/5'}`}
+                                    className={`mt-5 inline-flex min-h-11 items-center justify-center rounded-xl px-4 text-sm font-medium ${plan.highlight ? 'bg-[var(--color-accent)] text-[var(--color-text-primary)] hover:bg-[var(--color-accent-hover)]' : 'border border-[var(--color-border)] text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)]'}`}
                                 >
                                     {plan.price_monthly === 0 ? 'Začít zdarma' : 'Vybrat tarif'}
                                 </Link>
@@ -196,16 +196,16 @@ export default function Landing() {
 
                     {modules.length > 0 && (
                         <div className="mt-12">
-                            <h3 className="text-lg font-semibold text-white">Doplňkové moduly</h3>
+                            <h3 className="text-lg font-semibold text-[var(--color-text-primary)]">Doplňkové moduly</h3>
                             <p className="mt-1 text-sm text-[var(--color-text-secondary)]">Přidávají se k jakémukoliv tarifu a účtují se zvlášť.</p>
                             <div className="mt-4 grid gap-4 sm:grid-cols-2">
                                 {modules.map(module => (
                                     <article key={module.code} className="flex items-start gap-3 rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-5">
                                         <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-violet-500/10 text-xl">{module.icon}</span>
                                         <div className="min-w-0 flex-1">
-                                            <h4 className="font-semibold text-white">{module.name}</h4>
+                                            <h4 className="font-semibold text-[var(--color-text-primary)]">{module.name}</h4>
                                             {module.description && <p className="mt-1.5 text-sm leading-relaxed text-[var(--color-text-secondary)]">{module.description}</p>}
-                                            <p className="mt-3 font-semibold text-white">{money(module.price_monthly, module.currency)} <span className="text-xs font-normal text-[var(--color-text-secondary)]">/ měsíc</span></p>
+                                            <p className="mt-3 font-semibold text-[var(--color-text-primary)]">{money(module.price_monthly, module.currency)} <span className="text-xs font-normal text-[var(--color-text-secondary)]">/ měsíc</span></p>
                                         </div>
                                     </article>
                                 ))}
@@ -224,7 +224,7 @@ export default function Landing() {
                         ].map(([Icon, title, text]: any) => (
                             <div key={title} className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-5">
                                 <Icon size={20} className="text-[var(--color-accent)]" />
-                                <h3 className="mt-3 font-semibold text-white">{title}</h3>
+                                <h3 className="mt-3 font-semibold text-[var(--color-text-primary)]">{title}</h3>
                                 <p className="mt-1.5 text-sm leading-relaxed text-[var(--color-text-secondary)]">{text}</p>
                             </div>
                         ))}
@@ -234,12 +234,12 @@ export default function Landing() {
                 {/* Final call */}
                 <section className="mx-auto max-w-6xl px-4 pb-20">
                     <div className="rounded-3xl border border-[var(--color-accent)]/30 bg-[var(--color-accent)]/5 p-8 text-center sm:p-12">
-                        <h2 className="text-2xl font-bold text-white sm:text-3xl">Začněte dnes, zdarma</h2>
+                        <h2 className="text-2xl font-bold text-[var(--color-text-primary)] sm:text-3xl">Začněte dnes, zdarma</h2>
                         <p className="mx-auto mt-3 max-w-xl text-sm text-[var(--color-text-secondary)]">
                             Tarif Duo je trvale zdarma pro dva a 25 GB. Vyšší tarif si můžete pořídit
                             kdykoliv později přímo v nastavení.
                         </p>
-                        <Link href="/registrace" className="mt-6 inline-flex min-h-12 items-center gap-2 rounded-xl bg-[var(--color-accent)] px-7 font-medium text-white hover:bg-[var(--color-accent-hover)]">
+                        <Link href="/registrace" className="mt-6 inline-flex min-h-12 items-center gap-2 rounded-xl bg-[var(--color-accent)] px-7 font-medium text-[var(--color-text-primary)] hover:bg-[var(--color-accent-hover)]">
                             Založit galerii <ArrowRight size={17} />
                         </Link>
                     </div>
@@ -249,8 +249,8 @@ export default function Landing() {
                     <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-6 text-xs text-[var(--color-text-secondary)]">
                         <span>© {new Date().getFullYear()} Stanektech Gallery</span>
                         <span className="flex gap-4">
-                            <Link href="/cenik" className="hover:text-white">Ceník</Link>
-                            <Link href="/login" className="hover:text-white">Přihlášení</Link>
+                            <Link href="/cenik" className="hover:text-[var(--color-text-primary)]">Ceník</Link>
+                            <Link href="/login" className="hover:text-[var(--color-text-primary)]">Přihlášení</Link>
                         </span>
                     </div>
                 </footer>

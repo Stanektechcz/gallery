@@ -80,7 +80,7 @@ export default function ContactSheet() {
             `}</style>
 
             {/* Print controls (hidden when printing) */}
-            <div className="no-print fixed top-0 left-0 right-0 z-50 bg-gray-800 text-white px-6 py-3 flex items-center justify-between shadow-lg">
+            <div className="no-print fixed top-0 left-0 right-0 z-50 bg-gray-800 text-[var(--color-text-primary)] px-6 py-3 flex items-center justify-between shadow-lg">
                 <div>
                     <p className="text-sm font-semibold">{book?.name} — Contact Sheet</p>
                     <p className="text-xs text-gray-400">{items.length} fotografií · Ctrl+P pro tisk</p>
@@ -91,7 +91,7 @@ export default function ContactSheet() {
                         🖨 Tisknout
                     </button>
                     <button onClick={() => window.close()}
-                        className="bg-gray-600 hover:bg-gray-700 text-white text-sm px-4 py-2 rounded-lg transition-colors">
+                        className="bg-gray-600 hover:bg-gray-700 text-[var(--color-text-primary)] text-sm px-4 py-2 rounded-lg transition-colors">
                         Zavřít
                     </button>
                 </div>

@@ -86,7 +86,7 @@ export default function TrashIndex({ media, retention_days, can_purge }: Props) 
                     <div className="flex items-center justify-between flex-wrap gap-2">
                         <div className="flex items-center gap-2">
                             <Trash2 size={16} className="text-[var(--color-text-secondary)]" />
-                            <h1 className="text-sm font-semibold text-white">Koš</h1>
+                            <h1 className="text-sm font-semibold text-[var(--color-text-primary)]">Koš</h1>
                             <span className="text-xs text-[var(--color-text-secondary)]">{items.length} položek</span>
                             <span className="text-xs text-[var(--color-text-secondary)] hidden sm:inline">· Smazáno za {retention_days} dní</span>
                         </div>
@@ -101,7 +101,7 @@ export default function TrashIndex({ media, retention_days, can_purge }: Props) 
                                     >
                                         <RotateCcw size={12} /> Obnovit
                                     </button>
-                                    <button onClick={() => setSelected(new Set())} className="text-[var(--color-text-secondary)] hover:text-white"><X size={14} /></button>
+                                    <button onClick={() => setSelected(new Set())} className="text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"><X size={14} /></button>
                                 </>
                             )}
                             {can_purge && items.length > 0 && selected.size === 0 && (
@@ -115,7 +115,7 @@ export default function TrashIndex({ media, retention_days, can_purge }: Props) 
                             {items.length > 0 && (
                                 <button
                                     onClick={() => setSelected(new Set(items.map(i => i.uuid)))}
-                                    className="text-xs text-[var(--color-text-secondary)] hover:text-white"
+                                    className="text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
                                 >
                                     Vybrat vše
                                 </button>
@@ -157,14 +157,14 @@ export default function TrashIndex({ media, retention_days, can_purge }: Props) 
                                     </button>
                                 )}
                                 {item.purge_after && (
-                                    <span className="text-white/60 text-[10px] ml-auto">{daysUntilPurge(item.purge_after)}</span>
+                                    <span className="text-[var(--color-text-primary)]/60 text-[10px] ml-auto">{daysUntilPurge(item.purge_after)}</span>
                                 )}
                             </div>
                         )}
                         emptyState={
                             <div className="flex flex-col items-center justify-center h-64 text-[var(--color-text-secondary)]">
                                 <Trash2 size={48} className="mb-3 opacity-20" />
-                                <p className="text-lg font-medium text-white mb-1">Koš je prázdný</p>
+                                <p className="text-lg font-medium text-[var(--color-text-primary)] mb-1">Koš je prázdný</p>
                                 <p className="text-sm">Smazané položky se zobrazí zde</p>
                             </div>
                         }
@@ -180,7 +180,7 @@ export default function TrashIndex({ media, retention_days, can_purge }: Props) 
                                     <AlertTriangle size={20} className="text-red-400" />
                                 </div>
                                 <div>
-                                    <h2 className="text-sm font-semibold text-white">Vyprázdnit koš?</h2>
+                                    <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">Vyprázdnit koš?</h2>
                                     <p className="text-xs text-[var(--color-text-secondary)]">Tato akce je nevratná</p>
                                 </div>
                             </div>
@@ -191,7 +191,7 @@ export default function TrashIndex({ media, retention_days, can_purge }: Props) 
                             <div className="flex gap-3">
                                 <button
                                     onClick={() => setShowEmptyConfirm(false)}
-                                    className="flex-1 bg-white/10 hover:bg-white/15 text-white text-sm py-2 rounded-lg"
+                                    className="flex-1 bg-[var(--color-surface-muted)] hover:bg-white/15 text-[var(--color-text-primary)] text-sm py-2 rounded-lg"
                                 >
                                     Zrušit
                                 </button>

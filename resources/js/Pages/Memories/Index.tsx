@@ -67,12 +67,12 @@ function MemoryCard({ memory, onAction, onShare, onPlan }: { memory: Memory; onA
                 ))}
                 <div className="pointer-events-none absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-black/85 to-transparent" />
                 <div className="pointer-events-none absolute bottom-0 left-0 right-0 p-5 sm:p-6">
-                    <div className="mb-2 flex items-center gap-2 text-xs font-medium text-white/80">
+                    <div className="mb-2 flex items-center gap-2 text-xs font-medium text-[var(--color-text-primary)]/80">
                         <span className="text-lg">{memory.icon}</span>
                         <span>{TYPE_LABELS[memory.type]}</span>
                     </div>
-                    <h2 className="text-xl font-bold text-white sm:text-2xl">{memory.title}</h2>
-                    <p className="mt-1 text-sm text-white/75">{memory.subtitle} · {memory.count} {memory.count === 1 ? 'moment' : 'momentů'}</p>
+                    <h2 className="text-xl font-bold text-[var(--color-text-primary)] sm:text-2xl">{memory.title}</h2>
+                    <p className="mt-1 text-sm text-[var(--color-text-primary)]/75">{memory.subtitle} · {memory.count} {memory.count === 1 ? 'moment' : 'momentů'}</p>
                 </div>
             </div>
 
@@ -80,7 +80,7 @@ function MemoryCard({ memory, onAction, onShare, onPlan }: { memory: Memory; onA
                 <div className="flex items-start gap-2 text-xs text-[var(--color-text-secondary)]">
                     <Sparkles size={14} className="mt-0.5 shrink-0" style={{ color: memory.accent }} />
                     <div>
-                        <p className="font-medium text-white">Proč ji vidíte</p>
+                        <p className="font-medium text-[var(--color-text-primary)]">Proč ji vidíte</p>
                         <p>{memory.reason}</p>
                     </div>
                 </div>
@@ -88,11 +88,11 @@ function MemoryCard({ memory, onAction, onShare, onPlan }: { memory: Memory; onA
                     <button onClick={()=>onPlan(memory)} title="Naplánovat společný večer" className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-violet-400/30 px-3 text-xs font-medium text-violet-100 hover:bg-violet-500/10 sm:flex-none"><CalendarHeart size={15}/> Večer</button>
                     <button onClick={() => onShare(memory)} title="Uložit pro vás oba" className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-pink-400/30 px-3 text-xs font-medium text-pink-100 hover:bg-pink-500/10 sm:flex-none"><Heart size={15} /> Pro nás</button>
                     <button onClick={() => onAction(memory, 'saved')} title="Uložit vzpomínku"
-                        className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-[var(--color-accent)] px-3 text-xs font-medium text-white sm:flex-none">
+                        className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-[var(--color-accent)] px-3 text-xs font-medium text-[var(--color-text-primary)] sm:flex-none">
                         <Bookmark size={15} /> Uložit
                     </button>
                     <button onClick={() => onAction(memory, 'snoozed')} title="Připomenout později"
-                        className="flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-white">
+                        className="flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]">
                         <TimerReset size={16} />
                     </button>
                     <button onClick={() => onAction(memory, 'dismissed')} title="Tuto vzpomínku nezobrazovat"
@@ -129,24 +129,24 @@ function PreferencesPanel({ onClose }: { onClose: () => void }) {
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 backdrop-blur-sm sm:items-center sm:p-4">
             <div className="w-full max-w-md rounded-t-3xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-5 shadow-2xl sm:rounded-3xl">
                 <div className="mb-5 flex items-center justify-between">
-                    <div><h2 className="font-semibold text-white">Nastavení vzpomínek</h2><p className="text-xs text-[var(--color-text-secondary)]">Vy rozhodujete, co se vrací.</p></div>
-                    <button onClick={onClose} className="flex h-10 w-10 items-center justify-center rounded-xl hover:bg-white/5"><X size={18} /></button>
+                    <div><h2 className="font-semibold text-[var(--color-text-primary)]">Nastavení vzpomínek</h2><p className="text-xs text-[var(--color-text-secondary)]">Vy rozhodujete, co se vrací.</p></div>
+                    <button onClick={onClose} className="flex h-10 w-10 items-center justify-center rounded-xl hover:bg-[var(--color-surface-hover)]"><X size={18} /></button>
                 </div>
                 <label className="mb-4 block text-xs text-[var(--color-text-secondary)]">Četnost
-                    <select value={frequency} onChange={event => setFrequency(event.target.value)} className="mt-1.5 min-h-11 w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-3 text-sm text-white">
+                    <select value={frequency} onChange={event => setFrequency(event.target.value)} className="mt-1.5 min-h-11 w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-3 text-sm text-[var(--color-text-primary)]">
                         <option value="more">Častěji</option><option value="normal">Běžně</option><option value="less">Méně často</option><option value="off">Vypnout</option>
                     </select>
                 </label>
                 <p className="mb-2 text-xs text-[var(--color-text-secondary)]">Typy vzpomínek</p>
                 <div className="space-y-1">
                     {(Object.keys(TYPE_LABELS) as MemoryType[]).map(type => (
-                        <label key={type} className="flex min-h-11 cursor-pointer items-center justify-between rounded-xl px-3 hover:bg-white/5">
-                            <span className="text-sm text-white">{TYPE_LABELS[type]}</span>
+                        <label key={type} className="flex min-h-11 cursor-pointer items-center justify-between rounded-xl px-3 hover:bg-[var(--color-surface-hover)]">
+                            <span className="text-sm text-[var(--color-text-primary)]">{TYPE_LABELS[type]}</span>
                             <input type="checkbox" checked={enabled.includes(type)} onChange={() => setEnabled(previous => previous.includes(type) ? previous.filter(item => item !== type) : [...previous, type])} />
                         </label>
                     ))}
                 </div>
-                <button onClick={save} disabled={saving || enabled.length === 0} className="mt-5 min-h-11 w-full rounded-xl bg-[var(--color-accent)] text-sm font-medium text-white disabled:opacity-40">{saving ? 'Ukládám…' : 'Uložit nastavení'}</button>
+                <button onClick={save} disabled={saving || enabled.length === 0} className="mt-5 min-h-11 w-full rounded-xl bg-[var(--color-accent)] text-sm font-medium text-[var(--color-text-primary)] disabled:opacity-40">{saving ? 'Ukládám…' : 'Uložit nastavení'}</button>
             </div>
         </div>
     );
@@ -179,9 +179,9 @@ export default function MemoriesIndex({ memories: initialMemories, today_label, 
                     <div className="mx-auto flex max-w-5xl items-center justify-between">
                         <div className="flex items-center gap-3">
                             <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[var(--color-accent)]/15"><Clock size={19} className="text-[var(--color-accent)]" /></div>
-                            <div><h1 className="font-semibold text-white">Pro vás</h1><p className="text-xs text-[var(--color-text-secondary)]">{today_label} · osobní výběry z vašeho archivu</p></div>
+                            <div><h1 className="font-semibold text-[var(--color-text-primary)]">Pro vás</h1><p className="text-xs text-[var(--color-text-secondary)]">{today_label} · osobní výběry z vašeho archivu</p></div>
                         </div>
-                        <button onClick={() => setShowSettings(true)} className="flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-white"><Settings2 size={17} /></button>
+                        <button onClick={() => setShowSettings(true)} className="flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"><Settings2 size={17} /></button>
                     </div>
                 </header>
 
@@ -190,7 +190,7 @@ export default function MemoriesIndex({ memories: initialMemories, today_label, 
                     {!has_memories || memories.length === 0 ? (
                         <div className="flex min-h-[60vh] flex-col items-center justify-center text-center text-[var(--color-text-secondary)]">
                             <div className="mb-4 flex h-20 w-20 items-center justify-center rounded-3xl bg-[var(--color-accent)]/10"><Sparkles size={34} className="text-[var(--color-accent)]" /></div>
-                            <h2 className="text-lg font-semibold text-white">Vzpomínky právě odpočívají</h2>
+                            <h2 className="text-lg font-semibold text-[var(--color-text-primary)]">Vzpomínky právě odpočívají</h2>
                             <p className="mt-2 max-w-sm text-sm">Až najdeme výročí, oblíbené momenty, významnou cestu nebo známé místo, objeví se tady.</p>
                         </div>
                     ) : memories.map(memory => <MemoryCard key={memory.fingerprint} memory={memory} onAction={action} onShare={share} onPlan={setPlanningMemory} />)}

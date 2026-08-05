@@ -16,7 +16,7 @@ export default function Invitation({ token, name }: Props) {
         post(`/invite/${token}`);
     }
 
-    const field = 'w-full bg-white/5 border border-[var(--color-border)] rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-[var(--color-accent)] transition-colors';
+    const field = 'w-full bg-[var(--color-surface-muted)] border border-[var(--color-border)] rounded-lg px-3 py-2.5 text-[var(--color-text-primary)] text-sm focus:outline-none focus:border-[var(--color-accent)] transition-colors';
 
     return (
         <>
@@ -25,9 +25,9 @@ export default function Invitation({ token, name }: Props) {
                 <div className="w-full max-w-sm">
                     <div className="flex flex-col items-center mb-8">
                         <div className="w-14 h-14 rounded-2xl bg-[var(--color-accent)] flex items-center justify-center mb-4 shadow-lg shadow-[var(--color-accent)]/30">
-                            <Heart size={28} className="text-white" />
+                            <Heart size={28} className="text-[var(--color-text-primary)]" />
                         </div>
-                        <h1 className="text-xl font-semibold text-white">Vítejte, {name}!</h1>
+                        <h1 className="text-xl font-semibold text-[var(--color-text-primary)]">Vítejte, {name}!</h1>
                         <p className="text-sm text-[var(--color-text-secondary)] mt-1 text-center">
                             Nastavte si heslo a účet bude aktivní.
                         </p>
@@ -66,7 +66,7 @@ export default function Invitation({ token, name }: Props) {
                         <button
                             type="submit"
                             disabled={processing}
-                            className="w-full bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] disabled:opacity-60 text-white font-medium py-2.5 rounded-lg text-sm transition-colors"
+                            className="w-full bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] disabled:opacity-60 text-[var(--color-text-primary)] font-medium py-2.5 rounded-lg text-sm transition-colors"
                         >
                             {processing ? 'Aktivuji...' : 'Aktivovat účet'}
                         </button>

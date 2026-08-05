@@ -5,7 +5,25 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="theme-color" content="#1a1a2e">
-    <meta name="color-scheme" content="dark">
+    <meta name="color-scheme" content="dark light">
+
+    {{-- Applied before the first paint, otherwise a light-mode user sees a dark flash. --}}
+    <script>
+        (function () {
+            try {
+                var stored = localStorage.getItem('maki-theme');
+                if (stored === 'light' || stored === 'dark') {
+                    document.documentElement.dataset.theme = stored;
+                } else if (window.matchMedia('(prefers-color-scheme: light)').matches) {
+                    document.documentElement.dataset.theme = 'light';
+                }
+                var meta = document.querySelector('meta[name="theme-color"]');
+                if (meta && document.documentElement.dataset.theme === 'light') {
+                    meta.setAttribute('content', '#f6f5fb');
+                }
+            } catch (e) { /* Private mode without storage: the dark default stands. */ }
+        })();
+    </script>
 
     <title inertia>{{ config('app.name', 'Stanektech Gallery') }}</title>
 

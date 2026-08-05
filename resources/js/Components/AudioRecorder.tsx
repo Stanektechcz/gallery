@@ -102,7 +102,7 @@ export default function AudioRecorder({
             {!blob && (
                 <div className="flex flex-wrap items-center gap-3">
                     {!recording ? (
-                        <button type="button" onClick={start} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[var(--color-accent)] px-4 text-sm font-medium text-white">
+                        <button type="button" onClick={start} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[var(--color-accent)] px-4 text-sm font-medium text-[var(--color-text-primary)]">
                             <Mic size={16} /> {label}
                         </button>
                     ) : (
@@ -130,14 +130,14 @@ export default function AudioRecorder({
                             onChange={event => setTitle(event.target.value)}
                             maxLength={180}
                             placeholder="Název, nepovinné"
-                            className="mt-3 w-full rounded-lg border border-[var(--color-border)] bg-white/5 px-3 py-2.5 text-sm text-white focus:border-[var(--color-accent)] focus:outline-none"
+                            className="mt-3 w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-muted)] px-3 py-2.5 text-sm text-[var(--color-text-primary)] focus:border-[var(--color-accent)] focus:outline-none"
                         />
                     )}
                     <div className="mt-3 flex flex-wrap gap-2">
                         <button type="button" onClick={submit} disabled={busy} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-emerald-500 px-4 text-sm font-medium text-white disabled:opacity-40">
                             {busy ? <LoaderCircle size={15} className="animate-spin" /> : <Upload size={15} />} Uložit
                         </button>
-                        <button type="button" onClick={discard} disabled={busy} className="inline-flex min-h-10 items-center gap-1.5 rounded-xl border border-[var(--color-border)] px-4 text-sm text-white disabled:opacity-40">
+                        <button type="button" onClick={discard} disabled={busy} className="inline-flex min-h-10 items-center gap-1.5 rounded-xl border border-[var(--color-border)] px-4 text-sm text-[var(--color-text-primary)] disabled:opacity-40">
                             <Trash2 size={14} /> Zahodit
                         </button>
                     </div>
