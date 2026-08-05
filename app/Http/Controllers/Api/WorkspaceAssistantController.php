@@ -80,8 +80,13 @@ class WorkspaceAssistantController extends Controller
         $lines = preg_split('/\R/u', $message) ?: [];
         if (count($lines) < 3) return $empty;
 
-        $isIngredientsHeading = static fn (string $line) => (bool) preg_match('/^\s*(?:ingredience|suroviny)\s*:?\s*$/ui', $line);
-        $isStepsHeading = static fn (string $line) => (bool) preg_match('/^\s*(?:přesný\s+postup|presny\s+postup|postup|kroky|příprava\s+krok|instrukce)\s*:?\s*$/ui', $line);
+        // Recipes are usually pasted from somewhere that formats them, so headings arrive
+        // as "**Suroviny**", "## Postup" or "__Suroviny__". Strip that before matching,
+        // otherwise the whole recipe silently parses as nothing.
+        $plain = static fn (string $line) => trim(preg_replace('/^[#>\s]*|[*_~`]+/u', '', $line) ?? '');
+
+        $isIngredientsHeading = static fn (string $line) => (bool) preg_match('/^(?:ingredience|suroviny)\s*:?$/ui', $plain($line));
+        $isStepsHeading = static fn (string $line) => (bool) preg_match('/^(?:přesný\s+postup|presny\s+postup|postup|kroky|příprava\s+krok|instrukce)\s*:?$/ui', $plain($line));
 
         $ingredientsAt = null;
         $stepsAt = null;
@@ -93,8 +98,13 @@ class WorkspaceAssistantController extends Controller
 
         $title = '';
         foreach ($lines as $line) {
-            $line = trim($line);
-            if ($line !== '' && ! $isIngredientsHeading($line) && ! $isStepsHeading($line)) { $title = mb_substr($line, 0, self::RECIPE_TITLE_MAX); break; }
+            $candidate = $plain($line);
+            // A leading slash command is not part of the recipe's name.
+            $candidate = trim(preg_replace('/^\/[\p{L}]+\s*/u', '', $candidate) ?? '');
+            if ($candidate !== '' && ! $isIngredientsHeading($line) && ! $isStepsHeading($line)) {
+                $title = mb_substr($candidate, 0, self::RECIPE_TITLE_MAX);
+                break;
+            }
         }
 
         $ingredientEnd = $stepsAt !== null && ($ingredientsAt === null || $stepsAt > $ingredientsAt) ? $stepsAt : count($lines);
@@ -588,7 +598,7 @@ class WorkspaceAssistantController extends Controller
             }
         }
         if (in_array($command['name'], ['/film', '/filmy', '/seriál', '/serial', '/seriály', '/serialy'], true) && $command['body']) {
-            $titles[] = ['title' => $command['body'], 'type' => in_array($command['name'], ['/seriál', '/serial', '/seriály', '/serialy'], true) ? 'series' : 'movie'];
+            $titles[] = ['title' => $this->firstLine($command['body']), 'type' => in_array($command['name'], ['/seriál', '/serial', '/seriály', '/serialy'], true) ? 'series' : 'movie'];
         }
 
         preg_match('/recept\s*:\s*([^\n]+)/ui', $message, $recipeMatch);
@@ -755,12 +765,24 @@ class WorkspaceAssistantController extends Controller
 
         return array_values(array_slice(array_unique(array_filter(array_map('trim', $items))), 0, 30));
     }
+    /**
+     * The `s` modifier matters: without it `.` stops at the first newline and `$` cannot
+     * match, so a command followed by pasted multi-line text was not recognised as a
+     * command at all. `body` therefore carries everything after the command, newlines
+     * included; callers that need a single line take the first one themselves.
+     */
     private function command(string $message): array
     {
-        if (preg_match('/^\s*(\/[\p{L}]+)\s*(.*)$/u', $message, $match)) {
+        if (preg_match('/^\s*(\/[\p{L}]+)\s*(.*)$/su', $message, $match)) {
             return ['name' => mb_strtolower($match[1]), 'body' => trim($match[2])];
         }
         return ['name' => null, 'body' => null];
+    }
+
+    /** First line of a command body, for commands that name a single thing. */
+    private function firstLine(?string $value): string
+    {
+        return trim(strtok((string) $value, "\n") ?: '');
     }
 
     private function parts(?string $value): array

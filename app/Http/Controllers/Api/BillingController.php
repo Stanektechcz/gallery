@@ -40,8 +40,10 @@ class BillingController extends Controller
                     'features' => $module->grantedFeatures->pluck('code')->values(),
                 ])->values(),
             // Lets the landing page describe a plan by what it actually unlocks.
+            // Ordered by sort_order alone: the catalogue is authored core-first, and
+            // ordering by category name would lead with "Doplňky" and bury "Základ".
             'features' => Schema::hasTable('features')
-                ? Feature::orderBy('category')->orderBy('sort_order')->get()->map(fn (Feature $feature) => [
+                ? Feature::orderBy('sort_order')->get()->map(fn (Feature $feature) => [
                     'code' => $feature->code, 'name' => $feature->name, 'tagline' => $feature->tagline,
                     'category' => $feature->category, 'icon' => $feature->icon, 'is_core' => $feature->is_core,
                 ])->values()

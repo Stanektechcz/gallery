@@ -68,12 +68,23 @@ Route::get('/share-target/file/{index}',  [MediaController::class, 'serveShareFi
 Route::delete('/share-target',            [MediaController::class, 'clearShareTarget'])->name('share-target.clear')
     ->middleware(['auth']);
 
+/*
+ | The front door. A visitor sees what the service is; a member goes straight to their
+ | gallery. Previously "/" was behind auth, so anyone arriving at the domain met a login
+ | form and never saw the offering at all.
+ |
+ | app()->call() is used rather than calling the controller directly so its injected
+ | services are resolved from the container exactly as normal routing would.
+ */
+Route::get('/', function (Illuminate\Http\Request $request) {
+    if (! $request->user()) return Inertia::render('Landing/Index');
+
+    return app()->call([app(App\Http\Controllers\DashboardController::class), 'index']);
+})->name('dashboard');
+
 // ── Authenticated ───────────────────────────────────────
 Route::middleware(['auth'])->group(function () {
     Route::get('/banking/callback', [App\Http\Controllers\BankingOAuthController::class, 'callback'])->name('banking.callback');
-
-    // Dashboard / Timeline
-    Route::get('/',         [App\Http\Controllers\DashboardController::class, 'index'])->name('dashboard');
     Route::get('/home',     [App\Http\Controllers\DashboardController::class, 'index'])->name('home');
     Route::get('/timeline', fn() => Inertia::render('Timeline/Index'))->name('timeline.index');
 

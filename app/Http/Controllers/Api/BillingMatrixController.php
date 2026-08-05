@@ -22,7 +22,7 @@ class BillingMatrixController extends Controller
         $this->authorizeOperator($request);
 
         return response()->json([
-            'features' => Feature::orderBy('category')->orderBy('sort_order')->get()
+            'features' => Feature::orderBy('sort_order')->get()
                 ->map(fn (Feature $feature) => [
                     'code' => $feature->code, 'name' => $feature->name, 'category' => $feature->category,
                     'icon' => $feature->icon, 'is_core' => $feature->is_core, 'tagline' => $feature->tagline,

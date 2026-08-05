@@ -1,5 +1,5 @@
 import AppLayout from '@/Layouts/AppLayout';
-import { Head, Link, usePage } from '@inertiajs/react';
+import { Head, Link, router, usePage } from '@inertiajs/react';
 import axios from 'axios';
 import { CircleAlert, CreditCard, LoaderCircle, Lock, Sparkles } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -85,6 +85,11 @@ export default function Subscription() {
         try {
             const response = await axios.put(`/api/v1/billing/features/${feature.code}`, { enabled: !feature.enabled });
             applyOverview(response.data);
+            // The menu is driven by a shared Inertia prop, which an axios call does not
+            // refresh — without this the item stays in the navigation until a full reload
+            // and switching a feature off looks like it did nothing.
+            router.reload();
+            setNotice(feature.enabled ? `${feature.name} je skrytá z menu.` : `${feature.name} je zpět v menu.`);
         } catch (reason: any) {
             setError(reason?.response?.data?.message ?? 'Funkci se nepodařilo přepnout.');
         } finally { setBusy(null); }
