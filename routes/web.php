@@ -33,8 +33,14 @@ Route::post('/forgot-password', [PasswordResetController::class, 'email'])->name
 Route::get('/reset-password/{token}', [PasswordResetController::class, 'reset'])->name('password.reset');
 Route::post('/reset-password', [PasswordResetController::class, 'update'])->name('password.update');
 
-// Public pricing page. Reachable without an account so the offering can be shared.
+// Public marketing site. Both pages read the same catalogue the app bills from.
+Route::get('/sluzba', fn() => Inertia::render('Landing/Index'))->name('landing');
 Route::get('/cenik', fn() => Inertia::render('Pricing/Index'))->name('pricing');
+
+// Comgate. The notification is server-to-server and is what actually grants a
+// subscription; the return URL is only where the payer's browser lands.
+Route::post('/platby/comgate/notifikace', [App\Http\Controllers\Billing\CheckoutController::class, 'notify'])->name('billing.comgate.notify');
+Route::get('/platby/comgate/navrat', [App\Http\Controllers\Billing\CheckoutController::class, 'return'])->name('billing.comgate.return');
 
 // Public sign-up, gated by config('gallery.registration_open').
 Route::get('/registrace', [App\Http\Controllers\Auth\RegistrationController::class, 'show'])->name('register');
@@ -230,6 +236,7 @@ Route::middleware(['auth'])->group(function () {
     Route::middleware(['can:admin'])->prefix('admin')->name('admin.')->group(function () {
         Route::get('/',              [AdminController::class, 'dashboard'])->name('dashboard');
         Route::get('/storage-risk',  [StorageRiskController::class, 'index'])->name('storage-risk');
+        Route::get('/tarify',        fn() => Inertia::render('Admin/PlanMatrix'))->name('plan-matrix');
         Route::get('/users',         [AdminController::class, 'users'])->name('users');
         Route::post('/users/invite', [AdminController::class, 'invite'])->name('users.invite');
         Route::get('/jobs',          [AdminController::class, 'jobs'])->name('jobs');

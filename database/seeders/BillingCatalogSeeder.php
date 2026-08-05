@@ -4,42 +4,123 @@ namespace Database\Seeders;
 
 use App\Models\BillingModule;
 use App\Models\BillingPlan;
+use App\Models\Feature;
 use Illuminate\Database\Seeder;
 
 /**
- * The catalogue behind the pricing page. Prices are in minor units (haléře) so no
- * rounding creeps in. Safe to re-run: everything is keyed by code.
+ * The offering: the feature catalogue, the plans, the add-ons and the matrix binding them.
+ *
+ * Prices are in minor units (haléře). Everything is keyed by code, so the seeder is safe to
+ * re-run and will not duplicate or reset an operator's later edits to prices.
  */
 class BillingCatalogSeeder extends Seeder
 {
+    /**
+     * The catalogue. `core` features can never be locked or hidden — without them there is
+     * no product. Everything else can be granted per plan and hidden by the customer.
+     */
+    private function features(): array
+    {
+        return [
+            // Core — always on, in every plan.
+            ['code' => 'gallery',      'name' => 'Galerie a alba',        'category' => 'Základ',   'icon' => '🖼️', 'route' => '/timeline', 'is_core' => true,  'is_optional' => false, 'tagline' => 'Fotky, videa, alba a časová osa.'],
+            ['code' => 'search',       'name' => 'Vyhledávání',           'category' => 'Základ',   'icon' => '🔍', 'route' => '/search',   'is_core' => true,  'is_optional' => false, 'tagline' => 'Hledání napříč vším, co máte uložené.'],
+            ['code' => 'sharing',      'name' => 'Sdílené odkazy',        'category' => 'Základ',   'icon' => '🔗', 'route' => '/shared-memories', 'is_core' => false, 'is_optional' => true, 'tagline' => 'Odkazy s heslem a platností pro rodinu a přátele.'],
+
+            // Everyday life together.
+            ['code' => 'calendar',     'name' => 'Kalendář a plánování',  'category' => 'Společný život', 'icon' => '📅', 'route' => '/calendar',  'tagline' => 'Akce, úkoly, připomínky a dostupnost obou.'],
+            ['code' => 'recipes',      'name' => 'Kuchařka',              'category' => 'Společný život', 'icon' => '🍳', 'route' => '/recipes',   'tagline' => 'Recepty, jídelníček a nákupní seznamy.'],
+            ['code' => 'memories',     'name' => 'Vzpomínky a příběhy',   'category' => 'Společný život', 'icon' => '💞', 'route' => '/memories',  'tagline' => 'Časové kapsle, výročí a společná ohlédnutí.'],
+            ['code' => 'people',       'name' => 'Lidé',                  'category' => 'Společný život', 'icon' => '👥', 'route' => '/people',    'tagline' => 'Kdo je na fotkách a co k nim patří.'],
+            ['code' => 'places',       'name' => 'Místa',                 'category' => 'Společný život', 'icon' => '📍', 'route' => '/places',    'tagline' => 'Podniky, výlety a hodnocení návštěv.'],
+            ['code' => 'voice_notes',  'name' => 'Hlasovky',              'category' => 'Společný život', 'icon' => '🎙️', 'route' => '/hlasovky', 'tagline' => 'Krátké vzkazy, na které není potřeba psát.'],
+
+            // Planning bigger things.
+            ['code' => 'trips',        'name' => 'Cesty a itinerář',      'category' => 'Plánování', 'icon' => '🧭', 'route' => '/trips',     'tagline' => 'Trasy, dny, doklady, balení a offline režim.'],
+            ['code' => 'finance',      'name' => 'Společné finance',      'category' => 'Plánování', 'icon' => '💰', 'route' => '/finances',  'tagline' => 'Výdaje, podíly, vyrovnání a rozpočty cest.'],
+            ['code' => 'gifts',        'name' => 'Dárky a výročí',        'category' => 'Plánování', 'icon' => '🎁', 'route' => '/gifts-anniversaries', 'tagline' => 'Nápady, rozpočty a připomínky včas.'],
+            ['code' => 'watchlist',    'name' => 'Filmy a seriály',       'category' => 'Plánování', 'icon' => '🎬', 'route' => '/watchlist/movies',    'tagline' => 'Společný seznam, hodnocení a filmové večery.'],
+            ['code' => 'date_ideas',   'name' => 'Nápady na randíčka',    'category' => 'Plánování', 'icon' => '💡', 'route' => '/date-ideas',  'tagline' => 'Návrhy podle rozpočtu, počasí a nálady.'],
+
+            // Extras that not everyone wants.
+            ['code' => 'photobook',    'name' => 'Fotoknihy a tisk',      'category' => 'Nadstavba', 'icon' => '📔', 'route' => '/print',     'tagline' => 'Příprava tiskových výstupů s kontrolou kvality.'],
+            ['code' => 'vault',        'name' => 'Soukromý trezor',       'category' => 'Nadstavba', 'icon' => '🔐', 'route' => '/vault',     'tagline' => 'Obsah jen pro vaše oči, chráněný heslem.'],
+            ['code' => 'tv_mode',      'name' => 'TV režim',              'category' => 'Nadstavba', 'icon' => '📺', 'route' => '/tv',        'tagline' => 'Promítání na televizi nebo velké obrazovce.'],
+            ['code' => 'stats',        'name' => 'Statistiky',            'category' => 'Nadstavba', 'icon' => '📊', 'route' => '/stats',     'tagline' => 'Přehledy o tom, co a kdy jste nasbírali.'],
+            ['code' => 'automations',  'name' => 'Automatizace',          'category' => 'Nadstavba', 'icon' => '⚙️', 'route' => '/automations', 'tagline' => 'Pravidelné úlohy, které běží za vás.'],
+
+            // Paid add-on.
+            ['code' => 'burps',        'name' => 'Hodnocení krkanců',     'category' => 'Doplňky',   'icon' => '🎺', 'route' => '/krkance',   'tagline' => 'Ano, myslíme to vážně. A je to zábava.'],
+        ];
+    }
+
     public function run(): void
     {
+        $order = 0;
+        foreach ($this->features() as $feature) {
+            Feature::updateOrCreate(
+                ['code' => $feature['code']],
+                $feature + ['is_core' => false, 'is_optional' => true, 'sort_order' => $order += 10]
+            );
+        }
+
+        // Feature sets, from the smallest plan upwards.
+        $couple = ['gallery', 'search', 'sharing', 'calendar', 'recipes', 'memories', 'people', 'places', 'voice_notes', 'date_ideas'];
+        $family = [...$couple, 'trips', 'finance', 'gifts', 'watchlist', 'stats'];
+        $group  = [...$family, 'photobook', 'vault', 'tv_mode', 'automations'];
+
         $plans = [
             [
-                'code' => 'duo', 'name' => 'Duo', 'tagline' => 'Pro dva, kteří si chtějí pamatovat všechno',
-                'description' => 'Galerie, alba, kalendář, cesty, kuchařka a společné plánování bez omezení počtu vzpomínek.',
-                'price_monthly' => 0, 'member_limit' => 2, 'storage_limit_mb' => 25_000,
-                'features' => ['Sdílená galerie a alba', 'Kalendář a plánování ve dvou', 'Cesty a rozpočty', 'Kuchařka a nákupy', 'Hlasovky'],
-                'is_default' => true, 'sort_order' => 10,
+                'code' => 'duo', 'group_type' => 'couple', 'name' => 'Duo',
+                'tagline' => 'Pro dva, kteří si chtějí pamatovat všechno',
+                'description' => 'Sdílená galerie, kalendář, kuchařka, vzpomínky a hlasovky. Vše, co spolu potřebujete den po dni.',
+                'price_monthly' => 0, 'price_yearly' => 0,
+                'member_limit' => 2, 'storage_limit_mb' => 25_000,
+                'features' => ['Sdílená galerie a alba', 'Kalendář a plánování ve dvou', 'Kuchařka a nákupy', 'Vzpomínky a výročí', 'Hlasovky'],
+                'is_default' => true, 'highlight' => false, 'sort_order' => 10,
+                'grants' => $couple,
             ],
             [
-                'code' => 'rodina', 'name' => 'Rodina', 'tagline' => 'Když se sdílí víc než dva',
-                'description' => 'Vše z tarifu Duo, navíc více členů, více prostoru a sdílení s blízkými.',
-                'price_monthly' => 19_900, 'member_limit' => 6, 'storage_limit_mb' => 250_000,
-                'features' => ['Vše z tarifu Duo', 'Až 6 členů', '250 GB prostoru', 'Sdílené odkazy s heslem', 'Přednostní podpora'],
-                'is_default' => false, 'sort_order' => 20,
+                'code' => 'duo_plus', 'group_type' => 'couple', 'name' => 'Duo Plus',
+                'tagline' => 'Pro dvojice, které hodně cestují',
+                'description' => 'Vše z tarifu Duo a k tomu cesty, společné finance, dárky a filmový watchlist.',
+                'price_monthly' => 14_900, 'price_yearly' => 149_000,
+                'member_limit' => 2, 'storage_limit_mb' => 150_000,
+                'features' => ['Vše z tarifu Duo', 'Cesty a itinerář', 'Společné finance a vyrovnání', 'Dárky a výročí', 'Filmy a seriály', '150 GB prostoru'],
+                'is_default' => false, 'highlight' => true, 'sort_order' => 20,
+                'grants' => $family,
             ],
             [
-                'code' => 'archiv', 'name' => 'Archiv', 'tagline' => 'Pro rozsáhlé sbírky',
-                'description' => 'Neomezený počet členů a prostor pro celoživotní archiv.',
-                'price_monthly' => 49_900, 'member_limit' => null, 'storage_limit_mb' => null,
-                'features' => ['Vše z tarifu Rodina', 'Neomezeně členů', 'Neomezený prostor', 'Export a zálohy na vyžádání'],
-                'is_default' => false, 'sort_order' => 30,
+                'code' => 'rodina', 'group_type' => 'family', 'name' => 'Rodina',
+                'tagline' => 'Když se sdílí víc než dva',
+                'description' => 'Až šest členů, sdílení s blízkými a všechny plánovací funkce.',
+                'price_monthly' => 24_900, 'price_yearly' => 249_000,
+                'member_limit' => 6, 'storage_limit_mb' => 400_000,
+                'features' => ['Vše z tarifu Duo Plus', 'Až 6 členů', '400 GB prostoru', 'Fotoknihy a tisk', 'Soukromý trezor', 'TV režim'],
+                'is_default' => false, 'highlight' => false, 'sort_order' => 30,
+                'grants' => $group,
+            ],
+            [
+                'code' => 'skupina', 'group_type' => 'group', 'name' => 'Skupina',
+                'tagline' => 'Pro spolky, týmy a větší party',
+                'description' => 'Neomezený počet členů i prostoru, všechny funkce a automatizace.',
+                'price_monthly' => 49_900, 'price_yearly' => 499_000,
+                'member_limit' => null, 'storage_limit_mb' => null,
+                'features' => ['Vše z tarifu Rodina', 'Neomezeně členů', 'Neomezený prostor', 'Automatizace', 'Export a zálohy na vyžádání'],
+                'is_default' => false, 'highlight' => false, 'sort_order' => 40,
+                'grants' => $group,
             ],
         ];
 
-        foreach ($plans as $plan) {
-            BillingPlan::updateOrCreate(['code' => $plan['code']], $plan + ['currency' => 'CZK', 'is_public' => true]);
+        foreach ($plans as $definition) {
+            $grants = $definition['grants'];
+            unset($definition['grants']);
+
+            $plan = BillingPlan::updateOrCreate(
+                ['code' => $definition['code']],
+                $definition + ['currency' => 'CZK', 'is_public' => true]
+            );
+            $plan->grantedFeatures()->sync(Feature::whereIn('code', $grants)->pluck('id')->all());
         }
 
         $modules = [
@@ -48,11 +129,22 @@ class BillingCatalogSeeder extends Seeder
                 'tagline' => 'První doplňkový modul. Ano, myslíme to vážně.',
                 'description' => 'Zaznamenejte krkanec, nechte ho ohodnotit protějškem podle hlasitosti, délky, umění a překvapení, a sledujte žebříček i měsíčního šampiona.',
                 'price_monthly' => 4_900, 'sort_order' => 10,
+                'grants' => ['burps'],
             ],
         ];
 
-        foreach ($modules as $module) {
-            BillingModule::updateOrCreate(['code' => $module['code']], $module + ['currency' => 'CZK', 'is_public' => true]);
+        foreach ($modules as $definition) {
+            $grants = $definition['grants'];
+            unset($definition['grants']);
+
+            $module = BillingModule::updateOrCreate(
+                ['code' => $definition['code']],
+                $definition + ['currency' => 'CZK', 'is_public' => true]
+            );
+            $module->grantedFeatures()->sync(Feature::whereIn('code', $grants)->pluck('id')->all());
         }
+
+        // Core features are marked after the fact so the list above stays readable.
+        Feature::whereIn('code', ['gallery', 'search'])->update(['is_core' => true, 'is_optional' => false]);
     }
 }

@@ -496,6 +496,8 @@ type NavigationItem = {
     icon: typeof Home;
     adminOnly?: boolean;
     exact?: boolean;
+    /** Hidden unless the space has this feature switched on. Untagged items always show. */
+    feature?: string;
 };
 
 type NavigationGroup = {
@@ -519,15 +521,15 @@ const navGroups: NavigationGroup[] = [
         id: 'together', label: 'Společně', description: 'Plány, zážitky a domácnost', icon: Heart,
         items: [
             { href: '/planning', label: 'Plánování a úkoly', icon: Calendar },
-            { href: '/finances', label: 'Společné finance', icon: CircleDollarSign },
-            { href: '/watchlist/movies', label: 'Filmy a seriály', icon: Clapperboard },
-            { href: '/watchlist/movies', label: '↳ Filmy', icon: Film },
-            { href: '/watchlist/series', label: '↳ Seriály', icon: Tv },
-            { href: '/watchlist/movies/tierlist', label: '↳ Tierlist filmů', icon: Star },
-            { href: '/watchlist/series/tierlist', label: '↳ Tierlist seriálů', icon: Star },
-            { href: '/hlasovky', label: 'Hlasovky', icon: Mic },
-            { href: '/krkance', label: 'Hodnocení krkanců', icon: Trophy },
-            { href: '/date-ideas', label: 'Nápady na randíčka', icon: Sparkles },
+            { href: '/finances', label: 'Společné finance', icon: CircleDollarSign, feature: 'finance' },
+            { href: '/watchlist/movies', label: 'Filmy a seriály', icon: Clapperboard, feature: 'watchlist' },
+            { href: '/watchlist/movies', label: '↳ Filmy', icon: Film, feature: 'watchlist' },
+            { href: '/watchlist/series', label: '↳ Seriály', icon: Tv, feature: 'watchlist' },
+            { href: '/watchlist/movies/tierlist', label: '↳ Tierlist filmů', icon: Star, feature: 'watchlist' },
+            { href: '/watchlist/series/tierlist', label: '↳ Tierlist seriálů', icon: Star, feature: 'watchlist' },
+            { href: '/hlasovky', label: 'Hlasovky', icon: Mic, feature: 'voice_notes' },
+            { href: '/krkance', label: 'Hodnocení krkanců', icon: Trophy, feature: 'burps' },
+            { href: '/date-ideas', label: 'Nápady na randíčka', icon: Sparkles, feature: 'date_ideas' },
             { href: '/anniversary-album', label: 'Výroční album', icon: Images },
             { href: '/gifts-anniversaries', label: 'Dárky a výročí', icon: Gift },
             { href: '/recipes', label: 'Naše kuchařka', icon: ChefHat },
@@ -574,6 +576,7 @@ const navGroups: NavigationGroup[] = [
             { href: '/settings/automations', label: 'Automatizace', icon: Power },
             { href: '/admin', label: 'Správa systému', icon: ShieldCheck, adminOnly: true, exact: true },
             { href: '/admin/integrations', label: 'Integrace a API', icon: KeyRound, adminOnly: true },
+            { href: '/admin/tarify', label: 'Nabídka tarifů', icon: SlidersHorizontal, adminOnly: true },
         ],
     },
 ];
@@ -686,6 +689,8 @@ function NavigationCustomizer({
 export default function AppLayout({ children, title }: AppLayoutProps) {
     const { auth, flash } = usePage().props as any;
     const isAdmin = ['owner', 'admin'].includes(auth?.user?.role);
+    // Shared by HandleInertiaRequests; null means the feature catalogue is not in play yet.
+    const activeFeatures = (usePage().props as { features?: string[] | null }).features ?? null;
     const currentPath = window.location.pathname;
     // Exact match for root; prefix match for all others
     // (prevents '/' highlighting /timeline, /albums, /media/... etc.)
@@ -776,6 +781,8 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
 
     const renderNavigationItem = (item: NavigationItem, nested = false, closeDrawer = false) => {
         if (item.adminOnly && !isAdmin) return null;
+        // `features` is null before the catalogue is migrated — then nothing is hidden.
+        if (item.feature && activeFeatures && !activeFeatures.includes(item.feature)) return null;
         const Icon = item.icon;
         const active = isActive(item.href, item.exact);
         return (

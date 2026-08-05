@@ -201,10 +201,20 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
     Route::get('/onboarding', [App\Http\Controllers\Api\OnboardingController::class, 'show'])->name('api.onboarding.show');
     Route::post('/onboarding/dismiss', [App\Http\Controllers\Api\OnboardingController::class, 'dismiss'])->name('api.onboarding.dismiss');
 
-    // Plan and add-on modules for the current space.
+    // Plan, add-on modules and the customer's own feature choices.
     Route::get('/billing/overview', [App\Http\Controllers\Api\BillingController::class, 'overview'])->name('api.billing.overview');
     Route::put('/billing/plan', [App\Http\Controllers\Api\BillingController::class, 'setPlan'])->name('api.billing.plan.set');
     Route::put('/billing/modules/{code}', [App\Http\Controllers\Api\BillingController::class, 'setModule'])->name('api.billing.modules.set');
+    Route::put('/billing/features/{code}', [App\Http\Controllers\Api\BillingController::class, 'setFeature'])->name('api.billing.features.set');
+
+    // Checkout through Comgate.
+    Route::get('/billing/gateway', [App\Http\Controllers\Billing\CheckoutController::class, 'gatewayState'])->name('api.billing.gateway');
+    Route::post('/billing/checkout', [App\Http\Controllers\Billing\CheckoutController::class, 'start'])->name('api.billing.checkout');
+    Route::get('/billing/payments/{reference}', [App\Http\Controllers\Billing\CheckoutController::class, 'status'])->name('api.billing.payment.status');
+
+    // Operator-only: which features each plan contains.
+    Route::get('/admin/billing/matrix', [App\Http\Controllers\Api\BillingMatrixController::class, 'show'])->name('api.admin.billing.matrix');
+    Route::put('/admin/billing/matrix', [App\Http\Controllers\Api\BillingMatrixController::class, 'update'])->name('api.admin.billing.matrix.update');
 
     // Voice messages between members. Included in every plan.
     Route::get('/voice-notes', [App\Http\Controllers\Api\VoiceNoteController::class, 'index'])->name('api.voice-notes.index');

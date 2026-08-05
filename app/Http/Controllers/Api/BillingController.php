@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\BillingModule;
 use App\Models\BillingPlan;
+use App\Models\Feature;
 use App\Models\GallerySpace;
 use App\Services\Billing\EntitlementService;
 use Illuminate\Http\JsonResponse;
@@ -24,19 +25,40 @@ class BillingController extends Controller
         return response()->json($this->entitlements->overview($space));
     }
 
-    /** Public catalogue for the pricing page. */
+    /** Public catalogue for the pricing page and the landing page. */
     public function catalogue(): JsonResponse
     {
         if (! Schema::hasTable('billing_plans')) {
-            return response()->json(['plans' => [], 'modules' => []]);
+            return response()->json(['plans' => [], 'modules' => [], 'features' => []]);
         }
 
         return response()->json([
-            'plans' => BillingPlan::where('is_public', true)->orderBy('sort_order')->get()
+            'plans' => BillingPlan::with('grantedFeatures')->where('is_public', true)->orderBy('sort_order')->get()
                 ->map(fn (BillingPlan $plan) => $this->entitlements->planPayload($plan))->values(),
-            'modules' => BillingModule::where('is_public', true)->orderBy('sort_order')->get()
-                ->map(fn (BillingModule $module) => $this->entitlements->modulePayload($module))->values(),
+            'modules' => BillingModule::with('grantedFeatures')->where('is_public', true)->orderBy('sort_order')->get()
+                ->map(fn (BillingModule $module) => $this->entitlements->modulePayload($module) + [
+                    'features' => $module->grantedFeatures->pluck('code')->values(),
+                ])->values(),
+            // Lets the landing page describe a plan by what it actually unlocks.
+            'features' => Schema::hasTable('features')
+                ? Feature::orderBy('category')->orderBy('sort_order')->get()->map(fn (Feature $feature) => [
+                    'code' => $feature->code, 'name' => $feature->name, 'tagline' => $feature->tagline,
+                    'category' => $feature->category, 'icon' => $feature->icon, 'is_core' => $feature->is_core,
+                ])->values()
+                : [],
         ]);
+    }
+
+    /** The customer switching one of their entitled features on or off. */
+    public function setFeature(Request $request, string $code): JsonResponse
+    {
+        $data = $request->validate(['enabled' => 'required|boolean']);
+        $space = $this->space($request);
+        $feature = Feature::where('code', $code)->firstOrFail();
+
+        $this->entitlements->setFeaturePreference($space, $feature, $data['enabled']);
+
+        return response()->json($this->entitlements->overview($space));
     }
 
     /**

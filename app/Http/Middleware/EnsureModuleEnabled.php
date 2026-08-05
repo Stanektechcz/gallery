@@ -25,7 +25,10 @@ class EnsureModuleEnabled
         $space = $user->gallerySpaces()->orderByDesc('is_default')->first();
         abort_unless($space, 403, 'Účet zatím nemá vlastní prostor.');
 
-        if (! $this->entitlements->hasModule($space, $moduleCode)) {
+        // Entitlement, not preference: a customer who has merely hidden a feature from
+        // their menu must still reach it by URL, otherwise switching it off would look
+        // like data loss. Only a genuine lack of entitlement returns 402.
+        if (! $this->entitlements->isEntitled($space, $moduleCode)) {
             abort(402, 'Tenhle modul není ve vašem tarifu aktivní.');
         }
 
