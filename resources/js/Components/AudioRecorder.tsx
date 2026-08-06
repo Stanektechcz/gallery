@@ -102,7 +102,7 @@ export default function AudioRecorder({
             {!blob && (
                 <div className="flex flex-wrap items-center gap-3">
                     {!recording ? (
-                        <button type="button" onClick={start} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[var(--color-accent)] px-4 text-sm font-medium text-[var(--color-text-primary)]">
+                        <button type="button" onClick={start} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[var(--color-accent)] px-4 text-sm font-medium text-[var(--color-accent-contrast)]">
                             <Mic size={16} /> {label}
                         </button>
                     ) : (

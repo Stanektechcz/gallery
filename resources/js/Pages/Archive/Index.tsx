@@ -91,7 +91,7 @@ export default function ArchiveIndex({ media }: Props) {
                             <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/70 to-transparent flex justify-end items-end opacity-0 group-hover:opacity-100 transition-opacity">
                                 <button
                                     onClick={e => { e.preventDefault(); e.stopPropagation(); unarchiveOne(item.uuid); }}
-                                    className="bg-[var(--color-accent)]/80 hover:bg-[var(--color-accent)] text-[var(--color-text-primary)] text-[10px] px-2 py-0.5 rounded flex items-center gap-1"
+                                    className="bg-[var(--color-accent)]/80 hover:bg-[var(--color-accent)] text-[var(--color-accent-contrast)] text-[10px] px-2 py-0.5 rounded flex items-center gap-1"
                                 >
                                     <RotateCcw size={8} /> Obnovit
                                 </button>

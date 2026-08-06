@@ -162,7 +162,7 @@ export function BulkActionBar({
                         <div className="p-3 flex flex-wrap gap-2 max-h-48 overflow-y-auto">
                             {tags.filter(t => !tagSearch || t.name.toLowerCase().includes(tagSearch.toLowerCase())).map(tag => (
                                 <button key={tag.id} onClick={() => bulk('tag', { tag_id: tag.id })}
-                                    className="px-3 py-1.5 rounded-full text-xs border border-[var(--color-border)] text-[var(--color-text-primary)] hover:bg-[var(--color-accent)] hover:border-[var(--color-accent)] transition-colors">
+                                    className="px-3 py-1.5 rounded-full text-xs border border-[var(--color-border)] text-[var(--color-accent-contrast)] hover:bg-[var(--color-accent)] hover:border-[var(--color-accent)] transition-colors">
                                     {tag.name}
                                 </button>
                             ))}
@@ -203,13 +203,13 @@ export function BulkActionBar({
                             <div className="flex justify-center gap-2 mb-4">
                                 {[-24, -12, -1, 1, 12, 24].map(h => (
                                     <button key={h} onClick={() => setHourOffset(h)}
-                                        className={`px-2.5 py-1 text-xs rounded-lg border transition-colors ${hourOffset === h ? 'bg-[var(--color-accent)] border-[var(--color-accent)] text-[var(--color-text-primary)]' : 'border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}>
+                                        className={`px-2.5 py-1 text-xs rounded-lg border transition-colors ${hourOffset === h ? 'bg-[var(--color-accent)] border-[var(--color-accent)] text-[var(--color-accent-contrast)]' : 'border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}>
                                         {h > 0 ? '+' : ''}{h}h
                                     </button>
                                 ))}
                             </div>
                             <button onClick={() => bulk('shift_date', { hours_offset: hourOffset })} disabled={hourOffset === 0}
-                                className="w-full bg-[var(--color-accent)] text-[var(--color-text-primary)] text-sm py-2 rounded-lg hover:opacity-90 disabled:opacity-40">
+                                className="w-full bg-[var(--color-accent)] text-[var(--color-accent-contrast)] text-sm py-2 rounded-lg hover:opacity-90 disabled:opacity-40">
                                 Posunout u {count} médií
                             </button>
                         </div>
@@ -306,7 +306,7 @@ export function BulkActionBar({
                             <button key={a.key} onClick={handleClick} disabled={loading}
                                 className={`flex items-center gap-1.5 whitespace-nowrap text-xs px-3 py-1.5 rounded-lg border transition-all shrink-0 disabled:opacity-40 ${
                                     isActive
-                                        ? 'bg-[var(--color-accent)] border-[var(--color-accent)] text-[var(--color-text-primary)]'
+                                        ? 'bg-[var(--color-accent)] border-[var(--color-accent)] text-[var(--color-accent-contrast)]'
                                         : `text-[var(--color-text-secondary)] bg-[var(--color-bg-card)] border-[var(--color-border)] ${a.cls}`
                                 }`}>
                                 <Icon size={12}/>

@@ -152,7 +152,7 @@ function SettingsPanel({ config, onChange }: {
                 <div className="flex gap-1 flex-wrap">
                     {INTERVALS.map(s => (
                         <button key={s} onClick={() => set({ interval: s })}
-                            className={`px-2 py-1 rounded-lg text-xs transition-colors ${config.interval === s ? 'bg-[var(--color-accent)] text-[var(--color-text-primary)]' : 'bg-[var(--color-surface-muted)] hover:bg-white/20'}`}>
+                            className={`px-2 py-1 rounded-lg text-xs transition-colors ${config.interval === s ? 'bg-[var(--color-accent)] text-[var(--color-accent-contrast)]' : 'bg-[var(--color-surface-muted)] hover:bg-white/20'}`}>
                             {s}s
                         </button>
                     ))}
@@ -165,7 +165,7 @@ function SettingsPanel({ config, onChange }: {
                 <div className="grid grid-cols-2 gap-1">
                     {(Object.entries(MODE_LABELS) as [SlideshowMode, string][]).map(([key, label]) => (
                         <button key={key} onClick={() => set({ mode: key })}
-                            className={`px-2 py-1.5 rounded-lg text-xs transition-colors ${config.mode === key ? 'bg-[var(--color-accent)] text-[var(--color-text-primary)]' : 'bg-[var(--color-surface-muted)] hover:bg-white/20'}`}>
+                            className={`px-2 py-1.5 rounded-lg text-xs transition-colors ${config.mode === key ? 'bg-[var(--color-accent)] text-[var(--color-accent-contrast)]' : 'bg-[var(--color-surface-muted)] hover:bg-white/20'}`}>
                             {label}
                         </button>
                     ))}

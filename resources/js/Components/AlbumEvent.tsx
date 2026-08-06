@@ -134,7 +134,7 @@ function EventEditPanel({
 
             <div className="flex gap-2 pt-1">
                 <button onClick={save} disabled={saving}
-                    className="flex-1 bg-[var(--color-accent)] text-[var(--color-text-primary)] text-sm py-2 rounded-lg hover:opacity-90 disabled:opacity-40 flex items-center justify-center gap-1.5">
+                    className="flex-1 bg-[var(--color-accent)] text-[var(--color-accent-contrast)] text-sm py-2 rounded-lg hover:opacity-90 disabled:opacity-40 flex items-center justify-center gap-1.5">
                     {saving ? <Loader2 size={13} className="animate-spin"/> : <Check size={13}/>}
                     Uložit
                 </button>
@@ -329,7 +329,7 @@ export default function AlbumEvent({ albumUuid }: { albumUuid: string }) {
 
                         <div className="flex gap-2 shrink-0">
                             <button onClick={collectAll} disabled={collecting}
-                                className="flex items-center gap-1.5 bg-[var(--color-accent)] text-[var(--color-text-primary)] text-sm px-4 py-2 rounded-lg hover:opacity-90 disabled:opacity-40">
+                                className="flex items-center gap-1.5 bg-[var(--color-accent)] text-[var(--color-accent-contrast)] text-sm px-4 py-2 rounded-lg hover:opacity-90 disabled:opacity-40">
                                 {collecting ? <Loader2 size={13} className="animate-spin"/> : <Check size={13}/>}
                                 Přidat do alba
                             </button>

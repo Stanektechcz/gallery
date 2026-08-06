@@ -151,7 +151,7 @@ export default function SharesIndex({ shares }: Props) {
                         </div>
                         <button
                             onClick={() => setShowCreate(true)}
-                            className="flex items-center gap-1.5 bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] text-[var(--color-text-primary)] text-sm px-3 py-1.5 rounded-lg transition-colors"
+                            className="flex items-center gap-1.5 bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] text-[var(--color-accent-contrast)] text-sm px-3 py-1.5 rounded-lg transition-colors"
                         >
                             <Plus size={14} /> Nový odkaz
                         </button>
@@ -167,7 +167,7 @@ export default function SharesIndex({ shares }: Props) {
                             <p className="text-sm">Vytvořte odkaz pro sdílení alb nebo fotek</p>
                             <button
                                 onClick={() => setShowCreate(true)}
-                                className="mt-4 flex items-center gap-2 bg-[var(--color-accent)] text-[var(--color-text-primary)] text-sm px-4 py-2 rounded-lg"
+                                className="mt-4 flex items-center gap-2 bg-[var(--color-accent)] text-[var(--color-accent-contrast)] text-sm px-4 py-2 rounded-lg"
                             >
                                 <Plus size={14} /> Vytvořit první odkaz
                             </button>
@@ -357,7 +357,7 @@ export default function SharesIndex({ shares }: Props) {
                                     <button type="button" onClick={() => setShowCreate(false)} className="flex-1 bg-[var(--color-surface-muted)] hover:bg-white/15 text-[var(--color-text-primary)] text-sm py-2.5 rounded-lg">
                                         Zrušit
                                     </button>
-                                    <button type="submit" disabled={creating} className="flex-1 bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] disabled:opacity-50 text-[var(--color-text-primary)] text-sm py-2.5 rounded-lg flex items-center justify-center gap-2">
+                                    <button type="submit" disabled={creating} className="flex-1 bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] disabled:opacity-50 text-[var(--color-accent-contrast)] text-sm py-2.5 rounded-lg flex items-center justify-center gap-2">
                                         {creating ? (
                                             <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                                         ) : (

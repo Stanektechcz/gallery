@@ -151,7 +151,7 @@ function ComparePanel({
                 onTouchEnd={onTouchEnd}
             >
                 {/* Label badge */}
-                <div className="absolute top-2 left-2 z-10 w-6 h-6 rounded-full bg-[var(--color-accent)] text-[var(--color-text-primary)] text-xs font-bold flex items-center justify-center shadow">
+                <div className="absolute top-2 left-2 z-10 w-6 h-6 rounded-full bg-[var(--color-accent)] text-[var(--color-accent-contrast)] text-xs font-bold flex items-center justify-center shadow">
                     {label}
                 </div>
 
@@ -331,7 +331,7 @@ export default function CompareIndex() {
                                 Nebo přidejte UUID do URL: <code className="text-[var(--color-accent)]">?uuids=uuid1,uuid2</code>
                             </p>
                             <Link href="/timeline"
-                                className="mt-4 inline-flex items-center gap-2 bg-[var(--color-accent)] text-[var(--color-text-primary)] text-sm px-4 py-2 rounded-lg hover:opacity-90">
+                                className="mt-4 inline-flex items-center gap-2 bg-[var(--color-accent)] text-[var(--color-accent-contrast)] text-sm px-4 py-2 rounded-lg hover:opacity-90">
                                 <Plus size={14}/> Vybrat fotografie
                             </Link>
                         </div>

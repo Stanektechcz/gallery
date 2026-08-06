@@ -206,7 +206,7 @@ export default function TimelineIndex() {
                             <div className="flex items-center gap-0.5 bg-[var(--color-bg-card)] rounded-lg p-0.5 border border-[var(--color-border)]">
                                 {GRID_SIZES.map((_,i) => (
                                     <button key={i} onClick={()=>setGridSizeIdx(i)}
-                                        className={`px-2 py-1 rounded text-xs transition-colors ${i===gridSizeIdx?'bg-[var(--color-accent)] text-[var(--color-text-primary)]':'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}
+                                        className={`px-2 py-1 rounded text-xs transition-colors ${i===gridSizeIdx?'bg-[var(--color-accent)] text-[var(--color-accent-contrast)]':'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}
                                     >{i===0?'XS':i===1?'S':i===2?'M':'L'}</button>
                                 ))}
                             </div>

@@ -108,7 +108,7 @@ export default function TvIndex() {
                     </div>
 
                     <button onClick={() => setStarted(true)} disabled={loading || items.length === 0}
-                        className="w-full bg-[var(--color-accent)] text-[var(--color-text-primary)] text-lg py-4 rounded-2xl hover:opacity-90 disabled:opacity-40 font-semibold flex items-center justify-center gap-3 transition-opacity">
+                        className="w-full bg-[var(--color-accent)] text-[var(--color-accent-contrast)] text-lg py-4 rounded-2xl hover:opacity-90 disabled:opacity-40 font-semibold flex items-center justify-center gap-3 transition-opacity">
                         {loading
                             ? <><Loader2 size={20} className="animate-spin"/> Načítám…</>
                             : <><Tv size={20}/> Spustit TV režim ({items.length} fotek)</>

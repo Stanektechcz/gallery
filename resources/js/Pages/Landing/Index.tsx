@@ -63,13 +63,13 @@ export default function Landing() {
                 <header className="mx-auto flex max-w-6xl items-center justify-between px-4 py-5">
                     <span className="flex items-center gap-2.5">
                         <span className="grid h-9 w-9 place-items-center rounded-xl bg-[var(--color-accent)]">
-                            <Images size={19} className="text-[var(--color-text-primary)]" />
+                            <Images size={19} className="text-[var(--color-accent-contrast)]" />
                         </span>
                         <span className="font-semibold text-[var(--color-text-primary)]">Stanektech Gallery</span>
                     </span>
                     <nav className="flex items-center gap-2">
                         <Link href="/login" className="rounded-lg px-3 py-2 text-sm text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]">Přihlásit se</Link>
-                        <Link href="/registrace" className="rounded-lg bg-[var(--color-accent)] px-4 py-2 text-sm font-medium text-[var(--color-text-primary)] hover:bg-[var(--color-accent-hover)]">Vyzkoušet zdarma</Link>
+                        <Link href="/registrace" className="rounded-lg bg-[var(--color-accent)] px-4 py-2 text-sm font-medium text-[var(--color-accent-contrast)] hover:bg-[var(--color-accent-hover)]">Vyzkoušet zdarma</Link>
                     </nav>
                 </header>
 
@@ -88,7 +88,7 @@ export default function Landing() {
                             si vyberou vlastní tarif.
                         </p>
                         <div className="mt-8 flex flex-wrap gap-3">
-                            <Link href="/registrace" className="inline-flex min-h-12 items-center gap-2 rounded-xl bg-[var(--color-accent)] px-6 font-medium text-[var(--color-text-primary)] hover:bg-[var(--color-accent-hover)]">
+                            <Link href="/registrace" className="inline-flex min-h-12 items-center gap-2 rounded-xl bg-[var(--color-accent)] px-6 font-medium text-[var(--color-accent-contrast)] hover:bg-[var(--color-accent-hover)]">
                                 Založit galerii zdarma <ArrowRight size={17} />
                             </Link>
                             <a href="#cenik" className="inline-flex min-h-12 items-center rounded-xl border border-[var(--color-border)] px-6 text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)]">
@@ -144,7 +144,7 @@ export default function Landing() {
                                     type="button"
                                     onClick={() => setPeriod(value)}
                                     aria-pressed={period === value}
-                                    className={`min-h-9 rounded-lg px-4 text-sm ${period === value ? 'bg-[var(--color-accent)] text-[var(--color-text-primary)]' : 'text-[var(--color-text-secondary)]'}`}
+                                    className={`min-h-9 rounded-lg px-4 text-sm ${period === value ? 'bg-[var(--color-accent)] text-[var(--color-accent-contrast)]' : 'text-[var(--color-text-secondary)]'}`}
                                 >
                                     {value === 'monthly' ? 'Měsíčně' : 'Ročně · 2 měsíce zdarma'}
                                 </button>
@@ -160,7 +160,7 @@ export default function Landing() {
                             >
                                 <div className="flex items-center gap-2">
                                     <h3 className="text-lg font-semibold text-[var(--color-text-primary)]">{plan.name}</h3>
-                                    {plan.highlight && <span className="rounded-full bg-[var(--color-accent)] px-2 py-0.5 text-[10px] font-medium text-[var(--color-text-primary)]">Nejoblíbenější</span>}
+                                    {plan.highlight && <span className="rounded-full bg-[var(--color-accent)] px-2 py-0.5 text-[10px] font-medium text-[var(--color-accent-contrast)]">Nejoblíbenější</span>}
                                 </div>
                                 <span className="mt-1 text-[10px] uppercase tracking-wide text-[var(--color-text-secondary)]">{GROUP_LABEL[plan.group_type] ?? plan.group_type}</span>
                                 {plan.tagline && <p className="mt-2 text-xs text-[var(--color-text-secondary)]">{plan.tagline}</p>}
@@ -186,7 +186,7 @@ export default function Landing() {
 
                                 <Link
                                     href={`/registrace?tarif=${plan.code}&obdobi=${period}`}
-                                    className={`mt-5 inline-flex min-h-11 items-center justify-center rounded-xl px-4 text-sm font-medium ${plan.highlight ? 'bg-[var(--color-accent)] text-[var(--color-text-primary)] hover:bg-[var(--color-accent-hover)]' : 'border border-[var(--color-border)] text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)]'}`}
+                                    className={`mt-5 inline-flex min-h-11 items-center justify-center rounded-xl px-4 text-sm font-medium ${plan.highlight ? 'bg-[var(--color-accent)] text-[var(--color-accent-contrast)] hover:bg-[var(--color-accent-hover)]' : 'border border-[var(--color-border)] text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)]'}`}
                                 >
                                     {plan.price_monthly === 0 ? 'Začít zdarma' : 'Vybrat tarif'}
                                 </Link>
@@ -239,7 +239,7 @@ export default function Landing() {
                             Tarif Duo je trvale zdarma pro dva a 25 GB. Vyšší tarif si můžete pořídit
                             kdykoliv později přímo v nastavení.
                         </p>
-                        <Link href="/registrace" className="mt-6 inline-flex min-h-12 items-center gap-2 rounded-xl bg-[var(--color-accent)] px-7 font-medium text-[var(--color-text-primary)] hover:bg-[var(--color-accent-hover)]">
+                        <Link href="/registrace" className="mt-6 inline-flex min-h-12 items-center gap-2 rounded-xl bg-[var(--color-accent)] px-7 font-medium text-[var(--color-accent-contrast)] hover:bg-[var(--color-accent-hover)]">
                             Založit galerii <ArrowRight size={17} />
                         </Link>
                     </div>

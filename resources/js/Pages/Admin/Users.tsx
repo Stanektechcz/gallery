@@ -85,7 +85,7 @@ export default function AdminUsers({ users }: Props) {
                         <button
                             type="submit"
                             disabled={processing}
-                            className="min-h-11 rounded-lg bg-[var(--color-accent)] px-5 text-sm font-medium text-[var(--color-text-primary)] transition-colors hover:bg-[var(--color-accent-hover)] disabled:opacity-60"
+                            className="min-h-11 rounded-lg bg-[var(--color-accent)] px-5 text-sm font-medium text-[var(--color-accent-contrast)] transition-colors hover:bg-[var(--color-accent-hover)] disabled:opacity-60"
                         >
                             {processing ? 'Odesílám…' : 'Odeslat pozvánku'}
                         </button>

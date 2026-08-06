@@ -41,7 +41,7 @@ export default function PricingIndex() {
                 <div className="mx-auto max-w-5xl">
                     <header className="text-center">
                         <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-2xl bg-[var(--color-accent)] shadow-lg shadow-[var(--color-accent)]/30">
-                            <Images size={28} className="text-[var(--color-text-primary)]" />
+                            <Images size={28} className="text-[var(--color-accent-contrast)]" />
                         </div>
                         <h1 className="text-3xl font-bold text-[var(--color-text-primary)]">Ceník</h1>
                         <p className="mx-auto mt-2 max-w-2xl text-sm text-[var(--color-text-secondary)]">
@@ -109,7 +109,7 @@ export default function PricingIndex() {
 
                     {!loading && plans.length > 0 && (
                         <div className="mt-10 text-center">
-                            <Link href="/registrace" className="inline-flex min-h-11 items-center rounded-xl bg-[var(--color-accent)] px-6 text-sm font-medium text-[var(--color-text-primary)] transition-colors hover:bg-[var(--color-accent-hover)]">
+                            <Link href="/registrace" className="inline-flex min-h-11 items-center rounded-xl bg-[var(--color-accent)] px-6 text-sm font-medium text-[var(--color-accent-contrast)] transition-colors hover:bg-[var(--color-accent-hover)]">
                                 Založit galerii
                             </Link>
                         </div>

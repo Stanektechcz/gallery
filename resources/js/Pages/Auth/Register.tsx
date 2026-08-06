@@ -25,7 +25,7 @@ export default function Register() {
                 <div className="w-full max-w-sm">
                     <div className="mb-8 flex flex-col items-center">
                         <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--color-accent)] shadow-lg shadow-[var(--color-accent)]/30">
-                            <Images size={28} className="text-[var(--color-text-primary)]" />
+                            <Images size={28} className="text-[var(--color-accent-contrast)]" />
                         </div>
                         <h1 className="text-xl font-semibold text-[var(--color-text-primary)]">Založit galerii</h1>
                         <p className="mt-1 text-center text-sm text-[var(--color-text-secondary)]">
@@ -64,7 +64,7 @@ export default function Register() {
                             {errors.password_confirmation && <p className="mt-1 text-xs text-red-400">{errors.password_confirmation}</p>}
                         </div>
 
-                        <button type="submit" disabled={processing} className="w-full rounded-lg bg-[var(--color-accent)] py-2.5 text-sm font-medium text-[var(--color-text-primary)] transition-colors hover:bg-[var(--color-accent-hover)] disabled:opacity-60">
+                        <button type="submit" disabled={processing} className="w-full rounded-lg bg-[var(--color-accent)] py-2.5 text-sm font-medium text-[var(--color-accent-contrast)] transition-colors hover:bg-[var(--color-accent-hover)] disabled:opacity-60">
                             {processing ? 'Zakládám…' : 'Založit galerii'}
                         </button>
                     </form>

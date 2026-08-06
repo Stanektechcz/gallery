@@ -154,7 +154,7 @@ export default function GoogleStorageSettings({ connection, client_configured }:
                             <button
                                 onClick={connectDrive}
                                 disabled={!client_configured}
-                                className="bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] disabled:opacity-50 text-[var(--color-text-primary)] text-sm px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
+                                className="bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] disabled:opacity-50 text-[var(--color-accent-contrast)] text-sm px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
                             >
                                 <ExternalLink size={14} />
                                 Připojit Google Drive
@@ -172,7 +172,7 @@ export default function GoogleStorageSettings({ connection, client_configured }:
                                 <button
                                     onClick={syncExisting}
                                     disabled={syncing || status !== 'healthy'}
-                                    className="bg-[var(--color-accent)]/15 hover:bg-[var(--color-accent)]/25 disabled:opacity-50 text-[var(--color-text-primary)] text-sm px-3 py-2 rounded-lg transition-colors flex items-center gap-2"
+                                    className="bg-[var(--color-accent)]/15 hover:bg-[var(--color-accent)]/25 disabled:opacity-50 text-[var(--color-accent-contrast)] text-sm px-3 py-2 rounded-lg transition-colors flex items-center gap-2"
                                 >
                                     <RefreshCw size={14} className={syncing ? 'animate-spin' : ''} />
                                     {syncing ? 'Zařazuji…' : 'Synchronizovat média'}

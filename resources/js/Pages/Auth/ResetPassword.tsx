@@ -27,7 +27,7 @@ export default function ResetPassword({ token, email }: Props) {
                 <div className="w-full max-w-sm">
                     <div className="flex flex-col items-center mb-8">
                         <div className="w-14 h-14 rounded-2xl bg-[var(--color-accent)] flex items-center justify-center mb-4 shadow-lg shadow-[var(--color-accent)]/30">
-                            <LockKeyhole size={28} className="text-[var(--color-text-primary)]" />
+                            <LockKeyhole size={28} className="text-[var(--color-accent-contrast)]" />
                         </div>
                         <h1 className="text-xl font-semibold text-[var(--color-text-primary)]">Nové heslo</h1>
                         <p className="text-sm text-[var(--color-text-secondary)] mt-1">Zvolte si heslo alespoň o 8 znacích.</p>
@@ -80,7 +80,7 @@ export default function ResetPassword({ token, email }: Props) {
                         <button
                             type="submit"
                             disabled={processing}
-                            className="w-full bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] disabled:opacity-60 text-[var(--color-text-primary)] font-medium py-2.5 rounded-lg text-sm transition-colors"
+                            className="w-full bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] disabled:opacity-60 text-[var(--color-accent-contrast)] font-medium py-2.5 rounded-lg text-sm transition-colors"
                         >
                             {processing ? 'Ukládám...' : 'Nastavit heslo'}
                         </button>

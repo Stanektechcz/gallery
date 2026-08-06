@@ -247,7 +247,7 @@ export default function Subscription() {
                                     <div className="inline-flex rounded-xl border border-[var(--color-border)] p-1">
                                         {(['monthly', 'yearly'] as Period[]).map(value => (
                                             <button key={value} type="button" onClick={() => setPeriod(value)} aria-pressed={period === value}
-                                                className={`min-h-8 rounded-lg px-3 text-xs ${period === value ? 'bg-[var(--color-accent)] text-[var(--color-text-primary)]' : 'text-[var(--color-text-secondary)]'}`}>
+                                                className={`min-h-8 rounded-lg px-3 text-xs ${period === value ? 'bg-[var(--color-accent)] text-[var(--color-accent-contrast)]' : 'text-[var(--color-text-secondary)]'}`}>
                                                 {value === 'monthly' ? 'Měsíčně' : 'Ročně'}
                                             </button>
                                         ))}
@@ -274,7 +274,7 @@ export default function Subscription() {
                                                     type="button"
                                                     onClick={() => buy('plan', candidate.code)}
                                                     disabled={busy !== null || price === 0 || !gateway?.configured}
-                                                    className="mt-3 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl bg-[var(--color-accent)] px-4 text-sm font-medium text-[var(--color-text-primary)] disabled:opacity-40"
+                                                    className="mt-3 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl bg-[var(--color-accent)] px-4 text-sm font-medium text-[var(--color-accent-contrast)] disabled:opacity-40"
                                                 >
                                                     {busy === `buy:${candidate.code}` ? <LoaderCircle size={14} className="animate-spin" /> : <CreditCard size={14} />}
                                                     {price === 0 ? 'Zdarma' : 'Přejít na tarif'}
@@ -308,7 +308,7 @@ export default function Subscription() {
                                                             type="button"
                                                             onClick={() => buy('module', module.code)}
                                                             disabled={busy !== null || !gateway?.configured}
-                                                            className="mt-3 inline-flex min-h-10 items-center gap-2 rounded-xl bg-[var(--color-accent)] px-4 text-sm font-medium text-[var(--color-text-primary)] disabled:opacity-40"
+                                                            className="mt-3 inline-flex min-h-10 items-center gap-2 rounded-xl bg-[var(--color-accent)] px-4 text-sm font-medium text-[var(--color-accent-contrast)] disabled:opacity-40"
                                                         >
                                                             {busy === `buy:${module.code}` ? <LoaderCircle size={14} className="animate-spin" /> : <CreditCard size={14} />} Koupit modul
                                                         </button>

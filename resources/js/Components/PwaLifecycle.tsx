@@ -160,7 +160,7 @@ export default function PwaLifecycle() {
                         <p className="text-sm font-semibold text-[var(--color-text-primary)]">Je dostupná nová verze</p>
                         <p className="text-xs text-[var(--color-text-secondary)]">Aktualizace zachová stejná data a načte nejnovější web.</p>
                     </div>
-                    <button type="button" onClick={applyUpdate} disabled={refreshing} className="min-h-10 rounded-xl bg-[var(--color-accent)] px-3 text-xs font-medium text-[var(--color-text-primary)] disabled:opacity-60">
+                    <button type="button" onClick={applyUpdate} disabled={refreshing} className="min-h-10 rounded-xl bg-[var(--color-accent)] px-3 text-xs font-medium text-[var(--color-accent-contrast)] disabled:opacity-60">
                         Aktualizovat
                     </button>
                 </div>
@@ -171,7 +171,7 @@ export default function PwaLifecycle() {
                         <p className="text-sm font-semibold text-[var(--color-text-primary)]">Nainstalovat Maki do zařízení</p>
                         <p className="text-xs text-[var(--color-text-secondary)]">Celá partnerská aplikace na ploše telefonu i tabletu, vždy napojená na aktuální web.</p>
                     </div>
-                    <button type="button" onClick={() => void install()} disabled={installing} className="min-h-10 rounded-xl bg-[var(--color-accent)] px-3 text-xs font-medium text-[var(--color-text-primary)] disabled:opacity-60">{installing ? 'Instaluji…' : 'Nainstalovat'}</button>
+                    <button type="button" onClick={() => void install()} disabled={installing} className="min-h-10 rounded-xl bg-[var(--color-accent)] px-3 text-xs font-medium text-[var(--color-accent-contrast)] disabled:opacity-60">{installing ? 'Instaluji…' : 'Nainstalovat'}</button>
                     <button type="button" onClick={dismissInstallBanner} aria-label="Skrýt nabídku instalace" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]"><X size={18}/></button>
                 </div>
             ) : null}

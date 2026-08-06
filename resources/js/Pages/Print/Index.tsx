@@ -239,7 +239,7 @@ export default function PrintIndex() {
                                 <Printer size={16} className="text-[var(--color-accent)]"/> Výběry
                             </h1>
                             <button onClick={() => setShowCreate(v=>!v)}
-                                className="flex items-center gap-1 bg-[var(--color-accent)] text-[var(--color-text-primary)] text-xs px-2.5 py-1.5 rounded-lg hover:opacity-90">
+                                className="flex items-center gap-1 bg-[var(--color-accent)] text-[var(--color-accent-contrast)] text-xs px-2.5 py-1.5 rounded-lg hover:opacity-90">
                                 <Plus size={12}/> Nový
                             </button>
                         </div>
@@ -263,7 +263,7 @@ export default function PrintIndex() {
                                 className="w-full bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-lg px-2.5 py-1.5 text-xs text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] outline-none focus:border-[var(--color-accent)]"/>
                             <div className="flex gap-2">
                                 <button type="submit" disabled={creating}
-                                    className="flex-1 bg-[var(--color-accent)] text-[var(--color-text-primary)] text-xs py-1.5 rounded-lg hover:opacity-90 disabled:opacity-40">
+                                    className="flex-1 bg-[var(--color-accent)] text-[var(--color-accent-contrast)] text-xs py-1.5 rounded-lg hover:opacity-90 disabled:opacity-40">
                                     Vytvořit
                                 </button>
                                 <button type="button" onClick={()=>setShowCreate(false)}
@@ -351,7 +351,7 @@ export default function PrintIndex() {
                                     </button>
                                     <button onClick={exportZip}
                                         disabled={exporting === 'zip' || items.length === 0}
-                                        className="flex items-center gap-1.5 text-xs bg-[var(--color-accent)] text-[var(--color-text-primary)] px-3 py-1.5 rounded-lg hover:opacity-90 disabled:opacity-40">
+                                        className="flex items-center gap-1.5 text-xs bg-[var(--color-accent)] text-[var(--color-accent-contrast)] px-3 py-1.5 rounded-lg hover:opacity-90 disabled:opacity-40">
                                         <Download size={12}/> ZIP originálů
                                     </button>
                                 </div>

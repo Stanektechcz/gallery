@@ -311,7 +311,7 @@ export default function CalendarEventEditor({ eventUuid, open, onClose, onSaved,
                 <footer className="flex shrink-0 items-center gap-2 border-t border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-4 py-3 sm:px-5">
                     <p className="mr-auto hidden items-center gap-1 text-xs text-[var(--color-text-secondary)] sm:flex"><Check size={13}/>Server ověří oprávnění i všechny vazby.</p>
                     <button type="button" onClick={onClose} disabled={saving || deleting} className="min-h-11 rounded-xl px-4 text-sm text-[var(--color-text-secondary)] disabled:opacity-40">Zrušit</button>
-                    <button disabled={loading || saving || deleting || !event?.can_edit} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[var(--color-accent)] px-4 text-sm font-medium text-[var(--color-text-primary)] disabled:opacity-40"><Save size={16}/>{saving ? 'Ukládám…' : 'Uložit změny'}</button>
+                    <button disabled={loading || saving || deleting || !event?.can_edit} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[var(--color-accent)] px-4 text-sm font-medium text-[var(--color-accent-contrast)] disabled:opacity-40"><Save size={16}/>{saving ? 'Ukládám…' : 'Uložit změny'}</button>
                 </footer>
             </form>
         </div>

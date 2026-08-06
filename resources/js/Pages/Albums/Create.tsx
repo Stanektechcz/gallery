@@ -220,7 +220,7 @@ export default function AlbumsCreate({ allAlbums, parentAlbum }: Props) {
                         <button
                             type="submit"
                             disabled={processing || !data.title.trim()}
-                            className="flex items-center gap-2 bg-[var(--color-accent)] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed text-[var(--color-text-primary)] text-sm font-medium px-5 py-2.5 rounded-lg transition-opacity"
+                            className="flex items-center gap-2 bg-[var(--color-accent)] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed text-[var(--color-accent-contrast)] text-sm font-medium px-5 py-2.5 rounded-lg transition-opacity"
                         >
                             {processing && <Loader2 size={14} className="animate-spin" />}
                             Vytvořit album

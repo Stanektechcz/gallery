@@ -222,7 +222,7 @@ export default function Integrations({ providers, gallerySpaceId }: { providers:
                                         {item.is_enabled ? 'Deaktivovat' : 'Aktivovat'}
                                     </button>
                                 )}
-                                <button type="button" onClick={() => save(item, item.is_enabled || !item.is_configured)} disabled={busy !== null || !pending} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-[var(--color-accent)] px-4 text-xs font-medium text-[var(--color-text-primary)] disabled:cursor-not-allowed disabled:opacity-40">
+                                <button type="button" onClick={() => save(item, item.is_enabled || !item.is_configured)} disabled={busy !== null || !pending} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-[var(--color-accent)] px-4 text-xs font-medium text-[var(--color-accent-contrast)] disabled:cursor-not-allowed disabled:opacity-40">
                                     {saving ? <LoaderCircle size={14} className="animate-spin"/> : <Save size={14}/>} {item.is_configured ? 'Uložit změny' : 'Uložit a aktivovat'}
                                 </button>
                             </div>

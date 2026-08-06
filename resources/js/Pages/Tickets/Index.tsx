@@ -223,7 +223,7 @@ export default function TicketsIndex() {
                             </div>
 
                             <button type="submit" disabled={loading || !form.from || !form.to}
-                                className="flex items-center gap-2 bg-[var(--color-accent)] text-[var(--color-text-primary)] px-5 py-2.5 rounded-xl font-medium text-sm hover:opacity-90 disabled:opacity-40 transition-all shrink-0">
+                                className="flex items-center gap-2 bg-[var(--color-accent)] text-[var(--color-accent-contrast)] px-5 py-2.5 rounded-xl font-medium text-sm hover:opacity-90 disabled:opacity-40 transition-all shrink-0">
                                 {loading ? <RefreshCw size={15} className="animate-spin"/> : <Search size={15}/>}
                                 {loading ? 'Hledám…' : 'Hledat spoje'}
                             </button>
@@ -264,7 +264,7 @@ export default function TicketsIndex() {
                             <div className="flex gap-1">
                                 {(['price','departure'] as SortKey[]).map(k => (
                                     <button key={k} onClick={() => setSortBy(k)}
-                                        className={`px-3 py-1 rounded-lg text-xs transition-colors ${sortBy===k ? 'bg-[var(--color-accent)] text-[var(--color-text-primary)]' : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] border border-[var(--color-border)]'}`}>
+                                        className={`px-3 py-1 rounded-lg text-xs transition-colors ${sortBy===k ? 'bg-[var(--color-accent)] text-[var(--color-accent-contrast)]' : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] border border-[var(--color-border)]'}`}>
                                         {k === 'price' ? '⬆ Cena' : '⬆ Odjezd'}
                                     </button>
                                 ))}
@@ -343,7 +343,7 @@ export default function TicketsIndex() {
                                                     <p className="text-xs text-[var(--color-text-secondary)]">cenu ověří prodejce</p>
                                                 )}
                                                 <a href={trip.book_url} target="_blank" rel="noopener noreferrer"
-                                                    className={`inline-flex items-center gap-1 mt-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${trip.price !== null ? 'bg-[var(--color-accent)] text-[var(--color-text-primary)] hover:opacity-90' : 'bg-[var(--color-bg-secondary)] border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}>
+                                                    className={`inline-flex items-center gap-1 mt-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${trip.price !== null ? 'bg-[var(--color-accent)] text-[var(--color-accent-contrast)] hover:opacity-90' : 'bg-[var(--color-bg-secondary)] border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}>
                                                     {trip.price !== null ? '🎫 Koupit' : '🔍 Hledat'}
                                                     <span className="text-[10px] opacity-70">↗</span>
                                                 </a>

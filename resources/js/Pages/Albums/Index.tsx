@@ -90,7 +90,7 @@ export default function AlbumsIndex({ albums, gallerySpace, albumSuggestions, al
                     <h1 className="text-lg font-semibold text-[var(--color-text-primary)]">Alba</h1>
                     <Link
                         href="/albums/create"
-                        className="bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] text-[var(--color-text-primary)] text-sm px-3 py-1.5 rounded-lg transition-colors"
+                        className="bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] text-[var(--color-accent-contrast)] text-sm px-3 py-1.5 rounded-lg transition-colors"
                     >
                         + Nové album
                     </Link>

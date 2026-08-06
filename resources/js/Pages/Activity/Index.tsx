@@ -99,7 +99,7 @@ export default function ActivityIndex({ logs }: Props) {
                         {logs.links.map((link, i) => (
                             <button key={i} disabled={!link.url || link.active}
                                 onClick={() => link.url && (window.location.href = link.url)}
-                                className={`px-3 py-1.5 rounded text-xs ${link.active ? 'bg-[var(--color-accent)] text-[var(--color-text-primary)]' : !link.url ? 'opacity-40 text-[var(--color-text-secondary)]' : 'bg-[var(--color-bg-card)] border border-[var(--color-border)] text-[var(--color-text-primary)]'}`}
+                                className={`px-3 py-1.5 rounded text-xs ${link.active ? 'bg-[var(--color-accent)] text-[var(--color-accent-contrast)]' : !link.url ? 'opacity-40 text-[var(--color-text-secondary)]' : 'bg-[var(--color-bg-card)] border border-[var(--color-border)] text-[var(--color-text-primary)]'}`}
                                 dangerouslySetInnerHTML={{ __html: link.label }}
                             />
                         ))}

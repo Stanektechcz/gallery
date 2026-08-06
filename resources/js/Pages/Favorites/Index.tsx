@@ -62,7 +62,7 @@ export default function FavoritesIndex({ my_items, shared_items, partner_items, 
                         <div className="flex gap-1">
                             {TABS.map(t => (
                                 <button key={t.key} onClick={() => { setTab(t.key); setSelected(new Set()); }}
-                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-colors ${tab === t.key ? 'bg-[var(--color-accent)] text-[var(--color-text-primary)]' : 'border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}>
+                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-colors ${tab === t.key ? 'bg-[var(--color-accent)] text-[var(--color-accent-contrast)]' : 'border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}>
                                     {t.label}
                                     <span className={`text-[10px] ${tab === t.key ? 'opacity-80' : 'opacity-60'}`}>({t.count})</span>
                                 </button>

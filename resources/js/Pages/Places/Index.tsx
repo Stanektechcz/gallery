@@ -229,7 +229,7 @@ export default function PlacesIndex() {
                             <CalendarDays size={14}/> {planningMode ? 'Ukončit výběr' : 'Naplánovat výlet'}
                         </button>
                         <button onClick={() => setShowCreate(v => !v)}
-                            className="flex items-center gap-1.5 bg-[var(--color-accent)] text-[var(--color-text-primary)] text-sm px-3 py-2 rounded-lg hover:opacity-90">
+                            className="flex items-center gap-1.5 bg-[var(--color-accent)] text-[var(--color-accent-contrast)] text-sm px-3 py-2 rounded-lg hover:opacity-90">
                             <Plus size={14}/> Najít podnik nebo místo
                         </button>
                     </div>
@@ -299,7 +299,7 @@ export default function PlacesIndex() {
                         </div>
                         <div className="flex gap-2 mt-3">
                             <button type="submit" disabled={creating || !form.name}
-                                className="bg-[var(--color-accent)] text-[var(--color-text-primary)] text-sm px-4 py-2 rounded-lg hover:opacity-90 disabled:opacity-40">
+                                className="bg-[var(--color-accent)] text-[var(--color-accent-contrast)] text-sm px-4 py-2 rounded-lg hover:opacity-90 disabled:opacity-40">
                                 {creating ? 'Vytvářím…' : 'Vytvořit místo'}
                             </button>
                             <button type="button" onClick={() => { setShowCreate(false); setNominatimQ(''); setForm({ ...EMPTY_FORM }); }}
@@ -352,27 +352,27 @@ export default function PlacesIndex() {
                 {/* Type filter chips */}
                 <div className="flex gap-2 mb-5 overflow-x-auto pb-1">
                     <button onClick={() => setFilterType('all')}
-                        className={`text-xs px-3 py-1.5 rounded-full whitespace-nowrap transition-colors ${filterType === 'all' ? 'bg-[var(--color-accent)] text-[var(--color-text-primary)]' : 'border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}>
+                        className={`text-xs px-3 py-1.5 rounded-full whitespace-nowrap transition-colors ${filterType === 'all' ? 'bg-[var(--color-accent)] text-[var(--color-accent-contrast)]' : 'border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}>
                         Vše ({places.length})
                     </button>
                     {Object.entries(TYPES).filter(([k]) => typeCounts[k]).map(([k, v]) => (
                         <button key={k} onClick={() => setFilterType(k === filterType ? 'all' : k)}
-                            className={`text-xs px-3 py-1.5 rounded-full whitespace-nowrap transition-colors ${filterType === k ? 'bg-[var(--color-accent)] text-[var(--color-text-primary)]' : 'border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}>
+                            className={`text-xs px-3 py-1.5 rounded-full whitespace-nowrap transition-colors ${filterType === k ? 'bg-[var(--color-accent)] text-[var(--color-accent-contrast)]' : 'border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}>
                             {v.emoji} {v.label} ({typeCounts[k]})
                         </button>
                     ))}
                 </div>
 
                 <div className="mb-3 flex gap-2 overflow-x-auto pb-1" aria-label="Stav míst">
-                    <button onClick={() => setFilterLifecycle('all')} className={`min-h-9 shrink-0 rounded-full px-3 text-xs transition-colors ${filterLifecycle === 'all' ? 'bg-[var(--color-accent)] text-[var(--color-text-primary)]' : 'border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}>Všechny stavy</button>
-                    {(Object.entries(LIFECYCLE) as [LifecycleStatus, typeof LIFECYCLE.idea][]).map(([value, status]) => <button key={value} onClick={() => setFilterLifecycle(filterLifecycle === value ? 'all' : value)} className={`min-h-9 shrink-0 rounded-full border px-3 text-xs transition-colors ${filterLifecycle === value ? 'border-[var(--color-accent)] bg-[var(--color-accent)]/15 text-[var(--color-text-primary)]' : 'border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}>{status.label}</button>)}
+                    <button onClick={() => setFilterLifecycle('all')} className={`min-h-9 shrink-0 rounded-full px-3 text-xs transition-colors ${filterLifecycle === 'all' ? 'bg-[var(--color-accent)] text-[var(--color-accent-contrast)]' : 'border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}>Všechny stavy</button>
+                    {(Object.entries(LIFECYCLE) as [LifecycleStatus, typeof LIFECYCLE.idea][]).map(([value, status]) => <button key={value} onClick={() => setFilterLifecycle(filterLifecycle === value ? 'all' : value)} className={`min-h-9 shrink-0 rounded-full border px-3 text-xs transition-colors ${filterLifecycle === value ? 'border-[var(--color-accent)] bg-[var(--color-accent)]/15 text-[var(--color-accent-contrast)]' : 'border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}>{status.label}</button>)}
                 </div>
 
                 <div className="mb-5 flex gap-2 overflow-x-auto pb-1" aria-label="Rychlé kolekce míst">
                     {([
                         ['all', 'Všechny nápady'], ['rain', '🌧️ Na déšť'], ['photo', '📸 Fotogenické'],
                         ['early', '🌅 Brzy ráno'], ['budget', '💸 Do rozpočtu'], ['favorite', '★ Oblíbené'],
-                    ] as const).map(([key, label]) => <button key={key} onClick={() => setQuickFilter(key)} className={`min-h-9 shrink-0 rounded-full px-3 text-xs transition-colors ${quickFilter === key ? 'bg-[var(--color-accent)] text-[var(--color-text-primary)]' : 'border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}>{label}</button>)}
+                    ] as const).map(([key, label]) => <button key={key} onClick={() => setQuickFilter(key)} className={`min-h-9 shrink-0 rounded-full px-3 text-xs transition-colors ${quickFilter === key ? 'bg-[var(--color-accent)] text-[var(--color-accent-contrast)]' : 'border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}>{label}</button>)}
                 </div>
 
                 {/* Places grid */}

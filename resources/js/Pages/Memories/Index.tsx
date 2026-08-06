@@ -88,7 +88,7 @@ function MemoryCard({ memory, onAction, onShare, onPlan }: { memory: Memory; onA
                     <button onClick={()=>onPlan(memory)} title="Naplánovat společný večer" className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-violet-400/30 px-3 text-xs font-medium text-violet-100 hover:bg-violet-500/10 sm:flex-none"><CalendarHeart size={15}/> Večer</button>
                     <button onClick={() => onShare(memory)} title="Uložit pro vás oba" className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-pink-400/30 px-3 text-xs font-medium text-pink-100 hover:bg-pink-500/10 sm:flex-none"><Heart size={15} /> Pro nás</button>
                     <button onClick={() => onAction(memory, 'saved')} title="Uložit vzpomínku"
-                        className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-[var(--color-accent)] px-3 text-xs font-medium text-[var(--color-text-primary)] sm:flex-none">
+                        className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-[var(--color-accent)] px-3 text-xs font-medium text-[var(--color-accent-contrast)] sm:flex-none">
                         <Bookmark size={15} /> Uložit
                     </button>
                     <button onClick={() => onAction(memory, 'snoozed')} title="Připomenout později"
@@ -146,7 +146,7 @@ function PreferencesPanel({ onClose }: { onClose: () => void }) {
                         </label>
                     ))}
                 </div>
-                <button onClick={save} disabled={saving || enabled.length === 0} className="mt-5 min-h-11 w-full rounded-xl bg-[var(--color-accent)] text-sm font-medium text-[var(--color-text-primary)] disabled:opacity-40">{saving ? 'Ukládám…' : 'Uložit nastavení'}</button>
+                <button onClick={save} disabled={saving || enabled.length === 0} className="mt-5 min-h-11 w-full rounded-xl bg-[var(--color-accent)] text-sm font-medium text-[var(--color-accent-contrast)] disabled:opacity-40">{saving ? 'Ukládám…' : 'Uložit nastavení'}</button>
             </div>
         </div>
     );

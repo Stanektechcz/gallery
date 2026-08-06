@@ -36,9 +36,58 @@ class EntitlementService
     public const MODULE_BURPS = self::FEATURE_BURPS;
     public const MODULE_VOICE_NOTES = self::FEATURE_VOICE_NOTES;
 
+    /*
+     | Resolving one feature means reading the catalogue, the plan and the add-ons. The
+     | navigation asks about every feature on every page load, which turned into 130
+     | queries per request before these caches. They live for one request and are cleared
+     | whenever an entitlement changes.
+     */
+
+    /** @var array<int, list<string>> */
+    private array $entitledCache = [];
+
+    /** @var \Illuminate\Support\Collection<string, Feature>|null */
+    private $featureCache = null;
+
+    /** @var array<int, array<int, bool>> */
+    private array $preferenceCache = [];
+
+    /** @var array<int, BillingPlan|null> */
+    private array $planCache = [];
+
+    /** @var array<string, bool> */
+    private array $tableCache = [];
+
+    /** Schema::hasTable queries the database every time; the answer cannot change mid-request. */
+    private function hasTable(string $table): bool
+    {
+        return $this->tableCache[$table] ??= Schema::hasTable($table);
+    }
+
     public function available(): bool
     {
-        return Schema::hasTable('features') && Schema::hasTable('billing_plans');
+        return $this->hasTable('features') && $this->hasTable('billing_plans');
+    }
+
+    /** Called after anything that changes what a space may use. */
+    public function forget(?GallerySpace $space = null): void
+    {
+        if ($space) {
+            unset($this->entitledCache[$space->id], $this->preferenceCache[$space->id], $this->planCache[$space->id]);
+
+            return;
+        }
+
+        $this->entitledCache = [];
+        $this->preferenceCache = [];
+        $this->planCache = [];
+        $this->featureCache = null;
+    }
+
+    /** The whole catalogue, keyed by code. Small enough to hold, and read constantly. */
+    private function features()
+    {
+        return $this->featureCache ??= Feature::orderBy('sort_order')->get()->keyBy('code');
     }
 
     // ─── Entitlement ────────────────────────────────────────────────
@@ -50,20 +99,24 @@ class EntitlementService
      */
     public function entitledFeatures(GallerySpace $space): array
     {
+        if (isset($this->entitledCache[$space->id])) return $this->entitledCache[$space->id];
         if (! $this->available()) return [];
 
-        $codes = Feature::where('is_core', true)->pluck('code')->all();
+        return $this->entitledCache[$space->id] = (function () use ($space): array {
+            $codes = $this->features()->where('is_core', true)->keys()->all();
 
-        $plan = $this->plan($space);
-        if ($plan) {
-            $codes = [...$codes, ...$plan->grantedFeatures()->pluck('code')->all()];
-        }
+            $plan = $this->plan($space);
+            if ($plan) {
+                $codes = [...$codes, ...$plan->grantedFeatures()->pluck('code')->all()];
+            }
 
-        foreach ($this->activeModules($space) as $module) {
-            $codes = [...$codes, ...$module->grantedFeatures()->pluck('code')->all()];
-        }
+            // Eager-loaded, so the add-ons cost one query rather than one apiece.
+            foreach ($this->activeModules($space) as $module) {
+                $codes = [...$codes, ...$module->grantedFeatures->pluck('code')->all()];
+            }
 
-        return array_values(array_unique($codes));
+            return array_values(array_unique($codes));
+        })();
     }
 
     public function isEntitled(GallerySpace $space, string $featureCode): bool
@@ -79,14 +132,11 @@ class EntitlementService
     {
         if (! $this->isEntitled($space, $featureCode)) return false;
 
-        $feature = $this->featureByCode($featureCode);
+        $feature = $this->features()->get($featureCode);
         if (! $feature || $feature->is_core || ! $feature->is_optional) return true;
 
-        $preference = SpaceFeature::where('gallery_space_id', $space->id)
-            ->where('feature_id', $feature->id)->first();
-
-        // No row yet means the customer has not opted out: a granted feature starts on.
-        return $preference === null || $preference->enabled;
+        // No row means the customer has not opted out: a granted feature starts on.
+        return $this->preferences($space)[$feature->id] ?? true;
     }
 
     /** Backwards-compatible alias; module codes and feature codes share a namespace. */
@@ -105,13 +155,25 @@ class EntitlementService
             ['gallery_space_id' => $space->id, 'feature_id' => $feature->id],
             ['enabled' => $enabled]
         );
+
+        $this->forget($space);
     }
 
     // ─── Plan and modules ───────────────────────────────────────────
 
+    /** @return array<int, bool> Feature id => wanted, for one space. */
+    private function preferences(GallerySpace $space): array
+    {
+        return $this->preferenceCache[$space->id] ??= SpaceFeature::where('gallery_space_id', $space->id)
+            ->pluck('enabled', 'feature_id')
+            ->map(fn ($enabled) => (bool) $enabled)
+            ->all();
+    }
+
     public function plan(GallerySpace $space): ?BillingPlan
     {
-        if (! Schema::hasTable('space_subscriptions')) return null;
+        if (! $this->hasTable('space_subscriptions')) return null;
+        if (array_key_exists($space->id, $this->planCache)) return $this->planCache[$space->id];
 
         $subscription = SpaceSubscription::with('plan')
             ->where('gallery_space_id', $space->id)
@@ -119,12 +181,12 @@ class EntitlementService
             ->where(fn ($query) => $query->whereNull('ends_at')->orWhere('ends_at', '>', now()))
             ->first();
 
-        return $subscription?->plan ?? BillingPlan::where('is_default', true)->first();
+        return $this->planCache[$space->id] = $subscription?->plan ?? BillingPlan::where('is_default', true)->first();
     }
 
     public function subscription(GallerySpace $space): ?SpaceSubscription
     {
-        if (! Schema::hasTable('space_subscriptions')) return null;
+        if (! $this->hasTable('space_subscriptions')) return null;
 
         return SpaceSubscription::with('plan')->where('gallery_space_id', $space->id)->first();
     }
@@ -132,18 +194,21 @@ class EntitlementService
     /** @return \Illuminate\Support\Collection<int, BillingModule> */
     public function activeModules(GallerySpace $space)
     {
-        if (! Schema::hasTable('space_modules')) return collect();
+        if (! $this->hasTable('space_modules')) return collect();
 
         $ids = SpaceModule::where('gallery_space_id', $space->id)
             ->whereIn('status', ['active', 'trialing'])
             ->where(fn ($query) => $query->whereNull('ends_at')->orWhere('ends_at', '>', now()))
             ->pluck('billing_module_id');
 
-        return BillingModule::whereIn('id', $ids)->get();
+        // Eager-loaded so entitledFeatures() does not query per add-on.
+        return BillingModule::with('grantedFeatures')->whereIn('id', $ids)->get();
     }
 
     public function enableModule(GallerySpace $space, BillingModule $module, ?User $actor = null, string $period = 'monthly', ?\DateTimeInterface $until = null): SpaceModule
     {
+        $this->forget($space);
+
         return SpaceModule::updateOrCreate(
             ['gallery_space_id' => $space->id, 'billing_module_id' => $module->id],
             [
@@ -159,10 +224,14 @@ class EntitlementService
         SpaceModule::where('gallery_space_id', $space->id)
             ->where('billing_module_id', $module->id)
             ->update(['status' => 'paused', 'ends_at' => now()]);
+
+        $this->forget($space);
     }
 
     public function assignPlan(GallerySpace $space, BillingPlan $plan, ?User $actor = null, string $period = 'monthly', ?\DateTimeInterface $until = null): SpaceSubscription
     {
+        $this->forget($space);
+
         return SpaceSubscription::updateOrCreate(
             ['gallery_space_id' => $space->id],
             [

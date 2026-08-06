@@ -13,7 +13,9 @@ class AppServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-        //
+        // One instance per request, so its caches are shared by every caller rather than
+        // each resolution starting cold and re-reading the plan and add-ons.
+        $this->app->singleton(\App\Services\Billing\EntitlementService::class);
     }
 
     public function boot(): void

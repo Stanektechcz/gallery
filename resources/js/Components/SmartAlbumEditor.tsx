@@ -116,7 +116,7 @@ export default function SmartAlbumEditor({
                         <div className="flex gap-1">
                             {['all', 'any'].map(m => (
                                 <button key={m} onClick={() => setRules(r => ({ ...r, match: m as any }))}
-                                    className={`text-xs px-2 py-1 rounded-lg transition-colors ${rules.match === m ? 'bg-[var(--color-accent)] text-[var(--color-text-primary)]' : 'border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}>
+                                    className={`text-xs px-2 py-1 rounded-lg transition-colors ${rules.match === m ? 'bg-[var(--color-accent)] text-[var(--color-accent-contrast)]' : 'border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}>
                                     {m === 'all' ? 'VŠECHNA pravidla' : 'ALESPOŇ JEDNO pravidlo'}
                                 </button>
                             ))}
@@ -195,7 +195,7 @@ export default function SmartAlbumEditor({
 
             <div className="flex gap-2">
                 <button onClick={save} disabled={saving}
-                    className="flex items-center gap-1.5 bg-[var(--color-accent)] text-[var(--color-text-primary)] text-sm px-4 py-2 rounded-lg hover:opacity-90 disabled:opacity-40">
+                    className="flex items-center gap-1.5 bg-[var(--color-accent)] text-[var(--color-accent-contrast)] text-sm px-4 py-2 rounded-lg hover:opacity-90 disabled:opacity-40">
                     {saving ? <Loader2 size={13} className="animate-spin"/> : <Check size={13}/>}
                     Uložit
                 </button>

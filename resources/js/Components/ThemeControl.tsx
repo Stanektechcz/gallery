@@ -86,7 +86,7 @@ export default function ThemeControl({ initial }: { initial?: unknown }) {
                                     type="button"
                                     disabled={busy}
                                     onClick={() => void choose(option.value)}
-                                    className={`mt-1 flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left disabled:opacity-50 ${theme === option.value ? 'bg-[var(--color-accent)]/15 text-[var(--color-text-primary)]' : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]'}`}
+                                    className={`mt-1 flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left disabled:opacity-50 ${theme === option.value ? 'bg-[var(--color-accent)]/15 text-[var(--color-accent-contrast)]' : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]'}`}
                                 >
                                     <span className="flex h-5 w-5 items-center justify-center">
                                         {theme === option.value ? <Check size={14} /> : <Icon size={14} />}

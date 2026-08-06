@@ -215,7 +215,7 @@ export default function MapIndex() {
                                     )}
                                     <div className="flex gap-2 pt-1">
                                         <Link href={`/media/${selected.uuid}`}
-                                            className="flex-1 flex items-center justify-center gap-1.5 bg-[var(--color-accent)] text-[var(--color-text-primary)] text-xs py-1.5 rounded-lg hover:opacity-90"
+                                            className="flex-1 flex items-center justify-center gap-1.5 bg-[var(--color-accent)] text-[var(--color-accent-contrast)] text-xs py-1.5 rounded-lg hover:opacity-90"
                                             onClick={() => setSelected(null)}>
                                             <ExternalLink size={11} /> Otevřít
                                         </Link>
@@ -266,7 +266,7 @@ export default function MapIndex() {
                                     <p className="text-[10px] text-[var(--color-text-secondary)]">📸 {selectedAlbum.media_count} médií</p>
                                     <div className="flex gap-2 pt-1">
                                         <Link href={`/albums/${selectedAlbum.uuid}`}
-                                            className="flex-1 flex items-center justify-center gap-1.5 bg-[var(--color-accent)] text-[var(--color-text-primary)] text-xs py-1.5 rounded-lg hover:opacity-90"
+                                            className="flex-1 flex items-center justify-center gap-1.5 bg-[var(--color-accent)] text-[var(--color-accent-contrast)] text-xs py-1.5 rounded-lg hover:opacity-90"
                                             onClick={() => setSelectedAlbum(null)}>
                                             <FolderOpen size={11}/> Otevřít album
                                         </Link>

@@ -126,7 +126,7 @@ export default function BurpsIndex() {
                             protějškem podle hlasitosti, délky, umění a překvapení a sledujte žebříček i šampiona měsíce.
                         </p>
                         <div className="mt-5 flex flex-wrap justify-center gap-2">
-                            <Link href="/cenik" className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-[var(--color-accent)] px-4 text-sm font-medium text-[var(--color-text-primary)]">
+                            <Link href="/cenik" className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-[var(--color-accent)] px-4 text-sm font-medium text-[var(--color-accent-contrast)]">
                                 <Lock size={15} /> Zobrazit ceník
                             </Link>
                             <Link href="/settings/predplatne" className="inline-flex min-h-10 items-center rounded-xl border border-[var(--color-border)] px-4 text-sm text-[var(--color-text-primary)]">

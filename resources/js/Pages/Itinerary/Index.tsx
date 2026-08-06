@@ -246,7 +246,7 @@ export default function ItineraryIndex() {
                         </div>
                         <div className="flex gap-2">
                             <button onClick={() => { setShowForm(v=>!v); setSearchQuery(''); setForm({...EMPTY_FORM}); setShowDropdown(false); }}
-                                className="flex-1 flex items-center justify-center gap-1.5 bg-[var(--color-accent)] text-[var(--color-text-primary)] text-xs py-1.5 rounded-lg hover:opacity-90">
+                                className="flex-1 flex items-center justify-center gap-1.5 bg-[var(--color-accent)] text-[var(--color-accent-contrast)] text-xs py-1.5 rounded-lg hover:opacity-90">
                                 <Plus size={12}/> Přidat místo
                             </button>
                             <button onClick={autoCheck} disabled={checking}
@@ -334,7 +334,7 @@ export default function ItineraryIndex() {
 
                                 <div className="flex gap-2">
                                     <button type="submit" disabled={!form.name && !searchQuery}
-                                        className="flex-1 bg-[var(--color-accent)] text-[var(--color-text-primary)] text-xs py-1.5 rounded-lg hover:opacity-90 disabled:opacity-40">
+                                        className="flex-1 bg-[var(--color-accent)] text-[var(--color-accent-contrast)] text-xs py-1.5 rounded-lg hover:opacity-90 disabled:opacity-40">
                                         Přidat do itineráře
                                     </button>
                                     <button type="button" onClick={()=>setShowForm(false)}
@@ -348,7 +348,7 @@ export default function ItineraryIndex() {
                     <div className="flex gap-1 px-3 py-2 border-b border-[var(--color-border)] shrink-0 overflow-x-auto">
                         {([['all','Vše'],['dream','✨ Sny'],['soon','🎯 Brzy'],['someday','🌍 Jednou'],['planned','📅 Plán'],['visited','✅ Splněno']] as const).map(([key,label]) => (
                             <button key={key} onClick={()=>setFilter(key as any)}
-                                className={`px-2 py-1 rounded-lg text-[10px] whitespace-nowrap transition-colors ${filter===key?'bg-[var(--color-accent)] text-[var(--color-text-primary)]':'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}>
+                                className={`px-2 py-1 rounded-lg text-[10px] whitespace-nowrap transition-colors ${filter===key?'bg-[var(--color-accent)] text-[var(--color-accent-contrast)]':'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}>
                                 {label}
                             </button>
                         ))}
@@ -432,7 +432,7 @@ export default function ItineraryIndex() {
                                                         className="w-full bg-[var(--color-bg-secondary)] border border-[var(--color-accent)] rounded-lg px-2 py-1 text-[10px] text-[var(--color-text-primary)] outline-none resize-none"/>
                                                     <div className="flex gap-1">
                                                         <button onClick={() => updatePlace(place.id, { notes: editVal })} disabled={saving}
-                                                            className="flex items-center gap-1 text-[10px] bg-[var(--color-accent)] text-[var(--color-text-primary)] px-2 py-0.5 rounded hover:opacity-90 disabled:opacity-40">
+                                                            className="flex items-center gap-1 text-[10px] bg-[var(--color-accent)] text-[var(--color-accent-contrast)] px-2 py-0.5 rounded hover:opacity-90 disabled:opacity-40">
                                                             <Save size={9}/> Uložit
                                                         </button>
                                                         <button onClick={() => setEditField(null)} className="text-[10px] text-[var(--color-text-secondary)] px-1">Zrušit</button>

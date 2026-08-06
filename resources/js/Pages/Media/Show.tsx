@@ -183,13 +183,13 @@ function ReactionPanel({ uuid }: { uuid: string }) {
                     const who = details.filter(d => d.reaction === r.key);
                     return (
                         <button key={r.key} onClick={() => react(r.key)} title={r.label}
-                            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-full border text-xs transition-all ${mine === r.key ? 'bg-[var(--color-accent)]/20 border-[var(--color-accent)] text-[var(--color-text-primary)]' : 'border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[var(--color-accent)]/50 hover:text-[var(--color-text-primary)]'}`}>
+                            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-full border text-xs transition-all ${mine === r.key ? 'bg-[var(--color-accent)]/20 border-[var(--color-accent)] text-[var(--color-accent-contrast)]' : 'border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[var(--color-accent)]/50 hover:text-[var(--color-text-primary)]'}`}>
                             <span className="text-sm">{r.emoji}</span>
                             {who.length > 0 && (
                                 <span className="flex items-center gap-0.5">
                                     {who.map(d => (
                                         <span key={d.user_id}
-                                            className={`inline-flex w-4 h-4 rounded-full items-center justify-center text-[9px] font-bold ${d.is_me ? 'bg-[var(--color-accent)] text-[var(--color-text-primary)]' : 'bg-white/20 text-[var(--color-text-primary)]'}`}
+                                            className={`inline-flex w-4 h-4 rounded-full items-center justify-center text-[9px] font-bold ${d.is_me ? 'bg-[var(--color-accent)] text-[var(--color-accent-contrast)]' : 'bg-white/20 text-[var(--color-text-primary)]'}`}
                                             title={d.name}>
                                             {d.initial}
                                         </span>
@@ -229,7 +229,7 @@ function CurationPanel({ uuid }: { uuid: string }) {
 
     return <section>
         <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">Společný výběr</h3>
-        {boards.length ? <div className="flex gap-2"><select value={selected} onChange={event => setSelected(event.target.value)} className="min-h-9 min-w-0 flex-1 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-2 text-xs text-[var(--color-text-primary)]"><option value="">Vyberte kolekci</option>{boards.map(board => <option key={board.uuid} value={board.uuid}>{board.title}</option>)}</select><button onClick={add} className="min-h-9 rounded-lg bg-[var(--color-accent)] px-3 text-xs text-[var(--color-text-primary)]">Přidat</button></div> : <Link href="/curation" className="text-xs text-[var(--color-accent)] hover:underline">Vytvořit první společný výběr</Link>}
+        {boards.length ? <div className="flex gap-2"><select value={selected} onChange={event => setSelected(event.target.value)} className="min-h-9 min-w-0 flex-1 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-2 text-xs text-[var(--color-text-primary)]"><option value="">Vyberte kolekci</option>{boards.map(board => <option key={board.uuid} value={board.uuid}>{board.title}</option>)}</select><button onClick={add} className="min-h-9 rounded-lg bg-[var(--color-accent)] px-3 text-xs text-[var(--color-accent-contrast)]">Přidat</button></div> : <Link href="/curation" className="text-xs text-[var(--color-accent)] hover:underline">Vytvořit první společný výběr</Link>}
         {message && <p className="mt-1 text-[10px] text-[var(--color-text-secondary)]">{message}</p>}
     </section>;
 }
@@ -294,7 +294,7 @@ function MilestonePanel({ mediaId, gallerySpaceId, takenAt }: { mediaId: number;
         {linked.length > 0 && <div className="mb-2 space-y-1">{linked.map(item => <p key={item.uuid} className="rounded-lg bg-pink-500/10 px-2 py-1 text-xs text-pink-100">{item.title} · {new Date(item.occurred_on).toLocaleDateString('cs-CZ')}</p>)}</div>}
         {available.length > 0 && <div className="flex gap-2"><select value={selected} onChange={event => setSelected(event.target.value)} className="min-h-9 min-w-0 flex-1 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-2 text-xs text-[var(--color-text-primary)]"><option value="">Vybrat existující milník</option>{available.map(item => <option key={item.uuid} value={item.uuid}>{item.title}</option>)}</select><button onClick={attach} disabled={loading || !selected} className="min-h-9 rounded-lg border border-pink-400/30 px-3 text-xs text-pink-100 disabled:opacity-40">Připojit</button></div>}
         <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_auto]"><input value={title} onChange={event => setTitle(event.target.value)} placeholder="Nový společný milník" className="min-h-9 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-2 text-xs text-[var(--color-text-primary)]"/><input type="date" value={occurredOn} onChange={event => setOccurredOn(event.target.value)} className="min-h-9 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-2 text-xs text-[var(--color-text-primary)]"/></div>
-        <button onClick={create} disabled={loading || !title.trim()} className="mt-2 min-h-9 rounded-lg bg-[var(--color-accent)] px-3 text-xs text-[var(--color-text-primary)] disabled:opacity-40">Vytvořit z této vzpomínky</button>
+        <button onClick={create} disabled={loading || !title.trim()} className="mt-2 min-h-9 rounded-lg bg-[var(--color-accent)] px-3 text-xs text-[var(--color-accent-contrast)] disabled:opacity-40">Vytvořit z této vzpomínky</button>
         {message && <p className="mt-1 text-[10px] text-[var(--color-text-secondary)]">{message}</p>}
     </section>;
 }
@@ -783,7 +783,7 @@ export default function MediaShow({ media, breadcrumb, prev, next }: Props) {
                         title="Komentáře">
                         <MessageSquare size={15}/>
                         {comments.length > 0 && (
-                            <span className="absolute top-0.5 right-0.5 text-[9px] bg-[var(--color-accent)] text-[var(--color-text-primary)] rounded-full w-3.5 h-3.5 flex items-center justify-center font-bold leading-none">
+                            <span className="absolute top-0.5 right-0.5 text-[9px] bg-[var(--color-accent)] text-[var(--color-accent-contrast)] rounded-full w-3.5 h-3.5 flex items-center justify-center font-bold leading-none">
                                 {comments.length}
                             </span>
                         )}
@@ -1207,7 +1207,7 @@ export default function MediaShow({ media, breadcrumb, prev, next }: Props) {
                                             Soukromá poznámka
                                         </label>
                                         <button type="submit" disabled={!commentText.trim()}
-                                            className="text-xs bg-[var(--color-accent)] text-[var(--color-text-primary)] px-2.5 py-1 rounded-lg disabled:opacity-40 hover:opacity-90">
+                                            className="text-xs bg-[var(--color-accent)] text-[var(--color-accent-contrast)] px-2.5 py-1 rounded-lg disabled:opacity-40 hover:opacity-90">
                                             Přidat
                                         </button>
                                     </div>

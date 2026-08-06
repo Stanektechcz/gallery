@@ -227,7 +227,7 @@ function BlockEditor({ type, draft, setDraft, albumMedia, onSave, onCancel }: {
 
     const actions = (
         <div className="flex gap-2 mt-3">
-            <button onClick={onSave}   className="bg-[var(--color-accent)] text-[var(--color-text-primary)] text-xs px-4 py-1.5 rounded-lg hover:opacity-90">Uložit</button>
+            <button onClick={onSave}   className="bg-[var(--color-accent)] text-[var(--color-accent-contrast)] text-xs px-4 py-1.5 rounded-lg hover:opacity-90">Uložit</button>
             <button onClick={onCancel} className="border border-[var(--color-border)] text-[var(--color-text-secondary)] text-xs px-4 py-1.5 rounded-lg hover:text-[var(--color-text-primary)]">Zrušit</button>
         </div>
     );

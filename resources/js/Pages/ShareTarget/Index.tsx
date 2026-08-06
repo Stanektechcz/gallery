@@ -58,7 +58,7 @@ function AlbumTreeNode({
     return (
         <div>
             <div
-                className={`flex items-center gap-1.5 py-2 pr-3 rounded-lg cursor-pointer transition-all group ${isSelected ? 'bg-[var(--color-accent)]/15 text-[var(--color-text-primary)]' : 'hover:bg-[var(--color-surface-hover)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}
+                className={`flex items-center gap-1.5 py-2 pr-3 rounded-lg cursor-pointer transition-all group ${isSelected ? 'bg-[var(--color-accent)]/15 text-[var(--color-accent-contrast)]' : 'hover:bg-[var(--color-surface-hover)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}
                 style={{ paddingLeft: `${(album.depth + 1) * 14}px` }}
                 onClick={() => onSelect(album)}>
 
@@ -279,7 +279,7 @@ export default function ShareTargetIndex({ files }: Props) {
                                     <p className="px-4 py-6 text-center text-xs text-[var(--color-text-secondary)]">Žádné album nenalezeno</p>
                                 ) : filteredFlat.map(album => (
                                     <div key={album.id}
-                                        className={`flex items-center gap-2 px-4 py-2 cursor-pointer transition-colors ${selected?.id === album.id ? 'bg-[var(--color-accent)]/15 text-[var(--color-text-primary)]' : 'hover:bg-[var(--color-surface-hover)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}
+                                        className={`flex items-center gap-2 px-4 py-2 cursor-pointer transition-colors ${selected?.id === album.id ? 'bg-[var(--color-accent)]/15 text-[var(--color-accent-contrast)]' : 'hover:bg-[var(--color-surface-hover)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}
                                         onClick={() => setSelected(prev => prev?.id === album.id ? null : album)}>
                                         <FolderOpen size={14}/>
                                         <span className="flex-1 text-sm">{album.title}</span>
@@ -315,7 +315,7 @@ export default function ShareTargetIndex({ files }: Props) {
                         Zrušit
                     </button>
                     <button onClick={handleSave} disabled={!selected || saving}
-                        className="flex-[2] bg-[var(--color-accent)] text-[var(--color-text-primary)] text-sm py-3 rounded-xl hover:opacity-90 disabled:opacity-40 transition-opacity flex items-center justify-center gap-2">
+                        className="flex-[2] bg-[var(--color-accent)] text-[var(--color-accent-contrast)] text-sm py-3 rounded-xl hover:opacity-90 disabled:opacity-40 transition-opacity flex items-center justify-center gap-2">
                         {saving ? (
                             <><Loader2 size={16} className="animate-spin"/> Připravuji…</>
                         ) : (

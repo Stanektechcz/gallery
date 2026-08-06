@@ -72,7 +72,7 @@ function NoteEditor({ icon, title, hint, value, onChange, saving, onSave, privat
             <textarea value={value} onChange={event => onChange(event.target.value)} rows={4} maxLength={10000} placeholder={privateNote ? 'Například co si chcete pamatovat jen vy…' : 'Například co zde příště vyzkoušet…'} className="mt-3 w-full resize-y rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-3 py-2 text-sm text-[var(--color-text-primary)] outline-none placeholder:text-[var(--color-text-secondary)] focus:border-[var(--color-accent)]" />
             <div className="mt-2 flex items-center justify-between gap-3">
                 <span className="text-[11px] text-[var(--color-text-secondary)]">{value.length}/10 000</span>
-                <button onClick={onSave} disabled={saving} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-[var(--color-accent)] px-3 text-xs font-medium text-[var(--color-text-primary)] disabled:opacity-50"><Save size={13} />{saving ? 'Ukládám…' : 'Uložit'}</button>
+                <button onClick={onSave} disabled={saving} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-[var(--color-accent)] px-3 text-xs font-medium text-[var(--color-accent-contrast)] disabled:opacity-50"><Save size={13} />{saving ? 'Ukládám…' : 'Uložit'}</button>
             </div>
         </div>
     );

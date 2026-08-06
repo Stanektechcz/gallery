@@ -64,7 +64,7 @@ export default function TagsIndex() {
                 <p className="mt-1 max-w-2xl text-sm text-[var(--color-text-secondary)]">Jeden štítek může spojit fotky, kalendář, cesty, recepty, filmy, úkoly i finance. V chatu jej přidáte jako <code>#léto2026</code>.</p>
                 <form onSubmit={create} className="mt-5 flex max-w-xl gap-2">
                     <label className="sr-only" htmlFor="new-tag">Nový štítek</label><input id="new-tag" value={name} onChange={event => setName(event.target.value)} maxLength={100} placeholder="Např. léto 2026" className="min-h-11 min-w-0 flex-1 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-card)] px-3 text-sm text-[var(--color-text-primary)] outline-none focus:border-[var(--color-accent)]" />
-                    <button disabled={saving || !name.trim()} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[var(--color-accent)] px-4 text-sm font-semibold text-[var(--color-text-primary)] disabled:opacity-40"><Plus size={16}/>{saving ? 'Vytvářím…' : 'Přidat štítek'}</button>
+                    <button disabled={saving || !name.trim()} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[var(--color-accent)] px-4 text-sm font-semibold text-[var(--color-accent-contrast)] disabled:opacity-40"><Plus size={16}/>{saving ? 'Vytvářím…' : 'Přidat štítek'}</button>
                 </form>
                 {message && <p className="mt-2 text-xs text-[var(--color-text-secondary)]">{message}</p>}
             </header>
