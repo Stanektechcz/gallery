@@ -21,6 +21,11 @@
                 if (meta && document.documentElement.dataset.theme === 'light') {
                     meta.setAttribute('content', '#f6f5fb');
                 }
+                // Density scales the root font size, so it must land before layout too.
+                var density = localStorage.getItem('maki-density');
+                if (density === 'standard' || density === 'compact') {
+                    document.documentElement.dataset.density = density;
+                }
             } catch (e) { /* Private mode without storage: the dark default stands. */ }
         })();
     </script>

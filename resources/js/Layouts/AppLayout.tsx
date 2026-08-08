@@ -1,7 +1,6 @@
 import AppInstallButton from '@/Components/AppInstallButton';
 import { useViewportSafePanel } from '@/lib/useViewportSafePanel';
-import InterfaceDensityControl from '@/Components/InterfaceDensityControl';
-import ThemeControl from '@/Components/ThemeControl';
+import UserMenu, { userMenuLinks } from '@/Components/UserMenu';
 import UploadPanel from '@/Components/UploadPanel';
 import WorkspaceAssistant from '@/Components/WorkspaceAssistant';
 import { Link, router, usePage } from '@inertiajs/react';
@@ -34,7 +33,6 @@ import {
     Menu,
     Mic,
     Monitor,
-    Palette,
     Power,
     Printer,
     Route,
@@ -578,11 +576,6 @@ const navGroups: NavigationGroup[] = [
             { href: '/stats', label: 'Statistiky', icon: BarChart3, feature: 'stats' },
             { href: '/activity', label: 'Aktivita', icon: Activity },
             { href: '/recovery', label: 'Recovery centrum', icon: ShieldCheck },
-            { href: '/privacy', label: 'Soukromí a dědictví', icon: ShieldCheck },
-            { href: '/settings/security', label: 'Nastavení a zabezpečení', icon: Settings },
-            { href: '/settings/vzhled', label: 'Vzhled a barvy', icon: Palette },
-            { href: '/settings/predplatne', label: 'Předplatné a moduly', icon: CircleDollarSign },
-            { href: '/settings/storage/google', label: 'Úložiště a Google Drive', icon: Archive },
             { href: '/settings/automations', label: 'Automatizace', icon: Power, feature: 'automations' },
             { href: '/admin', label: 'Správa systému', icon: ShieldCheck, adminOnly: true, exact: true },
             { href: '/admin/integrations', label: 'Integrace a API', icon: KeyRound, adminOnly: true },
@@ -753,7 +746,7 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
         } catch { return {}; }
     });
     const currentLabel = title
-        ?? [...allNavItems].sort((a, b) => b.href.length - a.href.length).find(item => isActive(item.href, item.exact))?.label
+        ?? [...allNavItems, ...userMenuLinks].sort((a, b) => b.href.length - a.href.length).find(item => isActive(item.href))?.label
         ?? 'Galerie';
 
     useEffect(() => { localStorage.setItem(PINNED_NAV_KEY, JSON.stringify(pinnedHrefs)); }, [pinnedHrefs]);
@@ -926,16 +919,7 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
                 {/* User + Notifications */}
                 <div className="border-t border-[var(--color-border)] p-3">
                     <div className="flex items-center gap-2">
-                        <div className="flex items-center gap-2 flex-1 px-2 py-2 rounded-lg hover:bg-[var(--color-surface-hover)] cursor-pointer min-w-0">
-                            <div className="w-7 h-7 rounded-full bg-[var(--color-accent)]/30 flex items-center justify-center text-xs font-bold text-[var(--color-accent)] shrink-0">
-                                {auth?.user?.name?.[0]?.toUpperCase() ?? '?'}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                                <p className="text-xs font-medium text-[var(--color-text-primary)] truncate">{auth?.user?.name}</p>
-                                <p className="text-xs text-[var(--color-text-secondary)] truncate">{auth?.user?.role}</p>
-                            </div>
-                        </div>
-                        <ThemeControl initial={auth?.user?.theme}/><InterfaceDensityControl initial={auth?.user?.interface_density}/>
+                        <div className="min-w-0 flex-1"><UserMenu user={auth?.user}/></div>
                         <AppInstallButton/>
                         <NotificationBell/>
                     </div>
@@ -964,16 +948,7 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
                             {renderNavigation('mobile')}
                         </nav>
                         <div className="border-t border-[var(--color-border)] p-4">
-                            <div className="flex items-center gap-3">
-                                <div className="w-9 h-9 rounded-full bg-[var(--color-accent)]/30 flex items-center justify-center text-sm font-bold text-[var(--color-accent)]">
-                                    {auth?.user?.name?.[0]?.toUpperCase() ?? '?'}
-                                </div>
-                                <div>
-                                    <p className="text-sm font-medium text-[var(--color-text-primary)]">{auth?.user?.name}</p>
-                                    <p className="text-xs text-[var(--color-text-secondary)]">{auth?.user?.email}</p>
-                                </div>
-                                <ThemeControl initial={auth?.user?.theme}/><InterfaceDensityControl initial={auth?.user?.interface_density}/>
-                            </div>
+                            <UserMenu user={auth?.user}/>
                         </div>
                     </aside>
                 </div>

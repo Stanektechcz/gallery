@@ -255,3 +255,11 @@
         :root:not([data-theme]) :is(.text-gray-100, .text-gray-200, .text-gray-300)          { color: #374151; }
     }
 }
+
+/*
+ | Interface density. Everything in this app sizes from rem, so moving the root font
+ | size moves text and spacing together — one lever instead of a parallel scale.
+ | "comfortable" is the default and therefore carries no attribute.
+ */
+:root[data-density='standard'] { font-size: 15px; }
+:root[data-density='compact']  { font-size: 14px; }
