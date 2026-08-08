@@ -123,7 +123,7 @@ function GpsTransition({ lat, lng, label, onDone }: {
     }, [ready, lat, lng]);
 
     return (
-        <div className="fixed inset-0 z-[401] bg-black flex flex-col items-center justify-center animate-fade-in">
+        <div className="fixed inset-0 z-[700] bg-black flex flex-col items-center justify-center animate-fade-in">
             <div className="w-full max-w-lg h-64 rounded-2xl overflow-hidden shadow-2xl">
                 {!ready && <div className="w-full h-full bg-gray-800 animate-pulse"/>}
                 <div ref={mapRef} className="w-full h-full"/>

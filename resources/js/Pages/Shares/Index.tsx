@@ -273,7 +273,7 @@ export default function SharesIndex({ shares }: Props) {
 
                 {/* Create Link Modal */}
                 {showCreate && (
-                    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+                    <div className="fixed inset-0 z-[700] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-4">
                         <div className="glass rounded-2xl p-6 w-full max-w-md shadow-2xl max-h-[90vh] overflow-y-auto">
                             <div className="flex items-center justify-between mb-5">
                                 <h2 className="text-base font-semibold text-[var(--color-text-primary)]">Nový sdílený odkaz</h2>

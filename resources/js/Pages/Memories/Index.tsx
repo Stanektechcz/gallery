@@ -126,7 +126,7 @@ function PreferencesPanel({ onClose }: { onClose: () => void }) {
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 backdrop-blur-sm sm:items-center sm:p-4">
+        <div className="fixed inset-0 z-[700] flex items-end justify-center bg-black/60 p-0 backdrop-blur-sm sm:items-center sm:p-4">
             <div className="w-full max-w-md rounded-t-3xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-5 shadow-2xl sm:rounded-3xl">
                 <div className="mb-5 flex items-center justify-between">
                     <div><h2 className="font-semibold text-[var(--color-text-primary)]">Nastavení vzpomínek</h2><p className="text-xs text-[var(--color-text-secondary)]">Vy rozhodujete, co se vrací.</p></div>

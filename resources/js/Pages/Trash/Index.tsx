@@ -173,7 +173,7 @@ export default function TrashIndex({ media, retention_days, can_purge }: Props) 
 
                 {/* Empty trash confirmation dialog */}
                 {showEmptyConfirm && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+                    <div className="fixed inset-0 z-[700] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
                         <div className="glass rounded-2xl p-6 max-w-sm w-full shadow-2xl">
                             <div className="flex items-center gap-3 mb-4">
                                 <div className="w-10 h-10 rounded-xl bg-red-500/20 flex items-center justify-center">
