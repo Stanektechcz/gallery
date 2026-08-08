@@ -1,3 +1,4 @@
+import { describeMicrophoneError, recordingUnavailableReason } from '@/lib/microphone';
 import { LoaderCircle, Mic, Square, Trash2, Upload } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
@@ -14,7 +15,7 @@ export default function AudioRecorder({
     withTitle?: boolean;
     maxSeconds?: number;
 }) {
-    const [supported, setSupported] = useState(true);
+    const [unavailable, setUnavailable] = useState<string | null>(null);
     const [recording, setRecording] = useState(false);
     const [seconds, setSeconds] = useState(0);
     const [blob, setBlob] = useState<Blob | null>(null);
@@ -27,9 +28,7 @@ export default function AudioRecorder({
     const timer = useRef<number | null>(null);
     const startedAt = useRef(0);
 
-    useEffect(() => {
-        setSupported(typeof MediaRecorder !== 'undefined' && Boolean(navigator.mediaDevices?.getUserMedia));
-    }, []);
+    useEffect(() => { setUnavailable(recordingUnavailableReason()); }, []);
 
     // Object URLs have to be released or the blob stays in memory.
     useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
@@ -39,8 +38,9 @@ export default function AudioRecorder({
 
     const start = async () => {
         setError('');
+        let stream: MediaStream | null = null;
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             // Safari has no webm; let the browser pick what it supports.
             const mime = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm'
                 : MediaRecorder.isTypeSupported('audio/ogg') ? 'audio/ogg' : '';
@@ -63,8 +63,12 @@ export default function AudioRecorder({
                 setSeconds(elapsed);
                 if (elapsed >= maxSeconds) stop();
             }, 250);
-        } catch {
-            setError('Nepodařilo se získat přístup k mikrofonu. Zkontrolujte oprávnění v prohlížeči.');
+        } catch (reason) {
+            // The stream survives a failure to build the recorder, and an orphaned one
+            // leaves the browser's recording indicator lit with nothing recording.
+            stream?.getTracks().forEach(track => track.stop());
+            setRecording(false);
+            setError(describeMicrophoneError(reason));
         }
     };
 
@@ -87,10 +91,10 @@ export default function AudioRecorder({
         discard();
     };
 
-    if (!supported) {
+    if (unavailable) {
         return (
             <p className="mt-5 rounded-xl border border-amber-400/25 bg-amber-500/10 p-3 text-xs text-amber-100">
-                Tenhle prohlížeč nahrávání zvuku nepodporuje. Zkuste Chrome, Edge nebo Safari v aktuální verzi.
+                {unavailable}
             </p>
         );
     }
