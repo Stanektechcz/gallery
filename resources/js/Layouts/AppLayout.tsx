@@ -131,7 +131,7 @@ const GROUP_LABELS: Record<CommandGroup, string> = {
     search: 'Hledat',
 };
 
-function CommandPalette({ open, onClose, isAdmin }: { open: boolean; onClose: () => void; isAdmin: boolean }) {
+function CommandPalette({ open, onClose, isAdmin, features }: { open: boolean; onClose: () => void; isAdmin: boolean; features: string[] | null }) {
     const [query,    setQuery]    = useState('');
     const [activeIdx, setActive]  = useState(0);
     const inputRef = useRef<HTMLInputElement>(null);
@@ -139,7 +139,8 @@ function CommandPalette({ open, onClose, isAdmin }: { open: boolean; onClose: ()
     useEffect(() => { if (!open) { setQuery(''); setActive(0); } }, [open]);
     useEffect(() => { if (open) inputRef.current?.focus(); }, [open]);
 
-    const allCommands: Command[] = [...NAV_COMMANDS, ...ACTION_COMMANDS].filter(command => !command.adminOnly || isAdmin);
+    const allCommands: Command[] = [...NAV_COMMANDS, ...ACTION_COMMANDS]
+        .filter(command => canReach({ href: command.href ?? '', adminOnly: command.adminOnly }, features, isAdmin));
 
     // If query starts with known search triggers, add search command
     const searchCmd: Command | null = query.trim().length >= 2 ? {
@@ -519,8 +520,8 @@ const primaryNavItems: NavigationItem[] = [
     { href: '/', label: 'Domů', icon: Home, exact: true },
     { href: '/timeline', label: 'Fotky', icon: Images },
     { href: '/albums', label: 'Alba', icon: FolderOpen },
-    { href: '/calendar', label: 'Kalendář', icon: Calendar },
-    { href: '/weekly', label: 'Náš týden', icon: Sparkles },
+    { href: '/calendar', label: 'Kalendář', icon: Calendar, feature: 'calendar' },
+    { href: '/weekly', label: 'Náš týden', icon: Sparkles, feature: 'calendar' },
 ];
 
 const navGroups: NavigationGroup[] = [
@@ -539,20 +540,20 @@ const navGroups: NavigationGroup[] = [
             { href: '/prdy', label: 'Hodnocení prdů', icon: Wind, feature: 'farts' },
             { href: '/date-ideas', label: 'Nápady na randíčka', icon: Sparkles, feature: 'date_ideas' },
             { href: '/anniversary-album', label: 'Výroční album', icon: Images },
-            { href: '/gifts-anniversaries', label: 'Dárky a výročí', icon: Gift },
-            { href: '/recipes', label: 'Naše kuchařka', icon: ChefHat },
-            { href: '/memories', label: 'Vzpomínky', icon: Clock },
+            { href: '/gifts-anniversaries', label: 'Dárky a výročí', icon: Gift, feature: 'gifts' },
+            { href: '/recipes', label: 'Naše kuchařka', icon: ChefHat, feature: 'recipes' },
+            { href: '/memories', label: 'Vzpomínky', icon: Clock, feature: 'memories' },
             { href: '/journey', label: 'Náš příběh', icon: BookHeart },
         ],
     },
     {
         id: 'travel', label: 'Cestování', description: 'Od inspirace po jízdenky', icon: Route,
         items: [
-            { href: '/itinerary', label: 'Itinerář světa', icon: Globe },
+            { href: '/itinerary', label: 'Itinerář světa', icon: Globe, feature: 'trips' },
             { href: '/map', label: 'Mapa', icon: Map },
-            { href: '/trips', label: 'Cesty a výlety', icon: Route },
-            { href: '/tickets', label: 'Jízdenky a doprava', icon: Ticket },
-            { href: '/places', label: 'Místa a podniky', icon: MapPin },
+            { href: '/trips', label: 'Cesty a výlety', icon: Route, feature: 'trips' },
+            { href: '/tickets', label: 'Jízdenky a doprava', icon: Ticket, feature: 'trips' },
+            { href: '/places', label: 'Místa a podniky', icon: MapPin, feature: 'places' },
         ],
     },
     {
@@ -560,21 +561,21 @@ const navGroups: NavigationGroup[] = [
         items: [
             { href: '/search', label: 'Hledat', icon: Search },
             { href: '/favorites', label: 'Oblíbené', icon: Heart },
-            { href: '/people', label: 'Lidé', icon: Users },
+            { href: '/people', label: 'Lidé', icon: Users, feature: 'people' },
             { href: '/tags', label: 'Tagy', icon: Tag },
             { href: '/inbox', label: 'Akční inbox', icon: Inbox },
             { href: '/archive', label: 'Archiv', icon: Archive },
-            { href: '/vault', label: 'Soukromý trezor', icon: LockKeyhole },
+            { href: '/vault', label: 'Soukromý trezor', icon: LockKeyhole, feature: 'vault' },
             { href: '/trash', label: 'Koš', icon: Trash2 },
-            { href: '/shares', label: 'Sdílené', icon: Share2 },
-            { href: '/print', label: 'Výběry k tisku', icon: Printer },
-            { href: '/tv', label: 'TV režim', icon: Monitor },
+            { href: '/shares', label: 'Sdílené', icon: Share2, feature: 'sharing' },
+            { href: '/print', label: 'Výběry k tisku', icon: Printer, feature: 'photobook' },
+            { href: '/tv', label: 'TV režim', icon: Monitor, feature: 'tv_mode' },
         ],
     },
     {
         id: 'administration', label: 'Administrace', description: 'Kontrola, soukromí a integrace', icon: Settings,
         items: [
-            { href: '/stats', label: 'Statistiky', icon: BarChart3 },
+            { href: '/stats', label: 'Statistiky', icon: BarChart3, feature: 'stats' },
             { href: '/activity', label: 'Aktivita', icon: Activity },
             { href: '/recovery', label: 'Recovery centrum', icon: ShieldCheck },
             { href: '/privacy', label: 'Soukromí a dědictví', icon: ShieldCheck },
@@ -582,7 +583,7 @@ const navGroups: NavigationGroup[] = [
             { href: '/settings/vzhled', label: 'Vzhled a barvy', icon: Palette },
             { href: '/settings/predplatne', label: 'Předplatné a moduly', icon: CircleDollarSign },
             { href: '/settings/storage/google', label: 'Úložiště a Google Drive', icon: Archive },
-            { href: '/settings/automations', label: 'Automatizace', icon: Power },
+            { href: '/settings/automations', label: 'Automatizace', icon: Power, feature: 'automations' },
             { href: '/admin', label: 'Správa systému', icon: ShieldCheck, adminOnly: true, exact: true },
             { href: '/admin/integrations', label: 'Integrace a API', icon: KeyRound, adminOnly: true },
             { href: '/admin/tarify', label: 'Nabídka tarifů', icon: SlidersHorizontal, adminOnly: true },
@@ -592,6 +593,32 @@ const navGroups: NavigationGroup[] = [
 
 const allNavItems = [...primaryNavItems, ...navGroups.flatMap(group => group.items)];
 const customizableNavItems = navGroups.flatMap(group => group.items);
+
+/**
+ * Lets the command palette reuse the sidebar's tags instead of repeating them.
+ * A plain record, not a Map — `Map` in this file is the lucide map icon.
+ */
+const featureByHref: Record<string, string> = Object.fromEntries(
+    allNavItems.filter(item => item.feature).map(item => [item.href, item.feature!]),
+);
+
+/**
+ * The single rule for whether a destination may be offered, shared by the sidebar, the
+ * pinned row, the navigation editor and the command palette. Anything reachable from one
+ * of those must be reachable from all of them, or switching a feature off leaves a way in.
+ *
+ * `features` is null until the catalogue is migrated; then nothing is hidden.
+ */
+function canReach(
+    item: { href: string; feature?: string; adminOnly?: boolean },
+    features: string[] | null,
+    isAdmin: boolean,
+): boolean {
+    if (item.adminOnly && !isAdmin) return false;
+    const feature = item.feature ?? featureByHref[item.href];
+
+    return !feature || !features || features.includes(feature);
+}
 const PINNED_NAV_KEY = 'gallery.navigation.pinned.v1';
 const OPEN_NAV_GROUPS_KEY = 'gallery.navigation.groups.v1';
 
@@ -608,16 +635,18 @@ function NavigationCustomizer({
     pinnedHrefs,
     onChange,
     isAdmin,
+    features,
 }: {
     open: boolean;
     onClose: () => void;
     pinnedHrefs: string[];
     onChange: (hrefs: string[]) => void;
     isAdmin: boolean;
+    features: string[] | null;
 }) {
     if (!open) return null;
 
-    const available = customizableNavItems.filter(item => !item.adminOnly || isAdmin);
+    const available = customizableNavItems.filter(item => canReach(item, features, isAdmin));
     const toggle = (href: string) => {
         if (pinnedHrefs.includes(href)) {
             onChange(pinnedHrefs.filter(item => item !== href));
@@ -786,12 +815,10 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
 
     const pinnedItems = pinnedHrefs
         .map(href => customizableNavItems.find(item => item.href === href))
-        .filter((item): item is NavigationItem => Boolean(item) && (!item?.adminOnly || isAdmin));
+        .filter((item): item is NavigationItem => item !== undefined && canReach(item, activeFeatures, isAdmin));
 
     const renderNavigationItem = (item: NavigationItem, nested = false, closeDrawer = false) => {
-        if (item.adminOnly && !isAdmin) return null;
-        // `features` is null before the catalogue is migrated — then nothing is hidden.
-        if (item.feature && activeFeatures && !activeFeatures.includes(item.feature)) return null;
+        if (!canReach(item, activeFeatures, isAdmin)) return null;
         const Icon = item.icon;
         const active = isActive(item.href, item.exact);
         return (
@@ -830,7 +857,8 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
 
                 <div className="mt-3 space-y-1 border-t border-[var(--color-border)] pt-3">
                     {navGroups.map(group => {
-                        const items = group.items.filter(item => !item.adminOnly || isAdmin);
+                        const items = group.items.filter(item => canReach(item, activeFeatures, isAdmin));
+                        if (items.length === 0) return null;
                         if (!items.length) return null;
                         const open = Boolean(openGroups[group.id]);
                         const active = items.some(item => isActive(item.href, item.exact));
@@ -878,8 +906,8 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
 
     return (
         <div className="app-shell flex min-h-0 w-full overflow-hidden">
-            <CommandPalette open={cmdOpen} onClose={() => setCmdOpen(false)} isAdmin={isAdmin} />
-            <NavigationCustomizer open={navEditorOpen} onClose={() => setNavEditorOpen(false)} pinnedHrefs={pinnedHrefs} onChange={setPinnedHrefs} isAdmin={isAdmin}/>
+            <CommandPalette open={cmdOpen} onClose={() => setCmdOpen(false)} isAdmin={isAdmin} features={activeFeatures} />
+            <NavigationCustomizer open={navEditorOpen} onClose={() => setNavEditorOpen(false)} pinnedHrefs={pinnedHrefs} onChange={setPinnedHrefs} isAdmin={isAdmin} features={activeFeatures}/>
             {/* Sidebar — Desktop */}
             <aside className="hidden md:flex flex-col w-60 shrink-0 border-r border-[var(--color-border)] bg-[var(--color-bg-secondary)]">
                 {/* Logo */}
