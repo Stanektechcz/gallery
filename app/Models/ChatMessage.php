@@ -12,7 +12,7 @@ class ChatMessage extends Model
     use SoftDeletes;
 
     protected $fillable = [
-        'uuid', 'gallery_space_id', 'conversation_id', 'created_by', 'body',
+        'uuid', 'gallery_space_id', 'conversation_id', 'reply_to_id', 'game_id', 'created_by', 'body',
         'attachment_type', 'attachment_ref', 'edited_at',
         'media_path', 'media_mime', 'media_size', 'media_remote_url', 'media_width', 'media_height',
     ];
@@ -45,6 +45,11 @@ class ChatMessage extends Model
     public function revisions()
     {
         return $this->hasMany(ChatMessageRevision::class);
+    }
+
+    public function replyTo()
+    {
+        return $this->belongsTo(self::class, 'reply_to_id');
     }
 
     public function reactions()

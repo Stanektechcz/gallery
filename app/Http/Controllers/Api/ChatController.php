@@ -18,6 +18,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 /**
  * Live conversation for a space.
@@ -75,6 +76,7 @@ class ChatController extends Controller
         $conversation = $this->conversation($request, $space);
 
         $messages = ChatMessage::with('author:id,name,uuid,avatar_path,avatar_preset,avatar_colour')
+            ->with('replyTo:id,uuid,body,created_by,attachment_type')
             ->where('conversation_id', $conversation->id)
             ->when($after > 0, fn ($query) => $query->where('id', '>', $after))
             ->orderBy('id')
@@ -137,6 +139,8 @@ class ChatController extends Controller
             'gif_url' => 'nullable|url|max:600',
             'gif_width' => 'nullable|integer|max:4000',
             'gif_height' => 'nullable|integer|max:4000',
+            // The message being answered, by uuid so the client never sees our ids.
+            'reply_to' => 'nullable|string|max:64',
         ]);
 
         $body = trim((string) ($data['body'] ?? ''));
@@ -148,9 +152,15 @@ class ChatController extends Controller
 
         $path = $upload?->store("chat/{$space->id}", self::DISK) ?: null;
 
+        // A reply must point inside the same conversation; anything else is not a reply.
+        $replyTo = ! empty($data['reply_to'])
+            ? ChatMessage::where('conversation_id', $conversation->id)->where('uuid', $data['reply_to'])->first()
+            : null;
+
         $message = ChatMessage::create([
             'gallery_space_id' => $space->id,
             'conversation_id' => $conversation->id,
+            'reply_to_id' => $replyTo?->id,
             'created_by' => $request->user()->id,
             // Voice notes are stored like any other attachment; the type is what tells
             // the client to draw a player instead of a picture.
@@ -356,6 +366,21 @@ class ChatController extends Controller
                 'height' => $message->media_height,
             ] : null,
             'reactions' => $reactions,
+            /*
+             | What this answers. The excerpt is carried rather than fetched so a quote
+             | costs no extra query, and it is deliberately short: a quote is a pointer,
+             | not a second copy of the message.
+             */
+            'reply_to' => $message->replyTo ? [
+                'uuid' => $message->replyTo->uuid,
+                'author_id' => $message->replyTo->created_by,
+                'excerpt' => Str::limit(
+                    $message->replyTo->body !== '' ? $message->replyTo->body : match ($message->replyTo->attachment_type) {
+                        'voice' => 'Hlasovka', 'game' => 'Hra', default => 'Příloha',
+                    },
+                    90,
+                ),
+            ] : null,
             // A game invitation is a message whose body is the board.
             'game' => $message->attachment_type === 'game' ? $message->attachment_ref : null,
             'author' => [

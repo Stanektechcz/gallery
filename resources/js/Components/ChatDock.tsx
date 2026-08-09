@@ -69,6 +69,7 @@ export default function ChatDock() {
     const fileInput = useRef<HTMLInputElement>(null);
     const composer = useRef<HTMLTextAreaElement>(null);
     const [mention, setMention] = useState<{ query: string; from: number } | null>(null);
+    const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
 
     /** Replaces the half-typed "@…" with the chosen thing, and puts the caret after it. */
     const insertMention = (item: MentionItem) => {
@@ -182,6 +183,7 @@ export default function ChatDock() {
         try {
             const form = new FormData();
             if (currentRef.current) form.append('conversation', currentRef.current);
+            if (replyTo) form.append('reply_to', replyTo.uuid);
             build(form);
             const response = await axios.post('/api/v1/chat', form);
             setMessages(current => [...current, response.data].slice(-80));
@@ -233,6 +235,7 @@ export default function ChatDock() {
         });
         if (!ok) return;
         setDraft('');
+        setReplyTo(null);
         setPendingImage(null);
         setPendingGif(null);
         if (fileInput.current) fileInput.current.value = '';
@@ -337,6 +340,7 @@ export default function ChatDock() {
                                 onReact={emoji => void react(message, emoji)}
                                 meId={me}
                                 onOpenDetail={() => setDetailFor(message.uuid)}
+                                onReply={target => { setReplyTo(target); composer.current?.focus(); }}
                             />
                         ))}
 
@@ -346,6 +350,16 @@ export default function ChatDock() {
 
                         <div ref={bottom} />
                     </div>
+
+                    {replyTo && (
+                        <div className="flex shrink-0 items-center gap-2 border-t border-[var(--color-border)] px-2 py-1.5">
+                            <span className="h-7 w-0.5 shrink-0 rounded bg-[var(--color-accent)]" aria-hidden />
+                            <p className="min-w-0 flex-1 truncate text-[11px] text-[var(--color-text-secondary)]">
+                                Odpovídáte: {replyTo.body || 'příloha'}
+                            </p>
+                            <button type="button" onClick={() => setReplyTo(null)} aria-label="Zrušit odpověď" className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"><X size={15} /></button>
+                        </div>
+                    )}
 
                     {(pendingImage || pendingGif) && (
                         <div className="flex shrink-0 items-center gap-2 border-t border-[var(--color-border)] px-2 py-1.5">

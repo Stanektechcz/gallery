@@ -19,6 +19,8 @@ export interface ChatMedia {
 export interface ChatMessage {
     /** Set when the message is a game invitation rather than words. */
     game?: string | null;
+    /** What this message answers, if anything. */
+    reply_to?: { uuid: string; author_id: number; excerpt: string } | null;
     id: number;
     uuid: string;
     body: string;
@@ -44,7 +46,7 @@ const time = (value: string | null) =>
  * lower right in the smallest readable size, so a conversation reads as text rather than
  * as a list of cards.
  */
-export default function ChatMessageItem({ message, read, compact = false, meId = 0, onReact, onOpenDetail }: {
+export default function ChatMessageItem({ message, read, compact = false, meId = 0, onReact, onOpenDetail, onReply }: {
     message: ChatMessage;
     /** Whose side we are on, for the game board's scoreboard. */
     meId?: number;
@@ -53,6 +55,7 @@ export default function ChatMessageItem({ message, read, compact = false, meId =
     compact?: boolean;
     onReact: (emoji: string) => void;
     onOpenDetail: () => void;
+    onReply?: (message: ChatMessage) => void;
 }) {
     const [picker, setPicker] = useState(false);
 
@@ -68,7 +71,7 @@ export default function ChatMessageItem({ message, read, compact = false, meId =
     return (
         <div className={`group flex items-end gap-1 ${message.is_mine ? 'justify-end' : 'justify-start'}`}>
             {message.is_mine && (
-                <MessageMenu onOpenDetail={onOpenDetail} onPick={react} open={picker} setOpen={setPicker} />
+                <MessageMenu onOpenDetail={onOpenDetail} onReply={onReply ? () => onReply(message) : undefined} onPick={react} open={picker} setOpen={setPicker} />
             )}
 
             <div
@@ -96,6 +99,11 @@ export default function ChatMessageItem({ message, read, compact = false, meId =
                     />
                 ) : null}
 
+                {message.reply_to && (
+                    <p className="mb-1 truncate border-l-2 border-current/40 pl-2 text-[11px] opacity-70">
+                        {message.reply_to.excerpt}
+                    </p>
+                )}
                 {message.game && <ChatGame uuid={message.game} meId={meId} />}
                 {message.body && <MentionText body={message.body} />}
 
@@ -124,18 +132,19 @@ export default function ChatMessageItem({ message, read, compact = false, meId =
             </div>
 
             {! message.is_mine && (
-                <MessageMenu onOpenDetail={onOpenDetail} onPick={react} open={picker} setOpen={setPicker} />
+                <MessageMenu onOpenDetail={onOpenDetail} onReply={onReply ? () => onReply(message) : undefined} onPick={react} open={picker} setOpen={setPicker} />
             )}
         </div>
     );
 }
 
 /** The three dots: reactions and the detail sheet, in one place beside the bubble. */
-function MessageMenu({ open, setOpen, onPick, onOpenDetail }: {
+function MessageMenu({ open, setOpen, onPick, onOpenDetail, onReply }: {
     open: boolean;
     setOpen: (value: boolean) => void;
     onPick: (emoji: string) => void;
     onOpenDetail: () => void;
+    onReply?: () => void;
 }) {
     const [menu, setMenu] = useState(false);
     const trigger = useRef<HTMLButtonElement>(null);
@@ -197,6 +206,15 @@ function MessageMenu({ open, setOpen, onPick, onOpenDetail }: {
                         {/* Anything outside the quick five, from the full set. */}
                         <EmojiPicker compact label="Další emoji" onPick={emoji => { setMenu(false); onPick(emoji); }} />
                         <span className="mx-0.5 h-5 w-px bg-[var(--color-border)]" />
+                        {onReply && (
+                            <button
+                                type="button"
+                                onClick={() => { setMenu(false); setOpen(false); onReply(); }}
+                                className="rounded-lg px-2 py-1 text-[11px] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]"
+                            >
+                                Odpovědět
+                            </button>
+                        )}
                         <button
                             type="button"
                             onClick={() => { setMenu(false); setOpen(false); onOpenDetail(); }}

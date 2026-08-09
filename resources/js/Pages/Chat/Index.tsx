@@ -58,6 +58,8 @@ export default function ChatIndex() {
     const composer = useRef<HTMLTextAreaElement>(null);
     const conversationUuid = useRef<string | null>(null);
     const [mention, setMention] = useState<{ query: string; from: number } | null>(null);
+    const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
+    const [gamePicker, setGamePicker] = useState(false);
 
     /** Replaces the half-typed "@…" with the chosen thing, and puts the caret after it. */
     const insertMention = (item: MentionItem) => {
@@ -166,6 +168,8 @@ export default function ChatIndex() {
         setSending(true); setError('');
         try {
             const form = new FormData();
+            if (replyTo) form.append('reply_to', replyTo.uuid);
+            if (conversationUuid.current) form.append('conversation', conversationUuid.current);
             if (body) form.append('body', body);
             if (pendingImage) form.append('image', pendingImage);
             if (pendingGif) {
@@ -175,6 +179,7 @@ export default function ChatIndex() {
             }
             const response = await axios.post('/api/v1/chat', form);
             setDraft('');
+            setReplyTo(null);
             setPendingImage(null);
             setPendingGif(null);
             if (fileInput.current) fileInput.current.value = '';
@@ -188,11 +193,10 @@ export default function ChatIndex() {
     };
 
     /** Starts a game and lets the poll bring the announcement back like any message. */
-    const startGame = async () => {
-        const kind = window.prompt('Co si zahrajeme? Napište "piskvorky" nebo "kamen".', 'piskvorky');
-        if (!kind) return;
+    const startGame = async (kind: string) => {
+        setGamePicker(false);
         try {
-            await axios.post('/api/v1/hry', { conversation: conversationUuid.current, kind: kind.trim() });
+            await axios.post('/api/v1/hry', { conversation: conversationUuid.current, kind });
             quiet.current = 0;
             await poll();
         } catch (reason: any) {
@@ -268,6 +272,7 @@ export default function ChatIndex() {
                             onReact={emoji => void react(message, emoji)}
                             meId={me}
                             onOpenDetail={() => setDetailFor(message.uuid)}
+                            onReply={target => { setReplyTo(target); composer.current?.focus(); }}
                         />
                     ))}
 
@@ -298,6 +303,16 @@ export default function ChatIndex() {
                         >
                             <X size={16} />
                         </button>
+                    </div>
+                )}
+
+                {replyTo && (
+                    <div className="flex shrink-0 items-center gap-2 border-t border-[var(--color-border)] px-2 py-1.5">
+                        <span className="h-7 w-0.5 shrink-0 rounded bg-[var(--color-accent)]" aria-hidden />
+                        <p className="min-w-0 flex-1 truncate text-[11px] text-[var(--color-text-secondary)]">
+                            Odpovídáte: {replyTo.body || 'příloha'}
+                        </p>
+                        <button type="button" onClick={() => setReplyTo(null)} aria-label="Zrušit odpověď" className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"><X size={15} /></button>
                     </div>
                 )}
 
@@ -353,14 +368,34 @@ export default function ChatIndex() {
                     >
                         <Mic size={19} />
                     </button>
-                    <button
-                        type="button"
-                        onClick={() => void startGame()}
-                        aria-label="Zahrát si"
-                        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-lg text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]"
-                    >
-                        🎲
-                    </button>
+                    <div className="relative">
+                        <button
+                            type="button"
+                            onClick={() => setGamePicker(value => !value)}
+                            aria-label="Zahrát si"
+                            aria-expanded={gamePicker}
+                            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-lg text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]"
+                        >
+                            🎲
+                        </button>
+                        {gamePicker && (
+                            <>
+                                <button type="button" aria-label="Zavřít výběr hry" onClick={() => setGamePicker(false)} className="fixed inset-0 z-[735] cursor-default" />
+                                <div className="absolute bottom-full left-0 z-[740] mb-2 w-52 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-1 shadow-2xl">
+                                    {([['piskvorky', '⭕', 'Piškvorky'], ['kamen', '✊', 'Kámen, nůžky, papír']] as const).map(([code, icon, name]) => (
+                                        <button
+                                            key={code}
+                                            type="button"
+                                            onClick={() => void startGame(code)}
+                                            className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]"
+                                        >
+                                            <span className="w-5 text-center">{icon}</span>{name}
+                                        </button>
+                                    ))}
+                                </div>
+                            </>
+                        )}
+                    </div>
                     <GifPicker onPick={gif => { setPendingImage(null); setPendingGif(gif); }} />
                     <EmojiPicker keepOpen onPick={emoji => setDraft(current => current + emoji)} />
                     {/* Positioned, so the mention list can hang above the field. */}
