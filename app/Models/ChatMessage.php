@@ -19,7 +19,12 @@ class ChatMessage extends Model
 
     protected function casts(): array
     {
-        return ['edited_at' => 'datetime'];
+        return [
+            'edited_at' => 'datetime',
+            // At rest only: the server holds the key, so this defends a stolen database
+            // rather than the server itself. See the migration for what that means.
+            'body' => 'encrypted',
+        ];
     }
 
     protected static function booted(): void
@@ -35,6 +40,11 @@ class ChatMessage extends Model
     public function author()
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function revisions()
+    {
+        return $this->hasMany(ChatMessageRevision::class);
     }
 
     public function reactions()

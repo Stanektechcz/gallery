@@ -44,19 +44,24 @@ const time = (value: string | null) =>
  * you open it is not telling you anything.
  */
 export default function ChatDock() {
-    const page = usePage().props as { auth?: { user?: { id?: number } }; features?: string[] | null };
+    const page = usePage().props as {
+        auth?: { user?: { id?: number } };
+        features?: string[] | null;
+        chatBootstrap?: { conversation: Conversation; messages: Message[]; cursor: number } | null;
+    };
     const features = page.features ?? null;
     const available = !features || features.includes('chat');
+    const boot = page.chatBootstrap ?? null;
 
     const [open, setOpen] = useState(false);
-    const [messages, setMessages] = useState<Message[]>([]);
+    const [messages, setMessages] = useState<Message[]>(boot?.messages ?? []);
     const [others, setOthers] = useState<Other[]>([]);
     const [unread, setUnread] = useState(0);
     const [draft, setDraft] = useState('');
     const [sending, setSending] = useState(false);
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(!boot);
     const [conversations, setConversations] = useState<Conversation[]>([]);
-    const [current, setCurrent] = useState<string | null>(null);
+    const [current, setCurrent] = useState<string | null>(boot?.conversation?.uuid ?? null);
     const [switcher, setSwitcher] = useState(false);
     const [pendingImage, setPendingImage] = useState<File | null>(null);
     const [pendingGif, setPendingGif] = useState<Gif | null>(null);
@@ -66,7 +71,7 @@ export default function ChatDock() {
     const currentRef = useRef<string | null>(null);
     currentRef.current = current;
 
-    const cursor = useRef(0);
+    const cursor = useRef(boot?.cursor ?? 0);
     const quiet = useRef(0);
     const bottom = useRef<HTMLDivElement>(null);
     const openRef = useRef(open);

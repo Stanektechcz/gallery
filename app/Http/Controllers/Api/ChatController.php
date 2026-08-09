@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\ChatMessage;
+use App\Models\ChatMessageRevision;
 use App\Models\ChatReaction;
 use App\Models\Conversation;
 use App\Models\ConversationParticipant;
@@ -179,6 +180,17 @@ class ChatController extends Controller
         $message = $this->own($request, $uuid);
 
         $data = $request->validate(['body' => 'required|string|max:4000']);
+
+        // Keep what it said before. History is never destroyed, only superseded.
+        if ($this->hasTable('chat_message_revisions')) {
+            ChatMessageRevision::create([
+                'chat_message_id' => $message->id,
+                'edited_by' => $request->user()->id,
+                'body' => $message->body,
+                'replaced_at' => now(),
+            ]);
+        }
+
         $message->update(['body' => trim($data['body']), 'edited_at' => now()]);
 
         return response()->json($this->payload($message->fresh('author'), $request->user()->id));
@@ -307,7 +319,7 @@ class ChatController extends Controller
      */
     private function reactionsFor(array $messageIds, int $viewerId): array
     {
-        if (! $messageIds || ! Schema::hasTable('chat_reactions')) return [];
+        if (! $messageIds || ! $this->hasTable('chat_reactions')) return [];
 
         return ChatReaction::whereIn('chat_message_id', $messageIds)->get()
             ->groupBy('chat_message_id')
@@ -351,7 +363,7 @@ class ChatController extends Controller
         $members = $conversation->members->where('id', '!=', $viewerId);
         if ($members->isEmpty()) return [];
 
-        $presence = Schema::hasTable('chat_presence')
+        $presence = $this->hasTable('chat_presence')
             ? DB::table('chat_presence')->where('gallery_space_id', $conversation->gallery_space_id)->get()->keyBy('user_id')
             : collect();
 
@@ -468,8 +480,27 @@ class ChatController extends Controller
         abort_if($request->user()->read_only_mode, 403, 'V režimu pouze pro čtení nelze psát zprávy.');
     }
 
+    /** @var array<string, bool> */
+    private array $tables = [];
+
+    private function hasTable(string $table): bool
+    {
+        return $this->tables[$table] ??= Schema::hasTable($table);
+    }
+
+    /**
+     * Both tables, not just one.
+     *
+     * Checking only chat_messages meant that a deployment which had not yet run the
+     * conversations migration sailed past this and died further in with a 500, which is
+     * what "Server Error on opening the chat" was. A missing migration should say so.
+     */
     private function available(): void
     {
-        abort_unless(Schema::hasTable('chat_messages'), 503, 'Pro chat dokončete databázové migrace.');
+        abort_unless(
+            $this->hasTable('chat_messages') && $this->hasTable('conversations') && $this->hasTable('conversation_participants'),
+            503,
+            'Chat čeká na dokončení databázových migrací. Spusťte na serveru: php artisan migrate --force',
+        );
     }
 }

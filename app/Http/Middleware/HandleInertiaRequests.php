@@ -2,8 +2,12 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\ChatMessage;
+use App\Models\Conversation;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Schema;
 use Inertia\Middleware;
+use Throwable;
 
 class HandleInertiaRequests extends Middleware
 {
@@ -58,6 +62,9 @@ class HandleInertiaRequests extends Middleware
             // Which features this space may see. Lazily resolved so it costs nothing on
             // pages that never read it, and degrades to null before the migrations run.
             'features' => fn () => $this->activeFeatures($request),
+            // The chat's opening state, so the dock paints instantly instead of after a
+            // round trip. A closure, so it costs nothing on requests that never read it.
+            'chatBootstrap' => fn () => $this->chatBootstrap($request),
             // Public half of the VAPID pair; null until the deployment configures it, and
             // the toggle then says so instead of failing on a click.
             'push_public_key' => config('push.public_key'),
@@ -77,6 +84,64 @@ class HandleInertiaRequests extends Middleware
      *
      * @return list<string>|null
      */
+
+    /**
+     * Enough of the conversation to paint immediately: the most recent thread and its
+     * last messages. The client still polls for everything after this, so the only thing
+     * this removes is the blank moment on arrival.
+     *
+     * Returns null rather than throwing whenever the tables are not there yet, so a
+     * deployment mid-migration degrades to the old behaviour instead of an error page.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function chatBootstrap(Request $request): ?array
+    {
+        if (! $request->user()) return null;
+        if (! Schema::hasTable('conversations') || ! Schema::hasTable('chat_messages')) return null;
+
+        try {
+            $space = $request->user()->gallerySpaces()->orderByDesc('is_default')->first();
+            if (! $space) return null;
+
+            $conversation = Conversation::with('members')
+                ->where('gallery_space_id', $space->id)
+                ->forUser($request->user())
+                ->orderByDesc('last_message_at')->orderByDesc('id')
+                ->first();
+
+            if (! $conversation) return null;
+
+            $messages = ChatMessage::with('author:id,name,uuid,avatar_path,avatar_preset,avatar_colour')
+                ->where('conversation_id', $conversation->id)
+                ->latest('id')->limit(30)->get()->sortBy('id')->values();
+
+            return [
+                'conversation' => [
+                    'uuid' => $conversation->uuid,
+                    'kind' => $conversation->kind,
+                    'title' => $conversation->titleFor($request->user()),
+                    'icon' => $conversation->icon,
+                ],
+                'messages' => $messages->map(fn ($message) => [
+                    'id' => (int) $message->id,
+                    'uuid' => $message->uuid,
+                    'body' => $message->body,
+                    'media' => null,
+                    'reactions' => [],
+                    'author' => ['id' => $message->created_by, 'name' => $message->author?->name],
+                    'is_mine' => $message->created_by === $request->user()->id,
+                    'edited' => $message->edited_at !== null,
+                    'sent_at' => $message->created_at?->toIso8601String(),
+                ])->all(),
+                'cursor' => (int) ($messages->last()->id ?? 0),
+            ];
+        } catch (Throwable) {
+            // Never let a decoration take the whole page down.
+            return null;
+        }
+    }
+
     private function activeFeatures(Request $request): ?array
     {
         $user = $request->user();
