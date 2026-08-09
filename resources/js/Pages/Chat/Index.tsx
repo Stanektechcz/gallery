@@ -28,7 +28,13 @@ interface Other {
 }
 
 /** Quiet tabs ask less often; the interval climbs while nothing happens. */
-const IDLE_STEPS = [2000, 2000, 4000, 8000, 15000];
+/**
+ * How long to wait before asking again.
+ *
+ * With long polling the server holds the request until there is news, so these are not
+ * a delivery interval — they only slow the loop down after an error or an empty hold.
+ */
+const IDLE_STEPS = [250, 250, 500, 1000, 2000];
 
 /** The handful worth one tap; everything else lives in the picker. */
 const QUICK_REACTIONS = ['❤️', '😂', '👍', '😮', '😢', '🔥'];
@@ -87,7 +93,16 @@ export default function ChatIndex() {
 
     const poll = useCallback(async () => {
         try {
-            const response = await axios.get('/api/v1/chat', { params: { after: cursor.current || undefined } });
+            const response = await axios.get('/api/v1/chat', {
+                params: {
+                    conversation: conversationUuid.current ?? undefined,
+                    after: cursor.current || undefined,
+                    // Hold the request open until something happens; see the controller.
+                    wait: cursor.current > 0 ? 1 : undefined,
+                },
+                // Longer than the server's hold, so the browser never gives up first.
+                timeout: 30000,
+            });
             const fresh: ChatMessage[] = response.data.messages ?? [];
             setOthers(response.data.others ?? []);
             conversationUuid.current = response.data.conversation?.uuid ?? conversationUuid.current;

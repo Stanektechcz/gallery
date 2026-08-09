@@ -61,6 +61,17 @@ class ChatController extends Controller
     private const PRESENCE_SECONDS = 45;
 
     /**
+     * How long a waiting poll holds the connection before answering empty.
+     *
+     * Short enough to stay well inside any proxy or FPM timeout, long enough that most
+     * messages arrive on the same held request rather than on the next one.
+     */
+    private const HOLD_SECONDS = 20;
+
+    /** How often a held request looks for new messages. */
+    private const HOLD_INTERVAL_MS = 400;
+
+    /**
      * One endpoint for the whole live view: new messages, who is here, who is typing.
      *
      * `after` makes it a delta. Without it the client gets the tail of the conversation,
@@ -74,6 +85,46 @@ class ChatController extends Controller
 
         $after = $request->integer('after');
         $conversation = $this->conversation($request, $space);
+
+        /*
+         | Long polling: hold the request open until something arrives.
+         |
+         | This is what makes the chat feel immediate without a websocket server. The
+         | request sleeps in short steps and returns the moment a newer message exists,
+         | so delivery is bounded by the step rather than by a fixed interval.
+         |
+         | The session is closed first, and that is not optional. Laravel holds the
+         | session lock for the whole request, so a poll sleeping twenty seconds would
+         | block every other request from the same person — including the one sending
+         | the message this poll is waiting for. Closing it early releases the lock; the
+         | request is already authenticated and writes nothing to the session.
+         |
+         | The cost, stated plainly: a waiting poll occupies one PHP-FPM worker. For a
+         | couple or a small group that is a handful of workers. An installation with
+         | hundreds of simultaneous readers wants Reverb instead, and the payload here is
+         | already shaped to be broadcast unchanged.
+         */
+        if ($request->boolean('wait') && $after > 0) {
+            $request->session()->save();
+
+            $deadline = microtime(true) + self::HOLD_SECONDS;
+            while (microtime(true) < $deadline) {
+                $arrived = ChatMessage::where('conversation_id', $conversation->id)
+                    ->where('id', '>', $after)->exists();
+                if ($arrived) break;
+
+                // Somebody starting to type is also worth returning for: the dots should
+                // appear while they write, not after they send.
+                $typing = $this->hasTable('chat_presence') && DB::table('chat_presence')
+                    ->where('gallery_space_id', $space->id)
+                    ->where('user_id', '!=', $user->id)
+                    ->where('typing_until', '>', now())
+                    ->exists();
+                if ($typing) break;
+
+                usleep(self::HOLD_INTERVAL_MS * 1000);
+            }
+        }
 
         $messages = ChatMessage::with('author:id,name,uuid,avatar_path,avatar_preset,avatar_colour')
             ->with('replyTo:id,uuid,body,created_by,attachment_type')

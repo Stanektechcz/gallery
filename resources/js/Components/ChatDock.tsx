@@ -2,6 +2,7 @@ import { lastSeenLabel } from '@/lib/lastSeen';
 import { Link, usePage } from '@inertiajs/react';
 import axios from 'axios';
 import AudioRecorder from '@/Components/AudioRecorder';
+import { Avatar } from '@/Components/AvatarEditor';
 import ChatMessageItem, { type ChatMessage } from '@/Components/ChatMessageItem';
 import MentionAutocomplete, { activeMention, mentionToken, type MentionItem } from '@/Components/MentionAutocomplete';
 import MessageDetail from '@/Components/MessageDetail';
@@ -11,7 +12,7 @@ import { useAutoGrow } from '@/lib/useAutoGrow';
 import EmojiPicker from '@/Components/EmojiPicker';
 import GifPicker, { type Gif } from '@/Components/GifPicker';
 import { recordingFilename } from '@/lib/microphone';
-import { ChevronDown, ImagePlus, Loader2, Maximize2, MessagesSquare, Mic, Send, X } from 'lucide-react';
+import { ChevronDown, ImagePlus, Loader2, Maximize2, MessagesSquare, Mic, MoreVertical, Search, Send, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 
@@ -22,13 +23,15 @@ interface Conversation {
 
 interface Other {
     id: number; name: string | null;
+    avatar?: string | null;
+    avatar_fallback?: { preset: string | null; initial: string; colour: string };
     online: boolean; in_chat: boolean; typing: boolean;
     last_seen_at: string | null; read_up_to: number;
 }
 
 /** Closed docks ask rarely; an open one keeps up with the conversation. */
 const CLOSED_INTERVAL = 30000;
-const OPEN_STEPS = [2000, 2000, 4000, 8000];
+const OPEN_STEPS = [250, 250, 500, 1000];
 
 const time = (value: string | null) =>
     value ? new Date(value).toLocaleTimeString('cs-CZ', { hour: '2-digit', minute: '2-digit' }) : '';
@@ -62,6 +65,7 @@ export default function ChatDock() {
     const [conversations, setConversations] = useState<Conversation[]>([]);
     const [current, setCurrent] = useState<string | null>(boot?.conversation?.uuid ?? null);
     const [switcher, setSwitcher] = useState(false);
+    const [menu, setMenu] = useState(false);
     const [pendingImage, setPendingImage] = useState<File | null>(null);
     const [pendingGif, setPendingGif] = useState<Gif | null>(null);
     const [recording, setRecording] = useState(false);
@@ -102,9 +106,14 @@ export default function ChatDock() {
     const poll = useCallback(async () => {
         try {
             const response = await axios.get('/api/v1/chat', {
+                timeout: openRef.current ? 30000 : 10000,
                 params: {
                     conversation: currentRef.current ?? undefined,
                     after: cursor.current || undefined,
+                    // Hold the request open until something arrives; see the controller.
+                    // Only an open panel waits: a closed one must not hold a worker
+                    // for twenty seconds just to keep its badge current.
+                    wait: openRef.current && cursor.current > 0 ? 1 : undefined,
                     // Closed, the panel is not reading; the server must not mark it read.
                     peek: openRef.current ? undefined : 1,
                 },
@@ -267,6 +276,9 @@ export default function ChatDock() {
                     className="fixed bottom-[15rem] right-4 z-[720] flex max-h-[60vh] w-[min(22rem,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-secondary)] shadow-2xl md:bottom-[11.5rem] md:right-5"
                 >
                     <header className="flex shrink-0 items-center gap-2 border-b border-[var(--color-border)] px-3 py-2.5">
+                        {others.length === 1 && others[0].avatar_fallback && (
+                            <Avatar url={others[0].avatar ?? null} fallback={others[0].avatar_fallback} size={32} />
+                        )}
                         <div className="relative min-w-0 flex-1">
                             <button
                                 type="button"
@@ -307,9 +319,37 @@ export default function ChatDock() {
                                 {status}
                             </p>
                         </div>
-                        <Link href="/chat" aria-label="Otevřít celý chat" className="p-1.5 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]">
-                            <Maximize2 size={16} />
-                        </Link>
+                        <div className="relative">
+                            <button
+                                type="button"
+                                onClick={() => setMenu(value => !value)}
+                                aria-label="Nabídka konverzace"
+                                aria-expanded={menu}
+                                className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]"
+                            >
+                                <MoreVertical size={16} />
+                            </button>
+
+                            {menu && (
+                                <>
+                                    <button type="button" aria-label="Zavřít nabídku" onClick={() => setMenu(false)} className="fixed inset-0 z-[735] cursor-default" />
+                                    <div className="absolute right-0 top-full z-[740] mt-1 w-52 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-1 shadow-2xl">
+                                        <Link href="/chat" onClick={() => setMenu(false)} className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-xs text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]">
+                                            <Search size={14} /> Hledat ve zprávách
+                                        </Link>
+                                        <Link href="/chat" onClick={() => setMenu(false)} className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-xs text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]">
+                                            <Maximize2 size={14} /> Otevřít celý chat
+                                        </Link>
+                                        <button type="button" onClick={() => { setMenu(false); setSwitcher(true); }} className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]">
+                                            <MessagesSquare size={14} /> Přepnout konverzaci
+                                        </button>
+                                        <button type="button" onClick={() => { setMenu(false); setRecording(true); }} className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]">
+                                            <Mic size={14} /> Nahrát hlasovku
+                                        </button>
+                                    </div>
+                                </>
+                            )}
+                        </div>
                         <button type="button" onClick={() => setOpen(false)} aria-label="Zavřít chat" className="p-1.5 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]">
                             <X size={16} />
                         </button>
