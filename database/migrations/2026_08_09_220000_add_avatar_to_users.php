@@ -20,13 +20,18 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::table('users', function (Blueprint $table) {
-            if (! Schema::hasColumn('users', 'avatar_path')) {
-                $table->string('avatar_path', 400)->nullable()->after('last_seen_at');
-                $table->string('avatar_preset', 40)->nullable()->after('avatar_path');
-                $table->string('avatar_colour', 7)->nullable()->after('avatar_preset');
-            }
-        });
+        // One guard per column. Guarding all three behind a check on the first meant an
+        // installation that already had avatar_path gained none of them, while the
+        // migrations table still recorded success — see the repair migration.
+        foreach ([
+            'avatar_path' => fn (Blueprint $table) => $table->string('avatar_path', 400)->nullable(),
+            'avatar_preset' => fn (Blueprint $table) => $table->string('avatar_preset', 40)->nullable(),
+            'avatar_colour' => fn (Blueprint $table) => $table->string('avatar_colour', 7)->nullable(),
+        ] as $name => $define) {
+            if (Schema::hasColumn('users', $name)) continue;
+
+            Schema::table('users', fn (Blueprint $table) => $define($table));
+        }
     }
 
     public function down(): void
