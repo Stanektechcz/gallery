@@ -230,6 +230,52 @@ class ChatController extends Controller
         ]);
     }
 
+    /**
+     * Everything the detail sheet shows: when it was sent, who has read it and when.
+     *
+     * Read time is per participant, taken from how far each has read rather than from a
+     * per-message receipt — one row per person stays one row however long the
+     * conversation runs, and "read up to here" answers "have you seen this" exactly.
+     */
+    public function detail(Request $request, string $uuid): JsonResponse
+    {
+        $this->available();
+        $space = $this->space($request, $request->integer('gallery_space_id') ?: null);
+
+        $message = ChatMessage::with('author:id,name,uuid')
+            ->where('gallery_space_id', $space->id)->where('uuid', $uuid)->firstOrFail();
+
+        $conversation = Conversation::with('members')->forUser($request->user())
+            ->findOrFail($message->conversation_id);
+
+        $participants = ConversationParticipant::where('conversation_id', $conversation->id)
+            ->where('user_id', '!=', $message->created_by)->get();
+
+        return response()->json([
+            'uuid' => $message->uuid,
+            'sent_at' => $message->created_at?->toIso8601String(),
+            'edited_at' => $message->edited_at?->toIso8601String(),
+            'author' => ['id' => $message->created_by, 'name' => $message->author?->name],
+            'can_delete' => $message->created_by === $request->user()->id,
+            'can_edit' => $message->created_by === $request->user()->id,
+            'size_bytes' => $message->media_size,
+            'kind' => $message->attachment_type ?: ($message->media_remote_url ? 'gif' : ($message->media_path ? 'image' : 'text')),
+            'edits' => $this->hasTable('chat_message_revisions') ? $message->revisions()->count() : 0,
+            'readers' => $participants->map(function (ConversationParticipant $row) use ($message, $conversation) {
+                $member = $conversation->members->firstWhere('id', $row->user_id);
+                $read = $row->last_read_message_id >= $message->id;
+
+                return [
+                    'id' => $row->user_id,
+                    'name' => $member?->name,
+                    'read' => $read,
+                    // The moment they last read, which for this message is when it was seen.
+                    'read_at' => $read ? $row->last_read_at?->toIso8601String() : null,
+                ];
+            })->values(),
+        ]);
+    }
+
     /** Streams an uploaded picture. Private disk, authorised caller, never a public URL. */
     public function media(Request $request, string $uuid)
     {

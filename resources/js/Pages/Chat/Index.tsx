@@ -1,29 +1,20 @@
 import AppLayout from '@/Layouts/AppLayout';
+import AudioRecorder from '@/Components/AudioRecorder';
+import ChatMessageItem, { type ChatMessage } from '@/Components/ChatMessageItem';
+import MessageDetail from '@/Components/MessageDetail';
 import PresenceDot from '@/Components/PresenceDot';
+import TypingBubble from '@/Components/TypingBubble';
+import { recordingFilename } from '@/lib/microphone';
 import { lastSeenLabel } from '@/lib/lastSeen';
 import { useAutoGrow } from '@/lib/useAutoGrow';
 import { Head } from '@inertiajs/react';
 import axios from 'axios';
 import EmojiPicker from '@/Components/EmojiPicker';
 import GifPicker, { type Gif } from '@/Components/GifPicker';
-import { ImagePlus, Loader2, MessagesSquare, Send, SmilePlus, Trash2, X } from 'lucide-react';
+import { ImagePlus, Loader2, MessagesSquare, Mic, Send, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-interface Reaction { emoji: string; count: number; mine: boolean }
 
-interface Media { url: string; kind: 'image' | 'gif'; width: number | null; height: number | null }
-
-interface Message {
-    id: number;
-    uuid: string;
-    body: string;
-    media: Media | null;
-    reactions: Reaction[];
-    author: { id: number; name: string | null };
-    is_mine: boolean;
-    edited: boolean;
-    sent_at: string | null;
-}
 
 interface Other {
     id: number;
@@ -45,7 +36,7 @@ const time = (value: string | null) =>
     value ? new Date(value).toLocaleTimeString('cs-CZ', { hour: '2-digit', minute: '2-digit' }) : '';
 
 export default function ChatIndex() {
-    const [messages, setMessages] = useState<Message[]>([]);
+    const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [others, setOthers] = useState<Other[]>([]);
     const [draft, setDraft] = useState('');
     const [loading, setLoading] = useState(true);
@@ -53,7 +44,8 @@ export default function ChatIndex() {
     const [error, setError] = useState('');
     const [pendingImage, setPendingImage] = useState<File | null>(null);
     const [pendingGif, setPendingGif] = useState<Gif | null>(null);
-    const [pickerFor, setPickerFor] = useState<string | null>(null);
+    const [detailFor, setDetailFor] = useState<string | null>(null);
+    const [recording, setRecording] = useState(false);
     const fileInput = useRef<HTMLInputElement>(null);
 
     const cursor = useRef(0);
@@ -68,7 +60,7 @@ export default function ChatIndex() {
     const poll = useCallback(async () => {
         try {
             const response = await axios.get('/api/v1/chat', { params: { after: cursor.current || undefined } });
-            const fresh: Message[] = response.data.messages ?? [];
+            const fresh: ChatMessage[] = response.data.messages ?? [];
             setOthers(response.data.others ?? []);
             setError('');
 
@@ -159,8 +151,7 @@ export default function ChatIndex() {
         } finally { setSending(false); }
     };
 
-    const react = async (message: Message, emoji: string) => {
-        setPickerFor(null);
+    const react = async (message: ChatMessage, emoji: string) => {
         try {
             const response = await axios.post(`/api/v1/chat/${message.uuid}/reakce`, { emoji });
             setMessages(current => current.map(item =>
@@ -168,7 +159,7 @@ export default function ChatIndex() {
         } catch { setError('Reakci se nepodařilo uložit.'); }
     };
 
-    const remove = async (message: Message) => {
+    const remove = async (message: ChatMessage) => {
         if (!window.confirm('Smazat zprávu?')) return;
         try {
             await axios.delete(`/api/v1/chat/${message.uuid}`);
@@ -221,81 +212,17 @@ export default function ChatIndex() {
                     )}
 
                     {messages.map(message => (
-                        <div key={message.id} className={`group flex ${message.is_mine ? 'justify-end' : 'justify-start'}`}>
-                            <div className={`max-w-[80%] rounded-2xl px-3.5 py-2.5 ${message.is_mine
-                                ? 'bg-[var(--color-accent)] text-[var(--color-accent-contrast)]'
-                                : 'bg-[var(--color-surface-muted)] text-[var(--color-text-primary)]'}`}>
-                                {!message.is_mine && <p className="text-[10px] opacity-75">{message.author.name}</p>}
-                                {message.media && (
-                                    <img
-                                        src={message.media.url}
-                                        alt={message.media.kind === 'gif' ? 'GIF' : 'Obrázek ve zprávě'}
-                                        loading="lazy"
-                                        // The ratio is known for GIFs, so the bubble does not
-                                        // jump once the picture arrives.
-                                        style={message.media.width && message.media.height
-                                            ? { aspectRatio: `${message.media.width} / ${message.media.height}` }
-                                            : undefined}
-                                        className="mb-1 max-h-72 w-full rounded-xl object-cover"
-                                    />
-                                )}
-                                {message.body && <p className="whitespace-pre-wrap break-words text-sm">{message.body}</p>}
-                                <p className="mt-0.5 text-right text-[10px] opacity-65">
-                                    {time(message.sent_at)}{message.edited && ' · upraveno'}
-                                    {message.is_mine && others.some(other => other.read_up_to >= message.id) && ' · přečteno'}
-                                </p>
-
-                                {message.reactions.length > 0 && (
-                                    <div className="mt-1 flex flex-wrap gap-1">
-                                        {message.reactions.map(reaction => (
-                                            <button
-                                                key={reaction.emoji}
-                                                type="button"
-                                                onClick={() => void react(message, reaction.emoji)}
-                                                aria-pressed={reaction.mine}
-                                                className={`rounded-full px-1.5 py-0.5 text-[11px] ${reaction.mine
-                                                    ? 'bg-[var(--color-bg-card)] ring-1 ring-[var(--color-accent)]'
-                                                    : 'bg-[var(--color-bg-card)]/70'}`}
-                                            >
-                                                {reaction.emoji} {reaction.count}
-                                            </button>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-
-                            <div className="relative self-center">
-                                <button
-                                    type="button"
-                                    onClick={() => setPickerFor(pickerFor === message.uuid ? null : message.uuid)}
-                                    aria-label="Přidat reakci"
-                                    className="p-1 text-[var(--color-text-secondary)] opacity-0 transition-opacity hover:text-[var(--color-text-primary)] focus:opacity-100 group-hover:opacity-100"
-                                >
-                                    <SmilePlus size={14} />
-                                </button>
-                                {pickerFor === message.uuid && (
-                                    <>
-                                        <button type="button" aria-label="Zavřít reakce" onClick={() => setPickerFor(null)} className="fixed inset-0 z-[700] cursor-default" />
-                                        <div className="absolute bottom-full right-0 z-[710] mb-1 flex gap-0.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-1 shadow-2xl">
-                                            {QUICK_REACTIONS.map(emoji => (
-                                                <button key={emoji} type="button" onClick={() => void react(message, emoji)} className="rounded-lg p-1 text-base hover:bg-[var(--color-surface-hover)]">{emoji}</button>
-                                            ))}
-                                        </div>
-                                    </>
-                                )}
-                            </div>
-                            {message.is_mine && (
-                                <button
-                                    type="button"
-                                    onClick={() => void remove(message)}
-                                    aria-label="Smazat zprávu"
-                                    className="ml-1 self-center p-1 text-[var(--color-text-secondary)] opacity-0 transition-opacity hover:text-red-300 focus:opacity-100 group-hover:opacity-100"
-                                >
-                                    <Trash2 size={13} />
-                                </button>
-                            )}
-                        </div>
+                        <ChatMessageItem
+                            key={message.id}
+                            message={message}
+                            read={others.some(other => other.read_up_to >= message.id)}
+                            onReact={emoji => void react(message, emoji)}
+                            onOpenDetail={() => setDetailFor(message.uuid)}
+                        />
                     ))}
+
+                    {typing.length > 0 && <TypingBubble who={typing.map(other => other.name ?? 'Partner').join(', ')} />}
+
                     <div ref={bottom} />
                 </div>
 
@@ -321,6 +248,28 @@ export default function ChatIndex() {
                         >
                             <X size={16} />
                         </button>
+                    </div>
+                )}
+
+                {recording && (
+                    <div className="shrink-0">
+                        <AudioRecorder
+                            busy={sending}
+                            withTitle={false}
+                            maxSeconds={300}
+                            label="Nahrát hlasovku"
+                            onRecorded={async (blob, durationMs) => {
+                                const form = new FormData();
+                                form.append('audio', blob, recordingFilename('hlasovka', blob));
+                                form.append('duration_ms', String(durationMs));
+                                try {
+                                    const response = await axios.post('/api/v1/chat', form);
+                                    setMessages(current => [...current, response.data]);
+                                    cursor.current = Math.max(cursor.current, response.data.id);
+                                    setRecording(false);
+                                } catch { setError('Hlasovku se nepodařilo odeslat.'); }
+                            }}
+                        />
                     </div>
                 )}
 
@@ -371,6 +320,13 @@ export default function ChatIndex() {
                     </button>
                 </div>
             </div>
+            {detailFor && (
+                <MessageDetail
+                    uuid={detailFor}
+                    onClose={() => setDetailFor(null)}
+                    onDeleted={() => setMessages(current => current.filter(item => item.uuid !== detailFor))}
+                />
+            )}
         </AppLayout>
     );
 }

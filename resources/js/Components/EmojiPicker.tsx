@@ -60,7 +60,7 @@ const GROUPS: Array<{ label: string; emoji: Array<[string, string]> }> = [
 
 const ALL = GROUPS.flatMap(group => group.emoji);
 
-export default function EmojiPicker({ onPick, label = 'Emoji', compact = false }: { onPick: (emoji: string) => void; label?: string; compact?: boolean }) {
+export default function EmojiPicker({ onPick, label = 'Emoji', compact = false, keepOpen = false }: { onPick: (emoji: string) => void; label?: string; compact?: boolean; keepOpen?: boolean }) {
     const [open, setOpen] = useState(false);
     const [query, setQuery] = useState('');
     const panel = useViewportSafePanel(open);
@@ -73,6 +73,9 @@ export default function EmojiPicker({ onPick, label = 'Emoji', compact = false }
 
     const choose = (emoji: string) => {
         onPick(emoji);
+        // Writing a message usually means more than one emoji, so the panel stays until
+        // it is dismissed by a click outside; a reaction is a single act and closes.
+        if (keepOpen) return;
         setOpen(false);
         setQuery('');
     };

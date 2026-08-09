@@ -2,7 +2,10 @@ import { lastSeenLabel } from '@/lib/lastSeen';
 import { Link, usePage } from '@inertiajs/react';
 import axios from 'axios';
 import AudioRecorder from '@/Components/AudioRecorder';
+import ChatMessageItem, { type ChatMessage } from '@/Components/ChatMessageItem';
+import MessageDetail from '@/Components/MessageDetail';
 import PresenceDot from '@/Components/PresenceDot';
+import TypingBubble from '@/Components/TypingBubble';
 import { useAutoGrow } from '@/lib/useAutoGrow';
 import EmojiPicker from '@/Components/EmojiPicker';
 import GifPicker, { type Gif } from '@/Components/GifPicker';
@@ -10,12 +13,6 @@ import { recordingFilename } from '@/lib/microphone';
 import { ChevronDown, ImagePlus, Loader2, Maximize2, MessagesSquare, Mic, Send, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-interface Message {
-    id: number; uuid: string; body: string;
-    media: { url: string; kind: 'image' | 'gif' | 'voice'; duration_ms: number | null } | null;
-    author: { id: number; name: string | null };
-    is_mine: boolean; sent_at: string | null;
-}
 
 interface Conversation {
     uuid: string; kind: 'direct' | 'group'; title: string;
@@ -47,14 +44,14 @@ export default function ChatDock() {
     const page = usePage().props as {
         auth?: { user?: { id?: number } };
         features?: string[] | null;
-        chatBootstrap?: { conversation: Conversation; messages: Message[]; cursor: number } | null;
+        chatBootstrap?: { conversation: Conversation; messages: ChatMessage[]; cursor: number } | null;
     };
     const features = page.features ?? null;
     const available = !features || features.includes('chat');
     const boot = page.chatBootstrap ?? null;
 
     const [open, setOpen] = useState(false);
-    const [messages, setMessages] = useState<Message[]>(boot?.messages ?? []);
+    const [messages, setMessages] = useState<ChatMessage[]>(boot?.messages ?? []);
     const [others, setOthers] = useState<Other[]>([]);
     const [unread, setUnread] = useState(0);
     const [draft, setDraft] = useState('');
@@ -66,6 +63,7 @@ export default function ChatDock() {
     const [pendingImage, setPendingImage] = useState<File | null>(null);
     const [pendingGif, setPendingGif] = useState<Gif | null>(null);
     const [recording, setRecording] = useState(false);
+    const [detailFor, setDetailFor] = useState<string | null>(null);
     const fileInput = useRef<HTMLInputElement>(null);
     const composer = useRef<HTMLTextAreaElement>(null);
     const currentRef = useRef<string | null>(null);
@@ -89,7 +87,7 @@ export default function ChatDock() {
                     peek: openRef.current ? undefined : 1,
                 },
             });
-            const fresh: Message[] = response.data.messages ?? [];
+            const fresh: ChatMessage[] = response.data.messages ?? [];
             setOthers(response.data.others ?? []);
             if (!currentRef.current && response.data.conversation?.uuid) {
                 setCurrent(response.data.conversation.uuid);
@@ -176,6 +174,14 @@ export default function ChatDock() {
         if (ok) setRecording(false);
     };
 
+    const react = async (message: ChatMessage, emoji: string) => {
+        try {
+            const response = await axios.post(`/api/v1/chat/${message.uuid}/reakce`, { emoji });
+            setMessages(current => current.map(item =>
+                item.uuid === response.data.uuid ? { ...item, reactions: response.data.reactions } : item));
+        } catch { /* A failed reaction is not worth interrupting the conversation for. */ }
+    };
+
     const send = async () => {
         const body = draft.trim();
         if ((!body && !pendingImage && !pendingGif) || sending) return;
@@ -206,6 +212,14 @@ export default function ChatDock() {
 
     return (
         <>
+            {detailFor && (
+                <MessageDetail
+                    uuid={detailFor}
+                    onClose={() => setDetailFor(null)}
+                    onDeleted={() => setMessages(current => current.filter(item => item.uuid !== detailFor))}
+                />
+            )}
+
             {open && (
                 <section
                     aria-label="Chat"
@@ -278,20 +292,20 @@ export default function ChatDock() {
                             <p className="py-4 text-center text-xs text-[var(--color-text-secondary)]">Zatím tu nic není.</p>
                         )}
                         {messages.map(message => (
-                            <div key={message.id} className={`flex ${message.is_mine ? 'justify-end' : 'justify-start'}`}>
-                                <div className={`max-w-[85%] rounded-2xl px-3 py-2 ${message.is_mine
-                                    ? 'bg-[var(--color-accent)] text-[var(--color-accent-contrast)]'
-                                    : 'bg-[var(--color-surface-muted)] text-[var(--color-text-primary)]'}`}>
-                                    {message.media?.kind === 'voice' ? (
-                                        <audio controls src={message.media.url} className="mb-1 h-8 w-48 max-w-full" />
-                                    ) : message.media ? (
-                                        <img src={message.media.url} alt="" loading="lazy" className="mb-1 max-h-32 w-full rounded-lg object-cover" />
-                                    ) : null}
-                                    {message.body && <p className="whitespace-pre-wrap break-words text-[13px] leading-relaxed">{message.body}</p>}
-                                    <p className="mt-0.5 text-right text-[10px] opacity-70">{time(message.sent_at)}</p>
-                                </div>
-                            </div>
+                            <ChatMessageItem
+                                key={message.id}
+                                compact
+                                message={message}
+                                read={others.some(other => other.read_up_to >= message.id)}
+                                onReact={emoji => void react(message, emoji)}
+                                onOpenDetail={() => setDetailFor(message.uuid)}
+                            />
                         ))}
+
+                        {others.some(other => other.typing) && (
+                            <TypingBubble who={others.filter(other => other.typing).map(other => other.name ?? 'Partner').join(', ')} />
+                        )}
+
                         <div ref={bottom} />
                     </div>
 
@@ -304,7 +318,15 @@ export default function ChatDock() {
                     )}
 
                     {recording && (
-                        <div className="shrink-0 border-t border-[var(--color-border)] px-2">
+                        <div className="relative shrink-0 border-t border-[var(--color-border)] px-2">
+                            <button
+                                type="button"
+                                onClick={() => setRecording(false)}
+                                aria-label="Zrušit nahrávání"
+                                className="absolute right-2 top-2 z-10 flex h-7 w-7 items-center justify-center rounded-lg text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]"
+                            >
+                                <X size={15} />
+                            </button>
                             <AudioRecorder
                                 busy={sending}
                                 withTitle={false}
@@ -328,9 +350,13 @@ export default function ChatDock() {
                             }}
                         />
                         <button type="button" onClick={() => fileInput.current?.click()} aria-label="Přiložit obrázek" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]"><ImagePlus size={16}/></button>
-                        <button type="button" onClick={() => setRecording(value => !value)} aria-label="Hlasovka" aria-pressed={recording} className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg hover:bg-[var(--color-surface-hover)] ${recording ? 'text-[var(--color-accent)]' : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}><Mic size={16}/></button>
+                        <button
+                            type="button"
+                            onPointerDown={event => { if (event.pointerType !== 'mouse') setRecording(true); }}
+                            onClick={event => { if ((event as any).nativeEvent?.pointerType === 'mouse' || !('ontouchstart' in window)) setRecording(value => !value); }}
+                            aria-label="Hlasovka" aria-pressed={recording} className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg hover:bg-[var(--color-surface-hover)] ${recording ? 'text-[var(--color-accent)]' : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}><Mic size={16}/></button>
                         <GifPicker compact onPick={gif => { setPendingImage(null); setPendingGif(gif); }} />
-                        <EmojiPicker compact onPick={emoji => setDraft(current => current + emoji)} />
+                        <EmojiPicker compact keepOpen onPick={emoji => setDraft(current => current + emoji)} />
                         <textarea
                             value={draft}
                             onChange={event => setDraft(event.target.value)}
