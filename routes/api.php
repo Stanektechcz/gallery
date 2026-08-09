@@ -228,6 +228,9 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
     Route::get('/chat', [App\Http\Controllers\Api\ChatController::class, 'poll'])->name('api.chat.poll');
     Route::post('/chat', [App\Http\Controllers\Api\ChatController::class, 'store'])->name('api.chat.store');
     Route::post('/chat/pise', [App\Http\Controllers\Api\ChatController::class, 'typing'])->name('api.chat.typing');
+    Route::get('/chat/gify', [App\Http\Controllers\Api\ChatController::class, 'gifs'])->name('api.chat.gifs');
+    Route::get('/chat/{uuid}/obrazek', [App\Http\Controllers\Api\ChatController::class, 'media'])->name('api.chat.media');
+    Route::post('/chat/{uuid}/reakce', [App\Http\Controllers\Api\ChatController::class, 'react'])->name('api.chat.react');
     Route::patch('/chat/{uuid}', [App\Http\Controllers\Api\ChatController::class, 'update'])->name('api.chat.update');
     Route::delete('/chat/{uuid}', [App\Http\Controllers\Api\ChatController::class, 'destroy'])->name('api.chat.destroy');
 

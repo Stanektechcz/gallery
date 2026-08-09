@@ -68,10 +68,10 @@ class BillingCatalogSeeder extends Seeder
         }
 
         // Feature sets, from the smallest plan upwards.
-        $couple = ['gallery', 'search', 'sharing', 'calendar', 'recipes', 'memories', 'people', 'places', 'voice_notes', 'date_ideas', 'journal'];
-        // Chat starts at the paid tier: a couple of two has a phone, a group of six
-        // is where a shared conversation inside the app starts to earn its place.
-        $family = [...$couple, 'trips', 'finance', 'gifts', 'watchlist', 'stats', 'chat'];
+        // Chat belongs to every plan: talking to each other is the point of a couples'
+        // app, not an upsell. Larger plans get it by inheriting this set.
+        $couple = ['gallery', 'search', 'sharing', 'calendar', 'recipes', 'memories', 'people', 'places', 'voice_notes', 'date_ideas', 'journal', 'chat'];
+        $family = [...$couple, 'trips', 'finance', 'gifts', 'watchlist', 'stats'];
         $group  = [...$family, 'photobook', 'vault', 'tv_mode', 'automations'];
 
         $plans = [

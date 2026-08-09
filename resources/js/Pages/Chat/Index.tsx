@@ -1,13 +1,21 @@
 import AppLayout from '@/Layouts/AppLayout';
 import { Head } from '@inertiajs/react';
 import axios from 'axios';
-import { Loader2, MessagesSquare, Send, Trash2 } from 'lucide-react';
+import EmojiPicker from '@/Components/EmojiPicker';
+import GifPicker, { type Gif } from '@/Components/GifPicker';
+import { ImagePlus, Loader2, MessagesSquare, Send, SmilePlus, Trash2, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+
+interface Reaction { emoji: string; count: number; mine: boolean }
+
+interface Media { url: string; kind: 'image' | 'gif'; width: number | null; height: number | null }
 
 interface Message {
     id: number;
     uuid: string;
     body: string;
+    media: Media | null;
+    reactions: Reaction[];
     author: { id: number; name: string | null };
     is_mine: boolean;
     edited: boolean;
@@ -25,6 +33,9 @@ interface Other {
 /** Quiet tabs ask less often; the interval climbs while nothing happens. */
 const IDLE_STEPS = [2000, 2000, 4000, 8000, 15000];
 
+/** The handful worth one tap; everything else lives in the picker. */
+const QUICK_REACTIONS = ['❤️', '😂', '👍', '😮', '😢', '🔥'];
+
 const time = (value: string | null) =>
     value ? new Date(value).toLocaleTimeString('cs-CZ', { hour: '2-digit', minute: '2-digit' }) : '';
 
@@ -35,6 +46,10 @@ export default function ChatIndex() {
     const [loading, setLoading] = useState(true);
     const [sending, setSending] = useState(false);
     const [error, setError] = useState('');
+    const [pendingImage, setPendingImage] = useState<File | null>(null);
+    const [pendingGif, setPendingGif] = useState<Gif | null>(null);
+    const [pickerFor, setPickerFor] = useState<string | null>(null);
+    const fileInput = useRef<HTMLInputElement>(null);
 
     const cursor = useRef(0);
     const quiet = useRef(0);
@@ -110,11 +125,23 @@ export default function ChatIndex() {
 
     const send = async () => {
         const body = draft.trim();
-        if (!body || sending) return;
+        // A picture or a GIF is a message on its own; only all three being empty is not.
+        if ((!body && !pendingImage && !pendingGif) || sending) return;
         setSending(true); setError('');
         try {
-            const response = await axios.post('/api/v1/chat', { body });
+            const form = new FormData();
+            if (body) form.append('body', body);
+            if (pendingImage) form.append('image', pendingImage);
+            if (pendingGif) {
+                form.append('gif_url', pendingGif.url);
+                form.append('gif_width', String(pendingGif.width));
+                form.append('gif_height', String(pendingGif.height));
+            }
+            const response = await axios.post('/api/v1/chat', form);
             setDraft('');
+            setPendingImage(null);
+            setPendingGif(null);
+            if (fileInput.current) fileInput.current.value = '';
             stuckToBottom.current = true;
             setMessages(current => current.some(item => item.id === response.data.id) ? current : [...current, response.data]);
             cursor.current = Math.max(cursor.current, response.data.id);
@@ -122,6 +149,15 @@ export default function ChatIndex() {
         } catch (reason: any) {
             setError(reason?.response?.data?.message ?? 'Zprávu se nepodařilo odeslat.');
         } finally { setSending(false); }
+    };
+
+    const react = async (message: Message, emoji: string) => {
+        setPickerFor(null);
+        try {
+            const response = await axios.post(`/api/v1/chat/${message.uuid}/reakce`, { emoji });
+            setMessages(current => current.map(item =>
+                item.uuid === response.data.uuid ? { ...item, reactions: response.data.reactions } : item));
+        } catch { setError('Reakci se nepodařilo uložit.'); }
     };
 
     const remove = async (message: Message) => {
@@ -166,11 +202,63 @@ export default function ChatIndex() {
                                 ? 'bg-[var(--color-accent)] text-[var(--color-accent-contrast)]'
                                 : 'bg-[var(--color-surface-muted)] text-[var(--color-text-primary)]'}`}>
                                 {!message.is_mine && <p className="text-[10px] opacity-75">{message.author.name}</p>}
-                                <p className="whitespace-pre-wrap break-words text-sm">{message.body}</p>
+                                {message.media && (
+                                    <img
+                                        src={message.media.url}
+                                        alt={message.media.kind === 'gif' ? 'GIF' : 'Obrázek ve zprávě'}
+                                        loading="lazy"
+                                        // The ratio is known for GIFs, so the bubble does not
+                                        // jump once the picture arrives.
+                                        style={message.media.width && message.media.height
+                                            ? { aspectRatio: `${message.media.width} / ${message.media.height}` }
+                                            : undefined}
+                                        className="mb-1 max-h-72 w-full rounded-xl object-cover"
+                                    />
+                                )}
+                                {message.body && <p className="whitespace-pre-wrap break-words text-sm">{message.body}</p>}
                                 <p className="mt-0.5 text-right text-[10px] opacity-65">
                                     {time(message.sent_at)}{message.edited && ' · upraveno'}
                                     {message.is_mine && others.some(other => other.read_up_to >= message.id) && ' · přečteno'}
                                 </p>
+
+                                {message.reactions.length > 0 && (
+                                    <div className="mt-1 flex flex-wrap gap-1">
+                                        {message.reactions.map(reaction => (
+                                            <button
+                                                key={reaction.emoji}
+                                                type="button"
+                                                onClick={() => void react(message, reaction.emoji)}
+                                                aria-pressed={reaction.mine}
+                                                className={`rounded-full px-1.5 py-0.5 text-[11px] ${reaction.mine
+                                                    ? 'bg-[var(--color-bg-card)] ring-1 ring-[var(--color-accent)]'
+                                                    : 'bg-[var(--color-bg-card)]/70'}`}
+                                            >
+                                                {reaction.emoji} {reaction.count}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="relative self-center">
+                                <button
+                                    type="button"
+                                    onClick={() => setPickerFor(pickerFor === message.uuid ? null : message.uuid)}
+                                    aria-label="Přidat reakci"
+                                    className="p-1 text-[var(--color-text-secondary)] opacity-0 transition-opacity hover:text-[var(--color-text-primary)] focus:opacity-100 group-hover:opacity-100"
+                                >
+                                    <SmilePlus size={14} />
+                                </button>
+                                {pickerFor === message.uuid && (
+                                    <>
+                                        <button type="button" aria-label="Zavřít reakce" onClick={() => setPickerFor(null)} className="fixed inset-0 z-[700] cursor-default" />
+                                        <div className="absolute bottom-full right-0 z-[710] mb-1 flex gap-0.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-1 shadow-2xl">
+                                            {QUICK_REACTIONS.map(emoji => (
+                                                <button key={emoji} type="button" onClick={() => void react(message, emoji)} className="rounded-lg p-1 text-base hover:bg-[var(--color-surface-hover)]">{emoji}</button>
+                                            ))}
+                                        </div>
+                                    </>
+                                )}
                             </div>
                             {message.is_mine && (
                                 <button
@@ -187,7 +275,54 @@ export default function ChatIndex() {
                     <div ref={bottom} />
                 </div>
 
-                <div className="mt-3 flex shrink-0 items-end gap-2">
+                {(pendingImage || pendingGif) && (
+                    <div className="mt-3 flex shrink-0 items-center gap-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-2">
+                        <img
+                            src={pendingGif ? pendingGif.preview : URL.createObjectURL(pendingImage!)}
+                            alt="Náhled přílohy"
+                            className="h-12 w-12 rounded-lg object-cover"
+                        />
+                        <p className="min-w-0 flex-1 truncate text-xs text-[var(--color-text-secondary)]">
+                            {pendingGif ? pendingGif.description : pendingImage?.name}
+                        </p>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setPendingImage(null);
+                                setPendingGif(null);
+                                if (fileInput.current) fileInput.current.value = '';
+                            }}
+                            aria-label="Odebrat přílohu"
+                            className="p-1 text-[var(--color-text-secondary)] hover:text-red-300"
+                        >
+                            <X size={16} />
+                        </button>
+                    </div>
+                )}
+
+                <div className="mt-3 flex shrink-0 items-end gap-1">
+                    <input
+                        ref={fileInput}
+                        type="file"
+                        accept="image/jpeg,image/png,image/gif,image/webp"
+                        className="hidden"
+                        onChange={event => {
+                            const file = event.target.files?.[0] ?? null;
+                            // One attachment at a time: a picture replaces a chosen GIF.
+                            if (file) setPendingGif(null);
+                            setPendingImage(file);
+                        }}
+                    />
+                    <button
+                        type="button"
+                        onClick={() => fileInput.current?.click()}
+                        aria-label="Přiložit obrázek"
+                        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]"
+                    >
+                        <ImagePlus size={19} />
+                    </button>
+                    <GifPicker onPick={gif => { setPendingImage(null); setPendingGif(gif); }} />
+                    <EmojiPicker onPick={emoji => setDraft(current => current + emoji)} />
                     <textarea
                         value={draft}
                         onChange={event => { setDraft(event.target.value); announceTyping(); }}
@@ -203,7 +338,7 @@ export default function ChatIndex() {
                     <button
                         type="button"
                         onClick={() => void send()}
-                        disabled={sending || !draft.trim()}
+                        disabled={sending || (!draft.trim() && !pendingImage && !pendingGif)}
                         aria-label="Odeslat"
                         className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--color-accent)] text-[var(--color-accent-contrast)] disabled:opacity-40"
                     >

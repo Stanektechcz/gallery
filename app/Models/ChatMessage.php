@@ -14,6 +14,7 @@ class ChatMessage extends Model
     protected $fillable = [
         'uuid', 'gallery_space_id', 'created_by', 'body',
         'attachment_type', 'attachment_ref', 'edited_at',
+        'media_path', 'media_mime', 'media_size', 'media_remote_url', 'media_width', 'media_height',
     ];
 
     protected function casts(): array
@@ -29,5 +30,16 @@ class ChatMessage extends Model
     public function author()
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function reactions()
+    {
+        return $this->hasMany(ChatReaction::class);
+    }
+
+    /** A message is worth showing if it says something or carries something. */
+    public function hasContent(): bool
+    {
+        return $this->body !== '' || $this->media_path !== null || $this->media_remote_url !== null;
     }
 }

@@ -4,12 +4,15 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\ChatMessage;
+use App\Models\ChatReaction;
 use App\Models\GallerySpace;
+use App\Services\Integrations\TenorGifClient;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 
 /**
  * Live conversation for a space.
@@ -26,6 +29,25 @@ use Illuminate\Support\Facades\Schema;
  */
 class ChatController extends Controller
 {
+    private const DISK = 'local';
+
+    /** Phone photos are large; this is generous without letting a chat fill the quota. */
+    private const IMAGE_MAX_KB = 12288;
+
+    /** @var list<string> */
+    private const IMAGE_MIME = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+
+    /**
+     * Providers whose GIF links we are willing to render.
+     *
+     * A remote image URL is a tracking pixel with extra steps: whoever hosts it learns
+     * the reader's address and when they opened the conversation. Restricting it to the
+     * picker's own CDNs means a message cannot smuggle in an arbitrary beacon.
+     *
+     * @var list<string>
+     */
+    private const GIF_HOSTS = ['media.tenor.com', 'c.tenor.com', 'tenor.com'];
+
     /** Long enough that a pause reads as "still writing", short enough to expire on its own. */
     private const TYPING_SECONDS = 6;
 
@@ -62,11 +84,14 @@ class ChatController extends Controller
             $this->markRead($space->id, $user->id, (int) $messages->last()->id);
         }
 
+        // One query for the whole batch, not one per message.
+        $reactions = $this->reactionsFor($messages->pluck('id')->all(), $user->id);
+
         $this->touchPresence($space->id, $user->id);
 
         return response()->json([
             'space_id' => $space->id,
-            'messages' => $messages->map(fn (ChatMessage $message) => $this->payload($message, $user->id))->all(),
+            'messages' => $messages->map(fn (ChatMessage $message) => $this->payload($message, $user->id, $reactions[$message->id] ?? []))->all(),
             'cursor' => (int) ($messages->last()->id ?? $after),
             'others' => $this->others($space->id, $user->id),
         ]);
@@ -79,17 +104,37 @@ class ChatController extends Controller
         $space = $this->space($request, $request->integer('gallery_space_id') ?: null);
 
         $data = $request->validate([
-            'body' => 'required|string|max:4000',
+            // Optional, because a picture or a GIF is a message on its own.
+            'body' => 'nullable|string|max:4000',
             'attachment_type' => 'nullable|string|in:recipe,media,event,place,trip',
             'attachment_ref' => 'nullable|string|max:190',
+            'image' => 'nullable|file|max:' . self::IMAGE_MAX_KB . '|mimetypes:' . implode(',', self::IMAGE_MIME),
+            // A GIF picked from the provider: we keep the link, not a copy.
+            'gif_url' => 'nullable|url|max:600',
+            'gif_width' => 'nullable|integer|max:4000',
+            'gif_height' => 'nullable|integer|max:4000',
         ]);
+
+        $body = trim((string) ($data['body'] ?? ''));
+        $upload = $request->file('image');
+        $gif = $this->safeGifUrl($data['gif_url'] ?? null);
+
+        abort_if($body === '' && ! $upload && ! $gif, 422, 'Prázdnou zprávu odeslat nelze.');
+
+        $path = $upload?->store("chat/{$space->id}", self::DISK) ?: null;
 
         $message = ChatMessage::create([
             'gallery_space_id' => $space->id,
             'created_by' => $request->user()->id,
-            'body' => trim($data['body']),
+            'body' => $body,
             'attachment_type' => $data['attachment_type'] ?? null,
             'attachment_ref' => $data['attachment_ref'] ?? null,
+            'media_path' => $path,
+            'media_mime' => $upload?->getMimeType(),
+            'media_size' => $upload?->getSize(),
+            'media_remote_url' => $gif,
+            'media_width' => $data['gif_width'] ?? null,
+            'media_height' => $data['gif_height'] ?? null,
         ]);
 
         // Sending is reading: otherwise your own message comes back as unread.
@@ -129,8 +174,72 @@ class ChatController extends Controller
         return response()->json(['ok' => true]);
     }
 
+    /**
+     * GIF search. Answers with an empty list and configured=false when no key is set,
+     * so the client can hide the picker instead of showing one that never finds anything.
+     */
+    public function gifs(Request $request, TenorGifClient $tenor): JsonResponse
+    {
+        $this->available();
+        $request->validate(['q' => 'nullable|string|max:80']);
+
+        return response()->json([
+            'configured' => $tenor->configured(),
+            'results' => $tenor->configured() ? $tenor->search($request->string('q')->toString()) : [],
+        ]);
+    }
+
+    /** Streams an uploaded picture. Private disk, authorised caller, never a public URL. */
+    public function media(Request $request, string $uuid)
+    {
+        $this->available();
+        $space = $this->space($request, $request->integer('gallery_space_id') ?: null);
+
+        $message = ChatMessage::where('gallery_space_id', $space->id)->where('uuid', $uuid)->firstOrFail();
+        abort_unless($message->media_path && Storage::disk(self::DISK)->exists($message->media_path), 404);
+
+        return Storage::disk(self::DISK)->response($message->media_path, null, [
+            'Content-Type' => $message->media_mime ?? 'application/octet-stream',
+            'Cache-Control' => 'private, max-age=86400',
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
+    }
+
+    /** Toggles one emoji for the caller. Sending the same one again takes it back. */
+    public function react(Request $request, string $uuid): JsonResponse
+    {
+        $this->available();
+        $this->write($request);
+        $space = $this->space($request, $request->integer('gallery_space_id') ?: null);
+
+        $data = $request->validate([
+            // Length rather than a fixed list: a family emoji is several codepoints and
+            // a skin tone adds more, and none of that changes what we store it for.
+            'emoji' => 'required|string|max:16',
+        ]);
+
+        $message = ChatMessage::where('gallery_space_id', $space->id)->where('uuid', $uuid)->firstOrFail();
+
+        $existing = ChatReaction::where('chat_message_id', $message->id)
+            ->where('user_id', $request->user()->id)
+            ->where('emoji', $data['emoji'])
+            ->first();
+
+        if ($existing) $existing->delete();
+        else ChatReaction::create([
+            'chat_message_id' => $message->id,
+            'user_id' => $request->user()->id,
+            'emoji' => $data['emoji'],
+        ]);
+
+        return response()->json([
+            'uuid' => $message->uuid,
+            'reactions' => $this->reactionsFor([$message->id], $request->user()->id)[$message->id] ?? [],
+        ]);
+    }
+
     /** @return array<string, mixed> */
-    private function payload(ChatMessage $message, int $viewerId): array
+    private function payload(ChatMessage $message, int $viewerId, array $reactions = []): array
     {
         return [
             'id' => (int) $message->id,
@@ -139,11 +248,54 @@ class ChatController extends Controller
             'attachment' => $message->attachment_type
                 ? ['type' => $message->attachment_type, 'ref' => $message->attachment_ref]
                 : null,
+            'media' => $message->media_path || $message->media_remote_url ? [
+                // Uploads go through us; a provider's GIF stays where it already lives.
+                'url' => $message->media_remote_url ?: route('api.chat.media', ['uuid' => $message->uuid]),
+                'kind' => $message->media_remote_url ? 'gif' : 'image',
+                'mime' => $message->media_mime,
+                'width' => $message->media_width,
+                'height' => $message->media_height,
+            ] : null,
+            'reactions' => $reactions,
             'author' => ['id' => $message->created_by, 'name' => $message->author?->name],
             'is_mine' => $message->created_by === $viewerId,
             'edited' => $message->edited_at !== null,
             'sent_at' => $message->created_at?->toIso8601String(),
         ];
+    }
+
+    /**
+     * Reactions for a batch of messages, grouped by emoji, in one query.
+     *
+     * @param  list<int>  $messageIds
+     * @return array<int, list<array<string, mixed>>>
+     */
+    private function reactionsFor(array $messageIds, int $viewerId): array
+    {
+        if (! $messageIds || ! Schema::hasTable('chat_reactions')) return [];
+
+        return ChatReaction::whereIn('chat_message_id', $messageIds)->get()
+            ->groupBy('chat_message_id')
+            ->map(fn ($rows) => $rows->groupBy('emoji')
+                ->map(fn ($group, $emoji) => [
+                    'emoji' => $emoji,
+                    'count' => $group->count(),
+                    'mine' => $group->contains('user_id', $viewerId),
+                ])->values()->all())
+            ->all();
+    }
+
+    /** Accepts a GIF link only from the picker's own hosts; see GIF_HOSTS. */
+    private function safeGifUrl(?string $url): ?string
+    {
+        if (! $url) return null;
+
+        $host = strtolower((string) parse_url($url, PHP_URL_HOST));
+        $scheme = strtolower((string) parse_url($url, PHP_URL_SCHEME));
+
+        abort_unless($scheme === 'https' && in_array($host, self::GIF_HOSTS, true), 422, 'Tenhle zdroj GIFů nepodporujeme.');
+
+        return $url;
     }
 
     /**
