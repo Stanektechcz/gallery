@@ -256,6 +256,7 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
     Route::post('/chat', [App\Http\Controllers\Api\ChatController::class, 'store'])->name('api.chat.store');
     Route::post('/chat/pise', [App\Http\Controllers\Api\ChatController::class, 'typing'])->name('api.chat.typing');
     // Mentions: "@10.8" answers with that day's plans, a word searches the space.
+    Route::get('/chat/hledat', [App\Http\Controllers\Api\ChatController::class, 'search'])->name('api.chat.search');
     Route::get('/chat/zminky', [App\Http\Controllers\Api\ChatController::class, 'mentions'])->name('api.chat.mentions');
 
     // Turn-based games, played through the same polling as the conversation.

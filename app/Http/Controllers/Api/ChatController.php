@@ -269,6 +269,7 @@ class ChatController extends Controller
             'author' => ['id' => $message->created_by, 'name' => $message->author?->name],
             'can_delete' => $message->created_by === $request->user()->id,
             'can_edit' => $message->created_by === $request->user()->id,
+            'body' => $message->body,
             'size_bytes' => $message->media_size,
             'kind' => $message->attachment_type ?: ($message->media_remote_url ? 'gif' : ($message->media_path ? 'image' : 'text')),
             'edits' => $this->hasTable('chat_message_revisions') ? $message->revisions()->count() : 0,
@@ -285,6 +286,68 @@ class ChatController extends Controller
                 ];
             })->values(),
         ]);
+    }
+
+    /**
+     * Searches one conversation.
+     *
+     * Message bodies are encrypted, so the database cannot match them: LIKE over
+     * ciphertext finds nothing. Matching therefore happens in PHP, over chunks pulled
+     * newest-first, and stops as soon as enough hits are found — a search that answers
+     * from the recent past instantly is worth more than one that reads five years of
+     * history to prove a word was never used.
+     *
+     * The alternative, a plaintext search column, would undo the encryption for exactly
+     * the content it protects, which is not a trade worth making for a find box.
+     */
+    public function search(Request $request): JsonResponse
+    {
+        $this->available();
+        $request->validate(['q' => 'required|string|min:2|max:80']);
+
+        $space = $this->space($request, $request->integer('gallery_space_id') ?: null);
+        $conversation = $this->conversation($request, $space);
+        $needle = mb_strtolower(trim($request->string('q')->toString()));
+
+        $hits = [];
+        $scanned = 0;
+
+        ChatMessage::with('author:id,name')
+            ->where('conversation_id', $conversation->id)
+            ->orderByDesc('id')
+            ->chunk(200, function ($messages) use (&$hits, &$scanned, $needle) {
+                foreach ($messages as $message) {
+                    $scanned++;
+                    if ($message->body === '' || ! str_contains(mb_strtolower($message->body), $needle)) continue;
+
+                    $hits[] = [
+                        'id' => (int) $message->id,
+                        'uuid' => $message->uuid,
+                        'excerpt' => $this->excerptAround($message->body, $needle),
+                        'author' => $message->author?->name,
+                        'sent_at' => $message->created_at?->toIso8601String(),
+                    ];
+
+                    if (count($hits) >= 40) return false;
+                }
+
+                // Far enough back that anything older is better found by scrolling.
+                return $scanned < 4000;
+            });
+
+        return response()->json(['results' => $hits, 'scanned' => $scanned]);
+    }
+
+    /** A window around the match, so a result reads as a sentence rather than a word. */
+    private function excerptAround(string $body, string $needle): string
+    {
+        $at = mb_stripos($body, $needle);
+        if ($at === false) return Str::limit($body, 120);
+
+        $from = max(0, $at - 40);
+        $piece = mb_substr($body, $from, 140);
+
+        return ($from > 0 ? '…' : '') . trim($piece) . (mb_strlen($body) > $from + 140 ? '…' : '');
     }
 
     /** Suggestions for what someone typed after "@". */

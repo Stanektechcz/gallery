@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { Loader2, Trash2, X } from 'lucide-react';
+import { Check, Loader2, Pencil, Trash2, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 interface Detail {
@@ -8,6 +8,8 @@ interface Detail {
     edited_at: string | null;
     author: { id: number; name: string | null };
     can_delete: boolean;
+    can_edit: boolean;
+    body?: string;
     kind: string;
     edits: number;
     size_bytes: number | null;
@@ -34,13 +36,16 @@ const size = (bytes: number | null) =>
  * A sheet rather than a popover, because on a phone this is reached by swiping the bubble
  * and a popover would open under the thumb that just opened it.
  */
-export default function MessageDetail({ uuid, onClose, onDeleted }: {
+export default function MessageDetail({ uuid, onClose, onDeleted, onEdited }: {
     uuid: string;
     onClose: () => void;
     onDeleted: () => void;
+    /** The edited text, so the conversation updates without waiting for a poll. */
+    onEdited?: (body: string) => void;
 }) {
     const [detail, setDetail] = useState<Detail | null>(null);
     const [busy, setBusy] = useState(false);
+    const [editing, setEditing] = useState<string | null>(null);
     const [error, setError] = useState('');
 
     useEffect(() => {
@@ -48,6 +53,19 @@ export default function MessageDetail({ uuid, onClose, onDeleted }: {
             .then(response => setDetail(response.data))
             .catch(reason => setError(reason?.response?.data?.message ?? 'Detail se nepodařilo načíst.'));
     }, [uuid]);
+
+    /** Editing keeps the previous wording as a revision; the server files it. */
+    const saveEdit = async () => {
+        if (editing === null || !editing.trim()) return;
+        setBusy(true);
+        try {
+            await axios.patch(`/api/v1/chat/${uuid}`, { body: editing.trim() });
+            onEdited?.(editing.trim());
+            setEditing(null);
+            setDetail(current => current ? { ...current, body: editing.trim() } : current);
+        } catch { setError('Úpravu se nepodařilo uložit.'); }
+        finally { setBusy(false); }
+    };
 
     const remove = async () => {
         if (!window.confirm('Smazat zprávu? Zůstane v historii konverzace, ale nikomu se nezobrazí.')) return;
@@ -92,6 +110,37 @@ export default function MessageDetail({ uuid, onClose, onDeleted }: {
                                 </div>
                             ))}
                         </div>
+
+                        {detail.can_edit && (
+                            editing === null ? (
+                                <button
+                                    type="button"
+                                    onClick={() => setEditing(detail.body ?? '')}
+                                    className="mt-3 flex min-h-10 w-full items-center justify-center gap-2 rounded-xl border border-[var(--color-border)] text-xs text-[var(--color-text-primary)]"
+                                >
+                                    <Pencil size={14} /> Upravit text
+                                </button>
+                            ) : (
+                                <div className="mt-3">
+                                    <textarea
+                                        value={editing}
+                                        onChange={event => setEditing(event.target.value)}
+                                        rows={3}
+                                        maxLength={4000}
+                                        className="w-full resize-none rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-muted)] px-3 py-2 text-xs text-[var(--color-text-primary)]"
+                                    />
+                                    <p className="mt-1 text-[10px] text-[var(--color-text-secondary)]">
+                                        Původní znění zůstane uložené v historii úprav.
+                                    </p>
+                                    <div className="mt-2 flex gap-2">
+                                        <button type="button" disabled={busy} onClick={() => void saveEdit()} className="inline-flex min-h-9 flex-1 items-center justify-center gap-1.5 rounded-xl bg-[var(--color-accent)] text-xs font-medium text-[var(--color-accent-contrast)] disabled:opacity-50">
+                                            {busy ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />} Uložit
+                                        </button>
+                                        <button type="button" onClick={() => setEditing(null)} className="min-h-9 rounded-xl border border-[var(--color-border)] px-3 text-xs text-[var(--color-text-primary)]">Zrušit</button>
+                                    </div>
+                                </div>
+                            )
+                        )}
 
                         {detail.can_delete && (
                             <button

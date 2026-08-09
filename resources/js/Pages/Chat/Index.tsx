@@ -12,7 +12,7 @@ import { Head, usePage } from '@inertiajs/react';
 import axios from 'axios';
 import EmojiPicker from '@/Components/EmojiPicker';
 import GifPicker, { type Gif } from '@/Components/GifPicker';
-import { ImagePlus, Loader2, MessagesSquare, Mic, Send, X } from 'lucide-react';
+import { ImagePlus, Loader2, MessagesSquare, Mic, Search, Send, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 
@@ -60,6 +60,10 @@ export default function ChatIndex() {
     const [mention, setMention] = useState<{ query: string; from: number } | null>(null);
     const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
     const [gamePicker, setGamePicker] = useState(false);
+    const [finding, setFinding] = useState(false);
+    const [needle, setNeedle] = useState('');
+    const [hits, setHits] = useState<Array<{ id: number; uuid: string; excerpt: string; author: string | null; sent_at: string | null }>>([]);
+    const [searching, setSearching] = useState(false);
 
     /** Replaces the half-typed "@…" with the chosen thing, and puts the caret after it. */
     const insertMention = (item: MentionItem) => {
@@ -204,6 +208,25 @@ export default function ChatIndex() {
         }
     };
 
+    /*
+     | Searching is a request rather than a filter over what is loaded: the conversation
+     | holds sixty messages at a time and the history behind them is the point of
+     | searching at all.
+     */
+    useEffect(() => {
+        if (!finding || needle.trim().length < 2) { setHits([]); return; }
+        let active = true;
+        setSearching(true);
+        const handle = window.setTimeout(() => {
+            void axios.get('/api/v1/chat/hledat', { params: { q: needle.trim(), conversation: conversationUuid.current ?? undefined } })
+                .then(response => active && setHits(response.data.results ?? []))
+                .catch(() => active && setHits([]))
+                .finally(() => active && setSearching(false));
+        }, 350);
+
+        return () => { active = false; window.clearTimeout(handle); };
+    }, [finding, needle]);
+
     const react = async (message: ChatMessage, emoji: string) => {
         try {
             const response = await axios.post(`/api/v1/chat/${message.uuid}/reakce`, { emoji });
@@ -227,7 +250,7 @@ export default function ChatIndex() {
         <AppLayout title="Chat">
             <Head title="Chat" />
             <div className="mx-auto flex h-full max-w-3xl flex-col p-4 sm:p-6">
-                <header className="shrink-0">
+                <header className="relative shrink-0 pr-12">
                     <h1 className="flex items-center gap-2 text-xl font-bold text-[var(--color-text-primary)]">
                         <MessagesSquare size={22} className="text-[var(--color-accent)]" /> Chat
                     </h1>
@@ -242,7 +265,47 @@ export default function ChatIndex() {
                                     ? `${online.length} z ${others.length} online`
                                     : 'Zatím jste tu sami'}
                     </p>
+                    <button
+                        type="button"
+                        onClick={() => { setFinding(value => !value); setNeedle(''); }}
+                        aria-label="Hledat v konverzaci"
+                        aria-expanded={finding}
+                        className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-xl text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)] sm:right-6 sm:top-6"
+                    >
+                        <Search size={18} />
+                    </button>
                 </header>
+
+                {finding && (
+                    <div className="mt-3 shrink-0">
+                        <input
+                            autoFocus
+                            value={needle}
+                            onChange={event => setNeedle(event.target.value)}
+                            placeholder="Hledat ve zprávách…"
+                            className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-muted)] px-3 py-2.5 text-sm text-[var(--color-text-primary)]"
+                        />
+                        {needle.trim().length >= 2 && (
+                            <div className="mt-2 max-h-64 overflow-y-auto rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-1">
+                                {searching && <div className="flex justify-center py-3"><Loader2 size={16} className="animate-spin text-[var(--color-accent)]" /></div>}
+                                {!searching && hits.length === 0 && <p className="py-3 text-center text-xs text-[var(--color-text-secondary)]">Nic nenalezeno.</p>}
+                                {hits.map(hit => (
+                                    <button
+                                        key={hit.uuid}
+                                        type="button"
+                                        onClick={() => setDetailFor(hit.uuid)}
+                                        className="block w-full rounded-lg px-2 py-2 text-left hover:bg-[var(--color-surface-hover)]"
+                                    >
+                                        <p className="text-xs text-[var(--color-text-primary)]">{hit.excerpt}</p>
+                                        <p className="mt-0.5 text-[10px] text-[var(--color-text-secondary)]">
+                                            {hit.author} · {hit.sent_at ? new Date(hit.sent_at).toLocaleString('cs-CZ', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''}
+                                        </p>
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                )}
 
                 {others.length > 1 && (
                     <div className="mt-2 flex shrink-0 flex-wrap gap-1.5">
@@ -441,6 +504,8 @@ export default function ChatIndex() {
                     uuid={detailFor}
                     onClose={() => setDetailFor(null)}
                     onDeleted={() => setMessages(current => current.filter(item => item.uuid !== detailFor))}
+                    onEdited={body => setMessages(current => current.map(item =>
+                        item.uuid === detailFor ? { ...item, body, edited: true } : item))}
                 />
             )}
         </AppLayout>
