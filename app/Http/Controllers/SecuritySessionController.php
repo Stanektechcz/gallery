@@ -13,7 +13,7 @@ class SecuritySessionController extends Controller
     public function index(Request $request): Response
     {
         $sessions = DB::table('sessions')->where('user_id', $request->user()->id)->orderByDesc('last_activity')->get(['id', 'ip_address', 'user_agent', 'last_activity'])->map(fn ($session) => ['id' => $session->id, 'ip_address' => $session->ip_address, 'user_agent' => $this->summarizeUserAgent($session->user_agent), 'last_activity' => now()->setTimestamp((int) $session->last_activity)->toIso8601String(), 'is_current' => hash_equals((string) $request->session()->getId(), (string) $session->id)]);
-        return Inertia::render('Settings/Security', compact('sessions'));
+        return Inertia::render('Settings/Profile', compact('sessions'));
     }
 
     public function destroy(Request $request, string $sessionId): JsonResponse

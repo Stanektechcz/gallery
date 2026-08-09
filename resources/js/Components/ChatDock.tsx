@@ -126,8 +126,13 @@ export default function ChatDock() {
         return () => { active = false; if (handle) window.clearTimeout(handle); };
     }, [available, poll, open]);
 
+    // Opening lands on the newest message; later arrivals glide.
+    const opened = useRef(false);
     useEffect(() => {
-        if (open) { setUnread(0); bottom.current?.scrollIntoView(); }
+        if (!open) { opened.current = false; return; }
+        setUnread(0);
+        bottom.current?.scrollIntoView({ behavior: opened.current ? 'smooth' : 'auto' });
+        opened.current = true;
     }, [open, messages]);
 
     useEffect(() => {

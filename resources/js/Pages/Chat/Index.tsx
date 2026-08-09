@@ -105,8 +105,21 @@ export default function ChatIndex() {
         };
     }, [poll]);
 
-    // Follow the conversation, unless the reader has scrolled up to look at something.
+    /*
+     | Follow the conversation, unless the reader has scrolled up to look at something.
+     |
+     | The first paint jumps rather than glides: arriving part-way up a conversation and
+     | watching it scroll is worse than simply being at the end, which is where anyone
+     | opening a chat wants to be.
+     */
+    const landed = useRef(false);
     useEffect(() => {
+        if (!messages.length) return;
+        if (!landed.current) {
+            landed.current = true;
+            bottom.current?.scrollIntoView({ behavior: 'auto' });
+            return;
+        }
         if (stuckToBottom.current) bottom.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages]);
 

@@ -39,6 +39,10 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
         Route::delete('/{uuid}',                     [UploadController::class, 'cancel'])->name('cancel');
     });
 
+    // The account itself, as opposed to how the app looks.
+    Route::get('/profil', [App\Http\Controllers\Api\ProfileController::class, 'show'])->name('api.profile.show');
+    Route::patch('/profil', [App\Http\Controllers\Api\ProfileController::class, 'update'])->name('api.profile.update');
+    Route::put('/profil/heslo', [App\Http\Controllers\Api\ProfileController::class, 'password'])->name('api.profile.password');
     Route::patch('/user-preferences', [App\Http\Controllers\Api\UserPreferenceController::class, 'update'])->name('api.user-preferences.update');
     Route::get('/automations', [App\Http\Controllers\Api\AutomationRegistryController::class, 'index'])->name('api.automations.index');
     Route::patch('/automations/{key}', [App\Http\Controllers\Api\AutomationRegistryController::class, 'update'])->name('api.automations.update');
