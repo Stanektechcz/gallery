@@ -147,6 +147,9 @@ Route::middleware(['auth'])->group(function () {
     ]))->name('calendar');
     Route::get('/calendar/events/{uuid}', fn(string $uuid) => Inertia::render('Calendar/Show', ['eventUuid' => $uuid]))->name('calendar.events.show');
     // Voice messages, the burp module and the space's own plan overview.
+    Route::get('/settings/propojeni', fn() => Inertia::render('Settings/Connections'))->name('connections');
+    Route::get('/discord/pripojit', [App\Http\Controllers\DiscordOAuthController::class, 'redirect'])->name('discord.connect');
+    Route::get('/discord/zpet', [App\Http\Controllers\DiscordOAuthController::class, 'callback'])->name('discord.callback');
     Route::get('/denik', fn() => Inertia::render('Journal/Index'))->name('journal');
     Route::get('/chat', fn() => Inertia::render('Chat/Index'))->name('chat');
     Route::get('/hlasovky', fn() => Inertia::render('VoiceNotes/Index'))->name('voice-notes');

@@ -217,6 +217,17 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
     Route::put('/admin/billing/matrix', [App\Http\Controllers\Api\BillingMatrixController::class, 'update'])->name('api.admin.billing.matrix.update');
 
     // Voice messages between members. Included in every plan.
+    // Outside services a person connects: their own, or shared with the space.
+    Route::get('/propojeni', [App\Http\Controllers\Api\IntegrationConnectionController::class, 'index'])->name('api.integrations.index');
+    Route::post('/propojeni/notion', [App\Http\Controllers\Api\IntegrationConnectionController::class, 'connectNotion'])->name('api.integrations.notion');
+    Route::post('/propojeni/{uuid}/synchronizace', [App\Http\Controllers\Api\IntegrationConnectionController::class, 'sync'])->name('api.integrations.sync');
+    Route::post('/propojeni/{uuid}/zapis', [App\Http\Controllers\Api\IntegrationConnectionController::class, 'push'])->name('api.integrations.push');
+    Route::get('/propojeni/{uuid}/discord', [App\Http\Controllers\Api\IntegrationConnectionController::class, 'discordProfile'])->name('api.integrations.discord');
+    Route::put('/propojeni/{uuid}/webhook', [App\Http\Controllers\Api\IntegrationConnectionController::class, 'discordWebhook'])->name('api.integrations.webhook');
+    Route::put('/propojeni/{uuid}/viditelnost', [App\Http\Controllers\Api\IntegrationConnectionController::class, 'updateVisibility'])->name('api.integrations.visibility');
+    Route::delete('/propojeni/{uuid}', [App\Http\Controllers\Api\IntegrationConnectionController::class, 'destroy'])->name('api.integrations.destroy');
+    Route::get('/dokumenty/{uuid}', [App\Http\Controllers\Api\IntegrationConnectionController::class, 'document'])->name('api.integrations.document');
+
     // Diary. Entries are private until their author shares them, one at a time.
     Route::get('/journal', [App\Http\Controllers\Api\JournalController::class, 'index'])->name('api.journal.index');
     Route::post('/journal', [App\Http\Controllers\Api\JournalController::class, 'store'])->name('api.journal.store');
