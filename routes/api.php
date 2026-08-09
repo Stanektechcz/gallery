@@ -40,6 +40,10 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
     });
 
     // The account itself, as opposed to how the app looks.
+    // Each person's own arrangement of the menu, stored as a difference.
+    Route::get('/navigace', [App\Http\Controllers\Api\NavigationController::class, 'show'])->name('api.navigation.show');
+    Route::put('/navigace', [App\Http\Controllers\Api\NavigationController::class, 'update'])->name('api.navigation.update');
+    Route::delete('/navigace', [App\Http\Controllers\Api\NavigationController::class, 'reset'])->name('api.navigation.reset');
     Route::get('/profil', [App\Http\Controllers\Api\ProfileController::class, 'show'])->name('api.profile.show');
     Route::patch('/profil', [App\Http\Controllers\Api\ProfileController::class, 'update'])->name('api.profile.update');
     Route::put('/profil/heslo', [App\Http\Controllers\Api\ProfileController::class, 'password'])->name('api.profile.password');
