@@ -147,6 +147,8 @@ Route::middleware(['auth'])->group(function () {
     ]))->name('calendar');
     Route::get('/calendar/events/{uuid}', fn(string $uuid) => Inertia::render('Calendar/Show', ['eventUuid' => $uuid]))->name('calendar.events.show');
     // Voice messages, the burp module and the space's own plan overview.
+    Route::get('/denik', fn() => Inertia::render('Journal/Index'))->name('journal');
+    Route::get('/chat', fn() => Inertia::render('Chat/Index'))->name('chat');
     Route::get('/hlasovky', fn() => Inertia::render('VoiceNotes/Index'))->name('voice-notes');
     Route::get('/krkance', fn() => Inertia::render('Burps/Index'))->name('burps');
     Route::get('/prdy', fn() => Inertia::render('Farts/Index'))->name('farts');

@@ -217,6 +217,20 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
     Route::put('/admin/billing/matrix', [App\Http\Controllers\Api\BillingMatrixController::class, 'update'])->name('api.admin.billing.matrix.update');
 
     // Voice messages between members. Included in every plan.
+    // Diary. Entries are private until their author shares them, one at a time.
+    Route::get('/journal', [App\Http\Controllers\Api\JournalController::class, 'index'])->name('api.journal.index');
+    Route::post('/journal', [App\Http\Controllers\Api\JournalController::class, 'store'])->name('api.journal.store');
+    Route::patch('/journal/{uuid}', [App\Http\Controllers\Api\JournalController::class, 'update'])->name('api.journal.update');
+    Route::put('/journal/{uuid}/sdileni', [App\Http\Controllers\Api\JournalController::class, 'visibility'])->name('api.journal.visibility');
+    Route::delete('/journal/{uuid}', [App\Http\Controllers\Api\JournalController::class, 'destroy'])->name('api.journal.destroy');
+
+    // Chat. `poll` carries the whole live view: new messages, presence, typing.
+    Route::get('/chat', [App\Http\Controllers\Api\ChatController::class, 'poll'])->name('api.chat.poll');
+    Route::post('/chat', [App\Http\Controllers\Api\ChatController::class, 'store'])->name('api.chat.store');
+    Route::post('/chat/pise', [App\Http\Controllers\Api\ChatController::class, 'typing'])->name('api.chat.typing');
+    Route::patch('/chat/{uuid}', [App\Http\Controllers\Api\ChatController::class, 'update'])->name('api.chat.update');
+    Route::delete('/chat/{uuid}', [App\Http\Controllers\Api\ChatController::class, 'destroy'])->name('api.chat.destroy');
+
     Route::get('/voice-notes', [App\Http\Controllers\Api\VoiceNoteController::class, 'index'])->name('api.voice-notes.index');
     Route::post('/voice-notes', [App\Http\Controllers\Api\VoiceNoteController::class, 'store'])->name('api.voice-notes.store');
     Route::get('/voice-notes/{uuid}/stream', [App\Http\Controllers\Api\VoiceNoteController::class, 'stream'])->name('api.voice-notes.stream');

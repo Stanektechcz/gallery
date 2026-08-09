@@ -34,6 +34,8 @@ class BillingCatalogSeeder extends Seeder
             ['code' => 'people',       'name' => 'Lidé',                  'category' => 'Společný život', 'icon' => '👥', 'route' => '/people',    'tagline' => 'Kdo je na fotkách a co k nim patří.'],
             ['code' => 'places',       'name' => 'Místa',                 'category' => 'Společný život', 'icon' => '📍', 'route' => '/places',    'tagline' => 'Podniky, výlety a hodnocení návštěv.'],
             ['code' => 'voice_notes',  'name' => 'Hlasovky',              'category' => 'Společný život', 'icon' => '🎙️', 'route' => '/hlasovky', 'tagline' => 'Krátké vzkazy, na které není potřeba psát.'],
+            ['code' => 'journal',      'name' => 'Deník',                 'category' => 'Společný život', 'icon' => '📔', 'route' => '/denik',     'tagline' => 'Soukromé zápisky, které sdílíte, až když chcete.'],
+            ['code' => 'chat',         'name' => 'Chat',                  'category' => 'Společný život', 'icon' => '💬', 'route' => '/chat',      'tagline' => 'Živá konverzace pro pár i celou skupinu.'],
 
             // Planning bigger things.
             ['code' => 'trips',        'name' => 'Cesty a itinerář',      'category' => 'Plánování', 'icon' => '🧭', 'route' => '/trips',     'tagline' => 'Trasy, dny, doklady, balení a offline režim.'],
@@ -66,8 +68,10 @@ class BillingCatalogSeeder extends Seeder
         }
 
         // Feature sets, from the smallest plan upwards.
-        $couple = ['gallery', 'search', 'sharing', 'calendar', 'recipes', 'memories', 'people', 'places', 'voice_notes', 'date_ideas'];
-        $family = [...$couple, 'trips', 'finance', 'gifts', 'watchlist', 'stats'];
+        $couple = ['gallery', 'search', 'sharing', 'calendar', 'recipes', 'memories', 'people', 'places', 'voice_notes', 'date_ideas', 'journal'];
+        // Chat starts at the paid tier: a couple of two has a phone, a group of six
+        // is where a shared conversation inside the app starts to earn its place.
+        $family = [...$couple, 'trips', 'finance', 'gifts', 'watchlist', 'stats', 'chat'];
         $group  = [...$family, 'photobook', 'vault', 'tv_mode', 'automations'];
 
         $plans = [
