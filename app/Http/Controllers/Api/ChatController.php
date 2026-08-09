@@ -10,6 +10,7 @@ use App\Models\Conversation;
 use App\Models\ConversationParticipant;
 use App\Models\GallerySpace;
 use App\Support\AudioUploads;
+use App\Services\Chat\MentionSearchService;
 use App\Services\Integrations\GifSearchService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -276,6 +277,16 @@ class ChatController extends Controller
         ]);
     }
 
+    /** Suggestions for what someone typed after "@". */
+    public function mentions(Request $request, MentionSearchService $mentions): JsonResponse
+    {
+        $this->available();
+        $request->validate(['q' => 'nullable|string|max:60']);
+        $space = $this->space($request, $request->integer('gallery_space_id') ?: null);
+
+        return response()->json($mentions->search($space, $request->user(), $request->string('q')->toString()));
+    }
+
     /** Streams an uploaded picture. Private disk, authorised caller, never a public URL. */
     public function media(Request $request, string $uuid)
     {
@@ -345,6 +356,8 @@ class ChatController extends Controller
                 'height' => $message->media_height,
             ] : null,
             'reactions' => $reactions,
+            // A game invitation is a message whose body is the board.
+            'game' => $message->attachment_type === 'game' ? $message->attachment_ref : null,
             'author' => [
                 'id' => $message->created_by,
                 'name' => $message->author?->name,

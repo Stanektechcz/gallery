@@ -3,6 +3,7 @@ import { Link, usePage } from '@inertiajs/react';
 import axios from 'axios';
 import AudioRecorder from '@/Components/AudioRecorder';
 import ChatMessageItem, { type ChatMessage } from '@/Components/ChatMessageItem';
+import MentionAutocomplete, { activeMention, mentionToken, type MentionItem } from '@/Components/MentionAutocomplete';
 import MessageDetail from '@/Components/MessageDetail';
 import PresenceDot from '@/Components/PresenceDot';
 import TypingBubble from '@/Components/TypingBubble';
@@ -49,6 +50,7 @@ export default function ChatDock() {
     const features = page.features ?? null;
     const available = !features || features.includes('chat');
     const boot = page.chatBootstrap ?? null;
+    const me = page.auth?.user?.id ?? 0;
 
     const [open, setOpen] = useState(false);
     const [messages, setMessages] = useState<ChatMessage[]>(boot?.messages ?? []);
@@ -66,6 +68,25 @@ export default function ChatDock() {
     const [detailFor, setDetailFor] = useState<string | null>(null);
     const fileInput = useRef<HTMLInputElement>(null);
     const composer = useRef<HTMLTextAreaElement>(null);
+    const [mention, setMention] = useState<{ query: string; from: number } | null>(null);
+
+    /** Replaces the half-typed "@…" with the chosen thing, and puts the caret after it. */
+    const insertMention = (item: MentionItem) => {
+        const element = composer.current;
+        const caret = element?.selectionStart ?? draft.length;
+        const active = mention ?? activeMention(draft, caret);
+        if (!active) return;
+
+        const token = mentionToken(item) + ' ';
+        const next = draft.slice(0, active.from) + token + draft.slice(caret);
+        setDraft(next);
+        setMention(null);
+        window.requestAnimationFrame(() => {
+            element?.focus();
+            const at = active.from + token.length;
+            element?.setSelectionRange(at, at);
+        });
+    };
     const currentRef = useRef<string | null>(null);
     currentRef.current = current;
 
@@ -314,6 +335,7 @@ export default function ChatDock() {
                                 message={message}
                                 read={others.some(other => other.read_up_to >= message.id)}
                                 onReact={emoji => void react(message, emoji)}
+                                meId={me}
                                 onOpenDetail={() => setDetailFor(message.uuid)}
                             />
                         ))}
@@ -373,16 +395,30 @@ export default function ChatDock() {
                             aria-label="Hlasovka" aria-pressed={recording} className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg hover:bg-[var(--color-surface-hover)] ${recording ? 'text-[var(--color-accent)]' : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}><Mic size={16}/></button>
                         <GifPicker compact onPick={gif => { setPendingImage(null); setPendingGif(gif); }} />
                         <EmojiPicker compact keepOpen onPick={emoji => setDraft(current => current + emoji)} />
+                        {/* Positioned, so the mention list can hang above the field. */}
+                        <div className="relative min-h-9 flex-1">
+                            {mention && (
+                                <MentionAutocomplete
+                                    query={mention.query}
+                                    onPick={insertMention}
+                                    onDismiss={() => setMention(null)}
+                                />
+                            )}
                         <textarea
                             value={draft}
-                            onChange={event => { setDraft(event.target.value); announceTyping(); }}
+                            onChange={event => {
+                                setDraft(event.target.value);
+                                announceTyping();
+                                setMention(activeMention(event.target.value, event.target.selectionStart ?? 0));
+                            }}
                             onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void send(); } }}
                             ref={composer}
                             rows={1}
                             maxLength={4000}
                             placeholder="Napsat…"
-                            className="min-h-9 flex-1 resize-none rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-muted)] px-2.5 py-2 text-[13px] leading-5 text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:border-[var(--color-accent)] focus:outline-none"
+                            className="w-full min-h-9 resize-none rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-muted)] px-2.5 py-2 text-[13px] leading-5 text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:border-[var(--color-accent)] focus:outline-none"
                         />
+                        </div>
                         <button type="button" onClick={() => void send()} disabled={sending || (!draft.trim() && !pendingImage && !pendingGif)} aria-label="Odeslat" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--color-accent)] text-[var(--color-accent-contrast)] disabled:opacity-40">
                             {sending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
                         </button>

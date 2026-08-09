@@ -1,13 +1,14 @@
 import AppLayout from '@/Layouts/AppLayout';
 import AudioRecorder from '@/Components/AudioRecorder';
 import ChatMessageItem, { type ChatMessage } from '@/Components/ChatMessageItem';
+import MentionAutocomplete, { activeMention, mentionToken, type MentionItem } from '@/Components/MentionAutocomplete';
 import MessageDetail from '@/Components/MessageDetail';
 import PresenceDot from '@/Components/PresenceDot';
 import TypingBubble from '@/Components/TypingBubble';
 import { recordingFilename } from '@/lib/microphone';
 import { lastSeenLabel } from '@/lib/lastSeen';
 import { useAutoGrow } from '@/lib/useAutoGrow';
-import { Head } from '@inertiajs/react';
+import { Head, usePage } from '@inertiajs/react';
 import axios from 'axios';
 import EmojiPicker from '@/Components/EmojiPicker';
 import GifPicker, { type Gif } from '@/Components/GifPicker';
@@ -36,6 +37,7 @@ const time = (value: string | null) =>
     value ? new Date(value).toLocaleTimeString('cs-CZ', { hour: '2-digit', minute: '2-digit' }) : '';
 
 export default function ChatIndex() {
+    const me = (usePage().props as any)?.auth?.user?.id ?? 0;
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [others, setOthers] = useState<Other[]>([]);
     const [draft, setDraft] = useState('');
@@ -54,6 +56,26 @@ export default function ChatIndex() {
     const typingSent = useRef(0);
     const stuckToBottom = useRef(true);
     const composer = useRef<HTMLTextAreaElement>(null);
+    const conversationUuid = useRef<string | null>(null);
+    const [mention, setMention] = useState<{ query: string; from: number } | null>(null);
+
+    /** Replaces the half-typed "@…" with the chosen thing, and puts the caret after it. */
+    const insertMention = (item: MentionItem) => {
+        const element = composer.current;
+        const caret = element?.selectionStart ?? draft.length;
+        const active = mention ?? activeMention(draft, caret);
+        if (!active) return;
+
+        const token = mentionToken(item) + ' ';
+        const next = draft.slice(0, active.from) + token + draft.slice(caret);
+        setDraft(next);
+        setMention(null);
+        window.requestAnimationFrame(() => {
+            element?.focus();
+            const at = active.from + token.length;
+            element?.setSelectionRange(at, at);
+        });
+    };
 
     useAutoGrow(composer, draft);
 
@@ -62,6 +84,7 @@ export default function ChatIndex() {
             const response = await axios.get('/api/v1/chat', { params: { after: cursor.current || undefined } });
             const fresh: ChatMessage[] = response.data.messages ?? [];
             setOthers(response.data.others ?? []);
+            conversationUuid.current = response.data.conversation?.uuid ?? conversationUuid.current;
             setError('');
 
             if (fresh.length) {
@@ -164,6 +187,19 @@ export default function ChatIndex() {
         } finally { setSending(false); }
     };
 
+    /** Starts a game and lets the poll bring the announcement back like any message. */
+    const startGame = async () => {
+        const kind = window.prompt('Co si zahrajeme? Napište "piskvorky" nebo "kamen".', 'piskvorky');
+        if (!kind) return;
+        try {
+            await axios.post('/api/v1/hry', { conversation: conversationUuid.current, kind: kind.trim() });
+            quiet.current = 0;
+            await poll();
+        } catch (reason: any) {
+            setError(reason?.response?.data?.message ?? 'Hru se nepodařilo založit.');
+        }
+    };
+
     const react = async (message: ChatMessage, emoji: string) => {
         try {
             const response = await axios.post(`/api/v1/chat/${message.uuid}/reakce`, { emoji });
@@ -230,6 +266,7 @@ export default function ChatIndex() {
                             message={message}
                             read={others.some(other => other.read_up_to >= message.id)}
                             onReact={emoji => void react(message, emoji)}
+                            meId={me}
                             onOpenDetail={() => setDetailFor(message.uuid)}
                         />
                     ))}
@@ -316,11 +353,32 @@ export default function ChatIndex() {
                     >
                         <Mic size={19} />
                     </button>
+                    <button
+                        type="button"
+                        onClick={() => void startGame()}
+                        aria-label="Zahrát si"
+                        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-lg text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]"
+                    >
+                        🎲
+                    </button>
                     <GifPicker onPick={gif => { setPendingImage(null); setPendingGif(gif); }} />
                     <EmojiPicker keepOpen onPick={emoji => setDraft(current => current + emoji)} />
+                    {/* Positioned, so the mention list can hang above the field. */}
+                    <div className="relative min-h-11 flex-1">
+                        {mention && (
+                            <MentionAutocomplete
+                                query={mention.query}
+                                onPick={insertMention}
+                                onDismiss={() => setMention(null)}
+                            />
+                        )}
                     <textarea
                         value={draft}
-                        onChange={event => { setDraft(event.target.value); announceTyping(); }}
+                        onChange={event => {
+                            setDraft(event.target.value);
+                            announceTyping();
+                            setMention(activeMention(event.target.value, event.target.selectionStart ?? 0));
+                        }}
                         onKeyDown={event => {
                             // Enter sends; Shift+Enter is a new line, as everywhere else.
                             if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void send(); }
@@ -329,8 +387,9 @@ export default function ChatIndex() {
                         rows={1}
                         maxLength={4000}
                         placeholder="Napište zprávu…"
-                        className="min-h-11 flex-1 resize-none rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-muted)] px-3 py-2.5 text-sm leading-6 text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:border-[var(--color-accent)] focus:outline-none"
+                        className="w-full min-h-11 resize-none rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-muted)] px-3 py-2.5 text-sm leading-6 text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:border-[var(--color-accent)] focus:outline-none"
                     />
+                    </div>
                     <button
                         type="button"
                         onClick={() => void send()}

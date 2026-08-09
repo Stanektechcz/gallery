@@ -255,6 +255,14 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
     Route::get('/chat', [App\Http\Controllers\Api\ChatController::class, 'poll'])->name('api.chat.poll');
     Route::post('/chat', [App\Http\Controllers\Api\ChatController::class, 'store'])->name('api.chat.store');
     Route::post('/chat/pise', [App\Http\Controllers\Api\ChatController::class, 'typing'])->name('api.chat.typing');
+    // Mentions: "@10.8" answers with that day's plans, a word searches the space.
+    Route::get('/chat/zminky', [App\Http\Controllers\Api\ChatController::class, 'mentions'])->name('api.chat.mentions');
+
+    // Turn-based games, played through the same polling as the conversation.
+    Route::get('/hry', [App\Http\Controllers\Api\ChatGameController::class, 'options'])->name('api.games.options');
+    Route::post('/hry', [App\Http\Controllers\Api\ChatGameController::class, 'store'])->name('api.games.store');
+    Route::get('/hry/{uuid}', [App\Http\Controllers\Api\ChatGameController::class, 'show'])->name('api.games.show');
+    Route::post('/hry/{uuid}/tah', [App\Http\Controllers\Api\ChatGameController::class, 'move'])->name('api.games.move');
     Route::get('/chat/gify', [App\Http\Controllers\Api\ChatController::class, 'gifs'])->name('api.chat.gifs');
     Route::get('/chat/{uuid}/obrazek', [App\Http\Controllers\Api\ChatController::class, 'media'])->name('api.chat.media');
     Route::get('/chat/{uuid}/detail', [App\Http\Controllers\Api\ChatController::class, 'detail'])->name('api.chat.detail');

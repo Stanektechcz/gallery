@@ -1,4 +1,6 @@
+import ChatGame from '@/Components/ChatGame';
 import EmojiPicker from '@/Components/EmojiPicker';
+import MentionText from '@/Components/MentionText';
 import { useMessageGestures } from '@/lib/useMessageGestures';
 import { Check, CheckCheck, MoreHorizontal } from 'lucide-react';
 import { useLayoutEffect, useRef, useState } from 'react';
@@ -15,6 +17,8 @@ export interface ChatMedia {
 }
 
 export interface ChatMessage {
+    /** Set when the message is a game invitation rather than words. */
+    game?: string | null;
     id: number;
     uuid: string;
     body: string;
@@ -40,8 +44,10 @@ const time = (value: string | null) =>
  * lower right in the smallest readable size, so a conversation reads as text rather than
  * as a list of cards.
  */
-export default function ChatMessageItem({ message, read, compact = false, onReact, onOpenDetail }: {
+export default function ChatMessageItem({ message, read, compact = false, meId = 0, onReact, onOpenDetail }: {
     message: ChatMessage;
+    /** Whose side we are on, for the game board's scoreboard. */
+    meId?: number;
     /** Somebody else has read it. Only meaningful for your own messages. */
     read: boolean;
     compact?: boolean;
@@ -90,7 +96,8 @@ export default function ChatMessageItem({ message, read, compact = false, onReac
                     />
                 ) : null}
 
-                {message.body && <p className="whitespace-pre-wrap break-words leading-relaxed">{message.body}</p>}
+                {message.game && <ChatGame uuid={message.game} meId={meId} />}
+                {message.body && <MentionText body={message.body} />}
 
                 <p className="mt-0.5 flex items-center justify-end gap-1 text-[10px] opacity-65">
                     {message.edited && <span>upraveno</span>}
