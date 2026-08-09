@@ -1,4 +1,5 @@
 import AppLayout from '@/Layouts/AppLayout';
+import { lastSeenLabel } from '@/lib/lastSeen';
 import { Head } from '@inertiajs/react';
 import axios from 'axios';
 import EmojiPicker from '@/Components/EmojiPicker';
@@ -26,7 +27,9 @@ interface Other {
     id: number;
     name: string | null;
     online: boolean;
+    in_chat: boolean;
     typing: boolean;
+    last_seen_at: string | null;
     read_up_to: number;
 }
 
@@ -182,11 +185,25 @@ export default function ChatIndex() {
                     <p className="mt-1 text-xs text-[var(--color-text-secondary)]" aria-live="polite">
                         {typing.length
                             ? `${typing.map(other => other.name ?? 'partner').join(', ')} píše…`
-                            : online.length
-                                ? `${online.map(other => other.name ?? 'partner').join(', ')} je online`
-                                : 'Nikdo další teď není v konverzaci'}
+                            : others.length === 1
+                                // One partner: say exactly when they were last around.
+                                ? `${others[0].name ?? 'Partner'} — ${lastSeenLabel(others[0].last_seen_at, others[0].online)}`
+                                : others.length
+                                    ? `${online.length} z ${others.length} online`
+                                    : 'Zatím jste tu sami'}
                     </p>
                 </header>
+
+                {others.length > 1 && (
+                    <div className="mt-2 flex shrink-0 flex-wrap gap-1.5">
+                        {others.map(other => (
+                            <span key={other.id} className="inline-flex items-center gap-1.5 rounded-full bg-[var(--color-surface-muted)] px-2 py-1 text-[11px] text-[var(--color-text-secondary)]">
+                                <span className={`h-1.5 w-1.5 rounded-full ${other.in_chat ? 'bg-emerald-400' : other.online ? 'bg-amber-400' : 'bg-[var(--color-text-secondary)]/40'}`} aria-hidden />
+                                {other.name} · {lastSeenLabel(other.last_seen_at, other.online)}
+                            </span>
+                        ))}
+                    </div>
+                )}
 
                 {error && <p role="alert" className="mt-3 shrink-0 rounded-xl border border-red-400/25 bg-red-500/10 p-2.5 text-xs text-red-100">{error}</p>}
 

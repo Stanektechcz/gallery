@@ -79,15 +79,23 @@ class ChatController extends Controller
             ->sortBy('id')
             ->values();
 
-        // Seeing the conversation is what marks it read; there is no separate button.
-        if ($messages->isNotEmpty()) {
+        /*
+         | Seeing the conversation is what marks it read; there is no separate button.
+         |
+         | The docked panel keeps polling while closed so its unread badge stays honest,
+         | and says so with `peek`. Nobody is looking at a closed panel, so it must
+         | neither clear the unread state nor claim the person is in the conversation.
+         */
+        $peeking = $request->boolean('peek');
+
+        if ($messages->isNotEmpty() && ! $peeking) {
             $this->markRead($space->id, $user->id, (int) $messages->last()->id);
         }
 
         // One query for the whole batch, not one per message.
         $reactions = $this->reactionsFor($messages->pluck('id')->all(), $user->id);
 
-        $this->touchPresence($space->id, $user->id);
+        if (! $peeking) $this->touchPresence($space->id, $user->id);
 
         return response()->json([
             'space_id' => $space->id,
@@ -305,29 +313,44 @@ class ChatController extends Controller
      */
     private function others(int $spaceId, int $viewerId): array
     {
-        if (! Schema::hasTable('chat_presence')) return [];
-
-        $presence = DB::table('chat_presence')
-            ->join('users', 'users.id', '=', 'chat_presence.user_id')
-            ->where('chat_presence.gallery_space_id', $spaceId)
-            ->where('chat_presence.user_id', '!=', $viewerId)
-            ->select('users.id', 'users.name', 'chat_presence.last_seen_at', 'chat_presence.typing_until')
+        // Everyone in the space, not only those who have opened the chat: a partner
+        // reading the calendar is present in the app and should look it.
+        $members = DB::table('gallery_space_user')
+            ->join('users', 'users.id', '=', 'gallery_space_user.user_id')
+            ->where('gallery_space_user.gallery_space_id', $spaceId)
+            ->where('users.id', '!=', $viewerId)
+            ->select('users.id', 'users.name', 'users.last_seen_at')
             ->get();
 
-        $reads = DB::table('chat_reads')
-            ->where('gallery_space_id', $spaceId)
-            ->pluck('last_read_message_id', 'user_id');
+        if ($members->isEmpty()) return [];
+
+        $presence = Schema::hasTable('chat_presence')
+            ? DB::table('chat_presence')->where('gallery_space_id', $spaceId)->get()->keyBy('user_id')
+            : collect();
+
+        $reads = DB::table('chat_reads')->where('gallery_space_id', $spaceId)->pluck('last_read_message_id', 'user_id');
 
         $now = now();
 
-        return $presence->map(fn ($row) => [
-            'id' => (int) $row->id,
-            'name' => $row->name,
-            'online' => $row->last_seen_at !== null
-                && Carbon::parse($row->last_seen_at)->gt($now->copy()->subSeconds(self::PRESENCE_SECONDS)),
-            'typing' => $row->typing_until !== null && Carbon::parse($row->typing_until)->gt($now),
-            'read_up_to' => (int) ($reads[$row->id] ?? 0),
-        ])->all();
+        return $members->map(function ($member) use ($presence, $reads, $now) {
+            $row = $presence->get($member->id);
+            $inChat = $row?->last_seen_at ? Carbon::parse($row->last_seen_at) : null;
+            $inApp = $member->last_seen_at ? Carbon::parse($member->last_seen_at) : null;
+
+            // The later of the two: the chat's own beat is finer, the app's is broader.
+            $seen = $inApp && $inChat ? $inApp->max($inChat) : ($inApp ?? $inChat);
+
+            return [
+                'id' => (int) $member->id,
+                'name' => $member->name,
+                'online' => $seen !== null && $seen->gt($now->copy()->subSeconds(self::PRESENCE_SECONDS)),
+                // Distinguishes "here in the conversation" from "somewhere in the app".
+                'in_chat' => $inChat !== null && $inChat->gt($now->copy()->subSeconds(self::PRESENCE_SECONDS)),
+                'typing' => $row?->typing_until !== null && Carbon::parse($row->typing_until)->gt($now),
+                'last_seen_at' => $seen?->toIso8601String(),
+                'read_up_to' => (int) ($reads[$member->id] ?? 0),
+            ];
+        })->values()->all();
     }
 
     private function markRead(int $spaceId, int $userId, int $messageId): void

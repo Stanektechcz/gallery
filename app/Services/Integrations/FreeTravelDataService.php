@@ -46,6 +46,31 @@ class FreeTravelDataService
         'nominatim' => ['name' => 'Nominatim / OpenStreetMap', 'category' => 'places', 'priority' => 120, 'free' => true, 'description' => 'Český našeptávač míst, podniků a adres.', 'credentials' => ['contact_email'], 'credential_meta' => ['contact_email' => ['label' => 'Kontaktní e-mail', 'type' => 'email', 'placeholder' => 'spravce@example.cz', 'help' => 'Veřejná služba vyžaduje identifikovat provozovatele aplikace.']], 'capabilities' => ['Místa, adresy a podniky', 'Česká lokalizace'], 'setup_steps' => ['Zadejte kontaktní e-mail správce aplikace.', 'Aktivujte integraci a spusťte test.'], 'docs_url' => 'https://operations.osmfoundation.org/policies/nominatim/', 'signup_url' => 'https://www.openstreetmap.org/'],
         'openrouteservice' => ['name' => 'OpenRouteService', 'category' => 'travel', 'priority' => 130, 'free' => true, 'description' => 'Výpočet silničních, pěších a cyklistických tras.', 'credentials' => ['api_key'], 'credential_meta' => ['api_key' => ['label' => 'API klíč', 'type' => 'password', 'placeholder' => 'Vložte OpenRouteService API klíč', 'help' => 'Bezplatný klíč získáte po registraci v dashboardu.']], 'capabilities' => ['Auto, pěšky a kolo', 'Geometrie a délka trasy'], 'setup_steps' => ['Založte bezplatný účet a vytvořte token.', 'Uložte klíč, aktivujte a otestujte.'], 'docs_url' => 'https://openrouteservice.org/dev/#/signup', 'signup_url' => 'https://openrouteservice.org/dev/#/signup'],
         'transportapi' => ['name' => 'TransportAPI', 'category' => 'travel', 'priority' => 140, 'free' => true, 'description' => 'Doplňkový zdroj dopravních dat; bezplatný tarif má především pokrytí Velké Británie.', 'credentials' => ['app_id', 'app_key'], 'credential_meta' => ['app_id' => ['label' => 'App ID', 'type' => 'text', 'placeholder' => 'Vložte App ID', 'help' => 'Identifikátor aplikace z TransportAPI dashboardu.'], 'app_key' => ['label' => 'App Key', 'type' => 'password', 'placeholder' => 'Vložte App Key', 'help' => 'Tajný klíč aplikace.']], 'capabilities' => ['Doplňková dopravní data'], 'setup_steps' => ['Založte účet a vytvořte aplikaci.', 'Uložte App ID i App Key, aktivujte a otestujte.'], 'docs_url' => 'https://developer.transportapi.com/', 'signup_url' => 'https://developer.transportapi.com/'],
+
+        // ── Komunikace ────────────────────────────────────────────
+        'tenor' => [
+            'name' => 'Tenor · GIFy do chatu', 'category' => 'communication', 'priority' => 150, 'free' => true,
+            'description' => 'Vyhledávání GIFů přímo v chatu. Bez klíče se tlačítko GIF v chatu vůbec nezobrazí.',
+            'credentials' => ['api_key'],
+            'credential_meta' => [
+                'api_key' => ['label' => 'Tenor API klíč', 'type' => 'password', 'placeholder' => 'Vložte klíč z Google Cloud', 'help' => 'V Google Cloud povolte Tenor API a vytvořte API key. Je zdarma a nevyžaduje fakturační účet.'],
+            ],
+            'capabilities' => ['Vyhledávání GIFů v chatu', 'Náhledy v malém formátu', 'Rodinný filtr obsahu'],
+            'setup_steps' => ['V Google Cloud vytvořte projekt.', 'Povolte Tenor API a vytvořte API key.', 'Klíč uložte a integraci aktivujte.'],
+            'docs_url' => 'https://developers.google.com/tenor/guides/quickstart', 'signup_url' => 'https://console.cloud.google.com/',
+        ],
+        'discord' => [
+            'name' => 'Discord · propojení účtu', 'category' => 'communication', 'priority' => 160, 'free' => true,
+            'description' => 'Umožní členům propojit vlastní účet a posílat upozornění do kanálu. Živý stav Discord přes HTTP neposkytuje — podrobnosti v docs/DISCORD.md.',
+            'credentials' => ['client_id', 'client_secret'],
+            'credential_meta' => [
+                'client_id' => ['label' => 'Client ID', 'type' => 'text', 'placeholder' => 'Vložte Client ID aplikace', 'help' => 'Najdete v Discord Developer Portal → OAuth2.'],
+                'client_secret' => ['label' => 'Client Secret', 'type' => 'password', 'placeholder' => 'Vložte Client Secret', 'help' => 'Uloží se šifrovaně a po uložení se už nezobrazuje.'],
+            ],
+            'capabilities' => ['Propojení účtu (jen pro čtení)', 'Servery a propojené služby profilu', 'Upozornění přes webhook kanálu'],
+            'setup_steps' => ['V Developer Portal založte aplikaci.', 'Do OAuth2 → Redirects přidejte https://vase-domena/discord/zpet', 'Uložte Client ID i Secret a integraci aktivujte.'],
+            'docs_url' => 'https://discord.com/developers/docs/topics/oauth2', 'signup_url' => 'https://discord.com/developers/applications',
+        ],
     ];
 
     public function provider(string $provider): array

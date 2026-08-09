@@ -18,13 +18,21 @@ class IntegrationSettingsTest extends TestCase
         $admin = User::factory()->create(['role' => 'admin']);
         $this->actingAs($admin)->get('/admin/integrations')->assertOk()->assertInertia(fn (Assert $page) => $page
             ->component('Admin/Integrations')
-            ->has('providers', 8)
+            // Counted from the registry rather than written out, so adding a provider
+            // does not fail a test that was never about how many there are.
+            ->has('providers', count(\App\Services\Integrations\FreeTravelDataService::PROVIDERS))
             ->where('providers.0.provider', 'gocardless_bank_data')
             ->where('providers.0.credential_meta.secret_id.label', 'Secret ID')
             ->where('providers.1.provider', 'tmdb')
             ->where('providers.1.credential_meta.api_key.label', 'TMDB API klíč (v3 auth)')
             ->where('providers.2.provider', 'cinema_city')
         );
+
+        // The two that the chat depends on must actually reach the screen.
+        $providers = collect($this->actingAs($admin)->get('/admin/integrations')
+            ->viewData('page')['props']['providers'])->pluck('provider');
+        $this->assertContains('tenor', $providers);
+        $this->assertContains('discord', $providers);
         $this->putJson('/admin/integrations/openrouteservice', ['is_enabled' => true, 'config' => ['api_key' => 'secret-route-key']])->assertOk()->assertJsonPath('is_enabled', true);
         $stored = IntegrationSetting::where('provider', 'openrouteservice')->firstOrFail();
         $this->assertNotSame('secret-route-key', $stored->encrypted_config);

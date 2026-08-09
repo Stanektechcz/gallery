@@ -12,6 +12,7 @@ import {
     KeyRound,
     LoaderCircle,
     MapPinned,
+    MessagesSquare,
     RefreshCw,
     Route,
     Save,
@@ -29,7 +30,7 @@ type CredentialMeta = {
 type Provider = {
     provider: string;
     name: string;
-    category: 'finance' | 'entertainment' | 'travel' | 'places';
+    category: 'finance' | 'entertainment' | 'travel' | 'places' | 'communication';
     priority: number;
     free: boolean;
     description: string;
@@ -61,6 +62,7 @@ const categoryMeta = {
     entertainment: { label: 'Filmy a kino', icon: Clapperboard },
     travel: { label: 'Cestování', icon: Route },
     places: { label: 'Místa', icon: MapPinned },
+    communication: { label: 'Komunikace', icon: MessagesSquare },
 };
 
 const formatDate = (value?: string | null) => value

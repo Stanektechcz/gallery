@@ -16,7 +16,13 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->append(\App\Http\Middleware\SecurityHeaders::class);
         $middleware->web(append: [
             \App\Http\Middleware\HandleInertiaRequests::class,
+            \App\Http\Middleware\TrackLastSeen::class,
             \Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets::class,
+        ]);
+
+        // The chat polls here, so presence stays current while someone reads it.
+        $middleware->api(append: [
+            \App\Http\Middleware\TrackLastSeen::class,
         ]);
 
         $middleware->api(prepend: [

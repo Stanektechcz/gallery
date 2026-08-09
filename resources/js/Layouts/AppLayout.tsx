@@ -1,5 +1,6 @@
 import AppInstallButton from '@/Components/AppInstallButton';
 import { useViewportSafePanel } from '@/lib/useViewportSafePanel';
+import ChatDock from '@/Components/ChatDock';
 import UserMenu, { userMenuLinks } from '@/Components/UserMenu';
 import UploadPanel from '@/Components/UploadPanel';
 import WorkspaceAssistant from '@/Components/WorkspaceAssistant';
@@ -990,6 +991,7 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
 
                 {/* Global upload manager panel */}
                 <UploadPanel />
+                <ChatDock />
                 <WorkspaceAssistant />
 
                 {/* Mobile Bottom Nav */}
