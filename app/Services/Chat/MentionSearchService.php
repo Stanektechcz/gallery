@@ -44,6 +44,12 @@ class MentionSearchService
             ];
         }
 
+        if ($query === '') {
+            $today = now()->startOfDay();
+
+            return ['kind' => 'date', 'label' => self::czechDate($today) . ' — dnes', 'items' => $this->onDate($space, $today)];
+        }
+
         if (mb_strlen($query) < 2) return ['kind' => 'empty', 'label' => null, 'items' => []];
 
         return ['kind' => 'search', 'label' => null, 'items' => $this->byWord($space, $user, $query)];
@@ -110,7 +116,7 @@ class MentionSearchService
                 'title' => $event->title,
                 'detail' => $event->starts_at?->format('H:i'),
                 'icon' => '📅',
-                'url' => '/calendar/' . ($event->uuid ?? $event->id),
+                'url' => self::url('event', $event->uuid ?? (string) $event->id),
             ])->values()->all();
     }
 
@@ -126,7 +132,7 @@ class MentionSearchService
                 $results[] = [
                     'type' => 'recipe', 'id' => $recipe->uuid ?? (string) $recipe->id,
                     'title' => $recipe->title, 'detail' => 'recept', 'icon' => '🍳',
-                    'url' => '/recipes/' . ($recipe->uuid ?? $recipe->id),
+                    'url' => self::url('recipe', $recipe->uuid ?? (string) $recipe->id),
                 ];
             }
         }
@@ -138,7 +144,7 @@ class MentionSearchService
                     'type' => 'event', 'id' => $event->uuid ?? (string) $event->id,
                     'title' => $event->title,
                     'detail' => $event->starts_at?->format('j. n. H:i'), 'icon' => '📅',
-                    'url' => '/calendar/' . ($event->uuid ?? $event->id),
+                    'url' => self::url('event', $event->uuid ?? (string) $event->id),
                 ];
             }
         }
@@ -149,7 +155,30 @@ class MentionSearchService
                 $results[] = [
                     'type' => 'journal', 'id' => $entry->uuid,
                     'title' => $entry->title ?: 'Zápisek', 'detail' => 'deník', 'icon' => '📔',
-                    'url' => '/denik',
+                    'url' => self::url('journal', $entry->uuid),
+                ];
+            }
+        }
+
+        if (Schema::hasTable('places')) {
+            foreach (Place::where('gallery_space_id', $space->id)->where('name', 'like', $needle)
+                ->limit(3)->get() as $place) {
+                $results[] = [
+                    'type' => 'place', 'id' => (string) $place->id,
+                    'title' => $place->name, 'detail' => 'místo', 'icon' => '📍',
+                    'url' => self::url('place', (string) $place->id),
+                ];
+            }
+        }
+
+        if (Schema::hasTable('trips')) {
+            foreach (IlluminateSupportFacadesDB::table('trips')
+                ->where('gallery_space_id', $space->id)->where('title', 'like', $needle)
+                ->limit(3)->get() as $trip) {
+                $results[] = [
+                    'type' => 'trip', 'id' => (string) $trip->id,
+                    'title' => $trip->title, 'detail' => 'cesta', 'icon' => '🧭',
+                    'url' => self::url('trip', (string) $trip->id),
                 ];
             }
         }
@@ -158,11 +187,38 @@ class MentionSearchService
             $results[] = [
                 'type' => 'person', 'id' => (string) $member->id,
                 'title' => $member->name, 'detail' => 'člen prostoru', 'icon' => '👤',
-                'url' => '/people',
+                'url' => self::url('person', (string) $member->id),
             ];
         }
 
         return array_slice($results, 0, self::LIMIT);
+    }
+
+    /**
+     * Where each kind of mention leads.
+     *
+     * Verified against routes/web.php rather than assumed — the previous guess sent every
+     * calendar mention to /calendar/{uuid}, which is not a route, so every plan a person
+     * mentioned answered 404. Keep this in step with MentionText.tsx.
+     *
+     * @var array<string, string>
+     */
+    public const ROUTES = [
+        'event' => '/calendar/events/%s',
+        'recipe' => '/recipes/%s',
+        'place' => '/places/%s',
+        'trip' => '/trips/%s/plan',
+        'person' => '/people/%s',
+        // The diary has no per-entry page, so a mention opens the diary itself.
+        'journal' => '/denik',
+    ];
+
+    public static function url(string $type, string $id): string
+    {
+        $pattern = self::ROUTES[$type] ?? null;
+        if (! $pattern) return '/';
+
+        return str_contains($pattern, '%s') ? sprintf($pattern, rawurlencode($id)) : $pattern;
     }
 
     /**

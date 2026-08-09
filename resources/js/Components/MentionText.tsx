@@ -4,14 +4,21 @@ import { Link } from '@inertiajs/react';
 const TOKEN = /\[\[(\w+):([^|\]]+)\|([^\]]*)\]\]/g;
 
 const ICON: Record<string, string> = {
-    event: '📅', recipe: '🍳', journal: '📔', person: '👤',
+    event: '📅', recipe: '🍳', journal: '📔', person: '👤', place: '📍', trip: '🧭',
 };
 
+/**
+ * Where each kind of mention leads. Mirrors MentionSearchService::ROUTES — the two are
+ * the same table in two languages, and a calendar mention pointing at /calendar/{uuid}
+ * rather than /calendar/events/{uuid} is what made every one of them a 404.
+ */
 const HREF: Record<string, (id: string) => string> = {
-    event: id => `/calendar/${id}`,
-    recipe: id => `/recipes/${id}`,
+    event: id => `/calendar/events/${encodeURIComponent(id)}`,
+    recipe: id => `/recipes/${encodeURIComponent(id)}`,
+    place: id => `/places/${encodeURIComponent(id)}`,
+    trip: id => `/trips/${encodeURIComponent(id)}/plan`,
+    person: id => `/people/${encodeURIComponent(id)}`,
     journal: () => '/denik',
-    person: () => '/people',
 };
 
 /**
