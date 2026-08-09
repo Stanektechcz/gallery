@@ -59,6 +59,17 @@ class FreeTravelDataService
             'setup_steps' => ['V Google Cloud vytvořte projekt.', 'Povolte Tenor API a vytvořte API key.', 'Klíč uložte a integraci aktivujte.'],
             'docs_url' => 'https://developers.google.com/tenor/guides/quickstart', 'signup_url' => 'https://console.cloud.google.com/',
         ],
+        'giphy' => [
+            'name' => 'Giphy · GIFy do chatu', 'category' => 'communication', 'priority' => 155, 'free' => true,
+            'description' => 'Druhý zdroj GIFů. Stačí účet, na rozdíl od Tenoru nevyžaduje projekt v Google Cloud. Použije se, když Tenor není nastavený.',
+            'credentials' => ['api_key'],
+            'credential_meta' => [
+                'api_key' => ['label' => 'Giphy API klíč', 'type' => 'password', 'placeholder' => 'Vložte klíč z developers.giphy.com', 'help' => 'Po registraci vytvořte aplikaci typu API a zkopírujte klíč. Je zdarma.'],
+            ],
+            'capabilities' => ['Vyhledávání GIFů v chatu', 'Náhledy v malém formátu', 'Filtr obsahu pg-13'],
+            'setup_steps' => ['Zaregistrujte se na developers.giphy.com.', 'Vytvořte aplikaci typu API.', 'Klíč uložte a integraci aktivujte.'],
+            'docs_url' => 'https://developers.giphy.com/docs/api/', 'signup_url' => 'https://developers.giphy.com/dashboard/',
+        ],
         'discord' => [
             'name' => 'Discord · propojení účtu', 'category' => 'communication', 'priority' => 160, 'free' => true,
             'description' => 'Umožní členům propojit vlastní účet a posílat upozornění do kanálu. Živý stav Discord přes HTTP neposkytuje — podrobnosti v docs/DISCORD.md.',

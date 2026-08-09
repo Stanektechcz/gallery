@@ -1,5 +1,7 @@
 import AppLayout from '@/Layouts/AppLayout';
+import PresenceDot from '@/Components/PresenceDot';
 import { lastSeenLabel } from '@/lib/lastSeen';
+import { useAutoGrow } from '@/lib/useAutoGrow';
 import { Head } from '@inertiajs/react';
 import axios from 'axios';
 import EmojiPicker from '@/Components/EmojiPicker';
@@ -59,6 +61,9 @@ export default function ChatIndex() {
     const bottom = useRef<HTMLDivElement>(null);
     const typingSent = useRef(0);
     const stuckToBottom = useRef(true);
+    const composer = useRef<HTMLTextAreaElement>(null);
+
+    useAutoGrow(composer, draft);
 
     const poll = useCallback(async () => {
         try {
@@ -182,7 +187,8 @@ export default function ChatIndex() {
                     <h1 className="flex items-center gap-2 text-xl font-bold text-[var(--color-text-primary)]">
                         <MessagesSquare size={22} className="text-[var(--color-accent)]" /> Chat
                     </h1>
-                    <p className="mt-1 text-xs text-[var(--color-text-secondary)]" aria-live="polite">
+                    <p className="mt-1 flex items-center gap-2 text-xs text-[var(--color-text-secondary)]" aria-live="polite">
+                        {others.length === 1 && <PresenceDot person={others[0]} />}
                         {typing.length
                             ? `${typing.map(other => other.name ?? 'partner').join(', ')} píše…`
                             : others.length === 1
@@ -197,9 +203,10 @@ export default function ChatIndex() {
                 {others.length > 1 && (
                     <div className="mt-2 flex shrink-0 flex-wrap gap-1.5">
                         {others.map(other => (
-                            <span key={other.id} className="inline-flex items-center gap-1.5 rounded-full bg-[var(--color-surface-muted)] px-2 py-1 text-[11px] text-[var(--color-text-secondary)]">
-                                <span className={`h-1.5 w-1.5 rounded-full ${other.in_chat ? 'bg-emerald-400' : other.online ? 'bg-amber-400' : 'bg-[var(--color-text-secondary)]/40'}`} aria-hidden />
-                                {other.name} · {lastSeenLabel(other.last_seen_at, other.online)}
+                            <span key={other.id} className="inline-flex items-center gap-2 rounded-full bg-[var(--color-surface-muted)] px-2.5 py-1 text-[11px] text-[var(--color-text-secondary)]">
+                                <PresenceDot person={other} />
+                                <span className="text-[var(--color-text-primary)]">{other.name}</span>
+                                · {lastSeenLabel(other.last_seen_at, other.online)}
                             </span>
                         ))}
                     </div>
@@ -207,7 +214,7 @@ export default function ChatIndex() {
 
                 {error && <p role="alert" className="mt-3 shrink-0 rounded-xl border border-red-400/25 bg-red-500/10 p-2.5 text-xs text-red-100">{error}</p>}
 
-                <div onScroll={onScroll} className="mt-4 min-h-0 flex-1 space-y-2 overflow-y-auto rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-3">
+                <div onScroll={onScroll} className="mt-4 min-h-0 flex-1 space-y-2.5 overflow-y-auto rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-3">
                     {loading && <div className="flex justify-center py-8"><Loader2 className="animate-spin text-[var(--color-accent)]" /></div>}
                     {!loading && messages.length === 0 && (
                         <p className="py-8 text-center text-sm text-[var(--color-text-secondary)]">Zatím tu nic není. Napište první zprávu.</p>
@@ -215,7 +222,7 @@ export default function ChatIndex() {
 
                     {messages.map(message => (
                         <div key={message.id} className={`group flex ${message.is_mine ? 'justify-end' : 'justify-start'}`}>
-                            <div className={`max-w-[80%] rounded-2xl px-3 py-2 ${message.is_mine
+                            <div className={`max-w-[80%] rounded-2xl px-3.5 py-2.5 ${message.is_mine
                                 ? 'bg-[var(--color-accent)] text-[var(--color-accent-contrast)]'
                                 : 'bg-[var(--color-surface-muted)] text-[var(--color-text-primary)]'}`}>
                                 {!message.is_mine && <p className="text-[10px] opacity-75">{message.author.name}</p>}
@@ -347,10 +354,11 @@ export default function ChatIndex() {
                             // Enter sends; Shift+Enter is a new line, as everywhere else.
                             if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void send(); }
                         }}
+                        ref={composer}
                         rows={1}
                         maxLength={4000}
                         placeholder="Napište zprávu…"
-                        className="max-h-32 min-h-11 flex-1 resize-none rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-muted)] px-3 py-2.5 text-sm text-[var(--color-text-primary)]"
+                        className="min-h-11 flex-1 resize-none rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-muted)] px-3 py-2.5 text-sm leading-6 text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:border-[var(--color-accent)] focus:outline-none"
                     />
                     <button
                         type="button"

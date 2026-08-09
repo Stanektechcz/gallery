@@ -60,7 +60,7 @@ const GROUPS: Array<{ label: string; emoji: Array<[string, string]> }> = [
 
 const ALL = GROUPS.flatMap(group => group.emoji);
 
-export default function EmojiPicker({ onPick, label = 'Emoji' }: { onPick: (emoji: string) => void; label?: string }) {
+export default function EmojiPicker({ onPick, label = 'Emoji', compact = false }: { onPick: (emoji: string) => void; label?: string; compact?: boolean }) {
     const [open, setOpen] = useState(false);
     const [query, setQuery] = useState('');
     const panel = useViewportSafePanel(open);
@@ -84,9 +84,9 @@ export default function EmojiPicker({ onPick, label = 'Emoji' }: { onPick: (emoj
                 aria-label={label}
                 aria-expanded={open}
                 onClick={() => setOpen(value => !value)}
-                className="flex h-11 w-11 items-center justify-center rounded-xl text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]"
+                className={`flex items-center justify-center rounded-lg text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)] ${compact ? 'h-9 w-9' : 'h-11 w-11'}`}
             >
-                <Smile size={19} />
+                <Smile size={compact ? 16 : 18} />
             </button>
 
             {open && (

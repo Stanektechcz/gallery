@@ -2,6 +2,8 @@ import { lastSeenLabel } from '@/lib/lastSeen';
 import { Link, usePage } from '@inertiajs/react';
 import axios from 'axios';
 import AudioRecorder from '@/Components/AudioRecorder';
+import PresenceDot from '@/Components/PresenceDot';
+import { useAutoGrow } from '@/lib/useAutoGrow';
 import EmojiPicker from '@/Components/EmojiPicker';
 import GifPicker, { type Gif } from '@/Components/GifPicker';
 import { recordingFilename } from '@/lib/microphone';
@@ -30,6 +32,9 @@ interface Other {
 const CLOSED_INTERVAL = 30000;
 const OPEN_STEPS = [2000, 2000, 4000, 8000];
 
+const time = (value: string | null) =>
+    value ? new Date(value).toLocaleTimeString('cs-CZ', { hour: '2-digit', minute: '2-digit' }) : '';
+
 /**
  * The conversation as a panel, sitting above the assistant button.
  *
@@ -57,6 +62,7 @@ export default function ChatDock() {
     const [pendingGif, setPendingGif] = useState<Gif | null>(null);
     const [recording, setRecording] = useState(false);
     const fileInput = useRef<HTMLInputElement>(null);
+    const composer = useRef<HTMLTextAreaElement>(null);
     const currentRef = useRef<string | null>(null);
     currentRef.current = current;
 
@@ -65,6 +71,8 @@ export default function ChatDock() {
     const bottom = useRef<HTMLDivElement>(null);
     const openRef = useRef(open);
     openRef.current = open;
+
+    useAutoGrow(composer, draft);
 
     const poll = useCallback(async () => {
         try {
@@ -211,7 +219,7 @@ export default function ChatDock() {
                                     {conversations.find(item => item.uuid === current)?.title
                                         ?? (others.length === 1 ? others[0].name ?? 'Chat' : 'Chat')}
                                 </span>
-                                <ChevronDown size={13} className="shrink-0 text-[var(--color-text-secondary)]" />
+                                <ChevronDown size={16} className="shrink-0 text-[var(--color-text-secondary)]" />
                             </button>
 
                             {switcher && (
@@ -236,14 +244,12 @@ export default function ChatDock() {
                                 </>
                             )}
                             <p className="flex items-center gap-1.5 truncate text-[11px] text-[var(--color-text-secondary)]">
-                                {others.some(other => other.online) && (
-                                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400" aria-hidden />
-                                )}
+                                {others.length === 1 && <PresenceDot person={others[0]} size={7} />}
                                 {status}
                             </p>
                         </div>
                         <Link href="/chat" aria-label="Otevřít celý chat" className="p-1.5 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]">
-                            <Maximize2 size={15} />
+                            <Maximize2 size={16} />
                         </Link>
                         <button type="button" onClick={() => setOpen(false)} aria-label="Zavřít chat" className="p-1.5 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]">
                             <X size={16} />
@@ -253,8 +259,8 @@ export default function ChatDock() {
                     {others.length > 1 && (
                         <div className="flex shrink-0 flex-wrap gap-1 border-b border-[var(--color-border)] px-3 py-1.5">
                             {others.map(other => (
-                                <span key={other.id} title={lastSeenLabel(other.last_seen_at, other.online)} className="inline-flex items-center gap-1 rounded-full bg-[var(--color-surface-muted)] px-1.5 py-0.5 text-[10px] text-[var(--color-text-secondary)]">
-                                    <span className={`h-1.5 w-1.5 rounded-full ${other.in_chat ? 'bg-emerald-400' : other.online ? 'bg-amber-400' : 'bg-[var(--color-text-secondary)]/40'}`} aria-hidden />
+                                <span key={other.id} className="inline-flex items-center gap-1.5 rounded-full bg-[var(--color-surface-muted)] px-2 py-1 text-[10px] text-[var(--color-text-secondary)]">
+                                    <PresenceDot person={other} size={7} note={lastSeenLabel(other.last_seen_at, other.online)} />
                                     {other.name}
                                 </span>
                             ))}
@@ -268,7 +274,7 @@ export default function ChatDock() {
                         )}
                         {messages.map(message => (
                             <div key={message.id} className={`flex ${message.is_mine ? 'justify-end' : 'justify-start'}`}>
-                                <div className={`max-w-[85%] rounded-xl px-2.5 py-1.5 ${message.is_mine
+                                <div className={`max-w-[85%] rounded-2xl px-3 py-2 ${message.is_mine
                                     ? 'bg-[var(--color-accent)] text-[var(--color-accent-contrast)]'
                                     : 'bg-[var(--color-surface-muted)] text-[var(--color-text-primary)]'}`}>
                                     {message.media?.kind === 'voice' ? (
@@ -276,7 +282,8 @@ export default function ChatDock() {
                                     ) : message.media ? (
                                         <img src={message.media.url} alt="" loading="lazy" className="mb-1 max-h-32 w-full rounded-lg object-cover" />
                                     ) : null}
-                                    {message.body && <p className="whitespace-pre-wrap break-words text-xs">{message.body}</p>}
+                                    {message.body && <p className="whitespace-pre-wrap break-words text-[13px] leading-relaxed">{message.body}</p>}
+                                    <p className="mt-0.5 text-right text-[10px] opacity-70">{time(message.sent_at)}</p>
                                 </div>
                             </div>
                         ))}
@@ -287,7 +294,7 @@ export default function ChatDock() {
                         <div className="flex shrink-0 items-center gap-2 border-t border-[var(--color-border)] px-2 py-1.5">
                             <img src={pendingGif ? pendingGif.preview : URL.createObjectURL(pendingImage!)} alt="" className="h-8 w-8 rounded object-cover" />
                             <p className="min-w-0 flex-1 truncate text-[10px] text-[var(--color-text-secondary)]">{pendingGif ? pendingGif.description : pendingImage?.name}</p>
-                            <button type="button" onClick={() => { setPendingImage(null); setPendingGif(null); if (fileInput.current) fileInput.current.value = ''; }} aria-label="Odebrat přílohu" className="p-1 text-[var(--color-text-secondary)] hover:text-red-300"><X size={13}/></button>
+                            <button type="button" onClick={() => { setPendingImage(null); setPendingGif(null); if (fileInput.current) fileInput.current.value = ''; }} aria-label="Odebrat přílohu" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[var(--color-text-secondary)] hover:text-red-300"><X size={16}/></button>
                         </div>
                     )}
 
@@ -315,21 +322,22 @@ export default function ChatDock() {
                                 setPendingImage(file);
                             }}
                         />
-                        <button type="button" onClick={() => fileInput.current?.click()} aria-label="Přiložit obrázek" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]"><ImagePlus size={16}/></button>
+                        <button type="button" onClick={() => fileInput.current?.click()} aria-label="Přiložit obrázek" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]"><ImagePlus size={16}/></button>
                         <button type="button" onClick={() => setRecording(value => !value)} aria-label="Hlasovka" aria-pressed={recording} className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg hover:bg-[var(--color-surface-hover)] ${recording ? 'text-[var(--color-accent)]' : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}><Mic size={16}/></button>
-                        <GifPicker onPick={gif => { setPendingImage(null); setPendingGif(gif); }} />
-                        <EmojiPicker onPick={emoji => setDraft(current => current + emoji)} />
+                        <GifPicker compact onPick={gif => { setPendingImage(null); setPendingGif(gif); }} />
+                        <EmojiPicker compact onPick={emoji => setDraft(current => current + emoji)} />
                         <textarea
                             value={draft}
                             onChange={event => setDraft(event.target.value)}
                             onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void send(); } }}
+                            ref={composer}
                             rows={1}
                             maxLength={4000}
                             placeholder="Napsat…"
-                            className="max-h-24 min-h-9 flex-1 resize-none rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-muted)] px-2.5 py-2 text-xs text-[var(--color-text-primary)]"
+                            className="min-h-9 flex-1 resize-none rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-muted)] px-2.5 py-2 text-[13px] leading-5 text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:border-[var(--color-accent)] focus:outline-none"
                         />
                         <button type="button" onClick={() => void send()} disabled={sending || (!draft.trim() && !pendingImage && !pendingGif)} aria-label="Odeslat" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--color-accent)] text-[var(--color-accent-contrast)] disabled:opacity-40">
-                            {sending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                            {sending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
                         </button>
                     </div>
                 </section>

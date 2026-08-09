@@ -13,13 +13,13 @@ export interface Gif {
 }
 
 /**
- * GIF search, backed by Tenor through our own endpoint.
+ * GIF search, backed by whichever provider the operator configured.
  *
  * The picker hides itself entirely when no key is configured rather than showing a
  * search box that can never return anything. Previews are the small format; the full
  * GIF is only ever fetched once it has actually been sent.
  */
-export default function GifPicker({ onPick }: { onPick: (gif: Gif) => void }) {
+export default function GifPicker({ onPick, compact = false }: { onPick: (gif: Gif) => void; compact?: boolean }) {
     const [open, setOpen] = useState(false);
     const [query, setQuery] = useState('');
     const [results, setResults] = useState<Gif[]>([]);
@@ -55,7 +55,7 @@ export default function GifPicker({ onPick }: { onPick: (gif: Gif) => void }) {
                 aria-label="GIF"
                 aria-expanded={open}
                 onClick={() => setOpen(value => !value)}
-                className="flex h-11 w-11 items-center justify-center rounded-xl text-xs font-bold text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]"
+                className={`flex items-center justify-center rounded-lg font-bold text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)] ${compact ? 'h-9 w-9 text-[10px]' : 'h-11 w-11 text-xs'}`}
             >
                 GIF
             </button>
@@ -94,7 +94,7 @@ export default function GifPicker({ onPick }: { onPick: (gif: Gif) => void }) {
                             </div>
                         </div>
 
-                        <p className="pt-1.5 text-center text-[9px] text-[var(--color-text-secondary)]">GIFy poskytuje Tenor</p>
+                        <p className="pt-1.5 text-center text-[9px] text-[var(--color-text-secondary)]">GIFy poskytuje Tenor nebo Giphy</p>
                     </div>
                 </>
             )}

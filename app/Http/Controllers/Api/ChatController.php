@@ -9,7 +9,7 @@ use App\Models\Conversation;
 use App\Models\ConversationParticipant;
 use App\Models\GallerySpace;
 use App\Support\AudioUploads;
-use App\Services\Integrations\TenorGifClient;
+use App\Services\Integrations\GifSearchService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -49,7 +49,7 @@ class ChatController extends Controller
      *
      * @var list<string>
      */
-    private const GIF_HOSTS = ['media.tenor.com', 'c.tenor.com', 'tenor.com'];
+    private const GIF_HOSTS = GifSearchService::HOSTS;
 
     /** Long enough that a pause reads as "still writing", short enough to expire on its own. */
     private const TYPING_SECONDS = 6;
@@ -207,14 +207,14 @@ class ChatController extends Controller
      * GIF search. Answers with an empty list and configured=false when no key is set,
      * so the client can hide the picker instead of showing one that never finds anything.
      */
-    public function gifs(Request $request, TenorGifClient $tenor): JsonResponse
+    public function gifs(Request $request, GifSearchService $gifs): JsonResponse
     {
         $this->available();
         $request->validate(['q' => 'nullable|string|max:80']);
 
         return response()->json([
-            'configured' => $tenor->configured(),
-            'results' => $tenor->configured() ? $tenor->search($request->string('q')->toString()) : [],
+            'configured' => $gifs->configured(),
+            'results' => $gifs->configured() ? $gifs->search($request->string('q')->toString()) : [],
         ]);
     }
 
