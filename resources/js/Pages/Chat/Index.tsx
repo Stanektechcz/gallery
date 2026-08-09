@@ -3,6 +3,7 @@ import AudioRecorder from '@/Components/AudioRecorder';
 import ChatMessageItem, { type ChatMessage } from '@/Components/ChatMessageItem';
 import MentionAutocomplete, { activeMention, mentionToken, type MentionItem } from '@/Components/MentionAutocomplete';
 import MessageDetail from '@/Components/MessageDetail';
+import { Avatar } from '@/Components/AvatarEditor';
 import PresenceDot from '@/Components/PresenceDot';
 import TypingBubble from '@/Components/TypingBubble';
 import { recordingFilename } from '@/lib/microphone';
@@ -20,6 +21,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 interface Other {
     id: number;
     name: string | null;
+    avatar?: string | null;
+    avatar_fallback?: { preset: string | null; initial: string; colour: string };
     online: boolean;
     in_chat: boolean;
     typing: boolean;
@@ -242,6 +245,26 @@ export default function ChatIndex() {
         return () => { active = false; window.clearTimeout(handle); };
     }, [finding, needle]);
 
+    /** Loads the window around a search hit and scrolls to it. */
+    const jumpTo = async (id: number) => {
+        setFinding(false);
+        setNeedle('');
+        try {
+            const response = await axios.get('/api/v1/chat', {
+                params: { conversation: conversationUuid.current ?? undefined, around: id },
+            });
+            setMessages(response.data.messages ?? []);
+            cursor.current = response.data.cursor ?? cursor.current;
+            stuckToBottom.current = false;
+            window.requestAnimationFrame(() => {
+                const node = document.getElementById(`zprava-${id}`);
+                node?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                node?.classList.add('bg-[var(--color-accent)]/10');
+                window.setTimeout(() => node?.classList.remove('bg-[var(--color-accent)]/10'), 1600);
+            });
+        } catch { setError('Zprávu se nepodařilo otevřít.'); }
+    };
+
     const react = async (message: ChatMessage, emoji: string) => {
         try {
             const response = await axios.post(`/api/v1/chat/${message.uuid}/reakce`, { emoji });
@@ -267,7 +290,10 @@ export default function ChatIndex() {
             <div className="mx-auto flex h-full max-w-3xl flex-col p-4 sm:p-6">
                 <header className="relative shrink-0 pr-12">
                     <h1 className="flex items-center gap-2 text-xl font-bold text-[var(--color-text-primary)]">
-                        <MessagesSquare size={22} className="text-[var(--color-accent)]" /> Chat
+                        {others.length === 1 && others[0].avatar_fallback
+                            ? <Avatar url={others[0].avatar ?? null} fallback={others[0].avatar_fallback} size={32} />
+                            : <MessagesSquare size={22} className="text-[var(--color-accent)]" />}
+                        {others.length === 1 ? others[0].name ?? 'Chat' : 'Chat'}
                     </h1>
                     <p className="mt-1 flex items-center gap-2 text-xs text-[var(--color-text-secondary)]" aria-live="polite">
                         {others.length === 1 && <PresenceDot person={others[0]} />}
@@ -308,7 +334,7 @@ export default function ChatIndex() {
                                     <button
                                         key={hit.uuid}
                                         type="button"
-                                        onClick={() => setDetailFor(hit.uuid)}
+                                        onClick={() => void jumpTo(hit.id)}
                                         className="block w-full rounded-lg px-2 py-2 text-left hover:bg-[var(--color-surface-hover)]"
                                     >
                                         <p className="text-xs text-[var(--color-text-primary)]">{hit.excerpt}</p>

@@ -69,7 +69,10 @@ export default function ChatMessageItem({ message, read, compact = false, meId =
     const react = (emoji: string) => { setPicker(false); onReact(emoji); };
 
     return (
-        <div className={`group flex items-end gap-1 ${message.is_mine ? 'justify-end' : 'justify-start'}`}>
+        <div
+            id={`zprava-${message.id}`}
+            className={`group flex items-end gap-1 scroll-mt-24 transition-colors ${message.is_mine ? 'justify-end' : 'justify-start'}`}
+        >
             {message.is_mine && (
                 <MessageMenu onOpenDetail={onOpenDetail} onReply={onReply ? () => onReply(message) : undefined} onPick={react} open={picker} setOpen={setPicker} />
             )}

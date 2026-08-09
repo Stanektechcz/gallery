@@ -9,6 +9,7 @@ interface Detail {
     author: { id: number; name: string | null };
     can_delete: boolean;
     can_edit: boolean;
+    edit_blocked_reason?: string;
     body?: string;
     kind: string;
     edits: number;
@@ -110,6 +111,14 @@ export default function MessageDetail({ uuid, onClose, onDeleted, onEdited }: {
                                 </div>
                             ))}
                         </div>
+
+                        {/* Only the author is told why they cannot edit; for anyone else
+                            the absence of the button is the whole explanation. */}
+                        {detail.can_delete && !detail.can_edit && (
+                            <p className="mt-3 rounded-lg bg-[var(--color-surface-muted)] p-2 text-[10px] text-[var(--color-text-secondary)]">
+                                {detail.edit_blocked_reason ?? 'Upravit lze jen vlastní dosud nepřečtenou zprávu.'}
+                            </p>
+                        )}
 
                         {detail.can_edit && (
                             editing === null ? (

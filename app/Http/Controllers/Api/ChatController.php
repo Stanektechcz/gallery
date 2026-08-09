@@ -84,6 +84,7 @@ class ChatController extends Controller
         $space = $this->space($request, $request->integer('gallery_space_id') ?: null);
 
         $after = $request->integer('after');
+        $around = $request->integer('around');
         $conversation = $this->conversation($request, $space);
 
         /*
@@ -104,7 +105,7 @@ class ChatController extends Controller
          | hundreds of simultaneous readers wants Reverb instead, and the payload here is
          | already shaped to be broadcast unchanged.
          */
-        if ($request->boolean('wait') && $after > 0) {
+        if ($request->boolean('wait') && $after > 0 && $around <= 0) {
             $request->session()->save();
 
             $deadline = microtime(true) + self::HOLD_SECONDS;
@@ -126,17 +127,30 @@ class ChatController extends Controller
             }
         }
 
-        $messages = ChatMessage::with('author:id,name,uuid,avatar_path,avatar_preset,avatar_colour')
+        /*
+         | Three shapes of read, and the client picks by what it is doing:
+         |
+         |   around=N  a window either side of one message, for jumping to a search hit
+         |   after=N   everything newer, the ordinary live delta
+         |   neither   the recent tail, for a first load
+         */
+        $base = fn () => ChatMessage::with('author:id,name,uuid,avatar_path,avatar_preset,avatar_colour')
             ->with('replyTo:id,uuid,body,created_by,attachment_type')
-            ->where('conversation_id', $conversation->id)
-            ->when($after > 0, fn ($query) => $query->where('id', '>', $after))
-            ->orderBy('id')
-            // A first load wants the recent tail, not a five-year backlog.
-            ->when($after <= 0, fn ($query) => $query->latest('id')->limit(60))
-            ->when($after > 0, fn ($query) => $query->limit(200))
-            ->get()
-            ->sortBy('id')
-            ->values();
+            ->where('conversation_id', $conversation->id);
+
+        if ($around > 0) {
+            $before = $base()->where('id', '<=', $around)->latest('id')->limit(30)->get();
+            $behind = $base()->where('id', '>', $around)->orderBy('id')->limit(20)->get();
+            $messages = $before->concat($behind)->sortBy('id')->values();
+        } else {
+            $messages = $base()
+                ->when($after > 0, fn ($query) => $query->where('id', '>', $after))
+                ->orderBy('id')
+                // A first load wants the recent tail, not a five-year backlog.
+                ->when($after <= 0, fn ($query) => $query->latest('id')->limit(60))
+                ->when($after > 0, fn ($query) => $query->limit(200))
+                ->get()->sortBy('id')->values();
+        }
 
         /*
          | Seeing the conversation is what marks it read; there is no separate button.
@@ -241,6 +255,20 @@ class ChatController extends Controller
         $this->write($request);
         $message = $this->own($request, $uuid);
 
+        /*
+         | Once somebody has read it, it stands.
+         |
+         | Editing is for fixing what you just sent, not for changing what someone has
+         | already acted on — a conversation where the other person's words can change
+         | after they were read is not a record of anything.
+         */
+        $seenByOther = ConversationParticipant::where('conversation_id', $message->conversation_id)
+            ->where('user_id', '!=', $message->created_by)
+            ->where('last_read_message_id', '>=', $message->id)
+            ->exists();
+
+        abort_if($seenByOther, 422, 'Zprávu už někdo přečetl, upravit ji proto nelze.');
+
         $data = $request->validate(['body' => 'required|string|max:4000']);
 
         // Keep what it said before. History is never destroyed, only superseded.
@@ -319,7 +347,11 @@ class ChatController extends Controller
             'edited_at' => $message->edited_at?->toIso8601String(),
             'author' => ['id' => $message->created_by, 'name' => $message->author?->name],
             'can_delete' => $message->created_by === $request->user()->id,
-            'can_edit' => $message->created_by === $request->user()->id,
+            'can_edit' => $message->created_by === $request->user()->id
+                && ! ConversationParticipant::where('conversation_id', $message->conversation_id)
+                    ->where('user_id', '!=', $message->created_by)
+                    ->where('last_read_message_id', '>=', $message->id)->exists(),
+            'edit_blocked_reason' => 'Zprávu už někdo přečetl, upravit ji proto nelze.',
             'body' => $message->body,
             'size_bytes' => $message->media_size,
             'kind' => $message->attachment_type ?: ($message->media_remote_url ? 'gif' : ($message->media_path ? 'image' : 'text')),

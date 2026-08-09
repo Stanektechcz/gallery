@@ -66,6 +66,9 @@ export default function ChatDock() {
     const [current, setCurrent] = useState<string | null>(boot?.conversation?.uuid ?? null);
     const [switcher, setSwitcher] = useState(false);
     const [menu, setMenu] = useState(false);
+    const [finding, setFinding] = useState(false);
+    const [needle, setNeedle] = useState('');
+    const [hits, setHits] = useState<Array<{ id: number; uuid: string; excerpt: string; author: string | null; sent_at: string | null }>>([]);
     const [pendingImage, setPendingImage] = useState<File | null>(null);
     const [pendingGif, setPendingGif] = useState<Gif | null>(null);
     const [recording, setRecording] = useState(false);
@@ -222,6 +225,53 @@ export default function ChatDock() {
             .catch(() => { /* Cosmetic; it must never block typing. */ });
     };
 
+    useEffect(() => {
+        if (!finding || needle.trim().length < 2) { setHits([]); return; }
+        let active = true;
+        const handle = window.setTimeout(() => {
+            void axios.get('/api/v1/chat/hledat', { params: { q: needle.trim(), conversation: currentRef.current ?? undefined } })
+                .then(response => active && setHits(response.data.results ?? []))
+                .catch(() => active && setHits([]));
+        }, 300);
+
+        return () => { active = false; window.clearTimeout(handle); };
+    }, [finding, needle]);
+
+    /**
+     * Jumps to a message found by searching.
+     *
+     * The conversation only holds its recent tail, so the window around the hit is
+     * fetched first; the cursor moves with it, or the next live delta would arrive
+     * relative to a message far in the past.
+     */
+    const jumpTo = async (id: number) => {
+        setFinding(false);
+        setNeedle('');
+        try {
+            const response = await axios.get('/api/v1/chat', {
+                params: { conversation: currentRef.current ?? undefined, around: id },
+            });
+            setMessages(response.data.messages ?? []);
+            cursor.current = response.data.cursor ?? cursor.current;
+            window.requestAnimationFrame(() => {
+                const node = document.getElementById(`zprava-${id}`);
+                node?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                // A brief highlight, so the eye finds it among its neighbours.
+                node?.classList.add('bg-[var(--color-accent)]/10');
+                window.setTimeout(() => node?.classList.remove('bg-[var(--color-accent)]/10'), 1600);
+            });
+        } catch { /* Staying put is better than losing the conversation. */ }
+    };
+
+    /** Starts a game; the held poll brings the announcement straight back. */
+    const startGame = async () => {
+        try {
+            await axios.post('/api/v1/hry', { conversation: currentRef.current, kind: 'piskvorky' });
+            quiet.current = 0;
+            await poll();
+        } catch { /* Surfaced on the full page, where the picker offers both games. */ }
+    };
+
     const react = async (message: ChatMessage, emoji: string) => {
         try {
             const response = await axios.post(`/api/v1/chat/${message.uuid}/reakce`, { emoji });
@@ -334,18 +384,16 @@ export default function ChatDock() {
                                 <>
                                     <button type="button" aria-label="Zavřít nabídku" onClick={() => setMenu(false)} className="fixed inset-0 z-[735] cursor-default" />
                                     <div className="absolute right-0 top-full z-[740] mt-1 w-52 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-1 shadow-2xl">
-                                        <Link href="/chat" onClick={() => setMenu(false)} className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-xs text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]">
+                                        <button type="button" onClick={() => { setMenu(false); setFinding(true); }} className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]">
                                             <Search size={14} /> Hledat ve zprávách
-                                        </Link>
+                                        </button>
                                         <Link href="/chat" onClick={() => setMenu(false)} className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-xs text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]">
                                             <Maximize2 size={14} /> Otevřít celý chat
                                         </Link>
                                         <button type="button" onClick={() => { setMenu(false); setSwitcher(true); }} className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]">
                                             <MessagesSquare size={14} /> Přepnout konverzaci
                                         </button>
-                                        <button type="button" onClick={() => { setMenu(false); setRecording(true); }} className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]">
-                                            <Mic size={14} /> Nahrát hlasovku
-                                        </button>
+
                                     </div>
                                 </>
                             )}
@@ -363,6 +411,32 @@ export default function ChatDock() {
                                     {other.name}
                                 </span>
                             ))}
+                        </div>
+                    )}
+
+                    {finding && (
+                        <div className="shrink-0 border-b border-[var(--color-border)] p-2">
+                            <div className="flex items-center gap-1.5">
+                                <input
+                                    autoFocus
+                                    value={needle}
+                                    onChange={event => setNeedle(event.target.value)}
+                                    placeholder="Hledat v konverzaci…"
+                                    className="min-w-0 flex-1 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-muted)] px-2.5 py-2 text-xs text-[var(--color-text-primary)]"
+                                />
+                                <button type="button" onClick={() => { setFinding(false); setNeedle(''); }} aria-label="Zavřít hledání" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"><X size={15} /></button>
+                            </div>
+                            {needle.trim().length >= 2 && (
+                                <div className="mt-1.5 max-h-40 overflow-y-auto">
+                                    {hits.length === 0 && <p className="py-2 text-center text-[11px] text-[var(--color-text-secondary)]">Nic nenalezeno.</p>}
+                                    {hits.map(hit => (
+                                        <button key={hit.uuid} type="button" onClick={() => void jumpTo(hit.id)} className="block w-full rounded-lg px-2 py-1.5 text-left hover:bg-[var(--color-surface-hover)]">
+                                            <p className="truncate text-[11px] text-[var(--color-text-primary)]">{hit.excerpt}</p>
+                                            <p className="text-[10px] text-[var(--color-text-secondary)]">{hit.author} · {hit.sent_at ? new Date(hit.sent_at).toLocaleDateString('cs-CZ') : ''}</p>
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     )}
 
@@ -429,7 +503,10 @@ export default function ChatDock() {
                         </div>
                     )}
 
-                    <div className="flex shrink-0 items-end gap-0.5 border-t border-[var(--color-border)] p-2">
+                    <div className="shrink-0 border-t border-[var(--color-border)] p-2">
+                    {/* Everything that can be attached, on its own row above the field —
+                        a row of icons and a growing text box do not share a line well. */}
+                    <div className="mb-1.5 flex items-center gap-0.5">
                         <input
                             ref={fileInput}
                             type="file"
@@ -447,8 +524,19 @@ export default function ChatDock() {
                             onPointerDown={event => { if (event.pointerType !== 'mouse') setRecording(true); }}
                             onClick={event => { if ((event as any).nativeEvent?.pointerType === 'mouse' || !('ontouchstart' in window)) setRecording(value => !value); }}
                             aria-label="Hlasovka" aria-pressed={recording} className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg hover:bg-[var(--color-surface-hover)] ${recording ? 'text-[var(--color-accent)]' : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}><Mic size={16}/></button>
+                        <button
+                            type="button"
+                            onClick={() => void startGame()}
+                            aria-label="Zahrát si"
+                            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-base transition-colors hover:bg-[var(--color-surface-hover)]"
+                        >
+                            🎲
+                        </button>
                         <GifPicker compact onPick={gif => { setPendingImage(null); setPendingGif(gif); }} />
                         <EmojiPicker compact keepOpen onPick={emoji => setDraft(current => current + emoji)} />
+                    </div>
+
+                    <div className="flex items-end gap-1.5">
                         {/* Positioned, so the mention list can hang above the field. */}
                         <div className="relative min-h-9 flex-1">
                             {mention && (
@@ -476,6 +564,7 @@ export default function ChatDock() {
                         <button type="button" onClick={() => void send()} disabled={sending || (!draft.trim() && !pendingImage && !pendingGif)} aria-label="Odeslat" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--color-accent)] text-[var(--color-accent-contrast)] disabled:opacity-40">
                             {sending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
                         </button>
+                    </div>
                     </div>
                 </section>
             )}
