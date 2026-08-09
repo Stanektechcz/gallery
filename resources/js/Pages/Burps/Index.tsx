@@ -1,3 +1,4 @@
+import { recordingFilename } from '@/lib/microphone';
 import AppLayout from '@/Layouts/AppLayout';
 import AudioRecorder from '@/Components/AudioRecorder';
 import { Head, Link } from '@inertiajs/react';
@@ -72,7 +73,7 @@ export default function BurpsIndex() {
     const upload = async (blob: Blob, durationMs: number, title: string) => {
         setBusy('upload'); setError('');
         const form = new FormData();
-        form.append('audio', blob, `krkanec.${blob.type.includes('ogg') ? 'ogg' : 'webm'}`);
+        form.append('audio', blob, recordingFilename('krkanec', blob));
         form.append('duration_ms', String(Math.max(100, Math.round(durationMs))));
         if (title.trim()) form.append('title', title.trim());
         if (occasion.trim()) form.append('occasion', occasion.trim());
@@ -169,7 +170,7 @@ export default function BurpsIndex() {
                     placeholder="Příležitost, nepovinné — třeba „po nedělním obědě“"
                     className="mt-5 w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-muted)] px-3 py-2.5 text-sm text-[var(--color-text-primary)] focus:border-[var(--color-accent)] focus:outline-none"
                 />
-                <AudioRecorder onRecorded={upload} busy={busy === 'upload'} label="Zaznamenat krkanec" maxSeconds={60} />
+                <AudioRecorder profile="raw" onRecorded={upload} busy={busy === 'upload'} label="Zaznamenat krkanec" maxSeconds={60} />
 
                 {leaderboard.length > 0 && (
                     <section className="mt-6 rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-4">

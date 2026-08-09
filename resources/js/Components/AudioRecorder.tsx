@@ -3,17 +3,36 @@ import { LoaderCircle, Mic, Square, Trash2, Upload } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
 /**
+ * 'speech' asks the browser for the processing built for calls; 'raw' turns it off.
+ *
+ * That chain is tuned to keep a talking voice and discard everything else, which is what
+ * a voice note wants and exactly what a burp or a fart must not get — the suppressor
+ * hears the recording itself as noise and gates it away.
+ */
+type AudioProfile = 'speech' | 'raw';
+
+const constraints = (profile: AudioProfile): MediaTrackConstraints => ({
+    // One channel: a microphone has one capsule, so stereo only doubles the size.
+    channelCount: 1,
+    sampleRate: 48000,
+    echoCancellation: profile === 'speech',
+    noiseSuppression: profile === 'speech',
+    autoGainControl: profile === 'speech',
+});
+
+/**
  * Records audio with MediaRecorder and hands the finished blob to the caller.
- * Shared by the voice-note and burp modules, which store to different endpoints.
+ * Shared by the voice-note, burp and fart modules, which store to different endpoints.
  */
 export default function AudioRecorder({
-    onRecorded, busy, label = 'Nahrát', withTitle = true, maxSeconds = 300,
+    onRecorded, busy, label = 'Nahrát', withTitle = true, maxSeconds = 300, profile = 'speech',
 }: {
     onRecorded: (blob: Blob, durationMs: number, title: string) => void | Promise<void>;
     busy: boolean;
     label?: string;
     withTitle?: boolean;
     maxSeconds?: number;
+    profile?: AudioProfile;
 }) {
     const [unavailable, setUnavailable] = useState<string | null>(null);
     const [recording, setRecording] = useState(false);
@@ -40,11 +59,19 @@ export default function AudioRecorder({
         setError('');
         let stream: MediaStream | null = null;
         try {
-            stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            // Safari has no webm; let the browser pick what it supports.
-            const mime = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm'
-                : MediaRecorder.isTypeSupported('audio/ogg') ? 'audio/ogg' : '';
-            const instance = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+            stream = await navigator.mediaDevices.getUserMedia({ audio: constraints(profile) });
+            // Opus is worth asking for by name: the bare container can fall back to a
+            // codec several times larger at the same quality. Safari has neither and
+            // uses mp4, so every candidate is offered and the browser takes the first
+            // it knows.
+            const mime = ['audio/webm;codecs=opus', 'audio/ogg;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg']
+                .find(candidate => MediaRecorder.isTypeSupported(candidate));
+            const instance = new MediaRecorder(stream, {
+                ...(mime ? { mimeType: mime } : {}),
+                // The default is around 32 kbit/s, which is where the muffled, watery
+                // sound comes from. Opus at 128 is transparent for a single voice.
+                audioBitsPerSecond: 128000,
+            });
             chunks.current = [];
             instance.ondataavailable = event => { if (event.data.size) chunks.current.push(event.data); };
             instance.onstop = () => {

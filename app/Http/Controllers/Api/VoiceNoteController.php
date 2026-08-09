@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Support\AudioUploads;
 use App\Http\Controllers\Controller;
 use App\Models\GallerySpace;
 use App\Models\VoiceNote;
@@ -16,7 +17,6 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 class VoiceNoteController extends Controller
 {
     private const DISK = 'local';
-    private const ALLOWED_MIME = ['audio/webm', 'audio/ogg', 'audio/mpeg', 'audio/mp4', 'audio/wav', 'audio/x-m4a', 'audio/aac'];
 
     public function index(Request $request): JsonResponse
     {
@@ -44,7 +44,7 @@ class VoiceNoteController extends Controller
         $this->write($request);
         $data = $request->validate([
             'gallery_space_id' => 'nullable|integer',
-            'audio' => 'required|file|max:25600|mimetypes:' . implode(',', self::ALLOWED_MIME),
+            'audio' => 'required|file|max:25600|' . AudioUploads::rule(),
             'title' => 'nullable|string|max:180',
             'duration_ms' => 'nullable|integer|between:200,1800000',
             'transcript' => 'nullable|string|max:5000',

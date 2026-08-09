@@ -52,3 +52,21 @@ export function recordingUnavailableReason(): string | null {
 
     return null;
 }
+
+/**
+ * Names the upload after what the browser actually produced.
+ *
+ * The extension is cosmetic for validation, which sniffs the bytes, but it decides what
+ * the file is called when someone downloads it later — and Safari records mp4 where the
+ * others record webm, so a fixed ".webm" would mislabel every recording made on a Mac.
+ */
+export function recordingFilename(base: string, blob: Blob): string {
+    const type = blob.type;
+    const extension = type.includes('mp4') || type.includes('m4a') ? 'm4a'
+        : type.includes('ogg') ? 'ogg'
+        : type.includes('mpeg') ? 'mp3'
+        : type.includes('wav') ? 'wav'
+        : 'webm';
+
+    return `${base}.${extension}`;
+}

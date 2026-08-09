@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Support\AudioUploads;
 use App\Http\Controllers\Controller;
 use App\Models\Fart;
 use App\Models\FartRating;
@@ -24,7 +25,6 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 class FartController extends Controller
 {
     private const DISK = 'local';
-    private const ALLOWED_MIME = ['audio/webm', 'audio/ogg', 'audio/mpeg', 'audio/mp4', 'audio/wav', 'audio/x-m4a', 'audio/aac'];
     private const CRITERIA = ['loudness', 'aroma', 'stealth', 'timing'];
 
     public function index(Request $request): JsonResponse
@@ -65,7 +65,7 @@ class FartController extends Controller
             'occasion' => 'nullable|string|max:120',
             'happened_at' => 'nullable|date',
             'duration_ms' => 'nullable|integer|between:100,120000',
-            'audio' => 'nullable|file|max:10240|mimetypes:' . implode(',', self::ALLOWED_MIME),
+            'audio' => 'nullable|file|max:10240|' . AudioUploads::rule(),
             // Attach an existing recording rather than making a new one.
             'voice_note_uuid' => 'nullable|uuid',
         ]);

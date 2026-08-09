@@ -1,3 +1,4 @@
+import { recordingFilename } from '@/lib/microphone';
 import AppLayout from '@/Layouts/AppLayout';
 import AudioRecorder from '@/Components/AudioRecorder';
 import { Head } from '@inertiajs/react';
@@ -48,7 +49,7 @@ export default function VoiceNotesIndex() {
         setBusy('upload'); setError('');
         const form = new FormData();
         // The extension has to match the recorded type or the mimetypes rule rejects it.
-        form.append('audio', blob, `hlasovka.${blob.type.includes('ogg') ? 'ogg' : 'webm'}`);
+        form.append('audio', blob, recordingFilename('hlasovka', blob));
         form.append('duration_ms', String(Math.max(200, Math.round(durationMs))));
         if (title.trim()) form.append('title', title.trim());
         try {
