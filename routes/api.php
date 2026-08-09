@@ -243,6 +243,10 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
     Route::get('/konverzace', [App\Http\Controllers\ApiConversationController::class, 'index'])->name('api.conversations.index');
     Route::post('/konverzace/primy', [App\Http\Controllers\ApiConversationController::class, 'direct'])->name('api.conversations.direct');
     Route::post('/konverzace/skupina', [App\Http\Controllers\ApiConversationController::class, 'storeGroup'])->name('api.conversations.group');
+    Route::post('/konverzace/kanal', [App\Http\Controllers\Api\ConversationController::class, 'storeChannel'])->name('api.conversations.channel');
+    Route::patch('/konverzace/kanal/{uuid}', [App\Http\Controllers\Api\ConversationController::class, 'updateChannel'])->name('api.conversations.channel.update');
+    Route::post('/konverzace/kategorie', [App\Http\Controllers\Api\ConversationController::class, 'storeCategory'])->name('api.conversations.category');
+    Route::post('/konverzace/stitky', [App\Http\Controllers\Api\ConversationController::class, 'storeTag'])->name('api.conversations.tag');
     Route::patch('/konverzace/{uuid}', [App\Http\Controllers\ApiConversationController::class, 'updateGroup'])->name('api.conversations.update');
     Route::post('/konverzace/{uuid}/odejit', [App\Http\Controllers\ApiConversationController::class, 'leave'])->name('api.conversations.leave');
 

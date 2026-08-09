@@ -21,14 +21,23 @@ class Conversation extends Model
 
     public const KIND_DIRECT = 'direct';
     public const KIND_GROUP = 'group';
+    public const KIND_CHANNEL = 'channel';
+
+    public const VISIBILITY_OPEN = 'open';
+    public const VISIBILITY_INVITE = 'invite';
 
     protected $fillable = [
-        'uuid', 'gallery_space_id', 'created_by', 'kind', 'title', 'icon', 'last_message_at',
+        'uuid', 'gallery_space_id', 'conversation_category_id', 'created_by', 'kind', 'visibility',
+        'title', 'topic', 'icon', 'position', 'is_default', 'is_archived', 'last_message_at',
     ];
 
     protected function casts(): array
     {
-        return ['last_message_at' => 'datetime'];
+        return [
+            'last_message_at' => 'datetime',
+            'is_default' => 'boolean',
+            'is_archived' => 'boolean',
+        ];
     }
 
     protected static function booted(): void
@@ -48,6 +57,16 @@ class Conversation extends Model
             ->withTimestamps();
     }
 
+    public function category()
+    {
+        return $this->belongsTo(ConversationCategory::class, 'conversation_category_id');
+    }
+
+    public function tags()
+    {
+        return $this->belongsToMany(ConversationTag::class, 'conversation_tag', 'conversation_id', 'conversation_tag_id');
+    }
+
     public function messages()
     {
         return $this->hasMany(ChatMessage::class);
@@ -58,10 +77,40 @@ class Conversation extends Model
         return $this->kind === self::KIND_GROUP;
     }
 
+    public function isChannel(): bool
+    {
+        return $this->kind === self::KIND_CHANNEL;
+    }
+
+    /** An open channel belongs to the space, so membership is not a list. */
+    public function isOpen(): bool
+    {
+        return $this->visibility === self::VISIBILITY_OPEN;
+    }
+
     /** Only conversations the user is actually in. There is no other way to reach one. */
     public function scopeForUser(Builder $query, User $user): Builder
     {
-        return $query->whereHas('participants', fn (Builder $inner) => $inner->where('user_id', $user->id));
+        /*
+         | Two ways to be in a conversation, and channels are why:
+         |
+         |   a participant row  — direct chats, groups, private channels
+         |   membership of the space — open channels, which need no invitation
+         |
+         | Expressed as one condition so every existing caller keeps working without
+         | knowing channels exist.
+         */
+        return $query->where(fn (Builder $outer) => $outer
+            ->whereHas('participants', fn (Builder $inner) => $inner->where('user_id', $user->id))
+            ->orWhere(fn (Builder $open) => $open
+                ->where('kind', self::KIND_CHANNEL)
+                ->where('visibility', self::VISIBILITY_OPEN)
+                // The spaces this person belongs to, read straight from the pivot: there
+                // is no space relation on this model to hang a whereHas on.
+                ->whereIn('gallery_space_id', GallerySpace::whereHas(
+                    'members',
+                    fn ($member) => $member->whereKey($user->id),
+                )->select('id'))));
     }
 
     /**
@@ -72,6 +121,7 @@ class Conversation extends Model
      */
     public function titleFor(User $viewer): string
     {
+        if ($this->isChannel()) return $this->title ?: 'kanál';
         if ($this->isGroup()) return $this->title ?: 'Skupina';
 
         $other = $this->members->firstWhere('id', '!=', $viewer->id);

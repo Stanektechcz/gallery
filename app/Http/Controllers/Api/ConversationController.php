@@ -5,7 +5,9 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\ChatMessage;
 use App\Models\Conversation;
+use App\Models\ConversationCategory;
 use App\Models\ConversationParticipant;
+use App\Models\ConversationTag;
 use App\Models\GallerySpace;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
@@ -28,7 +30,7 @@ class ConversationController extends Controller
         $user = $request->user();
         $space = $this->space($request);
 
-        $conversations = Conversation::with(['members:id,name,avatar_path,last_seen_at', 'participants'])
+        $conversations = Conversation::with(['members:id,name,avatar_path,last_seen_at', 'participants', 'category', 'tags'])
             ->where('gallery_space_id', $space->id)
             ->forUser($user)
             ->orderByDesc('last_message_at')->orderByDesc('id')
@@ -43,6 +45,15 @@ class ConversationController extends Controller
             'conversations' => $conversations->map(fn (Conversation $row) => $this->payload($row, $user, $unread[$row->id] ?? 0))->values(),
             // Everyone this person is allowed to start a conversation with.
             'contacts' => $this->contacts($space, $user),
+            'categories' => ConversationCategory::where('gallery_space_id', $space->id)
+                ->orderBy('position')->orderBy('name')->get()
+                ->map(fn (ConversationCategory $row) => [
+                    'uuid' => $row->uuid, 'name' => $row->name, 'icon' => $row->icon,
+                ])->values(),
+            'tags' => ConversationTag::where('gallery_space_id', $space->id)->orderBy('name')->get()
+                ->map(fn (ConversationTag $row) => [
+                    'uuid' => $row->uuid, 'name' => $row->name, 'colour' => $row->colour,
+                ])->values(),
         ]);
     }
 
@@ -128,6 +139,148 @@ class ConversationController extends Controller
         return response()->json($this->payload($conversation->fresh(['members', 'participants']), $user, 0), 201);
     }
 
+    /**
+     * Creates a channel.
+     *
+     * Open by default, which is what makes a channel a channel: it is there for everyone
+     * in the space without anybody being invited. A private one falls back to the same
+     * participant list that groups use.
+     */
+    public function storeChannel(Request $request): JsonResponse
+    {
+        $this->available();
+        $this->write($request);
+        $user = $request->user();
+        $space = $this->space($request);
+
+        $data = $request->validate([
+            'title' => 'required|string|max:120',
+            'topic' => 'nullable|string|max:190',
+            'icon' => 'nullable|string|max:16',
+            'category' => 'nullable|string|max:64',
+            'visibility' => 'nullable|in:open,invite',
+            'user_ids' => 'nullable|array',
+            'user_ids.*' => 'integer',
+        ]);
+
+        $category = ! empty($data['category'])
+            ? ConversationCategory::where('gallery_space_id', $space->id)->where('uuid', $data['category'])->first()
+            : null;
+
+        $visibility = $data['visibility'] ?? Conversation::VISIBILITY_OPEN;
+
+        $channel = DB::transaction(function () use ($space, $user, $data, $category, $visibility) {
+            $created = Conversation::create([
+                'gallery_space_id' => $space->id,
+                'conversation_category_id' => $category?->id,
+                'created_by' => $user->id,
+                'kind' => Conversation::KIND_CHANNEL,
+                'visibility' => $visibility,
+                'title' => $data['title'],
+                'topic' => $data['topic'] ?? null,
+                'icon' => $data['icon'] ?? null,
+                'last_message_at' => now(),
+            ]);
+
+            // The creator is a participant even in an open channel, so it has an owner.
+            $created->participants()->create(['user_id' => $user->id, 'role' => 'owner']);
+
+            if ($visibility === Conversation::VISIBILITY_INVITE) {
+                foreach (collect($data['user_ids'] ?? [])->unique()->reject(fn ($id) => (int) $id === $user->id) as $id) {
+                    $created->participants()->create(['user_id' => $this->memberOrFail($space, (int) $id)->id]);
+                }
+            }
+
+            return $created;
+        });
+
+        return response()->json($this->payload($channel->fresh(['members', 'participants', 'category', 'tags']), $user, 0), 201);
+    }
+
+    /** Channel settings: name, topic, category, tags, archiving. */
+    public function updateChannel(Request $request, string $uuid): JsonResponse
+    {
+        $this->available();
+        $this->write($request);
+        $user = $request->user();
+        $space = $this->space($request);
+        $channel = $this->mine($request, $uuid);
+        abort_unless($channel->isChannel(), 422, 'Tohle není kanál.');
+        $this->ownerOrFail($channel, $user);
+
+        $data = $request->validate([
+            'title' => 'nullable|string|max:120',
+            'topic' => 'nullable|string|max:190',
+            'icon' => 'nullable|string|max:16',
+            'category' => 'nullable|string|max:64',
+            'is_archived' => 'nullable|boolean',
+            'tags' => 'nullable|array',
+            'tags.*' => 'string|max:64',
+        ]);
+
+        $category = ! empty($data['category'])
+            ? ConversationCategory::where('gallery_space_id', $space->id)->where('uuid', $data['category'])->first()
+            : null;
+
+        $channel->update(array_filter([
+            'title' => $data['title'] ?? null,
+            'topic' => $data['topic'] ?? null,
+            'icon' => $data['icon'] ?? null,
+            'conversation_category_id' => $category?->id,
+            'is_archived' => $data['is_archived'] ?? null,
+        ], fn ($value) => $value !== null));
+
+        if (isset($data['tags'])) {
+            $channel->tags()->sync(
+                ConversationTag::where('gallery_space_id', $space->id)->whereIn('uuid', $data['tags'])->pluck('id'),
+            );
+        }
+
+        return response()->json($this->payload($channel->fresh(['members', 'participants', 'category', 'tags']), $user, 0));
+    }
+
+    public function storeCategory(Request $request): JsonResponse
+    {
+        $this->available();
+        $this->write($request);
+        $space = $this->space($request);
+
+        $data = $request->validate([
+            'name' => 'required|string|max:80',
+            'icon' => 'nullable|string|max:16',
+        ]);
+
+        $category = ConversationCategory::create([
+            'gallery_space_id' => $space->id,
+            'created_by' => $request->user()->id,
+            'name' => $data['name'],
+            'icon' => $data['icon'] ?? null,
+            'position' => (int) ConversationCategory::where('gallery_space_id', $space->id)->max('position') + 1,
+        ]);
+
+        return response()->json(['uuid' => $category->uuid, 'name' => $category->name, 'icon' => $category->icon], 201);
+    }
+
+    public function storeTag(Request $request): JsonResponse
+    {
+        $this->available();
+        $this->write($request);
+        $space = $this->space($request);
+
+        $data = $request->validate([
+            'name' => 'required|string|max:40',
+            'colour' => 'nullable|string|regex:/^#[0-9a-fA-F]{6}$/',
+        ]);
+
+        // Reaching for a tag that already exists is the intent, not a clash.
+        $tag = ConversationTag::firstOrCreate(
+            ['gallery_space_id' => $space->id, 'name' => $data['name']],
+            ['colour' => $data['colour'] ?? '#7c5cff'],
+        );
+
+        return response()->json(['uuid' => $tag->uuid, 'name' => $tag->name, 'colour' => $tag->colour], 201);
+    }
+
     /** Renaming and membership changes, for the person who made the group. */
     public function updateGroup(Request $request, string $uuid): JsonResponse
     {
@@ -192,6 +345,12 @@ class ConversationController extends Controller
         return [
             'uuid' => $row->uuid,
             'kind' => $row->kind,
+            'visibility' => $row->visibility,
+            'topic' => $row->topic,
+            'is_default' => (bool) $row->is_default,
+            'is_archived' => (bool) $row->is_archived,
+            'category' => $row->category ? ['uuid' => $row->category->uuid, 'name' => $row->category->name, 'icon' => $row->category->icon] : null,
+            'tags' => $row->tags->map(fn ($tag) => ['uuid' => $tag->uuid, 'name' => $tag->name, 'colour' => $tag->colour])->values(),
             'title' => $row->titleFor($viewer),
             'icon' => $row->icon,
             'unread' => $unread,

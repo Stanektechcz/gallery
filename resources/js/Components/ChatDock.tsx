@@ -17,8 +17,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 
 interface Conversation {
-    uuid: string; kind: 'direct' | 'group'; title: string;
+    uuid: string; kind: 'direct' | 'group' | 'channel'; title: string;
     icon: string | null; unread: number;
+    visibility?: string;
+    is_archived?: boolean;
+    category?: { uuid: string; name: string; icon: string | null } | null;
+    tags?: Array<{ uuid: string; name: string; colour: string }>;
 }
 
 interface Other {
@@ -27,6 +31,30 @@ interface Other {
     avatar_fallback?: { preset: string | null; initial: string; colour: string };
     online: boolean; in_chat: boolean; typing: boolean;
     last_seen_at: string | null; read_up_to: number;
+}
+
+/**
+ * Channels under their category, then groups, then direct chats.
+ *
+ * Matching Discord's ordering because it matches how people look: the shared rooms are
+ * the place, individual conversations are the exception you go and find.
+ */
+function groupConversations(items: Conversation[]): Array<{ label: string; items: Conversation[] }> {
+    const groups = new Map<string, Conversation[]>();
+
+    for (const item of items) {
+        if (item.is_archived) continue;
+        const label = item.kind === 'channel'
+            ? (item.category?.name ?? 'Kanály')
+            : item.kind === 'group' ? 'Skupiny' : 'Přímé zprávy';
+        (groups.get(label) ?? groups.set(label, []).get(label)!).push(item);
+    }
+
+    const order = (label: string) => label === 'Přímé zprávy' ? 2 : label === 'Skupiny' ? 1 : 0;
+
+    return [...groups.entries()]
+        .map(([label, entries]) => ({ label, items: entries }))
+        .sort((a, b) => order(a.label) - order(b.label) || a.label.localeCompare(b.label, 'cs'));
 }
 
 /** Closed docks ask rarely; an open one keeps up with the conversation. */
@@ -348,17 +376,23 @@ export default function ChatDock() {
                                     <button type="button" aria-label="Zavřít výběr" onClick={() => setSwitcher(false)} className="fixed inset-0 z-[725] cursor-default" />
                                     <div className="absolute left-0 top-full z-[730] mt-1 max-h-56 w-56 overflow-y-auto rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-1 shadow-2xl">
                                         {conversations.length === 0 && <p className="px-2 py-2 text-[11px] text-[var(--color-text-secondary)]">Zatím žádná konverzace.</p>}
-                                        {conversations.map(item => (
+                                        {groupConversations(conversations).map(group => (
+                                            <div key={group.label} className="mb-1">
+                                                <p className="px-2 pb-0.5 pt-1 text-[10px] uppercase tracking-wide text-[var(--color-text-secondary)]">{group.label}</p>
+                                                {group.items.map(item => (
                                             <button
                                                 key={item.uuid}
                                                 type="button"
                                                 onClick={() => choose(item.uuid)}
                                                 className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs ${item.uuid === current ? 'bg-[var(--color-accent)]/15 text-[var(--color-accent-contrast)]' : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)]'}`}
                                             >
-                                                <span className="w-4 shrink-0 text-center">{item.icon ?? (item.kind === 'group' ? '👥' : '💬')}</span>
+                                                <span className="w-4 shrink-0 text-center">{item.icon ?? (item.kind === 'channel' ? '#' : item.kind === 'group' ? '👥' : '💬')}</span>
                                                 <span className="min-w-0 flex-1 truncate">{item.title}</span>
+                                                {item.visibility === 'invite' && item.kind === 'channel' && <span className="shrink-0 text-[10px] opacity-60" title="Soukromý kanál">🔒</span>}
                                                 {item.unread > 0 && <span className="shrink-0 rounded-full bg-[var(--color-accent)] px-1.5 text-[10px] text-[var(--color-accent-contrast)]">{item.unread}</span>}
                                             </button>
+                                                ))}
+                                            </div>
                                         ))}
                                         <Link href="/chat" className="mt-1 block border-t border-[var(--color-border)] px-2 pt-2 text-[11px] text-[var(--color-accent)]">Spravovat konverzace →</Link>
                                     </div>
