@@ -7,6 +7,7 @@ use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Throwable;
 
 /**
  * Setting and serving a person's face.
@@ -19,6 +20,12 @@ class AvatarController extends Controller
 {
     private const DISK = 'local';
     private const MAX_KB = 4096;
+
+    /** Reported when the upload is refused, so the screen can say which rule bit. */
+    private const MESSAGES = [
+        'image.max' => 'Obrázek je příliš velký. Nahrajte soubor do 4 MB.',
+        'image.mimetypes' => 'Nepodporovaný formát. Použijte JPEG, PNG, WebP nebo GIF.',
+    ];
 
     /** @var list<string> */
     private const MIME = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
@@ -49,7 +56,7 @@ class AvatarController extends Controller
             'colour' => 'nullable|string|regex:/^#[0-9a-fA-F]{6}$/',
             'image' => 'nullable|file|max:' . self::MAX_KB . '|mimetypes:' . implode(',', self::MIME),
             'clear' => 'nullable|boolean',
-        ]);
+        ], self::MESSAGES);
 
         if ($request->boolean('clear')) {
             $this->removeUpload($user);
@@ -60,7 +67,24 @@ class AvatarController extends Controller
 
         if ($upload = $request->file('image')) {
             $this->removeUpload($user);
-            $user->avatar_path = $upload->store('avatars', self::DISK);
+
+            /*
+             | Storing can fail for reasons that are not the caller's fault — an
+             | unwritable disk root being the usual one after a deployment, since the
+             | directory is created by whoever ran the last artisan command rather than
+             | by the web user. A 500 tells the person nothing they can act on, so the
+             | reason is caught and named.
+             */
+            try {
+                $stored = $upload->store('avatars', self::DISK);
+            } catch (Throwable $reason) {
+                report($reason);
+                abort(500, 'Obrázek se nepodařilo uložit na disk. Zkontrolujte práva ke složce storage/app.');
+            }
+
+            abort_unless($stored, 500, 'Obrázek se nepodařilo uložit na disk.');
+
+            $user->avatar_path = $stored;
             // An uploaded face replaces a chosen one; only one can be shown.
             $user->avatar_preset = null;
         } elseif (! empty($data['preset'])) {
