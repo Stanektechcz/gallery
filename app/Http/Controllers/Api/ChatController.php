@@ -5,7 +5,10 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\ChatMessage;
 use App\Models\ChatReaction;
+use App\Models\Conversation;
+use App\Models\ConversationParticipant;
 use App\Models\GallerySpace;
+use App\Support\AudioUploads;
 use App\Services\Integrations\TenorGifClient;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -67,9 +70,10 @@ class ChatController extends Controller
         $space = $this->space($request, $request->integer('gallery_space_id') ?: null);
 
         $after = $request->integer('after');
+        $conversation = $this->conversation($request, $space);
 
-        $messages = ChatMessage::with('author:id,name')
-            ->where('gallery_space_id', $space->id)
+        $messages = ChatMessage::with('author:id,name,uuid,avatar_path,avatar_preset,avatar_colour')
+            ->where('conversation_id', $conversation->id)
             ->when($after > 0, fn ($query) => $query->where('id', '>', $after))
             ->orderBy('id')
             // A first load wants the recent tail, not a five-year backlog.
@@ -89,7 +93,7 @@ class ChatController extends Controller
         $peeking = $request->boolean('peek');
 
         if ($messages->isNotEmpty() && ! $peeking) {
-            $this->markRead($space->id, $user->id, (int) $messages->last()->id);
+                $this->markRead($conversation->id, $user->id, (int) $messages->last()->id);
         }
 
         // One query for the whole batch, not one per message.
@@ -101,7 +105,13 @@ class ChatController extends Controller
             'space_id' => $space->id,
             'messages' => $messages->map(fn (ChatMessage $message) => $this->payload($message, $user->id, $reactions[$message->id] ?? []))->all(),
             'cursor' => (int) ($messages->last()->id ?? $after),
-            'others' => $this->others($space->id, $user->id),
+            'conversation' => [
+                'uuid' => $conversation->uuid,
+                'kind' => $conversation->kind,
+                'title' => $conversation->titleFor($user),
+                'icon' => $conversation->icon,
+            ],
+            'others' => $this->others($conversation, $user->id),
         ]);
     }
 
@@ -111,9 +121,13 @@ class ChatController extends Controller
         $this->write($request);
         $space = $this->space($request, $request->integer('gallery_space_id') ?: null);
 
+        $conversation = $this->conversation($request, $space);
+
         $data = $request->validate([
-            // Optional, because a picture or a GIF is a message on its own.
+            // Optional, because a picture, a GIF or a recording is a message on its own.
             'body' => 'nullable|string|max:4000',
+            'audio' => 'nullable|file|max:25600|' . AudioUploads::rule(),
+            'duration_ms' => 'nullable|integer|between:200,1800000',
             'attachment_type' => 'nullable|string|in:recipe,media,event,place,trip',
             'attachment_ref' => 'nullable|string|max:190',
             'image' => 'nullable|file|max:' . self::IMAGE_MAX_KB . '|mimetypes:' . implode(',', self::IMAGE_MIME),
@@ -124,7 +138,8 @@ class ChatController extends Controller
         ]);
 
         $body = trim((string) ($data['body'] ?? ''));
-        $upload = $request->file('image');
+        $upload = $request->file('image') ?? $request->file('audio');
+        $isVoice = $request->hasFile('audio');
         $gif = $this->safeGifUrl($data['gif_url'] ?? null);
 
         abort_if($body === '' && ! $upload && ! $gif, 422, 'Prázdnou zprávu odeslat nelze.');
@@ -133,20 +148,26 @@ class ChatController extends Controller
 
         $message = ChatMessage::create([
             'gallery_space_id' => $space->id,
+            'conversation_id' => $conversation->id,
             'created_by' => $request->user()->id,
+            // Voice notes are stored like any other attachment; the type is what tells
+            // the client to draw a player instead of a picture.
+            'attachment_type' => $isVoice ? 'voice' : ($data['attachment_type'] ?? null),
+            'media_width' => $isVoice ? null : ($data['gif_width'] ?? null),
+            'media_height' => $isVoice ? (int) ($data['duration_ms'] ?? 0) : ($data['gif_height'] ?? null),
             'body' => $body,
-            'attachment_type' => $data['attachment_type'] ?? null,
             'attachment_ref' => $data['attachment_ref'] ?? null,
             'media_path' => $path,
             'media_mime' => $upload?->getMimeType(),
             'media_size' => $upload?->getSize(),
             'media_remote_url' => $gif,
-            'media_width' => $data['gif_width'] ?? null,
-            'media_height' => $data['gif_height'] ?? null,
         ]);
 
+        // Keeps the conversation list in order without counting messages.
+        $conversation->forceFill(['last_message_at' => now()])->save();
+
         // Sending is reading: otherwise your own message comes back as unread.
-        $this->markRead($space->id, $request->user()->id, (int) $message->id);
+        $this->markRead($conversation->id, $request->user()->id, (int) $message->id);
 
         return response()->json($this->payload($message->fresh('author'), $request->user()->id), 201);
     }
@@ -259,13 +280,19 @@ class ChatController extends Controller
             'media' => $message->media_path || $message->media_remote_url ? [
                 // Uploads go through us; a provider's GIF stays where it already lives.
                 'url' => $message->media_remote_url ?: route('api.chat.media', ['uuid' => $message->uuid]),
-                'kind' => $message->media_remote_url ? 'gif' : 'image',
+                'kind' => $message->media_remote_url ? 'gif' : ($message->attachment_type === 'voice' ? 'voice' : 'image'),
+                'duration_ms' => $message->attachment_type === 'voice' ? (int) $message->media_height : null,
                 'mime' => $message->media_mime,
                 'width' => $message->media_width,
                 'height' => $message->media_height,
             ] : null,
             'reactions' => $reactions,
-            'author' => ['id' => $message->created_by, 'name' => $message->author?->name],
+            'author' => [
+                'id' => $message->created_by,
+                'name' => $message->author?->name,
+                'avatar' => $message->author?->avatar_url,
+                'avatar_fallback' => $message->author?->avatar_fallback,
+            ],
             'is_mine' => $message->created_by === $viewerId,
             'edited' => $message->edited_at !== null,
             'sent_at' => $message->created_at?->toIso8601String(),
@@ -311,40 +338,40 @@ class ChatController extends Controller
      *
      * @return list<array<string, mixed>>
      */
-    private function others(int $spaceId, int $viewerId): array
+    /**
+     * The other participants: present, in the conversation, typing, and how far read.
+     *
+     * Membership is read from the conversation itself. The previous version inferred it
+     * from who happened to be in the space, which is why a roster could come back empty.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function others(Conversation $conversation, int $viewerId): array
     {
-        // Everyone in the space, not only those who have opened the chat: a partner
-        // reading the calendar is present in the app and should look it.
-        $members = DB::table('gallery_space_user')
-            ->join('users', 'users.id', '=', 'gallery_space_user.user_id')
-            ->where('gallery_space_user.gallery_space_id', $spaceId)
-            ->where('users.id', '!=', $viewerId)
-            ->select('users.id', 'users.name', 'users.last_seen_at')
-            ->get();
-
+        $members = $conversation->members->where('id', '!=', $viewerId);
         if ($members->isEmpty()) return [];
 
         $presence = Schema::hasTable('chat_presence')
-            ? DB::table('chat_presence')->where('gallery_space_id', $spaceId)->get()->keyBy('user_id')
+            ? DB::table('chat_presence')->where('gallery_space_id', $conversation->gallery_space_id)->get()->keyBy('user_id')
             : collect();
 
-        $reads = DB::table('chat_reads')->where('gallery_space_id', $spaceId)->pluck('last_read_message_id', 'user_id');
-
+        $reads = $conversation->participants->pluck('last_read_message_id', 'user_id');
         $now = now();
 
         return $members->map(function ($member) use ($presence, $reads, $now) {
             $row = $presence->get($member->id);
             $inChat = $row?->last_seen_at ? Carbon::parse($row->last_seen_at) : null;
-            $inApp = $member->last_seen_at ? Carbon::parse($member->last_seen_at) : null;
+            $inApp = $member->last_seen_at;
 
-            // The later of the two: the chat's own beat is finer, the app's is broader.
+            // The later of the two: the chat's beat is finer, the app's is broader.
             $seen = $inApp && $inChat ? $inApp->max($inChat) : ($inApp ?? $inChat);
 
             return [
                 'id' => (int) $member->id,
                 'name' => $member->name,
+                'avatar' => $member->avatar_url,
+                'avatar_fallback' => $member->avatar_fallback,
                 'online' => $seen !== null && $seen->gt($now->copy()->subSeconds(self::PRESENCE_SECONDS)),
-                // Distinguishes "here in the conversation" from "somewhere in the app".
                 'in_chat' => $inChat !== null && $inChat->gt($now->copy()->subSeconds(self::PRESENCE_SECONDS)),
                 'typing' => $row?->typing_until !== null && Carbon::parse($row->typing_until)->gt($now),
                 'last_seen_at' => $seen?->toIso8601String(),
@@ -353,16 +380,51 @@ class ChatController extends Controller
         })->values()->all();
     }
 
-    private function markRead(int $spaceId, int $userId, int $messageId): void
+    private function markRead(int $conversationId, int $userId, int $messageId): void
     {
-        DB::table('chat_reads')->upsert([[
-            'gallery_space_id' => $spaceId,
-            'user_id' => $userId,
-            'last_read_message_id' => $messageId,
-            'read_at' => now(),
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]], ['gallery_space_id', 'user_id'], ['last_read_message_id', 'read_at', 'updated_at']);
+        ConversationParticipant::where('conversation_id', $conversationId)
+            ->where('user_id', $userId)
+            // Never move the mark backwards: an old delta must not un-read newer messages.
+            ->where('last_read_message_id', '<', $messageId)
+            ->update(['last_read_message_id' => $messageId, 'last_read_at' => now()]);
+    }
+
+    /**
+     * The conversation being read, defaulting to the most recent one this person is in.
+     *
+     * Falls back to creating the space-wide group when somebody has none at all, so a
+     * fresh install opens on something rather than an error.
+     */
+    private function conversation(Request $request, GallerySpace $space): Conversation
+    {
+        $user = $request->user();
+        $uuid = $request->string('conversation')->toString();
+
+        if ($uuid !== '') {
+            return Conversation::with('members')
+                ->where('gallery_space_id', $space->id)->forUser($user)->where('uuid', $uuid)->firstOrFail();
+        }
+
+        $recent = Conversation::with('members')
+            ->where('gallery_space_id', $space->id)->forUser($user)
+            ->orderByDesc('last_message_at')->orderByDesc('id')->first();
+
+        if ($recent) return $recent;
+
+        $created = Conversation::create([
+            'gallery_space_id' => $space->id,
+            'created_by' => $user->id,
+            'kind' => Conversation::KIND_GROUP,
+            'title' => 'Společná konverzace',
+            'icon' => '💬',
+            'last_message_at' => now(),
+        ]);
+
+        foreach ($space->members()->pluck('users.id') as $memberId) {
+            $created->participants()->create(['user_id' => $memberId]);
+        }
+
+        return $created->fresh('members');
     }
 
     private function touchPresence(int $spaceId, int $userId, bool $typing = false): void

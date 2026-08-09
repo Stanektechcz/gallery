@@ -536,7 +536,6 @@ const navGroups: NavigationGroup[] = [
             { href: '/watchlist/movies/tierlist', label: '↳ Tierlist filmů', icon: Star, feature: 'watchlist' },
             { href: '/watchlist/series/tierlist', label: '↳ Tierlist seriálů', icon: Star, feature: 'watchlist' },
             { href: '/denik', label: 'Deník', icon: BookHeart, feature: 'journal' },
-            { href: '/chat', label: 'Chat', icon: MessagesSquare, feature: 'chat' },
             { href: '/hlasovky', label: 'Hlasovky', icon: Mic, feature: 'voice_notes' },
             { href: '/krkance', label: 'Hodnocení krkanců', icon: Trophy, feature: 'burps' },
             { href: '/prdy', label: 'Hodnocení prdů', icon: Wind, feature: 'farts' },

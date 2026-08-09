@@ -12,7 +12,7 @@ class ChatMessage extends Model
     use SoftDeletes;
 
     protected $fillable = [
-        'uuid', 'gallery_space_id', 'created_by', 'body',
+        'uuid', 'gallery_space_id', 'conversation_id', 'created_by', 'body',
         'attachment_type', 'attachment_ref', 'edited_at',
         'media_path', 'media_mime', 'media_size', 'media_remote_url', 'media_width', 'media_height',
     ];
@@ -25,6 +25,11 @@ class ChatMessage extends Model
     protected static function booted(): void
     {
         static::creating(fn (self $message) => $message->uuid ??= (string) Str::uuid());
+    }
+
+    public function conversation()
+    {
+        return $this->belongsTo(Conversation::class);
     }
 
     public function author()

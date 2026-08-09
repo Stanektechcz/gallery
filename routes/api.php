@@ -235,6 +235,18 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
     Route::put('/journal/{uuid}/sdileni', [App\Http\Controllers\Api\JournalController::class, 'visibility'])->name('api.journal.visibility');
     Route::delete('/journal/{uuid}', [App\Http\Controllers\Api\JournalController::class, 'destroy'])->name('api.journal.destroy');
 
+    // Conversations: one direct chat per person, and as many groups as anyone makes.
+    Route::get('/konverzace', [App\Http\Controllers\ApiConversationController::class, 'index'])->name('api.conversations.index');
+    Route::post('/konverzace/primy', [App\Http\Controllers\ApiConversationController::class, 'direct'])->name('api.conversations.direct');
+    Route::post('/konverzace/skupina', [App\Http\Controllers\ApiConversationController::class, 'storeGroup'])->name('api.conversations.group');
+    Route::patch('/konverzace/{uuid}', [App\Http\Controllers\ApiConversationController::class, 'updateGroup'])->name('api.conversations.update');
+    Route::post('/konverzace/{uuid}/odejit', [App\Http\Controllers\ApiConversationController::class, 'leave'])->name('api.conversations.leave');
+
+    // Avatars: preset, upload, or the generated initial.
+    Route::get('/avatar/moznosti', [App\Http\Controllers\ApiAvatarController::class, 'options'])->name('api.avatar.options');
+    Route::post('/avatar', [App\Http\Controllers\ApiAvatarController::class, 'update'])->name('api.avatar.update');
+    Route::get('/avatar/{uuid}', [App\Http\Controllers\ApiAvatarController::class, 'show'])->name('api.avatar.show');
+
     // Chat. `poll` carries the whole live view: new messages, presence, typing.
     Route::get('/chat', [App\Http\Controllers\Api\ChatController::class, 'poll'])->name('api.chat.poll');
     Route::post('/chat', [App\Http\Controllers\Api\ChatController::class, 'store'])->name('api.chat.store');
