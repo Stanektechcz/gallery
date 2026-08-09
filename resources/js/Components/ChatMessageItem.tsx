@@ -1,7 +1,8 @@
 import EmojiPicker from '@/Components/EmojiPicker';
 import { useMessageGestures } from '@/lib/useMessageGestures';
 import { Check, CheckCheck, MoreHorizontal } from 'lucide-react';
-import { useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 export interface Reaction { emoji: string; count: number; mine: boolean }
 
@@ -130,19 +131,48 @@ function MessageMenu({ open, setOpen, onPick, onOpenDetail }: {
     onOpenDetail: () => void;
 }) {
     const [menu, setMenu] = useState(false);
+    const trigger = useRef<HTMLButtonElement>(null);
+    const [spot, setSpot] = useState<{ top: number; left: number } | null>(null);
+    const showing = menu || open;
+
+    /*
+     | The conversation scrolls, which means it clips: a panel positioned inside a
+     | message was cut off by the container the moment it was wider or taller than the
+     | bubble. So it is rendered into the body at fixed coordinates measured from the
+     | trigger, and nudged back inside the viewport if it would hang off an edge.
+     */
+    useLayoutEffect(() => {
+        if (!showing) { setSpot(null); return; }
+
+        const rect = trigger.current?.getBoundingClientRect();
+        if (!rect) return;
+
+        const width = 280;
+        const margin = 8;
+        const left = Math.min(
+            Math.max(margin, rect.left + rect.width / 2 - width / 2),
+            window.innerWidth - width - margin,
+        );
+        // Above the trigger by default; below it when there is no room above.
+        const above = rect.top > 120;
+        setSpot({ top: above ? rect.top - 52 : rect.bottom + 8, left });
+    }, [showing]);
 
     return (
-        <div className="relative self-center">
+        <div className="self-center">
             <button
+                ref={trigger}
                 type="button"
                 onClick={() => setMenu(value => !value)}
                 aria-label="Možnosti zprávy"
-                className="flex h-7 w-7 items-center justify-center rounded-full text-[var(--color-text-secondary)] opacity-0 transition-opacity hover:bg-[var(--color-surface-hover)] focus:opacity-100 group-hover:opacity-100"
+                // Always there on a phone: hover does not exist, so a control that only
+                // appears on hover simply never appears.
+                className="flex h-7 w-7 items-center justify-center rounded-full text-[var(--color-text-secondary)] opacity-60 transition-opacity hover:bg-[var(--color-surface-hover)] focus:opacity-100 md:opacity-0 md:group-hover:opacity-100"
             >
                 <MoreHorizontal size={16} />
             </button>
 
-            {(menu || open) && (
+            {showing && spot && createPortal(
                 <>
                     <button
                         type="button"
@@ -150,7 +180,10 @@ function MessageMenu({ open, setOpen, onPick, onOpenDetail }: {
                         onClick={() => { setMenu(false); setOpen(false); }}
                         className="fixed inset-0 z-[725] cursor-default"
                     />
-                    <div className="absolute bottom-full left-1/2 z-[730] mb-1 flex -translate-x-1/2 items-center gap-1 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-1 shadow-2xl">
+                    <div
+                        style={{ top: spot.top, left: spot.left, width: 280 }}
+                        className="fixed z-[730] flex items-center gap-1 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-1 shadow-2xl"
+                    >
                         {['❤️', '😂', '👍', '😮', '😢'].map(emoji => (
                             <button key={emoji} type="button" onClick={() => { setMenu(false); onPick(emoji); }} className="rounded-lg p-1 text-base hover:bg-[var(--color-surface-hover)]">{emoji}</button>
                         ))}
@@ -165,7 +198,8 @@ function MessageMenu({ open, setOpen, onPick, onOpenDetail }: {
                             Detail
                         </button>
                     </div>
-                </>
+                </>,
+                document.body,
             )}
         </div>
     );

@@ -127,7 +127,24 @@ class HandleInertiaRequests extends Middleware
                     'id' => (int) $message->id,
                     'uuid' => $message->uuid,
                     'body' => $message->body,
-                    'media' => null,
+                    /*
+                     | The opening batch has to carry its pictures.
+                     |
+                     | Sending null here was why a GIF appeared for whoever sent it and
+                     | not for the other person: the sender's copy came back from the
+                     | POST with its media, while the recipient's first paint came from
+                     | here and had none — and a message already present is never
+                     | re-fetched by the poll, so it stayed blank until a hard reload.
+                     */
+                    'media' => $message->media_path || $message->media_remote_url ? [
+                        'url' => $message->media_remote_url ?: route('api.chat.media', ['uuid' => $message->uuid]),
+                        'kind' => $message->media_remote_url
+                            ? 'gif'
+                            : ($message->attachment_type === 'voice' ? 'voice' : 'image'),
+                        'duration_ms' => $message->attachment_type === 'voice' ? (int) $message->media_height : null,
+                        'width' => $message->attachment_type === 'voice' ? null : $message->media_width,
+                        'height' => $message->attachment_type === 'voice' ? null : $message->media_height,
+                    ] : null,
                     'reactions' => [],
                     'author' => ['id' => $message->created_by, 'name' => $message->author?->name],
                     'is_mine' => $message->created_by === $request->user()->id,

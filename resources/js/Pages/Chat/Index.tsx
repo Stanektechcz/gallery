@@ -294,8 +294,17 @@ export default function ChatIndex() {
                     >
                         <ImagePlus size={19} />
                     </button>
+                    <button
+                        type="button"
+                        onClick={() => setRecording(value => !value)}
+                        aria-label="Hlasovka"
+                        aria-pressed={recording}
+                        className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl transition-colors hover:bg-[var(--color-surface-hover)] ${recording ? 'text-[var(--color-accent)]' : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}
+                    >
+                        <Mic size={19} />
+                    </button>
                     <GifPicker onPick={gif => { setPendingImage(null); setPendingGif(gif); }} />
-                    <EmojiPicker onPick={emoji => setDraft(current => current + emoji)} />
+                    <EmojiPicker keepOpen onPick={emoji => setDraft(current => current + emoji)} />
                     <textarea
                         value={draft}
                         onChange={event => { setDraft(event.target.value); announceTyping(); }}

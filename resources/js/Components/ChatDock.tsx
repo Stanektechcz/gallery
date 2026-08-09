@@ -174,6 +174,17 @@ export default function ChatDock() {
         if (ok) setRecording(false);
     };
 
+    const typingSent = useRef(0);
+
+    /** At most one announcement every few seconds, not one per keypress. */
+    const announceTyping = () => {
+        const now = Date.now();
+        if (now - typingSent.current < 3000) return;
+        typingSent.current = now;
+        void axios.post('/api/v1/chat/pise', currentRef.current ? { conversation: currentRef.current } : {})
+            .catch(() => { /* Cosmetic; it must never block typing. */ });
+    };
+
     const react = async (message: ChatMessage, emoji: string) => {
         try {
             const response = await axios.post(`/api/v1/chat/${message.uuid}/reakce`, { emoji });
@@ -359,7 +370,7 @@ export default function ChatDock() {
                         <EmojiPicker compact keepOpen onPick={emoji => setDraft(current => current + emoji)} />
                         <textarea
                             value={draft}
-                            onChange={event => setDraft(event.target.value)}
+                            onChange={event => { setDraft(event.target.value); announceTyping(); }}
                             onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void send(); } }}
                             ref={composer}
                             rows={1}
