@@ -1,3 +1,4 @@
+import AccountData from '@/Components/AccountData';
 import AvatarEditor from '@/Components/AvatarEditor';
 import AppLayout from '@/Layouts/AppLayout';
 import { Head, Link } from '@inertiajs/react';
@@ -15,6 +16,7 @@ interface Profile {
     avatar_url: string | null;
     avatar_fallback: { preset: string | null; initial: string; colour: string };
     created_at: string | null; last_login_at: string | null;
+    delete_requested_at?: string | null;
 }
 
 const stamp = (value: string | null) =>
@@ -213,6 +215,8 @@ export default function ProfileSettings({ sessions = [] }: { sessions?: Session[
                                 )}
                             </div>
                         </section>
+
+                        <AccountData scheduledFor={profile.delete_requested_at ?? null} onChanged={() => void load()} />
 
                         <p className="mt-5 text-center text-xs text-[var(--color-text-secondary)]">
                             <Link href="/settings/propojeni" className="text-[var(--color-accent)] hover:underline">Propojení služeb</Link>
