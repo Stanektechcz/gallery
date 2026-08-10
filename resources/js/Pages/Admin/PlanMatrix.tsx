@@ -13,6 +13,10 @@ interface PlanRow {
     is_public?: boolean; is_default?: boolean; subscribers?: number;
 }
 interface ModuleRow { code: string; name: string; icon: string; price_monthly: number; currency: string; feature_codes: string[] }
+interface Revenue {
+    currency: string; monthly_recurring: number; paying_spaces: number; free_spaces: number;
+    trials_running: number; collected_30d: number; payments_30d: number; failed_30d: number;
+}
 
 const money = (minor: number, currency: string) =>
     minor === 0 ? 'zdarma' : `${new Intl.NumberFormat('cs-CZ').format(Math.round(minor / 100))} ${currency}`;
@@ -25,6 +29,7 @@ export default function PlanMatrix() {
     const [features, setFeatures] = useState<FeatureRow[]>([]);
     const [plans, setPlans] = useState<PlanRow[]>([]);
     const [modules, setModules] = useState<ModuleRow[]>([]);
+    const [revenue, setRevenue] = useState<Revenue | null>(null);
     const [loading, setLoading] = useState(true);
     const [busy, setBusy] = useState<string | null>(null);
     const [error, setError] = useState('');
@@ -32,10 +37,16 @@ export default function PlanMatrix() {
 
     const load = useCallback(async () => {
         try {
-            const response = await axios.get('/api/v1/admin/billing/matrix');
+            // Both in one round trip: the summary is a header for the table below it, and
+            // showing the table first with the figures arriving later reads as a glitch.
+            const [response, money] = await Promise.all([
+                axios.get('/api/v1/admin/billing/matrix'),
+                axios.get('/api/v1/admin/billing/revenue').catch(() => null),
+            ]);
             setFeatures(response.data.features ?? []);
             setPlans(response.data.plans ?? []);
             setModules(response.data.modules ?? []);
+            setRevenue(money?.data ?? null);
         } catch (reason: any) {
             setError(reason?.response?.data?.message ?? 'Matici se nepodařilo načíst.');
         } finally { setLoading(false); }
@@ -85,6 +96,23 @@ export default function PlanMatrix() {
 
                 {!loading && (
                     <>
+                        {revenue && (
+                            <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                                {[
+                                    { label: 'Měsíční opakovaný příjem', value: money(revenue.monthly_recurring, revenue.currency), note: `${revenue.paying_spaces} platících prostorů` },
+                                    { label: 'Vybráno za 30 dní', value: money(revenue.collected_30d, revenue.currency), note: `${revenue.payments_30d} plateb` },
+                                    { label: 'Běžící zkušební období', value: String(revenue.trials_running), note: 'nepočítá se do příjmu' },
+                                    { label: 'Neúspěšné platby', value: String(revenue.failed_30d), note: 'za 30 dní' },
+                                ].map(card => (
+                                    <div key={card.label} className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-3">
+                                        <p className="text-[10px] uppercase tracking-wide text-[var(--color-text-secondary)]">{card.label}</p>
+                                        <p className="mt-1 text-xl font-semibold text-[var(--color-text-primary)]">{card.value}</p>
+                                        <p className="text-[11px] text-[var(--color-text-secondary)]">{card.note}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
                         <PlanEditor
                             plans={plans}
                             onSaved={payload => {

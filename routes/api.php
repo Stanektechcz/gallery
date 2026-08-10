@@ -216,6 +216,7 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
     // Plan, add-on modules and the customer's own feature choices.
     Route::get('/billing/overview', [App\Http\Controllers\Api\BillingController::class, 'overview'])->name('api.billing.overview');
     Route::put('/billing/plan', [App\Http\Controllers\Api\BillingController::class, 'setPlan'])->name('api.billing.plan.set');
+    Route::post('/billing/trial', [App\Http\Controllers\Api\BillingController::class, 'startTrial'])->name('api.billing.trial');
     Route::put('/billing/modules/{code}', [App\Http\Controllers\Api\BillingController::class, 'setModule'])->name('api.billing.modules.set');
     Route::put('/billing/features/{code}', [App\Http\Controllers\Api\BillingController::class, 'setFeature'])->name('api.billing.features.set');
 
@@ -228,6 +229,7 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
     Route::get('/admin/billing/matrix', [App\Http\Controllers\Api\BillingMatrixController::class, 'show'])->name('api.admin.billing.matrix');
     Route::put('/admin/billing/matrix', [App\Http\Controllers\Api\BillingMatrixController::class, 'update'])->name('api.admin.billing.matrix.update');
     Route::put('/admin/billing/plans/{code}', [App\Http\Controllers\Api\BillingMatrixController::class, 'updatePlan'])->name('api.admin.billing.plan.update');
+    Route::get('/admin/billing/revenue', [App\Http\Controllers\Api\BillingMatrixController::class, 'revenue'])->name('api.admin.billing.revenue');
 
     // Voice messages between members. Included in every plan.
     // Outside services a person connects: their own, or shared with the space.

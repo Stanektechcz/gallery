@@ -7,6 +7,8 @@ use App\Models\AuditLog;
 use App\Models\BillingModule;
 use App\Models\BillingPlan;
 use App\Models\Feature;
+use App\Models\Payment;
+use App\Models\SpaceSubscription;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -132,6 +134,56 @@ class BillingMatrixController extends Controller
         AuditLog::record('billing.plan.updated', $plan, ['plan' => $plan->code, 'before' => $before, 'after' => $data]);
 
         return $this->show($request);
+    }
+
+    /**
+     * What the offering is actually earning.
+     *
+     * Recurring revenue is computed from live subscriptions rather than from past
+     * payments, because the two answer different questions: takings tell you what came in
+     * last month, this tells you what is expected next month. A yearly subscription counts
+     * as a twelfth, so the figure stays comparable between customers who pay differently.
+     *
+     * Trials are counted separately and never as revenue. Folding them in would flatter
+     * the number by exactly the amount most likely to disappear.
+     */
+    public function revenue(Request $request): JsonResponse
+    {
+        $this->authorizeOperator($request);
+
+        $subscriptions = SpaceSubscription::with('plan')
+            ->whereIn('status', ['active', 'trialing'])
+            ->where(fn ($query) => $query->whereNull('ends_at')->orWhere('ends_at', '>', now()))
+            ->get();
+
+        $monthly = 0;
+        $trials = 0;
+
+        foreach ($subscriptions as $subscription) {
+            $plan = $subscription->plan;
+            if (! $plan || $plan->price_monthly <= 0) continue;
+
+            if ($subscription->status === 'trialing') { $trials++; continue; }
+
+            $monthly += $subscription->billing_period === 'yearly'
+                ? (int) round(($plan->price_yearly ?: $plan->price_monthly * 10) / 12)
+                : $plan->price_monthly;
+        }
+
+        $since = now()->subDays(30);
+
+        return response()->json([
+            'currency' => BillingPlan::value('currency') ?? 'CZK',
+            'monthly_recurring' => $monthly,
+            'paying_spaces' => $subscriptions->where('status', 'active')
+                ->filter(fn ($item) => ($item->plan?->price_monthly ?? 0) > 0)->count(),
+            'free_spaces' => $subscriptions->filter(fn ($item) => ($item->plan?->price_monthly ?? 0) <= 0)->count(),
+            'trials_running' => $trials,
+            // Takings are a separate figure and stay one: what was actually collected.
+            'collected_30d' => (int) Payment::where('status', 'paid')->where('paid_at', '>=', $since)->sum('amount'),
+            'payments_30d' => Payment::where('status', 'paid')->where('paid_at', '>=', $since)->count(),
+            'failed_30d' => Payment::whereIn('status', ['failed', 'cancelled'])->where('created_at', '>=', $since)->count(),
+        ]);
     }
 
     private function authorizeOperator(Request $request): void

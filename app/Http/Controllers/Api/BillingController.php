@@ -22,7 +22,35 @@ class BillingController extends Controller
     {
         $space = $this->space($request);
 
-        return response()->json($this->entitlements->overview($space));
+        return response()->json($this->entitlements->overview($space) + [
+            'trial_available' => ! $this->entitlements->trialUsed($space),
+            'trial_days' => EntitlementService::TRIAL_DAYS,
+        ]);
+    }
+
+    /**
+     * Starts the free fortnight.
+     *
+     * Deliberately not part of checkout: a trial takes no card and creates no payment, and
+     * routing it through the gateway would mean holding details we have no reason to hold.
+     */
+    public function startTrial(Request $request): JsonResponse
+    {
+        $space = $this->space($request);
+        $user = $request->user();
+
+        abort_unless(in_array($user->role, ['owner', 'admin'], true), 403,
+            'Zkušební období může spustit jen správce prostoru.');
+
+        $data = $request->validate(['plan' => 'required|string|max:60']);
+        $plan = BillingPlan::where('code', $data['plan'])->where('is_public', true)->firstOrFail();
+
+        $subscription = $this->entitlements->startTrial($space, $plan, $user);
+
+        return response()->json([
+            'plan' => $plan->code,
+            'ends_at' => $subscription->ends_at?->toIso8601String(),
+        ]);
     }
 
     /** Public catalogue for the pricing page and the landing page. */

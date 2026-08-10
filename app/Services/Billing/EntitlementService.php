@@ -2,6 +2,7 @@
 
 namespace App\Services\Billing;
 
+use App\Models\AuditLog;
 use App\Models\BillingModule;
 use App\Models\BillingPlan;
 use App\Models\Feature;
@@ -241,6 +242,54 @@ class EntitlementService
                 'granted_by' => $actor?->id,
             ]
         );
+    }
+
+    /** Long enough to use the thing properly, short enough that nobody forgets they started. */
+    public const TRIAL_DAYS = 14;
+
+    /**
+     * Puts a space on a paid plan for a fortnight without taking a card.
+     *
+     * Nothing schedules the end of it. A trial is a subscription whose ends_at has passed,
+     * and plan() already ignores those and falls back to the default — so an expired trial
+     * simply stops counting, with no job to run and nothing to go wrong overnight.
+     *
+     * Once per space, ever. The subscription row is replaced when somebody buys, so the
+     * fact of the trial is remembered in the audit log instead: that record is permanent
+     * and already carries every other billing event.
+     */
+    public function startTrial(GallerySpace $space, BillingPlan $plan, ?User $actor = null): SpaceSubscription
+    {
+        abort_if($plan->price_monthly <= 0, 422, 'Tenhle tarif je zdarma, zkušební období nedává smysl.');
+        abort_if($this->trialUsed($space), 422, 'Zkušební období už tento prostor jednou využil.');
+
+        $this->forget($space);
+
+        $subscription = SpaceSubscription::updateOrCreate(
+            ['gallery_space_id' => $space->id],
+            [
+                'billing_plan_id' => $plan->id, 'status' => 'trialing',
+                'started_at' => now(), 'ends_at' => now()->addDays(self::TRIAL_DAYS),
+                'billing_period' => 'monthly', 'current_period_ends_at' => now()->addDays(self::TRIAL_DAYS),
+                'granted_by' => $actor?->id,
+            ]
+        );
+
+        AuditLog::record('billing.trial.started', $space, [
+            'plan' => $plan->code, 'ends_at' => $subscription->ends_at?->toIso8601String(),
+        ]);
+
+        return $subscription;
+    }
+
+    public function trialUsed(GallerySpace $space): bool
+    {
+        if (! $this->hasTable('audit_logs')) return false;
+
+        return AuditLog::where('action', 'billing.trial.started')
+            ->where('subject_type', class_basename($space))
+            ->where('subject_id', $space->id)
+            ->exists();
     }
 
     // ─── Limits ─────────────────────────────────────────────────────
