@@ -227,6 +227,7 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
     // Operator-only: which features each plan contains.
     Route::get('/admin/billing/matrix', [App\Http\Controllers\Api\BillingMatrixController::class, 'show'])->name('api.admin.billing.matrix');
     Route::put('/admin/billing/matrix', [App\Http\Controllers\Api\BillingMatrixController::class, 'update'])->name('api.admin.billing.matrix.update');
+    Route::put('/admin/billing/plans/{code}', [App\Http\Controllers\Api\BillingMatrixController::class, 'updatePlan'])->name('api.admin.billing.plan.update');
 
     // Voice messages between members. Included in every plan.
     // Outside services a person connects: their own, or shared with the space.

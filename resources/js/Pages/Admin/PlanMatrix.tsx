@@ -1,3 +1,4 @@
+import PlanEditor from '@/Components/PlanEditor';
 import AppLayout from '@/Layouts/AppLayout';
 import { Head } from '@inertiajs/react';
 import axios from 'axios';
@@ -5,7 +6,12 @@ import { Check, LoaderCircle, SlidersHorizontal } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 interface FeatureRow { code: string; name: string; category: string; icon: string; is_core: boolean; tagline?: string | null }
-interface PlanRow { code: string; name: string; group_type: string; price_monthly: number; price_yearly: number; currency: string; member_limit: number | null; feature_codes: string[] }
+interface PlanRow {
+    code: string; name: string; group_type: string; price_monthly: number; price_yearly: number;
+    currency: string; member_limit: number | null; feature_codes: string[];
+    tagline?: string | null; storage_limit_mb?: number | null;
+    is_public?: boolean; is_default?: boolean; subscribers?: number;
+}
 interface ModuleRow { code: string; name: string; icon: string; price_monthly: number; currency: string; feature_codes: string[] }
 
 const money = (minor: number, currency: string) =>
@@ -79,6 +85,16 @@ export default function PlanMatrix() {
 
                 {!loading && (
                     <>
+                        <PlanEditor
+                            plans={plans}
+                            onSaved={payload => {
+                                setFeatures(payload.features ?? []);
+                                setPlans(payload.plans ?? []);
+                                setModules(payload.modules ?? []);
+                                setSaved('Ceník uložen. Nová cena platí až pro další nákup.');
+                            }}
+                        />
+
                         <div className="mt-6 overflow-x-auto rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)]">
                             <table className="w-full min-w-[46rem] text-sm">
                                 <thead>
