@@ -217,6 +217,11 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
     Route::get('/billing/overview', [App\Http\Controllers\Api\BillingController::class, 'overview'])->name('api.billing.overview');
     Route::put('/billing/plan', [App\Http\Controllers\Api\BillingController::class, 'setPlan'])->name('api.billing.plan.set');
     Route::post('/billing/trial', [App\Http\Controllers\Api\BillingController::class, 'startTrial'])->name('api.billing.trial');
+
+    Route::get('/automation-rules', [App\Http\Controllers\Api\AutomationRuleController::class, 'index'])->name('api.automation.rules');
+    Route::post('/automation-rules', [App\Http\Controllers\Api\AutomationRuleController::class, 'store'])->name('api.automation.rules.store');
+    Route::put('/automation-rules/{uuid}', [App\Http\Controllers\Api\AutomationRuleController::class, 'update'])->name('api.automation.rules.update');
+    Route::delete('/automation-rules/{uuid}', [App\Http\Controllers\Api\AutomationRuleController::class, 'destroy'])->name('api.automation.rules.destroy');
     Route::put('/billing/modules/{code}', [App\Http\Controllers\Api\BillingController::class, 'setModule'])->name('api.billing.modules.set');
     Route::put('/billing/features/{code}', [App\Http\Controllers\Api\BillingController::class, 'setFeature'])->name('api.billing.features.set');
 

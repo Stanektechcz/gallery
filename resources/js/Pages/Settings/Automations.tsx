@@ -1,4 +1,5 @@
 import axios from 'axios';
+import AutomationRules from '@/Components/AutomationRules';
 import AppLayout from '@/Layouts/AppLayout';
 import usePrimaryGallerySpace from '@/hooks/usePrimaryGallerySpace';
 import { Head, Link } from '@inertiajs/react';
@@ -69,6 +70,9 @@ export default function AutomationSettings() {
                 {!loading && !items.length && <div className="rounded-2xl border border-dashed border-[var(--color-border)] p-8 text-center text-sm text-[var(--color-text-secondary)]">Pro tento prostor zatím není k dispozici žádná automatizace.</div>}
                 {loading && <div className="rounded-2xl border border-[var(--color-border)] p-8 text-center text-sm text-[var(--color-text-secondary)]">Načítám automatizace…</div>}
             </section>
+
+            {/* Built-in switches above, rules people wrote below — not the same thing. */}
+            <AutomationRules />
         </div>
     </main></AppLayout>;
 }
