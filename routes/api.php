@@ -44,6 +44,10 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
     Route::get('/navigace', [App\Http\Controllers\Api\NavigationController::class, 'show'])->name('api.navigation.show');
     Route::put('/navigace', [App\Http\Controllers\Api\NavigationController::class, 'update'])->name('api.navigation.update');
     Route::delete('/navigace', [App\Http\Controllers\Api\NavigationController::class, 'reset'])->name('api.navigation.reset');
+    // Rights rather than features: take your data, or end the account.
+    Route::get('/ucet/export', [App\Http\Controllers\Api\AccountController::class, 'export'])->name('api.account.export');
+    Route::post('/ucet/zruseni', [App\Http\Controllers\Api\AccountController::class, 'scheduleDeletion'])->name('api.account.delete');
+    Route::delete('/ucet/zruseni', [App\Http\Controllers\Api\AccountController::class, 'cancelDeletion'])->name('api.account.delete.cancel');
     Route::get('/profil', [App\Http\Controllers\Api\ProfileController::class, 'show'])->name('api.profile.show');
     Route::patch('/profil', [App\Http\Controllers\Api\ProfileController::class, 'update'])->name('api.profile.update');
     Route::put('/profil/heslo', [App\Http\Controllers\Api\ProfileController::class, 'password'])->name('api.profile.password');
