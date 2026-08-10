@@ -5,9 +5,11 @@ namespace App\Services\Chat;
 use App\Models\CalendarEvent;
 use App\Models\GallerySpace;
 use App\Models\JournalEntry;
+use App\Models\Place;
 use App\Models\Recipe;
 use App\Models\User;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
@@ -172,7 +174,7 @@ class MentionSearchService
         }
 
         if (Schema::hasTable('trips')) {
-            foreach (IlluminateSupportFacadesDB::table('trips')
+            foreach (DB::table('trips')
                 ->where('gallery_space_id', $space->id)->where('title', 'like', $needle)
                 ->limit(3)->get() as $trip) {
                 $results[] = [
