@@ -7,6 +7,7 @@ use App\Models\BillingModule;
 use App\Models\BillingPlan;
 use App\Models\GallerySpace;
 use App\Models\Payment;
+use App\Models\SpaceSubscription;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -29,8 +30,17 @@ class CheckoutService
      */
     public function startPlanPurchase(GallerySpace $space, BillingPlan $plan, User $buyer, string $period): array
     {
-        $amount = $this->priceFor($plan->price_monthly, $plan->price_yearly, $period);
-        abort_if($amount <= 0, 422, 'Tenhle tarif je zdarma, platba není potřeba.');
+        $full = $this->priceFor($plan->price_monthly, $plan->price_yearly, $period);
+        abort_if($full <= 0, 422, 'Tenhle tarif je zdarma, platba není potřeba.');
+
+        $credit = $this->unusedCredit($space);
+        $amount = max(0, $full - $credit);
+
+        // A credit larger than the new plan means a downgrade mid-period. Charging nothing
+        // and letting the paid time run out is right; refunding the difference is not
+        // something this system can do, and pretending otherwise would owe people money.
+        abort_if($amount <= 0, 422,
+            'Za současný tarif máte předplaceno víc, než stojí nový. Změnu proveďte až ke konci období.');
 
         $payment = Payment::create([
             'gallery_space_id' => $space->id,
@@ -44,7 +54,7 @@ class CheckoutService
 
         $created = $this->gateway->createPayment($payment, 'Tarif ' . $plan->code, $buyer->email);
 
-        return ['payment' => $payment->fresh(), 'redirect' => $created['redirect']];
+        return ['payment' => $payment->fresh(), 'redirect' => $created['redirect'], 'credit' => $credit];
     }
 
     /**
@@ -68,6 +78,42 @@ class CheckoutService
         $created = $this->gateway->createPayment($payment, 'Modul ' . $module->code, $buyer->email);
 
         return ['payment' => $payment->fresh(), 'redirect' => $created['redirect']];
+    }
+
+    /**
+     * What the space has already paid for and not yet used, in hundredths.
+     *
+     * Somebody who upgrades on the third day of a month has twenty-seven days of the old
+     * plan in hand. Charging them the full new price takes that money twice, and the
+     * complaint that follows is entirely fair — so the remainder comes off the new price.
+     *
+     * Measured against the subscription's own window rather than a calendar month, because
+     * a yearly subscription changed in month eight has four months left, not three weeks.
+     * A plan that was granted rather than bought has no price to credit, which the join
+     * handles by simply finding nothing.
+     */
+    private function unusedCredit(GallerySpace $space): int
+    {
+        $current = SpaceSubscription::where('gallery_space_id', $space->id)
+            ->where('status', 'active')
+            ->whereNotNull('ends_at')
+            ->with('plan')
+            ->latest('started_at')
+            ->first();
+
+        if (! $current?->plan || ! $current->started_at || ! $current->ends_at) return 0;
+
+        $total = $current->started_at->diffInSeconds($current->ends_at);
+        $left = now()->diffInSeconds($current->ends_at, false);
+
+        if ($total <= 0 || $left <= 0) return 0;
+
+        // The window tells us which price was paid: anything close to a year was yearly.
+        $paid = $total > 60 * 60 * 24 * 60
+            ? $this->priceFor($current->plan->price_monthly, $current->plan->price_yearly, 'yearly')
+            : $current->plan->price_monthly;
+
+        return (int) floor($paid * min(1, $left / $total));
     }
 
     /** A yearly purchase is ten months' worth — two months free. */
