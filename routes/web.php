@@ -21,6 +21,10 @@ use Inertia\Inertia;
 // ── Public ─────────────────────────────────────────────
 Route::get('/login', [AuthenticatedSessionController::class, 'create'])->name('login');
 Route::post('/login', [AuthenticatedSessionController::class, 'store'])->name('login.store');
+
+// Reached signed out, holding nothing but an id in the session.
+Route::get('/login/overeni', [App\Http\Controllers\Auth\TwoFactorController::class, 'challenge'])->name('two-factor.challenge');
+Route::post('/login/overeni', [App\Http\Controllers\Auth\TwoFactorController::class, 'verify'])->name('two-factor.verify');
 Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])->name('logout');
 
 // Invitation-only registration

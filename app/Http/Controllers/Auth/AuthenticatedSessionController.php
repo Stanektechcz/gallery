@@ -37,6 +37,20 @@ class AuthenticatedSessionController extends Controller
             return back()->withErrors(['email' => 'Váš účet není aktivní.']);
         }
 
+        // The password was right, but it is not the whole answer yet. Signing out again
+        // and remembering only the id keeps the half-finished attempt out of the session
+        // as an authenticated user — a second factor that leaves you logged in while it
+        // asks is not a second factor.
+        if ($user->two_factor_confirmed_at && $user->two_factor_secret) {
+            $remember = $request->boolean('remember');
+            Auth::logout();
+
+            $request->session()->put('two_factor.user_id', $user->id);
+            $request->session()->put('two_factor.remember', $remember);
+
+            return redirect()->route('two-factor.challenge');
+        }
+
         $user->update([
             'last_login_at' => now(),
             'last_login_ip' => $request->ip(),

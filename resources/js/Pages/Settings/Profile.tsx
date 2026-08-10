@@ -1,4 +1,5 @@
 import AccountData from '@/Components/AccountData';
+import TwoFactorSetup from '@/Components/TwoFactorSetup';
 import AvatarEditor from '@/Components/AvatarEditor';
 import AppLayout from '@/Layouts/AppLayout';
 import { Head, Link } from '@inertiajs/react';
@@ -17,6 +18,7 @@ interface Profile {
     avatar_fallback: { preset: string | null; initial: string; colour: string };
     created_at: string | null; last_login_at: string | null;
     delete_requested_at?: string | null;
+    two_factor_enabled?: boolean;
 }
 
 const stamp = (value: string | null) =>
@@ -215,6 +217,8 @@ export default function ProfileSettings({ sessions = [] }: { sessions?: Session[
                                 )}
                             </div>
                         </section>
+
+                        <TwoFactorSetup enabled={profile.two_factor_enabled ?? false} onChanged={() => void load()} />
 
                         <AccountData scheduledFor={profile.delete_requested_at ?? null} onChanged={() => void load()} />
 

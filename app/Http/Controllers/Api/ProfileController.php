@@ -31,6 +31,8 @@ class ProfileController extends Controller
             'read_only_mode' => (bool) $user->read_only_mode,
             'created_at' => $user->created_at?->toIso8601String(),
             'last_login_at' => $user->last_login_at?->toIso8601String(),
+            // The fact, never the secret.
+            'two_factor_enabled' => (bool) $user->two_factor_confirmed_at,
             // So a pending closure is visible on the screen that can cancel it, rather
             // than only in the mail somebody has already deleted.
             'delete_requested_at' => is_array($user->preferences)

@@ -18,7 +18,11 @@ class User extends Authenticatable
         'preferences', 'last_login_at', 'last_login_ip', 'read_only_mode',
     ];
 
-    protected $hidden = ['password', 'remember_token', 'invitation_token'];
+    protected $hidden = [
+        'password', 'remember_token', 'invitation_token',
+        // A secret that reaches the browser once is a secret in somebody's browser history.
+        'two_factor_secret', 'two_factor_recovery_codes',
+    ];
 
     /** Every place that shows a person shows their face; deriving it twice invites drift. */
     protected $appends = ['avatar_url', 'avatar_fallback'];
@@ -67,6 +71,9 @@ class User extends Authenticatable
             'is_active'              => 'boolean',
             'read_only_mode'         => 'boolean',
             'password'               => 'hashed',
+            'two_factor_secret'         => 'encrypted',
+            'two_factor_recovery_codes' => 'encrypted:array',
+            'two_factor_confirmed_at'   => 'datetime',
         ];
     }
 

@@ -218,6 +218,10 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
     Route::put('/billing/plan', [App\Http\Controllers\Api\BillingController::class, 'setPlan'])->name('api.billing.plan.set');
     Route::post('/billing/trial', [App\Http\Controllers\Api\BillingController::class, 'startTrial'])->name('api.billing.trial');
 
+    Route::post('/ucet/2fa', [App\Http\Controllers\Auth\TwoFactorController::class, 'begin'])->name('api.2fa.begin');
+    Route::post('/ucet/2fa/potvrdit', [App\Http\Controllers\Auth\TwoFactorController::class, 'confirm'])->name('api.2fa.confirm');
+    Route::delete('/ucet/2fa', [App\Http\Controllers\Auth\TwoFactorController::class, 'disable'])->name('api.2fa.disable');
+
     Route::get('/automation-rules', [App\Http\Controllers\Api\AutomationRuleController::class, 'index'])->name('api.automation.rules');
     Route::post('/automation-rules', [App\Http\Controllers\Api\AutomationRuleController::class, 'store'])->name('api.automation.rules.store');
     Route::put('/automation-rules/{uuid}', [App\Http\Controllers\Api\AutomationRuleController::class, 'update'])->name('api.automation.rules.update');
