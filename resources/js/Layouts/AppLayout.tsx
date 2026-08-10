@@ -1,6 +1,7 @@
 import AppInstallButton from '@/Components/AppInstallButton';
 import { useViewportSafePanel } from '@/lib/useViewportSafePanel';
 import ChatDock from '@/Components/ChatDock';
+import TopNav from '@/Components/TopNav';
 import { applyArrangement, type Arrangement } from '@/lib/navigationArrangement';
 import UserMenu, { userMenuLinks } from '@/Components/UserMenu';
 import UploadPanel from '@/Components/UploadPanel';
@@ -986,6 +987,18 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
                         {flash.error}
                     </div>
                 )}
+
+                <TopNav
+                    sections={arrangedGroups
+                        .map(group => ({
+                            id: group.id,
+                            label: group.label,
+                            items: group.items
+                                .filter(item => canReach(item, activeFeatures, isAdmin))
+                                .map(item => ({ href: item.href, label: item.label, icon: item.icon })),
+                        }))
+                        .filter(group => group.items.length > 0)}
+                />
 
                 {/* Content */}
                 <main id="app-scroll-container" className="app-scroll min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain">
