@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use App\Models\ChatMessage;
 use App\Models\Conversation;
+use App\Models\UserNavigationItem;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Schema;
 use Inertia\Middleware;
@@ -65,6 +66,8 @@ class HandleInertiaRequests extends Middleware
             // The chat's opening state, so the dock paints instantly instead of after a
             // round trip. A closure, so it costs nothing on requests that never read it.
             'chatBootstrap' => fn () => $this->chatBootstrap($request),
+            // This person's own arrangement of the menu; null means the built-in one.
+            'navigation' => fn () => $this->navigation($request),
             // Public half of the VAPID pair; null until the deployment configures it, and
             // the toggle then says so instead of failing on a click.
             'push_public_key' => config('push.public_key'),
@@ -95,6 +98,34 @@ class HandleInertiaRequests extends Middleware
      *
      * @return array<string, mixed>|null
      */
+    /**
+     * The navigation differences this person has saved, or null if they have none.
+     *
+     * Null rather than an empty array on purpose: the frontend treats null as "use the
+     * built-in menu", and an empty array as "they hid everything", which are different
+     * things that would otherwise look identical.
+     *
+     * @return list<array<string, mixed>>|null
+     */
+    private function navigation(Request $request): ?array
+    {
+        if (! $request->user() || ! Schema::hasTable('user_navigation_items')) return null;
+
+        $rows = UserNavigationItem::where('user_id', $request->user()->id)
+            ->orderBy('position')->get();
+
+        if ($rows->isEmpty()) return null;
+
+        return $rows->map(fn ($row) => [
+            'href' => $row->href,
+            'label' => $row->label,
+            'icon' => $row->icon,
+            'parent' => $row->parent_id ? $rows->firstWhere('id', $row->parent_id)?->href : null,
+            'hidden' => (bool) $row->is_hidden,
+            'group' => (bool) $row->is_group,
+        ])->values()->all();
+    }
+
     private function chatBootstrap(Request $request): ?array
     {
         if (! $request->user()) return null;

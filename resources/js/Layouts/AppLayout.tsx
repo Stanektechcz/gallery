@@ -1,6 +1,7 @@
 import AppInstallButton from '@/Components/AppInstallButton';
 import { useViewportSafePanel } from '@/lib/useViewportSafePanel';
 import ChatDock from '@/Components/ChatDock';
+import { applyArrangement, type Arrangement } from '@/lib/navigationArrangement';
 import UserMenu, { userMenuLinks } from '@/Components/UserMenu';
 import UploadPanel from '@/Components/UploadPanel';
 import WorkspaceAssistant from '@/Components/WorkspaceAssistant';
@@ -725,6 +726,9 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
     const isAdmin = ['owner', 'admin'].includes(auth?.user?.role);
     // Shared by HandleInertiaRequests; null means the feature catalogue is not in play yet.
     const activeFeatures = (usePage().props as { features?: string[] | null }).features ?? null;
+    // Their own arrangement, or null for the built-in menu; see navigationArrangement.ts.
+    const arrangement = (usePage().props as { navigation?: Arrangement[] | null }).navigation ?? null;
+    const arrangedGroups = applyArrangement(navGroups, arrangement);
     const currentPath = window.location.pathname;
     // Exact match for root; prefix match for all others
     // (prevents '/' highlighting /timeline, /albums, /media/... etc.)
@@ -852,13 +856,13 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
                 )}
 
                 <div className="mt-3 space-y-1 border-t border-[var(--color-border)] pt-3">
-                    {navGroups.map(group => {
+                    {arrangedGroups.map(group => {
                         const items = group.items.filter(item => canReach(item, activeFeatures, isAdmin));
                         if (items.length === 0) return null;
                         if (!items.length) return null;
                         const open = Boolean(openGroups[group.id]);
                         const active = items.some(item => isActive(item.href, item.exact));
-                        const GroupIcon = group.icon;
+                        const GroupIcon = group.icon ?? FolderOpen;
                         return (
                             <div key={group.id}>
                                 <button

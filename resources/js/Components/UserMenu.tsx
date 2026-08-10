@@ -3,7 +3,7 @@ import { Link, router } from '@inertiajs/react';
 import axios from 'axios';
 import {
     CircleDollarSign, HardDrive, LogOut, Monitor, Moon,
-    Palette, Plug, Settings, ShieldCheck, Sun,
+    ListTree, Palette, Plug, Settings, ShieldCheck, Sun,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
@@ -36,6 +36,7 @@ export const userMenuLinks = [
     { href: '/settings/vzhled',         label: 'Vzhled a barvy',       icon: Palette },
     { href: '/settings/predplatne',     label: 'Předplatné a moduly',  icon: CircleDollarSign },
     { href: '/settings/storage/google', label: 'Úložiště a Drive',     icon: HardDrive },
+    { href: '/settings/menu',           label: 'Uspořádání menu',      icon: ListTree },
     { href: '/settings/propojeni',      label: 'Propojení služeb',     icon: Plug },
     { href: '/privacy',                 label: 'Soukromí a dědictví',  icon: ShieldCheck },
 ];
