@@ -21,12 +21,17 @@ class IntegrationSettingsTest extends TestCase
             // Counted from the registry rather than written out, so adding a provider
             // does not fail a test that was never about how many there are.
             ->has('providers', count(\App\Services\Integrations\FreeTravelDataService::PROVIDERS))
-            ->where('providers.0.provider', 'gocardless_bank_data')
-            ->where('providers.0.credential_meta.secret_id.label', 'Secret ID')
-            ->where('providers.1.provider', 'tmdb')
-            ->where('providers.1.credential_meta.api_key.label', 'TMDB API klíč (v3 auth)')
-            ->where('providers.2.provider', 'cinema_city')
         );
+
+        // Looked up rather than indexed. The previous version asserted which provider sat
+        // at position 0, so adding one with a higher priority failed a test that was never
+        // about the order — the same reason the count above is taken from the registry.
+        $byProvider = collect($this->actingAs($admin)->get('/admin/integrations')
+            ->viewData('page')['props']['providers'])->keyBy('provider');
+
+        $this->assertSame('Secret ID', $byProvider['gocardless_bank_data']['credential_meta']['secret_id']['label']);
+        $this->assertSame('TMDB API klíč (v3 auth)', $byProvider['tmdb']['credential_meta']['api_key']['label']);
+        $this->assertArrayHasKey('cinema_city', $byProvider);
 
         // The two that the chat depends on must actually reach the screen.
         $providers = collect($this->actingAs($admin)->get('/admin/integrations')

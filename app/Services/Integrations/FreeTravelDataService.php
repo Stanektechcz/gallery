@@ -10,6 +10,64 @@ use Illuminate\Support\Facades\Http;
 class FreeTravelDataService
 {
     public const PROVIDERS = [
+        // ─── Cloud storage ──────────────────────────────────────────
+        //
+        // These are the operator's own application registrations, not anybody's account.
+        // One pair of keys per service covers every customer; each customer then signs in
+        // with their own Google or Dropbox from their services screen. The two never meet:
+        // nothing here can reach a customer's files, and nothing there can change these.
+        'dropbox' => [
+            'name' => 'Dropbox · úložiště', 'category' => 'storage', 'priority' => 5, 'free' => true,
+            'description' => 'Aplikace, přes kterou se zákazníci přihlašují ke svému Dropboxu. Jejich soubory nevidíme.',
+            'credentials' => ['client_id', 'client_secret'],
+            'credential_meta' => [
+                'client_id' => ['label' => 'App key', 'type' => 'password', 'placeholder' => 'App key z Dropbox App Console', 'help' => 'Najdete v nastavení aplikace na dropbox.com/developers/apps.'],
+                'client_secret' => ['label' => 'App secret', 'type' => 'password', 'placeholder' => 'App secret', 'help' => 'Uloží se šifrovaně a už se nezobrazí.'],
+            ],
+            'capabilities' => ['Přihlášení zákazníka k vlastnímu Dropboxu', 'Obnovitelný přístup (offline)', 'Jedna aplikace pro všechny prostory'],
+            'setup_steps' => [
+                'Na dropbox.com/developers/apps vytvořte aplikaci se Scoped access.',
+                'Do Redirect URIs přidejte /oauth/dropbox/callback na této doméně.',
+                'Uložte App key a App secret a integraci aktivujte.',
+            ],
+            'docs_url' => 'https://www.dropbox.com/developers/documentation/http/documentation',
+            'signup_url' => 'https://www.dropbox.com/developers/apps',
+        ],
+        'onedrive' => [
+            'name' => 'OneDrive · úložiště', 'category' => 'storage', 'priority' => 6, 'free' => true,
+            'description' => 'Aplikace registrovaná v Azure, přes kterou se zákazníci přihlašují ke svému OneDrive.',
+            'credentials' => ['client_id', 'client_secret'],
+            'credential_meta' => [
+                'client_id' => ['label' => 'Application (client) ID', 'type' => 'password', 'placeholder' => 'GUID z Azure portálu', 'help' => 'Azure Portal → App registrations → vaše aplikace.'],
+                'client_secret' => ['label' => 'Client secret', 'type' => 'password', 'placeholder' => 'Hodnota tajného klíče', 'help' => 'Kopírujte hned po vytvoření, Azure ji podruhé neukáže.'],
+            ],
+            'capabilities' => ['Přihlášení zákazníka k vlastnímu OneDrive', 'Microsoft Graph', 'Jedna aplikace pro všechny prostory'],
+            'setup_steps' => [
+                'V Azure Portalu založte App registration.',
+                'Do Redirect URI přidejte /oauth/onedrive/callback na této doméně.',
+                'Vytvořte Client secret a obě hodnoty uložte sem.',
+            ],
+            'docs_url' => 'https://learn.microsoft.com/graph/auth-v2-user',
+            'signup_url' => 'https://portal.azure.com/',
+        ],
+        'google_drive' => [
+            'name' => 'Google Drive · úložiště', 'category' => 'storage', 'priority' => 4, 'free' => true,
+            'description' => 'Aplikace v Google Cloud, přes kterou se zákazníci přihlašují ke svému Disku.',
+            'credentials' => ['client_id', 'client_secret'],
+            'credential_meta' => [
+                'client_id' => ['label' => 'Client ID', 'type' => 'password', 'placeholder' => 'Končí na .apps.googleusercontent.com', 'help' => 'Google Cloud Console → Credentials → OAuth client ID.'],
+                'client_secret' => ['label' => 'Client secret', 'type' => 'password', 'placeholder' => 'Client secret', 'help' => 'Uloží se šifrovaně a už se nezobrazí.'],
+            ],
+            'capabilities' => ['Přihlášení zákazníka k vlastnímu Disku', 'Obnovitelný přístup', 'Jedna aplikace pro všechny prostory'],
+            'setup_steps' => [
+                'V Google Cloud Console vytvořte OAuth client ID typu Web application.',
+                'Do Authorised redirect URIs přidejte /oauth/google/callback na této doméně.',
+                'Uložte Client ID a Client secret a integraci aktivujte.',
+            ],
+            'docs_url' => 'https://developers.google.com/identity/protocols/oauth2/web-server',
+            'signup_url' => 'https://console.cloud.google.com/apis/credentials',
+        ],
+
         'gocardless_bank_data' => [
             'name' => 'GoCardless Bank Account Data · Revolut', 'category' => 'finance', 'priority' => 10, 'free' => true,
             'description' => 'Bezpečné PSD2 připojení společného Revolut účtu pouze pro čtení zůstatků a transakcí.',
