@@ -162,8 +162,12 @@ Route::middleware(['auth'])->group(function () {
      * refuses the click when the application is unregistered, and this is the second line
      * for the case where it is registered but the exchange still is not.
      */
+    Route::get('/oauth/dropbox/callback', [\App\Http\Controllers\Storage\DropboxOAuthController::class, 'callback'])->name('storage.dropbox.callback');
+    Route::post('/settings/storage/dropbox/disconnect', [\App\Http\Controllers\Storage\DropboxOAuthController::class, 'disconnect'])->name('storage.dropbox.disconnect');
+
     Route::get('/settings/propojeni/{provider}/start', function (string $provider) {
         if ($provider === 'google_drive') return redirect()->route('storage.google');
+        if ($provider === 'dropbox') return app(\App\Http\Controllers\Storage\DropboxOAuthController::class)->start(request());
 
         $registry = app(\App\Services\Integrations\ProviderRegistry::class);
         abort_unless($registry->has($provider), 404);

@@ -106,20 +106,20 @@ class IntegrationConnectionController extends Controller
      * own connect flow. One screen, two mechanisms — which is honest, because they behave
      * differently and pretending otherwise would surprise somebody at the worst moment.
      */
-    private function storage(int $spaceId): ?array
+    private function storage(int $spaceId): array
     {
-        if (! Schema::hasTable('storage_connections')) return null;
+        if (! Schema::hasTable('storage_connections')) return [];
 
-        $connection = StorageConnection::where('provider', 'google_drive')->first();
-        if (! $connection) return null;
-
-        return [
-            'account' => $connection->account_email,
-            'status' => $connection->connection_status,
-            'last_ok' => $connection->last_successful_request_at?->toIso8601String(),
-            'last_error' => $connection->last_error_message,
-            'last_error_at' => $connection->last_error_at?->toIso8601String(),
-        ];
+        // Keyed by provider, so a second cloud needs no second field on the payload — the
+        // card looks itself up rather than the payload naming every provider it knows.
+        return StorageConnection::all()
+            ->mapWithKeys(fn (StorageConnection $row) => [$row->provider => [
+                'account' => $row->account_email,
+                'status' => $row->connection_status,
+                'last_ok' => $row->last_successful_request_at?->toIso8601String(),
+                'last_error' => $row->last_error_message,
+                'last_error_at' => $row->last_error_at?->toIso8601String(),
+            ]])->all();
     }
 
     /**

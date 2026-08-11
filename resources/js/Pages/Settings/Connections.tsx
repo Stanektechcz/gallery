@@ -140,7 +140,8 @@ export default function Connections() {
     const [visibility, setVisibility] = useState<'personal' | 'shared'>('personal');
 
     const [catalogue, setCatalogue] = useState<Provider[]>([]);
-    const [storage, setStorage] = useState<Storage | null>(null);
+    /** Keyed by provider code, so a new cloud needs no change here. */
+    const [storage, setStorage] = useState<Record<string, Storage>>({});
     const [quota, setQuota] = useState<Quota | null>(null);
     /** Which service's form is open. One at a time: two token fields side by side invite pasting into the wrong one. */
     const [adding, setAdding] = useState<Provider | null>(null);
@@ -178,7 +179,7 @@ export default function Connections() {
             const response = await axios.get('/api/v1/propojeni');
             setConnections(response.data.connections ?? []);
             setCatalogue(response.data.catalogue ?? []);
-            setStorage(response.data.storage ?? null);
+            setStorage(response.data.storage ?? {});
             setQuota(response.data.quota ?? null);
             setDocuments(response.data.documents ?? []);
             setDiscordReady(response.data.discord_ready !== false);
@@ -284,8 +285,8 @@ export default function Connections() {
                                         provider={provider}
                                         connected={provider.code === 'server'
                                             ? (quota?.limit_mb ? `${bytes(quota.used_bytes)} / ${bytes(quota.limit_bytes ?? 0)}` : 'Základní')
-                                            : provider.code === 'google_drive' && storage?.status === 'connected'
-                                                ? (storage.account ?? 'Připojeno')
+                                            : storage[provider.code]?.status === 'connected'
+                                                ? (storage[provider.code].account ?? 'Připojeno')
                                                 : null}
                                         onOpen={() => openProvider(provider)}
                                     />
@@ -330,11 +331,12 @@ export default function Connections() {
                                 </div>
                             )}
 
-                            {storage?.last_error && (
-                                <p className="mt-2 rounded-lg bg-red-500/10 p-2 text-[11px] text-red-200">
-                                    Google Drive — poslední chyba: {storage.last_error}
+                            {/* Every connected cloud's last failure, not just Drive's. */}
+                            {Object.entries(storage).filter(([, row]) => row.last_error).map(([code, row]) => (
+                                <p key={code} className="mt-2 rounded-lg bg-red-500/10 p-2 text-[11px] text-red-200">
+                                    {nameOf(catalogue, code)} — poslední chyba: {row.last_error}
                                 </p>
-                            )}
+                            ))}
                         </section>
 
                         <section className="mt-6">

@@ -41,6 +41,20 @@ return [
         'redirect'      => env('GOOGLE_DRIVE_REDIRECT_URI', 'https://gallery.stanektech.cz/oauth/google/callback'),
     ],
 
+    // Dropbox as a second home for the gallery's files. Absent by default: the catalogue
+    // reports the service as unconfigured rather than offering a button that cannot work.
+    'dropbox' => [
+        'client_id'     => env('DROPBOX_CLIENT_ID'),
+        'client_secret' => env('DROPBOX_CLIENT_SECRET'),
+        'redirect'      => env('DROPBOX_REDIRECT_URI', 'https://gallery.stanektech.cz/oauth/dropbox/callback'),
+    ],
+
+    'onedrive' => [
+        'client_id'     => env('ONEDRIVE_CLIENT_ID'),
+        'client_secret' => env('ONEDRIVE_CLIENT_SECRET'),
+        'redirect'      => env('ONEDRIVE_REDIRECT_URI', 'https://gallery.stanektech.cz/oauth/onedrive/callback'),
+    ],
+
     // Optional local, free tools for reading travel confirmations. Imports
     // always remain editable and require an explicit user confirmation.
     'travel_documents' => [
