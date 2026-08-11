@@ -334,6 +334,14 @@ class UploadController extends Controller
                 'height'     => null,
             ]);
 
+            // A copy to the space's own cloud, if it has one. Queued after the commit
+            // rather than inside the transaction: a worker picking the job up first would
+            // look for a media row that does not exist yet.
+            $mediaId = $media->id;
+            \Illuminate\Support\Facades\DB::afterCommit(
+                fn () => \App\Jobs\MirrorMediaToCloud::dispatch($mediaId)
+            );
+
             // primary_album_id samotné nestačí pro části systému, které pracují
             // s explicitním obsahem alba (příběh, událost alba, sdílení). Vždy
             // proto založíme i členství v album_media a aktualizujeme souhrny.
