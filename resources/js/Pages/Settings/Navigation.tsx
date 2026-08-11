@@ -117,6 +117,14 @@ export default function NavigationSettings() {
                 defaultLabel: item.label, hidden: false, group: false, depth: 0,
             }));
 
+        // Nothing saved yet: start from the sidebar as it stands, sections and all.
+        //
+        // A flat list of forty rows was the wrong starting point. It threw away the
+        // grouping the app ships with before anybody had asked for anything different,
+        // so the first save silently flattened a menu the person was happy with. The
+        // editor's opening state should be what they are already looking at.
+        if (fromSaved.length === 0) return seedFromSidebar(page.features ?? null);
+
         return [...fromSaved, ...missing];
     });
 
@@ -397,6 +405,63 @@ export default function NavigationSettings() {
             </main>
         </AppLayout>
     );
+}
+
+/**
+ * The sidebar as it ships, as editor rows.
+ *
+ * Each built-in section becomes a heading and its items sit under it, nested exactly as
+ * the sidebar draws them. Somebody who opens this screen sees the menu they already have
+ * and changes what they want — rather than a flat list that quietly discards the grouping
+ * the moment they press save.
+ */
+function seedFromSidebar(features: string[] | null): Row[] {
+    const rows: Row[] = [];
+
+    const walk = (items: NavigationLike[], depth: number) => {
+        for (const item of items) {
+            if (item.feature && features && !features.includes(item.feature)) continue;
+
+            rows.push({
+                key: item.href,
+                href: item.href,
+                label: null,
+                defaultLabel: item.label,
+                hidden: false,
+                group: false,
+                depth,
+            });
+
+            if (item.children?.length) walk(item.children, depth + 1);
+        }
+    };
+
+    navGroups.forEach((group, index) => {
+        const before = rows.length;
+        rows.push({
+            key: `#sekce-${index}`,
+            href: null,
+            label: group.label,
+            defaultLabel: group.label,
+            hidden: false,
+            group: true,
+            depth: 0,
+        });
+
+        walk(group.items, 1);
+
+        // A section whose every item the plan withholds is a heading over nothing.
+        if (rows.length === before + 1) rows.pop();
+    });
+
+    return rows;
+}
+
+interface NavigationLike {
+    href: string;
+    label: string;
+    feature?: string;
+    children?: NavigationLike[];
 }
 
 /** The nearest row above sitting one level shallower, as an index the server understands. */

@@ -119,7 +119,20 @@ export function applyArrangement(
                 arranged.push({ id: `volne-${arranged.length}`, label: '', items: loose });
                 loose = [];
             }
-            if (node.children.length > 0) arranged.push({ id: key, label: node.label, items: node.children });
+            if (node.children.length > 0) {
+                // A heading that still carries a built-in section's name keeps its icon and
+                // description. Somebody who never renamed "Spolu" should not find it turned
+                // into a generic folder just because their arrangement now names it.
+                const original = groups.find(group => group.label === node.label);
+
+                arranged.push({
+                    id: key,
+                    label: node.label,
+                    icon: original?.icon,
+                    description: original?.description,
+                    items: node.children,
+                });
+            }
             continue;
         }
 
