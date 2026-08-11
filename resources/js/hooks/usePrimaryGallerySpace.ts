@@ -1,29 +1,30 @@
-import axios from 'axios';
-import { useCallback, useEffect, useState } from 'react';
+import { router, usePage } from '@inertiajs/react';
+import { useCallback } from 'react';
 
 type GallerySpace = { id: number; name: string };
 
+/**
+ * The space this person works in.
+ *
+ * Read from the shared page props rather than fetched. It used to come from the calendar
+ * endpoint, which meant a customer whose plan does not include the calendar was told
+ * "prostor není dostupný" on the automations page — a screen that has nothing to do with
+ * the calendar. One row that every page already has cannot fail the way a request can.
+ *
+ * `reload` is kept so callers that offered a retry keep working; it re-fetches the prop.
+ */
 export default function usePrimaryGallerySpace() {
-    const [space, setSpace] = useState<GallerySpace | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState('');
+    const space = (usePage().props as { space?: GallerySpace | null }).space ?? null;
 
-    const reload = useCallback(async () => {
-        setLoading(true);
-        setError('');
-        try {
-            const response = await axios.get('/api/v1/calendar/events');
-            const next = (response.data?.spaces ?? [])[0] ?? null;
-            setSpace(next);
-            if (!next) setError('Nejprve vytvořte nebo přijměte pozvánku do společného prostoru.');
-        } catch (reason: any) {
-            setError(reason?.response?.data?.message ?? 'Společný prostor se nepodařilo načíst.');
-        } finally {
-            setLoading(false);
-        }
+    const reload = useCallback(() => {
+        router.reload({ only: ['space'] });
     }, []);
 
-    useEffect(() => { void reload(); }, [reload]);
-
-    return { space, spaceId: space?.id, loading, error, reload };
+    return {
+        space,
+        spaceId: space?.id,
+        loading: false,
+        error: space ? '' : 'Nejprve vytvořte nebo přijměte pozvánku do společného prostoru.',
+        reload,
+    };
 }

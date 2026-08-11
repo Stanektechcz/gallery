@@ -1,4 +1,4 @@
-import AppLayout from '@/Layouts/AppLayout';
+import AppLayout, { navGroups, PINNED_NAV_KEY } from '@/Layouts/AppLayout';
 import { Head, router, usePage } from '@inertiajs/react';
 import axios from 'axios';
 import { ArrowDown, ArrowUp, Eye, EyeOff, FolderPlus, Loader2, RotateCcw, Save } from 'lucide-react';
@@ -23,10 +23,27 @@ interface Row {
 export default function NavigationSettings() {
     const page = usePage().props as {
         navigation?: Array<{ href: string | null; label: string | null; hidden: boolean; group: boolean; parent: string | null }> | null;
-        navigationDefaults?: Array<{ href: string; label: string }>;
+        features?: string[] | null;
     };
 
-    const defaults = page.navigationDefaults ?? [];
+    /**
+     * Every item the sidebar can show, taken from the sidebar itself.
+     *
+     * This previously read a `navigationDefaults` prop that nothing on the server ever
+     * sent, so the list was empty and there was nothing to arrange. Importing the real
+     * menu means the two can no longer disagree, and a newly shipped item appears here
+     * without anybody remembering to add it in a second place.
+     *
+     * Items the plan does not include are left out: offering to rearrange something the
+     * person cannot open would be arranging a menu they will never see.
+     */
+    const defaults = useMemo(() => {
+        const features = page.features ?? null;
+
+        return navGroups.flatMap(group => group.items
+            .filter(item => !item.feature || !features || features.includes(item.feature))
+            .map(item => ({ href: item.href, label: item.label, section: group.label })));
+    }, [page.features]);
 
     const [rows, setRows] = useState<Row[]>(() => {
         const saved = page.navigation ?? [];
@@ -60,6 +77,11 @@ export default function NavigationSettings() {
     const [busy, setBusy] = useState(false);
     const [notice, setNotice] = useState('');
 
+    const [pinned, setPinned] = useState<string[]>(() => {
+        try { return JSON.parse(window.localStorage.getItem(PINNED_NAV_KEY) ?? '[]'); }
+        catch { return []; }
+    });
+
     const move = (index: number, by: number) => {
         setRows(current => {
             const next = [...current];
@@ -89,6 +111,27 @@ export default function NavigationSettings() {
             router.reload({ only: ['navigation'] });
         } catch { setNotice('Uložit se nepodařilo.'); }
         finally { setBusy(false); }
+    };
+
+    /**
+     * The handful of items pinned to the top of the sidebar.
+     *
+     * Kept in localStorage and not on the server, which is deliberate: pins are about the
+     * device you are on. The key is imported from the sidebar so the two cannot drift —
+     * writing the same string in two files is how a preference silently stops applying.
+     *
+     * Six, because a shortcut list you have to read is not a shortcut.
+     */
+    const togglePin = (href: string) => {
+        setPinned(current => {
+            const next = current.includes(href)
+                ? current.filter(item => item !== href)
+                : current.length < 6 ? [...current, href] : current;
+
+            try { window.localStorage.setItem(PINNED_NAV_KEY, JSON.stringify(next)); } catch { /* private mode */ }
+
+            return next;
+        });
     };
 
     const reset = async () => {
@@ -124,6 +167,37 @@ export default function NavigationSettings() {
                         <RotateCcw size={14} /> Výchozí
                     </button>
                 </div>
+
+                <section className="mt-5 rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-4">
+                    <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">Připnuté nahoře</h2>
+                    <p className="mt-1 text-xs text-[var(--color-text-secondary)]">
+                        Nejvýš šest položek — zkratka, kterou je potřeba číst, není zkratka.
+                        Platí pro toto zařízení, ne pro účet.
+                    </p>
+
+                    <div className="mt-3 flex flex-wrap gap-1.5">
+                        {defaults.map(item => {
+                            const active = pinned.includes(item.href);
+
+                            return (
+                                <button
+                                    key={item.href}
+                                    type="button"
+                                    onClick={() => togglePin(item.href)}
+                                    disabled={!active && pinned.length >= 6}
+                                    aria-pressed={active}
+                                    className={`min-h-9 rounded-lg border px-2.5 text-xs transition-colors disabled:opacity-30 ${active
+                                        ? 'border-[var(--color-accent)] bg-[var(--color-accent)]/10 text-[var(--color-text-primary)]'
+                                        : 'border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}
+                                >
+                                    {item.label}
+                                </button>
+                            );
+                        })}
+                    </div>
+
+                    <p className="mt-2 text-[11px] text-[var(--color-text-secondary)]">{pinned.length} / 6</p>
+                </section>
 
                 <div className="mt-4 space-y-1">
                     {rows.map((row, index) => (

@@ -526,7 +526,14 @@ const primaryNavItems: NavigationItem[] = [
     { href: '/weekly', label: 'Náš týden', icon: Sparkles, feature: 'calendar' },
 ];
 
-const navGroups: NavigationGroup[] = [
+/**
+ * The menu itself.
+ *
+ * Exported because the customisation screen has to offer exactly these items. It used to
+ * read a `navigationDefaults` prop that nothing ever sent, so the screen listed nothing at
+ * all — two descriptions of one menu, one of which did not exist.
+ */
+export const navGroups: NavigationGroup[] = [
     {
         id: 'together', label: 'Společně', description: 'Plány, zážitky a domácnost', icon: Heart,
         items: [
@@ -617,7 +624,8 @@ function canReach(
 
     return !feature || !features || features.includes(feature);
 }
-const PINNED_NAV_KEY = 'gallery.navigation.pinned.v1';
+/** Exported so the customisation screen writes the same key the sidebar reads. */
+export const PINNED_NAV_KEY = 'gallery.navigation.pinned.v1';
 const OPEN_NAV_GROUPS_KEY = 'gallery.navigation.groups.v1';
 
 const mobileNav = [
@@ -740,7 +748,6 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
     const [mobileOpen, setMobileOpen] = useState(false);
     const [cmdOpen,    setCmdOpen]    = useState(false);
     const navigationPrefix = useRef<number | null>(null);
-    const [navEditorOpen, setNavEditorOpen] = useState(false);
     const [pinnedHrefs, setPinnedHrefs] = useState<string[]>(() => {
         try {
             const value = JSON.parse(localStorage.getItem(PINNED_NAV_KEY) ?? '[]');
@@ -893,14 +900,10 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
                     })}
                 </div>
 
-                <button
-                    type="button"
-                    onClick={() => { setMobileOpen(false); setNavEditorOpen(true); }}
-                    className="mx-2 mt-3 flex min-h-11 w-[calc(100%-1rem)] items-center gap-3 rounded-xl border border-dashed border-[var(--color-border)] px-3 text-xs text-[var(--color-text-secondary)] transition-colors hover:border-[var(--color-accent)]/50 hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]"
-                >
-                    <SlidersHorizontal size={16}/>
-                    Přizpůsobit nabídku
-                </button>
+                {/* Nothing to customise the menu with lives in the menu any more. Two
+                    ways to rearrange one sidebar — a quick pin editor here and the full
+                    screen in settings — meant two things to keep in step, and the one in
+                    the sidebar could only do a fraction of it. */}
             </>
         );
     };
@@ -908,7 +911,6 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
     return (
         <div className="app-shell flex min-h-0 w-full overflow-hidden">
             <CommandPalette open={cmdOpen} onClose={() => setCmdOpen(false)} isAdmin={isAdmin} features={activeFeatures} />
-            <NavigationCustomizer open={navEditorOpen} onClose={() => setNavEditorOpen(false)} pinnedHrefs={pinnedHrefs} onChange={setPinnedHrefs} isAdmin={isAdmin} features={activeFeatures}/>
             {/* Sidebar — Desktop */}
             <aside className="hidden md:flex flex-col w-60 shrink-0 border-r border-[var(--color-border)] bg-[var(--color-bg-secondary)]">
                 {/* Logo */}

@@ -60,6 +60,13 @@ class HandleInertiaRequests extends Middleware
                 'error'   => $request->session()->get('error'),
                 'warning' => $request->session()->get('warning'),
             ],
+            // The space this person works in.
+            //
+            // Shared here because three separate screens were each fetching it, one of
+            // them from the calendar endpoint — so a customer without the calendar saw
+            // "prostor není dostupný" on the automations page. It is one row, resolved
+            // twice below already, and a prop cannot fail the way a request can.
+            'space' => fn () => $this->currentSpace($request),
             // Which features this space may see. Lazily resolved so it costs nothing on
             // pages that never read it, and degrades to null before the migrations run.
             'features' => fn () => $this->activeFeatures($request),
@@ -76,6 +83,17 @@ class HandleInertiaRequests extends Middleware
                 'location' => $request->url(),
             ],
         ];
+    }
+
+    /** @return array{id:int, name:?string}|null */
+    private function currentSpace(Request $request): ?array
+    {
+        $user = $request->user();
+        if (! $user) return null;
+
+        $space = $user->gallerySpaces()->orderByDesc('is_default')->first();
+
+        return $space ? ['id' => $space->id, 'name' => $space->name] : null;
     }
 
     /**
