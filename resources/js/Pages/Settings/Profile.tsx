@@ -1,4 +1,5 @@
 import AccountData from '@/Components/AccountData';
+import SecurityActivity from '@/Components/SecurityActivity';
 import TwoFactorSetup from '@/Components/TwoFactorSetup';
 import AvatarEditor from '@/Components/AvatarEditor';
 import AppLayout from '@/Layouts/AppLayout';
@@ -219,6 +220,8 @@ export default function ProfileSettings({ sessions = [] }: { sessions?: Session[
                         </section>
 
                         <TwoFactorSetup enabled={profile.two_factor_enabled ?? false} onChanged={() => void load()} />
+
+                        <SecurityActivity />
 
                         <AccountData scheduledFor={profile.delete_requested_at ?? null} onChanged={() => void load()} />
 

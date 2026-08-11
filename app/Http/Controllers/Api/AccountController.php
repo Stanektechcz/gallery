@@ -11,6 +11,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -93,6 +94,51 @@ class AccountController extends Controller
         $this->rememberDeletion($request->user(), null);
 
         return response()->json(['scheduled_for' => null]);
+    }
+
+    /**
+     * What has happened to this account: sign-ins, failures, changes to how it is secured.
+     *
+     * Read straight from the audit log rather than kept a second time. A security history
+     * that can disagree with the audit trail is worse than none — it would be believed.
+     *
+     * Failed attempts are included and matter most: the useful question is not "where did
+     * I sign in from" but "did anybody else try". They are matched by subject rather than
+     * by the email in the payload, which would mean a LIKE over a JSON column.
+     */
+    public function activity(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        if (! Schema::hasTable('audit_logs')) return response()->json(['events' => []]);
+
+        $events = \App\Models\AuditLog::query()
+            ->where('subject_type', 'User')
+            ->where('subject_id', $user->id)
+            ->whereIn('action', [
+                'auth.login', 'auth.login.failed', 'auth.logout',
+                'auth.2fa.enabled', 'auth.2fa.disabled', 'auth.2fa.failed', 'auth.2fa.recovery_used',
+                'auth.registered', 'auth.invitation.accepted',
+            ])
+            ->orderByDesc('created_at')
+            ->limit(60)
+            ->get();
+
+        return response()->json([
+            'events' => $events->map(fn ($event) => [
+                'action' => $event->action,
+                'at' => $event->created_at?->toIso8601String(),
+                'ip' => $event->ip_address,
+                // Trimmed: a full user agent is a paragraph, and the question it answers
+                // here is only "was this me, roughly".
+                'device' => Str::limit((string) $event->user_agent, 60, ''),
+                'second_factor' => (bool) ($event->payload['second_factor'] ?? false),
+            ])->values(),
+            'failed_recently' => $events
+                ->where('action', 'auth.login.failed')
+                ->filter(fn ($event) => $event->created_at?->gt(now()->subDays(7)))
+                ->count(),
+        ]);
     }
 
     /**

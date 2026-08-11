@@ -218,6 +218,7 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
     Route::put('/billing/plan', [App\Http\Controllers\Api\BillingController::class, 'setPlan'])->name('api.billing.plan.set');
     Route::post('/billing/trial', [App\Http\Controllers\Api\BillingController::class, 'startTrial'])->name('api.billing.trial');
 
+    Route::get('/ucet/aktivita', [App\Http\Controllers\Api\AccountController::class, 'activity'])->name('api.account.activity');
     Route::post('/ucet/2fa', [App\Http\Controllers\Auth\TwoFactorController::class, 'begin'])->name('api.2fa.begin');
     Route::post('/ucet/2fa/potvrdit', [App\Http\Controllers\Auth\TwoFactorController::class, 'confirm'])->name('api.2fa.confirm');
     Route::delete('/ucet/2fa', [App\Http\Controllers\Auth\TwoFactorController::class, 'disable'])->name('api.2fa.disable');
