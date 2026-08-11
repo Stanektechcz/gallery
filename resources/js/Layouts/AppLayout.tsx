@@ -849,9 +849,14 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
     /**
      * One menu entry and everything nested beneath it.
      *
-     * Depth is unlimited, so this recurses. The indent stops growing after the fourth
-     * level: past that the text column is narrower than the words in it, and a menu you
-     * cannot read is not an organised menu.
+     * Depth is unlimited, so this recurses. Children sit inside a rail — a vertical line
+     * running down beside them, starting under the parent's icon, with a short elbow
+     * reaching out to each child. Indentation alone leaves you counting pixels to work out
+     * what belongs to what once there is more than one level; the line answers it directly.
+     *
+     * The rail stops moving right after the third level. Past that the text column is
+     * narrower than the words in it, and a menu you cannot read is not an organised one —
+     * the lines still nest, so depth stays legible even where the offset does not grow.
      *
      * A parent whose own destination is gone still draws, because its children are not.
      */
@@ -862,16 +867,14 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
 
         const Icon = item.icon;
         const active = item.href ? isActive(item.href, item.exact) : false;
-        const indent = nested ? Math.min(depth + 1, 4) * 0.75 : 0;
 
         const row = item.href ? (
             <Link
                 href={item.href}
                 onClick={closeDrawer ? () => setMobileOpen(false) : undefined}
-                style={indent ? { marginLeft: `${indent}rem` } : undefined}
                 className={clsx(
-                    'mx-2 flex min-h-10 items-center gap-3 rounded-xl px-3 text-sm transition-colors',
-                    nested && 'text-[13px]',
+                    'flex min-h-10 items-center gap-3 rounded-xl px-3 text-sm transition-colors',
+                    nested ? 'mr-2 text-[13px]' : 'mx-2',
                     active
                         ? 'bg-[var(--color-accent)] text-[var(--color-accent-contrast)] font-medium shadow-sm'
                         : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-accent-contrast)]'
@@ -881,19 +884,30 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
                 <span className="min-w-0 flex-1 truncate">{item.label}</span>
             </Link>
         ) : (
-            <p
-                style={indent ? { marginLeft: `${indent}rem` } : undefined}
-                className="mx-2 px-3 pt-2 text-[9px] font-semibold uppercase tracking-[.14em] text-[var(--color-text-secondary)]"
-            >
+            <p className={clsx(
+                'px-3 pt-2 text-[9px] font-semibold uppercase tracking-[.14em] text-[var(--color-text-secondary)]',
+                nested ? 'mr-2' : 'mx-2',
+            )}>
                 {item.label}
             </p>
         );
 
         return (
-            <div key={item.href || `sekce-${item.label}-${depth}`}>
+            <div key={item.href || `sekce-${item.label}-${depth}`} className={nested ? 'relative' : undefined}>
+                {/* The elbow: a short horizontal stub from the parent's rail to this row,
+                    at the height of its icon. Without it the rail runs past every child
+                    without ever visibly touching one. */}
+                {nested && <span aria-hidden className="pointer-events-none absolute left-0 top-5 h-px w-2 bg-[var(--color-border)]" />}
+
                 {row}
+
                 {visibleChildren.length > 0 && (
-                    <div className="space-y-0.5">
+                    <div
+                        className="space-y-0.5 border-l border-[var(--color-border)] pl-2"
+                        // Aligned under the parent's icon rather than its text, so the line
+                        // reads as descending from the item instead of from the margin.
+                        style={{ marginLeft: depth >= 2 ? '0.85rem' : '1.6rem' }}
+                    >
                         {visibleChildren.map(child => renderNavigationItem(child, true, closeDrawer, depth + 1))}
                     </div>
                 )}
@@ -954,8 +968,11 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
                                     </span>
                                     <ChevronDown size={15} className={clsx('shrink-0 transition-transform duration-200', open && 'rotate-180')}/>
                                 </button>
+                                {/* The section's own rail gets the same treatment as any
+                                    other level, so a section reads as the top of the tree
+                                    rather than as a different kind of thing. */}
                                 {open && (
-                                    <div id={`${instance}-nav-${group.id}`} className="mt-1 space-y-0.5 border-l border-[var(--color-border)] pb-1 ml-5">
+                                    <div id={`${instance}-nav-${group.id}`} className="ml-5 mt-1 space-y-0.5 border-l border-[var(--color-border)] pb-1 pl-2">
                                         {items.map(item => renderNavigationItem(item, true, closeDrawer))}
                                     </div>
                                 )}
