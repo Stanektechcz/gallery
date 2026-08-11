@@ -91,17 +91,47 @@ class NavigationController extends Controller
                 ]);
             }
 
+            // Nesting is unlimited in depth. What it may not be is circular: a chain that
+            // loops has no top, and every reader of this table walks upward. The check is
+            // done on the submitted indices before anything is written, so a bad request
+            // cannot leave a menu that hangs whatever renders it.
+            $parents = [];
             foreach ($data['items'] as $position => $item) {
                 $parent = $item['parent'] ?? null;
-                // A row cannot be its own parent, and nesting stops at one level.
                 if ($parent === null || $parent === $position || ! isset($created[$parent])) continue;
-                if ($created[$parent]->parent_id !== null) continue;
+                if ($this->wouldLoop($parents, $position, $parent)) continue;
 
+                $parents[$position] = $parent;
+            }
+
+            foreach ($parents as $position => $parent) {
                 $created[$position]->forceFill(['parent_id' => $created[$parent]->id])->save();
             }
         });
 
         return $this->show($request);
+    }
+
+    /**
+     * Would making $parent the parent of $position close a circle?
+     *
+     * Walks up from the proposed parent looking for the child. The step limit is a second
+     * belt: $parents is acyclic by construction here, but this runs on submitted data and
+     * an infinite walk in a web request is a worse outcome than a rejected nesting.
+     *
+     * @param array<int, int> $parents
+     */
+    private function wouldLoop(array $parents, int $position, int $parent): bool
+    {
+        $steps = 0;
+        $cursor = $parent;
+
+        while ($cursor !== null && $steps++ < 200) {
+            if ($cursor === $position) return true;
+            $cursor = $parents[$cursor] ?? null;
+        }
+
+        return $steps >= 200;
     }
 
     /** Back to the built-in navigation: the rows go, the items do not. */

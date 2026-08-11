@@ -134,11 +134,19 @@ class HandleInertiaRequests extends Middleware
 
         if ($rows->isEmpty()) return null;
 
+        // Every row gets a stable key, because a custom heading has no href and parentage
+        // used to be matched by label — which broke the moment two headings shared a name
+        // and made nesting under one of them unrepresentable.
+        $key = fn ($row) => $row->href ?: '#' . $row->uuid;
+
         return $rows->map(fn ($row) => [
+            'key' => $key($row),
             'href' => $row->href,
             'label' => $row->label,
             'icon' => $row->icon,
-            'parent' => $row->parent_id ? $rows->firstWhere('id', $row->parent_id)?->href : null,
+            'parent' => $row->parent_id
+                ? ($rows->firstWhere('id', $row->parent_id) ? $key($rows->firstWhere('id', $row->parent_id)) : null)
+                : null,
             'hidden' => (bool) $row->is_hidden,
             'group' => (bool) $row->is_group,
         ])->values()->all();

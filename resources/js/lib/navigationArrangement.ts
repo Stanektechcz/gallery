@@ -1,6 +1,8 @@
 import type { ComponentType } from 'react';
 
 export interface Arrangement {
+    /** Stable identity: the href for a real item, `#uuid` for a heading somebody invented. */
+    key?: string | null;
     href: string | null;
     label: string | null;
     icon: string | null;
@@ -17,6 +19,8 @@ export interface Entry {
     adminOnly?: boolean;
     feature?: string;
     exact?: boolean;
+    /** Nesting is unlimited, so this is the same shape all the way down. */
+    children?: Entry[];
 }
 
 export interface ArrangedGroup {
@@ -25,8 +29,19 @@ export interface ArrangedGroup {
     /** Carried through so the sidebar can keep drawing the group's icon. */
     icon?: ComponentType<{ size?: number; className?: string }>;
     description?: string;
-    items: Array<Entry & { children?: Entry[] }>;
+    items: Entry[];
 }
+
+interface SourceGroup {
+    id: string;
+    label: string;
+    icon?: ComponentType<{ size?: number; className?: string }>;
+    description?: string;
+    items: Entry[];
+}
+
+/** The key a row is known by, matching what the server emits. */
+const keyOf = (row: Arrangement, index: number) => row.key ?? row.href ?? `#${index}`;
 
 /**
  * Applies somebody's saved arrangement to the built-in navigation.
@@ -36,53 +51,88 @@ export interface ArrangedGroup {
  * its default place — which is what lets a newly shipped feature appear for people who
  * customised their sidebar months ago.
  *
- * Order comes from the arrangement where it says something, and from the built-in list
- * otherwise, with arranged items first: somebody who deliberately placed six items
- * expects those six at the top, not scattered through the defaults.
+ * Nesting is unlimited. Rows point at their parent by key and this assembles the tree in
+ * one pass, so a child three levels down costs no more than a child at the top. Rows whose
+ * parent is missing are lifted to the top rather than dropped: losing an item is worse
+ * than showing it in the wrong place, because one is visible and the other is not.
  */
 export function applyArrangement(
-    groups: Array<{ id: string; label: string; icon?: ComponentType<{ size?: number; className?: string }>; description?: string; items: Entry[] }>,
+    groups: SourceGroup[],
     arrangement: Arrangement[] | null,
 ): ArrangedGroup[] {
     if (!arrangement || arrangement.length === 0) {
         return groups.map(group => ({ ...group, items: group.items.map(item => ({ ...item })) }));
     }
 
-    const byHref = new Map(arrangement.filter(row => row.href).map(row => [row.href!, row]));
-    const rank = new Map(arrangement.map((row, index) => [row.href ?? `#${index}`, index]));
+    const defaults = new Map(groups.flatMap(group => group.items).map(item => [item.href, item]));
 
-    // Custom headings the person invented, each collecting whatever names it as parent.
-    const custom: ArrangedGroup[] = arrangement
-        .filter(row => row.group)
-        .map((row, index) => ({ id: `vlastni-${index}`, label: row.label ?? 'Sekce', items: [] }));
+    // One node per row, children filled in below. Built first so a parent that appears
+    // after its child in the list still resolves.
+    const nodes = new Map<string, Entry & { children: Entry[] }>();
+    const rows = new Map<string, Arrangement>();
+    const order: string[] = [];
 
-    const all = groups.flatMap(group => group.items);
-    const claimed = new Set<string>();
+    arrangement.forEach((row, index) => {
+        if (row.hidden) return;
 
-    for (const row of arrangement) {
-        if (!row.parent) continue;
-        const parentIndex = arrangement.findIndex(candidate => candidate.group && candidate.label === row.parent)
-            ?? -1;
-        const entry = all.find(item => item.href === row.href);
-        if (!entry || parentIndex < 0 || !custom[parentIndex]) continue;
+        const key = keyOf(row, index);
+        const base = row.href ? defaults.get(row.href) : undefined;
 
-        custom[parentIndex].items.push({ ...entry, label: row.label ?? entry.label });
-        claimed.add(entry.href);
+        // A row naming an href the menu no longer has is a feature that went away, and
+        // there is nothing to draw for it. A row with no href is a heading, which is kept.
+        if (row.href && !base) return;
+
+        nodes.set(key, {
+            ...(base ?? { href: '', label: '', icon: undefined }),
+            label: row.label ?? base?.label ?? 'Sekce',
+            children: [],
+        });
+        rows.set(key, row);
+        order.push(key);
+    });
+
+    const roots: string[] = [];
+
+    for (const key of order) {
+        const parent = rows.get(key)?.parent ?? null;
+
+        if (parent && nodes.has(parent) && parent !== key) nodes.get(parent)!.children.push(nodes.get(key)!);
+        else roots.push(key);
     }
 
-    const arranged = groups.map(group => ({
-        ...group,
-        items: group.items
-            .filter(item => !claimed.has(item.href))
-            .filter(item => !byHref.get(item.href)?.hidden)
-            .map(item => {
-                const row = byHref.get(item.href);
+    // A heading at the top level is a section; a real item at the top level belongs to an
+    // unnamed one. This keeps the sidebar's existing shape — groups holding trees — rather
+    // than making it understand a forest.
+    const arranged: ArrangedGroup[] = [];
+    let loose: Entry[] = [];
 
-                return { ...item, label: row?.label ?? item.label };
-            })
-            .sort((a, b) => (rank.get(a.href) ?? 999) - (rank.get(b.href) ?? 999)),
-    }));
+    for (const key of roots) {
+        const node = nodes.get(key)!;
 
-    // Custom headings lead, because they were made on purpose.
-    return [...custom.filter(group => group.items.length > 0), ...arranged.filter(group => group.items.length > 0)];
+        if (rows.get(key)?.group || !node.href) {
+            if (loose.length > 0) {
+                arranged.push({ id: `volne-${arranged.length}`, label: '', items: loose });
+                loose = [];
+            }
+            if (node.children.length > 0) arranged.push({ id: key, label: node.label, items: node.children });
+            continue;
+        }
+
+        loose.push(node);
+    }
+
+    if (loose.length > 0) arranged.push({ id: `volne-${arranged.length}`, label: '', items: loose });
+
+    // Anything the arrangement never mentions keeps its built-in group, so a feature
+    // shipped after somebody customised their menu still appears.
+    const mentioned = new Set(arrangement.map(row => row.href).filter(Boolean) as string[]);
+
+    const untouched: ArrangedGroup[] = groups
+        .map(group => ({
+            ...group,
+            items: group.items.filter(item => !mentioned.has(item.href)).map(item => ({ ...item })),
+        }))
+        .filter(group => group.items.length > 0);
+
+    return [...arranged, ...untouched];
 }

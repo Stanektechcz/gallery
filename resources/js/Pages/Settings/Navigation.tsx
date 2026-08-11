@@ -1,38 +1,51 @@
 import AppLayout, { navGroups, PINNED_NAV_KEY } from '@/Layouts/AppLayout';
 import { Head, router, usePage } from '@inertiajs/react';
 import axios from 'axios';
-import { ArrowDown, ArrowUp, Eye, EyeOff, FolderPlus, Loader2, RotateCcw, Save } from 'lucide-react';
+import {
+    ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Eye, EyeOff,
+    FolderPlus, GripVertical, Loader2, RotateCcw, Save,
+} from 'lucide-react';
 import { useMemo, useState } from 'react';
 
 interface Row {
+    /** Stable identity: href for a real item, `#n` for a heading somebody invented. */
+    key: string;
     href: string | null;
     label: string | null;
     defaultLabel: string;
     hidden: boolean;
     group: boolean;
-    parent: string | null;
+    /** How deep it sits. Nesting is unlimited; this is the whole of the tree. */
+    depth: number;
 }
 
 /**
  * Rearranging the menu.
  *
- * Buttons rather than dragging, deliberately: a drag target on a phone is fiddly and
- * needs a keyboard equivalent anyway, so the arrows are the honest version of the same
- * thing rather than a fallback nobody tests.
+ * The list is flat and each row carries a depth, rather than rows holding children. The
+ * two describe the same tree, but only one of them can be dragged without the drop target
+ * moving underneath the thing being dropped — which is why every outliner ever written
+ * uses this shape.
+ *
+ * Dragging is for pointers. The arrows and the indent buttons do the same job and are
+ * kept, not as a fallback but as the version that works on a phone and from a keyboard:
+ * HTML5 drag events never fire on touch, and a screen reader has nothing to grab.
  */
 export default function NavigationSettings() {
     const page = usePage().props as {
-        navigation?: Array<{ href: string | null; label: string | null; hidden: boolean; group: boolean; parent: string | null }> | null;
+        navigation?: Array<{
+            key?: string | null; href: string | null; label: string | null;
+            hidden: boolean; group: boolean; parent: string | null;
+        }> | null;
         features?: string[] | null;
     };
 
     /**
      * Every item the sidebar can show, taken from the sidebar itself.
      *
-     * This previously read a `navigationDefaults` prop that nothing on the server ever
-     * sent, so the list was empty and there was nothing to arrange. Importing the real
-     * menu means the two can no longer disagree, and a newly shipped item appears here
-     * without anybody remembering to add it in a second place.
+     * This previously read a prop that nothing on the server ever sent, so the list was
+     * empty. Importing the real menu means the two cannot disagree, and a newly shipped
+     * item appears here without anybody remembering a second place to add it.
      *
      * Items the plan does not include are left out: offering to rearrange something the
      * person cannot open would be arranging a menu they will never see.
@@ -42,86 +55,127 @@ export default function NavigationSettings() {
 
         return navGroups.flatMap(group => group.items
             .filter(item => !item.feature || !features || features.includes(item.feature))
-            .map(item => ({ href: item.href, label: item.label, section: group.label })));
+            .map(item => ({ href: item.href, label: item.label })));
     }, [page.features]);
 
     const [rows, setRows] = useState<Row[]>(() => {
         const saved = page.navigation ?? [];
-        const byHref = new Map(saved.filter(row => row.href).map(row => [row.href!, row]));
+        const keyOf = (row: typeof saved[number], index: number) => row.key ?? row.href ?? `#${index}`;
 
-        const fromDefaults: Row[] = defaults.map(item => {
-            const row = byHref.get(item.href);
+        // Depth comes from walking each row's parent chain. The step limit is defensive:
+        // the server refuses cycles, but a menu that hangs the settings page would be a
+        // poor way to find out it stopped doing so.
+        const byKey = new Map(saved.map((row, index) => [keyOf(row, index), row]));
+        const depthOf = (row: typeof saved[number]): number => {
+            let depth = 0;
+            let cursor = row.parent;
+            while (cursor && depth < 50) { depth++; cursor = byKey.get(cursor)?.parent ?? null; }
 
-            return {
-                href: item.href,
-                label: row?.label ?? null,
-                defaultLabel: item.label,
-                hidden: row?.hidden ?? false,
-                group: false,
-                parent: row?.parent ?? null,
-            };
-        });
+            return depth;
+        };
 
-        // Custom headings have no default to hang from, so they are carried through.
-        const groups: Row[] = saved.filter(row => row.group).map(row => ({
-            href: null, label: row.label, defaultLabel: 'Sekce', hidden: false, group: true, parent: null,
-        }));
+        const known = new Set(saved.map(row => row.href).filter(Boolean));
 
-        const order = new Map(saved.map((row, index) => [row.href ?? `#${row.label}`, index]));
+        const fromSaved: Row[] = saved
+            .filter(row => row.group || (row.href && defaults.some(item => item.href === row.href)))
+            .map((row, index) => ({
+                key: keyOf(row, index),
+                href: row.href,
+                label: row.label,
+                defaultLabel: defaults.find(item => item.href === row.href)?.label ?? 'Sekce',
+                hidden: row.hidden,
+                group: row.group,
+                depth: depthOf(row),
+            }));
 
-        return [...groups, ...fromDefaults].sort(
-            (a, b) => (order.get(a.href ?? `#${a.label}`) ?? 999) - (order.get(b.href ?? `#${b.label}`) ?? 999),
-        );
+        // Anything shipped since they last saved goes to the bottom rather than nowhere.
+        const missing: Row[] = defaults
+            .filter(item => !known.has(item.href))
+            .map(item => ({
+                key: item.href, href: item.href, label: null,
+                defaultLabel: item.label, hidden: false, group: false, depth: 0,
+            }));
+
+        return [...fromSaved, ...missing];
     });
 
     const [busy, setBusy] = useState(false);
     const [notice, setNotice] = useState('');
+    const [dragging, setDragging] = useState<number | null>(null);
+    const [over, setOver] = useState<number | null>(null);
 
     const [pinned, setPinned] = useState<string[]>(() => {
         try { return JSON.parse(window.localStorage.getItem(PINNED_NAV_KEY) ?? '[]'); }
         catch { return []; }
     });
 
-    const move = (index: number, by: number) => {
-        setRows(current => {
-            const next = [...current];
-            const target = index + by;
-            if (target < 0 || target >= next.length) return current;
-            [next[index], next[target]] = [next[target], next[index]];
+    /** How many rows below `index` belong to it, so a branch moves as one thing. */
+    const branchLength = (list: Row[], index: number) => {
+        let size = 1;
+        while (index + size < list.length && list[index + size].depth > list[index].depth) size++;
 
-            return next;
+        return size;
+    };
+
+    /** Moves a row and everything under it. Moving a parent onto its own child is refused. */
+    const relocate = (from: number, to: number) => {
+        setRows(current => {
+            const size = branchLength(current, from);
+            if (to > from && to < from + size) return current;
+
+            const next = [...current];
+            const branch = next.splice(from, size);
+            const target = to > from ? to - size : to;
+            next.splice(Math.max(0, Math.min(target, next.length)), 0, ...branch);
+
+            return normalise(next);
         });
+    };
+
+    /**
+     * A row may sit at most one level deeper than the row above it.
+     *
+     * Without this, dragging a deep branch to the top would leave items nested under
+     * nothing — they would render at the top level anyway, so the list would be showing
+     * an arrangement the sidebar does not have.
+     */
+    const normalise = (list: Row[]) => list.map((row, index) => ({
+        ...row,
+        depth: index === 0 ? 0 : Math.min(row.depth, list[index - 1].depth + 1),
+    }));
+
+    const move = (index: number, by: number) => {
+        const size = branchLength(rows, index);
+        relocate(index, by < 0 ? Math.max(0, index - 1) : index + size + 1);
+    };
+
+    const indent = (index: number, by: number) => {
+        setRows(current => normalise(current.map((row, position) => {
+            if (position < index || position >= index + branchLength(current, index)) return row;
+
+            return { ...row, depth: Math.max(0, row.depth + by) };
+        })));
     };
 
     const save = async () => {
         setBusy(true); setNotice('');
         try {
             await axios.put('/api/v1/navigace', {
-                items: rows.map(row => ({
+                items: rows.map((row, index) => ({
                     href: row.href,
                     label: row.label || null,
                     hidden: row.hidden,
                     group: row.group,
-                    // Parent is an index into this same list; see the controller.
-                    parent: row.parent ? rows.findIndex(candidate => candidate.group && candidate.label === row.parent) : null,
+                    // The parent is the nearest row above sitting one level shallower.
+                    parent: parentIndex(rows, index),
                 })),
             });
             setNotice('Menu uloženo.');
-            // The sidebar reads a shared prop, which only a reload refreshes.
             router.reload({ only: ['navigation'] });
         } catch { setNotice('Uložit se nepodařilo.'); }
         finally { setBusy(false); }
     };
 
-    /**
-     * The handful of items pinned to the top of the sidebar.
-     *
-     * Kept in localStorage and not on the server, which is deliberate: pins are about the
-     * device you are on. The key is imported from the sidebar so the two cannot drift —
-     * writing the same string in two files is how a preference silently stops applying.
-     *
-     * Six, because a shortcut list you have to read is not a shortcut.
-     */
     const togglePin = (href: string) => {
         setPinned(current => {
             const next = current.includes(href)
@@ -142,22 +196,29 @@ export default function NavigationSettings() {
         finally { setBusy(false); }
     };
 
-    const groups = useMemo(() => rows.filter(row => row.group), [rows]);
-
     return (
         <AppLayout title="Uspořádání menu">
             <Head title="Uspořádání menu" />
+
             <main className="mx-auto max-w-2xl p-4 sm:p-6">
                 <p className="text-xs uppercase tracking-widest text-[var(--color-accent)]">Nastavení</p>
                 <h1 className="mt-1 text-2xl font-bold text-[var(--color-text-primary)]">Uspořádání menu</h1>
                 <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
-                    Platí jen pro váš účet. Nové funkce se objeví samy — vaše uspořádání o ně nepřijde.
+                    Přesuňte položky myší, nebo šipkami. Odsazením je vnoříte pod položku nad nimi — do libovolné hloubky.
+                    Platí jen pro váš účet; nové funkce se objeví samy.
                 </p>
 
                 {notice && <p className="mt-4 rounded-xl border border-emerald-400/25 bg-emerald-500/10 p-3 text-xs text-emerald-100">{notice}</p>}
 
                 <div className="mt-4 flex flex-wrap gap-2">
-                    <button type="button" onClick={() => setRows(current => [{ href: null, label: 'Nová sekce', defaultLabel: 'Sekce', hidden: false, group: true, parent: null }, ...current])} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-[var(--color-border)] px-3 text-xs text-[var(--color-text-primary)]">
+                    <button
+                        type="button"
+                        onClick={() => setRows(current => [
+                            { key: `#${Date.now()}`, href: null, label: 'Nová sekce', defaultLabel: 'Sekce', hidden: false, group: true, depth: 0 },
+                            ...current,
+                        ])}
+                        className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-[var(--color-border)] px-3 text-xs text-[var(--color-text-primary)]"
+                    >
                         <FolderPlus size={14} /> Přidat sekci
                     </button>
                     <button type="button" disabled={busy} onClick={() => void save()} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-[var(--color-accent)] px-4 text-xs font-medium text-[var(--color-accent-contrast)] disabled:opacity-50">
@@ -171,8 +232,7 @@ export default function NavigationSettings() {
                 <section className="mt-5 rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-4">
                     <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">Připnuté nahoře</h2>
                     <p className="mt-1 text-xs text-[var(--color-text-secondary)]">
-                        Nejvýš šest položek — zkratka, kterou je potřeba číst, není zkratka.
-                        Platí pro toto zařízení, ne pro účet.
+                        Nejvýš šest — zkratka, kterou je potřeba číst, není zkratka. Platí pro toto zařízení, ne pro účet.
                     </p>
 
                     <div className="mt-3 flex flex-wrap gap-1.5">
@@ -201,39 +261,49 @@ export default function NavigationSettings() {
 
                 <div className="mt-4 space-y-1">
                     {rows.map((row, index) => (
-                        <div key={row.href ?? `group-${index}`} className={`flex items-center gap-2 rounded-xl border p-2 ${row.group ? 'border-[var(--color-accent)]/40 bg-[var(--color-accent)]/5' : 'border-[var(--color-border)] bg-[var(--color-bg-card)]'} ${row.hidden ? 'opacity-50' : ''}`}>
-                            <div className="flex shrink-0 flex-col">
-                                <button type="button" onClick={() => move(index, -1)} aria-label="Nahoru" className="text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"><ArrowUp size={13} /></button>
-                                <button type="button" onClick={() => move(index, 1)} aria-label="Dolů" className="text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"><ArrowDown size={13} /></button>
-                            </div>
+                        <div
+                            key={row.key}
+                            draggable
+                            onDragStart={() => setDragging(index)}
+                            onDragEnd={() => { setDragging(null); setOver(null); }}
+                            onDragOver={event => { event.preventDefault(); setOver(index); }}
+                            onDrop={event => {
+                                event.preventDefault();
+                                if (dragging !== null && dragging !== index) relocate(dragging, index);
+                                setDragging(null); setOver(null);
+                            }}
+                            style={{ marginLeft: `${Math.min(row.depth, 6) * 1.25}rem` }}
+                            className={`flex items-center gap-2 rounded-xl border p-2 transition-colors ${row.group
+                                ? 'border-[var(--color-accent)]/40 bg-[var(--color-accent)]/5'
+                                : 'border-[var(--color-border)] bg-[var(--color-bg-card)]'} ${row.hidden ? 'opacity-50' : ''} ${
+                                over === index && dragging !== null && dragging !== index ? 'border-[var(--color-accent)]' : ''} ${
+                                dragging === index ? 'opacity-40' : ''}`}
+                        >
+                            <GripVertical size={15} className="shrink-0 cursor-grab text-[var(--color-text-secondary)]" aria-hidden />
 
                             <input
                                 value={row.label ?? ''}
                                 placeholder={row.defaultLabel}
-                                onChange={event => setRows(current => current.map((item, at) => at === index ? { ...item, label: event.target.value } : item))}
-                                className="min-w-0 flex-1 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-muted)] px-2.5 py-2 text-xs text-[var(--color-text-primary)]"
+                                onChange={event => setRows(current => current.map((candidate, position) =>
+                                    position === index ? { ...candidate, label: event.target.value } : candidate))}
+                                aria-label={`Název položky ${row.defaultLabel}`}
+                                className="min-w-0 flex-1 rounded-lg bg-transparent px-1 text-sm text-[var(--color-text-primary)]"
                             />
 
-                            {!row.group && groups.length > 0 && (
-                                <select
-                                    value={row.parent ?? ''}
-                                    onChange={event => setRows(current => current.map((item, at) => at === index ? { ...item, parent: event.target.value || null } : item))}
-                                    className="min-h-9 shrink-0 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-muted)] px-2 text-[11px] text-[var(--color-text-primary)]"
-                                >
-                                    <option value="">bez sekce</option>
-                                    {groups.map(group => <option key={group.label} value={group.label ?? ''}>{group.label}</option>)}
-                                </select>
-                            )}
+                            <button type="button" onClick={() => indent(index, -1)} disabled={row.depth === 0} aria-label="O úroveň výš" className="rounded-lg p-1.5 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] disabled:opacity-25"><ChevronLeft size={14} /></button>
+                            <button type="button" onClick={() => indent(index, 1)} disabled={index === 0 || row.depth > rows[index - 1].depth} aria-label="Vnořit pod položku výše" className="rounded-lg p-1.5 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] disabled:opacity-25"><ChevronRight size={14} /></button>
+                            <button type="button" onClick={() => move(index, -1)} disabled={index === 0} aria-label="Posunout výš" className="rounded-lg p-1.5 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] disabled:opacity-25"><ArrowUp size={14} /></button>
+                            <button type="button" onClick={() => move(index, 1)} disabled={index === rows.length - 1} aria-label="Posunout níž" className="rounded-lg p-1.5 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] disabled:opacity-25"><ArrowDown size={14} /></button>
 
                             {!row.group && (
                                 <button
                                     type="button"
-                                    onClick={() => setRows(current => current.map((item, at) => at === index ? { ...item, hidden: !item.hidden } : item))}
+                                    onClick={() => setRows(current => current.map((candidate, position) =>
+                                        position === index ? { ...candidate, hidden: !candidate.hidden } : candidate))}
                                     aria-label={row.hidden ? 'Zobrazit' : 'Skrýt'}
-                                    aria-pressed={row.hidden}
-                                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]"
+                                    className="rounded-lg p-1.5 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
                                 >
-                                    {row.hidden ? <EyeOff size={15} /> : <Eye size={15} />}
+                                    {row.hidden ? <EyeOff size={14} /> : <Eye size={14} />}
                                 </button>
                             )}
                         </div>
@@ -242,4 +312,13 @@ export default function NavigationSettings() {
             </main>
         </AppLayout>
     );
+}
+
+/** The nearest row above sitting one level shallower, as an index the server understands. */
+function parentIndex(rows: Row[], index: number): number | null {
+    for (let position = index - 1; position >= 0; position--) {
+        if (rows[position].depth < rows[index].depth) return position;
+    }
+
+    return null;
 }

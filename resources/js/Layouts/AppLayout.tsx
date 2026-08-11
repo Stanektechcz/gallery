@@ -825,26 +825,59 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
         .map(href => customizableNavItems.find(item => item.href === href))
         .filter((item): item is NavigationItem => item !== undefined && canReach(item, activeFeatures, isAdmin));
 
-    const renderNavigationItem = (item: NavigationItem, nested = false, closeDrawer = false) => {
+    /**
+     * One menu entry and everything nested beneath it.
+     *
+     * Depth is unlimited, so this recurses. The indent stops growing after the fourth
+     * level: past that the text column is narrower than the words in it, and a menu you
+     * cannot read is not an organised menu.
+     *
+     * A parent whose own destination is gone still draws, because its children are not.
+     */
+    const renderNavigationItem = (item: NavigationItem, nested = false, closeDrawer = false, depth = 0) => {
         if (!canReach(item, activeFeatures, isAdmin)) return null;
+
+        const children = (item as any).children as NavigationItem[] | undefined;
+        const visibleChildren = (children ?? []).filter(child => canReach(child, activeFeatures, isAdmin));
+
         const Icon = item.icon;
-        const active = isActive(item.href, item.exact);
-        return (
+        const active = item.href ? isActive(item.href, item.exact) : false;
+        const indent = nested ? Math.min(depth + 1, 4) * 0.75 : 0;
+
+        const row = item.href ? (
             <Link
-                key={item.href}
                 href={item.href}
                 onClick={closeDrawer ? () => setMobileOpen(false) : undefined}
+                style={indent ? { marginLeft: `${indent}rem` } : undefined}
                 className={clsx(
                     'mx-2 flex min-h-10 items-center gap-3 rounded-xl px-3 text-sm transition-colors',
-                    nested && 'ml-5 text-[13px]',
+                    nested && 'text-[13px]',
                     active
                         ? 'bg-[var(--color-accent)] text-[var(--color-accent-contrast)] font-medium shadow-sm'
                         : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-accent-contrast)]'
                 )}
             >
-                <Icon size={nested ? 15 : 16} className="shrink-0" />
+                {Icon && <Icon size={nested ? 15 : 16} className="shrink-0" />}
                 <span className="min-w-0 flex-1 truncate">{item.label}</span>
             </Link>
+        ) : (
+            <p
+                style={indent ? { marginLeft: `${indent}rem` } : undefined}
+                className="mx-2 px-3 pt-2 text-[9px] font-semibold uppercase tracking-[.14em] text-[var(--color-text-secondary)]"
+            >
+                {item.label}
+            </p>
+        );
+
+        return (
+            <div key={item.href || `sekce-${item.label}-${depth}`}>
+                {row}
+                {visibleChildren.length > 0 && (
+                    <div className="space-y-0.5">
+                        {visibleChildren.map(child => renderNavigationItem(child, true, closeDrawer, depth + 1))}
+                    </div>
+                )}
+            </div>
         );
     };
 
@@ -867,7 +900,18 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
                     {arrangedGroups.map(group => {
                         const items = group.items.filter(item => canReach(item, activeFeatures, isAdmin));
                         if (items.length === 0) return null;
-                        if (!items.length) return null;
+
+                        // Items somebody moved to the top level belong to no section, so
+                        // they get no heading to collapse — a collapsible group labelled
+                        // with nothing is a control that hides things for no stated reason.
+                        if (!group.label) {
+                            return (
+                                <div key={group.id} className="space-y-0.5">
+                                    {items.map(item => renderNavigationItem(item, false, closeDrawer))}
+                                </div>
+                            );
+                        }
+
                         const open = Boolean(openGroups[group.id]);
                         const active = items.some(item => isActive(item.href, item.exact));
                         const GroupIcon = group.icon ?? FolderOpen;
