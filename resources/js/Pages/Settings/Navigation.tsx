@@ -2,7 +2,7 @@ import AppLayout, { flattenNavItems, navGroups, PINNED_NAV_KEY } from '@/Layouts
 import { Head, router, usePage } from '@inertiajs/react';
 import axios from 'axios';
 import {
-    ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Eye, EyeOff,
+    ArrowDown, ArrowUp, ChevronDown, ChevronLeft, ChevronRight, Eye, EyeOff,
     FolderPlus, GripVertical, Loader2, RotateCcw, Save,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
@@ -156,6 +156,60 @@ export default function NavigationSettings() {
 
     const hiddenCount = rows.filter(row => !row.group && row.hidden).length;
 
+    const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+
+    /**
+     * Which rows are on screen, and which are folded away inside a collapsed branch.
+     *
+     * Forty-four rows do not fit on a phone and barely fit on a laptop, so a section has to
+     * be foldable to be workable. Collapsing hides descendants from view only — they keep
+     * their place in the list and are saved exactly as they are, because a fold is a way of
+     * looking at the menu, not a change to it.
+     *
+     * Filtering wins: a search that could not see inside a folded branch would report that
+     * a page does not exist.
+     */
+    const view = useMemo(() => {
+        const out: Array<{ row: Row; index: number; hasChildren: boolean; folded: boolean }> = [];
+        let hideBelow: number | null = null;
+
+        rows.forEach((row, index) => {
+            const hasChildren = index + 1 < rows.length && rows[index + 1].depth > row.depth;
+
+            if (hideBelow !== null && row.depth > hideBelow) return;
+            hideBelow = null;
+
+            if (!filtering && collapsed.has(row.key) && hasChildren) hideBelow = row.depth;
+
+            out.push({ row, index, hasChildren, folded: collapsed.has(row.key) && hasChildren });
+        });
+
+        return out.filter(entry => matches(entry.row));
+    }, [rows, collapsed, filtering, needle]);
+
+    /** Every row that has something under it, so "fold all" knows what it can fold. */
+    const foldable = useMemo(
+        () => rows.filter((row, index) => index + 1 < rows.length && rows[index + 1].depth > row.depth).map(row => row.key),
+        [rows],
+    );
+
+    /**
+     * Whether anything is waiting to be saved.
+     *
+     * Compared against the state this screen opened with rather than tracked per edit: a
+     * flag set by every keystroke says "changed" after you type a letter and delete it,
+     * and the whole point of the warning is that it should be trusted.
+     */
+    const [initial, setInitial] = useState(() => JSON.stringify(rows));
+    const dirty = JSON.stringify(rows) !== initial;
+
+    const toggleFold = (key: string) => setCollapsed(current => {
+        const next = new Set(current);
+        next.has(key) ? next.delete(key) : next.add(key);
+
+        return next;
+    });
+
     const [pinned, setPinned] = useState<string[]>(() => {
         try { return JSON.parse(window.localStorage.getItem(PINNED_NAV_KEY) ?? '[]'); }
         catch { return []; }
@@ -226,6 +280,7 @@ export default function NavigationSettings() {
                 })),
             });
             setNotice('Menu uloženo.');
+            setInitial(JSON.stringify(rows));
             router.reload({ only: ['navigation'] });
         } catch { setNotice('Uložit se nepodařilo.'); }
         finally { setBusy(false); }
@@ -276,9 +331,22 @@ export default function NavigationSettings() {
                     >
                         <FolderPlus size={14} /> Přidat sekci
                     </button>
+                    <button
+                        type="button"
+                        onClick={() => setCollapsed(current => current.size > 0 ? new Set() : new Set(foldable))}
+                        className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-[var(--color-border)] px-3 text-xs text-[var(--color-text-primary)]"
+                    >
+                        {collapsed.size > 0 ? 'Rozbalit vše' : 'Sbalit vše'}
+                    </button>
                     <button type="button" disabled={busy} onClick={() => void save()} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-[var(--color-accent)] px-4 text-xs font-medium text-[var(--color-accent-contrast)] disabled:opacity-50">
                         {busy ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Uložit
+                        {dirty && <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-[var(--color-accent-contrast)]" />}
                     </button>
+                    {dirty && (
+                        <span role="status" className="self-center text-[11px] text-amber-200">
+                            Neuložené změny
+                        </span>
+                    )}
                     <button type="button" disabled={busy} onClick={() => void reset()} className="inline-flex min-h-10 items-center gap-2 rounded-xl px-3 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] disabled:opacity-50">
                         <RotateCcw size={14} /> Výchozí
                     </button>
@@ -353,7 +421,10 @@ export default function NavigationSettings() {
                 )}
 
                 <div className="mt-3 space-y-1">
-                    {rows.map((row, index) => matches(row) && (
+                    {view.map(({ row, index, hasChildren, folded }) => {
+                        const rail = Math.min(row.depth, 6);
+
+                        return (
                         <div
                             key={row.key}
                             draggable={!filtering}
@@ -365,13 +436,55 @@ export default function NavigationSettings() {
                                 if (dragging !== null && dragging !== index) relocate(dragging, index);
                                 setDragging(null); setOver(null);
                             }}
-                            style={{ marginLeft: `${Math.min(row.depth, 6) * 1.25}rem` }}
-                            className={`flex items-center gap-2 rounded-xl border p-2 transition-colors ${row.group
+                            style={{ paddingLeft: `${rail * 1.25}rem` }}
+                            className="relative"
+                        >
+                            {/* The same rails the sidebar draws, so this list and the menu
+                                it produces are read the same way. In a flat list they are
+                                painted per row: one vertical segment per ancestor level,
+                                plus an elbow reaching from the parent's rail to this row. */}
+                            {Array.from({ length: rail }).map((_, level) => (
+                                <span
+                                    key={level}
+                                    aria-hidden
+                                    className="pointer-events-none absolute bottom-0 top-0 w-px bg-[var(--color-border)]"
+                                    style={{ left: `${level * 1.25 + 0.6}rem` }}
+                                />
+                            ))}
+                            {rail > 0 && (
+                                <span
+                                    aria-hidden
+                                    className="pointer-events-none absolute top-1/2 h-px w-2.5 bg-[var(--color-border)]"
+                                    style={{ left: `${(rail - 1) * 1.25 + 0.6}rem` }}
+                                />
+                            )}
+
+                            {/* Where the dragged row would land, drawn as the gap it will
+                                occupy. Highlighting the row underneath said which row was
+                                involved but never whether it would go above or below it. */}
+                            {over === index && dragging !== null && dragging !== index && (
+                                <span aria-hidden className="pointer-events-none absolute -top-0.5 left-0 right-0 h-0.5 rounded bg-[var(--color-accent)]" />
+                            )}
+
+                            <div className={`flex items-center gap-2 rounded-xl border p-2 transition-colors ${row.group
                                 ? 'border-[var(--color-accent)]/40 bg-[var(--color-accent)]/5'
                                 : 'border-[var(--color-border)] bg-[var(--color-bg-card)]'} ${row.hidden ? 'opacity-50' : ''} ${
-                                over === index && dragging !== null && dragging !== index ? 'border-[var(--color-accent)]' : ''} ${
                                 dragging === index ? 'opacity-40' : ''}`}
-                        >
+                            >
+                            {hasChildren ? (
+                                <button
+                                    type="button"
+                                    onClick={() => toggleFold(row.key)}
+                                    aria-expanded={!folded}
+                                    aria-label={folded ? `Rozbalit ${row.label ?? row.defaultLabel}` : `Sbalit ${row.label ?? row.defaultLabel}`}
+                                    className="shrink-0 rounded-lg p-0.5 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
+                                >
+                                    <ChevronDown size={14} className={folded ? '-rotate-90 transition-transform' : 'transition-transform'} />
+                                </button>
+                            ) : (
+                                <span className="w-[1.4rem] shrink-0" aria-hidden />
+                            )}
+
                             <GripVertical size={15} className={`shrink-0 text-[var(--color-text-secondary)] ${filtering ? 'opacity-25' : 'cursor-grab'}`} aria-hidden />
 
                             {/* A bordered field, not a bare transparent one. The old input
@@ -420,8 +533,16 @@ export default function NavigationSettings() {
                                     {row.hidden ? <EyeOff size={14} /> : <Eye size={14} />}
                                 </button>
                             )}
+                            </div>
                         </div>
-                    ))}
+                        );
+                    })}
+
+                    {view.length === 0 && (
+                        <p className="rounded-xl border border-dashed border-[var(--color-border)] p-6 text-center text-sm text-[var(--color-text-secondary)]">
+                            {filtering ? 'Hledání nic nenašlo.' : 'Menu je prázdné.'}
+                        </p>
+                    )}
                 </div>
             </main>
         </AppLayout>
