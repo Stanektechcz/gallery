@@ -1,4 +1,4 @@
-import AppLayout, { navGroups, PINNED_NAV_KEY } from '@/Layouts/AppLayout';
+import AppLayout, { flattenNavItems, navGroups, PINNED_NAV_KEY } from '@/Layouts/AppLayout';
 import { Head, router, usePage } from '@inertiajs/react';
 import axios from 'axios';
 import {
@@ -53,9 +53,20 @@ export default function NavigationSettings() {
     const defaults = useMemo(() => {
         const features = page.features ?? null;
 
-        return navGroups.flatMap(group => group.items
-            .filter(item => !item.feature || !features || features.includes(item.feature))
-            .map(item => ({ href: item.href, label: item.label })));
+        // Deduplicated by href, and this is not belt and braces: the menu briefly listed
+        // one page under two labels, which gave this list two rows with one identity. React
+        // keys them by href, so moving either made both jump — reported, correctly, as
+        // items duplicating. A list that cannot hold the same href twice cannot do that.
+        const seen = new Map<string, { href: string; label: string }>();
+
+        for (const item of flattenNavItems(navGroups.flatMap(group => group.items))) {
+            if (item.feature && features && !features.includes(item.feature)) continue;
+            if (!item.href || seen.has(item.href)) continue;
+
+            seen.set(item.href, { href: item.href, label: item.label });
+        }
+
+        return [...seen.values()];
     }, [page.features]);
 
     const [rows, setRows] = useState<Row[]>(() => {

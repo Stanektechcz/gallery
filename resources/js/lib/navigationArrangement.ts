@@ -64,7 +64,12 @@ export function applyArrangement(
         return groups.map(group => ({ ...group, items: group.items.map(item => ({ ...item })) }));
     }
 
-    const defaults = new Map(groups.flatMap(group => group.items).map(item => [item.href, item]));
+    // Walked to the bottom: the built-in menu nests too, and a child nobody can look up
+    // here is a child the arrangement silently drops.
+    const flatten = (items: Entry[]): Entry[] =>
+        items.flatMap(item => [item, ...flatten(item.children ?? [])]);
+
+    const defaults = new Map(flatten(groups.flatMap(group => group.items)).map(item => [item.href, item]));
 
     // One node per row, children filled in below. Built first so a parent that appears
     // after its child in the list still resolves.
@@ -127,10 +132,14 @@ export function applyArrangement(
     // shipped after somebody customised their menu still appears.
     const mentioned = new Set(arrangement.map(row => row.href).filter(Boolean) as string[]);
 
+    // Flattened before filtering: a built-in child whose parent was rearranged has lost
+    // the branch it hung on, and would otherwise disappear rather than fall back.
     const untouched: ArrangedGroup[] = groups
         .map(group => ({
             ...group,
-            items: group.items.filter(item => !mentioned.has(item.href)).map(item => ({ ...item })),
+            items: flatten(group.items)
+                .filter(item => item.href && !mentioned.has(item.href))
+                .map(item => ({ ...item, children: undefined })),
         }))
         .filter(group => group.items.length > 0);
 

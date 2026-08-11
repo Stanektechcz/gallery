@@ -508,6 +508,8 @@ type NavigationItem = {
     exact?: boolean;
     /** Hidden unless the space has this feature switched on. Untagged items always show. */
     feature?: string;
+    /** Nesting is unlimited, so this is the same shape all the way down. */
+    children?: NavigationItem[];
 };
 
 type NavigationGroup = {
@@ -539,11 +541,17 @@ export const navGroups: NavigationGroup[] = [
         items: [
             { href: '/planning', label: 'Plánování a úkoly', icon: Calendar },
             { href: '/finances', label: 'Společné finance', icon: CircleDollarSign, feature: 'finance' },
-            { href: '/watchlist/movies', label: 'Filmy a seriály', icon: Clapperboard, feature: 'watchlist' },
-            { href: '/watchlist/movies', label: '↳ Filmy', icon: Film, feature: 'watchlist' },
-            { href: '/watchlist/series', label: '↳ Seriály', icon: Tv, feature: 'watchlist' },
-            { href: '/watchlist/movies/tierlist', label: '↳ Tierlist filmů', icon: Star, feature: 'watchlist' },
-            { href: '/watchlist/series/tierlist', label: '↳ Tierlist seriálů', icon: Star, feature: 'watchlist' },
+            // Real children now that the sidebar nests. The arrows in these labels used to
+            // draw the hierarchy by hand, and the top two rows pointed at the same page —
+            // which gave the menu two entries with one identity.
+            {
+                href: '/watchlist/movies', label: 'Filmy a seriály', icon: Clapperboard, feature: 'watchlist',
+                children: [
+                    { href: '/watchlist/series', label: 'Seriály', icon: Tv, feature: 'watchlist' },
+                    { href: '/watchlist/movies/tierlist', label: 'Tierlist filmů', icon: Star, feature: 'watchlist' },
+                    { href: '/watchlist/series/tierlist', label: 'Tierlist seriálů', icon: Star, feature: 'watchlist' },
+                ],
+            },
             { href: '/denik', label: 'Deník', icon: BookHeart, feature: 'journal' },
             { href: '/hlasovky', label: 'Hlasovky', icon: Mic, feature: 'voice_notes' },
             { href: '/krkance', label: 'Hodnocení krkanců', icon: Trophy, feature: 'burps' },
@@ -596,8 +604,19 @@ export const navGroups: NavigationGroup[] = [
     },
 ];
 
-const allNavItems = [...primaryNavItems, ...navGroups.flatMap(group => group.items)];
-const customizableNavItems = navGroups.flatMap(group => group.items);
+/**
+ * Every entry in a tree, however deep, as one list.
+ *
+ * The menu nests now, so anything that wants "all the items" — the command palette, the
+ * feature tags, the customisation screen — has to walk it rather than take the first
+ * level. Taking the first level is how a nested page becomes unsearchable.
+ */
+export function flattenNavItems(items: NavigationItem[]): NavigationItem[] {
+    return items.flatMap(item => [item, ...flattenNavItems(item.children ?? [])]);
+}
+
+const allNavItems = [...primaryNavItems, ...flattenNavItems(navGroups.flatMap(group => group.items))];
+const customizableNavItems = flattenNavItems(navGroups.flatMap(group => group.items));
 
 /**
  * Lets the command palette reuse the sidebar's tags instead of repeating them.
@@ -837,8 +856,7 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
     const renderNavigationItem = (item: NavigationItem, nested = false, closeDrawer = false, depth = 0) => {
         if (!canReach(item, activeFeatures, isAdmin)) return null;
 
-        const children = (item as any).children as NavigationItem[] | undefined;
-        const visibleChildren = (children ?? []).filter(child => canReach(child, activeFeatures, isAdmin));
+        const visibleChildren = (item.children ?? []).filter(child => canReach(child, activeFeatures, isAdmin));
 
         const Icon = item.icon;
         const active = item.href ? isActive(item.href, item.exact) : false;
