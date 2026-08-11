@@ -25,12 +25,16 @@ class SaasModulesTest extends TestCase
 
     public function test_the_public_pricing_catalogue_needs_no_account(): void
     {
-        $this->getJson('/api/v1/public/billing/catalogue')
-            ->assertOk()
-            ->assertJsonPath('plans.0.code', 'duo')
-            ->assertJsonPath('modules.0.code', 'burps')
-            // Prices are minor units: 49 CZK.
-            ->assertJsonPath('modules.0.price_monthly', 4900);
+        $response = $this->getJson('/api/v1/public/billing/catalogue')->assertOk();
+
+        // Looked up by code, not by position: adding a module that sorts ahead of this one
+        // would otherwise fail a test that was never about the order of the price list.
+        $modules = collect($response->json('modules'))->keyBy('code');
+
+        $this->assertSame('duo', $response->json('plans.0.code'));
+        $this->assertArrayHasKey('burps', $modules);
+        // Prices are minor units: 49 CZK.
+        $this->assertSame(4900, $modules['burps']['price_monthly']);
     }
 
     public function test_the_burp_module_is_locked_until_it_is_switched_on(): void

@@ -314,16 +314,39 @@ class EntitlementService
             ->whereNull('trashed_at')
             ->sum('size_bytes');
 
-        $limitMb = $this->plan($space)?->storage_limit_mb;
+        $planMb = $this->plan($space)?->storage_limit_mb;
+
+        // Purchased expansions add to whatever the plan gives. A plan with no limit stays
+        // unlimited rather than becoming the size of its add-ons, which is the arithmetic
+        // mistake this shape exists to avoid.
+        $bonusMb = $planMb === null ? 0 : $this->storageBonusMb($space);
+        $limitMb = $planMb === null ? null : $planMb + $bonusMb;
         $limitBytes = $limitMb === null ? null : $limitMb * 1024 * 1024;
 
         return [
             'used_bytes' => $usedBytes,
             'limit_bytes' => $limitBytes,
             'limit_mb' => $limitMb,
+            'plan_mb' => $planMb,
+            'bonus_mb' => $bonusMb,
             'remaining_bytes' => $limitBytes === null ? null : max(0, $limitBytes - $usedBytes),
             'percent' => $limitBytes ? min(100, (int) round($usedBytes / $limitBytes * 100)) : null,
         ];
+    }
+
+    /**
+     * Capacity bought on top of the plan, from the space's active add-ons.
+     *
+     * Read through activeModules so an expansion that has lapsed stops counting on the
+     * same day as every other add-on. Space that quietly outlives the payment for it would
+     * be a rule nobody could explain.
+     */
+    private function storageBonusMb(GallerySpace $space): int
+    {
+        if (! $this->hasTable('billing_modules')) return 0;
+        if (! Schema::hasColumn('billing_modules', 'storage_bonus_mb')) return 0;
+
+        return (int) $this->activeModules($space)->sum('storage_bonus_mb');
     }
 
     public function canStore(GallerySpace $space, int $bytes): bool

@@ -129,6 +129,16 @@ class BillingCatalogSeeder extends Seeder
         }
 
         $modules = [
+            // Capacity rather than features: it grants nothing new to do, only room to
+            // keep doing it. Sorted first because it is the add-on people reach for when
+            // something has stopped working, not one they browse for.
+            [
+                'code' => 'uloziste_100', 'name' => '100 GB navíc', 'icon' => '💾',
+                'tagline' => 'Rozšíření místa na serveru galerie.',
+                'description' => 'Přidá 100 GB ke kapacitě vašeho tarifu. Sčítá se, takže lze pořídit i vícekrát.',
+                'price_monthly' => 9_900, 'storage_bonus_mb' => 100_000, 'sort_order' => 1,
+                'grants' => [],
+            ],
             [
                 'code' => 'burps', 'name' => 'Hodnocení krkanců', 'icon' => '🎺',
                 'tagline' => 'První doplňkový modul. Ano, myslíme to vážně.',
