@@ -57,17 +57,27 @@ export default function NavigationSettings() {
         // one page under two labels, which gave this list two rows with one identity. React
         // keys them by href, so moving either made both jump — reported, correctly, as
         // items duplicating. A list that cannot hold the same href twice cannot do that.
-        const seen = new Map<string, { href: string; label: string }>();
+        const seen = new Map<string, { href: string; label: string; section: string }>();
 
-        for (const item of flattenNavItems(navGroups.flatMap(group => group.items))) {
-            if (item.feature && features && !features.includes(item.feature)) continue;
-            if (!item.href || seen.has(item.href)) continue;
+        for (const group of navGroups) {
+            for (const item of flattenNavItems(group.items)) {
+                if (item.feature && features && !features.includes(item.feature)) continue;
+                if (!item.href || seen.has(item.href)) continue;
 
-            seen.set(item.href, { href: item.href, label: item.label });
+                // Where it lives by default, carried so the editor can say where a row
+                // came from. Forty rows in one column is a list; forty rows that each say
+                // which part of the app they belong to is something you can manage.
+                seen.set(item.href, { href: item.href, label: item.label, section: group.label });
+            }
         }
 
         return [...seen.values()];
     }, [page.features]);
+
+    const sectionOf = useMemo(
+        () => new Map(defaults.map(item => [item.href, item.section])),
+        [defaults],
+    );
 
     const [rows, setRows] = useState<Row[]>(() => {
         const saved = page.navigation ?? [];
@@ -114,6 +124,25 @@ export default function NavigationSettings() {
     const [notice, setNotice] = useState('');
     const [dragging, setDragging] = useState<number | null>(null);
     const [over, setOver] = useState<number | null>(null);
+    const [filter, setFilter] = useState('');
+
+    /**
+     * Searching narrows the list, and while it is narrowed nothing may be reordered.
+     *
+     * Position in this list *is* the arrangement, so moving a row up when the rows between
+     * it and its neighbour are hidden would move it somewhere the person cannot see. Show
+     * and hide still work, because those do not depend on what is next to what.
+     */
+    const filtering = filter.trim().length > 0;
+    const needle = filter.trim().toLowerCase();
+
+    const matches = (row: Row) =>
+        !filtering
+        || (row.label ?? row.defaultLabel).toLowerCase().includes(needle)
+        || (row.href ?? '').toLowerCase().includes(needle)
+        || (sectionOf.get(row.href ?? '') ?? '').toLowerCase().includes(needle);
+
+    const hiddenCount = rows.filter(row => !row.group && row.hidden).length;
 
     const [pinned, setPinned] = useState<string[]>(() => {
         try { return JSON.parse(window.localStorage.getItem(PINNED_NAV_KEY) ?? '[]'); }
@@ -270,11 +299,49 @@ export default function NavigationSettings() {
                     <p className="mt-2 text-[11px] text-[var(--color-text-secondary)]">{pinned.length} / 6</p>
                 </section>
 
-                <div className="mt-4 space-y-1">
-                    {rows.map((row, index) => (
+                <div className="mt-5 flex flex-wrap items-center gap-2">
+                    <input
+                        value={filter}
+                        onChange={event => setFilter(event.target.value)}
+                        placeholder="Najít položku, adresu nebo sekci…"
+                        aria-label="Filtrovat položky menu"
+                        className="min-w-0 flex-1 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-muted)] px-3 py-2 text-sm text-[var(--color-text-primary)]"
+                    />
+                    {filtering && (
+                        <button
+                            type="button"
+                            onClick={() => setRows(current => {
+                                // Whatever the search is showing, flipped together. The
+                                // target state comes from the first match so the button
+                                // does one thing to all of them rather than inverting each.
+                                const target = !current.find(row => !row.group && matches(row))?.hidden;
+
+                                return current.map(row => row.group || !matches(row) ? row : { ...row, hidden: target });
+                            })}
+                            className="min-h-9 rounded-lg border border-[var(--color-border)] px-2.5 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
+                        >
+                            Skrýt / zobrazit nalezené
+                        </button>
+                    )}
+
+                    <span className="text-[11px] text-[var(--color-text-secondary)]">
+                        {rows.filter(row => !row.group).length} položek
+                        {hiddenCount > 0 && ` · ${hiddenCount} skrytých`}
+                    </span>
+                </div>
+
+                {filtering && (
+                    <p className="mt-2 rounded-lg bg-[var(--color-surface-muted)] p-2 text-[11px] text-[var(--color-text-secondary)]">
+                        Při hledání nelze přesouvat — pořadí v tomto seznamu je samo uspořádáním menu.
+                        Skrýt a zobrazit jde dál.
+                    </p>
+                )}
+
+                <div className="mt-3 space-y-1">
+                    {rows.map((row, index) => matches(row) && (
                         <div
                             key={row.key}
-                            draggable
+                            draggable={!filtering}
                             onDragStart={() => setDragging(index)}
                             onDragEnd={() => { setDragging(null); setOver(null); }}
                             onDragOver={event => { event.preventDefault(); setOver(index); }}
@@ -290,21 +357,28 @@ export default function NavigationSettings() {
                                 over === index && dragging !== null && dragging !== index ? 'border-[var(--color-accent)]' : ''} ${
                                 dragging === index ? 'opacity-40' : ''}`}
                         >
-                            <GripVertical size={15} className="shrink-0 cursor-grab text-[var(--color-text-secondary)]" aria-hidden />
+                            <GripVertical size={15} className={`shrink-0 text-[var(--color-text-secondary)] ${filtering ? 'opacity-25' : 'cursor-grab'}`} aria-hidden />
 
-                            <input
-                                value={row.label ?? ''}
-                                placeholder={row.defaultLabel}
-                                onChange={event => setRows(current => current.map((candidate, position) =>
-                                    position === index ? { ...candidate, label: event.target.value } : candidate))}
-                                aria-label={`Název položky ${row.defaultLabel}`}
-                                className="min-w-0 flex-1 rounded-lg bg-transparent px-1 text-sm text-[var(--color-text-primary)]"
-                            />
+                            <div className="min-w-0 flex-1">
+                                <input
+                                    value={row.label ?? ''}
+                                    placeholder={row.defaultLabel}
+                                    onChange={event => setRows(current => current.map((candidate, position) =>
+                                        position === index ? { ...candidate, label: event.target.value } : candidate))}
+                                    aria-label={`Název položky ${row.defaultLabel}`}
+                                    className="w-full rounded-lg bg-transparent px-1 text-sm text-[var(--color-text-primary)]"
+                                />
+                                {!row.group && (
+                                    <p className="truncate px-1 text-[10px] text-[var(--color-text-secondary)]">
+                                        {sectionOf.get(row.href ?? '') ?? 'Mimo sekce'} · {row.href}
+                                    </p>
+                                )}
+                            </div>
 
-                            <button type="button" onClick={() => indent(index, -1)} disabled={row.depth === 0} aria-label="O úroveň výš" className="rounded-lg p-1.5 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] disabled:opacity-25"><ChevronLeft size={14} /></button>
-                            <button type="button" onClick={() => indent(index, 1)} disabled={index === 0 || row.depth > rows[index - 1].depth} aria-label="Vnořit pod položku výše" className="rounded-lg p-1.5 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] disabled:opacity-25"><ChevronRight size={14} /></button>
-                            <button type="button" onClick={() => move(index, -1)} disabled={index === 0} aria-label="Posunout výš" className="rounded-lg p-1.5 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] disabled:opacity-25"><ArrowUp size={14} /></button>
-                            <button type="button" onClick={() => move(index, 1)} disabled={index === rows.length - 1} aria-label="Posunout níž" className="rounded-lg p-1.5 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] disabled:opacity-25"><ArrowDown size={14} /></button>
+                            <button type="button" onClick={() => indent(index, -1)} disabled={filtering || row.depth === 0} aria-label="O úroveň výš" className="rounded-lg p-1.5 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] disabled:opacity-25"><ChevronLeft size={14} /></button>
+                            <button type="button" onClick={() => indent(index, 1)} disabled={filtering || index === 0 || row.depth > rows[index - 1].depth} aria-label="Vnořit pod položku výše" className="rounded-lg p-1.5 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] disabled:opacity-25"><ChevronRight size={14} /></button>
+                            <button type="button" onClick={() => move(index, -1)} disabled={filtering || index === 0} aria-label="Posunout výš" className="rounded-lg p-1.5 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] disabled:opacity-25"><ArrowUp size={14} /></button>
+                            <button type="button" onClick={() => move(index, 1)} disabled={filtering || index === rows.length - 1} aria-label="Posunout níž" className="rounded-lg p-1.5 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] disabled:opacity-25"><ArrowDown size={14} /></button>
 
                             {!row.group && (
                                 <button

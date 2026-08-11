@@ -542,11 +542,13 @@ export const navGroups: NavigationGroup[] = [
             { href: '/planning', label: 'Plánování a úkoly', icon: Calendar },
             { href: '/finances', label: 'Společné finance', icon: CircleDollarSign, feature: 'finance' },
             // Real children now that the sidebar nests. The arrows in these labels used to
-            // draw the hierarchy by hand, and the top two rows pointed at the same page —
-            // which gave the menu two entries with one identity.
+            // draw the hierarchy by hand, and the parent pointed at the same page as its
+            // own first child — which is what gave the menu two entries with one identity.
+            // The parent takes /watchlist, which is the hub and was not in the menu at all.
             {
-                href: '/watchlist/movies', label: 'Filmy a seriály', icon: Clapperboard, feature: 'watchlist',
+                href: '/watchlist', label: 'Filmy a seriály', icon: Clapperboard, feature: 'watchlist',
                 children: [
+                    { href: '/watchlist/movies', label: 'Filmy', icon: Film, feature: 'watchlist' },
                     { href: '/watchlist/series', label: 'Seriály', icon: Tv, feature: 'watchlist' },
                     { href: '/watchlist/movies/tierlist', label: 'Tierlist filmů', icon: Star, feature: 'watchlist' },
                     { href: '/watchlist/series/tierlist', label: 'Tierlist seriálů', icon: Star, feature: 'watchlist' },
