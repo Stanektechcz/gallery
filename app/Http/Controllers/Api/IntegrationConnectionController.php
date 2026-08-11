@@ -44,6 +44,9 @@ class IntegrationConnectionController extends Controller
             // service the server knows how to accept.
             'catalogue' => app(ProviderRegistry::class)->catalogue(),
             'storage' => $this->storage($space->id),
+            // How full the server disk is. The limit was enforced on upload but shown
+            // nowhere, so the first anybody heard of it was a refused photograph.
+            'quota' => app(\App\Services\Billing\EntitlementService::class)->storageUsage($space),
         ]);
     }
 

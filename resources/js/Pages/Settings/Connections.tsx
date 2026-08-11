@@ -23,6 +23,13 @@ interface Provider {
     caveat?: string;
 }
 
+interface Quota {
+    used_bytes: number;
+    limit_bytes: number | null;
+    limit_mb: number | null;
+    percent: number | null;
+}
+
 interface Storage {
     account: string | null;
     status: string;
@@ -51,6 +58,14 @@ interface Doc {
     uuid: string; title: string | null; kind: string;
     icon: string | null; url: string | null; updated_at: string | null;
 }
+
+/** Sizes in the units people actually think in, not in bytes. */
+const bytes = (value: number) => {
+    if (value >= 1024 ** 3) return `${(value / 1024 ** 3).toFixed(1)} GB`;
+    if (value >= 1024 ** 2) return `${Math.round(value / 1024 ** 2)} MB`;
+
+    return `${Math.round(value / 1024)} kB`;
+};
 
 /** Names come from the server's catalogue; this is only the fallback for an unknown code. */
 const nameOf = (catalogue: Provider[], code: string) =>
@@ -126,6 +141,7 @@ export default function Connections() {
 
     const [catalogue, setCatalogue] = useState<Provider[]>([]);
     const [storage, setStorage] = useState<Storage | null>(null);
+    const [quota, setQuota] = useState<Quota | null>(null);
     /** Which service's form is open. One at a time: two token fields side by side invite pasting into the wrong one. */
     const [adding, setAdding] = useState<Provider | null>(null);
 
@@ -163,6 +179,7 @@ export default function Connections() {
             setConnections(response.data.connections ?? []);
             setCatalogue(response.data.catalogue ?? []);
             setStorage(response.data.storage ?? null);
+            setQuota(response.data.quota ?? null);
             setDocuments(response.data.documents ?? []);
             setDiscordReady(response.data.discord_ready !== false);
         } catch (reason: any) {
@@ -266,7 +283,7 @@ export default function Connections() {
                                         key={provider.code}
                                         provider={provider}
                                         connected={provider.code === 'server'
-                                            ? 'Základní'
+                                            ? (quota?.limit_mb ? `${bytes(quota.used_bytes)} / ${bytes(quota.limit_bytes ?? 0)}` : 'Základní')
                                             : provider.code === 'google_drive' && storage?.status === 'connected'
                                                 ? (storage.account ?? 'Připojeno')
                                                 : null}
@@ -274,6 +291,44 @@ export default function Connections() {
                                     />
                                 ))}
                             </div>
+
+                            {/* How full the server disk is. The limit was already refusing
+                                uploads, but nothing said so until a photograph bounced —
+                                a quota nobody can see is a surprise rather than a rule. */}
+                            {quota && (
+                                <div className="mt-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-3">
+                                    <div className="flex flex-wrap items-baseline justify-between gap-2">
+                                        <p className="text-xs text-[var(--color-text-primary)]">
+                                            Zabráno {bytes(quota.used_bytes)}
+                                            {quota.limit_bytes ? ` z ${bytes(quota.limit_bytes)}` : ' — bez limitu'}
+                                        </p>
+                                        {quota.percent !== null && (
+                                            <p className={`text-[11px] ${quota.percent >= 90 ? 'text-red-300' : 'text-[var(--color-text-secondary)]'}`}>
+                                                {quota.percent} %
+                                            </p>
+                                        )}
+                                    </div>
+
+                                    {quota.percent !== null && (
+                                        <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-[var(--color-surface-muted)]">
+                                            <div
+                                                className={`h-full rounded-full ${quota.percent >= 90 ? 'bg-red-400' : 'bg-[var(--color-accent)]'}`}
+                                                style={{ width: `${Math.max(2, quota.percent)}%` }}
+                                            />
+                                        </div>
+                                    )}
+
+                                    {quota.percent !== null && quota.percent >= 75 && (
+                                        <p className="mt-2 text-[11px] text-[var(--color-text-secondary)]">
+                                            Místo dochází.{' '}
+                                            <a href="/settings/predplatne" className="text-[var(--color-accent)] hover:underline">
+                                                Rozšířit kapacitu
+                                            </a>{' '}
+                                            nebo připojte vlastní cloud.
+                                        </p>
+                                    )}
+                                </div>
+                            )}
 
                             {storage?.last_error && (
                                 <p className="mt-2 rounded-lg bg-red-500/10 p-2 text-[11px] text-red-200">
