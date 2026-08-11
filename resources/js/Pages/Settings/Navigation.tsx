@@ -12,6 +12,8 @@ interface Row {
     key: string;
     href: string | null;
     label: string | null;
+    /** Sections only; the sidebar draws it under the heading. */
+    description?: string | null;
     defaultLabel: string;
     hidden: boolean;
     group: boolean;
@@ -35,6 +37,7 @@ export default function NavigationSettings() {
     const page = usePage().props as {
         navigation?: Array<{
             key?: string | null; href: string | null; label: string | null;
+            description?: string | null;
             hidden: boolean; group: boolean; parent: string | null;
         }> | null;
         features?: string[] | null;
@@ -103,6 +106,7 @@ export default function NavigationSettings() {
                 key: keyOf(row, index),
                 href: row.href,
                 label: row.label,
+                description: row.description ?? null,
                 defaultLabel: defaults.find(item => item.href === row.href)?.label ?? 'Sekce',
                 hidden: row.hidden,
                 group: row.group,
@@ -212,6 +216,9 @@ export default function NavigationSettings() {
                 items: rows.map((row, index) => ({
                     href: row.href,
                     label: row.label || null,
+                    // Only a section has one, so an item never carries a stale subtitle
+                    // from having briefly been a heading.
+                    description: row.group ? (row.description || null) : null,
                     hidden: row.hidden,
                     group: row.group,
                     // The parent is the nearest row above sitting one level shallower.
@@ -262,7 +269,7 @@ export default function NavigationSettings() {
                     <button
                         type="button"
                         onClick={() => setRows(current => [
-                            { key: `#${Date.now()}`, href: null, label: 'Nová sekce', defaultLabel: 'Sekce', hidden: false, group: true, depth: 0 },
+                            { key: `#${Date.now()}`, href: null, label: 'Nová sekce', description: null, defaultLabel: 'Sekce', hidden: false, group: true, depth: 0 },
                             ...current,
                         ])}
                         className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-[var(--color-border)] px-3 text-xs text-[var(--color-text-primary)]"
@@ -367,16 +374,30 @@ export default function NavigationSettings() {
                         >
                             <GripVertical size={15} className={`shrink-0 text-[var(--color-text-secondary)] ${filtering ? 'opacity-25' : 'cursor-grab'}`} aria-hidden />
 
-                            <div className="min-w-0 flex-1">
+                            {/* A bordered field, not a bare transparent one. The old input
+                                looked like a label, so a renameable section read as fixed
+                                text — the commonest report was that it could not be edited
+                                at all, which was a matter of appearance rather than fact. */}
+                            <div className="min-w-0 flex-1 space-y-1">
                                 <input
                                     value={row.label ?? ''}
                                     placeholder={row.defaultLabel}
                                     onChange={event => setRows(current => current.map((candidate, position) =>
                                         position === index ? { ...candidate, label: event.target.value } : candidate))}
-                                    aria-label={`Název položky ${row.defaultLabel}`}
-                                    className="w-full rounded-lg bg-transparent px-1 text-sm text-[var(--color-text-primary)]"
+                                    aria-label={row.group ? `Název sekce ${row.defaultLabel}` : `Název položky ${row.defaultLabel}`}
+                                    className={`w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-muted)] px-2 py-1.5 text-[var(--color-text-primary)] ${row.group ? 'text-sm font-medium' : 'text-sm'}`}
                                 />
-                                {!row.group && (
+
+                                {row.group ? (
+                                    <input
+                                        value={row.description ?? ''}
+                                        placeholder="Popis sekce (nepovinný)"
+                                        onChange={event => setRows(current => current.map((candidate, position) =>
+                                            position === index ? { ...candidate, description: event.target.value } : candidate))}
+                                        aria-label={`Popis sekce ${row.defaultLabel}`}
+                                        className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-muted)] px-2 py-1 text-[11px] text-[var(--color-text-secondary)]"
+                                    />
+                                ) : (
                                     <p className="truncate px-1 text-[10px] text-[var(--color-text-secondary)]">
                                         {sectionOf.get(row.href ?? '') ?? 'Mimo sekce'} · {row.href}
                                     </p>
@@ -442,6 +463,7 @@ function seedFromSidebar(features: string[] | null): Row[] {
             key: `#sekce-${index}`,
             href: null,
             label: group.label,
+            description: group.description ?? null,
             defaultLabel: group.label,
             hidden: false,
             group: true,

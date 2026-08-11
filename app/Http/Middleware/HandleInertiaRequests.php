@@ -143,6 +143,7 @@ class HandleInertiaRequests extends Middleware
             'key' => $key($row),
             'href' => $row->href,
             'label' => $row->label,
+            'description' => $row->description,
             'icon' => $row->icon,
             'parent' => $row->parent_id
                 ? ($rows->firstWhere('id', $row->parent_id) ? $key($rows->firstWhere('id', $row->parent_id)) : null)

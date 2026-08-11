@@ -35,6 +35,7 @@ class NavigationController extends Controller
                 'uuid' => $row->uuid,
                 'href' => $row->href,
                 'label' => $row->label,
+                'description' => $row->description,
                 'icon' => $row->icon,
                 'parent' => $row->parent_id
                     ? $items->firstWhere('id', $row->parent_id)?->uuid
@@ -62,6 +63,7 @@ class NavigationController extends Controller
             'items' => 'present|array|max:200',
             'items.*.href' => 'nullable|string|max:190',
             'items.*.label' => 'nullable|string|max:120',
+            'items.*.description' => 'nullable|string|max:160',
             'items.*.icon' => 'nullable|string|max:16',
             // Index into this same array; null for a top-level item.
             'items.*.parent' => 'nullable|integer|min:0',
@@ -84,6 +86,7 @@ class NavigationController extends Controller
                     'user_id' => $user->id,
                     'href' => $item['href'] ?? null,
                     'label' => $item['label'] ?? null,
+                    'description' => $item['description'] ?? null,
                     'icon' => $item['icon'] ?? null,
                     'position' => $position,
                     'is_hidden' => (bool) ($item['hidden'] ?? false),

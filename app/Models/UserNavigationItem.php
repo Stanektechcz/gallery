@@ -14,7 +14,7 @@ use Illuminate\Support\Str;
 class UserNavigationItem extends Model
 {
     protected $fillable = [
-        'uuid', 'user_id', 'href', 'label', 'icon',
+        'uuid', 'user_id', 'href', 'label', 'description', 'icon',
         'parent_id', 'position', 'is_hidden', 'is_group',
     ];
 

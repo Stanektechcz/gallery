@@ -5,6 +5,7 @@ export interface Arrangement {
     key?: string | null;
     href: string | null;
     label: string | null;
+    description?: string | null;
     icon: string | null;
     parent: string | null;
     hidden: boolean;
@@ -129,7 +130,9 @@ export function applyArrangement(
                     id: key,
                     label: node.label,
                     icon: original?.icon,
-                    description: original?.description,
+                    // Their own words win; the built-in subtitle is only the fallback, and
+                    // an empty string is a deliberate "no subtitle" rather than a missing one.
+                    description: rows.get(key)?.description ?? original?.description,
                     items: node.children,
                 });
             }
