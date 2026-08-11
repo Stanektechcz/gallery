@@ -1,5 +1,6 @@
+import ServiceLogo from '@/Components/ServiceLogo';
 import AppLayout from '@/Layouts/AppLayout';
-import { Head, Link, usePage } from '@inertiajs/react';
+import { Head, router, usePage } from '@inertiajs/react';
 import axios from 'axios';
 import {
     ExternalLink, HardDrive, Loader2, Lock, Plug, RefreshCw, Trash2, Users,
@@ -9,13 +10,17 @@ import { useCallback, useEffect, useState } from 'react';
 interface Provider {
     code: string;
     name: string;
-    auth: 'token' | 'oauth' | 'invite';
+    kind: 'storage' | 'service';
+    auth: 'token' | 'oauth' | 'invite' | 'builtin' | 'none';
+    mode: 'page' | 'redirect' | 'modal' | 'none';
+    url?: string;
+    brand?: string;
     summary: string;
     help: string;
     scopes: Array<'personal' | 'shared'>;
     ready: boolean;
+    available?: boolean;
     caveat?: string;
-    managed_by?: string;
 }
 
 interface Storage {
@@ -51,6 +56,61 @@ interface Doc {
 const nameOf = (catalogue: Provider[], code: string) =>
     catalogue.find(provider => provider.code === code)?.name ?? code;
 
+/**
+ * One service as a card.
+ *
+ * What a click does is the provider's own business: storage with a library behind it opens
+ * a page, a plain sign-in goes straight to the redirect, and anything needing a token or a
+ * choice opens a modal. Three behaviours behind one shape, so the card is read once and
+ * the difference is in what follows rather than in how it looks.
+ *
+ * A service we cannot integrate stays on the grid, greyed, saying why. Removing it would
+ * only mean somebody asks for it again next month.
+ */
+function ServiceCard({ provider, connected, onOpen }: {
+    provider: Provider;
+    connected: string | null;
+    onOpen: () => void;
+}) {
+    const dead = provider.available === false;
+    const inert = dead || provider.mode === 'none';
+
+    return (
+        <button
+            type="button"
+            onClick={inert ? undefined : onOpen}
+            disabled={inert}
+            title={dead ? provider.help : undefined}
+            className={`flex h-full flex-col items-start gap-2 rounded-2xl border p-3 text-left transition-colors ${dead
+                ? 'cursor-default border-[var(--color-border)] bg-[var(--color-bg-card)] opacity-45'
+                : inert
+                    ? 'cursor-default border-[var(--color-border)] bg-[var(--color-bg-card)]'
+                    : 'border-[var(--color-border)] bg-[var(--color-bg-card)] hover:border-[var(--color-accent)] hover:bg-[var(--color-surface-hover)]'}`}
+        >
+            <ServiceLogo code={provider.code} brand={provider.brand} />
+
+            <span className="w-full">
+                <span className="block truncate text-sm font-medium text-[var(--color-text-primary)]">{provider.name}</span>
+                <span className="mt-0.5 block text-[11px] leading-4 text-[var(--color-text-secondary)]">
+                    {dead ? 'Napojit nelze' : provider.summary}
+                </span>
+            </span>
+
+            <span className="mt-auto pt-1">
+                {connected ? (
+                    <span className="rounded-md bg-emerald-500/15 px-1.5 py-0.5 text-[10px] text-emerald-200">{connected}</span>
+                ) : dead ? null : !provider.ready ? (
+                    <span className="rounded-md bg-[var(--color-surface-muted)] px-1.5 py-0.5 text-[10px] text-[var(--color-text-secondary)]">
+                        Nenastaveno
+                    </span>
+                ) : (
+                    <span className="text-[10px] text-[var(--color-accent)]">Připojit</span>
+                )}
+            </span>
+        </button>
+    );
+}
+
 export default function Connections() {
     const flash = (usePage().props as any).flash ?? {};
     const [connections, setConnections] = useState<Connection[]>([]);
@@ -68,6 +128,34 @@ export default function Connections() {
     const [storage, setStorage] = useState<Storage | null>(null);
     /** Which service's form is open. One at a time: two token fields side by side invite pasting into the wrong one. */
     const [adding, setAdding] = useState<Provider | null>(null);
+
+    /**
+     * What a card does when clicked, decided by the provider rather than by the card.
+     *
+     * A page navigates, a redirect leaves for the service, and everything else opens the
+     * modal. The redirect is a full page load rather than a client-side visit, because the
+     * destination is not ours to route.
+     */
+    const openProvider = (provider: Provider) => {
+        if (provider.available === false) return;
+
+        if (provider.mode === 'page' && provider.url) { router.visit(provider.url); return; }
+
+        if (provider.mode === 'redirect') {
+            if (!provider.ready) {
+                setError(`${provider.name}: ${provider.help}`);
+
+                return;
+            }
+            window.location.href = `/settings/propojeni/${provider.code}/start`;
+
+            return;
+        }
+
+        setToken('');
+        setVisibility(provider.scopes[0] ?? 'personal');
+        setAdding(provider);
+    };
 
     const load = useCallback(async () => {
         try {
@@ -161,135 +249,61 @@ export default function Connections() {
 
                 {!loading && (
                     <>
-                        {/* Storage first. It is the one connection the gallery cannot work
-                            without, and burying it under the optional ones would say the
-                            opposite. It keeps its own screen for the heavy operations —
-                            re-syncing and rebuilding the folder tree are not things to put
-                            a click away from a token field. */}
-                        <section className="mt-6 rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-4">
-                            <div className="flex items-start justify-between gap-3">
-                                <div className="min-w-0">
-                                    <h2 className="flex items-center gap-2 font-semibold text-[var(--color-text-primary)]">
-                                        <HardDrive size={17} className="text-[var(--color-accent)]" /> Úložiště galerie
-                                    </h2>
-                                    <p className="mt-1 text-xs text-[var(--color-text-secondary)]">
-                                        {storage
-                                            ? <>Google Drive · {storage.account ?? 'účet neznámý'}</>
-                                            : 'Zatím není připojené žádné úložiště. Fotky se ukládají jen lokálně.'}
-                                    </p>
-                                    {storage?.last_error && (
-                                        <p className="mt-2 rounded-lg bg-red-500/10 p-2 text-[11px] text-red-200">
-                                            Poslední chyba: {storage.last_error}
-                                        </p>
-                                    )}
-                                </div>
+                        {/* Storage first. It is the one connection the gallery cannot
+                            work without, and burying it under the optional ones would say
+                            otherwise. Four to a row: the cards carry a name, a mark and a
+                            sentence, and a fifth would push the sentence to two lines on
+                            every screen narrower than a desk. */}
+                        <section className="mt-6">
+                            <h2 className="font-semibold text-[var(--color-text-primary)]">Úložiště</h2>
+                            <p className="mt-1 text-xs text-[var(--color-text-secondary)]">
+                                Fotky leží na našem serveru. Připojením vlastního cloudu je přesunete k sobě.
+                            </p>
 
-                                <span className={`shrink-0 rounded-lg px-2 py-1 text-[10px] ${storage?.status === 'connected'
-                                    ? 'bg-emerald-500/15 text-emerald-200'
-                                    : 'bg-[var(--color-surface-muted)] text-[var(--color-text-secondary)]'}`}>
-                                    {storage?.status === 'connected' ? 'Připojeno' : storage ? storage.status : 'Nepřipojeno'}
-                                </span>
+                            <div className="mt-3 grid grid-cols-2 gap-2 lg:grid-cols-4">
+                                {catalogue.filter(provider => provider.kind === 'storage').map(provider => (
+                                    <ServiceCard
+                                        key={provider.code}
+                                        provider={provider}
+                                        connected={provider.code === 'server'
+                                            ? 'Základní'
+                                            : provider.code === 'google_drive' && storage?.status === 'connected'
+                                                ? (storage.account ?? 'Připojeno')
+                                                : null}
+                                        onOpen={() => openProvider(provider)}
+                                    />
+                                ))}
                             </div>
 
-                            <Link
-                                href="/settings/storage/google"
-                                className="mt-3 inline-flex min-h-10 items-center gap-2 rounded-xl border border-[var(--color-border)] px-3 text-xs text-[var(--color-text-primary)] hover:border-[var(--color-accent)]"
-                            >
-                                <HardDrive size={14} /> {storage ? 'Spravovat úložiště' : 'Připojit Google Drive'}
-                            </Link>
+                            {storage?.last_error && (
+                                <p className="mt-2 rounded-lg bg-red-500/10 p-2 text-[11px] text-red-200">
+                                    Google Drive — poslední chyba: {storage.last_error}
+                                </p>
+                            )}
                         </section>
 
-                        {/* What else can be joined, and what it would take. A service whose
-                            OAuth application nobody has registered says so here rather than
-                            handing somebody a button that leads to an error page. */}
-                        <section className="mt-5 rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-4">
-                            <h2 className="font-semibold text-[var(--color-text-primary)]">Dostupné služby</h2>
+                        <section className="mt-6">
+                            <h2 className="font-semibold text-[var(--color-text-primary)]">Služby</h2>
                             <p className="mt-1 text-xs text-[var(--color-text-secondary)]">
                                 Každou lze připojit zvlášť jako osobní a zvlášť jako sdílenou — dva účty téže služby vedle sebe.
                             </p>
 
-                            <div className="mt-3 space-y-2">
-                                {catalogue.filter(provider => provider.managed_by !== 'storage').map(provider => {
-                                    const mine = connections.filter(row => row.provider === provider.code);
+                            <div className="mt-3 grid grid-cols-2 gap-2 lg:grid-cols-4">
+                                {catalogue.filter(provider => provider.kind === 'service').map(provider => (
+                                    <ServiceCard
+                                        key={provider.code}
+                                        provider={provider}
+                                        connected={(() => {
+                                            const mine = connections.filter(row => row.provider === provider.code);
 
-                                    return (
-                                        <div key={provider.code} className="rounded-xl border border-[var(--color-border)] p-3">
-                                            <div className="flex items-start justify-between gap-3">
-                                                <div className="min-w-0">
-                                                    <p className="text-sm font-medium text-[var(--color-text-primary)]">
-                                                        {provider.name}
-                                                        {mine.length > 0 && (
-                                                            <span className="ml-2 text-[10px] text-[var(--color-accent)]">
-                                                                {mine.length}× připojeno
-                                                            </span>
-                                                        )}
-                                                    </p>
-                                                    <p className="mt-0.5 text-xs text-[var(--color-text-secondary)]">{provider.summary}</p>
-                                                    {provider.caveat && (
-                                                        <p className="mt-1 text-[11px] text-amber-200">{provider.caveat}</p>
-                                                    )}
-                                                </div>
-
-                                                {provider.auth === 'token' && provider.code !== 'notion' ? (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => { setAdding(adding?.code === provider.code ? null : provider); setToken(''); setVisibility(provider.scopes[0]); }}
-                                                        className="shrink-0 rounded-lg border border-[var(--color-border)] px-2.5 py-1.5 text-xs text-[var(--color-text-primary)] hover:border-[var(--color-accent)]"
-                                                    >
-                                                        Připojit
-                                                    </button>
-                                                ) : (
-                                                    <span className="shrink-0 rounded-lg bg-[var(--color-surface-muted)] px-2 py-1 text-[10px] text-[var(--color-text-secondary)]">
-                                                        {provider.code === 'notion' ? 'níže' : provider.ready ? 'přes přesměrování' : 'nenastaveno'}
-                                                    </span>
-                                                )}
-                                            </div>
-
-                                            {adding?.code === provider.code && (
-                                                <div className="mt-3 space-y-2 border-t border-[var(--color-border)] pt-3">
-                                                    <p className="text-[11px] text-[var(--color-text-secondary)]">{provider.help}</p>
-                                                    <input
-                                                        type="password"
-                                                        value={token}
-                                                        onChange={event => setToken(event.target.value)}
-                                                        placeholder="Token"
-                                                        className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-muted)] px-3 py-2 text-sm text-[var(--color-text-primary)]"
-                                                    />
-                                                    <div className="flex flex-wrap items-center gap-2">
-                                                        <select
-                                                            value={visibility}
-                                                            onChange={event => setVisibility(event.target.value as 'personal' | 'shared')}
-                                                            className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-muted)] px-2 py-2 text-xs text-[var(--color-text-primary)]"
-                                                        >
-                                                            {provider.scopes.includes('personal') && <option value="personal">Osobní — jen pro mě</option>}
-                                                            {provider.scopes.includes('shared') && <option value="shared">Sdílené — pro celý prostor</option>}
-                                                        </select>
-                                                        <button
-                                                            type="button"
-                                                            disabled={busy === provider.code || !token}
-                                                            onClick={async () => {
-                                                                setBusy(provider.code); setError('');
-                                                                try {
-                                                                    await axios.post(`/api/v1/propojeni/token/${provider.code}`, { token, visibility });
-                                                                    setToken(''); setAdding(null);
-                                                                    setNotice(`${provider.name} připojeno.`);
-                                                                    await load();
-                                                                } catch (reason: any) {
-                                                                    setError(reason?.response?.data?.message ?? 'Připojit se nepodařilo.');
-                                                                } finally { setBusy(null); }
-                                                            }}
-                                                            className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-[var(--color-accent)] px-3 text-xs text-[var(--color-accent-contrast)] disabled:opacity-50"
-                                                        >
-                                                            {busy === provider.code && <Loader2 size={13} className="animate-spin" />} Uložit
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </div>
-                                    );
-                                })}
+                                            return mine.length > 0 ? `${mine.length}× připojeno` : null;
+                                        })()}
+                                        onOpen={() => openProvider(provider)}
+                                    />
+                                ))}
                             </div>
                         </section>
+
 
                         <section className="mt-6 rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-4">
                             <h2 className="font-semibold text-[var(--color-text-primary)]">Notion</h2>
@@ -438,6 +452,78 @@ export default function Connections() {
                             </section>
                         )}
                     </>
+                )}
+
+                {/* The middle case: more than a sign-in, less than a screen of its own.
+                    A modal rather than an expanding card, because the form needs the whole
+                    width on a phone and an inline one pushes everything below it away. */}
+                {adding && (
+                    <div className="fixed inset-0 z-[760] flex items-end justify-center bg-black/60 sm:items-center sm:p-4">
+                        <button type="button" aria-label="Zavřít" onClick={() => setAdding(null)} className="absolute inset-0 cursor-default" />
+
+                        <section className="safe-area-pb relative w-full rounded-t-2xl border border-[var(--color-border)] bg-[var(--color-bg-secondary)] p-4 sm:max-w-md sm:rounded-2xl">
+                            <div className="flex items-start gap-3">
+                                <ServiceLogo code={adding.code} brand={adding.brand} size={30} />
+                                <div className="min-w-0 flex-1">
+                                    <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">Připojit {adding.name}</h2>
+                                    <p className="mt-1 text-xs text-[var(--color-text-secondary)]">{adding.help}</p>
+                                    {adding.caveat && <p className="mt-1 text-[11px] text-amber-200">{adding.caveat}</p>}
+                                </div>
+                            </div>
+
+                            <input
+                                type="password"
+                                autoFocus
+                                value={token}
+                                onChange={event => setToken(event.target.value)}
+                                placeholder={adding.auth === 'invite' ? 'Adresa webhooku' : 'Token'}
+                                className="mt-4 w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-muted)] px-3 py-2.5 text-sm text-[var(--color-text-primary)]"
+                            />
+
+                            {adding.scopes.length > 1 && (
+                                <select
+                                    value={visibility}
+                                    onChange={event => setVisibility(event.target.value as 'personal' | 'shared')}
+                                    className="mt-2 w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-muted)] px-3 py-2.5 text-sm text-[var(--color-text-primary)]"
+                                >
+                                    <option value="personal">Osobní — vidím jen já</option>
+                                    <option value="shared">Sdílené — pro celý prostor</option>
+                                </select>
+                            )}
+
+                            <div className="mt-4 flex gap-2">
+                                <button
+                                    type="button"
+                                    disabled={busy === adding.code || !token}
+                                    onClick={async () => {
+                                        const provider = adding;
+                                        setBusy(provider.code); setError('');
+                                        try {
+                                            const url = provider.code === 'notion'
+                                                ? '/api/v1/propojeni/notion'
+                                                : `/api/v1/propojeni/token/${provider.code}`;
+                                            await axios.post(url, { token, visibility });
+                                            setToken(''); setAdding(null);
+                                            setNotice(`${provider.name} připojeno.`);
+                                            await load();
+                                        } catch (reason: any) {
+                                            setError(reason?.response?.data?.message ?? 'Připojit se nepodařilo.');
+                                        } finally { setBusy(null); }
+                                    }}
+                                    className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-[var(--color-accent)] text-sm font-medium text-[var(--color-accent-contrast)] disabled:opacity-50"
+                                >
+                                    {busy === adding.code && <Loader2 size={14} className="animate-spin" />} Připojit
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setAdding(null)}
+                                    className="min-h-11 rounded-xl border border-[var(--color-border)] px-4 text-sm text-[var(--color-text-primary)]"
+                                >
+                                    Zrušit
+                                </button>
+                            </div>
+                        </section>
+                    </div>
                 )}
             </main>
         </AppLayout>

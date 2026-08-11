@@ -12,63 +12,153 @@ use Illuminate\Support\Facades\Schema;
  * the server had never heard of and the server could accept one the screen never showed.
  * It is authored here now and travels with the page.
  *
- * Each entry says how it authorises, because that decides what the screen must ask for:
+ * Three fields decide what the screen does with each entry:
  *
- *   token    a personal token the person pastes — nothing to configure, works immediately
- *   oauth    a redirect, which needs an application registered by the operator first
- *   invite   no account at all; the app posts to a URL the person supplies
+ *   auth   token | oauth | invite | builtin — how a credential is obtained
+ *   mode   page | redirect | modal | none   — what a click on the card should do
+ *   kind   storage | service                — which half of the screen it belongs to
  *
- * `ready` is the honest part. A provider whose OAuth application has not been registered
- * cannot be connected however inviting the button looks, so the screen says so rather than
- * sending somebody to a page that will refuse them.
+ * `available` is the honest field. Several services people reasonably expect cannot be
+ * connected at all, and the reason is theirs rather than ours — no public API, or one that
+ * demands a password we must never ask for. A card that says so is worth more than a
+ * button that fails after somebody has tried twice.
  */
 class ProviderRegistry
 {
-    /**
-     * Personal and shared both, unless stated. "Personal" means the credential is the
-     * person's own and nobody else in the space can use it; "shared" means the space can.
-     */
     public const PROVIDERS = [
-        'notion' => [
-            'name' => 'Notion',
-            'auth' => 'token',
-            'summary' => 'Čtení a zápis stránek. Osobní i sdílený prostor zvlášť.',
-            'help' => 'Vytvořte si integraci na notion.so/my-integrations a vložte její token.',
-            'scopes' => ['personal', 'shared'],
-        ],
-        'affine' => [
-            'name' => 'AFFiNE',
-            'auth' => 'token',
-            'summary' => 'Poznámky a whiteboardy. Přístup je přes MCP přihlašovací údaj.',
-            'help' => 'V AFFiNE si vytvořte MCP credential a vložte jej sem.',
-            'scopes' => ['personal', 'shared'],
-        ],
-        'discord' => [
-            'name' => 'Discord',
-            'auth' => 'invite',
-            'summary' => 'Odesílání zpráv na kanál přes webhook.',
-            'help' => 'V nastavení kanálu vytvořte webhook a vložte jeho adresu.',
-            'scopes' => ['personal', 'shared'],
-            // Presence needs a gateway connection and a privileged intent, which needs a
-            // daemon this app does not run. Saying so beats a status that never updates.
-            'caveat' => 'Stav uživatele (online/offline) přes webhook nelze číst.',
+        // ─── Storage ────────────────────────────────────────────────
+        'server' => [
+            'name' => 'Server galerie',
+            'kind' => 'storage',
+            'auth' => 'builtin',
+            'mode' => 'none',
+            'brand' => '#7c8cf8',
+            'summary' => 'Základní úložiště na našem disku. Funguje hned, bez připojování.',
+            'help' => 'Kapacitu rozšíříte v předplatném.',
+            'scopes' => ['shared'],
+            'available' => true,
         ],
         'google_drive' => [
             'name' => 'Google Drive',
+            'kind' => 'storage',
             'auth' => 'oauth',
-            'summary' => 'Úložiště fotek a videí galerie.',
-            'help' => 'Připojuje se přes Google účet a platí pro celý prostor.',
-            // One Drive per space, not one per person: the gallery's files live in it, and
-            // two accounts holding half the photographs each is not a gallery.
+            // Its own page: re-syncing a library and rebuilding a folder tree are not
+            // things to put behind a modal somebody can dismiss halfway through.
+            'mode' => 'page',
+            'url' => '/settings/storage/google',
+            'brand' => '#1fa463',
+            'summary' => 'Fotky a videa ve vašem Disku.',
+            'help' => 'Připojí se přes Google účet a platí pro celý prostor.',
             'scopes' => ['shared'],
-            'managed_by' => 'storage',
+            'available' => true,
+        ],
+        'onedrive' => [
+            'name' => 'OneDrive',
+            'kind' => 'storage',
+            'auth' => 'oauth',
+            'mode' => 'redirect',
+            'brand' => '#0f6cbd',
+            'summary' => 'Úložiště Microsoftu přes Graph API.',
+            'help' => 'Vyžaduje registrovanou aplikaci v Azure a souhlas účtu.',
+            'scopes' => ['shared'],
+            'available' => true,
+        ],
+        'dropbox' => [
+            'name' => 'Dropbox',
+            'kind' => 'storage',
+            'auth' => 'oauth',
+            'mode' => 'redirect',
+            'brand' => '#0061fe',
+            'summary' => 'Úložiště Dropboxu přes jejich API.',
+            'help' => 'Vyžaduje registrovanou aplikaci v Dropbox App Console.',
+            'scopes' => ['shared'],
+            'available' => true,
+        ],
+        'mega' => [
+            'name' => 'MEGA',
+            'kind' => 'storage',
+            'auth' => 'none',
+            'mode' => 'none',
+            'brand' => '#d9272e',
+            'summary' => 'Napojit nelze.',
+            'help' => 'MEGA nemá OAuth. Přihlášení vyžaduje e-mail a heslo k účtu, '
+                . 'a heslo k cizí službě od vás nikdy chtít nebudeme.',
+            'scopes' => [],
+            'available' => false,
+        ],
+        'proton_drive' => [
+            'name' => 'Proton Drive',
+            'kind' => 'storage',
+            'auth' => 'none',
+            'mode' => 'none',
+            'brand' => '#6d4aff',
+            'summary' => 'Napojit nelze.',
+            'help' => 'Proton Drive nemá veřejné API. Existující nástroje obcházejí '
+                . 'protokol zpětným inženýrstvím, což není základ, na kterém chceme mít vaše fotky.',
+            'scopes' => [],
+            'available' => false,
+        ],
+        'icloud' => [
+            'name' => 'iCloud Drive',
+            'kind' => 'storage',
+            'auth' => 'none',
+            'mode' => 'none',
+            'brand' => '#8e8e93',
+            'summary' => 'Napojit nelze.',
+            'help' => 'Apple nedává aplikacím třetích stran přístup k iCloud Drive. '
+                . 'CloudKit umí jen vlastní úložiště aplikace, ne vaše soubory.',
+            'scopes' => [],
+            'available' => false,
+        ],
+
+        // ─── Services ───────────────────────────────────────────────
+        'notion' => [
+            'name' => 'Notion',
+            'kind' => 'service',
+            'auth' => 'token',
+            'mode' => 'modal',
+            'brand' => '#e8e8e8',
+            'summary' => 'Čtení a zápis stránek.',
+            'help' => 'Vytvořte si integraci na notion.so/my-integrations, vložte její token '
+                . 'a nasdílejte jí stránky — bez nasdílení nevidí nic.',
+            'scopes' => ['personal', 'shared'],
+            'available' => true,
+        ],
+        'affine' => [
+            'name' => 'AFFiNE',
+            'kind' => 'service',
+            'auth' => 'token',
+            'mode' => 'modal',
+            'brand' => '#1e96eb',
+            'summary' => 'Poznámky a whiteboardy.',
+            'help' => 'V AFFiNE si vytvořte MCP credential a vložte jej sem.',
+            'scopes' => ['personal', 'shared'],
+            'available' => true,
+        ],
+        'discord' => [
+            'name' => 'Discord',
+            'kind' => 'service',
+            'auth' => 'invite',
+            'mode' => 'modal',
+            'brand' => '#5865f2',
+            'summary' => 'Zprávy na kanál přes webhook.',
+            'help' => 'V nastavení kanálu vytvořte webhook a vložte jeho adresu.',
+            'scopes' => ['personal', 'shared'],
+            'available' => true,
+            // Presence needs a gateway connection and a privileged intent, which needs a
+            // daemon this app does not run. Saying so beats a status that never updates.
+            'caveat' => 'Stav uživatele (online/offline) přes webhook číst nelze.',
         ],
         'facebook' => [
             'name' => 'Facebook',
+            'kind' => 'service',
             'auth' => 'oauth',
+            'mode' => 'redirect',
+            'brand' => '#0866ff',
             'summary' => 'Import fotek z alb.',
             'help' => 'Vyžaduje registrovanou aplikaci a schválení oprávnění od Meta.',
             'scopes' => ['personal'],
+            'available' => true,
         ],
     ];
 
@@ -90,17 +180,20 @@ class ProviderRegistry
     /**
      * Can somebody actually connect this today?
      *
-     * A token or a webhook needs nothing from the operator — the person supplies the
-     * credential themselves. A redirect needs an application registered first, and without
-     * one the button leads to an error page with somebody else's problem written on it.
+     * A service we cannot integrate is never ready, whatever is configured. A token or a
+     * webhook needs nothing from the operator — the person supplies the credential. A
+     * redirect needs an application registered first, and without one the button leads to
+     * an error page with somebody else's problem written on it.
      */
     private function ready(string $code, array $provider): bool
     {
+        if (($provider['available'] ?? true) === false) return false;
+        if (($provider['auth'] ?? '') === 'builtin') return true;
         if (($provider['auth'] ?? '') !== 'oauth') return true;
 
-        if ($code === 'google_drive') {
-            return (bool) config('services.google.client_id');
-        }
+        if ($code === 'google_drive') return (bool) config('services.google.client_id');
+        if ($code === 'onedrive') return (bool) config('services.onedrive.client_id');
+        if ($code === 'dropbox') return (bool) config('services.dropbox.client_id');
 
         if (! Schema::hasTable('integration_settings')) return false;
 

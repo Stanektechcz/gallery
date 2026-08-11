@@ -153,6 +153,26 @@ Route::middleware(['auth'])->group(function () {
     // Voice messages, the burp module and the space's own plan overview.
     Route::get('/settings/menu', fn() => Inertia::render('Settings/Navigation'))->name('navigation.settings');
     Route::get('/settings/propojeni', fn() => Inertia::render('Settings/Connections'))->name('connections');
+
+    /**
+     * Where a card marked "redirect" sends people.
+     *
+     * Google Drive keeps its own established flow. The rest are catalogued but their OAuth
+     * exchange is not written yet, so this says so and sends them back — the card already
+     * refuses the click when the application is unregistered, and this is the second line
+     * for the case where it is registered but the exchange still is not.
+     */
+    Route::get('/settings/propojeni/{provider}/start', function (string $provider) {
+        if ($provider === 'google_drive') return redirect()->route('storage.google');
+
+        $registry = app(\App\Services\Integrations\ProviderRegistry::class);
+        abort_unless($registry->has($provider), 404);
+
+        $name = \App\Services\Integrations\ProviderRegistry::PROVIDERS[$provider]['name'];
+
+        return redirect()->route('connections')
+            ->with('error', $name . ': přihlášení přes tuto službu zatím není dokončené.');
+    })->name('connections.start');
     Route::get('/discord/pripojit', [App\Http\Controllers\DiscordOAuthController::class, 'redirect'])->name('discord.connect');
     Route::get('/discord/zpet', [App\Http\Controllers\DiscordOAuthController::class, 'callback'])->name('discord.callback');
     Route::get('/denik', fn() => Inertia::render('Journal/Index'))->name('journal');
