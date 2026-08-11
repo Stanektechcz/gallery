@@ -122,6 +122,37 @@ class DropboxOAuthController extends Controller
         return redirect()->route('connections')->with('success', 'Dropbox připojen.');
     }
 
+    /**
+     * Asks Dropbox whether the connection still works, rather than reading our own column.
+     *
+     * That column says what happened last time, which is not the question somebody
+     * pressing this button is asking. A token that expired overnight is renewed as part of
+     * the check, so the commonest failure fixes itself here.
+     */
+    public function test(Request $request, \App\Services\Storage\DropboxClient $client): RedirectResponse
+    {
+        $space = $this->space($request);
+        $connection = StorageConnection::where('provider', 'dropbox')
+            ->where('gallery_space_id', $space->id)->first();
+
+        if (! $connection) {
+            return redirect()->route('connections')->with('error', 'Dropbox není připojený.');
+        }
+
+        $result = $client->probe($connection);
+
+        if (! $result['ok']) {
+            return redirect()->route('connections')->with('error', 'Dropbox: ' . $result['error']);
+        }
+
+        $free = $result['allocated_bytes'] && $result['used_bytes'] !== null
+            ? ' Volné místo: ' . round(($result['allocated_bytes'] - $result['used_bytes']) / 1024 ** 3, 1) . ' GB.'
+            : '';
+
+        return redirect()->route('connections')
+            ->with('success', 'Dropbox odpovídá — ' . ($result['account'] ?? 'účet ověřen') . '.' . $free);
+    }
+
     public function disconnect(Request $request): RedirectResponse
     {
         $space = $this->space($request);

@@ -164,6 +164,7 @@ Route::middleware(['auth'])->group(function () {
      */
     Route::get('/oauth/dropbox/callback', [\App\Http\Controllers\Storage\DropboxOAuthController::class, 'callback'])->name('storage.dropbox.callback');
     Route::post('/settings/storage/dropbox/disconnect', [\App\Http\Controllers\Storage\DropboxOAuthController::class, 'disconnect'])->name('storage.dropbox.disconnect');
+    Route::post('/settings/storage/dropbox/test', [\App\Http\Controllers\Storage\DropboxOAuthController::class, 'test'])->name('storage.dropbox.test');
 
     Route::get('/settings/propojeni/{provider}/start', function (string $provider) {
         if ($provider === 'google_drive') return redirect()->route('storage.google');
