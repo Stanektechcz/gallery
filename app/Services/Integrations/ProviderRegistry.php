@@ -191,9 +191,11 @@ class ProviderRegistry
         if (($provider['auth'] ?? '') === 'builtin') return true;
         if (($provider['auth'] ?? '') !== 'oauth') return true;
 
-        if ($code === 'google_drive') return (bool) config('services.google.client_id');
-        if ($code === 'onedrive') return (bool) config('services.onedrive.client_id');
-        if ($code === 'dropbox') return (bool) config('services.dropbox.client_id');
+        // Clouds ask the resolver, which reads the administration first and the
+        // environment second — so a key entered in the interface takes effect there.
+        if (in_array($code, \App\Services\Storage\StorageResolver::CLOUDS, true)) {
+            return app(\App\Services\Storage\StorageResolver::class)->configured($code);
+        }
 
         if (! Schema::hasTable('integration_settings')) return false;
 

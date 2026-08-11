@@ -9,7 +9,9 @@ use Illuminate\Support\Facades\Crypt;
 class StorageConnection extends Model
 {
     protected $fillable = [
-        'provider', 'owner_user_id', 'google_subject_id', 'account_email',
+        // Without this the space is silently dropped on save and every connection looks
+        // like it belongs to nobody — which reads, downstream, as "use the local disk".
+        'provider', 'gallery_space_id', 'owner_user_id', 'google_subject_id', 'account_email',
         'encrypted_access_token', 'encrypted_refresh_token', 'token_expires_at',
         'granted_scopes_json', 'connection_status', 'last_successful_request_at',
         'last_error_at', 'last_error_code', 'last_error_message',

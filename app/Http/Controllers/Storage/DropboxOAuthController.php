@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Storage;
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\StorageConnection;
+use App\Services\Storage\StorageResolver;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Crypt;
@@ -28,11 +29,17 @@ class DropboxOAuthController extends Controller
     private const TOKEN = 'https://api.dropboxapi.com/oauth2/token';
     private const ACCOUNT = 'https://api.dropboxapi.com/2/users/get_current_account';
 
+    public function __construct(private readonly StorageResolver $resolver)
+    {
+    }
+
     public function start(Request $request): RedirectResponse
     {
         abort_unless($this->configured(), 503, 'Dropbox zatím není nastavený.');
-        abort_unless(in_array($request->user()->role, ['owner', 'admin'], true), 403,
-            'Úložiště prostoru může připojit jen správce.');
+
+        $space = $this->space($request);
+        abort_unless($this->resolver->mayManage($space, $request->user()->id), 403,
+            'Úložiště prostoru může připojit jen vlastník tarifu.');
 
         // A one-time value tied to this session. Without it, anyone could hand somebody a
         // callback link and attach their own Dropbox to the victim's gallery.
@@ -40,8 +47,8 @@ class DropboxOAuthController extends Controller
         $request->session()->put('dropbox.state', $state);
 
         return redirect()->away(self::AUTHORISE . '?' . http_build_query([
-            'client_id' => config('services.dropbox.client_id'),
-            'redirect_uri' => config('services.dropbox.redirect'),
+            'client_id' => $this->resolver->credentials('dropbox')['client_id'],
+            'redirect_uri' => $this->resolver->credentials('dropbox')['redirect'],
             'response_type' => 'code',
             'token_access_type' => 'offline',
             'state' => $state,
@@ -70,9 +77,9 @@ class DropboxOAuthController extends Controller
         $exchange = Http::asForm()->post(self::TOKEN, [
             'code' => $request->string('code')->toString(),
             'grant_type' => 'authorization_code',
-            'client_id' => config('services.dropbox.client_id'),
-            'client_secret' => config('services.dropbox.client_secret'),
-            'redirect_uri' => config('services.dropbox.redirect'),
+            'client_id' => $this->resolver->credentials('dropbox')['client_id'],
+            'client_secret' => $this->resolver->credentials('dropbox')['client_secret'],
+            'redirect_uri' => $this->resolver->credentials('dropbox')['redirect'],
         ]);
 
         if ($exchange->failed()) {
@@ -91,8 +98,10 @@ class DropboxOAuthController extends Controller
 
         $account = Http::withToken($tokens['access_token'])->post(self::ACCOUNT);
 
+        // Keyed by space as well as provider: one customer connecting their Dropbox must
+        // not redirect another customer's photographs into it.
         StorageConnection::updateOrCreate(
-            ['provider' => 'dropbox'],
+            ['provider' => 'dropbox', 'gallery_space_id' => $this->space($request)->id],
             [
                 'owner_user_id' => $request->user()->id,
                 'account_email' => $account->json('email'),
@@ -115,11 +124,14 @@ class DropboxOAuthController extends Controller
 
     public function disconnect(Request $request): RedirectResponse
     {
-        abort_unless(in_array($request->user()->role, ['owner', 'admin'], true), 403);
+        $space = $this->space($request);
+        abort_unless($this->resolver->mayManage($space, $request->user()->id), 403,
+            'Úložiště prostoru může odpojit jen vlastník tarifu.');
 
         // The row goes; the files do not. Nothing here reaches into somebody's Dropbox to
-        // delete what it finds.
-        StorageConnection::where('provider', 'dropbox')->delete();
+        // delete what it finds. Photographs saved from here on go to the local disk, which
+        // is the floor rather than a failure.
+        StorageConnection::where('provider', 'dropbox')->where('gallery_space_id', $space->id)->delete();
         AuditLog::record('storage.dropbox.disconnected');
 
         return redirect()->route('connections')->with('success', 'Dropbox odpojen. Soubory v Dropboxu zůstávají.');
@@ -127,6 +139,14 @@ class DropboxOAuthController extends Controller
 
     private function configured(): bool
     {
-        return (bool) config('services.dropbox.client_id') && (bool) config('services.dropbox.client_secret');
+        return $this->resolver->configured('dropbox');
+    }
+
+    private function space(Request $request): \App\Models\GallerySpace
+    {
+        $space = $request->user()->gallerySpaces()->orderByDesc('is_default')->first();
+        abort_unless($space, 404, 'Prostor nebyl nalezen.');
+
+        return $space;
     }
 }

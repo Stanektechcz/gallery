@@ -110,9 +110,14 @@ class IntegrationConnectionController extends Controller
     {
         if (! Schema::hasTable('storage_connections')) return [];
 
-        // Keyed by provider, so a second cloud needs no second field on the payload — the
-        // card looks itself up rather than the payload naming every provider it knows.
-        return StorageConnection::all()
+        // This space's own, not the installation's. Rows predating the space column are
+        // left out rather than shown to everybody — an unattributed connection belongs to
+        // nobody, and guessing wrong here would show one customer another's account.
+        return StorageConnection::when(
+                Schema::hasColumn('storage_connections', 'gallery_space_id'),
+                fn ($query) => $query->where('gallery_space_id', $spaceId),
+            )
+            ->get()
             ->mapWithKeys(fn (StorageConnection $row) => [$row->provider => [
                 'account' => $row->account_email,
                 'status' => $row->connection_status,
