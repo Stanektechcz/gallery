@@ -245,6 +245,7 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
     // Outside services a person connects: their own, or shared with the space.
     Route::get('/propojeni', [App\Http\Controllers\Api\IntegrationConnectionController::class, 'index'])->name('api.integrations.index');
     Route::post('/propojeni/notion', [App\Http\Controllers\Api\IntegrationConnectionController::class, 'connectNotion'])->name('api.integrations.notion');
+    Route::post('/propojeni/token/{provider}', [App\Http\Controllers\Api\IntegrationConnectionController::class, 'connectToken'])->name('api.integrations.token');
     Route::post('/propojeni/{uuid}/synchronizace', [App\Http\Controllers\Api\IntegrationConnectionController::class, 'sync'])->name('api.integrations.sync');
     Route::post('/propojeni/{uuid}/zapis', [App\Http\Controllers\Api\IntegrationConnectionController::class, 'push'])->name('api.integrations.push');
     Route::get('/propojeni/{uuid}/discord', [App\Http\Controllers\Api\IntegrationConnectionController::class, 'discordProfile'])->name('api.integrations.discord');

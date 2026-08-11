@@ -7,7 +7,9 @@ use App\Models\GallerySpace;
 use App\Models\IntegrationDocument;
 use App\Models\UserIntegration;
 use App\Services\Integrations\DiscordClient;
+use App\Models\StorageConnection;
 use App\Services\Integrations\NotionClient;
+use App\Services\Integrations\ProviderRegistry;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Schema;
@@ -38,7 +40,83 @@ class IntegrationConnectionController extends Controller
             'connections' => $connections->map(fn (UserIntegration $row) => $this->payload($row, $user->id))->values(),
             'documents' => $this->documents($space->id, $connections->pluck('id')->all()),
             'discord_ready' => app(DiscordClient::class)->configured(),
+            // The catalogue travels with the list, so the screen can only ever offer a
+            // service the server knows how to accept.
+            'catalogue' => app(ProviderRegistry::class)->catalogue(),
+            'storage' => $this->storage($space->id),
         ]);
+    }
+
+    /**
+     * Connects a service that authorises with a token the person pastes.
+     *
+     * One endpoint rather than one per service. Notion keeps its own because it verifies
+     * the token against Notion before storing it — a check worth having where it exists.
+     * The rest have no probe to make, and inventing one that always says yes would be a
+     * reassurance rather than a check.
+     *
+     * The credential is stored encrypted and never returned. What the screen sees
+     * afterwards is that a connection exists, not what it is made of.
+     */
+    public function connectToken(Request $request, string $provider): JsonResponse
+    {
+        $this->available();
+        $this->write($request);
+
+        $registry = app(ProviderRegistry::class);
+        abort_unless($registry->has($provider), 404, 'Tuhle službu neznáme.');
+        abort_if($provider === 'notion', 422, 'Notion se připojuje vlastní cestou.');
+        abort_unless((ProviderRegistry::PROVIDERS[$provider]['auth'] ?? '') === 'token', 422,
+            'Tuhle službu nelze připojit tokenem.');
+
+        $data = $request->validate([
+            'token' => 'required|string|min:8|max:500',
+            'visibility' => 'required|in:personal,shared',
+            'label' => 'nullable|string|max:120',
+        ]);
+
+        abort_unless(in_array($data['visibility'], $registry->scopes($provider), true), 422,
+            'Tuhle službu takto sdílet nelze.');
+
+        $space = $this->space($request);
+
+        $connection = new UserIntegration([
+            'gallery_space_id' => $space->id,
+            'user_id' => $request->user()->id,
+            'provider' => $provider,
+            'visibility' => $data['visibility'],
+            'label' => $data['label'] ?: ProviderRegistry::PROVIDERS[$provider]['name'],
+            'account_name' => $data['label'] ?: null,
+            'status' => 'active',
+        ]);
+        $connection->setCredentials(['token' => $data['token']]);
+        $connection->save();
+
+        return response()->json($this->payload($connection->fresh(), $request->user()->id), 201);
+    }
+
+    /**
+     * The space's Drive, summarised for the same screen.
+     *
+     * Reported rather than merged. Drive is not a per-person integration: it holds the
+     * gallery's files and belongs to the whole space, so it keeps its own table and its
+     * own connect flow. One screen, two mechanisms — which is honest, because they behave
+     * differently and pretending otherwise would surprise somebody at the worst moment.
+     */
+    private function storage(int $spaceId): ?array
+    {
+        if (! Schema::hasTable('storage_connections')) return null;
+
+        $connection = StorageConnection::where('provider', 'google_drive')->first();
+        if (! $connection) return null;
+
+        return [
+            'account' => $connection->account_email,
+            'status' => $connection->connection_status,
+            'last_ok' => $connection->last_successful_request_at?->toIso8601String(),
+            'last_error' => $connection->last_error_message,
+            'last_error_at' => $connection->last_error_at?->toIso8601String(),
+        ];
     }
 
     /**

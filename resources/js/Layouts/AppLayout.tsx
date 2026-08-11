@@ -110,7 +110,7 @@ const NAV_COMMANDS: Command[] = [
     { group: 'nav', label: 'Koš',                 href: '/trash',     keywords: 'kos trash smazat' },
     { group: 'nav', label: 'Sdílené',             href: '/shares',    keywords: 'share sdilene' },
     { group: 'nav', label: 'Společné výběry',     href: '/curation',  keywords: 'vyber kurator kolekce hlasovani fotky' },
-    { group: 'nav', label: 'Nastavení Drive',     href: '/settings/storage/google', keywords: 'settings nastaveni google drive' },
+    { group: 'nav', label: 'Úložiště a služby',   href: '/settings/propojeni', keywords: 'settings nastaveni google drive uloziste propojeni notion discord affine' },
     { group: 'nav', label: 'Automatizace',         href: '/settings/automations', keywords: 'automatizace automaticky plan kalendar ukoly' },
 ];
 

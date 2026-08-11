@@ -35,9 +35,10 @@ export const userMenuLinks = [
     { href: '/settings/security',       label: 'Profil a zabezpečení', icon: Settings },
     { href: '/settings/vzhled',         label: 'Vzhled a barvy',       icon: Palette },
     { href: '/settings/predplatne',     label: 'Předplatné a moduly',  icon: CircleDollarSign },
-    { href: '/settings/storage/google', label: 'Úložiště a Drive',     icon: HardDrive },
+    // One entry, because "Úložiště a Drive" and "Propojení služeb" were two doors onto the
+    // same question: what is this gallery joined to, and by whom.
+    { href: '/settings/propojeni',      label: 'Úložiště a služby',    icon: Plug },
     { href: '/settings/menu',           label: 'Uspořádání menu',      icon: ListTree },
-    { href: '/settings/propojeni',      label: 'Propojení služeb',     icon: Plug },
     { href: '/privacy',                 label: 'Soukromí a dědictví',  icon: ShieldCheck },
 ];
 

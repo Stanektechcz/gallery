@@ -226,7 +226,7 @@ export default function ProfileSettings({ sessions = [] }: { sessions?: Session[
                         <AccountData scheduledFor={profile.delete_requested_at ?? null} onChanged={() => void load()} />
 
                         <p className="mt-5 text-center text-xs text-[var(--color-text-secondary)]">
-                            <Link href="/settings/propojeni" className="text-[var(--color-accent)] hover:underline">Propojení služeb</Link>
+                            <Link href="/settings/propojeni" className="text-[var(--color-accent)] hover:underline">Úložiště a služby</Link>
                             {' · '}
                             <Link href="/settings/vzhled" className="text-[var(--color-accent)] hover:underline">Vzhled a barvy</Link>
                         </p>

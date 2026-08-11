@@ -1,14 +1,34 @@
 import AppLayout from '@/Layouts/AppLayout';
-import { Head, usePage } from '@inertiajs/react';
+import { Head, Link, usePage } from '@inertiajs/react';
 import axios from 'axios';
 import {
-    ExternalLink, Loader2, Lock, Plug, RefreshCw, Trash2, Users,
+    ExternalLink, HardDrive, Loader2, Lock, Plug, RefreshCw, Trash2, Users,
 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
+interface Provider {
+    code: string;
+    name: string;
+    auth: 'token' | 'oauth' | 'invite';
+    summary: string;
+    help: string;
+    scopes: Array<'personal' | 'shared'>;
+    ready: boolean;
+    caveat?: string;
+    managed_by?: string;
+}
+
+interface Storage {
+    account: string | null;
+    status: string;
+    last_ok: string | null;
+    last_error: string | null;
+    last_error_at: string | null;
+}
+
 interface Connection {
     uuid: string;
-    provider: 'notion' | 'discord';
+    provider: string;
     visibility: 'personal' | 'shared';
     label: string | null;
     account_name: string | null;
@@ -27,7 +47,9 @@ interface Doc {
     icon: string | null; url: string | null; updated_at: string | null;
 }
 
-const PROVIDER_LABEL: Record<string, string> = { notion: 'Notion', discord: 'Discord' };
+/** Names come from the server's catalogue; this is only the fallback for an unknown code. */
+const nameOf = (catalogue: Provider[], code: string) =>
+    catalogue.find(provider => provider.code === code)?.name ?? code;
 
 export default function Connections() {
     const flash = (usePage().props as any).flash ?? {};
@@ -42,10 +64,17 @@ export default function Connections() {
     const [token, setToken] = useState('');
     const [visibility, setVisibility] = useState<'personal' | 'shared'>('personal');
 
+    const [catalogue, setCatalogue] = useState<Provider[]>([]);
+    const [storage, setStorage] = useState<Storage | null>(null);
+    /** Which service's form is open. One at a time: two token fields side by side invite pasting into the wrong one. */
+    const [adding, setAdding] = useState<Provider | null>(null);
+
     const load = useCallback(async () => {
         try {
             const response = await axios.get('/api/v1/propojeni');
             setConnections(response.data.connections ?? []);
+            setCatalogue(response.data.catalogue ?? []);
+            setStorage(response.data.storage ?? null);
             setDocuments(response.data.documents ?? []);
             setDiscordReady(response.data.discord_ready !== false);
         } catch (reason: any) {
@@ -92,7 +121,7 @@ export default function Connections() {
     };
 
     const disconnect = async (row: Connection) => {
-        if (!window.confirm(`Odpojit ${PROVIDER_LABEL[row.provider]}? Načtené stránky se odstraní z přehledu.`)) return;
+        if (!window.confirm(`Odpojit ${nameOf(catalogue, row.provider)}? Načtené stránky se odstraní z přehledu.`)) return;
         setBusy(row.uuid);
         try { await axios.delete(`/api/v1/propojeni/${row.uuid}`); await load(); }
         catch (reason: any) { setError(reason?.response?.data?.message ?? 'Odpojit se nepodařilo.'); }
@@ -114,16 +143,16 @@ export default function Connections() {
     const discord = connections.filter(row => row.provider === 'discord');
 
     return (
-        <AppLayout title="Propojení">
-            <Head title="Propojení" />
+        <AppLayout title="Úložiště a služby">
+            <Head title="Úložiště a služby" />
             <main className="mx-auto max-w-3xl p-4 sm:p-6">
                 <p className="text-xs uppercase tracking-widest text-[var(--color-accent)]">Nastavení</p>
                 <h1 className="mt-1 flex items-center gap-2 text-2xl font-bold text-[var(--color-text-primary)] sm:text-3xl">
-                    <Plug size={24} className="text-[var(--color-accent)]" /> Propojení služeb
+                    <Plug size={24} className="text-[var(--color-accent)]" /> Úložiště a služby
                 </h1>
                 <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
-                    Každý si připojuje svůj účet. Osobní propojení vidíte jen vy; sdílené může používat celý prostor,
-                    ale odpojit ho smí jen ten, kdo ho vytvořil.
+                    Kam galerie ukládá soubory a s čím je propojená. Osobní propojení vidíte jen vy;
+                    sdílené může používat celý prostor, ale odpojit ho smí jen ten, kdo ho vytvořil.
                 </p>
 
                 {(flash.error || error) && <p role="alert" className="mt-4 rounded-xl border border-red-400/25 bg-red-500/10 p-3 text-xs text-red-100">{flash.error || error}</p>}
@@ -132,6 +161,136 @@ export default function Connections() {
 
                 {!loading && (
                     <>
+                        {/* Storage first. It is the one connection the gallery cannot work
+                            without, and burying it under the optional ones would say the
+                            opposite. It keeps its own screen for the heavy operations —
+                            re-syncing and rebuilding the folder tree are not things to put
+                            a click away from a token field. */}
+                        <section className="mt-6 rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-4">
+                            <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                    <h2 className="flex items-center gap-2 font-semibold text-[var(--color-text-primary)]">
+                                        <HardDrive size={17} className="text-[var(--color-accent)]" /> Úložiště galerie
+                                    </h2>
+                                    <p className="mt-1 text-xs text-[var(--color-text-secondary)]">
+                                        {storage
+                                            ? <>Google Drive · {storage.account ?? 'účet neznámý'}</>
+                                            : 'Zatím není připojené žádné úložiště. Fotky se ukládají jen lokálně.'}
+                                    </p>
+                                    {storage?.last_error && (
+                                        <p className="mt-2 rounded-lg bg-red-500/10 p-2 text-[11px] text-red-200">
+                                            Poslední chyba: {storage.last_error}
+                                        </p>
+                                    )}
+                                </div>
+
+                                <span className={`shrink-0 rounded-lg px-2 py-1 text-[10px] ${storage?.status === 'connected'
+                                    ? 'bg-emerald-500/15 text-emerald-200'
+                                    : 'bg-[var(--color-surface-muted)] text-[var(--color-text-secondary)]'}`}>
+                                    {storage?.status === 'connected' ? 'Připojeno' : storage ? storage.status : 'Nepřipojeno'}
+                                </span>
+                            </div>
+
+                            <Link
+                                href="/settings/storage/google"
+                                className="mt-3 inline-flex min-h-10 items-center gap-2 rounded-xl border border-[var(--color-border)] px-3 text-xs text-[var(--color-text-primary)] hover:border-[var(--color-accent)]"
+                            >
+                                <HardDrive size={14} /> {storage ? 'Spravovat úložiště' : 'Připojit Google Drive'}
+                            </Link>
+                        </section>
+
+                        {/* What else can be joined, and what it would take. A service whose
+                            OAuth application nobody has registered says so here rather than
+                            handing somebody a button that leads to an error page. */}
+                        <section className="mt-5 rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-4">
+                            <h2 className="font-semibold text-[var(--color-text-primary)]">Dostupné služby</h2>
+                            <p className="mt-1 text-xs text-[var(--color-text-secondary)]">
+                                Každou lze připojit zvlášť jako osobní a zvlášť jako sdílenou — dva účty téže služby vedle sebe.
+                            </p>
+
+                            <div className="mt-3 space-y-2">
+                                {catalogue.filter(provider => provider.managed_by !== 'storage').map(provider => {
+                                    const mine = connections.filter(row => row.provider === provider.code);
+
+                                    return (
+                                        <div key={provider.code} className="rounded-xl border border-[var(--color-border)] p-3">
+                                            <div className="flex items-start justify-between gap-3">
+                                                <div className="min-w-0">
+                                                    <p className="text-sm font-medium text-[var(--color-text-primary)]">
+                                                        {provider.name}
+                                                        {mine.length > 0 && (
+                                                            <span className="ml-2 text-[10px] text-[var(--color-accent)]">
+                                                                {mine.length}× připojeno
+                                                            </span>
+                                                        )}
+                                                    </p>
+                                                    <p className="mt-0.5 text-xs text-[var(--color-text-secondary)]">{provider.summary}</p>
+                                                    {provider.caveat && (
+                                                        <p className="mt-1 text-[11px] text-amber-200">{provider.caveat}</p>
+                                                    )}
+                                                </div>
+
+                                                {provider.auth === 'token' && provider.code !== 'notion' ? (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => { setAdding(adding?.code === provider.code ? null : provider); setToken(''); setVisibility(provider.scopes[0]); }}
+                                                        className="shrink-0 rounded-lg border border-[var(--color-border)] px-2.5 py-1.5 text-xs text-[var(--color-text-primary)] hover:border-[var(--color-accent)]"
+                                                    >
+                                                        Připojit
+                                                    </button>
+                                                ) : (
+                                                    <span className="shrink-0 rounded-lg bg-[var(--color-surface-muted)] px-2 py-1 text-[10px] text-[var(--color-text-secondary)]">
+                                                        {provider.code === 'notion' ? 'níže' : provider.ready ? 'přes přesměrování' : 'nenastaveno'}
+                                                    </span>
+                                                )}
+                                            </div>
+
+                                            {adding?.code === provider.code && (
+                                                <div className="mt-3 space-y-2 border-t border-[var(--color-border)] pt-3">
+                                                    <p className="text-[11px] text-[var(--color-text-secondary)]">{provider.help}</p>
+                                                    <input
+                                                        type="password"
+                                                        value={token}
+                                                        onChange={event => setToken(event.target.value)}
+                                                        placeholder="Token"
+                                                        className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-muted)] px-3 py-2 text-sm text-[var(--color-text-primary)]"
+                                                    />
+                                                    <div className="flex flex-wrap items-center gap-2">
+                                                        <select
+                                                            value={visibility}
+                                                            onChange={event => setVisibility(event.target.value as 'personal' | 'shared')}
+                                                            className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-muted)] px-2 py-2 text-xs text-[var(--color-text-primary)]"
+                                                        >
+                                                            {provider.scopes.includes('personal') && <option value="personal">Osobní — jen pro mě</option>}
+                                                            {provider.scopes.includes('shared') && <option value="shared">Sdílené — pro celý prostor</option>}
+                                                        </select>
+                                                        <button
+                                                            type="button"
+                                                            disabled={busy === provider.code || !token}
+                                                            onClick={async () => {
+                                                                setBusy(provider.code); setError('');
+                                                                try {
+                                                                    await axios.post(`/api/v1/propojeni/token/${provider.code}`, { token, visibility });
+                                                                    setToken(''); setAdding(null);
+                                                                    setNotice(`${provider.name} připojeno.`);
+                                                                    await load();
+                                                                } catch (reason: any) {
+                                                                    setError(reason?.response?.data?.message ?? 'Připojit se nepodařilo.');
+                                                                } finally { setBusy(null); }
+                                                            }}
+                                                            className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-[var(--color-accent)] px-3 text-xs text-[var(--color-accent-contrast)] disabled:opacity-50"
+                                                        >
+                                                            {busy === provider.code && <Loader2 size={13} className="animate-spin" />} Uložit
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </section>
+
                         <section className="mt-6 rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-4">
                             <h2 className="font-semibold text-[var(--color-text-primary)]">Notion</h2>
                             <p className="mt-1 text-xs text-[var(--color-text-secondary)]">
