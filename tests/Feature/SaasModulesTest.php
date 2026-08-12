@@ -31,7 +31,11 @@ class SaasModulesTest extends TestCase
         // would otherwise fail a test that was never about the order of the price list.
         $modules = collect($response->json('modules'))->keyBy('code');
 
-        $this->assertSame('duo', $response->json('plans.0.code'));
+        // By code, like the modules below it. Adding a plan that sorts ahead of duo would
+        // otherwise fail a test about the catalogue being public, not about its order.
+        $plans = collect($response->json('plans'))->keyBy('code');
+        $this->assertArrayHasKey('duo', $plans);
+        $this->assertTrue($plans['duo']['is_default'], 'Duo má být výchozí tarif.');
         $this->assertArrayHasKey('burps', $modules);
         // Prices are minor units: 49 CZK.
         $this->assertSame(4900, $modules['burps']['price_monthly']);
