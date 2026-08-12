@@ -133,9 +133,39 @@ class AdminController extends Controller
                 'pending'   => DB::table('jobs')->count(),
                 'failed'    => DB::table('failed_jobs')->count(),
             ],
+            // Customers' clouds. A revoked token stops copies silently — the gallery keeps
+            // working, so nobody reports it, and the operator is the only one placed to
+            // notice. Counted rather than listed: whose account it is belongs to them.
+            'clouds' => $this->cloudHealth(),
         ];
 
         return Inertia::render('Admin/Health', compact('checks'));
+    }
+
+    /**
+     * How the connected storage accounts are faring, across every space.
+     *
+     * @return array<string, int>
+     */
+    private function cloudHealth(): array
+    {
+        if (! \Illuminate\Support\Facades\Schema::hasTable('storage_connections')) {
+            return ['connected' => 0, 'errored' => 0, 'stale' => 0];
+        }
+
+        $rows = \App\Models\StorageConnection::all();
+
+        return [
+            'connected' => $rows->where('connection_status', 'connected')->count(),
+            'errored' => $rows->where('connection_status', 'error')->count(),
+            // Connected but silent for a fortnight. Not proof of a fault, but the shape a
+            // fault takes when nothing throws: copies stop and the gallery looks fine.
+            'stale' => $rows
+                ->where('connection_status', 'connected')
+                ->filter(fn ($row) => ! $row->last_successful_request_at
+                    || $row->last_successful_request_at->lt(now()->subDays(14)))
+                ->count(),
+        ];
     }
 
     private function checkDb(): bool

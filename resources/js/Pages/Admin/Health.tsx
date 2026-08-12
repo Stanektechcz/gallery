@@ -10,6 +10,7 @@ type Props = {
         storage: { writable: boolean; free_gb: number };
         binaries: { ffmpeg: boolean; exiftool: boolean };
         queue: { pending: number; failed: number };
+        clouds?: { connected: number; errored: number; stale: number };
     };
 };
 
@@ -87,6 +88,22 @@ export default function AdminHealth({ checks }: Props) {
                         <Metric label="Selhané úlohy" value={String(checks.queue.failed)} tone={checks.queue.failed > 0 ? 'warn' : 'neutral'} />
                     </div>
                 </section>
+
+                {/* Guarded: an install that has not migrated the storage table yet would
+                    otherwise read undefined and blank the page. */}
+                {checks.clouds && (
+                    <section className="mt-7">
+                        <h2 className="mb-3 font-semibold text-[var(--color-text-primary)]">Připojená úložiště zákazníků</h2>
+                        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                            <Metric label="Funkční" value={String(checks.clouds.connected)} />
+                            <Metric label="S chybou" value={String(checks.clouds.errored)} tone={checks.clouds.errored > 0 ? 'warn' : 'neutral'} />
+                            <Metric label="Bez odezvy 14 dní" value={String(checks.clouds.stale)} tone={checks.clouds.stale > 0 ? 'warn' : 'neutral'} />
+                        </div>
+                        <p className="mt-2 text-xs text-[var(--color-text-secondary)]">
+                            Odvolaný přístup zastaví kopie do cloudu potichu — galerie funguje dál, takže to zákazník nenahlásí.
+                        </p>
+                    </section>
+                )}
             </main>
         </AppLayout>
     );
