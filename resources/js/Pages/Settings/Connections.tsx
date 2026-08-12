@@ -405,25 +405,6 @@ export default function Connections() {
                                 </article>
                             ))}
 
-                            <div className="mt-3 space-y-2 border-t border-[var(--color-border)] pt-3">
-                                <input
-                                    value={token}
-                                    onChange={event => setToken(event.target.value)}
-                                    type="password"
-                                    autoComplete="off"
-                                    placeholder="Interní token integrace (ntn_…)"
-                                    className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-muted)] px-3 py-2.5 text-sm text-[var(--color-text-primary)]"
-                                />
-                                <div className="flex flex-wrap gap-2">
-                                    <select value={visibility} onChange={event => setVisibility(event.target.value as 'personal' | 'shared')} className="min-h-10 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-muted)] px-3 text-sm text-[var(--color-text-primary)]">
-                                        <option value="personal">Osobní — vidím jen já</option>
-                                        <option value="shared">Sdílené — vidí celý prostor</option>
-                                    </select>
-                                    <button type="button" disabled={busy === 'notion'} onClick={() => void connectNotion()} className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-[var(--color-accent)] px-4 text-sm font-medium text-[var(--color-accent-contrast)] disabled:opacity-50">
-                                        {busy === 'notion' && <Loader2 size={14} className="animate-spin" />} Připojit Notion
-                                    </button>
-                                </div>
-                            </div>
                         </section>
 
                         <section className="mt-5 rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-4">
@@ -556,10 +537,18 @@ export default function Connections() {
                                         const provider = adding;
                                         setBusy(provider.code); setError('');
                                         try {
-                                            const url = provider.code === 'notion'
-                                                ? '/api/v1/propojeni/notion'
-                                                : `/api/v1/propojeni/token/${provider.code}`;
-                                            await axios.post(url, { token, visibility });
+                                            // Notion has its own call: it verifies the token,
+                                            // says how many pages it found, and explains the
+                                            // commonest surprise — an integration nobody has
+                                            // shared a page with can see nothing at all.
+                                            if (provider.code === 'notion') {
+                                                setAdding(null);
+                                                await connectNotion();
+
+                                                return;
+                                            }
+
+                                            await axios.post(`/api/v1/propojeni/token/${provider.code}`, { token, visibility });
                                             setToken(''); setAdding(null);
                                             setNotice(`${provider.name} připojeno.`);
                                             await load();
