@@ -8,6 +8,7 @@ use App\Models\BillingPlan;
 use App\Models\GallerySpace;
 use App\Models\Payment;
 use App\Models\SpaceSubscription;
+use App\Services\Billing\InvoiceService;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -188,6 +189,17 @@ class CheckoutService
         ]);
 
         Log::info('Payment settled', ['reference' => $payment->reference, 'space' => $payment->gallery_space_id]);
+
+        // The document, after the subscription is in place. Wrapped because a failure to
+        // number an invoice must not undo a payment the customer has already made — the
+        // money moved, and the record can be issued again once whatever broke is fixed.
+        try {
+            app(InvoiceService::class)->forPayment($payment->fresh());
+        } catch (\Throwable $e) {
+            Log::error('Fakturu se nepodařilo vystavit', [
+                'reference' => $payment->reference, 'error' => $e->getMessage(),
+            ]);
+        }
 
         return $payment->fresh();
     }

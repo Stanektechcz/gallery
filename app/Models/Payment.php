@@ -31,5 +31,8 @@ class Payment extends Model
     public function module() { return $this->belongsTo(BillingModule::class, 'billing_module_id'); }
     public function space() { return $this->belongsTo(GallerySpace::class, 'gallery_space_id'); }
 
+    /** Who paid. Needed by the invoice, which names the customer rather than an id. */
+    public function buyer() { return $this->belongsTo(User::class, 'created_by'); }
+
     public function isPaid(): bool { return $this->status === 'paid'; }
 }
