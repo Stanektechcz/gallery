@@ -195,6 +195,10 @@ class VoiceNoteController extends Controller
             'recorded_at' => optional($note->recorded_at)->toIso8601String(),
             'stream_url' => "/api/v1/voice-notes/{$note->uuid}/stream",
             'heard' => $heard,
+            // Where it came from. Only whether it was pinned, not from which message —
+            // the timeline has no use for the identifier and it would be one more thing
+            // travelling to the browser for nothing.
+            'from_chat' => (bool) $note->source_message_uuid,
             'can_delete' => $note->created_by === request()->user()?->id,
         ];
     }

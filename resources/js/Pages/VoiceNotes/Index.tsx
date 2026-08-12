@@ -3,7 +3,7 @@ import AppLayout from '@/Layouts/AppLayout';
 import AudioRecorder from '@/Components/AudioRecorder';
 import { Head } from '@inertiajs/react';
 import axios from 'axios';
-import { Check, LoaderCircle, Mic, Trash2 } from 'lucide-react';
+import { Check, LoaderCircle, Mic, Pin, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 interface Note {
@@ -16,6 +16,7 @@ interface Note {
     recorded_at?: string | null;
     stream_url: string;
     heard: boolean;
+    from_chat?: boolean;
     can_delete: boolean;
 }
 
@@ -146,8 +147,14 @@ export default function VoiceNotesIndex() {
                                             {!note.heard && <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--color-accent)]" title="Nepřehráno" />}
                                         </div>
 
-                                        <p className="truncate text-[10px] text-[var(--color-text-secondary)]">
-                                            {note.author.name}{note.duration_ms ? ` · ${duration(note.duration_ms)}` : ''}
+                                        <p className="flex items-center gap-1 truncate text-[10px] text-[var(--color-text-secondary)]">
+                                            {/* Marked rather than labelled: a word would take
+                                                the width the name needs, and the icon already
+                                                matches the button that put it here. */}
+                                            {note.from_chat && <Pin size={9} className="shrink-0 text-[var(--color-accent)]" aria-label="Připnuto z konverzace" />}
+                                            <span className="truncate">
+                                                {note.author.name}{note.duration_ms ? ` · ${duration(note.duration_ms)}` : ''}
+                                            </span>
                                         </p>
 
                                         {/* The native player, kept small. Rolling our own would

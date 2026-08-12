@@ -493,6 +493,32 @@ class ChatController extends Controller
     }
 
     /** @return array<string, mixed> */
+    /**
+     * Which voice messages in this space are already on the timeline.
+     *
+     * Read once per space per request and kept, because payload() runs for every bubble on
+     * screen and a query each would be sixty for one page of chat. Null means the column
+     * is not there yet, which is a deployment mid-migration rather than an error.
+     *
+     * @var array<int, list<string>|null>
+     */
+    private array $pinnedVoice = [];
+
+    private function isPinned(ChatMessage $message): bool
+    {
+        $space = (int) $message->gallery_space_id;
+
+        if (! array_key_exists($space, $this->pinnedVoice)) {
+            $this->pinnedVoice[$space] = Schema::hasColumn('voice_notes', 'source_message_uuid')
+                ? \App\Models\VoiceNote::where('gallery_space_id', $space)
+                    ->whereNotNull('source_message_uuid')
+                    ->pluck('source_message_uuid')->all()
+                : null;
+        }
+
+        return in_array($message->uuid, $this->pinnedVoice[$space] ?? [], true);
+    }
+
     private function payload(ChatMessage $message, int $viewerId, array $reactions = []): array
     {
         return [
@@ -507,6 +533,10 @@ class ChatController extends Controller
                 'url' => $message->media_remote_url ?: route('api.chat.media', ['uuid' => $message->uuid]),
                 'kind' => $message->media_remote_url ? 'gif' : ($message->attachment_type === 'voice' ? 'voice' : 'image'),
                 'duration_ms' => $message->attachment_type === 'voice' ? (int) $message->media_height : null,
+                // Whether this recording is already on the voice-note timeline, so the pin
+                // survives a reload. Resolved for the whole page at once — asking per
+                // message would be a query for every bubble on screen.
+                'pinned' => $message->attachment_type === 'voice' && $this->isPinned($message),
                 'mime' => $message->media_mime,
                 'width' => $message->media_width,
                 'height' => $message->media_height,

@@ -12,6 +12,8 @@ export interface Reaction { emoji: string; count: number; mine: boolean }
 export interface ChatMedia {
     url: string;
     kind: 'image' | 'gif' | 'voice';
+    /** Voice only: already kept on the voice-note timeline. */
+    pinned?: boolean;
     duration_ms?: number | null;
     width?: number | null;
     height?: number | null;
@@ -59,8 +61,10 @@ export default function ChatMessageItem({ message, read, compact = false, meId =
     onReply?: (message: ChatMessage) => void;
 }) {
     const [picker, setPicker] = useState(false);
-    /** Local only: whether this message has been kept on the voice-note timeline. */
-    const [pinned, setPinned] = useState<'idle' | 'busy' | 'done'>('idle');
+    /** Seeded from the server, so the pin survives a reload rather than resetting. */
+    const [pinned, setPinned] = useState<'idle' | 'busy' | 'done'>(
+        message.media?.pinned ? 'done' : 'idle',
+    );
 
     const gestures = useMessageGestures({
         // A double tap is the fastest way to say "yes, this" and costs no menu.
