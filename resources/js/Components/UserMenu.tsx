@@ -2,7 +2,7 @@ import { useViewportSafePanel } from '@/lib/useViewportSafePanel';
 import { Link, router } from '@inertiajs/react';
 import axios from 'axios';
 import {
-    CircleDollarSign, HardDrive, LogOut, Monitor, Moon,
+    CircleDollarSign, FileText, HardDrive, LogOut, Monitor, Moon,
     ListTree, Palette, Plug, Settings, ShieldCheck, Sun,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -35,6 +35,7 @@ export const userMenuLinks = [
     { href: '/settings/security',       label: 'Profil a zabezpečení', icon: Settings },
     { href: '/settings/vzhled',         label: 'Vzhled a barvy',       icon: Palette },
     { href: '/settings/predplatne',     label: 'Předplatné a moduly',  icon: CircleDollarSign },
+    { href: '/settings/faktury',        label: 'Faktury a platby',     icon: FileText },
     // One entry, because "Úložiště a Drive" and "Propojení služeb" were two doors onto the
     // same question: what is this gallery joined to, and by whom.
     { href: '/settings/propojeni',      label: 'Úložiště a služby',    icon: Plug },

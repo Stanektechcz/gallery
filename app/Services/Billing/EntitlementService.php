@@ -356,6 +356,22 @@ class EntitlementService
         return $usage['limit_bytes'] === null || $usage['used_bytes'] + $bytes <= $usage['limit_bytes'];
     }
 
+    /**
+     * Feature codes the plan alone grants, without any add-on.
+     *
+     * Deliberately not entitledFeatures(), which folds in the modules already bought — ask
+     * that and every module looks redundant the moment it is active.
+     *
+     * @return list<string>
+     */
+    public function planFeatures(GallerySpace $space): array
+    {
+        $plan = $this->plan($space);
+        if (! $plan || ! $this->hasTable('billing_plan_feature')) return [];
+
+        return $plan->grantedFeatures()->pluck('code')->all();
+    }
+
     // ─── Payloads ───────────────────────────────────────────────────
 
     /** Everything the customer's own subscription screen needs. */
@@ -384,11 +400,29 @@ class EntitlementService
             ];
         })->values()->all();
 
+        // Which features the plan already covers, so an add-on that unlocks nothing new is
+        // not offered. Selling somebody a module for something they can already open is
+        // taking money for nothing, whatever the entitlement engine does with it.
+        //
+        // Capacity modules have no features and are always shown: more room is worth
+        // buying however complete the plan is.
+        $planFeatures = $this->planFeatures($space);
+
+        $active = $this->activeModules($space);
+
         $modules = BillingModule::with('grantedFeatures')->orderBy('sort_order')->orderBy('name')->get()
             ->map(fn (BillingModule $module) => $this->modulePayload($module) + [
-                'is_active' => $this->activeModules($space)->contains('id', $module->id),
+                'is_active' => $active->contains('id', $module->id),
                 'features' => $module->grantedFeatures->pluck('code')->all(),
-            ])->values()->all();
+            ])
+            ->filter(function (array $module) use ($planFeatures) {
+                // Kept once bought, so somebody can see what they are paying for.
+                if ($module['is_active']) return true;
+                if ($module['features'] === []) return true;
+
+                return (bool) array_diff($module['features'], $planFeatures);
+            })
+            ->values()->all();
 
         return [
             'available' => true,
