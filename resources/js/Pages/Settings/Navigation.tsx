@@ -310,7 +310,7 @@ export default function NavigationSettings() {
         <AppLayout title="Uspořádání menu">
             <Head title="Uspořádání menu" />
 
-            <main className="mx-auto max-w-2xl p-4 sm:p-6">
+            <main className="w-full p-4 sm:p-6">
                 <p className="text-xs uppercase tracking-widest text-[var(--color-accent)]">Nastavení</p>
                 <h1 className="mt-1 text-2xl font-bold text-[var(--color-text-primary)]">Uspořádání menu</h1>
                 <p className="mt-2 text-sm text-[var(--color-text-secondary)]">

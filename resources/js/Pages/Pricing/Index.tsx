@@ -38,7 +38,7 @@ export default function PricingIndex() {
         <>
             <Head title="Ceník" />
             <div className="min-h-screen bg-[var(--color-bg-primary)] px-4 py-10">
-                <div className="mx-auto max-w-5xl">
+                <div className="w-full">
                     <header className="text-center">
                         <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-2xl bg-[var(--color-accent)] shadow-lg shadow-[var(--color-accent)]/30">
                             <Images size={28} className="text-[var(--color-accent-contrast)]" />

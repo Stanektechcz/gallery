@@ -58,7 +58,7 @@ export default function TagsIndex() {
     return <AppLayout>
         <Head title="Společné štítky" />
         <main className="min-h-full px-3 py-4 pb-24 sm:px-6 sm:py-7">
-            <header className="mx-auto max-w-6xl">
+            <header className="w-full">
                 <div className="flex items-center gap-2 text-[var(--color-accent)]"><FolderTree size={16}/><span className="text-xs font-semibold uppercase tracking-wider">Společný kontext</span></div>
                 <h1 className="mt-1 text-2xl font-bold text-[var(--color-text-primary)]">Štítky napříč systémem</h1>
                 <p className="mt-1 max-w-2xl text-sm text-[var(--color-text-secondary)]">Jeden štítek může spojit fotky, kalendář, cesty, recepty, filmy, úkoly i finance. V chatu jej přidáte jako <code>#léto2026</code>.</p>

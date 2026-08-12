@@ -118,7 +118,7 @@ export default function BurpsIndex() {
         return (
             <AppLayout>
                 <Head title="Hodnocení krkanců" />
-                <main className="mx-auto max-w-2xl p-4 sm:p-6">
+                <main className="w-full p-4 sm:p-6">
                     <div className="rounded-2xl border border-violet-400/30 bg-violet-500/5 p-8 text-center">
                         <span className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-violet-500/15 text-2xl">🎺</span>
                         <h1 className="mt-4 text-xl font-bold text-[var(--color-text-primary)]">Hodnocení krkanců</h1>
@@ -143,7 +143,7 @@ export default function BurpsIndex() {
     return (
         <AppLayout>
             <Head title="Hodnocení krkanců" />
-            <main className="mx-auto max-w-3xl p-4 sm:p-6">
+            <main className="w-full p-4 sm:p-6">
                 <p className="text-xs uppercase tracking-widest text-violet-300">Doplňkový modul</p>
                 <h1 className="mt-1 flex items-center gap-2 text-2xl font-bold text-[var(--color-text-primary)] sm:text-3xl">🎺 Hodnocení krkanců</h1>
                 <p className="mt-2 text-sm text-[var(--color-text-secondary)]">

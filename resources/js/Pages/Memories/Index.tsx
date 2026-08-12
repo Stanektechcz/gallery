@@ -185,7 +185,7 @@ export default function MemoriesIndex({ memories: initialMemories, today_label, 
                     </div>
                 </header>
 
-                <main className="mx-auto max-w-5xl space-y-6 p-3 pb-24 sm:p-6">
+                <main className="w-full space-y-6 p-3 pb-24 sm:p-6">
                     <MemoryEveningPanel spaceId={spaceId} source={planningMemory} onClose={()=>setPlanningMemory(null)}/>
                     {!has_memories || memories.length === 0 ? (
                         <div className="flex min-h-[60vh] flex-col items-center justify-center text-center text-[var(--color-text-secondary)]">

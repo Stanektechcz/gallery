@@ -271,7 +271,7 @@ export default function Integrations({ providers, gallerySpaceId }: { providers:
     return (
         <AppLayout>
             <Head title="Integrace"/>
-            <main className="mx-auto max-w-6xl p-4 sm:p-6">
+            <main className="w-full p-4 sm:p-6">
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                     <div>
                         <p className="text-xs uppercase tracking-widest text-[var(--color-accent)]">Administrace</p>

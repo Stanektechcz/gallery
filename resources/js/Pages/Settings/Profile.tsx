@@ -91,7 +91,7 @@ export default function ProfileSettings({ sessions = [] }: { sessions?: Session[
     return (
         <AppLayout title="Profil a zabezpečení">
             <Head title="Profil a zabezpečení" />
-            <main className="mx-auto max-w-3xl p-4 sm:p-6">
+            <main className="w-full p-4 sm:p-6">
                 <p className="text-xs uppercase tracking-widest text-[var(--color-accent)]">Nastavení</p>
                 <h1 className="mt-1 text-2xl font-bold text-[var(--color-text-primary)] sm:text-3xl">Profil a zabezpečení</h1>
 

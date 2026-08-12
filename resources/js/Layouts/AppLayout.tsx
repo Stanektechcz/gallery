@@ -647,6 +647,21 @@ function canReach(
 }
 /** Exported so the customisation screen writes the same key the sidebar reads. */
 export const PINNED_NAV_KEY = 'gallery.navigation.pinned.v1';
+
+const SIDEBAR_WIDTH_KEY = 'gallery.sidebar.width.v1';
+const SIDEBAR_COLLAPSED_KEY = 'gallery.sidebar.collapsed.v1';
+
+/**
+ * Bounds for the sidebar.
+ *
+ * The minimum is where labels stop fitting and the thing becomes a column of clipped
+ * words — worse than the icon rail, which at least looks deliberate. The maximum stops
+ * somebody dragging the menu over the content they came to read.
+ */
+const MIN_SIDEBAR = 180;
+const MAX_SIDEBAR = 420;
+const DEFAULT_SIDEBAR = 240;
+const MINI_SIDEBAR = 64;
 const OPEN_NAV_GROUPS_KEY = 'gallery.navigation.groups.v1';
 
 const mobileNav = [
@@ -842,6 +857,59 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
         return () => window.removeEventListener('keydown', close);
     }, [mobileOpen]);
 
+    /**
+     * How wide the sidebar is, and whether it is a rail.
+     *
+     * Kept in localStorage rather than on the account: a width that suits a wide monitor
+     * is wrong on a laptop, and the same person uses both. Nothing here is worth a request.
+     */
+    const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
+        const stored = Number(window.localStorage.getItem(SIDEBAR_WIDTH_KEY));
+
+        return stored >= MIN_SIDEBAR && stored <= MAX_SIDEBAR ? stored : DEFAULT_SIDEBAR;
+    });
+
+    const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(
+        () => window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1',
+    );
+
+    useEffect(() => {
+        try { window.localStorage.setItem(SIDEBAR_WIDTH_KEY, String(sidebarWidth)); } catch { /* private mode */ }
+    }, [sidebarWidth]);
+
+    useEffect(() => {
+        try { window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, sidebarCollapsed ? '1' : '0'); } catch { /* private mode */ }
+    }, [sidebarCollapsed]);
+
+    /**
+     * Dragging the border.
+     *
+     * Pointer events with capture, so the drag survives the cursor outrunning the handle —
+     * with mouse events it stops the moment the pointer leaves the two pixels it started
+     * on, which feels like the app dropping what you were holding.
+     *
+     * `select-none` on the body for the duration: without it a drag paints the whole menu
+     * blue, because the browser thinks you are selecting text.
+     */
+    const beginResize = (event: React.PointerEvent<HTMLDivElement>) => {
+        event.preventDefault();
+        (event.target as HTMLElement).setPointerCapture(event.pointerId);
+        document.body.classList.add('select-none');
+
+        const move = (moveEvent: PointerEvent) => {
+            setSidebarWidth(Math.min(MAX_SIDEBAR, Math.max(MIN_SIDEBAR, moveEvent.clientX)));
+        };
+
+        const stop = () => {
+            document.body.classList.remove('select-none');
+            window.removeEventListener('pointermove', move);
+            window.removeEventListener('pointerup', stop);
+        };
+
+        window.addEventListener('pointermove', move);
+        window.addEventListener('pointerup', stop);
+    };
+
     const pinnedItems = pinnedHrefs
         .map(href => customizableNavItems.find(item => item.href === href))
         .filter((item): item is NavigationItem => item !== undefined && canReach(item, activeFeatures, isAdmin));
@@ -862,6 +930,30 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
      */
     const renderNavigationItem = (item: NavigationItem, nested = false, closeDrawer = false, depth = 0) => {
         if (!canReach(item, activeFeatures, isAdmin)) return null;
+
+        // A rail shows icons only. Nested entries go with them: an icon indented under
+        // another icon says nothing, and the rails have no room to draw the tree.
+        if (railMode) {
+            if (nested || !item.href) return null;
+
+            const RailIcon = item.icon;
+
+            return (
+                <Link
+                    key={item.href}
+                    href={item.href}
+                    title={item.label}
+                    className={clsx(
+                        'mx-2 flex h-10 items-center justify-center rounded-xl transition-colors',
+                        isActive(item.href, item.exact)
+                            ? 'bg-[var(--color-accent)] text-[var(--color-accent-contrast)]'
+                            : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]',
+                    )}
+                >
+                    {RailIcon && <RailIcon size={18} />}
+                </Link>
+            );
+        }
 
         const visibleChildren = (item.children ?? []).filter(child => canReach(child, activeFeatures, isAdmin));
 
@@ -915,8 +1007,12 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
         );
     };
 
+    /** Set only while the desktop sidebar is drawing itself as a rail. */
+    let railMode = false;
+
     const renderNavigation = (instance: 'desktop' | 'mobile') => {
         const closeDrawer = instance === 'mobile';
+        railMode = instance === 'desktop' && sidebarCollapsed;
         return (
             <>
                 <div className="space-y-0.5">
@@ -934,6 +1030,16 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
                     {arrangedGroups.map(group => {
                         const items = group.items.filter(item => canReach(item, activeFeatures, isAdmin));
                         if (items.length === 0) return null;
+
+                        // A rail has no room for a heading, and a collapsible group whose
+                        // label is invisible is a control with no stated purpose.
+                        if (railMode) {
+                            return (
+                                <div key={group.id} className="space-y-0.5 border-t border-[var(--color-border)] pt-2">
+                                    {items.map(item => renderNavigationItem(item, false, closeDrawer))}
+                                </div>
+                            );
+                        }
 
                         // Items somebody moved to the top level belong to no section, so
                         // they get no heading to collapse — a collapsible group labelled
@@ -993,28 +1099,55 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
         <div className="app-shell flex min-h-0 w-full overflow-hidden">
             <CommandPalette open={cmdOpen} onClose={() => setCmdOpen(false)} isAdmin={isAdmin} features={activeFeatures} />
             {/* Sidebar — Desktop */}
-            <aside className="hidden md:flex flex-col w-60 shrink-0 border-r border-[var(--color-border)] bg-[var(--color-bg-secondary)]">
+            <aside
+                style={{ width: sidebarCollapsed ? MINI_SIDEBAR : sidebarWidth }}
+                className="relative hidden shrink-0 flex-col border-r border-[var(--color-border)] bg-[var(--color-bg-secondary)] md:flex"
+            >
                 {/* Logo */}
-                <div className="flex items-center gap-3 px-5 py-4 border-b border-[var(--color-border)]">
-                    <div className="w-8 h-8 rounded-lg bg-[var(--color-accent)] flex items-center justify-center">
+                <div className={clsx('flex items-center gap-3 border-b border-[var(--color-border)] py-4', sidebarCollapsed ? 'justify-center px-2' : 'px-5')}>
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--color-accent)]">
                         <Images size={16} className="text-[var(--color-accent-contrast)]" />
                     </div>
-                    <span className="font-semibold text-sm text-[var(--color-text-primary)] truncate">Stanektech Gallery</span>
+                    {!sidebarCollapsed && <span className="truncate text-sm font-semibold text-[var(--color-text-primary)]">Stanektech Gallery</span>}
                 </div>
 
                 {/* Nav */}
-                <nav className="flex-1 py-3 overflow-y-auto scrollbar-hide">
+                <nav className="scrollbar-hide flex-1 overflow-y-auto py-3">
                     {renderNavigation('desktop')}
                 </nav>
 
                 {/* User + Notifications */}
                 <div className="border-t border-[var(--color-border)] p-3">
-                    <div className="flex items-center gap-2">
-                        <div className="min-w-0 flex-1"><UserMenu user={auth?.user}/></div>
-                        <AppInstallButton/>
+                    <div className={clsx('flex items-center gap-2', sidebarCollapsed && 'flex-col')}>
+                        <div className="min-w-0 flex-1"><UserMenu user={auth?.user} compact={sidebarCollapsed}/></div>
+                        {!sidebarCollapsed && <AppInstallButton/>}
                         <NotificationBell/>
                     </div>
                 </div>
+
+                {/* Collapse toggle, sitting on the border it moves. */}
+                <button
+                    type="button"
+                    onClick={() => setSidebarCollapsed(current => !current)}
+                    aria-label={sidebarCollapsed ? 'Rozbalit postranní panel' : 'Sbalit postranní panel'}
+                    className="absolute -right-3 top-20 z-20 flex h-6 w-6 items-center justify-center rounded-full border border-[var(--color-border)] bg-[var(--color-bg-secondary)] text-[var(--color-text-secondary)] shadow-sm transition-colors hover:text-[var(--color-text-primary)]"
+                >
+                    <ChevronDown size={13} className={sidebarCollapsed ? '-rotate-90' : 'rotate-90'} />
+                </button>
+
+                {/* The drag handle is the border itself, widened to something a mouse can
+                    actually catch. Hidden while collapsed: dragging a rail that snaps back
+                    to a fixed width would be a control that lies about what it does. */}
+                {!sidebarCollapsed && (
+                    <div
+                        role="separator"
+                        aria-orientation="vertical"
+                        aria-label="Změnit šířku postranního panelu"
+                        onPointerDown={beginResize}
+                        onDoubleClick={() => setSidebarWidth(DEFAULT_SIDEBAR)}
+                        className="absolute inset-y-0 -right-1 z-10 w-2 cursor-col-resize hover:bg-[var(--color-accent)]/30"
+                    />
+                )}
             </aside>
 
             {/* Mobile Sidebar Overlay */}

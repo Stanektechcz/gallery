@@ -107,7 +107,7 @@ export default function Appearance() {
     return (
         <AppLayout>
             <Head title="Vzhled a barvy" />
-            <main className="mx-auto max-w-4xl p-4 sm:p-6">
+            <main className="w-full p-4 sm:p-6">
                 <p className="text-xs uppercase tracking-widest text-[var(--color-accent)]">Nastavení</p>
                 <h1 className="mt-1 flex items-center gap-2 text-2xl font-bold text-[var(--color-text-primary)] sm:text-3xl">
                     <Palette size={22} className="text-[var(--color-accent)]" /> Vzhled a barvy

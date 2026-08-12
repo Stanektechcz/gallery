@@ -21,7 +21,7 @@ export default function AnniversaryAlbumIndex() {
             .finally(() => setLoading(false));
     }, [spaceId]);
 
-    return <AppLayout><Head title="Výroční album"/><main className="mx-auto max-w-6xl p-4 sm:p-6">
+    return <AppLayout><Head title="Výroční album"/><main className="w-full p-4 sm:p-6">
         <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start"><div><p className="text-xs font-medium uppercase tracking-wider text-pink-200">Fotografie, videa a společná vzpomínka</p><h1 className="mt-1 flex items-center gap-2 text-xl font-semibold text-[var(--color-text-primary)]"><Images size={22} className="text-pink-300"/>Vytvořit výroční album</h1><p className="mt-1 max-w-3xl text-sm text-[var(--color-text-secondary)]">Automatický návrh výběru za konkrétní rok vztahu můžete upravit, zvolit titulní snímek a jedním krokem propojit s příběhem i vzpomínkou.</p></div><Link href="/gifts-anniversaries" className="text-sm text-pink-200">Nastavení výročí →</Link></div>
         {(spaceLoading || loading) && <div className="mt-5 h-44 animate-pulse rounded-2xl bg-[var(--color-surface-muted)]"/>}
         {(spaceError || error) && <div className="mt-5 rounded-xl bg-red-500/10 p-4 text-sm text-red-200">{spaceError || error} <button type="button" onClick={reload} className="ml-2 underline">Načíst znovu</button></div>}

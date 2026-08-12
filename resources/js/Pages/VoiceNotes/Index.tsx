@@ -82,7 +82,7 @@ export default function VoiceNotesIndex() {
     return (
         <AppLayout>
             <Head title="Hlasovky" />
-            <main className="mx-auto max-w-3xl p-4 sm:p-6">
+            <main className="w-full p-4 sm:p-6">
                 <p className="text-xs uppercase tracking-widest text-[var(--color-accent)]">Zvuk</p>
                 <h1 className="mt-1 flex items-center gap-2 text-2xl font-bold text-[var(--color-text-primary)] sm:text-3xl">
                     <Mic size={24} className="text-[var(--color-accent)]" /> Hlasovky

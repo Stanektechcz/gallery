@@ -112,7 +112,7 @@ export default function JournalIndex() {
     return (
         <AppLayout title="Deník">
             <Head title="Deník" />
-            <main className="mx-auto max-w-3xl p-4 sm:p-6">
+            <main className="w-full p-4 sm:p-6">
                 <header className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                         <p className="text-xs uppercase tracking-widest text-[var(--color-accent)]">Jen pro vás</p>

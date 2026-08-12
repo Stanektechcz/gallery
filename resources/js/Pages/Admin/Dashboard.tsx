@@ -28,7 +28,7 @@ export default function Dashboard({ stats, connection, queue }: Props) {
     return (
         <AppLayout>
             <Head title="Administrace"/>
-            <main className="mx-auto max-w-6xl p-4 sm:p-6">
+            <main className="w-full p-4 sm:p-6">
                 <p className="text-xs uppercase tracking-widest text-[var(--color-accent)]">Správa systému</p>
                 <h1 className="mt-1 text-2xl font-bold text-[var(--color-text-primary)] sm:text-3xl">Administrace</h1>
                 <p className="mt-2 max-w-3xl text-sm text-[var(--color-text-secondary)]">Centrální nastavení datových zdrojů, úložiště a provozního stavu aplikace.</p>

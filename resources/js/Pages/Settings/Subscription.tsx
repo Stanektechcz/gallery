@@ -128,7 +128,7 @@ export default function Subscription() {
     return (
         <AppLayout>
             <Head title="Předplatné" />
-            <main className="mx-auto max-w-4xl p-4 sm:p-6">
+            <main className="w-full p-4 sm:p-6">
                 <p className="text-xs uppercase tracking-widest text-[var(--color-accent)]">Nastavení</p>
                 <h1 className="mt-1 text-2xl font-bold text-[var(--color-text-primary)] sm:text-3xl">Předplatné a funkce</h1>
                 <p className="mt-2 text-sm text-[var(--color-text-secondary)]">

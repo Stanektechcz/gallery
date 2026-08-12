@@ -74,7 +74,7 @@ export default function Landing() {
                 </header>
 
                 {/* Hero */}
-                <section className="mx-auto max-w-6xl px-4 pb-8 pt-10 sm:pt-16">
+                <section className="w-full px-4 pb-8 pt-10 sm:pt-16">
                     <div className="max-w-3xl">
                         <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--color-accent)]/30 bg-[var(--color-accent)]/10 px-3 py-1 text-xs text-[var(--color-accent)]">
                             <Sparkles size={13} /> Především pro dvojice
@@ -102,7 +102,7 @@ export default function Landing() {
                 </section>
 
                 {/* What you get */}
-                <section className="mx-auto max-w-6xl px-4 py-14">
+                <section className="w-full px-4 py-14">
                     <h2 className="text-2xl font-bold text-[var(--color-text-primary)] sm:text-3xl">Co všechno v tom je</h2>
                     <p className="mt-2 max-w-2xl text-sm text-[var(--color-text-secondary)]">
                         Funkce si zapínáte sami. Co nepoužíváte, zmizí z rozhraní — a kdykoliv se dá vrátit.
@@ -129,7 +129,7 @@ export default function Landing() {
                 </section>
 
                 {/* Pricing */}
-                <section id="cenik" className="mx-auto max-w-6xl scroll-mt-6 px-4 py-14">
+                <section id="cenik" className="w-full scroll-mt-6 px-4 py-14">
                     <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
                         <div>
                             <h2 className="text-2xl font-bold text-[var(--color-text-primary)] sm:text-3xl">Tarify</h2>
@@ -215,7 +215,7 @@ export default function Landing() {
                 </section>
 
                 {/* Trust */}
-                <section className="mx-auto max-w-6xl px-4 py-14">
+                <section className="w-full px-4 py-14">
                     <div className="grid gap-4 sm:grid-cols-3">
                         {[
                             [Lock, 'Vaše data zůstávají vaše', 'Prostory jsou od sebe oddělené na úrovni databáze. K vašim fotkám se nikdo jiný nedostane.'],
@@ -232,7 +232,7 @@ export default function Landing() {
                 </section>
 
                 {/* Final call */}
-                <section className="mx-auto max-w-6xl px-4 pb-20">
+                <section className="w-full px-4 pb-20">
                     <div className="rounded-3xl border border-[var(--color-accent)]/30 bg-[var(--color-accent)]/5 p-8 text-center sm:p-12">
                         <h2 className="text-2xl font-bold text-[var(--color-text-primary)] sm:text-3xl">Začněte dnes, zdarma</h2>
                         <p className="mx-auto mt-3 max-w-xl text-sm text-[var(--color-text-secondary)]">
