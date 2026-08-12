@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Models\MediaItem;
 use App\Services\Storage\DropboxClient;
+use App\Services\Storage\OneDriveClient;
 use App\Services\Storage\StorageResolver;
 use App\Support\SpaceContext;
 use Illuminate\Bus\Queueable;
@@ -39,17 +40,27 @@ class MirrorMediaToCloud implements ShouldQueue
     {
     }
 
-    public function handle(StorageResolver $resolver, DropboxClient $dropbox): void
+    public function handle(StorageResolver $resolver, DropboxClient $dropbox, OneDriveClient $oneDrive): void
     {
         $media = MediaItem::withoutGlobalScope(SpaceContext::SCOPE)->find($this->mediaId);
         if (! $media || ! $media->gallerySpace) return;
 
         $connection = $resolver->activeConnection($media->gallerySpace);
-        if (! $connection || $connection->provider !== 'dropbox') return;
+        if (! $connection) return;
 
-        // Already mirrored: a retried job must not produce a second copy, and autorename
-        // means Dropbox would happily make one.
-        if ($media->variants()->where('disk', 'dropbox')->exists()) return;
+        // The two clients answer the same three calls, so the job picks one and stops
+        // caring which. A provider with no client is simply not mirrored rather than
+        // being an error nobody can act on.
+        $client = match ($connection->provider) {
+            'dropbox' => $dropbox,
+            'onedrive' => $oneDrive,
+            default => null,
+        };
+        if (! $client) return;
+
+        // Already mirrored: a retried job must not produce a second copy, and both
+        // providers are asked to rename on conflict, so they would happily make one.
+        if ($media->variants()->where('disk', $connection->provider)->exists()) return;
 
         $original = $media->variants()->where('type', 'original')->first();
         if (! $original) return;
@@ -57,10 +68,10 @@ class MirrorMediaToCloud implements ShouldQueue
         $disk = Storage::disk($original->disk);
         if (! $disk->exists($original->path)) return;
 
-        $remote = $dropbox->folderFor($connection)
+        $remote = $client->folderFor($connection)
             . '/' . $media->uuid . '.' . ($media->extension ?: 'bin');
 
-        $result = $dropbox->upload($connection, $remote, $disk->get($original->path));
+        $result = $client->upload($connection, $remote, $disk->get($original->path));
 
         if (! $result['ok']) {
             // Logged and retried rather than swallowed. The connection's own error column
@@ -73,7 +84,7 @@ class MirrorMediaToCloud implements ShouldQueue
 
         $media->variants()->create([
             'type' => 'cloud_copy',
-            'disk' => 'dropbox',
+            'disk' => $connection->provider,
             'path' => $result['path'] ?? $remote,
             'size_bytes' => $result['size'] ?? null,
         ]);

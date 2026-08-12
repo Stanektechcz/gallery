@@ -49,7 +49,7 @@ class MirrorBacklogCommand extends Command
                 ->where('gallery_space_id', $space->id)
                 ->where('status', 'ready')
                 ->whereNull('trashed_at')
-                ->whereDoesntHave('variants', fn ($query) => $query->where('disk', 'dropbox'))
+                ->whereDoesntHave('variants', fn ($query) => $query->where('disk', $connection->provider))
                 ->whereHas('variants', fn ($query) => $query->where('type', 'original'))
                 ->limit($limit)
                 ->pluck('id');
