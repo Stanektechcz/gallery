@@ -125,6 +125,19 @@ export default function Subscription() {
 
     const upgrades = catalogue.filter(candidate => candidate.code !== plan?.code);
 
+    /**
+     * Capacity and capability are two different purchases and belong under two headings.
+     *
+     * Somebody buying space has run out of it and knows exactly what they want; somebody
+     * browsing add-ons is deciding whether a thing is worth having. Mixed together, the
+     * first person scrolls past eight things they did not ask about.
+     *
+     * Split on whether the module grants features, which is what actually distinguishes
+     * them — a name-based rule would break the first time one was renamed.
+     */
+    const storageModules = modules.filter(module => module.features.length === 0);
+    const featureModules = modules.filter(module => module.features.length > 0);
+
     return (
         <AppLayout>
             <Head title="Předplatné" />
@@ -210,7 +223,7 @@ export default function Subscription() {
                                         {/* Two or three across. Each row is an icon, a name and
                                             a switch; a full-width strip for that turns a dozen
                                             features into a page of scrolling. */}
-                                        <div className="mt-2 grid gap-2 lg:grid-cols-2 2xl:grid-cols-3">
+                                        <div className="mt-2 grid gap-2 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
                                             {rows.map(feature => (
                                                 <div
                                                     key={feature.code}
@@ -299,8 +312,61 @@ export default function Subscription() {
                             </section>
                         )}
 
+                        {/* Capacity. Its own heading because it answers a different question:
+                            not "would I like this" but "I have run out". Somebody in that
+                            position should not have to read past eight feature bundles. */}
+                        {storageModules.length > 0 && (
+                            <section className="mt-10">
+                                <h2 className="font-semibold text-[var(--color-text-primary)]">Rozšíření úložiště</h2>
+                                <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
+                                    Přidává se ke kapacitě tarifu a sčítá se — lze pořídit i vícekrát.
+                                </p>
+
+                                <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+                                    {storageModules.map(module => (
+                                        <article
+                                            key={module.code}
+                                            className={`flex flex-col rounded-2xl border p-4 ${module.is_active
+                                                ? 'border-emerald-400/30 bg-emerald-500/5'
+                                                : 'border-[var(--color-border)] bg-[var(--color-bg-card)]'}`}
+                                        >
+                                            <div className="flex items-center gap-3">
+                                                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-sky-500/10 text-lg">{module.icon}</span>
+                                                <div className="min-w-0 flex-1">
+                                                    <h3 className="truncate font-semibold text-[var(--color-text-primary)]">{module.name}</h3>
+                                                    <p className="text-sm text-[var(--color-text-primary)]">
+                                                        {money(module.price_monthly, module.currency)}
+                                                        <span className="text-xs text-[var(--color-text-secondary)]"> / měsíc</span>
+                                                    </p>
+                                                </div>
+                                                {module.is_active && (
+                                                    <span className="shrink-0 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] text-emerald-200">aktivní</span>
+                                                )}
+                                            </div>
+
+                                            <div className="mt-auto pt-3">
+                                                {isAdmin ? (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => buy('module', module.code)}
+                                                        disabled={busy !== null || !gateway?.configured}
+                                                        className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl bg-[var(--color-accent)] text-sm font-medium text-[var(--color-accent-contrast)] disabled:opacity-40"
+                                                    >
+                                                        {busy === `buy:${module.code}` ? <LoaderCircle size={14} className="animate-spin" /> : <CreditCard size={14} />}
+                                                        {module.is_active ? 'Přikoupit' : 'Rozšířit'}
+                                                    </button>
+                                                ) : (
+                                                    <p className="text-xs text-[var(--color-text-secondary)]">Nákup provede správce prostoru.</p>
+                                                )}
+                                            </div>
+                                        </article>
+                                    ))}
+                                </div>
+                            </section>
+                        )}
+
                         {/* Add-ons */}
-                        {modules.length > 0 && (
+                        {featureModules.length > 0 && (
                             <section className="mt-10">
                                 <h2 className="font-semibold text-[var(--color-text-primary)]">Doplňkové moduly</h2>
                                 {/* Cards rather than a stack. A module is an icon, a name, a
@@ -311,7 +377,7 @@ export default function Subscription() {
                                     Four across at most, not six: these carry a sentence of
                                     description that a sixth column would cut to two words. */}
                                 <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-                                    {modules.map(module => (
+                                    {featureModules.map(module => (
                                         <article
                                             key={module.code}
                                             className={`flex flex-col rounded-2xl border p-4 ${module.is_active
