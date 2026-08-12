@@ -264,7 +264,10 @@ export default function Subscription() {
                                     </div>
                                 </div>
 
-                                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                                {/* Three, four once there is room. Plans are compared against
+                                    each other rather than read one at a time, and a comparison
+                                    you have to scroll through is not one. */}
+                                <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
                                     {upgrades.map(candidate => {
                                         const price = period === 'yearly'
                                             ? (candidate.price_yearly > 0 ? candidate.price_yearly : candidate.price_monthly * 10)

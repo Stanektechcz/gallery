@@ -139,6 +139,84 @@ class BillingCatalogSeeder extends Seeder
                 'price_monthly' => 9_900, 'storage_bonus_mb' => 100_000, 'sort_order' => 1,
                 'grants' => [],
             ],
+            // Capacity, in the sizes people actually run out at. All three stack, so
+            // somebody who needs two terabytes buys the big one twice rather than waiting
+            // for us to invent a bigger tier.
+            [
+                'code' => 'uloziste_500', 'name' => '500 GB navíc', 'icon' => '💾',
+                'tagline' => 'Větší rozšíření místa na serveru.',
+                'description' => 'Přidá 500 GB ke kapacitě tarifu. Výhodnější než pětkrát sto.',
+                'price_monthly' => 39_900, 'storage_bonus_mb' => 500_000, 'sort_order' => 2,
+                'grants' => [],
+            ],
+            [
+                'code' => 'uloziste_1tb', 'name' => '1 TB navíc', 'icon' => '🗄️',
+                'tagline' => 'Pro knihovny, které se počítají v terabajtech.',
+                'description' => 'Přidá 1 TB ke kapacitě tarifu. Sčítá se s ostatními rozšířeními.',
+                'price_monthly' => 69_900, 'storage_bonus_mb' => 1_000_000, 'sort_order' => 3,
+                'grants' => [],
+            ],
+
+            // Feature bundles. Each unlocks things the cheaper plans leave out, grouped by
+            // what somebody is actually trying to do rather than by which screen it lives
+            // on — nobody wants "the places module", they want to plan a holiday.
+            [
+                'code' => 'cestovatel', 'name' => 'Cestovatel', 'icon' => '🧭',
+                'tagline' => 'Plánování cest a míst na jednom místě.',
+                'description' => 'Itineráře, ubytování a doprava k cestám, plus mapa navštívených míst.',
+                'price_monthly' => 9_900, 'sort_order' => 40,
+                'grants' => ['trips', 'places'],
+            ],
+            [
+                'code' => 'spolecne_finance', 'name' => 'Společné finance', 'icon' => '💰',
+                'tagline' => 'Kdo co zaplatil a jak jste vyrovnaní.',
+                'description' => 'Společné výdaje, vyrovnání mezi vámi a přehled, kam peníze odcházejí.',
+                'price_monthly' => 7_900, 'sort_order' => 41,
+                'grants' => ['finance'],
+            ],
+            [
+                'code' => 'kronikar', 'name' => 'Kronikář', 'icon' => '📖',
+                'tagline' => 'Deník, fotokniha a statistiky.',
+                'description' => 'Osobní i sdílený deník, sazba fotoknihy z alba a přehledy o tom, co jste nafotili.',
+                'price_monthly' => 11_900, 'sort_order' => 42,
+                'grants' => ['journal', 'photobook', 'stats'],
+            ],
+            [
+                'code' => 'vecerni_program', 'name' => 'Večerní program', 'icon' => '🍿',
+                'tagline' => 'Filmy, seriály a nápady na rande.',
+                'description' => 'Společný watchlist s tierlisty a generátor nápadů, co spolu podniknout.',
+                'price_monthly' => 6_900, 'sort_order' => 43,
+                'grants' => ['watchlist', 'date_ideas'],
+            ],
+            [
+                'code' => 'trezor', 'name' => 'Trezor', 'icon' => '🔒',
+                'tagline' => 'Soukromá část galerie za druhým heslem.',
+                'description' => 'Fotky, které nemají být vidět jen tak — oddělené a zamčené zvlášť.',
+                'price_monthly' => 8_900, 'sort_order' => 44,
+                'grants' => ['vault'],
+            ],
+            [
+                'code' => 'automatizace', 'name' => 'Automatizace', 'icon' => '⚙️',
+                'tagline' => 'Vlastní pravidla: když se stane tohle, udělej tamto.',
+                'description' => 'Pravidla nad kalendářem, fotkami a úkoly, která běží sama.',
+                'price_monthly' => 9_900, 'sort_order' => 45,
+                'grants' => ['automations'],
+            ],
+            [
+                'code' => 'obyvak', 'name' => 'Obývák', 'icon' => '📺',
+                'tagline' => 'Galerie na televizi.',
+                'description' => 'Režim pro velkou obrazovku — fotky běží samy, ovládá se z telefonu.',
+                'price_monthly' => 4_900, 'sort_order' => 46,
+                'grants' => ['tv_mode'],
+            ],
+            [
+                'code' => 'darky_a_vyroci', 'name' => 'Dárky a výročí', 'icon' => '🎁',
+                'tagline' => 'Aby vám nic neuteklo.',
+                'description' => 'Seznam nápadů na dárky, hlídání výročí a připomínky s předstihem.',
+                'price_monthly' => 5_900, 'sort_order' => 47,
+                'grants' => ['gifts'],
+            ],
+
             [
                 'code' => 'burps', 'name' => 'Hodnocení krkanců', 'icon' => '🎺',
                 'tagline' => 'První doplňkový modul. Ano, myslíme to vážně.',
