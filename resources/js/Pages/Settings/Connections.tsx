@@ -21,6 +21,9 @@ interface Provider {
     ready: boolean;
     available?: boolean;
     caveat?: string;
+    steps?: string[];
+    signup_url?: string;
+    docs_url?: string;
 }
 
 interface Quota {
@@ -82,21 +85,37 @@ const nameOf = (catalogue: Provider[], code: string) =>
  * A service we cannot integrate stays on the grid, greyed, saying why. Removing it would
  * only mean somebody asks for it again next month.
  */
-function ServiceCard({ provider, connected, onOpen }: {
+function ServiceCard({ provider, connected, onOpen, onExplain }: {
     provider: Provider;
     connected: string | null;
     onOpen: () => void;
+    /** Shows the guide without connecting — the only way to read it for a service that
+     *  connects by redirect, where clicking the card leaves the page immediately. */
+    onExplain: () => void;
 }) {
     const dead = provider.available === false;
     const inert = dead || provider.mode === 'none';
 
     return (
+        <div className="relative h-full">
+            {(provider.steps?.length || provider.docs_url) && (
+                <button
+                    type="button"
+                    onClick={onExplain}
+                    aria-label={`Jak připojit ${provider.name}`}
+                    title="Jak to propojit"
+                    className="absolute right-2 top-2 z-10 flex h-5 w-5 items-center justify-center rounded-full border border-[var(--color-border)] text-[10px] text-[var(--color-text-secondary)] hover:border-[var(--color-accent)] hover:text-[var(--color-text-primary)]"
+                >
+                    ?
+                </button>
+            )}
+
         <button
             type="button"
             onClick={inert ? undefined : onOpen}
             disabled={inert}
             title={dead ? provider.help : undefined}
-            className={`flex h-full flex-col items-start gap-2 rounded-2xl border p-3 text-left transition-colors ${dead
+            className={`flex h-full w-full flex-col items-start gap-2 rounded-2xl border p-3 text-left transition-colors ${dead
                 ? 'cursor-default border-[var(--color-border)] bg-[var(--color-bg-card)] opacity-45'
                 : inert
                     ? 'cursor-default border-[var(--color-border)] bg-[var(--color-bg-card)]'
@@ -123,6 +142,7 @@ function ServiceCard({ provider, connected, onOpen }: {
                 )}
             </span>
         </button>
+        </div>
     );
 }
 
@@ -145,6 +165,9 @@ export default function Connections() {
     const [quota, setQuota] = useState<Quota | null>(null);
     /** Which service's form is open. One at a time: two token fields side by side invite pasting into the wrong one. */
     const [adding, setAdding] = useState<Provider | null>(null);
+    /** Reading the guide without connecting. Separate from `adding` so opening the help for
+     *  a redirect service does not put a token field on screen it has no use for. */
+    const [explaining, setExplaining] = useState<Provider | null>(null);
 
     /**
      * What a card does when clicked, decided by the provider rather than by the card.
@@ -289,6 +312,7 @@ export default function Connections() {
                                                 ? (storage[provider.code].account ?? 'Připojeno')
                                                 : null}
                                         onOpen={() => openProvider(provider)}
+                                        onExplain={() => setExplaining(provider)}
                                     />
                                 ))}
                             </div>
@@ -356,6 +380,7 @@ export default function Connections() {
                                             return mine.length > 0 ? `${mine.length}× připojeno` : null;
                                         })()}
                                         onOpen={() => openProvider(provider)}
+                                        onExplain={() => setExplaining(provider)}
                                     />
                                 ))}
                             </div>
@@ -506,6 +531,35 @@ export default function Connections() {
                                     <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">Připojit {adding.name}</h2>
                                     <p className="mt-1 text-xs text-[var(--color-text-secondary)]">{adding.help}</p>
                                     {adding.caveat && <p className="mt-1 text-[11px] text-amber-200">{adding.caveat}</p>}
+
+                                    {/* Numbered, because these are done in order and in
+                                        somebody else's interface — a paragraph would mean
+                                        re-reading it to find where you got to. */}
+                                    {adding.steps && adding.steps.length > 0 && (
+                                        <ol className="mt-2 space-y-1 text-[11px] leading-4 text-[var(--color-text-secondary)]">
+                                            {adding.steps.map((step, index) => (
+                                                <li key={index} className="flex gap-1.5">
+                                                    <span className="shrink-0 text-[var(--color-accent)]">{index + 1}.</span>
+                                                    <span>{step}</span>
+                                                </li>
+                                            ))}
+                                        </ol>
+                                    )}
+
+                                    {(adding.signup_url || adding.docs_url) && (
+                                        <p className="mt-2 flex flex-wrap gap-3 text-[11px]">
+                                            {adding.signup_url && (
+                                                <a href={adding.signup_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[var(--color-accent)] hover:underline">
+                                                    Otevřít {adding.name} <ExternalLink size={11} />
+                                                </a>
+                                            )}
+                                            {adding.docs_url && (
+                                                <a href={adding.docs_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[var(--color-text-secondary)] hover:underline">
+                                                    Nápověda <ExternalLink size={11} />
+                                                </a>
+                                            )}
+                                        </p>
+                                    )}
                                 </div>
                             </div>
 
@@ -566,6 +620,52 @@ export default function Connections() {
                                     className="min-h-11 rounded-xl border border-[var(--color-border)] px-4 text-sm text-[var(--color-text-primary)]"
                                 >
                                     Zrušit
+                                </button>
+                            </div>
+                        </section>
+                    </div>
+                )}
+                {/* The guide on its own. Same shape as the connect sheet so the two read as
+                    one thing seen twice, but with no field: this is for services that
+                    connect by leaving the page, where there is nothing to type here. */}
+                {explaining && (
+                    <div className="fixed inset-0 z-[760] flex items-end justify-center bg-black/60 sm:items-center sm:p-4">
+                        <button type="button" aria-label="Zavřít" onClick={() => setExplaining(null)} className="absolute inset-0 cursor-default" />
+
+                        <section className="safe-area-pb relative w-full rounded-t-2xl border border-[var(--color-border)] bg-[var(--color-bg-secondary)] p-4 sm:max-w-md sm:rounded-2xl">
+                            <div className="flex items-start gap-3">
+                                <ServiceLogo code={explaining.code} brand={explaining.brand} size={30} />
+                                <div className="min-w-0 flex-1">
+                                    <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">Jak propojit {explaining.name}</h2>
+                                    <p className="mt-1 text-xs text-[var(--color-text-secondary)]">{explaining.help}</p>
+                                    {explaining.caveat && <p className="mt-1 text-[11px] text-amber-200">{explaining.caveat}</p>}
+                                </div>
+                            </div>
+
+                            {explaining.steps && explaining.steps.length > 0 && (
+                                <ol className="mt-3 space-y-1.5 text-xs leading-5 text-[var(--color-text-secondary)]">
+                                    {explaining.steps.map((step, index) => (
+                                        <li key={index} className="flex gap-2">
+                                            <span className="shrink-0 font-medium text-[var(--color-accent)]">{index + 1}.</span>
+                                            <span>{step}</span>
+                                        </li>
+                                    ))}
+                                </ol>
+                            )}
+
+                            <div className="mt-4 flex flex-wrap items-center gap-3 text-xs">
+                                {explaining.signup_url && (
+                                    <a href={explaining.signup_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[var(--color-accent)] hover:underline">
+                                        Otevřít {explaining.name} <ExternalLink size={12} />
+                                    </a>
+                                )}
+                                {explaining.docs_url && (
+                                    <a href={explaining.docs_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[var(--color-text-secondary)] hover:underline">
+                                        Oficiální nápověda <ExternalLink size={12} />
+                                    </a>
+                                )}
+                                <button type="button" onClick={() => setExplaining(null)} className="ml-auto min-h-10 rounded-xl border border-[var(--color-border)] px-4 text-[var(--color-text-primary)]">
+                                    Zavřít
                                 </button>
                             </div>
                         </section>
