@@ -4,7 +4,7 @@ import AudioRecorder from '@/Components/AudioRecorder';
 import { Head } from '@inertiajs/react';
 import axios from 'axios';
 import { Check, LoaderCircle, Mic, Trash2 } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 interface Note {
     uuid: string;
@@ -30,6 +30,27 @@ const when = (value?: string | null) =>
 
 export default function VoiceNotesIndex() {
     const [notes, setNotes] = useState<Note[]>([]);
+
+    /**
+     * The notes gathered under the day they were recorded.
+     *
+     * Insertion order carries the grouping, so the API's ordering decides the timeline and
+     * this does not sort it a second time — two places deciding the order is how a list
+     * ends up disagreeing with itself.
+     */
+    const byDay = useMemo(() => {
+        const groups = new Map<string, Note[]>();
+
+        for (const note of notes) {
+            const day = note.recorded_at
+                ? new Date(note.recorded_at).toLocaleDateString('cs-CZ', { day: 'numeric', month: 'long', year: 'numeric' })
+                : 'Bez data';
+
+            (groups.get(day) ?? groups.set(day, []).get(day)!).push(note);
+        }
+
+        return [...groups.entries()];
+    }, [notes]);
     const [loading, setLoading] = useState(true);
     const [busy, setBusy] = useState<string | null>(null);
     const [error, setError] = useState('');
@@ -95,39 +116,66 @@ export default function VoiceNotesIndex() {
 
                 <AudioRecorder onRecorded={upload} busy={busy === 'upload'} label="Nahrát hlasovku" />
 
-                <section className="mt-6 space-y-3">
+                {/* A timeline grouped by the day things were said, and within a day a grid
+                    rather than a stack. A voice note carries a name, a length and a play
+                    button — a full-width row for that is mostly empty, and twenty of them
+                    is a lot of scrolling for very little. */}
+                <section className="mt-6">
                     {loading && <div className="flex justify-center py-8"><LoaderCircle className="animate-spin text-[var(--color-accent)]" /></div>}
 
-                    {!loading && notes.map(note => (
-                        <article key={note.uuid} className={`rounded-2xl border p-4 ${note.heard ? 'border-[var(--color-border)] bg-[var(--color-bg-card)]' : 'border-[var(--color-accent)]/35 bg-[var(--color-accent)]/5'}`}>
-                            <div className="flex flex-wrap items-baseline justify-between gap-2">
-                                <p className="font-medium text-[var(--color-text-primary)]">
-                                    {note.title || 'Bez názvu'}
-                                    {!note.heard && <span className="ml-2 rounded-full bg-[var(--color-accent)]/20 px-2 py-0.5 text-[10px] text-[var(--color-accent)]">nové</span>}
-                                </p>
-                                <p className="text-xs text-[var(--color-text-secondary)]">
-                                    {note.author.name} · {when(note.recorded_at)}{note.duration_ms ? ` · ${duration(note.duration_ms)}` : ''}
-                                </p>
+                    {!loading && byDay.map(([day, dayNotes]) => (
+                        <div key={day} className="mt-6 first:mt-0">
+                            <div className="mb-2 flex items-center gap-3">
+                                <h2 className="shrink-0 text-xs font-semibold uppercase tracking-wide text-[var(--color-text-secondary)]">{day}</h2>
+                                <span className="h-px flex-1 bg-[var(--color-border)]" />
+                                <span className="shrink-0 text-[10px] text-[var(--color-text-secondary)]">{dayNotes.length}</span>
                             </div>
-                            <audio
-                                controls
-                                preload="none"
-                                src={note.stream_url}
-                                onPlay={() => markHeard(note)}
-                                className="mt-3 w-full"
-                            />
-                            {note.transcript && <p className="mt-2 text-xs leading-relaxed text-[var(--color-text-secondary)]">{note.transcript}</p>}
-                            {note.can_delete && (
-                                <button
-                                    type="button"
-                                    onClick={() => remove(note)}
-                                    disabled={busy !== null}
-                                    className="mt-3 inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-red-400/30 px-3 text-xs text-red-100 hover:bg-red-500/10 disabled:opacity-40"
-                                >
-                                    {busy === `del:${note.uuid}` ? <LoaderCircle size={13} className="animate-spin" /> : <Trash2 size={13} />} Smazat
-                                </button>
-                            )}
-                        </article>
+
+                            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-6">
+                                {dayNotes.map(note => (
+                                    <article
+                                        key={note.uuid}
+                                        className={`flex flex-col rounded-xl border p-2.5 ${note.heard
+                                            ? 'border-[var(--color-border)] bg-[var(--color-bg-card)]'
+                                            : 'border-[var(--color-accent)]/35 bg-[var(--color-accent)]/5'}`}
+                                    >
+                                        <div className="flex items-start gap-1.5">
+                                            <p className="min-w-0 flex-1 truncate text-xs font-medium text-[var(--color-text-primary)]" title={note.title || 'Bez názvu'}>
+                                                {note.title || 'Bez názvu'}
+                                            </p>
+                                            {!note.heard && <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--color-accent)]" title="Nepřehráno" />}
+                                        </div>
+
+                                        <p className="truncate text-[10px] text-[var(--color-text-secondary)]">
+                                            {note.author.name}{note.duration_ms ? ` · ${duration(note.duration_ms)}` : ''}
+                                        </p>
+
+                                        {/* The native player, kept small. Rolling our own would
+                                            mean rebuilding seeking, buffering and keyboard
+                                            control for no gain the person can hear. */}
+                                        <audio
+                                            controls
+                                            preload="none"
+                                            src={note.stream_url}
+                                            onPlay={() => markHeard(note)}
+                                            className="mt-2 h-8 w-full"
+                                        />
+
+                                        {note.can_delete && (
+                                            <button
+                                                type="button"
+                                                onClick={() => remove(note)}
+                                                disabled={busy !== null}
+                                                aria-label={`Smazat ${note.title || 'hlasovku'}`}
+                                                className="mt-1.5 self-end rounded-lg p-1 text-red-300 hover:bg-red-500/10 disabled:opacity-40"
+                                            >
+                                                {busy === `del:${note.uuid}` ? <LoaderCircle size={12} className="animate-spin" /> : <Trash2 size={12} />}
+                                            </button>
+                                        )}
+                                    </article>
+                                ))}
+                            </div>
+                        </div>
                     ))}
 
                     {!loading && !notes.length && (

@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Api;
 
 use App\Support\AudioUploads;
 use App\Http\Controllers\Controller;
+use App\Models\ChatMessage;
+use App\Models\Conversation;
 use App\Models\GallerySpace;
 use App\Models\VoiceNote;
 use App\Models\VoiceNoteListen;
@@ -12,6 +14,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class VoiceNoteController extends Controller
@@ -66,6 +69,64 @@ class VoiceNoteController extends Controller
             'duration_ms' => $data['duration_ms'] ?? null,
             'transcript' => $data['transcript'] ?? null,
             'recorded_at' => now(),
+        ]);
+
+        return response()->json($this->payload($note->fresh('author'), true), 201);
+    }
+
+    /**
+     * Keeps a voice message from a conversation on the timeline.
+     *
+     * The file is copied, not referenced. A chat message can be deleted, and a note pinned
+     * because it mattered should not disappear with the conversation it happened in — the
+     * whole reason for pinning is that the timeline outlives the chat.
+     *
+     * Once per message, enforced by a unique column rather than by the button being
+     * disabled: two people can press it at the same moment.
+     */
+    public function pinFromChat(Request $request, string $messageUuid): JsonResponse
+    {
+        $this->available();
+        $this->write($request);
+
+        abort_unless(Schema::hasColumn('voice_notes', 'source_message_uuid'), 503,
+            'Pro připínání hlasovek dokončete databázové migrace.');
+
+        $message = ChatMessage::where('uuid', $messageUuid)->firstOrFail();
+        abort_unless($message->attachment_type === 'voice' && $message->media_path, 422,
+            'Tahle zpráva není hlasovka.');
+
+        // Readable by this person, not merely existing: a uuid is not a permission.
+        abort_unless(
+            Conversation::where('id', $message->conversation_id)->forUser($request->user())->exists(),
+            403, 'K téhle konverzaci nemáte přístup.',
+        );
+
+        $existing = VoiceNote::where('source_message_uuid', $messageUuid)->first();
+        if ($existing) return response()->json($this->payload($existing->fresh('author'), true));
+
+        $space = $this->space($request, $message->gallery_space_id);
+
+        $source = Storage::disk(self::DISK)->exists($message->media_path) ? self::DISK : 'local';
+        abort_unless(Storage::disk($source)->exists($message->media_path), 404, 'Zvuk zprávy se nepodařilo najít.');
+
+        $path = "voice-notes/{$space->id}/" . Str::uuid() . '.' . (pathinfo($message->media_path, PATHINFO_EXTENSION) ?: 'webm');
+        Storage::disk(self::DISK)->put($path, Storage::disk($source)->get($message->media_path));
+
+        $note = VoiceNote::create([
+            'gallery_space_id' => $space->id,
+            'created_by' => $message->created_by,
+            'source_message_uuid' => $messageUuid,
+            'title' => 'Z konverzace',
+            'path' => $path,
+            'mime_type' => $message->media_mime,
+            'size_bytes' => $message->media_size,
+            // Chat stores a voice message's length in media_height; see ChatController.
+            'duration_ms' => $message->media_height ?: null,
+            // The moment it was said, not the moment somebody pinned it. A timeline
+            // ordered by when things were noticed rather than when they happened is not
+            // a timeline.
+            'recorded_at' => $message->created_at,
         ]);
 
         return response()->json($this->payload($note->fresh('author'), true), 201);

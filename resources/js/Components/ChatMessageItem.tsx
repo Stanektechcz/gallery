@@ -2,7 +2,8 @@ import ChatGame from '@/Components/ChatGame';
 import EmojiPicker from '@/Components/EmojiPicker';
 import MentionText from '@/Components/MentionText';
 import { useMessageGestures } from '@/lib/useMessageGestures';
-import { Check, CheckCheck, MoreHorizontal } from 'lucide-react';
+import axios from 'axios';
+import { Check, CheckCheck, MoreHorizontal, Pin } from 'lucide-react';
 import { useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
@@ -58,6 +59,8 @@ export default function ChatMessageItem({ message, read, compact = false, meId =
     onReply?: (message: ChatMessage) => void;
 }) {
     const [picker, setPicker] = useState(false);
+    /** Local only: whether this message has been kept on the voice-note timeline. */
+    const [pinned, setPinned] = useState<'idle' | 'busy' | 'done'>('idle');
 
     const gestures = useMessageGestures({
         // A double tap is the fastest way to say "yes, this" and costs no menu.
@@ -89,7 +92,30 @@ export default function ChatMessageItem({ message, read, compact = false, meId =
                 )}
 
                 {message.media?.kind === 'voice' ? (
-                    <audio controls src={message.media.url} className="my-0.5 h-8 w-52 max-w-full" />
+                    <span className="my-0.5 flex items-center gap-1.5">
+                        <audio controls src={message.media.url} className="h-8 w-48 max-w-full" />
+                        {/* Keeping a voice message on the timeline. The copy is the server's
+                            job; here it only needs to say whether it worked, and to stop
+                            offering itself once it has. */}
+                        <button
+                            type="button"
+                            disabled={pinned !== 'idle'}
+                            aria-label="Připnout hlasovku do přehledu"
+                            title={pinned === 'done' ? 'Připnuto do hlasovek' : 'Připnout do hlasovek'}
+                            onClick={async () => {
+                                setPinned('busy');
+                                try {
+                                    await axios.post(`/api/v1/voice-notes/pripnout/${message.uuid}`);
+                                    setPinned('done');
+                                } catch { setPinned('idle'); }
+                            }}
+                            className={`shrink-0 rounded-lg p-1.5 transition-colors ${pinned === 'done'
+                                ? 'text-[var(--color-accent)]'
+                                : 'opacity-60 hover:opacity-100'}`}
+                        >
+                            <Pin size={13} className={pinned === 'busy' ? 'animate-pulse' : ''} />
+                        </button>
+                    </span>
                 ) : message.media ? (
                     <img
                         src={message.media.url}

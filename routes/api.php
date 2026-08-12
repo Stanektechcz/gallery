@@ -300,6 +300,7 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
 
     Route::get('/voice-notes', [App\Http\Controllers\Api\VoiceNoteController::class, 'index'])->name('api.voice-notes.index');
     Route::post('/voice-notes', [App\Http\Controllers\Api\VoiceNoteController::class, 'store'])->name('api.voice-notes.store');
+    Route::post('/voice-notes/pripnout/{messageUuid}', [App\Http\Controllers\Api\VoiceNoteController::class, 'pinFromChat'])->name('api.voice-notes.pin');
     Route::get('/voice-notes/{uuid}/stream', [App\Http\Controllers\Api\VoiceNoteController::class, 'stream'])->name('api.voice-notes.stream');
     Route::post('/voice-notes/{uuid}/listened', [App\Http\Controllers\Api\VoiceNoteController::class, 'markListened'])->name('api.voice-notes.listened');
     Route::patch('/voice-notes/{uuid}', [App\Http\Controllers\Api\VoiceNoteController::class, 'update'])->name('api.voice-notes.update');
