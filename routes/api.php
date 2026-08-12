@@ -215,6 +215,7 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
 
     // Plan, add-on modules and the customer's own feature choices.
     Route::get('/billing/overview', [App\Http\Controllers\Api\BillingController::class, 'overview'])->name('api.billing.overview');
+    Route::get('/billing/faktury', [App\Http\Controllers\Billing\InvoiceController::class, 'index'])->name('api.billing.invoices');
     Route::put('/billing/plan', [App\Http\Controllers\Api\BillingController::class, 'setPlan'])->name('api.billing.plan.set');
     Route::post('/billing/trial', [App\Http\Controllers\Api\BillingController::class, 'startTrial'])->name('api.billing.trial');
 

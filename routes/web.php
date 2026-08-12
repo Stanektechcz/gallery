@@ -166,6 +166,8 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/settings/storage/dropbox/disconnect', [\App\Http\Controllers\Storage\DropboxOAuthController::class, 'disconnect'])->name('storage.dropbox.disconnect');
     Route::post('/settings/storage/dropbox/test', [\App\Http\Controllers\Storage\DropboxOAuthController::class, 'test'])->name('storage.dropbox.test');
 
+    Route::get('/faktury/{uuid}', [\App\Http\Controllers\Billing\InvoiceController::class, 'show'])->name('invoice.show');
+
     Route::get('/oauth/onedrive/callback', [\App\Http\Controllers\Storage\OneDriveOAuthController::class, 'callback'])->name('storage.onedrive.callback');
     Route::post('/settings/storage/onedrive/disconnect', [\App\Http\Controllers\Storage\OneDriveOAuthController::class, 'disconnect'])->name('storage.onedrive.disconnect');
 
