@@ -54,6 +54,7 @@ class MirrorMediaToCloud implements ShouldQueue
         $client = match ($connection->provider) {
             'dropbox' => $dropbox,
             'onedrive' => $oneDrive,
+            'webdav' => app(\App\Services\Storage\WebDavClient::class),
             default => null,
         };
         if (! $client) return;

@@ -19,7 +19,7 @@ use Illuminate\Support\Facades\Schema;
 class StorageResolver
 {
     /** Providers whose files this app can hold. Local is not one of them; it is the floor. */
-    public const CLOUDS = ['google_drive', 'dropbox', 'onedrive'];
+    public const CLOUDS = ['google_drive', 'dropbox', 'onedrive', 'webdav'];
 
     /**
      * A provider's client id and secret, from the administration first.

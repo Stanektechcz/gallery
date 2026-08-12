@@ -99,6 +99,27 @@ class ProviderRegistry
             'scopes' => ['shared'],
             'available' => true,
         ],
+        // The answer to "let me use my own account" for everything without OAuth. One
+        // protocol instead of one integration each, and it covers services we would never
+        // build separately — including a NAS somebody has at home.
+        'webdav' => [
+            'name' => 'Vlastní úložiště (WebDAV)',
+            'kind' => 'storage',
+            'auth' => 'token',
+            'mode' => 'modal',
+            'brand' => '#4b9a7a',
+            'summary' => 'Nextcloud, Koofr, pCloud, ownCloud, Box nebo vlastní server.',
+            'help' => 'Zadejte adresu WebDAV, uživatele a heslo aplikace — nikdy hlavní heslo k účtu.',
+            'steps' => [
+                'Ve své službě najděte adresu WebDAV (u Nextcloudu Nastavení → WebDAV).',
+                'Vytvořte si heslo aplikace (app password), ne to hlavní. Jde kdykoliv zrušit.',
+                'Adresu, uživatele a heslo aplikace vložte sem ve tvaru adresa|uživatel|heslo.',
+                'Fotky se ukládají do složky MAKI Gallery.',
+            ],
+            'docs_url' => 'https://docs.nextcloud.com/server/latest/user_manual/en/files/access_webdav.html',
+            'scopes' => ['shared'],
+            'available' => true,
+        ],
         'mega' => [
             'name' => 'MEGA',
             'kind' => 'storage',
@@ -242,6 +263,8 @@ class ProviderRegistry
     {
         if (($provider['available'] ?? true) === false) return false;
         if (($provider['auth'] ?? '') === 'builtin') return true;
+        // Anything not using a redirect needs nothing from the operator — the person
+        // supplies their own credential. WebDAV is a cloud but is in this half.
         if (($provider['auth'] ?? '') !== 'oauth') return true;
 
         // Clouds ask the resolver, which reads the administration first and the

@@ -10,6 +10,9 @@ use App\Services\Integrations\DiscordClient;
 use App\Models\StorageConnection;
 use App\Services\Integrations\NotionClient;
 use App\Services\Integrations\ProviderRegistry;
+use App\Services\Storage\StorageResolver;
+use App\Services\Storage\WebDavClient;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Schema;
@@ -69,6 +72,11 @@ class IntegrationConnectionController extends Controller
         $registry = app(ProviderRegistry::class);
         abort_unless($registry->has($provider), 404, 'Tuhle službu neznáme.');
         abort_if($provider === 'notion', 422, 'Notion se připojuje vlastní cestou.');
+
+        // WebDAV is storage rather than an integration: it belongs to the space and is
+        // checked against the server before anything is stored, so a typo fails here
+        // rather than silently at the first photograph.
+        if ($provider === 'webdav') return $this->connectWebDav($request);
         abort_unless((ProviderRegistry::PROVIDERS[$provider]['auth'] ?? '') === 'token', 422,
             'Tuhle službu nelze připojit tokenem.');
 
@@ -96,6 +104,55 @@ class IntegrationConnectionController extends Controller
         $connection->save();
 
         return response()->json($this->payload($connection->fresh(), $request->user()->id), 201);
+    }
+
+    /**
+     * Connects somebody's own WebDAV storage.
+     *
+     * Three values arrive in one field as address|user|password, because the modal has one
+     * input and splitting it would mean a second shape of form for a single provider. The
+     * password is an app password by instruction; nothing here can tell the difference, so
+     * the guide says it and this does not pretend to enforce it.
+     *
+     * Verified against the server before it is stored. An address that answers 401 fails
+     * here with a reason rather than at the first photograph nobody is watching.
+     */
+    private function connectWebDav(Request $request): JsonResponse
+    {
+        $data = $request->validate(['token' => 'required|string|max:500']);
+
+        $parts = array_map('trim', explode('|', $data['token']));
+        abort_unless(count($parts) === 3 && filled($parts[0]), 422,
+            'Zadejte adresu, uživatele a heslo aplikace oddělené svislítkem: adresa|uzivatel|heslo');
+
+        [$url, $user, $pass] = $parts;
+        abort_unless(str_starts_with($url, 'https://'), 422,
+            'Adresa musí začínat https:// — přes http by heslo cestovalo otevřeně.');
+
+        $space = $this->space($request);
+        abort_unless(app(StorageResolver::class)->mayManage($space, $request->user()->id), 403,
+            'Úložiště prostoru může připojit jen vlastník tarifu.');
+
+        $connection = StorageConnection::updateOrCreate(
+            ['provider' => 'webdav', 'gallery_space_id' => $space->id],
+            [
+                'owner_user_id' => $request->user()->id,
+                'account_email' => $user,
+                'encrypted_access_token' => Crypt::encryptString(json_encode([
+                    'url' => rtrim($url, '/'), 'user' => $user, 'pass' => $pass,
+                ])),
+                'connection_status' => 'connected',
+            ],
+        );
+
+        $probe = app(WebDavClient::class)->probe($connection);
+
+        if (! $probe['ok']) {
+            $connection->delete();
+            abort(422, 'Připojení se nepodařilo ověřit: ' . $probe['error']);
+        }
+
+        return response()->json(['provider' => 'webdav', 'account' => $user], 201);
     }
 
     /**
