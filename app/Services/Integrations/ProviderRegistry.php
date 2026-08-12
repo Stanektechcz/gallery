@@ -147,8 +147,8 @@ class ProviderRegistry
             'help' => 'Vytvořte si integraci na notion.so/my-integrations, vložte její token '
                 . 'a nasdílejte jí stránky — bez nasdílení nevidí nic.',
             'steps' => [
-                'Otevřete notion.so/my-integrations a dejte New integration.',
-                'Vyberte workspace, uložte a zkopírujte Internal Integration Token.',
+                'Otevřete notion.so/my-integrations — Notion vás přesměruje na stránku Connections.',
+                'Vytvořte novou integraci, vyberte workspace a zkopírujte její interní token.',
                 'Token vložte sem a potvrďte.',
                 'V Notionu u stránky, kterou chcete sdílet, dejte ••• → Connections a integraci k ní připojte. Bez toho nevidí nic.',
             ],
@@ -189,7 +189,7 @@ class ProviderRegistry
                 'Zkopírujte adresu webhooku a vložte ji sem.',
             ],
             'signup_url' => 'https://discord.com',
-            'docs_url' => 'https://support.discord.com/hc/cs/articles/228383668',
+            'docs_url' => 'https://docs.discord.com/developers/resources/webhook',
             'scopes' => ['personal', 'shared'],
             'available' => true,
             // Presence needs a gateway connection and a privileged intent, which needs a
