@@ -207,7 +207,10 @@ export default function Subscription() {
                                 {byCategory.map(([category, rows]) => (
                                     <div key={category}>
                                         <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">{category}</h3>
-                                        <div className="mt-2 space-y-2">
+                                        {/* Two or three across. Each row is an icon, a name and
+                                            a switch; a full-width strip for that turns a dozen
+                                            features into a page of scrolling. */}
+                                        <div className="mt-2 grid gap-2 lg:grid-cols-2 2xl:grid-cols-3">
                                             {rows.map(feature => (
                                                 <div
                                                     key={feature.code}
@@ -297,31 +300,53 @@ export default function Subscription() {
                         {modules.length > 0 && (
                             <section className="mt-10">
                                 <h2 className="font-semibold text-[var(--color-text-primary)]">Doplňkové moduly</h2>
-                                <div className="mt-3 space-y-3">
-                                    {modules.map(module => (
-                                        <article key={module.code} className={`rounded-2xl border p-4 ${module.is_active ? 'border-emerald-400/30 bg-emerald-500/5' : 'border-[var(--color-border)] bg-[var(--color-bg-card)]'}`}>
-                                            <div className="flex items-start gap-3">
-                                                <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-violet-500/10 text-xl">{module.icon}</span>
-                                                <div className="min-w-0 flex-1">
-                                                    <div className="flex flex-wrap items-center gap-2">
-                                                        <h3 className="font-semibold text-[var(--color-text-primary)]">{module.name}</h3>
-                                                        {module.is_active && <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] text-emerald-200">aktivní</span>}
-                                                    </div>
-                                                    {module.description && <p className="mt-1.5 text-sm leading-relaxed text-[var(--color-text-secondary)]">{module.description}</p>}
-                                                    <p className="mt-2 text-sm font-medium text-[var(--color-text-primary)]">{money(module.price_monthly, module.currency)} <span className="text-xs font-normal text-[var(--color-text-secondary)]">/ měsíc</span></p>
+                                {/* Cards rather than a stack. A module is an icon, a name, a
+                                    price and one button — laid across the whole screen it is
+                                    mostly white space, and the list reads as longer and more
+                                    daunting than the handful of things it actually is.
 
-                                                    {isAdmin && !module.is_active && (
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => buy('module', module.code)}
-                                                            disabled={busy !== null || !gateway?.configured}
-                                                            className="mt-3 inline-flex min-h-10 items-center gap-2 rounded-xl bg-[var(--color-accent)] px-4 text-sm font-medium text-[var(--color-accent-contrast)] disabled:opacity-40"
-                                                        >
-                                                            {busy === `buy:${module.code}` ? <LoaderCircle size={14} className="animate-spin" /> : <CreditCard size={14} />} Koupit modul
-                                                        </button>
-                                                    )}
-                                                    {!isAdmin && <p className="mt-2 text-xs text-[var(--color-text-secondary)]">Nákup provede správce prostoru.</p>}
+                                    Four across at most, not six: these carry a sentence of
+                                    description that a sixth column would cut to two words. */}
+                                <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+                                    {modules.map(module => (
+                                        <article
+                                            key={module.code}
+                                            className={`flex flex-col rounded-2xl border p-4 ${module.is_active
+                                                ? 'border-emerald-400/30 bg-emerald-500/5'
+                                                : 'border-[var(--color-border)] bg-[var(--color-bg-card)]'}`}
+                                        >
+                                            <div className="flex items-start gap-3">
+                                                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-violet-500/10 text-lg">{module.icon}</span>
+                                                <div className="min-w-0 flex-1">
+                                                    <h3 className="truncate font-semibold text-[var(--color-text-primary)]">{module.name}</h3>
+                                                    <p className="text-sm font-medium text-[var(--color-text-primary)]">
+                                                        {money(module.price_monthly, module.currency)}
+                                                        <span className="text-xs font-normal text-[var(--color-text-secondary)]"> / měsíc</span>
+                                                    </p>
                                                 </div>
+                                                {module.is_active && (
+                                                    <span className="shrink-0 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] text-emerald-200">aktivní</span>
+                                                )}
+                                            </div>
+
+                                            {module.description && (
+                                                <p className="mt-2 text-xs leading-5 text-[var(--color-text-secondary)]">{module.description}</p>
+                                            )}
+
+                                            {/* Pinned to the bottom, so buttons line up across
+                                                a row whose descriptions differ in length. */}
+                                            <div className="mt-auto pt-3">
+                                                {isAdmin && !module.is_active && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => buy('module', module.code)}
+                                                        disabled={busy !== null || !gateway?.configured}
+                                                        className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl bg-[var(--color-accent)] text-sm font-medium text-[var(--color-accent-contrast)] disabled:opacity-40"
+                                                    >
+                                                        {busy === `buy:${module.code}` ? <LoaderCircle size={14} className="animate-spin" /> : <CreditCard size={14} />} Koupit
+                                                    </button>
+                                                )}
+                                                {!isAdmin && <p className="text-xs text-[var(--color-text-secondary)]">Nákup provede správce prostoru.</p>}
                                             </div>
                                         </article>
                                     ))}
