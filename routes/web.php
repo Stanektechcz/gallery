@@ -166,9 +166,13 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/settings/storage/dropbox/disconnect', [\App\Http\Controllers\Storage\DropboxOAuthController::class, 'disconnect'])->name('storage.dropbox.disconnect');
     Route::post('/settings/storage/dropbox/test', [\App\Http\Controllers\Storage\DropboxOAuthController::class, 'test'])->name('storage.dropbox.test');
 
+    Route::get('/oauth/onedrive/callback', [\App\Http\Controllers\Storage\OneDriveOAuthController::class, 'callback'])->name('storage.onedrive.callback');
+    Route::post('/settings/storage/onedrive/disconnect', [\App\Http\Controllers\Storage\OneDriveOAuthController::class, 'disconnect'])->name('storage.onedrive.disconnect');
+
     Route::get('/settings/propojeni/{provider}/start', function (string $provider) {
         if ($provider === 'google_drive') return redirect()->route('storage.google');
         if ($provider === 'dropbox') return app(\App\Http\Controllers\Storage\DropboxOAuthController::class)->start(request());
+        if ($provider === 'onedrive') return app(\App\Http\Controllers\Storage\OneDriveOAuthController::class)->start(request());
 
         $registry = app(\App\Services\Integrations\ProviderRegistry::class);
         abort_unless($registry->has($provider), 404);
