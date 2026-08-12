@@ -46,6 +46,9 @@ export default function Subscription() {
     const [catalogue, setCatalogue] = useState<Plan[]>([]);
     const [gateway, setGateway] = useState<{ configured: boolean; test_mode: boolean } | null>(null);
     const [period, setPeriod] = useState<Period>('monthly');
+    const [invoices, setInvoices] = useState<Array<{
+        uuid: string; number: string; description: string; amount: number; currency: string;
+    }>>([]);
     const [available, setAvailable] = useState(true);
     const [loading, setLoading] = useState(true);
     const [busy, setBusy] = useState<string | null>(null);
@@ -54,10 +57,13 @@ export default function Subscription() {
 
     const load = useCallback(async () => {
         try {
-            const [overview, cat, gw] = await Promise.all([
+            const [overview, cat, gw, inv] = await Promise.all([
                 axios.get('/api/v1/billing/overview'),
                 axios.get('/api/v1/public/billing/catalogue'),
                 axios.get('/api/v1/billing/gateway').catch(() => ({ data: null })),
+                // Caught rather than allowed to fail the page: somebody who has never paid
+                // has no invoices, and that is not a reason to hide their plan from them.
+                axios.get('/api/v1/billing/faktury').catch(() => ({ data: { invoices: [] } })),
             ]);
             setAvailable(overview.data.available !== false);
             setPlan(overview.data.plan ?? null);
@@ -66,6 +72,7 @@ export default function Subscription() {
             setFeatures(overview.data.features ?? []);
             setCatalogue(cat.data.plans ?? []);
             setGateway(gw.data);
+            setInvoices(inv.data.invoices ?? []);
         } catch (reason: any) {
             setError(reason?.response?.data?.message ?? 'Přehled se nepodařilo načíst.');
         } finally { setLoading(false); }
@@ -317,6 +324,36 @@ export default function Subscription() {
                                                 </div>
                                             </div>
                                         </article>
+                                    ))}
+                                </div>
+                            </section>
+                        )}
+
+                        {/* Receipts belong beside what they were for. Somebody looking for
+                            an invoice is on this screen already, and a separate page in
+                            the menu would be one more thing to find. */}
+                        {invoices.length > 0 && (
+                            <section className="mt-6 rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-4">
+                                <h2 className="font-semibold text-[var(--color-text-primary)]">Doklady</h2>
+                                <p className="mt-1 text-xs text-[var(--color-text-secondary)]">
+                                    Otevřou se jako stránka připravená k tisku — prohlížeč z ní udělá PDF tam, kam si řeknete.
+                                </p>
+
+                                <div className="mt-3 space-y-1.5">
+                                    {invoices.map(invoice => (
+                                        <a
+                                            key={invoice.uuid}
+                                            href={`/faktury/${invoice.uuid}`}
+                                            target="_blank"
+                                            rel="noopener"
+                                            className="flex items-center gap-3 rounded-xl border border-[var(--color-border)] p-2.5 text-sm hover:border-[var(--color-accent)]"
+                                        >
+                                            <span className="font-mono text-xs text-[var(--color-text-secondary)]">{invoice.number}</span>
+                                            <span className="min-w-0 flex-1 truncate text-[var(--color-text-primary)]">{invoice.description}</span>
+                                            <span className="shrink-0 text-xs text-[var(--color-text-secondary)]">
+                                                {new Intl.NumberFormat('cs-CZ').format(Math.round(invoice.amount / 100))} {invoice.currency}
+                                            </span>
+                                        </a>
                                     ))}
                                 </div>
                             </section>
