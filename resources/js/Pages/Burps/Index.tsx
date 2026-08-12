@@ -188,7 +188,10 @@ export default function BurpsIndex() {
                     </section>
                 )}
 
-                <section className="mt-6 space-y-3">
+                {/* Two columns once there is room. The cards carry a rating form, so the six-across
+                    grid the voice notes use would squeeze the inputs — but a single column on a
+                    wide monitor leaves half the screen doing nothing. */}
+                <section className="mt-6 grid gap-3 xl:grid-cols-2">
                     {loading && <div className="flex justify-center py-8"><LoaderCircle className="animate-spin text-[var(--color-accent)]" /></div>}
 
                     {!loading && burps.map(burp => {
