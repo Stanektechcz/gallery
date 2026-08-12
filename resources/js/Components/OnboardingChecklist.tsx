@@ -1,85 +1,98 @@
 import { Link } from '@inertiajs/react';
 import axios from 'axios';
-import { Check, Circle, Sparkles, X } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { Check, X } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
 interface Step {
     key: string;
     title: string;
     description: string;
-    done: boolean;
     href: string | null;
+    done: boolean;
 }
 
 /**
- * Shown to a new customer until every step is genuinely done. Steps are derived from
- * real state on the server, so doing the work elsewhere ticks them off too.
+ * What a new gallery still needs.
+ *
+ * The endpoint behind this has existed for a while and nothing ever drew it, so the
+ * checklist was computed on every request and shown to nobody. This is the missing half.
+ *
+ * Renders nothing at all once the steps are done or the person has waved it away — not a
+ * collapsed strip, nothing. A finished checklist that lingers says the app is still
+ * waiting for something.
+ *
+ * Completed steps stay visible with a tick rather than disappearing. Watching the list
+ * fill up is the point; one that only shows what is missing reads as a list of failures.
  */
 export default function OnboardingChecklist() {
-    const [visible, setVisible] = useState(false);
     const [steps, setSteps] = useState<Step[]>([]);
     const [remaining, setRemaining] = useState(0);
+    const [visible, setVisible] = useState(false);
 
-    const load = useCallback(async () => {
-        try {
-            const response = await axios.get('/api/v1/onboarding');
-            setVisible(Boolean(response.data.visible));
-            setSteps(response.data.steps ?? []);
-            setRemaining(response.data.remaining ?? 0);
-        } catch { /* The checklist is a nicety; never block the dashboard for it. */ }
+    useEffect(() => {
+        void axios.get('/api/v1/onboarding')
+            .then(response => {
+                setSteps(response.data.steps ?? []);
+                setRemaining(response.data.remaining ?? 0);
+                setVisible(Boolean(response.data.visible));
+            })
+            .catch(() => setVisible(false));
     }, []);
 
-    useEffect(() => { void load(); }, [load]);
+    if (!visible || steps.length === 0) return null;
 
-    const dismiss = async () => {
+    const hide = () => {
         setVisible(false);
-        try { await axios.post('/api/v1/onboarding/dismiss'); } catch { /* Nothing to recover. */ }
+        void axios.post('/api/v1/onboarding/dismiss').catch(() => { /* hiding is not worth an error */ });
     };
 
-    if (!visible) return null;
-
     return (
-        <section className="mb-5 rounded-2xl border border-[var(--color-accent)]/35 bg-[var(--color-accent)]/5 p-4 sm:p-5">
+        <section className="mb-5 rounded-2xl border border-[var(--color-accent)]/30 bg-[var(--color-accent)]/5 p-4">
             <div className="flex items-start justify-between gap-3">
-                <div className="flex items-start gap-3">
-                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[var(--color-accent)]/15 text-[var(--color-accent)]">
-                        <Sparkles size={19} />
-                    </span>
-                    <div>
-                        <h2 className="font-semibold text-[var(--color-text-primary)]">Začínáme</h2>
-                        <p className="mt-1 text-xs text-[var(--color-text-secondary)]">
-                            Zbývají {remaining} {remaining === 1 ? 'krok' : remaining < 5 ? 'kroky' : 'kroků'} k rozjeté galerii.
-                        </p>
-                    </div>
+                <div>
+                    <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">Ať galerie začne žít</h2>
+                    <p className="mt-0.5 text-xs text-[var(--color-text-secondary)]">
+                        {/* Czech counts in three forms; one of them for every number reads as translated. */}
+                        Zbývá {remaining} {remaining === 1 ? 'krok' : remaining <= 4 ? 'kroky' : 'kroků'}.
+                    </p>
                 </div>
-                <button type="button" onClick={dismiss} aria-label="Skrýt začátečnický průvodce" className="shrink-0 rounded-lg p-2 text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]">
-                    <X size={16} />
+                <button
+                    type="button"
+                    onClick={hide}
+                    aria-label="Skrýt nápovědu"
+                    className="shrink-0 rounded-lg p-1.5 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
+                >
+                    <X size={15} />
                 </button>
             </div>
 
-            <ol className="mt-4 space-y-2">
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
                 {steps.map(step => {
                     const body = (
-                        <span className="flex items-start gap-3">
-                            <span className={`mt-0.5 shrink-0 ${step.done ? 'text-emerald-300' : 'text-[var(--color-text-secondary)]'}`}>
-                                {step.done ? <Check size={16} /> : <Circle size={16} />}
+                        <>
+                            <span className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${step.done
+                                ? 'border-emerald-400 bg-emerald-400/20 text-emerald-300'
+                                : 'border-[var(--color-border)]'}`}>
+                                {step.done && <Check size={10} />}
                             </span>
                             <span className="min-w-0">
-                                <span className={`block text-sm font-medium ${step.done ? 'text-[var(--color-text-secondary)] line-through' : 'text-[var(--color-text-primary)]'}`}>{step.title}</span>
-                                {!step.done && <span className="block text-xs text-[var(--color-text-secondary)]">{step.description}</span>}
+                                <span className="block text-xs font-medium text-[var(--color-text-primary)]">{step.title}</span>
+                                <span className="block text-[11px] leading-4 text-[var(--color-text-secondary)]">{step.description}</span>
                             </span>
-                        </span>
+                        </>
                     );
 
-                    return (
-                        <li key={step.key}>
-                            {step.href && !step.done
-                                ? <Link href={step.href} className="block rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-muted)] p-3 transition-colors hover:border-[var(--color-accent)]/40">{body}</Link>
-                                : <div className="rounded-xl border border-transparent p-3">{body}</div>}
-                        </li>
-                    );
+                    const shell = `flex items-start gap-2.5 rounded-xl border p-2.5 transition-colors ${step.done
+                        ? 'border-[var(--color-border)] opacity-60'
+                        : 'border-[var(--color-border)] bg-[var(--color-bg-card)]'}`;
+
+                    // A step with nowhere to go is not a link. Naming the gallery happens at
+                    // sign-up, so there is no page to send anybody to for it.
+                    return step.href
+                        ? <Link key={step.key} href={step.href} className={`${shell} hover:border-[var(--color-accent)]`}>{body}</Link>
+                        : <div key={step.key} className={shell}>{body}</div>;
                 })}
-            </ol>
+            </div>
         </section>
     );
 }

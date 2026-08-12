@@ -1,4 +1,5 @@
 import { BulkActionBar } from '@/Components/BulkActionBar';
+import OnboardingChecklist from '@/Components/OnboardingChecklist';
 import Slideshow, { type SlideshowItem } from '@/Components/Slideshow';
 import AppLayout from '@/Layouts/AppLayout';
 import { Head, Link, router } from '@inertiajs/react';
@@ -184,6 +185,10 @@ export default function TimelineIndex() {
     return (
         <AppLayout>
             <Head title="Fotky" />
+
+            {/* Renders nothing once the gallery is set up, so it costs a request on the
+                first few visits and disappears for good after that. */}
+            <div className="px-4 pt-4 sm:px-6"><OnboardingChecklist /></div>
 
             {/* New Slideshow */}
             {slideshowItems && (
