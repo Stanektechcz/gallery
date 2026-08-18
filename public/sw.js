@@ -22,18 +22,38 @@ const LEGACY_PRIVATE_CACHES = new Set([
 
 self.addEventListener('install', event => {
     /*
-     * Takes over straight away instead of waiting for every tab to close.
+     * No skipWaiting here, deliberately.
      *
-     * A service worker normally sits in "waiting" until the last page using the old one
-     * goes away, which for an app people leave open can be days. That is fine for a new
-     * feature and wrong for a fix: a worker shipped to stop the offline page appearing
-     * cannot stop it while the broken one is still the one answering.
+     * The page runs its own update flow: it watches for a waiting worker, tells the
+     * person, and sends SKIP_WAITING when they accept — and its controllerchange handler
+     * reloads the tab. Calling skipWaiting here bypasses all of that, so every deployment
+     * reloads the page under whoever is using it, mid-upload or mid-sentence.
      *
-     * Paired with clients.claim() below, so the page being looked at right now is served
-     * by the corrected worker rather than the next one to be opened.
+     * A worker that waits is the correct behaviour; being stuck behind one is a problem
+     * to solve in the page, where somebody can be asked.
      */
-    self.skipWaiting();
-    event.waitUntil(caches.open(SHELL_CACHE).then(cache => cache.addAll(SHELL_FILES)));
+    /*
+     * Cached one at a time rather than with addAll.
+     *
+     * addAll is all-or-nothing: one file answering anything but 200 — a redirect from a
+     * middleware, a proxy hiccup, an icon renamed — rejects the whole promise, install
+     * fails, and the worker never activates. The previous one then keeps serving forever,
+     * which is exactly how a fix ships and changes nothing.
+     *
+     * A missing icon is not worth blocking the shell for. What actually matters offline
+     * is offline.html, and losing an icon costs nothing anybody notices.
+     */
+    event.waitUntil((async () => {
+        const cache = await caches.open(SHELL_CACHE);
+
+        await Promise.all(SHELL_FILES.map(async file => {
+            try {
+                await cache.add(file);
+            } catch (error) {
+                console.warn('[sw] nepodařilo se uložit do cache:', file, error);
+            }
+        }));
+    })());
 });
 
 self.addEventListener('activate', event => {
