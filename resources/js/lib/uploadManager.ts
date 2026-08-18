@@ -9,6 +9,14 @@ import axios from "axios";
 // Musí bezpečně projít i výchozí konfigurací PHP (upload_max_filesize=2M).
 // Multipart obálka má vlastní režii, proto nepoužíváme hranici 2 MiB.
 const CHUNK_SIZE = 1 * 1024 * 1024; // 1 MiB
+
+/**
+ * How many previews may exist at once.
+ *
+ * Each pins its file in memory. Sixty is more than fits on a screen and far less than a
+ * camera card, which is the balance that keeps the panel useful without filling the tab.
+ */
+const MAX_LIVE_THUMBS = 60;
 const MAX_CONCURRENT = 3;
 const SHA256_LIMIT = 200 * 1024 * 1024; // Only hash files < 200 MB
 
@@ -48,6 +56,8 @@ export interface ManagedUpload {
 class UploadManagerClass extends EventTarget {
     private queue: ManagedUpload[] = [];
     private aborts = new Map<string, AbortController>();
+    /** Previews currently holding a file open; see MAX_LIVE_THUMBS. */
+    private liveThumbs = 0;
     private pausedIds = new Set<string>();
     private globalPause = false;
     private online = navigator.onLine;
@@ -69,8 +79,12 @@ class UploadManagerClass extends EventTarget {
     enqueue(files: File[], albumId: number | null = null): void {
         for (const file of files) {
             const id = crypto.randomUUID();
-            const thumb = file.type.startsWith("image/")
-                ? URL.createObjectURL(file)
+            // Previews are capped. Each one pins its file in memory, so a folder of two
+            // thousand photographs would hold two thousand files at once — which is not a
+            // gallery loading, it is a tab running out of room. Later rows show a
+            // placeholder and lose nothing that matters while they wait their turn.
+            const thumb = file.type.startsWith("image/") && this.liveThumbs < MAX_LIVE_THUMBS
+                ? (this.liveThumbs++, URL.createObjectURL(file))
                 : undefined;
             const chunks = Math.max(1, Math.ceil(file.size / CHUNK_SIZE));
             const item: ManagedUpload = {
@@ -120,9 +134,7 @@ class UploadManagerClass extends EventTarget {
         this.pausedIds.delete(id);
         this.aborts.get(id)?.abort();
         this.aborts.delete(id);
-        if (item.thumb) {
-            URL.revokeObjectURL(item.thumb);
-        }
+        this.releaseThumb(item);
         item.status = "cancelled";
         item.percent = 0;
         this.emit();
@@ -185,9 +197,7 @@ class UploadManagerClass extends EventTarget {
         const removed = this.queue.filter((u) =>
             ["done", "duplicate", "cancelled"].includes(u.status),
         );
-        removed.forEach((u) => {
-            if (u.thumb) URL.revokeObjectURL(u.thumb);
-        });
+        removed.forEach((u) => this.releaseThumb(u));
         this.queue = this.queue.filter(
             (u) => !["done", "duplicate", "cancelled"].includes(u.status),
         );
@@ -354,6 +364,11 @@ class UploadManagerClass extends EventTarget {
             item.mediaUuid = completeRes.data.media_uuid;
             item.status = "done";
             item.percent = 100;
+
+            // The preview holds the whole file in memory until it is revoked, and a
+            // finished upload has no use for one. Keeping them was what filled the tab
+            // and crashed it partway through a large import.
+            this.releaseThumb(item);
         } catch (err: any) {
             if (ctrl.signal.aborted || err?.code === "ERR_CANCELED") {
                 // paused or cancelled — status already set
@@ -422,12 +437,50 @@ class UploadManagerClass extends EventTarget {
         );
     }
 
+    /**
+     * A fingerprint that does not read the whole file.
+     *
+     * arrayBuffer() on a four-gigabyte video puts four gigabytes in the tab, and doing it
+     * for several files at once is the other half of why uploading a folder crashed.
+     *
+     * Head, tail and the exact byte count. Two different files sharing all three is not
+     * something that happens by accident, and the server checks properly anyway — this
+     * only exists to skip re-uploading something already there.
+     */
     private async sha256(file: File): Promise<string> {
-        const buf = await file.arrayBuffer();
-        const hash = await crypto.subtle.digest("SHA-256", buf);
+        const sample = 2 * 1024 * 1024;
+
+        const parts = file.size <= sample * 2
+            ? [file]
+            : [file.slice(0, sample), file.slice(file.size - sample)];
+
+        const buffers = await Promise.all(parts.map((part) => part.arrayBuffer()));
+        const total = buffers.reduce((sum, b) => sum + b.byteLength, 0);
+        const joined = new Uint8Array(total + 8);
+
+        let offset = 0;
+        for (const buffer of buffers) {
+            joined.set(new Uint8Array(buffer), offset);
+            offset += buffer.byteLength;
+        }
+        // The size goes in too, so a head and tail that match but a middle that does not
+        // still produces a different fingerprint.
+        new DataView(joined.buffer).setFloat64(total, file.size);
+
+        const hash = await crypto.subtle.digest("SHA-256", joined);
+
         return Array.from(new Uint8Array(hash))
             .map((b) => b.toString(16).padStart(2, "0"))
             .join("");
+    }
+
+    /** Frees a preview once, and keeps the live count honest. */
+    private releaseThumb(item: ManagedUpload): void {
+        if (! item.thumb) return;
+
+        URL.revokeObjectURL(item.thumb);
+        item.thumb = undefined;
+        this.liveThumbs = Math.max(0, this.liveThumbs - 1);
     }
 }
 
