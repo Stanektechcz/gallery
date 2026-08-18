@@ -141,7 +141,7 @@ class IntegrationConnectionController extends Controller
                 'encrypted_access_token' => Crypt::encryptString(json_encode([
                     'url' => rtrim($url, '/'), 'user' => $user, 'pass' => $pass,
                 ])),
-                'connection_status' => 'connected',
+                'connection_status' => StorageConnection::STATUS_HEALTHY,
             ],
         );
 

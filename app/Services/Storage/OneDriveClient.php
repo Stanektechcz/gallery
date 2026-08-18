@@ -42,7 +42,7 @@ class OneDriveClient
         $drive = Http::withToken($token)->get(self::DRIVE);
 
         $connection->forceFill([
-            'connection_status' => 'connected',
+            'connection_status' => StorageConnection::STATUS_HEALTHY,
             'last_successful_request_at' => now(),
             'last_error_at' => null, 'last_error_code' => null, 'last_error_message' => null,
         ])->save();
@@ -87,7 +87,7 @@ class OneDriveClient
             $reason = (string) $response->json('error.message', 'Nahrání do OneDrive selhalo.');
 
             $connection->forceFill([
-                'connection_status' => 'error',
+                'connection_status' => StorageConnection::STATUS_ERROR,
                 'last_error_at' => now(),
                 'last_error_code' => 'upload_failed',
                 'last_error_message' => $reason,

@@ -77,7 +77,7 @@ class StorageResolver
 
         return StorageConnection::where('gallery_space_id', $space->id)
             ->whereIn('provider', self::CLOUDS)
-            ->orderByRaw("CASE WHEN connection_status = 'connected' THEN 0 ELSE 1 END")
+            ->orderByRaw("CASE WHEN connection_status = ? THEN 0 ELSE 1 END", [StorageConnection::STATUS_HEALTHY])
             ->first();
     }
 

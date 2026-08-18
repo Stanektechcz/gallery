@@ -60,7 +60,19 @@ class StorageConnection extends Model
         $this->encrypted_refresh_token = Crypt::encryptString($token);
     }
 
-    public function isHealthy(): bool       { return $this->connection_status === 'healthy'; }
+    /**
+     * The three states a connection can be in.
+     *
+     * Spelled out here because they were string literals scattered across a dozen files,
+     * and a provider added later wrote "connected" — a fourth value nothing recognised, so
+     * a working Google Drive reported itself as not connected. Naming them makes that
+     * mistake a fatal error rather than a quiet one.
+     */
+    public const STATUS_HEALTHY = 'healthy';
+    public const STATUS_ERROR = 'error';
+    public const STATUS_DISCONNECTED = 'disconnected';
+
+    public function isHealthy(): bool       { return $this->connection_status === self::STATUS_HEALTHY; }
     public function isDisconnected(): bool  { return $this->connection_status === 'disconnected'; }
     public function needsRefresh(): bool    { return $this->connection_status === 'refresh_required'; }
 

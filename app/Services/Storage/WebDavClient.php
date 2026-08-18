@@ -51,7 +51,7 @@ class WebDavClient
         }
 
         $connection->forceFill([
-            'connection_status' => 'connected',
+            'connection_status' => StorageConnection::STATUS_HEALTHY,
             'last_successful_request_at' => now(),
             'last_error_at' => null, 'last_error_code' => null, 'last_error_message' => null,
         ])->save();
@@ -125,7 +125,7 @@ class WebDavClient
     private function fail(StorageConnection $connection, string $code, string $message): void
     {
         $connection->forceFill([
-            'connection_status' => 'error',
+            'connection_status' => StorageConnection::STATUS_ERROR,
             'last_error_at' => now(),
             'last_error_code' => $code,
             'last_error_message' => $message,

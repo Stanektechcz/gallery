@@ -112,7 +112,7 @@ class OneDriveOAuthController extends Controller
                 'encrypted_refresh_token' => Crypt::encryptString($tokens['refresh_token']),
                 'token_expires_at' => now()->addSeconds((int) ($tokens['expires_in'] ?? 3600)),
                 'granted_scopes_json' => $tokens['scope'] ?? null,
-                'connection_status' => 'connected',
+                'connection_status' => StorageConnection::STATUS_HEALTHY,
                 'last_successful_request_at' => now(),
                 'last_error_at' => null, 'last_error_code' => null, 'last_error_message' => null,
             ]

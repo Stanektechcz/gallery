@@ -53,7 +53,7 @@ class DropboxClient
         $space = Http::withToken($token)->post(self::SPACE);
 
         $connection->forceFill([
-            'connection_status' => 'connected',
+            'connection_status' => StorageConnection::STATUS_HEALTHY,
             'last_successful_request_at' => now(),
             'last_error_at' => null, 'last_error_code' => null, 'last_error_message' => null,
         ])->save();
@@ -100,7 +100,7 @@ class DropboxClient
             $reason = (string) $response->json('error_summary', 'Nahrání do Dropboxu selhalo.');
 
             $connection->forceFill([
-                'connection_status' => 'error',
+                'connection_status' => StorageConnection::STATUS_ERROR,
                 'last_error_at' => now(),
                 'last_error_code' => 'upload_failed',
                 'last_error_message' => $reason,

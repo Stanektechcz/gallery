@@ -70,6 +70,16 @@ const bytes = (value: number) => {
     return `${Math.round(value / 1024)} kB`;
 };
 
+/**
+ * Whether a storage connection is working.
+ *
+ * The server's word for it is "healthy". A card comparing against "connected" — a value
+ * that only ever existed in one newer provider — showed a perfectly good Google Drive as
+ * not connected, which is the worst kind of wrong: everything works and the screen says
+ * it does not.
+ */
+const isConnected = (row?: Storage | null) => row?.status === 'healthy';
+
 /** Names come from the server's catalogue; this is only the fallback for an unknown code. */
 const nameOf = (catalogue: Provider[], code: string) =>
     catalogue.find(provider => provider.code === code)?.name ?? code;
@@ -308,7 +318,7 @@ export default function Connections() {
                                         provider={provider}
                                         connected={provider.code === 'server'
                                             ? (quota?.limit_mb ? `${bytes(quota.used_bytes)} / ${bytes(quota.limit_bytes ?? 0)}` : 'Základní')
-                                            : storage[provider.code]?.status === 'connected'
+                                            : isConnected(storage[provider.code])
                                                 ? (storage[provider.code].account ?? 'Připojeno')
                                                 : null}
                                         onOpen={() => openProvider(provider)}

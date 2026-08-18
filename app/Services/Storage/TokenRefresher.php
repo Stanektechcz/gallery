@@ -97,7 +97,7 @@ class TokenRefresher
         $connection->forceFill([
             'encrypted_access_token' => Crypt::encryptString($access),
             'token_expires_at' => now()->addSeconds((int) ($tokens['expires_in'] ?? 3600)),
-            'connection_status' => 'connected',
+            'connection_status' => StorageConnection::STATUS_HEALTHY,
             'last_successful_request_at' => now(),
             'last_error_at' => null,
             'last_error_code' => null,
@@ -118,7 +118,7 @@ class TokenRefresher
     private function fail(StorageConnection $connection, string $code, string $message): void
     {
         $connection->forceFill([
-            'connection_status' => 'error',
+            'connection_status' => StorageConnection::STATUS_ERROR,
             'last_error_at' => now(),
             'last_error_code' => $code,
             'last_error_message' => $message,

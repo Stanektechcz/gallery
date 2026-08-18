@@ -156,12 +156,12 @@ class AdminController extends Controller
         $rows = \App\Models\StorageConnection::all();
 
         return [
-            'connected' => $rows->where('connection_status', 'connected')->count(),
+            'connected' => $rows->where('connection_status', \App\Models\StorageConnection::STATUS_HEALTHY)->count(),
             'errored' => $rows->where('connection_status', 'error')->count(),
             // Connected but silent for a fortnight. Not proof of a fault, but the shape a
             // fault takes when nothing throws: copies stop and the gallery looks fine.
             'stale' => $rows
-                ->where('connection_status', 'connected')
+                ->where('connection_status', \App\Models\StorageConnection::STATUS_HEALTHY)
                 ->filter(fn ($row) => ! $row->last_successful_request_at
                     || $row->last_successful_request_at->lt(now()->subDays(14)))
                 ->count(),
