@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Jobs\Media\GenerateImageVariantsJob;
 use App\Jobs\Media\GenerateVideoPosterJob;
 use App\Models\MediaItem;
+use App\Support\SpaceContext;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
@@ -23,6 +24,16 @@ class MediaFileController extends Controller
         $path = ltrim($path, '/');
         if (str_contains($path, '..')) {
             abort(400);
+        }
+
+        /*
+         * The extension may arrive as ?ext= instead of on the path; see
+         * MediaVariant::proxyUrl for why. Restricted to plain letters and digits so the
+         * query cannot be used to reach a different file than the path names.
+         */
+        $extension = (string) $request->query('ext', '');
+        if ($extension !== '' && preg_match('/^[a-z0-9]{2,5}$/i', $extension)) {
+            $path .= '.' . strtolower($extension);
         }
 
         if (!Storage::disk('public')->exists($path)) {
@@ -109,7 +120,20 @@ class MediaFileController extends Controller
             return null;
         }
 
-        $media = MediaItem::where('uuid', $match[1])->first();
+        // Without the space scope, deliberately.
+        //
+        // This runs on an image request, where the tenant context the rest of the app
+        // relies on is not established — so the scoped lookup found nothing, the fallback
+        // gave up, and every missing preview answered 404. A page of broken images is a
+        // gallery that looks destroyed rather than one waiting for a thumbnail.
+        //
+        // Reading a uuid to decide which placeholder to draw leaks nothing: the response
+        // is the same grey rectangle either way, and the file itself is still served by
+        // the guarded path above.
+        $media = MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
+            ->where('uuid', $match[1])
+            ->first();
+
         if (!$media) {
             return null;
         }

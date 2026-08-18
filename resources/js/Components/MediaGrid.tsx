@@ -1,3 +1,4 @@
+import { previewUrl } from '@/lib/mediaUrl';
 import { Link, router } from '@inertiajs/react';
 import { clsx } from 'clsx';
 import { Heart, Play, Star } from 'lucide-react';
@@ -35,7 +36,7 @@ interface Props {
 export const MediaCard = memo(function MediaCard({ item, selected, onSelect, onAction, badge, href }: Props) {
     const thumb       = item.variants.find(v => v.type === 'thumbnail');
     const placeholder = item.variants.find(v => v.type === 'placeholder');
-    const previewUrl  = thumb?.url ?? `/files/media/${item.uuid}/${item.media_type === 'video' ? 'video_poster.jpg' : 'thumbnail.jpg'}`;
+    const preview = thumb?.url ?? previewUrl(item.uuid, item.media_type);
     const aspect      = thumb?.aspect_ratio ?? (item.width && item.height ? item.width / item.height : 1);
 
     const handleClick = (e: React.MouseEvent) => {
@@ -67,9 +68,9 @@ export const MediaCard = memo(function MediaCard({ item, selected, onSelect, onA
             {placeholder?.dominant_color && (
                 <div className="absolute inset-0" style={{ backgroundColor: placeholder.dominant_color }} />
             )}
-            {previewUrl && (
+            {preview && (
                 <img
-                    src={previewUrl}
+                    src={preview}
                     alt=""
                     loading="lazy"
                     decoding="async"

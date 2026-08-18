@@ -29,7 +29,7 @@ class MediaController extends Controller
         // Attach URL to each variant (uses model getUrlAttribute, explicit here for clarity)
         $media->variants->each(function ($v) {
             $v->url = $v->disk === 'public'
-                ? url('/files/' . ltrim($v->path, '/'))
+                ? \App\Models\MediaVariant::proxyUrl($v->path)
                 : url('media-stream/' . $v->path);
         });
 
@@ -147,7 +147,7 @@ class MediaController extends Controller
                 ?? $m->variants->first(fn($v) => $v->type === 'medium')
                 ?? $thumb;
 
-            $makeUrl = fn($v) => $v ? ($v->disk === 'public' ? url('/files/' . ltrim($v->path, '/')) : url('media-stream/' . $v->path)) : null;
+            $makeUrl = fn($v) => $v ? ($v->disk === 'public' ? \App\Models\MediaVariant::proxyUrl($v->path) : url('media-stream/' . $v->path)) : null;
 
             return [
                 'id'            => $m->id,

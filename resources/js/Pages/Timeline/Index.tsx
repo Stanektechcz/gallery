@@ -1,3 +1,4 @@
+import { previewUrl } from '@/lib/mediaUrl';
 import { BulkActionBar } from '@/Components/BulkActionBar';
 import OnboardingChecklist from '@/Components/OnboardingChecklist';
 import Slideshow, { type SlideshowItem } from '@/Components/Slideshow';
@@ -27,7 +28,7 @@ const MediaCardComponent = memo(function MediaCardComponent({ item, size, select
     onSlideshow: (uuid: string) => void; onSelect: (uuid: string) => void;
 }) {
     const thumb = item.variants?.find(v => v.type === 'thumbnail');
-    const thumbUrl = thumb?.url ?? `/files/media/${item.uuid}/${item.media_type === 'video' ? 'video_poster.jpg' : 'thumbnail.jpg'}`;
+    const thumbUrl = thumb?.url ?? previewUrl(item.uuid, item.media_type);
     const dom   = item.variants?.find(v => v.type === 'placeholder')?.dominant_color;
     return (
         <div

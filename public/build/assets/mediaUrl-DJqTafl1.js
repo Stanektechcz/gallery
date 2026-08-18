@@ -1,0 +1,1 @@
+function e(e,t){return`/files/media/${e}/${t===`video`?`video_poster`:`thumbnail`}?ext=jpg`}export{e as t};

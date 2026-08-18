@@ -1,3 +1,4 @@
+import { previewUrl } from '@/lib/mediaUrl';
 import AlbumEvent from '@/Components/AlbumEvent';
 import AlbumCurationAssistant from '@/Components/AlbumCurationAssistant';
 import LocationPicker, { type LocationValue } from '@/Components/LocationPicker';
@@ -76,7 +77,7 @@ export default function AlbumShow({ album, breadcrumb, children, media, filters:
         const thumbnail = item.variants?.find(v => v.type === 'thumbnail')
             ?? item.variants?.find(v => v.type === 'video_poster');
         const placeholder = item.variants?.find(v => v.type === 'placeholder');
-        const repairablePreview = `/files/media/${item.uuid}/${item.media_type === 'video' ? 'video_poster.jpg' : 'thumbnail.jpg'}`;
+        const repairablePreview = previewUrl(item.uuid, item.media_type);
 
         return { item, displayUrl: thumbnail?.url ?? repairablePreview, placeholder };
     }), [media.data]);
