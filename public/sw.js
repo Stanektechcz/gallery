@@ -3,7 +3,7 @@
  * v3 drops every v2 entry. The static cache key never changed, so build assets from
  * every past deployment accumulated in it — three generations of app.js were still held.
  */
-const VERSION = 'maki-shell-v3';
+const VERSION = 'maki-shell-v4';
 const SHELL_CACHE = `${VERSION}:static`;
 const SHELL_FILES = [
     '/offline.html',
@@ -21,6 +21,18 @@ const LEGACY_PRIVATE_CACHES = new Set([
 ]);
 
 self.addEventListener('install', event => {
+    /*
+     * Takes over straight away instead of waiting for every tab to close.
+     *
+     * A service worker normally sits in "waiting" until the last page using the old one
+     * goes away, which for an app people leave open can be days. That is fine for a new
+     * feature and wrong for a fix: a worker shipped to stop the offline page appearing
+     * cannot stop it while the broken one is still the one answering.
+     *
+     * Paired with clients.claim() below, so the page being looked at right now is served
+     * by the corrected worker rather than the next one to be opened.
+     */
+    self.skipWaiting();
     event.waitUntil(caches.open(SHELL_CACHE).then(cache => cache.addAll(SHELL_FILES)));
 });
 
@@ -65,7 +77,14 @@ self.addEventListener('fetch', event => {
          * Freshness does not depend on this: authenticated HTML is never put in the cache
          * and the response headers govern the browser's own caching.
          */
-        event.respondWith(fetch(request).catch(() => caches.match('/offline.html')));
+        /*
+         * One retry before giving up. A single failed request is usually a moment of no
+         * signal rather than a device that is offline, and answering the first stumble
+         * with "waiting for connection" is how a working app looks broken.
+         */
+        event.respondWith(
+            fetch(request).catch(() => fetch(request)).catch(() => caches.match('/offline.html')),
+        );
         return;
     }
 
