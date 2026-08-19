@@ -87,6 +87,9 @@ class UploadController extends Controller
             'total_chunks'    => 'required|integer|min:1',
             'sha256'          => 'nullable|string|size:64',
             'target_album_id' => 'nullable|integer|exists:albums,id',
+            // The browser knows when the file was last written; we never will. Optional,
+            // because an older client or a share-target upload may not send it.
+            'client_modified_at' => 'nullable|date',
         ]);
 
         $user  = $request->user();
@@ -120,6 +123,7 @@ class UploadController extends Controller
             'total_size'       => $validated['total_size'],
             'total_chunks'     => $validated['total_chunks'],
             'sha256'           => $validated['sha256'] ?? null,
+            'client_modified_at' => $validated['client_modified_at'] ?? null,
             'status'           => 'pending',
             'expires_at'       => now()->addDays(7),
         ]);
@@ -282,6 +286,15 @@ class UploadController extends Controller
             $mediaType   = ($isVideo || str_starts_with($session->mime_type, 'video/')) ? 'video' : 'photo';
             $filenameMetadata = (new \App\Services\Media\FilenameMetadataService())
                 ->infer($session->original_filename, $mediaType);
+
+            // The archive is ordered by when a picture was taken, so a photograph with no
+            // date at all falls into a heap at the end where nobody goes looking. When the
+            // name held no date either, the file's own modification time stands in — the
+            // last honest evidence we have. Real EXIF still wins: the metadata job runs
+            // afterwards and overwrites this the moment it finds a genuine capture time.
+            if (empty($filenameMetadata['taken_at']) && $session->client_modified_at) {
+                $filenameMetadata['taken_at'] = $session->client_modified_at;
+            }
 
             // For RAW files: extract embedded JPEG preview for thumbnailing
             $previewPath = null;

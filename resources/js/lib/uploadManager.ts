@@ -300,6 +300,13 @@ class UploadManagerClass extends EventTarget {
                         total_chunks: item.totalChunks,
                         sha256: item.sha256 ?? null,
                         target_album_id: item.albumId ?? null,
+                        // Only this side of the wire ever sees when the file was written.
+                        // The server receives reassembled chunks stamped with today, so a
+                        // screenshot or a picture forwarded through a chat app — neither
+                        // of which has EXIF — would otherwise have no date at all.
+                        client_modified_at: item.file.lastModified
+                            ? new Date(item.file.lastModified).toISOString()
+                            : null,
                     },
                     { signal: ctrl.signal },
                 );

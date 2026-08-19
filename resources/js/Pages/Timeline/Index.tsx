@@ -1,6 +1,9 @@
 import { previewUrl } from '@/lib/mediaUrl';
 import { BulkActionBar } from '@/Components/BulkActionBar';
+import AlbumSuggestionPanel, { type AlbumSuggestion } from '@/Components/AlbumSuggestionPanel';
 import OnboardingChecklist from '@/Components/OnboardingChecklist';
+import UploadZone from '@/Components/UploadZone';
+import usePrimaryGallerySpace from '@/hooks/usePrimaryGallerySpace';
 import Slideshow, { type SlideshowItem } from '@/Components/Slideshow';
 import AppLayout from '@/Layouts/AppLayout';
 import { Head, Link, router } from '@inertiajs/react';
@@ -93,6 +96,20 @@ export default function TimelineIndex() {
     const [selected,    setSelected]    = useState<Set<string>>(new Set());
     const [slideshowItems, setSlideshowItems] = useState<MediaCard[]|null>(null);
     const [slideshowIdx,   setSlideshowIdx]   = useState(0);
+    const { spaceId } = usePrimaryGallerySpace();
+    const [suggestions, setSuggestions] = useState<AlbumSuggestion[]>([]);
+    const [suggestionsAvailable, setSuggestionsAvailable] = useState(false);
+
+    /** What the system thinks belongs together, asked for rather than assumed. */
+    const loadSuggestions = useCallback(async () => {
+        try {
+            const response = await axios.get('/api/v1/album-suggestions');
+            setSuggestions(response.data.suggestions ?? []);
+            setSuggestionsAvailable(Boolean(response.data.available));
+        } catch { setSuggestions([]); }
+    }, []);
+
+    useEffect(() => { void loadSuggestions(); }, [loadSuggestions]);
     const gridSize = GRID_SIZES[gridSizeIdx];
 
     const toggleFav = useCallback(async (uuid: string, cur: boolean) => {
@@ -189,7 +206,40 @@ export default function TimelineIndex() {
 
             {/* Renders nothing once the gallery is set up, so it costs a request on the
                 first few visits and disappears for good after that. */}
-            <div className="px-4 pt-4 sm:px-6"><OnboardingChecklist /></div>
+            <div className="px-4 pt-4 sm:px-6">
+                <OnboardingChecklist />
+
+                {/* Uploading here puts photographs straight into the archive with no album
+                    chosen. Making somebody name an album before they can save a picture is
+                    asking them to sort their memories before they have looked at them. */}
+                <div className="mb-5">
+                    <UploadZone
+                        albumId={null}
+                        onUploadComplete={() => {
+                            void queryClient.invalidateQueries({ queryKey: ['timeline'] });
+                            // The suggestion is recomputed rather than guessed at: a batch
+                            // just landed, and what belongs together is the server's
+                            // judgement over the whole library, not this page's.
+                            void loadSuggestions();
+                        }}
+                    />
+                </div>
+
+                {/* Offered, never applied. Declining leaves everything exactly where it is —
+                    in the archive, in the order it was taken — which is the point of the
+                    archive existing at all. */}
+                {spaceId !== undefined && suggestions.length > 0 && (
+                    <AlbumSuggestionPanel
+                        /* The panel seeds its state once, so a fresh set of fingerprints has to
+                           remount it — otherwise a batch uploaded a moment ago would be sorted
+                           by the server and never offered here. */
+                        key={suggestions.map(item => item.fingerprint).join('|')}
+                        gallerySpaceId={spaceId}
+                        initialSuggestions={suggestions}
+                        available={suggestionsAvailable}
+                    />
+                )}
+            </div>
 
             {/* New Slideshow */}
             {slideshowItems && (

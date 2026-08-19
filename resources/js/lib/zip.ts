@@ -25,6 +25,10 @@ export interface ZipEntry {
     size: number;
     compression: number;
     offset: number;
+    /** Bytes as they sit in the archive. Only equal to `size` when nothing was compressed. */
+    compressedSize: number;
+    /** Milliseconds, from the archive's own record of when the file was written. */
+    modified: number;
 }
 
 export interface ZipReadResult {
@@ -83,6 +87,7 @@ export async function listEntries(file: File): Promise<ZipEntry[]> {
         if (directory.getUint32(cursor, true) !== CENTRAL_SIGNATURE) break;
 
         const compression = directory.getUint16(cursor + 10, true);
+        const compressedSize = directory.getUint32(cursor + 20, true);
         const size = directory.getUint32(cursor + 24, true);
         const nameLength = directory.getUint16(cursor + 28, true);
         const extraLength = directory.getUint16(cursor + 30, true);
@@ -92,11 +97,41 @@ export async function listEntries(file: File): Promise<ZipEntry[]> {
         const nameBytes = new Uint8Array(directory.buffer, cursor + 46, nameLength);
         const name = new TextDecoder('utf-8').decode(nameBytes);
 
-        entries.push({ name, size, compression, offset });
+        const modified = dosTimestamp(
+            directory.getUint16(cursor + 12, true),
+            directory.getUint16(cursor + 14, true),
+        );
+
+        entries.push({ name, size, compressedSize, compression, offset, modified });
         cursor += 46 + nameLength + extraLength + commentLength;
     }
 
     return entries;
+}
+
+/**
+ * The MS-DOS date and time a ZIP stores, in milliseconds.
+ *
+ * The format predates the archive by a decade: two 16-bit words, seconds in steps of two,
+ * years counted from 1980, and no timezone at all — so it is read as local time, which is
+ * what whoever packed the archive was looking at.
+ *
+ * A zero date means the packer never wrote one. That falls back to now rather than to
+ * 1980, because a photograph filed under the Moscow Olympics is worse than one filed today.
+ */
+function dosTimestamp(time: number, date: number): number {
+    if (date === 0) return Date.now();
+
+    const year = 1980 + ((date >> 9) & 0x7f);
+    const month = ((date >> 5) & 0x0f) - 1;
+    const day = date & 0x1f;
+    const hours = (time >> 11) & 0x1f;
+    const minutes = (time >> 5) & 0x3f;
+    const seconds = (time & 0x1f) * 2;
+
+    const stamp = new Date(year, month, day, hours, minutes, seconds).getTime();
+
+    return Number.isNaN(stamp) ? Date.now() : stamp;
 }
 
 /**
@@ -136,6 +171,10 @@ export async function extractMedia(file: File): Promise<ZipReadResult> {
 
             files.push(new File([bytes], base, {
                 type: MIME_BY_EXTENSION[extension] ?? 'application/octet-stream',
+                // Carried across from the archive. Without it every photograph out of a
+                // ZIP would be stamped with the moment it was unpacked, and a holiday
+                // from three years ago would file itself under today.
+                lastModified: entry.modified,
             }));
         } catch (error) {
             skipped.push({ name: entry.name, reason: (error as Error).message });
@@ -158,7 +197,12 @@ async function readEntry(file: File, entry: ZipEntry): Promise<ArrayBuffer> {
     const extraLength = header.getUint16(28, true);
 
     const start = entry.offset + 30 + nameLength + extraLength;
-    const blob = file.slice(start, start + entry.size);
+
+    // The compressed length, not the original one. Slicing by the uncompressed size reaches
+    // past the end of the entry and into the next file's header; deflate happens to stop at
+    // its own end marker and hide that, but it means holding far more of the archive in
+    // memory than the entry needs — which is exactly how a large import runs a tab out of it.
+    const blob = file.slice(start, start + (entry.compressedSize || entry.size));
 
     // 0 is stored, 8 is deflate. Everything else is a format we do not read, and saying so
     // beats handing the gallery a file of noise.

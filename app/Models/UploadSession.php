@@ -10,7 +10,7 @@ class UploadSession extends Model
     protected $fillable = [
         'uuid', 'user_id', 'gallery_space_id', 'target_album_id',
         'original_filename', 'mime_type', 'total_size', 'total_chunks',
-        'received_chunks', 'uploaded_bytes', 'sha256', 'status',
+        'received_chunks', 'uploaded_bytes', 'sha256', 'client_modified_at', 'status',
         'assembled_path', 'drive_upload_uri', 'drive_uploaded_bytes',
         'expires_at', 'completed_at', 'resulting_media_id',
     ];
@@ -20,6 +20,7 @@ class UploadSession extends Model
         return [
             'expires_at'    => 'datetime',
             'completed_at'  => 'datetime',
+            'client_modified_at' => 'datetime',
         ];
     }
 
