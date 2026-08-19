@@ -100,6 +100,8 @@ export default function TimelineIndex() {
     const [suggestions, setSuggestions] = useState<AlbumSuggestion[]>([]);
     const [suggestionsAvailable, setSuggestionsAvailable] = useState(false);
 
+    const suggestionTimer = useRef<number | null>(null);
+
     /** What the system thinks belongs together, asked for rather than assumed. */
     const loadSuggestions = useCallback(async () => {
         try {
@@ -109,7 +111,23 @@ export default function TimelineIndex() {
         } catch { setSuggestions([]); }
     }, []);
 
-    useEffect(() => { void loadSuggestions(); }, [loadSuggestions]);
+    /**
+     * Asked for once the batch has settled, not once per file.
+     *
+     * The upload queue reports every completed handful, so importing five hundred
+     * photographs would otherwise fire this dozens of times — and each answer would be
+     * stale before it arrived, because the rest of the import is still landing.
+     */
+    const scheduleSuggestions = useCallback(() => {
+        if (suggestionTimer.current) window.clearTimeout(suggestionTimer.current);
+        suggestionTimer.current = window.setTimeout(() => { void loadSuggestions(); }, 2500);
+    }, [loadSuggestions]);
+
+    useEffect(() => {
+        void loadSuggestions();
+
+        return () => { if (suggestionTimer.current) window.clearTimeout(suggestionTimer.current); };
+    }, [loadSuggestions]);
     const gridSize = GRID_SIZES[gridSizeIdx];
 
     const toggleFav = useCallback(async (uuid: string, cur: boolean) => {
@@ -220,7 +238,7 @@ export default function TimelineIndex() {
                             // The suggestion is recomputed rather than guessed at: a batch
                             // just landed, and what belongs together is the server's
                             // judgement over the whole library, not this page's.
-                            void loadSuggestions();
+                            scheduleSuggestions();
                         }}
                     />
                 </div>
