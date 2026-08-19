@@ -1,4 +1,5 @@
 import { uploadManager } from '@/lib/uploadManager';
+import { extractMedia, isZip } from '@/lib/zip';
 import { Upload } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
@@ -32,6 +33,9 @@ interface Props { albumId: number | null; onUploadComplete?: (mediaUuids: string
 export default function UploadZone({ albumId, onUploadComplete }: Props) {
     const [dragging, setDragging] = useState(false);
     const [queued,   setQueued]   = useState(0);
+    /** Which archive is being expanded, so a big ZIP does not look like a frozen page. */
+    const [busy,     setBusy]     = useState<string | null>(null);
+    const [notice,   setNotice]   = useState('');
     const inputRef  = useRef<HTMLInputElement>(null);
     const dragCount = useRef(0);
     const reported = useRef(new Set<string>());
@@ -58,10 +62,49 @@ export default function UploadZone({ albumId, onUploadComplete }: Props) {
         return () => uploadManager.removeEventListener('change', onChange);
     }, [albumId, onUploadComplete]);
 
-    const process = useCallback((raw: FileList | null) => {
+    /**
+     * Takes whatever was dropped, expanding any archives on the way in.
+     *
+     * A ZIP is unpacked here rather than sent up whole: the pictures are already on this
+     * machine, so uploading a hundred megabytes only to receive the same photographs back
+     * would pay for them twice — and everything the queue does (per-file progress, pause,
+     * resume, skipping duplicates) applies unchanged, which it could not if the server
+     * unpacked a blob.
+     *
+     * Async because reading an archive is, and the drop event must not wait for it.
+     */
+    const process = useCallback(async (raw: FileList | null) => {
         if (!raw) return;
-        const accepted = Array.from(raw).filter(ok);
+
+        const dropped = Array.from(raw);
+        const archives = dropped.filter(isZip);
+        let accepted = dropped.filter(file => !isZip(file)).filter(ok);
+        const notes: string[] = [];
+
+        for (const archive of archives) {
+            setBusy(archive.name);
+            try {
+                const { files, skipped } = await extractMedia(archive);
+                accepted = accepted.concat(files.filter(ok));
+
+                // Said out loud rather than swallowed. An archive of a holiday usually
+                // holds a stray text file or two, and somebody who is told none of their
+                // photographs were dropped stops wondering what went missing.
+                if (skipped.length) {
+                    notes.push(`${archive.name}: přeskočeno ${skipped.length} souborů, které nejsou fotka ani video.`);
+                }
+            } catch (error) {
+                notes.push(`${archive.name}: ${(error as Error).message}`);
+            } finally {
+                setBusy(null);
+            }
+        }
+
+        setNotice(notes.join(' '));
+        if (notes.length) setTimeout(() => setNotice(''), 8000);
+
         if (!accepted.length) return;
+
         uploadManager.enqueue(accepted, albumId);
         setQueued(n => n + accepted.length);
         setTimeout(() => setQueued(0), 3000);
@@ -83,11 +126,21 @@ export default function UploadZone({ albumId, onUploadComplete }: Props) {
             ].join(' ')}>
             <Upload size={28} className={dragging ? 'text-[var(--color-accent)]' : 'text-[var(--color-text-secondary)]'}/>
             <p className="text-sm text-[var(--color-text-primary)] font-medium">
-                {dragging ? 'Pusťte soubory sem' : queued ? `✓ ${queued} souborů přidáno` : 'Přetáhněte nebo klikněte'}
+                {busy
+                    ? `Rozbaluji ${busy}…`
+                    : dragging ? 'Pusťte soubory sem' : queued ? `✓ ${queued} souborů přidáno` : 'Přetáhněte nebo klikněte'}
             </p>
-            <p className="text-xs text-[var(--color-text-secondary)]">Fotky, videa, RAW · JPG PNG HEIC AVIF CR2 NEF ARW DNG MP4 MOV MKV…</p>
-            <p className="text-[10px] text-[var(--color-text-secondary)] opacity-60">Kontrola duplicit · pokračování po výpadku</p>
-            <input ref={inputRef} type="file" multiple accept={ACCEPTED.join(',')} className="sr-only"
+            <p className="text-xs text-[var(--color-text-secondary)]">Fotky, videa, RAW i ZIP · JPG PNG HEIC AVIF CR2 NEF ARW DNG MP4 MOV MKV…</p>
+            <p className="text-[10px] text-[var(--color-text-secondary)] opacity-60">Kontrola duplicit · pokračování po výpadku · archivy se rozbalí samy</p>
+
+            {/* What an archive left behind. Stopping the click from reopening the picker,
+                because reading a message should not start a second import. */}
+            {notice && (
+                <p onClick={event => event.stopPropagation()} className="mt-1 rounded-lg bg-amber-500/10 px-2 py-1 text-[11px] text-amber-100">
+                    {notice}
+                </p>
+            )}
+            <input ref={inputRef} type="file" multiple accept={[...ACCEPTED, '.zip', 'application/zip'].join(',')} className="sr-only"
                 onChange={e => { process(e.target.files); (e.target as HTMLInputElement).value = ''; }}/>
         </div>
     );
