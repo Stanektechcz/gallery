@@ -126,7 +126,49 @@ class DailyMomentService
             'others' => $mine ? $others->map(fn ($entry) => $this->entryPayload($entry))->values()->all() : [],
             'others_count' => $others->count(),
             'members_count' => $space->members()->count(),
+            'streak' => $this->streak($space, $user, $now),
         ];
+    }
+
+    /**
+     * How many days in a row this person has answered.
+     *
+     * Counted back from today when they have already posted, and from yesterday when
+     * they have not — otherwise the number would read as broken every morning, before
+     * the day has even been asked about, which is exactly the wrong thing to tell
+     * somebody at breakfast.
+     *
+     * Days with no prompt at all cannot break a streak; nobody was asked.
+     */
+    public function streak(GallerySpace $space, User $user, ?Carbon $now = null): int
+    {
+        $now ??= Carbon::now();
+
+        $dny = DailyMomentEntry::where('daily_moment_entries.user_id', $user->id)
+            ->join('daily_moments', 'daily_moments.id', '=', 'daily_moment_entries.daily_moment_id')
+            ->where('daily_moments.gallery_space_id', $space->id)
+            ->orderByDesc('daily_moments.moment_date')
+            ->pluck('daily_moments.moment_date')
+            ->map(fn ($date) => Carbon::parse($date)->toDateString())
+            ->unique()
+            ->values();
+
+        if ($dny->isEmpty()) return 0;
+
+        $kurzor = $dny->first() === $now->toDateString()
+            ? $now->copy()
+            : $now->copy()->subDay();
+
+        $delka = 0;
+
+        foreach ($dny as $den) {
+            if ($den !== $kurzor->toDateString()) break;
+
+            $delka++;
+            $kurzor->subDay();
+        }
+
+        return $delka;
     }
 
     /**

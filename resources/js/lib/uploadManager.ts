@@ -1,7 +1,16 @@
 /**
  * UploadManager — Singleton service for managing all file uploads.
- * Features: concurrent (3 parallel), pause/resume, cancel, retry,
- * SHA-256 duplicate detection, network recovery, persistence.
+ *
+ * Concurrent (3 parallel), pause/resume, cancel, retry, SHA-256 duplicate detection and
+ * network recovery.
+ *
+ * The queue lives in memory and does not survive the tab closing. That is deliberate
+ * rather than missing: keeping it would mean copying every queued file into IndexedDB,
+ * so importing forty gigabytes would write eighty. Dropping the same folder again is
+ * cheap instead — the fingerprint is taken from the first and last couple of megabytes,
+ * so everything already uploaded is recognised and skipped without being sent twice.
+ *
+ * What the tab closing does cost is the work in flight, so it asks first; see below.
  */
 
 import axios from "axios";
@@ -74,6 +83,27 @@ class UploadManagerClass extends EventTarget {
             this.online = false;
             this.handleOffline();
         });
+
+        // Closing the tab throws away whatever has not been sent yet. Browsers show
+        // their own wording here and ignore ours, but the prompt itself is the point:
+        // somebody who tidies up their tabs halfway through a folder of holiday
+        // photographs should be asked rather than told afterwards.
+        window.addEventListener("beforeunload", (event) => {
+            if (!this.hasWorkInFlight()) return;
+
+            event.preventDefault();
+            // Old browsers need a returnValue to show the prompt at all.
+            event.returnValue = "";
+        });
+    }
+
+    /** Whether anything would actually be lost by leaving now. */
+    private hasWorkInFlight(): boolean {
+        return this.queue.some((upload) =>
+            ["waiting", "hashing", "uploading", "processing", "offline"].includes(
+                upload.status,
+            ),
+        );
     }
 
     // ── Public API ────────────────────────────────────────────────────────

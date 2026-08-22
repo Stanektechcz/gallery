@@ -3,6 +3,7 @@ import PartnerPulsePanel, { CoordinationAction, PartnerPulse } from '@/Component
 import PartnerDecisionPanel, { PartnerDecisionSnapshot } from '@/Components/PartnerDecisionPanel';
 import ReminderActionPanel, { ActionableReminder } from '@/Components/ReminderActionPanel';
 import OnboardingChecklist from '@/Components/OnboardingChecklist';
+import TogetherNowCard from '@/Components/TogetherNowCard';
 import { Head, Link, router } from '@inertiajs/react';
 import axios from 'axios';
 import { Album, CalendarDays, Check, ChefHat, Clock, FolderOpen, Heart, Images, Map, MapPin, RefreshCw, Route, Sparkles, Star, TrendingUp, Upload } from 'lucide-react';
@@ -111,6 +112,10 @@ export default function DashboardIndex({ data }: Props) {
 
             <div className="w-full p-4 sm:p-6 lg:p-8 space-y-5 pb-8">
                 <OnboardingChecklist />
+
+                {/* Above the greeting on purpose: the window is open for two hours and
+                    nothing else on this page expires. */}
+                <TogetherNowCard />
 
                 {/* Greeting */}
                 <div className="flex flex-col gap-3 pt-2 sm:flex-row sm:items-start sm:justify-between">
