@@ -64,12 +64,28 @@ class GalleryDoctorCommand extends Command
             return;
         }
 
-        // Pending migrations
+        // Pending migrations.
+        //
+        // Counted rather than inferred from migrate:status, which succeeds whether or not
+        // anything is pending — so this reported PASS unconditionally and would have said
+        // the database was fine on the day a half-finished deploy left three migrations
+        // unrun and every upload failing on a missing column.
         try {
-            \Artisan::call('migrate:status', ['--no-interaction' => true]);
-            $this->check('No pending migrations', true);
+            $spustene = DB::table('migrations')->pluck('migration')->all();
+
+            $cekaji = collect(glob(database_path('migrations/*.php')))
+                ->map(fn (string $cesta) => basename($cesta, '.php'))
+                ->reject(fn (string $jmeno) => in_array($jmeno, $spustene, true))
+                ->values();
+
+            $this->check(
+                $cekaji->isEmpty()
+                    ? 'No pending migrations'
+                    : "Pending migrations: {$cekaji->count()} ({$cekaji->take(3)->implode(', ')}" . ($cekaji->count() > 3 ? ', …' : '') . ')',
+                $cekaji->isEmpty(),
+            );
         } catch (\Throwable $e) {
-            $this->check('No pending migrations', false);
+            $this->check('Pending migrations: could not be read (' . $e->getMessage() . ')', false);
         }
 
         // Charset check (MySQL only)
