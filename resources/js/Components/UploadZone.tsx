@@ -1,6 +1,7 @@
 import { uploadManager } from '@/lib/uploadManager';
+import { hasDirectories, readDroppedTree } from '@/lib/dropTree';
 import { extractMedia, isZip } from '@/lib/zip';
-import { Upload } from 'lucide-react';
+import { FolderOpen, Upload } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 const ACCEPTED: string[] = [
@@ -37,6 +38,7 @@ export default function UploadZone({ albumId, onUploadComplete }: Props) {
     const [busy,     setBusy]     = useState<string | null>(null);
     const [notice,   setNotice]   = useState('');
     const inputRef  = useRef<HTMLInputElement>(null);
+    const folderRef = useRef<HTMLInputElement>(null);
     const dragCount = useRef(0);
     const reported = useRef(new Set<string>());
 
@@ -73,7 +75,7 @@ export default function UploadZone({ albumId, onUploadComplete }: Props) {
      *
      * Async because reading an archive is, and the drop event must not wait for it.
      */
-    const process = useCallback(async (raw: FileList | null) => {
+    const process = useCallback(async (raw: FileList | File[] | null) => {
         if (!raw) return;
 
         const dropped = Array.from(raw);
@@ -113,9 +115,29 @@ export default function UploadZone({ albumId, onUploadComplete }: Props) {
     const onDE = (e: React.DragEvent) => { e.preventDefault(); dragCount.current++; if (dragCount.current === 1) setDragging(true); };
     const onDL = (e: React.DragEvent) => { e.preventDefault(); dragCount.current--; if (dragCount.current === 0) setDragging(false); };
     const onDO = (e: React.DragEvent) => { e.preventDefault(); };
+    /**
+     * A drop can be loose files or whole folders, and only one of those arrives in
+     * `dataTransfer.files`. The transfer is read out synchronously — it is emptied as
+     * soon as this handler yields — and the walk happens after.
+     */
     const onDrop = (e: React.DragEvent) => {
         e.preventDefault(); dragCount.current = 0; setDragging(false);
-        process(e.dataTransfer.files);
+
+        const transfer = e.dataTransfer;
+        const folders = hasDirectories(transfer);
+
+        if (folders) setBusy('složky');
+
+        void readDroppedTree(transfer)
+            .then(({ files, truncated }) => {
+                if (truncated) {
+                    setNotice('Složka je opravdu velká — vzali jsme prvních 25 000 souborů. Zbytek přetáhněte zvlášť.');
+                    setTimeout(() => setNotice(''), 10000);
+                }
+
+                return process(files);
+            })
+            .finally(() => { if (folders) setBusy(null); });
     };
 
     return (
@@ -131,7 +153,15 @@ export default function UploadZone({ albumId, onUploadComplete }: Props) {
                     : dragging ? 'Pusťte soubory sem' : queued ? `✓ ${queued} souborů přidáno` : 'Přetáhněte nebo klikněte'}
             </p>
             <p className="text-xs text-[var(--color-text-secondary)]">Fotky, videa, RAW i ZIP · JPG PNG HEIC AVIF CR2 NEF ARW DNG MP4 MOV MKV…</p>
-            <p className="text-[10px] text-[var(--color-text-secondary)] opacity-60">Kontrola duplicit · pokračování po výpadku · archivy se rozbalí samy</p>
+            <p className="text-[10px] text-[var(--color-text-secondary)] opacity-60">Kontrola duplicit · pokračování po výpadku · archivy i složky se rozbalí samy</p>
+
+            {/* A folder needs its own picker: one input cannot offer both files and
+                directories, and the drop target alone leaves anyone who does not drag
+                without a way in at all. */}
+            <button type="button" onClick={event => { event.stopPropagation(); folderRef.current?.click(); }}
+                className="mt-1 inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-border)] px-3 py-1.5 text-xs text-[var(--color-text-secondary)] transition-colors hover:border-[var(--color-accent)]/60 hover:text-[var(--color-text-primary)]">
+                <FolderOpen size={13}/> Vybrat celou složku
+            </button>
 
             {/* What an archive left behind. Stopping the click from reopening the picker,
                 because reading a message should not start a second import. */}
@@ -141,6 +171,13 @@ export default function UploadZone({ albumId, onUploadComplete }: Props) {
                 </p>
             )}
             <input ref={inputRef} type="file" multiple accept={[...ACCEPTED, '.zip', 'application/zip'].join(',')} className="sr-only"
+                onChange={e => { process(e.target.files); (e.target as HTMLInputElement).value = ''; }}/>
+
+            {/* No `accept` here on purpose: with webkitdirectory some browsers apply the
+                filter to the folder itself and offer nothing at all. The files are sorted
+                out by `ok()` a moment later anyway. */}
+            <input ref={folderRef} type="file" multiple className="sr-only"
+                {...({ webkitdirectory: '', directory: '' } as any)}
                 onChange={e => { process(e.target.files); (e.target as HTMLInputElement).value = ''; }}/>
         </div>
     );

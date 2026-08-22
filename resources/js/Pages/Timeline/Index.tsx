@@ -1,6 +1,7 @@
 import { previewUrl } from '@/lib/mediaUrl';
 import { BulkActionBar } from '@/Components/BulkActionBar';
 import AlbumSuggestionPanel, { type AlbumSuggestion } from '@/Components/AlbumSuggestionPanel';
+import CameraCapture from '@/Components/CameraCapture';
 import OnboardingChecklist from '@/Components/OnboardingChecklist';
 import UploadZone from '@/Components/UploadZone';
 import usePrimaryGallerySpace from '@/hooks/usePrimaryGallerySpace';
@@ -9,7 +10,7 @@ import AppLayout from '@/Layouts/AppLayout';
 import { Head, Link, router } from '@inertiajs/react';
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
-import { Grid3X3, Heart, Layers, Map, Maximize2, Play, Trash2 } from 'lucide-react';
+import { Camera, Grid3X3, Heart, Layers, Map, Maximize2, Play, Trash2 } from 'lucide-react';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 const GRID_SIZES = [120, 160, 200, 260];
@@ -99,6 +100,7 @@ export default function TimelineIndex() {
     const { spaceId } = usePrimaryGallerySpace();
     const [suggestions, setSuggestions] = useState<AlbumSuggestion[]>([]);
     const [suggestionsAvailable, setSuggestionsAvailable] = useState(false);
+    const [cameraOpen, setCameraOpen] = useState(false);
 
     const suggestionTimer = useRef<number | null>(null);
 
@@ -230,7 +232,7 @@ export default function TimelineIndex() {
                 {/* Uploading here puts photographs straight into the archive with no album
                     chosen. Making somebody name an album before they can save a picture is
                     asking them to sort their memories before they have looked at them. */}
-                <div className="mb-5">
+                <div className="mb-5 space-y-2">
                     <UploadZone
                         albumId={null}
                         onUploadComplete={() => {
@@ -241,7 +243,19 @@ export default function TimelineIndex() {
                             scheduleSuggestions();
                         }}
                     />
+                    <button type="button" onClick={() => setCameraOpen(true)}
+                        className="flex w-full items-center justify-center gap-2 rounded-xl border border-[var(--color-border)] py-2.5 text-sm text-[var(--color-text-secondary)] transition-colors hover:border-[var(--color-accent)]/60 hover:text-[var(--color-text-primary)]">
+                        <Camera size={15}/> Vyfotit rovnou do galerie
+                    </button>
                 </div>
+
+                {cameraOpen && (
+                    <CameraCapture
+                        albumId={null}
+                        onClose={() => setCameraOpen(false)}
+                        onCaptured={() => void queryClient.invalidateQueries({ queryKey: ['timeline'] })}
+                    />
+                )}
 
                 {/* Offered, never applied. Declining leaves everything exactly where it is —
                     in the archive, in the order it was taken — which is the point of the
