@@ -57,19 +57,28 @@ class AlbumService
     }
     public function update(Album $album, array $data, User $user): Album
     {
-        $updateData = array_filter([
-            'title'            => $data['title'] ?? null,
-            'description'      => $data['description'] ?? null,
-            'color'            => $data['color'] ?? null,
-            'icon'             => $data['icon'] ?? null,
-            'event_date_start' => $data['event_date_start'] ?? null,
-            'event_date_end'   => $data['event_date_end'] ?? null,
-            'visibility'       => $data['visibility'] ?? null,
-            'sort_mode'        => $data['sort_mode'] ?? null,
-            'sort_direction'   => $data['sort_direction'] ?? null,
-            'cover_media_id'   => $data['cover_media_id'] ?? null,
-            'updated_by'       => $user->id,
-        ], fn($v) => $v !== null);
+        // What the caller actually sent, not what happens to be non-null.
+        //
+        // This used to drop every null, which made a field impossible to clear: removing
+        // an album's description or its colour sent null, null was filtered out, and the
+        // old value stayed. Absence and emptiness are different answers, and only the
+        // request knows which one was given.
+        $editable = [
+            'title', 'description', 'color', 'icon',
+            'event_date_start', 'event_date_end',
+            'visibility', 'sort_mode', 'sort_direction', 'cover_media_id',
+            // Validated by the request since the location picker was added, but never
+            // mapped here — so saving an album's location silently did nothing at all.
+            'location_name', 'latitude', 'longitude', 'location_country', 'location_country_code',
+        ];
+
+        $updateData = ['updated_by' => $user->id];
+
+        foreach ($editable as $field) {
+            if (array_key_exists($field, $data)) {
+                $updateData[$field] = $data[$field];
+            }
+        }
 
         $album->update($updateData);
 

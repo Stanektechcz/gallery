@@ -1,6 +1,7 @@
 import { previewUrl } from '@/lib/mediaUrl';
 import AlbumEvent from '@/Components/AlbumEvent';
 import AlbumCurationAssistant from '@/Components/AlbumCurationAssistant';
+import AlbumSettings from '@/Components/AlbumSettings';
 import LocationPicker, { type LocationValue } from '@/Components/LocationPicker';
 import SmartAlbumEditor from '@/Components/SmartAlbumEditor';
 import UploadZone from '@/Components/UploadZone';
@@ -8,7 +9,7 @@ import AppLayout from '@/Layouts/AppLayout';
 import AlbumStory from '@/Pages/Albums/Story';
 import { Head, Link, router } from '@inertiajs/react';
 import axios from 'axios';
-import { ArrowUpDown, BookOpen, ChevronRight, Clock, Edit3, Film, FolderOpen, FolderPlus, Grid3X3, Image, MapPin, Search, SortAsc, SortDesc, Trash2, Upload } from 'lucide-react';
+import { ArrowUpDown, BookOpen, ChevronRight, Clock, Edit3, Film, FolderOpen, FolderPlus, Grid3X3, Image, MapPin, Search, Settings, SortAsc, SortDesc, Trash2, Upload } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
 interface MediaItem {
@@ -41,6 +42,10 @@ interface Album {
     latitude?: number;
     longitude?: number;
     location_country?: string;
+    event_date_end?: string;
+    visibility?: 'private' | 'shared' | 'public';
+    sort_mode?: string;
+    sort_direction?: string;
     cover?: { variants: Array<{ type: string; url: string }> } | null;
 }
 
@@ -57,6 +62,7 @@ interface Props {
 export default function AlbumShow({ album, breadcrumb, children, media, filters: rawFilters }: Props) {
     const filters: Filters = rawFilters ?? { sort: 'taken_at', dir: 'desc', type: null, search: null };
     const [uploadOpen, setUploadOpen] = useState(false);
+    const [settingsOpen, setSettingsOpen] = useState(false);
     const [search, setSearch]         = useState(filters.search ?? '');
     const [deleting, setDeleting]     = useState(false);
     const [activeTab, setActiveTab]   = useState<'grid' | 'story'>(album.story_mode ? 'story' : 'grid');
@@ -220,11 +226,18 @@ export default function AlbumShow({ album, breadcrumb, children, media, filters:
                         <button onClick={() => setUploadOpen(v=>!v)} className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-all ${uploadOpen ? 'bg-[var(--color-accent)] text-[var(--color-accent-contrast)]' : 'bg-[var(--color-bg-card)] border border-[var(--color-border)] text-[var(--color-text-primary)] hover:border-[var(--color-accent)]/60'}`}>
                             <Upload size={14}/> Nahrát
                         </button>
+                        <button onClick={() => setSettingsOpen(v=>!v)} className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-all ${settingsOpen ? 'bg-[var(--color-accent)] text-[var(--color-accent-contrast)]' : 'bg-[var(--color-bg-card)] border border-[var(--color-border)] text-[var(--color-text-primary)] hover:border-[var(--color-accent)]/60'}`}>
+                            <Settings size={14}/> Nastavení
+                        </button>
                         <button onClick={deleteAlbum} disabled={deleting} title="Smazat album" className="flex shrink-0 items-center gap-1.5 rounded-lg bg-[var(--color-bg-card)] border border-[var(--color-border)] text-red-400 hover:border-red-500/60 px-3 py-2 text-sm font-medium transition-all disabled:opacity-50">
                             <Trash2 size={14}/> Smazat
                         </button>
                     </div>
                 </div>
+
+                {settingsOpen && (
+                    <AlbumSettings albumUuid={album.uuid} album={album} onClose={() => setSettingsOpen(false)} />
+                )}
 
                 <AlbumCurationAssistant albumUuid={album.uuid} />
 
