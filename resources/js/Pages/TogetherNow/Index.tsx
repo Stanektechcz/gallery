@@ -103,8 +103,13 @@ export default function TogetherNowIndex() {
             setState(today.data);
             setPast(history.data.moments ?? []);
             setError('');
-        } catch {
-            setError('Dnešní moment se nepodařilo načíst.');
+        } catch (problem: any) {
+            // A person with no shared space yet gets a 404 from the lookup, which is not
+            // a fault and must not read like one — it is the first thing a new account
+            // sees here, and "could not load" tells them nothing they can act on.
+            setError(problem?.response?.status === 404
+                ? 'Nejprve vytvořte nebo přijměte pozvánku do společného prostoru. Zároveň je na dva.'
+                : 'Dnešní moment se nepodařilo načíst.');
         } finally {
             setLoading(false);
         }

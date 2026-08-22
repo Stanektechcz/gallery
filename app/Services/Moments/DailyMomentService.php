@@ -79,7 +79,12 @@ class DailyMomentService
             return $now->copy()->addMinutes(5);
         }
 
-        return $earliest->copy()->addMinutes(random_int(0, $earliest->diffInMinutes($latest)));
+        // Floored to whole minutes on purpose: Carbon hands back a float, and the moment
+        // `$earliest` carries any seconds — which it does the instant it is derived from
+        // now — that float has a fraction random_int must not be given.
+        $span = (int) floor($earliest->diffInMinutes($latest));
+
+        return $earliest->copy()->addMinutes(random_int(0, max(0, $span)));
     }
 
     /**

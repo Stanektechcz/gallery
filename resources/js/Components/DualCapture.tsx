@@ -82,6 +82,15 @@ export default function DualCapture({ onCancel, onReady }: Props) {
 
     useEffect(() => stop, [stop]);
 
+    // Both previews hold their photograph in memory. `retake` lets them go, but a moment
+    // that was sent successfully closed with two still open — small each time, and this
+    // screen is opened once a day for as long as the app is installed.
+    const shots = useRef<Array<Shot | null>>([]);
+    shots.current = [back, front];
+    useEffect(() => () => {
+        shots.current.forEach(shot => { if (shot) URL.revokeObjectURL(shot.url); });
+    }, []);
+
     const take = async () => {
         if (! videoRef.current) return;
 
