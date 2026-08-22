@@ -188,7 +188,22 @@ class GalleryDoctorCommand extends Command
     {
         $this->section('Queue');
         $driver = config('queue.default');
-        $this->check("Queue driver: {$driver}", true);
+
+        // "sync" is not a queue at all: every job runs inside the web request that
+        // created it. On an upload that means variant generation, EXIF extraction and
+        // the copy to the space's cloud all happen before the browser gets an answer —
+        // which is how a large video ends up timing out instead of uploading.
+        //
+        // Reported as PASS whatever the driver was, which said nothing to anybody.
+        if ($driver === 'sync') {
+            $this->check(
+                'Queue driver: sync — jobs run inside web requests, uploads will stall on large files',
+                false,
+                app()->environment('production') ? 'FAIL' : 'WARN',
+            );
+        } else {
+            $this->check("Queue driver: {$driver}", true);
+        }
 
         if ($driver === 'database') {
             try {
@@ -206,10 +221,25 @@ class GalleryDoctorCommand extends Command
     {
         $this->section('Scheduler');
         $heartbeat = \App\Models\SystemSetting::get('scheduler_last_heartbeat');
+
+        if (! $heartbeat) {
+            // Never written once. Cron is not calling schedule:run at all, which means
+            // no reminders, no Zároveň prompt, no nightly cleanup — none of it, silently.
+            $this->check('Scheduler has never run — cron is not calling schedule:run', false);
+
+            return;
+        }
+
+        // abs(), because Carbon returns a signed difference and a heartbeat in the past
+        // gives a negative one: a scheduler dead for three hours read as -180 and passed
+        // the "< 5" test, so this only ever complained when the value was missing entirely.
+        $stari = (int) abs(now()->diffInMinutes(\Illuminate\Support\Carbon::parse($heartbeat)));
+
         $this->check(
-            'Scheduler heartbeat recent',
-            $heartbeat && now()->diffInMinutes($heartbeat) < 5,
-            'WARN'
+            $stari < 5
+                ? "Scheduler heartbeat recent ({$stari} min)"
+                : "Scheduler last ran {$stari} min ago — reminders and daily prompts are not going out",
+            $stari < 5,
         );
     }
 
@@ -231,8 +261,23 @@ class GalleryDoctorCommand extends Command
         $this->check('OAuth connection active', true);
         $this->check('Account: ' . ($connection->account_email ?? 'unknown'), true);
         $this->check('Root folder configured', !empty($connection->root_folder_id));
-        $this->check('Refresh token present', !empty($connection->getRefreshToken()));
-        $this->check('Token not expired', !$connection->isTokenExpired());
+        $maRefresh = ! empty($connection->getRefreshToken());
+        $this->check('Refresh token present', $maRefresh);
+
+        // An access token expiring is ordinary — Google issues them by the hour — and the
+        // provider fetches a new one before its next call. Reporting that as a red FAIL
+        // sent somebody looking for a fault on a connection that was working perfectly.
+        // It only matters when there is no refresh token to recover with.
+        if (! $connection->isTokenExpired()) {
+            $this->check('Access token valid', true);
+        } else {
+            $this->check(
+                $maRefresh
+                    ? 'Access token expired — will be renewed on next use (normal)'
+                    : 'Access token expired and no refresh token — reconnect required',
+                $maRefresh,
+            );
+        }
 
         $lastOk = $connection->last_successful_request_at;
         $this->check(
