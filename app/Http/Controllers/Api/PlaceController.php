@@ -109,7 +109,10 @@ class PlaceController extends Controller
             'price_level' => 'nullable|integer|between:1,4', 'estimated_visit_minutes' => 'nullable|integer|between:5,1440', 'personal_rating' => 'nullable|integer|between:1,5', 'next_time_note' => 'nullable|string|max:5000',
         ]);
 
-        $place->update(array_filter($v, fn($val) => $val !== null));
+        // A description, a website or a "next time" note could be added and then never
+        // removed, because the null that means "clear this" was filtered out before the
+        // write. The validated array is already just what the caller sent.
+        $place->update($v);
 
         return response()->json($this->withStats($place->fresh(), $space->id));
     }

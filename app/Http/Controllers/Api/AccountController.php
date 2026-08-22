@@ -148,9 +148,17 @@ class AccountController extends Controller
     private function rememberDeletion(User $user, ?\Illuminate\Support\Carbon $at): void
     {
         $preferences = is_array($user->preferences) ? $user->preferences : [];
-        $preferences['delete_requested_at'] = $at?->toIso8601String();
 
-        $user->forceFill(['preferences' => array_filter($preferences, fn ($value) => $value !== null)])->save();
+        // Only this one key. Sweeping every null out of the whole array would take any
+        // other preference that happens to be unset with it -- somebody cancelling a
+        // deletion request should not quietly lose unrelated settings.
+        if ($at) {
+            $preferences['delete_requested_at'] = $at->toIso8601String();
+        } else {
+            unset($preferences['delete_requested_at']);
+        }
+
+        $user->forceFill(['preferences' => $preferences])->save();
     }
 
     /** A space left with nobody who can administer it is a space nobody can fix. */

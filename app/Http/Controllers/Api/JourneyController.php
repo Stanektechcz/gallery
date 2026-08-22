@@ -101,8 +101,10 @@ class JourneyController extends Controller
             'longitude'          => 'nullable|numeric|between:-180,180',
         ]);
 
-        // Only update provided (non-null) fields
-        $toUpdate = array_filter($v, fn($val) => $val !== null);
+        // Only the fields the caller sent -- which is what the validated array already
+        // is. Dropping nulls on top of that made a place, an emotion or a song link
+        // impossible to take back off a moment once it had been put there.
+        $toUpdate = $v;
         $toUpdate['updated_at'] = now();
 
         DB::table('journey_events')

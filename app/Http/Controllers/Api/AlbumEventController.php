@@ -40,7 +40,10 @@ class AlbumEventController extends Controller
             'event_gps_radius' => 'nullable|integer|min:50|max:50000',
         ]);
 
-        $album->update(array_filter($v, fn($val) => $val !== null));
+        // Written as sent. Filtering nulls out first meant an event window or its GPS
+        // place could be set but never removed -- and the validated array already holds
+        // only the fields the caller actually included, so there was nothing to filter.
+        $album->update($v);
 
         return response()->json($this->eventData($album->fresh()));
     }

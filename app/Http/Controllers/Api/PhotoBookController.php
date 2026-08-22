@@ -74,7 +74,9 @@ class PhotoBookController extends Controller
 
         DB::table('photo_books')
             ->where('id', $book->id)
-            ->update(array_merge(array_filter($v, fn($v) => $v !== null), ['updated_at' => now()]));
+            // As sent: the validated array holds only the fields the caller included, so
+            // dropping nulls just meant a book's description could never be removed.
+            ->update(array_merge($v, ['updated_at' => now()]));
 
         return response()->json($this->enrichBook(DB::table('photo_books')->find($book->id)));
     }

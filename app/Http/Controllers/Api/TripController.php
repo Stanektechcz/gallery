@@ -122,7 +122,10 @@ class TripController extends Controller
             'is_offline_available' => 'nullable|boolean',
         ]);
 
-        $toUpdate = array_filter($v, fn($val) => $val !== null);
+        // The validated array is already only what the caller sent, so filtering nulls
+        // added nothing except the inability to clear a trip's notes, description or
+        // budget once any value had been saved.
+        $toUpdate = $v;
         $toUpdate['updated_at'] = now();
 
         DB::table('trips')
