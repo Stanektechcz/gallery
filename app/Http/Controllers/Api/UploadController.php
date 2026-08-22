@@ -448,7 +448,13 @@ class UploadController extends Controller
                 // Told plainly, so the browser only bothers drawing a thumbnail for the
                 // pictures this server could not open. Without it a folder of two
                 // thousand JPEGs would be decoded twice over and posted back for nothing.
-                'has_thumbnail' => $media->variants()->where('type', 'thumbnail')->exists(),
+                //
+                // A film's still is filed as video_poster, so asking only about
+                // "thumbnail" would report every video as missing one and have the
+                // browser redraw a frame ffmpeg had already produced.
+                'has_thumbnail' => $media->variants()
+                    ->whereIn('type', ['thumbnail', 'video_poster'])
+                    ->exists(),
             ]);
         } catch (\Throwable $e) {
             if ($media) {

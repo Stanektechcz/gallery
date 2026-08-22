@@ -42,11 +42,16 @@ class MediaThumbnailController extends Controller
             ->whereIn('gallery_space_id', $spaceIds)
             ->firstOrFail();
 
-        if ($media->variants()->where('type', 'thumbnail')->exists()) {
+        // A film's still is filed as video_poster, a photograph's as thumbnail. Using one
+        // name for both would leave ffmpeg's poster and the browser's frame sitting side
+        // by side under different types, with nothing to say which is authoritative.
+        $type = $media->media_type === 'video' ? 'video_poster' : 'thumbnail';
+
+        if ($media->variants()->whereIn('type', ['thumbnail', 'video_poster'])->exists()) {
             return response()->json(['stored' => false, 'reason' => 'thumbnail_exists']);
         }
 
-        $path = "media/{$media->uuid}/thumbnail.jpg";
+        $path = "media/{$media->uuid}/{$type}.jpg";
         $file = $request->file('thumbnail');
 
         if (! Storage::disk('public')->put($path, fopen($file->getRealPath(), 'rb'), 'public')) {
@@ -54,7 +59,7 @@ class MediaThumbnailController extends Controller
         }
 
         $media->variants()->create([
-            'type' => 'thumbnail',
+            'type' => $type,
             'disk' => 'public',
             'path' => $path,
             'mime_type' => 'image/jpeg',

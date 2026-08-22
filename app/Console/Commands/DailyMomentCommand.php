@@ -54,7 +54,9 @@ class DailyMomentCommand extends Command
 
             foreach ($space->members as $member) {
                 $member->notify(new GalleryNotification(
-                    'daily_moment',
+                    // Named to the "area.action" convention the rest of the app uses, which
+                    // is also what files it under Galerie a vzpomínky rather than Ostatní.
+                    'moment.today',
                     'Zároveň! Vyfoťte, co právě děláte — máte ' . $moment->window_minutes . ' minut.',
                     '/zaroven',
                     '📸',

@@ -28,6 +28,13 @@ const MAX_SOURCE_BYTES = 80 * 1024 * 1024;
  */
 export async function makeThumbnail(file: File): Promise<Blob | null> {
     if (typeof createImageBitmap !== 'function') return null;
+
+    // A film is read differently — a frame is seeked to rather than decoded whole — and
+    // it has no size ceiling, because only the first second of it is ever touched.
+    if (file.type.startsWith('video/') || /\.(mp4|mov|m4v|webm|mkv|avi|3gp)$/i.test(file.name)) {
+        return frameFromVideo(file);
+    }
+
     if (file.size > MAX_SOURCE_BYTES) return null;
     if (! file.type.startsWith('image/') && ! /\.(heic|heif)$/i.test(file.name)) return null;
 
@@ -65,4 +72,72 @@ export async function makeThumbnail(file: File): Promise<Blob | null> {
         // a phone photograph — and a folder import would otherwise hold one per file.
         bitmap?.close();
     }
+}
+
+/**
+ * A still from the first moment of a film.
+ *
+ * The server makes these with ffmpeg, which is not always installed — and a video with
+ * no poster is a grey rectangle in the grid, indistinguishable from one that failed to
+ * upload. The browser that is about to play the file can always draw a frame from it.
+ *
+ * One second in rather than zero: the very first frame of a phone video is very often
+ * black, the shutter having opened a moment before the sensor settled.
+ */
+function frameFromVideo(file: File): Promise<Blob | null> {
+    return new Promise(resolve => {
+        const url = URL.createObjectURL(file);
+        const video = document.createElement('video');
+
+        let settled = false;
+
+        const finish = (blob: Blob | null) => {
+            if (settled) return;
+            settled = true;
+
+            window.clearTimeout(timer);
+            video.removeAttribute('src');
+            video.load();
+            URL.revokeObjectURL(url);
+            resolve(blob);
+        };
+
+        // A codec the browser cannot play never fires an event at all — it would sit
+        // here forever and hold the next file's thumbnail behind it.
+        const timer = window.setTimeout(() => finish(null), 15_000);
+
+        video.onerror = () => finish(null);
+
+        video.onloadeddata = () => {
+            // Only seek if there is something to seek to; a one-second clip stays put.
+            video.currentTime = Math.min(1, (video.duration || 0) / 2);
+        };
+
+        video.onseeked = () => {
+            const min = Math.min(video.videoWidth, video.videoHeight);
+            if (! min) { finish(null); return; }
+
+            const canvas = document.createElement('canvas');
+            canvas.width = SIZE;
+            canvas.height = SIZE;
+
+            const context = canvas.getContext('2d');
+            if (! context) { finish(null); return; }
+
+            context.drawImage(
+                video,
+                Math.round((video.videoWidth - min) / 2), Math.round((video.videoHeight - min) / 2), min, min,
+                0, 0, SIZE, SIZE,
+            );
+
+            canvas.toBlob(blob => finish(blob), 'image/jpeg', 0.82);
+        };
+
+        // Muted and inline so a mobile browser will load frames without a tap, which it
+        // otherwise refuses to do.
+        video.muted = true;
+        video.playsInline = true;
+        video.preload = 'auto';
+        video.src = url;
+    });
 }

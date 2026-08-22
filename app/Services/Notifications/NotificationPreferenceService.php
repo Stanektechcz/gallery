@@ -70,7 +70,7 @@ class NotificationPreferenceService
         return match (true) {
             str_starts_with($type, 'calendar.'), str_starts_with($type, 'todo.'), str_starts_with($type, 'gift.') => 'planning',
             str_starts_with($type, 'trip.'), str_starts_with($type, 'ticket.'), str_starts_with($type, 'transport.'), str_starts_with($type, 'place.'), str_starts_with($type, 'reservation.') => 'travel',
-            str_starts_with($type, 'memory.'), str_starts_with($type, 'media.'), str_starts_with($type, 'album.'), str_starts_with($type, 'upload.'), str_starts_with($type, 'date_idea.') => 'memories',
+            str_starts_with($type, 'memory.'), str_starts_with($type, 'media.'), str_starts_with($type, 'album.'), str_starts_with($type, 'upload.'), str_starts_with($type, 'date_idea.'), str_starts_with($type, 'moment.') => 'memories',
             str_starts_with($type, 'relationship.'), str_starts_with($type, 'anniversary.'), str_starts_with($type, 'birthday.') => 'relationship',
             str_starts_with($type, 'bank.'), str_starts_with($type, 'finance.'), str_starts_with($type, 'expense.'), str_starts_with($type, 'settlement.') => 'finance',
             str_starts_with($type, 'drive.'), str_starts_with($type, 'security.'), str_starts_with($type, 'system.'), str_starts_with($type, 'export.') => 'system',
@@ -82,7 +82,9 @@ class NotificationPreferenceService
     {
         return match (true) {
             str_contains($type, 'security'), str_contains($type, 'failed'), str_contains($type, 'emergency') => 'critical',
-            str_contains($type, 'overdue'), str_contains($type, 'reconnect'), str_contains($type, 'reminder'), str_contains($type, 'assigned'), str_contains($type, 'capsule') => 'high',
+            // The shared moment is high because it expires: the window is two hours and
+            // then the day is gone. Almost nothing else here stops being actionable.
+            str_contains($type, 'overdue'), str_contains($type, 'reconnect'), str_contains($type, 'reminder'), str_contains($type, 'assigned'), str_contains($type, 'capsule'), str_starts_with($type, 'moment.') => 'high',
             str_contains($type, 'favorited'), str_contains($type, 'response'), str_contains($type, 'comment') => 'normal',
             str_contains($type, 'complete'), str_contains($type, 'added') => 'low',
             default => 'normal',
