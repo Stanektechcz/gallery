@@ -351,9 +351,21 @@ class UploadController extends Controller
             // rather than inside the transaction: a worker picking the job up first would
             // look for a media row that does not exist yet.
             $mediaId = $media->id;
-            \Illuminate\Support\Facades\DB::afterCommit(
-                fn () => \App\Jobs\MirrorMediaToCloud::dispatch($mediaId)
-            );
+            \Illuminate\Support\Facades\DB::afterCommit(function () use ($mediaId) {
+                // Wrapped like every other dispatch in this method, and for a sharper
+                // reason. This one sat inside the try whose catch deletes the media row
+                // and wipes its directory — so a failure in the *backup copy* destroyed
+                // the *original*. On a sync queue the job runs right here, in the
+                // request, which turns any cloud hiccup into a lost photograph.
+                try {
+                    \App\Jobs\MirrorMediaToCloud::dispatch($mediaId);
+                } catch (\Throwable $mirrorException) {
+                    Log::warning('Kopii do cloudu se nepodařilo zařadit', [
+                        'media_id' => $mediaId,
+                        'error' => $mirrorException->getMessage(),
+                    ]);
+                }
+            });
 
             // primary_album_id samotné nestačí pro části systému, které pracují
             // s explicitním obsahem alba (příběh, událost alba, sdílení). Vždy

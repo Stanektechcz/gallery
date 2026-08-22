@@ -36,6 +36,15 @@ class MirrorMediaToCloud implements ShouldQueue
     public int $tries = 3;
     public array $backoff = [60, 300];
 
+    /**
+     * The largest file this will carry to the cloud in one piece.
+     *
+     * Set against a typical PHP memory_limit rather than against what the providers
+     * accept: the file is held whole in memory while it is sent, so the ceiling that
+     * matters is this server's, not theirs.
+     */
+    private const MAX_MIRROR_BYTES = 256 * 1024 * 1024;
+
     public function __construct(public readonly int $mediaId)
     {
     }
@@ -68,6 +77,26 @@ class MirrorMediaToCloud implements ShouldQueue
 
         $disk = Storage::disk($original->disk);
         if (! $disk->exists($original->path)) return;
+
+        // Asked before reading, because reading is what costs.
+        //
+        // The file is loaded whole to be sent, so a two gigabyte video would need two
+        // gigabytes of memory — and on a sync queue that happens inside the upload
+        // request, where the process dies rather than the job failing. The clients have
+        // their own ceilings, but they only see the bytes once they are already in hand.
+        //
+        // A film too large to mirror is left where it is. The original is safe on this
+        // server either way; only the second copy is missed.
+        $size = (int) ($original->size_bytes ?: $disk->size($original->path));
+
+        if ($size > self::MAX_MIRROR_BYTES) {
+            Log::info('Soubor je na kopii do cloudu příliš velký, ponechán jen lokálně', [
+                'media' => $media->uuid,
+                'size_bytes' => $size,
+            ]);
+
+            return;
+        }
 
         $remote = $client->folderFor($connection)
             . '/' . $media->uuid . '.' . ($media->extension ?: 'bin');
