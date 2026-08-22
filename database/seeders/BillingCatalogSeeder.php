@@ -35,6 +35,7 @@ class BillingCatalogSeeder extends Seeder
             ['code' => 'places',       'name' => 'Místa',                 'category' => 'Společný život', 'icon' => '📍', 'route' => '/places',    'tagline' => 'Podniky, výlety a hodnocení návštěv.'],
             ['code' => 'voice_notes',  'name' => 'Hlasovky',              'category' => 'Společný život', 'icon' => '🎙️', 'route' => '/hlasovky', 'tagline' => 'Krátké vzkazy, na které není potřeba psát.'],
             ['code' => 'journal',      'name' => 'Deník',                 'category' => 'Společný život', 'icon' => '📔', 'route' => '/denik',     'tagline' => 'Soukromé zápisky, které sdílíte, až když chcete.'],
+            ['code' => 'together_now', 'name' => 'Zároveň',            'category' => 'Společný život', 'icon' => '📸', 'route' => '/zaroven',  'tagline' => 'Jednou denně v náhodný čas vyfotíte oba, co právě děláte.'],
             ['code' => 'chat',         'name' => 'Chat',                  'category' => 'Společný život', 'icon' => '💬', 'route' => '/chat',      'tagline' => 'Živá konverzace pro pár i celou skupinu.'],
 
             // Planning bigger things.
@@ -70,7 +71,7 @@ class BillingCatalogSeeder extends Seeder
         // Feature sets, from the smallest plan upwards.
         // Chat belongs to every plan: talking to each other is the point of a couples'
         // app, not an upsell. Larger plans get it by inheriting this set.
-        $couple = ['gallery', 'search', 'sharing', 'calendar', 'recipes', 'memories', 'people', 'places', 'voice_notes', 'date_ideas', 'journal', 'chat'];
+        $couple = ['gallery', 'search', 'sharing', 'calendar', 'recipes', 'memories', 'people', 'places', 'voice_notes', 'date_ideas', 'journal', 'chat', 'together_now'];
         $family = [...$couple, 'trips', 'finance', 'gifts', 'watchlist', 'stats'];
         $group  = [...$family, 'photobook', 'vault', 'tv_mode', 'automations'];
 

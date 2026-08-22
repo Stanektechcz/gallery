@@ -76,9 +76,19 @@ class UploadManagerClass extends EventTarget {
 
     // ── Public API ────────────────────────────────────────────────────────
 
-    enqueue(files: File[], albumId: number | null = null): void {
+    /**
+     * Queues files and hands back the ids it gave them.
+     *
+     * The ids matter to anything that has to know what became of a specific upload --
+     * the shared moment needs the media uuid of the two photographs it just took before
+     * it can post them. Callers that only wanted the files queued can keep ignoring it.
+     */
+    enqueue(files: File[], albumId: number | null = null): string[] {
+        const ids: string[] = [];
+
         for (const file of files) {
             const id = crypto.randomUUID();
+            ids.push(id);
             // Previews are capped. Each one pins its file in memory, so a folder of two
             // thousand photographs would hold two thousand files at once — which is not a
             // gallery loading, it is a tab running out of room. Later rows show a
@@ -103,6 +113,8 @@ class UploadManagerClass extends EventTarget {
         }
         this.emit();
         this.process();
+
+        return ids;
     }
 
     pause(id: string): void {

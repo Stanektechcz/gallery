@@ -190,6 +190,7 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/denik', fn() => Inertia::render('Journal/Index'))->name('journal');
     Route::get('/chat', fn() => Inertia::render('Chat/Index'))->name('chat');
     Route::get('/hlasovky', fn() => Inertia::render('VoiceNotes/Index'))->name('voice-notes');
+    Route::get('/zaroven', fn() => Inertia::render('TogetherNow/Index'))->name('together-now');
     Route::get('/krkance', fn() => Inertia::render('Burps/Index'))->name('burps');
     Route::get('/prdy', fn() => Inertia::render('Farts/Index'))->name('farts');
     Route::get('/settings/vzhled', fn() => Inertia::render('Settings/Appearance'))->name('settings.appearance');

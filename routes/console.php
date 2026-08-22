@@ -11,6 +11,13 @@ Schedule::command('gallery:deliver-reminders --no-interaction')
     ->withoutOverlapping()
     ->name('calendar-reminders');
 
+// Every minute, because the moment's time is drawn per space per day — there is no hour
+// to hang this on, which is exactly what stops anyone from being ready for it.
+Schedule::command('gallery:daily-moment --no-interaction')
+    ->everyMinute()
+    ->withoutOverlapping()
+    ->name('daily-moment');
+
 // Old plans should never remain in current views simply because nobody opened the calendar.
 Schedule::command('gallery:close-elapsed-events --no-interaction')
     ->dailyAt('00:05')
