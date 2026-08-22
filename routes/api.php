@@ -73,6 +73,9 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
     Route::get('/trips/{tripId}/banking-finance', [App\Http\Controllers\Api\BankingController::class, 'trip'])->name('api.trips.banking-finance');
     Route::patch('/trips/{tripId}/banking-finance/{linkId}', [App\Http\Controllers\Api\BankingController::class, 'updateTripLink'])->name('api.trips.banking-finance.update');
 
+    // A thumbnail the browser drew, for formats this server cannot open (HEIC above all).
+    Route::post('/media/{uuid}/thumbnail', [App\Http\Controllers\Api\MediaThumbnailController::class, 'store'])->name('api.media.thumbnail');
+
     // Zároveň — the day's shared moment.
     Route::get('/daily-moment', [App\Http\Controllers\Api\DailyMomentController::class, 'show'])->name('api.daily-moment.show');
     Route::post('/daily-moment', [App\Http\Controllers\Api\DailyMomentController::class, 'store'])->name('api.daily-moment.store');

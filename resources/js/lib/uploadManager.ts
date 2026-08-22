@@ -60,6 +60,8 @@ class UploadManagerClass extends EventTarget {
     private liveThumbs = 0;
     private pausedIds = new Set<string>();
     private globalPause = false;
+    /** Client-drawn thumbnails run one behind another; see queueClientThumbnail. */
+    private thumbnailWork: Promise<void> = Promise.resolve();
     private online = navigator.onLine;
 
     constructor() {
@@ -115,6 +117,36 @@ class UploadManagerClass extends EventTarget {
         this.process();
 
         return ids;
+    }
+
+    /**
+     * Draws a thumbnail for one finished upload and sends it, one file at a time.
+     *
+     * Strictly sequential. Decoding a photograph costs tens of megabytes of pixels, and
+     * doing three at once alongside three uploads is how a folder import runs the tab
+     * out of memory — the exact failure this queue exists to avoid.
+     *
+     * The server refuses it when it made its own, so nothing here can make a picture
+     * worse. It only fills the gap left by formats the server cannot open, HEIC above all.
+     */
+    private queueClientThumbnail(mediaUuid: string, file: File): void {
+        this.thumbnailWork = this.thumbnailWork
+            .then(async () => {
+                const { makeThumbnail } = await import("./clientThumb");
+                const blob = await makeThumbnail(file);
+                if (!blob) return;
+
+                const form = new FormData();
+                form.append("thumbnail", blob, "thumbnail.jpg");
+
+                await axios.post(`/api/v1/media/${mediaUuid}/thumbnail`, form, {
+                    headers: { "Content-Type": "multipart/form-data" },
+                    timeout: 30_000,
+                });
+            })
+            // Never breaks the chain: one unreadable file must not stop the next one
+            // from getting its thumbnail.
+            .catch(() => undefined);
     }
 
     pause(id: string): void {
@@ -383,6 +415,15 @@ class UploadManagerClass extends EventTarget {
             item.mediaUuid = completeRes.data.media_uuid;
             item.status = "done";
             item.percent = 100;
+
+            // Only for the pictures the server could not open — it says so itself, so a
+            // folder of ordinary JPEGs is never decoded a second time for nothing.
+            //
+            // Queued, not awaited: the upload is finished either way, and a thumbnail
+            // that fails to draw must never hold up the file behind it.
+            if (item.mediaUuid && completeRes.data.has_thumbnail === false) {
+                this.queueClientThumbnail(item.mediaUuid, item.file);
+            }
 
             // The preview holds the whole file in memory until it is revoked, and a
             // finished upload has no use for one. Keeping them was what filled the tab

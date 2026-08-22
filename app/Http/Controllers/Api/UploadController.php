@@ -445,6 +445,10 @@ class UploadController extends Controller
                 'status'   => 'completed',
                 'media_id' => $media->id,
                 'media_uuid' => $media->uuid,
+                // Told plainly, so the browser only bothers drawing a thumbnail for the
+                // pictures this server could not open. Without it a folder of two
+                // thousand JPEGs would be decoded twice over and posted back for nothing.
+                'has_thumbnail' => $media->variants()->where('type', 'thumbnail')->exists(),
             ]);
         } catch (\Throwable $e) {
             if ($media) {

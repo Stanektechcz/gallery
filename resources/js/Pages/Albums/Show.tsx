@@ -10,7 +10,7 @@ import AppLayout from '@/Layouts/AppLayout';
 import AlbumStory from '@/Pages/Albums/Story';
 import { Head, Link, router } from '@inertiajs/react';
 import axios from 'axios';
-import { ArrowUpDown, BookOpen, Camera, ChevronRight, Clock, Edit3, Film, FolderOpen, FolderPlus, Grid3X3, Image, MapPin, Search, Settings, SortAsc, SortDesc, Trash2, Upload } from 'lucide-react';
+import { ArrowUpDown, BookOpen, Camera, ChevronRight, Clock, Edit3, Film, FolderOpen, FolderPlus, Grid3X3, Image, MapPin, Search, Settings, SortAsc, SortDesc, Star, Trash2, Upload } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
 interface MediaItem {
@@ -47,6 +47,7 @@ interface Album {
     visibility?: 'private' | 'shared' | 'public';
     sort_mode?: string;
     sort_direction?: string;
+    cover_media_id?: number | null;
     cover?: { variants: Array<{ type: string; url: string }> } | null;
 }
 
@@ -65,6 +66,24 @@ export default function AlbumShow({ album, breadcrumb, children, media, filters:
     const [uploadOpen, setUploadOpen] = useState(false);
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [cameraOpen, setCameraOpen] = useState(false);
+    const [coverId, setCoverId] = useState<number | null>(album.cover_media_id ?? null);
+    const [coverBusy, setCoverBusy] = useState<number | null>(null);
+
+    /**
+     * The album's cover picture.
+     *
+     * The endpoint has been there all along; there was simply no way to reach it, so
+     * every album kept whichever photograph happened to be chosen for it automatically.
+     */
+    const chooseCover = async (item: MediaItem) => {
+        setCoverBusy(item.id);
+        try {
+            await axios.put(`/api/v1/albums/${album.uuid}/cover`, { media_uuid: item.uuid });
+            setCoverId(item.id);
+        } finally {
+            setCoverBusy(null);
+        }
+    };
     const [search, setSearch]         = useState(filters.search ?? '');
     const [deleting, setDeleting]     = useState(false);
     const [activeTab, setActiveTab]   = useState<'grid' | 'story'>(album.story_mode ? 'story' : 'grid');
@@ -381,6 +400,21 @@ export default function AlbumShow({ album, breadcrumb, children, media, filters:
                                                 {item.media_type === 'video' ? <Film size={28} className="text-[var(--color-text-secondary)] opacity-60" /> : <Image size={28} className="text-[var(--color-text-secondary)] opacity-60" />}
                                               </div>
                                         }
+                                        {/* The tile is a link, so this has to refuse the
+                                            navigation the same click would start. */}
+                                        {coverId === item.id ? (
+                                            <span title="Titulní fotka alba"
+                                                className="absolute left-1.5 top-1.5 rounded-full bg-amber-400 px-1.5 py-0.5 text-[9px] font-medium text-black">
+                                                titulní
+                                            </span>
+                                        ) : (
+                                            <button type="button" title="Nastavit jako titulní fotku"
+                                                onClick={event => { event.preventDefault(); event.stopPropagation(); void chooseCover(item); }}
+                                                disabled={coverBusy !== null}
+                                                className="absolute left-1.5 top-1.5 rounded-full bg-black/60 p-1 text-white opacity-0 transition-opacity hover:bg-black/80 focus-visible:opacity-100 group-hover:opacity-100 disabled:opacity-40">
+                                                <Star size={12}/>
+                                            </button>
+                                        )}
                                         {item.media_type === 'video' && displayUrl && (
                                             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                                                 <div className="w-8 h-8 rounded-full bg-black/50 flex items-center justify-center">
