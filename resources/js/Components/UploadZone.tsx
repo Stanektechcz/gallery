@@ -1,33 +1,10 @@
+import { ACCEPTED_MIME, canPickFolders, isMedia } from '@/lib/mediaTypes';
 import { uploadManager } from '@/lib/uploadManager';
 import { hasDirectories, readDroppedTree } from '@/lib/dropTree';
 import { extractMedia, isZip } from '@/lib/zip';
 import { FolderOpen, Upload } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-const ACCEPTED: string[] = [
-    // Standard images
-    'image/jpeg', 'image/png', 'image/webp', 'image/gif',
-    'image/avif', 'image/heic', 'image/heif', 'image/tiff', 'image/bmp',
-    // RAW formats (MIME types vary by browser — we use extension fallback)
-    'image/x-canon-cr2', 'image/x-canon-cr3',
-    'image/x-nikon-nef', 'image/x-sony-arw', 'image/x-adobe-dng',
-    'image/x-olympus-orf', 'image/x-panasonic-rw2', 'image/x-fuji-raf',
-    'image/x-pentax-pef', 'image/x-samsung-srw', 'image/x-raw',
-    // Video
-    'video/mp4', 'video/quicktime', 'video/webm',
-    'video/x-m4v', 'video/x-matroska', 'video/x-msvideo',
-    'video/avi', 'video/mpeg', 'video/mp2t',
-];
-
-const RAW_EXTS = ['cr2','cr3','nef','nrw','arw','dng','orf','rw2','raf','pef','srw','3fr','fff','kdc','dcr','mrw','rwl','x3f'];
-
-function ok(file: File): boolean {
-    if (ACCEPTED.includes(file.type)) return true;
-    const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
-    if (RAW_EXTS.includes(ext)) return true;
-    return ['jpg','jpeg','png','webp','gif','avif','heic','heif','tiff','tif','bmp',
-            'mp4','mov','webm','m4v','mkv','avi','mts','m2ts'].includes(ext);
-}
 
 interface Props { albumId: number | null; onUploadComplete?: (mediaUuids: string[]) => void; }
 
@@ -40,6 +17,8 @@ export default function UploadZone({ albumId, onUploadComplete }: Props) {
     const inputRef  = useRef<HTMLInputElement>(null);
     const folderRef = useRef<HTMLInputElement>(null);
     const dragCount = useRef(0);
+    // Asked once: the answer cannot change while the page is open.
+    const [folders] = useState(canPickFolders);
     const reported = useRef(new Set<string>());
 
     useEffect(() => {
@@ -80,14 +59,14 @@ export default function UploadZone({ albumId, onUploadComplete }: Props) {
 
         const dropped = Array.from(raw);
         const archives = dropped.filter(isZip);
-        let accepted = dropped.filter(file => !isZip(file)).filter(ok);
+        let accepted = dropped.filter(file => !isZip(file)).filter(isMedia);
         const notes: string[] = [];
 
         for (const archive of archives) {
             setBusy(archive.name);
             try {
                 const { files, skipped } = await extractMedia(archive);
-                accepted = accepted.concat(files.filter(ok));
+                accepted = accepted.concat(files.filter(isMedia));
 
                 // Said out loud rather than swallowed. An archive of a holiday usually
                 // holds a stray text file or two, and somebody who is told none of their
@@ -157,10 +136,12 @@ export default function UploadZone({ albumId, onUploadComplete }: Props) {
 
             {/* A folder needs its own picker: one input cannot offer both files and
                 directories, and the drop target alone leaves anyone who does not drag
-                without a way in at all. */}
-            <button type="button" onClick={event => { event.stopPropagation(); folderRef.current?.click(); }}
+                without a way in at all. On iOS, where directories cannot be chosen at
+                all, this offers the thing that does work there instead of a dead button. */}
+            <button type="button"
+                onClick={event => { event.stopPropagation(); (folders ? folderRef : inputRef).current?.click(); }}
                 className="mt-1 inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-border)] px-3 py-1.5 text-xs text-[var(--color-text-secondary)] transition-colors hover:border-[var(--color-accent)]/60 hover:text-[var(--color-text-primary)]">
-                <FolderOpen size={13}/> Vybrat celou složku
+                <FolderOpen size={13}/> {folders ? 'Vybrat celou složku' : 'Vybrat víc fotek najednou'}
             </button>
 
             {/* What an archive left behind. Stopping the click from reopening the picker,
@@ -170,7 +151,7 @@ export default function UploadZone({ albumId, onUploadComplete }: Props) {
                     {notice}
                 </p>
             )}
-            <input ref={inputRef} type="file" multiple accept={[...ACCEPTED, '.zip', 'application/zip'].join(',')} className="sr-only"
+            <input ref={inputRef} type="file" multiple accept={[...ACCEPTED_MIME, '.zip', 'application/zip'].join(',')} className="sr-only"
                 onChange={e => { process(e.target.files); (e.target as HTMLInputElement).value = ''; }}/>
 
             {/* No `accept` here on purpose: with webkitdirectory some browsers apply the

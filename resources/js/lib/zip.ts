@@ -14,6 +14,8 @@
  * added to the bundle.
  */
 
+import { MEDIA_EXTENSIONS, MIME_BY_EXTENSION, extensionOf } from '@/lib/mediaTypes';
+
 const EOCD_SIGNATURE = 0x06054b50;
 const CENTRAL_SIGNATURE = 0x02014b50;
 
@@ -37,19 +39,6 @@ export interface ZipReadResult {
     skipped: Array<{ name: string; reason: string }>;
 }
 
-const MEDIA_EXTENSIONS = new Set([
-    'jpg', 'jpeg', 'png', 'gif', 'webp', 'avif', 'heic', 'heif', 'bmp', 'tif', 'tiff',
-    'mp4', 'mov', 'm4v', 'webm', 'mkv', 'avi', '3gp', 'mpg', 'mpeg',
-]);
-
-const MIME_BY_EXTENSION: Record<string, string> = {
-    jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif',
-    webp: 'image/webp', avif: 'image/avif', heic: 'image/heic', heif: 'image/heif',
-    bmp: 'image/bmp', tif: 'image/tiff', tiff: 'image/tiff',
-    mp4: 'video/mp4', mov: 'video/quicktime', m4v: 'video/x-m4v', webm: 'video/webm',
-    mkv: 'video/x-matroska', avi: 'video/x-msvideo', '3gp': 'video/3gpp',
-    mpg: 'video/mpeg', mpeg: 'video/mpeg',
-};
 
 export const isZip = (file: File): boolean =>
     file.name.toLowerCase().endsWith('.zip') || file.type === 'application/zip';
@@ -154,7 +143,7 @@ export async function extractMedia(file: File): Promise<ZipReadResult> {
             continue;
         }
 
-        const extension = base.includes('.') ? base.split('.').pop()!.toLowerCase() : '';
+        const extension = extensionOf(base);
 
         if (! MEDIA_EXTENSIONS.has(extension)) {
             skipped.push({ name: entry.name, reason: 'není fotka ani video' });
