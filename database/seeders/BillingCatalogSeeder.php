@@ -50,7 +50,7 @@ class BillingCatalogSeeder extends Seeder
             ['code' => 'vault',        'name' => 'Soukromý trezor',       'category' => 'Nadstavba', 'icon' => '🔐', 'route' => '/vault',     'tagline' => 'Obsah jen pro vaše oči, chráněný heslem.'],
             ['code' => 'tv_mode',      'name' => 'TV režim',              'category' => 'Nadstavba', 'icon' => '📺', 'route' => '/tv',        'tagline' => 'Promítání na televizi nebo velké obrazovce.'],
             ['code' => 'stats',        'name' => 'Statistiky',            'category' => 'Nadstavba', 'icon' => '📊', 'route' => '/stats',     'tagline' => 'Přehledy o tom, co a kdy jste nasbírali.'],
-            ['code' => 'automations',  'name' => 'Automatizace',          'category' => 'Nadstavba', 'icon' => '⚙️', 'route' => '/automations', 'tagline' => 'Pravidelné úlohy, které běží za vás.'],
+            ['code' => 'automations',  'name' => 'Automatizace',          'category' => 'Nadstavba', 'icon' => '⚙️', 'route' => '/settings/automations', 'tagline' => 'Pravidelné úlohy, které běží za vás.'],
 
             // Paid add-ons.
             ['code' => 'burps',        'name' => 'Hodnocení krkanců',     'category' => 'Doplňky',   'icon' => '🎺', 'route' => '/krkance',   'tagline' => 'Ano, myslíme to vážně. A je to zábava.'],

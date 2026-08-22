@@ -567,8 +567,29 @@ class UploadController extends Controller
         }
 
         // --- Fallback: alias thumbnail = original ---
-        // When neither Imagick nor GD work, point thumbnail at the original file
-        // so the grid shows something instead of a blank placeholder.
+        //
+        // Only for formats a browser will actually draw. Pointing a thumbnail at a HEIC
+        // — which is what every iPhone uploads by default — produced a broken image in
+        // every grid on every browser but Safari, and it looked like the photograph had
+        // failed to upload rather than like a server missing a codec. Same for RAW and
+        // TIFF, which no browser renders either.
+        //
+        // Leaving no thumbnail is the better answer: the file controller draws a proper
+        // placeholder for a missing one and queues another attempt at making it, so the
+        // picture appears by itself once the server can produce it.
+        $displayable = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif'];
+
+        if (! in_array(strtolower($media->extension), $displayable, true)) {
+            Log::warning('Thumbnail could not be produced and the original is not browser-displayable', [
+                'media_id' => $media->id,
+                'extension' => $media->extension,
+                'imagick' => extension_loaded('imagick'),
+                'gd' => extension_loaded('gd'),
+            ]);
+
+            return;
+        }
+
         $originalVar = $media->variants()->where('type', 'original')->first();
         if ($originalVar) {
             $media->variants()->create([

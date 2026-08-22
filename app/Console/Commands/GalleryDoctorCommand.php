@@ -135,6 +135,37 @@ class GalleryDoctorCommand extends Command
             $exists = file_exists($path) && is_executable($path);
             $this->check("{$name} at {$path}", $exists, 'WARN');
         }
+
+        $this->checkImageFormats();
+    }
+
+    /**
+     * Which picture formats this server can actually turn into a thumbnail.
+     *
+     * Worth asking out loud, because the failure is silent and looks like something
+     * else: without the HEIC delegate every photograph straight off an iPhone uploads
+     * fine, keeps its bytes, and then shows as a broken image in the grid. The customer
+     * reports that "photos do not upload", which is not what happened at all.
+     */
+    private function checkImageFormats(): void
+    {
+        $this->section('Image Formats');
+
+        $imagick = extension_loaded('imagick');
+        $this->check('imagick extension', $imagick, 'WARN');
+        $this->check('gd extension', extension_loaded('gd'), 'WARN');
+
+        if (! $imagick) {
+            $this->check('HEIC/HEIF thumbnails (iPhone photos)', false, 'WARN');
+
+            return;
+        }
+
+        $formats = array_map('strtoupper', \Imagick::queryFormats());
+
+        foreach (['HEIC' => 'HEIC/HEIF thumbnails (iPhone photos)', 'AVIF' => 'AVIF thumbnails', 'TIFF' => 'TIFF thumbnails'] as $format => $label) {
+            $this->check($label, in_array($format, $formats, true), 'WARN');
+        }
     }
 
     private function checkQueue(): void
