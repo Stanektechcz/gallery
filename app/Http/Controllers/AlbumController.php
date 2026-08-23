@@ -62,7 +62,10 @@ class AlbumController extends Controller
             ->where('gallery_space_id', $space->id)
             ->whereNull('parent_id')
             ->whereNull('deleted_at')
-            ->orderBy('sort_mode')
+            // Podle názvu, ne podle `sort_mode`. To je slovo popisující, jak se řadí
+            // obsah alba — „date_taken", „manual" — takže se alba seřadila abecedně
+            // podle svého nastavení, což je pořadí bez jakéhokoli významu pro čtenáře.
+            ->orderBy('title')
             ->get();
 
         $this->fillMissingCovers($albums);
@@ -143,9 +146,22 @@ class AlbumController extends Controller
             ->orderBy('title')
             ->get();
 
-        // Filtrace a třídění
-        $sortBy  = $request->input('sort', 'taken_at');
-        $sortDir = $request->input('dir', 'desc');
+        // Filtrace a třídění.
+        //
+        // Výchozí hodnota je ta, kterou si album uložilo ve svém nastavení — jinak
+        // volba „Výchozí řazení" nedělala vůbec nic a album se vždycky otevřelo podle
+        // data pořízení, ať si člověk nastavil cokoli. Adresa v URL má pořád přednost,
+        // aby šlo řazení přepnout jen pro tenhle pohled.
+        $albumSort = match ($album->sort_mode) {
+            'date_uploaded' => 'uploaded_at',
+            'title' => 'original_filename',
+            // Ruční pořadí drží album_media.sort_order, ne sloupec na médiu; dokud
+            // neexistuje obrazovka na přeskládání, chová se jako datum pořízení.
+            default => 'taken_at',
+        };
+
+        $sortBy  = $request->input('sort', $albumSort);
+        $sortDir = $request->input('dir', $album->sort_direction ?: 'desc');
         $type    = $request->input('type');   // photo|video
         $search  = $request->input('search');
 

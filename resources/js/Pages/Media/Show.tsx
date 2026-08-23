@@ -1,3 +1,4 @@
+import LocationPicker, { type LocationValue } from '@/Components/LocationPicker';
 import AppLayout from '@/Layouts/AppLayout';
 import { takenAtDate } from '@/lib/takenAt';
 import { Head, Link, router } from '@inertiajs/react';
@@ -70,6 +71,9 @@ interface MediaItem {
     taken_at?: string;
     taken_at_timezone?: string;
     latitude?: number;
+    location_name?: string | null;
+    location_country?: string | null;
+    location_source?: string | null;
     longitude?: number;
     altitude?: number;
     camera_make?: string;
@@ -624,6 +628,46 @@ function ProgressiveImage({ uuid, fullUrl, thumbUrl, alt, width, height, dominan
 export default function MediaShow({ media, breadcrumb, prev, next }: Props) {
     const [item, setItem]        = useState(media);
     const [infoOpen, setInfo]    = useState(false);
+
+    /** Místo, kde snímek vznikl — pro ty, kterým ho fotoaparát nezapsal. */
+    const [place, setPlace] = useState<LocationValue>({
+        location_name: media.location_name ?? '',
+        latitude: media.latitude ?? '',
+        longitude: media.longitude ?? '',
+        location_country: media.location_country ?? '',
+        location_country_code: '',
+    });
+    const [placeNote, setPlaceNote] = useState('');
+
+    /**
+     * Uloží se hned po výběru.
+     *
+     * Jde přes hromadnou akci s jediným uuid: je to tentýž zápis, tedy i tatáž pravidla,
+     * a druhá cesta k témuž by znamenala dvě místa, která se časem rozejdou.
+     */
+    const savePlace = async (next: LocationValue) => {
+        setPlace(next);
+        if (next.latitude === '') return;
+
+        try {
+            await axios.post('/api/v1/media/bulk', {
+                action: 'set_location',
+                uuids: [item.uuid],
+                latitude: next.latitude,
+                longitude: next.longitude,
+                location_name: next.location_name || null,
+                location_country: next.location_country || null,
+                // U jediné fotky je přepis to, co člověk právě zvolil.
+                overwrite_gps: true,
+            });
+
+            setItem(current => ({ ...current, latitude: Number(next.latitude), longitude: Number(next.longitude), location_name: next.location_name, location_source: 'manual' }));
+            setPlaceNote('Místo uloženo.');
+            setTimeout(() => setPlaceNote(''), 3000);
+        } catch {
+            setPlaceNote('');
+        }
+    };
     const [moreOpen, setMoreOpen] = useState(false);
     const [isMine,     setIsMine]    = useState(media.is_my_favorite ?? media.is_favorite);
     const [isShared,   setIsShared]  = useState(media.is_shared_favorite ?? false);
@@ -988,6 +1032,33 @@ export default function MediaShow({ media, breadcrumb, prev, next }: Props) {
                                     </div>
                                 </section>
                             )}
+
+                            {/* Poloha, kterou fotoaparát nezapsal.
+                                Sekce GPS pod tímhle se ukáže jen snímku, který souřadnice
+                                má — takže u screenshotu, skenu nebo fotky z telefonu s
+                                vypnutou GPS nebylo kde místo doplnit. */}
+                            <section>
+                                <h3 className="mb-2 flex items-center gap-1 text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">
+                                    <MapPin size={10}/> {item.latitude ? 'Upravit místo' : 'Kde to bylo'}
+                                </h3>
+
+                                {item.location_name && (
+                                    <p className="mb-2 text-xs text-[var(--color-text-primary)]">
+                                        {item.location_name}
+                                        {item.location_source === 'manual' && (
+                                            <span className="ml-1.5 text-[10px] text-[var(--color-text-secondary)]">doplněno ručně</span>
+                                        )}
+                                    </p>
+                                )}
+
+                                <LocationPicker
+                                    value={place}
+                                    onChange={savePlace}
+                                    compact
+                                    near={item.latitude && item.longitude ? { lat: item.latitude, lon: item.longitude } : null}
+                                />
+                                {placeNote && <p className="mt-1 text-[11px] text-emerald-300">{placeNote}</p>}
+                            </section>
 
                             {/* GPS */}
                             {item.latitude && item.longitude && (

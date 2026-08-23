@@ -65,6 +65,28 @@ class TimelineController extends Controller
             $query->where('is_favorite', true);
         }
 
+        // Co ještě chce doplnit. Fotky bez data spadnou na konec výpisu a fotky bez
+        // alba se nedostanou nikam — dokud je nejde vyfiltrovat, nikdo je nedohledá,
+        // a doplňovat je po jedné z celého archivu nikdo nebude.
+        if ($request->boolean('no_album')) {
+            $query->whereNull('primary_album_id')
+                ->whereDoesntHave('albums');
+        }
+
+        if ($request->boolean('no_date')) {
+            $query->whereNull('taken_at');
+        }
+
+        if ($request->boolean('no_location')) {
+            $query->whereNull('latitude');
+        }
+
+        if ($year = $request->input('year')) {
+            // Na roce se sahá přímo do uloženého razítka, protože se nikde nepřevádí —
+            // fotka z 31. prosince ve 23:10 patří do svého roku, ne do následujícího.
+            $query->whereYear('taken_at', (int) $year);
+        }
+
         $query->orderBy('taken_at', 'desc')
             ->orderBy('id', 'desc');
 

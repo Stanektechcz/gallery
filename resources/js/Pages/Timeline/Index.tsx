@@ -111,6 +111,9 @@ export default function TimelineIndex() {
     const [suggestions, setSuggestions] = useState<AlbumSuggestion[]>([]);
     const [suggestionsAvailable, setSuggestionsAvailable] = useState(false);
     const [cameraOpen, setCameraOpen] = useState(false);
+    /** Rychlé filtry. Jeden po druhém, ne najednou — kombinace tří se nedá přečíst z lišty. */
+    const [filter, setFilter] = useState<'' | 'favorites_only' | 'no_album' | 'no_date' | 'no_location' | 'video'>('');
+    const [year, setYear] = useState('');
 
     const suggestionTimer = useRef<number | null>(null);
 
@@ -157,9 +160,12 @@ export default function TimelineIndex() {
     const clearSelect  = useCallback(() => setSelected(new Set()), []);
 
     const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading } = useInfiniteQuery({
-        queryKey: ['timeline'],
+        queryKey: ['timeline', filter, year],
         queryFn: async ({ pageParam }) => {
             const params: Record<string,string> = { per_page: '48' };
+            if (filter === 'video') params.media_type = 'video';
+            else if (filter) params[filter] = '1';
+            if (year) params.year = year;
             if (pageParam) params.cursor = String(pageParam);
             return (await axios.get('/api/v1/timeline', { params })).data;
         },
@@ -202,6 +208,19 @@ export default function TimelineIndex() {
             .map(i => ({ ...i, ...(localItems[i.uuid]??{}) })),
         [data, localItems]
     );
+    /**
+     * Roky, které archiv obsahuje.
+     *
+     * Z načtených stránek, ne ze samostatného dotazu: nabídka se doplňuje, jak se
+     * doroluje, a jeden dotaz navíc jen kvůli seznamu let by se nevyplatil.
+     */
+    const years = useMemo(() => {
+        const found = new Set<string>();
+        for (const item of allItems) if (item.taken_at) found.add(item.taken_at.substring(0, 4));
+
+        return Array.from(found).sort().reverse();
+    }, [allItems]);
+
     const groups   = useMemo(() => groupByDate(allItems), [allItems]);
     const sections = useMemo(() => {
         const m: Record<string, TimelineGroup[]> = {};
@@ -296,9 +315,43 @@ export default function TimelineIndex() {
                 <div className="min-w-0 flex-1">
                     {/* Header */}
                     <div className="sticky top-0 z-20 flex flex-col gap-2 border-b border-[var(--color-border)] bg-[var(--color-bg-primary)]/95 px-2 py-2 backdrop-blur-sm sm:flex-row sm:items-center sm:justify-between sm:px-4 sm:py-2.5">
-                        <div className="flex items-center gap-3">
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
                             <h1 className="text-sm font-semibold text-[var(--color-text-primary)]">Fotky</h1>
                             <span className="text-xs text-[var(--color-text-secondary)]">{allItems.length} položek</span>
+
+                            {/* Jeden filtr po druhém, ne kombinace. Tři zaškrtnuté naráz
+                                se z lišty nedají přečíst a nikdo pak neví, co vlastně vidí.
+                                Poslední tři jsou to, co v archivu chybí — dokud to nešlo
+                                vyfiltrovat, nikdo tyhle fotky nedohledal. */}
+                            <div className="flex items-center gap-1 overflow-x-auto scrollbar-hide">
+                                {([
+                                    ['', 'Vše'],
+                                    ['favorites_only', 'Oblíbené'],
+                                    ['video', 'Videa'],
+                                    ['no_album', 'Bez alba'],
+                                    ['no_date', 'Bez data'],
+                                    ['no_location', 'Bez místa'],
+                                ] as const).map(([key, label]) => (
+                                    <button key={key || 'all'} type="button" onClick={() => setFilter(key as typeof filter)}
+                                        className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] transition-colors ${
+                                            filter === key
+                                                ? 'bg-[var(--color-accent)] text-[var(--color-accent-contrast)]'
+                                                : 'border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'
+                                        }`}>
+                                        {label}
+                                    </button>
+                                ))}
+                            </div>
+
+                            {/* Skok na rok. U tisíců fotek je rolování k roku 2019 práce
+                                na minuty a „vybrat měsíc" na to nestačí. */}
+                            {years.length > 1 && (
+                                <select value={year} onChange={event => setYear(event.target.value)}
+                                    className="shrink-0 rounded-full border border-[var(--color-border)] bg-[var(--color-bg-card)] px-2 py-1 text-[11px] text-[var(--color-text-secondary)]">
+                                    <option value="">Všechny roky</option>
+                                    {years.map(y => <option key={y} value={y}>{y}</option>)}
+                                </select>
+                            )}
                         </div>
                         <div className="flex w-full items-center justify-between gap-2 overflow-x-auto scrollbar-hide sm:w-auto sm:justify-end">
                             <div className="flex items-center gap-0.5 bg-[var(--color-bg-card)] rounded-lg p-0.5 border border-[var(--color-border)]">
