@@ -31,7 +31,11 @@ const MediaCardComponent = memo(function MediaCardComponent({ item, size, select
     onFav: (uuid: string, cur: boolean) => void; onTrash: (uuid: string) => void;
     onSlideshow: (uuid: string) => void; onSelect: (uuid: string) => void;
 }) {
-    const thumb = item.variants?.find(v => v.type === 'thumbnail');
+    // Film má svůj snímek uložený jako `video_poster`, ne `thumbnail`. Hledat jen
+    // `thumbnail` znamenalo, že každé video v mřížce zůstalo šedé, i když poster
+    // dávno existoval — k nerozeznání od nahrání, které se nepovedlo.
+    const thumb = item.variants?.find(v => v.type === 'thumbnail')
+        ?? item.variants?.find(v => v.type === 'video_poster');
     const thumbUrl = thumb?.url ?? previewUrl(item.uuid, item.media_type);
     const dom   = item.variants?.find(v => v.type === 'placeholder')?.dominant_color;
     return (
@@ -243,7 +247,7 @@ export default function TimelineIndex() {
     const slideshowMapped: SlideshowItem[] = useMemo(() => (slideshowItems ?? []).map(i => ({
         uuid:          i.uuid,
         media_type:    i.media_type as 'photo' | 'video',
-        thumb_url:     i.variants?.find(v => v.type === 'thumbnail')?.url,
+        thumb_url:     (i.variants?.find(v => v.type === 'thumbnail') ?? i.variants?.find(v => v.type === 'video_poster'))?.url,
         display_title: undefined,
         taken_at:      i.taken_at ?? undefined,
         rating:        i.rating ?? undefined,

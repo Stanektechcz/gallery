@@ -45,7 +45,26 @@ class PlaceSearchService
         }
 
         $vlastni = $space ? $this->ownPlaces($query, $space) : [];
+
+        // Dva zdroje, protože každý umí něco jiného. Nominatim je adresní a na názvech
+        // podniků selhává; Photon staví nad stejnými daty OSM, ale je dělaný na
+        // našeptávání a snese překlepy. Ani jeden ovšem nenajde, co v OSM nikdo nevložil —
+        // od toho je možnost uložit si místo pod vlastním jménem.
         $svet = $this->nominatim($query, $near);
+
+        if (count($svet) < 5) {
+            foreach ($this->photon($query, $near) as $navic) {
+                $duplicita = false;
+                foreach ($svet as $uz) {
+                    if ($this->distanceMeters($uz['latitude'], $uz['longitude'], $navic['latitude'], $navic['longitude']) < 120) {
+                        $duplicita = true;
+                        break;
+                    }
+                }
+
+                if (! $duplicita) $svet[] = $navic;
+            }
+        }
 
         // Vlastní místo a stejné místo z Nominatimu se nesmí objevit dvakrát: shoda se
         // pozná podle vzdálenosti, ne podle jména, protože jméno bývá jiné právě proto,
@@ -159,6 +178,58 @@ class PlaceSearchService
         }
 
         return $mista;
+    }
+
+    /**
+     * Photon — našeptávač nad OSM.
+     *
+     * Doplňuje Nominatim tam, kde je slabý: u názvů podniků a u překlepů. Vrací GeoJSON,
+     * takže souřadnice jsou v `geometry.coordinates` v pořadí [lon, lat] — obráceně, než
+     * je člověk zvyklý číst, a záměna je tichá chyba na druhém konci světa.
+     */
+    private function photon(string $query, array $near): array
+    {
+        $params = ['q' => $query, 'lang' => 'cs', 'limit' => 6];
+
+        if (isset($near['lat'], $near['lon']) && $near['lat'] !== null) {
+            $params['lat'] = $near['lat'];
+            $params['lon'] = $near['lon'];
+        }
+
+        $klic = 'geo:photon:' . md5(json_encode($params));
+        $odpoved = Cache::remember($klic, now()->addMinutes(self::CACHE_MINUTES), fn () => $this->call('https://photon.komoot.io/api/', $params));
+
+        if (! is_array($odpoved) || empty($odpoved['features'])) return [];
+
+        $mista = [];
+
+        foreach ($odpoved['features'] as $feature) {
+            $p = $feature['properties'] ?? [];
+            $souradnice = $feature['geometry']['coordinates'] ?? null;
+
+            if (! is_array($souradnice) || count($souradnice) < 2) continue;
+
+            $ulice = collect([$p['street'] ?? null, $p['housenumber'] ?? null])->filter()->implode(' ');
+
+            $mista[] = [
+                'id' => null,
+                'name' => $p['name'] ?? ($p['street'] ?? ''),
+                'label' => $p['name'] ?? '',
+                'detail' => collect([$ulice ?: null, $p['city'] ?? null, $p['country'] ?? null])->filter()->implode(', '),
+                'latitude' => (float) $souradnice[1],
+                'longitude' => (float) $souradnice[0],
+                'country' => $p['country'] ?? null,
+                'country_code' => strtoupper($p['countrycode'] ?? ''),
+                'city' => $p['city'] ?? null,
+                'address' => $ulice ?: null,
+                'category' => $this->category(['type' => $p['osm_value'] ?? '', 'category' => $p['osm_key'] ?? '']),
+                'osm_id' => $p['osm_id'] ?? null,
+                'osm_type' => $p['osm_type'] ?? null,
+                'source' => 'osm',
+            ];
+        }
+
+        return array_values(array_filter($mista, fn ($m) => $m['name'] !== ''));
     }
 
     /** Jednotný tvar pro obojí — vlastní i cizí. */

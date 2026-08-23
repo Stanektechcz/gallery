@@ -4,6 +4,7 @@
  */
 
 import { uploadManager, type ManagedUpload } from '@/lib/uploadManager';
+import { explainUploadError } from '@/lib/uploadErrors';
 import {
     ChevronDown, ChevronUp,
     Loader2, Pause, Play, RefreshCw, Trash2, X, ZoomIn
@@ -47,6 +48,7 @@ function UploadRow({ item }: { item: ManagedUpload }) {
     const canPause    = ['uploading', 'waiting'].includes(item.status);
     const canResume   = ['paused', 'offline'].includes(item.status);
     const canRetry    = ['error', 'cancelled'].includes(item.status);
+
     const canCancel   = !['done', 'duplicate', 'cancelled', 'error'].includes(item.status);
     const isDone      = ['done', 'duplicate'].includes(item.status);
 
@@ -88,13 +90,21 @@ function UploadRow({ item }: { item: ManagedUpload }) {
                     {item.percent > 0 && !isDone && item.status !== 'error' && (
                         <span className="text-[9px] text-[var(--color-text-secondary)]">· {item.percent}%</span>
                     )}
-                    {item.error && (
-                        <span className="text-[9px] text-red-400 truncate max-w-28" title={item.error}>{item.error}</span>
-                    )}
+                    {/* Důvod se zobrazuje celý, na vlastním řádku.
+                        Byl zkrácený na 112 px a zbytek jen v `title` — což je tooltip, a
+                        ten se na dotykovém displeji nikdy neukáže. Na telefonu tedy nešlo
+                        zjistit, proč se soubor nenahrál, což je přesně to jediné, co
+                        člověk v tu chvíli potřebuje vědět. */}
                     {item.status === 'duplicate' && (
                         <span className="text-[9px] text-yellow-400">· Soubor již existuje</span>
                     )}
                 </div>
+
+                {item.error && (
+                    <p className="mt-1 rounded bg-red-500/10 px-1.5 py-1 text-[10px] leading-snug text-red-300">
+                        {explainUploadError(item.error)}
+                    </p>
+                )}
             </div>
 
             {/* Actions */}
@@ -202,6 +212,16 @@ export default function UploadPanel() {
                 {(stats.allPaused || stats.paused > 0) && (
                     <button onClick={() => uploadManager.resumeAll()} className="flex items-center gap-0.5 text-green-400 hover:text-green-300 transition-colors ml-2">
                         <Play size={9}/> Pokračovat
+                    </button>
+                )}
+                {/* Opakovat všechny naráz. Po výpadku sítě nebo vypršelém přihlášení
+                    selže celá dávka, a proklikat na telefonu čtyřicet řádků po jednom
+                    není oprava, je to trest. */}
+                {stats.error > 0 && (
+                    <button
+                        onClick={() => uploads.filter(u => u.status === 'error').forEach(u => uploadManager.retry(u.id))}
+                        className="ml-2 flex items-center gap-0.5 text-blue-300 transition-colors hover:text-blue-200">
+                        <RefreshCw size={9}/> Zkusit znovu ({stats.error})
                     </button>
                 )}
                 {stats.done + stats.cancelled > 0 && (

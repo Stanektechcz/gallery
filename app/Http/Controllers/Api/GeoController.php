@@ -29,6 +29,61 @@ class GeoController extends Controller
         ]);
     }
 
+    /**
+     * Uloží místo pod jménem, které mu dali oni.
+     *
+     * OpenStreetMap zná jen to, co do něj někdo vložil. „Mauzoleum" tam je, „Mausoleum
+     * David Černý" ne — a žádný vyhledávač to nezmění. Tohle je odpověď: místo se najde
+     * pod tím jménem, jaké má v mapě, uloží se pod tím, jak mu říkají oni, a od té chvíle
+     * se nabízí první.
+     */
+    public function store(Request $request): JsonResponse
+    {
+        abort_if($request->user()->read_only_mode, 403, 'V režimu pouze pro čtení nelze místa ukládat.');
+
+        $data = $request->validate([
+            'name' => 'required|string|max:255',
+            'latitude' => 'required|numeric|between:-90,90',
+            'longitude' => 'required|numeric|between:-180,180',
+            'city' => 'nullable|string|max:100',
+            'country' => 'nullable|string|max:100',
+            'country_code' => 'nullable|string|max:3',
+            'address' => 'nullable|string|max:255',
+        ]);
+
+        $space = $request->user()->gallerySpaces()->firstOrFail();
+
+        // Stejné jméno na stejném místě se nezakládá podruhé — jinak by se seznam
+        // vlastních míst za pár měsíců zaplnil kopiemi téhož rohu ulice.
+        $place = \App\Models\Place::firstOrCreate(
+            [
+                'gallery_space_id' => $space->id,
+                'name' => $data['name'],
+            ],
+            $data + [
+                'gallery_space_id' => $space->id,
+                'source' => 'manual',
+                'created_by' => $request->user()->id,
+            ],
+        );
+
+        return response()->json([
+            'place' => [
+                'id' => $place->id,
+                'name' => $place->name,
+                'latitude' => (float) $place->latitude,
+                'longitude' => (float) $place->longitude,
+                'country' => $place->country,
+                'country_code' => $place->country_code,
+                'city' => $place->city,
+                'address' => $place->address,
+                'detail' => collect([$place->address, $place->city, $place->country])->filter()->implode(', '),
+                'category' => 'saved',
+                'source' => 'own',
+            ],
+        ], 201);
+    }
+
     public function reverse(Request $request): JsonResponse
     {
         $data = $request->validate([

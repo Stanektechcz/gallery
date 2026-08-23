@@ -79,6 +79,7 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
     // Hledání míst — vlastní napřed, Nominatim potom; a adresa pro bod na mapě.
     Route::get('/mista/napoveda', [App\Http\Controllers\Api\GeoController::class, 'suggest'])->name('api.geo.suggest');
     Route::get('/mista/adresa', [App\Http\Controllers\Api\GeoController::class, 'reverse'])->name('api.geo.reverse');
+    Route::post('/mista/vlastni', [App\Http\Controllers\Api\GeoController::class, 'store'])->name('api.geo.store');
 
     // Rozpočty na období a žádosti o peníze mezi partnery.
     Route::prefix('rozpocty')->name('api.budgets.')->group(function () {

@@ -32,7 +32,7 @@ class TimelineController extends Controller
                     ->where('media_stack_items.is_cover', false);
             })
             ->with([
-                'variants'     => fn($q) => $q->whereIn('type', ['thumbnail', 'placeholder']),
+                'variants'     => fn($q) => $q->whereIn('type', ['thumbnail', 'video_poster', 'placeholder']),
                 'primaryAlbum' => fn($q) => $q->select('id', 'uuid', 'title', 'slug', 'materialized_path', 'parent_id'),
                 'stacks' => fn($q) => $q->withCount('items'),
             ])
@@ -147,7 +147,7 @@ class TimelineController extends Controller
             ->whereNotNull('longitude')
             ->select(['id', 'uuid', 'latitude', 'longitude', 'taken_at', 'media_type', 'primary_album_id', 'original_filename'])
             ->with([
-                'variants'     => fn($q) => $q->whereIn('type', ['thumbnail', 'placeholder']),
+                'variants'     => fn($q) => $q->whereIn('type', ['thumbnail', 'video_poster', 'placeholder']),
                 'primaryAlbum' => fn($q) => $q->select('id', 'uuid', 'title'),
             ])
             ->limit(5000)

@@ -68,6 +68,31 @@ export default function LocationPicker({ value, onChange, label, compact = false
     const [busy, setBusy] = useState(false);
     const [locating, setLocating] = useState(false);
     const [note, setNote] = useState('');
+    /** Ukládání pod vlastním jménem — viz tlačítko pod zvoleným místem. */
+    const [saving, setSaving] = useState(false);
+    const [ownName, setOwnName] = useState('');
+
+    const saveOwn = async () => {
+        if (! ownName.trim() || value.latitude === '') return;
+
+        try {
+            await axios.post('/api/v1/mista/vlastni', {
+                name: ownName.trim(),
+                latitude: value.latitude,
+                longitude: value.longitude,
+                country: value.location_country || null,
+                country_code: value.location_country_code || null,
+            });
+
+            setQuery(ownName.trim());
+            onChange({ ...value, location_name: ownName.trim() });
+            setSaving(false);
+            setNote('Uloženo mezi vaše místa — příště se nabídne první.');
+            setTimeout(() => setNote(''), 5000);
+        } catch {
+            setNote('Místo se nepodařilo uložit.');
+        }
+    };
 
     // Poslední dotaz přeruší ten předchozí: bez toho doběhne odpověď na „Pra" po odpovědi
     // na „Praha" a nabídka skočí zpátky na výsledky, které už nikdo nechtěl.
@@ -208,10 +233,37 @@ export default function LocationPicker({ value, onChange, label, compact = false
             {note && <p className="mt-1 text-[11px] text-amber-200">{note}</p>}
 
             {chosen && ! open && (
-                <p className="mt-1 text-[11px] text-[var(--color-text-secondary)]">
-                    {Number(value.latitude).toFixed(5)}, {Number(value.longitude).toFixed(5)}
-                    {value.location_country ? ` · ${value.location_country}` : ''}
-                </p>
+                <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <p className="text-[11px] text-[var(--color-text-secondary)]">
+                        {Number(value.latitude).toFixed(5)}, {Number(value.longitude).toFixed(5)}
+                        {value.location_country ? ` · ${value.location_country}` : ''}
+                    </p>
+
+                    {/* OpenStreetMap zná jen to, co do něj někdo vložil: „Mauzoleum" ano,
+                        „Mausoleum David Černý" ne. Tohle je odpověď — najít to pod jménem
+                        z mapy a uložit pod tím, jak tomu říkají oni. Příště se nabídne
+                        první, a už se nehledá. */}
+                    <button type="button" onClick={() => { setOwnName(query || value.location_name); setSaving(true); }}
+                        className="text-[11px] text-[var(--color-accent)] hover:underline">
+                        Uložit pod vlastním názvem
+                    </button>
+                </div>
+            )}
+
+            {saving && (
+                <div className="mt-2 flex flex-col gap-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-2 sm:flex-row">
+                    <input autoFocus value={ownName} onChange={event => setOwnName(event.target.value)}
+                        placeholder="Jak tomu říkáte vy"
+                        className="flex-1 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-primary)] px-2.5 py-1.5 text-sm text-[var(--color-text-primary)] focus:border-[var(--color-accent)] focus:outline-none"/>
+                    <div className="flex gap-2">
+                        <button type="button" onClick={() => setSaving(false)}
+                            className="rounded-lg border border-[var(--color-border)] px-3 py-1.5 text-xs text-[var(--color-text-secondary)]">Zrušit</button>
+                        <button type="button" onClick={() => void saveOwn()} disabled={! ownName.trim()}
+                            className="rounded-lg bg-[var(--color-accent)] px-3 py-1.5 text-xs font-medium text-[var(--color-accent-contrast)] disabled:opacity-50">
+                            Uložit
+                        </button>
+                    </div>
+                </div>
             )}
 
             {open && results.length > 0 && (
