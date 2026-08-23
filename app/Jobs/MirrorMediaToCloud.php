@@ -60,6 +60,19 @@ class MirrorMediaToCloud implements ShouldQueue
         // The two clients answer the same three calls, so the job picks one and stops
         // caring which. A provider with no client is simply not mirrored rather than
         // being an error nobody can act on.
+        // Google Drive má vlastní cestu — obnovitelný upload a `drive_file_id` místo
+        // varianty `cloud_copy`. Dva protokoly slučovat nemá smysl, ale mít dva nezávislé
+        // vstupy ano: tenhle job byl jediné místo, kam se volalo „zkopíruj to do cloudu",
+        // a pro Drive tiše nedělal nic. Kdo připojil Drive, žádnou zálohu nedostal a
+        // nikde se to nedozvěděl.
+        if ($connection->provider === 'google_drive') {
+            if (! $media->drive_file_id) {
+                \App\Jobs\Media\InitiateDriveResumableUploadJob::dispatch($media->id)->onQueue('drive');
+            }
+
+            return;
+        }
+
         $client = match ($connection->provider) {
             'dropbox' => $dropbox,
             'onedrive' => $oneDrive,

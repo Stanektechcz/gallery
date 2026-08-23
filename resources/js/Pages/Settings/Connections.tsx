@@ -173,6 +173,7 @@ export default function Connections() {
     /** Keyed by provider code, so a new cloud needs no change here. */
     const [storage, setStorage] = useState<Record<string, Storage>>({});
     const [quota, setQuota] = useState<Quota | null>(null);
+    const [backup, setBackup] = useState<{ total: number; backed_up: number; percent: number; failed: number; provider: string } | null>(null);
     /** Which service's form is open. One at a time: two token fields side by side invite pasting into the wrong one. */
     const [adding, setAdding] = useState<Provider | null>(null);
     /** Reading the guide without connecting. Separate from `adding` so opening the help for
@@ -214,6 +215,7 @@ export default function Connections() {
             setCatalogue(response.data.catalogue ?? []);
             setStorage(response.data.storage ?? {});
             setQuota(response.data.quota ?? null);
+            setBackup(response.data.backup ?? null);
             setDocuments(response.data.documents ?? []);
             setDiscordReady(response.data.discord_ready !== false);
         } catch (reason: any) {
@@ -310,6 +312,39 @@ export default function Connections() {
                             <p className="mt-1 text-xs text-[var(--color-text-secondary)]">
                                 Fotky leží na našem serveru. Připojením vlastního cloudu je přesunete k sobě.
                             </p>
+
+                            {/* Připojený účet a zkopírovaná knihovna jsou dvě různé věci.
+                                Ta druhá je ta, na které záleží, a doteď ji nebylo kde vidět. */}
+                            {backup && backup.total > 0 && (
+                                <div className={`mt-3 rounded-2xl border p-4 ${
+                                    backup.percent === 100 ? 'border-emerald-400/25 bg-emerald-500/5' : 'border-amber-400/25 bg-amber-500/5'
+                                }`}>
+                                    <div className="flex flex-wrap items-baseline justify-between gap-2">
+                                        <p className="text-sm font-medium text-[var(--color-text-primary)]">
+                                            {backup.percent === 100
+                                                ? 'Všechny originály jsou v cloudu'
+                                                : `V cloudu je ${backup.backed_up} z ${backup.total} originálů`}
+                                        </p>
+                                        <span className={`text-sm font-semibold ${backup.percent === 100 ? 'text-emerald-300' : 'text-amber-200'}`}>
+                                            {backup.percent} %
+                                        </span>
+                                    </div>
+
+                                    <div className="mt-2 h-2 overflow-hidden rounded-full bg-[var(--color-bg-primary)]">
+                                        <div className={`h-full ${backup.percent === 100 ? 'bg-emerald-400' : 'bg-amber-400'}`}
+                                            style={{ width: `${backup.percent}%` }}/>
+                                    </div>
+
+                                    <p className="mt-2 text-xs text-[var(--color-text-secondary)]">
+                                        {backup.percent === 100
+                                            ? 'Kopie leží mimo tento server. Kdyby se mu něco stalo, fotky zůstanou.'
+                                            : backup.provider === 'local'
+                                                ? 'Zatím není připojený žádný cloud — kopie existuje jen na tomto serveru.'
+                                                : 'Zbytek se zkopíruje na pozadí. Pokud se to nehne, spusťte na serveru gallery:sync-drive --all.'}
+                                        {backup.failed > 0 && ` · ${backup.failed} položek hlásí chybu.`}
+                                    </p>
+                                </div>
+                            )}
 
                             <div className="mt-3 grid grid-cols-2 gap-2 lg:grid-cols-4">
                                 {catalogue.filter(provider => provider.kind === 'storage').map(provider => (

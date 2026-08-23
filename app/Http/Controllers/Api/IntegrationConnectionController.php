@@ -47,6 +47,10 @@ class IntegrationConnectionController extends Controller
             // service the server knows how to accept.
             'catalogue' => app(ProviderRegistry::class)->catalogue(),
             'storage' => $this->storage($space->id),
+            // Kolik knihovny je opravdu v cloudu. Připojený účet a zkopírovaná knihovna
+            // jsou dvě různé věci a jen jedna z nich pomůže, když se něco stane — a zjistit
+            // ten rozdíl až ve chvíli, kdy je zálohy potřeba, je pozdě.
+            'backup' => $this->backupCoverage($space->id),
             // How full the server disk is. The limit was enforced on upload but shown
             // nowhere, so the first anybody heard of it was a refused photograph.
             'quota' => app(\App\Services\Billing\EntitlementService::class)->storageUsage($space),
@@ -163,6 +167,38 @@ class IntegrationConnectionController extends Controller
      * own connect flow. One screen, two mechanisms — which is honest, because they behave
      * differently and pretending otherwise would surprise somebody at the worst moment.
      */
+    /**
+     * Kolik originálů je skutečně v cloudu.
+     *
+     * Média bez originálu na tomhle serveru poslat nejde, takže se počítají zvlášť —
+     * jinak by dokončená záloha navždy hlásila, že něco chybí.
+     *
+     * @return array{total: int, backed_up: int, percent: int, failed: int, provider: string}
+     */
+    private function backupCoverage(int $spaceId): array
+    {
+        $base = \Illuminate\Support\Facades\DB::table('media_items')
+            ->where('gallery_space_id', $spaceId)
+            ->whereNull('trashed_at')
+            ->whereExists(fn ($q) => $q->select(\Illuminate\Support\Facades\DB::raw(1))
+                ->from('media_variants')
+                ->whereColumn('media_variants.media_item_id', 'media_items.id')
+                ->where('media_variants.type', 'original'));
+
+        $celkem = (clone $base)->count();
+        $zalohovano = (clone $base)->whereNotNull('drive_file_id')->count();
+        $chyby = (clone $base)->whereNull('drive_file_id')->whereNotNull('processing_error')->count();
+
+        return [
+            'total' => $celkem,
+            'backed_up' => $zalohovano,
+            'percent' => $celkem > 0 ? (int) round($zalohovano / $celkem * 100) : 100,
+            'failed' => $chyby,
+            'provider' => app(\App\Services\Storage\StorageResolver::class)
+                ->activeProvider(\App\Models\GallerySpace::find($spaceId) ?? new \App\Models\GallerySpace()),
+        ];
+    }
+
     private function storage(int $spaceId): array
     {
         if (! Schema::hasTable('storage_connections')) return [];
