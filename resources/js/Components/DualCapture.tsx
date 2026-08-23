@@ -82,6 +82,25 @@ export default function DualCapture({ onCancel, onReady }: Props) {
 
     useEffect(() => stop, [stop]);
 
+    /**
+     * Escape closes it, as it does everywhere else full-screen in this app.
+     *
+     * Not while the moment is being sent, though: the photographs are mid-upload and
+     * leaving would abandon them halfway.
+     */
+    useEffect(() => {
+        const onKey = (event: KeyboardEvent) => {
+            if (event.key !== 'Escape' || sending) return;
+
+            stop();
+            onCancel();
+        };
+
+        window.addEventListener('keydown', onKey);
+
+        return () => window.removeEventListener('keydown', onKey);
+    });
+
     // Both previews hold their photograph in memory. `retake` lets them go, but a moment
     // that was sent successfully closed with two still open — small each time, and this
     // screen is opened once a day for as long as the app is installed.

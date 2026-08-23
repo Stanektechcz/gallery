@@ -84,6 +84,31 @@ export default function CameraCapture({ albumId, onClose, onCaptured }: Props) {
     // closes keeps a long session from leaking a frame at a time.
     useEffect(() => () => { if (shot) URL.revokeObjectURL(shot.url); }, [shot]);
 
+    /**
+     * Escape closes it, the way every other full-screen surface here behaves.
+     *
+     * Without this the only way out was the small X in the corner — and somebody who has
+     * just been refused camera permission is looking at a black screen, reaching for the
+     * key that has always worked.
+     *
+     * A held shot is discarded first rather than the whole thing closing: one press to
+     * undo the photograph, a second to leave.
+     */
+    useEffect(() => {
+        const onKey = (event: KeyboardEvent) => {
+            if (event.key !== 'Escape') return;
+
+            if (shot) { discard(); return; }
+
+            stop();
+            onClose();
+        };
+
+        window.addEventListener('keydown', onKey);
+
+        return () => window.removeEventListener('keydown', onKey);
+    });
+
     const take = async () => {
         if (! videoRef.current) return;
 

@@ -54,12 +54,18 @@ class AlbumController extends Controller
     {
         $space = $request->user()->gallerySpaces()->first();
 
-        $albums = Album::with(['cover', 'children.cover'])
+        // cover.variants, not cover. The card looks for the thumbnail among the cover's
+        // variants, and loading the media row without them meant every album drew the
+        // folder placeholder — including one with fifty-two photographs in it, and
+        // including albums whose cover had just been chosen by hand.
+        $albums = Album::with(['cover.variants', 'children.cover.variants'])
             ->where('gallery_space_id', $space->id)
             ->whereNull('parent_id')
             ->whereNull('deleted_at')
             ->orderBy('sort_mode')
             ->get();
+
+        $this->fillMissingCovers($albums);
 
         return Inertia::render('Albums/Index', [
             'albums'      => $albums,
@@ -67,6 +73,55 @@ class AlbumController extends Controller
             'albumSuggestions' => $suggestions->suggestions($space, $request->user()),
             'albumSuggestionsAvailable' => $suggestions->available(),
         ]);
+    }
+
+    /**
+     * Shows something for albums nobody has chosen a cover for.
+     *
+     * An album holding fifty photographs drew a folder icon, which said less about it
+     * than any one of the pictures inside would have. Choosing a cover by hand is still
+     * better and still wins; this is only for the albums nobody got round to.
+     *
+     * Nothing is written. The album keeps no cover of its own, so the day somebody picks
+     * one it simply takes over.
+     *
+     * One query for all of them rather than one each, because this runs on a page that
+     * lists every album a space has.
+     *
+     * @param \Illuminate\Support\Collection<int, Album> $albums
+     */
+    private function fillMissingCovers($albums): void
+    {
+        $ploche = $albums->concat($albums->flatMap->children ?? collect());
+        $chybi = $ploche->filter(fn (Album $album) => ! $album->cover && $album->media_count > 0);
+
+        if ($chybi->isEmpty()) return;
+
+        // The newest picture in each album. Newest rather than oldest because an album
+        // being added to is usually being looked at, and its latest addition is what the
+        // person has in mind.
+        $nejnovejsi = \Illuminate\Support\Facades\DB::table('album_media')
+            ->join('media_items', 'media_items.id', '=', 'album_media.media_item_id')
+            ->whereIn('album_media.album_id', $chybi->pluck('id'))
+            ->whereNull('media_items.trashed_at')
+            ->where('media_items.media_type', 'photo')
+            ->orderByDesc('media_items.taken_at')
+            ->orderByDesc('media_items.id')
+            ->get(['album_media.album_id', 'media_items.id as media_id'])
+            ->unique('album_id')
+            ->keyBy('album_id');
+
+        $media = MediaItem::with('variants')
+            ->whereIn('id', $nejnovejsi->pluck('media_id'))
+            ->get()
+            ->keyBy('id');
+
+        foreach ($chybi as $album) {
+            $vybrane = $nejnovejsi->get($album->id);
+            if ($vybrane && $media->has($vybrane->media_id)) {
+                $album->setRelation('cover', $media->get($vybrane->media_id));
+            }
+        }
     }
 
     public function show(Request $request, string $uuid): Response

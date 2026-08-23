@@ -146,8 +146,15 @@ export default function AlbumSettings({ albumUuid, album, onClose }: Props) {
                     </div>
                     <div>
                         <label className={LABEL}>Výchozí řazení</label>
-                        <div className="flex gap-2">
-                            <select value={form.sort_mode} onChange={e => set('sort_mode', e.target.value)} className={FIELD}>
+                        {/* Widths given by the grid, not by the fields.
+                            Both selects carried FIELD's own w-full, and appending w-auto
+                            to one of them did not undo it — Tailwind decides by stylesheet
+                            order, not by the order of names in the string. The direction
+                            select won the whole row and the mode select was squeezed down
+                            to its arrow, unreadable and unpickable. */}
+                        <div className="grid grid-cols-[1fr_auto] gap-2">
+                            <select value={form.sort_mode} onChange={e => set('sort_mode', e.target.value)}
+                                className={`${FIELD} min-w-0`}>
                                 <option value="date_taken">Datum pořízení</option>
                                 <option value="date_uploaded">Datum nahrání</option>
                                 <option value="title">Název</option>
@@ -157,7 +164,7 @@ export default function AlbumSettings({ albumUuid, album, onClose }: Props) {
                                 arranging it by hand is that the order is already decided. */}
                             <select value={form.sort_direction} onChange={e => set('sort_direction', e.target.value)}
                                 disabled={form.sort_mode === 'manual'}
-                                className={`${FIELD} w-auto shrink-0 disabled:opacity-40`}>
+                                className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-primary)] px-3 py-2 text-sm text-[var(--color-text-primary)] transition-colors focus:border-[var(--color-accent)] focus:outline-none disabled:opacity-40">
                                 <option value="desc">Sestupně</option>
                                 <option value="asc">Vzestupně</option>
                             </select>
