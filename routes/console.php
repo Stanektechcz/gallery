@@ -18,6 +18,20 @@ Schedule::command('gallery:daily-moment --no-interaction')
     ->withoutOverlapping()
     ->name('daily-moment');
 
+// Připomínka blížící se menstruace. Příkaz si sám hlídá denní dobu i to, aby za jedno
+// dopoledne neposlal dvě zprávy — plánovač ho proto může volat klidně každou hodinu.
+Schedule::command('gallery:cycle-reminders --no-interaction')
+    ->hourly()
+    ->withoutOverlapping()
+    ->name('cycle-reminders');
+
+// Pravidelné položky rozpočtu na nový měsíc. Prvního ráno, jinak by nájem chyběl
+// v přehledu právě ve dnech, kdy se člověk dívá, jestli mu vyjde měsíc.
+Schedule::command('gallery:recurring-entries --apply --no-interaction')
+    ->monthlyOn(1, '06:30')
+    ->withoutOverlapping()
+    ->name('recurring-budget-entries');
+
 // Old plans should never remain in current views simply because nobody opened the calendar.
 Schedule::command('gallery:close-elapsed-events --no-interaction')
     ->dailyAt('00:05')

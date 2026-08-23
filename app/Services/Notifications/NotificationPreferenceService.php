@@ -14,6 +14,7 @@ class NotificationPreferenceService
         'relationship' => 'Vztah a výročí',
         'finance' => 'Společné finance',
         'system' => 'Systém a zabezpečení',
+        'health' => 'Zdraví a cyklus',
         'general' => 'Ostatní',
     ];
 
@@ -73,6 +74,9 @@ class NotificationPreferenceService
             str_starts_with($type, 'memory.'), str_starts_with($type, 'media.'), str_starts_with($type, 'album.'), str_starts_with($type, 'upload.'), str_starts_with($type, 'date_idea.'), str_starts_with($type, 'moment.') => 'memories',
             str_starts_with($type, 'relationship.'), str_starts_with($type, 'anniversary.'), str_starts_with($type, 'birthday.') => 'relationship',
             str_starts_with($type, 'bank.'), str_starts_with($type, 'finance.'), str_starts_with($type, 'expense.'), str_starts_with($type, 'settlement.') => 'finance',
+            // Zdravotní připomínky mají vlastní kategorii, aby šly vypnout samostatně —
+            // a hlavně aby nespadly do „Ostatní" vedle upozornění o volném místě na disku.
+            str_starts_with($type, 'health.') => 'health',
             str_starts_with($type, 'drive.'), str_starts_with($type, 'security.'), str_starts_with($type, 'system.'), str_starts_with($type, 'export.') => 'system',
             default => 'general',
         };

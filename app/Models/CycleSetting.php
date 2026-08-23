@@ -27,6 +27,11 @@ class CycleSetting extends Model
         ];
     }
 
+    public function user()
+    {
+        return $this->belongsTo(User::class);
+    }
+
     /** Co smí vidět někdo jiný než majitelka. */
     public function allowsPartner(): bool
     {
