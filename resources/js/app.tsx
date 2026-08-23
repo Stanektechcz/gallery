@@ -1,4 +1,5 @@
 import { createInertiaApp, type ResolvedComponent } from '@inertiajs/react';
+import ShortcutsOverlay from '@/Components/ShortcutsOverlay';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import axios from 'axios';
 import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
@@ -39,6 +40,7 @@ createInertiaApp({
             <QueryClientProvider client={queryClient}>
                 <PwaInstallProvider>
                     <PwaLifecycle />
+                    <ShortcutsOverlay />
                     <App {...props} />
                 </PwaInstallProvider>
             </QueryClientProvider>

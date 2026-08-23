@@ -202,7 +202,25 @@ class AlbumController extends Controller
             if ($type)   $mediaQuery->where('media_type', $type);
             if ($search) $mediaQuery->where('original_filename', 'like', "%{$search}%");
 
-            $media = $mediaQuery->orderBy($sortBy, $sortDir)->paginate(48)->withQueryString();
+            // Ruční pořadí drží `album_media.sort_order`, ne sloupec na médiu — proto se
+            // musí přisadit spojením. Volba „Ručně" v nastavení alba do téhle chvíle
+            // nedělala nic: uložila se a album se dál řadilo podle data.
+            if ($album->sort_mode === 'manual' && ! $request->has('sort')) {
+                $media = $mediaQuery
+                    ->leftJoin('album_media', function ($join) use ($album) {
+                        $join->on('album_media.media_item_id', '=', 'media_items.id')
+                            ->where('album_media.album_id', '=', $album->id);
+                    })
+                    ->select('media_items.*')
+                    // Nezařazené na konec, ne na začátek: fotka, kterou nikdo nepřeskládal,
+                    // nemá skončit před těmi, u kterých si s pořadím někdo dal práci.
+                    ->orderByRaw('CASE WHEN album_media.sort_order IS NULL THEN 1 ELSE 0 END')
+                    ->orderBy('album_media.sort_order')
+                    ->orderByDesc('media_items.taken_at')
+                    ->paginate(48)->withQueryString();
+            } else {
+                $media = $mediaQuery->orderBy($sortBy, $sortDir)->paginate(48)->withQueryString();
+            }
         }
 
         // Serialize smart_rules for frontend
@@ -257,6 +275,55 @@ class AlbumController extends Controller
         }
 
         return back()->with('success', 'Album bylo upraveno.');
+    }
+
+    /**
+     * Uloží ruční pořadí fotek v albu.
+     *
+     * Přijímá jen ta uuid, která se přesunula, ne celé album — přeskládat padesátou
+     * fotku neznamená přepsat všech padesát řádků, a poslat celý seznam by u velkého
+     * alba znamenalo posílat megabajt při každém puštění myši.
+     *
+     * Pořadí se čísluje po desítkách, aby šlo mezi dvě sousední vložit další bez
+     * přepisování zbytku.
+     */
+    public function reorder(Request $request, string $uuid): \Illuminate\Http\JsonResponse
+    {
+        $album = Album::where('uuid', $uuid)->firstOrFail();
+        Gate::authorize('update', $album);
+
+        $data = $request->validate([
+            'uuids' => 'required|array|max:500',
+            'uuids.*' => 'required|uuid',
+            // Odkud se číslování rozjíždí — u druhé a další stránky alba.
+            'offset' => 'sometimes|integer|min:0',
+        ]);
+
+        $media = MediaItem::whereIn('uuid', $data['uuids'])
+            ->where('gallery_space_id', $album->gallery_space_id)
+            ->pluck('id', 'uuid');
+
+        $poradi = (int) ($data['offset'] ?? 0) * 10;
+
+        foreach ($data['uuids'] as $mediaUuid) {
+            if (! isset($media[$mediaUuid])) continue;
+
+            // updateOrInsert, protože fotka může být v albu jen přes primary_album_id a
+            // řádek v album_media pak vůbec nemá — a bez něj by pořadí nebylo kam uložit.
+            \Illuminate\Support\Facades\DB::table('album_media')->updateOrInsert(
+                ['album_id' => $album->id, 'media_item_id' => $media[$mediaUuid]],
+                ['sort_order' => $poradi, 'added_at' => now(), 'added_by' => $request->user()->id],
+            );
+
+            $poradi += 10;
+        }
+
+        // Album, které někdo právě přeskládal, chce to pořadí i ukázat.
+        if ($album->sort_mode !== 'manual') {
+            $album->update(['sort_mode' => 'manual', 'updated_by' => $request->user()->id]);
+        }
+
+        return response()->json(['ok' => true, 'sort_mode' => 'manual']);
     }
 
     public function move(MoveAlbumRequest $request, string $uuid): \Illuminate\Http\JsonResponse
