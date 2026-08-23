@@ -72,6 +72,7 @@ class CycleService
                 'temperature' => $den->temperature !== null ? (float) $den->temperature : null,
                 'note' => $den->note,
                 'is_cycle_start' => $den->is_cycle_start,
+                'is_predicted' => $den->is_predicted,
             ])->values()->all(),
             'cycles' => $cycles->map(fn (array $c) => [
                 'started_on' => $c['start']->toDateString(),
@@ -81,6 +82,9 @@ class CycleService
             ])->values()->all(),
             'prediction' => $this->predict($cycles, $averages, $today),
             'today' => $this->describeToday($cycles, $averages, $today),
+            // Měsíc dopředu, den po dni. Souhrnné „menstruace 30. července" je na
+            // plánování dovolené málo — kalendář má ukázat celý nadcházející měsíc.
+            'forecast' => $this->forecast($space, $owner, 40, $today),
         ];
     }
 
@@ -95,7 +99,10 @@ class CycleService
      */
     private function cycles(Collection $days): Collection
     {
-        $krvaceni = $days->filter(fn (CycleDay $d) => $d->isBleeding())->values();
+        // Jen zapsané dny. Předvyplněné odhady sem nesmí: aplikace by odhadla pět dní,
+        // z nich spočítala průměr pět, tím potvrdila sama sebe — a že tenhle cyklus trval
+        // tři dny, by se nikdy nedozvěděla.
+        $krvaceni = $days->filter(fn (CycleDay $d) => $d->isBleeding() && $d->isRecorded())->values();
         if ($krvaceni->isEmpty()) return collect();
 
         $zacatky = collect();
@@ -145,7 +152,17 @@ class CycleService
             ->filter(fn ($d) => $d !== null && $d >= self::MIN_CYCLE_DAYS && $d <= self::MAX_CYCLE_DAYS)
             ->values();
 
-        $krvaceni = $cycles->pluck('period_days')->filter(fn ($d) => $d > 0 && $d <= 14)->values();
+        // Probíhající cyklus se do průměru délky krvácení nepočítá.
+        //
+        // Má zatím zapsaný jeden nebo dva dny prostě proto, že ještě neskončil, a průměr
+        // by tím strhával dolů — po zadání prvního dne by aplikace „zjistila", že
+        // menstruace trvá kratší dobu, a podle toho předvyplnila míň dnů příště. Poznají
+        // se podle toho, že nemají délku: tu dostane cyklus až tím, že začne další.
+        $krvaceni = $cycles
+            ->filter(fn (array $c) => $c['length'] !== null)
+            ->pluck('period_days')
+            ->filter(fn ($d) => $d > 0 && $d <= 14)
+            ->values();
 
         return [
             'cycle' => $delky->count() >= self::MIN_CYCLES_FOR_AVERAGE
@@ -291,11 +308,127 @@ class CycleService
         }
     }
 
+    /**
+     * Předvyplní zbytek menstruace po zadání prvního dne.
+     *
+     * Zadat, že to začalo, a pak ještě čtyřikrát ťuknout na další dny je práce, kterou
+     * aplikace umí udělat sama — jak dlouho krvácení obvykle trvá, ví z historie.
+     *
+     * Jsou to odhady, ne záznamy: kreslí se jinak, do statistik nevstupují a jakmile se
+     * jich člověk dotkne, přestávají být odhadem. Den, který už zapsaný je, se nepřepisuje
+     * nikdy — skutečnost má vždycky přednost před tím, co jsme si mysleli.
+     *
+     * Intenzita klesá, protože tak menstruace obvykle probíhá; kdo to má jinak, přepíše
+     * dva dny místo pěti.
+     *
+     * @return int Kolik dnů skutečně přibylo.
+     */
+    public function autofillPeriod(GallerySpace $space, User $user, CycleDay $prvni): int
+    {
+        $settings = $this->settings($space, $user);
+        $days = CycleDay::where('user_id', $user->id)->orderBy('day')->get();
+        $prumer = $this->averages($this->cycles($days), $settings)['period'];
+
+        $pribylo = 0;
+
+        for ($posun = 1; $posun < max(1, $prumer); $posun++) {
+            $datum = $prvni->day->copy()->addDays($posun);
+
+            // Do budoucnosti se nepředvyplňuje přes konec očekávaného krvácení a už vůbec
+            // ne přes dny, které si člověk zapsal sám.
+            if (CycleDay::where('user_id', $user->id)->whereDate('day', $datum)->exists()) continue;
+
+            CycleDay::create([
+                'user_id' => $user->id,
+                'gallery_space_id' => $space->id,
+                'day' => $datum,
+                'flow' => $posun <= 1 ? 'medium' : ($posun < $prumer - 1 ? 'light' : 'spotting'),
+                'is_predicted' => true,
+            ]);
+
+            $pribylo++;
+        }
+
+        return $pribylo;
+    }
+
+    /**
+     * Den po dni na měsíc dopředu.
+     *
+     * Souhrnná předpověď říká „menstruace 30. července" a to je málo — kalendář má
+     * ukázat celý nadcházející měsíc obarvený podle fází, aby šlo naplánovat dovolenou
+     * nebo návštěvu, aniž by si to člověk musel dopočítávat v hlavě.
+     *
+     * @return array<int, array{day: string, phase: string, confidence: string}>
+     */
+    public function forecast(GallerySpace $space, User $owner, int $dnu = 40, ?Carbon $today = null): array
+    {
+        $today ??= Carbon::today();
+
+        $days = CycleDay::where('user_id', $owner->id)->orderBy('day')->get();
+        $cycles = $this->cycles($days);
+        if ($cycles->isEmpty()) return [];
+
+        $settings = $this->settings($space, $owner);
+        $averages = $this->averages($cycles, $settings);
+        $predpoved = $this->predict($cycles, $averages, $today);
+        if (! $predpoved) return [];
+
+        // Zapsané dny se do předpovědi nepletou — co je zapsané, se nepředpovídá.
+        $zapsane = $days->filter(fn (CycleDay $d) => $d->isRecorded())->keyBy(fn (CycleDay $d) => $d->day->toDateString());
+
+        $zacatek = Carbon::parse($predpoved['next_period_on']);
+        $vysledek = [];
+
+        for ($i = 0; $i < $dnu; $i++) {
+            $datum = $today->copy()->addDays($i);
+            $klic = $datum->toDateString();
+
+            if ($zapsane->has($klic)) continue;
+
+            // Kolikátý den kterého očekávaného cyklu — počítá se dopředu po celých
+            // cyklech, aby předpověď nekončila prvním z nich.
+            $odZacatku = (int) $zacatek->diffInDays($datum, false);
+            while ($odZacatku < 0) {
+                $zacatek->subDays($averages['cycle']);
+                $odZacatku = (int) $zacatek->diffInDays($datum, false);
+            }
+
+            $vCyklu = $odZacatku % max(1, $averages['cycle']);
+            $ovulace = $averages['cycle'] - 14;
+
+            $faze = match (true) {
+                $vCyklu < max(1, $averages['period']) => 'menstruation',
+                $vCyklu >= $ovulace - 5 && $vCyklu <= $ovulace + 1 => 'fertile',
+                // PMS: posledních pár dní před očekávaným krvácením. Vyznačit je stojí za
+                // to — je to týden, kdy člověk chce vědět, proč mu je, jak mu je.
+                $vCyklu >= $averages['cycle'] - 4 => 'pms',
+                $vCyklu < $ovulace - 5 => 'follicular',
+                default => 'luteal',
+            };
+
+            $vysledek[] = [
+                'day' => $klic,
+                'phase' => $faze,
+                // Čím dál do budoucna, tím volnější odhad — druhý cyklus dopředu stojí
+                // na tom, že ten první vyjde přesně, což skoro nikdy nevyjde.
+                'confidence' => $odZacatku > $averages['cycle'] ? 'low' : $predpoved['confidence'],
+            ];
+        }
+
+        return $vysledek;
+    }
+
     /** Zapíše nebo přepíše jeden den. */
     public function saveDay(GallerySpace $space, User $user, array $data): CycleDay
     {
+        // Datum se normalizuje na půlnoc, protože podle něj se řádek hledá. Uložená
+        // hodnota je '2026-05-05 00:00:00' a hledat podle '2026-05-05' ji v SQLite
+        // nenajde — updateOrCreate pak místo úpravy zkusí vložit druhý řádek na týž den
+        // a spadne na jedinečném klíči. Přepsat existující den je přitom to, co člověk
+        // v kalendáři dělá nejčastěji.
         $den = CycleDay::updateOrCreate(
-            ['user_id' => $user->id, 'day' => $data['day']],
+            ['user_id' => $user->id, 'day' => Carbon::parse($data['day'])->startOfDay()],
             [
                 'gallery_space_id' => $space->id,
                 'flow' => $data['flow'] ?? 'none',
@@ -305,11 +438,24 @@ class CycleService
                 'temperature' => $data['temperature'] ?? null,
                 'note' => $data['note'] ?? null,
                 'is_cycle_start' => $data['is_cycle_start'] ?? false,
+                // Cokoli přijde odsud, zapsal člověk — i když to přepisuje dřívější odhad.
+                'is_predicted' => false,
             ],
         );
 
         if ($den->isBleeding()) {
             $this->announceStart($space, $user, $den);
+
+            // Předvyplní zbytek jen u prvního dne. Uprostřed menstruace by to nedávalo
+            // smysl a na konci by dopisovalo dny, které už minuly.
+            $predchoziKrvacel = CycleDay::where('user_id', $user->id)
+                ->whereBetween('day', [$den->day->copy()->subDays(2), $den->day->copy()->subDay()])
+                ->get()
+                ->contains(fn (CycleDay $d) => $d->isBleeding());
+
+            if (! $predchoziKrvacel) {
+                $this->autofillPeriod($space, $user, $den);
+            }
         }
 
         return $den;

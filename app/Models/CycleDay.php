@@ -16,7 +16,7 @@ class CycleDay extends Model
 
     protected $fillable = [
         'uuid', 'user_id', 'gallery_space_id', 'day', 'flow',
-        'symptoms', 'moods', 'pain', 'temperature', 'note', 'is_cycle_start',
+        'symptoms', 'moods', 'pain', 'temperature', 'note', 'is_cycle_start', 'is_predicted',
     ];
 
     protected function casts(): array
@@ -27,12 +27,19 @@ class CycleDay extends Model
             'moods' => 'array',
             'temperature' => 'decimal:2',
             'is_cycle_start' => 'boolean',
+            'is_predicted' => 'boolean',
         ];
     }
 
     protected static function booted(): void
     {
         static::creating(fn (self $den) => $den->uuid ??= (string) Str::uuid());
+    }
+
+    /** Skutečně zapsaný den, ne předvyplněný odhad. Jen tyhle smí do statistik. */
+    public function isRecorded(): bool
+    {
+        return ! $this->is_predicted;
     }
 
     /** Teče, ať slabě nebo silně — na rozdíl od dne, kdy se zapsala jen nálada. */

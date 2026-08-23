@@ -22,6 +22,7 @@ interface Day {
     symptoms: string[]; moods: string[];
     pain: number | null; temperature: number | null; note: string | null;
     is_cycle_start: boolean;
+    is_predicted: boolean;
 }
 
 interface Prediction {
@@ -41,6 +42,7 @@ interface Overview {
     cycles: Array<{ started_on: string; ended_on: string | null; length: number | null; period_days: number }>;
     prediction: Prediction | null;
     today: { cycle_day: number; phase: string } | null;
+    forecast?: Array<{ day: string; phase: string; confidence: string }>;
 }
 
 interface PartnerView {
@@ -64,7 +66,15 @@ const FLOW_COLOR: Record<Flow, string> = {
 };
 
 const PHASE_LABEL: Record<string, string> = {
-    menstruation: 'menstruace', follicular: 'folikulární fáze', fertile: 'plodné dny', luteal: 'luteální fáze',
+    menstruation: 'menstruace', follicular: 'folikulární fáze', fertile: 'plodné dny',
+    luteal: 'luteální fáze', pms: 'dny před menstruací',
+};
+
+/** Barvy předpovědi. Vždycky slabší než zapsaná skutečnost — odhad se nemá tvářit jako údaj. */
+const PHASE_HINT: Record<string, string> = {
+    menstruation: 'border-dashed border-rose-400/60',
+    fertile: 'border-dashed border-emerald-400/50',
+    pms: 'border-dashed border-amber-400/50',
 };
 
 const SYMPTOMS = ['křeče', 'bolest hlavy', 'nadýmání', 'citlivá prsa', 'únava', 'akné', 'nevolnost', 'bolest zad', 'chutě'];
@@ -124,6 +134,14 @@ export default function CycleIndex() {
         return map;
     }, [data]);
 
+    /** Předpověď po dnech, aby ji kalendář nemusel hledat v poli u každé buňky. */
+    const forecastByDay = useMemo(() => {
+        const map = new Map<string, string>();
+        data?.forecast?.forEach(f => map.set(f.day, f.phase));
+
+        return map;
+    }, [data]);
+
     const grid = useMemo(() => monthGrid(month), [month]);
 
     return (
@@ -151,6 +169,7 @@ export default function CycleIndex() {
                         <Calendar
                             grid={grid} month={month} byDay={byDay}
                             prediction={data.prediction}
+                            forecast={forecastByDay}
                             onMonth={setMonth}
                             onPick={setEditing}
                         />
@@ -211,9 +230,10 @@ function Tile({ label, value, hint, accent = false }: { label: string; value: st
     );
 }
 
-function Calendar({ grid, month, byDay, prediction, onMonth, onPick }: {
+function Calendar({ grid, month, byDay, prediction, forecast, onMonth, onPick }: {
     grid: Array<string | null>; month: Date; byDay: Map<string, Day>;
-    prediction: Prediction | null; onMonth: (d: Date) => void; onPick: (day: string) => void;
+    prediction: Prediction | null; forecast: Map<string, string>;
+    onMonth: (d: Date) => void; onPick: (day: string) => void;
 }) {
     const dnes = new Date().toISOString().slice(0, 10);
 
@@ -249,10 +269,12 @@ function Calendar({ grid, month, byDay, prediction, onMonth, onPick }: {
                     return (
                         <button key={day} type="button" onClick={() => onPick(day)}
                             title={zaznam ? FLOW_LABEL[zaznam.flow] : 'Zapsat'}
-                            className={`relative aspect-square rounded-lg text-xs transition-colors ${
+                            className={`relative aspect-square rounded-lg border text-xs transition-colors ${
                                 zaznam?.flow && zaznam.flow !== 'none'
-                                    ? `${FLOW_COLOR[zaznam.flow]} text-white`
-                                    : 'bg-[var(--color-bg-primary)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)]'
+                                    // Předvyplněný den je bledší a tečkovaný: je to odhad,
+                                    // dokud se ho někdo nedotkne.
+                                    ? `${FLOW_COLOR[zaznam.flow]} text-white ${zaznam.is_predicted ? 'border-dashed border-white/60 opacity-55' : 'border-transparent'}`
+                                    : `bg-[var(--color-bg-primary)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] ${PHASE_HINT[forecast.get(day) ?? ''] ?? 'border-transparent'}`
                             } ${day === dnes ? 'ring-2 ring-[var(--color-accent)]' : ''}`}>
                             {cislo}
 
@@ -276,6 +298,8 @@ function Calendar({ grid, month, byDay, prediction, onMonth, onPick }: {
                 <span className="flex items-center gap-1"><span className="h-2 w-2 rounded bg-rose-500"/> zapsané krvácení</span>
                 <span className="flex items-center gap-1"><span className="h-2 w-2 rounded border border-dashed border-rose-400"/> čekaná menstruace</span>
                 <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-emerald-400"/> plodné dny</span>
+                <span className="flex items-center gap-1"><span className="h-2 w-2 rounded bg-rose-500/50 opacity-60"/> předvyplněno — ťuknutím potvrdíte</span>
+                <span className="flex items-center gap-1"><span className="h-2 w-2 rounded border border-dashed border-amber-400"/> dny před menstruací</span>
             </div>
         </section>
     );
