@@ -78,7 +78,17 @@ function groupByDate(items: MediaCard[]): TimelineGroup[] {
         groups[key].push(item);
     }
     return Object.entries(groups).map(([key, its]) => {
-        const d = its[0].taken_at ? new Date(its[0].taken_at) : null;
+        // Built from the key, not from the first photograph's instant.
+        //
+        // The two disagreed. The key is the date part of the stored timestamp, while the
+        // heading came from converting that timestamp into the reader's timezone — so a
+        // group of pictures keyed to the first of July was headed "čtvrtek 2. července"
+        // the moment its first photograph fell after ten at night. The day was named
+        // after a different day than the one its photographs were filed under.
+        //
+        // Noon keeps the date components intact whatever the reader's offset or any
+        // daylight-saving change that night.
+        const d = key === '__nodate__' ? null : new Date(`${key}T12:00:00`);
         return {
             date: key,
             label: d ? d.toLocaleDateString('cs-CZ', { weekday: 'long', day: 'numeric', month: 'long' }) : 'Bez data',
