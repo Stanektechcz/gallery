@@ -54,6 +54,7 @@ import {
     Trophy,
     Tv,
     Users,
+    Wallet,
     Wind,
     X
 } from 'lucide-react';
@@ -558,6 +559,7 @@ export const navGroups: NavigationGroup[] = [
             { href: '/denik', label: 'Deník', icon: BookHeart, feature: 'journal' },
             { href: '/hlasovky', label: 'Hlasovky', icon: Mic, feature: 'voice_notes' },
             { href: '/zaroven', label: 'Zároveň', icon: Camera, feature: 'together_now' },
+            { href: '/rozpocty', label: 'Rozpočty', icon: Wallet },
             { href: '/krkance', label: 'Hodnocení krkanců', icon: Trophy, feature: 'burps' },
             { href: '/prdy', label: 'Hodnocení prdů', icon: Wind, feature: 'farts' },
             { href: '/date-ideas', label: 'Nápady na randíčka', icon: Sparkles, feature: 'date_ideas' },

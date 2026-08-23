@@ -76,6 +76,21 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
     // A thumbnail the browser drew, for formats this server cannot open (HEIC above all).
     Route::post('/media/{uuid}/thumbnail', [App\Http\Controllers\Api\MediaThumbnailController::class, 'store'])->name('api.media.thumbnail');
 
+    // Rozpočty na období a žádosti o peníze mezi partnery.
+    Route::prefix('rozpocty')->name('api.budgets.')->group(function () {
+        Route::get('/', [App\Http\Controllers\Api\BudgetController::class, 'index'])->name('index');
+        Route::post('/', [App\Http\Controllers\Api\BudgetController::class, 'store'])->name('store');
+        Route::post('/zadost', [App\Http\Controllers\Api\BudgetController::class, 'requestMoney'])->name('request');
+        Route::post('/zadost/{uuid}', [App\Http\Controllers\Api\BudgetController::class, 'respondToRequest'])->name('request.respond');
+        Route::get('/{uuid}', [App\Http\Controllers\Api\BudgetController::class, 'show'])->name('show');
+        Route::patch('/{uuid}', [App\Http\Controllers\Api\BudgetController::class, 'update'])->name('update');
+        Route::delete('/{uuid}', [App\Http\Controllers\Api\BudgetController::class, 'destroy'])->name('destroy');
+        Route::post('/{uuid}/kategorie', [App\Http\Controllers\Api\BudgetController::class, 'storeCategory'])->name('categories.store');
+        Route::delete('/{uuid}/kategorie/{categoryId}', [App\Http\Controllers\Api\BudgetController::class, 'destroyCategory'])->name('categories.destroy');
+        Route::post('/{uuid}/polozky', [App\Http\Controllers\Api\BudgetController::class, 'storeEntry'])->name('entries.store');
+        Route::delete('/{uuid}/polozky/{entryUuid}', [App\Http\Controllers\Api\BudgetController::class, 'destroyEntry'])->name('entries.destroy');
+    });
+
     // Zároveň — the day's shared moment.
     Route::get('/daily-moment', [App\Http\Controllers\Api\DailyMomentController::class, 'show'])->name('api.daily-moment.show');
     Route::post('/daily-moment', [App\Http\Controllers\Api\DailyMomentController::class, 'store'])->name('api.daily-moment.store');
