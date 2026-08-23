@@ -81,6 +81,14 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
     Route::get('/mista/adresa', [App\Http\Controllers\Api\GeoController::class, 'reverse'])->name('api.geo.reverse');
     Route::post('/mista/vlastni', [App\Http\Controllers\Api\GeoController::class, 'store'])->name('api.geo.store');
 
+    // Menstruační kalendář. Zdravotní údaj — co uvidí partner, rozhoduje majitelka.
+    Route::prefix('cyklus')->name('api.cycle.')->group(function () {
+        Route::get('/', [App\Http\Controllers\Api\CycleController::class, 'index'])->name('index');
+        Route::post('/den', [App\Http\Controllers\Api\CycleController::class, 'storeDay'])->name('day.store');
+        Route::delete('/den/{day}', [App\Http\Controllers\Api\CycleController::class, 'destroyDay'])->name('day.destroy');
+        Route::patch('/nastaveni', [App\Http\Controllers\Api\CycleController::class, 'updateSettings'])->name('settings');
+    });
+
     // Rozpočty na období a žádosti o peníze mezi partnery.
     Route::prefix('rozpocty')->name('api.budgets.')->group(function () {
         Route::get('/', [App\Http\Controllers\Api\BudgetController::class, 'index'])->name('index');

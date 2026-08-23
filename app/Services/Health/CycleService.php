@@ -1,0 +1,277 @@
+<?php
+
+namespace App\Services\Health;
+
+use App\Models\CycleDay;
+use App\Models\CycleSetting;
+use App\Models\GallerySpace;
+use App\Models\User;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
+
+/**
+ * Menstruační kalendář — odvození cyklů a předpovědi.
+ *
+ * Předpovědi se nikam neukládají. Počítají se z historie při každém dotazu, aby se po
+ * doplnění zapomenutého dne rovnou opravily; uložená předpověď by po týdnu tiše lhala.
+ *
+ * A všude, kde se něco odhaduje, se říká z čeho: „podle posledních tří cyklů" znamená
+ * něco jiného než „podle výchozích 28 dní", a člověk, který plánuje dovolenou, ten
+ * rozdíl potřebuje znát.
+ */
+class CycleService
+{
+    /** Pod tolik cyklů se průměr nepočítá — dva údaje nejsou historie. */
+    private const MIN_CYCLES_FOR_AVERAGE = 2;
+
+    /** Cyklus kratší nebo delší než tohle je zápis omylem, ne cyklus. */
+    private const MIN_CYCLE_DAYS = 15;
+    private const MAX_CYCLE_DAYS = 60;
+
+    public function settings(GallerySpace $space, User $user): CycleSetting
+    {
+        return CycleSetting::firstOrCreate(
+            ['user_id' => $user->id, 'gallery_space_id' => $space->id],
+        );
+    }
+
+    /**
+     * Celý přehled pro jednoho člověka.
+     *
+     * @return array<string, mixed>
+     */
+    public function overview(GallerySpace $space, User $owner, ?Carbon $today = null): array
+    {
+        $today ??= Carbon::today();
+        $settings = $this->settings($space, $owner);
+
+        $days = CycleDay::where('user_id', $owner->id)
+            ->orderBy('day')
+            ->get();
+
+        $cycles = $this->cycles($days);
+        $averages = $this->averages($cycles, $settings);
+
+        return [
+            'settings' => [
+                'share_level' => $settings->share_level,
+                'average_cycle_days' => $averages['cycle'],
+                'average_period_days' => $averages['period'],
+                'based_on_cycles' => $averages['based_on'],
+                'remind_upcoming' => $settings->remind_upcoming,
+                'remind_days_before' => $settings->remind_days_before,
+                'track_symptoms' => $settings->track_symptoms,
+            ],
+            'days' => $days->map(fn (CycleDay $den) => [
+                'uuid' => $den->uuid,
+                'day' => $den->day->toDateString(),
+                'flow' => $den->flow,
+                'symptoms' => $den->symptoms ?? [],
+                'moods' => $den->moods ?? [],
+                'pain' => $den->pain,
+                'temperature' => $den->temperature !== null ? (float) $den->temperature : null,
+                'note' => $den->note,
+                'is_cycle_start' => $den->is_cycle_start,
+            ])->values()->all(),
+            'cycles' => $cycles->map(fn (array $c) => [
+                'started_on' => $c['start']->toDateString(),
+                'ended_on' => $c['end']?->toDateString(),
+                'length' => $c['length'],
+                'period_days' => $c['period_days'],
+            ])->values()->all(),
+            'prediction' => $this->predict($cycles, $averages, $today),
+            'today' => $this->describeToday($cycles, $averages, $today),
+        ];
+    }
+
+    /**
+     * Rozdělí zapsané dny na cykly.
+     *
+     * Nový cyklus začíná ručně označeným dnem, nebo prvním krvácením po aspoň dvou dnech
+     * pauzy. Ta pauza je tam schválně: krvácení se často na den přeruší a bez ní by se
+     * jeden cyklus rozpadl na tři.
+     *
+     * @return Collection<int, array{start: Carbon, end: ?Carbon, length: ?int, period_days: int}>
+     */
+    private function cycles(Collection $days): Collection
+    {
+        $krvaceni = $days->filter(fn (CycleDay $d) => $d->isBleeding())->values();
+        if ($krvaceni->isEmpty()) return collect();
+
+        $zacatky = collect();
+        $predchozi = null;
+
+        foreach ($krvaceni as $den) {
+            $novy = $den->is_cycle_start
+                || $predchozi === null
+                || $predchozi->day->diffInDays($den->day) > 2;
+
+            if ($novy) $zacatky->push($den->day->copy());
+
+            $predchozi = $den;
+        }
+
+        return $zacatky->map(function (Carbon $start, int $index) use ($zacatky, $krvaceni) {
+            $dalsi = $zacatky->get($index + 1);
+
+            // Délka cyklu je vzdálenost k dalšímu začátku. Poslední cyklus délku nemá —
+            // ještě neskončil, a dopočítat ji z předpovědi by znamenalo vydávat odhad
+            // za změřený údaj.
+            $delka = $dalsi ? (int) $start->diffInDays($dalsi) : null;
+
+            $dnyKrvaceni = $krvaceni->filter(function (CycleDay $d) use ($start, $dalsi) {
+                return $d->day->greaterThanOrEqualTo($start)
+                    && ($dalsi === null || $d->day->lessThan($dalsi));
+            })->count();
+
+            return [
+                'start' => $start,
+                'end' => $dalsi?->copy()->subDay(),
+                'length' => $delka !== null && $delka >= self::MIN_CYCLE_DAYS && $delka <= self::MAX_CYCLE_DAYS ? $delka : $delka,
+                'period_days' => $dnyKrvaceni,
+            ];
+        });
+    }
+
+    /**
+     * Průměry ze skutečnosti, dokud je z čeho.
+     *
+     * Nesmyslně krátké i dlouhé cykly se do průměru nepočítají — jeden zápis omylem by
+     * jinak posunul předpověď o týden a nikdo by nevěděl proč.
+     */
+    private function averages(Collection $cycles, CycleSetting $settings): array
+    {
+        $delky = $cycles->pluck('length')
+            ->filter(fn ($d) => $d !== null && $d >= self::MIN_CYCLE_DAYS && $d <= self::MAX_CYCLE_DAYS)
+            ->values();
+
+        $krvaceni = $cycles->pluck('period_days')->filter(fn ($d) => $d > 0 && $d <= 14)->values();
+
+        return [
+            'cycle' => $delky->count() >= self::MIN_CYCLES_FOR_AVERAGE
+                ? (int) round($delky->avg())
+                : (int) $settings->average_cycle_days,
+            'period' => $krvaceni->count() >= self::MIN_CYCLES_FOR_AVERAGE
+                ? (int) round($krvaceni->avg())
+                : (int) $settings->average_period_days,
+            'based_on' => $delky->count(),
+            // Rozptyl: u nepravidelného cyklu je předpověď orientační a má to být vidět.
+            'spread' => $delky->count() >= self::MIN_CYCLES_FOR_AVERAGE
+                ? (int) ($delky->max() - $delky->min())
+                : null,
+        ];
+    }
+
+    /**
+     * Kdy čekat příští menstruaci a plodné dny.
+     *
+     * Ovulace se odvozuje od konce cyklu, ne od začátku: luteální fáze je u většiny lidí
+     * stabilních čtrnáct dní, kdežto první polovina se protahuje. Počítat plodné dny od
+     * začátku by u delšího cyklu ukázalo špatný týden.
+     */
+    private function predict(Collection $cycles, array $averages, Carbon $today): ?array
+    {
+        $posledni = $cycles->last();
+        if (! $posledni) return null;
+
+        $dalsi = $posledni['start']->copy()->addDays($averages['cycle']);
+
+        // Když už měla dávno začít, posouváme po celých cyklech dál — jinak by aplikace
+        // tvrdila, že menstruace „měla přijít před třemi týdny", což nikomu nepomůže.
+        while ($dalsi->lessThan($today->copy()->subDays(3))) {
+            $dalsi->addDays($averages['cycle']);
+        }
+
+        $ovulace = $dalsi->copy()->subDays(14);
+
+        return [
+            'next_period_on' => $dalsi->toDateString(),
+            'days_until' => (int) $today->diffInDays($dalsi, false),
+            'period_ends_on' => $dalsi->copy()->addDays(max(1, $averages['period']) - 1)->toDateString(),
+            'ovulation_on' => $ovulace->toDateString(),
+            'fertile_from' => $ovulace->copy()->subDays(5)->toDateString(),
+            'fertile_to' => $ovulace->copy()->addDay()->toDateString(),
+            'based_on_cycles' => $averages['based_on'],
+            'spread_days' => $averages['spread'],
+            // Odhad, ne diagnóza — a čím míň cyklů, tím volnější.
+            'confidence' => match (true) {
+                $averages['based_on'] >= 6 && ($averages['spread'] ?? 99) <= 4 => 'high',
+                $averages['based_on'] >= 3 => 'medium',
+                default => 'low',
+            },
+        ];
+    }
+
+    /** Kolikátý den cyklu je dnes a v jaké fázi. */
+    private function describeToday(Collection $cycles, array $averages, Carbon $today): ?array
+    {
+        $posledni = $cycles->last();
+        if (! $posledni) return null;
+
+        $den = (int) $posledni['start']->diffInDays($today) + 1;
+        if ($den < 1) return null;
+
+        $ovulace = $averages['cycle'] - 14;
+
+        return [
+            'cycle_day' => $den,
+            'phase' => match (true) {
+                $den <= max(1, $averages['period']) => 'menstruation',
+                $den < $ovulace - 4 => 'follicular',
+                $den <= $ovulace + 1 => 'fertile',
+                default => 'luteal',
+            },
+        ];
+    }
+
+    /**
+     * Co uvidí partner.
+     *
+     * Nefiltruje se to až na obrazovce — sem se nedostane nic, co majitelka nesdílí.
+     * Skrývat na frontendu údaj, který server odeslal, je iluze soukromí.
+     */
+    public function partnerView(GallerySpace $space, User $owner, ?Carbon $today = null): ?array
+    {
+        $settings = $this->settings($space, $owner);
+        if (! $settings->allowsPartner()) return null;
+
+        $plny = $this->overview($space, $owner, $today);
+
+        if (! $settings->allowsDetail()) {
+            // Jen kdy čekat. Žádné příznaky, žádné poznámky, žádná teplota.
+            return [
+                'owner' => ['id' => $owner->id, 'name' => $owner->name],
+                'share_level' => $settings->share_level,
+                'prediction' => $plny['prediction'],
+                'today' => $plny['today'],
+            ];
+        }
+
+        return [
+            'owner' => ['id' => $owner->id, 'name' => $owner->name],
+            'share_level' => $settings->share_level,
+            'prediction' => $plny['prediction'],
+            'today' => $plny['today'],
+            'days' => $plny['days'],
+            'cycles' => $plny['cycles'],
+        ];
+    }
+
+    /** Zapíše nebo přepíše jeden den. */
+    public function saveDay(GallerySpace $space, User $user, array $data): CycleDay
+    {
+        return CycleDay::updateOrCreate(
+            ['user_id' => $user->id, 'day' => $data['day']],
+            [
+                'gallery_space_id' => $space->id,
+                'flow' => $data['flow'] ?? 'none',
+                'symptoms' => $data['symptoms'] ?? null,
+                'moods' => $data['moods'] ?? null,
+                'pain' => $data['pain'] ?? null,
+                'temperature' => $data['temperature'] ?? null,
+                'note' => $data['note'] ?? null,
+                'is_cycle_start' => $data['is_cycle_start'] ?? false,
+            ],
+        );
+    }
+}
