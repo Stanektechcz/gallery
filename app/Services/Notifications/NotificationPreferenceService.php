@@ -43,6 +43,9 @@ class NotificationPreferenceService
                 'to' => $this->validTime((string) ($quiet['to'] ?? '07:00'), '07:00'),
             ],
             'browser_notifications' => (bool) ($saved['browser_notifications'] ?? false),
+            // Souhrn místo drobností. Vypnuto: zapnout si to má ten, komu upozornění
+            // přerostla přes hlavu, ne každý mlčky.
+            'digest' => (bool) ($saved['digest'] ?? false),
         ];
     }
 
@@ -119,8 +122,25 @@ class NotificationPreferenceService
         if ($meta['priority'] === 'critical') return true;
         $preferences = $this->preferences($user);
 
+        // Se zapnutým souhrnem drobnosti nechodí jednotlivě — sejdou se do jedné večerní
+        // zprávy. Smysl souhrnu je ubrat upozornění, ne přidat šesté k pěti stávajícím,
+        // takže se to, co do něj patří, tady zastaví.
+        if (($preferences['digest'] ?? false) && $meta['priority'] === 'low') return false;
+
         return ($preferences['categories'][$meta['category']] ?? true)
             && $this->rank($meta['priority']) >= $this->rank($preferences['priority_floor']);
+    }
+
+    /**
+     * Co by se za dané období sešlo do souhrnu.
+     *
+     * Sbírá se z toho, co se opravdu stalo, ne z odchycených upozornění: zastavená
+     * zpráva nikde nezůstala, a znovu ji vyrobit z databáze je spolehlivější než držet
+     * frontu čekajících textů.
+     */
+    public function wantsDigest(User $user): bool
+    {
+        return (bool) ($this->preferences($user)['digest'] ?? false);
     }
 
     public function isQuiet(User $user, ?CarbonInterface $at = null): bool

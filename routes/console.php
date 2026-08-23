@@ -25,6 +25,19 @@ Schedule::command('gallery:cycle-reminders --no-interaction')
     ->withoutOverlapping()
     ->name('cycle-reminders');
 
+// Večerní souhrn pro ty, kdo si ho zapnuli. Příkaz si hlídá čas i to, aby za jeden
+// večer neposlal dva.
+Schedule::command('gallery:notification-digest --no-interaction')
+    ->hourly()
+    ->withoutOverlapping()
+    ->name('notification-digest');
+
+// Automatické štítky z data a místa. V noci, protože prochází celý archiv.
+Schedule::command('gallery:auto-tag --apply --no-interaction')
+    ->dailyAt('03:20')
+    ->withoutOverlapping()
+    ->name('auto-tag');
+
 // Nevyřízené žádosti o peníze. Jednou denně stačí — a příkaz si sám hlídá, aby tutéž
 // žádost nepřipomínal opakovaně.
 Schedule::command('gallery:money-request-reminders --no-interaction')
