@@ -29,9 +29,19 @@ export interface AlbumSettingsValues {
     color?: string | null;
 }
 
+export interface CoverCandidate {
+    id: number;
+    uuid: string;
+    url?: string | null;
+}
+
 interface Props {
     albumUuid: string;
     album: AlbumSettingsValues;
+    /** What the album holds, so a cover can be chosen without hunting through the grid. */
+    candidates?: CoverCandidate[];
+    coverId?: number | null;
+    onCoverChange?: (id: number) => void;
     onClose: () => void;
 }
 
@@ -41,7 +51,7 @@ const asDay = (value?: string | null): string => (value ? value.substring(0, 10)
 const FIELD = 'w-full rounded-lg bg-[var(--color-bg-primary)] border border-[var(--color-border)] text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-accent)] transition-colors';
 const LABEL = 'block text-xs font-medium text-[var(--color-text-secondary)] mb-1.5';
 
-export default function AlbumSettings({ albumUuid, album, onClose }: Props) {
+export default function AlbumSettings({ albumUuid, album, candidates = [], coverId, onCoverChange, onClose }: Props) {
     const [form, setForm] = useState({
         title: album.title ?? '',
         description: album.description ?? '',
@@ -54,6 +64,30 @@ export default function AlbumSettings({ albumUuid, album, onClose }: Props) {
     });
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
+    const [cover, setCover] = useState<number | null>(coverId ?? null);
+    const [coverBusy, setCoverBusy] = useState(false);
+
+    /**
+     * The cover, chosen here as well as from the grid.
+     *
+     * Saved the moment it is picked rather than with the rest of the form: it has its own
+     * endpoint, and somebody who chooses a picture expects that to be the choice, not to
+     * hunt for a second button that confirms it.
+     */
+    const chooseCover = async (candidate: CoverCandidate) => {
+        setCoverBusy(true);
+        setError('');
+
+        try {
+            await axios.put(`/api/v1/albums/${albumUuid}/cover`, { media_uuid: candidate.uuid });
+            setCover(candidate.id);
+            onCoverChange?.(candidate.id);
+        } catch {
+            setError('Titulní fotku se nepodařilo nastavit.');
+        } finally {
+            setCoverBusy(false);
+        }
+    };
 
     const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) =>
         setForm(current => ({ ...current, [key]: value }));
@@ -189,6 +223,37 @@ export default function AlbumSettings({ albumUuid, album, onClose }: Props) {
                         </button>
                     </div>
                 </div>
+
+                {/* A strip rather than the whole album: the cover is nearly always one of
+                    the first pictures, and anything further in can still be picked from
+                    the grid below, where every tile carries the same star. */}
+                {candidates.length > 0 && (
+                    <div>
+                        <label className={LABEL}>Titulní fotka</label>
+                        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+                            {candidates.slice(0, 24).map(candidate => (
+                                <button key={candidate.id} type="button" title="Nastavit jako titulní fotku"
+                                    onClick={() => void chooseCover(candidate)}
+                                    disabled={coverBusy}
+                                    className={`relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border-2 transition-all disabled:opacity-50 ${
+                                        cover === candidate.id
+                                            ? 'border-amber-400'
+                                            : 'border-transparent hover:border-[var(--color-accent)]/60'
+                                    }`}>
+                                    {candidate.url
+                                        ? <img src={candidate.url} alt="" loading="lazy" className="h-full w-full object-cover"/>
+                                        : <span className="flex h-full w-full items-center justify-center bg-[var(--color-bg-primary)] text-[10px] text-[var(--color-text-secondary)]">?</span>}
+                                    {cover === candidate.id && (
+                                        <span className="absolute inset-x-0 bottom-0 bg-amber-400 py-0.5 text-[8px] font-medium text-black">titulní</span>
+                                    )}
+                                </button>
+                            ))}
+                        </div>
+                        <p className="mt-1 text-[10px] text-[var(--color-text-secondary)]">
+                            Uloží se hned. Bez volby si album půjčí svou nejnovější fotku.
+                        </p>
+                    </div>
+                )}
 
                 {error && <p className="text-xs text-red-400">{error}</p>}
 

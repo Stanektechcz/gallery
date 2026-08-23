@@ -1,4 +1,5 @@
 import AppLayout from '@/Layouts/AppLayout';
+import { takenAtDate } from '@/lib/takenAt';
 import { Head } from '@inertiajs/react';
 import axios from 'axios';
 import { addLocalizedBaseLayer, localizedCountry } from '@/lib/localizedMap';
@@ -486,7 +487,7 @@ export default function ItineraryIndex() {
                                                                 <img key={ph.uuid} src={ph.thumbnail_url} alt=""
                                                                     className="w-12 h-12 object-cover rounded-md border border-[var(--color-border)] hover:opacity-80 cursor-pointer transition-opacity"
                                                                     onClick={() => window.open(`/media/${ph.uuid}`, '_blank')}
-                                                                    title={ph.taken_at ? new Date(ph.taken_at).toLocaleDateString('cs-CZ') : ''}
+                                                                    title={ph.taken_at ? takenAtDate(ph.taken_at)!.toLocaleDateString('cs-CZ') : ''}
                                                                 />
                                                             ))}
                                                             {placePhotos.length > 10 && (

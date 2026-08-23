@@ -1,4 +1,5 @@
 import AppLayout from '@/Layouts/AppLayout';
+import { takenAtDate } from '@/lib/takenAt';
 import { Head, Link, router } from '@inertiajs/react';
 import axios from 'axios';
 import { addLocalizedBaseLayer } from '@/lib/localizedMap';
@@ -120,9 +121,19 @@ function formatBytes(b: number): string {
     return `${(b / 1024 ** 3).toFixed(2)} GB`;
 }
 
+/**
+ * A capture time, shown as the camera recorded it.
+ *
+ * EXIF carries no timezone, so converting turned 14:51 in Prague into 16:51 and moved
+ * anything after ten at night onto the next day. The hour someone remembers is the hour
+ * the shutter went, wherever they happen to be reading this.
+ */
 function formatDate(d?: string): string {
-    if (!d) return '—';
-    return new Date(d).toLocaleString('cs-CZ', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    const date = takenAtDate(d);
+
+    return date
+        ? date.toLocaleString('cs-CZ', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+        : '—';
 }
 
 function formatDuration(milliseconds?: number): string {

@@ -1,4 +1,5 @@
 import AppLayout from '@/Layouts/AppLayout';
+import { takenAtDate } from '@/lib/takenAt';
 import { Head, Link } from '@inertiajs/react';
 import axios from 'axios';
 import { addLocalizedBaseLayer } from '@/lib/localizedMap';
@@ -200,7 +201,7 @@ export default function MapIndex() {
                                 <div className="p-3 space-y-2">
                                     <p className="text-xs text-[var(--color-text-primary)] font-medium">
                                         {selected.taken_at
-                                            ? new Date(selected.taken_at).toLocaleDateString('cs-CZ', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+                                            ? takenAtDate(selected.taken_at)!.toLocaleDateString('cs-CZ', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
                                             : 'Neznámé datum'}
                                     </p>
                                     <p className="text-[10px] text-[var(--color-text-secondary)] font-mono">

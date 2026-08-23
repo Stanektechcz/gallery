@@ -9,6 +9,7 @@ import {
     Pause, Play, Settings2, Shuffle, SkipForward, Star, X,
 } from 'lucide-react';
 import { addLocalizedBaseLayer } from '@/lib/localizedMap';
+import { takenAtDate } from '@/lib/takenAt';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 // ── Types ─────────────────────────────────────────────────────────────────
@@ -223,11 +224,11 @@ export default function Slideshow({ items: rawItems, initialIndex = 0, tvMode: i
             const today = new Date();
             result = result.filter(it => {
                 if (!it.taken_at) return false;
-                const d = new Date(it.taken_at);
+                const d = takenAtDate(it.taken_at)!;
                 return d.getMonth() === today.getMonth() && d.getDate() === today.getDate();
             }).concat(result.filter(it => {
                 if (!it.taken_at) return false;
-                const d = new Date(it.taken_at);
+                const d = takenAtDate(it.taken_at)!;
                 return !(d.getMonth() === today.getMonth() && d.getDate() === today.getDate());
             }));
         }

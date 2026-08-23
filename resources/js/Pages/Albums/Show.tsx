@@ -260,7 +260,14 @@ export default function AlbumShow({ album, breadcrumb, children, media, filters:
                 </div>
 
                 {settingsOpen && (
-                    <AlbumSettings albumUuid={album.uuid} album={album} onClose={() => setSettingsOpen(false)} />
+                    <AlbumSettings
+                        albumUuid={album.uuid}
+                        album={album}
+                        candidates={galleryItems.map(({ item, displayUrl }) => ({ id: item.id, uuid: item.uuid, url: displayUrl }))}
+                        coverId={coverId}
+                        onCoverChange={setCoverId}
+                        onClose={() => setSettingsOpen(false)}
+                    />
                 )}
 
                 {cameraOpen && (
