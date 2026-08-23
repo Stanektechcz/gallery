@@ -70,6 +70,8 @@ class BudgetService
             'categories' => $this->categories($budget, $today),
             'months' => $this->months($budget),
             'allowance' => $this->allowance($budget, $vydaje, $today),
+            // Co dochází. Prázdné pole je dobrá zpráva a nic se nekreslí.
+            'warnings' => $this->warnings($budget, $today),
             'entries' => $budget->entries
                 ->sortByDesc('spent_on')
                 ->take(100)
@@ -178,6 +180,52 @@ class BudgetService
             'days_left' => $dniDoKonce,
             'currency' => $budget->currency,
         ];
+    }
+
+    /**
+     * Kategorie, které docházejí nebo už přetekly.
+     *
+     * Počítá se proti tomu, co mělo být utraceno k dnešku, ne proti celému období —
+     * utratit polovinu rozpočtu na jídlo je v půlce měsíce v pořádku a po týdnu ne, a
+     * číslo, které tenhle rozdíl nevidí, varuje buď pořád, nebo nikdy.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function warnings(Budget $budget, ?Carbon $today = null): array
+    {
+        $today ??= Carbon::today();
+        $budget->loadMissing(['categories', 'entries']);
+
+        $konec = $budget->ends_on && $today->greaterThan($budget->ends_on) ? $budget->ends_on : $today;
+        $mesicu = max(0.2, $budget->starts_on->diffInDays($konec) / 30.44);
+
+        $varovani = [];
+
+        foreach ($budget->categories as $category) {
+            if ((float) $category->planned_monthly <= 0) continue;
+
+            $utraceno = (float) $budget->entries
+                ->where('kind', 'expense')
+                ->where('budget_category_id', $category->id)
+                ->where('currency', $budget->currency)
+                ->sum('amount');
+
+            $melo = (float) $category->planned_monthly * $mesicu;
+            if ($melo <= 0) continue;
+
+            $podil = $utraceno / $melo;
+            if ($podil < 0.8) continue;
+
+            $varovani[] = [
+                'category' => $category->name,
+                'spent' => round($utraceno, 2),
+                'planned_to_date' => round($melo, 2),
+                'percent' => (int) round($podil * 100),
+                'level' => $podil >= 1 ? 'over' : 'close',
+            ];
+        }
+
+        return $varovani;
     }
 
     /** @param Collection<int, BudgetEntry> $entries */

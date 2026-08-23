@@ -39,6 +39,11 @@ class CycleController extends Controller
         ]);
     }
 
+    public function statistics(Request $request): JsonResponse
+    {
+        return response()->json($this->cycles->statistics($this->space($request), $request->user()));
+    }
+
     public function storeDay(Request $request): JsonResponse
     {
         $this->write($request);

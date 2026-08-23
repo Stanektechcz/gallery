@@ -165,6 +165,8 @@ export default function CycleIndex() {
                             />
                         )}
 
+                        <Statistics/>
+
                         <Sharing settings={data.settings} onSaved={setData}/>
 
                         {partners.length > 0 && <Partners partners={partners}/>}
@@ -377,6 +379,74 @@ function DayEditor({ day, existing, trackSymptoms, onClose, onSaved }: {
                     {busy ? 'Ukládám…' : 'Uložit'}
                 </button>
             </div>
+        </section>
+    );
+}
+
+/**
+ * Jak se cyklus choval v čase.
+ *
+ * Načítá se zvlášť, protože se dívá dozadu přes celou historii — u někoho, kdo zapisuje
+ * třetí rok, je to podstatně dražší dotaz než dnešní stav, a ten nemá na co čekat.
+ */
+function Statistics() {
+    const [stats, setStats] = useState<{
+        cycle_lengths: Array<{ started_on: string; length: number; period_days: number }>;
+        shortest: number | null; longest: number | null; average: number; spread: number | null;
+        tracked_days: number;
+        symptom_patterns: Array<{ symptom: string; phase: string; count: number; in_phase: number }>;
+    } | null>(null);
+
+    useEffect(() => {
+        void axios.get('/api/v1/cyklus/statistika').then(r => setStats(r.data)).catch(() => setStats(null));
+    }, []);
+
+    if (! stats || stats.cycle_lengths.length === 0) return null;
+
+    const nejdelsi = Math.max(...stats.cycle_lengths.map(c => c.length), 1);
+
+    return (
+        <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-4">
+            <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">Jak to chodí</h2>
+            <p className="mt-0.5 text-xs text-[var(--color-text-secondary)]">
+                Z {stats.tracked_days} zapsaných dnů · nejkratší {stats.shortest} dní, nejdelší {stats.longest}
+                {stats.spread !== null && stats.spread > 4 && ' — cyklus je spíš nepravidelný'}
+            </p>
+
+            <div className="mt-3 space-y-1.5">
+                {stats.cycle_lengths.slice(-12).map(cyklus => (
+                    <div key={cyklus.started_on} className="flex items-center gap-2">
+                        <span className="w-20 shrink-0 text-[10px] text-[var(--color-text-secondary)]">{den(cyklus.started_on)}</span>
+                        <div className="h-4 flex-1 overflow-hidden rounded bg-[var(--color-bg-primary)]">
+                            {/* Krvácení tmavší částí téhož pruhu — délka cyklu a délka
+                                menstruace patří k sobě a dva grafy vedle sebe je nutí
+                                porovnávat očima. */}
+                            <div className="flex h-full">
+                                <div className="h-full bg-rose-500" style={{ width: `${cyklus.period_days / nejdelsi * 100}%` }}/>
+                                <div className="h-full bg-rose-400/25" style={{ width: `${(cyklus.length - cyklus.period_days) / nejdelsi * 100}%` }}/>
+                            </div>
+                        </div>
+                        <span className="w-12 shrink-0 text-right text-[10px] text-[var(--color-text-secondary)]">{cyklus.length} dní</span>
+                    </div>
+                ))}
+            </div>
+
+            {stats.symptom_patterns.length > 0 && (
+                <>
+                    <h3 className="mt-4 text-xs font-medium text-[var(--color-text-primary)]">Co se opakuje</h3>
+                    <p className="mt-0.5 text-[10px] text-[var(--color-text-secondary)]">
+                        Není to diagnóza, jen „tohle už znáte" — počítá se jen to, co se objevilo aspoň třikrát.
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                        {stats.symptom_patterns.slice(0, 8).map(vzorec => (
+                            <span key={vzorec.symptom} className="rounded-full border border-[var(--color-border)] px-2.5 py-1 text-[11px] text-[var(--color-text-secondary)]">
+                                {vzorec.symptom} · nejčastěji {PHASE_LABEL[vzorec.phase] ?? vzorec.phase}
+                                <span className="ml-1 opacity-60">{vzorec.count}×</span>
+                            </span>
+                        ))}
+                    </div>
+                </>
+            )}
         </section>
     );
 }

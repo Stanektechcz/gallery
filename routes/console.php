@@ -25,6 +25,13 @@ Schedule::command('gallery:cycle-reminders --no-interaction')
     ->withoutOverlapping()
     ->name('cycle-reminders');
 
+// Nevyřízené žádosti o peníze. Jednou denně stačí — a příkaz si sám hlídá, aby tutéž
+// žádost nepřipomínal opakovaně.
+Schedule::command('gallery:money-request-reminders --no-interaction')
+    ->dailyAt('09:30')
+    ->withoutOverlapping()
+    ->name('money-request-reminders');
+
 // Pravidelné položky rozpočtu na nový měsíc. Prvního ráno, jinak by nájem chyběl
 // v přehledu právě ve dnech, kdy se člověk dívá, jestli mu vyjde měsíc.
 Schedule::command('gallery:recurring-entries --apply --no-interaction')

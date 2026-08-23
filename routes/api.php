@@ -86,6 +86,7 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
         Route::get('/', [App\Http\Controllers\Api\CycleController::class, 'index'])->name('index');
         Route::post('/den', [App\Http\Controllers\Api\CycleController::class, 'storeDay'])->name('day.store');
         Route::delete('/den/{day}', [App\Http\Controllers\Api\CycleController::class, 'destroyDay'])->name('day.destroy');
+        Route::get('/statistika', [App\Http\Controllers\Api\CycleController::class, 'statistics'])->name('statistics');
         Route::patch('/nastaveni', [App\Http\Controllers\Api\CycleController::class, 'updateSettings'])->name('settings');
     });
 

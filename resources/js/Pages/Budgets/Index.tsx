@@ -34,6 +34,7 @@ interface Overview {
     categories: Array<{ id: number; name: string; color: string | null; planned_monthly: number; planned_to_date: number; spent: number; used_percent: number | null }>;
     months: Array<{ month: string; spent: number; income: number; count: number }>;
     allowance: { planned_total: number; spent: number; left: number; per_day: number | null; days_left: number | null; currency: string };
+    warnings?: Array<{ category: string; spent: number; planned_to_date: number; percent: number; level: 'close' | 'over' }>;
     entries: Array<{ uuid: string; kind: string; amount: number; currency: string; spent_on: string; note: string | null; is_recurring: boolean; category: string | null; author: string | null }>;
 }
 
@@ -219,6 +220,27 @@ function Overview({ data, onChanged }: { data: Overview; onChanged: () => void }
                 <Tile label="Příjem" value={money(totals.income[budget.currency] ?? 0, budget.currency)}
                     hint={budget.monthly_income ? `plán ${money(budget.monthly_income, budget.currency)} / měsíc` : 'zatím bez plánu'}/>
             </section>
+
+            {/* Co dochází, hned pod čísly. Prázdné je dobrá zpráva a nic se nekreslí —
+                varování, které svítí pořád, se přestane číst. */}
+            {data.warnings && data.warnings.length > 0 && (
+                <section className="rounded-2xl border border-amber-400/25 bg-amber-500/5 p-4">
+                    <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">Pozor na tyhle kategorie</h2>
+                    <div className="mt-2 space-y-1.5">
+                        {data.warnings.map(warning => (
+                            <p key={warning.category} className="flex flex-wrap items-baseline gap-x-2 text-xs">
+                                <span className={warning.level === 'over' ? 'text-red-300' : 'text-amber-200'}>
+                                    {warning.category} — {warning.percent} %
+                                </span>
+                                <span className="text-[var(--color-text-secondary)]">
+                                    {money(warning.spent, budget.currency)} z {money(warning.planned_to_date, budget.currency)},
+                                    které měly padnout do dneška
+                                </span>
+                            </p>
+                        ))}
+                    </div>
+                </section>
+            )}
 
             <Categories budget={budget} categories={categories} onChanged={onChanged}/>
 

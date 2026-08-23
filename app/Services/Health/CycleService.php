@@ -257,10 +257,44 @@ class CycleService
         ];
     }
 
+    /**
+     * Dá partnerovi vědět, že to začalo.
+     *
+     * Jen když si to majitelka sdílí — a jen první den, ne každý zápis. Smysl je
+     * praktický: partner ví, proč je jí zle, a nemusí se ptát.
+     */
+    private function announceStart(GallerySpace $space, User $owner, CycleDay $den): void
+    {
+        $settings = $this->settings($space, $owner);
+        if (! $settings->allowsPartner()) return;
+
+        // Jen skutečný začátek: předchozí dva dny bez krvácení. Bez téhle podmínky by
+        // zpráva odešla i za den, který se doplňoval zpětně uprostřed menstruace.
+        $predchozi = CycleDay::where('user_id', $owner->id)
+            ->whereBetween('day', [$den->day->copy()->subDays(2), $den->day->copy()->subDay()])
+            ->get()
+            ->contains(fn (CycleDay $d) => $d->isBleeding());
+
+        if ($predchozi) return;
+
+        $klic = "cycle:announced:{$owner->id}:" . $den->day->toDateString();
+        if (! \Illuminate\Support\Facades\Cache::add($klic, true, now()->addDays(3))) return;
+
+        foreach ($space->members()->where('users.id', '!=', $owner->id)->get() as $partner) {
+            $partner->notify(new \App\Notifications\GalleryNotification(
+                'health.cycle',
+                $owner->name . ' má první den cyklu.',
+                '/cyklus',
+                '🩸',
+                ['owner_id' => $owner->id],
+            ));
+        }
+    }
+
     /** Zapíše nebo přepíše jeden den. */
     public function saveDay(GallerySpace $space, User $user, array $data): CycleDay
     {
-        return CycleDay::updateOrCreate(
+        $den = CycleDay::updateOrCreate(
             ['user_id' => $user->id, 'day' => $data['day']],
             [
                 'gallery_space_id' => $space->id,
@@ -273,5 +307,82 @@ class CycleService
                 'is_cycle_start' => $data['is_cycle_start'] ?? false,
             ],
         );
+
+        if ($den->isBleeding()) {
+            $this->announceStart($space, $user, $den);
+        }
+
+        return $den;
+    }
+
+    /**
+     * Statistika: jak se cyklus choval v čase a co ho doprovází.
+     *
+     * Odděleně od přehledu, protože se dívá dozadu přes celou historii — u někoho, kdo
+     * zapisuje třetí rok, je to podstatně dražší dotaz než dnešní stav.
+     *
+     * @return array<string, mixed>
+     */
+    public function statistics(GallerySpace $space, User $owner): array
+    {
+        $days = CycleDay::where('user_id', $owner->id)->orderBy('day')->get();
+        $cycles = $this->cycles($days);
+        $settings = $this->settings($space, $owner);
+        $averages = $this->averages($cycles, $settings);
+
+        $delky = $cycles->pluck('length')->filter()->values();
+
+        // Který příznak se v které fázi objevuje. Ne diagnóza — jen „tohle už znáš",
+        // což u opakujících se bolestí hlavy stojí za vidění.
+        $vFazi = [];
+
+        foreach ($cycles as $cyklus) {
+            $konec = $cyklus['end'] ?? Carbon::today();
+
+            foreach ($days as $den) {
+                if ($den->day->lessThan($cyklus['start']) || $den->day->greaterThan($konec)) continue;
+
+                $poradi = (int) $cyklus['start']->diffInDays($den->day) + 1;
+                $faze = match (true) {
+                    $poradi <= max(1, $averages['period']) => 'menstruation',
+                    $poradi < $averages['cycle'] - 18 => 'follicular',
+                    $poradi <= $averages['cycle'] - 13 => 'fertile',
+                    default => 'luteal',
+                };
+
+                foreach (($den->symptoms ?? []) as $priznak) {
+                    $vFazi[$priznak][$faze] = ($vFazi[$priznak][$faze] ?? 0) + 1;
+                }
+            }
+        }
+
+        // Jen to, co se opakovalo — jeden výskyt není vzorec.
+        $vzorce = collect($vFazi)
+            ->map(function (array $faze, string $priznak) {
+                arsort($faze);
+
+                return [
+                    'symptom' => $priznak,
+                    'phase' => array_key_first($faze),
+                    'count' => array_sum($faze),
+                    'in_phase' => reset($faze),
+                ];
+            })
+            ->filter(fn (array $v) => $v['count'] >= 3)
+            ->sortByDesc('count')
+            ->values()
+            ->all();
+
+        return [
+            'cycle_lengths' => $cycles->filter(fn ($c) => $c['length'] !== null)
+                ->map(fn ($c) => ['started_on' => $c['start']->toDateString(), 'length' => $c['length'], 'period_days' => $c['period_days']])
+                ->values()->all(),
+            'shortest' => $delky->min(),
+            'longest' => $delky->max(),
+            'average' => $averages['cycle'],
+            'spread' => $averages['spread'],
+            'tracked_days' => $days->count(),
+            'symptom_patterns' => $vzorce,
+        ];
     }
 }
