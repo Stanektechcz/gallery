@@ -74,7 +74,60 @@ export default function MapIndex() {
             map.fitBounds(L.latLngBounds(allBounds), { padding: [40, 40] });
         }
 
-        points.forEach(point => {
+        /**
+         * Shluky, aby se stovka fotek z jedné ulice nepřekryla v jeden nečitelný flek.
+         *
+         * Bez knihovny navíc: body se seskupí podle zaokrouhlených souřadnic, jemněji
+         * s každým přiblížením. Skupina se kreslí jako jedna značka s počtem a kliknutí
+         * do ní přiblíží — což je přesně to, co od shluku kdo čeká.
+         */
+        const seskup = (body: typeof points, zoom: number) => {
+            // Na velkém přiblížení už se nic neslučuje: tam má být vidět každá fotka.
+            const presnost = zoom >= 16 ? 5 : zoom >= 13 ? 3 : zoom >= 10 ? 2 : 1;
+            const skupiny = new Map<string, typeof points>();
+
+            for (const bod of body) {
+                const klic = `${bod.latitude.toFixed(presnost)},${bod.longitude.toFixed(presnost)}`;
+                const stavajici = skupiny.get(klic);
+                stavajici ? stavajici.push(bod) : skupiny.set(klic, [bod]);
+            }
+
+            return [...skupiny.values()];
+        };
+
+        const vrstva = L.layerGroup().addTo(map);
+
+        const vykresli = () => {
+            vrstva.clearLayers();
+
+            for (const skupina of seskup(points, map.getZoom())) {
+                if (skupina.length === 1) {
+                    kresliBod(skupina[0]);
+                    continue;
+                }
+
+                const stred = skupina[0];
+                const nahled = skupina.map(b => b.variants?.find(v => v.type === 'thumbnail')?.url).find(Boolean);
+
+                const shluk = L.marker([stred.latitude, stred.longitude], {
+                    icon: L.divIcon({
+                        className: '',
+                        html: `<div style="position:relative;width:48px;height:48px;border-radius:50%;border:3px solid #6c63ff;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.5);background:#1a1a2e;cursor:pointer">
+                                 ${nahled ? `<img src="${nahled}" style="width:100%;height:100%;object-fit:cover;opacity:.55"/>` : ''}
+                                 <span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#fff;font:600 13px/1 system-ui;text-shadow:0 1px 3px rgba(0,0,0,.9)">${skupina.length}</span>
+                               </div>`,
+                        iconSize: [48, 48], iconAnchor: [24, 24],
+                    }),
+                }).addTo(vrstva);
+
+                shluk.on('click', () => map.flyTo([stred.latitude, stred.longitude], Math.min(18, map.getZoom() + 3)));
+            }
+        };
+
+        // Přiblížení mění, co se slučuje — bez překreslení by shluky zůstaly z prvního pohledu.
+        map.on('zoomend', vykresli);
+
+        const kresliBod = (point: (typeof points)[number]) => {
             const thumb = point.variants?.find(v => v.type === 'thumbnail')?.url;
             const icon = L.divIcon({
                 className: '',
@@ -88,13 +141,15 @@ export default function MapIndex() {
                 iconSize: [44, 44], iconAnchor: [22, 22],
             });
 
-            const marker = L.marker([point.latitude, point.longitude], { icon }).addTo(map);
+            const marker = L.marker([point.latitude, point.longitude], { icon }).addTo(vrstva);
             marker.on('click', (e: any) => {
                 const cp = map.latLngToContainerPoint(e.latlng);
                 setPopupPos({ x: cp.x, y: cp.y });
                 setSelected(point); setSelectedAlbum(null);
             });
-        });
+        };
+
+        vykresli();
 
         // Album markers — folder icons
         if (showAlbums) {
