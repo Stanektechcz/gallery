@@ -326,6 +326,53 @@ class AlbumController extends Controller
         return response()->json(['ok' => true, 'sort_mode' => 'manual']);
     }
 
+    /**
+     * Přenese polohu alba na jeho fotky a videa.
+     *
+     * Album z jednoho místa je nejlevnější způsob, jak doplnit polohu padesáti snímkům
+     * naráz — u fotek ze zrcadlovky nebo z telefonu s vypnutou GPS je to jediný způsob,
+     * jak se vůbec na mapu dostanou.
+     *
+     * Snímky s vlastní GPS se ve výchozím stavu nechávají být. Album je odhad („někde
+     * tady"), zatímco zapsaná GPS je měření — přepsat druhé prvním je ztráta, kterou
+     * nikdo nevrátí, takže si to musí člověk vyžádat výslovně.
+     */
+    public function applyLocation(Request $request, string $uuid): \Illuminate\Http\JsonResponse
+    {
+        $album = Album::where('uuid', $uuid)->firstOrFail();
+        Gate::authorize('update', $album);
+
+        $data = $request->validate([
+            'overwrite_gps' => 'sometimes|boolean',
+        ]);
+
+        abort_if($album->latitude === null || $album->longitude === null, 422, 'Album nemá nastavenou polohu.');
+
+        $query = MediaItem::query()
+            ->where(function ($q) use ($album) {
+                $q->where('primary_album_id', $album->id)
+                    ->orWhereHas('albums', fn ($q2) => $q2->where('albums.id', $album->id));
+            })
+            ->whereNull('trashed_at');
+
+        if (! ($data['overwrite_gps'] ?? false)) {
+            $query->whereNull('latitude');
+        }
+
+        $zmeneno = $query->update([
+            'latitude' => $album->latitude,
+            'longitude' => $album->longitude,
+            'location_name' => $album->location_name,
+            'location_country' => $album->location_country,
+            'location_source' => 'album',
+        ]);
+
+        return response()->json([
+            'updated' => $zmeneno,
+            'location_name' => $album->location_name,
+        ]);
+    }
+
     public function move(MoveAlbumRequest $request, string $uuid): \Illuminate\Http\JsonResponse
     {
         $album     = Album::where('uuid', $uuid)->firstOrFail();

@@ -1,6 +1,7 @@
+import LocationPicker, { type LocationValue } from '@/Components/LocationPicker';
 import axios from 'axios';
 import { router } from '@inertiajs/react';
-import { Check, X } from 'lucide-react';
+import { Check, MapPin, X } from 'lucide-react';
 import { useState } from 'react';
 
 /**
@@ -27,6 +28,10 @@ export interface AlbumSettingsValues {
     sort_mode?: string | null;
     sort_direction?: string | null;
     color?: string | null;
+    location_name?: string | null;
+    latitude?: number | null;
+    longitude?: number | null;
+    location_country?: string | null;
 }
 
 export interface CoverCandidate {
@@ -66,6 +71,51 @@ export default function AlbumSettings({ albumUuid, album, candidates = [], cover
     const [error, setError] = useState('');
     const [cover, setCover] = useState<number | null>(coverId ?? null);
     const [coverBusy, setCoverBusy] = useState(false);
+
+    const [location, setLocation] = useState<LocationValue>({
+        location_name: album.location_name ?? '',
+        latitude: album.latitude ?? '',
+        longitude: album.longitude ?? '',
+        location_country: album.location_country ?? '',
+        location_country_code: '',
+    });
+    const [overwriteGps, setOverwriteGps] = useState(false);
+    const [applying, setApplying] = useState(false);
+    const [applied, setApplied] = useState('');
+
+    /** Poloha alba se ukládá hned; přenesení na obsah je vědomý druhý krok. */
+    const saveLocation = async (next: LocationValue) => {
+        setApplied('');
+
+        try {
+            await axios.patch(`/albums/${albumUuid}`, {
+                location_name: next.location_name || null,
+                latitude: next.latitude === '' ? null : next.latitude,
+                longitude: next.longitude === '' ? null : next.longitude,
+                location_country: next.location_country || null,
+            });
+        } catch {
+            setError('Místo alba se nepodařilo uložit.');
+        }
+    };
+
+    const applyToMedia = async () => {
+        setApplying(true);
+        setApplied('');
+
+        try {
+            const response = await axios.post(`/api/v1/albums/${albumUuid}/poloha`, { overwrite_gps: overwriteGps });
+            const count = response.data.updated ?? 0;
+
+            setApplied(count === 0
+                ? 'Všechny snímky už polohu měly — nic se neměnilo.'
+                : `Poloha doplněna u ${count} položek.`);
+        } catch (problem: any) {
+            setError(problem?.response?.data?.message ?? 'Polohu se nepodařilo přenést.');
+        } finally {
+            setApplying(false);
+        }
+    };
 
     /**
      * The cover, chosen here as well as from the grid.
@@ -222,6 +272,37 @@ export default function AlbumSettings({ albumUuid, album, candidates = [], cover
                             Bez barvy
                         </button>
                     </div>
+                </div>
+
+                {/* Poloha alba a její přenesení na obsah.
+                    Album z jednoho místa je nejlevnější způsob, jak dostat na mapu
+                    padesát snímků, které GPS nemají — u fotek ze zrcadlovky nebo z
+                    telefonu s vypnutou polohou jediný. */}
+                <div>
+                    <label className={LABEL}>Místo alba</label>
+
+                    <LocationPicker
+                        value={location}
+                        onChange={next => { setLocation(next); void saveLocation(next); }}
+                    />
+
+                    {location.latitude !== '' && (
+                        <div className="mt-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-primary)] p-3">
+                            <label className="flex items-start gap-2 text-[11px] text-[var(--color-text-secondary)]">
+                                <input type="checkbox" checked={overwriteGps} onChange={event => setOverwriteGps(event.target.checked)} className="mt-0.5"/>
+                                {/* Vypnuté schválně: album je odhad („někde tady"), zapsaná
+                                    GPS je měření. Přepsat druhé prvním nikdo nevrátí. */}
+                                <span>Přepsat i u snímků, které vlastní GPS mají. Bez zaškrtnutí se doplní jen těm bez polohy.</span>
+                            </label>
+
+                            <button type="button" onClick={() => void applyToMedia()} disabled={applying}
+                                className="mt-2 inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-[var(--color-border)] px-3 text-xs text-[var(--color-text-primary)] transition-colors hover:border-[var(--color-accent)]/60 disabled:opacity-50">
+                                <MapPin size={13}/>{applying ? 'Přenáším…' : 'Použít u všech fotek a videí v albu'}
+                            </button>
+
+                            {applied && <p className="mt-2 text-[11px] text-emerald-300">{applied}</p>}
+                        </div>
+                    )}
                 </div>
 
                 {/* A strip rather than the whole album: the cover is nearly always one of

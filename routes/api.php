@@ -133,6 +133,7 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
         Route::get('/{uuid}/curation-assistant',       [App\Http\Controllers\Api\AlbumCurationController::class, 'show'])->name('curation.show');
         Route::put('/{uuid}/cover',                    [App\Http\Controllers\Api\AlbumCurationController::class, 'setCover'])->name('cover.update');
         Route::post('/{uuid}/poradi',                  [App\Http\Controllers\AlbumController::class, 'reorder'])->name('reorder');
+        Route::post('/{uuid}/poloha',                  [App\Http\Controllers\AlbumController::class, 'applyLocation'])->name('location.apply');
         Route::post('/{uuid}/curation-shortlist',      [App\Http\Controllers\Api\AlbumCurationController::class, 'createShortlist'])->name('curation.shortlist');
         Route::post('/{uuid}/backup',                  [App\Http\Controllers\Api\AlbumCurationController::class, 'syncBackup'])->name('backup.store');
         Route::post('/{uuid}/repair-previews',         [App\Http\Controllers\Api\AlbumCurationController::class, 'repairPreviews'])->name('previews.repair');
