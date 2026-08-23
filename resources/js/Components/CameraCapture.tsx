@@ -1,4 +1,4 @@
-import { cameraUnavailableReason, captureFilename, describeCameraError, grabFrame, hasMultipleCameras } from '@/lib/camera';
+import { cameraPermissionState, cameraUnavailableReason, captureFilename, describeCameraError, grabFrame, hasMultipleCameras, isInstalledApp } from '@/lib/camera';
 import { uploadManager } from '@/lib/uploadManager';
 import { Camera, Check, RefreshCw, RotateCcw, SwitchCamera, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -31,6 +31,8 @@ export default function CameraCapture({ albumId, onClose, onCaptured }: Props) {
     const fallbackRef = useRef<HTMLInputElement>(null);
 
     const [facing, setFacing] = useState<Facing>('environment');
+    /** Asked once — it cannot change while the camera is open. */
+    const [installed] = useState(isInstalledApp);
     const [canSwitch, setCanSwitch] = useState(false);
     const [error, setError] = useState('');
     const [starting, setStarting] = useState(true);
@@ -46,6 +48,17 @@ export default function CameraCapture({ albumId, onClose, onCaptured }: Props) {
     const start = useCallback(async (want: Facing) => {
         const blocked = cameraUnavailableReason();
         if (blocked) { setError(blocked); setStarting(false); return; }
+
+        // Asked before trying. A camera already refused for this site will never raise a
+        // dialog again, so calling getUserMedia only produces a "Spouštím fotoaparát…"
+        // that dies a second later — and inside the installed app there is no address bar
+        // to go and undo it in. Better to say so at once and offer the way that works.
+        if (await cameraPermissionState() === 'denied') {
+            setError(describeCameraError({ name: 'NotAllowedError' }));
+            setStarting(false);
+
+            return;
+        }
 
         setStarting(true);
         setError('');
@@ -201,7 +214,16 @@ export default function CameraCapture({ albumId, onClose, onCaptured }: Props) {
                     </>
                 ) : (
                     <>
-                        <span className="w-11"/>
+                        {/* In the installed app this sits beside the shutter from the
+                            start, not only after a refusal. It needs no permission of
+                            ours — the phone's own camera app takes the picture and hands
+                            it back — so on a phone it is the button that always works. */}
+                        {installed && ! error ? (
+                            <button type="button" onClick={useDeviceCamera} title="Fotoaparát telefonu"
+                                className="rounded-full bg-white/10 p-3 text-white hover:bg-white/20">
+                                <Camera size={18}/>
+                            </button>
+                        ) : <span className="w-11"/>}
                         <button type="button" onClick={take} disabled={Boolean(error) || starting} title="Vyfotit"
                             className="h-16 w-16 rounded-full border-4 border-white/80 bg-white transition-transform active:scale-95 disabled:opacity-30"/>
                         {canSwitch && ! error ? (

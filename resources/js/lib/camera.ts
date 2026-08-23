@@ -13,7 +13,12 @@ export function describeCameraError(error: unknown): string {
     switch (name) {
         case 'NotAllowedError':
         case 'PermissionDeniedError':
-            return 'Přístup k fotoaparátu je zamítnutý. Povolte ho v adresním řádku prohlížeče (ikona vlevo od adresy) a zkuste to znovu.';
+            // Told where the setting actually is for wherever they are standing. In the
+            // installed app there is no address bar at all, so the browser advice sent
+            // people looking for a button that does not exist on their screen.
+            return isInstalledApp()
+                ? 'Přístup k fotoaparátu je zamítnutý. Otevřete nastavení aplikace (podržte její ikonu → Informace o aplikaci → Oprávnění → Fotoaparát), nebo použijte fotoaparát telefonu tlačítkem níže — ten funguje vždy.'
+                : 'Přístup k fotoaparátu je zamítnutý. Povolte ho v adresním řádku prohlížeče (ikona vlevo od adresy) a zkuste to znovu.';
 
         case 'NotFoundError':
         case 'DevicesNotFoundError':
@@ -34,6 +39,45 @@ export function describeCameraError(error: unknown): string {
 
         default:
             return `Fotoaparát se nepodařilo spustit${name ? ` (${name})` : ''}. Zkontrolujte, že není zakrytý a že ho nepoužívá jiná aplikace.`;
+    }
+}
+
+/**
+ * Whether we are running inside the installed app rather than a browser tab.
+ *
+ * It changes what advice is true. The app is a Trusted Web Activity — the site rendered
+ * by Chrome inside our own window — so there is no address bar, no padlock icon, and no
+ * site-settings menu where somebody could turn the camera back on. Telling them to use
+ * one is telling them to do something impossible.
+ */
+export function isInstalledApp(): boolean {
+    if (typeof window === 'undefined') return false;
+
+    return window.matchMedia?.('(display-mode: standalone)').matches === true
+        // iOS uses its own flag, and a TWA launched from the home screen reports itself
+        // in the referrer rather than in display-mode on some Chrome versions.
+        || (navigator as unknown as { standalone?: boolean }).standalone === true
+        || document.referrer.startsWith('android-app://');
+}
+
+/**
+ * What the browser will do if we ask for the camera right now.
+ *
+ * Worth knowing before asking, because the three answers need three different screens:
+ * "prompt" means a tap will raise the system dialog, "granted" means go straight in, and
+ * "denied" means no dialog will ever appear again and the only way through is settings —
+ * or the device camera, which needs no permission from us at all.
+ *
+ * Returns null where the Permissions API does not know about the camera, which is still
+ * the case in Firefox and older Safari; there the request itself is the only way to find out.
+ */
+export async function cameraPermissionState(): Promise<PermissionState | null> {
+    try {
+        const status = await navigator.permissions?.query({ name: 'camera' as PermissionName });
+
+        return status?.state ?? null;
+    } catch {
+        return null;
     }
 }
 
