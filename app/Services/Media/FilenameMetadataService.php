@@ -15,12 +15,23 @@ class FilenameMetadataService
     {
         $base = pathinfo($filename, PATHINFO_FILENAME);
 
-        if (!preg_match('/(?<!\d)(20\d{2})[._-]?(0[1-9]|1[0-2])[._-]?([0-3]\d)(?!\d)/', $base, $match)) {
+        // Datum a — pokud ho název nese — i čas. Telefony píšou 20260701_145133 a ta
+        // druhá půlka je stejně spolehlivá jako první: je to čas, který ukazovaly hodiny
+        // ve fotoaparátu. Zahodit ho znamenalo poslat celý den fotek na půlnoc, kde se
+        // pak v archivu seřadily náhodně.
+        if (!preg_match('/(?<!\d)(20\d{2})[._-]?(0[1-9]|1[0-2])[._-]?([0-3]\d)(?!\d)(?:[._\-T ]?([0-2]\d)[._:-]?([0-5]\d)(?:[._:-]?([0-5]\d))?)?/', $base, $match)) {
             return [];
         }
 
+        $hodina = isset($match[4]) && $match[4] !== '' ? (int) $match[4] : null;
+        if ($hodina !== null && $hodina > 23) $hodina = null;
+
         try {
             $date = Carbon::create((int) $match[1], (int) $match[2], (int) $match[3])->startOfDay();
+
+            if ($hodina !== null) {
+                $date->setTime($hodina, (int) ($match[5] ?? 0), (int) ($match[6] ?? 0));
+            }
         } catch (\Throwable) {
             return [];
         }

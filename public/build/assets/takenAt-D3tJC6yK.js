@@ -1,1 +1,0 @@
-var e=/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?/;function t(t){if(!t)return null;let n=e.exec(t);if(!n){let e=new Date(t);return Number.isNaN(e.getTime())?null:e}return new Date(Number(n[1]),Number(n[2])-1,Number(n[3]),Number(n[4]),Number(n[5]),Number(n[6]??0))}export{t};

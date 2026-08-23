@@ -97,27 +97,32 @@ class AlbumController extends Controller
 
         if ($chybi->isEmpty()) return;
 
-        // The newest picture in each album. Newest rather than oldest because an album
-        // being added to is usually being looked at, and its latest addition is what the
-        // person has in mind.
-        $nejnovejsi = \Illuminate\Support\Facades\DB::table('album_media')
+        // The best picture in each album rather than merely the newest, ordered the same
+        // way the album assistant already ranks its own recommendation: something the
+        // person marked as a favourite, then whatever they rated, then a photograph over
+        // a still from a film, and only then the sharpest of what is left.
+        //
+        // A hand-picked cover still beats all of it — these albums have none.
+        $nejlepsi = \Illuminate\Support\Facades\DB::table('album_media')
             ->join('media_items', 'media_items.id', '=', 'album_media.media_item_id')
             ->whereIn('album_media.album_id', $chybi->pluck('id'))
             ->whereNull('media_items.trashed_at')
-            ->where('media_items.media_type', 'photo')
+            ->orderByDesc('media_items.is_favorite')
+            ->orderByRaw('COALESCE(media_items.rating, 0) DESC')
+            ->orderByRaw("CASE WHEN media_items.media_type = 'photo' THEN 0 ELSE 1 END")
+            ->orderByRaw('COALESCE(media_items.width, 0) * COALESCE(media_items.height, 0) DESC')
             ->orderByDesc('media_items.taken_at')
-            ->orderByDesc('media_items.id')
             ->get(['album_media.album_id', 'media_items.id as media_id'])
             ->unique('album_id')
             ->keyBy('album_id');
 
         $media = MediaItem::with('variants')
-            ->whereIn('id', $nejnovejsi->pluck('media_id'))
+            ->whereIn('id', $nejlepsi->pluck('media_id'))
             ->get()
             ->keyBy('id');
 
         foreach ($chybi as $album) {
-            $vybrane = $nejnovejsi->get($album->id);
+            $vybrane = $nejlepsi->get($album->id);
             if ($vybrane && $media->has($vybrane->media_id)) {
                 $album->setRelation('cover', $media->get($vybrane->media_id));
             }

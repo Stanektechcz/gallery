@@ -192,6 +192,7 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/hlasovky', fn() => Inertia::render('VoiceNotes/Index'))->name('voice-notes');
     Route::get('/zaroven', fn() => Inertia::render('TogetherNow/Index'))->name('together-now');
     Route::get('/rozpocty', fn() => Inertia::render('Budgets/Index'))->name('budgets');
+    Route::get('/duplicity', fn() => Inertia::render('Duplicates/Index'))->name('duplicates');
     Route::get('/krkance', fn() => Inertia::render('Burps/Index'))->name('burps');
     Route::get('/prdy', fn() => Inertia::render('Farts/Index'))->name('farts');
     Route::get('/settings/vzhled', fn() => Inertia::render('Settings/Appearance'))->name('settings.appearance');
