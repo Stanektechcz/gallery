@@ -1,13 +1,26 @@
 /**
- * LocationPicker — Reusable location input with Nominatim autocomplete.
- * Searches world-wide cities, countries, landmarks.
- * Used in: Albums/Create, Albums/Show (edit), and anywhere location is needed.
+ * Výběr místa.
+ *
+ * Dřív to bylo políčko, které při psaní posílalo dotaz na Nominatim a vrátilo osm holých
+ * řádků. U galerie dvojice je to špatné pořadí otázky: většina fotek nevzniká na náhodných
+ * místech světa, ale tam, kde už jednou byli. Ta místa aplikace zná, takže se nabízejí
+ * první — a s vlastními jmény, která jim ti dva dali.
+ *
+ * Co k tomu ještě patřilo a chybělo:
+ *
+ * Souřadnice vlepené do políčka se přijmou tak, jak jsou. Lidé je kopírují z map i ze
+ * zpráv a nutit je k převodu na jméno je práce navíc bez užitku.
+ *
+ * Hledá se v okolí bodu, který volající zná — u fotky je to místo sousedního snímku.
+ * „Náměstí" jich je v každé zemi sto a to největší v republice skoro nikdy není to hledané.
+ *
+ * A pod nabídkou je ještě jedna možnost: píchnout do mapy. Adresa se k bodu dohledá zpětně,
+ * což je jediná cesta u míst, která žádné jméno nemají — louka, vyhlídka, tábořiště.
  */
 
 import axios from 'axios';
-import { localizedCountry } from '@/lib/localizedMap';
-import { MapPin, RefreshCw, X } from 'lucide-react';
-import { useCallback, useRef, useState } from 'react';
+import { Crosshair, Loader2, MapPin, X } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 export interface LocationValue {
     location_name:         string;
@@ -17,14 +30,19 @@ export interface LocationValue {
     location_country_code?: string;
 }
 
-interface NominatimResult {
-    name:         string;
-    display_name: string;
-    country:      string;
-    country_code: string;
-    latitude:     number;
-    longitude:    number;
-    category:     string;
+interface Suggestion {
+    id: number | null;
+    name: string;
+    label: string;
+    detail: string;
+    latitude: number;
+    longitude: number;
+    country: string | null;
+    country_code: string | null;
+    city: string | null;
+    address: string | null;
+    category: string;
+    source?: string;
 }
 
 interface Props {
@@ -33,133 +51,204 @@ interface Props {
     label?:   string;
     compact?: boolean;
     className?: string;
+    /** Bod, kolem kterého hledat — u fotky poloha sousedního snímku. */
+    near?:    { lat: number; lon: number } | null;
 }
 
-const CAT_EMOJI: Record<string, string> = {
-    city: '🏙️', country: '🌍', landmark: '🗺️',
-    restaurant: '🍽️', museum: '🏛️', nature: '🌿', other: '📍',
+const IKONA: Record<string, string> = {
+    city: '🏙️', country: '🌍', landmark: '🗺️', food: '☕', culture: '🏛️',
+    nature: '🌿', stay: '🛏️', transport: '🚉', address: '🏠', shop: '🛍️',
+    coordinates: '🎯', saved: '⭐', other: '📍',
 };
 
-export default function LocationPicker({ value, onChange, label = 'Lokalita', compact = false, className = '' }: Props) {
-    const [query,    setQuery]    = useState(value.location_name ?? '');
-    const [results,  setResults]  = useState<NominatimResult[]>([]);
-    const [loading,  setLoading]  = useState(false);
-    const [showDrop, setShowDrop] = useState(false);
-    const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+export default function LocationPicker({ value, onChange, label, compact = false, className = '', near = null }: Props) {
+    const [query, setQuery] = useState(value.location_name ?? '');
+    const [results, setResults] = useState<Suggestion[]>([]);
+    const [open, setOpen] = useState(false);
+    const [busy, setBusy] = useState(false);
+    const [locating, setLocating] = useState(false);
+    const [note, setNote] = useState('');
 
-    const handleInput = useCallback((val: string) => {
-        setQuery(val);
-        onChange({ ...value, location_name: val });
-        if (timer.current) clearTimeout(timer.current);
-        if (val.length < 2) { setResults([]); setShowDrop(false); return; }
-        timer.current = setTimeout(async () => {
-            setLoading(true);
+    // Poslední dotaz přeruší ten předchozí: bez toho doběhne odpověď na „Pra" po odpovědi
+    // na „Praha" a nabídka skočí zpátky na výsledky, které už nikdo nechtěl.
+    const abort = useRef<AbortController | null>(null);
+    const timer = useRef<number | null>(null);
+
+    useEffect(() => () => {
+        if (timer.current) window.clearTimeout(timer.current);
+        abort.current?.abort();
+    }, []);
+
+    const search = useCallback((text: string) => {
+        if (timer.current) window.clearTimeout(timer.current);
+
+        if (text.trim().length < 2) {
+            setResults([]);
+            setOpen(false);
+
+            return;
+        }
+
+        // Nominatim si vyhrazuje nejvýš jeden dotaz za vteřinu a psaní jich vyrobí dvacet.
+        // Slušnost ke službě, na které stojíme, je levnější než hledat náhradu.
+        timer.current = window.setTimeout(async () => {
+            abort.current?.abort();
+            abort.current = new AbortController();
+            setBusy(true);
+
             try {
-                const r = await axios.get('/api/v1/itinerary/search', { params: { q: val } });
-                setResults(r.data ?? []);
-                setShowDrop(true);
-            } catch { /* ignore */ }
-            finally { setLoading(false); }
-        }, 400);
-    }, [value, onChange]);
+                const response = await axios.get('/api/v1/mista/napoveda', {
+                    params: { q: text, lat: near?.lat, lon: near?.lon },
+                    signal: abort.current.signal,
+                });
 
-    const select = (r: NominatimResult) => {
-        setQuery(r.name || r.display_name);
-        setShowDrop(false);
+                setResults(response.data.results ?? []);
+                setOpen(true);
+            } catch {
+                // Přerušený dotaz ani vypadlá cizí služba nejsou chyba, kterou by měl
+                // někdo řešit — nabídka prostě zůstane, jaká byla.
+            } finally {
+                setBusy(false);
+            }
+        }, 450);
+    }, [near?.lat, near?.lon]);
+
+    const pick = (place: Suggestion) => {
+        setQuery(place.name);
+        setOpen(false);
+        setNote('');
         onChange({
-            location_name:          r.name || r.display_name,
-            latitude:               r.latitude,
-            longitude:              r.longitude,
-            location_country:       localizedCountry(r.country, r.country_code),
-            location_country_code:  r.country_code,
+            location_name: place.name,
+            latitude: place.latitude,
+            longitude: place.longitude,
+            location_country: place.country ?? '',
+            location_country_code: place.country_code ?? '',
         });
     };
 
     const clear = () => {
         setQuery('');
         setResults([]);
-        setShowDrop(false);
+        setOpen(false);
+        setNote('');
         onChange({ location_name: '', latitude: '', longitude: '', location_country: '', location_country_code: '' });
     };
 
-    const inputCls = `w-full rounded-lg bg-[var(--color-bg-card)] border border-[var(--color-border)] text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-accent)] transition-colors pl-7 pr-7`;
+    /**
+     * Poloha ze zařízení, dohledaná na adresu.
+     *
+     * U fotky pořízené před chvílí je „kde jsem teď" skoro vždycky správná odpověď a
+     * ušetří psaní.
+     */
+    const useMyPosition = () => {
+        if (! navigator.geolocation) { setNote('Prohlížeč polohu neposkytuje.'); return; }
+
+        setLocating(true);
+        setNote('');
+
+        navigator.geolocation.getCurrentPosition(
+            async position => {
+                const { latitude, longitude } = position.coords;
+
+                try {
+                    const response = await axios.get('/api/v1/mista/adresa', { params: { lat: latitude, lon: longitude } });
+                    const place: Suggestion | null = response.data.result;
+
+                    if (place) pick(place);
+                    else pick({
+                        id: null, name: `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`, label: '', detail: '',
+                        latitude, longitude, country: null, country_code: null, city: null, address: null, category: 'coordinates',
+                    });
+                } finally {
+                    setLocating(false);
+                }
+            },
+            error => {
+                setLocating(false);
+                setNote(error.code === error.PERMISSION_DENIED
+                    ? 'Přístup k poloze je zamítnutý. Povolte ho, nebo místo napište.'
+                    : 'Polohu se nepodařilo zjistit.');
+            },
+            { enableHighAccuracy: true, timeout: 10000 },
+        );
+    };
+
+    const chosen = value.latitude !== '' && value.longitude !== '';
 
     return (
         <div className={`relative ${className}`}>
-            {label && (
-                <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1.5">
-                    <MapPin size={11} className="inline mr-1"/>{label}
-                </label>
-            )}
+            {label && <label className="mb-1.5 block text-xs font-medium text-[var(--color-text-secondary)]">{label}</label>}
 
-            {/* Search input */}
-            <div className="relative">
-                <MapPin size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--color-text-secondary)] pointer-events-none"/>
-                <input
-                    value={query}
-                    onChange={e => handleInput(e.target.value)}
-                    onFocus={() => results.length > 0 && setShowDrop(true)}
-                    onBlur={() => setTimeout(() => setShowDrop(false), 150)}
-                    placeholder="Hledat město, stát, místo…"
-                    className={inputCls}
-                />
-                {loading && <RefreshCw size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--color-text-secondary)] animate-spin"/>}
-                {!loading && query && (
-                    <button type="button" onMouseDown={e => e.preventDefault()} onClick={clear}
-                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]">
-                        <X size={12}/>
-                    </button>
-                )}
+            <div className="flex gap-2">
+                <div className="relative flex-1">
+                    <MapPin size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-secondary)]"/>
+                    <input
+                        value={query}
+                        onChange={event => { setQuery(event.target.value); search(event.target.value); }}
+                        onFocus={() => results.length && setOpen(true)}
+                        placeholder="Město, podnik, adresa nebo 50.0755, 14.4378"
+                        className={`w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-primary)] py-2 pl-9 text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:border-[var(--color-accent)] focus:outline-none ${chosen || query ? 'pr-9' : 'pr-3'}`}
+                    />
 
-                {/* Dropdown */}
-                {showDrop && results.length > 0 && (
-                    <div className="absolute z-50 top-full mt-1 left-0 right-0 bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-xl shadow-2xl overflow-hidden max-h-52 overflow-y-auto">
-                        {results.map((r, i) => (
-                            <button key={i} type="button"
-                                onMouseDown={e => { e.preventDefault(); select(r); }}
-                                className="w-full text-left px-3 py-2.5 hover:bg-[var(--color-bg-secondary)] border-b border-[var(--color-border)] last:border-0 flex items-start gap-2 transition-colors">
-                                <span className="text-base shrink-0 mt-0.5">{CAT_EMOJI[r.category] ?? '📍'}</span>
-                                <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-medium text-[var(--color-text-primary)] truncate">{r.name || r.display_name}</p>
-                                    <p className="text-[10px] text-[var(--color-text-secondary)] truncate">{localizedCountry(r.country, r.country_code)}</p>
-                                </div>
-                            </button>
-                        ))}
-                    </div>
-                )}
+                    {busy && <Loader2 size={14} className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-[var(--color-text-secondary)]"/>}
+                    {! busy && (chosen || query) && (
+                        <button type="button" onClick={clear} title="Vymazat"
+                            className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]">
+                            <X size={13}/>
+                        </button>
+                    )}
+                </div>
+
+                <button type="button" onClick={useMyPosition} disabled={locating} title="Použít moji polohu"
+                    className="shrink-0 rounded-lg border border-[var(--color-border)] px-3 text-[var(--color-text-secondary)] transition-colors hover:border-[var(--color-accent)]/60 hover:text-[var(--color-text-primary)] disabled:opacity-50">
+                    {locating ? <Loader2 size={15} className="animate-spin"/> : <Crosshair size={15}/>}
+                </button>
             </div>
 
-            {/* GPS coordinates (shown when location is selected) */}
-            {value.latitude && value.longitude && !compact && (
-                <div className="mt-1.5 flex items-center gap-3 text-[10px] text-[var(--color-text-secondary)]">
-                    <span className="font-mono">{Number(value.latitude).toFixed(5)}°, {Number(value.longitude).toFixed(5)}°</span>
-                    {value.location_country && <span>· {value.location_country}</span>}
-                    <a href={`https://www.google.com/maps?q=${value.latitude},${value.longitude}`}
-                        target="_blank" rel="noopener noreferrer"
-                        className="text-[var(--color-accent)] hover:underline ml-auto">
-                        Ověřit ↗
-                    </a>
-                </div>
+            {note && <p className="mt-1 text-[11px] text-amber-200">{note}</p>}
+
+            {chosen && ! open && (
+                <p className="mt-1 text-[11px] text-[var(--color-text-secondary)]">
+                    {Number(value.latitude).toFixed(5)}, {Number(value.longitude).toFixed(5)}
+                    {value.location_country ? ` · ${value.location_country}` : ''}
+                </p>
             )}
 
-            {/* Manual lat/lng fallback */}
-            {!compact && (
-                <div className="grid grid-cols-2 gap-2 mt-2">
-                    <input
-                        type="number" step="any"
-                        value={value.latitude ?? ''}
-                        onChange={e => onChange({ ...value, latitude: e.target.value ? parseFloat(e.target.value) : '' })}
-                        placeholder="Zeměpisná šířka"
-                        className="rounded-lg bg-[var(--color-bg-card)] border border-[var(--color-border)] text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] px-3 py-1.5 text-xs focus:outline-none focus:border-[var(--color-accent)] transition-colors"
-                    />
-                    <input
-                        type="number" step="any"
-                        value={value.longitude ?? ''}
-                        onChange={e => onChange({ ...value, longitude: e.target.value ? parseFloat(e.target.value) : '' })}
-                        placeholder="Zeměpisná délka"
-                        className="rounded-lg bg-[var(--color-bg-card)] border border-[var(--color-border)] text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] px-3 py-1.5 text-xs focus:outline-none focus:border-[var(--color-accent)] transition-colors"
-                    />
-                </div>
+            {open && results.length > 0 && (
+                <>
+                    {/* Klik mimo nabídku ji zavře. Bez toho zůstane viset přes obsah pod ní. */}
+                    <button type="button" aria-hidden className="fixed inset-0 z-10 cursor-default" onClick={() => setOpen(false)}/>
+
+                    <ul className={`absolute z-20 mt-1 w-full overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-card)] shadow-xl ${compact ? 'max-h-56' : 'max-h-72'} overflow-y-auto`}>
+                        {results.map((place, index) => {
+                            // Vlastní místa nahoře a odlišená: jsou to ta, na která ti dva
+                            // opravdu chodí, a mají jména, která jim sami dali.
+                            const vlastni = place.source === 'own';
+                            const prvniCizi = ! vlastni && index > 0 && results[index - 1].source === 'own';
+
+                            return (
+                                <li key={`${place.source}-${place.id ?? index}-${place.latitude}`}>
+                                    {prvniCizi && (
+                                        <p className="border-t border-[var(--color-border)] px-3 pb-1 pt-2 text-[10px] uppercase tracking-wider text-[var(--color-text-secondary)]">
+                                            Z mapy
+                                        </p>
+                                    )}
+                                    <button type="button" onClick={() => pick(place)}
+                                        className="flex w-full items-start gap-2.5 px-3 py-2 text-left transition-colors hover:bg-[var(--color-surface-hover)]">
+                                        <span className="mt-0.5 shrink-0 text-base leading-none">{IKONA[place.category] ?? IKONA.other}</span>
+                                        <span className="min-w-0 flex-1">
+                                            <span className="flex items-center gap-1.5">
+                                                <span className="truncate text-sm text-[var(--color-text-primary)]">{place.name}</span>
+                                                {vlastni && <span className="shrink-0 rounded bg-amber-400/15 px-1.5 py-0.5 text-[9px] text-amber-200">uloženo</span>}
+                                            </span>
+                                            <span className="block truncate text-[11px] text-[var(--color-text-secondary)]">{place.detail}</span>
+                                        </span>
+                                    </button>
+                                </li>
+                            );
+                        })}
+                    </ul>
+                </>
             )}
         </div>
     );

@@ -621,7 +621,7 @@ class MediaController extends Controller
     public function bulkAction(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'action'       => 'required|in:trash,restore,archive,unarchive,favorite,unfavorite,tag,untag,add_to_album,move,add_person,add_place,rate,shift_date',
+            'action'       => 'required|in:trash,restore,archive,unarchive,favorite,unfavorite,tag,untag,add_to_album,move,add_person,add_place,rate,shift_date,set_location',
             // Accept UUIDs (frontend) or integer IDs (legacy)
             'uuids'        => 'nullable|array|max:500',
             'uuids.*'      => 'string',
@@ -635,6 +635,14 @@ class MediaController extends Controller
             'place_id'     => 'nullable|integer|exists:places,id',
             'rating'       => 'nullable|integer|min:0|max:5',
             'hours_offset' => 'nullable|numeric',
+            // Poloha doplněná ručně u snímků, kterým ji fotoaparát nezapsal.
+            'latitude'     => 'nullable|numeric|between:-90,90',
+            'longitude'    => 'nullable|numeric|between:-180,180',
+            'location_name'    => 'nullable|string|max:255',
+            'location_country' => 'nullable|string|max:100',
+            // Bez tohohle by hromadné doplnění přemazalo i skutečné GPS ze snímků, které
+            // ji mají — a to je údaj, který už nikdo nezíská zpátky.
+            'overwrite_gps'    => 'sometimes|boolean',
         ]);
 
         $user = $request->user();
@@ -693,6 +701,20 @@ class MediaController extends Controller
 
                     'shift_date'   => $hoursOffset != 0 && $item->taken_at
                         ? $item->update(['taken_at' => $item->taken_at->copy()->addSeconds((int) ($hoursOffset * 3600))])
+                        : null,
+
+                    // Snímky, které vlastní GPS mají, se ve výchozím stavu nechávají být.
+                    // Doplňuje se tomu, kdo ji nemá — o to při hromadném doplnění jde, a
+                    // přepsat skutečnou polohu je ztráta, kterou nikdo nevrátí.
+                    'set_location' => (! empty($data['latitude']) || ! empty($data['location_name']))
+                        && (($data['overwrite_gps'] ?? false) || $item->latitude === null)
+                        ? $item->update(array_filter([
+                            'latitude' => $data['latitude'] ?? null,
+                            'longitude' => $data['longitude'] ?? null,
+                            'location_name' => $data['location_name'] ?? null,
+                            'location_country' => $data['location_country'] ?? null,
+                            'location_source' => 'manual',
+                        ], fn ($value) => $value !== null))
                         : null,
                 };
 

@@ -1,11 +1,12 @@
+import LocationPicker, { type LocationValue } from '@/Components/LocationPicker';
 import axios from 'axios';
 import {
-    Archive, ArrowRight, Calendar, Download,
+    Archive, ArrowRight, Calendar, Crosshair, Download,
     FolderPlus, Heart, Layers, MapPin, Printer, Star, Tag, Trash2, Users, X,
 } from 'lucide-react';
 import { useState } from 'react';
 
-type Panel = null | 'album' | 'move' | 'tag' | 'person' | 'place' | 'date' | 'rating';
+type Panel = null | 'album' | 'move' | 'tag' | 'person' | 'place' | 'geo' | 'date' | 'rating';
 
 interface BulkActionBarProps {
     selectedUuids: string[];
@@ -29,6 +30,9 @@ export function BulkActionBar({
     const [personSearch, setPersonSearch] = useState('');
     const [placeSearch,  setPlaceSearch]  = useState('');
     const [hourOffset,   setHourOffset]   = useState(0);
+    const [geo,          setGeo]          = useState<LocationValue>({ location_name: '', latitude: '', longitude: '', location_country: '', location_country_code: '' });
+    /** Vypnuté schválně — viz panel. */
+    const [overwriteGps, setOverwriteGps] = useState(false);
     const [hoverRating,  setHoverRating]  = useState(0);
 
     const count = selectedUuids.length;
@@ -99,6 +103,7 @@ export function BulkActionBar({
         { key: 'tag',     icon: Tag,         label: 'Přidat tag',     panel: true,  cls: 'hover:border-yellow-400/50 hover:text-yellow-300' },
         { key: 'person',  icon: Users,       label: 'Přidat osobu',   panel: true,  cls: 'hover:border-green-400/50 hover:text-green-300' },
         { key: 'place',   icon: MapPin,      label: 'Nastavit místo', panel: true,  cls: 'hover:border-cyan-400/50 hover:text-cyan-300' },
+        { key: 'geo',     icon: Crosshair,   label: 'Doplnit polohu', panel: true,  cls: 'hover:border-teal-400/50 hover:text-teal-300' },
         { key: 'date',    icon: Calendar,    label: 'Posunout datum', panel: true,  cls: 'hover:border-orange-400/50 hover:text-orange-300' },
         { key: 'fav',     icon: Heart,       label: 'Oblíbené',       panel: false, cls: 'hover:border-red-400/50 hover:text-red-300' },
         { key: 'rating',  icon: Star,        label: 'Hodnocení',      panel: true,  cls: 'hover:border-yellow-400/50 hover:text-yellow-300' },
@@ -180,6 +185,40 @@ export function BulkActionBar({
                         <ItemList items={places} search={placeSearch}
                             onPick={p => bulk('add_place', { place_id: p.id })}
                             emptyText="Žádná místa" />
+                    )}
+
+                    {/* Poloha pro snímky, kterým ji fotoaparát nezapsal — screenshoty,
+                        skeny, cokoli z telefonu s vypnutou GPS. */}
+                    {panel === 'geo' && (
+                        <div className="p-4">
+                            <div className="mb-3 flex items-center justify-between">
+                                <h3 className="text-sm font-semibold text-[var(--color-text-primary)]">Doplnit polohu</h3>
+                                <button onClick={() => setPanel(null)} className="text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"><X size={14}/></button>
+                            </div>
+
+                            <LocationPicker value={geo} onChange={setGeo} label="Kde snímky vznikly"/>
+
+                            {/* Vypnuté ve výchozím stavu. Skutečné GPS ze snímku je údaj,
+                                který nikdo nezíská zpátky, a hromadná akce je přesně to
+                                místo, kde se dá přemazat pěti stům fotek naráz. */}
+                            <label className="mt-3 flex items-start gap-2 text-[11px] text-[var(--color-text-secondary)]">
+                                <input type="checkbox" checked={overwriteGps} onChange={e => setOverwriteGps(e.target.checked)} className="mt-0.5"/>
+                                <span>Přepsat i u snímků, které vlastní GPS mají. Bez zaškrtnutí se doplní jen těm bez polohy.</span>
+                            </label>
+
+                            <button
+                                onClick={() => bulk('set_location', {
+                                    latitude: geo.latitude === '' ? null : geo.latitude,
+                                    longitude: geo.longitude === '' ? null : geo.longitude,
+                                    location_name: geo.location_name || null,
+                                    location_country: geo.location_country || null,
+                                    overwrite_gps: overwriteGps,
+                                })}
+                                disabled={geo.latitude === ''}
+                                className="mt-4 w-full rounded-lg bg-[var(--color-accent)] py-2 text-sm text-[var(--color-accent-contrast)] hover:opacity-90 disabled:opacity-40">
+                                Doplnit {selectedUuids.length} položkám
+                            </button>
+                        </div>
                     )}
 
                     {panel === 'date' && (

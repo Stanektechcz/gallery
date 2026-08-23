@@ -76,6 +76,10 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
     // A thumbnail the browser drew, for formats this server cannot open (HEIC above all).
     Route::post('/media/{uuid}/thumbnail', [App\Http\Controllers\Api\MediaThumbnailController::class, 'store'])->name('api.media.thumbnail');
 
+    // Hledání míst — vlastní napřed, Nominatim potom; a adresa pro bod na mapě.
+    Route::get('/mista/napoveda', [App\Http\Controllers\Api\GeoController::class, 'suggest'])->name('api.geo.suggest');
+    Route::get('/mista/adresa', [App\Http\Controllers\Api\GeoController::class, 'reverse'])->name('api.geo.reverse');
+
     // Rozpočty na období a žádosti o peníze mezi partnery.
     Route::prefix('rozpocty')->name('api.budgets.')->group(function () {
         Route::get('/', [App\Http\Controllers\Api\BudgetController::class, 'index'])->name('index');
