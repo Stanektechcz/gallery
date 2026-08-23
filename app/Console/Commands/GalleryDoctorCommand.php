@@ -285,6 +285,72 @@ class GalleryDoctorCommand extends Command
             $lastOk && $lastOk->diffInHours(now()) < 24,
             'WARN'
         );
+
+        $this->checkDriveCoverage();
+    }
+
+    /**
+     * How much of the library is actually on Drive.
+     *
+     * A connected account says nothing about whether anything has been copied to it, and
+     * that difference is invisible until somebody needs the backup. The album screen
+     * quietly read "0 % originálů v cloudu" on a space whose Drive had been connected and
+     * healthy for weeks, and nothing anywhere raised its voice about it.
+     *
+     * Media with no original on this server cannot be sent and are counted apart, so a
+     * genuinely finished backup is not reported as incomplete forever.
+     */
+    private function checkDriveCoverage(): void
+    {
+        try {
+            $sendable = DB::table('media_items')
+                ->whereNull('trashed_at')
+                ->whereExists(fn ($q) => $q->select(DB::raw(1))
+                    ->from('media_variants')
+                    ->whereColumn('media_variants.media_item_id', 'media_items.id')
+                    ->where('media_variants.type', 'original'))
+                ->count();
+
+            if ($sendable === 0) {
+                $this->check('Drive backup: nothing to send yet', true);
+
+                return;
+            }
+
+            $onDrive = DB::table('media_items')
+                ->whereNull('trashed_at')
+                ->whereNotNull('drive_file_id')
+                ->count();
+
+            $percent = (int) round($onDrive / $sendable * 100);
+
+            $this->check(
+                $onDrive === 0
+                    ? "Drive backup: 0 of {$sendable} originals copied — run gallery:sync-drive --all"
+                    : "Drive backup: {$onDrive}/{$sendable} originals ({$percent} %)",
+                $onDrive > 0,
+                $percent >= 95 ? 'WARN' : 'FAIL',
+            );
+
+            $failed = DB::table('media_items')
+                ->whereNull('trashed_at')
+                ->whereNull('drive_file_id')
+                ->whereNotNull('processing_error')
+                ->count();
+
+            if ($failed > 0) {
+                // Named, because "it did not work" is not something anyone can act on.
+                $priklad = DB::table('media_items')
+                    ->whereNull('trashed_at')
+                    ->whereNull('drive_file_id')
+                    ->whereNotNull('processing_error')
+                    ->value('processing_error');
+
+                $this->check("Drive backup errors: {$failed} — \"{$priklad}\"", false, 'WARN');
+            }
+        } catch (\Throwable $e) {
+            $this->check('Drive backup coverage could not be read (' . $e->getMessage() . ')', false, 'WARN');
+        }
     }
 
     private function section(string $title): void
