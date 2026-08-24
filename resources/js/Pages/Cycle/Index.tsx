@@ -1,7 +1,8 @@
+import Panel, { Stat } from '@/Components/Panel';
 import AppLayout from '@/Layouts/AppLayout';
 import { Head } from '@inertiajs/react';
 import axios from 'axios';
-import { Droplet, Eye, Heart, Lock, Sparkles } from 'lucide-react';
+import { CalendarDays, ChevronDown, Droplet, Eye, Heart, LineChart, Lock, Pencil, Repeat, Sparkles, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 /**
@@ -117,6 +118,8 @@ const CONFIDENCE: Record<string, string> = {
 
 const den = (iso: string) => new Date(`${iso}T12:00:00`).toLocaleDateString('cs-CZ', { day: 'numeric', month: 'long' });
 
+const dny = (pocet: number) => `${pocet} ${pocet === 1 ? 'den' : pocet >= 2 && pocet <= 4 ? 'dny' : 'dní'}`;
+
 /** Dny v mřížce po měsících — kalendář se čte líp než seznam. */
 function monthGrid(anchor: Date): Array<string | null> {
     const first = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
@@ -177,7 +180,9 @@ export default function CycleIndex() {
         <AppLayout>
             <Head title="Cyklus" />
 
-            <div className="p-4 sm:p-6">
+            {/* Omezená šířka: kalendář roztažený přes celý širokoúhlý monitor má buňky
+                velké jako dlaň a stejně se v něm hůř hledá než v tom menším. */}
+            <div className="mx-auto max-w-[1500px] p-4 sm:p-6">
                 <header className="mb-5">
                     <h1 className="flex items-center gap-2 text-xl font-semibold text-[var(--color-text-primary)]">
                         <Droplet size={20} className="text-rose-400"/> Cyklus
@@ -192,33 +197,49 @@ export default function CycleIndex() {
                 {error && <p className="text-sm text-red-400">{error}</p>}
 
                 {data && (
-                    <div className="space-y-5">
+                    <div className="space-y-4">
                         <Summary data={data}/>
 
-                        <Calendar
-                            grid={grid} month={month} byDay={byDay}
-                            forecast={forecastByDay}
-                            onMonth={setMonth}
-                            onPick={setEditing}
-                        />
-
-                        {editing && (
-                            <DayEditor
-                                day={editing}
-                                existing={byDay.get(editing)}
-                                trackSymptoms={data.settings.track_symptoms}
-                                onClose={() => setEditing(null)}
-                                onSaved={next => { setData(next); setEditing(null); }}
+                        {/* Kalendář a editor dne vedle sebe. Dokud byl editor pod
+                            kalendářem, ťuknutí na den odsunulo mřížku nahoru a člověk
+                            zapisoval, aniž viděl, do kterého dne. */}
+                        {/* items-start: kalendář si drží svou výšku. Bez toho by se natáhl
+                            na výšku editoru a pod mřížkou dnů by zůstalo prázdné pole. */}
+                        <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
+                            <Calendar
+                                grid={grid} month={month} byDay={byDay}
+                                forecast={forecastByDay}
+                                onMonth={setMonth}
+                                onPick={setEditing}
+                                active={editing}
                             />
-                        )}
 
-                        {data.forecast && data.forecast.length > 0 && <Fertility forecast={data.forecast}/>}
+                            <div className="space-y-4">
+                                {editing && (
+                                    <DayEditor
+                                        key={editing}
+                                        day={editing}
+                                        existing={byDay.get(editing)}
+                                        trackSymptoms={data.settings.track_symptoms}
+                                        onClose={() => setEditing(null)}
+                                        onSaved={next => { setData(next); setEditing(null); }}
+                                    />
+                                )}
 
-                        <Statistics/>
+                                {data.forecast && data.forecast.length > 0 && <Fertility forecast={data.forecast}/>}
+                            </div>
+                        </div>
 
-                        <Sharing settings={data.settings} onSaved={setData}/>
+                        {/* Historie vlevo, nastavení vpravo. Rozbor je dlouhý, sdílení
+                            krátké — pod sebou by nastavení skončilo mimo obrazovku. */}
+                        <div className="grid gap-4 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
+                            <Statistics/>
 
-                        {partners.length > 0 && <Partners partners={partners}/>}
+                            <div className="space-y-4">
+                                <Sharing settings={data.settings} onSaved={setData}/>
+                                {partners.length > 0 && <Partners partners={partners}/>}
+                            </div>
+                        </div>
                     </div>
                 )}
             </div>
@@ -230,54 +251,58 @@ function Summary({ data }: { data: Overview }) {
     const { prediction, today, settings } = data;
 
     return (
-        <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <Tile label="Dnes" value={today ? `${today.cycle_day}. den` : '—'}
-                hint={today ? PHASE_LABEL[today.phase] ?? today.phase : 'zatím bez záznamů'} accent/>
-            <Tile label="Příští menstruace" value={prediction ? den(prediction.next_period_on) : '—'}
-                hint={prediction ? (prediction.days_until >= 0 ? `za ${prediction.days_until} dní` : 'měla už začít') : ''}/>
-            <Tile label="Plodné dny" value={prediction ? `${den(prediction.fertile_from)} – ${den(prediction.fertile_to)}` : '—'}
+        <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <Stat label="Dnes" icon={CalendarDays} tone="accent"
+                value={today ? `${today.cycle_day}. den` : '—'}
+                hint={today ? PHASE_LABEL[today.phase] ?? today.phase : 'zatím bez záznamů'}/>
+            <Stat label="Příští menstruace" icon={Droplet}
+                value={prediction ? den(prediction.next_period_on) : '—'}
+                hint={prediction
+                    ? <>
+                        {prediction.days_until >= 0 ? `za ${dny(prediction.days_until)}` : 'měla už začít'}
+                        {' · '}
+                        <span title="Spolehlivost roste s počtem zapsaných cyklů.">{CONFIDENCE[prediction.confidence]}</span>
+                    </>
+                    : 'zapište první den'}/>
+            <Stat label="Plodné dny" icon={Sparkles}
+                value={prediction ? `${den(prediction.fertile_from)} – ${den(prediction.fertile_to)}` : '—'}
                 hint={prediction ? `ovulace ${den(prediction.ovulation_on)}` : ''}/>
-            <Tile label="Průměrný cyklus" value={`${settings.average_cycle_days} dní`}
-                hint={settings.based_on_cycles > 0 ? `z ${settings.based_on_cycles} cyklů` : 'výchozí odhad'}/>
-
-            {prediction && (
-                <p className="sm:col-span-2 lg:col-span-4 text-[11px] text-[var(--color-text-secondary)]">
-                    Předpověď je {CONFIDENCE[prediction.confidence]}
-                    {prediction.spread_days !== null && prediction.spread_days > 4 && ` · délka cyklu kolísá o ${prediction.spread_days} dní`}.
-                </p>
-            )}
+            <Stat label="Průměrný cyklus" icon={Repeat} value={`${settings.average_cycle_days} dní`}
+                hint={settings.based_on_cycles > 0
+                    ? <>
+                        z {settings.based_on_cycles} {settings.based_on_cycles === 1 ? 'cyklu' : settings.based_on_cycles <= 4 ? 'cyklů' : 'cyklů'}
+                        {prediction?.spread_days !== null && (prediction?.spread_days ?? 0) > 4 && ` · kolísá o ${prediction!.spread_days} dní`}
+                    </>
+                    : 'výchozí odhad, dokud nejsou data'}/>
         </section>
     );
 }
 
-function Tile({ label, value, hint, accent = false }: { label: string; value: string; hint?: string; accent?: boolean }) {
-    return (
-        <div className={`rounded-2xl border p-4 ${accent ? 'border-rose-400/30 bg-rose-500/5' : 'border-[var(--color-border)] bg-[var(--color-bg-card)]'}`}>
-            <p className="text-xs uppercase tracking-wider text-[var(--color-text-secondary)]">{label}</p>
-            <p className="mt-1 text-base font-semibold text-[var(--color-text-primary)]">{value}</p>
-            {hint && <p className="mt-0.5 text-[11px] text-[var(--color-text-secondary)]">{hint}</p>}
-        </div>
-    );
-}
-
-function Calendar({ grid, month, byDay, forecast, onMonth, onPick }: {
+function Calendar({ grid, month, byDay, forecast, onMonth, onPick, active }: {
     grid: Array<string | null>; month: Date; byDay: Map<string, Day>;
     forecast: Map<string, string>;
     onMonth: (d: Date) => void; onPick: (day: string) => void;
+    /** Právě otevřený den — v mřížce dostane rámeček, ať je vidět, co se vpravo edituje. */
+    active: string | null;
 }) {
     const dnes = new Date().toISOString().slice(0, 10);
+    // Vysvětlivky jsou zavřené. Buňky nesou popisek přímo v sobě, takže legenda je
+    // záchranná síť, ne to, co se čte pokaždé — a otevřená zabírá třetinu panelu.
+    const [legenda, setLegenda] = useState(false);
 
     return (
-        <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-4">
-            <div className="mb-3 flex items-center justify-between">
-                <button type="button" onClick={() => onMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))}
-                    className="rounded-lg border border-[var(--color-border)] px-2.5 py-1 text-xs text-[var(--color-text-secondary)]">←</button>
-                <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">
-                    {month.toLocaleDateString('cs-CZ', { month: 'long', year: 'numeric' })}
-                </h2>
-                <button type="button" onClick={() => onMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))}
-                    className="rounded-lg border border-[var(--color-border)] px-2.5 py-1 text-xs text-[var(--color-text-secondary)]">→</button>
-            </div>
+        <Panel icon={CalendarDays} title={month.toLocaleDateString('cs-CZ', { month: 'long', year: 'numeric' })}
+            actions={<>
+                <button type="button" title="Předchozí měsíc"
+                    onClick={() => onMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))}
+                    className="rounded-lg border border-[var(--color-border)] px-2.5 py-1 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]">←</button>
+                <button type="button"
+                    onClick={() => onMonth(new Date())}
+                    className="rounded-lg border border-[var(--color-border)] px-2.5 py-1 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]">Dnes</button>
+                <button type="button" title="Následující měsíc"
+                    onClick={() => onMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))}
+                    className="rounded-lg border border-[var(--color-border)] px-2.5 py-1 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]">→</button>
+            </>}>
 
             <div className="grid grid-cols-7 gap-1 text-center">
                 {['Po', 'Út', 'St', 'Čt', 'Pá', 'So', 'Ne'].map(d => (
@@ -305,7 +330,8 @@ function Calendar({ grid, month, byDay, forecast, onMonth, onPick }: {
                                         PHASE_HINT[forecast.get(day) ?? '']
                                             ?? 'bg-[var(--color-bg-primary)] border-[var(--color-border)] text-[var(--color-text-secondary)]'
                                     }`
-                            } ${day === dnes ? 'ring-2 ring-offset-2 ring-offset-[var(--color-bg-card)] ring-[var(--color-accent)]' : ''}`}>
+                            } ${day === dnes ? 'ring-2 ring-offset-2 ring-offset-[var(--color-bg-card)] ring-[var(--color-accent)]' : ''
+                            } ${day === active ? 'outline outline-2 outline-offset-1 outline-[var(--color-text-primary)]' : ''}`}>
                             {/* Číslo nahoře, druh dne pod ním. Bez toho popisku se barva
                                 musí pořád překládat přes legendu, což je práce navíc
                                 pokaždé, když se člověk na kalendář podívá. */}
@@ -340,7 +366,15 @@ function Calendar({ grid, month, byDay, forecast, onMonth, onPick }: {
             {/* Legenda ve dvou řadách, protože jde o dvě různé věci: co je zapsané a co
                 se teprve čeká. Smíchat je do jednoho řádku znamená, že rozdíl mezi
                 záznamem a odhadem zapadne — a ten je tu ze všeho nejdůležitější. */}
-            <div className="mt-4 space-y-2 border-t border-[var(--color-border)] pt-3">
+            <div className="mt-4 border-t border-[var(--color-border)] pt-3">
+                <button type="button" onClick={() => setLegenda(v => ! v)}
+                    className="flex items-center gap-1.5 text-[11px] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]">
+                    <ChevronDown size={13} className={`transition-transform ${legenda ? 'rotate-180' : ''}`}/>
+                    Vysvětlivky barev
+                </button>
+            </div>
+
+            <div className={`space-y-2 overflow-hidden transition-all ${legenda ? 'mt-3 max-h-96' : 'max-h-0'}`}>
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[10px] text-[var(--color-text-secondary)]">
                     <span className="font-medium text-[var(--color-text-primary)]">Zapsáno</span>
                     <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded border-2 border-rose-300/60 bg-rose-600"/> silná</span>
@@ -360,7 +394,7 @@ function Calendar({ grid, month, byDay, forecast, onMonth, onPick }: {
                     <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded border-2 border-dashed border-violet-400/40 bg-violet-500/10"/> luteální</span>
                 </div>
             </div>
-        </section>
+        </Panel>
     );
 }
 
@@ -397,12 +431,14 @@ function DayEditor({ day, existing, trackSymptoms, onClose, onSaved }: {
     };
 
     return (
-        <section className="rounded-2xl border border-rose-400/25 bg-[var(--color-bg-card)] p-4">
-            <div className="mb-3 flex items-center justify-between">
-                <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">{den(day)}</h2>
-                <button type="button" onClick={onClose} className="text-xs text-[var(--color-text-secondary)]">Zavřít</button>
-            </div>
-
+        <Panel icon={Pencil} title={den(day)} tone="accent"
+            description={existing?.is_predicted ? 'Předvyplněný odhad — uložením ho potvrdíte jako skutečný záznam.' : undefined}
+            actions={
+                <button type="button" onClick={onClose} title="Zavřít"
+                    className="rounded-lg p-1 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]">
+                    <X size={15}/>
+                </button>
+            }>
             <label className="mb-1.5 block text-xs text-[var(--color-text-secondary)]">Krvácení</label>
             <div className="flex flex-wrap gap-1.5">
                 {(Object.keys(FLOW_LABEL) as Flow[]).map(f => (
@@ -452,17 +488,17 @@ function DayEditor({ day, existing, trackSymptoms, onClose, onSaved }: {
                 Tímto dnem začal nový cyklus
             </label>
 
-            <div className="mt-4 flex flex-wrap justify-end gap-2">
+            <div className="mt-4 flex flex-wrap items-center justify-end gap-2 border-t border-[var(--color-border)] pt-3">
                 {existing && (
                     <button type="button" onClick={() => void remove()} disabled={busy}
-                        className="rounded-xl border border-[var(--color-border)] px-3 py-2 text-xs text-red-300 disabled:opacity-50">Smazat záznam</button>
+                        className="mr-auto rounded-xl border border-[var(--color-border)] px-3 py-2 text-xs text-red-300 disabled:opacity-50">Smazat záznam</button>
                 )}
                 <button type="button" onClick={() => void save()} disabled={busy}
                     className="rounded-xl bg-rose-500 px-4 py-2 text-sm font-medium text-white hover:bg-rose-400 disabled:opacity-50">
                     {busy ? 'Ukládám…' : 'Uložit'}
                 </button>
             </div>
-        </section>
+        </Panel>
     );
 }
 
@@ -481,13 +517,9 @@ function Fertility({ forecast }: { forecast: Array<{ day: string; phase: string;
     const dnes = new Date().toISOString().slice(0, 10);
 
     return (
-        <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-4">
-            <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">Plodné dny</h2>
-            <p className="mt-0.5 text-xs text-[var(--color-text-secondary)]">
-                Odhad pravděpodobnosti početí podle dne cyklu. Orientační — na plánování ano, na ochranu ne.
-            </p>
-
-            <div className="mt-4 flex h-24 items-end gap-px">
+        <Panel icon={Sparkles} title="Plodné dny"
+            description="Odhad pravděpodobnosti početí podle dne cyklu. Orientační — na plánování ano, na ochranu ne.">
+            <div className="flex h-24 items-end gap-px">
                 {okno.map(den => {
                     const vyska = Math.max(2, den.fertility ?? 0);
 
@@ -519,7 +551,7 @@ function Fertility({ forecast }: { forecast: Array<{ day: string; phase: string;
                 })()}
                 <span>{new Date(`${okno[okno.length - 1].day}T12:00:00`).toLocaleDateString('cs-CZ', { day: 'numeric', month: 'short' })}</span>
             </div>
-        </section>
+        </Panel>
     );
 }
 
@@ -542,18 +574,30 @@ function Statistics() {
         void axios.get('/api/v1/cyklus/statistika').then(r => setStats(r.data)).catch(() => setStats(null));
     }, []);
 
-    if (! stats || stats.cycle_lengths.length === 0) return null;
+    // Prázdný panel, ne nic. Kdyby se komponenta odstranila úplně, zůstala by v mřížce
+    // díra vedle sdílení — a hlavně by nikde nestálo, proč tu zatím nic není.
+    if (! stats || stats.cycle_lengths.length === 0) {
+        return (
+            <Panel icon={LineChart} title="Jak to chodí">
+                <p className="rounded-xl border border-dashed border-[var(--color-border)] px-4 py-8 text-center text-xs leading-relaxed text-[var(--color-text-secondary)]">
+                    Zatím není z čeho počítat.<br/>
+                    Po druhém zapsaném cyklu se tu objeví délky, rozptyl a co se vám opakuje.
+                </p>
+            </Panel>
+        );
+    }
 
     const nejdelsi = Math.max(...stats.cycle_lengths.map(c => c.length), 1);
 
     return (
-        <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-4">
-            <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">Jak to chodí</h2>
+        <Panel icon={LineChart} title="Jak to chodí"
+            description={`Z ${stats.tracked_days} zapsaných dnů · nejkratší ${stats.shortest} dní, nejdelší ${stats.longest}${
+                stats.spread !== null && stats.spread > 4 ? ' — cyklus je spíš nepravidelný' : ''}`}>
 
             {/* Rozbor nad čísly, ne pod nimi. Zjištění je to, co si člověk odnese; graf
                 je doklad, proč to tak je. */}
             {stats.analysis && stats.analysis.length > 0 && (
-                <div className="mt-3 space-y-2">
+                <div className="space-y-2">
                     {stats.analysis.map(zjisteni => (
                         <div key={zjisteni.code}
                             className={`rounded-xl border p-3 ${
@@ -577,12 +621,8 @@ function Statistics() {
                     </p>
                 </div>
             )}
-            <p className="mt-0.5 text-xs text-[var(--color-text-secondary)]">
-                Z {stats.tracked_days} zapsaných dnů · nejkratší {stats.shortest} dní, nejdelší {stats.longest}
-                {stats.spread !== null && stats.spread > 4 && ' — cyklus je spíš nepravidelný'}
-            </p>
 
-            <div className="mt-3 space-y-1.5">
+            <div className="mt-4 space-y-1.5">
                 {stats.cycle_lengths.slice(-12).map(cyklus => (
                     <div key={cyklus.started_on} className="flex items-center gap-2">
                         <span className="w-20 shrink-0 text-[10px] text-[var(--color-text-secondary)]">{den(cyklus.started_on)}</span>
@@ -616,7 +656,7 @@ function Statistics() {
                     </div>
                 </>
             )}
-        </section>
+        </Panel>
     );
 }
 
@@ -637,15 +677,9 @@ function Sharing({ settings, onSaved }: { settings: Overview['settings']; onSave
     ];
 
     return (
-        <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-4">
-            <h2 className="flex items-center gap-2 text-sm font-semibold text-[var(--color-text-primary)]">
-                <Lock size={15}/> Co vidí partner
-            </h2>
-            <p className="mt-1 text-xs text-[var(--color-text-secondary)]">
-                Změnu poznáte hned — a kdykoli ji můžete vzít zpátky.
-            </p>
-
-            <div className="mt-3 space-y-2">
+        <Panel icon={Lock} title="Co vidí partner"
+            description="Změnu poznáte hned — a kdykoli ji můžete vzít zpátky.">
+            <div className="space-y-2">
                 {VOLBY.map(([value, label, popis]) => (
                     <button key={value} type="button" onClick={() => void set(value)} disabled={busy}
                         className={`flex w-full items-start gap-3 rounded-xl border p-3 text-left transition-colors disabled:opacity-60 ${
@@ -663,18 +697,14 @@ function Sharing({ settings, onSaved }: { settings: Overview['settings']; onSave
                     </button>
                 ))}
             </div>
-        </section>
+        </Panel>
     );
 }
 
 function Partners({ partners }: { partners: PartnerView[] }) {
     return (
-        <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-4">
-            <h2 className="flex items-center gap-2 text-sm font-semibold text-[var(--color-text-primary)]">
-                <Heart size={15} className="text-rose-400"/> Sdíleno s vámi
-            </h2>
-
-            <div className="mt-3 space-y-3">
+        <Panel icon={Heart} title="Sdíleno s vámi">
+            <div className="space-y-3">
                 {partners.map(partner => (
                     <article key={partner.owner.id} className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-muted)] p-3">
                         <div className="flex flex-wrap items-baseline gap-2">
@@ -703,6 +733,6 @@ function Partners({ partners }: { partners: PartnerView[] }) {
                     </article>
                 ))}
             </div>
-        </section>
+        </Panel>
     );
 }

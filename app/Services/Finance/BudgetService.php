@@ -158,16 +158,30 @@ class BudgetService
         })->values()->all();
     }
 
-    /** Měsíc po měsíci, aby šlo vidět, jestli to někam ujíždí. */
+    /**
+     * Měsíc po měsíci, aby šlo vidět, jestli to někam ujíždí.
+     *
+     * Jen hlavní měna. Bez toho filtru se pět tisíc korun přičetlo k eurům a graf
+     * ukazoval měsíc jako dvakrát dražší, než jaký byl — přesně ta chyba, kvůli které
+     * se nikde jinde v rozpočtu měny nesčítají.
+     */
     private function months(Budget $budget): array
     {
+        $mena = $budget->currency;
+
         return $budget->entries
+            ->where('currency', $mena)
             ->groupBy(fn (BudgetEntry $entry) => $entry->spent_on->format('Y-m'))
             ->map(fn (Collection $mesic, string $klic) => [
                 'month' => $klic,
                 'spent' => round((float) $mesic->where('kind', 'expense')->sum('amount'), 2),
                 'income' => round((float) $mesic->where('kind', 'income')->sum('amount'), 2),
                 'count' => $mesic->count(),
+                // Kolik položek měsíce se do grafu nevešlo, protože jsou v jiné měně.
+                // Graf, který mlčky něco vynechá, je horší než graf, který to přizná.
+                'other_currency_count' => $budget->entries
+                    ->filter(fn (BudgetEntry $e) => $e->currency !== $mena && $e->spent_on->format('Y-m') === $klic)
+                    ->count(),
             ])
             ->sortKeys()
             ->values()

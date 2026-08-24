@@ -1,8 +1,12 @@
+import Panel, { Stat } from '@/Components/Panel';
 import AppLayout from '@/Layouts/AppLayout';
 import { uploadManager, waitForUploads } from '@/lib/uploadManager';
 import { Head } from '@inertiajs/react';
 import axios from 'axios';
-import { ArrowRightLeft, Check, Download, PiggyBank, Plus, Receipt, Trash2, Upload, Wallet, X } from 'lucide-react';
+import {
+    AlertTriangle, ArrowRightLeft, BarChart3, CalendarDays, Check, Download, ListPlus, PieChart,
+    PiggyBank, Plus, Receipt, Scale, Tags, TrendingDown, TrendingUp, Trash2, Upload, Wallet, X,
+} from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import StatementImport from './StatementImport';
 
@@ -35,7 +39,7 @@ interface Overview {
     period: { days_elapsed: number; days_left: number | null; days_total: number | null; has_started: boolean; has_ended: boolean };
     totals: { spent: Record<string, number>; income: Record<string, number> };
     categories: Array<{ id: number; name: string; color: string | null; planned_monthly: number; planned_to_date: number; spent: number; used_percent: number | null }>;
-    months: Array<{ month: string; spent: number; income: number; count: number }>;
+    months: Array<{ month: string; spent: number; income: number; count: number; other_currency_count?: number }>;
     allowance: { planned_total: number; spent: number; left: number; per_day: number | null; days_left: number | null; currency: string };
     warnings?: Array<{ category: string; spent: number; planned_to_date: number; percent: number; level: 'close' | 'over' }>;
     settlement?: Array<{ currency: string; from: string | null; from_id?: number | null; to: string; to_id: number; amount: number }>;
@@ -105,8 +109,11 @@ export default function BudgetsIndex() {
         <AppLayout>
             <Head title="Rozpočty" />
 
-            <div className="p-4 sm:p-6">
-                <header className="mb-6">
+            {/* Šířka je omezená. Na širokém monitoru by se panely roztáhly na metr a
+                oko by muselo skákat přes prázdno — čtyři sloupce po pětadvaceti
+                centimetrech se nečtou o nic líp než jeden. */}
+            <div className="mx-auto max-w-[1600px] p-4 sm:p-6">
+                <header className="mb-5">
                     <h1 className="flex items-center gap-2 text-xl font-semibold text-[var(--color-text-primary)]">
                         <Wallet size={20} className="text-[var(--color-accent)]"/> Rozpočty
                     </h1>
@@ -120,7 +127,7 @@ export default function BudgetsIndex() {
                 {error && <p className="text-sm text-red-400">{error}</p>}
 
                 {! loading && ! error && (
-                    <div className="space-y-6">
+                    <div className="space-y-4">
                         <BudgetPicker budgets={budgets} active={active?.budget.uuid} onPick={uuid => void load(uuid)} onCreated={uuid => void load(uuid)}/>
 
                         {active && <Overview data={active} members={members} onChanged={() => void load(active.budget.uuid)}/>}
@@ -249,209 +256,276 @@ function BudgetPicker({ budgets, active, onPick, onCreated }: {
     );
 }
 
+/**
+ * Přehled rozpočtu.
+ *
+ * Panely nejsou pod sebou na celou šířku. Deset karet ve sloupci znamená, že člověk
+ * musí scrollovat, aby porovnal plán se skutečností — a porovnávat přes obrazovku
+ * nikdo neumí. Vedle sebe patří to, co spolu souvisí: plán vedle toho, kam peníze
+ * opravdu tečou, měsíce vedle porovnání dvou z nich.
+ *
+ * Šířka panelu je podle obsahu, ne podle důležitosti. Zápis položky má šest polí
+ * vedle sebe a potřebuje celou šířku; kdo komu dluží je jedna věta a v půlce se ztratí.
+ */
 function Overview({ data, members, onChanged }: { data: Overview; members: Array<{ id: number; name: string }>; onChanged: () => void }) {
     const { budget, period, totals, categories, months, allowance } = data;
     const meny = Object.keys({ ...totals.spent, ...totals.income });
 
+    // Stavové panely se skládají do pole, protože se každý ukazuje jen někdy. Mřížka
+    // o dvou sloupcích s jedním potomkem nechá půlku řádku prázdnou a vypadá jako
+    // nedokreslená — tohle podle počtu přepne na jeden sloupec.
+    const stav = [
+        data.runway && ! data.runway.covers_period && <RunwayPanel key="runway" runway={data.runway} budget={budget}/>,
+        data.warnings && data.warnings.length > 0 && <WarningsPanel key="warnings" warnings={data.warnings} currency={budget.currency}/>,
+        data.settlement && data.settlement.length > 0 && <SettlementPanel key="settlement" settlement={data.settlement}/>,
+        data.savings && <SavingsPanel key="savings" savings={data.savings} currency={budget.currency}/>,
+    ].filter(Boolean);
+
     return (
-        <>
+        <div className="space-y-4">
             {/* Denní zbytek nahoře: v cizině je to jediné číslo, které opravdu řídí chování. */}
-            <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                <Tile label="Zbývá na den" value={allowance.per_day !== null ? money(allowance.per_day, allowance.currency) : '—'}
-                    hint={allowance.days_left !== null ? `na ${allowance.days_left} dní` : 'bez konce období'} accent/>
-                <Tile label="Zbývá celkem" value={money(allowance.left, allowance.currency)} hint={`z ${money(allowance.planned_total, allowance.currency)}`}/>
-                <Tile label="Utraceno" value={money(allowance.spent, allowance.currency)}
-                    hint={meny.length > 1 ? `+ ${meny.filter(m => m !== budget.currency).map(m => money(totals.spent[m] ?? 0, m)).join(', ')}` : `${period.days_elapsed} dní`}/>
-                <Tile label="Příjem" value={money(totals.income[budget.currency] ?? 0, budget.currency)}
-                    hint={budget.monthly_income ? `plán ${money(budget.monthly_income, budget.currency)} / měsíc` : 'zatím bez plánu'}/>
+            <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <Stat label="Zbývá na den" icon={CalendarDays} tone="accent"
+                    value={allowance.per_day !== null ? money(allowance.per_day, allowance.currency) : '—'}
+                    hint={allowance.days_left !== null ? `na ${dny(allowance.days_left)}` : 'bez konce období'}/>
+                <Stat label="Zbývá celkem" icon={Wallet} value={money(allowance.left, allowance.currency)}
+                    tone={allowance.left < 0 ? 'danger' : 'plain'}
+                    hint={`z ${money(allowance.planned_total, allowance.currency)} plánovaných`}/>
+                <Stat label="Utraceno" icon={TrendingDown} value={money(allowance.spent, allowance.currency)}
+                    hint={meny.length > 1
+                        ? `+ ${meny.filter(m => m !== budget.currency).map(m => money(totals.spent[m] ?? 0, m)).join(', ')}`
+                        : `za ${dny(period.days_elapsed)}`}/>
+                <Stat label="Příjem" icon={TrendingUp} value={money(totals.income[budget.currency] ?? 0, budget.currency)}
+                    hint={budget.monthly_income
+                        ? `plán ${money(budget.monthly_income, budget.currency)} ${budget.period_label}`
+                        : 'zatím bez plánu'}/>
             </section>
 
-            {/* Co dochází, hned pod čísly. Prázdné je dobrá zpráva a nic se nekreslí —
-                varování, které svítí pořád, se přestane číst. */}
-            {data.warnings && data.warnings.length > 0 && (
-                <section className="rounded-2xl border border-amber-400/25 bg-amber-500/5 p-4">
-                    <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">Pozor na tyhle kategorie</h2>
-                    <div className="mt-2 space-y-1.5">
-                        {data.warnings.map(warning => (
-                            <p key={warning.category} className="flex flex-wrap items-baseline gap-x-2 text-xs">
-                                <span className={warning.level === 'over' ? 'text-red-300' : 'text-amber-200'}>
-                                    {warning.category} — {warning.percent} %
-                                </span>
-                                <span className="text-[var(--color-text-secondary)]">
-                                    {money(warning.spent, budget.currency)} z {money(warning.planned_to_date, budget.currency)},
-                                    které měly padnout do dneška
-                                </span>
-                            </p>
-                        ))}
+            {stav.length > 0 && (
+                <div className={`grid gap-4 ${stav.length > 1 ? 'lg:grid-cols-2' : ''}`}>
+                    {/* Při lichém počtu se poslední roztáhne přes obě půlky. Panel, vedle
+                        kterého zbyla prázdná polovina řádku, vypadá, jako by se něco
+                        nenačetlo. */}
+                    {/* flex na obalu, aby se panel uvnitř natáhl na výšku řádku a dvojice
+                        vedle sebe byla zarovnaná — sám o sobě má panel výšku podle obsahu. */}
+                    {stav.map((panel, i) => (
+                        <div key={i} className={`flex ${stav.length % 2 === 1 && i === stav.length - 1 ? 'lg:col-span-2' : ''}`}>
+                            {panel}
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            {/* Zápis a výpis položek. Celá šířka, protože formulář má šest polí vedle
+                sebe — v půlce obrazovky by se zlomil na tři řádky. */}
+            <Entries budget={budget} categories={categories} entries={data.entries} members={members} onChanged={onChanged}/>
+
+            {/* Plán vedle skutečnosti. Dvě odpovědi na jednu otázku — kolik mělo padnout
+                a kam to opravdu šlo — a mají smysl jen společně. */}
+            <div className={`grid gap-4 ${categories.some(c => c.spent > 0) ? 'lg:grid-cols-2' : ''}`}>
+                <Categories budget={budget} categories={categories} onChanged={onChanged}/>
+                {categories.some(c => c.spent > 0) && <BreakdownPanel categories={categories} currency={budget.currency}/>}
+            </div>
+
+            {/* Čas: celé období vlevo, poslední dva měsíce podrobně vpravo. */}
+            {(months.length > 0 || data.comparison) && (
+                <div className={`grid gap-4 ${months.length > 0 && data.comparison ? 'lg:grid-cols-2' : ''}`}>
+                    {months.length > 0 && <MonthsPanel months={months} currency={budget.currency}/>}
+                    {data.comparison && <Comparison data={data.comparison}/>}
+                </div>
+            )}
+        </div>
+    );
+}
+
+/** Kdy při současném tempu dojdou peníze. Ukazuje se jen tehdy, když to nevyjde. */
+function RunwayPanel({ runway, budget }: { runway: NonNullable<Overview['runway']>; budget: Overview['budget'] }) {
+    return (
+        <Panel tone="danger" icon={AlertTriangle}
+            title={runway.days_left === 0 ? 'Rozpočet je vyčerpaný' : `Peníze dojdou ${datum(runway.runs_out_on)}`}>
+            <p className="text-xs leading-relaxed text-[var(--color-text-secondary)]">
+                Posledních třicet dní utrácíš <strong className="text-[var(--color-text-primary)]">{money(runway.per_day, budget.currency)}</strong> denně.
+                {runway.days_left > 0 && ` Při tomhle tempu to je ještě ${dny(runway.days_left)}`}
+                {budget.ends_on && `, a období končí ${datum(budget.ends_on)}.`}
+            </p>
+        </Panel>
+    );
+}
+
+/** Kategorie, které docházejí. Prázdné je dobrá zpráva a nic se nekreslí. */
+function WarningsPanel({ warnings, currency }: { warnings: NonNullable<Overview['warnings']>; currency: string }) {
+    return (
+        <Panel tone="warn" icon={AlertTriangle} title="Pozor na tyhle kategorie"
+            footnote="Měří se proti tomu, co mělo padnout do dneška — ne proti celému období.">
+            <div className="space-y-2.5">
+                {warnings.map(warning => (
+                    <div key={warning.category}>
+                        <div className="flex items-baseline justify-between gap-2 text-xs">
+                            <span className="text-[var(--color-text-primary)]">{warning.category}</span>
+                            <span className={warning.level === 'over' ? 'font-semibold text-red-300' : 'font-semibold text-amber-200'}>
+                                {warning.percent} %
+                            </span>
+                        </div>
+                        <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-[var(--color-bg-primary)]">
+                            <div className={`h-full ${warning.level === 'over' ? 'bg-red-400' : 'bg-amber-400'}`}
+                                style={{ width: `${Math.min(100, warning.percent)}%` }}/>
+                        </div>
+                        <p className="mt-1 text-[11px] text-[var(--color-text-secondary)]">
+                            {money(warning.spent, currency)} z {money(warning.planned_to_date, currency)}
+                        </p>
                     </div>
-                </section>
-            )}
+                ))}
+            </div>
+        </Panel>
+    );
+}
 
-            {/* Kdy dojdou peníze. Ukazuje se jen tehdy, když to nevyjde do konce období —
-                „vydrží to" je informace, kterou už nese dlaždice se zbytkem na den. */}
-            {data.runway && ! data.runway.covers_period && (
-                <section className="rounded-2xl border border-red-400/30 bg-red-500/5 p-4">
-                    <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">
-                        {data.runway.days_left === 0 ? 'Rozpočet je vyčerpaný' : `Při současném tempu dojdou peníze ${datum(data.runway.runs_out_on)}`}
-                    </h2>
-                    <p className="mt-1 text-xs text-[var(--color-text-secondary)]">
-                        Posledních třicet dní utrácíš {money(data.runway.per_day, budget.currency)} denně.
-                        {data.runway.days_left > 0 && ` To je ještě ${dny(data.runway.days_left)}`}
-                        {budget.ends_on && `, a období končí ${datum(budget.ends_on)}.`}
-                    </p>
-                </section>
-            )}
-
-            {/* Vyrovnání. U dvou lidí je to jedno číslo a to je celý smysl: deset drobných
-                převodů nikdo nedělá, jeden na konci měsíce ano. */}
-            {data.settlement && data.settlement.length > 0 && (
-                <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-4">
-                    <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold text-[var(--color-text-primary)]">
-                        <ArrowRightLeft className="h-4 w-4"/> Kdo komu dluží
-                    </h2>
-                    <div className="space-y-2">
-                        {data.settlement.map(radek => (
-                            <p key={`${radek.currency}-${radek.to_id}`} className="flex flex-wrap items-baseline gap-x-2 text-sm">
-                                <span className="text-[var(--color-text-primary)]">
-                                    <strong>{radek.from ?? 'Druhý'}</strong> dluží <strong>{radek.to}</strong>
-                                </span>
-                                <span className="font-semibold text-[var(--color-accent)]">{money(radek.amount, radek.currency)}</span>
-                            </p>
-                        ))}
-                    </div>
-                    <p className="mt-2 text-[11px] text-[var(--color-text-secondary)]">
-                        Počítá se z položek označených „napůl" a „za druhého". Každá měna zvlášť.
-                    </p>
-                </section>
-            )}
-
-            {/* Spoření na cíl. Jeden pruh; kolik chybí a kolik měsíčně odkládat. */}
-            {data.savings && (
-                <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-4">
-                    <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-                        <h2 className="flex items-center gap-2 text-sm font-semibold text-[var(--color-text-primary)]">
-                            <PiggyBank className="h-4 w-4"/> Spoření na cíl
-                        </h2>
-                        <span className="text-xs text-[var(--color-text-secondary)]">
-                            {money(data.savings.saved, budget.currency)} z {money(data.savings.target, budget.currency)}
+/** Jedno číslo na konci. Deset drobných převodů nikdo nedělá, jeden ano. */
+function SettlementPanel({ settlement }: { settlement: NonNullable<Overview['settlement']> }) {
+    return (
+        <Panel icon={ArrowRightLeft} title="Kdo komu dluží"
+            footnote={'Počítá se z položek označených „napůl" a „za druhého". Každá měna zvlášť.'}>
+            <div className="space-y-2">
+                {settlement.map(radek => (
+                    <div key={`${radek.currency}-${radek.to_id}`}
+                        className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 rounded-xl bg-[var(--color-bg-primary)] px-3 py-2.5">
+                        <span className="text-sm text-[var(--color-text-secondary)]">
+                            <strong className="text-[var(--color-text-primary)]">{radek.from ?? 'Druhý'}</strong>
+                            {' → '}
+                            <strong className="text-[var(--color-text-primary)]">{radek.to}</strong>
+                        </span>
+                        <span className="text-base font-semibold tabular-nums text-[var(--color-accent)]">
+                            {money(radek.amount, radek.currency)}
                         </span>
                     </div>
+                ))}
+            </div>
+        </Panel>
+    );
+}
 
-                    <div className="h-3 overflow-hidden rounded-full bg-[var(--color-bg-primary)]">
-                        <div className={`h-full ${data.savings.reached ? 'bg-emerald-400' : data.savings.overdue ? 'bg-red-400' : 'bg-[var(--color-accent)]'}`}
-                            style={{ width: `${data.savings.percent}%` }}/>
+/** Spoření na cíl: jeden pruh, kolik chybí a kolik měsíčně odkládat. */
+function SavingsPanel({ savings, currency }: { savings: NonNullable<Overview['savings']>; currency: string }) {
+    return (
+        <Panel icon={PiggyBank} title="Spoření na cíl"
+            tone={savings.reached ? 'accent' : savings.overdue ? 'warn' : 'plain'}
+            actions={<span className="text-xs tabular-nums text-[var(--color-text-secondary)]">
+                {money(savings.saved, currency)} z {money(savings.target, currency)}
+            </span>}>
+            <div className="h-3 overflow-hidden rounded-full bg-[var(--color-bg-primary)]">
+                <div className={`h-full transition-all ${savings.reached ? 'bg-emerald-400' : savings.overdue ? 'bg-red-400' : 'bg-[var(--color-accent)]'}`}
+                    style={{ width: `${savings.percent}%` }}/>
+            </div>
+
+            <p className="mt-2.5 text-xs leading-relaxed text-[var(--color-text-secondary)]">
+                {savings.reached
+                    ? 'Cíl je splněný.'
+                    : savings.overdue
+                        ? `Termín ${datum(savings.target_on!)} uplynul a chybí ${money(savings.missing, currency)}.`
+                        : savings.monthly_needed !== null
+                            ? <>Chybí {money(savings.missing, currency)} — to je <strong className="text-[var(--color-text-primary)]">{money(savings.monthly_needed, currency)} měsíčně</strong> do {datum(savings.target_on!)}.</>
+                            : `Chybí ${money(savings.missing, currency)}. Termín není nastavený.`}
+            </p>
+        </Panel>
+    );
+}
+
+/**
+ * Kam peníze tečou.
+ *
+ * Koláč by ukázal totéž, ale porovnat dvě výseče od oka nikdo neumí — délky vedle
+ * sebe ano.
+ */
+function BreakdownPanel({ categories, currency }: { categories: Overview['categories']; currency: string }) {
+    const utracene = categories.filter(c => c.spent > 0).sort((a, b) => b.spent - a.spent);
+    const celkem = utracene.reduce((sum, c) => sum + c.spent, 0);
+    const nejvic = Math.max(...utracene.map(c => c.spent), 1);
+    const BARVY = ['bg-violet-400', 'bg-sky-400', 'bg-emerald-400', 'bg-amber-400', 'bg-rose-400', 'bg-teal-400'];
+
+    return (
+        <Panel icon={PieChart} title="Kam to jde">
+            {/* Jeden pruh složený z podílů — poměr celku je vidět dřív než částky. */}
+            <div className="mb-4 flex h-3 overflow-hidden rounded-full">
+                {utracene.map((category, index) => (
+                    <div key={category.id} className={BARVY[index % BARVY.length]}
+                        style={{ width: `${category.spent / celkem * 100}%` }}
+                        title={`${category.name}: ${money(category.spent, currency)}`}/>
+                ))}
+            </div>
+
+            <div className="space-y-2.5">
+                {utracene.map((category, index) => (
+                    <div key={category.id} className="flex items-center gap-2.5">
+                        <span className={`h-2.5 w-2.5 shrink-0 rounded-sm ${BARVY[index % BARVY.length]}`}/>
+                        <span className="w-20 shrink-0 truncate text-xs text-[var(--color-text-primary)]">{category.name}</span>
+                        <div className="h-2 min-w-8 flex-1 overflow-hidden rounded-full bg-[var(--color-bg-primary)]">
+                            <div className={`h-full ${BARVY[index % BARVY.length]} opacity-70`}
+                                style={{ width: `${category.spent / nejvic * 100}%` }}/>
+                        </div>
+                        <span className="shrink-0 text-right text-xs tabular-nums text-[var(--color-text-secondary)]">
+                            {money(category.spent, currency)}
+                        </span>
+                        <span className="w-9 shrink-0 text-right text-[10px] tabular-nums text-[var(--color-text-secondary)]">
+                            {Math.round(category.spent / celkem * 100)} %
+                        </span>
                     </div>
+                ))}
+            </div>
+        </Panel>
+    );
+}
 
-                    <p className="mt-2 text-xs text-[var(--color-text-secondary)]">
-                        {data.savings.reached
-                            ? 'Cíl je splněný.'
-                            : data.savings.overdue
-                                ? `Termín ${datum(data.savings.target_on!)} uplynul a chybí ${money(data.savings.missing, budget.currency)}.`
-                                : data.savings.monthly_needed !== null
-                                    ? `Chybí ${money(data.savings.missing, budget.currency)} — to je ${money(data.savings.monthly_needed, budget.currency)} měsíčně do ${datum(data.savings.target_on!)}.`
-                                    : `Chybí ${money(data.savings.missing, budget.currency)}. Termín není nastavený.`}
-                    </p>
-                </section>
-            )}
+/** Měsíc po měsíci — příjem i výdaj v jednom měřítku, ať je vidět ztrátový měsíc. */
+function MonthsPanel({ months, currency }: { months: Overview['months']; currency: string }) {
+    const nejvic = Math.max(...months.flatMap(m => [m.spent, m.income]), 1);
 
-            <Categories budget={budget} categories={categories} onChanged={onChanged}/>
+    return (
+        <Panel icon={BarChart3} title="Měsíc po měsíci"
+            footnote="Dva grafy pod sebou nutí porovnávat očima přes mezeru; jedno měřítko ne.">
+            <div className="space-y-3.5">
+                {months.map(month => {
+                    const zbylo = month.income - month.spent;
 
-            {/* Kam peníze tečou. Koláč by ukázal totéž, ale porovnat dva výseče od oka
-                nikdo neumí — délky vedle sebe ano. */}
-            {categories.some(c => c.spent > 0) && (
-                <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-4">
-                    <h2 className="mb-3 text-sm font-semibold text-[var(--color-text-primary)]">Kam to jde</h2>
-
-                    {(() => {
-                        const utracene = categories.filter(c => c.spent > 0).sort((a, b) => b.spent - a.spent);
-                        const celkem = utracene.reduce((sum, c) => sum + c.spent, 0);
-                        const nejvic = Math.max(...utracene.map(c => c.spent), 1);
-                        const BARVY = ['bg-violet-400', 'bg-sky-400', 'bg-emerald-400', 'bg-amber-400', 'bg-rose-400', 'bg-teal-400'];
-
-                        return (
-                            <>
-                                {/* Jeden pruh složený z podílů — poměr celku je vidět dřív
-                                    než jednotlivé částky. */}
-                                <div className="mb-4 flex h-3 overflow-hidden rounded-full">
-                                    {utracene.map((category, index) => (
-                                        <div key={category.id} className={BARVY[index % BARVY.length]}
-                                            style={{ width: `${category.spent / celkem * 100}%` }}
-                                            title={`${category.name}: ${money(category.spent, budget.currency)}`}/>
-                                    ))}
-                                </div>
-
-                                <div className="space-y-2">
-                                    {utracene.map((category, index) => (
-                                        <div key={category.id} className="flex items-center gap-2.5">
-                                            <span className={`h-2.5 w-2.5 shrink-0 rounded-sm ${BARVY[index % BARVY.length]}`}/>
-                                            <span className="w-24 shrink-0 truncate text-xs text-[var(--color-text-primary)]">{category.name}</span>
-                                            <div className="h-2 flex-1 overflow-hidden rounded-full bg-[var(--color-bg-primary)]">
-                                                <div className={`h-full ${BARVY[index % BARVY.length]} opacity-70`}
-                                                    style={{ width: `${category.spent / nejvic * 100}%` }}/>
-                                            </div>
-                                            <span className="w-24 shrink-0 text-right text-xs text-[var(--color-text-secondary)]">
-                                                {money(category.spent, budget.currency)}
-                                            </span>
-                                            <span className="w-10 shrink-0 text-right text-[10px] text-[var(--color-text-secondary)]">
-                                                {Math.round(category.spent / celkem * 100)} %
-                                            </span>
-                                        </div>
-                                    ))}
-                                </div>
-                            </>
-                        );
-                    })()}
-                </section>
-            )}
-
-            {months.length > 0 && (
-                <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-4">
-                    <h2 className="mb-3 text-sm font-semibold text-[var(--color-text-primary)]">Měsíc po měsíci</h2>
-                    {/* Příjem i výdaj v jednom měřítku, aby šlo vidět, který měsíc byl
-                        ztrátový. Dva grafy pod sebou nutí porovnávat očima přes mezeru. */}
-                    <div className="space-y-3">
-                        {months.map(month => {
-                            const nejvic = Math.max(...months.flatMap(m => [m.spent, m.income]), 1);
-                            const zbylo = month.income - month.spent;
-
-                            return (
-                                <div key={month.month}>
-                                    <div className="mb-1 flex items-baseline justify-between text-xs">
-                                        <span className="text-[var(--color-text-secondary)]">{month.month}</span>
-                                        <span className={zbylo >= 0 ? 'text-emerald-300' : 'text-red-300'}>
-                                            {zbylo >= 0 ? '+' : '−'}{money(Math.abs(zbylo), budget.currency)}
+                    return (
+                        <div key={month.month}>
+                            <div className="mb-1.5 flex items-baseline justify-between gap-2 text-xs">
+                                <span className="text-[var(--color-text-primary)]">
+                                    {mesic(month.month)}
+                                    {(month.other_currency_count ?? 0) > 0 && (
+                                        <span className="ml-1.5 text-[10px] text-[var(--color-text-secondary)]"
+                                            title="Položky v jiné měně se do grafu nepočítají — kurz nemáme odkud vzít.">
+                                            +{month.other_currency_count} v jiné měně
                                         </span>
-                                    </div>
+                                    )}
+                                </span>
+                                <span className={`tabular-nums ${zbylo >= 0 ? 'text-emerald-300' : 'text-red-300'}`}>
+                                    {zbylo >= 0 ? '+' : '−'}{money(Math.abs(zbylo), currency)}
+                                </span>
+                            </div>
 
-                                    <div className="space-y-0.5">
-                                        {month.income > 0 && (
-                                            <div className="flex items-center gap-2">
-                                                <span className="w-10 shrink-0 text-[9px] text-[var(--color-text-secondary)]">příjem</span>
-                                                <div className="h-2.5 flex-1 overflow-hidden rounded bg-[var(--color-bg-primary)]">
-                                                    <div className="h-full bg-emerald-400/70" style={{ width: `${month.income / nejvic * 100}%` }}/>
-                                                </div>
-                                                <span className="w-24 shrink-0 text-right text-[10px] text-[var(--color-text-secondary)]">{money(month.income, budget.currency)}</span>
-                                            </div>
-                                        )}
-                                        <div className="flex items-center gap-2">
-                                            <span className="w-10 shrink-0 text-[9px] text-[var(--color-text-secondary)]">výdaj</span>
-                                            <div className="h-2.5 flex-1 overflow-hidden rounded bg-[var(--color-bg-primary)]">
-                                                <div className="h-full bg-[var(--color-accent)]/70" style={{ width: `${month.spent / nejvic * 100}%` }}/>
-                                            </div>
-                                            <span className="w-24 shrink-0 text-right text-[10px] text-[var(--color-text-primary)]">{money(month.spent, budget.currency)}</span>
+                            <div className="space-y-1">
+                                {month.income > 0 && (
+                                    <div className="flex items-center gap-2">
+                                        <span className="w-9 shrink-0 text-[9px] text-[var(--color-text-secondary)]">příjem</span>
+                                        <div className="h-2.5 min-w-8 flex-1 overflow-hidden rounded bg-[var(--color-bg-primary)]">
+                                            <div className="h-full bg-emerald-400/70" style={{ width: `${month.income / nejvic * 100}%` }}/>
                                         </div>
+                                        <span className="shrink-0 text-right text-[10px] tabular-nums text-[var(--color-text-secondary)]">{money(month.income, currency)}</span>
                                     </div>
+                                )}
+                                <div className="flex items-center gap-2">
+                                    <span className="w-9 shrink-0 text-[9px] text-[var(--color-text-secondary)]">výdaj</span>
+                                    <div className="h-2.5 min-w-8 flex-1 overflow-hidden rounded bg-[var(--color-bg-primary)]">
+                                        <div className="h-full bg-[var(--color-accent)]/70" style={{ width: `${month.spent / nejvic * 100}%` }}/>
+                                    </div>
+                                    <span className="shrink-0 text-right text-[10px] tabular-nums text-[var(--color-text-primary)]">{money(month.spent, currency)}</span>
                                 </div>
-                            );
-                        })}
-                    </div>
-                </section>
-            )}
-
-            {data.comparison && <Comparison data={data.comparison}/>}
-
-            <Entries budget={budget} categories={categories} entries={data.entries} members={members} onChanged={onChanged}/>
-        </>
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+        </Panel>
     );
 }
 
@@ -466,16 +540,13 @@ function Comparison({ data }: { data: NonNullable<Overview['comparison']> }) {
     const nejvic = Math.max(...data.rows.flatMap(r => [r.previous, r.current]), 1);
 
     return (
-        <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-4">
-            <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-                <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">
-                    {mesic(data.previous_month)} vs {mesic(data.current_month)}
-                </h2>
-                <span className={`text-xs font-semibold ${data.total_diff > 0 ? 'text-red-300' : data.total_diff < 0 ? 'text-emerald-300' : 'text-[var(--color-text-secondary)]'}`}>
-                    {data.total_diff > 0 ? '+' : data.total_diff < 0 ? '−' : ''}{money(Math.abs(data.total_diff), data.currency)} celkem
+        <Panel icon={Scale} title={`${mesic(data.previous_month)} vs ${mesic(data.current_month)}`}
+            actions={
+                <span className={`text-xs font-semibold tabular-nums ${data.total_diff > 0 ? 'text-red-300' : data.total_diff < 0 ? 'text-emerald-300' : 'text-[var(--color-text-secondary)]'}`}>
+                    {data.total_diff > 0 ? '+' : data.total_diff < 0 ? '−' : ''}{money(Math.abs(data.total_diff), data.currency)}
                 </span>
-            </div>
-
+            }
+            footnote={`Šedý pruh je starší měsíc. Jen položky v ${data.currency} — ostatní měny se nesčítají.`}>
             <div className="space-y-2.5">
                 {data.rows.map(radek => (
                     <div key={radek.name}>
@@ -506,21 +577,7 @@ function Comparison({ data }: { data: NonNullable<Overview['comparison']> }) {
                     </div>
                 ))}
             </div>
-
-            <p className="mt-3 text-[11px] text-[var(--color-text-secondary)]">
-                Šedý pruh je starší měsíc. Jen položky v {data.currency} — ostatní měny se nesčítají.
-            </p>
-        </section>
-    );
-}
-
-function Tile({ label, value, hint, accent = false }: { label: string; value: string; hint?: string; accent?: boolean }) {
-    return (
-        <div className={`rounded-2xl border p-4 ${accent ? 'border-[var(--color-accent)]/30 bg-[var(--color-accent)]/5' : 'border-[var(--color-border)] bg-[var(--color-bg-card)]'}`}>
-            <p className="text-xs uppercase tracking-wider text-[var(--color-text-secondary)]">{label}</p>
-            <p className="mt-1 text-lg font-semibold text-[var(--color-text-primary)]">{value}</p>
-            {hint && <p className="mt-0.5 text-[11px] text-[var(--color-text-secondary)]">{hint}</p>}
-        </div>
+        </Panel>
     );
 }
 
@@ -536,10 +593,14 @@ function Categories({ budget, categories, onChanged }: { budget: Overview['budge
     };
 
     return (
-        <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-4">
-            <h2 className="mb-3 text-sm font-semibold text-[var(--color-text-primary)]">Kategorie</h2>
-
-            <div className="space-y-3">
+        <Panel icon={Tags} title="Plán proti skutečnosti"
+            description={`Kolik mělo padnout do dneška — přepočteno na to, co z období uplynulo. Plán se zadává ${budget.period_label}.`}>
+            <div className="space-y-3.5">
+                {categories.length === 0 && (
+                    <p className="rounded-xl border border-dashed border-[var(--color-border)] px-3 py-5 text-center text-xs text-[var(--color-text-secondary)]">
+                        Zatím žádné kategorie. Bez nich rozpočet jen sčítá — s nimi řekne, na čem se přepálilo.
+                    </p>
+                )}
                 {categories.map(category => (
                     <div key={category.id}>
                         <div className="flex items-baseline justify-between gap-2 text-sm">
@@ -568,16 +629,16 @@ function Categories({ budget, categories, onChanged }: { budget: Overview['budge
                 ))}
             </div>
 
-            <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+            <div className="mt-4 flex flex-col gap-2 border-t border-[var(--color-border)] pt-4 sm:flex-row">
                 <input value={name} onChange={e => setName(e.target.value)} placeholder="Nájem, jídlo, doprava…" className={FIELD}/>
                 <input type="number" inputMode="decimal" value={planned} onChange={e => setPlanned(e.target.value)}
-                    placeholder={`${budget.period_unit === 'week' ? 'za týden' : 'za měsíc'} (${budget.currency})`} className={`${FIELD} sm:w-48`}/>
+                    placeholder={`${budget.period_unit === 'week' ? 'za týden' : 'za měsíc'} (${budget.currency})`} className={`${FIELD} sm:w-40`}/>
                 <button type="button" onClick={() => void add()} disabled={! name.trim()}
                     className="inline-flex min-h-10 shrink-0 items-center justify-center gap-1.5 rounded-lg bg-[var(--color-accent)] px-4 text-sm font-medium text-[var(--color-accent-contrast)] disabled:opacity-50">
                     <Plus size={14}/> Přidat
                 </button>
             </div>
-        </section>
+        </Panel>
     );
 }
 
@@ -639,30 +700,32 @@ function Entries({ budget, categories, entries, members, onChanged }: {
     };
 
     return (
-        <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-4">
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">Položky</h2>
-
-                <div className="flex flex-wrap items-center gap-2">
-                    <button type="button" onClick={() => setImporting(v => ! v)}
-                        className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-[var(--color-border)] px-3 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]">
-                        <Upload size={13}/> Načíst výpis
-                    </button>
-                    {/* Odkaz, ne fetch: stažení souboru přes XHR by znamenalo držet celý
-                        obsah v paměti a pak si ho podat blobem sám sobě. */}
-                    <a href={`/api/v1/rozpocty/${budget.uuid}/export`} download
-                        className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-[var(--color-border)] px-3 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]">
-                        <Download size={13}/> Stáhnout CSV
-                    </a>
-                </div>
-            </div>
+        <Panel icon={ListPlus} title="Položky"
+            actions={<>
+                <button type="button" onClick={() => setImporting(v => ! v)}
+                    className={`inline-flex min-h-8 items-center gap-1.5 rounded-lg border px-3 text-xs transition-colors ${
+                        importing
+                            ? 'border-[var(--color-accent)] bg-[var(--color-accent)]/10 text-[var(--color-text-primary)]'
+                            : 'border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'
+                    }`}>
+                    <Upload size={13}/> Načíst výpis
+                </button>
+                {/* Odkaz, ne fetch: stažení souboru přes XHR by znamenalo držet celý
+                    obsah v paměti a pak si ho podat blobem sám sobě. */}
+                <a href={`/api/v1/rozpocty/${budget.uuid}/export`} download
+                    className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-[var(--color-border)] px-3 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]">
+                    <Download size={13}/> Stáhnout CSV
+                </a>
+            </>}>
 
             {importing && (
                 <StatementImport budget={budget} categories={categories}
                     onDone={() => { setImporting(false); onChanged(); }} onCancel={() => setImporting(false)}/>
             )}
 
-            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-6">
+            {/* Zápis má vlastní pozadí, aby bylo poznat, kde končí formulář a začíná
+                výpis. Bez toho splyne jedenáct polí a dvacet řádků v jednu plochu. */}
+            <div className="grid gap-2 rounded-xl bg-[var(--color-bg-primary)]/60 p-3 sm:grid-cols-2 lg:grid-cols-6">
                 <select value={form.kind} onChange={e => setForm(f => ({ ...f, kind: e.target.value }))} className={FIELD}>
                     <option value="expense">Výdaj</option>
                     <option value="income">Příjem</option>
@@ -730,7 +793,9 @@ function Entries({ budget, categories, entries, members, onChanged }: {
                 )}
             </div>
 
-            <div className="mt-4 space-y-1">
+            {/* Výpis má vlastní posuvník. Sto položek pod formulářem by odsunulo
+                všechno ostatní na stránce mimo dosah. */}
+            <div className="mt-4 max-h-[26rem] space-y-1 overflow-y-auto pr-1">
                 {entries.map(entry => (
                     <div key={entry.uuid} className="flex items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-[var(--color-surface-hover)]">
                         <span className="w-14 shrink-0 text-xs text-[var(--color-text-secondary)]">{den(entry.spent_on)}</span>
@@ -760,9 +825,13 @@ function Entries({ budget, categories, entries, members, onChanged }: {
                         </button>
                     </div>
                 ))}
-                {entries.length === 0 && <p className="py-4 text-center text-sm text-[var(--color-text-secondary)]">Zatím nic zapsaného.</p>}
+                {entries.length === 0 && (
+                    <p className="py-6 text-center text-sm text-[var(--color-text-secondary)]">
+                        Zatím nic zapsaného. Zapište první částku, nebo načtěte výpis z banky.
+                    </p>
+                )}
             </div>
-        </section>
+        </Panel>
     );
 }
 
@@ -793,16 +862,12 @@ function MoneyRequests({ requests, members, onChanged }: {
     };
 
     return (
-        <section id="zadosti" className="scroll-mt-20 rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-4">
-            <h2 className="mb-1 flex items-center gap-2 text-sm font-semibold text-[var(--color-text-primary)]">
-                <ArrowRightLeft size={15}/> Žádosti o peníze
-            </h2>
-            <p className="mb-3 text-xs text-[var(--color-text-secondary)]">
-                Partner dostane upozornění hned. Kolik doopravdy dorazilo a jakým kurzem se zapisuje až při vyřízení.
-            </p>
+        <Panel className="scroll-mt-20" icon={ArrowRightLeft} title="Žádosti o peníze"
+            description="Partner dostane upozornění hned. Kolik doopravdy dorazilo a jakým kurzem se zapisuje až při vyřízení.">
+            <div id="zadosti" className="sr-only"/>
 
             {members.length > 0 && (
-                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+                <div className="grid gap-2 rounded-xl bg-[var(--color-bg-primary)]/60 p-3 sm:grid-cols-2 lg:grid-cols-5">
                     <select value={form.to_user_id} onChange={e => setForm(f => ({ ...f, to_user_id: e.target.value }))} className={FIELD}>
                         <option value="">Komu…</option>
                         {members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
@@ -884,6 +949,6 @@ function MoneyRequests({ requests, members, onChanged }: {
                 ))}
                 {requests.length === 0 && <p className="py-3 text-center text-sm text-[var(--color-text-secondary)]">Žádné žádosti.</p>}
             </div>
-        </section>
+        </Panel>
     );
 }
