@@ -1,4 +1,4 @@
-import Panel, { Stat } from '@/Components/Panel';
+import Panel, { PanelGrid, Stat } from '@/Components/Panel';
 import AppLayout from '@/Layouts/AppLayout';
 import { uploadManager, waitForUploads } from '@/lib/uploadManager';
 import { Head } from '@inertiajs/react';
@@ -317,20 +317,10 @@ function Overview({ data, members, onChanged }: { data: Overview; members: Array
                         : 'zatím bez plánu'}/>
             </section>
 
-            {stav.length > 0 && (
-                <div className={`grid gap-4 ${stav.length > 1 ? 'lg:grid-cols-2' : ''}`}>
-                    {/* Při lichém počtu se poslední roztáhne přes obě půlky. Panel, vedle
-                        kterého zbyla prázdná polovina řádku, vypadá, jako by se něco
-                        nenačetlo. */}
-                    {/* flex na obalu, aby se panel uvnitř natáhl na výšku řádku a dvojice
-                        vedle sebe byla zarovnaná — sám o sobě má panel výšku podle obsahu. */}
-                    {stav.map((panel, i) => (
-                        <div key={i} className={`flex ${stav.length % 2 === 1 && i === stav.length - 1 ? 'lg:col-span-2' : ''}`}>
-                            {panel}
-                        </div>
-                    ))}
-                </div>
-            )}
+            {/* Počet sloupců si mřížka odvodí z toho, kolik panelů opravdu přišlo —
+                stavové panely se zobrazují podmíněně a prázdná půlka řádku vedle
+                osamoceného panelu vypadá, jako by se něco nenačetlo. */}
+            <PanelGrid max={2}>{stav}</PanelGrid>
 
             {/* Zápis a výpis položek. Celá šířka, protože formulář má šest polí vedle
                 sebe — v půlce obrazovky by se zlomil na tři řádky. */}
@@ -338,18 +328,16 @@ function Overview({ data, members, onChanged }: { data: Overview; members: Array
 
             {/* Plán vedle skutečnosti. Dvě odpovědi na jednu otázku — kolik mělo padnout
                 a kam to opravdu šlo — a mají smysl jen společně. */}
-            <div className={`grid gap-4 ${categories.some(c => c.spent > 0) ? 'lg:grid-cols-2' : ''}`}>
+            <PanelGrid max={2}>
                 <Categories budget={budget} categories={categories} onChanged={onChanged}/>
                 {categories.some(c => c.spent > 0) && <BreakdownPanel categories={categories} currency={budget.currency}/>}
-            </div>
+            </PanelGrid>
 
             {/* Čas: celé období vlevo, poslední dva měsíce podrobně vpravo. */}
-            {(months.length > 0 || data.comparison) && (
-                <div className={`grid gap-4 ${months.length > 0 && data.comparison ? 'lg:grid-cols-2' : ''}`}>
-                    {months.length > 0 && <MonthsPanel months={months} currency={budget.currency}/>}
-                    {data.comparison && <Comparison data={data.comparison}/>}
-                </div>
-            )}
+            <PanelGrid max={2}>
+                {months.length > 0 && <MonthsPanel months={months} currency={budget.currency}/>}
+                {data.comparison && <Comparison data={data.comparison}/>}
+            </PanelGrid>
         </div>
     );
 }
@@ -984,41 +972,54 @@ function Entries({ budget, categories, members, total, onChanged }: {
                 </div>
             )}
 
-            <div className="mt-3 space-y-1">
+            {/* Vlastní posuvník se stropem. Padesát řádků na stránku je dva tisíce bodů
+                výšky — všechno pod položkami by se tím odsunulo mimo dosah. */}
+            <div className="mt-3 max-h-[30rem] space-y-1 overflow-y-auto pr-1">
                 {rows.map(entry => (
                     editing === entry.uuid
                         ? <EntryEditor key={entry.uuid} budget={budget} categories={categories} members={members} entry={entry}
                             onClose={() => setEditing(null)}
                             onSaved={() => { setEditing(null); refresh(); }}/>
-                        : <div key={entry.uuid} className="group flex items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-[var(--color-surface-hover)]">
-                            <span className="w-14 shrink-0 text-xs text-[var(--color-text-secondary)]">{den(entry.spent_on)}</span>
-                            <span className="min-w-0 flex-1 truncate text-sm text-[var(--color-text-primary)]">
-                                {entry.note || entry.category || (entry.kind === 'income' ? 'Příjem' : 'Výdaj')}
-                                {entry.category && entry.note && <span className="ml-2 text-[11px] text-[var(--color-text-secondary)]">{entry.category}</span>}
-                                {entry.is_recurring && <span className="ml-2 rounded bg-[var(--color-surface-muted)] px-1.5 py-0.5 text-[9px] text-[var(--color-text-secondary)]">pravidelné</span>}
+                        : <div key={entry.uuid} className="group flex items-center gap-2 rounded-lg px-2 py-1.5 sm:gap-3 hover:bg-[var(--color-surface-hover)]">
+                            <span className="w-11 shrink-0 text-xs text-[var(--color-text-secondary)] sm:w-14">{den(entry.spent_on)}</span>
+
+                            {/* Popis a štítky se na úzké obrazovce zalomí pod sebe. Jeden
+                                řádek s ořezem by na telefonu ukázal tři slova a zbytek
+                                spolkl — přitom „napůl · Adrian" je ta zajímavá část. */}
+                            <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-0.5 text-sm text-[var(--color-text-primary)]">
+                                <span className="min-w-0 max-w-full truncate">
+                                    {entry.note || entry.category || (entry.kind === 'income' ? 'Příjem' : 'Výdaj')}
+                                </span>
+                                {entry.category && entry.note && <span className="text-[11px] text-[var(--color-text-secondary)]">{entry.category}</span>}
+                                {entry.is_recurring && <span className="rounded bg-[var(--color-surface-muted)] px-1.5 py-0.5 text-[9px] text-[var(--color-text-secondary)]">pravidelné</span>}
                                 {entry.split && entry.split !== 'none' && (
-                                    <span className="ml-2 rounded bg-[var(--color-accent)]/15 px-1.5 py-0.5 text-[9px] text-[var(--color-accent)]">
+                                    <span className="rounded bg-[var(--color-accent)]/15 px-1.5 py-0.5 text-[9px] text-[var(--color-accent)]">
                                         {DELENI[entry.split]}{entry.paid_by ? ` · ${entry.paid_by}` : ''}
                                     </span>
                                 )}
                                 {entry.receipt_uuid && (
                                     <a href={`/media/${entry.receipt_uuid}`} target="_blank" rel="noreferrer" title="Účtenka"
-                                        className="ml-2 inline-flex align-middle text-[var(--color-text-secondary)] hover:text-[var(--color-accent)]">
+                                        className="inline-flex text-[var(--color-text-secondary)] hover:text-[var(--color-accent)]">
                                         <Receipt size={12}/>
                                     </a>
                                 )}
                             </span>
+
                             <span className={`shrink-0 text-sm tabular-nums ${entry.kind === 'income' ? 'text-emerald-300' : 'text-[var(--color-text-primary)]'}`}>
                                 {entry.kind === 'income' ? '+' : '−'}{money(entry.amount, entry.currency)}
                             </span>
+
+                            {/* Na dotyku jsou tlačítka vidět vždycky. Skrývat je za najetí
+                                myší znamená, že na telefonu neexistují — a tam se položky
+                                zapisují a opravují nejčastěji. */}
                             <button type="button" title="Upravit" onClick={() => setEditing(entry.uuid)}
-                                className="rounded p-1 text-[var(--color-text-secondary)] opacity-0 transition-opacity hover:text-[var(--color-accent)] focus:opacity-100 group-hover:opacity-100">
-                                <Pencil size={13}/>
+                                className="flex h-8 w-8 shrink-0 items-center justify-center rounded text-[var(--color-text-secondary)] transition-opacity hover:text-[var(--color-accent)] focus:opacity-100 sm:opacity-0 sm:group-hover:opacity-100">
+                                <Pencil size={14}/>
                             </button>
                             <button type="button" title="Smazat"
                                 onClick={async () => { await axios.delete(`/api/v1/rozpocty/${budget.uuid}/polozky/${entry.uuid}`); refresh(); }}
-                                className="rounded p-1 text-[var(--color-text-secondary)] opacity-0 transition-opacity hover:text-red-300 focus:opacity-100 group-hover:opacity-100">
-                                <Trash2 size={13}/>
+                                className="flex h-8 w-8 shrink-0 items-center justify-center rounded text-[var(--color-text-secondary)] transition-opacity hover:text-red-300 focus:opacity-100 sm:opacity-0 sm:group-hover:opacity-100">
+                                <Trash2 size={14}/>
                             </button>
                         </div>
                 ))}

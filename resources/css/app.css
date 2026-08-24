@@ -98,6 +98,64 @@
         -webkit-tap-highlight-color: transparent;
     }
 
+    /*
+     * Zaškrtávátka a přepínače.
+     *
+     * Prohlížeč jim dává třináct bodů. To je na prst málo — člověk mine, trefí popisek
+     * vedle a nic se nestane, nebo hůř, trefí sousední řádek. V aplikaci jich je přes
+     * padesát na dvou desítkách obrazovek, takže je levnější je zvětšit tady než u
+     * každého jednoho.
+     *
+     * Osmnáct bodů plus dva body odsazení dělá dohromady dvaadvacet — pořád méně než
+     * doporučovaných čtyřicet čtyři, ale zaškrtávátko skoro vždycky sedí uvnitř <label>,
+     * takže skutečný terč je celý řádek s textem. Zvětšovat samotný čtvereček víc by
+     * z něj v hustém seznamu udělal dominantní prvek.
+     */
+    input[type="checkbox"],
+    input[type="radio"] {
+        width: 1.125rem;
+        height: 1.125rem;
+        margin: 2px;
+        flex-shrink: 0;
+        accent-color: var(--color-accent);
+        cursor: pointer;
+    }
+
+    input[type="checkbox"]:disabled,
+    input[type="radio"]:disabled {
+        cursor: not-allowed;
+        opacity: 0.5;
+    }
+
+    /* Popisek obalující ovládací prvek je terč taky — ať to prst pozná. */
+    label:has(> input[type="checkbox"]),
+    label:has(> input[type="radio"]) {
+        cursor: pointer;
+    }
+
+    /*
+     * Ovládání schované do najetí myší na dotyku neexistuje.
+     *
+     * Na devatenácti místech se tlačítka odkrývají přes `opacity-0 group-hover:opacity-100`
+     * — smazat fotku, upravit položku, odebrat výběr. Na myši je to čistý vzhled, na
+     * telefonu je to funkce, ke které se nedá dostat: prst nemá jak „najet".
+     *
+     * Řeší se to tady, ne u každého tlačítka zvlášť, protože jinak by na to příště někdo
+     * zase zapomněl. `hover: none` je zařízení bez ukazovátka — telefon a tablet.
+     *
+     * Odkrývají se jen ovladače a obaly, ve kterých nějaký je. Ozdobné přechody, které
+     * se objevují nad fotkou při najetí, zůstávají skryté — jinak by každá miniatura
+     * v mřížce natrvalo ztmavla.
+     */
+    @media (hover: none) {
+        button[class*="group-hover:opacity-100"],
+        a[class*="group-hover:opacity-100"],
+        label[class*="group-hover:opacity-100"],
+        [class*="group-hover:opacity-100"]:has(> button, > a, > input, > label) {
+            opacity: 1;
+        }
+    }
+
     ::-webkit-scrollbar {
         width: 6px;
         height: 6px;

@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { Children, type ReactNode } from 'react';
 
 /**
  * Jeden panel v přehledu.
@@ -77,6 +77,55 @@ export default function Panel({
                 </p>
             )}
         </section>
+    );
+}
+
+/**
+ * Řada panelů vedle sebe.
+ *
+ * Existuje kvůli jedné chybě, která se jinak opakuje na každé stránce: mřížka o třech
+ * sloupcích se dvěma potomky nechá třetí sloupec prázdný a vypadá to, jako by se něco
+ * nenačetlo. Panely se přitom skoro vždycky zobrazují podmíněně — varování jen když je
+ * co, „dnes před lety" jen když nějaká fotka je.
+ *
+ * Počet sloupců se proto řídí tím, kolik panelů opravdu přišlo, ne tím, kolik jich autor
+ * napsal. Falsy potomci se zahodí, takže `{podminka && <Panel/>}` funguje bez obcházení.
+ *
+ * Na telefonu je vždycky jeden sloupec — dva panely vedle sebe na třech stech
+ * sedmdesáti bodech jsou dva úzké pruhy, ve kterých se nedá nic přečíst.
+ */
+export function PanelGrid({ children, max = 3, className = '' }: {
+    children: ReactNode;
+    /** Nejvíc sloupců na široké obrazovce. Víc než tři panely v řadě se přestanou číst. */
+    max?: 2 | 3 | 4;
+    className?: string;
+}) {
+    const panely = Children.toArray(children).filter(Boolean);
+
+    if (panely.length === 0) return null;
+
+    // Třídy se píšou celé, ne skládají z kousků — Tailwind hledá jména tříd v textu
+    // souboru a `lg:grid-cols-${n}` by ve výsledném CSS neexistovalo.
+    const sloupce = Math.min(panely.length, max);
+    const trida = sloupce >= 4 ? 'sm:grid-cols-2 xl:grid-cols-4'
+        : sloupce === 3 ? 'sm:grid-cols-2 xl:grid-cols-3'
+        : sloupce === 2 ? 'lg:grid-cols-2'
+        : '';
+
+    // Lichý počet ve dvou sloupcích: poslední se roztáhne přes oba. Panel, vedle kterého
+    // zbyla prázdná polovina řádku, vypadá stejně jako panel, který se nenačetl.
+    const roztahnoutPosledni = sloupce === 2 && panely.length % 2 === 1;
+
+    return (
+        <div className={`grid gap-4 ${trida} ${className}`}>
+            {panely.map((panel, i) => (
+                // flex na obalu, aby panel uvnitř dorostl na výšku řádku — sám o sobě má
+                // výšku podle obsahu a dvojice vedle sebe by měla schod.
+                <div key={i} className={`flex ${roztahnoutPosledni && i === panely.length - 1 ? 'lg:col-span-2' : ''}`}>
+                    {panel}
+                </div>
+            ))}
+        </div>
     );
 }
 
