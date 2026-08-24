@@ -208,6 +208,216 @@ class BudgetController extends Controller
     }
 
     /**
+     * Označí dluh v jedné měně za vyrovnaný.
+     *
+     * Volitelně z toho rovnou udělá žádost o peníze — panel dosud ukázal částku a vedle
+     * něj stál nesouvisející formulář, do kterého ji člověk musel přepsat.
+     */
+    public function settleUp(Request $request, string $uuid): JsonResponse
+    {
+        $this->write($request);
+        $budget = $this->budget($request, $uuid);
+
+        $data = $request->validate([
+            'currency' => 'required|string|size:3',
+            'settled_through' => 'nullable|date',
+            'request_money' => 'sometimes|boolean',
+        ]);
+
+        $radek = collect($this->budgets->settlement($budget))->firstWhere('currency', strtoupper($data['currency']));
+
+        abort_if($radek === null, 422, 'V téhle měně teď není co vyrovnávat.');
+
+        // Žádost odchází dřív než uzávěrka. Kdyby se poslala až potom a odeslání selhalo,
+        // dluh by byl zavřený a partner by se o něm nedozvěděl.
+        if (($data['request_money'] ?? false) && ! empty($radek['from_id'])) {
+            $komu = \App\Models\User::find($radek['from_id']);
+
+            if ($komu && $komu->id !== $request->user()->id) {
+                $this->budgets->requestMoney($this->space($request), $request->user(), $komu, [
+                    'amount' => $radek['amount'],
+                    'currency' => $radek['currency'],
+                    'reason' => 'Vyrovnání společných výdajů — '.$budget->name,
+                ]);
+            }
+        }
+
+        $this->budgets->settleUp(
+            $budget,
+            $request->user(),
+            $data['currency'],
+            ! empty($data['settled_through']) ? \Illuminate\Support\Carbon::parse($data['settled_through']) : null,
+        );
+
+        return response()->json($this->budgets->overview($budget->fresh()), 201);
+    }
+
+    /** Vezme uzávěrku zpět — dluh se od téhle chvíle zase počítá od původního data. */
+    public function destroySettlement(Request $request, string $uuid, string $settlementUuid): JsonResponse
+    {
+        $this->write($request);
+        $budget = $this->budget($request, $uuid);
+
+        $budget->settlements()->where('uuid', $settlementUuid)->firstOrFail()->delete();
+
+        return response()->json($this->budgets->overview($budget->fresh()));
+    }
+
+    /**
+     * Opraví existující položku.
+     *
+     * Dosud šlo položku jen smazat a napsat znovu — a s ní zmizela účtenka i nastavení
+     * dělení, takže překlep v částce stál nové focení a nové naklikání.
+     */
+    public function updateEntry(Request $request, string $uuid, string $entryUuid): JsonResponse
+    {
+        $this->write($request);
+        $budget = $this->budget($request, $uuid);
+
+        $entry = $budget->entries()->where('uuid', $entryUuid)->firstOrFail();
+
+        $data = $request->validate([
+            'kind' => 'sometimes|in:expense,income',
+            'amount' => 'sometimes|numeric|min:0.01',
+            'currency' => 'sometimes|string|size:3',
+            'spent_on' => 'sometimes|date',
+            'budget_category_id' => 'nullable|integer',
+            'note' => 'nullable|string|max:500',
+            'is_recurring' => 'sometimes|boolean',
+            'paid_by' => 'nullable|integer',
+            'split' => 'sometimes|in:none,equal,other',
+            'receipt_uuid' => 'nullable|uuid',
+        ]);
+
+        if (! empty($data['budget_category_id'])) {
+            abort_unless($budget->categories()->whereKey($data['budget_category_id'])->exists(), 422, 'Kategorie do tohoto rozpočtu nepatří.');
+        }
+
+        // Účtenka i plátce se ověřují stejně jako při zakládání — bez toho by šlo
+        // úpravou obejít kontrolu, kterou zápis dělá.
+        if (array_key_exists('receipt_uuid', $data)) {
+            $entry->media_item_id = $data['receipt_uuid']
+                ? \App\Models\MediaItem::where('uuid', $data['receipt_uuid'])
+                    ->where('gallery_space_id', $budget->gallery_space_id)
+                    ->value('id')
+                : null;
+        }
+
+        if (array_key_exists('paid_by', $data)) {
+            $entry->paid_by = ! empty($data['paid_by'])
+                && $budget->gallerySpace?->members()->whereKey($data['paid_by'])->exists()
+                    ? (int) $data['paid_by']
+                    : $entry->user_id;
+        }
+
+        if (array_key_exists('currency', $data)) {
+            $data['currency'] = strtoupper($data['currency']);
+        }
+
+        $entry->fill(collect($data)->except(['receipt_uuid', 'paid_by'])->all())->save();
+
+        return response()->json($this->budgets->overview($budget->fresh()));
+    }
+
+    /** Jedna položka tak, jak ji čeká obrazovka. @return array<string, mixed> */
+    private function entryPayload(BudgetEntry $entry): array
+    {
+        return [
+            'uuid' => $entry->uuid,
+            'kind' => $entry->kind,
+            'amount' => (float) $entry->amount,
+            'currency' => $entry->currency,
+            'spent_on' => $entry->spent_on->toDateString(),
+            'note' => $entry->note,
+            'is_recurring' => $entry->is_recurring,
+            'category' => $entry->category?->name,
+            'budget_category_id' => $entry->budget_category_id,
+            'author' => $entry->author?->name,
+            'paid_by' => $entry->payer?->name ?? $entry->author?->name,
+            'paid_by_id' => $entry->paid_by,
+            'split' => $entry->split,
+            'receipt_uuid' => $entry->receipt?->uuid,
+        ];
+    }
+
+    /**
+     * Měsíce, ve kterých rozpočet vůbec něco má.
+     *
+     * Formátuje se v PHP, ne v SQL. Lokálně běží SQLite a na serveru MySQL a každá má
+     * na formátování data jinou funkci — takový dotaz projde v testech a spadne až
+     * v provozu. Datum se vrací jako sloupec a měsíc se z něj udělá tady.
+     *
+     * @return array<int, string>
+     */
+    private function entryMonths(Budget $budget): array
+    {
+        return $budget->entries()
+            ->orderByDesc('spent_on')
+            ->pluck('spent_on')
+            ->map(fn ($datum) => \Illuminate\Support\Carbon::parse($datum)->format('Y-m'))
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Položky po stránkách, s hledáním a filtry.
+     *
+     * Vlastní koncový bod, ne součást přehledu. Přehled počítá souhrny přes všechno a
+     * posílat k nim pokaždé i pět set řádků by znamenalo, že se celý seznam přenese
+     * znovu při každém zapsání jedné částky.
+     */
+    public function entries(Request $request, string $uuid): JsonResponse
+    {
+        $budget = $this->budget($request, $uuid);
+
+        $data = $request->validate([
+            'q' => 'nullable|string|max:120',
+            'kind' => 'nullable|in:expense,income',
+            'category' => 'nullable|string|max:20',
+            'month' => 'nullable|date_format:Y-m',
+            'page' => 'nullable|integer|min:1',
+        ]);
+
+        $naStranku = 50;
+        $stranka = (int) ($data['page'] ?? 1);
+
+        $dotaz = $budget->entries()
+            ->with(['category:id,name', 'payer:id,name', 'author:id,name', 'receipt:id,uuid'])
+            ->when($data['kind'] ?? null, fn ($q, $kind) => $q->where('kind', $kind))
+            ->when($data['q'] ?? null, fn ($q, $hledane) => $q->where('note', 'like', '%'.$hledane.'%'))
+            // 'none' je záměrně jiná hodnota než prázdno: prázdno znamená „nefiltrovat",
+            // kdežto 'none' znamená „jen ty, které kategorii nemají".
+            ->when(isset($data['category']) && $data['category'] !== '', function ($q) use ($data) {
+                $data['category'] === 'none'
+                    ? $q->whereNull('budget_category_id')
+                    : $q->where('budget_category_id', (int) $data['category']);
+            })
+            ->when($data['month'] ?? null, function ($q, $mesic) {
+                $od = \Illuminate\Support\Carbon::createFromFormat('Y-m', $mesic)->startOfMonth();
+                $q->whereBetween('spent_on', [$od->toDateString(), $od->copy()->endOfMonth()->toDateString()]);
+            });
+
+        $celkem = (clone $dotaz)->count();
+
+        $polozky = $dotaz
+            ->orderByDesc('spent_on')
+            ->orderByDesc('id')
+            ->forPage($stranka, $naStranku)
+            ->get();
+
+        return response()->json([
+            'entries' => $polozky->map(fn (BudgetEntry $entry) => $this->entryPayload($entry))->values(),
+            'total' => $celkem,
+            'page' => $stranka,
+            'per_page' => $naStranku,
+            'has_more' => $celkem > $stranka * $naStranku,
+            // Měsíce, ve kterých vůbec něco je — aby filtr nenabízel prázdná období.
+            'months' => $this->entryMonths($budget),
+        ]);
+    }
+
+    /**
      * Přečte výpis a vrátí, co v něm je. Nic neuloží.
      *
      * Náhled je záměrně samostatný krok: dvě stě položek zapsaných jedním kliknutím se
@@ -232,19 +442,24 @@ class BudgetController extends Controller
             ->map(fn (BudgetEntry $e) => $e->spent_on->toDateString().'|'.number_format((float) $e->amount, 2, '.', '').'|'.$e->kind)
             ->flip();
 
-        $rows = collect($vysledek['rows'])->map(function (array $radek) use ($existujici, $budget) {
-            $klic = $radek['spent_on'].'|'.number_format($radek['amount'], 2, '.', '').'|'.$radek['kind'];
-            $radek['duplicate'] = $existujici->has($klic);
-            $radek['currency'] ??= $budget->currency;
+        // Kategorie se hádají z popisu. Klasifikátor obchodníků v systému už je i s
+        // vlastními pravidly prostoru — bez tohohle kroku by každý řádek přistál jako
+        // „bez kategorie" a člověk by je proklikával po jednom.
+        $rows = collect(app(\App\Services\Finance\CategoryMatcher::class)->suggest($budget, $vysledek['rows']))
+            ->map(function (array $radek) use ($existujici, $budget) {
+                $klic = $radek['spent_on'].'|'.number_format($radek['amount'], 2, '.', '').'|'.$radek['kind'];
+                $radek['duplicate'] = $existujici->has($klic);
+                $radek['currency'] ??= $budget->currency;
 
-            return $radek;
-        });
+                return $radek;
+            });
 
         return response()->json([
             'rows' => $rows->values(),
             'skipped' => $vysledek['skipped'],
             'recognised' => array_keys(array_filter($vysledek['columns'], fn ($i) => $i !== null)),
             'duplicates' => $rows->where('duplicate', true)->count(),
+            'categorised' => $rows->whereNotNull('suggested_category_id')->count(),
         ]);
     }
 

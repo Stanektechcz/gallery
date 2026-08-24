@@ -45,7 +45,10 @@ class BudgetService
     public function overview(Budget $budget, ?Carbon $today = null): array
     {
         $today ??= Carbon::today();
-        $budget->loadMissing(['categories', 'entries.category', 'entries.author:id,name']);
+        $budget->loadMissing([
+            'categories', 'entries.category', 'entries.author:id,name',
+            'settlements.from:id,name', 'settlements.to:id,name',
+        ]);
 
         $vydaje = $budget->entries->where('kind', 'expense');
         $prijmy = $budget->entries->where('kind', 'income');
@@ -80,23 +83,20 @@ class BudgetService
             'runway' => $this->runway($budget, $today),
             'savings' => $this->savings($budget, $today),
             'comparison' => $this->comparison($budget),
-            'entries' => $budget->entries
-                ->sortByDesc('spent_on')
-                ->take(100)
-                ->map(fn (BudgetEntry $entry) => [
-                    'uuid' => $entry->uuid,
-                    'kind' => $entry->kind,
-                    'amount' => (float) $entry->amount,
-                    'currency' => $entry->currency,
-                    'spent_on' => $entry->spent_on->toDateString(),
-                    'note' => $entry->note,
-                    'is_recurring' => $entry->is_recurring,
-                    'category' => $entry->category?->name,
-                    'author' => $entry->author?->name,
-                    'paid_by' => $entry->payer?->name ?? $entry->author?->name,
-                    'split' => $entry->split,
-                    'receipt_uuid' => $entry->receipt?->uuid,
-                ])->values()->all(),
+            // Historie uzávěrek. Bez ní by po vyrovnání zmizel dluh i důkaz, že se platil.
+            'settlements' => $budget->settlements->take(6)->map(fn (\App\Models\BudgetSettlement $s) => [
+                'uuid' => $s->uuid,
+                'currency' => $s->currency,
+                'amount' => (float) $s->amount,
+                'settled_through' => $s->settled_through->toDateString(),
+                'from' => $s->from?->name,
+                'to' => $s->to?->name,
+            ])->values()->all(),
+            // Seznam položek sem nepatří. Dřív se posílalo sto nejnovějších — po nahrání
+            // výpisu o pěti stech řádcích jich zbytek nešlo ani vidět, ani smazat.
+            // Seznam si teď řídí vlastní koncový bod s hledáním a stránkováním; tady
+            // zůstává jen počet, aby obrazovka věděla, kolik toho vlastně je.
+            'entries_total' => $budget->entries->count(),
         ];
     }
 
@@ -267,17 +267,29 @@ class BudgetService
      *
      * Po měnách zvlášť, ze stejného důvodu jako všude jinde: kurz nemáme.
      *
+     * Co je jednou vyrovnané, se už nepočítá. Bez toho by číslo po zaplacení svítilo dál
+     * a příští měsíc se k němu přičetlo nové — panel by po půl roce ukazoval součet
+     * všeho, co kdy kdo za koho zaplatil, místo toho, co ještě zbývá srovnat.
+     *
      * @return array<int, array<string, mixed>>
      */
     public function settlement(Budget $budget): array
     {
-        $budget->loadMissing(['entries.payer:id,name', 'entries.author:id,name']);
+        $budget->loadMissing(['entries.payer:id,name', 'entries.author:id,name', 'settlements']);
+
+        // Do kdy je která měna vyrovnaná. Bere se poslední uzávěrka.
+        $vyrovnanoDo = $budget->settlements
+            ->groupBy('currency')
+            ->map(fn (Collection $skupina) => $skupina->max('settled_through'));
 
         // Kdo za koho utratil. Klíč je měna, pak plátce.
         $saldo = [];
 
         foreach ($budget->entries->where('kind', 'expense') as $entry) {
             if ($entry->split === 'none') continue;
+
+            $mez = $vyrovnanoDo[$entry->currency] ?? null;
+            if ($mez !== null && $entry->spent_on->lessThanOrEqualTo($mez)) continue;
 
             $platce = $entry->paid_by ?? $entry->user_id;
             if (! $platce) continue;
@@ -346,7 +358,42 @@ class BudgetService
             ];
         }
 
+        // Od kdy se v každé měně počítá — aby panel mohl napsat „od 14. srpna" a bylo
+        // jasné, že se nedívám na součet za celé období.
+        foreach ($vysledek as $i => $radek) {
+            $vysledek[$i]['since'] = ($vyrovnanoDo[$radek['currency']] ?? null)?->copy()->addDay()->toDateString();
+        }
+
         return $vysledek;
+    }
+
+    /**
+     * Uzavře dluh v jedné měně ke dni.
+     *
+     * Nemaže ani neoznačuje položky. Jedno datum říká totéž jako dvě stě příznaků, dá se
+     * vzít zpět a zůstane po něm historie.
+     */
+    public function settleUp(Budget $budget, User $user, string $mena, ?Carbon $doDne = null): \App\Models\BudgetSettlement
+    {
+        $doDne ??= Carbon::today();
+
+        // Částka se bere z aktuálního výpočtu, ne od klienta — jinak by šlo uzavřít dluh
+        // libovolným číslem a historie by lhala.
+        $radek = collect($this->settlement($budget))->firstWhere('currency', strtoupper($mena));
+
+        $zaznam = \App\Models\BudgetSettlement::create([
+            'budget_id' => $budget->id,
+            'currency' => strtoupper($mena),
+            'settled_through' => $doDne->toDateString(),
+            'amount' => $radek['amount'] ?? 0,
+            'from_user_id' => $radek['from_id'] ?? null,
+            'to_user_id' => $radek['to_id'] ?? null,
+            'created_by' => $user->id,
+        ]);
+
+        $budget->unsetRelation('settlements');
+
+        return $zaznam;
     }
 
     /**

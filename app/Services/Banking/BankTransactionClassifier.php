@@ -44,7 +44,11 @@ class BankTransactionClassifier
 
         $category = 'other';
         foreach (self::DEFAULTS as $candidate => $needles) {
-            if (Str::contains($haystack, $needles)) {
+            // Hledané výrazy projdou stejnou normalizací jako text, ve kterém se hledají.
+            // Bez toho „booking.com" a „cd.cz" nikdy nic nechytily: z popisu se stane
+            // „booking com", kdežto ve slovníku zůstala tečka — a to jsou zrovna dva
+            // z nejčastějších obchodníků, na které tenhle seznam míří.
+            if (Str::contains($haystack, $this->normalizeNeedles($candidate, $needles))) {
                 $category = $candidate;
                 break;
             }
@@ -52,6 +56,28 @@ class BankTransactionClassifier
 
         return ['category' => $category, 'trip_action' => 'suggest', 'is_internal_transfer' => $isInternal, 'is_refund' => $isRefund,
             'is_fee' => $isFee, 'is_cash_withdrawal' => $isCash, 'rule' => null];
+    }
+
+    /**
+     * Normalizované hledané výrazy, spočítané jednou za běh.
+     *
+     * @var array<string, array<int, string>>
+     */
+    private array $needleCache = [];
+
+    /**
+     * @param  array<int, string>  $needles
+     * @return array<int, string>
+     */
+    private function normalizeNeedles(string $candidate, array $needles): array
+    {
+        // Výrazy končící mezerou (například „mol ") se tím nepokazí: squish uřízne
+        // koncovou mezeru, ale ta tam je právě proto, aby „mol" nechytlo „molekula" —
+        // proto se zachová ručně.
+        return $this->needleCache[$candidate] ??= array_map(
+            fn (string $needle) => $this->normalize($needle) . (str_ends_with($needle, ' ') ? ' ' : ''),
+            $needles,
+        );
     }
 
     public function normalize(mixed $value): string

@@ -104,7 +104,11 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
         Route::delete('/{uuid}/kategorie/{categoryId}', [App\Http\Controllers\Api\BudgetController::class, 'destroyCategory'])->name('categories.destroy');
         Route::post('/{uuid}/vypis/nahled', [App\Http\Controllers\Api\BudgetController::class, 'previewStatement'])->name('statement.preview');
         Route::post('/{uuid}/vypis', [App\Http\Controllers\Api\BudgetController::class, 'importStatement'])->name('statement.import');
+        Route::post('/{uuid}/vyrovnani', [App\Http\Controllers\Api\BudgetController::class, 'settleUp'])->name('settlement.store');
+        Route::delete('/{uuid}/vyrovnani/{settlementUuid}', [App\Http\Controllers\Api\BudgetController::class, 'destroySettlement'])->name('settlement.destroy');
+        Route::get('/{uuid}/polozky', [App\Http\Controllers\Api\BudgetController::class, 'entries'])->name('entries.index');
         Route::post('/{uuid}/polozky', [App\Http\Controllers\Api\BudgetController::class, 'storeEntry'])->name('entries.store');
+        Route::patch('/{uuid}/polozky/{entryUuid}', [App\Http\Controllers\Api\BudgetController::class, 'updateEntry'])->name('entries.update');
         Route::delete('/{uuid}/polozky/{entryUuid}', [App\Http\Controllers\Api\BudgetController::class, 'destroyEntry'])->name('entries.destroy');
     });
 

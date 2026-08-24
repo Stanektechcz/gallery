@@ -52,6 +52,11 @@ class Budget extends Model
         return $this->belongsTo(User::class, 'owner_user_id');
     }
 
+    public function settlements()
+    {
+        return $this->hasMany(BudgetSettlement::class)->orderByDesc('settled_through');
+    }
+
     public function gallerySpace()
     {
         return $this->belongsTo(GallerySpace::class);

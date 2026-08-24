@@ -4,8 +4,8 @@ import { uploadManager, waitForUploads } from '@/lib/uploadManager';
 import { Head } from '@inertiajs/react';
 import axios from 'axios';
 import {
-    AlertTriangle, ArrowRightLeft, BarChart3, CalendarDays, Check, Download, ListPlus, PieChart,
-    PiggyBank, Plus, Receipt, Scale, Tags, TrendingDown, TrendingUp, Trash2, Upload, Wallet, X,
+    AlertTriangle, ArrowRightLeft, BarChart3, CalendarDays, Check, Download, ListPlus, Pencil, PieChart,
+    PiggyBank, Plus, Receipt, Scale, Search, Tags, TrendingDown, TrendingUp, Trash2, Upload, Wallet, X,
 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import StatementImport from './StatementImport';
@@ -42,7 +42,8 @@ interface Overview {
     months: Array<{ month: string; spent: number; income: number; count: number; other_currency_count?: number }>;
     allowance: { planned_total: number; spent: number; left: number; per_day: number | null; days_left: number | null; currency: string };
     warnings?: Array<{ category: string; spent: number; planned_to_date: number; percent: number; level: 'close' | 'over' }>;
-    settlement?: Array<{ currency: string; from: string | null; from_id?: number | null; to: string; to_id: number; amount: number }>;
+    settlement?: Array<{ currency: string; from: string | null; from_id?: number | null; to: string; to_id: number; amount: number; since: string | null }>;
+    settlements?: Array<{ uuid: string; currency: string; amount: number; settled_through: string; from: string | null; to: string | null }>;
     runway?: { per_day: number; days_left: number; runs_out_on: string; covers_period: boolean } | null;
     savings?: { target: number; saved: number; missing: number; percent: number; target_on: string | null; days_left: number | null; monthly_needed: number | null; overdue: boolean; reached: boolean } | null;
     comparison?: {
@@ -50,8 +51,18 @@ interface Overview {
         rows: Array<{ name: string; color: string | null; previous: number; current: number; diff: number; diff_percent: number | null }>;
         total_previous: number; total_current: number; total_diff: number;
     } | null;
-    entries: Array<{ uuid: string; kind: string; amount: number; currency: string; spent_on: string; note: string | null; is_recurring: boolean; category: string | null; author: string | null;
-        paid_by?: string | null; split?: 'none' | 'equal' | 'other'; receipt_uuid?: string | null }>;
+    /** Kolik položek rozpočet má. Samotný seznam si načítá vlastní koncový bod. */
+    entries_total: number;
+}
+
+/** Jedna položka ze seznamu. Odpovídá tomu, co vrací /rozpocty/{uuid}/polozky. */
+interface EntryRow {
+    uuid: string; kind: string; amount: number; currency: string; spent_on: string;
+    note: string | null; is_recurring: boolean;
+    category: string | null; budget_category_id: number | null;
+    author: string | null; paid_by: string | null; paid_by_id: number | null;
+    split: 'none' | 'equal' | 'other';
+    receipt_uuid: string | null;
 }
 
 const money = (amount: number, currency: string) =>
@@ -68,6 +79,9 @@ const mesic = (klic: string) =>
 const dny = (pocet: number) => `${pocet} ${pocet === 1 ? 'den' : pocet >= 2 && pocet <= 4 ? 'dny' : 'dní'}`;
 
 const DELENI: Record<string, string> = { none: 'moje', equal: 'napůl', other: 'za druhého' };
+
+/** Měny, které nabízíme. Na jednom místě, ať se seznam v zápisu a v úpravě nerozejde. */
+const MENY = ['EUR', 'CZK', 'USD', 'GBP', 'PLN', 'CHF'];
 
 const STAV: Record<string, string> = { pending: 'čeká', sent: 'posláno', declined: 'zamítnuto', cancelled: 'zrušeno' };
 
@@ -277,7 +291,9 @@ function Overview({ data, members, onChanged }: { data: Overview; members: Array
     const stav = [
         data.runway && ! data.runway.covers_period && <RunwayPanel key="runway" runway={data.runway} budget={budget}/>,
         data.warnings && data.warnings.length > 0 && <WarningsPanel key="warnings" warnings={data.warnings} currency={budget.currency}/>,
-        data.settlement && data.settlement.length > 0 && <SettlementPanel key="settlement" settlement={data.settlement}/>,
+        ((data.settlement && data.settlement.length > 0) || (data.settlements && data.settlements.length > 0))
+            && <SettlementPanel key="settlement" budget={budget} settlement={data.settlement ?? []}
+                history={data.settlements ?? []} onChanged={onChanged}/>,
         data.savings && <SavingsPanel key="savings" savings={data.savings} currency={budget.currency}/>,
     ].filter(Boolean);
 
@@ -318,7 +334,7 @@ function Overview({ data, members, onChanged }: { data: Overview; members: Array
 
             {/* Zápis a výpis položek. Celá šířka, protože formulář má šest polí vedle
                 sebe — v půlce obrazovky by se zlomil na tři řádky. */}
-            <Entries budget={budget} categories={categories} entries={data.entries} members={members} onChanged={onChanged}/>
+            <Entries budget={budget} categories={categories} members={members} total={data.entries_total} onChanged={onChanged}/>
 
             {/* Plán vedle skutečnosti. Dvě odpovědi na jednu otázku — kolik mělo padnout
                 a kam to opravdu šlo — a mají smysl jen společně. */}
@@ -380,26 +396,99 @@ function WarningsPanel({ warnings, currency }: { warnings: NonNullable<Overview[
     );
 }
 
-/** Jedno číslo na konci. Deset drobných převodů nikdo nedělá, jeden ano. */
-function SettlementPanel({ settlement }: { settlement: NonNullable<Overview['settlement']> }) {
+/**
+ * Jedno číslo na konci. Deset drobných převodů nikdo nedělá, jeden ano.
+ *
+ * Dluh jde uzavřít. Bez toho svítil dál i po zaplacení a příští měsíc se k němu přičetlo
+ * nové — po půl roce panel ukazoval součet všeho, co kdy kdo za koho zaplatil, místo
+ * toho, co ještě zbývá srovnat.
+ */
+function SettlementPanel({ budget, settlement, history, onChanged }: {
+    budget: Overview['budget'];
+    settlement: NonNullable<Overview['settlement']>;
+    history: NonNullable<Overview['settlements']>;
+    onChanged: () => void;
+}) {
+    const [busy, setBusy] = useState('');
+
+    const vyrovnat = async (mena: string, poslatZadost: boolean) => {
+        setBusy(mena);
+        try {
+            await axios.post(`/api/v1/rozpocty/${budget.uuid}/vyrovnani`, { currency: mena, request_money: poslatZadost });
+            onChanged();
+        } finally { setBusy(''); }
+    };
+
     return (
         <Panel icon={ArrowRightLeft} title="Kdo komu dluží"
-            footnote={'Počítá se z položek označených „napůl" a „za druhého". Každá měna zvlášť.'}>
+            footnote={'Počítá se z položek označených „napůl" a „za druhého". Každá měna zvlášť — kurz nemáme odkud vzít.'}>
             <div className="space-y-2">
                 {settlement.map(radek => (
-                    <div key={`${radek.currency}-${radek.to_id}`}
-                        className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 rounded-xl bg-[var(--color-bg-primary)] px-3 py-2.5">
-                        <span className="text-sm text-[var(--color-text-secondary)]">
-                            <strong className="text-[var(--color-text-primary)]">{radek.from ?? 'Druhý'}</strong>
-                            {' → '}
-                            <strong className="text-[var(--color-text-primary)]">{radek.to}</strong>
-                        </span>
-                        <span className="text-base font-semibold tabular-nums text-[var(--color-accent)]">
-                            {money(radek.amount, radek.currency)}
-                        </span>
+                    <div key={`${radek.currency}-${radek.to_id}`} className="rounded-xl bg-[var(--color-bg-primary)] px-3 py-2.5">
+                        <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                            <span className="text-sm text-[var(--color-text-secondary)]">
+                                <strong className="text-[var(--color-text-primary)]">{radek.from ?? 'Druhý'}</strong>
+                                {' → '}
+                                <strong className="text-[var(--color-text-primary)]">{radek.to}</strong>
+                            </span>
+                            <span className="text-base font-semibold tabular-nums text-[var(--color-accent)]">
+                                {money(radek.amount, radek.currency)}
+                            </span>
+                        </div>
+
+                        {radek.since && (
+                            <p className="mt-0.5 text-[11px] text-[var(--color-text-secondary)]">
+                                Od {datum(radek.since)} — starší je vyrovnané.
+                            </p>
+                        )}
+
+                        <div className="mt-2 flex flex-wrap gap-2">
+                            {/* Poslat žádost a uzavřít je jedno kliknutí. Přepisovat částku
+                                do formuláře vedle je práce, kterou aplikace umí sama. */}
+                            {radek.from_id && (
+                                <button type="button" disabled={busy === radek.currency}
+                                    onClick={() => void vyrovnat(radek.currency, true)}
+                                    className="inline-flex min-h-8 items-center gap-1.5 rounded-lg bg-[var(--color-accent)] px-3 text-xs font-medium text-[var(--color-accent-contrast)] disabled:opacity-50">
+                                    <Check size={13}/> Požádat a uzavřít
+                                </button>
+                            )}
+                            <button type="button" disabled={busy === radek.currency}
+                                onClick={() => void vyrovnat(radek.currency, false)}
+                                className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-[var(--color-border)] px-3 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] disabled:opacity-50">
+                                Už je vyrovnáno
+                            </button>
+                        </div>
                     </div>
                 ))}
+
+                {settlement.length === 0 && (
+                    <p className="rounded-xl border border-dashed border-[var(--color-border)] px-3 py-4 text-center text-xs text-[var(--color-text-secondary)]">
+                        Všechno je vyrovnané.
+                    </p>
+                )}
             </div>
+
+            {history.length > 0 && (
+                <div className="mt-3 border-t border-[var(--color-border)] pt-2.5">
+                    <p className="mb-1.5 text-[11px] font-medium text-[var(--color-text-secondary)]">Vyrovnáno dřív</p>
+                    <div className="space-y-1">
+                        {history.map(zaznam => (
+                            <div key={zaznam.uuid} className="group flex items-baseline gap-2 text-[11px] text-[var(--color-text-secondary)]">
+                                <span>{datum(zaznam.settled_through)}</span>
+                                <span className="min-w-0 flex-1 truncate">
+                                    {zaznam.from && zaznam.to ? `${zaznam.from} → ${zaznam.to}` : 'vyrovnáno'}
+                                </span>
+                                <span className="tabular-nums">{money(zaznam.amount, zaznam.currency)}</span>
+                                <button type="button" title="Vzít uzávěrku zpět"
+                                    onClick={async () => { await axios.delete(`/api/v1/rozpocty/${budget.uuid}/vyrovnani/${zaznam.uuid}`); onChanged(); }}
+                                    className="rounded p-0.5 opacity-0 transition-opacity hover:text-red-300 focus:opacity-100 group-hover:opacity-100">
+                                    <X size={11}/>
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
         </Panel>
     );
 }
@@ -642,9 +731,20 @@ function Categories({ budget, categories, onChanged }: { budget: Overview['budge
     );
 }
 
-function Entries({ budget, categories, entries, members, onChanged }: {
-    budget: Overview['budget']; categories: Overview['categories']; entries: Overview['entries'];
-    members: Array<{ id: number; name: string }>; onChanged: () => void;
+/**
+ * Zápis a výpis položek.
+ *
+ * Seznam se načítá vlastním voláním, ne z přehledu. Přehled dřív posílal sto nejnovějších
+ * položek — po nahrání výpisu o pěti stech řádcích jich čtyři sta nešlo ani vidět, ani
+ * smazat. Teď má seznam hledání, filtry a stránkování a s přehledem se potkává jen
+ * v tom, že se po každé změně obojí načte znovu.
+ */
+function Entries({ budget, categories, members, total, onChanged }: {
+    budget: Overview['budget']; categories: Overview['categories'];
+    members: Array<{ id: number; name: string }>;
+    /** Kolik položek rozpočet má celkem — ze souhrnu, aby šlo napsat „50 z 512". */
+    total: number;
+    onChanged: () => void;
 }) {
     const [form, setForm] = useState({
         kind: 'expense', amount: '', currency: budget.currency, spent_on: new Date().toISOString().slice(0, 10),
@@ -654,6 +754,56 @@ function Entries({ budget, categories, entries, members, onChanged }: {
     const [importing, setImporting] = useState(false);
     const [receipt, setReceipt] = useState<{ uuid: string; nahled: string } | null>(null);
     const [receiptState, setReceiptState] = useState('');
+
+    const [rows, setRows] = useState<EntryRow[]>([]);
+    const [months, setMonths] = useState<string[]>([]);
+    const [found, setFound] = useState(0);
+    const [hasMore, setHasMore] = useState(false);
+    const [page, setPage] = useState(1);
+    const [loading, setLoading] = useState(true);
+    const [editing, setEditing] = useState<string | null>(null);
+    const [filter, setFilter] = useState({ q: '', kind: '', category: '', month: '' });
+
+    /**
+     * Načte stránku seznamu.
+     *
+     * Připojit, nebo nahradit — o tom rozhoduje volající. Připojuje se jen při „načíst
+     * další"; změna filtru musí seznam přepsat, jinak by se výsledky dvou různých
+     * dotazů slily dohromady.
+     */
+    const load = useCallback(async (cilovaStranka: number, pripojit: boolean) => {
+        setLoading(true);
+        try {
+            const { data } = await axios.get(`/api/v1/rozpocty/${budget.uuid}/polozky`, {
+                params: {
+                    page: cilovaStranka,
+                    q: filter.q || undefined,
+                    kind: filter.kind || undefined,
+                    category: filter.category || undefined,
+                    month: filter.month || undefined,
+                },
+            });
+
+            setRows(stav => (pripojit ? [...stav, ...data.entries] : data.entries));
+            setMonths(data.months ?? []);
+            setFound(data.total ?? 0);
+            setHasMore(Boolean(data.has_more));
+            setPage(cilovaStranka);
+        } finally {
+            setLoading(false);
+        }
+    }, [budget.uuid, filter]);
+
+    // Psaní do hledání se nechá doznít. Volání na každou stisknutou klávesu by při
+    // pěti stech položkách znamenalo desítky dotazů, ze kterých je platný poslední.
+    useEffect(() => {
+        const casovac = window.setTimeout(() => void load(1, false), filter.q ? 300 : 0);
+
+        return () => window.clearTimeout(casovac);
+    }, [load, filter.q]);
+
+    /** Po zápisu, úpravě nebo smazání se musí přepočítat souhrny i seznam. */
+    const refresh = () => { onChanged(); void load(1, false); };
 
     /**
      * Účtenka jde rovnou do galerie jako každá jiná fotka.
@@ -695,12 +845,19 @@ function Entries({ budget, categories, entries, members, onChanged }: {
             setForm(f => ({ ...f, amount: '', note: '' }));
             if (receipt) URL.revokeObjectURL(receipt.nahled);
             setReceipt(null);
-            onChanged();
+            refresh();
         } finally { setBusy(false); }
     };
 
+    const filtrovano = Boolean(filter.q || filter.kind || filter.category || filter.month);
+
     return (
         <Panel icon={ListPlus} title="Položky"
+            description={total > 0
+                ? filtrovano
+                    ? `Vyhovuje ${found} z ${total} položek.`
+                    : `Celkem ${total} ${total === 1 ? 'položka' : total <= 4 ? 'položky' : 'položek'}.`
+                : undefined}
             actions={<>
                 <button type="button" onClick={() => setImporting(v => ! v)}
                     className={`inline-flex min-h-8 items-center gap-1.5 rounded-lg border px-3 text-xs transition-colors ${
@@ -720,7 +877,7 @@ function Entries({ budget, categories, entries, members, onChanged }: {
 
             {importing && (
                 <StatementImport budget={budget} categories={categories}
-                    onDone={() => { setImporting(false); onChanged(); }} onCancel={() => setImporting(false)}/>
+                    onDone={() => { setImporting(false); refresh(); }} onCancel={() => setImporting(false)}/>
             )}
 
             {/* Zápis má vlastní pozadí, aby bylo poznat, kde končí formulář a začíná
@@ -732,7 +889,7 @@ function Entries({ budget, categories, entries, members, onChanged }: {
                 </select>
                 <input type="number" inputMode="decimal" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} placeholder="Částka" className={FIELD}/>
                 <select value={form.currency} onChange={e => setForm(f => ({ ...f, currency: e.target.value }))} className={FIELD}>
-                    {['EUR', 'CZK', 'USD', 'GBP', 'PLN', 'CHF'].map(c => <option key={c} value={c}>{c}</option>)}
+                    {MENY.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
                 <select value={form.budget_category_id} onChange={e => setForm(f => ({ ...f, budget_category_id: e.target.value }))} className={FIELD}>
                     <option value="">Bez kategorie</option>
@@ -793,47 +950,202 @@ function Entries({ budget, categories, entries, members, onChanged }: {
                 )}
             </div>
 
-            {/* Výpis má vlastní posuvník. Sto položek pod formulářem by odsunulo
-                všechno ostatní na stránce mimo dosah. */}
-            <div className="mt-4 max-h-[26rem] space-y-1 overflow-y-auto pr-1">
-                {entries.map(entry => (
-                    <div key={entry.uuid} className="flex items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-[var(--color-surface-hover)]">
-                        <span className="w-14 shrink-0 text-xs text-[var(--color-text-secondary)]">{den(entry.spent_on)}</span>
-                        <span className="min-w-0 flex-1 truncate text-sm text-[var(--color-text-primary)]">
-                            {entry.note || entry.category || (entry.kind === 'income' ? 'Příjem' : 'Výdaj')}
-                            {entry.category && entry.note && <span className="ml-2 text-[11px] text-[var(--color-text-secondary)]">{entry.category}</span>}
-                            {entry.is_recurring && <span className="ml-2 rounded bg-[var(--color-surface-muted)] px-1.5 py-0.5 text-[9px] text-[var(--color-text-secondary)]">pravidelné</span>}
-                            {entry.split && entry.split !== 'none' && (
-                                <span className="ml-2 rounded bg-[var(--color-accent)]/15 px-1.5 py-0.5 text-[9px] text-[var(--color-accent)]">
-                                    {DELENI[entry.split]}{entry.paid_by ? ` · ${entry.paid_by}` : ''}
-                                </span>
-                            )}
-                            {entry.receipt_uuid && (
-                                <a href={`/media/${entry.receipt_uuid}`} target="_blank" rel="noreferrer" title="Účtenka"
-                                    className="ml-2 inline-flex align-middle text-[var(--color-text-secondary)] hover:text-[var(--color-accent)]">
-                                    <Receipt size={12}/>
-                                </a>
-                            )}
-                        </span>
-                        <span className={`shrink-0 text-sm ${entry.kind === 'income' ? 'text-emerald-300' : 'text-[var(--color-text-primary)]'}`}>
-                            {entry.kind === 'income' ? '+' : '−'}{money(entry.amount, entry.currency)}
-                        </span>
-                        <button type="button" title="Smazat"
-                            onClick={async () => { await axios.delete(`/api/v1/rozpocty/${budget.uuid}/polozky/${entry.uuid}`); onChanged(); }}
-                            className="rounded p-1 text-[var(--color-text-secondary)] hover:text-red-300">
-                            <Trash2 size={13}/>
-                        </button>
+            {/* Filtry se ukážou, až když je co filtrovat. U deseti položek je hledání
+                pole navíc, u pěti set je to jediná cesta, jak něco najít. */}
+            {total > 12 && (
+                <div className="mt-4 flex flex-wrap items-center gap-2">
+                    <div className="relative min-w-40 flex-1">
+                        <Search size={13} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--color-text-secondary)]"/>
+                        <input value={filter.q} onChange={e => setFilter(f => ({ ...f, q: e.target.value }))}
+                            placeholder="Hledat v poznámkách…" className={`${FIELD} pl-8`}/>
                     </div>
+                    <select value={filter.kind} onChange={e => setFilter(f => ({ ...f, kind: e.target.value }))} className={`${FIELD} w-28`}>
+                        <option value="">Vše</option>
+                        <option value="expense">Výdaje</option>
+                        <option value="income">Příjmy</option>
+                    </select>
+                    <select value={filter.category} onChange={e => setFilter(f => ({ ...f, category: e.target.value }))} className={`${FIELD} w-40`}>
+                        <option value="">Všechny kategorie</option>
+                        {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        <option value="none">Bez kategorie</option>
+                    </select>
+                    {months.length > 1 && (
+                        <select value={filter.month} onChange={e => setFilter(f => ({ ...f, month: e.target.value }))} className={`${FIELD} w-40`}>
+                            <option value="">Celé období</option>
+                            {months.map(m => <option key={m} value={m}>{mesic(m)}</option>)}
+                        </select>
+                    )}
+                    {filtrovano && (
+                        <button type="button" onClick={() => setFilter({ q: '', kind: '', category: '', month: '' })}
+                            className="text-xs text-[var(--color-text-secondary)] underline-offset-2 hover:underline">
+                            Zrušit filtry
+                        </button>
+                    )}
+                </div>
+            )}
+
+            <div className="mt-3 space-y-1">
+                {rows.map(entry => (
+                    editing === entry.uuid
+                        ? <EntryEditor key={entry.uuid} budget={budget} categories={categories} members={members} entry={entry}
+                            onClose={() => setEditing(null)}
+                            onSaved={() => { setEditing(null); refresh(); }}/>
+                        : <div key={entry.uuid} className="group flex items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-[var(--color-surface-hover)]">
+                            <span className="w-14 shrink-0 text-xs text-[var(--color-text-secondary)]">{den(entry.spent_on)}</span>
+                            <span className="min-w-0 flex-1 truncate text-sm text-[var(--color-text-primary)]">
+                                {entry.note || entry.category || (entry.kind === 'income' ? 'Příjem' : 'Výdaj')}
+                                {entry.category && entry.note && <span className="ml-2 text-[11px] text-[var(--color-text-secondary)]">{entry.category}</span>}
+                                {entry.is_recurring && <span className="ml-2 rounded bg-[var(--color-surface-muted)] px-1.5 py-0.5 text-[9px] text-[var(--color-text-secondary)]">pravidelné</span>}
+                                {entry.split && entry.split !== 'none' && (
+                                    <span className="ml-2 rounded bg-[var(--color-accent)]/15 px-1.5 py-0.5 text-[9px] text-[var(--color-accent)]">
+                                        {DELENI[entry.split]}{entry.paid_by ? ` · ${entry.paid_by}` : ''}
+                                    </span>
+                                )}
+                                {entry.receipt_uuid && (
+                                    <a href={`/media/${entry.receipt_uuid}`} target="_blank" rel="noreferrer" title="Účtenka"
+                                        className="ml-2 inline-flex align-middle text-[var(--color-text-secondary)] hover:text-[var(--color-accent)]">
+                                        <Receipt size={12}/>
+                                    </a>
+                                )}
+                            </span>
+                            <span className={`shrink-0 text-sm tabular-nums ${entry.kind === 'income' ? 'text-emerald-300' : 'text-[var(--color-text-primary)]'}`}>
+                                {entry.kind === 'income' ? '+' : '−'}{money(entry.amount, entry.currency)}
+                            </span>
+                            <button type="button" title="Upravit" onClick={() => setEditing(entry.uuid)}
+                                className="rounded p-1 text-[var(--color-text-secondary)] opacity-0 transition-opacity hover:text-[var(--color-accent)] focus:opacity-100 group-hover:opacity-100">
+                                <Pencil size={13}/>
+                            </button>
+                            <button type="button" title="Smazat"
+                                onClick={async () => { await axios.delete(`/api/v1/rozpocty/${budget.uuid}/polozky/${entry.uuid}`); refresh(); }}
+                                className="rounded p-1 text-[var(--color-text-secondary)] opacity-0 transition-opacity hover:text-red-300 focus:opacity-100 group-hover:opacity-100">
+                                <Trash2 size={13}/>
+                            </button>
+                        </div>
                 ))}
-                {entries.length === 0 && (
+
+                {loading && rows.length === 0 && (
+                    <p className="py-6 text-center text-sm text-[var(--color-text-secondary)]">Načítám…</p>
+                )}
+
+                {! loading && rows.length === 0 && (
                     <p className="py-6 text-center text-sm text-[var(--color-text-secondary)]">
-                        Zatím nic zapsaného. Zapište první částku, nebo načtěte výpis z banky.
+                        {filtrovano
+                            ? 'Nic, co by odpovídalo filtru.'
+                            : 'Zatím nic zapsaného. Zapište první částku, nebo načtěte výpis z banky.'}
                     </p>
                 )}
             </div>
+
+            {hasMore && (
+                <button type="button" onClick={() => void load(page + 1, true)} disabled={loading}
+                    className="mt-3 w-full rounded-lg border border-[var(--color-border)] py-2 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] disabled:opacity-50">
+                    {loading ? 'Načítám…' : `Načíst dalších ${Math.min(50, found - rows.length)} z ${found}`}
+                </button>
+            )}
         </Panel>
     );
 }
+
+/**
+ * Oprava jedné položky přímo v řádku.
+ *
+ * Bez tohohle šlo položku jen smazat a napsat znovu — a s ní zmizela účtenka i nastavení
+ * dělení, takže překlep v částce stál nové focení a nové naklikání. Otevírá se v místě
+ * řádku, ne v dialogu: člověk opravuje to, na co se právě dívá.
+ */
+function EntryEditor({ budget, categories, members, entry, onClose, onSaved }: {
+    budget: Overview['budget']; categories: Overview['categories'];
+    members: Array<{ id: number; name: string }>;
+    entry: EntryRow; onClose: () => void; onSaved: () => void;
+}) {
+    const [form, setForm] = useState({
+        kind: entry.kind,
+        amount: String(entry.amount),
+        currency: entry.currency,
+        spent_on: entry.spent_on,
+        budget_category_id: entry.budget_category_id ? String(entry.budget_category_id) : '',
+        note: entry.note ?? '',
+        is_recurring: entry.is_recurring,
+        // Záměrně jako prostý řetězec: hodnota přichází ze <select>, který užší typ nezná.
+        split: String(entry.split ?? 'none'),
+        paid_by: entry.paid_by_id ? String(entry.paid_by_id) : '',
+    });
+    const [busy, setBusy] = useState(false);
+
+    const save = async () => {
+        setBusy(true);
+        try {
+            await axios.patch(`/api/v1/rozpocty/${budget.uuid}/polozky/${entry.uuid}`, {
+                ...form,
+                amount: Number(form.amount),
+                budget_category_id: form.budget_category_id ? Number(form.budget_category_id) : null,
+                paid_by: form.paid_by ? Number(form.paid_by) : null,
+            });
+            onSaved();
+        } finally { setBusy(false); }
+    };
+
+    return (
+        <div className="rounded-xl border border-[var(--color-accent)]/40 bg-[var(--color-bg-primary)] p-3">
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-6">
+                <select value={form.kind} onChange={e => setForm(f => ({ ...f, kind: e.target.value }))} className={FIELD}>
+                    <option value="expense">Výdaj</option>
+                    <option value="income">Příjem</option>
+                </select>
+                <input type="number" inputMode="decimal" value={form.amount}
+                    onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} className={FIELD}/>
+                <select value={form.currency} onChange={e => setForm(f => ({ ...f, currency: e.target.value }))} className={FIELD}>
+                    {MENY.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+                <select value={form.budget_category_id} onChange={e => setForm(f => ({ ...f, budget_category_id: e.target.value }))} className={FIELD}>
+                    <option value="">Bez kategorie</option>
+                    {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+                <input type="date" value={form.spent_on} onChange={e => setForm(f => ({ ...f, spent_on: e.target.value }))} className={FIELD}/>
+                <div className="flex gap-2">
+                    <button type="button" onClick={() => void save()} disabled={busy || ! form.amount}
+                        className="inline-flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-lg bg-[var(--color-accent)] px-3 text-sm font-medium text-[var(--color-accent-contrast)] disabled:opacity-50">
+                        <Check size={14}/> Uložit
+                    </button>
+                    <button type="button" onClick={onClose} title="Zrušit"
+                        className="rounded-lg border border-[var(--color-border)] px-2 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]">
+                        <X size={14}/>
+                    </button>
+                </div>
+
+                <input value={form.note} onChange={e => setForm(f => ({ ...f, note: e.target.value }))}
+                    placeholder="Poznámka" className={`${FIELD} lg:col-span-4`}/>
+                <label className="flex items-center gap-2 text-xs text-[var(--color-text-secondary)]">
+                    <input type="checkbox" checked={form.is_recurring} onChange={e => setForm(f => ({ ...f, is_recurring: e.target.checked }))}/>
+                    Pravidelné
+                </label>
+
+                {form.kind === 'expense' && (
+                    <>
+                        <select value={form.split} onChange={e => setForm(f => ({ ...f, split: e.target.value }))} className={`${FIELD} lg:col-span-2`}>
+                            <option value="none">Jen moje</option>
+                            <option value="equal">Napůl</option>
+                            <option value="other">Za druhého</option>
+                        </select>
+                        <select value={form.paid_by} onChange={e => setForm(f => ({ ...f, paid_by: e.target.value }))} className={`${FIELD} lg:col-span-2`}>
+                            <option value="">Platil jsem já</option>
+                            {members.map(m => <option key={m.id} value={m.id}>Platil{'(a)'} {m.name}</option>)}
+                        </select>
+                    </>
+                )}
+            </div>
+
+            {entry.receipt_uuid && (
+                <p className="mt-2 text-[11px] text-[var(--color-text-secondary)]">
+                    Účtenka zůstává připojená.{' '}
+                    <a href={`/media/${entry.receipt_uuid}`} target="_blank" rel="noreferrer"
+                        className="text-[var(--color-accent)] underline-offset-2 hover:underline">Zobrazit</a>
+                </p>
+            )}
+        </div>
+    );
+}
+
 
 function MoneyRequests({ requests, members, onChanged }: {
     requests: MoneyRow[]; members: Array<{ id: number; name: string }>; onChanged: () => void;
