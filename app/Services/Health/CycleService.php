@@ -500,6 +500,26 @@ class CycleService
         // ne jako problém, ale proto, že předpověď je pak orientační a je fér to říct.
         $rozptyl = (int) ($delky->max() - $delky->min());
 
+        // Z dopočítaných dat se pravidelnost odvozovat nesmí.
+        //
+        // Zpětné doplnění nabídne data odkrokovaná po typické délce cyklu. Kdo je potvrdí
+        // beze změny, má rozestupy přesně stejné — a aplikace by z toho vyvodila „všechny
+        // cykly mají stejnou délku, předpovědi jsou spolehlivé". To není zjištění o
+        // člověku, to je vlastní výpočet vydávaný za pozorování.
+        $doplneno = $days->where('is_cycle_start', true)->where('is_backfilled', true)->count();
+
+        if ($doplneno > 0 && $doplneno >= $cycles->count() - 1) {
+            $zjisteni[] = [
+                'code' => 'backfilled',
+                'level' => 'info',
+                'title' => 'Historie je doplněná zpětně',
+                'detail' => 'Rozestupy si podle zadané délky nabídla aplikace, takže z nich nejde poznat, '
+                    . 'jak pravidelný cyklus doopravdy je. Zpřesní se to samo, jak budete zapisovat dál.',
+            ];
+
+            return array_slice($zjisteni, 0, 4);
+        }
+
         $zjisteni[] = match (true) {
             $rozptyl <= 3 => ['code' => 'regular', 'level' => 'good', 'title' => 'Pravidelný cyklus',
                 'detail' => $rozptyl === 0
@@ -605,6 +625,72 @@ class CycleService
         }
 
         return $den;
+    }
+
+    /**
+     * Doplní historii zpětně z toho, co si člověk pamatuje.
+     *
+     * Předpověď potřebuje aspoň dva cykly. Kdo začne zapisovat dnes, čeká dva měsíce,
+     * než mu aplikace řekne cokoli užitečného — a přitom „posledního půl roku to
+     * začínalo kolem patnáctého" ví hned.
+     *
+     * Data si nevymýšlí. Dostane seznam konkrétních dat, která člověk potvrdil, ne
+     * délku cyklu, ze které by si je dopočítala sama — z pravidelně dopočítaných dat by
+     * vyšel nulový rozptyl a aplikace by hlásila spolehlivou předpověď postavenou na
+     * vlastním výpočtu. Návrh dat dělá formulář, potvrzení člověk.
+     *
+     * Existující dny se nepřepisují. Kdo už něco zapsal, má to zapsané přesněji než
+     * hromadné doplnění.
+     *
+     * @param  array<int, string>  $zacatky
+     * @return array{created:int, skipped:int}
+     */
+    public function backfill(GallerySpace $space, User $user, array $zacatky, int $dnuKrvaceni = 5): array
+    {
+        $dnuKrvaceni = max(1, min(14, $dnuKrvaceni));
+
+        $existujici = CycleDay::where('user_id', $user->id)
+            ->pluck('day')
+            ->map(fn ($d) => Carbon::parse($d)->toDateString())
+            ->flip();
+
+        $vytvoreno = 0;
+        $preskoceno = 0;
+
+        foreach ($zacatky as $zacatek) {
+            $prvni = Carbon::parse($zacatek)->startOfDay();
+
+            for ($i = 0; $i < $dnuKrvaceni; $i++) {
+                $den = $prvni->copy()->addDays($i);
+
+                if ($existujici->has($den->toDateString())) {
+                    $preskoceno++;
+
+                    continue;
+                }
+
+                CycleDay::create([
+                    'gallery_space_id' => $space->id,
+                    'user_id' => $user->id,
+                    'day' => $den,
+                    // Sílu krvácení nikdo po půl roce nezpětně nerekonstruuje. Střední je
+                    // nejméně zavádějící volba a dá se u kteréhokoli dne přepsat.
+                    'flow' => $i === $dnuKrvaceni - 1 ? 'light' : 'medium',
+                    'is_cycle_start' => $i === 0,
+                    // Zapsané, ne odhad: člověk ta data potvrdil, a předpověď z nich má
+                    // vycházet. Příznak drží stopu, odkud se vzala — rozbor z nich pak
+                    // neodvozuje pravidelnost, protože rozestupy si nabídla aplikace sama.
+                    'is_predicted' => false,
+                    'is_backfilled' => true,
+                    'note' => $i === 0 ? 'Doplněno zpětně z paměti' : null,
+                ]);
+
+                $existujici[$den->toDateString()] = true;
+                $vytvoreno++;
+            }
+        }
+
+        return ['created' => $vytvoreno, 'skipped' => $preskoceno];
     }
 
     /**

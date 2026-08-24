@@ -2,7 +2,7 @@ import Panel, { Stat } from '@/Components/Panel';
 import AppLayout from '@/Layouts/AppLayout';
 import { Head } from '@inertiajs/react';
 import axios from 'axios';
-import { CalendarDays, ChevronDown, Droplet, Eye, Heart, LineChart, Lock, Pencil, Repeat, Sparkles, X } from 'lucide-react';
+import { Bell, CalendarDays, ChevronDown, Droplet, Eye, Heart, History, LineChart, Lock, Pencil, Repeat, Sparkles, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 /**
@@ -142,6 +142,18 @@ export default function CycleIndex() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
 
+    // Počitadlo změn. Statistika se načítá vlastním voláním, protože se dívá dozadu přes
+    // celou historii — a bez tohohle by po zápisu dne nebo po doplnění historie zůstala
+    // viset na starém výsledku, takže souhrn nahoře hlásil pět cyklů a panel pod ním
+    // tvrdil, že není z čeho počítat.
+    const [verze, setVerze] = useState(0);
+
+    /** Přijme nový přehled ze serveru a řekne zbytku stránky, že se něco změnilo. */
+    const prijmout = useCallback((dalsi: Overview) => {
+        setData(dalsi);
+        setVerze(v => v + 1);
+    }, []);
+
     const load = useCallback(async () => {
         try {
             const response = await axios.get('/api/v1/cyklus');
@@ -222,7 +234,7 @@ export default function CycleIndex() {
                                         existing={byDay.get(editing)}
                                         trackSymptoms={data.settings.track_symptoms}
                                         onClose={() => setEditing(null)}
-                                        onSaved={next => { setData(next); setEditing(null); }}
+                                        onSaved={next => { prijmout(next); setEditing(null); }}
                                     />
                                 )}
 
@@ -233,10 +245,16 @@ export default function CycleIndex() {
                         {/* Historie vlevo, nastavení vpravo. Rozbor je dlouhý, sdílení
                             krátké — pod sebou by nastavení skončilo mimo obrazovku. */}
                         <div className="grid gap-4 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
-                            <Statistics/>
+                            <Statistics reloadKey={verze}/>
 
                             <div className="space-y-4">
-                                <Sharing settings={data.settings} onSaved={setData}/>
+                                <Sharing settings={data.settings} onSaved={prijmout}/>
+                                <Preferences settings={data.settings} onSaved={prijmout}/>
+                                {/* Doplnění historie zmizí, jakmile je z čeho počítat —
+                                    nabízet ho někomu, kdo zapisuje rok, nemá smysl. */}
+                                {data.settings.based_on_cycles < 2 && (
+                                    <Backfill settings={data.settings} onSaved={prijmout}/>
+                                )}
                                 {partners.length > 0 && <Partners partners={partners}/>}
                             </div>
                         </div>
@@ -561,7 +579,7 @@ function Fertility({ forecast }: { forecast: Array<{ day: string; phase: string;
  * Načítá se zvlášť, protože se dívá dozadu přes celou historii — u někoho, kdo zapisuje
  * třetí rok, je to podstatně dražší dotaz než dnešní stav, a ten nemá na co čekat.
  */
-function Statistics() {
+function Statistics({ reloadKey }: { reloadKey: number }) {
     const [stats, setStats] = useState<{
         cycle_lengths: Array<{ started_on: string; length: number; period_days: number }>;
         shortest: number | null; longest: number | null; average: number; spread: number | null;
@@ -570,9 +588,11 @@ function Statistics() {
         analysis?: Array<{ code: string; level: string; title: string; detail: string }>;
     } | null>(null);
 
+    // reloadKey, ne prázdné pole. Se zápisem dne nebo doplněnou historií se statistika
+    // mění taky — a bez tohohle by viset zůstala na výsledku z prvního načtení stránky.
     useEffect(() => {
         void axios.get('/api/v1/cyklus/statistika').then(r => setStats(r.data)).catch(() => setStats(null));
-    }, []);
+    }, [reloadKey]);
 
     // Prázdný panel, ne nic. Kdyby se komponenta odstranila úplně, zůstala by v mřížce
     // díra vedle sdílení — a hlavně by nikde nestálo, proč tu zatím nic není.
@@ -696,6 +716,226 @@ function Sharing({ settings, onSaved }: { settings: Overview['settings']; onSave
                         </span>
                     </button>
                 ))}
+            </div>
+        </Panel>
+    );
+}
+
+/**
+ * Připomínky a co se zapisuje.
+ *
+ * Všechno tohle server uměl už dřív a příkaz na připomínky to i četl — jenže nastavit
+ * se to nedalo odnikud. Feature, kterou nejde zapnout ani vypnout, je pro toho, kdo
+ * ji má používat, totéž jako by nebyla.
+ */
+function Preferences({ settings, onSaved }: { settings: Overview['settings']; onSaved: (d: Overview) => void }) {
+    const [busy, setBusy] = useState(false);
+
+    const uloz = async (zmena: Record<string, unknown>) => {
+        setBusy(true);
+        try {
+            onSaved((await axios.patch('/api/v1/cyklus/nastaveni', zmena)).data);
+        } finally { setBusy(false); }
+    };
+
+    return (
+        <Panel icon={Bell} title="Připomínky a zápisky">
+            <div className="space-y-3">
+                <label className="flex items-start gap-3">
+                    <input type="checkbox" checked={settings.remind_upcoming} disabled={busy}
+                        onChange={e => void uloz({ remind_upcoming: e.target.checked })} className="mt-0.5"/>
+                    <span>
+                        <span className="block text-sm text-[var(--color-text-primary)]">Upozornit před menstruací</span>
+                        <span className="block text-[11px] text-[var(--color-text-secondary)]">
+                            Chodí ráno, jednou. Jen vám — partner dostane upozornění jedině tehdy, když mu sdílení sami zapnete.
+                        </span>
+                    </span>
+                </label>
+
+                {settings.remind_upcoming && (
+                    <label className="flex flex-wrap items-center gap-2 pl-7 text-xs text-[var(--color-text-secondary)]">
+                        Kolik dní předem
+                        <select value={settings.remind_days_before} disabled={busy}
+                            onChange={e => void uloz({ remind_days_before: Number(e.target.value) })}
+                            className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-primary)] px-2 py-1 text-xs text-[var(--color-text-primary)] focus:outline-none">
+                            <option value={0}>v den, kdy má začít</option>
+                            {[1, 2, 3, 4, 5, 6, 7].map(d => <option key={d} value={d}>{dny(d)} předem</option>)}
+                        </select>
+                    </label>
+                )}
+
+                <label className="flex items-start gap-3 border-t border-[var(--color-border)] pt-3">
+                    <input type="checkbox" checked={settings.track_symptoms} disabled={busy}
+                        onChange={e => void uloz({ track_symptoms: e.target.checked })} className="mt-0.5"/>
+                    <span>
+                        <span className="block text-sm text-[var(--color-text-primary)]">Zapisovat příznaky a náladu</span>
+                        <span className="block text-[11px] text-[var(--color-text-secondary)]">
+                            Když je vypnuté, u dne zůstane jen krvácení a poznámka. Zapsané příznaky se nemažou.
+                        </span>
+                    </span>
+                </label>
+
+                {/* Ruční průměr má smysl jen dokud není z čeho počítat. Jakmile jsou dva
+                    cykly, přebije ho skutečnost a pole by lhalo o tom, co dělá. */}
+                {settings.based_on_cycles < 2 && (
+                    <div className="flex flex-wrap items-center gap-2 border-t border-[var(--color-border)] pt-3 text-xs text-[var(--color-text-secondary)]">
+                        Můj cyklus bývá
+                        <input type="number" min={15} max={60} defaultValue={settings.average_cycle_days} disabled={busy}
+                            onBlur={e => {
+                                const hodnota = Number(e.target.value);
+                                if (hodnota >= 15 && hodnota <= 60 && hodnota !== settings.average_cycle_days) {
+                                    void uloz({ average_cycle_days: hodnota });
+                                }
+                            }}
+                            className="w-16 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-primary)] px-2 py-1 text-xs text-[var(--color-text-primary)] focus:outline-none"/>
+                        dní dlouhý
+                    </div>
+                )}
+            </div>
+        </Panel>
+    );
+}
+
+/**
+ * Doplnění historie zpětně.
+ *
+ * Předpověď potřebuje aspoň dva cykly. Kdo začne zapisovat dnes, čeká dva měsíce, než
+ * mu aplikace řekne cokoli užitečného — a přitom „posledního půl roku to začínalo kolem
+ * patnáctého" ví hned.
+ *
+ * Data se nabídnou, ale musí se potvrdit. Kdyby se poslala jen délka cyklu a server si
+ * je dopočítal, vyšel by z pravidelných rozestupů nulový rozptyl a aplikace by hlásila
+ * spolehlivou předpověď postavenou na vlastním výpočtu — ne na tom, co se opravdu dělo.
+ */
+function Backfill({ settings, onSaved }: { settings: Overview['settings']; onSaved: (d: Overview) => void }) {
+    const [otevreno, setOtevreno] = useState(false);
+    const [delka, setDelka] = useState(settings.average_cycle_days);
+    const [krvaceni, setKrvaceni] = useState(settings.average_period_days);
+    const [posledni, setPosledni] = useState('');
+    const [data, setData] = useState<string[]>([]);
+    const [busy, setBusy] = useState(false);
+    const [hlaska, setHlaska] = useState('');
+
+    /** Odkrokuje data dozadu podle typické délky. Jen návrh — každé jde přepsat. */
+    const navrhnout = (pocet: number) => {
+        if (! posledni) return;
+
+        const seznam: string[] = [];
+        const zaklad = new Date(`${posledni}T12:00:00`);
+
+        for (let i = 0; i < pocet; i++) {
+            const d = new Date(zaklad);
+            d.setDate(d.getDate() - i * delka);
+            seznam.push(d.toISOString().slice(0, 10));
+        }
+
+        setData(seznam);
+        setHlaska('');
+    };
+
+    const ulozit = async () => {
+        setBusy(true);
+        try {
+            const { data: prehled } = await axios.post('/api/v1/cyklus/historie', {
+                starts: data,
+                period_days: krvaceni,
+            });
+            onSaved(prehled);
+            setHlaska(`Doplněno ${prehled.backfill?.created ?? 0} dní.`);
+            setData([]);
+            setOtevreno(false);
+        } catch (problem: any) {
+            setHlaska(problem?.response?.data?.message ?? 'Doplnit se to nepodařilo.');
+        } finally { setBusy(false); }
+    };
+
+    if (! otevreno) {
+        return (
+            <Panel icon={History} title="Znáte svoje poslední cykly?"
+                description="Předpověď potřebuje aspoň dva cykly. Doplňte, co si pamatujete, a bude užitečná hned — jinak si na ni počkáte dva měsíce.">
+                <button type="button" onClick={() => setOtevreno(true)}
+                    className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-[var(--color-border)] px-3 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]">
+                    <History size={13}/> Doplnit historii
+                </button>
+                {hlaska && <p className="mt-2 text-[11px] text-emerald-300">{hlaska}</p>}
+            </Panel>
+        );
+    }
+
+    return (
+        <Panel icon={History} title="Doplnit historii"
+            actions={
+                <button type="button" onClick={() => { setOtevreno(false); setData([]); }} title="Zavřít"
+                    className="rounded-lg p-1 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]">
+                    <X size={15}/>
+                </button>
+            }>
+            <div className="space-y-3">
+                <label className="block">
+                    <span className="mb-1 block text-xs text-[var(--color-text-secondary)]">Kdy začala poslední menstruace</span>
+                    <input type="date" value={posledni} max={new Date().toISOString().slice(0, 10)}
+                        onChange={e => setPosledni(e.target.value)}
+                        className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-primary)] px-3 py-2 text-sm text-[var(--color-text-primary)] focus:outline-none"/>
+                </label>
+
+                <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--color-text-secondary)]">
+                    Bývá po
+                    <input type="number" min={15} max={60} value={delka} onChange={e => setDelka(Number(e.target.value))}
+                        className="w-14 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-primary)] px-2 py-1 text-xs text-[var(--color-text-primary)] focus:outline-none"/>
+                    dnech a trvá
+                    <input type="number" min={1} max={14} value={krvaceni} onChange={e => setKrvaceni(Number(e.target.value))}
+                        className="w-14 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-primary)] px-2 py-1 text-xs text-[var(--color-text-primary)] focus:outline-none"/>
+                    {dny(krvaceni)}
+                </div>
+
+                {data.length === 0 && (
+                    <div className="flex flex-wrap gap-2">
+                        {[3, 6, 12].map(pocet => (
+                            <button key={pocet} type="button" onClick={() => navrhnout(pocet)} disabled={! posledni}
+                                className="rounded-lg border border-[var(--color-border)] px-3 py-1.5 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] disabled:opacity-40">
+                                Posledních {pocet}
+                            </button>
+                        ))}
+                    </div>
+                )}
+
+                {data.length > 0 && (
+                    <>
+                        <p className="text-[11px] leading-relaxed text-[var(--color-text-secondary)]">
+                            Projděte data a opravte, co nesedí. Aplikace si je jen odkrokovala podle délky,
+                            kterou jste zadali — skutečnost bývá nepravidelnější a právě to je na předpovědi
+                            to podstatné.
+                        </p>
+
+                        <div className="max-h-56 space-y-1 overflow-y-auto pr-1">
+                            {data.map((den, i) => (
+                                <div key={i} className="flex items-center gap-2">
+                                    <span className="w-6 shrink-0 text-[11px] text-[var(--color-text-secondary)]">{i + 1}.</span>
+                                    <input type="date" value={den} max={new Date().toISOString().slice(0, 10)}
+                                        onChange={e => setData(s => s.map((d, index) => (index === i ? e.target.value : d)))}
+                                        className="min-w-0 flex-1 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-primary)] px-2 py-1 text-xs text-[var(--color-text-primary)] focus:outline-none"/>
+                                    <button type="button" onClick={() => setData(s => s.filter((_, index) => index !== i))}
+                                        title="Odebrat" className="rounded p-1 text-[var(--color-text-secondary)] hover:text-red-300">
+                                        <X size={12}/>
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+
+                        <div className="flex flex-wrap gap-2">
+                            <button type="button" onClick={() => void ulozit()} disabled={busy || data.length === 0}
+                                className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-rose-500 px-4 text-sm font-medium text-white hover:bg-rose-400 disabled:opacity-50">
+                                {busy ? 'Ukládám…' : `Zapsat ${data.length} ${data.length === 1 ? 'cyklus' : data.length <= 4 ? 'cykly' : 'cyklů'}`}
+                            </button>
+                            <button type="button" onClick={() => setData([])}
+                                className="text-xs text-[var(--color-text-secondary)] underline-offset-2 hover:underline">
+                                Začít znovu
+                            </button>
+                        </div>
+                    </>
+                )}
+
+                {hlaska && <p className="text-[11px] text-amber-300">{hlaska}</p>}
             </div>
         </Panel>
     );

@@ -209,6 +209,9 @@ class DashboardController extends Controller
                 'pinned_views'     => $pinnedViews,
                 'upcoming_trip'    => $upcomingTrip,
                 'finance_hub'      => $financeHub,
+                // Rozpočet a cyklus byly dosud ostrovy dostupné jedině přes menu, přitom
+                // „kolik dneska můžu utratit" je údaj, kvůli kterému se aplikace otevírá.
+                'personal_hub'     => app(\App\Services\Dashboard\PersonalSummaryService::class)->forUser($space, $user),
                 'action_inbox'     => $actionInbox,
                 'partner_hub'      => ['space_id' => $space->id, 'album_suggestion' => $albumSuggestion, 'milestones' => $upcomingMilestones, 'next_event' => $nextSharedEvent, 'next_actions' => $nextActions, 'reminders' => $actionableReminders, 'coordination' => $coordination, 'decisions' => $decisions, 'reflection_prompt' => $reflectionPrompt, 'event_reflection_prompt' => $eventReflectionPrompt, 'experience_recommendation' => $experienceRecommendation, 'experience_follow_up' => $experienceFollowUp, 'date_follow_up' => $dateFollowUp, 'recipe' => $recipeHub, 'memory_evening' => $memoryEvening, 'date_idea' => $dateIdea, 'anniversary_recap' => $anniversaryRecap],
             ],

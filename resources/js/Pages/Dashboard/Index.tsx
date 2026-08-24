@@ -6,7 +6,7 @@ import OnboardingChecklist from '@/Components/OnboardingChecklist';
 import TogetherNowCard from '@/Components/TogetherNowCard';
 import { Head, Link, router } from '@inertiajs/react';
 import axios from 'axios';
-import { Album, CalendarDays, Check, ChefHat, Clock, FolderOpen, Heart, Images, Map, MapPin, RefreshCw, Route, Sparkles, Star, TrendingUp, Upload } from 'lucide-react';
+import { Album, CalendarDays, Check, ChefHat, Clock, Droplet, FolderOpen, Heart, Images, Map, MapPin, RefreshCw, Route, Sparkles, Star, TrendingUp, Upload, Wallet } from 'lucide-react';
 import { FormEvent, useEffect, useState } from 'react';
 
 interface DashboardData {
@@ -18,6 +18,11 @@ interface DashboardData {
     upcoming_trip: { id: number; name: string; start_date: string; end_date: string; status: string; finance?:{planned:number;actual:number}; readiness?:{packing_total:number;packing_packed:number;essential_missing:number}; savings_goal?:{target_amount:number;saved_amount:number;monthly_contribution?:number|null;currency:string;percent:number}|null; preparation?:{status:'ready'|'in_progress'|'attention';score:number;next_item?:{title:string;at:string}|null;actions:Array<{key:string;title:string;due_at:string;priority:string}>;summary:{actions_total:number;critical_total:number;risky_connections:number}}; bank_finance?:{available:boolean;connected:boolean;spent_by_currency:Record<string,number>;refunds_by_currency:Record<string,number>;suggested_count:number;confirmed_count:number;balances:Array<{name:string;currency:string;before:{amount:number|null;estimated:boolean};after:{amount:number|null;estimated:boolean};change:number|null}>} } | null;
     finance_hub: { available:boolean; transactions_count?:number; accounts:Array<{uuid:string;name:string;currency:string;current_balance?:number|null;transactions_count:number}> };
     action_inbox: Array<{ key:string; label:string; count:number; href:string; tone:'violet'|'teal'|'sky'|'pink'|'emerald' }>;
+    personal_hub?: {
+        budget: { uuid:string; name:string; currency:string; per_day:number|null; left:number; days_left:number|null; warnings:number; runs_out_on:string|null } | null;
+        /** owner je null, když jde o vlastní cyklus — pak se u dlaždice nepíše jméno. */
+        cycle: { owner:string|null; next_period_on:string; days_until:number; phase:string|null; cycle_day:number|null; confidence:string } | null;
+    };
     partner_hub: { space_id:number; album_suggestion?:{fingerprint:string;title:string;reason:string;media_count:number;photo_count:number;video_count:number;context?:{type:string;name:string}|null}|null; milestones: Array<{ uuid:string; title:string; icon:string; kind?:string; relationship?:string|null; person_name?:string|null; is_highlighted?:boolean; days_until:number; next_anniversary:string }>; reminders?:ActionableReminder[]; next_event?:{uuid:string;title:string;starts_at:string;place_name?:string|null;trip_id?:number|null;open_tasks_count?:number;planning_items_count?:number}|null; next_actions?:NextAction[]; coordination?:PartnerPulse|null; decisions?:PartnerDecisionSnapshot|null; reflection_prompt?:{id:number;name:string;end_date:string}|null; event_reflection_prompt?:{uuid:string;title:string;starts_at:string}|null; experience_recommendation?:ExperienceRecommendation|null; experience_follow_up?:ExperienceFollowUp|null; date_follow_up?:{uuid:string;title:string;event_uuid:string;starts_at:string;needs_feedback:boolean;needs_memory:boolean}|null; recipe?:{kind:'planned'|'suggestion';uuid:string;title:string;planned_for?:string;servings?:number;times_cooked?:number}|null; memory_evening?:{uuid:string;title:string;status:'planned'|'active';scheduled_for:string;event_uuid?:string|null;media_count:number;selected_count:number}|null; date_idea?:{uuid:string;title:string;summary:string;estimated_cost:number;currency:string;suggested_starts_at?:string|null;destination?:string|null;status:'saved'|'generated'}|null };
 }
 
@@ -142,6 +147,56 @@ export default function DashboardIndex({ data }: Props) {
                         </div>
                     </section>
                 )}
+                {/* Kolik dneska můžu utratit a kdy čekat menstruaci — dva údaje, kvůli
+                    kterým se aplikace otevírá a které byly dosud schované v menu. */}
+                {(data.personal_hub?.budget || data.personal_hub?.cycle) && (
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                        {data.personal_hub.budget && (
+                            <DashCard icon={Wallet} label="Rozpočet" href="/rozpocty" color="#a78bfa">
+                                <p className="text-base font-semibold text-[var(--color-text-primary)]">
+                                    {data.personal_hub.budget.per_day == null
+                                        ? new Intl.NumberFormat('cs-CZ', { style: 'currency', currency: data.personal_hub.budget.currency, maximumFractionDigits: 0 }).format(data.personal_hub.budget.left)
+                                        : `${new Intl.NumberFormat('cs-CZ', { style: 'currency', currency: data.personal_hub.budget.currency, maximumFractionDigits: 0 }).format(data.personal_hub.budget.per_day)} na den`}
+                                </p>
+                                <p className="mt-1 text-xs text-[var(--color-text-secondary)]">
+                                    {data.personal_hub.budget.name}
+                                    {data.personal_hub.budget.days_left != null && ` · zbývá ${data.personal_hub.budget.days_left} dní`}
+                                </p>
+                                {(data.personal_hub.budget.runs_out_on || data.personal_hub.budget.warnings > 0) && (
+                                    <p className="mt-2 text-xs text-amber-200">
+                                        {data.personal_hub.budget.runs_out_on
+                                            ? `Při současném tempu dojdou ${new Date(`${data.personal_hub.budget.runs_out_on}T12:00:00`).toLocaleDateString('cs-CZ', { day: 'numeric', month: 'long' })}`
+                                            : `${data.personal_hub.budget.warnings} ${data.personal_hub.budget.warnings === 1 ? 'kategorie dochází' : 'kategorie docházejí'}`}
+                                    </p>
+                                )}
+                                <p className="mt-3 text-xs text-violet-200">Zapsat výdaj →</p>
+                            </DashCard>
+                        )}
+
+                        {data.personal_hub.cycle && (
+                            <DashCard icon={Droplet} label={data.personal_hub.cycle.owner ? `Cyklus — ${data.personal_hub.cycle.owner}` : 'Cyklus'} href="/cyklus" color="#fb7185">
+                                <p className="text-base font-semibold text-[var(--color-text-primary)]">
+                                    {data.personal_hub.cycle.days_until < 0
+                                        ? 'Měla už začít'
+                                        : data.personal_hub.cycle.days_until === 0
+                                            ? 'Čekaná dnes'
+                                            : `Za ${data.personal_hub.cycle.days_until} ${data.personal_hub.cycle.days_until === 1 ? 'den' : data.personal_hub.cycle.days_until <= 4 ? 'dny' : 'dní'}`}
+                                </p>
+                                <p className="mt-1 text-xs text-[var(--color-text-secondary)]">
+                                    {new Date(`${data.personal_hub.cycle.next_period_on}T12:00:00`).toLocaleDateString('cs-CZ', { day: 'numeric', month: 'long' })}
+                                    {data.personal_hub.cycle.cycle_day != null && ` · dnes ${data.personal_hub.cycle.cycle_day}. den`}
+                                </p>
+                                {/* Spolehlivost se píše vždycky. Kdo si podle toho plánuje
+                                    cestu, ten rozdíl potřebuje vidět. */}
+                                {data.personal_hub.cycle.confidence === 'low' && (
+                                    <p className="mt-2 text-xs text-[var(--color-text-secondary)]">Orientační — zatím je z čeho počítat málo.</p>
+                                )}
+                                <p className="mt-3 text-xs text-rose-200">Otevřít kalendář →</p>
+                            </DashCard>
+                        )}
+                    </div>
+                )}
+
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-2"><DashCard icon={TrendingUp} label="Společné finance" href="/finances" color="#10b981">{data.finance_hub?.accounts?.length?<><div className="flex flex-wrap gap-x-5 gap-y-2">{data.finance_hub.accounts.map(account=><div key={account.uuid}><p className="text-base font-semibold text-[var(--color-text-primary)]">{account.current_balance==null?'—':new Intl.NumberFormat('cs-CZ',{style:'currency',currency:account.currency,maximumFractionDigits:2}).format(account.current_balance)}</p><p className="text-[10px] text-[var(--color-text-secondary)]">{account.name} · {account.transactions_count} transakcí</p></div>)}</div><p className="mt-3 text-xs text-emerald-200">Přehledy, grafy a platby cest →</p></>:<><p className="text-base font-semibold text-[var(--color-text-primary)]">Nahrát výpis společného účtu</p><p className="mt-1 text-xs text-[var(--color-text-secondary)]">Importujte export CSV, XLS nebo XLSX a zobrazte zůstatky, grafy i cestovní výdaje.</p><p className="mt-3 text-xs text-emerald-200">Nahrát výpis a otevřít přehled →</p></>}</DashCard></div>
 
                 {(data.upcoming_trip || data.pinned_views?.length > 0 || data.partner_hub?.next_event || data.partner_hub?.reflection_prompt || data.partner_hub?.event_reflection_prompt || data.partner_hub?.experience_recommendation || data.partner_hub?.experience_follow_up || data.partner_hub?.date_follow_up || data.partner_hub?.recipe || data.partner_hub?.memory_evening || data.partner_hub?.date_idea || data.partner_hub?.album_suggestion) && (

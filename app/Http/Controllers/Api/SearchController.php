@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Api;
 
 use App\Models\Album;
 use App\Http\Controllers\Controller;
+use App\Models\Budget;
+use App\Models\BudgetEntry;
 use App\Models\MediaItem;
 use App\Models\Person;
 use App\Models\Place;
@@ -210,6 +212,24 @@ class SearchController extends Controller
                 ->where(fn ($query) => $query->where('title', 'like', $like)->orWhere('original_title', 'like', $like))
                 ->limit($limit)->get()->map(fn ($item) => [
                     'type' => 'entertainment', 'id' => $item->id, 'label' => $item->title, 'url' => '/watchlist', 'icon' => $item->media_type === 'series' ? '📺' : '🎬',
+                ]) : [])
+            // Rozpočty a jejich položky. Osobní rozpočet je soukromý, dokud ho vlastník
+            // nesdílí — filtruje se stejnou podmínkou jako na stránce rozpočtů, aby
+            // našeptávač neprozradil ani název něčeho, na co ten druhý nevidí.
+            ->concat(Schema::hasTable('budgets') ? Budget::where('gallery_space_id', $space->id)
+                ->where(fn ($visible) => $visible->whereNull('owner_user_id')->orWhere('is_shared', true)->orWhere('owner_user_id', $request->user()->id))
+                ->where('name', 'like', $like)->limit($limit)->get()->map(fn ($item) => [
+                    'type' => 'budget', 'id' => $item->id, 'label' => $item->name, 'url' => '/rozpocty', 'icon' => '💰',
+                ]) : [])
+            ->concat(Schema::hasTable('budget_entries') ? BudgetEntry::whereHas('budget', fn ($budget) => $budget
+                    ->where('gallery_space_id', $space->id)
+                    ->where(fn ($visible) => $visible->whereNull('owner_user_id')->orWhere('is_shared', true)->orWhere('owner_user_id', $request->user()->id)))
+                ->where('note', 'like', $like)
+                ->with('budget:id,name,currency')
+                ->latest('spent_on')->limit($limit)->get()->map(fn ($item) => [
+                    'type' => 'expense', 'id' => $item->id,
+                    'label' => $item->note.' · '.number_format((float) $item->amount, 0, ',', ' ').' '.$item->currency,
+                    'url' => '/rozpocty', 'icon' => $item->kind === 'income' ? '💵' : '🧾',
                 ]) : [])
             ->concat(SavedSearch::where('gallery_space_id', $space->id)
                 ->where(fn ($query) => $query->where('user_id', $request->user()->id)->orWhere('is_shared', true))

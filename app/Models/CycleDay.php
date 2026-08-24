@@ -17,6 +17,7 @@ class CycleDay extends Model
     protected $fillable = [
         'uuid', 'user_id', 'gallery_space_id', 'day', 'flow',
         'symptoms', 'moods', 'pain', 'temperature', 'note', 'is_cycle_start', 'is_predicted',
+        'is_backfilled',
     ];
 
     protected function casts(): array
@@ -28,6 +29,7 @@ class CycleDay extends Model
             'temperature' => 'decimal:2',
             'is_cycle_start' => 'boolean',
             'is_predicted' => 'boolean',
+            'is_backfilled' => 'boolean',
         ];
     }
 

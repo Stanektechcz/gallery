@@ -104,6 +104,38 @@ class CycleController extends Controller
         return response()->json($this->cycles->overview($space, $request->user()));
     }
 
+    /**
+     * Doplní historii zpětně.
+     *
+     * Bere konkrétní data, ne délku cyklu. Kdyby si je server dopočítal sám, vyšel by
+     * z pravidelných rozestupů nulový rozptyl a aplikace by hlásila spolehlivou
+     * předpověď postavenou na vlastním výpočtu, ne na tom, co se opravdu dělo.
+     */
+    public function backfill(Request $request): JsonResponse
+    {
+        $this->write($request);
+
+        $data = $request->validate([
+            'starts' => 'required|array|min:1|max:24',
+            'starts.*' => 'required|date|before_or_equal:today',
+            'period_days' => 'sometimes|integer|min:1|max:14',
+        ]);
+
+        $space = $this->space($request);
+
+        $vysledek = $this->cycles->backfill(
+            $space,
+            $request->user(),
+            $data['starts'],
+            $data['period_days'] ?? 5,
+        );
+
+        return response()->json(
+            $this->cycles->overview($space, $request->user()) + ['backfill' => $vysledek],
+            201,
+        );
+    }
+
     private function space(Request $request): GallerySpace
     {
         return $request->user()->gallerySpaces()->firstOrFail();
