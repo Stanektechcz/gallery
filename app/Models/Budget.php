@@ -17,6 +17,7 @@ class Budget extends Model
     protected $fillable = [
         'uuid', 'gallery_space_id', 'owner_user_id', 'name', 'currency',
         'starts_on', 'ends_on', 'monthly_income', 'note', 'is_shared', 'created_by',
+        'savings_target', 'savings_target_on', 'period_unit',
     ];
 
     protected function casts(): array
@@ -25,6 +26,8 @@ class Budget extends Model
             'starts_on' => 'date',
             'ends_on' => 'date',
             'monthly_income' => 'decimal:2',
+            'savings_target' => 'decimal:2',
+            'savings_target_on' => 'date',
             'is_shared' => 'boolean',
         ];
     }
@@ -49,6 +52,11 @@ class Budget extends Model
         return $this->belongsTo(User::class, 'owner_user_id');
     }
 
+    public function gallerySpace()
+    {
+        return $this->belongsTo(GallerySpace::class);
+    }
+
     /**
      * Kdo na rozpočet vidí.
      *
@@ -67,6 +75,24 @@ class Budget extends Model
     {
         $konec = $this->ends_on ?? now();
 
-        return max(1, (int) ceil($this->starts_on->diffInDays($konec) / 30.44));
+        return max(1, (int) ceil($this->starts_on->diffInDays($konec) / $this->periodDays()));
+    }
+
+    /**
+     * Kolik dní má jednotka plánu.
+     *
+     * Plán se zadává „na kategorii za období" a období je buď měsíc, nebo týden. Na
+     * čtyřdenní výlet je měsíc špatná jednotka — plán by se dělil číslem, které s délkou
+     * cesty nesouvisí, a denní příděl by vyšel jako zlomek toho, co člověk reálně utratí.
+     */
+    public function periodDays(): float
+    {
+        return $this->period_unit === 'week' ? 7.0 : 30.44;
+    }
+
+    /** Jak se jednotce plánu říká česky — pro popisky, ať je jasné, proti čemu se měří. */
+    public function periodLabel(): string
+    {
+        return $this->period_unit === 'week' ? 'týdně' : 'měsíčně';
     }
 }

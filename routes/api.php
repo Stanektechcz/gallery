@@ -97,10 +97,13 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
         Route::post('/zadost', [App\Http\Controllers\Api\BudgetController::class, 'requestMoney'])->name('request');
         Route::post('/zadost/{uuid}', [App\Http\Controllers\Api\BudgetController::class, 'respondToRequest'])->name('request.respond');
         Route::get('/{uuid}', [App\Http\Controllers\Api\BudgetController::class, 'show'])->name('show');
+        Route::get('/{uuid}/export', [App\Http\Controllers\Api\BudgetController::class, 'export'])->name('export');
         Route::patch('/{uuid}', [App\Http\Controllers\Api\BudgetController::class, 'update'])->name('update');
         Route::delete('/{uuid}', [App\Http\Controllers\Api\BudgetController::class, 'destroy'])->name('destroy');
         Route::post('/{uuid}/kategorie', [App\Http\Controllers\Api\BudgetController::class, 'storeCategory'])->name('categories.store');
         Route::delete('/{uuid}/kategorie/{categoryId}', [App\Http\Controllers\Api\BudgetController::class, 'destroyCategory'])->name('categories.destroy');
+        Route::post('/{uuid}/vypis/nahled', [App\Http\Controllers\Api\BudgetController::class, 'previewStatement'])->name('statement.preview');
+        Route::post('/{uuid}/vypis', [App\Http\Controllers\Api\BudgetController::class, 'importStatement'])->name('statement.import');
         Route::post('/{uuid}/polozky', [App\Http\Controllers\Api\BudgetController::class, 'storeEntry'])->name('entries.store');
         Route::delete('/{uuid}/polozky/{entryUuid}', [App\Http\Controllers\Api\BudgetController::class, 'destroyEntry'])->name('entries.destroy');
     });

@@ -10,6 +10,7 @@ class BudgetEntry extends Model
     protected $fillable = [
         'uuid', 'budget_id', 'budget_category_id', 'user_id',
         'kind', 'amount', 'currency', 'spent_on', 'note', 'is_recurring',
+        'paid_by', 'split', 'media_item_id',
     ];
 
     protected function casts(): array
@@ -34,6 +35,16 @@ class BudgetEntry extends Model
     public function category()
     {
         return $this->belongsTo(BudgetCategory::class, 'budget_category_id');
+    }
+
+    public function payer()
+    {
+        return $this->belongsTo(User::class, 'paid_by');
+    }
+
+    public function receipt()
+    {
+        return $this->belongsTo(MediaItem::class, 'media_item_id');
     }
 
     public function author()

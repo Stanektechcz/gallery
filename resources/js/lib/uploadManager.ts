@@ -575,3 +575,60 @@ class UploadManagerClass extends EventTarget {
 }
 
 export const uploadManager = new UploadManagerClass();
+
+/**
+ * Waits for queued uploads to reach the archive and returns their media uuids, in order.
+ *
+ * A duplicate counts as success: the photograph is already there, which is all the caller
+ * needs, and refusing it would strand somebody who re-sent the same shot.
+ *
+ * Callers that need the uuid rather than just the file being somewhere: the shared moment
+ * posts two photographs and then has to name them, and a budget entry attaches a receipt
+ * to a row that does not exist until the picture does.
+ */
+export function waitForUploads(
+    ids: string[],
+    timeoutMs = 120_000,
+): Promise<Array<string | undefined>> {
+    return new Promise((resolve, reject) => {
+        const found = new Map<string, string | undefined>();
+
+        const finish = () => {
+            uploadManager.removeEventListener("change", onChange);
+            window.clearTimeout(timer);
+            resolve(ids.map((id) => found.get(id)));
+        };
+
+        const onChange = (event: Event) => {
+            const uploads = (event as CustomEvent).detail.uploads as Array<{
+                id: string;
+                status: string;
+                mediaUuid?: string;
+                error?: string;
+            }>;
+
+            for (const id of ids) {
+                const upload = uploads.find((candidate) => candidate.id === id);
+                if (!upload) continue;
+
+                if (["done", "duplicate"].includes(upload.status)) found.set(id, upload.mediaUuid);
+                else if (["error", "cancelled"].includes(upload.status)) found.set(id, undefined);
+            }
+
+            if (ids.every((id) => found.has(id))) finish();
+        };
+
+        // Something that never resolves is worse than something that reports a problem:
+        // the person is standing there holding a phone waiting for a spinner.
+        const timer = window.setTimeout(() => {
+            uploadManager.removeEventListener("change", onChange);
+            reject(
+                new Error(
+                    "Nahrávání trvá déle než obvykle. Fotky se dokončí na pozadí — zkuste to za chvíli.",
+                ),
+            );
+        }, timeoutMs);
+
+        uploadManager.addEventListener("change", onChange);
+    });
+}

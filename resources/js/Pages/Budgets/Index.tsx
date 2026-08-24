@@ -1,8 +1,10 @@
 import AppLayout from '@/Layouts/AppLayout';
+import { uploadManager, waitForUploads } from '@/lib/uploadManager';
 import { Head } from '@inertiajs/react';
 import axios from 'axios';
-import { ArrowRightLeft, Check, Plus, Trash2, Wallet, X } from 'lucide-react';
+import { ArrowRightLeft, Check, Download, PiggyBank, Plus, Receipt, Trash2, Upload, Wallet, X } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
+import StatementImport from './StatementImport';
 
 /**
  * Rozpočty na období.
@@ -28,20 +30,40 @@ interface MoneyRow {
 }
 
 interface Overview {
-    budget: { uuid: string; name: string; currency: string; starts_on: string; ends_on: string | null; monthly_income: number | null; note: string | null; is_shared: boolean; owner: { id: number; name: string } | null };
+    budget: { uuid: string; name: string; currency: string; starts_on: string; ends_on: string | null; monthly_income: number | null; note: string | null; is_shared: boolean; owner: { id: number; name: string } | null;
+        savings_target: number | null; savings_target_on: string | null; period_unit: 'month' | 'week'; period_label: string };
     period: { days_elapsed: number; days_left: number | null; days_total: number | null; has_started: boolean; has_ended: boolean };
     totals: { spent: Record<string, number>; income: Record<string, number> };
     categories: Array<{ id: number; name: string; color: string | null; planned_monthly: number; planned_to_date: number; spent: number; used_percent: number | null }>;
     months: Array<{ month: string; spent: number; income: number; count: number }>;
     allowance: { planned_total: number; spent: number; left: number; per_day: number | null; days_left: number | null; currency: string };
     warnings?: Array<{ category: string; spent: number; planned_to_date: number; percent: number; level: 'close' | 'over' }>;
-    entries: Array<{ uuid: string; kind: string; amount: number; currency: string; spent_on: string; note: string | null; is_recurring: boolean; category: string | null; author: string | null }>;
+    settlement?: Array<{ currency: string; from: string | null; from_id?: number | null; to: string; to_id: number; amount: number }>;
+    runway?: { per_day: number; days_left: number; runs_out_on: string; covers_period: boolean } | null;
+    savings?: { target: number; saved: number; missing: number; percent: number; target_on: string | null; days_left: number | null; monthly_needed: number | null; overdue: boolean; reached: boolean } | null;
+    comparison?: {
+        previous_month: string; current_month: string; currency: string;
+        rows: Array<{ name: string; color: string | null; previous: number; current: number; diff: number; diff_percent: number | null }>;
+        total_previous: number; total_current: number; total_diff: number;
+    } | null;
+    entries: Array<{ uuid: string; kind: string; amount: number; currency: string; spent_on: string; note: string | null; is_recurring: boolean; category: string | null; author: string | null;
+        paid_by?: string | null; split?: 'none' | 'equal' | 'other'; receipt_uuid?: string | null }>;
 }
 
 const money = (amount: number, currency: string) =>
     new Intl.NumberFormat('cs-CZ', { style: 'currency', currency, maximumFractionDigits: 2 }).format(amount);
 
 const den = (iso: string) => new Date(`${iso}T12:00:00`).toLocaleDateString('cs-CZ', { day: 'numeric', month: 'short' });
+
+const datum = (iso: string) => new Date(`${iso}T12:00:00`).toLocaleDateString('cs-CZ', { day: 'numeric', month: 'long', year: 'numeric' });
+
+/** „2026-07" → „červenec 2026". Číslo měsíce si nikdo nepřeloží na první pohled. */
+const mesic = (klic: string) =>
+    new Date(`${klic}-01T12:00:00`).toLocaleDateString('cs-CZ', { month: 'long', year: 'numeric' });
+
+const dny = (pocet: number) => `${pocet} ${pocet === 1 ? 'den' : pocet >= 2 && pocet <= 4 ? 'dny' : 'dní'}`;
+
+const DELENI: Record<string, string> = { none: 'moje', equal: 'napůl', other: 'za druhého' };
 
 const STAV: Record<string, string> = { pending: 'čeká', sent: 'posláno', declined: 'zamítnuto', cancelled: 'zrušeno' };
 
@@ -101,7 +123,7 @@ export default function BudgetsIndex() {
                     <div className="space-y-6">
                         <BudgetPicker budgets={budgets} active={active?.budget.uuid} onPick={uuid => void load(uuid)} onCreated={uuid => void load(uuid)}/>
 
-                        {active && <Overview data={active} onChanged={() => void load(active.budget.uuid)}/>}
+                        {active && <Overview data={active} members={members} onChanged={() => void load(active.budget.uuid)}/>}
 
                         <MoneyRequests requests={requests} members={members} onChanged={() => void load(active?.budget.uuid)}/>
                     </div>
@@ -115,7 +137,7 @@ function BudgetPicker({ budgets, active, onPick, onCreated }: {
     budgets: BudgetRow[]; active?: string; onPick: (uuid: string) => void; onCreated: (uuid: string) => void;
 }) {
     const [adding, setAdding] = useState(false);
-    const [form, setForm] = useState({ name: '', currency: 'EUR', starts_on: '', ends_on: '', monthly_income: '', is_shared: true });
+    const [form, setForm] = useState({ name: '', currency: 'EUR', starts_on: '', ends_on: '', monthly_income: '', is_shared: true, period_unit: 'month', savings_target: '', savings_target_on: '' });
     const [busy, setBusy] = useState(false);
 
     const create = async () => {
@@ -126,10 +148,12 @@ function BudgetPicker({ budgets, active, onPick, onCreated }: {
             const created = await axios.post('/api/v1/rozpocty', {
                 ...form,
                 monthly_income: form.monthly_income === '' ? null : Number(form.monthly_income),
+                savings_target: form.savings_target === '' ? null : Number(form.savings_target),
+                savings_target_on: form.savings_target_on || null,
                 ends_on: form.ends_on || null,
             });
             setAdding(false);
-            setForm({ name: '', currency: 'EUR', starts_on: '', ends_on: '', monthly_income: '', is_shared: true });
+            setForm({ name: '', currency: 'EUR', starts_on: '', ends_on: '', monthly_income: '', is_shared: true, period_unit: 'month', savings_target: '', savings_target_on: '' });
             onCreated(created.data.budget.uuid);
         } finally { setBusy(false); }
     };
@@ -184,6 +208,27 @@ function BudgetPicker({ budgets, active, onPick, onCreated }: {
                             <input type="number" inputMode="decimal" value={form.monthly_income}
                                 onChange={e => setForm(f => ({ ...f, monthly_income: e.target.value }))} className={FIELD}/>
                         </div>
+
+                        {/* Jednotka plánu. Na čtyřdenní výlet je měsíc špatná míra — plán
+                            by se dělil číslem, které s délkou cesty nesouvisí. */}
+                        <div>
+                            <label className={LABEL}>Plán zadávám</label>
+                            <select value={form.period_unit} onChange={e => setForm(f => ({ ...f, period_unit: e.target.value }))} className={FIELD}>
+                                <option value="month">za měsíc — delší pobyt</option>
+                                <option value="week">za týden — krátká cesta</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label className={LABEL}>Chci našetřit (nepovinné)</label>
+                            <input type="number" inputMode="decimal" value={form.savings_target}
+                                onChange={e => setForm(f => ({ ...f, savings_target: e.target.value }))}
+                                placeholder="např. na letenky domů" className={FIELD}/>
+                        </div>
+                        <div>
+                            <label className={LABEL}>Do kdy našetřit</label>
+                            <input type="date" value={form.savings_target_on}
+                                onChange={e => setForm(f => ({ ...f, savings_target_on: e.target.value }))} className={FIELD}/>
+                        </div>
                     </div>
 
                     <label className="mt-3 flex items-center gap-2 text-xs text-[var(--color-text-secondary)]">
@@ -204,7 +249,7 @@ function BudgetPicker({ budgets, active, onPick, onCreated }: {
     );
 }
 
-function Overview({ data, onChanged }: { data: Overview; onChanged: () => void }) {
+function Overview({ data, members, onChanged }: { data: Overview; members: Array<{ id: number; name: string }>; onChanged: () => void }) {
     const { budget, period, totals, categories, months, allowance } = data;
     const meny = Object.keys({ ...totals.spent, ...totals.income });
 
@@ -239,6 +284,73 @@ function Overview({ data, onChanged }: { data: Overview; onChanged: () => void }
                             </p>
                         ))}
                     </div>
+                </section>
+            )}
+
+            {/* Kdy dojdou peníze. Ukazuje se jen tehdy, když to nevyjde do konce období —
+                „vydrží to" je informace, kterou už nese dlaždice se zbytkem na den. */}
+            {data.runway && ! data.runway.covers_period && (
+                <section className="rounded-2xl border border-red-400/30 bg-red-500/5 p-4">
+                    <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">
+                        {data.runway.days_left === 0 ? 'Rozpočet je vyčerpaný' : `Při současném tempu dojdou peníze ${datum(data.runway.runs_out_on)}`}
+                    </h2>
+                    <p className="mt-1 text-xs text-[var(--color-text-secondary)]">
+                        Posledních třicet dní utrácíš {money(data.runway.per_day, budget.currency)} denně.
+                        {data.runway.days_left > 0 && ` To je ještě ${dny(data.runway.days_left)}`}
+                        {budget.ends_on && `, a období končí ${datum(budget.ends_on)}.`}
+                    </p>
+                </section>
+            )}
+
+            {/* Vyrovnání. U dvou lidí je to jedno číslo a to je celý smysl: deset drobných
+                převodů nikdo nedělá, jeden na konci měsíce ano. */}
+            {data.settlement && data.settlement.length > 0 && (
+                <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-4">
+                    <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold text-[var(--color-text-primary)]">
+                        <ArrowRightLeft className="h-4 w-4"/> Kdo komu dluží
+                    </h2>
+                    <div className="space-y-2">
+                        {data.settlement.map(radek => (
+                            <p key={`${radek.currency}-${radek.to_id}`} className="flex flex-wrap items-baseline gap-x-2 text-sm">
+                                <span className="text-[var(--color-text-primary)]">
+                                    <strong>{radek.from ?? 'Druhý'}</strong> dluží <strong>{radek.to}</strong>
+                                </span>
+                                <span className="font-semibold text-[var(--color-accent)]">{money(radek.amount, radek.currency)}</span>
+                            </p>
+                        ))}
+                    </div>
+                    <p className="mt-2 text-[11px] text-[var(--color-text-secondary)]">
+                        Počítá se z položek označených „napůl" a „za druhého". Každá měna zvlášť.
+                    </p>
+                </section>
+            )}
+
+            {/* Spoření na cíl. Jeden pruh; kolik chybí a kolik měsíčně odkládat. */}
+            {data.savings && (
+                <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-4">
+                    <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                        <h2 className="flex items-center gap-2 text-sm font-semibold text-[var(--color-text-primary)]">
+                            <PiggyBank className="h-4 w-4"/> Spoření na cíl
+                        </h2>
+                        <span className="text-xs text-[var(--color-text-secondary)]">
+                            {money(data.savings.saved, budget.currency)} z {money(data.savings.target, budget.currency)}
+                        </span>
+                    </div>
+
+                    <div className="h-3 overflow-hidden rounded-full bg-[var(--color-bg-primary)]">
+                        <div className={`h-full ${data.savings.reached ? 'bg-emerald-400' : data.savings.overdue ? 'bg-red-400' : 'bg-[var(--color-accent)]'}`}
+                            style={{ width: `${data.savings.percent}%` }}/>
+                    </div>
+
+                    <p className="mt-2 text-xs text-[var(--color-text-secondary)]">
+                        {data.savings.reached
+                            ? 'Cíl je splněný.'
+                            : data.savings.overdue
+                                ? `Termín ${datum(data.savings.target_on!)} uplynul a chybí ${money(data.savings.missing, budget.currency)}.`
+                                : data.savings.monthly_needed !== null
+                                    ? `Chybí ${money(data.savings.missing, budget.currency)} — to je ${money(data.savings.monthly_needed, budget.currency)} měsíčně do ${datum(data.savings.target_on!)}.`
+                                    : `Chybí ${money(data.savings.missing, budget.currency)}. Termín není nastavený.`}
+                    </p>
                 </section>
             )}
 
@@ -336,8 +448,69 @@ function Overview({ data, onChanged }: { data: Overview; onChanged: () => void }
                 </section>
             )}
 
-            <Entries budget={budget} categories={categories} entries={data.entries} onChanged={onChanged}/>
+            {data.comparison && <Comparison data={data.comparison}/>}
+
+            <Entries budget={budget} categories={categories} entries={data.entries} members={members} onChanged={onChanged}/>
         </>
+    );
+}
+
+/**
+ * Dva měsíce vedle sebe.
+ *
+ * „Utratili jsme o dva tisíce víc" je konstatování; „o dva tisíce víc za jídlo" je něco,
+ * s čím se dá něco udělat. Řazení podle velikosti změny, ne podle abecedy — kvůli tomu
+ * se tabulka otevírá.
+ */
+function Comparison({ data }: { data: NonNullable<Overview['comparison']> }) {
+    const nejvic = Math.max(...data.rows.flatMap(r => [r.previous, r.current]), 1);
+
+    return (
+        <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-4">
+            <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">
+                    {mesic(data.previous_month)} vs {mesic(data.current_month)}
+                </h2>
+                <span className={`text-xs font-semibold ${data.total_diff > 0 ? 'text-red-300' : data.total_diff < 0 ? 'text-emerald-300' : 'text-[var(--color-text-secondary)]'}`}>
+                    {data.total_diff > 0 ? '+' : data.total_diff < 0 ? '−' : ''}{money(Math.abs(data.total_diff), data.currency)} celkem
+                </span>
+            </div>
+
+            <div className="space-y-2.5">
+                {data.rows.map(radek => (
+                    <div key={radek.name}>
+                        <div className="mb-1 flex flex-wrap items-baseline justify-between gap-x-2">
+                            <span className="text-xs text-[var(--color-text-primary)]">{radek.name}</span>
+                            <span className="text-[11px] text-[var(--color-text-secondary)]">
+                                {money(radek.previous, data.currency)} → {money(radek.current, data.currency)}
+                                {radek.diff !== 0 && (
+                                    <span className={radek.diff > 0 ? ' text-red-300' : ' text-emerald-300'}>
+                                        {' '}({radek.diff > 0 ? '+' : '−'}{money(Math.abs(radek.diff), data.currency)}
+                                        {radek.diff_percent !== null && `, ${radek.diff_percent > 0 ? '+' : ''}${radek.diff_percent} %`})
+                                    </span>
+                                )}
+                            </span>
+                        </div>
+
+                        {/* Dva pruhy nad sebou ve stejném měřítku. Čísla vedle sebe se
+                            porovnávají hůř než délky. */}
+                        <div className="space-y-0.5">
+                            <div className="h-2 overflow-hidden rounded bg-[var(--color-bg-primary)]">
+                                <div className="h-full bg-[var(--color-text-secondary)]/40" style={{ width: `${radek.previous / nejvic * 100}%` }}/>
+                            </div>
+                            <div className="h-2 overflow-hidden rounded bg-[var(--color-bg-primary)]">
+                                <div className={`h-full ${radek.diff > 0 ? 'bg-red-400/70' : 'bg-emerald-400/70'}`}
+                                    style={{ width: `${radek.current / nejvic * 100}%` }}/>
+                            </div>
+                        </div>
+                    </div>
+                ))}
+            </div>
+
+            <p className="mt-3 text-[11px] text-[var(--color-text-secondary)]">
+                Šedý pruh je starší měsíc. Jen položky v {data.currency} — ostatní měny se nesčítají.
+            </p>
+        </section>
     );
 }
 
@@ -398,7 +571,7 @@ function Categories({ budget, categories, onChanged }: { budget: Overview['budge
             <div className="mt-4 flex flex-col gap-2 sm:flex-row">
                 <input value={name} onChange={e => setName(e.target.value)} placeholder="Nájem, jídlo, doprava…" className={FIELD}/>
                 <input type="number" inputMode="decimal" value={planned} onChange={e => setPlanned(e.target.value)}
-                    placeholder={`za měsíc (${budget.currency})`} className={`${FIELD} sm:w-48`}/>
+                    placeholder={`${budget.period_unit === 'week' ? 'za týden' : 'za měsíc'} (${budget.currency})`} className={`${FIELD} sm:w-48`}/>
                 <button type="button" onClick={() => void add()} disabled={! name.trim()}
                     className="inline-flex min-h-10 shrink-0 items-center justify-center gap-1.5 rounded-lg bg-[var(--color-accent)] px-4 text-sm font-medium text-[var(--color-accent-contrast)] disabled:opacity-50">
                     <Plus size={14}/> Přidat
@@ -408,11 +581,41 @@ function Categories({ budget, categories, onChanged }: { budget: Overview['budge
     );
 }
 
-function Entries({ budget, categories, entries, onChanged }: {
-    budget: Overview['budget']; categories: Overview['categories']; entries: Overview['entries']; onChanged: () => void;
+function Entries({ budget, categories, entries, members, onChanged }: {
+    budget: Overview['budget']; categories: Overview['categories']; entries: Overview['entries'];
+    members: Array<{ id: number; name: string }>; onChanged: () => void;
 }) {
-    const [form, setForm] = useState({ kind: 'expense', amount: '', currency: budget.currency, spent_on: new Date().toISOString().slice(0, 10), budget_category_id: '', note: '', is_recurring: false });
+    const [form, setForm] = useState({
+        kind: 'expense', amount: '', currency: budget.currency, spent_on: new Date().toISOString().slice(0, 10),
+        budget_category_id: '', note: '', is_recurring: false, split: 'none', paid_by: '',
+    });
     const [busy, setBusy] = useState(false);
+    const [importing, setImporting] = useState(false);
+    const [receipt, setReceipt] = useState<{ uuid: string; nahled: string } | null>(null);
+    const [receiptState, setReceiptState] = useState('');
+
+    /**
+     * Účtenka jde rovnou do galerie jako každá jiná fotka.
+     *
+     * Vlastní úložiště na účtenky by znamenalo druhý systém na obrázky vedle toho, který
+     * už tu je — se zálohou, náhledy a mazáním, které by se musely řešit znovu.
+     */
+    const attachReceipt = async (file: File) => {
+        setReceiptState('Nahrávám účtenku…');
+        const nahled = URL.createObjectURL(file);
+
+        try {
+            const [uuid] = await waitForUploads(uploadManager.enqueue([file], null));
+
+            if (! uuid) { setReceiptState('Účtenku se nepodařilo nahrát.'); URL.revokeObjectURL(nahled); return; }
+
+            setReceipt({ uuid, nahled });
+            setReceiptState('');
+        } catch (problem) {
+            URL.revokeObjectURL(nahled);
+            setReceiptState((problem as Error).message);
+        }
+    };
 
     const add = async () => {
         if (! form.amount) return;
@@ -422,15 +625,42 @@ function Entries({ budget, categories, entries, onChanged }: {
                 ...form,
                 amount: Number(form.amount),
                 budget_category_id: form.budget_category_id ? Number(form.budget_category_id) : null,
+                paid_by: form.paid_by ? Number(form.paid_by) : null,
+                receipt_uuid: receipt?.uuid ?? null,
             });
+            // Dělení a plátce zůstávají: kdo zapisuje společné výdaje, zapisuje jich víc
+            // za sebou a přepínat to u každého by bylo otravné. Účtenka ne — ta patří
+            // právě k té jedné položce.
             setForm(f => ({ ...f, amount: '', note: '' }));
+            if (receipt) URL.revokeObjectURL(receipt.nahled);
+            setReceipt(null);
             onChanged();
         } finally { setBusy(false); }
     };
 
     return (
         <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-4">
-            <h2 className="mb-3 text-sm font-semibold text-[var(--color-text-primary)]">Položky</h2>
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">Položky</h2>
+
+                <div className="flex flex-wrap items-center gap-2">
+                    <button type="button" onClick={() => setImporting(v => ! v)}
+                        className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-[var(--color-border)] px-3 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]">
+                        <Upload size={13}/> Načíst výpis
+                    </button>
+                    {/* Odkaz, ne fetch: stažení souboru přes XHR by znamenalo držet celý
+                        obsah v paměti a pak si ho podat blobem sám sobě. */}
+                    <a href={`/api/v1/rozpocty/${budget.uuid}/export`} download
+                        className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-[var(--color-border)] px-3 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]">
+                        <Download size={13}/> Stáhnout CSV
+                    </a>
+                </div>
+            </div>
+
+            {importing && (
+                <StatementImport budget={budget} categories={categories}
+                    onDone={() => { setImporting(false); onChanged(); }} onCancel={() => setImporting(false)}/>
+            )}
 
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-6">
                 <select value={form.kind} onChange={e => setForm(f => ({ ...f, kind: e.target.value }))} className={FIELD}>
@@ -455,6 +685,49 @@ function Entries({ budget, categories, entries, onChanged }: {
                     <input type="checkbox" checked={form.is_recurring} onChange={e => setForm(f => ({ ...f, is_recurring: e.target.checked }))}/>
                     Pravidelné
                 </label>
+
+                {/* Dělení a plátce jen u výdajů. U příjmu nedává „napůl" smysl a prázdné
+                    pole, které nic nedělá, mate víc než pole, které tam není. */}
+                {form.kind === 'expense' && (
+                    <>
+                        <select value={form.split} onChange={e => setForm(f => ({ ...f, split: e.target.value }))} className={`${FIELD} lg:col-span-2`}>
+                            <option value="none">Jen moje</option>
+                            <option value="equal">Napůl</option>
+                            <option value="other">Za druhého</option>
+                        </select>
+                        <select value={form.paid_by} onChange={e => setForm(f => ({ ...f, paid_by: e.target.value }))} className={`${FIELD} lg:col-span-2`}>
+                            <option value="">Platil jsem já</option>
+                            {members.map(m => <option key={m.id} value={m.id}>Platil{'(a)'} {m.name}</option>)}
+                        </select>
+                        <p className="self-center text-[11px] text-[var(--color-text-secondary)] lg:col-span-2">
+                            {form.split === 'none'
+                                ? 'Do vyrovnání se nezapočítá.'
+                                : form.split === 'equal'
+                                    ? 'Druhý dluží polovinu.'
+                                    : 'Druhý dluží celou částku.'}
+                        </p>
+
+                        {/* capture="environment" otevře na mobilu rovnou foťák. Účtenku
+                            člověk fotí u kasy, ne až doma z galerie. */}
+                        <label className="flex cursor-pointer items-center gap-2 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] lg:col-span-3">
+                            <input type="file" accept="image/*" capture="environment" className="hidden"
+                                onChange={e => { const file = e.target.files?.[0]; e.target.value = ''; if (file) void attachReceipt(file); }}/>
+                            {receipt
+                                ? <img src={receipt.nahled} alt="" className="h-8 w-8 rounded object-cover"/>
+                                : <Receipt size={14}/>}
+                            {receipt ? 'Účtenka připojena' : 'Vyfotit účtenku'}
+                        </label>
+
+                        {receipt && (
+                            <button type="button" onClick={() => { URL.revokeObjectURL(receipt.nahled); setReceipt(null); }}
+                                className="self-center text-left text-xs text-[var(--color-text-secondary)] hover:text-red-300 lg:col-span-1">
+                                Odebrat
+                            </button>
+                        )}
+
+                        {receiptState && <p className="self-center text-[11px] text-amber-300 lg:col-span-2">{receiptState}</p>}
+                    </>
+                )}
             </div>
 
             <div className="mt-4 space-y-1">
@@ -465,6 +738,17 @@ function Entries({ budget, categories, entries, onChanged }: {
                             {entry.note || entry.category || (entry.kind === 'income' ? 'Příjem' : 'Výdaj')}
                             {entry.category && entry.note && <span className="ml-2 text-[11px] text-[var(--color-text-secondary)]">{entry.category}</span>}
                             {entry.is_recurring && <span className="ml-2 rounded bg-[var(--color-surface-muted)] px-1.5 py-0.5 text-[9px] text-[var(--color-text-secondary)]">pravidelné</span>}
+                            {entry.split && entry.split !== 'none' && (
+                                <span className="ml-2 rounded bg-[var(--color-accent)]/15 px-1.5 py-0.5 text-[9px] text-[var(--color-accent)]">
+                                    {DELENI[entry.split]}{entry.paid_by ? ` · ${entry.paid_by}` : ''}
+                                </span>
+                            )}
+                            {entry.receipt_uuid && (
+                                <a href={`/media/${entry.receipt_uuid}`} target="_blank" rel="noreferrer" title="Účtenka"
+                                    className="ml-2 inline-flex align-middle text-[var(--color-text-secondary)] hover:text-[var(--color-accent)]">
+                                    <Receipt size={12}/>
+                                </a>
+                            )}
                         </span>
                         <span className={`shrink-0 text-sm ${entry.kind === 'income' ? 'text-emerald-300' : 'text-[var(--color-text-primary)]'}`}>
                             {entry.kind === 'income' ? '+' : '−'}{money(entry.amount, entry.currency)}

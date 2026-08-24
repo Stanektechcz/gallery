@@ -61,6 +61,9 @@ class BudgetController extends Controller
             'note' => 'nullable|string|max:5000',
             'is_shared' => 'sometimes|boolean',
             'personal' => 'sometimes|boolean',
+            'savings_target' => 'nullable|numeric|min:0',
+            'savings_target_on' => 'nullable|date',
+            'period_unit' => 'sometimes|in:month,week',
         ]);
 
         $budget = Budget::create([
@@ -72,6 +75,9 @@ class BudgetController extends Controller
             'starts_on' => $data['starts_on'],
             'ends_on' => $data['ends_on'] ?? null,
             'monthly_income' => $data['monthly_income'] ?? null,
+            'savings_target' => $data['savings_target'] ?? null,
+            'savings_target_on' => $data['savings_target_on'] ?? null,
+            'period_unit' => $data['period_unit'] ?? 'month',
             'note' => $data['note'] ?? null,
             'is_shared' => $data['is_shared'] ?? false,
             'created_by' => $request->user()->id,
@@ -93,6 +99,9 @@ class BudgetController extends Controller
             'monthly_income' => 'nullable|numeric|min:0',
             'note' => 'nullable|string|max:5000',
             'is_shared' => 'sometimes|boolean',
+            'savings_target' => 'nullable|numeric|min:0',
+            'savings_target_on' => 'nullable|date',
+            'period_unit' => 'sometimes|in:month,week',
         ]);
 
         $budget->update($data);
@@ -151,6 +160,11 @@ class BudgetController extends Controller
             'budget_category_id' => 'nullable|integer',
             'note' => 'nullable|string|max:500',
             'is_recurring' => 'sometimes|boolean',
+            // Kdo zaplatil a jak se to dělí — bez toho se společné výdaje na dálku
+            // po půl roce nedopočítají.
+            'paid_by' => 'nullable|integer',
+            'split' => 'sometimes|in:none,equal,other',
+            'receipt_uuid' => 'nullable|uuid',
         ]);
 
         // Kategorie musí patřit tomuhle rozpočtu, jinak by šlo zapsat do cizího.
@@ -158,9 +172,26 @@ class BudgetController extends Controller
             abort_unless($budget->categories()->whereKey($data['budget_category_id'])->exists(), 422, 'Kategorie do tohoto rozpočtu nepatří.');
         }
 
-        BudgetEntry::create($data + [
+        // Účtenka se hledá v prostoru rozpočtu, ne kdekoli — jinak by šlo k položce
+        // připnout cizí fotku podle uuid.
+        $receipt = ! empty($data['receipt_uuid'])
+            ? \App\Models\MediaItem::where('uuid', $data['receipt_uuid'])
+                ->where('gallery_space_id', $budget->gallery_space_id)
+                ->first()
+            : null;
+
+        // Plátce musí být člen prostoru; jinak by rozvaha dluhů ukazovala někoho, kdo
+        // do ní nepatří.
+        $paidBy = ! empty($data['paid_by'])
+            && $budget->gallerySpace?->members()->whereKey($data['paid_by'])->exists()
+                ? (int) $data['paid_by']
+                : $request->user()->id;
+
+        BudgetEntry::create(collect($data)->except(['receipt_uuid', 'paid_by'])->all() + [
             'budget_id' => $budget->id,
             'user_id' => $request->user()->id,
+            'paid_by' => $paidBy,
+            'media_item_id' => $receipt?->id,
             'currency' => strtoupper($data['currency'] ?? $budget->currency),
         ]);
 
@@ -174,6 +205,130 @@ class BudgetController extends Controller
         $budget->entries()->where('uuid', $entryUuid)->delete();
 
         return response()->json($this->budgets->overview($budget->fresh()));
+    }
+
+    /**
+     * Přečte výpis a vrátí, co v něm je. Nic neuloží.
+     *
+     * Náhled je záměrně samostatný krok: dvě stě položek zapsaných jedním kliknutím se
+     * maže hůř, než se ručně píšou.
+     */
+    public function previewStatement(Request $request, string $uuid): JsonResponse
+    {
+        $this->write($request);
+        $budget = $this->budget($request, $uuid);
+
+        $request->validate([
+            'file' => 'required|file|max:5120|mimetypes:text/plain,text/csv,application/csv,application/vnd.ms-excel,application/octet-stream',
+        ]);
+
+        $vysledek = app(\App\Services\Finance\StatementParser::class)
+            ->parse((string) file_get_contents($request->file('file')->getRealPath()));
+
+        // Co už v rozpočtu je. Duplicitní řádky se předem odškrtnou — výpisy se stahují
+        // po měsících a překryv je pravidlo, ne výjimka.
+        $existujici = $budget->entries()
+            ->get(['spent_on', 'amount', 'kind'])
+            ->map(fn (BudgetEntry $e) => $e->spent_on->toDateString().'|'.number_format((float) $e->amount, 2, '.', '').'|'.$e->kind)
+            ->flip();
+
+        $rows = collect($vysledek['rows'])->map(function (array $radek) use ($existujici, $budget) {
+            $klic = $radek['spent_on'].'|'.number_format($radek['amount'], 2, '.', '').'|'.$radek['kind'];
+            $radek['duplicate'] = $existujici->has($klic);
+            $radek['currency'] ??= $budget->currency;
+
+            return $radek;
+        });
+
+        return response()->json([
+            'rows' => $rows->values(),
+            'skipped' => $vysledek['skipped'],
+            'recognised' => array_keys(array_filter($vysledek['columns'], fn ($i) => $i !== null)),
+            'duplicates' => $rows->where('duplicate', true)->count(),
+        ]);
+    }
+
+    /** Zapíše potvrzené řádky výpisu. */
+    public function importStatement(Request $request, string $uuid): JsonResponse
+    {
+        $this->write($request);
+        $budget = $this->budget($request, $uuid);
+
+        $data = $request->validate([
+            'rows' => 'required|array|min:1|max:500',
+            'rows.*.kind' => 'required|in:expense,income',
+            'rows.*.amount' => 'required|numeric|min:0.01',
+            'rows.*.currency' => 'nullable|string|size:3',
+            'rows.*.spent_on' => 'required|date',
+            'rows.*.note' => 'nullable|string|max:500',
+            'rows.*.budget_category_id' => 'nullable|integer',
+        ]);
+
+        $kategorie = $budget->categories()->pluck('id')->flip();
+        $ulozeno = 0;
+
+        foreach ($data['rows'] as $radek) {
+            BudgetEntry::create([
+                'budget_id' => $budget->id,
+                'user_id' => $request->user()->id,
+                'paid_by' => $request->user()->id,
+                'kind' => $radek['kind'],
+                'amount' => $radek['amount'],
+                'currency' => strtoupper($radek['currency'] ?? $budget->currency),
+                'spent_on' => $radek['spent_on'],
+                'note' => $radek['note'] ?? null,
+                // Cizí kategorie se zahodí, ne odmítne: kvůli jednomu řádku by nemělo
+                // spadnout celé nahrání výpisu.
+                'budget_category_id' => isset($radek['budget_category_id']) && $kategorie->has($radek['budget_category_id'])
+                    ? $radek['budget_category_id']
+                    : null,
+            ]);
+
+            $ulozeno++;
+        }
+
+        return response()->json($this->budgets->overview($budget->fresh()) + ['imported' => $ulozeno], 201);
+    }
+
+    /**
+     * Položky jako CSV.
+     *
+     * Pro účetní, pro daňové přiznání, nebo prostě proto, že data mají patřit tomu, kdo
+     * je zapsal. Středník a BOM kvůli Excelu: bez nich česká verze otevře soubor jako
+     * jeden sloupec a rozsype diakritiku, což z exportu udělá práci navíc.
+     */
+    public function export(Request $request, string $uuid): \Symfony\Component\HttpFoundation\StreamedResponse
+    {
+        $budget = $this->budget($request, $uuid);
+        $budget->loadMissing(['entries.category', 'entries.payer:id,name', 'entries.author:id,name']);
+
+        $nazev = \Illuminate\Support\Str::slug($budget->name) . '-' . now()->toDateString() . '.csv';
+
+        return response()->streamDownload(function () use ($budget) {
+            $out = fopen('php://output', 'w');
+            fwrite($out, "\xEF\xBB\xBF");
+
+            // Prázdný escape je RFC-správné chování a od PHP 8.4 se musí uvést výslovně —
+            // jinak se do staženého souboru vypíše deprecation hláška a Excel z ní udělá
+            // první řádek tabulky.
+            fputcsv($out, ['Datum', 'Druh', 'Částka', 'Měna', 'Kategorie', 'Poznámka', 'Zaplatil', 'Dělení', 'Pravidelné'], ';', '"', '');
+
+            foreach ($budget->entries->sortBy('spent_on') as $entry) {
+                fputcsv($out, [
+                    $entry->spent_on->toDateString(),
+                    $entry->kind === 'income' ? 'příjem' : 'výdaj',
+                    number_format((float) $entry->amount, 2, ',', ''),
+                    $entry->currency,
+                    $entry->category?->name ?? '',
+                    $entry->note ?? '',
+                    $entry->payer?->name ?? $entry->author?->name ?? '',
+                    match ($entry->split) { 'equal' => 'napůl', 'other' => 'za druhého', default => 'moje' },
+                    $entry->is_recurring ? 'ano' : 'ne',
+                ], ';', '"', '');
+            }
+
+            fclose($out);
+        }, $nazev, ['Content-Type' => 'text/csv; charset=UTF-8']);
     }
 
     public function requestMoney(Request $request): JsonResponse

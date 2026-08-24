@@ -58,6 +58,10 @@ class BudgetService
                 'starts_on' => $budget->starts_on->toDateString(),
                 'ends_on' => $budget->ends_on?->toDateString(),
                 'monthly_income' => $budget->monthly_income !== null ? (float) $budget->monthly_income : null,
+                'savings_target' => $budget->savings_target !== null ? (float) $budget->savings_target : null,
+                'savings_target_on' => $budget->savings_target_on?->toDateString(),
+                'period_unit' => $budget->period_unit ?? 'month',
+                'period_label' => $budget->periodLabel(),
                 'note' => $budget->note,
                 'is_shared' => $budget->is_shared,
                 'owner' => $budget->owner ? ['id' => $budget->owner->id, 'name' => $budget->owner->name] : null,
@@ -72,6 +76,10 @@ class BudgetService
             'allowance' => $this->allowance($budget, $vydaje, $today),
             // Co dochází. Prázdné pole je dobrá zpráva a nic se nekreslí.
             'warnings' => $this->warnings($budget, $today),
+            'settlement' => $this->settlement($budget),
+            'runway' => $this->runway($budget, $today),
+            'savings' => $this->savings($budget, $today),
+            'comparison' => $this->comparison($budget),
             'entries' => $budget->entries
                 ->sortByDesc('spent_on')
                 ->take(100)
@@ -85,6 +93,9 @@ class BudgetService
                     'is_recurring' => $entry->is_recurring,
                     'category' => $entry->category?->name,
                     'author' => $entry->author?->name,
+                    'paid_by' => $entry->payer?->name ?? $entry->author?->name,
+                    'split' => $entry->split,
+                    'receipt_uuid' => $entry->receipt?->uuid,
                 ])->values()->all(),
         ];
     }
@@ -117,7 +128,12 @@ class BudgetService
     private function categories(Budget $budget, Carbon $today): array
     {
         $konecObdobi = $budget->ends_on && $today->greaterThan($budget->ends_on) ? $budget->ends_on : $today;
-        $mesicu = max(1.0, $budget->starts_on->diffInDays($konecObdobi) / 30.44);
+
+        // Spodní hranice je pětina období, ne celé období. S jedničkou by čtvrtý den
+        // z týdne tvrdil, že se smělo utratit všech sedm tisíc, a plán by nic neřídil.
+        // Nula by zase v první den dělila skoro nulou a všechno by svítilo červeně;
+        // pětina je kompromis — stejný, jaký používají varování.
+        $mesicu = max(0.2, $budget->starts_on->diffInDays($konecObdobi) / $budget->periodDays());
 
         return $budget->categories->map(function ($category) use ($budget, $mesicu) {
             $utraceno = $budget->entries
@@ -197,7 +213,7 @@ class BudgetService
         $budget->loadMissing(['categories', 'entries']);
 
         $konec = $budget->ends_on && $today->greaterThan($budget->ends_on) ? $budget->ends_on : $today;
-        $mesicu = max(0.2, $budget->starts_on->diffInDays($konec) / 30.44);
+        $mesicu = max(0.2, $budget->starts_on->diffInDays($konec) / $budget->periodDays());
 
         $varovani = [];
 
@@ -226,6 +242,273 @@ class BudgetService
         }
 
         return $varovani;
+    }
+
+    /**
+     * Kdo komu kolik dluží.
+     *
+     * Nepočítají se převody tam a zpět, ale jediné číslo na konci: kdo zaplatil za
+     * druhého víc, než druhý za něj. Deset drobných vyrovnání nikdo nedělá, jedno na
+     * konci měsíce ano — a o to jde, aby se to vůbec vyrovnalo.
+     *
+     * Po měnách zvlášť, ze stejného důvodu jako všude jinde: kurz nemáme.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function settlement(Budget $budget): array
+    {
+        $budget->loadMissing(['entries.payer:id,name', 'entries.author:id,name']);
+
+        // Kdo za koho utratil. Klíč je měna, pak plátce.
+        $saldo = [];
+
+        foreach ($budget->entries->where('kind', 'expense') as $entry) {
+            if ($entry->split === 'none') continue;
+
+            $platce = $entry->paid_by ?? $entry->user_id;
+            if (! $platce) continue;
+
+            // Napůl znamená, že druhý dluží polovinu; „za druhého" celou částku.
+            $dluh = $entry->split === 'equal'
+                ? (float) $entry->amount / 2
+                : (float) $entry->amount;
+
+            $saldo[$entry->currency][$platce] = ($saldo[$entry->currency][$platce] ?? 0) + $dluh;
+        }
+
+        // Jména podle id. Ne přes flatMap: ten uvnitř dělá array_merge, a ten číselné
+        // klíče přečísluje — z mapy id→jméno by vznikl obyčejný seznam a k saldu by se
+        // pak přiřadilo cizí jméno.
+        $jmena = [];
+
+        foreach ($budget->entries as $e) {
+            if ($e->paid_by && $e->payer) {
+                $jmena[$e->paid_by] = $e->payer->name;
+            }
+            if ($e->user_id && $e->author) {
+                $jmena[$e->user_id] = $e->author->name;
+            }
+        }
+
+        $vysledek = [];
+
+        foreach ($saldo as $mena => $podleOsoby) {
+            // U dvou lidí je výsledek přesný: rozdíl toho, co jeden dal za druhého, a naopak.
+            // U tří a víc se ukáže jen největší dvojice — zbytek by chtěl skutečné
+            // vyrovnání grafu dluhů a tenhle systém je pro dva.
+            $osoby = array_keys($podleOsoby);
+            if (count($osoby) === 1) {
+                // Platil jen jeden. Dluží mu ten druhý — a když je prostor dvoučlenný,
+                // dá se pojmenovat. „Někdo ti dluží" je informace, se kterou se nedá nic
+                // dělat; „Makinka ti dluží" ano.
+                $druhy = $this->protistrana($budget, (int) $osoby[0]);
+
+                $vysledek[] = [
+                    'currency' => $mena,
+                    'from' => $druhy?->name,
+                    'from_id' => $druhy?->id,
+                    'to' => $jmena[$osoby[0]] ?? '—',
+                    'to_id' => $osoby[0],
+                    'amount' => round($podleOsoby[$osoby[0]], 2),
+                ];
+
+                continue;
+            }
+
+            arsort($podleOsoby);
+            $nejvic = array_key_first($podleOsoby);
+            $nejmin = array_key_last($podleOsoby);
+            $rozdil = round($podleOsoby[$nejvic] - $podleOsoby[$nejmin], 2);
+
+            if ($rozdil < 0.01) continue;
+
+            $vysledek[] = [
+                'currency' => $mena,
+                'from' => $jmena[$nejmin] ?? '—',
+                'from_id' => $nejmin,
+                'to' => $jmena[$nejvic] ?? '—',
+                'to_id' => $nejvic,
+                'amount' => $rozdil,
+            ];
+        }
+
+        return $vysledek;
+    }
+
+    /**
+     * Kdy při současném tempu dojdou peníze.
+     *
+     * Tempo se počítá z posledních třiceti dnů, ne z celého období: kdo první měsíc
+     * platil kauci a vybavení, má průměr od začátku nesmyslně vysoký a předpověď by
+     * strašila zbytečně.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function runway(Budget $budget, ?Carbon $today = null): ?array
+    {
+        $today ??= Carbon::today();
+        $budget->loadMissing(['categories', 'entries']);
+
+        // Okno je třicet dnů, ale nesahá před začátek rozpočtu: u pětidenní cesty by se
+        // pět dnů útraty dělilo třiceti a tempo by vyšlo šestkrát nižší, než jaké je.
+        $od = $today->copy()->subDays(30)->max($budget->starts_on);
+
+        $nedavne = $budget->entries
+            ->where('kind', 'expense')
+            ->where('currency', $budget->currency)
+            ->filter(fn (BudgetEntry $e) => $e->spent_on->greaterThanOrEqualTo($od));
+
+        // Míň než tři položky za měsíc není tempo, ze kterého se dá cokoli odvodit.
+        if ($nedavne->count() < 3) return null;
+
+        $dni = max(1, (int) $od->diffInDays($today));
+        $naDen = (float) $nedavne->sum('amount') / $dni;
+
+        if ($naDen <= 0) return null;
+
+        $rozpocet = (float) $budget->categories->sum('planned_monthly') * $budget->monthsCovered();
+        $utraceno = (float) $budget->entries->where('kind', 'expense')->where('currency', $budget->currency)->sum('amount');
+        $zbyva = $rozpocet - $utraceno;
+
+        if ($zbyva <= 0) {
+            return ['per_day' => round($naDen, 2), 'days_left' => 0, 'runs_out_on' => $today->toDateString(), 'covers_period' => false];
+        }
+
+        $dniDoNuly = (int) floor($zbyva / $naDen);
+        $dojde = $today->copy()->addDays($dniDoNuly);
+
+        return [
+            'per_day' => round($naDen, 2),
+            'days_left' => $dniDoNuly,
+            'runs_out_on' => $dojde->toDateString(),
+            // Jestli to vydrží do konce období — jediná otázka, na které opravdu záleží.
+            'covers_period' => $budget->ends_on === null || $dojde->greaterThanOrEqualTo($budget->ends_on),
+        ];
+    }
+
+    /**
+     * Kolik měsíčně odkládat, aby cíl do data vyšel.
+     *
+     * Počítá se z toho, co ještě chybí, a ze zbývajících měsíců — ne z původního plánu,
+     * který po prvním vynechaném měsíci přestal platit.
+     */
+    public function savings(Budget $budget, ?Carbon $today = null): ?array
+    {
+        if ($budget->savings_target === null) return null;
+
+        $today ??= Carbon::today();
+        $budget->loadMissing('entries');
+
+        // Odloženo = příjmy minus výdaje v hlavní měně. Hrubé, ale poctivé: co zbylo.
+        $prijem = (float) $budget->entries->where('kind', 'income')->where('currency', $budget->currency)->sum('amount');
+        $vydaj = (float) $budget->entries->where('kind', 'expense')->where('currency', $budget->currency)->sum('amount');
+        $odlozeno = max(0, $prijem - $vydaj);
+
+        $cil = (float) $budget->savings_target;
+        $chybi = max(0, $cil - $odlozeno);
+
+        // Se znaménkem: bez něj by cíl, jehož datum už uplynulo, vyšel jako by do něj
+        // zbývalo stejně dní, kolik jich uteklo, a aplikace by klidně počítala měsíční
+        // splátku na termín, který je dávno pryč.
+        $doData = $budget->savings_target_on;
+        $dniDoCile = $doData ? (int) $today->diffInDays($doData, false) : null;
+        $mesicu = $dniDoCile !== null && $dniDoCile > 0 ? $dniDoCile / 30.44 : null;
+
+        return [
+            'target' => round($cil, 2),
+            'saved' => round($odlozeno, 2),
+            'missing' => round($chybi, 2),
+            'percent' => $cil > 0 ? min(100, (int) round($odlozeno / $cil * 100)) : 0,
+            'target_on' => $doData?->toDateString(),
+            'days_left' => $dniDoCile,
+            'monthly_needed' => $mesicu ? round($chybi / $mesicu, 2) : null,
+            // Termín uplynul a cíl není naplněn — to není „kolik měsíčně", ale konstatování.
+            'overdue' => $dniDoCile !== null && $dniDoCile < 0 && $chybi > 0,
+            'reached' => $chybi <= 0,
+        ];
+    }
+
+    /** Ten druhý v prostoru. Null, když jich je víc než dva — pak není „ten druhý". */
+    private function protistrana(Budget $budget, int $krome): ?User
+    {
+        $clenove = $budget->gallerySpace?->members()->get(['users.id', 'users.name']) ?? collect();
+
+        return $clenove->count() === 2
+            ? $clenove->firstWhere('id', '!=', $krome)
+            : null;
+    }
+
+    /**
+     * Dva měsíce vedle sebe, po kategoriích.
+     *
+     * Součet za měsíc řekne, že se utratilo víc; teprve rozpad po kategoriích řekne za co,
+     * a to je jediná informace, se kterou se dá něco udělat. Bere se poslední měsíc, ve
+     * kterém něco je, a ten před ním — ne aktuální proti minulému: rozpočet otevřený
+     * třetího v měsíci by porovnával tři dny s třiceti a vypadal by jako zázrak.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function comparison(Budget $budget): ?array
+    {
+        $budget->loadMissing(['categories', 'entries.category']);
+
+        $vydaje = $budget->entries->where('kind', 'expense')->where('currency', $budget->currency);
+
+        $mesice = $vydaje
+            ->map(fn (BudgetEntry $e) => $e->spent_on->format('Y-m'))
+            ->unique()
+            ->sort()
+            ->values();
+
+        if ($mesice->count() < 2) return null;
+
+        $novy = $mesice->last();
+        $stary = $mesice[$mesice->count() - 2];
+
+        $soucet = function (string $mesic, ?int $kategorie) use ($vydaje) {
+            return round((float) $vydaje
+                ->filter(fn (BudgetEntry $e) => $e->spent_on->format('Y-m') === $mesic
+                    && $e->budget_category_id === $kategorie)
+                ->sum('amount'), 2);
+        };
+
+        // I kategorie bez jediné položky patří do tabulky: nula proti tisícovce je
+        // změna, kterou chce člověk vidět nejvíc.
+        $radky = $budget->categories->map(fn ($category) => [
+            'name' => $category->name,
+            'color' => $category->color,
+            'previous' => $soucet($stary, $category->id),
+            'current' => $soucet($novy, $category->id),
+        ])->values()->all();
+
+        // Položky bez kategorie se nesmí ztratit, jinak by řádky nedaly součet.
+        $bezKategorie = ['previous' => $soucet($stary, null), 'current' => $soucet($novy, null)];
+        if ($bezKategorie['previous'] > 0 || $bezKategorie['current'] > 0) {
+            $radky[] = ['name' => 'Bez kategorie', 'color' => null] + $bezKategorie;
+        }
+
+        foreach ($radky as $i => $radek) {
+            $radky[$i]['diff'] = round($radek['current'] - $radek['previous'], 2);
+            $radky[$i]['diff_percent'] = $radek['previous'] > 0
+                ? (int) round(($radek['current'] - $radek['previous']) / $radek['previous'] * 100)
+                : null;
+        }
+
+        // Největší změny nahoru — kvůli tomu se tabulka otevírá.
+        usort($radky, fn ($a, $b) => abs($b['diff']) <=> abs($a['diff']));
+
+        $celkemStary = array_sum(array_column($radky, 'previous'));
+        $celkemNovy = array_sum(array_column($radky, 'current'));
+
+        return [
+            'previous_month' => $stary,
+            'current_month' => $novy,
+            'currency' => $budget->currency,
+            'rows' => $radky,
+            'total_previous' => round($celkemStary, 2),
+            'total_current' => round($celkemNovy, 2),
+            'total_diff' => round($celkemNovy - $celkemStary, 2),
+        ];
     }
 
     /** @param Collection<int, BudgetEntry> $entries */

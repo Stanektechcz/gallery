@@ -1,5 +1,5 @@
 import { cameraUnavailableReason, captureFilename, describeCameraError, grabFrame, hasMultipleCameras } from '@/lib/camera';
-import { uploadManager } from '@/lib/uploadManager';
+import { uploadManager, waitForUploads } from '@/lib/uploadManager';
 import { Camera, Check, RotateCcw, SwitchCamera, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
@@ -281,43 +281,3 @@ export default function DualCapture({ onCancel, onReady }: Props) {
     );
 }
 
-/**
- * Waits for queued uploads to reach the archive and returns their media uuids, in order.
- *
- * A duplicate counts as success: the photograph is already there, which is all the
- * moment needs, and refusing it would strand somebody who re-sent the same shot.
- */
-function waitForUploads(ids: string[]): Promise<Array<string | undefined>> {
-    return new Promise((resolve, reject) => {
-        const found = new Map<string, string | undefined>();
-
-        const finish = () => {
-            uploadManager.removeEventListener('change', onChange);
-            window.clearTimeout(timer);
-            resolve(ids.map(id => found.get(id)));
-        };
-
-        const onChange = (event: Event) => {
-            const uploads = (event as CustomEvent).detail.uploads as Array<{ id: string; status: string; mediaUuid?: string; error?: string }>;
-
-            for (const id of ids) {
-                const upload = uploads.find(candidate => candidate.id === id);
-                if (! upload) continue;
-
-                if (['done', 'duplicate'].includes(upload.status)) found.set(id, upload.mediaUuid);
-                else if (['error', 'cancelled'].includes(upload.status)) found.set(id, undefined);
-            }
-
-            if (ids.every(id => found.has(id))) finish();
-        };
-
-        // A moment that never resolves is worse than one that reports a problem: the
-        // person is standing there holding a phone waiting for a spinner.
-        const timer = window.setTimeout(() => {
-            uploadManager.removeEventListener('change', onChange);
-            reject(new Error('Nahrávání trvá déle než obvykle. Fotky se dokončí na pozadí — zkuste moment odeslat za chvíli.'));
-        }, 120_000);
-
-        uploadManager.addEventListener('change', onChange);
-    });
-}
