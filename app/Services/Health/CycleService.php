@@ -414,6 +414,9 @@ class CycleService
             $vysledek[] = [
                 'day' => $klic,
                 'phase' => $faze,
+                'cycle_day' => $vCyklu + 1,
+                // Pravděpodobnost otěhotnění pro tenhle den cyklu, 0–100.
+                'fertility' => $this->fertility($vCyklu, $ovulace),
                 // Čím dál do budoucna, tím volnější odhad — druhý cyklus dopředu stojí
                 // na tom, že ten první vyjde přesně, což skoro nikdy nevyjde.
                 'confidence' => $odZacatku > $averages['cycle'] ? 'low' : $predpoved['confidence'],
@@ -421,6 +424,145 @@ class CycleService
         }
 
         return $vysledek;
+    }
+
+    /**
+     * Jak plodný je daný den cyklu, 0–100.
+     *
+     * Křivka je nesymetrická schválně, protože plodnost taková je: spermie přežijí až
+     * pět dní, takže styk pět dní před ovulací ještě k otěhotnění vést může, kdežto den
+     * po ní už skoro ne — vajíčko vydrží zhruba den. Symetrický zvon kolem ovulace, jak
+     * ho kreslí spousta aplikací, tedy oba konce okna popisuje špatně.
+     *
+     * Čísla jsou hrubý odhad z běžně uváděných pravděpodobností početí podle dne. Není
+     * to antikoncepce a aplikace to nikde netvrdí.
+     */
+    /** 1 den / 2–4 dny / 5+ dní — čeština to potřebuje a „o 1 dny" čte každý jako chybu. */
+    private function dny(int $pocet): string
+    {
+        if ($pocet === 1) return '1 den';
+        if ($pocet >= 2 && $pocet <= 4) return "{$pocet} dny";
+
+        return "{$pocet} dní";
+    }
+
+    private function fertility(int $denVCyklu, int $ovulace): int
+    {
+        $odstup = $denVCyklu - $ovulace;
+
+        return match (true) {
+            $odstup === 0 => 100,
+            $odstup === -1 => 90,
+            $odstup === -2 => 75,
+            $odstup === -3 => 55,
+            $odstup === -4 => 35,
+            $odstup === -5 => 20,
+            $odstup === 1 => 25,
+            $odstup === 2 => 5,
+            default => 0,
+        };
+    }
+
+    /**
+     * Co se z historie dá vyčíst o tom, jak cyklus funguje.
+     *
+     * Odděleně od předpovědi: předpověď říká „kdy", tohle „jak to vypadá". Každé zjištění
+     * nese svou závažnost a hlavně důvod — „cyklus kolísá o devět dní" je informace, ze
+     * které si člověk může něco vyvodit, kdežto samotné „nepravidelný" je nálepka.
+     *
+     * Nic z toho není diagnóza a služba to i takhle pojmenovává. Rozhodovat o zdraví
+     * podle aplikace, která má v ruce dvanáct řádků v databázi, by bylo nemístné.
+     *
+     * @return array<int, array{code: string, level: string, title: string, detail: string}>
+     */
+    public function analysis(GallerySpace $space, User $owner, ?Carbon $today = null): array
+    {
+        $today ??= Carbon::today();
+
+        $days = CycleDay::where('user_id', $owner->id)->orderBy('day')->get();
+        $cycles = $this->cycles($days);
+        $settings = $this->settings($space, $owner);
+        $averages = $this->averages($cycles, $settings);
+
+        $zjisteni = [];
+        $delky = $cycles->pluck('length')->filter()->values();
+
+        if ($delky->count() < self::MIN_CYCLES_FOR_AVERAGE) {
+            return [[
+                'code' => 'not_enough',
+                'level' => 'info',
+                'title' => 'Zatím je málo dat',
+                'detail' => 'Po druhém zaznamenaném cyklu se tady začnou objevovat souvislosti a předpověď se zpřesní.',
+            ]];
+        }
+
+        // Kolísání délky. Pod čtyři dny je cyklus pravidelný, nad osm stojí za zmínku —
+        // ne jako problém, ale proto, že předpověď je pak orientační a je fér to říct.
+        $rozptyl = (int) ($delky->max() - $delky->min());
+
+        $zjisteni[] = match (true) {
+            $rozptyl <= 3 => ['code' => 'regular', 'level' => 'good', 'title' => 'Pravidelný cyklus',
+                'detail' => $rozptyl === 0
+                    ? 'Všechny zaznamenané cykly mají stejnou délku, takže předpovědi jsou spolehlivé.'
+                    : 'Délka kolísá jen o ' . $this->dny($rozptyl) . ', takže předpovědi jsou spolehlivé.'],
+            $rozptyl <= 8 => ['code' => 'slightly_irregular', 'level' => 'info', 'title' => 'Mírně kolísavý cyklus',
+                'detail' => 'Délka se pohybuje v rozmezí ' . $this->dny($rozptyl) . '. Předpověď berte s rezervou pár dní.'],
+            default => ['code' => 'irregular', 'level' => 'warn', 'title' => 'Nepravidelný cyklus',
+                'detail' => 'Mezi nejkratším a nejdelším cyklem je ' . $this->dny($rozptyl) . ', takže datum příští menstruace je opravdu jen odhad.'],
+        };
+
+        // Trend: poslední tři proti předchozím. Postupné prodlužování nebo zkracování je
+        // něco, co si člověk sám z řady čísel nevšimne.
+        if ($delky->count() >= 4) {
+            $noveji = $delky->slice(-3)->avg();
+            $drive = $delky->slice(0, $delky->count() - 3)->avg();
+            $rozdil = (int) round($noveji - $drive);
+
+            if (abs($rozdil) >= 3) {
+                $zjisteni[] = [
+                    'code' => $rozdil > 0 ? 'lengthening' : 'shortening',
+                    'level' => 'info',
+                    'title' => $rozdil > 0 ? 'Cyklus se prodlužuje' : 'Cyklus se zkracuje',
+                    'detail' => 'Poslední tři cykly jsou v průměru o ' . abs($rozdil) . ' dní '
+                        . ($rozdil > 0 ? 'delší' : 'kratší') . ' než ty předtím.',
+                ];
+            }
+        }
+
+        // Zpoždění. Počítá se od očekávaného dne, ne od průměru — a mlčí se, dokud to
+        // není víc než pár dní, protože posun o den dva je běžný.
+        $predpoved = $this->predict($cycles, $averages, $today);
+        $posledni = $cycles->last();
+
+        if ($predpoved && $posledni) {
+            $odPosledni = (int) $posledni['start']->diffInDays($today);
+
+            if ($odPosledni > $averages['cycle'] + 5) {
+                $zpozdeni = $odPosledni - $averages['cycle'];
+                $zjisteni[] = [
+                    'code' => 'late',
+                    'level' => 'warn',
+                    'title' => 'Menstruace se opožďuje',
+                    'detail' => "Od začátku posledního cyklu uplynulo {$odPosledni} dní, tedy o {$zpozdeni} víc, než je u vás obvyklé.",
+                ];
+            }
+        }
+
+        // Neobvykle dlouhé krvácení. Sedm dní je horní hranice toho, co se běžně uvádí.
+        $dlouhe = $cycles->filter(fn (array $c) => $c['length'] !== null && $c['period_days'] > 7);
+
+        if ($dlouhe->isNotEmpty()) {
+            $zjisteni[] = [
+                'code' => 'long_period',
+                'level' => 'info',
+                'title' => 'Delší krvácení',
+                'detail' => $dlouhe->count() === 1
+                    ? 'Jeden cyklus měl krvácení delší než týden.'
+                    : $dlouhe->count() . ' cyklů mělo krvácení delší než týden.',
+            ];
+        }
+
+        return $zjisteni;
     }
 
     /** Zapíše nebo přepíše jeden den. */

@@ -42,7 +42,7 @@ interface Overview {
     cycles: Array<{ started_on: string; ended_on: string | null; length: number | null; period_days: number }>;
     prediction: Prediction | null;
     today: { cycle_day: number; phase: string } | null;
-    forecast?: Array<{ day: string; phase: string; confidence: string }>;
+    forecast?: Array<{ day: string; phase: string; confidence: string; cycle_day?: number; fertility?: number }>;
 }
 
 interface PartnerView {
@@ -89,6 +89,21 @@ const PHASE_HINT: Record<string, string> = {
     pms: 'bg-amber-500/15 border-dashed border-amber-400/70',
     follicular: 'bg-sky-500/10 border-dashed border-sky-400/40',
     luteal: 'bg-violet-500/10 border-dashed border-violet-400/40',
+};
+
+/**
+ * Zkratka do políčka, aby se den dal přečíst bez legendy.
+ *
+ * Zkráceno tvrdě: v mřížce sedmi sloupců má buňka na telefonu kolem pětačtyřiceti bodů
+ * a delší slovo se zalomí nebo přeteče. Folikulární a luteální fáze zkratku nedostávají
+ * — jsou to „nic zvláštního se neděje" dny a popisek u každého z nich by z kalendáře
+ * udělal text, ve kterém to důležité zanikne.
+ */
+const PHASE_SHORT: Record<string, string> = {
+    menstruation: 'men',
+    fertile: 'plod',
+    ovulation: 'ovul',
+    pms: 'PMS',
 };
 
 const SYMPTOMS = ['křeče', 'bolest hlavy', 'nadýmání', 'citlivá prsa', 'únava', 'akné', 'nevolnost', 'bolest zad', 'chutě'];
@@ -197,6 +212,8 @@ export default function CycleIndex() {
                             />
                         )}
 
+                        {data.forecast && data.forecast.length > 0 && <Fertility forecast={data.forecast}/>}
+
                         <Statistics/>
 
                         <Sharing settings={data.settings} onSaved={setData}/>
@@ -289,7 +306,22 @@ function Calendar({ grid, month, byDay, forecast, onMonth, onPick }: {
                                             ?? 'bg-[var(--color-bg-primary)] border-[var(--color-border)] text-[var(--color-text-secondary)]'
                                     }`
                             } ${day === dnes ? 'ring-2 ring-offset-2 ring-offset-[var(--color-bg-card)] ring-[var(--color-accent)]' : ''}`}>
-                            {cislo}
+                            {/* Číslo nahoře, druh dne pod ním. Bez toho popisku se barva
+                                musí pořád překládat přes legendu, což je práce navíc
+                                pokaždé, když se člověk na kalendář podívá. */}
+                            <span className="flex h-full flex-col items-center justify-center leading-none">
+                                <span>{cislo}</span>
+
+                                {(() => {
+                                    const zkratka = zaznam?.flow && zaznam.flow !== 'none'
+                                        ? (zaznam.is_predicted ? 'men?' : 'men')
+                                        : PHASE_SHORT[forecast.get(day) ?? ''];
+
+                                    return zkratka
+                                        ? <span className="mt-0.5 text-[7px] font-normal opacity-80">{zkratka}</span>
+                                        : null;
+                                })()}
+                            </span>
 
                             {/* Den ovulace dostane tečku navíc. Barva sama o sobě říká
                                 „plodné dny", ale ten jeden den uvnitř okna je jiná
@@ -435,6 +467,63 @@ function DayEditor({ day, existing, trackSymptoms, onClose, onSaved }: {
 }
 
 /**
+ * Křivka plodnosti na nejbližší cyklus.
+ *
+ * Nesymetrická schválně, protože plodnost taková je: spermie přežijí až pět dní, takže
+ * styk pět dní před ovulací k otěhotnění vést může, kdežto den po ní už skoro ne. Zvon
+ * souměrný kolem ovulace, jak ho kreslí spousta aplikací, popisuje oba konce okna špatně.
+ *
+ * Není to antikoncepce a nikde se to tak netváří.
+ */
+function Fertility({ forecast }: { forecast: Array<{ day: string; phase: string; cycle_day?: number; fertility?: number }> }) {
+    // Jen do konce nejbližšího cyklu: druhý dopředu stojí na tom, že první vyjde přesně.
+    const okno = forecast.slice(0, 32);
+    const dnes = new Date().toISOString().slice(0, 10);
+
+    return (
+        <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-4">
+            <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">Plodné dny</h2>
+            <p className="mt-0.5 text-xs text-[var(--color-text-secondary)]">
+                Odhad pravděpodobnosti početí podle dne cyklu. Orientační — na plánování ano, na ochranu ne.
+            </p>
+
+            <div className="mt-4 flex h-24 items-end gap-px">
+                {okno.map(den => {
+                    const vyska = Math.max(2, den.fertility ?? 0);
+
+                    return (
+                        <div key={den.day} className="group relative flex-1"
+                            title={`${new Date(`${den.day}T12:00:00`).toLocaleDateString('cs-CZ', { day: 'numeric', month: 'numeric' })} — ${den.fertility ?? 0} %`}>
+                            <div
+                                className={`w-full rounded-t transition-all ${
+                                    den.phase === 'ovulation' ? 'bg-emerald-400'
+                                        : (den.fertility ?? 0) > 0 ? 'bg-emerald-500/50'
+                                        : den.phase === 'menstruation' ? 'bg-rose-500/40'
+                                        : 'bg-[var(--color-border)]'
+                                } ${den.day === dnes ? 'ring-1 ring-[var(--color-accent)]' : ''}`}
+                                style={{ height: `${vyska}%` }}
+                            />
+                        </div>
+                    );
+                })}
+            </div>
+
+            <div className="mt-1.5 flex justify-between text-[10px] text-[var(--color-text-secondary)]">
+                <span>{new Date(`${okno[0].day}T12:00:00`).toLocaleDateString('cs-CZ', { day: 'numeric', month: 'short' })}</span>
+                {(() => {
+                    const vrchol = okno.find(d => d.phase === 'ovulation');
+
+                    return vrchol
+                        ? <span className="text-emerald-300">ovulace {new Date(`${vrchol.day}T12:00:00`).toLocaleDateString('cs-CZ', { day: 'numeric', month: 'short' })}</span>
+                        : null;
+                })()}
+                <span>{new Date(`${okno[okno.length - 1].day}T12:00:00`).toLocaleDateString('cs-CZ', { day: 'numeric', month: 'short' })}</span>
+            </div>
+        </section>
+    );
+}
+
+/**
  * Jak se cyklus choval v čase.
  *
  * Načítá se zvlášť, protože se dívá dozadu přes celou historii — u někoho, kdo zapisuje
@@ -446,6 +535,7 @@ function Statistics() {
         shortest: number | null; longest: number | null; average: number; spread: number | null;
         tracked_days: number;
         symptom_patterns: Array<{ symptom: string; phase: string; count: number; in_phase: number }>;
+        analysis?: Array<{ code: string; level: string; title: string; detail: string }>;
     } | null>(null);
 
     useEffect(() => {
@@ -459,6 +549,34 @@ function Statistics() {
     return (
         <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-4">
             <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">Jak to chodí</h2>
+
+            {/* Rozbor nad čísly, ne pod nimi. Zjištění je to, co si člověk odnese; graf
+                je doklad, proč to tak je. */}
+            {stats.analysis && stats.analysis.length > 0 && (
+                <div className="mt-3 space-y-2">
+                    {stats.analysis.map(zjisteni => (
+                        <div key={zjisteni.code}
+                            className={`rounded-xl border p-3 ${
+                                zjisteni.level === 'warn' ? 'border-amber-400/30 bg-amber-500/5'
+                                    : zjisteni.level === 'good' ? 'border-emerald-400/25 bg-emerald-500/5'
+                                    : 'border-[var(--color-border)] bg-[var(--color-bg-primary)]'
+                            }`}>
+                            <p className={`text-xs font-medium ${
+                                zjisteni.level === 'warn' ? 'text-amber-200'
+                                    : zjisteni.level === 'good' ? 'text-emerald-200'
+                                    : 'text-[var(--color-text-primary)]'
+                            }`}>{zjisteni.title}</p>
+                            <p className="mt-0.5 text-[11px] leading-snug text-[var(--color-text-secondary)]">{zjisteni.detail}</p>
+                        </div>
+                    ))}
+
+                    {/* Řečeno naplno. Aplikace, která z dvanácti řádků v databázi soudí
+                        o zdraví, by si dovolovala víc, než na co má. */}
+                    <p className="text-[10px] text-[var(--color-text-secondary)] opacity-70">
+                        Nic z toho není diagnóza — je to jen to, co plyne z vašich vlastních záznamů.
+                    </p>
+                </div>
+            )}
             <p className="mt-0.5 text-xs text-[var(--color-text-secondary)]">
                 Z {stats.tracked_days} zapsaných dnů · nejkratší {stats.shortest} dní, nejdelší {stats.longest}
                 {stats.spread !== null && stats.spread > 4 && ' — cyklus je spíš nepravidelný'}
