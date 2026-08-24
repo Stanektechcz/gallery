@@ -244,20 +244,91 @@ function Overview({ data, onChanged }: { data: Overview; onChanged: () => void }
 
             <Categories budget={budget} categories={categories} onChanged={onChanged}/>
 
+            {/* Kam peníze tečou. Koláč by ukázal totéž, ale porovnat dva výseče od oka
+                nikdo neumí — délky vedle sebe ano. */}
+            {categories.some(c => c.spent > 0) && (
+                <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-4">
+                    <h2 className="mb-3 text-sm font-semibold text-[var(--color-text-primary)]">Kam to jde</h2>
+
+                    {(() => {
+                        const utracene = categories.filter(c => c.spent > 0).sort((a, b) => b.spent - a.spent);
+                        const celkem = utracene.reduce((sum, c) => sum + c.spent, 0);
+                        const nejvic = Math.max(...utracene.map(c => c.spent), 1);
+                        const BARVY = ['bg-violet-400', 'bg-sky-400', 'bg-emerald-400', 'bg-amber-400', 'bg-rose-400', 'bg-teal-400'];
+
+                        return (
+                            <>
+                                {/* Jeden pruh složený z podílů — poměr celku je vidět dřív
+                                    než jednotlivé částky. */}
+                                <div className="mb-4 flex h-3 overflow-hidden rounded-full">
+                                    {utracene.map((category, index) => (
+                                        <div key={category.id} className={BARVY[index % BARVY.length]}
+                                            style={{ width: `${category.spent / celkem * 100}%` }}
+                                            title={`${category.name}: ${money(category.spent, budget.currency)}`}/>
+                                    ))}
+                                </div>
+
+                                <div className="space-y-2">
+                                    {utracene.map((category, index) => (
+                                        <div key={category.id} className="flex items-center gap-2.5">
+                                            <span className={`h-2.5 w-2.5 shrink-0 rounded-sm ${BARVY[index % BARVY.length]}`}/>
+                                            <span className="w-24 shrink-0 truncate text-xs text-[var(--color-text-primary)]">{category.name}</span>
+                                            <div className="h-2 flex-1 overflow-hidden rounded-full bg-[var(--color-bg-primary)]">
+                                                <div className={`h-full ${BARVY[index % BARVY.length]} opacity-70`}
+                                                    style={{ width: `${category.spent / nejvic * 100}%` }}/>
+                                            </div>
+                                            <span className="w-24 shrink-0 text-right text-xs text-[var(--color-text-secondary)]">
+                                                {money(category.spent, budget.currency)}
+                                            </span>
+                                            <span className="w-10 shrink-0 text-right text-[10px] text-[var(--color-text-secondary)]">
+                                                {Math.round(category.spent / celkem * 100)} %
+                                            </span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </>
+                        );
+                    })()}
+                </section>
+            )}
+
             {months.length > 0 && (
                 <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-4">
                     <h2 className="mb-3 text-sm font-semibold text-[var(--color-text-primary)]">Měsíc po měsíci</h2>
-                    <div className="space-y-2">
+                    {/* Příjem i výdaj v jednom měřítku, aby šlo vidět, který měsíc byl
+                        ztrátový. Dva grafy pod sebou nutí porovnávat očima přes mezeru. */}
+                    <div className="space-y-3">
                         {months.map(month => {
-                            const nejvic = Math.max(...months.map(m => m.spent), 1);
+                            const nejvic = Math.max(...months.flatMap(m => [m.spent, m.income]), 1);
+                            const zbylo = month.income - month.spent;
 
                             return (
-                                <div key={month.month} className="flex items-center gap-3">
-                                    <span className="w-16 shrink-0 text-xs text-[var(--color-text-secondary)]">{month.month}</span>
-                                    <div className="h-5 flex-1 overflow-hidden rounded bg-[var(--color-bg-primary)]">
-                                        <div className="h-full bg-[var(--color-accent)]/70" style={{ width: `${Math.round(month.spent / nejvic * 100)}%` }}/>
+                                <div key={month.month}>
+                                    <div className="mb-1 flex items-baseline justify-between text-xs">
+                                        <span className="text-[var(--color-text-secondary)]">{month.month}</span>
+                                        <span className={zbylo >= 0 ? 'text-emerald-300' : 'text-red-300'}>
+                                            {zbylo >= 0 ? '+' : '−'}{money(Math.abs(zbylo), budget.currency)}
+                                        </span>
                                     </div>
-                                    <span className="w-28 shrink-0 text-right text-xs text-[var(--color-text-primary)]">{money(month.spent, budget.currency)}</span>
+
+                                    <div className="space-y-0.5">
+                                        {month.income > 0 && (
+                                            <div className="flex items-center gap-2">
+                                                <span className="w-10 shrink-0 text-[9px] text-[var(--color-text-secondary)]">příjem</span>
+                                                <div className="h-2.5 flex-1 overflow-hidden rounded bg-[var(--color-bg-primary)]">
+                                                    <div className="h-full bg-emerald-400/70" style={{ width: `${month.income / nejvic * 100}%` }}/>
+                                                </div>
+                                                <span className="w-24 shrink-0 text-right text-[10px] text-[var(--color-text-secondary)]">{money(month.income, budget.currency)}</span>
+                                            </div>
+                                        )}
+                                        <div className="flex items-center gap-2">
+                                            <span className="w-10 shrink-0 text-[9px] text-[var(--color-text-secondary)]">výdaj</span>
+                                            <div className="h-2.5 flex-1 overflow-hidden rounded bg-[var(--color-bg-primary)]">
+                                                <div className="h-full bg-[var(--color-accent)]/70" style={{ width: `${month.spent / nejvic * 100}%` }}/>
+                                            </div>
+                                            <span className="w-24 shrink-0 text-right text-[10px] text-[var(--color-text-primary)]">{money(month.spent, budget.currency)}</span>
+                                        </div>
+                                    </div>
                                 </div>
                             );
                         })}
