@@ -432,7 +432,10 @@ export default function Connections() {
                         </section>
 
 
-                        <section className="mt-6 rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-4">
+                        {/* Dvě propojení vedle sebe. Karta „připojit službu" je pár řádků
+                            textu a tlačítko — přes celou šířku z ní byl prázdný pruh. */}
+                        <div className="mt-6 grid items-start gap-5 xl:grid-cols-2">
+                        <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-4">
                             <h2 className="font-semibold text-[var(--color-text-primary)]">Notion</h2>
                             <p className="mt-1 text-xs text-[var(--color-text-secondary)]">
                                 V Notionu si vytvořte vlastní integraci (Settings → Connections → Develop or manage integrations),
@@ -477,7 +480,7 @@ export default function Connections() {
 
                         </section>
 
-                        <section className="mt-5 rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-4">
+                        <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-4">
                             <h2 className="font-semibold text-[var(--color-text-primary)]">Discord</h2>
 
                             {!discordReady && (
@@ -538,6 +541,7 @@ export default function Connections() {
                                 trvale běžícímu botovi. Co je dostupné: účet, servery a propojené služby profilu.
                             </p>
                         </section>
+                        </div>
 
                         {documents.length > 0 && (
                             <section className="mt-5 rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-4">

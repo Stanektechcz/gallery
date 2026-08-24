@@ -131,9 +131,14 @@ export default function DashboardIndex({ data }: Props) {
                 <PartnerDecisionPanel spaceId={data.partner_hub.space_id} initialData={data.partner_hub.decisions} compact />
                 <ReminderActionPanel initialItems={data.partner_hub.reminders ?? []} compact hideWhenEmpty />
 
+                {/* Dva velké panely vedle sebe. Oba odpovídají na „co teď" —
+                    jeden co čeká na zařazení, druhý co udělat dnes. Pod sebou přes
+                    celou šířku znamenaly, že druhý začínal až pod okrajem obrazovky. */}
+                <div className={`grid items-start gap-4 ${data.action_inbox.length > 0 && nextActions.length > 0 ? 'xl:grid-cols-2' : ''}`}>
                 {data.action_inbox.length > 0 && <section className="rounded-3xl border border-violet-400/25 bg-gradient-to-br from-violet-500/10 to-[var(--color-bg-card)] p-4 sm:p-5"><div className="flex items-start justify-between gap-3"><div><p className="text-xs font-medium uppercase tracking-wider text-violet-200">Neztratit ze zřetele</p><h2 className="mt-1 font-semibold text-[var(--color-text-primary)]">Aktuální věci čekající na zařazení</h2><p className="mt-1 text-xs text-[var(--color-text-secondary)]">Pouze otevřené nebo budoucí položky. Historie sem nepatří.</p></div><Link href="/inbox" className="inline-flex min-h-10 shrink-0 items-center rounded-xl border border-violet-300/30 px-3 text-xs font-medium text-violet-100 hover:bg-violet-400/10">Otevřít inbox</Link></div><div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">{data.action_inbox.map(item => <Link key={item.key} href={item.href} className="flex min-h-16 items-center justify-between gap-3 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-muted)] px-3 py-2.5 hover:border-violet-300/40 hover:bg-violet-400/10"><span className="min-w-0 text-sm text-[var(--color-text-primary)]">{item.label}</span><span className="flex h-8 min-w-8 shrink-0 items-center justify-center rounded-full bg-violet-400/15 px-2 text-sm font-semibold text-violet-100">{item.count}</span></Link>)}</div></section>}
 
                 {nextActions.length > 0 && <section className="rounded-3xl border border-teal-400/25 bg-gradient-to-br from-teal-500/10 to-[var(--color-bg-card)] p-4 sm:p-5"><div className="flex items-start justify-between gap-3"><div><p className="text-xs font-medium uppercase tracking-wider text-teal-200">Dnes stačí toto</p><h2 className="mt-1 font-semibold text-[var(--color-text-primary)]">Společný krok bez hledání v aplikaci</h2><p className="mt-1 text-xs text-[var(--color-text-secondary)]">Úkoly, kalendář, balení, podklady, doklady, dárky i vyrovnání cest jsou v jednom pořadí.</p></div><Check size={20} className="shrink-0 text-teal-300"/></div><div className="mt-4 space-y-2">{nextActions.map(action => <div key={action.key} className="flex items-center gap-3 rounded-xl border border-teal-400/15 bg-[var(--color-surface-muted)] p-3"><button aria-label={`Označit ${action.title} jako hotové`} disabled={actionBusy === action.key} onClick={() => completeAction(action)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-teal-300/50 text-teal-200 hover:bg-teal-400/15 disabled:opacity-40"><Check size={15}/></button><div className="min-w-0 flex-1"><Link href={action.href} className="block truncate text-sm text-[var(--color-text-primary)] hover:text-teal-200">{action.title}</Link><p className={`mt-0.5 truncate text-xs ${action.is_overdue?'text-amber-200':'text-[var(--color-text-secondary)]'}`}>{action.context}{action.assigned_to ? ` · ${action.assigned_to.name}` : ' · bez přiřazení'}{action.due_at ? ` · ${new Date(action.due_at).toLocaleDateString('cs-CZ', { day:'numeric', month:'short' })}` : ''}</p></div><span className="shrink-0 rounded-full bg-teal-400/10 px-2 py-1 text-[10px] text-teal-100">{ACTION_LABEL[action.type]}</span></div>)}</div>{actionError && <p className="mt-3 text-xs text-red-300">{actionError}</p>}</section>}
+                </div>
                 {!data.upcoming_trip && !data.partner_hub?.next_event && nextActions.length === 0 && data.action_inbox.length === 0 && (data.partner_hub?.milestones?.length ?? 0) === 0 && (
                     <section className="rounded-3xl border border-dashed border-[var(--color-border)] bg-[var(--color-bg-card)] p-5 text-center">
                         <CalendarDays className="mx-auto text-[var(--color-accent)]" size={24} />
@@ -147,10 +152,12 @@ export default function DashboardIndex({ data }: Props) {
                         </div>
                     </section>
                 )}
-                {/* Kolik dneska můžu utratit a kdy čekat menstruaci — dva údaje, kvůli
-                    kterým se aplikace otevírá a které byly dosud schované v menu. */}
+                {/* Kolik dneska můžu utratit, kdy čekat menstruaci a kolik je na účtu —
+                    tři údaje, kvůli kterým se aplikace otevírá. Finance sem patří taky:
+                    stály dole samotné v dvousloupcové mřížce a nechávaly vedle sebe
+                    prázdnou půlku obrazovky. */}
                 {(data.personal_hub?.budget || data.personal_hub?.cycle) && (
-                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
                         {data.personal_hub.budget && (
                             <DashCard icon={Wallet} label="Rozpočet" href="/rozpocty" color="#a78bfa">
                                 <p className="text-base font-semibold text-[var(--color-text-primary)]">
@@ -194,10 +201,30 @@ export default function DashboardIndex({ data }: Props) {
                                 <p className="mt-3 text-xs text-rose-200">Otevřít kalendář →</p>
                             </DashCard>
                         )}
+
+                        <DashCard icon={TrendingUp} label="Společné finance" href="/finances" color="#10b981">
+                            {data.finance_hub?.accounts?.length ? <>
+                                <div className="flex flex-wrap gap-x-5 gap-y-2">
+                                    {data.finance_hub.accounts.map(account => (
+                                        <div key={account.uuid}>
+                                            <p className="text-base font-semibold text-[var(--color-text-primary)]">
+                                                {account.current_balance == null ? '—' : new Intl.NumberFormat('cs-CZ', { style:'currency', currency:account.currency, maximumFractionDigits:2 }).format(account.current_balance)}
+                                            </p>
+                                            <p className="text-[10px] text-[var(--color-text-secondary)]">{account.name} · {account.transactions_count} transakcí</p>
+                                        </div>
+                                    ))}
+                                </div>
+                                <p className="mt-3 text-xs text-emerald-200">Přehledy, grafy a platby cest →</p>
+                            </> : <>
+                                <p className="text-base font-semibold text-[var(--color-text-primary)]">Nahrát výpis společného účtu</p>
+                                <p className="mt-1 text-xs text-[var(--color-text-secondary)]">Import CSV, XLS nebo XLSX zobrazí zůstatky, grafy i cestovní výdaje.</p>
+                                <p className="mt-3 text-xs text-emerald-200">Nahrát výpis a otevřít přehled →</p>
+                            </>}
+                        </DashCard>
                     </div>
                 )}
 
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-2"><DashCard icon={TrendingUp} label="Společné finance" href="/finances" color="#10b981">{data.finance_hub?.accounts?.length?<><div className="flex flex-wrap gap-x-5 gap-y-2">{data.finance_hub.accounts.map(account=><div key={account.uuid}><p className="text-base font-semibold text-[var(--color-text-primary)]">{account.current_balance==null?'—':new Intl.NumberFormat('cs-CZ',{style:'currency',currency:account.currency,maximumFractionDigits:2}).format(account.current_balance)}</p><p className="text-[10px] text-[var(--color-text-secondary)]">{account.name} · {account.transactions_count} transakcí</p></div>)}</div><p className="mt-3 text-xs text-emerald-200">Přehledy, grafy a platby cest →</p></>:<><p className="text-base font-semibold text-[var(--color-text-primary)]">Nahrát výpis společného účtu</p><p className="mt-1 text-xs text-[var(--color-text-secondary)]">Importujte export CSV, XLS nebo XLSX a zobrazte zůstatky, grafy i cestovní výdaje.</p><p className="mt-3 text-xs text-emerald-200">Nahrát výpis a otevřít přehled →</p></>}</DashCard></div>
+                
 
                 {(data.upcoming_trip || data.pinned_views?.length > 0 || data.partner_hub?.next_event || data.partner_hub?.reflection_prompt || data.partner_hub?.event_reflection_prompt || data.partner_hub?.experience_recommendation || data.partner_hub?.experience_follow_up || data.partner_hub?.date_follow_up || data.partner_hub?.recipe || data.partner_hub?.memory_evening || data.partner_hub?.date_idea || data.partner_hub?.album_suggestion) && (
                     <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
