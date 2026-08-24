@@ -399,6 +399,10 @@ class CycleService
 
             $faze = match (true) {
                 $vCyklu < max(1, $averages['period']) => 'menstruation',
+                // Samotný den ovulace se vyznačuje zvlášť. V plodném okně je to ten
+                // jediný, na kterém opravdu záleží, a splynout s pěti okolními by z něj
+                // udělalo informaci, kterou si člověk musí dopočítat.
+                $vCyklu === $ovulace => 'ovulation',
                 $vCyklu >= $ovulace - 5 && $vCyklu <= $ovulace + 1 => 'fertile',
                 // PMS: posledních pár dní před očekávaným krvácením. Vyznačit je stojí za
                 // to — je to týden, kdy člověk chce vědět, proč mu je, jak mu je.

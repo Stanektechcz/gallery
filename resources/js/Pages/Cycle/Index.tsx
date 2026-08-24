@@ -70,11 +70,25 @@ const PHASE_LABEL: Record<string, string> = {
     luteal: 'luteální fáze', pms: 'dny před menstruací',
 };
 
-/** Barvy předpovědi. Vždycky slabší než zapsaná skutečnost — odhad se nemá tvářit jako údaj. */
+/**
+ * Barvy předpovědi — pastelová výplň a tečkovaný okraj.
+ *
+ * Každá fáze má svou barvu, aby z měsíce šlo číst, co kdy čekat, bez počítání. Dvě
+ * pravidla, na kterých to celé stojí:
+ *
+ * Pastel znamená odhad, sytá barva zapsanou skutečnost. Kdyby předpověď vypadala stejně
+ * jako záznam, nikdo by je od sebe nerozeznal — a plánovat dovolenou podle něčeho, co
+ * vypadá jako fakt a je to dohad, je horší než nemít barvu žádnou.
+ *
+ * Tečkovaný okraj to říká podruhé, pro každého, komu barvy splývají.
+ */
 const PHASE_HINT: Record<string, string> = {
-    menstruation: 'border-dashed border-rose-400/60',
-    fertile: 'border-dashed border-emerald-400/50',
-    pms: 'border-dashed border-amber-400/50',
+    menstruation: 'bg-rose-500/15 border-dashed border-rose-400/70',
+    fertile: 'bg-emerald-500/15 border-dashed border-emerald-400/70',
+    ovulation: 'bg-emerald-500/30 border-dashed border-emerald-400',
+    pms: 'bg-amber-500/15 border-dashed border-amber-400/70',
+    follicular: 'bg-sky-500/10 border-dashed border-sky-400/40',
+    luteal: 'bg-violet-500/10 border-dashed border-violet-400/40',
 };
 
 const SYMPTOMS = ['křeče', 'bolest hlavy', 'nadýmání', 'citlivá prsa', 'únava', 'akné', 'nevolnost', 'bolest zad', 'chutě'];
@@ -168,7 +182,6 @@ export default function CycleIndex() {
 
                         <Calendar
                             grid={grid} month={month} byDay={byDay}
-                            prediction={data.prediction}
                             forecast={forecastByDay}
                             onMonth={setMonth}
                             onPick={setEditing}
@@ -230,18 +243,12 @@ function Tile({ label, value, hint, accent = false }: { label: string; value: st
     );
 }
 
-function Calendar({ grid, month, byDay, prediction, forecast, onMonth, onPick }: {
+function Calendar({ grid, month, byDay, forecast, onMonth, onPick }: {
     grid: Array<string | null>; month: Date; byDay: Map<string, Day>;
-    prediction: Prediction | null; forecast: Map<string, string>;
+    forecast: Map<string, string>;
     onMonth: (d: Date) => void; onPick: (day: string) => void;
 }) {
     const dnes = new Date().toISOString().slice(0, 10);
-
-    const jePlodny = (day: string) =>
-        prediction !== null && day >= prediction.fertile_from && day <= prediction.fertile_to;
-
-    const jeCekana = (day: string) =>
-        prediction !== null && day >= prediction.next_period_on && day <= prediction.period_ends_on;
 
     return (
         <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-4">
@@ -269,37 +276,57 @@ function Calendar({ grid, month, byDay, prediction, forecast, onMonth, onPick }:
                     return (
                         <button key={day} type="button" onClick={() => onPick(day)}
                             title={zaznam ? FLOW_LABEL[zaznam.flow] : 'Zapsat'}
-                            className={`relative aspect-square rounded-lg border text-xs transition-colors ${
+                            /* Silnější okraj má každý den, i prázdný: mřížka z pastelových
+                               ploch bez hranic splývá v jednu barevnou kaši a přestane se
+                               dát počítat, kolikátého co je. */
+                            className={`relative aspect-square rounded-lg border-2 text-xs font-medium transition-colors ${
                                 zaznam?.flow && zaznam.flow !== 'none'
                                     // Předvyplněný den je bledší a tečkovaný: je to odhad,
                                     // dokud se ho někdo nedotkne.
-                                    ? `${FLOW_COLOR[zaznam.flow]} text-white ${zaznam.is_predicted ? 'border-dashed border-white/60 opacity-55' : 'border-transparent'}`
-                                    : `bg-[var(--color-bg-primary)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] ${PHASE_HINT[forecast.get(day) ?? ''] ?? 'border-transparent'}`
-                            } ${day === dnes ? 'ring-2 ring-[var(--color-accent)]' : ''}`}>
+                                    ? `${FLOW_COLOR[zaznam.flow]} text-white ${zaznam.is_predicted ? 'border-dashed border-white/70 opacity-60' : 'border-rose-300/60'}`
+                                    : `text-[var(--color-text-primary)] hover:brightness-125 ${
+                                        PHASE_HINT[forecast.get(day) ?? '']
+                                            ?? 'bg-[var(--color-bg-primary)] border-[var(--color-border)] text-[var(--color-text-secondary)]'
+                                    }`
+                            } ${day === dnes ? 'ring-2 ring-offset-2 ring-offset-[var(--color-bg-card)] ring-[var(--color-accent)]' : ''}`}>
                             {cislo}
 
-                            {/* Předpověď je tečkovaná, zapsaná skutečnost plná — odhad se
-                                nemá tvářit jako údaj. */}
-                            {! zaznam && jeCekana(day) && (
-                                <span className="absolute inset-0 rounded-lg border border-dashed border-rose-400/60"/>
-                            )}
-                            {! zaznam && jePlodny(day) && (
-                                <span className="absolute bottom-0.5 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-emerald-400"/>
+                            {/* Den ovulace dostane tečku navíc. Barva sama o sobě říká
+                                „plodné dny", ale ten jeden den uvnitř okna je jiná
+                                informace a stojí za vlastní značku. */}
+                            {! zaznam && forecast.get(day) === 'ovulation' && (
+                                <span className="absolute bottom-0.5 left-1/2 h-1.5 w-1.5 -translate-x-1/2 rounded-full bg-emerald-300"/>
                             )}
                             {zaznam && (zaznam.symptoms.length > 0 || zaznam.note) && (
-                                <span className="absolute right-0.5 top-0.5 h-1 w-1 rounded-full bg-white/80"/>
+                                <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-white/90"/>
                             )}
                         </button>
                     );
                 })}
             </div>
 
-            <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-[var(--color-text-secondary)]">
-                <span className="flex items-center gap-1"><span className="h-2 w-2 rounded bg-rose-500"/> zapsané krvácení</span>
-                <span className="flex items-center gap-1"><span className="h-2 w-2 rounded border border-dashed border-rose-400"/> čekaná menstruace</span>
-                <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-emerald-400"/> plodné dny</span>
-                <span className="flex items-center gap-1"><span className="h-2 w-2 rounded bg-rose-500/50 opacity-60"/> předvyplněno — ťuknutím potvrdíte</span>
-                <span className="flex items-center gap-1"><span className="h-2 w-2 rounded border border-dashed border-amber-400"/> dny před menstruací</span>
+            {/* Legenda ve dvou řadách, protože jde o dvě různé věci: co je zapsané a co
+                se teprve čeká. Smíchat je do jednoho řádku znamená, že rozdíl mezi
+                záznamem a odhadem zapadne — a ten je tu ze všeho nejdůležitější. */}
+            <div className="mt-4 space-y-2 border-t border-[var(--color-border)] pt-3">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[10px] text-[var(--color-text-secondary)]">
+                    <span className="font-medium text-[var(--color-text-primary)]">Zapsáno</span>
+                    <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded border-2 border-rose-300/60 bg-rose-600"/> silná</span>
+                    <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded border-2 border-rose-300/60 bg-rose-500/80"/> střední</span>
+                    <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded border-2 border-rose-300/60 bg-rose-400/55"/> slabá</span>
+                    <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded border-2 border-rose-300/60 bg-rose-400/30"/> špinění</span>
+                    <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded border-2 border-dashed border-white/70 bg-rose-500/80 opacity-60"/> předvyplněno — ťuknutím potvrdíte</span>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[10px] text-[var(--color-text-secondary)]">
+                    <span className="font-medium text-[var(--color-text-primary)]">Čeká se</span>
+                    <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded border-2 border-dashed border-rose-400/70 bg-rose-500/15"/> menstruace</span>
+                    <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded border-2 border-dashed border-emerald-400/70 bg-emerald-500/15"/> plodné dny</span>
+                    <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded border-2 border-dashed border-emerald-400 bg-emerald-500/30"/> ovulace</span>
+                    <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded border-2 border-dashed border-amber-400/70 bg-amber-500/15"/> před menstruací</span>
+                    <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded border-2 border-dashed border-sky-400/40 bg-sky-500/10"/> folikulární</span>
+                    <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded border-2 border-dashed border-violet-400/40 bg-violet-500/10"/> luteální</span>
+                </div>
             </div>
         </section>
     );
