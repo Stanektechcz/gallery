@@ -101,7 +101,7 @@ export const MediaCard = memo(function MediaCard({ item, selected, onSelect, onA
             {/* Media type badge */}
             {item.media_type === 'video' && (
                 <div className="absolute top-2 right-2 bg-black/60 rounded-full p-1">
-                    <Play size={10} className="text-[var(--color-text-primary)] fill-white" />
+                    <Play size={10} className="text-white fill-white" />
                 </div>
             )}
 
@@ -112,11 +112,14 @@ export const MediaCard = memo(function MediaCard({ item, selected, onSelect, onA
                 </div>
             )}
 
-            {/* Rating */}
+            {/* Rating
+                Clona je tmavá v obou motivech, takže text na ní musí být bílý natvrdo.
+                S `--color-text-primary` se ve světlém motivu obarvil skoro na černo a
+                hodnocení na tmavém podkladu zmizelo. */}
             {item.rating && item.rating > 0 && (
-                <div className="absolute bottom-2 right-2 bg-black/50 rounded px-1 flex items-center gap-0.5">
+                <div className="absolute bottom-2 right-2 bg-black/65 rounded px-1 flex items-center gap-0.5">
                     <Star size={10} className="text-yellow-400 fill-yellow-400" />
-                    <span className="text-[var(--color-text-primary)] text-[10px]">{item.rating}</span>
+                    <span className="text-white text-[10px]">{item.rating}</span>
                 </div>
             )}
 

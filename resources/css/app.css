@@ -329,6 +329,48 @@
 }
 
 /*
+ * Odstín 400 ve světlém motivu, hlavně červená a zelená.
+ *
+ * Chybové a potvrzovací hlášky se píšou `text-red-400` a `text-green-400` — dohromady
+ * sto sedm míst. Nad tmavým pozadím to jsou dobře viditelné signály, nad světlým je
+ * červená 3,0:1 a zelená 1,9:1. Právě u textu, který říká „tohle se nepovedlo", je to
+ * ta nejhorší možná barva.
+ *
+ * Míří se na holé třídy, takže `hover:text-red-400` zůstává — osmnáct ze sto dvaceti
+ * čtyř výskytů je za modifikátorem a ty se mají objevit až při najetí, často na tmavé
+ * cloně, kde je světlá červená správně.
+ */
+@layer utilities {
+    :root[data-theme="light"] .text-red-400     { color: #b91c1c; }
+    :root[data-theme="light"] .text-green-400   { color: #15803d; }
+    :root[data-theme="light"] .text-emerald-400 { color: #047857; }
+    :root[data-theme="light"] .text-teal-400    { color: #0f766e; }
+    :root[data-theme="light"] .text-orange-400  { color: #9a3412; }
+    :root[data-theme="light"] .text-amber-400   { color: #92400e; }
+    :root[data-theme="light"] .text-rose-400    { color: #be123c; }
+    :root[data-theme="light"] .text-pink-400    { color: #be185d; }
+    :root[data-theme="light"] .text-violet-400  { color: #6d28d9; }
+    :root[data-theme="light"] .text-blue-400    { color: #1d4ed8; }
+    :root[data-theme="light"] .text-sky-400     { color: #0369a1; }
+    :root[data-theme="light"] .text-cyan-400    { color: #0e7490; }
+
+    @media (prefers-color-scheme: light) {
+        :root:not([data-theme]) .text-red-400     { color: #b91c1c; }
+        :root:not([data-theme]) .text-green-400   { color: #15803d; }
+        :root:not([data-theme]) .text-emerald-400 { color: #047857; }
+        :root:not([data-theme]) .text-teal-400    { color: #0f766e; }
+        :root:not([data-theme]) .text-orange-400  { color: #9a3412; }
+        :root:not([data-theme]) .text-amber-400   { color: #92400e; }
+        :root:not([data-theme]) .text-rose-400    { color: #be123c; }
+        :root:not([data-theme]) .text-pink-400    { color: #be185d; }
+        :root:not([data-theme]) .text-violet-400  { color: #6d28d9; }
+        :root:not([data-theme]) .text-blue-400    { color: #1d4ed8; }
+        :root:not([data-theme]) .text-sky-400     { color: #0369a1; }
+        :root:not([data-theme]) .text-cyan-400    { color: #0e7490; }
+    }
+}
+
+/*
  * Tytéž bledé odstíny, ale se zeslabením — „text-emerald-100/75".
  *
  * Přemapování výš míří na holé třídy, takže tuhle podobu minulo: `.text-emerald-100`

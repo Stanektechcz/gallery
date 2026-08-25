@@ -304,7 +304,7 @@ export default function AlbumEvent({ albumUuid }: { albumUuid: string }) {
                             </div>
                             <div>
                                 <p className="text-sm font-semibold text-[var(--color-text-primary)]">
-                                    Nalezeno {detected.count} médií z tohoto období
+                                    Z tohoto období nalezeno médií: {detected.count}
                                 </p>
                                 <p className="text-xs text-[var(--color-text-secondary)] mt-0.5 flex items-center gap-2">
                                     {detected.photo_count > 0 && <span className="flex items-center gap-1"><Camera size={10}/> {detected.photo_count} fotografií</span>}

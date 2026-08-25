@@ -1,4 +1,5 @@
 import AppLayout from '@/Layouts/AppLayout';
+import { media } from '@/lib/cestina';
 import { takenAtDate } from '@/lib/takenAt';
 import { Head, Link } from '@inertiajs/react';
 import axios from 'axios';
@@ -319,7 +320,7 @@ export default function MapIndex() {
                                             {new Date(selectedAlbum.event_date_start).toLocaleDateString('cs-CZ', { day: 'numeric', month: 'long', year: 'numeric' })}
                                         </p>
                                     )}
-                                    <p className="text-[10px] text-[var(--color-text-secondary)]">📸 {selectedAlbum.media_count} médií</p>
+                                    <p className="text-[10px] text-[var(--color-text-secondary)]">📸 {media(selectedAlbum.media_count)}</p>
                                     <div className="flex gap-2 pt-1">
                                         <Link href={`/albums/${selectedAlbum.uuid}`}
                                             className="flex-1 flex items-center justify-center gap-1.5 bg-[var(--color-accent)] text-[var(--color-accent-contrast)] text-xs py-1.5 rounded-lg hover:opacity-90"

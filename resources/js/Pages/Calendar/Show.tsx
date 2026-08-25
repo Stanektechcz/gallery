@@ -1,5 +1,6 @@
 import AppLayout from '@/Layouts/AppLayout';
 import CalendarEventEditor from '@/Components/CalendarEventEditor';
+import { media } from '@/lib/cestina';
 import EventReflection from '@/Components/EventReflection';
 import DateExperiencePanel, { DateExperience } from '@/Components/DateExperiencePanel';
 import MealPlanPanel from '@/Components/Recipes/MealPlanPanel';
@@ -109,7 +110,7 @@ export default function CalendarShow({ eventUuid }: { eventUuid:string }) {
             const response = await axios.get(`/api/v1/calendar/events/${eventUuid}/media-suggestions`);
             const found=response.data.candidates??[]; setCandidates(found); setChosen([]);
             setCaptureAlbumId(response.data.capture?.album?.id ?? captureAlbumId);
-            setNotice(found.length?`Našel jsem ${found.length} médií odpovídajících času a místu akce. Vyberte je níže v části Vzpomínky z akce.`:'V okolí akce zatím nebyla nalezena žádná nová média. Můžete je rovnou nahrát.');
+            setNotice(found.length?`Našel jsem ${media(found.length)} odpovídajících času a místu akce. Vyberte je níže v části Vzpomínky z akce.`:'V okolí akce zatím nebyla nalezena žádná nová média. Můžete je rovnou nahrát.');
         } catch (reason:any) { setError(reason.response?.data?.message ?? 'Vhodná média se nepodařilo vyhledat.'); }
     };
     const attachSelected = async () => {

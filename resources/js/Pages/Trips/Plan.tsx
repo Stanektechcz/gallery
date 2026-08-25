@@ -1,5 +1,7 @@
 import AppLayout from '@/Layouts/AppLayout';
 import TripBankFinancePanel from '@/Components/Banking/TripBankFinancePanel';
+// `media` je tu už pole médií cesty, tak pod jiným jménem.
+import { media as pocetMedii } from '@/lib/cestina';
 import MealPlanPanel from '@/Components/Recipes/MealPlanPanel';
 import TripReservationImportPanel from '@/Components/Trips/TripReservationImportPanel';
 import TripWatchlistPanel from '@/Components/Trips/TripWatchlistPanel';
@@ -277,7 +279,7 @@ function TripMemoryPanel({ trip }: { trip: Trip }) {
             if (!ids.length) { setMessage('V termínu cesty jsme v galerii nenašli další fotky.'); return; }
             await axios.post(`/api/v1/trips/${trip.id}/media`, { media_ids: ids });
             const items = await loadMedia(); setSelected(items.slice(0, 200).map(item => item.id));
-            setMessage(`Přiřazeno ${ids.length} médií z termínu cesty; prvních ${Math.min(items.length, 200)} je vybráno do alba.`);
+            setMessage(`Z termínu cesty přiřazeno médií: ${ids.length}; prvních ${Math.min(items.length, 200)} je vybráno do alba.`);
         } catch (error: any) { setMessage(error?.response?.data?.message ?? 'Fotky se nepodařilo přiřadit k cestě.'); }
         finally { setSuggesting(false); }
     };
@@ -295,7 +297,7 @@ function TripMemoryPanel({ trip }: { trip: Trip }) {
         </div>
         {open && <div className="mt-3 space-y-2">
             {recap && <div className="flex flex-wrap items-center gap-2 rounded-xl border border-emerald-400/25 bg-emerald-500/10 p-2 text-[10px] text-emerald-100">
-                <span className="mr-auto">Album „{recap.title}“ · {recap.media_count} médií · {recap.story_blocks_count} částí příběhu{recap.curation ? ` · ${recap.curation.backup.coverage_percent} % originálů v cloudu${recap.curation.quality.missing_preview ? ` · ${recap.curation.quality.missing_preview} náhledů k opravě` : ''}` : ''}</span>
+                <span className="mr-auto">Album „{recap.title}“ · {pocetMedii(recap.media_count)} · {recap.story_blocks_count} částí příběhu{recap.curation ? ` · ${recap.curation.backup.coverage_percent} % originálů v cloudu${recap.curation.quality.missing_preview ? ` · ${recap.curation.quality.missing_preview} náhledů k opravě` : ''}` : ''}</span>
                 <Link href={`/albums/${recap.uuid}`} className="rounded-lg border border-emerald-300/30 px-2 py-1">Výběr a bezpečí alba</Link>
             </div>}
             <input value={title} onChange={event => setTitle(event.target.value)} maxLength={160} className="min-h-9 w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-muted)] px-2 text-xs text-[var(--color-text-primary)]" placeholder="Název alba a vzpomínky"/>

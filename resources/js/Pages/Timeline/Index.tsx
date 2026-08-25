@@ -1,4 +1,4 @@
-import { polozky } from '@/lib/cestina';
+import { media, polozky } from '@/lib/cestina';
 import { previewUrl } from '@/lib/mediaUrl';
 import { BulkActionBar } from '@/Components/BulkActionBar';
 import AlbumSuggestionPanel, { type AlbumSuggestion } from '@/Components/AlbumSuggestionPanel';
@@ -48,7 +48,7 @@ const MediaCardComponent = memo(function MediaCardComponent({ item, size, select
             {dom && <div className="absolute inset-0" style={{ backgroundColor: dom }} />}
             <img src={thumbUrl} alt="" loading="lazy" decoding="async" fetchPriority="low" draggable={false} className="absolute inset-0 w-full h-full object-cover" />
             <div className={`absolute inset-0 transition-colors ${selected ? 'bg-[var(--color-accent)]/20' : 'bg-black/0 group-hover:bg-[var(--color-surface-muted)]'}`} />
-            {item.media_type === 'video' && !selected && <div className="absolute top-1.5 right-1.5 bg-black/60 rounded-full p-0.5"><Play size={9} className="text-[var(--color-text-primary)] fill-white" /></div>}
+            {item.media_type === 'video' && !selected && <div className="absolute top-1.5 right-1.5 bg-black/60 rounded-full p-0.5"><Play size={9} className="text-white fill-white" /></div>}
             {(item.stacks?.[0]?.items_count ?? 0) > 1 && !selected && <div className="absolute top-1.5 right-1.5 bg-black/70 rounded-full px-1.5 py-1 flex items-center gap-1 text-[9px] text-white" title="Seskupené fotografie"><Layers size={10} />{item.stacks![0].items_count}</div>}
             {item.is_favorite && !selected && <Heart size={11} className="absolute top-1.5 left-1.5 text-red-400 fill-red-400" />}
             <div className={`absolute top-1.5 left-1.5 w-6 h-6 rounded border-2 flex items-center justify-center transition-all ${selected ? 'bg-[var(--color-accent)] border-[var(--color-accent)]' : 'bg-black/45 border-white/70 opacity-75 md:opacity-0 md:group-hover:opacity-100'}`}
@@ -64,8 +64,8 @@ const MediaCardComponent = memo(function MediaCardComponent({ item, size, select
                         <Heart size={10} className={item.is_favorite ? 'text-red-400 fill-red-400' : 'text-[var(--color-text-primary)]'} />
                     </button>
                     <div className="flex gap-1">
-                        <button onClick={e => { e.stopPropagation(); onSlideshow(item.uuid); }} className="w-8 h-8 sm:w-6 sm:h-6 rounded-full bg-black/60 flex items-center justify-center hover:bg-black/80"><Maximize2 size={10} className="text-[var(--color-text-primary)]" /></button>
-                        <button onClick={e => { e.stopPropagation(); onTrash(item.uuid); }} className="w-8 h-8 sm:w-6 sm:h-6 rounded-full bg-black/60 flex items-center justify-center hover:bg-red-500/80"><Trash2 size={10} className="text-[var(--color-text-primary)]" /></button>
+                        <button onClick={e => { e.stopPropagation(); onSlideshow(item.uuid); }} className="w-8 h-8 sm:w-6 sm:h-6 rounded-full bg-black/60 flex items-center justify-center hover:bg-black/80"><Maximize2 size={10} className="text-white" /></button>
+                        <button onClick={e => { e.stopPropagation(); onTrash(item.uuid); }} className="w-8 h-8 sm:w-6 sm:h-6 rounded-full bg-black/60 flex items-center justify-center hover:bg-red-500/80"><Trash2 size={10} className="text-white" /></button>
                     </div>
                 </div>
             )}
@@ -509,7 +509,10 @@ export default function TimelineIndex() {
                                 <div key={group.date} className="px-2 pb-4 sm:px-4" style={{contentVisibility:'auto',containIntrinsicSize:'auto 420px'}}>
                                     <div className="py-2 flex items-center gap-2">
                                         <span className="text-xs font-medium text-[var(--color-text-secondary)]">{group.label}</span>
-                                        <span className="text-xs text-[var(--color-text-secondary)]/60">— {group.items.length} médií</span>
+                                        {/* Bez zeslabení na 60 %: druhotná barva už zeslabená
+                                            je a další průhlednost ji ve světlém motivu srazila
+                                            na 2,65:1. */}
+                                        <span className="text-xs text-[var(--color-text-secondary)]">— {media(group.items.length)}</span>
                                     </div>
                                     <div className="flex flex-wrap gap-0.5">
                                         {group.items.map(item => (

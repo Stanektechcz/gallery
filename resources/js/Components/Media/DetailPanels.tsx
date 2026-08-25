@@ -244,7 +244,7 @@ export function GpsMap({ lat, lng }: { lat: number; lng: number }) {
             {!ready && <div className="w-full h-full bg-[var(--color-bg-secondary)] animate-pulse rounded-lg"/>}
             <div ref={mapRef} className="w-full h-full"/>
             <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-[var(--color-surface-muted)]">
-                <span className="text-[10px] text-white bg-black/50 px-2 py-0.5 rounded">Otevřít mapy ↗</span>
+                <span className="text-[10px] text-white bg-black/65 px-2 py-0.5 rounded">Otevřít mapy ↗</span>
             </div>
         </a>
     );

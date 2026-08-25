@@ -424,7 +424,7 @@ export default function PlacesIndex() {
                                         : <div className="w-full h-full flex items-center justify-center text-4xl opacity-20">{TYPES[place.type]?.emoji ?? '📍'}</div>
                                     }
                                     {/* Type badge */}
-                                    <div className={`absolute top-2 bg-black/50 backdrop-blur-sm text-white text-[10px] px-1.5 py-0.5 rounded-full ${selectedPlaceIds.includes(place.id) ? 'left-10' : 'left-2'}`}>
+                                    <div className={`absolute top-2 bg-black/65 backdrop-blur-sm text-white text-[10px] px-1.5 py-0.5 rounded-full ${selectedPlaceIds.includes(place.id) ? 'left-10' : 'left-2'}`}>
                                         {TYPES[place.type]?.emoji} {TYPES[place.type]?.label}
                                     </div>
                                     {selectedPlaceIds.includes(place.id) && <span className="absolute left-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-sky-500 text-xs font-bold text-white">{selectedPlaceIds.indexOf(place.id) + 1}</span>}

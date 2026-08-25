@@ -1,4 +1,5 @@
 import LocationPicker, { type LocationValue } from '@/Components/LocationPicker';
+import { media } from '@/lib/cestina';
 import axios from 'axios';
 import {
     Archive, ArrowRight, Calendar, Crosshair, Download,
@@ -66,7 +67,7 @@ export function BulkActionBar({
                 uuids: selectedUuids,
                 ...extra,
             });
-            onDone(`Hotovo: ${r.data.processed} médií`);
+            onDone(`Hotovo: ${media(r.data.processed)}`);
         } catch (e: any) {
             alert(e?.response?.data?.message ?? 'Chyba při hromadné operaci');
         } finally {
@@ -335,7 +336,7 @@ export function BulkActionBar({
                             if (a.key === 'archive') { bulk('archive'); return; }
                             if (a.key === 'dl')      { handleDownload(); return; }
                             if (a.key === 'trash') {
-                                if (!confirm(`Přesunout ${count} médií do koše?`)) return;
+                                if (!confirm(`Přesunout ${media(count)} do koše?`)) return;
                                 bulk('trash'); return;
                             }
                             if (a.panel) openPanel(a.key as Panel);
