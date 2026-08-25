@@ -1,3 +1,4 @@
+import DeleteButton from '@/Components/DeleteButton';
 import Panel, { PanelGrid, Stat } from '@/Components/Panel';
 import AppLayout from '@/Layouts/AppLayout';
 import { uploadManager, waitForUploads } from '@/lib/uploadManager';
@@ -5,7 +6,7 @@ import { Head } from '@inertiajs/react';
 import axios from 'axios';
 import {
     AlertTriangle, ArrowRightLeft, BarChart3, CalendarDays, Check, Download, ListPlus, Pencil, PieChart,
-    PiggyBank, Plus, Receipt, Repeat, Scale, Search, Tags, TrendingDown, TrendingUp, Trash2, Upload, Wallet, X,
+    PiggyBank, Plus, Receipt, Repeat, Scale, Search, Tags, TrendingDown, TrendingUp, Upload, Wallet, X,
 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import StatementImport from './StatementImport';
@@ -510,11 +511,13 @@ function SettlementPanel({ budget, settlement, combined, history, onChanged }: {
                                     {zaznam.from && zaznam.to ? `${zaznam.from} → ${zaznam.to}` : 'vyrovnáno'}
                                 </span>
                                 <span className="tabular-nums">{money(zaznam.amount, zaznam.currency)}</span>
-                                <button type="button" title="Vzít uzávěrku zpět"
-                                    onClick={async () => { await axios.delete(`/api/v1/rozpocty/${budget.uuid}/vyrovnani/${zaznam.uuid}`); onChanged(); }}
-                                    className="rounded p-0.5 opacity-0 transition-opacity hover:text-red-300 focus:opacity-100 group-hover:opacity-100">
+                                <DeleteButton
+                                    label={`Vzít zpět uzávěrku z ${datum(zaznam.settled_through)}`}
+                                    confirmLabel="Vzít zpět"
+                                    className="opacity-0 transition-opacity focus:opacity-100 group-hover:opacity-100"
+                                    onDelete={async () => { await axios.delete(`/api/v1/rozpocty/${budget.uuid}/vyrovnani/${zaznam.uuid}`); onChanged(); }}>
                                     <X size={11}/>
-                                </button>
+                                </DeleteButton>
                             </div>
                         ))}
                     </div>
@@ -813,11 +816,9 @@ function Categories({ budget, categories, onChanged }: { budget: Overview['budge
                             <span className={`w-12 shrink-0 text-right text-[11px] ${(category.used_percent ?? 0) > 100 ? 'text-red-300' : 'text-[var(--color-text-secondary)]'}`}>
                                 {category.used_percent !== null ? `${category.used_percent} %` : '—'}
                             </span>
-                            <button type="button" title="Smazat kategorii"
-                                onClick={async () => { await axios.delete(`/api/v1/rozpocty/${budget.uuid}/kategorie/${category.id}`); onChanged(); }}
-                                className="rounded p-1 text-[var(--color-text-secondary)] hover:text-red-300">
-                                <Trash2 size={13}/>
-                            </button>
+                            <DeleteButton
+                                label={`Smazat kategorii ${category.name}`}
+                                onDelete={async () => { await axios.delete(`/api/v1/rozpocty/${budget.uuid}/kategorie/${category.id}`); onChanged(); }}/>
                         </div>
                     </div>
                 ))}
@@ -1133,11 +1134,10 @@ function Entries({ budget, categories, members, total, onChanged }: {
                                 className="flex h-8 w-8 shrink-0 items-center justify-center rounded text-[var(--color-text-secondary)] transition-opacity hover:text-[var(--color-accent)] focus:opacity-100 sm:opacity-0 sm:group-hover:opacity-100">
                                 <Pencil size={14}/>
                             </button>
-                            <button type="button" title="Smazat"
-                                onClick={async () => { await axios.delete(`/api/v1/rozpocty/${budget.uuid}/polozky/${entry.uuid}`); refresh(); }}
-                                className="flex h-8 w-8 shrink-0 items-center justify-center rounded text-[var(--color-text-secondary)] transition-opacity hover:text-red-300 focus:opacity-100 sm:opacity-0 sm:group-hover:opacity-100">
-                                <Trash2 size={14}/>
-                            </button>
+                            <DeleteButton
+                                label={`Smazat položku ${entry.note || money(entry.amount, entry.currency)} z ${den(entry.spent_on)}`}
+                                className="transition-opacity focus:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+                                onDelete={async () => { await axios.delete(`/api/v1/rozpocty/${budget.uuid}/polozky/${entry.uuid}`); refresh(); }}/>
                         </div>
                 ))}
 
