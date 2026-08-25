@@ -1,5 +1,7 @@
 import AppLayout from '@/Layouts/AppLayout';
-import { fotky, pocet } from '@/lib/cestina';
+import { hlaska } from '@/Components/Hlasky';
+import { fotky, pocet, tvar } from '@/lib/cestina';
+import { sdilenyGet } from '@/lib/sdilenyDotaz';
 import { Head, router } from '@inertiajs/react';
 import PlaceReviewPanel from '@/Components/PlaceReviewPanel';
 import PlaceNotesPanel from '@/Components/Places/PlaceNotesPanel';
@@ -82,14 +84,22 @@ export default function PlaceShow() {
     // Load place + media + albums in parallel
     useEffect(() => {
         if (!placeId) return;
-        Promise.all([
+        // allSettled, ne all: fotky a alba jsou doplněk k místu, ne podmínka jeho
+        // existence. S `all` stačilo, aby spadl jeden z nich, a nenastavilo se nic —
+        // stránka pak hlásila „Místo nebylo nalezeno" u místa, které server v pořádku
+        // vrátil. Chybějící doplněk se projeví jako prázdný seznam, ne jako chybějící místo.
+        Promise.allSettled([
             axios.get(`/api/v1/places/${placeId}`),
-            axios.get(`/api/v1/places/${placeId}/media`),
+            // Tentýž seznam chce i panel s hodnocením níž na stránce — sdílený dotaz.
+            sdilenyGet<any[]>(`mistoFotky:${placeId}`, `/api/v1/places/${placeId}/media`),
             axios.get(`/api/v1/places/${placeId}/albums`),
-        ]).then(([pR, mR, aR]) => {
+        ]).then(([misto, fotky, alba]) => {
+            if (misto.status !== 'fulfilled') return;
+
+            const pR = misto.value;
+            setMedia(fotky.status === 'fulfilled' ? fotky.value ?? [] : []);
+            setAlbums(alba.status === 'fulfilled' ? alba.value.data ?? [] : []);
             setPlace(pR.data);
-            setMedia(mR.data ?? []);
-            setAlbums(aR.data ?? []);
             setEditForm({
                 lifecycle_status: pR.data.lifecycle_status ?? 'idea',
                 description:   pR.data.description ?? '',
@@ -163,12 +173,14 @@ export default function PlaceShow() {
         try {
             const r = await axios.post(`/api/v1/places/${placeId}/auto-link`);
             if (r.data.linked > 0) {
-                const mR = await axios.get(`/api/v1/places/${placeId}/media`);
+                // `cerstve`: právě přibyly fotky, takže se odpověď z doby před tím nesmí půjčit.
+                const mR = await sdilenyGet<any[]>(`mistoFotky:${placeId}`, `/api/v1/places/${placeId}/media`, { cerstve: true });
                 const pR = await axios.get(`/api/v1/places/${placeId}`);
-                setMedia(mR.data ?? []); setPlace(pR.data);
-                alert(`Propojeno ${r.data.linked} nových fotek!`);
+                setMedia(mR ?? []); setPlace(pR.data);
+                // Mění se i příčestí: jedna je propojena, dvě propojeny, pět propojeno.
+                hlaska(`${tvar(r.data.linked, 'Propojena', 'Propojeny', 'Propojeno')} ${pocet(r.data.linked, 'nová fotka', 'nové fotky', 'nových fotek')}.`, 'uspech');
             } else {
-                alert('Žádné nové fotky v GPS poloměru nebyly nalezeny.');
+                hlaska('Žádné nové fotky v GPS poloměru nebyly nalezeny.');
             }
         } finally { setAutoLinking(false); }
     };

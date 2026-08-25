@@ -1,3 +1,4 @@
+import { sdilenyGet } from '@/lib/sdilenyDotaz';
 import UploadZone from '@/Components/UploadZone';
 import ContentShareButton from '@/Components/ContentShareButton';
 import axios from 'axios';
@@ -43,7 +44,9 @@ export default function PlaceReviewPanel({placeId,placeName}:{placeId:number;pla
     const [filters,setFilters]=useState({q:'',context:'',min_rating:''}); const [uploadAlbumId,setUploadAlbumId]=useState<number|null>(null); const [showUpload,setShowUpload]=useState(false);
     const [returnAt,setReturnAt]=useState(nextDateEvening); const [returnPlanning,setReturnPlanning]=useState(false); const [plannedEvent,setPlannedEvent]=useState<{uuid:string;starts_at?:string}|null>(null);
     const load=async()=>{try{const response=await axios.get(`/api/v1/places/${placeId}/reviews`,{params:{q:filters.q||undefined,context:filters.context||undefined,min_rating:filters.min_rating||undefined}});setData(response.data);setUploadAlbumId(response.data.review_album?.id??null);}catch(error:any){setMessage(error?.response?.data?.message??'Hodnocení podniku se nepodařilo načíst.');}finally{setLoading(false);}};
-    const loadMedia=()=>axios.get(`/api/v1/places/${placeId}/media`).then(response=>setMedia(response.data??[])).catch(()=>setMedia([]));
+    // Tentýž seznam si při načtení bere i stránka místa nad tímhle panelem. Sdílený dotaz
+    // je spojí do jednoho stažení; obojí jen čte, takže se nemá co rozejít.
+    const loadMedia=()=>sdilenyGet<any[]>(`mistoFotky:${placeId}`,`/api/v1/places/${placeId}/media`).then(fotky=>setMedia(fotky??[])).catch(()=>setMedia([]));
     useEffect(()=>{void load();void loadMedia();},[placeId]);
     useEffect(()=>{if(!editorOpen||editingUuid)return;window.localStorage.setItem(storageKey,JSON.stringify(form));},[form,editorOpen,editingUuid,storageKey]);
     const openNew=()=>{let next=blankForm();try{const stored=window.localStorage.getItem(storageKey);if(stored)next={...next,...JSON.parse(stored)};}catch{}setForm(next);setEditingUuid(null);setEditorOpen(true);setMessage('');};

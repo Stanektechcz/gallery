@@ -168,14 +168,17 @@ class PlaceController extends Controller
 
         $albums = Album::where('gallery_space_id', $space->id)
             ->whereHas('places', fn($q) => $q->where('places.id', $place->id))
-            ->withCount('mediaItems')
+            // Album má vztah `media`, ne `mediaItems` — to jméno nese DuplicateGroup,
+            // SharedLink a GallerySpace. Volání neexistujícího vztahu shodilo celý
+            // požadavek na 500 a stránka místa pak tvrdila, že místo neexistuje.
+            ->withCount('media')
             ->get(['id', 'uuid', 'title', 'cover_path', 'created_at'])
             ->map(fn($a) => [
                 'id'          => $a->id,
                 'uuid'        => $a->uuid,
                 'title'       => $a->title,
                 'cover_thumb' => $a->cover_path,
-                'media_count' => $a->media_items_count,
+                'media_count' => $a->media_count,
             ]);
 
         return response()->json($albums);
