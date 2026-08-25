@@ -2,7 +2,8 @@ import DeleteButton from '@/Components/DeleteButton';
 import { hlaska } from '@/Components/Hlasky';
 import Panel, { PanelGrid, Stat } from '@/Components/Panel';
 import SekceNav, { type Sekce as SekceTyp } from '@/Components/SekceNav';
-import { dny } from '@/lib/cestina';
+import { dny, polozky as pocetPolozek } from '@/lib/cestina';
+import { naSirokeObrazovce } from '@/lib/zobrazeni';
 import AppLayout from '@/Layouts/AppLayout';
 import { uploadManager, waitForUploads } from '@/lib/uploadManager';
 import { Head } from '@inertiajs/react';
@@ -1154,6 +1155,11 @@ function Entries({ budget, categories, members, total, onChanged }: {
     const [editing, setEditing] = useState<string | null>(null);
     const [filter, setFilter] = useState({ q: '', kind: '', category: '', month: '' });
 
+    // Na monitoru je pro formulář místo vedle seznamu, na telefonu ne — tam by zabral
+    // celou první obrazovku. Rozhoduje se jednou při prvním vykreslení; kdo si ho otevře
+    // nebo zavře, má přednost.
+    const [zapisujeSe, setZapisujeSe] = useState(naSirokeObrazovce);
+
     /**
      * Načte stránku seznamu.
      *
@@ -1246,7 +1252,7 @@ function Entries({ budget, categories, members, total, onChanged }: {
             description={total > 0
                 ? filtrovano
                     ? `Vyhovuje ${found} z ${total} položek.`
-                    : `Celkem ${total} ${total === 1 ? 'položka' : total <= 4 ? 'položky' : 'položek'}.`
+                    : `Celkem ${pocetPolozek(total)}.`
                 : undefined}
             actions={<>
                 <button type="button" onClick={() => setImporting(v => ! v)}
@@ -1270,9 +1276,23 @@ function Entries({ budget, categories, members, total, onChanged }: {
                     onDone={() => { setImporting(false); refresh(); }} onCancel={() => setImporting(false)}/>
             )}
 
+            {/* Zápis je sbalený, dokud ho člověk nechce.
+
+                Rozbalený zabíral i s účtenkou a dělením přes osm set bodů a tlačil první
+                položku pod okraj obrazovky — na telefonu se tak seznam otevřel formulářem
+                a k tomu, co v rozpočtu je, se člověk musel doscrollovat. Přitom číst se
+                chodí častěji než zapisovat. Po zapsání zůstává otevřený, protože kdo zapíše
+                jednu položku, zapisuje obvykle rovnou tři. */}
+            {! zapisujeSe && (
+                <button type="button" onClick={() => setZapisujeSe(true)}
+                    className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-dashed border-[var(--color-border)] text-sm font-medium text-[var(--color-text-secondary)] transition-colors hover:border-[var(--color-accent)] hover:text-[var(--color-text-primary)]">
+                    <Plus size={16}/> Zapsat položku
+                </button>
+            )}
+
             {/* Zápis má vlastní pozadí, aby bylo poznat, kde končí formulář a začíná
                 výpis. Bez toho splyne jedenáct polí a dvacet řádků v jednu plochu. */}
-            <div className="grid gap-2 rounded-xl bg-[var(--color-bg-primary)]/60 p-3 sm:grid-cols-2 lg:grid-cols-6">
+            <div className={`${zapisujeSe ? 'grid' : 'hidden'} gap-2 rounded-xl bg-[var(--color-bg-primary)]/60 p-3 sm:grid-cols-2 lg:grid-cols-6`}>
                 <select value={form.kind} onChange={e => setForm(f => ({ ...f, kind: e.target.value }))} className={FIELD}>
                     <option value="expense">Výdaj</option>
                     <option value="income">Příjem</option>
@@ -1290,7 +1310,11 @@ function Entries({ budget, categories, members, total, onChanged }: {
                     className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg bg-[var(--color-accent)] px-4 text-sm font-medium text-[var(--color-accent-contrast)] disabled:opacity-50">
                     <Plus size={14}/> Zapsat
                 </button>
-                <input value={form.note} onChange={e => setForm(f => ({ ...f, note: e.target.value }))} placeholder="Poznámka" className={`${FIELD} lg:col-span-5`}/>
+                <input value={form.note} onChange={e => setForm(f => ({ ...f, note: e.target.value }))} placeholder="Poznámka" className={`${FIELD} lg:col-span-4`}/>
+                <button type="button" onClick={() => setZapisujeSe(false)}
+                    className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg border border-[var(--color-border)] px-3 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]">
+                    <X size={14}/> Sbalit
+                </button>
                 <label className="flex items-center gap-2 text-xs text-[var(--color-text-secondary)]">
                     <input type="checkbox" checked={form.is_recurring} onChange={e => setForm(f => ({ ...f, is_recurring: e.target.checked }))}/>
                     Pravidelné
