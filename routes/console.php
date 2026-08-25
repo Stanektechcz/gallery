@@ -45,6 +45,13 @@ Schedule::command('gallery:money-request-reminders --no-interaction')
     ->withoutOverlapping()
     ->name('money-request-reminders');
 
+// Docházející rozpočet a přetečené kategorie. Příkaz si sám hlídá denní dobu i to, aby
+// tutéž zprávu neposlal dvakrát — plánovač ho proto může volat každou hodinu.
+Schedule::command('gallery:budget-alerts --no-interaction')
+    ->hourly()
+    ->withoutOverlapping()
+    ->name('budget-alerts');
+
 // Pravidelné položky rozpočtu na nový měsíc. Prvního ráno, jinak by nájem chyběl
 // v přehledu právě ve dnech, kdy se člověk dívá, jestli mu vyjde měsíc.
 Schedule::command('gallery:recurring-entries --apply --no-interaction')
