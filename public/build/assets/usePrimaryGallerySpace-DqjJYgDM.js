@@ -1,0 +1,1 @@
+import{a as e,n as t}from"./jsx-runtime-n5LQ9ujS.js";import{B as n,H as r}from"./app-Dm2niGYF.js";var i=e(t(),1);function a(){let e=n().props.space??null,t=(0,i.useCallback)(()=>{r.reload({only:[`space`]})},[]);return{space:e,spaceId:e?.id,loading:!1,error:e?``:`Nejprve vytvořte nebo přijměte pozvánku do společného prostoru.`,reload:t}}export{a as t};

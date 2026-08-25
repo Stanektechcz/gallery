@@ -59,12 +59,25 @@ const FLOW_LABEL: Record<Flow, string> = {
     none: 'Nic', spotting: 'Špinění', light: 'Slabá', medium: 'Střední', heavy: 'Silná',
 };
 
+/**
+ * Síla krvácení barvou buňky — a k ní text, který na ní jde přečíst.
+ *
+ * Dřív se intenzita dělala průhledností jedné růžové (30 %, 55 %, 80 %, plná) a text
+ * byl vždycky bílý. Ve světlém motivu z toho vyšlo bílé písmo na skoro bílém podkladu:
+ * změřeno 1,4:1 u slabého krvácení a 3,2:1 u středního, tedy hluboko pod čtyřmi a půl,
+ * které se považují za čitelné. V tmavém motivu totéž fungovalo, protože se průhledná
+ * růžová skládala přes tmavé pozadí — návrh počítal jen s ním.
+ *
+ * Odstíny jsou proto plné, ne průhledné: složí se stejně v obou motivech, takže je
+ * kontrast předvídatelný. Světlé mají tmavý text, nejtmavší bílý. Změřené poměry:
+ * 12,8 / 9,6 / 4,9 / 6,3.
+ */
 const FLOW_COLOR: Record<Flow, string> = {
-    none: 'bg-[var(--color-bg-primary)]',
-    spotting: 'bg-rose-400/30',
-    light: 'bg-rose-400/55',
-    medium: 'bg-rose-500/80',
-    heavy: 'bg-rose-600',
+    none: 'bg-[var(--color-bg-primary)] text-[var(--color-text-primary)]',
+    spotting: 'bg-rose-200 text-[#16151f]',
+    light: 'bg-rose-300 text-[#16151f]',
+    medium: 'bg-rose-500 text-[#16151f]',
+    heavy: 'bg-rose-700 text-white',
 };
 
 const PHASE_LABEL: Record<string, string> = {
@@ -367,7 +380,11 @@ function Calendar({ grid, month, byDay, forecast, onMonth, onPick, active }: {
                                 zaznam?.flow && zaznam.flow !== 'none'
                                     // Předvyplněný den je bledší a tečkovaný: je to odhad,
                                     // dokud se ho někdo nedotkne.
-                                    ? `${FLOW_COLOR[zaznam.flow]} text-white ${zaznam.is_predicted ? 'border-dashed border-white/70 opacity-60' : 'border-rose-300/60'}`
+                                    // Předvyplněný den poznat jde i bez ztmavení: má tečkovaný
+                                    // okraj a v buňce stojí „men?" místo „men". Původní
+                                    // opacity-60 srážela kontrast pod čitelnou hranici právě
+                                    // u dní, které si člověk přišel zkontrolovat.
+                                    ? `${FLOW_COLOR[zaznam.flow]} ${zaznam.is_predicted ? 'border-dashed border-current/50' : 'border-rose-300/60'}`
                                     : `text-[var(--color-text-primary)] hover:brightness-125 ${
                                         PHASE_HINT[forecast.get(day) ?? '']
                                             ?? 'bg-[var(--color-bg-primary)] border-[var(--color-border)] text-[var(--color-text-secondary)]'
@@ -587,7 +604,11 @@ function Fertility({ forecast }: {
                 se kterou se sem chodí, a odečítat ji z výšky sloupců je práce navíc. */}
             <div className="mb-3 grid grid-cols-2 gap-2">
                 <div className="rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-3 py-2">
-                    <p className="text-[10px] uppercase tracking-wide text-emerald-200/80">Plodné období</p>
+                    {/* Bez modifikátoru průhlednosti schválně: app.css přemapovává světlé
+                        odstíny na čitelné jen u holých tříd, takže „text-emerald-200/80"
+                        by ve světlém motivu zůstalo bledě zelené na bledě zeleném —
+                        změřeno 1,13:1. */}
+                    <p className="text-[10px] uppercase tracking-wide text-emerald-200">Plodné období</p>
                     <p className="mt-0.5 text-sm font-semibold text-[var(--color-text-primary)]">
                         {plodneOd ? `${den(plodneOd)} – ${den(plodneDo!)}` : 'mimo okno'}
                     </p>
@@ -596,7 +617,7 @@ function Fertility({ forecast }: {
                     )}
                 </div>
                 <div className="rounded-xl border border-emerald-400/50 bg-emerald-500/20 px-3 py-2">
-                    <p className="text-[10px] uppercase tracking-wide text-emerald-100/90">Nejplodnější den</p>
+                    <p className="text-[10px] uppercase tracking-wide text-emerald-100">Nejplodnější den</p>
                     <p className="mt-0.5 text-sm font-semibold text-[var(--color-text-primary)]">
                         {vrchol ? den(vrchol.day) : '—'}
                     </p>

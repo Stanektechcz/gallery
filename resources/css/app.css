@@ -329,6 +329,150 @@
 }
 
 /*
+ * Tytéž bledé odstíny, ale se zeslabením — „text-emerald-100/75".
+ *
+ * Přemapování výš míří na holé třídy, takže tuhle podobu minulo: `.text-emerald-100`
+ * nesedí na `text-emerald-100/75`, protože je to jiné jméno třídy. Ve světlém motivu
+ * z toho zbyla bledá zelená na bledě zeleném podkladu — změřeno 1,03:1 na plánování a
+ * 1,07:1 ve watchlistu, což není špatně čitelné, to je neviditelné.
+ *
+ * V aplikaci je takových tříd čtyřicet. Atributový selektor je bere všechny naráz.
+ *
+ * Má to jednu mez, kterou je lepší mít napsanou než objevit: selektor sedí i na
+ * `hover:text-teal-100/70`, protože hledá jen kus jména. Takové třídě by barvu nastavil
+ * natrvalo a stav při najetí by zmizel. Ověřeno, že ani jedna ze čtyřiceti dnešních
+ * tříd za modifikátorem nestojí — kdo takovou přidá, ať zúží selektor na
+ * `[class^="text-teal-100/"], [class*=" text-teal-100/"]`, což modifikátory vyloučí.
+ *
+ * Zeslabení se tím ztrácí, a to je záměr: u barvy, která je ve světlém motivu potřeba
+ * ztmavit, aby vůbec šla přečíst, je průhlednost navíc přesně to, co jí chybět nemá.
+ */
+@layer utilities {
+    :root[data-theme="light"] [class*="text-amber-100/"],
+    :root[data-theme="light"] [class*="text-amber-200/"],
+    :root[data-theme="light"] [class*="text-amber-300/"],
+    :root[data-theme="light"] [class*="text-yellow-100/"],
+    :root[data-theme="light"] [class*="text-yellow-200/"],
+    :root[data-theme="light"] [class*="text-yellow-300/"]   { color: #92400e; }
+    :root[data-theme="light"] [class*="text-orange-100/"],
+    :root[data-theme="light"] [class*="text-orange-200/"],
+    :root[data-theme="light"] [class*="text-orange-300/"]   { color: #9a3412; }
+    :root[data-theme="light"] [class*="text-emerald-100/"],
+    :root[data-theme="light"] [class*="text-emerald-200/"],
+    :root[data-theme="light"] [class*="text-emerald-300/"]  { color: #047857; }
+    :root[data-theme="light"] [class*="text-green-100/"],
+    :root[data-theme="light"] [class*="text-green-200/"],
+    :root[data-theme="light"] [class*="text-green-300/"]    { color: #15803d; }
+    :root[data-theme="light"] [class*="text-teal-100/"],
+    :root[data-theme="light"] [class*="text-teal-200/"],
+    :root[data-theme="light"] [class*="text-teal-300/"]     { color: #0f766e; }
+    :root[data-theme="light"] [class*="text-red-100/"],
+    :root[data-theme="light"] [class*="text-red-200/"],
+    :root[data-theme="light"] [class*="text-red-300/"]      { color: #b91c1c; }
+    :root[data-theme="light"] [class*="text-rose-100/"],
+    :root[data-theme="light"] [class*="text-rose-200/"],
+    :root[data-theme="light"] [class*="text-rose-300/"]     { color: #be123c; }
+    :root[data-theme="light"] [class*="text-pink-100/"],
+    :root[data-theme="light"] [class*="text-pink-200/"],
+    :root[data-theme="light"] [class*="text-pink-300/"]     { color: #be185d; }
+    :root[data-theme="light"] [class*="text-fuchsia-100/"],
+    :root[data-theme="light"] [class*="text-fuchsia-200/"],
+    :root[data-theme="light"] [class*="text-fuchsia-300/"]  { color: #a21caf; }
+    :root[data-theme="light"] [class*="text-violet-100/"],
+    :root[data-theme="light"] [class*="text-violet-200/"],
+    :root[data-theme="light"] [class*="text-violet-300/"]   { color: #6d28d9; }
+    :root[data-theme="light"] [class*="text-sky-100/"],
+    :root[data-theme="light"] [class*="text-sky-200/"],
+    :root[data-theme="light"] [class*="text-sky-300/"]      { color: #0369a1; }
+
+    @media (prefers-color-scheme: light) {
+        :root:not([data-theme]) [class*="text-amber-100/"],
+        :root:not([data-theme]) [class*="text-amber-200/"],
+        :root:not([data-theme]) [class*="text-amber-300/"],
+        :root:not([data-theme]) [class*="text-yellow-100/"],
+        :root:not([data-theme]) [class*="text-yellow-200/"],
+        :root:not([data-theme]) [class*="text-yellow-300/"]   { color: #92400e; }
+        :root:not([data-theme]) [class*="text-orange-100/"],
+        :root:not([data-theme]) [class*="text-orange-200/"],
+        :root:not([data-theme]) [class*="text-orange-300/"]   { color: #9a3412; }
+        :root:not([data-theme]) [class*="text-emerald-100/"],
+        :root:not([data-theme]) [class*="text-emerald-200/"],
+        :root:not([data-theme]) [class*="text-emerald-300/"]  { color: #047857; }
+        :root:not([data-theme]) [class*="text-green-100/"],
+        :root:not([data-theme]) [class*="text-green-200/"],
+        :root:not([data-theme]) [class*="text-green-300/"]    { color: #15803d; }
+        :root:not([data-theme]) [class*="text-teal-100/"],
+        :root:not([data-theme]) [class*="text-teal-200/"],
+        :root:not([data-theme]) [class*="text-teal-300/"]     { color: #0f766e; }
+        :root:not([data-theme]) [class*="text-red-100/"],
+        :root:not([data-theme]) [class*="text-red-200/"],
+        :root:not([data-theme]) [class*="text-red-300/"]      { color: #b91c1c; }
+        :root:not([data-theme]) [class*="text-rose-100/"],
+        :root:not([data-theme]) [class*="text-rose-200/"],
+        :root:not([data-theme]) [class*="text-rose-300/"]     { color: #be123c; }
+        :root:not([data-theme]) [class*="text-pink-100/"],
+        :root:not([data-theme]) [class*="text-pink-200/"],
+        :root:not([data-theme]) [class*="text-pink-300/"]     { color: #be185d; }
+        :root:not([data-theme]) [class*="text-fuchsia-100/"],
+        :root:not([data-theme]) [class*="text-fuchsia-200/"],
+        :root:not([data-theme]) [class*="text-fuchsia-300/"]  { color: #a21caf; }
+        :root:not([data-theme]) [class*="text-violet-100/"],
+        :root:not([data-theme]) [class*="text-violet-200/"],
+        :root:not([data-theme]) [class*="text-violet-300/"]   { color: #6d28d9; }
+        :root:not([data-theme]) [class*="text-sky-100/"],
+        :root:not([data-theme]) [class*="text-sky-200/"],
+        :root:not([data-theme]) [class*="text-sky-300/"]      { color: #0369a1; }
+    }
+}
+
+/*
+ * Bílý text na barevném tlačítku ve světlém motivu.
+ *
+ * Vedle bledých odstínů výš má světlý motiv druhý problém, opačný: plná barva odstínu
+ * 500 je pro bílé písmo moc světlá. Změřeno na tlačítkách, která tam doopravdy jsou —
+ * „Sdílet dnešní stav" 2,49:1, „Přidat výdaj" 2,13:1, „Vygenerovat randíčko" 1,08:1 —
+ * proti čtyřem a půl, které se považují za čitelné. V tmavém motivu je to v pořádku,
+ * protože tam bílá na sytější barvě nekonkuruje světlému pozadí stránky.
+ *
+ * Takových dvojic je v aplikaci šestaosmdesát. Ztmavuje se proto tady a ne v každé
+ * z nich; podmínka `.text-white` drží zásah u textu — pruhy, tečky a výplně grafů,
+ * které tutéž barvu používají jako plochu, zůstávají světlé.
+ *
+ * Odstín je u každé barvy ten nejsvětlejší, který s bílou projde — u fialové stačí 600,
+ * u tyrkysové až 700. Vybráno měřením, ne odhadem.
+ */
+@layer utilities {
+    :root[data-theme="light"] .text-white.bg-violet-500  { background-color: #7c3aed; }
+    :root[data-theme="light"] .text-white.bg-red-500     { background-color: #dc2626; }
+    :root[data-theme="light"] .text-white.bg-pink-500    { background-color: #db2777; }
+    :root[data-theme="light"] .text-white.bg-rose-500    { background-color: #e11d48; }
+    :root[data-theme="light"] .text-white.bg-fuchsia-500 { background-color: #c026d3; }
+    :root[data-theme="light"] .text-white.bg-emerald-500 { background-color: #047857; }
+    :root[data-theme="light"] .text-white.bg-orange-500  { background-color: #c2410c; }
+    :root[data-theme="light"] .text-white.bg-amber-500   { background-color: #b45309; }
+    :root[data-theme="light"] .text-white.bg-sky-500     { background-color: #0369a1; }
+    :root[data-theme="light"] .text-white.bg-teal-500    { background-color: #0f766e; }
+    :root[data-theme="light"] .text-white.bg-green-500   { background-color: #15803d; }
+
+    /* A totéž, když si nikdo motiv nevybral a řídí se podle systému. Bez téhle media
+       query by `:root:not([data-theme])` ztmavovalo tlačítka i v tmavém motivu, kde je
+       světlejší odstín správně. */
+    @media (prefers-color-scheme: light) {
+        :root:not([data-theme]) .text-white.bg-violet-500  { background-color: #7c3aed; }
+        :root:not([data-theme]) .text-white.bg-red-500     { background-color: #dc2626; }
+        :root:not([data-theme]) .text-white.bg-pink-500    { background-color: #db2777; }
+        :root:not([data-theme]) .text-white.bg-rose-500    { background-color: #e11d48; }
+        :root:not([data-theme]) .text-white.bg-fuchsia-500 { background-color: #c026d3; }
+        :root:not([data-theme]) .text-white.bg-emerald-500 { background-color: #047857; }
+        :root:not([data-theme]) .text-white.bg-orange-500  { background-color: #c2410c; }
+        :root:not([data-theme]) .text-white.bg-amber-500   { background-color: #b45309; }
+        :root:not([data-theme]) .text-white.bg-sky-500     { background-color: #0369a1; }
+        :root:not([data-theme]) .text-white.bg-teal-500    { background-color: #0f766e; }
+        :root:not([data-theme]) .text-white.bg-green-500   { background-color: #15803d; }
+    }
+}
+
+/*
  | Interface density. Everything in this app sizes from rem, so moving the root font
  | size moves text and spacing together — one lever instead of a parallel scale.
  | "comfortable" is the default and therefore carries no attribute.
