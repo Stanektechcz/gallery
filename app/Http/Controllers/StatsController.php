@@ -29,7 +29,10 @@ class StatsController extends Controller
         $total   = (clone $base)->count();
         $photos  = (clone $base)->where('media_type', 'photo')->count();
         $videos  = (clone $base)->where('media_type', 'video')->count();
-        $withGps = (clone $base)->whereNotNull('latitude')->count();
+        // Obě souřadnice, ne jen šířku. Hledání i mapa vyžadují obojí, takže se šířkou
+        // bez délky se médium počítalo do „S GPS", ale filtr „S polohou" ho nenašel a na
+        // mapě nebylo — statistika slibovala něco, co se pak nedalo otevřít.
+        $withGps = (clone $base)->whereNotNull('latitude')->whereNotNull('longitude')->count();
         $totalSize = (clone $base)->sum('size_bytes');
         $albums  = Album::where('gallery_space_id', $space->id)->whereNull('deleted_at')->count();
 

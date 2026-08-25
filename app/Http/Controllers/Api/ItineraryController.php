@@ -176,6 +176,10 @@ class ItineraryController extends Controller
             ->where('gallery_space_id', $space->id)
             ->where('visited', false)
             ->whereNotNull('latitude')
+            // Místo bez zeměpisné délky se sem stejně nikdy nedostalo dál — porovnání
+            // níž počítá s oběma souřadnicemi a proti NULL nevyjde. Řečeno rovnou to
+            // ušetří dotaz a hlavně je vidět, že jde o záměr.
+            ->whereNotNull('longitude')
             ->get();
 
         $updated = 0;

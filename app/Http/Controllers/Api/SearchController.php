@@ -29,6 +29,8 @@ class SearchController extends Controller
     {
         $validated = $request->validate([
             'q' => 'nullable|string|max:200',
+            // Vypne rozpoznávání dotazu a hledá se celý zadaný text.
+            'raw' => 'nullable|boolean',
             'media_type' => 'nullable|in:photo,video',
             'date_from' => 'nullable|date',
             'date_to' => 'nullable|date',
@@ -47,14 +49,29 @@ class SearchController extends Controller
         $user  = $request->user();
         $space = $user->gallerySpaces()->first();
 
-        $interpreted = app(\App\Services\Search\QueryInterpreter::class)
-            ->interpret(trim((string) ($validated['q'] ?? '')));
+        $dotaz = trim((string) ($validated['q'] ?? ''));
+
+        /*
+         * Rozpoznávání se dá vypnout.
+         *
+         * Odhad podle začátku slova umí minout — „mistr" se trefí na místo jménem
+         * „Kavárna Místo" a žádné nastavení hranic to nespraví. Dokud se s tím nedalo
+         * nic dělat, byl to slepý filtr; s tímhle přepínačem je z toho návrh, který jde
+         * odmítnout. Platí na celé rozpoznávání, ne jen na jména — stejně tak vrátí
+         * doslovné hledání slova „léto", které by jinak zabralo jako roční doba.
+         */
+        $doslova = (bool) ($validated['raw'] ?? false);
+
+        $interpreted = $doslova
+            ? ['filters' => [], 'labels' => [], 'text' => $dotaz]
+            : app(\App\Services\Search\QueryInterpreter::class)->interpret($dotaz);
 
         // Kdo a kde. Z toho, co po vyříznutí času a druhu zbylo, se ještě zkusí poznat
         // jméno člověka nebo místa — česky skloňované, takže „z Prahy" najde Prahu.
         // Co se pozná, přestává být hledaným textem a stává se filtrem podle vazby.
-        $entity = app(\App\Services\Search\EntityMatcher::class)
-            ->match($space, $interpreted['text']);
+        $entity = $doslova
+            ? ['place_ids' => [], 'person_ids' => [], 'labels' => [], 'text' => $dotaz]
+            : app(\App\Services\Search\EntityMatcher::class)->match($space, $interpreted['text']);
 
         $interpreted['text'] = $entity['text'];
         $interpreted['labels'] = array_merge($interpreted['labels'], $entity['labels']);
@@ -188,6 +205,7 @@ class SearchController extends Controller
                 'query' => $q,
                 'filters' => $interpreted['filters'],
                 'labels' => $interpreted['labels'],
+                'raw' => $doslova,
             ],
         ]);
     }

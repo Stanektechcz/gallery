@@ -11,6 +11,8 @@ interface SearchFilters {
     q: string; media_type: string; date_from: string; date_to: string; has_gps: boolean;
     min_rating: string; favorites_only: boolean; archived: boolean; extension: string;
     camera: string; orientation: string; sort_by: string; sort_direction: string;
+    /** Vypne rozpoznávání dotazu a hledá se zadaný text doslova. */
+    raw: boolean;
 }
 interface SavedView { id: number; name: string; icon?: string; filters_json: SearchFilters; view_type: ViewType; is_pinned: boolean; user_id: number; }
 interface Suggestion { type: string; id: number; label: string; icon: string; url?: string; filters?: Partial<SearchFilters>; }
@@ -18,6 +20,7 @@ interface Suggestion { type: string; id: number; label: string; icon: string; ur
 const defaultFilters: SearchFilters = {
     q: '', media_type: '', date_from: '', date_to: '', has_gps: false, min_rating: '', favorites_only: false,
     archived: false, extension: '', camera: '', orientation: '', sort_by: 'taken_at', sort_direction: 'desc',
+    raw: false,
 };
 
 const QUICK_FILTERS = [
@@ -27,10 +30,21 @@ const QUICK_FILTERS = [
     { label: 'Tento rok', patch: { date_from: `${new Date().getFullYear()}-01-01`, date_to: `${new Date().getFullYear()}-12-31` }, icon: '✨' },
 ];
 
+/**
+ * Filtry na parametry dotazu.
+ *
+ * Pravdivostní hodnoty musí odejít jako „1", ne jako „true". Laravelovo pravidlo
+ * `boolean` bere jen true, false, 1, 0, „1" a „0" — na řetězci „true" spadne na 422.
+ * Dokud se tu psalo `String(value)`, odcházelo „true" a hledání s přepínačem „Oblíbené",
+ * „S polohou" nebo „Archivované" vracelo chybu, kterou stránka ukázala jako nula
+ * výsledků. Vypadalo to, že se nic nenašlo; ve skutečnosti se nehledalo.
+ */
 function paramsFor(filters: SearchFilters) {
     const params: Record<string, string> = {};
     Object.entries(filters).forEach(([key, value]) => {
-        if (value !== '' && value !== false) params[key] = String(value);
+        if (value === '' || value === false) return;
+
+        params[key] = value === true ? '1' : String(value);
     });
     return params;
 }
@@ -190,7 +204,8 @@ export default function SearchIndex() {
                 {submitted && (
                     <section className="mt-6">
                         <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                            <div><p className="text-sm font-semibold text-[var(--color-text-primary)]">{searchQuery.isLoading ? 'Hledám…' : `${meta?.total ?? 0} výsledků`}</p>{interpreted?.labels?.length > 0 && <div className="mt-1 flex flex-wrap gap-1">{interpreted.labels.map((label: string) => <span key={label} className="rounded-full bg-[var(--color-accent)]/15 px-2 py-0.5 text-[10px] text-[var(--color-accent)]">Rozpoznáno: {label}</span>)}</div>}</div>
+                            <div><p className="text-sm font-semibold text-[var(--color-text-primary)]">{searchQuery.isLoading ? 'Hledám…' : `${meta?.total ?? 0} výsledků`}</p>{interpreted?.labels?.length > 0 && <div className="mt-1.5 flex flex-wrap items-center gap-1.5">{interpreted.labels.map((label: string) => <span key={label} className="rounded-full bg-[var(--color-accent)] px-2 py-0.5 text-[10px] text-[var(--color-accent-contrast)]">Rozpoznáno: {label}</span>)}<button type="button" onClick={() => { setFilters(current => ({ ...current, raw: true })); setSubmitted(true); }} className="panel-link rounded-full border border-[var(--color-border)] px-2 text-[10px] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]">Hledat doslova</button></div>}
+                            {interpreted?.raw && <div className="mt-1.5 flex flex-wrap items-center gap-1.5"><span className="text-[10px] text-[var(--color-text-secondary)]">Hledáno doslova, bez rozpoznávání.</span><button type="button" onClick={() => { setFilters(current => ({ ...current, raw: false })); setSubmitted(true); }} className="panel-link rounded-full border border-[var(--color-border)] px-2 text-[10px] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]">Zkusit rozpoznat</button></div>}</div>
                             <div className="flex items-center gap-2">
                                 <div className="flex overflow-hidden rounded-xl border border-[var(--color-border)]">
                                     <ViewButton active={viewType === 'grid'} onClick={() => setViewType('grid')} icon={<Grid3X3 size={14} />} label="Mřížka" />
