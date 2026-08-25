@@ -40,3 +40,18 @@ export const fotografie = (cislo: number) => pocet(cislo, 'fotografie', 'fotogra
 export const media = (cislo: number) => pocet(cislo, 'médium', 'média', 'médií');
 export const fotky = (cislo: number) => pocet(cislo, 'fotka', 'fotky', 'fotek');
 export const minuty = (cislo: number) => pocet(cislo, 'minuta', 'minuty', 'minut');
+export const jidla = (cislo: number) => pocet(cislo, 'jídlo', 'jídla', 'jídel');
+export const ukoly = (cislo: number) => pocet(cislo, 'nový úkol', 'nové úkoly', 'nových úkolů');
+export const pripominky = (cislo: number) => pocet(cislo, 'připomínka', 'připomínky', 'připomínek');
+
+/**
+ * Tvary, kde se s číslem mění i to, co k němu patří.
+ *
+ * „5 nových transakcí" má u jedničky tvar „1 nová transakce" — mění se přídavné jméno
+ * spolu s podstatným. A u přeskočených duplicit se mění i příčestí: jedna je přeskočena,
+ * dvě jsou přeskočeny, pět jich je přeskočeno. Proto je celé spojení tady a ne po kouscích
+ * na místě použití, kde by se skloňovala jen půlka.
+ */
+export const noveTransakce = (cislo: number) => pocet(cislo, 'nová transakce', 'nové transakce', 'nových transakcí');
+export const preskoceneDuplicity = (cislo: number) => pocet(cislo, 'duplicita přeskočena', 'duplicity přeskočeny', 'duplicit přeskočeno');
+export const radkyKeKontrole = (cislo: number) => pocet(cislo, 'řádek vyžaduje', 'řádky vyžadují', 'řádků vyžaduje') + ' kontrolu';

@@ -1,4 +1,5 @@
 import AppInstallButton from '@/Components/AppInstallButton';
+import Hlasky from '@/Components/Hlasky';
 import { sdilenyGet } from '@/lib/sdilenyDotaz';
 import { useViewportSafePanel } from '@/lib/useViewportSafePanel';
 import ChatDock from '@/Components/ChatDock';
@@ -1244,6 +1245,7 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
                 <UploadPanel />
                 <ChatDock />
                 <WorkspaceAssistant />
+                <Hlasky />
 
                 {/* Mobile Bottom Nav */}
                 <nav className="mobile-bottom-nav safe-area-pb fixed inset-x-0 bottom-0 z-[650] flex shrink-0 items-center border-t border-[var(--color-border)] bg-[var(--color-bg-secondary)]/98 shadow-[0_-8px_30px_rgba(0,0,0,.28)] backdrop-blur-xl md:hidden" aria-label="Rychlá mobilní navigace">
