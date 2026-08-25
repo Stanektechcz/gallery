@@ -209,7 +209,19 @@ export default function MediaShow({ media, breadcrumb, prev, next }: Props) {
     const [commentText, setCommentText] = useState('');
     const [commentPrivate, setCommentPrivate] = useState(false);
     const [commentsLoaded, setCommentsLoaded] = useState(false);
+    const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
     const [memberRatings, setMemberRatings] = useState<{user_id:number;name:string;initial:string;rating:number;is_me:boolean}[]>([]);
+
+    const deleteComment = async (id: number) => {
+        setConfirmDelete(null);
+        const previous = comments;
+        setComments(current => current.filter(c => c.id !== id));
+        try {
+            await axios.delete(`/api/v1/media/${item.uuid}/comments/${id}`);
+        } catch {
+            setComments(previous);   // zůstat u pravdy ze serveru, ne u optimistického smazání
+        }
+    };
 
     // Load comments + per-user ratings when info panel opens
     useEffect(() => {
@@ -794,12 +806,29 @@ export default function MediaShow({ media, breadcrumb, prev, next }: Props) {
                                 <h3 className="text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider mb-2">Komentáře</h3>
                                 <div className="space-y-2 mb-3 max-h-40 overflow-y-auto">
                                     {comments.map(c => (
-                                        <div key={c.id} className={`p-2 rounded-lg text-xs ${c.is_private ? 'bg-yellow-500/10 border border-yellow-500/20' : 'bg-[var(--color-bg-secondary)]'}`}>
-                                            <div className="flex items-center justify-between mb-1">
-                                                <span className="font-medium text-[var(--color-text-primary)]">{c.user_name}</span>
-                                                {c.is_private && <span className="text-[9px] text-yellow-400">soukromé</span>}
+                                        <div key={c.id} className={`group p-2 rounded-lg text-xs ${c.is_private ? 'bg-yellow-500/10 border border-yellow-500/20' : 'bg-[var(--color-bg-secondary)]'}`}>
+                                            <div className="flex items-center justify-between gap-2 mb-1">
+                                                <span className="font-medium text-[var(--color-text-primary)] truncate">{c.user_name}</span>
+                                                <span className="flex items-center gap-1.5 shrink-0">
+                                                    {c.is_private && <span className="text-[9px] text-yellow-400">soukromé</span>}
+                                                    {c.is_mine && (
+                                                        confirmDelete === c.id ? (
+                                                            <>
+                                                                <button onClick={() => deleteComment(c.id)}
+                                                                    className="text-[9px] text-red-300 hover:text-red-200">Smazat</button>
+                                                                <button onClick={() => setConfirmDelete(null)}
+                                                                    className="text-[9px] text-[var(--color-text-secondary)]">Zpět</button>
+                                                            </>
+                                                        ) : (
+                                                            <button onClick={() => setConfirmDelete(c.id)} aria-label="Smazat komentář"
+                                                                className="p-1 -m-1 text-[var(--color-text-secondary)] opacity-0 group-hover:opacity-100 focus:opacity-100 hover:text-red-300 transition-opacity">
+                                                                <Trash2 size={11}/>
+                                                            </button>
+                                                        )
+                                                    )}
+                                                </span>
                                             </div>
-                                            <p className="text-[var(--color-text-secondary)] leading-relaxed">{c.body}</p>
+                                            <p className="text-[var(--color-text-secondary)] leading-relaxed whitespace-pre-wrap break-words">{c.body}</p>
                                         </div>
                                     ))}
                                     {comments.length === 0 && <p className="text-xs text-[var(--color-text-secondary)]">Žádné komentáře</p>}
