@@ -45,39 +45,22 @@ if (PHP_SAPI === 'cli' && PHP_VERSION_ID < 80401) {
  * vyloučení E_WARNING je nechá být, vyloučení E_COMPILE_WARNING je odstraní. Je to
  * proto užší zásah než vypnout varování obecně; běžná runtime varování zůstávají.
  *
- * Jen v produkci. Ve vývoji a v testech mají hlášky zůstat: tam je chceme vidět kvůli
- * vlastnímu kódu a kvůli tomu, abychom poznali, že je čas ten balíček vyměnit.
+ * Platí ve všech prostředích a nic tím nezmizí. Dvě věci to drží pohromadě:
  *
- * Vyhodit ho zatím nejde. Cesta ven vede přes web-token řady 3, jenže ta vyžaduje
+ * Zaprvé, balíček se autoloaduje přes „files", takže se všech dvě stě jeho souborů
+ * přeloží najednou při `require vendor/autoload.php` — hned za tímhle řádkem.
+ * Zadruhé, Laravel při startu volá `error_reporting(-1)` (HandleExceptions, řádek 47),
+ * takže se hlášení zase v plné šíři zapne dřív, než se dostane ke slovu jakýkoli náš
+ * kód. Maska pokrývá právě to jedno okno mezi tím.
+ *
+ * Původně se tady omezovala jen produkce, aby si vývoj hlášky nechal. Jenže vidět
+ * nebylo co — vlastního kódu se to okno netýká — a cena byla vysoká: lokální server
+ * vypsal dvě stě řádků do těla odpovědi ještě před hlavičkami, takže každý požadavek
+ * skončil na „Cannot modify header information". Vývojový server byl tím pádem
+ * nepoužitelný a přišlo se na to až ve chvíli, kdy se doopravdy spustil.
+ *
+ * Vyhodit balíček zatím nejde. Cesta ven vede přes web-token řady 3, jenže ta vyžaduje
  * brick/math nejvýš 0.12, kdežto Laravel 13 chce aspoň 0.14 — rozsahy se nepřekrývají.
  * Řada 4 zatím existuje jen jako vývojová větev.
  */
-$prostredi = static function (): string {
-    foreach ([$_SERVER['APP_ENV'] ?? null, $_ENV['APP_ENV'] ?? null, getenv('APP_ENV') ?: null] as $hodnota) {
-        if (is_string($hodnota) && $hodnota !== '') {
-            return $hodnota;
-        }
-    }
-
-    $env = dirname(__DIR__) . '/.env';
-
-    if (! is_readable($env)) {
-        return 'unknown';
-    }
-
-    // Jen ten jeden řádek. Načítat celý .env vlastním parserem znamená druhé místo,
-    // které se od Laravelu časem rozejde v tom, co považuje za hodnotu.
-    foreach (file($env, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $radek) {
-        if (str_starts_with(ltrim($radek), 'APP_ENV=')) {
-            return trim(explode('=', $radek, 2)[1], " \t\"'");
-        }
-    }
-
-    // Když se nepozná nic, mlčí se. Neznámé prostředí je spíš vývoj než produkce
-    // a skrýt hlášku, kterou někdo potřebuje vidět, je horší než ji ukázat navíc.
-    return 'unknown';
-};
-
-if ($prostredi() === 'production') {
-    error_reporting(E_ALL & ~E_DEPRECATED & ~E_USER_DEPRECATED & ~E_COMPILE_WARNING);
-}
+error_reporting(E_ALL & ~E_DEPRECATED & ~E_USER_DEPRECATED & ~E_COMPILE_WARNING);
