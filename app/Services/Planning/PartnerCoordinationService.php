@@ -16,6 +16,7 @@ class PartnerCoordinationService
     public function snapshot(GallerySpace $space, User $viewer, int $limit = 12): array
     {
         $now = now();
+        $zdroje = $this->sources();
         $allActions = collect()
             ->concat($this->sharedTodos($space, $now))
             ->concat($this->eventTasks($space, $viewer, $now))
@@ -79,6 +80,30 @@ class PartnerCoordinationService
             ],
             'recommendation' => $this->recommendation($members, $unassigned),
             'check_in_available' => Schema::hasTable('partner_check_ins'),
+            'available_sources' => $zdroje,
+            'partially_available' => in_array(false, $zdroje, true),
+        ];
+    }
+
+    /**
+     * Které zdroje kroků jsou k dispozici.
+     *
+     * Každá z metod níž se při chybějící tabulce sama přeskočí a vrátí prázdno. Když se
+     * to nikde neřekne, vyjde z toho nula kroků a panel prohlásí „všechny společné kroky
+     * jsou hotové" — i ve chvíli, kdy se polovina zdrojů vůbec nezeptala. Stejné přiznání
+     * má vedle sebe PartnerDecisionService.
+     *
+     * @return array<string, bool>
+     */
+    private function sources(): array
+    {
+        return [
+            'shared_todos' => Schema::hasTable('shared_todos'),
+            'event_tasks' => Schema::hasTable('event_tasks'),
+            'packing_items' => Schema::hasTable('trip_packing_items'),
+            'travel_inbox' => Schema::hasTable('travel_inbox_items'),
+            'trip_documents' => Schema::hasTable('trip_document_checks'),
+            'gifts' => Schema::hasTable('gift_ideas'),
         ];
     }
 

@@ -37,6 +37,8 @@ export interface PartnerPulse {
     summary: { total: number; mine: number; unassigned: number; overdue: number; due_this_week: number; snoozed_for_me: number };
     recommendation?: { code: string; title: string; message: string; suggested_user_id?: number } | null;
     check_in_available: boolean;
+    /** Nepravda, když se některý zdroj kroků přeskočil kvůli chybějící tabulce. */
+    partially_available?: boolean;
 }
 
 const SOURCE_LABEL: Record<CoordinationAction['type'], string> = {
@@ -123,7 +125,11 @@ export default function PartnerPulsePanel({ spaceId, initialPulse, compact = fal
             </form>}
 
             {!compact && <div className="mt-4 space-y-2">
-                {pulse.actions.length === 0 && <p className="rounded-xl bg-emerald-500/10 p-3 text-sm text-emerald-100">Všechny společné kroky jsou hotové. Teď zbývá užít si čas spolu.</p>}
+                {/* „Všechny kroky jsou hotové" se smí říct jen tehdy, když se opravdu
+                    zeptalo všech šesti zdrojů. Zdroj s chybějící tabulkou se sám přeskočí
+                    a vrátí prázdno, což by jinak vypadalo jako hotovo. */}
+                {pulse.actions.length === 0 && pulse.partially_available && <p className="rounded-xl bg-amber-500/10 p-3 text-sm text-amber-100">Mezi dostupnými zdroji nezbývá žádný krok. Některý zdroj ale čeká na databázovou migraci, takže se do přehledu nedostal — dokud to platí, není tohle úplný obrázek.</p>}
+                {pulse.actions.length === 0 && ! pulse.partially_available && <p className="rounded-xl bg-emerald-500/10 p-3 text-sm text-emerald-100">Všechny společné kroky jsou hotové. Teď zbývá užít si čas spolu.</p>}
                 {pulse.actions.map(action => <div key={action.key} className="grid gap-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-muted)] p-3 sm:grid-cols-[auto_minmax(0,1fr)_auto_auto] sm:items-center">
                     <button aria-label={`Dokončit ${action.title}`} disabled={busy === action.key} onClick={() => mutate(action,{completed:true})} className="flex h-9 w-9 items-center justify-center rounded-full border border-teal-300/40 text-teal-200 hover:bg-teal-400/15 disabled:opacity-40"><Check size={16}/></button>
                     <div className="min-w-0"><Link href={action.href} className="block truncate text-sm font-medium text-[var(--color-text-primary)] hover:text-teal-200">{action.title}</Link><p className={`mt-0.5 truncate text-xs ${action.is_overdue ? 'text-amber-200' : 'text-[var(--color-text-secondary)]'}`}>{SOURCE_LABEL[action.type]} · {action.context}{action.due_at ? ` · ${new Date(action.due_at).toLocaleDateString('cs-CZ',{day:'numeric',month:'short'})}` : ''}</p></div>
