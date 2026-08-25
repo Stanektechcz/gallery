@@ -47,7 +47,8 @@ class SearchController extends Controller
         $user  = $request->user();
         $space = $user->gallerySpaces()->first();
 
-        $interpreted = $this->interpretQuery(trim((string) ($validated['q'] ?? '')));
+        $interpreted = app(\App\Services\Search\QueryInterpreter::class)
+            ->interpret(trim((string) ($validated['q'] ?? '')));
         $filters = array_merge($interpreted['filters'], array_filter($validated, fn ($value) => $value !== null && $value !== ''));
 
         $query = MediaItem::query()
@@ -242,41 +243,4 @@ class SearchController extends Controller
         return response()->json($results);
     }
 
-    private function interpretQuery(string $query): array
-    {
-        $text = mb_strtolower($query);
-        $filters = [];
-        $labels = [];
-
-        $patterns = [
-            '/\b(videa?|video)\b/u' => ['media_type', 'video', 'Videa'],
-            '/\b(fotky|fotografie|foto)\b/u' => ['media_type', 'photo', 'Fotografie'],
-            '/\b(oblíbené|oblibene|favority)\b/u' => ['favorites_only', true, 'Oblíbené'],
-            '/\b(s gps|na mapě|na mape)\b/u' => ['has_gps', true, 'S GPS'],
-            '/\b(bez gps|bez polohy)\b/u' => ['no_gps', true, 'Bez GPS'],
-        ];
-        foreach ($patterns as $pattern => [$key, $value, $label]) {
-            if (preg_match($pattern, $text)) {
-                $filters[$key] = $value;
-                $labels[] = $label;
-                $text = preg_replace($pattern, ' ', $text) ?? $text;
-            }
-        }
-
-        if (preg_match('/\b(léto|leto)\s+(20\d{2})\b/u', $text, $match)) {
-            $filters['date_from'] = "{$match[2]}-06-01";
-            $filters['date_to'] = "{$match[2]}-08-31 23:59:59";
-            $labels[] = "Léto {$match[2]}";
-            $text = str_replace($match[0], ' ', $text);
-        } elseif (preg_match('/\b(20\d{2})\b/', $text, $match)) {
-            $filters['date_from'] = "{$match[1]}-01-01";
-            $filters['date_to'] = "{$match[1]}-12-31 23:59:59";
-            $labels[] = $match[1];
-            $text = str_replace($match[0], ' ', $text);
-        }
-
-        $text = trim((string) preg_replace('/\s+/u', ' ', $text));
-
-        return ['text' => $text, 'filters' => $filters, 'labels' => $labels];
-    }
 }
