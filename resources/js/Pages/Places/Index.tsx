@@ -438,12 +438,12 @@ export default function PlacesIndex() {
                                 {/* Info */}
                                 <div className="p-3">
                                     <h3 className="text-sm font-semibold text-[var(--color-text-primary)] truncate">{place.name}</h3>
-                                    <span className={`mt-1 inline-flex rounded-full px-1.5 py-0.5 text-[9px] ${LIFECYCLE[place.lifecycle_status ?? 'idea'].className}`}>{LIFECYCLE[place.lifecycle_status ?? 'idea'].label}</span>
+                                    <span className={`mt-1 inline-flex rounded-full px-1.5 py-0.5 text-[10px] ${LIFECYCLE[place.lifecycle_status ?? 'idea'].className}`}>{LIFECYCLE[place.lifecycle_status ?? 'idea'].label}</span>
                                     {(place.city || place.country) && (
                                         <p className="text-[10px] text-[var(--color-text-secondary)] truncate mt-0.5">{[place.city, place.country].filter(Boolean).join(', ')}</p>
                                     )}
 
-                                    {(place.is_rain_friendly || place.is_photogenic || place.price_level || place.personal_rating || place.review_average) && <p className="mt-1 text-[9px] text-[var(--color-text-secondary)]">{place.is_rain_friendly ? '🌧️ ' : ''}{place.is_photogenic ? '📸 ' : ''}{(place.review_average ?? place.personal_rating) ? `★${place.review_average ?? place.personal_rating}${place.review_count ? ` (${place.review_count})` : ''}` : ''}{place.price_level ? `${(place.review_average ?? place.personal_rating) ? ' · ' : ''}${'€'.repeat(place.price_level)}` : ''}</p>}
+                                    {(place.is_rain_friendly || place.is_photogenic || place.price_level || place.personal_rating || place.review_average) && <p className="mt-1 text-[10px] text-[var(--color-text-secondary)]">{place.is_rain_friendly ? '🌧️ ' : ''}{place.is_photogenic ? '📸 ' : ''}{(place.review_average ?? place.personal_rating) ? `★${place.review_average ?? place.personal_rating}${place.review_count ? ` (${place.review_count})` : ''}` : ''}{place.price_level ? `${(place.review_average ?? place.personal_rating) ? ' · ' : ''}${'€'.repeat(place.price_level)}` : ''}</p>}
 
                                     <div className="flex items-center gap-3 mt-2 text-[10px] text-[var(--color-text-secondary)]">
                                         <span>📸 {place.photo_count}</span>

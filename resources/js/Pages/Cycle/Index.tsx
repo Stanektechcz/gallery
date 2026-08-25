@@ -386,7 +386,11 @@ function Calendar({ grid, month, byDay, forecast, onMonth, onPick, active }: {
                                         : PHASE_SHORT[forecast.get(day) ?? ''];
 
                                     return zkratka
-                                        ? <span className="mt-0.5 text-[7px] font-normal opacity-80">{zkratka}</span>
+                                        // Bylo sedm bodů. Zkratka měřila čtrnáct bodů v buňce
+                                        // široké čtyřicet, takže o místo tu nikdy nešlo — jen
+                                        // to nikdo nepřeměřil. Deset bodů zabere dvacet a
+                                        // pořád se to vejde i s trojciferným dnem.
+                                        ? <span className="mt-0.5 text-[10px] font-normal opacity-90">{zkratka}</span>
                                         : null;
                                 })()}
                             </span>
