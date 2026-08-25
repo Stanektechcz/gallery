@@ -1,13 +1,15 @@
 import DeleteButton from '@/Components/DeleteButton';
 import Panel, { PanelGrid, Stat } from '@/Components/Panel';
+import SekceNav, { type Sekce as SekceTyp } from '@/Components/SekceNav';
 import { dny } from '@/lib/cestina';
 import AppLayout from '@/Layouts/AppLayout';
 import { uploadManager, waitForUploads } from '@/lib/uploadManager';
 import { Head } from '@inertiajs/react';
 import axios from 'axios';
 import {
-    AlertTriangle, ArrowRightLeft, BarChart3, CalendarDays, Check, Download, ListPlus, Pencil, PieChart,
-    PiggyBank, Plus, Receipt, Repeat, Scale, Search, Tags, TrendingDown, TrendingUp, Upload, Wallet, X,
+    AlertTriangle, ArrowRightLeft, BarChart3, CalendarDays, Check, Download, LayoutDashboard, ListPlus,
+    Pencil, PieChart, PiggyBank, Plus, Receipt, Repeat, Scale, Search, Tags, Target, TrendingDown,
+    TrendingUp, Upload, Wallet, X,
 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import StatementImport from './StatementImport';
@@ -69,6 +71,17 @@ interface Overview {
         split: 'none' | 'equal' | 'other'; paid_by: string | null;
         last_on: string; occurrences: number;
     }>;
+    /** Co teprve přijde. Null, když rozpočet nemá konec — pak není co předpovídat. */
+    outlook?: {
+        currency: string; horizon_days: number; ends_on: string; days_left: number;
+        upcoming: Array<{
+            note: string | null; category: string | null; kind: string;
+            amount: number; currency: string; due_on: string; days_away: number;
+            in_budget_currency: boolean;
+        }>;
+        recurring_expense: number; recurring_income: number; variable_estimate: number;
+        projected_left: number; verdict: 'ok' | 'tight' | 'short';
+    } | null;
     /** Kolik položek rozpočet má. Samotný seznam si načítá vlastní koncový bod. */
     entries_total: number;
 }
@@ -160,9 +173,14 @@ export default function BudgetsIndex() {
                     <div className="space-y-4">
                         <BudgetPicker budgets={budgets} active={active?.budget.uuid} onPick={uuid => void load(uuid)} onCreated={uuid => void load(uuid)}/>
 
-                        {active && <Overview data={active} members={members} onChanged={() => void load(active.budget.uuid)}/>}
+                        {/* Žádosti o peníze patří do přehledu, ne pod každou sekci —
+                            proto jdou dovnitř, ne vedle. */}
+                        {active && (
+                            <Overview data={active} members={members} requests={requests}
+                                onChanged={() => void load(active.budget.uuid)}/>
+                        )}
 
-                        <MoneyRequests requests={requests} members={members} onChanged={() => void load(active?.budget.uuid)}/>
+                        {! active && <MoneyRequests requests={requests} members={members} onChanged={() => void load()}/>}
                     </div>
                 )}
             </div>
@@ -297,14 +315,58 @@ function BudgetPicker({ budgets, active, onPick, onCreated }: {
  * Šířka panelu je podle obsahu, ne podle důležitosti. Zápis položky má šest polí
  * vedle sebe a potřebuje celou šířku; kdo komu dluží je jedna věta a v půlce se ztratí.
  */
-function Overview({ data, members, onChanged }: { data: Overview; members: Array<{ id: number; name: string }>; onChanged: () => void }) {
+/**
+ * Která sekce je otevřená. Drží se v adrese, ne ve stavu.
+ *
+ * Odkaz na položky pak vede na položky, tlačítko zpět projde sekce po jedné a obnovení
+ * stránky nechá člověka tam, kde byl. Ve stavu komponenty by se všechno tohle ztratilo.
+ */
+function useSekce(vychozi: string): [string, (id: string) => void] {
+    const [sekce, setSekce] = useState(() => {
+        if (typeof window === 'undefined') return vychozi;
+
+        return new URLSearchParams(window.location.search).get('sekce') ?? vychozi;
+    });
+
+    useEffect(() => {
+        const zpet = () => setSekce(new URLSearchParams(window.location.search).get('sekce') ?? vychozi);
+
+        window.addEventListener('popstate', zpet);
+
+        return () => window.removeEventListener('popstate', zpet);
+    }, [vychozi]);
+
+    const zmen = useCallback((id: string) => {
+        setSekce(id);
+
+        const adresa = new URL(window.location.href);
+
+        // Výchozí sekce se do adresy nepíše — `?sekce=prehled` v odkazu nic nepřidává.
+        if (id === vychozi) adresa.searchParams.delete('sekce');
+        else adresa.searchParams.set('sekce', id);
+
+        window.history.pushState({}, '', adresa);
+    }, [vychozi]);
+
+    return [sekce, zmen];
+}
+
+function Overview({ data, members, requests, onChanged }: {
+    data: Overview;
+    members: Array<{ id: number; name: string }>;
+    requests: MoneyRow[];
+    onChanged: () => void;
+}) {
     const { budget, period, totals, categories, months, allowance } = data;
     const meny = Object.keys({ ...totals.spent, ...totals.income });
+    const [sekce, setSekce] = useSekce('prehled');
 
     // Stavové panely se skládají do pole, protože se každý ukazuje jen někdy. Mřížka
     // o dvou sloupcích s jedním potomkem nechá půlku řádku prázdnou a vypadá jako
     // nedokreslená — tohle podle počtu přepne na jeden sloupec.
     const stav = [
+        // Výhled první: „vyjde mi to do konce" je otázka, kvůli které se sem člověk dívá.
+        data.outlook && <OutlookPanel key="outlook" outlook={data.outlook}/>,
         data.runway && ! data.runway.covers_period && <RunwayPanel key="runway" runway={data.runway} budget={budget}/>,
         data.warnings && data.warnings.length > 0 && <WarningsPanel key="warnings" warnings={data.warnings} currency={budget.currency}/>,
         ((data.settlement && data.settlement.length > 0) || (data.settlements && data.settlements.length > 0))
@@ -314,10 +376,24 @@ function Overview({ data, members, onChanged }: { data: Overview; members: Array
         data.savings && <SavingsPanel key="savings" savings={data.savings} currency={budget.currency}/>,
     ].filter(Boolean);
 
+    const sekce_seznam: SekceTyp[] = [
+        { id: 'prehled', label: 'Přehled', icon: LayoutDashboard, upozorneni: (data.warnings?.length ?? 0) > 0 || data.outlook?.verdict === 'short' },
+        { id: 'polozky', label: 'Položky', icon: Receipt, pocet: data.entries_total },
+        { id: 'plan', label: 'Plán', icon: Target, pocet: categories.length },
+        { id: 'vyvoj', label: 'Vývoj', icon: TrendingUp },
+    ];
+
     return (
         <div className="space-y-4">
-            {/* Denní zbytek nahoře: v cizině je to jediné číslo, které opravdu řídí chování. */}
-            <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <SekceNav sekce={sekce_seznam} aktivni={sekce} onZmena={setSekce}/>
+
+            {/* Dlaždice zůstávají nad sekcemi. Kolik zbývá na den je jediné číslo, které
+                v cizině opravdu řídí chování — a mělo by být vidět bez ohledu na to,
+                ve které části rozpočtu se člověk zrovna hrabe.
+
+                Na telefonu dva sloupce, ne jeden: čtyři dlaždice pod sebou zabraly
+                443 bodů, přes polovinu obrazovky, než začal obsah. */}
+            <section className="grid grid-cols-2 gap-2.5 sm:gap-3 xl:grid-cols-4">
                 <Stat label="Zbývá na den" icon={CalendarDays} tone="accent"
                     value={allowance.per_day !== null ? money(allowance.per_day, allowance.currency) : '—'}
                     hint={allowance.days_left !== null ? `na ${dny(allowance.days_left)}` : 'bez konce období'}/>
@@ -347,33 +423,123 @@ function Overview({ data, members, onChanged }: { data: Overview; members: Array
             {/* Počet sloupců si mřížka odvodí z toho, kolik panelů opravdu přišlo —
                 stavové panely se zobrazují podmíněně a prázdná půlka řádku vedle
                 osamoceného panelu vypadá, jako by se něco nenačetlo. */}
-            <PanelGrid max={2}>{stav}</PanelGrid>
+            {sekce === 'prehled' && (
+                <div className="space-y-4">
+                    <PanelGrid max={2}>{stav}</PanelGrid>
+                    <MoneyRequests requests={requests} members={members} onChanged={onChanged}/>
+                </div>
+            )}
 
             {/* Zápis a výpis položek. Celá šířka, protože formulář má šest polí vedle
                 sebe — v půlce obrazovky by se zlomil na tři řádky. */}
-            <Entries budget={budget} categories={categories} members={members} total={data.entries_total} onChanged={onChanged}/>
+            {sekce === 'polozky' && (
+                <Entries budget={budget} categories={categories} members={members} total={data.entries_total} onChanged={onChanged}/>
+            )}
 
             {/* Plán vedle skutečnosti. Dvě odpovědi na jednu otázku — kolik mělo padnout
                 a kam to opravdu šlo — a mají smysl jen společně. */}
-            <PanelGrid max={2}>
-                <Categories budget={budget} categories={categories} onChanged={onChanged}/>
-                {categories.some(c => c.spent > 0) && <BreakdownPanel categories={categories} currency={budget.currency}/>}
-            </PanelGrid>
+            {sekce === 'plan' && (
+                <div className="space-y-4">
+                    <PanelGrid max={2}>
+                        <Categories budget={budget} categories={categories} onChanged={onChanged}/>
+                        {categories.some(c => c.spent > 0) && <BreakdownPanel categories={categories} currency={budget.currency}/>}
+                    </PanelGrid>
 
-            {(data.recurring?.length ?? 0) > 0 && (
-                <RecurringPanel budget={budget} rows={data.recurring!} onChanged={onChanged}/>
+                    {(data.recurring?.length ?? 0) > 0 && (
+                        <RecurringPanel budget={budget} rows={data.recurring!} onChanged={onChanged}/>
+                    )}
+                </div>
             )}
 
             {/* Čas: celé období vlevo, poslední dva měsíce podrobně vpravo. */}
-            <PanelGrid max={2}>
-                {months.length > 0 && <MonthsPanel months={months} currency={budget.currency}/>}
-                {data.comparison && <Comparison data={data.comparison}/>}
-            </PanelGrid>
+            {sekce === 'vyvoj' && (
+                <PanelGrid max={2}>
+                    {months.length > 0 && <MonthsPanel months={months} currency={budget.currency}/>}
+                    {data.comparison && <Comparison data={data.comparison}/>}
+                </PanelGrid>
+            )}
         </div>
     );
 }
 
 /** Kdy při současném tempu dojdou peníze. Ukazuje se jen tehdy, když to nevyjde. */
+/**
+ * Jak období dopadne — a co přijde nejdřív.
+ *
+ * Zbytek přehledu se dívá dozadu. Tenhle panel odpovídá na otázku, kterou si člověk
+ * v cizině klade doopravdy: vyjde mi to? „Zbývá na den" tvrdí, že ano, i když třetího
+ * přijde nájem, který denní zbytek spolkne celý.
+ *
+ * Jisté a odhadnuté se drží odděleně a je to napsané: pravidelné platby známe jménem
+ * i datem, tempo nepravidelných výdajů je odhad z dosavadního průběhu. Slepit obojí do
+ * jednoho čísla by vypadalo přesněji, než to je.
+ */
+function OutlookPanel({ outlook }: { outlook: NonNullable<Overview['outlook']> }) {
+    const ton = outlook.verdict === 'short' ? 'danger' : outlook.verdict === 'tight' ? 'warn' : 'accent';
+
+    const nadpis = outlook.verdict === 'short'
+        ? 'Do konce období to nevyjde'
+        : outlook.verdict === 'tight'
+            ? 'Vyjde to těsně'
+            : 'Do konce období to vychází';
+
+    return (
+        <Panel tone={ton} icon={outlook.verdict === 'ok' ? TrendingUp : AlertTriangle} title={nadpis}
+            footnote="Pravidelné platby známe jménem i datem. Tempo nepravidelných výdajů je odhad z dosavadního průběhu, takže skutečnost se od něj bude lišit.">
+
+            <p className="text-2xl font-semibold tabular-nums text-[var(--color-text-primary)]">
+                {money(outlook.projected_left, outlook.currency)}
+            </p>
+            <p className="mt-0.5 text-xs text-[var(--color-text-secondary)]">
+                zbude z plánu {datum(outlook.ends_on)}
+            </p>
+
+            {/* Rozpad, ze kterého je vidět, čím to číslo vzniklo. Bez něj je to věštba. */}
+            <dl className="mt-3 space-y-1.5 border-t border-[var(--color-border)] pt-3 text-xs">
+                <div className="flex items-baseline justify-between gap-3">
+                    <dt className="text-[var(--color-text-secondary)]">Pravidelné platby do konce</dt>
+                    <dd className="shrink-0 tabular-nums text-[var(--color-text-primary)]">− {money(outlook.recurring_expense, outlook.currency)}</dd>
+                </div>
+                <div className="flex items-baseline justify-between gap-3">
+                    <dt className="text-[var(--color-text-secondary)]">Odhad ostatních výdajů</dt>
+                    <dd className="shrink-0 tabular-nums text-[var(--color-text-primary)]">− {money(outlook.variable_estimate, outlook.currency)}</dd>
+                </div>
+                {outlook.recurring_income > 0 && (
+                    <div className="flex items-baseline justify-between gap-3">
+                        {/* Příjem se do zbytku nepřičítá — `zbývá z plánu` není zůstatek na
+                            účtu. Ukazuje se proto jako samostatná informace, ne jako součet. */}
+                        <dt className="text-[var(--color-text-secondary)]">Ještě přijde na příjmu</dt>
+                        <dd className="shrink-0 tabular-nums text-emerald-400">+ {money(outlook.recurring_income, outlook.currency)}</dd>
+                    </div>
+                )}
+            </dl>
+
+            {outlook.upcoming.length > 0 && (
+                <div className="mt-3 border-t border-[var(--color-border)] pt-3">
+                    <p className="mb-2 text-[11px] font-medium uppercase tracking-wider text-[var(--color-text-secondary)]">
+                        Nejbližších {dny(outlook.horizon_days)}
+                    </p>
+                    <ul className="space-y-1.5">
+                        {outlook.upcoming.slice(0, 6).map((polozka, i) => (
+                            <li key={`${polozka.due_on}-${i}`} className="flex items-baseline justify-between gap-3 text-xs">
+                                <span className="min-w-0 truncate text-[var(--color-text-primary)]">
+                                    {polozka.note ?? polozka.category ?? 'Platba'}
+                                    <span className="ml-1.5 text-[var(--color-text-secondary)]">
+                                        {polozka.days_away === 0 ? 'dnes' : polozka.days_away === 1 ? 'zítra' : `za ${dny(polozka.days_away)}`}
+                                    </span>
+                                </span>
+                                <span className={`shrink-0 tabular-nums ${polozka.kind === 'income' ? 'text-emerald-400' : 'text-[var(--color-text-primary)]'}`}>
+                                    {polozka.kind === 'income' ? '+' : '−'} {money(polozka.amount, polozka.currency)}
+                                </span>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            )}
+        </Panel>
+    );
+}
+
 function RunwayPanel({ runway, budget }: { runway: NonNullable<Overview['runway']>; budget: Overview['budget'] }) {
     return (
         <Panel tone="danger" icon={AlertTriangle}

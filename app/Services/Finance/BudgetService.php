@@ -99,6 +99,8 @@ class BudgetService
             'comparison' => $this->comparison($budget),
             // Co se každý měsíc samo připisuje. Prázdné je běžný stav a nic se nekreslí.
             'recurring' => $this->recurring($budget),
+            // Co teprve přijde. Zbytek přehledu se dívá dozadu; tohle dopředu.
+            'outlook' => $this->outlook($budget, $today),
             // Historie uzávěrek. Bez ní by po vyrovnání zmizel dluh i důkaz, že se platil.
             'settlements' => $budget->settlements->take(6)->map(fn (\App\Models\BudgetSettlement $s) => [
                 'uuid' => $s->uuid,
@@ -592,6 +594,159 @@ class BudgetService
             ->sortByDesc('amount')
             ->values()
             ->all();
+    }
+
+    /**
+     * Co teprve přijde a jak to dopadne.
+     *
+     * Celý zbytek přehledu se dívá dozadu — kolik se utratilo, kolik zbylo, jak vyšel
+     * minulý měsíc. To odpoví na otázku „jak jsem na tom", ale ne na tu, kterou si člověk
+     * v cizině klade doopravdy: vyjde mi to do konce? Zbývající částka dělená počtem dní
+     * tvrdí, že ano, i když třetího přijde nájem, který ji spolkne celou.
+     *
+     * Předpověď stojí na dvou různých věcech a drží je oddělené, protože každá je jinak
+     * jistá. Pravidelné platby jsou skoro jisté: víme, co to je, kolik to je a kolikátého
+     * to chodí. Zbytek je odhad z dosavadního tempa nepravidelných výdajů — ten může být
+     * vedle, a proto se ukazuje zvlášť a je z něj vidět, že je to odhad.
+     *
+     * Počítá se jen v měně rozpočtu. Sečíst do předpovědi částky v jiné měně by znamenalo
+     * hádat kurz na měsíce dopředu, což je horší než ho neznat — položky v cizí měně se
+     * proto v seznamu „co přijde" objeví, ale do součtu nevstupují.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function outlook(Budget $budget, ?Carbon $today = null): ?array
+    {
+        $today ??= Carbon::today();
+
+        if ($budget->ends_on === null || $today->greaterThan($budget->ends_on)) {
+            // Bez konce období není co předpovídat — „do kdy" chybí zadání.
+            return null;
+        }
+
+        $pravidelne = $this->recurring($budget);
+        $konec = $budget->ends_on->copy();
+
+        $nadchazejici = [];
+        $doKonceVydaje = 0.0;
+        $doKoncePrijmy = 0.0;
+
+        foreach ($pravidelne as $polozka) {
+            foreach ($this->dalsiTerminy($polozka['day_of_month'], $today, $konec) as $termin) {
+                $vlastniMena = $polozka['currency'] === $budget->currency;
+
+                if ($vlastniMena) {
+                    if ($polozka['kind'] === 'income') {
+                        $doKoncePrijmy += $polozka['amount'];
+                    } else {
+                        $doKonceVydaje += $polozka['amount'];
+                    }
+                }
+
+                $zaKolikDni = (int) $today->diffInDays($termin, false);
+
+                if ($zaKolikDni <= self::VYHLED_DNI) {
+                    $nadchazejici[] = [
+                        'note' => $polozka['note'],
+                        'category' => $polozka['category'],
+                        'kind' => $polozka['kind'],
+                        'amount' => $polozka['amount'],
+                        'currency' => $polozka['currency'],
+                        'due_on' => $termin->toDateString(),
+                        'days_away' => $zaKolikDni,
+                        'in_budget_currency' => $vlastniMena,
+                    ];
+                }
+            }
+        }
+
+        usort($nadchazejici, fn (array $a, array $b) => $a['days_away'] <=> $b['days_away']);
+
+        $dniDoKonce = max(1, (int) $today->diffInDays($konec, false));
+        $odhadNepravidelnych = $this->tempoNepravidelnych($budget, $today) * $dniDoKonce;
+
+        $rozvaha = $this->allowance($budget, $budget->entries->where('kind', 'expense'), $today);
+        $zbyva = $rozvaha['left'];
+
+        // Příjem se do předpovědi nepřičítá, i když ho známe. `left` není zůstatek na
+        // účtu, ale kolik zbývá z plánu — a plán se tím, že přijde výplata, nezvětší.
+        // Připočíst ji by znamenalo, že by rozpočet vypadal tím lépe, čím víc se vydělá,
+        // i kdyby se přitom utrácelo nad plán. Kolik ještě přijde, se hlásí zvlášť.
+        $zbudeNaKonci = round($zbyva - $doKonceVydaje - $odhadNepravidelnych, 2);
+
+        return [
+            'currency' => $budget->currency,
+            'horizon_days' => self::VYHLED_DNI,
+            'upcoming' => $nadchazejici,
+            'ends_on' => $konec->toDateString(),
+            'days_left' => $dniDoKonce,
+            'recurring_expense' => round($doKonceVydaje, 2),
+            'recurring_income' => round($doKoncePrijmy, 2),
+            'variable_estimate' => round($odhadNepravidelnych, 2),
+            'projected_left' => $zbudeNaKonci,
+            // Tři stavy, ne dva: těsně znamená „vyjde to, ale bez rezervy", a to je jiná
+            // informace než „vyjde to" i než „nevyjde".
+            //
+            // Rezerva se poměřuje s velikostí plánu, ne s pravidelnými platbami. Rozpočet,
+            // ve kterém žádná pravidelná platba není, by jinak hlásil „v pořádku" i s pěti
+            // eury do konce, protože nula krát cokoliv je nula.
+            'verdict' => $zbudeNaKonci < 0
+                ? 'short'
+                : ($zbudeNaKonci < $rozvaha['planned_total'] * self::TESNA_REZERVA ? 'tight' : 'ok'),
+        ];
+    }
+
+    /** Jak daleko dopředu se vypisují jednotlivé nadcházející platby. */
+    private const VYHLED_DNI = 30;
+
+    /** Zbytek pod tímhle podílem celého plánu se hlásí jako těsný. */
+    private const TESNA_REZERVA = 0.1;
+
+    /**
+     * Data, kdy pravidelná platba do konce období ještě přijde.
+     *
+     * Den v měsíci se nedá použít přímo: třicátý první v únoru neexistuje a `Carbon` by
+     * z něj udělal první březen, takže by platba spadla do jiného měsíce. Bere se proto
+     * poslední den měsíce, pokud je kratší.
+     *
+     * @return list<Carbon>
+     */
+    private function dalsiTerminy(int $denVMesici, Carbon $today, Carbon $konec): array
+    {
+        $terminy = [];
+        $mesic = $today->copy()->startOfMonth();
+
+        while ($mesic->lessThanOrEqualTo($konec)) {
+            $den = $mesic->copy()->day(min($denVMesici, $mesic->daysInMonth));
+
+            if ($den->greaterThan($today) && $den->lessThanOrEqualTo($konec)) {
+                $terminy[] = $den;
+            }
+
+            $mesic->addMonthNoOverflow();
+        }
+
+        return $terminy;
+    }
+
+    /**
+     * Kolik za den padne na to, co se neopakuje.
+     *
+     * Pravidelné platby se do tempa nepočítají — ty už jsou v předpovědi jednou, jmenovitě,
+     * a započítat je podruhé přes průměr by nájem zaplatilo dvakrát.
+     */
+    private function tempoNepravidelnych(Budget $budget, Carbon $today): float
+    {
+        $od = $budget->starts_on;
+        $dni = max(1, (int) $od->diffInDays($today->min($budget->ends_on ?? $today), false));
+
+        $nepravidelne = $budget->entries
+            ->where('kind', 'expense')
+            ->where('is_recurring', false)
+            ->where('currency', $budget->currency)
+            ->sum('amount');
+
+        return round(((float) $nepravidelne) / $dni, 4);
     }
 
     /**
