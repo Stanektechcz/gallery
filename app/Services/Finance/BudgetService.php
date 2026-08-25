@@ -153,14 +153,20 @@ class BudgetService
         // pětina je kompromis — stejný, jaký používají varování.
         $mesicu = max(0.2, $budget->starts_on->diffInDays($konecObdobi) / $budget->periodDays());
 
-        return $budget->categories->map(function ($category) use ($budget, $mesicu) {
+        // Kategorie s přenosem počítá celé započaté měsíce, ne poměrnou část. Obálka na
+        // jízdenku domů se naplní prvního; tvrdit patnáctého, že je v ní půlka měsíčního
+        // vkladu, by u nepravidelného výdaje neodpovídalo tomu, jak se s ní zachází.
+        $mesicuCelych = max(1.0, ceil($mesicu));
+
+        return $budget->categories->map(function ($category) use ($budget, $mesicu, $mesicuCelych) {
             $utraceno = $budget->entries
                 ->where('kind', 'expense')
                 ->where('budget_category_id', $category->id)
                 ->where('currency', $budget->currency)
                 ->sum('amount');
 
-            $planovano = (float) $category->planned_monthly * $mesicu;
+            $prenos = (bool) ($category->rollover ?? false);
+            $planovano = (float) $category->planned_monthly * ($prenos ? $mesicuCelych : $mesicu);
 
             return [
                 'id' => $category->id,
@@ -168,8 +174,13 @@ class BudgetService
                 'color' => $category->color,
                 'icon' => $category->icon,
                 'planned_monthly' => (float) $category->planned_monthly,
+                'rollover' => $prenos,
                 'planned_to_date' => round($planovano, 2),
                 'spent' => round((float) $utraceno, 2),
+                // Zbývající částka, ne jen procenta. Podle procent se nikdo nerozhoduje —
+                // „112 %" neřekne, jestli je to o pět eur, nebo o pět set. Záporné číslo
+                // znamená překročeno a je to na něm vidět bez počítání.
+                'left' => round($planovano - (float) $utraceno, 2),
                 // Nad sto procent je varování, ne chyba — někdo prostě utratil víc.
                 'used_percent' => $planovano > 0 ? (int) round($utraceno / $planovano * 100) : null,
             ];

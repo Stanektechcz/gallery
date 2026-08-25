@@ -1,4 +1,5 @@
 import DeleteButton from '@/Components/DeleteButton';
+import { hlaska } from '@/Components/Hlasky';
 import Panel, { PanelGrid, Stat } from '@/Components/Panel';
 import SekceNav, { type Sekce as SekceTyp } from '@/Components/SekceNav';
 import { dny } from '@/lib/cestina';
@@ -50,7 +51,15 @@ interface Overview {
         /** Součet přes měny. Null, když kurz chybí nebo je všechno v jedné měně. */
         spent_combined: { total: number; currency: string; date: string; rates: Record<string, number> } | null;
     };
-    categories: Array<{ id: number; name: string; color: string | null; planned_monthly: number; planned_to_date: number; spent: number; used_percent: number | null }>;
+    categories: Array<{
+        id: number; name: string; color: string | null;
+        planned_monthly: number; planned_to_date: number; spent: number;
+        /** Kolik z plánu k dnešku zbývá. Záporné znamená překročeno. */
+        left: number;
+        /** Nevyčerpané se přenáší do dalšího měsíce — obálka na nepravidelný výdaj. */
+        rollover: boolean;
+        used_percent: number | null;
+    }>;
     months: Array<{ month: string; spent: number; income: number; count: number; other_currency_count?: number }>;
     allowance: { planned_total: number; spent: number; left: number; per_day: number | null; days_left: number | null; currency: string };
     warnings?: Array<{ category: string; spent: number; planned_to_date: number; percent: number; level: 'close' | 'over' }>;
@@ -943,6 +952,137 @@ function Comparison({ data }: { data: NonNullable<Overview['comparison']> }) {
     );
 }
 
+/**
+ * Jedna kategorie v plánu — a její úprava.
+ *
+ * Hlavní číslo je zbývající částka, ne procenta. „112 %" neřekne, jestli je to o pět eur,
+ * nebo o pět set, a právě podle toho se člověk rozhoduje, jestli si dnes něco koupí.
+ * Procenta zůstávají u proužku, kde slouží k porovnání kategorií mezi sebou.
+ *
+ * Úprava je na místě, ne v okně: měnit plán je běžná věc, kterou člověk dělá průběžně,
+ * jak zjišťuje, kolik co doopravdy stojí.
+ */
+function CategoryRow({ budget, category, onChanged }: {
+    budget: Overview['budget'];
+    category: Overview['categories'][number];
+    onChanged: () => void;
+}) {
+    const [uprava, setUprava] = useState(false);
+    const [nazev, setNazev] = useState(category.name);
+    const [plan, setPlan] = useState(String(category.planned_monthly || ''));
+    const [prenos, setPrenos] = useState(Boolean(category.rollover));
+    const [uklada, setUklada] = useState(false);
+
+    const preteklo = (category.used_percent ?? 0) > 100;
+
+    const uloz = async () => {
+        if (! nazev.trim()) return;
+
+        setUklada(true);
+
+        try {
+            await axios.patch(`/api/v1/rozpocty/${budget.uuid}/kategorie/${category.id}`, {
+                name: nazev.trim(),
+                planned_monthly: Number(plan || 0),
+                rollover: prenos,
+            });
+
+            setUprava(false);
+            onChanged();
+        } catch (problem: any) {
+            hlaska(problem?.response?.data?.message ?? 'Kategorii se nepodařilo uložit.', 'chyba');
+        } finally {
+            setUklada(false);
+        }
+    };
+
+    if (uprava) {
+        return (
+            <div className="rounded-xl border border-[var(--color-accent)]/30 bg-[var(--color-surface-muted)] p-3">
+                <div className="flex flex-col gap-2 sm:flex-row">
+                    <input value={nazev} onChange={e => setNazev(e.target.value)} aria-label="Název kategorie" className={FIELD}/>
+                    <input type="number" inputMode="decimal" value={plan} onChange={e => setPlan(e.target.value)}
+                        aria-label={`Plán ${budget.period_label}`}
+                        placeholder={`${budget.period_unit === 'week' ? 'za týden' : 'za měsíc'} (${budget.currency})`}
+                        className={`${FIELD} sm:w-40`}/>
+                </div>
+
+                <label className="mt-2.5 flex cursor-pointer items-start gap-2 text-xs text-[var(--color-text-secondary)]">
+                    <input type="checkbox" checked={prenos} onChange={e => setPrenos(e.target.checked)}
+                        className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--color-accent)]"/>
+                    <span>
+                        <strong className="text-[var(--color-text-primary)]">Přenášet nevyčerpané do dalšího měsíce</strong>
+                        <span className="mt-0.5 block leading-relaxed">
+                            Pro výdaje, které chodí jednou za čas a naráz — jízdenka domů, zubař. Co se
+                            v měsíci nevyčerpá, zůstane v kategorii na příště.
+                        </span>
+                    </span>
+                </label>
+
+                <div className="mt-3 flex flex-wrap gap-2">
+                    <button type="button" onClick={() => void uloz()} disabled={uklada || ! nazev.trim()}
+                        className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-[var(--color-accent)] px-3 text-xs font-medium text-[var(--color-accent-contrast)] disabled:opacity-40">
+                        <Check size={14}/> Uložit
+                    </button>
+                    <button type="button" onClick={() => { setUprava(false); setNazev(category.name); setPlan(String(category.planned_monthly || '')); setPrenos(Boolean(category.rollover)); }}
+                        className="inline-flex min-h-9 items-center rounded-lg border border-[var(--color-border)] px-3 text-xs text-[var(--color-text-secondary)]">
+                        Zrušit
+                    </button>
+                    <DeleteButton
+                        label={`Smazat kategorii ${category.name}`}
+                        onDelete={async () => { await axios.delete(`/api/v1/rozpocty/${budget.uuid}/kategorie/${category.id}`); onChanged(); }}/>
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div>
+            <div className="flex items-baseline justify-between gap-2 text-sm">
+                <span className="flex min-w-0 items-center gap-1.5">
+                    <span className="truncate text-[var(--color-text-primary)]">{category.name}</span>
+                    {category.rollover && (
+                        <span title="Nevyčerpané se přenáší do dalšího měsíce"
+                            className="shrink-0 rounded bg-[var(--color-surface-muted)] px-1.5 py-0.5 text-[10px] text-[var(--color-text-secondary)]">
+                            přenos
+                        </span>
+                    )}
+                </span>
+                <span className={`shrink-0 text-sm font-medium tabular-nums ${preteklo ? 'text-red-400' : 'text-[var(--color-text-primary)]'}`}>
+                    {category.planned_to_date > 0
+                        ? <>{preteklo ? '−' : ''}{money(Math.abs(category.left), budget.currency)}</>
+                        : money(category.spent, budget.currency)}
+                </span>
+            </div>
+
+            <div className="flex items-baseline justify-between gap-2">
+                <span className="text-[11px] text-[var(--color-text-secondary)]">
+                    {money(category.spent, budget.currency)}
+                    {category.planned_to_date > 0 && <> z {money(category.planned_to_date, budget.currency)}</>}
+                </span>
+                <span className="shrink-0 text-[11px] text-[var(--color-text-secondary)]">
+                    {category.planned_to_date > 0 ? (preteklo ? 'přes plán' : 'zbývá') : 'bez plánu'}
+                </span>
+            </div>
+
+            <div className="mt-1.5 flex items-center gap-2">
+                <div className="h-2 flex-1 overflow-hidden rounded-full bg-[var(--color-bg-primary)]">
+                    {/* Nad sto procent je varování, ne chyba — někdo prostě utratil víc. */}
+                    <div className={`h-full ${preteklo ? 'bg-red-400' : 'bg-emerald-400/80'}`}
+                        style={{ width: `${Math.min(100, category.used_percent ?? 0)}%` }}/>
+                </div>
+                <span className={`w-11 shrink-0 text-right text-[11px] tabular-nums ${preteklo ? 'text-red-300' : 'text-[var(--color-text-secondary)]'}`}>
+                    {category.used_percent !== null ? `${category.used_percent} %` : '—'}
+                </span>
+                <button type="button" onClick={() => setUprava(true)} aria-label={`Upravit kategorii ${category.name}`}
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-muted)] hover:text-[var(--color-text-primary)]">
+                    <Pencil size={14}/>
+                </button>
+            </div>
+        </div>
+    );
+}
+
 function Categories({ budget, categories, onChanged }: { budget: Overview['budget']; categories: Overview['categories']; onChanged: () => void }) {
     const [name, setName] = useState('');
     const [planned, setPlanned] = useState('');
@@ -964,28 +1104,7 @@ function Categories({ budget, categories, onChanged }: { budget: Overview['budge
                     </p>
                 )}
                 {categories.map(category => (
-                    <div key={category.id}>
-                        <div className="flex items-baseline justify-between gap-2 text-sm">
-                            <span className="text-[var(--color-text-primary)]">{category.name}</span>
-                            <span className="text-xs text-[var(--color-text-secondary)]">
-                                {money(category.spent, budget.currency)}
-                                {category.planned_to_date > 0 && <> z {money(category.planned_to_date, budget.currency)}</>}
-                            </span>
-                        </div>
-                        <div className="mt-1 flex items-center gap-2">
-                            <div className="h-2 flex-1 overflow-hidden rounded-full bg-[var(--color-bg-primary)]">
-                                {/* Nad sto procent je varování, ne chyba — někdo prostě utratil víc. */}
-                                <div className={`h-full ${(category.used_percent ?? 0) > 100 ? 'bg-red-400' : 'bg-emerald-400/80'}`}
-                                    style={{ width: `${Math.min(100, category.used_percent ?? 0)}%` }}/>
-                            </div>
-                            <span className={`w-12 shrink-0 text-right text-[11px] ${(category.used_percent ?? 0) > 100 ? 'text-red-300' : 'text-[var(--color-text-secondary)]'}`}>
-                                {category.used_percent !== null ? `${category.used_percent} %` : '—'}
-                            </span>
-                            <DeleteButton
-                                label={`Smazat kategorii ${category.name}`}
-                                onDelete={async () => { await axios.delete(`/api/v1/rozpocty/${budget.uuid}/kategorie/${category.id}`); onChanged(); }}/>
-                        </div>
-                    </div>
+                    <CategoryRow key={category.id} budget={budget} category={category} onChanged={onChanged}/>
                 ))}
             </div>
 

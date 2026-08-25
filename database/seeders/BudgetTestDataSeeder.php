@@ -76,20 +76,23 @@ class BudgetTestDataSeeder extends Seeder
             'period_unit' => 'month',
         ]);
 
+        // Poslední má zapnutý přenos: jízdenka domů nechodí každý měsíc, takže měsíční
+        // plán je u ní vždycky špatně a teprve obálka, která se plní, odpovídá skutečnosti.
         $kategorie = collect([
-            ['Bydlení', 950, '#6366f1', 0],
-            ['Jídlo a nákupy', 420, '#22c55e', 1],
-            ['Doprava', 140, '#f59e0b', 2],
-            ['Zdraví', 90, '#ef4444', 3],
-            ['Volný čas', 180, '#ec4899', 4],
-            ['Cesty domů', 0, '#06b6d4', 5],
+            ['Bydlení', 950, '#6366f1', 0, false],
+            ['Jídlo a nákupy', 420, '#22c55e', 1, false],
+            ['Doprava', 140, '#f59e0b', 2, false],
+            ['Zdraví', 90, '#ef4444', 3, false],
+            ['Volný čas', 180, '#ec4899', 4, false],
+            ['Cesty domů', 100, '#06b6d4', 5, true],
         ])->mapWithKeys(function (array $radek) use ($budget) {
-            [$nazev, $plan, $barva, $poradi] = $radek;
+            [$nazev, $plan, $barva, $poradi, $prenos] = $radek;
 
             $kategorie = BudgetCategory::create([
                 'budget_id' => $budget->id,
                 'name' => $nazev,
                 'planned_monthly' => $plan,
+                'rollover' => $prenos,
                 'color' => $barva,
                 'sort_order' => $poradi,
             ]);
@@ -126,6 +129,9 @@ class BudgetTestDataSeeder extends Seeder
             [-28, 'Jídlo a nákupy', 95.40, 'EUR', 'Nákup', $druhy, 'equal'],
             [-21, 'Volný čas', 48.00, 'EUR', 'Koncert', $druhy, 'equal'],
             [-16, 'Cesty domů', 2450.00, 'CZK', 'Zpáteční jízdenka', $druhy, 'equal'],
+            // Jedna jízdenka v měně rozpočtu, aby bylo na obálce vidět i čerpání —
+            // koruny se do eurového plánu záměrně nesčítají.
+            [-24, 'Cesty domů', 138.00, 'EUR', 'Jízdenka z Mnichova', $ja, 'none'],
             [-12, 'Jídlo a nákupy', 66.30, 'EUR', 'Nákup', $ja, 'equal'],
             [-8, 'Doprava', 18.50, 'EUR', 'Taxi z nádraží', $ja, 'none'],
             [-5, 'Jídlo a nákupy', 52.70, 'EUR', 'Nákup', $druhy, 'equal'],

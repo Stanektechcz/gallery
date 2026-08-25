@@ -102,6 +102,7 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
         Route::patch('/{uuid}', [App\Http\Controllers\Api\BudgetController::class, 'update'])->name('update');
         Route::delete('/{uuid}', [App\Http\Controllers\Api\BudgetController::class, 'destroy'])->name('destroy');
         Route::post('/{uuid}/kategorie', [App\Http\Controllers\Api\BudgetController::class, 'storeCategory'])->name('categories.store');
+        Route::patch('/{uuid}/kategorie/{categoryId}', [App\Http\Controllers\Api\BudgetController::class, 'updateCategory'])->name('categories.update');
         Route::delete('/{uuid}/kategorie/{categoryId}', [App\Http\Controllers\Api\BudgetController::class, 'destroyCategory'])->name('categories.destroy');
         Route::post('/{uuid}/vypis/nahled', [App\Http\Controllers\Api\BudgetController::class, 'previewStatement'])->name('statement.preview');
         Route::post('/{uuid}/vypis', [App\Http\Controllers\Api\BudgetController::class, 'importStatement'])->name('statement.import');

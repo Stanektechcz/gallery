@@ -138,6 +138,38 @@ class BudgetController extends Controller
         return response()->json($this->budgets->overview($budget->fresh()), 201);
     }
 
+    /**
+     * Úprava kategorie.
+     *
+     * Dosud šla kategorie jen založit a smazat. Změnit „Jídlo 420" na „Jídlo 450" tedy
+     * znamenalo smazat ji a založit znovu — a protože se položky na kategorii vážou cizím
+     * klíčem s `nullOnDelete`, přišly tím všechny dosavadní výdaje o zařazení. Za změnu
+     * jednoho čísla se platilo historií, což je cena, kterou nikdo čekat nemůže.
+     */
+    public function updateCategory(Request $request, string $uuid, int $categoryId): JsonResponse
+    {
+        $this->write($request);
+        $budget = $this->budget($request, $uuid, owned: true);
+
+        $data = $request->validate([
+            'name' => 'sometimes|required|string|max:120',
+            'planned_monthly' => 'sometimes|nullable|numeric|min:0',
+            'rollover' => 'sometimes|boolean',
+            'color' => 'sometimes|nullable|string|max:20',
+            'icon' => 'sometimes|nullable|string|max:50',
+        ]);
+
+        $kategorie = $budget->categories()->whereKey($categoryId)->firstOrFail();
+
+        if (array_key_exists('planned_monthly', $data) && $data['planned_monthly'] === null) {
+            $data['planned_monthly'] = 0;
+        }
+
+        $kategorie->update($data);
+
+        return response()->json($this->budgets->overview($budget->fresh()));
+    }
+
     public function destroyCategory(Request $request, string $uuid, int $categoryId): JsonResponse
     {
         $this->write($request);
