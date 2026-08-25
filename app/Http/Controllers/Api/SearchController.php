@@ -49,6 +49,15 @@ class SearchController extends Controller
 
         $interpreted = app(\App\Services\Search\QueryInterpreter::class)
             ->interpret(trim((string) ($validated['q'] ?? '')));
+
+        // Kdo a kde. Z toho, co po vyříznutí času a druhu zbylo, se ještě zkusí poznat
+        // jméno člověka nebo místa — česky skloňované, takže „z Prahy" najde Prahu.
+        // Co se pozná, přestává být hledaným textem a stává se filtrem podle vazby.
+        $entity = app(\App\Services\Search\EntityMatcher::class)
+            ->match($space, $interpreted['text']);
+
+        $interpreted['text'] = $entity['text'];
+        $interpreted['labels'] = array_merge($interpreted['labels'], $entity['labels']);
         $filters = array_merge($interpreted['filters'], array_filter($validated, fn ($value) => $value !== null && $value !== ''));
 
         $query = MediaItem::query()
@@ -70,6 +79,16 @@ class SearchController extends Controller
                     ->orWhere('display_title', 'like', "%{$q}%")
                     ->orWhere('caption', 'like', "%{$q}%");
             });
+        }
+
+        // Rozpoznaná místa a lidé. Víc jmen v dotazu znamená „a zároveň" — kdo napíše
+        // „Makinka v Praze", chce fotky, kde je obojí, ne sjednocení obou seznamů.
+        foreach ($entity['place_ids'] as $placeId) {
+            $query->whereHas('places', fn ($vazba) => $vazba->where('places.id', $placeId));
+        }
+
+        foreach ($entity['person_ids'] as $personId) {
+            $query->whereHas('people', fn ($vazba) => $vazba->where('people.id', $personId));
         }
 
         // Structured filters
