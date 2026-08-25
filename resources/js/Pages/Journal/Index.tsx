@@ -139,7 +139,7 @@ export default function JournalIndex() {
                             type="button"
                             onClick={() => setScope(option.value)}
                             className={`min-h-9 rounded-lg px-3 text-xs ${scope === option.value
-                                ? 'bg-[var(--color-accent)]/15 text-[var(--color-accent-contrast)]'
+                                ? 'bg-[var(--color-accent)] text-[var(--color-accent-contrast)]'
                                 : 'border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}
                         >
                             {option.label}

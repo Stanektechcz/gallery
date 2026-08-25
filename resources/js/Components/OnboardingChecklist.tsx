@@ -60,7 +60,7 @@ export default function OnboardingChecklist() {
                     type="button"
                     onClick={hide}
                     aria-label="Skrýt nápovědu"
-                    className="shrink-0 rounded-lg p-1.5 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] sm:h-7 sm:w-7"
                 >
                     <X size={15} />
                 </button>

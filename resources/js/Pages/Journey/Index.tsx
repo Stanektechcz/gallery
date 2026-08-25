@@ -114,7 +114,7 @@ export default function JourneyIndex() {
     return (
         <AppLayout>
             <Head title="Naše cesta" />
-            <div className="p-4 max-w-3xl mx-auto pb-10">
+            <div role="main" className="p-4 max-w-3xl mx-auto pb-10">
 
                 {/* Header */}
                 <div className="flex items-center justify-between mb-6 flex-wrap gap-3">

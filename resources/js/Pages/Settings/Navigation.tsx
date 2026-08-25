@@ -478,7 +478,7 @@ export default function NavigationSettings() {
                                     onClick={() => toggleFold(row.key)}
                                     aria-expanded={!folded}
                                     aria-label={folded ? `Rozbalit ${row.label ?? row.defaultLabel}` : `Sbalit ${row.label ?? row.defaultLabel}`}
-                                    className="shrink-0 rounded-lg p-0.5 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
+                                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] sm:h-6 sm:w-6"
                                 >
                                     <ChevronDown size={14} className={folded ? '-rotate-90 transition-transform' : 'transition-transform'} />
                                 </button>
@@ -518,10 +518,10 @@ export default function NavigationSettings() {
                                 )}
                             </div>
 
-                            <button type="button" onClick={() => indent(index, -1)} disabled={filtering || row.depth === 0} aria-label="O úroveň výš" className="rounded-lg p-1.5 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] disabled:opacity-25"><ChevronLeft size={14} /></button>
-                            <button type="button" onClick={() => indent(index, 1)} disabled={filtering || index === 0 || row.depth > rows[index - 1].depth} aria-label="Vnořit pod položku výše" className="rounded-lg p-1.5 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] disabled:opacity-25"><ChevronRight size={14} /></button>
-                            <button type="button" onClick={() => move(index, -1)} disabled={filtering || index === 0} aria-label="Posunout výš" className="rounded-lg p-1.5 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] disabled:opacity-25"><ArrowUp size={14} /></button>
-                            <button type="button" onClick={() => move(index, 1)} disabled={filtering || index === rows.length - 1} aria-label="Posunout níž" className="rounded-lg p-1.5 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] disabled:opacity-25"><ArrowDown size={14} /></button>
+                            <button type="button" onClick={() => indent(index, -1)} disabled={filtering || row.depth === 0} aria-label="O úroveň výš" className="flex h-9 w-9 items-center justify-center rounded-lg text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] disabled:opacity-25 sm:h-7 sm:w-7"><ChevronLeft size={14} /></button>
+                            <button type="button" onClick={() => indent(index, 1)} disabled={filtering || index === 0 || row.depth > rows[index - 1].depth} aria-label="Vnořit pod položku výše" className="flex h-9 w-9 items-center justify-center rounded-lg text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] disabled:opacity-25 sm:h-7 sm:w-7"><ChevronRight size={14} /></button>
+                            <button type="button" onClick={() => move(index, -1)} disabled={filtering || index === 0} aria-label="Posunout výš" className="flex h-9 w-9 items-center justify-center rounded-lg text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] disabled:opacity-25 sm:h-7 sm:w-7"><ArrowUp size={14} /></button>
+                            <button type="button" onClick={() => move(index, 1)} disabled={filtering || index === rows.length - 1} aria-label="Posunout níž" className="flex h-9 w-9 items-center justify-center rounded-lg text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] disabled:opacity-25 sm:h-7 sm:w-7"><ArrowDown size={14} /></button>
 
                             {!row.group && (
                                 <button
@@ -529,7 +529,7 @@ export default function NavigationSettings() {
                                     onClick={() => setRows(current => current.map((candidate, position) =>
                                         position === index ? { ...candidate, hidden: !candidate.hidden } : candidate))}
                                     aria-label={row.hidden ? 'Zobrazit' : 'Skrýt'}
-                                    className="rounded-lg p-1.5 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
+                                    className="flex h-9 w-9 items-center justify-center rounded-lg text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] sm:h-7 sm:w-7"
                                 >
                                     {row.hidden ? <EyeOff size={14} /> : <Eye size={14} />}
                                 </button>

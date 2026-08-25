@@ -41,7 +41,7 @@ export default function RecoveryIndex({ checks, media_stats, drive_info }: Props
     return (
         <AppLayout>
             <Head title="Recovery Center" />
-            <div className="p-4 max-w-2xl mx-auto pb-8">
+            <div role="main" className="p-4 max-w-2xl mx-auto pb-8">
                 <div className="flex items-center gap-3 mb-6">
                     <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${allOk ? 'bg-green-500/20' : 'bg-yellow-500/20'}`}>
                         {allOk ? <CheckCircle size={18} className="text-green-400" /> : <AlertTriangle size={18} className="text-yellow-400" />}

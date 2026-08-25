@@ -275,7 +275,7 @@ export default function CompareIndex() {
     return (
         <AppLayout>
             <Head title="Porovnání fotografií" />
-            <div className="flex flex-col h-full min-h-0">
+            <div role="main" className="flex flex-col h-full min-h-0">
 
                 {/* Top bar */}
                 <div className="shrink-0 h-11 px-3 border-b border-[var(--color-border)] bg-[var(--color-bg-secondary)] flex items-center gap-3">
@@ -295,7 +295,7 @@ export default function CompareIndex() {
 
                     {/* Sync zoom toggle */}
                     <button onClick={() => setSyncEnabled(v => !v)}
-                        className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border transition-colors ${syncEnabled ? 'bg-[var(--color-accent)]/20 border-[var(--color-accent)] text-[var(--color-accent)]' : 'border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}>
+                        className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border transition-colors ${syncEnabled ? 'bg-[var(--color-accent)] border-[var(--color-accent)] text-[var(--color-accent-contrast)]' : 'border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}>
                         {syncEnabled ? <Link2 size={13}/> : <Link2Off size={13}/>}
                         Synchronní zoom
                     </button>

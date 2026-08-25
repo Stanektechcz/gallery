@@ -227,7 +227,7 @@ export default function ItineraryIndex() {
     return (
         <AppLayout>
             <Head title="Světový itinerář" />
-            <div className="flex h-full min-h-0">
+            <div role="main" className="flex h-full min-h-0">
 
                 {/* ── Left panel ───────────────────────────────────────── */}
                 <div className="w-80 shrink-0 flex flex-col border-r border-[var(--color-border)] overflow-hidden">
