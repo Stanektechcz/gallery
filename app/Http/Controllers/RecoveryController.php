@@ -189,6 +189,16 @@ class RecoveryController extends Controller
                 'count' => (clone $base)->whereNull('taken_at')->count(), 'bytes' => 0,
                 'reason' => 'Bez data nelze média správně zařadit do časové osy a vzpomínek.', 'action' => '/search?q=&sort_by=uploaded_at',
             ],
+            // Slepá skvrna hledání duplicit jako viditelná položka. Počet výš vzniká
+            // dotazem přes sha256, takže soubor bez otisku se do něj nepočítá a úspora
+            // vyjde menší, než by měla. Vypsat to jako kategorii je poctivější než
+            // poznámka pod čarou — a hlavně se s tím dá něco dělat.
+            [
+                'key' => 'no_fingerprint', 'label' => 'Bez otisku', 'icon' => '🔍',
+                'count' => (clone $base)->whereNull('sha256')->count(), 'bytes' => 0,
+                'reason' => 'Bez otisku se soubor nedá porovnat s ostatními, takže do hledání duplicit nevstupuje. Stává se to, když zpracování skončilo chybou.',
+                'action' => '/duplicity',
+            ],
         ];
 
         return response()->json([
