@@ -28,9 +28,12 @@ class Person extends Model
 
     public function media()
     {
+        // Bez `withTimestamps()`: spojovací tabulka má jen `created_at`, `updated_at` v ní
+        // nikdy nebylo. `withTimestamps()` si žádá obojí, takže dotaz spadl na chybějící
+        // sloupec a detail osoby vracel 500. Druhá strana vztahu, MediaItem::people(),
+        // to má správně už teď a bere `created_at` přes withPivot.
         return $this->belongsToMany(MediaItem::class, 'media_person')
-            ->withPivot(['tagged_by'])
-            ->withTimestamps();
+            ->withPivot(['tagged_by', 'created_at']);
     }
 
     public function albums()

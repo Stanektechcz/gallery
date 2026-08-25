@@ -218,7 +218,8 @@ class MediaItem extends Model
 
     public function userFavoritedBy()
     {
-        return $this->belongsToMany(User::class, 'user_favorites')->withTimestamps();
+        // Viz User::favorites() — `user_favorites` nemá `updated_at`.
+        return $this->belongsToMany(User::class, 'user_favorites')->withPivot('created_at');
     }
 
     public function userRatings()

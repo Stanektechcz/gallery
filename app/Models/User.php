@@ -94,7 +94,8 @@ class User extends Authenticatable
     }
 
     public function ownedSpaces()       { return $this->hasMany(GallerySpace::class, 'owner_id'); }
-    public function favorites()         { return $this->belongsToMany(MediaItem::class, 'user_favorites')->withTimestamps(); }
+    /** `user_favorites` má jen `created_at` — `withTimestamps()` by si žádalo i `updated_at`. */
+    public function favorites()         { return $this->belongsToMany(MediaItem::class, 'user_favorites')->withPivot('created_at'); }
     public function ratings()           { return $this->belongsToMany(MediaItem::class, 'user_ratings')->withPivot('rating')->withTimestamps(); }
     public function storageConnections(){ return $this->hasMany(StorageConnection::class, 'owner_user_id'); }
     public function savedSearches()     { return $this->hasMany(SavedSearch::class); }

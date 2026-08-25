@@ -19,9 +19,10 @@ class Tag extends Model
 
     public function media()
     {
+        // `media_tag` má jen `created_at`. `withTimestamps()` si žádá i `updated_at`,
+        // který v tabulce není, a dotaz pak spadne na chybějící sloupec.
         return $this->belongsToMany(MediaItem::class, 'media_tag')
-            ->withPivot(['tagged_by'])
-            ->withTimestamps();
+            ->withPivot(['tagged_by', 'created_at']);
     }
 
     public function albums()

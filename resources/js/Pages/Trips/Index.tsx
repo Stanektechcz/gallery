@@ -223,12 +223,14 @@ export default function TripsIndex() {
         if (!selectedId) { setTripMedia([]); setSuggestion(null); return; }
         setEditNotes(false);
         setLoadingMedia(true); setTripMedia([]); setSuggestion(null);
-        Promise.all([
+        // allSettled: návrh fotek je nápověda navíc, ne podmínka pro seznam fotek cesty.
+        // S `all` by jeho selhání shodilo i vypsání fotek, které se načetly v pořádku.
+        Promise.allSettled([
             axios.get(`/api/v1/trips/${selectedId}/media`),
             axios.get(`/api/v1/trips/${selectedId}/suggest-media`),
-        ]).then(([mR, sR]) => {
-            setTripMedia(mR.data ?? []);
-            if (sR.data?.count > 0) setSuggestion(sR.data);
+        ]).then(([fotky, navrh]) => {
+            if (fotky.status === 'fulfilled') setTripMedia(fotky.value.data ?? []);
+            if (navrh.status === 'fulfilled' && navrh.value.data?.count > 0) setSuggestion(navrh.value.data);
         }).finally(() => setLoadingMedia(false));
     }, [selectedId]);
 
