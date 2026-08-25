@@ -1,5 +1,6 @@
 import Panel, { Stat } from '@/Components/Panel';
 import AppLayout from '@/Layouts/AppLayout';
+import { dny } from '@/lib/cestina';
 import { Head } from '@inertiajs/react';
 import axios from 'axios';
 import { Bell, CalendarDays, ChevronDown, Droplet, Eye, Heart, History, LineChart, Lock, Pencil, Repeat, Sparkles, X } from 'lucide-react';
@@ -142,7 +143,6 @@ const den = (iso: string) => new Date(`${iso}T12:00:00`).toLocaleDateString('cs-
 /** Krátký tvar pro osu grafu — „25. srp". Celé „25. srpna" se do třetiny řádku nevejde. */
 const denKratce = (iso: string) => new Date(`${iso}T12:00:00`).toLocaleDateString('cs-CZ', { day: 'numeric', month: 'short' });
 
-const dny = (pocet: number) => `${pocet} ${pocet === 1 ? 'den' : pocet >= 2 && pocet <= 4 ? 'dny' : 'dní'}`;
 
 /** Dny v mřížce po měsících — kalendář se čte líp než seznam. */
 function monthGrid(anchor: Date): Array<string | null> {

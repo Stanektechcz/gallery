@@ -1,4 +1,5 @@
 import AppLayout from '@/Layouts/AppLayout';
+import { polozky } from '@/lib/cestina';
 import { Head, Link } from '@inertiajs/react';
 import axios from 'axios';
 import { AlertTriangle, CheckCircle, Layers, RefreshCw, Sparkles, XCircle } from 'lucide-react';
@@ -115,7 +116,7 @@ export default function RecoveryIndex({ checks, media_stats, drive_info }: Props
                         <p className="mb-3 text-xs text-[var(--color-text-secondary)]">Pouze vysvětlitelné návrhy. Nic se nesmaže bez vaší kontroly.</p>
                         <div className="grid gap-2 sm:grid-cols-2">{cleanup.categories.map(category => (
                             <Link key={category.key} href={category.action} className="rounded-xl border border-[var(--color-border)] p-3 transition hover:border-[var(--color-accent)]">
-                                <div className="flex items-center gap-2"><span className="text-xl">{category.icon}</span><div className="min-w-0 flex-1"><p className="text-xs font-medium text-[var(--color-text-primary)]">{category.label}</p><p className="text-[10px] text-[var(--color-text-secondary)]">{category.count} položek{category.bytes > 0 ? ` · ${fmt(category.bytes)}` : ''}</p></div></div>
+                                <div className="flex items-center gap-2"><span className="text-xl">{category.icon}</span><div className="min-w-0 flex-1"><p className="text-xs font-medium text-[var(--color-text-primary)]">{category.label}</p><p className="text-[10px] text-[var(--color-text-secondary)]">{polozky(category.count)}{category.bytes > 0 ? ` · ${fmt(category.bytes)}` : ''}</p></div></div>
                                 <p className="mt-2 text-[10px] leading-relaxed text-[var(--color-text-secondary)]">{category.reason}</p>
                             </Link>
                         ))}</div>

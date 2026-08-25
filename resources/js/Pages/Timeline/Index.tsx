@@ -1,3 +1,4 @@
+import { polozky } from '@/lib/cestina';
 import { previewUrl } from '@/lib/mediaUrl';
 import { BulkActionBar } from '@/Components/BulkActionBar';
 import AlbumSuggestionPanel, { type AlbumSuggestion } from '@/Components/AlbumSuggestionPanel';
@@ -375,7 +376,7 @@ export default function TimelineIndex() {
                     <div className="sticky top-0 z-20 flex flex-col gap-2 border-b border-[var(--color-border)] bg-[var(--color-bg-primary)]/95 px-2 py-2 backdrop-blur-sm sm:flex-row sm:items-center sm:justify-between sm:px-4 sm:py-2.5">
                         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
                             <h1 className="text-sm font-semibold text-[var(--color-text-primary)]">Fotky</h1>
-                            <span className="text-xs text-[var(--color-text-secondary)]">{allItems.length} položek</span>
+                            <span className="text-xs text-[var(--color-text-secondary)]">{polozky(allItems.length)}</span>
 
                             {/* Jeden filtr po druhém, ne kombinace. Tři zaškrtnuté naráz
                                 se z lišty nedají přečíst a nikdo pak neví, co vlastně vidí.

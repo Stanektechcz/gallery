@@ -1,4 +1,5 @@
 import { MediaCardData, MediaGrid } from '@/Components/MediaGrid';
+import { polozky } from '@/lib/cestina';
 import AppLayout from '@/Layouts/AppLayout';
 import { Head, router } from '@inertiajs/react';
 import axios from 'axios';
@@ -50,7 +51,7 @@ export default function ArchiveIndex({ media }: Props) {
                         <div className="flex items-center gap-2">
                             <Archive size={16} className="text-[var(--color-text-secondary)]" />
                             <h1 className="text-sm font-semibold text-[var(--color-text-primary)]">Archiv</h1>
-                            <span className="text-xs text-[var(--color-text-secondary)]">{items.length} položek</span>
+                            <span className="text-xs text-[var(--color-text-secondary)]">{polozky(items.length)}</span>
                         </div>
                         <div className="flex items-center gap-2">
                             {selected.size > 0 && (

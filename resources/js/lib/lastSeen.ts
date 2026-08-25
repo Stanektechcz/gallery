@@ -1,3 +1,5 @@
+import { tvar } from '@/lib/cestina';
+
 /**
  * "Naposledy aktivní" in words, in Czech, with the cases right.
  *
@@ -24,5 +26,8 @@ export function lastSeenLabel(iso: string | null | undefined, online: boolean): 
     return `naposledy ${new Date(iso).toLocaleDateString('cs-CZ', { day: 'numeric', month: 'numeric' })}`;
 }
 
+/* Skloňování se řeší v cestina.ts. Tady zůstává jen jméno, aby se nemusela přepisovat
+   všechna volání níž — pravidlo je jedno a je jinde. Původní verze mimochodem posílala
+   nulu do tvaru pro dva až čtyři („0 dny"), protože testovala `count < 5`. */
 const plural = (count: number, one: string, few: string, many: string) =>
-    count === 1 ? one : count < 5 ? few : many;
+    tvar(count, one, few, many);

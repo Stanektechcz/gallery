@@ -1,4 +1,5 @@
 import AppLayout from '@/Layouts/AppLayout';
+import { pocet } from '@/lib/cestina';
 import { Head, Link } from '@inertiajs/react';
 import axios from 'axios';
 import { Image, User } from 'lucide-react';
@@ -32,7 +33,7 @@ export default function PeopleIndex() {
                     </div>
                     <div>
                         <h1 className="text-lg font-semibold text-[var(--color-text-primary)]">Lidé</h1>
-                        <p className="text-xs text-[var(--color-text-secondary)]">{people.length} osob</p>
+                        <p className="text-xs text-[var(--color-text-secondary)]">{pocet(people.length, 'osoba', 'osoby', 'osob')}</p>
                     </div>
                 </div>
 

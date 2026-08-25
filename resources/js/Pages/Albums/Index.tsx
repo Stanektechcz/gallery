@@ -1,4 +1,5 @@
 import AppLayout from '@/Layouts/AppLayout';
+import { pocet } from '@/lib/cestina';
 import AlbumSuggestionPanel, { AlbumSuggestion } from '@/Components/AlbumSuggestionPanel';
 import { Head, Link } from '@inertiajs/react';
 import { FolderOpen, Image } from 'lucide-react';
@@ -70,7 +71,7 @@ function AlbumCard({ album }: { album: AlbumNode }) {
                     {album.descendant_count > 0 && (
                         <span className="flex items-center gap-1">
                             <FolderOpen size={10} />
-                            {album.descendant_count} alb
+                            {pocet(album.descendant_count, 'album', 'alba', 'alb')}
                         </span>
                     )}
                 </div>

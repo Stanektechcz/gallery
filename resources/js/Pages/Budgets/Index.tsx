@@ -1,5 +1,6 @@
 import DeleteButton from '@/Components/DeleteButton';
 import Panel, { PanelGrid, Stat } from '@/Components/Panel';
+import { dny } from '@/lib/cestina';
 import AppLayout from '@/Layouts/AppLayout';
 import { uploadManager, waitForUploads } from '@/lib/uploadManager';
 import { Head } from '@inertiajs/react';
@@ -92,8 +93,6 @@ const datum = (iso: string) => new Date(`${iso}T12:00:00`).toLocaleDateString('c
 /** „2026-07" → „červenec 2026". Číslo měsíce si nikdo nepřeloží na první pohled. */
 const mesic = (klic: string) =>
     new Date(`${klic}-01T12:00:00`).toLocaleDateString('cs-CZ', { month: 'long', year: 'numeric' });
-
-const dny = (pocet: number) => `${pocet} ${pocet === 1 ? 'den' : pocet >= 2 && pocet <= 4 ? 'dny' : 'dní'}`;
 
 const DELENI: Record<string, string> = { none: 'moje', equal: 'napůl', other: 'za druhého' };
 

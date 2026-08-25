@@ -1,4 +1,5 @@
 import { MediaCardData, MediaGrid } from '@/Components/MediaGrid';
+import { polozky } from '@/lib/cestina';
 import AppLayout from '@/Layouts/AppLayout';
 import { Head } from '@inertiajs/react';
 import axios from 'axios';
@@ -87,7 +88,7 @@ export default function TrashIndex({ media, retention_days, can_purge }: Props) 
                         <div className="flex items-center gap-2">
                             <Trash2 size={16} className="text-[var(--color-text-secondary)]" />
                             <h1 className="text-sm font-semibold text-[var(--color-text-primary)]">Koš</h1>
-                            <span className="text-xs text-[var(--color-text-secondary)]">{items.length} položek</span>
+                            <span className="text-xs text-[var(--color-text-secondary)]">{polozky(items.length)}</span>
                             <span className="text-xs text-[var(--color-text-secondary)] hidden sm:inline">· Smazáno za {retention_days} dní</span>
                         </div>
                         <div className="flex items-center gap-2">

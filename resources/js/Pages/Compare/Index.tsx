@@ -1,4 +1,5 @@
 import AppLayout from '@/Layouts/AppLayout';
+import { fotografie } from '@/lib/cestina';
 import { Head, Link, router } from '@inertiajs/react';
 import axios from 'axios';
 import { ArrowLeft, Heart, Layers, Link2, Link2Off, Plus, RotateCcw, Star, X, ZoomIn, ZoomOut } from 'lucide-react';
@@ -286,7 +287,7 @@ export default function CompareIndex() {
                         <Layers size={15} className="text-[var(--color-accent)]"/>
                         <h1 className="text-sm font-semibold text-[var(--color-text-primary)]">Porovnání</h1>
                         {items.length > 0 && (
-                            <span className="text-xs text-[var(--color-text-secondary)]">{items.length} fotografie</span>
+                            <span className="text-xs text-[var(--color-text-secondary)]">{fotografie(items.length)}</span>
                         )}
                     </div>
 

@@ -1,5 +1,6 @@
 import FilterBar from '@/Components/FilterBar';
 import AppLayout from '@/Layouts/AppLayout';
+import { fotografie, pocet } from '@/lib/cestina';
 import { Head, Link, router } from '@inertiajs/react';
 import axios from 'axios';
 import { localizedCountry } from '@/lib/localizedMap';
@@ -220,7 +221,7 @@ export default function PlacesIndex() {
                             <MapPin size={20} className="text-[var(--color-accent)]"/> Místa
                         </h1>
                         <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">
-                            {places.length} míst · {places.reduce((s, p) => s + p.photo_count, 0)} fotografií
+                            {pocet(places.length, 'místo', 'místa', 'míst')} · {fotografie(places.reduce((s, p) => s + p.photo_count, 0))}
                         </p>
                     </div>
                     <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">

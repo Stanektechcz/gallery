@@ -1,5 +1,6 @@
 import Panel, { PanelGrid } from '@/Components/Panel';
 import AppLayout from '@/Layouts/AppLayout';
+import { dny } from '@/lib/cestina';
 import { takenAtDate } from '@/lib/takenAt';
 import PartnerPulsePanel from '@/Components/PartnerPulsePanel';
 import { Head, Link } from '@inertiajs/react';
@@ -7,7 +8,6 @@ import axios from 'axios';
 import { CalendarDays, Heart, Hourglass, Images, Sparkles } from 'lucide-react';
 import { FormEvent, useEffect, useState } from 'react';
 
-const dny = (pocet: number) => `${pocet} ${pocet === 1 ? 'den' : pocet >= 2 && pocet <= 4 ? 'dny' : 'dní'}`;
 
 interface Overview { period:string[]; events:any[]; open_tasks:any[]; travel_inbox:any[]; rediscover:any[]; on_this_day?:any[]; }
 interface Milestone { uuid:string; title:string; icon:string; days_until:number; next_anniversary:string; }

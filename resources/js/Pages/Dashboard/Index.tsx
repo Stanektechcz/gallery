@@ -175,7 +175,7 @@ export default function DashboardIndex({ data }: Props) {
         <AppLayout>
             <Head title="Domů" />
 
-            <div className="w-full p-4 sm:p-6 lg:p-8 space-y-5 pb-8">
+            <div role="main" className="w-full p-4 sm:p-6 lg:p-8 space-y-5 pb-8">
                 <OnboardingChecklist />
 
                 {/* Above the greeting on purpose: the window is open for two hours and

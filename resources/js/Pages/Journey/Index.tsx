@@ -1,4 +1,5 @@
 import AppLayout from '@/Layouts/AppLayout';
+import { pocet } from '@/lib/cestina';
 import { Head } from '@inertiajs/react';
 import axios from 'axios';
 import { Camera, CheckCircle, Heart, MapPin, Music, Plus, RefreshCw, Trash2, X } from 'lucide-react';
@@ -122,7 +123,7 @@ export default function JourneyIndex() {
                             Naše cesta <Heart size={18} className="text-red-400 fill-red-400"/>
                         </h1>
                         <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">
-                            Vaše společná digitální kronika · {events.length} vzpomínek
+                            Vaše společná digitální kronika · {pocet(events.length, 'vzpomínka', 'vzpomínky', 'vzpomínek')}
                         </p>
                     </div>
                     <div className="flex gap-2">
