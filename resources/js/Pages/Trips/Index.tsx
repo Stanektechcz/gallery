@@ -3,6 +3,7 @@ import { fotky } from '@/lib/cestina';
 import { Head, Link } from '@inertiajs/react';
 import axios from 'axios';
 import { addLocalizedBaseLayer, localizedCountry } from '@/lib/localizedMap';
+import { nactiMapu } from '@/lib/mapa';
 import { ArrowDown, ArrowUp, Calendar, Camera, GripVertical, MapPin, Plus, RefreshCw, Route, Search, Trash2, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
@@ -281,12 +282,9 @@ export default function TripsIndex() {
 
     // Load Leaflet
     useEffect(() => {
-        if ((window as any).L) { setMapLoaded(true); return; }
-        const link = document.createElement('link'); link.rel = 'stylesheet';
-        link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'; document.head.appendChild(link);
-        const script = document.createElement('script');
-        script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
-        script.onload = () => setMapLoaded(true); document.head.appendChild(script);
+        let zive = true;
+        void nactiMapu().then(() => { if (zive) setMapLoaded(true); });
+        return () => { zive = false; };
     }, []);
 
     // Waypoint autocomplete (reuses itinerary Nominatim proxy)

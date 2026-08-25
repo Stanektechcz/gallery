@@ -5,6 +5,7 @@
 
 import axios from 'axios';
 import { addLocalizedBaseLayer } from '@/lib/localizedMap';
+import { nactiMapu } from '@/lib/mapa';
 import {
     ChevronDown, ChevronUp, Edit3,
     Plus,
@@ -112,11 +113,9 @@ function MapBlock({ content }: { content: Record<string, any> }) {
     const [ready, setReady] = useState(!!(window as any).L);
 
     useEffect(() => {
-        if ((window as any).L) { setReady(true); return; }
-        const link = document.createElement('link'); link.rel = 'stylesheet';
-        link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'; document.head.appendChild(link);
-        const s = document.createElement('script'); s.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
-        s.onload = () => setReady(true); document.head.appendChild(s);
+        let zive = true;
+        void nactiMapu().then(() => { if (zive) setReady(true); });
+        return () => { zive = false; };
     }, []);
 
     useEffect(() => {

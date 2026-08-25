@@ -5,6 +5,7 @@ import PlaceReviewPanel from '@/Components/PlaceReviewPanel';
 import PlaceNotesPanel from '@/Components/Places/PlaceNotesPanel';
 import axios from 'axios';
 import { addLocalizedBaseLayer } from '@/lib/localizedMap';
+import { nactiMapu } from '@/lib/mapa';
 import {
     ArrowLeft, Calendar, Camera, ExternalLink,
     FolderOpen, MapPin, RefreshCw, Settings2
@@ -152,12 +153,9 @@ export default function PlaceShow() {
 
     // Load Leaflet
     useEffect(() => {
-        if ((window as any).L) { setMapLoaded(true); return; }
-        const link = document.createElement('link'); link.rel = 'stylesheet';
-        link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'; document.head.appendChild(link);
-        const script = document.createElement('script');
-        script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
-        script.onload = () => setMapLoaded(true); document.head.appendChild(script);
+        let zive = true;
+        void nactiMapu().then(() => { if (zive) setMapLoaded(true); });
+        return () => { zive = false; };
     }, []);
 
     const autoLink = async () => {

@@ -12,6 +12,7 @@
 
 import { addLocalizedBaseLayer } from '@/lib/localizedMap';
 import { Link, router } from '@inertiajs/react';
+import { nactiMapu } from '@/lib/mapa';
 import axios from 'axios';
 import { useEffect, useRef, useState } from 'react';
 
@@ -218,12 +219,9 @@ export function GpsMap({ lat, lng }: { lat: number; lng: number }) {
     const [ready, setReady] = useState(!!(window as any).L);
 
     useEffect(() => {
-        if ((window as any).L) { setReady(true); return; }
-        const link = document.createElement('link'); link.rel = 'stylesheet';
-        link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'; document.head.appendChild(link);
-        const s = document.createElement('script');
-        s.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
-        s.onload = () => setReady(true); document.head.appendChild(s);
+        let zive = true;
+        void nactiMapu().then(() => { if (zive) setReady(true); });
+        return () => { zive = false; };
     }, []);
 
     useEffect(() => {

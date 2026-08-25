@@ -9,6 +9,7 @@ import {
     Pause, Play, Settings2, Shuffle, SkipForward, Star, X,
 } from 'lucide-react';
 import { addLocalizedBaseLayer } from '@/lib/localizedMap';
+import { nactiMapu } from '@/lib/mapa';
 import { takenAtDate } from '@/lib/takenAt';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
@@ -102,11 +103,9 @@ function GpsTransition({ lat, lng, label, onDone }: {
     const [ready, setReady] = useState(!!(window as any).L);
 
     useEffect(() => {
-        if ((window as any).L) { setReady(true); return; }
-        const link = document.createElement('link'); link.rel = 'stylesheet';
-        link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'; document.head.appendChild(link);
-        const s = document.createElement('script'); s.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
-        s.onload = () => setReady(true); document.head.appendChild(s);
+        let zive = true;
+        void nactiMapu().then(() => { if (zive) setReady(true); });
+        return () => { zive = false; };
     }, []);
 
     useEffect(() => {

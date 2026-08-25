@@ -4,6 +4,7 @@ import { takenAtDate } from '@/lib/takenAt';
 import { Head } from '@inertiajs/react';
 import axios from 'axios';
 import { addLocalizedBaseLayer, localizedCountry } from '@/lib/localizedMap';
+import { nactiMapu } from '@/lib/mapa';
 import { Calendar, CalendarClock, Camera, CheckCircle, ExternalLink, Globe, MapPin, Pencil, Plus, RefreshCw, Save, Search, Star, Trash2, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
@@ -106,9 +107,9 @@ export default function ItineraryIndex() {
     }, [mapLoaded, wishlist, visited]);
 
     useEffect(() => {
-        if ((window as any).L) { setMapLoaded(true); return; }
-        const link = document.createElement('link'); link.rel='stylesheet'; link.href='https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'; document.head.appendChild(link);
-        const script = document.createElement('script'); script.src='https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'; script.onload=()=>setMapLoaded(true); document.head.appendChild(script);
+        let zive = true;
+        void nactiMapu().then(() => { if (zive) setMapLoaded(true); });
+        return () => { zive = false; };
     }, []);
 
     const handleSearchInput = useCallback((val: string) => {

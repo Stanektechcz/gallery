@@ -184,4 +184,14 @@ namespace App {
 }
 }
 
+/**
+ * Obrázky importované jako modul — Vite je zabalí a vrátí adresu.
+ *
+ * Potřebují to výchozí značky mapy, které jsou v Leafletu obyčejné PNG.
+ */
+declare module '*.png' {
+    const adresa: string;
+    export default adresa;
+}
+
 export {};
