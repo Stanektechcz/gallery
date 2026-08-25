@@ -1,5 +1,5 @@
 import LocationPicker, { LocationValue } from '@/Components/LocationPicker';
-import { dny } from '@/lib/cestina';
+import { dny, pocet, tvar } from '@/lib/cestina';
 import { Link } from '@inertiajs/react';
 import axios from 'axios';
 import { CalendarDays, Clock, CloudRain, Heart, MapPin, RefreshCw, Route, Sparkles, Wallet } from 'lucide-react';
@@ -48,7 +48,7 @@ export default function DateIdeaGenerator({ spaceId }:{ spaceId?:number }) {
             setIdeas(current=>[...generated,...current.filter(old=>!generated.some(fresh=>fresh.uuid===old.uuid))]);
             setStarts(current=>({...current,...Object.fromEntries(generated.map(idea=>[idea.uuid,toLocalInput(idea.suggested_starts_at)]))}));
             setTripChoices(current=>({...current,...Object.fromEntries(generated.map(idea=>[idea.uuid,idea.is_trip_recommended]))}));
-            setMessage(response.data.message??(generated.length?`Připraveny ${generated.length} nové neopakované varianty.`:'Zkuste upravit omezení.'));
+            setMessage(response.data.message??(generated.length?`${tvar(generated.length, 'Připravena', 'Připraveny', 'Připraveno')} ${pocet(generated.length, 'nová neopakovaná varianta', 'nové neopakované varianty', 'nových neopakovaných variant')}.`:'Zkuste upravit omezení.'));
         } catch(reason:any) { setError(reason?.response?.data?.message??'Randíčka se nepodařilo vygenerovat. Zkuste parametry upravit.'); }
         finally { setLoading(false); }
     };

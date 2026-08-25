@@ -41,8 +41,13 @@ export const media = (cislo: number) => pocet(cislo, 'médium', 'média', 'médi
 export const fotky = (cislo: number) => pocet(cislo, 'fotka', 'fotky', 'fotek');
 export const minuty = (cislo: number) => pocet(cislo, 'minuta', 'minuty', 'minut');
 export const jidla = (cislo: number) => pocet(cislo, 'jídlo', 'jídla', 'jídel');
-export const ukoly = (cislo: number) => pocet(cislo, 'nový úkol', 'nové úkoly', 'nových úkolů');
+export const ukoly = (cislo: number) => pocet(cislo, 'úkol', 'úkoly', 'úkolů');
 export const pripominky = (cislo: number) => pocet(cislo, 'připomínka', 'připomínky', 'připomínek');
+export const serie = (cislo: number) => pocet(cislo, 'série', 'série', 'sérií');
+export const recepty = (cislo: number) => pocet(cislo, 'recept', 'recepty', 'receptů');
+export const transakce = (cislo: number) => pocet(cislo, 'transakce', 'transakce', 'transakcí');
+export const podklady = (cislo: number) => pocet(cislo, 'podklad', 'podklady', 'podkladů');
+export const limity = (cislo: number) => pocet(cislo, 'limit', 'limity', 'limitů');
 
 /**
  * Tvary, kde se s číslem mění i to, co k němu patří.
@@ -53,5 +58,6 @@ export const pripominky = (cislo: number) => pocet(cislo, 'připomínka', 'přip
  * na místě použití, kde by se skloňovala jen půlka.
  */
 export const noveTransakce = (cislo: number) => pocet(cislo, 'nová transakce', 'nové transakce', 'nových transakcí');
+export const noveUkoly = (cislo: number) => pocet(cislo, 'nový úkol', 'nové úkoly', 'nových úkolů');
 export const preskoceneDuplicity = (cislo: number) => pocet(cislo, 'duplicita přeskočena', 'duplicity přeskočeny', 'duplicit přeskočeno');
 export const radkyKeKontrole = (cislo: number) => pocet(cislo, 'řádek vyžaduje', 'řádky vyžadují', 'řádků vyžaduje') + ' kontrolu';

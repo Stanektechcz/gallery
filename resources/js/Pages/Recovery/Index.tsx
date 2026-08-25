@@ -1,6 +1,6 @@
 import { hlaska } from '@/Components/Hlasky';
 import AppLayout from '@/Layouts/AppLayout';
-import { polozky } from '@/lib/cestina';
+import { pocet, polozky } from '@/lib/cestina';
 import { Head, Link } from '@inertiajs/react';
 import axios from 'axios';
 import { AlertTriangle, CheckCircle, Layers, RefreshCw, Sparkles, XCircle } from 'lucide-react';
@@ -30,7 +30,7 @@ export default function RecoveryIndex({ checks, media_stats, drive_info }: Props
         axios.get('/api/v1/media-stacks/preview').then(response => setStackPreview(response.data)).catch(() => undefined);
     }, []);
     const applyStacks = async () => {
-        if (!stackPreview?.count || !confirm(`Seskupit ${stackPreview.count} rozpoznaných sérií? Fotografie se nesmažou.`)) return;
+        if (!stackPreview?.count || !confirm(`Seskupit ${pocet(stackPreview.count, 'rozpoznanou sérii', 'rozpoznané série', 'rozpoznaných sérií')}? Fotografie se nesmažou.`)) return;
         setStacking(true);
         try {
             const { data } = await axios.post('/api/v1/media-stacks/apply', { candidate_keys: stackPreview.groups.map(group => group.key) });
@@ -128,7 +128,7 @@ export default function RecoveryIndex({ checks, media_stats, drive_info }: Props
                     <div className="mb-4 rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-4">
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                             <div className="flex items-start gap-3"><Layers size={18} className="mt-0.5 text-[var(--color-accent)]"/><div><h2 className="text-sm font-semibold text-[var(--color-text-primary)]">Automatické stacky</h2><p className="mt-1 text-xs text-[var(--color-text-secondary)]">RAW+JPEG a rychlé série zůstanou pohromadě. Nejlepší snímek bude na obálce.</p></div></div>
-                            <button onClick={applyStacks} disabled={!stackPreview.count || stacking} className="min-h-10 shrink-0 rounded-lg bg-[var(--color-accent)] px-4 text-xs font-medium text-[var(--color-accent-contrast)] disabled:opacity-40">{stacking ? 'Seskupuji…' : stackPreview.count ? `Seskupit ${stackPreview.count} sérií` : 'Vše seskupeno'}</button>
+                            <button onClick={applyStacks} disabled={!stackPreview.count || stacking} className="min-h-10 shrink-0 rounded-lg bg-[var(--color-accent)] px-4 text-xs font-medium text-[var(--color-accent-contrast)] disabled:opacity-40">{stacking ? 'Seskupuji…' : stackPreview.count ? `Seskupit ${pocet(stackPreview.count, 'sérii', 'série', 'sérií')}` : 'Vše seskupeno'}</button>
                         </div>
                     </div>
                 )}

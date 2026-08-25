@@ -1,5 +1,5 @@
 import FilterBar from '@/Components/FilterBar';
-import { pocet } from '@/lib/cestina';
+import { pocet, recepty } from '@/lib/cestina';
 import RecipeEditor from '@/Components/Recipes/RecipeEditor';
 import AppLayout from '@/Layouts/AppLayout';
 import { Head, Link } from '@inertiajs/react';
@@ -28,7 +28,7 @@ export default function RecipesIndex(){
         <section className="mt-5 rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-3"><FilterBar
             className=""
             leading={<label className="relative block w-full sm:w-64"><Search size={16} className="absolute left-3 top-3 text-[var(--color-text-secondary)]"/><input value={filters.q} onChange={e=>setFilters(current=>({...current,q:e.target.value}))} className="min-h-10 w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-muted)] pl-9 pr-3 text-sm text-[var(--color-text-primary)]" placeholder="Název, kuchyně nebo surovina…"/></label>}
-            summary={`${data?.items?.length ?? 0} receptů`}
+            summary={recepty(data?.items?.length ?? 0)}
             active={[
                 ...(filters.category ? [{label:categories[filters.category]??filters.category, clear:()=>setFilters(current=>({...current,category:''}))}] : []),
                 ...(filters.difficulty ? [{label:difficulties[filters.difficulty]??filters.difficulty, clear:()=>setFilters(current=>({...current,difficulty:''}))}] : []),

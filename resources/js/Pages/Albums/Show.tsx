@@ -380,7 +380,7 @@ export default function AlbumShow({ album, breadcrumb, children, media, filters:
                                         </div>
                                         <div className="p-2.5">
                                             <p className="text-sm font-medium text-[var(--color-text-primary)] truncate">{child.title}</p>
-                                            <p className="text-xs text-[var(--color-text-secondary)]">{child.media_count > 0 ? `${child.media_count} médií` : 'Prázdné'}</p>
+                                            <p className="text-xs text-[var(--color-text-secondary)]">{child.media_count > 0 ? pocetMedii(child.media_count) : 'Prázdné'}</p>
                                         </div>
                                     </Link>
                                 );

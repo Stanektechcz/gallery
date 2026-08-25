@@ -1,6 +1,6 @@
 import AppLayout from '@/Layouts/AppLayout';
 import CalendarEventEditor from '@/Components/CalendarEventEditor';
-import { media } from '@/lib/cestina';
+import { media, tvar } from '@/lib/cestina';
 import EventReflection from '@/Components/EventReflection';
 import DateExperiencePanel, { DateExperience } from '@/Components/DateExperiencePanel';
 import MealPlanPanel from '@/Components/Recipes/MealPlanPanel';
@@ -110,7 +110,7 @@ export default function CalendarShow({ eventUuid }: { eventUuid:string }) {
             const response = await axios.get(`/api/v1/calendar/events/${eventUuid}/media-suggestions`);
             const found=response.data.candidates??[]; setCandidates(found); setChosen([]);
             setCaptureAlbumId(response.data.capture?.album?.id ?? captureAlbumId);
-            setNotice(found.length?`Našel jsem ${media(found.length)} odpovídajících času a místu akce. Vyberte je níže v části Vzpomínky z akce.`:'V okolí akce zatím nebyla nalezena žádná nová média. Můžete je rovnou nahrát.');
+            setNotice(found.length?`Našel jsem ${media(found.length)} ${tvar(found.length, 'odpovídající', 'odpovídající', 'odpovídajících')} času a místu akce. Vyberte je níže v části Vzpomínky z akce.`:'V okolí akce zatím nebyla nalezena žádná nová média. Můžete je rovnou nahrát.');
         } catch (reason:any) { setError(reason.response?.data?.message ?? 'Vhodná média se nepodařilo vyhledat.'); }
     };
     const attachSelected = async () => {
@@ -137,7 +137,13 @@ export default function CalendarShow({ eventUuid }: { eventUuid:string }) {
         setError('');
         try {
             if (mediaUuids.length) await axios.post(`/api/v1/calendar/events/${eventUuid}/media-suggestions`, {media_uuids:mediaUuids});
-            setNotice(mediaUuids.length === 1 ? 'Médium je nahrané a propojené s akcí, albem i cestou.' : `${mediaUuids.length || 'Nová'} média jsou nahraná do alba zážitku.`);
+            // „5 média jsou nahraná" — od pěti výš se mění podstatné jméno i sloveso se
+// slovesným tvarem. Nula je jiná věta, ta o počtu nemluví.
+setNotice(mediaUuids.length === 1
+    ? 'Médium je nahrané a propojené s akcí, albem i cestou.'
+    : mediaUuids.length === 0
+        ? 'Nová média jsou nahraná do alba zážitku.'
+        : `${media(mediaUuids.length)} ${tvar(mediaUuids.length, 'je nahrané', 'jsou nahraná', 'je nahráno')} do alba zážitku.`);
             await load();
         } catch (reason:any) { setError(reason.response?.data?.message ?? 'Média se nahrála, ale jejich propojení s akcí se nepodařilo dokončit.'); }
     };
