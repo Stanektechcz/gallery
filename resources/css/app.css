@@ -521,3 +521,25 @@
  */
 :root[data-density='standard'] { font-size: 15px; }
 :root[data-density='compact']  { font-size: 14px; }
+
+/*
+ * Kam se člověk dostal klávesnicí.
+ *
+ * V rozhraní je sto jednadvacet tříd `outline-none`. U polí za ně zaskakuje změna barvy
+ * rámečku, ale u sedmnácti tlačítek a odkazů nezůstalo nic — kdo prochází stránku
+ * tabulátorem, nevidí, kde stojí. Jednotný ukazatel nebyl nikde, ani u prvků, které si
+ * výchozí obrys prohlížeče nechaly.
+ *
+ * Jedno pravidlo tady je lepší než sto jednadvacet zásahů v rozhraní a hlavně platí
+ * i pro to, co teprve přibude.
+ *
+ * Ke specificitě: `.focus\:outline-none:focus`, který Tailwind vygeneruje, má (0,2,0).
+ * `:where(…)` sám o sobě nic nepřidá, takže `:root` před ním srovná počet na (0,2,0) —
+ * a protože tenhle soubor se načítá po Tailwindu, při shodě vyhraje pozdější pravidlo.
+ * Záměrně se to týká jen `:focus-visible`, tedy klávesnice; po kliknutí myší zůstává
+ * `outline-none` v platnosti a tlačítko se neobkrouží.
+ */
+:root :where(a[href], button, input, select, textarea, summary, [tabindex]:not([tabindex='-1'])):focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+}
