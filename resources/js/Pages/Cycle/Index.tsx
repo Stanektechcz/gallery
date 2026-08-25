@@ -43,7 +43,7 @@ interface Overview {
     cycles: Array<{ started_on: string; ended_on: string | null; length: number | null; period_days: number }>;
     prediction: Prediction | null;
     today: { cycle_day: number; phase: string } | null;
-    forecast?: Array<{ day: string; phase: string; confidence: string; cycle_day?: number; fertility?: number }>;
+    forecast?: Array<{ day: string; phase: string; confidence: string; cycle_day?: number; fertility?: number; is_recorded?: boolean; flow?: string | null }>;
 }
 
 interface PartnerView {
@@ -68,6 +68,9 @@ const FLOW_COLOR: Record<Flow, string> = {
 
 const PHASE_LABEL: Record<string, string> = {
     menstruation: 'menstruace', follicular: 'folikulární fáze', fertile: 'plodné dny',
+    // Ovulace tu dřív chyběla, takže se v den ovulace ukazovalo anglické „ovulation“
+    // z klíče. Nebylo to vidět dřív, protože „dnes je" tuhle fázi vůbec neznalo.
+    ovulation: 'ovulace',
     luteal: 'luteální fáze', pms: 'dny před menstruací',
 };
 
@@ -107,6 +110,24 @@ const PHASE_SHORT: Record<string, string> = {
     pms: 'PMS',
 };
 
+/**
+ * Tytéž fáze v grafu plodných dní.
+ *
+ * Odstíny jsou stejné jako v kalendáři — růžová menstruace, modrá folikulární fáze,
+ * zelené plodné okno, jantarové PMS, fialová luteální fáze — aby se dva pohledy na týž
+ * měsíc daly číst jedním klíčem. Sytost je vyšší: buňka kalendáře je čtverec o straně
+ * pětačtyřiceti bodů a bledá výplň v ní vynikne, kdežto proužek v grafu je pár bodů
+ * široký a při patnáctiprocentní průhlednosti by na pozadí zmizel úplně.
+ */
+const PHASE_BAND: Record<string, string> = {
+    menstruation: 'bg-rose-500/70',
+    follicular: 'bg-sky-400/50',
+    fertile: 'bg-emerald-500/60',
+    ovulation: 'bg-emerald-400',
+    pms: 'bg-amber-500/60',
+    luteal: 'bg-violet-400/45',
+};
+
 const SYMPTOMS = ['křeče', 'bolest hlavy', 'nadýmání', 'citlivá prsa', 'únava', 'akné', 'nevolnost', 'bolest zad', 'chutě'];
 const MOODS = ['v pohodě', 'podrážděná', 'úzkost', 'smutek', 'energie', 'plačtivost'];
 
@@ -117,6 +138,9 @@ const CONFIDENCE: Record<string, string> = {
 };
 
 const den = (iso: string) => new Date(`${iso}T12:00:00`).toLocaleDateString('cs-CZ', { day: 'numeric', month: 'long' });
+
+/** Krátký tvar pro osu grafu — „25. srp". Celé „25. srpna" se do třetiny řádku nevejde. */
+const denKratce = (iso: string) => new Date(`${iso}T12:00:00`).toLocaleDateString('cs-CZ', { day: 'numeric', month: 'short' });
 
 const dny = (pocet: number) => `${pocet} ${pocet === 1 ? 'den' : pocet >= 2 && pocet <= 4 ? 'dny' : 'dní'}`;
 
@@ -313,13 +337,13 @@ function Calendar({ grid, month, byDay, forecast, onMonth, onPick, active }: {
             actions={<>
                 <button type="button" title="Předchozí měsíc"
                     onClick={() => onMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))}
-                    className="rounded-lg border border-[var(--color-border)] px-2.5 py-1 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]">←</button>
+                    className="inline-flex min-h-9 min-w-9 items-center justify-center rounded-lg border border-[var(--color-border)] px-2.5 py-1 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]">←</button>
                 <button type="button"
                     onClick={() => onMonth(new Date())}
-                    className="rounded-lg border border-[var(--color-border)] px-2.5 py-1 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]">Dnes</button>
+                    className="inline-flex min-h-9 min-w-9 items-center justify-center rounded-lg border border-[var(--color-border)] px-2.5 py-1 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]">Dnes</button>
                 <button type="button" title="Následující měsíc"
                     onClick={() => onMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))}
-                    className="rounded-lg border border-[var(--color-border)] px-2.5 py-1 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]">→</button>
+                    className="inline-flex min-h-9 min-w-9 items-center justify-center rounded-lg border border-[var(--color-border)] px-2.5 py-1 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]">→</button>
             </>}>
 
             <div className="grid grid-cols-7 gap-1 text-center">
@@ -386,7 +410,7 @@ function Calendar({ grid, month, byDay, forecast, onMonth, onPick, active }: {
                 záznamem a odhadem zapadne — a ten je tu ze všeho nejdůležitější. */}
             <div className="mt-4 border-t border-[var(--color-border)] pt-3">
                 <button type="button" onClick={() => setLegenda(v => ! v)}
-                    className="flex items-center gap-1.5 text-[11px] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]">
+                    className="panel-link flex items-center gap-1.5 text-[11px] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]">
                     <ChevronDown size={13} className={`transition-transform ${legenda ? 'rotate-180' : ''}`}/>
                     Vysvětlivky barev
                 </button>
@@ -529,45 +553,90 @@ function DayEditor({ day, existing, trackSymptoms, onClose, onSaved }: {
  *
  * Není to antikoncepce a nikde se to tak netváří.
  */
-function Fertility({ forecast }: { forecast: Array<{ day: string; phase: string; cycle_day?: number; fertility?: number }> }) {
+function Fertility({ forecast }: {
+    forecast: Array<{ day: string; phase: string; cycle_day?: number; fertility?: number; is_recorded?: boolean }>;
+}) {
     // Jen do konce nejbližšího cyklu: druhý dopředu stojí na tom, že první vyjde přesně.
     const okno = forecast.slice(0, 32);
     const dnes = new Date().toISOString().slice(0, 10);
 
+    const vrchol = okno.find(d => d.phase === 'ovulation');
+
+    /* Nejbližší plodné okno, ne všechny plodné dny ve výhledu. Do dvaatřiceti dní se
+       vejde konec jednoho cyklu i začátek plodných dnů toho dalšího, a prosté vyfiltrování
+       obojího dohromady dalo „26. srpna – 25. září, 10 dní" — dvě okna slepená přes měsíc,
+       který mezi nimi plodný není. Bere se proto první souvislý úsek. */
+    const zacatek = okno.findIndex(d => d.phase === 'fertile' || d.phase === 'ovulation');
+    let konec = zacatek;
+    while (konec + 1 < okno.length && (okno[konec + 1].phase === 'fertile' || okno[konec + 1].phase === 'ovulation')) konec++;
+
+    const plodne = zacatek === -1 ? [] : okno.slice(zacatek, konec + 1);
+    const plodneOd = plodne[0]?.day;
+    const plodneDo = plodne[plodne.length - 1]?.day;
+
     return (
         <Panel icon={Sparkles} title="Plodné dny"
-            description="Odhad pravděpodobnosti početí podle dne cyklu. Orientační — na plánování ano, na ochranu ne.">
-            <div className="flex h-24 items-end gap-px">
-                {okno.map(den => {
-                    const vyska = Math.max(2, den.fertility ?? 0);
+            description="Odhad pravděpodobnosti početí podle dne cyklu. Orientační — na plánování ano, na ochranu ne."
+            footnote="Barvy fází odpovídají kalendáři výše. Plná výplň je zapsaný den, bledší odhad.">
 
-                    return (
-                        <div key={den.day} className="group relative flex-1"
-                            title={`${new Date(`${den.day}T12:00:00`).toLocaleDateString('cs-CZ', { day: 'numeric', month: 'numeric' })} — ${den.fertility ?? 0} %`}>
-                            <div
-                                className={`w-full rounded-t transition-all ${
-                                    den.phase === 'ovulation' ? 'bg-emerald-400'
-                                        : (den.fertility ?? 0) > 0 ? 'bg-emerald-500/50'
-                                        : den.phase === 'menstruation' ? 'bg-rose-500/40'
-                                        : 'bg-[var(--color-border)]'
-                                } ${den.day === dnes ? 'ring-1 ring-[var(--color-accent)]' : ''}`}
-                                style={{ height: `${vyska}%` }}
-                            />
-                        </div>
-                    );
-                })}
+            {/* Nejdřív odpověď slovy, teprve pak graf. „Kdy je to nejlepší" je otázka,
+                se kterou se sem chodí, a odečítat ji z výšky sloupců je práce navíc. */}
+            <div className="mb-3 grid grid-cols-2 gap-2">
+                <div className="rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-3 py-2">
+                    <p className="text-[10px] uppercase tracking-wide text-emerald-200/80">Plodné období</p>
+                    <p className="mt-0.5 text-sm font-semibold text-[var(--color-text-primary)]">
+                        {plodneOd ? `${den(plodneOd)} – ${den(plodneDo!)}` : 'mimo okno'}
+                    </p>
+                    {plodne.length > 0 && (
+                        <p className="text-[10px] text-[var(--color-text-secondary)]">{plodne.length} dní</p>
+                    )}
+                </div>
+                <div className="rounded-xl border border-emerald-400/50 bg-emerald-500/20 px-3 py-2">
+                    <p className="text-[10px] uppercase tracking-wide text-emerald-100/90">Nejplodnější den</p>
+                    <p className="mt-0.5 text-sm font-semibold text-[var(--color-text-primary)]">
+                        {vrchol ? den(vrchol.day) : '—'}
+                    </p>
+                    {vrchol && (
+                        <p className="text-[10px] text-[var(--color-text-secondary)]">ovulace · {vrchol.fertility ?? 0} %</p>
+                    )}
+                </div>
+            </div>
+
+            {/* Sloupce nesou pravděpodobnost, pruh pod nimi fázi. Dvě různé informace ve
+                dvou vrstvách: den s nulovou plodností má nulový sloupec, ale pořád patří
+                do nějaké fáze a ta má být vidět. Dokud se fáze kreslila jen barvou
+                sloupce, splynulo celé luteální období do šedé čáry u dna. */}
+            <div className="flex h-24 items-end gap-px">
+                {okno.map(d => (
+                    <div key={d.day} className="relative flex-1"
+                        title={`${den(d.day)} · ${PHASE_LABEL[d.phase] ?? d.phase} · ${d.fertility ?? 0} %${d.is_recorded ? ' · zapsáno' : ''}`}>
+                        {/* Den ovulace dostane tečku nad sloupcem, stejně jako v kalendáři. */}
+                        {d.phase === 'ovulation' && (
+                            <span className="absolute -top-2 left-1/2 h-1.5 w-1.5 -translate-x-1/2 rounded-full bg-emerald-300"/>
+                        )}
+                        <div
+                            className={`w-full rounded-t transition-all ${PHASE_BAND[d.phase] ?? 'bg-[var(--color-border)]'} ${d.is_recorded ? '' : 'opacity-75'}`}
+                            style={{ height: `${d.fertility ?? 0}%` }}
+                        />
+                    </div>
+                ))}
+            </div>
+
+            {/* Pás fází: každý den okna jednou barvou, ve stejném pořadí jako sloupce nad
+                ním. Tohle je to, co se dá porovnat s kalendářem den po dni. */}
+            <div className="mt-1 flex gap-px overflow-hidden rounded" aria-hidden="true">
+                {okno.map(d => (
+                    <div key={d.day}
+                        className={`h-2 flex-1 ${PHASE_BAND[d.phase] ?? 'bg-[var(--color-border)]'} ${d.is_recorded ? '' : 'opacity-75'} ${
+                            d.day === dnes ? 'ring-1 ring-[var(--color-accent)]' : ''
+                        }`}/>
+                ))}
             </div>
 
             <div className="mt-1.5 flex justify-between text-[10px] text-[var(--color-text-secondary)]">
-                <span>{new Date(`${okno[0].day}T12:00:00`).toLocaleDateString('cs-CZ', { day: 'numeric', month: 'short' })}</span>
-                {(() => {
-                    const vrchol = okno.find(d => d.phase === 'ovulation');
-
-                    return vrchol
-                        ? <span className="text-emerald-300">ovulace {new Date(`${vrchol.day}T12:00:00`).toLocaleDateString('cs-CZ', { day: 'numeric', month: 'short' })}</span>
-                        : null;
-                })()}
-                <span>{new Date(`${okno[okno.length - 1].day}T12:00:00`).toLocaleDateString('cs-CZ', { day: 'numeric', month: 'short' })}</span>
+                <span>{denKratce(okno[0].day)}</span>
+                {vrchol && <span className="text-emerald-300">ovulace {denKratce(vrchol.day)}</span>}
+                <span>{denKratce(okno[okno.length - 1].day)}</span>
             </div>
         </Panel>
     );

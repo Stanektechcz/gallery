@@ -219,6 +219,36 @@ class CycleService
         ];
     }
 
+    /**
+     * Do jaké fáze spadá daný den cyklu. Jediné místo, kde se to rozhoduje.
+     *
+     * Pravidlo bývalo trojí a každé jinak. Předpověď rozeznávala šest fází, kdežto
+     * „dnes je" a statistika příznaků jen čtyři — neznaly ovulaci ani PMS a plodné okno
+     * jim končilo o den dřív. Na obrazovce z toho plynulo, že v den ovulace stálo nahoře
+     * „plodné dny", zatímco kalendář pod tím týž den značil jako ovulaci, a pár dní před
+     * menstruací hlásila stránka luteální fázi proti jantarovému PMS v kalendáři.
+     *
+     * @param int $vCyklu Pořadí dne v cyklu od nuly. První den krvácení je 0.
+     */
+    private function phaseFor(int $vCyklu, array $averages): string
+    {
+        $ovulace = $averages['cycle'] - 14;
+
+        return match (true) {
+            $vCyklu < max(1, $averages['period']) => 'menstruation',
+            // Samotný den ovulace se vyznačuje zvlášť. V plodném okně je to ten jediný,
+            // na kterém opravdu záleží, a splynout s pěti okolními by z něj udělalo
+            // informaci, kterou si člověk musí dopočítat.
+            $vCyklu === $ovulace => 'ovulation',
+            $vCyklu >= $ovulace - 5 && $vCyklu <= $ovulace + 1 => 'fertile',
+            // PMS: posledních pár dní před očekávaným krvácením. Vyznačit je stojí za to —
+            // je to týden, kdy člověk chce vědět, proč mu je, jak mu je.
+            $vCyklu >= $averages['cycle'] - 4 => 'pms',
+            $vCyklu < $ovulace - 5 => 'follicular',
+            default => 'luteal',
+        };
+    }
+
     /** Kolikátý den cyklu je dnes a v jaké fázi. */
     private function describeToday(Collection $cycles, array $averages, Carbon $today): ?array
     {
@@ -228,16 +258,9 @@ class CycleService
         $den = (int) $posledni['start']->diffInDays($today) + 1;
         if ($den < 1) return null;
 
-        $ovulace = $averages['cycle'] - 14;
-
         return [
             'cycle_day' => $den,
-            'phase' => match (true) {
-                $den <= max(1, $averages['period']) => 'menstruation',
-                $den < $ovulace - 4 => 'follicular',
-                $den <= $ovulace + 1 => 'fertile',
-                default => 'luteal',
-            },
+            'phase' => $this->phaseFor($den - 1, $averages),
         ];
     }
 
@@ -359,7 +382,19 @@ class CycleService
      * ukázat celý nadcházející měsíc obarvený podle fází, aby šlo naplánovat dovolenou
      * nebo návštěvu, aniž by si to člověk musel dopočítávat v hlavě.
      *
-     * @return array<int, array{day: string, phase: string, confidence: string}>
+     * Řada je souvislá: obsahuje každý kalendářní den okna včetně těch, které si někdo
+     * zapsal. Dřív se zapsané dny vynechávaly, aby odhad nepřebil záznam — jenže záznam
+     * přebít nemohl, o tom rozhoduje kalendář, který zapsanému krvácení dává přednost
+     * sám. Vynecháním vznikly dvě škody. V kalendáři den zapsaný s „žádné krvácení"
+     * ztratil barvu fáze a zešedl, takže kdo si poctivě zapisoval, viděl ze svého
+     * plodného okna míň než ten, kdo si nezapisoval nic. A v grafu plodných dní se
+     * osa přestala krýt s kalendářem: každý zapsaný den z ní vypadl, takže dvaatřicet
+     * sloupců pokrývalo třiatřicet dní a sousední sloupce nebyly sousední dny.
+     *
+     * U zapsaného krvácení má přednost záznam: fáze je „menstruation" bez ohledu na to,
+     * co počítá vzorec z průměrů. Když cyklus přišel dřív, je to skutečnost proti odhadu.
+     *
+     * @return array<int, array{day: string, phase: string, cycle_day: int, fertility: int, is_recorded: bool, flow: ?string, confidence: string}>
      */
     public function forecast(GallerySpace $space, User $owner, int $dnu = 40, ?Carbon $today = null): array
     {
@@ -374,7 +409,6 @@ class CycleService
         $predpoved = $this->predict($cycles, $averages, $today);
         if (! $predpoved) return [];
 
-        // Zapsané dny se do předpovědi nepletou — co je zapsané, se nepředpovídá.
         $zapsane = $days->filter(fn (CycleDay $d) => $d->isRecorded())->keyBy(fn (CycleDay $d) => $d->day->toDateString());
 
         $zacatek = Carbon::parse($predpoved['next_period_on']);
@@ -383,8 +417,7 @@ class CycleService
         for ($i = 0; $i < $dnu; $i++) {
             $datum = $today->copy()->addDays($i);
             $klic = $datum->toDateString();
-
-            if ($zapsane->has($klic)) continue;
+            $zaznam = $zapsane->get($klic);
 
             // Kolikátý den kterého očekávaného cyklu — počítá se dopředu po celých
             // cyklech, aby předpověď nekončila prvním z nich.
@@ -396,27 +429,25 @@ class CycleService
 
             $vCyklu = $odZacatku % max(1, $averages['cycle']);
             $ovulace = $averages['cycle'] - 14;
+            $faze = $this->phaseFor($vCyklu, $averages);
 
-            $faze = match (true) {
-                $vCyklu < max(1, $averages['period']) => 'menstruation',
-                // Samotný den ovulace se vyznačuje zvlášť. V plodném okně je to ten
-                // jediný, na kterém opravdu záleží, a splynout s pěti okolními by z něj
-                // udělalo informaci, kterou si člověk musí dopočítat.
-                $vCyklu === $ovulace => 'ovulation',
-                $vCyklu >= $ovulace - 5 && $vCyklu <= $ovulace + 1 => 'fertile',
-                // PMS: posledních pár dní před očekávaným krvácením. Vyznačit je stojí za
-                // to — je to týden, kdy člověk chce vědět, proč mu je, jak mu je.
-                $vCyklu >= $averages['cycle'] - 4 => 'pms',
-                $vCyklu < $ovulace - 5 => 'follicular',
-                default => 'luteal',
-            };
+            // Zapsané krvácení je skutečnost, vzorec jen odhad z průměrů. Když cyklus
+            // přišel o tři dny dřív, má pravdu záznam.
+            $krvaceni = $zaznam && $zaznam->flow !== null && $zaznam->flow !== 'none';
+
+            if ($krvaceni) {
+                $faze = 'menstruation';
+            }
 
             $vysledek[] = [
                 'day' => $klic,
                 'phase' => $faze,
                 'cycle_day' => $vCyklu + 1,
                 // Pravděpodobnost otěhotnění pro tenhle den cyklu, 0–100.
-                'fertility' => $this->fertility($vCyklu, $ovulace),
+                'fertility' => $krvaceni ? 0 : $this->fertility($vCyklu, $ovulace),
+                // Ať se pozná odhad od zápisu: graf i kalendář kreslí odhad bledě.
+                'is_recorded' => (bool) $zaznam,
+                'flow' => $zaznam?->flow,
                 // Čím dál do budoucna, tím volnější odhad — druhý cyklus dopředu stojí
                 // na tom, že ten první vyjde přesně, což skoro nikdy nevyjde.
                 'confidence' => $odZacatku > $averages['cycle'] ? 'low' : $predpoved['confidence'],
@@ -424,6 +455,15 @@ class CycleService
         }
 
         return $vysledek;
+    }
+
+    /** 1 den / 2–4 dny / 5+ dní — čeština to potřebuje a „o 1 dny" čte každý jako chybu. */
+    private function dny(int $pocet): string
+    {
+        if ($pocet === 1) return '1 den';
+        if ($pocet >= 2 && $pocet <= 4) return "{$pocet} dny";
+
+        return "{$pocet} dní";
     }
 
     /**
@@ -437,15 +477,6 @@ class CycleService
      * Čísla jsou hrubý odhad z běžně uváděných pravděpodobností početí podle dne. Není
      * to antikoncepce a aplikace to nikde netvrdí.
      */
-    /** 1 den / 2–4 dny / 5+ dní — čeština to potřebuje a „o 1 dny" čte každý jako chybu. */
-    private function dny(int $pocet): string
-    {
-        if ($pocet === 1) return '1 den';
-        if ($pocet >= 2 && $pocet <= 4) return "{$pocet} dny";
-
-        return "{$pocet} dní";
-    }
-
     private function fertility(int $denVCyklu, int $ovulace): int
     {
         $odstup = $denVCyklu - $ovulace;
@@ -721,12 +752,7 @@ class CycleService
                 if ($den->day->lessThan($cyklus['start']) || $den->day->greaterThan($konec)) continue;
 
                 $poradi = (int) $cyklus['start']->diffInDays($den->day) + 1;
-                $faze = match (true) {
-                    $poradi <= max(1, $averages['period']) => 'menstruation',
-                    $poradi < $averages['cycle'] - 18 => 'follicular',
-                    $poradi <= $averages['cycle'] - 13 => 'fertile',
-                    default => 'luteal',
-                };
+                $faze = $this->phaseFor($poradi - 1, $averages);
 
                 foreach (($den->symptoms ?? []) as $priznak) {
                     $vFazi[$priznak][$faze] = ($vFazi[$priznak][$faze] ?? 0) + 1;
