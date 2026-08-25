@@ -54,14 +54,17 @@ const MediaCardComponent = memo(function MediaCardComponent({ item, size, select
                 onClick={e => { e.stopPropagation(); onSelect(item.uuid); }}>
                 {selected && <span className="text-[var(--color-text-primary)] text-[10px] font-bold">✓</span>}
             </div>
+            {/* Na dotyk jsou tahle tlačítka trvale vidět (pravidlo pro zařízení bez
+                ukazovátka v app.css), takže na nich záleží víc než na myši: 24 px je
+                pod palcem málo. Od sm výš zůstává původní hustota. */}
             {!selected && (
                 <div className="absolute bottom-0 left-0 right-0 p-1 flex justify-between opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button onClick={e => { e.stopPropagation(); onFav(item.uuid, item.is_favorite); }} className="w-6 h-6 rounded-full bg-black/60 flex items-center justify-center hover:bg-black/80">
+                    <button onClick={e => { e.stopPropagation(); onFav(item.uuid, item.is_favorite); }} className="w-8 h-8 sm:w-6 sm:h-6 rounded-full bg-black/60 flex items-center justify-center hover:bg-black/80">
                         <Heart size={10} className={item.is_favorite ? 'text-red-400 fill-red-400' : 'text-[var(--color-text-primary)]'} />
                     </button>
                     <div className="flex gap-1">
-                        <button onClick={e => { e.stopPropagation(); onSlideshow(item.uuid); }} className="w-6 h-6 rounded-full bg-black/60 flex items-center justify-center hover:bg-black/80"><Maximize2 size={10} className="text-[var(--color-text-primary)]" /></button>
-                        <button onClick={e => { e.stopPropagation(); onTrash(item.uuid); }} className="w-6 h-6 rounded-full bg-black/60 flex items-center justify-center hover:bg-red-500/80"><Trash2 size={10} className="text-[var(--color-text-primary)]" /></button>
+                        <button onClick={e => { e.stopPropagation(); onSlideshow(item.uuid); }} className="w-8 h-8 sm:w-6 sm:h-6 rounded-full bg-black/60 flex items-center justify-center hover:bg-black/80"><Maximize2 size={10} className="text-[var(--color-text-primary)]" /></button>
+                        <button onClick={e => { e.stopPropagation(); onTrash(item.uuid); }} className="w-8 h-8 sm:w-6 sm:h-6 rounded-full bg-black/60 flex items-center justify-center hover:bg-red-500/80"><Trash2 size={10} className="text-[var(--color-text-primary)]" /></button>
                     </div>
                 </div>
             )}
@@ -443,13 +446,13 @@ export default function TimelineIndex() {
                             <div className="flex items-center gap-0.5 bg-[var(--color-bg-card)] rounded-lg p-0.5 border border-[var(--color-border)]">
                                 {GRID_SIZES.map((_,i) => (
                                     <button key={i} onClick={()=>setGridSizeIdx(i)}
-                                        className={`px-2 py-1 rounded text-xs transition-colors ${i===gridSizeIdx?'bg-[var(--color-accent)] text-[var(--color-accent-contrast)]':'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}
+                                        className={`min-w-8 px-2 py-2 sm:py-1 rounded text-xs transition-colors ${i===gridSizeIdx?'bg-[var(--color-accent)] text-[var(--color-accent-contrast)]':'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}
                                     >{i===0?'XS':i===1?'S':i===2?'M':'L'}</button>
                                 ))}
                             </div>
-                            <Link href="/map" className="p-1.5 rounded-lg border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors" title="Mapa"><Map size={14} /></Link>
+                            <Link href="/map" className="p-2 sm:p-1.5 rounded-lg border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors" title="Mapa"><Map size={14} /></Link>
                             <button onClick={()=>allItems.length&&startSlideshow(allItems[0].uuid)} disabled={!allItems.length}
-                                className="p-1.5 rounded-lg border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors disabled:opacity-40" title="Slideshow">
+                                className="p-2 sm:p-1.5 rounded-lg border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors disabled:opacity-40" title="Slideshow">
                                 <Maximize2 size={14} />
                             </button>
                             <Grid3X3 size={14} className="text-[var(--color-accent)]" />
@@ -496,7 +499,7 @@ export default function TimelineIndex() {
                                             uuids.forEach(u => allIn?n.delete(u):n.add(u));
                                             return n;
                                         });
-                                    }} className="text-[10px] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors">
+                                    }} className="-my-1.5 px-1.5 py-1.5 text-[10px] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors">
                                         vybrat měsíc
                                     </button>
                                 </div>

@@ -36,7 +36,7 @@ export default function Weekly() {
                             Jen aktuální a nadcházející plány. Starší akce se po termínu automaticky uzavírají.
                         </p>
                     </div>
-                    <Link href="/calendar" className="shrink-0 text-sm text-[var(--color-accent)]">Kalendář →</Link>
+                    <Link href="/calendar" className="panel-link shrink-0 text-sm text-[var(--color-accent)]">Kalendář →</Link>
                 </header>
 
                 {spaceId && <div className="mt-5"><PartnerPulsePanel spaceId={spaceId}/></div>}
@@ -58,7 +58,7 @@ export default function Weekly() {
                             ) : (
                                 <p className="rounded-xl border border-dashed border-[var(--color-border)] p-4 text-center text-sm text-[var(--color-text-secondary)]">
                                     Na tento týden zatím nic nemáte.{' '}
-                                    <Link href="/calendar" className="text-[var(--color-accent)] underline">Vytvořit akci</Link>
+                                    <Link href="/calendar" className="panel-link text-[var(--color-accent)] underline">Vytvořit akci</Link>
                                 </p>
                             )}
                         </Panel>

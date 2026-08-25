@@ -352,12 +352,12 @@ export default function PlacesIndex() {
                 {/* Type filter chips */}
                 <div className="flex gap-2 mb-5 overflow-x-auto pb-1">
                     <button onClick={() => setFilterType('all')}
-                        className={`text-xs px-3 py-1.5 rounded-full whitespace-nowrap transition-colors ${filterType === 'all' ? 'bg-[var(--color-accent)] text-[var(--color-accent-contrast)]' : 'border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}>
+                        className={`min-h-8 text-xs px-3 py-1.5 rounded-full whitespace-nowrap transition-colors ${filterType === 'all' ? 'bg-[var(--color-accent)] text-[var(--color-accent-contrast)]' : 'border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}>
                         Vše ({places.length})
                     </button>
                     {Object.entries(TYPES).filter(([k]) => typeCounts[k]).map(([k, v]) => (
                         <button key={k} onClick={() => setFilterType(k === filterType ? 'all' : k)}
-                            className={`text-xs px-3 py-1.5 rounded-full whitespace-nowrap transition-colors ${filterType === k ? 'bg-[var(--color-accent)] text-[var(--color-accent-contrast)]' : 'border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}>
+                            className={`min-h-8 text-xs px-3 py-1.5 rounded-full whitespace-nowrap transition-colors ${filterType === k ? 'bg-[var(--color-accent)] text-[var(--color-accent-contrast)]' : 'border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}>
                             {v.emoji} {v.label} ({typeCounts[k]})
                         </button>
                     ))}

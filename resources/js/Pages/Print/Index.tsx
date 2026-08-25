@@ -239,7 +239,7 @@ export default function PrintIndex() {
                                 <Printer size={16} className="text-[var(--color-accent)]"/> Výběry
                             </h1>
                             <button onClick={() => setShowCreate(v=>!v)}
-                                className="flex items-center gap-1 bg-[var(--color-accent)] text-[var(--color-accent-contrast)] text-xs px-2.5 py-1.5 rounded-lg hover:opacity-90">
+                                className="flex items-center gap-1 bg-[var(--color-accent)] text-[var(--color-accent-contrast)] text-xs px-2.5 py-2 sm:py-1.5 rounded-lg hover:opacity-90">
                                 <Plus size={12}/> Nový
                             </button>
                         </div>

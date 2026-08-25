@@ -187,6 +187,20 @@
         background: var(--color-glass-bg);
         border: 1px solid var(--color-glass-border);
     }
+    /*
+     * Odkaz „jdi tam" v rohu panelu — „Kalendář a akce →", „Otevřít album →".
+     * Takových je v aplikaci přes třicet a všechny byly holý text: široké přes půl
+     * obrazovky, ale jen šestnáct až dvacet bodů vysoké, protože výšku určoval
+     * samotný řádek písma. Na myši se do nich trefíte, palcem se dá minout svisle.
+     *
+     * Nezvětšuje se písmo, jen se pod odkaz doplní výška. Vedle nadpisu tak vypadá
+     * stejně jako dřív a nikde se nic neposune, protože zarovnání drží flex.
+     */
+    .panel-link {
+        display: inline-flex;
+        align-items: center;
+        min-height: 2rem;
+    }
     .safe-area-pb {
         padding-bottom: env(safe-area-inset-bottom, 0px);
     }

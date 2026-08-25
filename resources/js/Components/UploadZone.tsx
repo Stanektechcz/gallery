@@ -140,7 +140,7 @@ export default function UploadZone({ albumId, onUploadComplete }: Props) {
                 all, this offers the thing that does work there instead of a dead button. */}
             <button type="button"
                 onClick={event => { event.stopPropagation(); (folders ? folderRef : inputRef).current?.click(); }}
-                className="mt-1 inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-border)] px-3 py-1.5 text-xs text-[var(--color-text-secondary)] transition-colors hover:border-[var(--color-accent)]/60 hover:text-[var(--color-text-primary)]">
+                className="mt-1 inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-[var(--color-border)] px-3 py-1.5 text-xs text-[var(--color-text-secondary)] transition-colors hover:border-[var(--color-accent)]/60 hover:text-[var(--color-text-primary)]">
                 <FolderOpen size={13}/> {folders ? 'Vybrat celou složku' : 'Vybrat víc fotek najednou'}
             </button>
 

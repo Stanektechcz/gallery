@@ -202,11 +202,11 @@ export default function MapIndex() {
                     <h1 className="text-sm font-semibold text-[var(--color-text-primary)]">Mapa</h1>
                     <div className="flex items-center gap-3 text-xs text-[var(--color-text-secondary)]">
                         <button onClick={() => setShowPhotos(v=>!v)}
-                            className={`flex items-center gap-1 px-2 py-1 rounded-lg transition-colors ${showPhotos ? 'bg-[var(--color-accent)]/20 text-[var(--color-accent)]' : 'hover:text-[var(--color-text-primary)]'}`}>
+                            className={`flex items-center gap-1 px-2 py-2 sm:py-1 rounded-lg transition-colors ${showPhotos ? 'bg-[var(--color-accent)]/20 text-[var(--color-accent)]' : 'hover:text-[var(--color-text-primary)]'}`}>
                             <Image size={11}/> Fotky ({points.length})
                         </button>
                         <button onClick={() => setShowAlbums(v=>!v)}
-                            className={`flex items-center gap-1 px-2 py-1 rounded-lg transition-colors ${showAlbums ? 'bg-green-500/20 text-green-400' : 'hover:text-[var(--color-text-primary)]'}`}>
+                            className={`flex items-center gap-1 px-2 py-2 sm:py-1 rounded-lg transition-colors ${showAlbums ? 'bg-green-500/20 text-green-400' : 'hover:text-[var(--color-text-primary)]'}`}>
                             <FolderOpen size={11}/> Alba ({albums.length})
                         </button>
                     </div>
