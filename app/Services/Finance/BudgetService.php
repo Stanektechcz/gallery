@@ -16,16 +16,23 @@ use Illuminate\Support\Collection;
  *
  * Dvě rozhodnutí, která tvarují všechno ostatní:
  *
- * Měny se nesčítají napříč. Kurz nemáme odkud brát a odhadnout ho u peněz je horší než
- * ho neznat — člověk, který si podle vymyšleného kurzu naplánuje nájem, to zjistí až
- * na účtu. Součty se proto drží po měnách zvlášť a rozpočet má svou hlavní měnu, ve
- * které se plánuje.
+ * Měny se nesčítají napříč — ne aspoň tam, kde na číslech záleží. Plán, denní příděl
+ * i varování stojí na hlavní měně rozpočtu a součty se drží po měnách zvlášť, protože
+ * jedině tak sedí na haléř; kdo si podle přepočteného čísla naplánuje nájem, zjistí
+ * rozdíl až na účtu.
+ *
+ * Vedle toho se posílá i součet přes měny, kurzem ECB a s datem. Je to výslovně odhad
+ * a nikdy nenahrazuje součty po měnách — existuje proto, že „kolik jsme dohromady
+ * utratili" je u páru, kde jeden platí v eurech a druhý v korunách, otázka číslo jedna
+ * a bez přepočtu se na ni odpovědět nedá.
  *
  * Zbytek se počítá ke dnešku, ne k celému období. Odpověď na „kolik ještě můžu utratit"
  * je za půl roku v cizině užitečná jen tehdy, když bere v úvahu, kolik dní zbývá.
  */
 class BudgetService
 {
+    public function __construct(private readonly ExchangeRateService $rates) {}
+
     /** Rozpočty, na které tenhle člověk vidí. */
     public function forUser(GallerySpace $space, User $user): Collection
     {
@@ -73,13 +80,20 @@ class BudgetService
             'totals' => [
                 'spent' => $this->byCurrency($vydaje),
                 'income' => $this->byCurrency($prijmy),
+                // Součet přes měny. Druhá, výslovně označená informace — po měnách zvlášť
+                // zůstává tím hlavním. Odpovídá na otázku, na kterou se jinak odpovědět
+                // nedá: kolik jsme dohromady utratili, když jeden platí v eurech a druhý
+                // v korunách. Null, když kurz chybí nebo je všechno v jedné měně.
+                'spent_combined' => $this->rates->combine($this->byCurrency($vydaje), $budget->currency),
             ],
             'categories' => $this->categories($budget, $today),
             'months' => $this->months($budget),
             'allowance' => $this->allowance($budget, $vydaje, $today),
             // Co dochází. Prázdné pole je dobrá zpráva a nic se nekreslí.
             'warnings' => $this->warnings($budget, $today),
-            'settlement' => $this->settlement($budget),
+            'settlement' => $vyrovnani = $this->settlement($budget),
+            // Dluh napříč měnami jedním číslem — jeden převod se posílá jednou částkou.
+            'settlement_combined' => $this->settlementCombined($budget, $vyrovnani),
             'runway' => $this->runway($budget, $today),
             'savings' => $this->savings($budget, $today),
             'comparison' => $this->comparison($budget),
@@ -265,7 +279,8 @@ class BudgetService
      * druhého víc, než druhý za něj. Deset drobných vyrovnání nikdo nedělá, jedno na
      * konci měsíce ano — a o to jde, aby se to vůbec vyrovnalo.
      *
-     * Po měnách zvlášť, ze stejného důvodu jako všude jinde: kurz nemáme.
+     * Po měnách zvlášť, ze stejného důvodu jako všude jinde: dluh má sedět na haléř.
+     * Přepočet na jedno číslo dělá settlementCombined() a je označený jako odhad.
      *
      * Co je jednou vyrovnané, se už nepočítá. Bez toho by číslo po zaplacení svítilo dál
      * a příští měsíc se k němu přičetlo nové — panel by po půl roce ukazoval součet
@@ -365,6 +380,37 @@ class BudgetService
         }
 
         return $vysledek;
+    }
+
+    /**
+     * Dluh napříč měnami jedním číslem.
+     *
+     * „Dlužíš mi osm set eur a dva a půl tisíce korun" je věta, po které si oba sednou
+     * k počítání. Jeden převod se posílá jednou částkou, takže tohle číslo je přesně to,
+     * co člověk potřebuje — s kurzem a jeho datem, aby bylo vidět, odkud se vzalo.
+     *
+     * Počítá se jen tehdy, když všechny řádky míří stejným směrem. Když jeden dluží
+     * v korunách a druhý v eurech, jediný převod z toho neudělá nic a součet by lhal.
+     *
+     * @param  array<int, array<string, mixed>>  $vyrovnani
+     * @return array<string, mixed>|null
+     */
+    public function settlementCombined(Budget $budget, array $vyrovnani): ?array
+    {
+        if (count($vyrovnani) < 2) return null;
+
+        $smery = collect($vyrovnani)->map(fn (array $r) => ($r['from_id'] ?? null).'→'.($r['to_id'] ?? null))->unique();
+
+        if ($smery->count() !== 1) return null;
+
+        $podleMeny = collect($vyrovnani)->mapWithKeys(fn (array $r) => [$r['currency'] => (float) $r['amount']])->all();
+
+        $soucet = $this->rates->combine($podleMeny, $budget->currency);
+
+        return $soucet === null ? null : $soucet + [
+            'from' => $vyrovnani[0]['from'] ?? null,
+            'to' => $vyrovnani[0]['to'] ?? null,
+        ];
     }
 
     /**

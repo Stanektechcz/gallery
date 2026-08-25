@@ -16,8 +16,12 @@ import StatementImport from './StatementImport';
  * Finance v aplikaci byly navázané na cestu. Půl roku v cizině není cesta: je tam příjem,
  * nájem, druhá měna a partner o dva státy dál, kterého je občas potřeba požádat o peníze.
  *
- * Měny se nikde nesčítají. Kurz nemáme odkud brát a odhadnout ho u peněz je horší než ho
- * neznat — kdo si podle vymyšleného kurzu naplánuje nájem, zjistí to až na účtu.
+ * Každá částka si drží svou měnu a všechny součty jsou po měnách zvlášť. To je to, co
+ * obrazovka ukazuje jako pravdu, protože jedině to sedí na haléř.
+ *
+ * Vedle toho se počítá i součet přes měny — kurzem ECB, s datem, výslovně jako odhad.
+ * Bez něj se totiž na otázku „kolik jsme dohromady utratili" nedá odpovědět vůbec, a
+ * když jeden platí v eurech a druhý v korunách, je to ta nejčastější otázka.
  */
 
 interface BudgetRow {
@@ -37,13 +41,18 @@ interface Overview {
     budget: { uuid: string; name: string; currency: string; starts_on: string; ends_on: string | null; monthly_income: number | null; note: string | null; is_shared: boolean; owner: { id: number; name: string } | null;
         savings_target: number | null; savings_target_on: string | null; period_unit: 'month' | 'week'; period_label: string };
     period: { days_elapsed: number; days_left: number | null; days_total: number | null; has_started: boolean; has_ended: boolean };
-    totals: { spent: Record<string, number>; income: Record<string, number> };
+    totals: {
+        spent: Record<string, number>; income: Record<string, number>;
+        /** Součet přes měny. Null, když kurz chybí nebo je všechno v jedné měně. */
+        spent_combined: { total: number; currency: string; date: string; rates: Record<string, number> } | null;
+    };
     categories: Array<{ id: number; name: string; color: string | null; planned_monthly: number; planned_to_date: number; spent: number; used_percent: number | null }>;
     months: Array<{ month: string; spent: number; income: number; count: number; other_currency_count?: number }>;
     allowance: { planned_total: number; spent: number; left: number; per_day: number | null; days_left: number | null; currency: string };
     warnings?: Array<{ category: string; spent: number; planned_to_date: number; percent: number; level: 'close' | 'over' }>;
     settlement?: Array<{ currency: string; from: string | null; from_id?: number | null; to: string; to_id: number; amount: number; since: string | null }>;
     settlements?: Array<{ uuid: string; currency: string; amount: number; settled_through: string; from: string | null; to: string | null }>;
+    settlement_combined?: { total: number; currency: string; date: string; rates: Record<string, number>; from: string | null; to: string | null } | null;
     runway?: { per_day: number; days_left: number; runs_out_on: string; covers_period: boolean } | null;
     savings?: { target: number; saved: number; missing: number; percent: number; target_on: string | null; days_left: number | null; monthly_needed: number | null; overdue: boolean; reached: boolean } | null;
     comparison?: {
@@ -293,6 +302,7 @@ function Overview({ data, members, onChanged }: { data: Overview; members: Array
         data.warnings && data.warnings.length > 0 && <WarningsPanel key="warnings" warnings={data.warnings} currency={budget.currency}/>,
         ((data.settlement && data.settlement.length > 0) || (data.settlements && data.settlements.length > 0))
             && <SettlementPanel key="settlement" budget={budget} settlement={data.settlement ?? []}
+                combined={data.settlement_combined ?? null}
                 history={data.settlements ?? []} onChanged={onChanged}/>,
         data.savings && <SavingsPanel key="savings" savings={data.savings} currency={budget.currency}/>,
     ].filter(Boolean);
@@ -309,7 +319,17 @@ function Overview({ data, members, onChanged }: { data: Overview; members: Array
                     hint={`z ${money(allowance.planned_total, allowance.currency)} plánovaných`}/>
                 <Stat label="Utraceno" icon={TrendingDown} value={money(allowance.spent, allowance.currency)}
                     hint={meny.length > 1
-                        ? `+ ${meny.filter(m => m !== budget.currency).map(m => money(totals.spent[m] ?? 0, m)).join(', ')}`
+                        ? <>
+                            + {meny.filter(m => m !== budget.currency).map(m => money(totals.spent[m] ?? 0, m)).join(', ')}
+                            {/* Součet přes měny se píše jako odhad, protože jím je — kurz
+                                je snímek jednoho dne. Bez něj se ale na otázku „kolik
+                                dohromady" nedá odpovědět vůbec. */}
+                            {totals.spent_combined && (
+                                <span className="mt-0.5 block" title={`Kurz ECB z ${datum(totals.spent_combined.date)}`}>
+                                    ≈ {money(totals.spent_combined.total, totals.spent_combined.currency)} celkem
+                                </span>
+                            )}
+                        </>
                         : `za ${dny(period.days_elapsed)}`}/>
                 <Stat label="Příjem" icon={TrendingUp} value={money(totals.income[budget.currency] ?? 0, budget.currency)}
                     hint={budget.monthly_income
@@ -391,9 +411,11 @@ function WarningsPanel({ warnings, currency }: { warnings: NonNullable<Overview[
  * nové — po půl roce panel ukazoval součet všeho, co kdy kdo za koho zaplatil, místo
  * toho, co ještě zbývá srovnat.
  */
-function SettlementPanel({ budget, settlement, history, onChanged }: {
+function SettlementPanel({ budget, settlement, combined, history, onChanged }: {
     budget: Overview['budget'];
     settlement: NonNullable<Overview['settlement']>;
+    /** Dluh napříč měnami jedním číslem. Null, když míří různými směry nebo chybí kurz. */
+    combined: NonNullable<Overview['settlement_combined']> | null;
     history: NonNullable<Overview['settlements']>;
     onChanged: () => void;
 }) {
@@ -409,7 +431,7 @@ function SettlementPanel({ budget, settlement, history, onChanged }: {
 
     return (
         <Panel icon={ArrowRightLeft} title="Kdo komu dluží"
-            footnote={'Počítá se z položek označených „napůl" a „za druhého". Každá měna zvlášť — kurz nemáme odkud vzít.'}>
+            footnote={'Počítá se z položek označených „napůl" a „za druhého". Každá měna zvlášť, aby čísla seděla přesně; převod na jednu je odhad.'}>
             <div className="space-y-2">
                 {settlement.map(radek => (
                     <div key={`${radek.currency}-${radek.to_id}`} className="rounded-xl bg-[var(--color-bg-primary)] px-3 py-2.5">
@@ -452,6 +474,16 @@ function SettlementPanel({ budget, settlement, history, onChanged }: {
                 {settlement.length === 0 && (
                     <p className="rounded-xl border border-dashed border-[var(--color-border)] px-3 py-4 text-center text-xs text-[var(--color-text-secondary)]">
                         Všechno je vyrovnané.
+                    </p>
+                )}
+
+                {/* Jeden převod se posílá jednou částkou. „Dlužíš mi osm set eur a dva
+                    a půl tisíce korun" je věta, po které si oba sednou k počítání. */}
+                {combined && (
+                    <p className="rounded-xl border border-[var(--color-accent)]/30 bg-[var(--color-accent)]/5 px-3 py-2.5 text-xs leading-relaxed text-[var(--color-text-secondary)]">
+                        Jedním převodem to je <strong className="text-[var(--color-text-primary)]">≈ {money(combined.total, combined.currency)}</strong>
+                        {combined.from && combined.to && <> od {combined.from} pro {combined.to}</>}.
+                        <span className="mt-0.5 block opacity-75">Kurz ECB z {datum(combined.date)} — orientační, banka počítá svým.</span>
                     </p>
                 )}
             </div>
