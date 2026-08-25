@@ -1,3 +1,4 @@
+import { noveTransakce, preskoceneDuplicity, radkyKeKontrole } from '@/lib/cestina';
 import axios from 'axios';
 import { Building2, ExternalLink, FileSpreadsheet, LockKeyhole, Plus, RefreshCw, Trash2, Unplug, Upload, WalletCards } from 'lucide-react';
 import { ChangeEvent, DragEvent, useCallback, useEffect, useState } from 'react';
@@ -68,7 +69,7 @@ export default function BankConnectionManager({ gallerySpaceId, returnTripId, co
             await load();onChanged?.();
             const baseMessage=response.data.duplicate_file
                 ? 'Tento úspěšně zpracovaný výpis už je v historii; žádná data se nezdvojila.'
-                : `${response.data.retried_import?'Předchozí neúspěšný import byl opraven. ':''}Hotovo: ${response.data.import.rows_imported} nových transakcí, ${response.data.import.rows_duplicate} duplicit přeskočeno${response.data.import.rows_failed?`, ${response.data.import.rows_failed} řádků vyžaduje kontrolu`:''}.`;
+                : `${response.data.retried_import?'Předchozí neúspěšný import byl opraven. ':''}Hotovo: ${noveTransakce(response.data.import.rows_imported)}, ${preskoceneDuplicity(response.data.import.rows_duplicate)}${response.data.import.rows_failed?`, ${radkyKeKontrole(response.data.import.rows_failed)}`:''}.`;
             setMessage(`${baseMessage}${response.data.warnings?.length?` ${response.data.warnings.join(' ')}`:''}`);
         }catch(reason:any){setError(reason.response?.data?.message??'Výpis se nepodařilo importovat.');}
         finally{setBusy('');}

@@ -1,3 +1,4 @@
+import { hlaska } from '@/Components/Hlasky';
 import AppLayout from '@/Layouts/AppLayout';
 import { fotky } from '@/lib/cestina';
 import { takenAtDate } from '@/lib/takenAt';
@@ -200,8 +201,8 @@ export default function ItineraryIndex() {
             if (r.data.auto_detected > 0) {
                 const r2 = await axios.get('/api/v1/itinerary');
                 setWishlist(r2.data.wishlist ?? []);
-                alert(`Z fotek se automaticky označilo míst: ${r.data.auto_detected}`);
-            } else { alert('Žádné nové shody s fotografiemi.'); }
+                hlaska(`Z fotek se automaticky označilo míst: ${r.data.auto_detected}`, 'uspech');
+            } else { hlaska('Žádné nové shody s fotografiemi.'); }
         } finally { setChecking(false); }
     };
 

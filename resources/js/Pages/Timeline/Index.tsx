@@ -1,3 +1,4 @@
+import { hlaska } from '@/Components/Hlasky';
 import { media, polozky } from '@/lib/cestina';
 import { previewUrl } from '@/lib/mediaUrl';
 import { BulkActionBar } from '@/Components/BulkActionBar';
@@ -176,7 +177,7 @@ export default function TimelineIndex() {
         if (!confirm('Přesunout do koše?')) return;
         setLocalItems(p => ({ ...p, [uuid]: { ...(p[uuid]??{}), _trashed: true } as any }));
         try { await axios.delete(`/media/${uuid}`); queryClient.invalidateQueries({ queryKey: ['timeline'] }); }
-        catch (e: any) { setLocalItems(p => { const n={...p}; delete n[uuid]; return n; }); alert(e?.response?.data?.message??'Chyba'); }
+        catch (e: any) { setLocalItems(p => { const n={...p}; delete n[uuid]; return n; }); hlaska(e?.response?.data?.message??'Něco se nepovedlo.','chyba'); }
     }, [queryClient]);
     const toggleSelect = useCallback((uuid: string) => setSelected(prev => { const n=new Set(prev); n.has(uuid)?n.delete(uuid):n.add(uuid); return n; }), []);
     const clearSelect  = useCallback(() => setSelected(new Set()), []);

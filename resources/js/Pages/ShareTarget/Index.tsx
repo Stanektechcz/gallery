@@ -4,6 +4,7 @@
  * Lets the user choose where to save the shared photos/videos.
  */
 
+import { hlaska } from '@/Components/Hlasky';
 import AppLayout from '@/Layouts/AppLayout';
 import { uploadManager } from '@/lib/uploadManager';
 import { Head, router } from '@inertiajs/react';
@@ -166,7 +167,7 @@ export default function ShareTargetIndex({ files }: Props) {
             // Navigate to the selected album
             router.visit(`/albums/${selected.uuid}`);
         } catch (err: any) {
-            alert('Chyba při přípravě souborů: ' + (err?.message ?? err));
+            hlaska('Chyba při přípravě souborů: ' + (err?.message ?? err), 'chyba');
             setSaving(false);
         }
     };

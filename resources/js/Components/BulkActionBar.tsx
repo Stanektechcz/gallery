@@ -1,3 +1,4 @@
+import { hlaska } from '@/Components/Hlasky';
 import LocationPicker, { type LocationValue } from '@/Components/LocationPicker';
 import { media, pocet } from '@/lib/cestina';
 import axios from 'axios';
@@ -69,7 +70,7 @@ export function BulkActionBar({
             });
             onDone(`Hotovo: ${media(r.data.processed)}`);
         } catch (e: any) {
-            alert(e?.response?.data?.message ?? 'Chyba při hromadné operaci');
+            hlaska(e?.response?.data?.message ?? 'Chyba při hromadné operaci', 'chyba');
         } finally {
             setLoading(false);
         }
@@ -92,7 +93,7 @@ export function BulkActionBar({
             }
             onDone('Export zahájen — odkaz se otevře po přípravě');
         } catch {
-            alert('Export se nepodařilo spustit');
+            hlaska('Export se nepodařilo spustit.', 'chyba');
         } finally {
             setLoading(false);
         }

@@ -1,7 +1,8 @@
+import { hlaska } from '@/Components/Hlasky';
 import AppLayout from '@/Layouts/AppLayout';
 import TripBankFinancePanel from '@/Components/Banking/TripBankFinancePanel';
 // `media` je tu už pole médií cesty, tak pod jiným jménem.
-import { media as pocetMedii, pocet } from '@/lib/cestina';
+import { media as pocetMedii, pocet, pripominky, ukoly } from '@/lib/cestina';
 import { sdilenyGet } from '@/lib/sdilenyDotaz';
 import MealPlanPanel from '@/Components/Recipes/MealPlanPanel';
 import TripReservationImportPanel from '@/Components/Trips/TripReservationImportPanel';
@@ -97,7 +98,7 @@ export default function TripPlan({ tripId }: { tripId: number }) {
             await axios.put(`/api/v1/trips/${tripId}/plan/days/${activeDay.id}/activities/reorder`, { order: reordered.map(item => item.id) });
         } catch (error: any) {
             setDays(items => items.map(day => day.id === activeDay.id ? { ...day, activities: previous } : day));
-            alert(error?.response?.data?.message ?? 'Pořadí programu se nepodařilo uložit.');
+            hlaska(error?.response?.data?.message ?? 'Pořadí programu se nepodařilo uložit.', 'chyba');
         }
     };
     const updateStatus = async (status: string) => {
@@ -377,7 +378,7 @@ function TripReadiness({ tripId }: { tripId: number }) {
     const addLimit=async(e:React.FormEvent)=>{e.preventDefault();if(!limit.amount)return;await axios.put(`/api/v1/trips/${tripId}/budget-limits`,{category:limit.category,amount:Number(limit.amount)});setLimit({...limit,amount:''});load();};
     const addDocument=async(e:React.FormEvent)=>{e.preventDefault();if(!document.title)return;await axios.post(`/api/v1/trips/${tripId}/documents`,{...document,expires_on:document.expires_on||null,assigned_to:document.assigned_to?Number(document.assigned_to):null});setDocument({...document,title:'',expires_on:'',assigned_to:''});load();};
     const updateDocument=async(id:number,payload:Record<string,unknown>)=>{if(!data?.trip?.gallery_space_id)return;await axios.patch(`/api/v1/coordination/actions/trip_document/${id}`,{gallery_space_id:data.trip.gallery_space_id,...payload});await load();};
-    const sync=async()=>{setSyncing(true);setMessage('');try{const response=await axios.post(`/api/v1/trips/${tripId}/preparation-timeline/sync`);setData((current:any)=>({...current,preparation:response.data.preparation}));const automation=response.data.automation;setMessage(automation.event_uuid?`Příprava je v kalendáři · ${automation.tasks_created} nových úkolů · ${automation.reminders_created} připomínek.`:'Cesta zatím není propojená s kalendářovou událostí.');await load();}catch(error:any){setMessage(error?.response?.data?.message??'Přípravu se nepodařilo synchronizovat.');}finally{setSyncing(false);}};
+    const sync=async()=>{setSyncing(true);setMessage('');try{const response=await axios.post(`/api/v1/trips/${tripId}/preparation-timeline/sync`);setData((current:any)=>({...current,preparation:response.data.preparation}));const automation=response.data.automation;setMessage(automation.event_uuid?`Příprava je v kalendáři · ${ukoly(automation.tasks_created)} · ${pripominky(automation.reminders_created)}.`:'Cesta zatím není propojená s kalendářovou událostí.');await load();}catch(error:any){setMessage(error?.response?.data?.message??'Přípravu se nepodařilo synchronizovat.');}finally{setSyncing(false);}};
     const preparation=data?.preparation;
     const upcoming=preparation?.timeline?.filter((item:any)=>item.status!=='past').slice(0,4)??[];
     return <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-4"><div className="flex items-start justify-between gap-2"><div><p className="text-xs font-semibold text-[var(--color-text-primary)]">Doklady a připravenost</p><p className="mt-1 text-[10px] text-[var(--color-text-secondary)]">Odjezd, přestupy, pobyt, platnosti a připomínky v jedné časové ose.</p></div><div className="shrink-0 text-right text-[10px]">{preparation&&<p className={preparation.status==='attention'?'text-amber-300':preparation.status==='ready'?'text-green-300':'text-[var(--color-text-primary)]'}>příprava {preparation.score}/100</p>}{data?.budget_advisor&&<p className={data.budget_advisor.status==='over'?'text-red-300':data.budget_advisor.status==='ready'?'text-green-300':'text-amber-300'}>rozpočet {data.budget_advisor.health_score}/100</p>}</div></div>

@@ -1,3 +1,4 @@
+import { hlaska } from '@/Components/Hlasky';
 import AppLayout from '@/Layouts/AppLayout';
 import { Head } from '@inertiajs/react';
 import axios from 'axios';
@@ -113,7 +114,7 @@ export default function SharesIndex({ shares }: Props) {
             // Reload to get the new link in the list
             window.location.reload();
         } catch (err: unknown) {
-            alert('Nepodařilo se vytvořit odkaz');
+            hlaska('Nepodařilo se vytvořit odkaz.', 'chyba');
         } finally {
             setCreating(false);
         }

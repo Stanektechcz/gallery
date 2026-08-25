@@ -1,3 +1,4 @@
+import { hlaska } from '@/Components/Hlasky';
 import LocationPicker, { type LocationValue } from '@/Components/LocationPicker';
 import {
     AddToEventPanel, CurationPanel, GpsMap, MilestonePanel, ReactionPanel, RevisitFromMediaPanel,
@@ -300,7 +301,7 @@ export default function MediaShow({ media, breadcrumb, prev, next }: Props) {
             router.visit('/timeline');
         } catch (e: any) {
             const msg = e?.response?.data?.message ?? e?.message ?? 'Chyba p\u0159i p\u0159esunu do ko\u0161e';
-            alert(msg);
+            hlaska(msg, 'chyba');
         }
     };
 

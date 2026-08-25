@@ -1,3 +1,4 @@
+import { hlaska } from '@/Components/Hlasky';
 import AppLayout from '@/Layouts/AppLayout';
 import { polozky } from '@/lib/cestina';
 import { Head, Link } from '@inertiajs/react';
@@ -34,7 +35,7 @@ export default function RecoveryIndex({ checks, media_stats, drive_info }: Props
         try {
             const { data } = await axios.post('/api/v1/media-stacks/apply', { candidate_keys: stackPreview.groups.map(group => group.key) });
             setStackPreview({ count: 0, groups: [] });
-            alert(`Vytvořeno stacků: ${data.created}`);
+            hlaska(`Vytvořeno sérií: ${data.created}`, 'uspech');
         } finally { setStacking(false); }
     };
 
