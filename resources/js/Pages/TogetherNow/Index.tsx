@@ -1,5 +1,6 @@
 import DualCapture from '@/Components/DualCapture';
 import AppLayout from '@/Layouts/AppLayout';
+import { minuty } from '@/lib/cestina';
 import { Head } from '@inertiajs/react';
 import axios from 'axios';
 import { Camera, Clock, Hourglass, Lock, Sparkles } from 'lucide-react';
@@ -43,12 +44,7 @@ interface State {
 interface PastMoment { uuid: string; date: string; notify_at: string; prompt: string | null; entries: Entry[] }
 
 /** 1 minuta / 2-4 minuty / 5+ minut — the same shape Czech needs everywhere else. */
-function minutes(count: number): string {
-    if (count === 1) return '1 minuta';
-    if (count >= 2 && count <= 4) return `${count} minuty`;
-
-    return `${count} minut`;
-}
+const minutes = minuty;
 
 const dayLabel = (iso: string) =>
     new Date(iso).toLocaleDateString('cs-CZ', { weekday: 'long', day: 'numeric', month: 'long' });

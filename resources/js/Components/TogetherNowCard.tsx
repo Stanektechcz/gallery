@@ -1,4 +1,4 @@
-import { dny } from '@/lib/cestina';
+import { dny, minuty } from '@/lib/cestina';
 import { Link } from '@inertiajs/react';
 import axios from 'axios';
 import { Camera, Flame, Lock } from 'lucide-react';
@@ -24,12 +24,7 @@ interface State {
     streak: number;
 }
 
-const minutes = (count: number): string => {
-    if (count === 1) return '1 minuta';
-    if (count >= 2 && count <= 4) return `${count} minuty`;
-
-    return `${count} minut`;
-};
+const minutes = minuty;
 
 /** Pátá kopie téhož pravidla; teď ukazuje na to jedno v cestina.ts. */
 const days = dny;

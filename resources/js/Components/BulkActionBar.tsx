@@ -1,5 +1,5 @@
 import LocationPicker, { type LocationValue } from '@/Components/LocationPicker';
-import { media } from '@/lib/cestina';
+import { media, pocet } from '@/lib/cestina';
 import axios from 'axios';
 import {
     Archive, ArrowRight, Calendar, Crosshair, Download,
@@ -234,7 +234,7 @@ export function BulkActionBar({
                                 <div className="flex-1 text-center">
                                     <p className="text-2xl font-mono text-[var(--color-text-primary)] font-bold">{hourOffset > 0 ? '+' : ''}{hourOffset}<span className="text-sm ml-1 text-[var(--color-text-secondary)]">h</span></p>
                                     <p className="text-[10px] text-[var(--color-text-secondary)] mt-0.5">
-                                        {hourOffset === 0 ? 'Bez posunu' : `${Math.abs(hourOffset)} hodin ${hourOffset > 0 ? 'dopředu' : 'dozadu'}`}
+                                        {hourOffset === 0 ? 'Bez posunu' : `${pocet(Math.abs(hourOffset), 'hodina', 'hodiny', 'hodin')} ${hourOffset > 0 ? 'dopředu' : 'dozadu'}`}
                                     </p>
                                 </div>
                                 <button onClick={() => setHourOffset(h => Math.min(720, h + 1))}
@@ -316,7 +316,7 @@ export function BulkActionBar({
                             const bookUuid = prompt('UUID fotoknihy (nechte prázdné pro přechod na /print):');
                             if (bookUuid) {
                                 await axios.post(`/api/v1/books/${bookUuid}/items`, { media_uuids: selectedUuids });
-                                onDone(`Přidáno ${count} fotek do výběru`);
+                                onDone(`Do výběru přidáno fotek: ${count}`);
                             } else {
                                 window.open('/print', '_blank');
                             }

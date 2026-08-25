@@ -1,4 +1,5 @@
 import AppLayout from '@/Layouts/AppLayout';
+import { fotky } from '@/lib/cestina';
 import { takenAtDate } from '@/lib/takenAt';
 import { Head } from '@inertiajs/react';
 import axios from 'axios';
@@ -80,7 +81,7 @@ export default function ItineraryIndex() {
         visited.forEach(area => {
             const r = Math.min(22, 5 + Math.log(area.photo_count) * 3);
             L.circleMarker([area.latitude, area.longitude], { radius: r, fillColor: '#22c55e', color: '#16a34a', weight: 1, opacity: 0.9, fillOpacity: 0.5 })
-                .addTo(map).bindPopup(`<div style="font-size:12px"><b>📸 ${area.photo_count} fotek</b><br/>${area.first_visit ? new Date(area.first_visit).toLocaleDateString('cs-CZ') : ''}<br/><small style="color:#888">${Number(area.latitude).toFixed(4)}, ${Number(area.longitude).toFixed(4)}</small></div>`);
+                .addTo(map).bindPopup(`<div style="font-size:12px"><b>📸 ${fotky(area.photo_count)}</b><br/>${area.first_visit ? new Date(area.first_visit).toLocaleDateString('cs-CZ') : ''}<br/><small style="color:#888">${Number(area.latitude).toFixed(4)}, ${Number(area.longitude).toFixed(4)}</small></div>`);
         });
 
         wishlist.filter(p => p.latitude && p.longitude).forEach(place => {
@@ -549,7 +550,7 @@ export default function ItineraryIndex() {
                                         <span className="text-sm">📸</span>
                                         <div className="flex-1 min-w-0">
                                             <p className="text-[10px] font-mono text-[var(--color-text-secondary)] truncate">{Number(area.latitude).toFixed(2)}°, {Number(area.longitude).toFixed(2)}°</p>
-                                            <p className="text-[10px] text-green-400">{area.photo_count} fotek</p>
+                                            <p className="text-[10px] text-green-400">{fotky(area.photo_count)}</p>
                                         </div>
                                     </div>
                                 ))}

@@ -6,6 +6,7 @@
  */
 
 import Slideshow, { type SlideshowItem } from '@/Components/Slideshow';
+import { fotky } from '@/lib/cestina';
 import { Head } from '@inertiajs/react';
 import axios from 'axios';
 import { Loader2, Monitor, Tv } from 'lucide-react';
@@ -111,7 +112,7 @@ export default function TvIndex() {
                         className="w-full bg-[var(--color-accent)] text-[var(--color-accent-contrast)] text-lg py-4 rounded-2xl hover:opacity-90 disabled:opacity-40 font-semibold flex items-center justify-center gap-3 transition-opacity">
                         {loading
                             ? <><Loader2 size={20} className="animate-spin"/> Načítám…</>
-                            : <><Tv size={20}/> Spustit TV režim ({items.length} fotek)</>
+                            : <><Tv size={20}/> Spustit TV režim ({fotky(items.length)})</>
                         }
                     </button>
 

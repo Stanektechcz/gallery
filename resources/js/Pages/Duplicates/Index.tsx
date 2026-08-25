@@ -173,7 +173,7 @@ export default function DuplicatesIndex() {
                         {/* Lišta zůstává na očích: kolik toho zmizí a kolik se uvolní. */}
                         <div className="sticky top-2 z-10 mb-4 flex flex-wrap items-center gap-3 rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)]/95 p-3 backdrop-blur">
                             <span className="text-sm text-[var(--color-text-primary)]">
-                                {groups.length} skupin · vybráno {selected.size} kopií
+                                {pocet(groups.length, 'skupina', 'skupiny', 'skupin')} · vybráno {selected.size} kopií
                             </span>
                             <span className="text-xs text-[var(--color-text-secondary)]">uvolní {velikost(usetreno)}</span>
 

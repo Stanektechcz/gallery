@@ -1,5 +1,5 @@
 import AppLayout from '@/Layouts/AppLayout';
-import { pocet } from '@/lib/cestina';
+import { fotky, pocet } from '@/lib/cestina';
 import { Head, router } from '@inertiajs/react';
 import PlaceReviewPanel from '@/Components/PlaceReviewPanel';
 import PlaceNotesPanel from '@/Components/Places/PlaceNotesPanel';
@@ -297,7 +297,7 @@ export default function PlaceShow() {
                                     </span>
                                 )}
                                 <span className="flex items-center gap-1">
-                                    <Camera size={11}/> {place.photo_count} fotek
+                                    <Camera size={11}/> {fotky(place.photo_count)}
                                 </span>
                                 {place.album_count > 0 && (
                                     <span className="flex items-center gap-1">

@@ -38,3 +38,5 @@ export const dny = (cislo: number) => pocet(cislo, 'den', 'dny', 'dní');
 export const polozky = (cislo: number) => pocet(cislo, 'položka', 'položky', 'položek');
 export const fotografie = (cislo: number) => pocet(cislo, 'fotografie', 'fotografie', 'fotografií');
 export const media = (cislo: number) => pocet(cislo, 'médium', 'média', 'médií');
+export const fotky = (cislo: number) => pocet(cislo, 'fotka', 'fotky', 'fotek');
+export const minuty = (cislo: number) => pocet(cislo, 'minuta', 'minuty', 'minut');

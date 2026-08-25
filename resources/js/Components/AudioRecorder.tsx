@@ -1,3 +1,4 @@
+import { minuty } from '@/lib/cestina';
 import { describeMicrophoneError, recordingUnavailableReason } from '@/lib/microphone';
 import { LoaderCircle, Mic, Square, Trash2, Upload } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
@@ -147,7 +148,7 @@ export default function AudioRecorder({
                             </span>
                         </>
                     )}
-                    {!recording && <span className="text-xs text-[var(--color-text-secondary)]">Maximálně {Math.round(maxSeconds / 60)} minut</span>}
+                    {!recording && <span className="text-xs text-[var(--color-text-secondary)]">Maximálně {minuty(Math.round(maxSeconds / 60))}</span>}
                 </div>
             )}
 

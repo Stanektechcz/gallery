@@ -1,4 +1,5 @@
 import AppLayout from '@/Layouts/AppLayout';
+import { fotky } from '@/lib/cestina';
 import { Head, Link } from '@inertiajs/react';
 import axios from 'axios';
 import { addLocalizedBaseLayer, localizedCountry } from '@/lib/localizedMap';
@@ -653,7 +654,7 @@ export default function TripsIndex() {
                                             </p>
                                         )}
 
-                                        <p className="text-[10px] text-[var(--color-text-secondary)] mt-0.5">📸 {trip.media_count} fotek</p>
+                                        <p className="text-[10px] text-[var(--color-text-secondary)] mt-0.5">📸 {fotky(trip.media_count)}</p>
                                     </div>
                                 </div>
                             </div>
@@ -673,7 +674,7 @@ export default function TripsIndex() {
                                     <p className="text-xs text-[var(--color-text-secondary)] mt-0.5 flex items-center gap-3 flex-wrap">
                                         <span className="flex items-center gap-1"><Calendar size={11}/>{fmtRange(selected.start_date, selected.end_date)}</span>
                                         <span>{selected.duration_days} {selected.duration_days === 1 ? 'den' : selected.duration_days < 5 ? 'dny' : 'dní'}</span>
-                                        <span>📸 {selected.media_count} fotek</span>
+                                        <span>📸 {fotky(selected.media_count)}</span>
                                     </p>
                                     {selected.waypoints.length > 0 && (
                                         <p className="text-xs text-[var(--color-accent)] mt-1 flex items-center gap-1 flex-wrap">
