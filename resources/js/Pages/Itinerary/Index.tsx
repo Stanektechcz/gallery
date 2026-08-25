@@ -247,11 +247,11 @@ export default function ItineraryIndex() {
                         </div>
                         <div className="flex gap-2">
                             <button onClick={() => { setShowForm(v=>!v); setSearchQuery(''); setForm({...EMPTY_FORM}); setShowDropdown(false); }}
-                                className="flex-1 flex items-center justify-center gap-1.5 bg-[var(--color-accent)] text-[var(--color-accent-contrast)] text-xs py-1.5 rounded-lg hover:opacity-90">
+                                className="flex-1 flex min-h-9 items-center justify-center gap-1.5 bg-[var(--color-accent)] text-[var(--color-accent-contrast)] text-xs py-1.5 rounded-lg hover:opacity-90">
                                 <Plus size={12}/> Přidat místo
                             </button>
                             <button onClick={autoCheck} disabled={checking}
-                                className="flex items-center gap-1.5 border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] text-xs px-2.5 py-1.5 rounded-lg transition-colors disabled:opacity-40"
+                                className="flex min-h-9 items-center gap-1.5 border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] text-xs px-2.5 py-1.5 rounded-lg transition-colors disabled:opacity-40"
                                 title="Automaticky označit navštívená místa z fotek">
                                 <RefreshCw size={12} className={checking?'animate-spin':''}/> Auto
                             </button>
@@ -349,7 +349,7 @@ export default function ItineraryIndex() {
                     <div className="flex gap-1 px-3 py-2 border-b border-[var(--color-border)] shrink-0 overflow-x-auto">
                         {([['all','Vše'],['dream','✨ Sny'],['soon','🎯 Brzy'],['someday','🌍 Jednou'],['planned','📅 Plán'],['visited','✅ Splněno']] as const).map(([key,label]) => (
                             <button key={key} onClick={()=>setFilter(key as any)}
-                                className={`px-2 py-1 rounded-lg text-[10px] whitespace-nowrap transition-colors ${filter===key?'bg-[var(--color-accent)] text-[var(--color-accent-contrast)]':'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}>
+                                className={`min-h-8 px-2 py-1 rounded-lg text-[10px] whitespace-nowrap transition-colors ${filter===key?'bg-[var(--color-accent)] text-[var(--color-accent-contrast)]':'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}>
                                 {label}
                             </button>
                         ))}

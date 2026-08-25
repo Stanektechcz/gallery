@@ -108,13 +108,17 @@ function ServiceCard({ provider, connected, onOpen, onExplain }: {
 
     return (
         <div className="relative h-full">
+            {/* Kolečko zůstává dvacetibodové, ale sahá o osm bodů dál na všechny strany.
+                Průhledný obdélník přes ::after zvětší jen plochu, na kterou se dá klepnout
+                — kdyby se zvětšilo samo tlačítko, roztáhl by se viditelný otazník přes
+                roh karty. */}
             {(provider.steps?.length || provider.docs_url) && (
                 <button
                     type="button"
                     onClick={onExplain}
                     aria-label={`Jak připojit ${provider.name}`}
                     title="Jak to propojit"
-                    className="absolute right-2 top-2 z-10 flex h-5 w-5 items-center justify-center rounded-full border border-[var(--color-border)] text-[10px] text-[var(--color-text-secondary)] hover:border-[var(--color-accent)] hover:text-[var(--color-text-primary)]"
+                    className="absolute right-2 top-2 z-10 flex h-5 w-5 items-center justify-center rounded-full border border-[var(--color-border)] text-[10px] text-[var(--color-text-secondary)] after:absolute after:-inset-2 after:content-['']hover:border-[var(--color-accent)] hover:text-[var(--color-text-primary)]"
                 >
                     ?
                 </button>
