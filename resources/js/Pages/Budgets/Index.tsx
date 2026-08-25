@@ -5,7 +5,7 @@ import { Head } from '@inertiajs/react';
 import axios from 'axios';
 import {
     AlertTriangle, ArrowRightLeft, BarChart3, CalendarDays, Check, Download, ListPlus, Pencil, PieChart,
-    PiggyBank, Plus, Receipt, Scale, Search, Tags, TrendingDown, TrendingUp, Trash2, Upload, Wallet, X,
+    PiggyBank, Plus, Receipt, Repeat, Scale, Search, Tags, TrendingDown, TrendingUp, Trash2, Upload, Wallet, X,
 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import StatementImport from './StatementImport';
@@ -60,6 +60,13 @@ interface Overview {
         rows: Array<{ name: string; color: string | null; previous: number; current: number; diff: number; diff_percent: number | null }>;
         total_previous: number; total_current: number; total_diff: number;
     } | null;
+    /** Co se každý měsíc samo připisuje. Prázdné pole je běžný stav. */
+    recurring?: Array<{
+        uuid: string; kind: string; amount: number; currency: string;
+        note: string | null; category: string | null; day_of_month: number;
+        split: 'none' | 'equal' | 'other'; paid_by: string | null;
+        last_on: string; occurrences: number;
+    }>;
     /** Kolik položek rozpočet má. Samotný seznam si načítá vlastní koncový bod. */
     entries_total: number;
 }
@@ -353,6 +360,10 @@ function Overview({ data, members, onChanged }: { data: Overview; members: Array
                 {categories.some(c => c.spent > 0) && <BreakdownPanel categories={categories} currency={budget.currency}/>}
             </PanelGrid>
 
+            {(data.recurring?.length ?? 0) > 0 && (
+                <RecurringPanel budget={budget} rows={data.recurring!} onChanged={onChanged}/>
+            )}
+
             {/* Čas: celé období vlevo, poslední dva měsíce podrobně vpravo. */}
             <PanelGrid max={2}>
                 {months.length > 0 && <MonthsPanel months={months} currency={budget.currency}/>}
@@ -535,6 +546,80 @@ function SavingsPanel({ savings, currency }: { savings: NonNullable<Overview['sa
                             ? <>Chybí {money(savings.missing, currency)} — to je <strong className="text-[var(--color-text-primary)]">{money(savings.monthly_needed, currency)} měsíčně</strong> do {datum(savings.target_on!)}.</>
                             : `Chybí ${money(savings.missing, currency)}. Termín není nastavený.`}
             </p>
+        </Panel>
+    );
+}
+
+/**
+ * Co se každý měsíc samo připisuje.
+ *
+ * Označit položku za pravidelnou šlo, ale zjistit, co všechno se kvůli tomu děje, ne —
+ * a hlavně to nešlo zastavit. Nájem po odstěhování běžel dál a člověk to poznal až
+ * podle toho, že mu nesedí zbytek.
+ *
+ * Zastavení nemaže historii. Zruší se jen příznak u poslední položky, takže se příští
+ * měsíc nic nepřipíše, ale co se už zaplatilo, v rozpočtu zůstane.
+ */
+function RecurringPanel({ budget, rows, onChanged }: {
+    budget: Overview['budget'];
+    rows: NonNullable<Overview['recurring']>;
+    onChanged: () => void;
+}) {
+    const [busy, setBusy] = useState('');
+
+    const zastavit = async (uuid: string) => {
+        setBusy(uuid);
+        try {
+            await axios.patch(`/api/v1/rozpocty/${budget.uuid}/polozky/${uuid}`, { is_recurring: false });
+            onChanged();
+        } finally { setBusy(''); }
+    };
+
+    const mesicne = rows
+        .filter(r => r.kind === 'expense' && r.currency === budget.currency)
+        .reduce((sum, r) => sum + r.amount, 0);
+
+    return (
+        <Panel icon={Repeat} title="Každý měsíc znovu"
+            description="Tyhle položky se samy připíšou i do dalšího měsíce. Zastavení nesmaže, co už bylo zaplaceno."
+            actions={mesicne > 0 && (
+                <span className="text-xs tabular-nums text-[var(--color-text-secondary)]">
+                    {money(mesicne, budget.currency)} měsíčně
+                </span>
+            )}>
+            <div className="space-y-1">
+                {rows.map(radek => (
+                    <div key={radek.uuid} className="group flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg px-2 py-2 hover:bg-[var(--color-surface-hover)]">
+                        <span className="w-10 shrink-0 text-center text-xs text-[var(--color-text-secondary)]" title="Den v měsíci">
+                            {radek.day_of_month}.
+                        </span>
+
+                        <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-0.5 text-sm text-[var(--color-text-primary)]">
+                            <span className="min-w-0 max-w-full truncate">{radek.note || radek.category || 'Bez popisu'}</span>
+                            {radek.category && radek.note && (
+                                <span className="text-[11px] text-[var(--color-text-secondary)]">{radek.category}</span>
+                            )}
+                            {radek.split !== 'none' && (
+                                <span className="rounded bg-[var(--color-accent)]/15 px-1.5 py-0.5 text-[9px] text-[var(--color-accent)]">
+                                    {DELENI[radek.split]}{radek.paid_by ? ` · ${radek.paid_by}` : ''}
+                                </span>
+                            )}
+                            <span className="text-[10px] text-[var(--color-text-secondary)]">
+                                {radek.occurrences}× · naposledy {den(radek.last_on)}
+                            </span>
+                        </span>
+
+                        <span className={`shrink-0 text-sm tabular-nums ${radek.kind === 'income' ? 'text-emerald-300' : 'text-[var(--color-text-primary)]'}`}>
+                            {radek.kind === 'income' ? '+' : '−'}{money(radek.amount, radek.currency)}
+                        </span>
+
+                        <button type="button" disabled={busy === radek.uuid} onClick={() => void zastavit(radek.uuid)}
+                            className="min-h-8 shrink-0 rounded-lg border border-[var(--color-border)] px-2.5 text-xs text-[var(--color-text-secondary)] transition-opacity hover:text-red-300 focus:opacity-100 disabled:opacity-50 sm:opacity-0 sm:group-hover:opacity-100">
+                            {busy === radek.uuid ? 'Ruším…' : 'Zastavit'}
+                        </button>
+                    </div>
+                ))}
+            </div>
         </Panel>
     );
 }

@@ -97,6 +97,8 @@ class BudgetService
             'runway' => $this->runway($budget, $today),
             'savings' => $this->savings($budget, $today),
             'comparison' => $this->comparison($budget),
+            // Co se každý měsíc samo připisuje. Prázdné je běžný stav a nic se nekreslí.
+            'recurring' => $this->recurring($budget),
             // Historie uzávěrek. Bez ní by po vyrovnání zmizel dluh i důkaz, že se platil.
             'settlements' => $budget->settlements->take(6)->map(fn (\App\Models\BudgetSettlement $s) => [
                 'uuid' => $s->uuid,
@@ -543,6 +545,53 @@ class BudgetService
         return $clenove->count() === 2
             ? $clenove->firstWhere('id', '!=', $krome)
             : null;
+    }
+
+    /**
+     * Co se každý měsíc opakuje.
+     *
+     * Označit položku za pravidelnou šlo, ale zjistit, co všechno se kvůli tomu každý
+     * měsíc samo připisuje, ne. Nájem po odstěhování běžel dál a člověk to poznal až
+     * podle toho, že mu nesedí zbytek.
+     *
+     * Skládá se stejným klíčem, jakým je hledá příkaz, který kopie vytváří — kategorie,
+     * popis a druh. Kdyby se seskupovalo jinak, seznam by ukazoval něco jiného, než co
+     * se doopravdy děje.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function recurring(Budget $budget): array
+    {
+        $budget->loadMissing(['entries.category', 'entries.payer:id,name', 'entries.author:id,name']);
+
+        return $budget->entries
+            ->where('is_recurring', true)
+            ->sortByDesc('spent_on')
+            ->groupBy(fn (BudgetEntry $e) => $e->budget_category_id.'|'.$e->note.'|'.$e->kind)
+            ->map(function (Collection $skupina) {
+                $posledni = $skupina->first();
+
+                return [
+                    // uuid poslední položky: podle ní se opakování zastavuje, protože
+                    // právě z ní příkaz vyrábí kopii pro další měsíc.
+                    'uuid' => $posledni->uuid,
+                    'kind' => $posledni->kind,
+                    'amount' => (float) $posledni->amount,
+                    'currency' => $posledni->currency,
+                    'note' => $posledni->note,
+                    'category' => $posledni->category?->name,
+                    'day_of_month' => (int) $posledni->spent_on->day,
+                    'split' => $posledni->split,
+                    'paid_by' => $posledni->payer?->name ?? $posledni->author?->name,
+                    'last_on' => $posledni->spent_on->toDateString(),
+                    // Kolikrát už proběhlo — z toho je poznat, jestli jde o zavedenou
+                    // pravidelnou platbu, nebo o něco, co se zaškrtlo omylem.
+                    'occurrences' => $skupina->count(),
+                ];
+            })
+            ->sortByDesc('amount')
+            ->values()
+            ->all();
     }
 
     /**

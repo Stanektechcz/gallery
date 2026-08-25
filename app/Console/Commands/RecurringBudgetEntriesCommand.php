@@ -86,6 +86,14 @@ class RecurringBudgetEntriesCommand extends Command
                         'spent_on' => $datum,
                         'note' => $vzor->note,
                         'is_recurring' => true,
+                        // Kdo platí a jak se to dělí patří k opakování stejně jako částka.
+                        // Bez toho se nájem dělený napůl zkopíroval jako nedělený a do
+                        // vyrovnání se každý další měsíc nezapočítal — dvojice by po půl
+                        // roce zjistila, že jí v dluhu chybí pět měsíců nájmu.
+                        'paid_by' => $vzor->paid_by ?? $vzor->user_id,
+                        'split' => $vzor->split,
+                        // Účtenka se nekopíruje schválně: nový měsíc svou účtenku nemá
+                        // a připnout k němu tu starou by z dokladu udělalo lež.
                     ]);
                 }
 
