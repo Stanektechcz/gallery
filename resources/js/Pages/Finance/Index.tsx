@@ -1,4 +1,5 @@
 import AppLayout from '@/Layouts/AppLayout';
+import CardStrip from '@/Components/CardStrip';
 import usePrimaryGallerySpace from '@/hooks/usePrimaryGallerySpace';
 import { Head, Link } from '@inertiajs/react';
 import axios from 'axios';
@@ -79,7 +80,18 @@ function Overview({data,busy,onCreate,onUpdate,onDelete,onReview}:{data:Dashboar
         {/* Co je ke kontrole vedle toho, kdo komu dluží — obojí je krátký souhrn a čte se spolu. */}
         <div className="grid items-start gap-5 lg:grid-cols-2"><ReviewOverview data={data} onReview={onReview}/><SharedSettlementSummary rows={data.shared_settlements}/></div>
         <ManualExpenses rows={data.manual_expenses} members={data.members} trips={data.trip_options} busy={busy} onCreate={onCreate} onUpdate={onUpdate} onDelete={onDelete}/>
-        <div className="grid gap-5 lg:grid-cols-2"><div className="lg:col-span-2"><DailyFlowChart rows={data.daily_cashflow}/></div><BalanceChart series={data.balance_series}/><CashflowChart rows={data.cashflow}/><CategoryChart rows={data.categories}/><MerchantList rows={data.top_merchants}/></div>
+        {/* Denní vývoj zůstává přes celou šířku — je to hlavní graf stránky. Čtyři
+            rozbory pod ním jsou si rovné a na telefonu stály pod sebou přes šest set
+            bodů, takže se z nich stal pás. */}
+        <div className="space-y-5">
+            <DailyFlowChart rows={data.daily_cashflow}/>
+            <CardStrip from="lg">
+                <BalanceChart series={data.balance_series}/>
+                <CashflowChart rows={data.cashflow}/>
+                <CategoryChart rows={data.categories}/>
+                <MerchantList rows={data.top_merchants}/>
+            </CardStrip>
+        </div>
         {/* Cesty a jejich události patří k sobě — jedno je rozpad plateb, druhé jejich kalendář. */}
         <div className="grid items-start gap-5 lg:grid-cols-2"><TravelOverview trips={data.trips} summary={data.summary}/><LinkedEvents events={data.events}/></div>
     </div>;
