@@ -1,3 +1,4 @@
+import FilterBar from '@/Components/FilterBar';
 import AppLayout from '@/Layouts/AppLayout';
 import { Head, Link, router } from '@inertiajs/react';
 import axios from 'axios';
@@ -46,6 +47,12 @@ const TYPES: Record<string, { emoji: string; label: string }> = {
     home:       { emoji: '🏠', label: 'Domov' },
     custom:     { emoji: '📍', label: 'Vlastní' },
 };
+
+/** Vytažené z JSX, protože je teď potřeba i pro popisek zapnutého filtru v FilterBar. */
+const QUICK_FILTERS = [
+    ['all', 'Všechny nápady'], ['rain', '🌧️ Na déšť'], ['photo', '📸 Fotogenické'],
+    ['early', '🌅 Brzy ráno'], ['budget', '💸 Do rozpočtu'], ['favorite', '★ Oblíbené'],
+] as const;
 
 const EMPTY_FORM = {
     name: '', type: 'city', country: '', city: '', address: '',
@@ -230,7 +237,12 @@ export default function PlacesIndex() {
                         </button>
                         <button onClick={() => setShowCreate(v => !v)}
                             className="flex items-center gap-1.5 bg-[var(--color-accent)] text-[var(--color-accent-contrast)] text-sm px-3 py-2 rounded-lg hover:opacity-90">
-                            <Plus size={14}/> Najít podnik nebo místo
+                            {/* Dřív „Najít podnik nebo místo". Dvě stě bodů širokého tlačítka
+                                se na telefon vedle „Naplánovat výlet" nevešlo a obojí se lámalo
+                                pod sebe. Co tlačítko otevře, stejně říká nadpis formuláře —
+                                a prázdný stav odkazoval na „Přidat místo", tedy na popisek,
+                                který v aplikaci do teď nebyl. */}
+                            <Plus size={14}/> Přidat místo
                         </button>
                     </div>
                 </div>
@@ -349,8 +361,19 @@ export default function PlacesIndex() {
                     </form>
                 )}
 
-                {/* Type filter chips */}
-                <div className="flex gap-2 mb-5 overflow-x-auto pb-1">
+                {/* Tři řady odznaků nad sebou stály na telefonu 128 bodů a první místo
+                    začínalo až 473 bodů dolů. FilterBar je na úzkém displeji složí do
+                    jednoho řádku; na sm a výš zůstávají rozbalené jako dřív. */}
+                <FilterBar
+                    summary={`${filtered.length} z ${places.length} míst`}
+                    active={[
+                        ...(filterType !== 'all' ? [{ label: `${TYPES[filterType]?.emoji ?? ''} ${TYPES[filterType]?.label ?? filterType}`, clear: () => setFilterType('all') }] : []),
+                        ...(filterLifecycle !== 'all' ? [{ label: LIFECYCLE[filterLifecycle as LifecycleStatus]?.label ?? filterLifecycle, clear: () => setFilterLifecycle('all') }] : []),
+                        ...(quickFilter !== 'all' ? [{ label: QUICK_FILTERS.find(([key]) => key === quickFilter)?.[1] ?? quickFilter, clear: () => setQuickFilter('all') }] : []),
+                    ]}
+                    onClearAll={() => { setFilterType('all'); setFilterLifecycle('all'); setQuickFilter('all'); }}
+                >
+                <div className="flex gap-2 overflow-x-auto pb-1" aria-label="Typ místa">
                     <button onClick={() => setFilterType('all')}
                         className={`min-h-8 text-xs px-3 py-1.5 rounded-full whitespace-nowrap transition-colors ${filterType === 'all' ? 'bg-[var(--color-accent)] text-[var(--color-accent-contrast)]' : 'border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}>
                         Vše ({places.length})
@@ -363,17 +386,15 @@ export default function PlacesIndex() {
                     ))}
                 </div>
 
-                <div className="mb-3 flex gap-2 overflow-x-auto pb-1" aria-label="Stav míst">
+                <div className="flex gap-2 overflow-x-auto pb-1" aria-label="Stav míst">
                     <button onClick={() => setFilterLifecycle('all')} className={`min-h-9 shrink-0 rounded-full px-3 text-xs transition-colors ${filterLifecycle === 'all' ? 'bg-[var(--color-accent)] text-[var(--color-accent-contrast)]' : 'border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}>Všechny stavy</button>
                     {(Object.entries(LIFECYCLE) as [LifecycleStatus, typeof LIFECYCLE.idea][]).map(([value, status]) => <button key={value} onClick={() => setFilterLifecycle(filterLifecycle === value ? 'all' : value)} className={`min-h-9 shrink-0 rounded-full border px-3 text-xs transition-colors ${filterLifecycle === value ? 'border-[var(--color-accent)] bg-[var(--color-accent)]/15 text-[var(--color-accent-contrast)]' : 'border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}>{status.label}</button>)}
                 </div>
 
-                <div className="mb-5 flex gap-2 overflow-x-auto pb-1" aria-label="Rychlé kolekce míst">
-                    {([
-                        ['all', 'Všechny nápady'], ['rain', '🌧️ Na déšť'], ['photo', '📸 Fotogenické'],
-                        ['early', '🌅 Brzy ráno'], ['budget', '💸 Do rozpočtu'], ['favorite', '★ Oblíbené'],
-                    ] as const).map(([key, label]) => <button key={key} onClick={() => setQuickFilter(key)} className={`min-h-9 shrink-0 rounded-full px-3 text-xs transition-colors ${quickFilter === key ? 'bg-[var(--color-accent)] text-[var(--color-accent-contrast)]' : 'border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}>{label}</button>)}
+                <div className="flex gap-2 overflow-x-auto pb-1" aria-label="Rychlé kolekce míst">
+                    {QUICK_FILTERS.map(([key, label]) => <button key={key} onClick={() => setQuickFilter(key)} className={`min-h-9 shrink-0 rounded-full px-3 text-xs transition-colors ${quickFilter === key ? 'bg-[var(--color-accent)] text-[var(--color-accent-contrast)]' : 'border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}>{label}</button>)}
                 </div>
+                </FilterBar>
 
                 {/* Places grid */}
                 {loading ? (
