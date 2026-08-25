@@ -209,7 +209,8 @@ class GalleryDoctorCommand extends Command
             try {
                 $pending = DB::table('jobs')->count();
                 $failed  = DB::table('failed_jobs')->count();
-                $this->check("Pending jobs: {$pending}", true);
+
+                $this->checkQueueMoving($pending);
                 $this->check("Failed jobs: {$failed}", $failed === 0, $failed < 10 ? 'WARN' : 'FAIL');
             } catch (\Throwable) {
                 $this->check('jobs table accessible', false);
@@ -295,6 +296,61 @@ class GalleryDoctorCommand extends Command
         );
 
         $this->checkDriveCoverage();
+    }
+
+    /**
+     * Hýbe se fronta, nebo jen roste?
+     *
+     * Dřív se tady vypsalo „Pending jobs: 316" a označilo se to za PASS bez ohledu na
+     * číslo. Jenže počet čekajících úloh sám o sobě neznamená nic: tři sta úloh, které
+     * někdo zpracovává, je běžný stav po zařazení zálohy, kdežto tři sta úloh, ke kterým
+     * se nikdo nehlásí, znamená, že se nezpracuje nikdy nic — a doktor by to hlásil jako
+     * v pořádku až do konce světa.
+     *
+     * Rozhoduje se podle dvou věcí. Rezervovaná úloha znamená, že si ji právě teď někdo
+     * vzal, tedy že worker žije. A stáří nejstarší nerezervované úlohy říká, jak dlouho
+     * se na ni nikdo nepodíval — čerstvě zařazené úlohy jsou v pořádku vždycky, protože
+     * worker je zvedá po vteřinách.
+     */
+    private function checkQueueMoving(int $pending): void
+    {
+        if ($pending === 0) {
+            $this->check('Pending jobs: 0 — fronta je prázdná', true);
+
+            return;
+        }
+
+        $rezervovanych = DB::table('jobs')->whereNotNull('reserved_at')->count();
+
+        if ($rezervovanych > 0) {
+            $this->check("Pending jobs: {$pending} — worker právě zpracovává {$rezervovanych}", true);
+
+            return;
+        }
+
+        // Nejstarší úloha, na kterou už došla řada a nikdo si ji nevzal.
+        $nejstarsi = DB::table('jobs')
+            ->whereNull('reserved_at')
+            ->where('available_at', '<=', now()->timestamp)
+            ->min('created_at');
+
+        if ($nejstarsi === null) {
+            $this->check("Pending jobs: {$pending} — všechny naplánované na později", true);
+
+            return;
+        }
+
+        $ceka = (int) round((now()->timestamp - (int) $nejstarsi) / 60);
+
+        // Čtvrt hodiny. Worker zvedá úlohy po vteřinách, takže i při plné frontě je pořád
+        // něco rezervované; když se patnáct minut nehnulo nic, neběží.
+        $this->check(
+            $ceka >= 15
+                ? "Pending jobs: {$pending} — nejstarší čeká {$ceka} min a nikdo ji nezpracovává; běží queue worker?"
+                : "Pending jobs: {$pending} — nejstarší čeká {$ceka} min",
+            $ceka < 15,
+            'FAIL',
+        );
     }
 
     /**

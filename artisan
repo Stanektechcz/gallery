@@ -6,7 +6,7 @@ use Symfony\Component\Console\Input\ArgvInput;
 
 define('LARAVEL_START', microtime(true));
 
-require __DIR__.'/bootstrap/deprecations.php';
+require __DIR__.'/bootstrap/preflight.php';
 
 // Register the Composer autoloader...
 require __DIR__.'/vendor/autoload.php';
