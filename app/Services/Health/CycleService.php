@@ -6,6 +6,7 @@ use App\Models\CycleDay;
 use App\Models\CycleSetting;
 use App\Models\GallerySpace;
 use App\Models\User;
+use App\Support\Cestina;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 
@@ -457,13 +458,10 @@ class CycleService
         return $vysledek;
     }
 
-    /** 1 den / 2–4 dny / 5+ dní — čeština to potřebuje a „o 1 dny" čte každý jako chybu. */
+    /** 1 den / 2–4 dny / 5+ dní — pravidlo je jednou v App\Support\Cestina. */
     private function dny(int $pocet): string
     {
-        if ($pocet === 1) return '1 den';
-        if ($pocet >= 2 && $pocet <= 4) return "{$pocet} dny";
-
-        return "{$pocet} dní";
+        return Cestina::dny($pocet);
     }
 
     /**

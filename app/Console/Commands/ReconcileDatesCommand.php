@@ -79,6 +79,7 @@ class ReconcileDatesCommand extends Command
         }
 
         $this->info($zapsat
+            // „u {n} položek" se neskloňuje — po předložce „u" je druhý pád vždycky.
             ? "Doplněno datum u {$zmeneno} položek." . ($preskoceno ? " Přeskočeno {$preskoceno}." : '')
             : "Doplnilo by se {$zmeneno} položek. Spusťte znovu s --apply.");
 

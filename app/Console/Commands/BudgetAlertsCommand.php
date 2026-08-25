@@ -6,6 +6,7 @@ use App\Models\Budget;
 use App\Models\User;
 use App\Notifications\GalleryNotification;
 use App\Services\Finance\BudgetService;
+use App\Support\Cestina;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
@@ -210,12 +211,9 @@ class BudgetAlertsCommand extends Command
         return number_format($castka, 0, ',', ' ').' '.$mena;
     }
 
+    /** Pravidlo je jednou v App\Support\Cestina. */
     private function dny(int $pocet): string
     {
-        return $pocet.' '.match (true) {
-            $pocet === 1 => 'den',
-            $pocet >= 2 && $pocet <= 4 => 'dny',
-            default => 'dní',
-        };
+        return Cestina::dny($pocet);
     }
 }

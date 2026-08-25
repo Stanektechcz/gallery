@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Models\MoneyRequest;
 use App\Models\User;
 use App\Notifications\GalleryNotification;
+use App\Support\Cestina;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
 
@@ -62,12 +63,9 @@ class MoneyRequestRemindersCommand extends Command
         return self::SUCCESS;
     }
 
-    /** 1 den / 2-4 dny / 5+ dní. */
+    /** 1 den / 2-4 dny / 5+ dní — pravidlo je jednou v App\Support\Cestina. */
     private function dny(int $count): string
     {
-        if ($count === 1) return '1 den';
-        if ($count >= 2 && $count <= 4) return "{$count} dny";
-
-        return "{$count} dní";
+        return Cestina::dny($count);
     }
 }

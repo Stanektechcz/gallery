@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Models\Budget;
 use App\Models\BudgetEntry;
+use App\Support\Cestina;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
 
@@ -104,7 +105,9 @@ class RecurringBudgetEntriesCommand extends Command
         $this->newLine();
         $this->info($vzniklo === 0
             ? 'Nic k doplnění — pravidelné položky už tenhle měsíc mají.'
-            : ($zapsat ? "Doplněno {$vzniklo} položek." : "Vzniklo by {$vzniklo} položek. Spusťte s --apply."));
+            : ($zapsat
+                ? 'Doplněno položek: '.$vzniklo.'.'
+                : 'Vzniklo by '.Cestina::polozky($vzniklo).'. Spusťte s --apply.'));
 
         return self::SUCCESS;
     }

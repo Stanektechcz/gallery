@@ -2,6 +2,7 @@
 
 namespace App\Services\Planning;
 
+use App\Support\Cestina;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -83,7 +84,7 @@ class TripPreparationTimelineService
                 ];
                 $connectionChecks->push($check);
                 if (in_array($risk, ['critical', 'invalid'], true)) {
-                    $actions->push($this->action($check['key'], 'Prověřit krátký přestup', "Na přestup je pouze {$minutes} minut. Zvažte bezpečnější variantu.", ($departure ?? $tripStart)->copy()->subDay(), 'high'));
+                    $actions->push($this->action($check['key'], 'Prověřit krátký přestup', 'Na přestup '.Cestina::tvar($minutes, 'je', 'jsou', 'je').' pouze '.Cestina::minuty($minutes).'. Zvažte bezpečnější variantu.', ($departure ?? $tripStart)->copy()->subDay(), 'high'));
                 }
             }
         }

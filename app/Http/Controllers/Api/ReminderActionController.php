@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\CalendarEvent;
 use App\Models\EventReminder;
 use App\Services\Planning\ReminderActionService;
+use App\Support\Cestina;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -54,7 +55,7 @@ class ReminderActionController extends Controller
                 'last_error' => null,
                 'automation_source' => 'manual',
             ]);
-            $this->reminders->log($reminder, 'scheduled', "Naplánováno {$minutes} minut před začátkem akce.");
+            $this->reminders->log($reminder, 'scheduled', 'Naplánováno '.Cestina::minuty($minutes).' před začátkem akce.');
 
             return $reminder;
         });
