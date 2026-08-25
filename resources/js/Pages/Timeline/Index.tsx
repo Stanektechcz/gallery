@@ -313,7 +313,7 @@ export default function TimelineIndex() {
 
             {/* Renders nothing once the gallery is set up, so it costs a request on the
                 first few visits and disappears for good after that. */}
-            <div className="px-4 pt-4 sm:px-6">
+            <div role="main" className="px-4 pt-4 sm:px-6">
                 <OnboardingChecklist />
 
                 {/* Uploading here puts photographs straight into the archive with no album

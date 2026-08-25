@@ -211,7 +211,7 @@ export default function PlacesIndex() {
     return (
         <AppLayout>
             <Head title="Místa" />
-            <div className="w-full px-4 py-5 sm:px-6 lg:px-8">
+            <div role="main" className="w-full px-4 py-5 sm:px-6 lg:px-8">
 
                 {/* Header */}
                 <div className="flex items-center justify-between mb-6 gap-4 flex-wrap">

@@ -196,7 +196,7 @@ export default function MapIndex() {
     return (
         <AppLayout>
             <Head title="Mapa" />
-            <div className="relative h-full flex flex-col">
+            <div role="main" className="relative h-full flex flex-col">
                 {/* Header */}
                 <div className="px-4 py-3 border-b border-[var(--color-border)] flex items-center justify-between shrink-0">
                     <h1 className="text-sm font-semibold text-[var(--color-text-primary)]">Mapa</h1>

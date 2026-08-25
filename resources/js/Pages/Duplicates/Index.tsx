@@ -126,7 +126,7 @@ export default function DuplicatesIndex() {
         <AppLayout>
             <Head title="Duplicity" />
 
-            <div className="p-4 sm:p-6">
+            <div role="main" className="p-4 sm:p-6">
                 <header className="mb-5">
                     <h1 className="flex items-center gap-2 text-xl font-semibold text-[var(--color-text-primary)]">
                         <Copy size={20} className="text-[var(--color-accent)]"/> Duplicity

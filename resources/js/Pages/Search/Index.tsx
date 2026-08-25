@@ -124,7 +124,7 @@ export default function SearchIndex() {
     return (
         <AppLayout>
             <Head title="Hledat a objevovat" />
-            <div className="mx-auto min-h-full max-w-6xl px-3 py-4 pb-24 sm:px-6 sm:py-7">
+            <div role="main" className="mx-auto min-h-full max-w-6xl px-3 py-4 pb-24 sm:px-6 sm:py-7">
                 <header className="mb-5">
                     <div className="flex items-center gap-2 text-[var(--color-accent)]"><Sparkles size={16} /><span className="text-xs font-semibold uppercase tracking-wider">Objevovat</span></div>
                     <h1 className="mt-1 text-2xl font-bold text-[var(--color-text-primary)]">Najděte okamžik, ne soubor</h1>

@@ -1224,10 +1224,16 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
                         .filter(group => group.items.length > 0)}
                 />
 
-                {/* Content */}
-                <main id="app-scroll-container" className="app-scroll min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain">
+                {/* Content
+                    Tenhle obal je scrollovací oblast, ne obsah stránky. Dokud to bylo
+                    <main>, mělo jedenačtyřicet podstránek, které si vlastní <main> kreslí
+                    samy, zanořené <main> v <main> — což HTML nedovoluje a odečítač kvůli
+                    tomu hlásí dvě hlavní oblasti, takže „přejít na obsah" přestává mít
+                    jednoznačný cíl. Značku si drží stránka, protože ta ví, kde její obsah
+                    začíná; layout jen řeší, co se scrolluje. */}
+                <div id="app-scroll-container" className="app-scroll min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain">
                     {children}
-                </main>
+                </div>
 
                 {/* Global upload manager panel */}
                 <UploadPanel />

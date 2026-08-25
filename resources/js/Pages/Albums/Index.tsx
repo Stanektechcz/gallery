@@ -84,7 +84,7 @@ export default function AlbumsIndex({ albums, gallerySpace, albumSuggestions, al
         <AppLayout>
             <Head title="Alba" />
 
-            <div className="p-4">
+            <div role="main" className="p-4">
                 {/* Header */}
                 <div className="flex items-center justify-between mb-6">
                     <h1 className="text-lg font-semibold text-[var(--color-text-primary)]">Alba</h1>

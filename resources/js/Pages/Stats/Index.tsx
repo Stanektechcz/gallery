@@ -39,7 +39,7 @@ export default function StatsIndex({ stats }: { stats: any }) {
     return (
         <AppLayout>
             <Head title="Statistiky" />
-            <div className="p-4 max-w-4xl mx-auto space-y-6 pb-8">
+            <div role="main" className="p-4 max-w-4xl mx-auto space-y-6 pb-8">
                 <h1 className="text-xl font-bold text-[var(--color-text-primary)]">Statistiky galerie</h1>
 
                 {/* Top cards */}

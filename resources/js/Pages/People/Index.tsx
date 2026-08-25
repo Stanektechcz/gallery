@@ -25,7 +25,7 @@ export default function PeopleIndex() {
     return (
         <AppLayout>
             <Head title="Lidé" />
-            <div className="p-4">
+            <div role="main" className="p-4">
                 <div className="flex items-center gap-3 mb-6">
                     <div className="w-9 h-9 rounded-lg bg-[var(--color-accent)]/20 flex items-center justify-center">
                         <User size={18} className="text-[var(--color-accent)]" />

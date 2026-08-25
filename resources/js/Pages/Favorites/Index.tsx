@@ -50,7 +50,7 @@ export default function FavoritesIndex({ my_items, shared_items, partner_items, 
     return (
         <AppLayout>
             <Head title="Oblíbené" />
-            <div className="flex flex-col h-full min-h-0">
+            <div role="main" className="flex flex-col h-full min-h-0">
 
                 {/* Header */}
                 <div className="shrink-0 px-5 py-3 border-b border-[var(--color-border)]">

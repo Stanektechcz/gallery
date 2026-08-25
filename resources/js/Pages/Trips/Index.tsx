@@ -552,7 +552,7 @@ export default function TripsIndex() {
     return (
         <AppLayout>
             <Head title="Cesty" />
-            <div className="flex flex-col lg:flex-row h-full min-h-0">
+            <div role="main" className="flex flex-col lg:flex-row h-full min-h-0">
 
                 {/* ── Left: trip list ──────────────────────────────────── */}
                 <div className={`${selected ? 'hidden lg:flex' : 'flex'} w-full lg:w-72 min-h-0 shrink-0 flex-col border-r border-[var(--color-border)] overflow-hidden`}>
