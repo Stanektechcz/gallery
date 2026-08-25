@@ -8,7 +8,7 @@ import usePrimaryGallerySpace from '@/hooks/usePrimaryGallerySpace';
 import Slideshow, { type SlideshowItem } from '@/Components/Slideshow';
 import AppLayout from '@/Layouts/AppLayout';
 import { Head, Link, router } from '@inertiajs/react';
-import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import { Camera, Grid3X3, Heart, Layers, Map, Maximize2, Play, Trash2 } from 'lucide-react';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -116,6 +116,13 @@ export default function TimelineIndex() {
     const [suggestionsAvailable, setSuggestionsAvailable] = useState(false);
     const [cameraOpen, setCameraOpen] = useState(false);
     /** Rychlé filtry. Jeden po druhém, ne najednou — kombinace tří se nedá přečíst z lišty. */
+    /**
+     * Vybraný měsíc jako „2026-08".
+     *
+     * Skok se musí propsat do dotazu, ne jen odrolovat stránku: při donekonečna
+     * dorolovávaném seznamu ten měsíc ještě nemusí být stažený, takže není kam skočit.
+     */
+    const [month, setMonth] = useState('');
     const [filter, setFilter] = useState<'' | 'favorites_only' | 'no_album' | 'no_date' | 'no_location' | 'video'>('');
     const [year, setYear] = useState('');
 
@@ -164,12 +171,19 @@ export default function TimelineIndex() {
     const clearSelect  = useCallback(() => setSelected(new Set()), []);
 
     const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading } = useInfiniteQuery({
-        queryKey: ['timeline', filter, year],
+        queryKey: ['timeline', filter, year, month],
         queryFn: async ({ pageParam }) => {
             const params: Record<string,string> = { per_page: '48' };
             if (filter === 'video') params.media_type = 'video';
             else if (filter) params[filter] = '1';
-            if (year) params.year = year;
+            // Měsíc má přednost před rokem — je to jeho zpřesnění, ne druhý filtr.
+            if (month) {
+                const [r, m] = month.split('-').map(Number);
+                params.date_from = `${month}-01`;
+                params.date_to = new Date(r, m, 0).toISOString().slice(0, 10);
+            } else if (year) {
+                params.year = year;
+            }
             if (pageParam) params.cursor = String(pageParam);
             return (await axios.get('/api/v1/timeline', { params })).data;
         },
@@ -215,15 +229,52 @@ export default function TimelineIndex() {
     /**
      * Roky, které archiv obsahuje.
      *
-     * Z načtených stránek, ne ze samostatného dotazu: nabídka se doplňuje, jak se
-     * doroluje, a jeden dotaz navíc jen kvůli seznamu let by se nevyplatil.
+     * Ze samostatného dotazu, ne z načtených stránek.
+     *
+     * Dřív se nabídka skládala z toho, co už bylo staženo — takže kdo měl fotky z roku
+     * 2019 a nedorolovall tam, ten rok v nabídce nenašel. Funkce, která má ušetřit
+     * rolování, ho nejdřív vyžadovala.
+     *
+     * Server na to má koncový bod, který tu ležel nepoužitý: jeden seskupený dotaz vrátí
+     * všechny roky a měsíce i s počty. To je levnější než stahovat kvůli seznamu let
+     * tisíc fotek a hlavně je to úplné.
      */
+    const { data: bucketData } = useQuery({
+        queryKey: ['timeline-buckets'],
+        queryFn: async () => (await axios.get('/api/v1/timeline/buckets')).data,
+        staleTime: 5 * 60_000,
+    });
+
+    const buckets = useMemo<Array<{ year: number; month: number; count: number }>>(
+        () => bucketData?.buckets ?? [],
+        [bucketData],
+    );
+
     const years = useMemo(() => {
+        const zBucketu = Array.from(new Set(buckets.map(b => String(b.year))));
+
+        if (zBucketu.length > 0) return zBucketu.sort().reverse();
+
+        // Než dorazí odpověď, ať je nabídka aspoň z toho, co je na obrazovce.
         const found = new Set<string>();
         for (const item of allItems) if (item.taken_at) found.add(item.taken_at.substring(0, 4));
 
         return Array.from(found).sort().reverse();
-    }, [allItems]);
+    }, [buckets, allItems]);
+
+    /**
+     * Měsíce vybraného roku i s počty.
+     *
+     * Ukazují se, teprve když je rok zvolený. Dvanáct měsíců krát pět let je šedesát
+     * odkazů, ve kterých se hledá hůř než v tom archivu.
+     */
+    const monthsOfYear = useMemo(() => {
+        if (! year) return [];
+
+        return buckets
+            .filter(b => String(b.year) === year)
+            .sort((a, b) => b.month - a.month);
+    }, [buckets, year]);
 
     const groups   = useMemo(() => groupByDate(allItems), [allItems]);
     const sections = useMemo(() => {
@@ -337,7 +388,7 @@ export default function TimelineIndex() {
                                     ['no_location', 'Bez místa'],
                                 ] as const).map(([key, label]) => (
                                     <button key={key || 'all'} type="button" onClick={() => setFilter(key as typeof filter)}
-                                        className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] transition-colors ${
+                                        className={`flex min-h-9 shrink-0 items-center rounded-full px-3 text-[11px] transition-colors ${
                                             filter === key
                                                 ? 'bg-[var(--color-accent)] text-[var(--color-accent-contrast)]'
                                                 : 'border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'
@@ -350,13 +401,44 @@ export default function TimelineIndex() {
                             {/* Skok na rok. U tisíců fotek je rolování k roku 2019 práce
                                 na minuty a „vybrat měsíc" na to nestačí. */}
                             {years.length > 1 && (
-                                <select value={year} onChange={event => setYear(event.target.value)}
+                                <select value={year} onChange={event => { setYear(event.target.value); setMonth(''); }}
                                     className="shrink-0 rounded-full border border-[var(--color-border)] bg-[var(--color-bg-card)] px-2 py-1 text-[11px] text-[var(--color-text-secondary)]">
                                     <option value="">Všechny roky</option>
                                     {years.map(y => <option key={y} value={y}>{y}</option>)}
                                 </select>
                             )}
                         </div>
+
+                        {/* Měsíce vybraného roku i s počty. Ukazují se, teprve když je rok
+                            zvolený — dvanáct měsíců krát pět let je šedesát odkazů, ve
+                            kterých se hledá hůř než v samotném archivu. */}
+                        {monthsOfYear.length > 1 && (
+                            <div className="flex w-full items-center gap-1 overflow-x-auto scrollbar-hide pb-0.5">
+                                <button onClick={() => setMonth('')}
+                                    className={`flex min-h-9 shrink-0 items-center rounded-full px-3 text-[11px] transition-colors ${
+                                        month === ''
+                                            ? 'bg-[var(--color-accent)] text-[var(--color-accent-contrast)]'
+                                            : 'border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'
+                                    }`}>
+                                    celý rok
+                                </button>
+                                {monthsOfYear.map(b => {
+                                    const klic = `${b.year}-${String(b.month).padStart(2, '0')}`;
+
+                                    return (
+                                        <button key={klic} onClick={() => setMonth(month === klic ? '' : klic)}
+                                            className={`flex min-h-9 shrink-0 items-center rounded-full px-3 text-[11px] transition-colors ${
+                                                month === klic
+                                                    ? 'bg-[var(--color-accent)] text-[var(--color-accent-contrast)]'
+                                                    : 'border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'
+                                            }`}>
+                                            {MONTHS_CS[b.month - 1]}
+                                            <span className="ml-1 opacity-60">{b.count}</span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        )}
                         <div className="flex w-full items-center justify-between gap-2 overflow-x-auto scrollbar-hide sm:w-auto sm:justify-end">
                             <div className="flex items-center gap-0.5 bg-[var(--color-bg-card)] rounded-lg p-0.5 border border-[var(--color-border)]">
                                 {GRID_SIZES.map((_,i) => (
