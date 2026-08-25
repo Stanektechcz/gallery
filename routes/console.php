@@ -103,6 +103,19 @@ Schedule::command('gallery:status')
     ->dailyAt('02:00')
     ->name('daily-status');
 
+// Kopie originálů do cloudu, které tam ještě nejsou.
+//
+// Zrcadlení se dosud spouštělo jedině při nahrání. Co jednou selhalo — výpadek sítě,
+// nedoběhlá fronta — nebo co je starší než připojení cloudu, tam zůstalo navždy a
+// nikdo se to nedozvěděl; doktor pak hlásil „0 z 203 originálů zkopírováno" jako trvalý
+// stav. Příkaz je idempotentní a omezený, takže se dá volat opakovaně a sám se dorovná.
+//
+// V noci, protože kopíruje originály: u pěti set fotek jsou to gigabajty přes síť.
+Schedule::command('gallery:mirror-backlog --no-interaction')
+    ->dailyAt('02:40')
+    ->withoutOverlapping()
+    ->name('mirror-backlog');
+
 Schedule::command('gallery:clean-temp')
     ->daily()
     ->name('temp-cleanup');

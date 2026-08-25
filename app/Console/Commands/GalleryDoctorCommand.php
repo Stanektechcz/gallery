@@ -279,9 +279,17 @@ class GalleryDoctorCommand extends Command
             );
         }
 
+        // Popisek říká, co se stalo, ne co by bylo v pořádku.
+        //
+        // Dřív tu stálo „Last successful request < 24h" a při selhání se to vypsalo jako
+        // varování — takže vedle žluté značky svítila věta popisující zdravý stav. Kdo to
+        // čte, si musí domyslet, že platí opak, a to je přesně ta práce navíc, kterou má
+        // kontrola ušetřit.
         $lastOk = $connection->last_successful_request_at;
         $this->check(
-            'Last successful request < 24h',
+            $lastOk
+                ? 'Last successful request: '.$lastOk->diffForHumans()
+                : 'No successful request yet',
             $lastOk && $lastOk->diffInHours(now()) < 24,
             'WARN'
         );
@@ -332,21 +340,30 @@ class GalleryDoctorCommand extends Command
                 $percent >= 95 ? 'WARN' : 'FAIL',
             );
 
-            $failed = DB::table('media_items')
+            // Chyby zpracování, ne chyby zálohy.
+            //
+            // Dřív se to hlásilo jako „Drive backup errors" jen proto, že ta média nemají
+            // drive_file_id. Jenže dokud není zkopírované nic, nemá ho žádné — takže ta
+            // podmínka nic nerozlišovala a doktor svaloval na zálohu chybu, která vznikla
+            // úplně jinde, při počítání otisků nebo čtení metadat. Kdo podle toho hledal
+            // závadu v cloudu, hledal ji na špatném místě.
+            $chybne = DB::table('media_items')
                 ->whereNull('trashed_at')
-                ->whereNull('drive_file_id')
                 ->whereNotNull('processing_error')
                 ->count();
 
-            if ($failed > 0) {
-                // Named, because "it did not work" is not something anyone can act on.
+            if ($chybne > 0) {
+                // Pojmenovaná, protože „nepovedlo se to" není nic, s čím se dá pohnout.
                 $priklad = DB::table('media_items')
                     ->whereNull('trashed_at')
-                    ->whereNull('drive_file_id')
                     ->whereNotNull('processing_error')
                     ->value('processing_error');
 
-                $this->check("Drive backup errors: {$failed} — \"{$priklad}\"", false, 'WARN');
+                $this->check(
+                    "Media processing errors: {$chybne} — \"{$priklad}\" (netýká se zálohy)",
+                    false,
+                    'WARN',
+                );
             }
         } catch (\Throwable $e) {
             $this->check('Drive backup coverage could not be read (' . $e->getMessage() . ')', false, 'WARN');
