@@ -2,6 +2,7 @@ import AppLayout from '@/Layouts/AppLayout';
 import TripBankFinancePanel from '@/Components/Banking/TripBankFinancePanel';
 // `media` je tu už pole médií cesty, tak pod jiným jménem.
 import { media as pocetMedii, pocet } from '@/lib/cestina';
+import { sdilenyGet } from '@/lib/sdilenyDotaz';
 import MealPlanPanel from '@/Components/Recipes/MealPlanPanel';
 import TripReservationImportPanel from '@/Components/Trips/TripReservationImportPanel';
 import TripWatchlistPanel from '@/Components/Trips/TripWatchlistPanel';
@@ -370,7 +371,8 @@ function TripReadiness({ tripId }: { tripId: number }) {
     const [document,setDocument]=useState({type:'insurance',title:'',expires_on:'',status:'ready',assigned_to:''});
     const [syncing,setSyncing]=useState(false);
     const [message,setMessage]=useState('');
-    const load=()=>Promise.allSettled([axios.get(`/api/v1/trips/${tripId}/readiness`),axios.get(`/api/v1/trips/${tripId}/packing-members`)]).then(([readiness,people])=>{if(readiness.status==='fulfilled')setData(readiness.value.data);if(people.status==='fulfilled')setMembers(people.value.data??[]);});
+    // Seznam lidí chce i balicí panel vedle. Sdílený dotaz je spojí do jednoho stažení.
+    const load=()=>Promise.allSettled([axios.get(`/api/v1/trips/${tripId}/readiness`),sdilenyGet<any>(`ucastnici:${tripId}`,`/api/v1/trips/${tripId}/packing-members`)]).then(([readiness,people])=>{if(readiness.status==='fulfilled')setData(readiness.value.data);if(people.status==='fulfilled')setMembers(people.value??[]);});
     useEffect(()=>{load();},[tripId]);
     const addLimit=async(e:React.FormEvent)=>{e.preventDefault();if(!limit.amount)return;await axios.put(`/api/v1/trips/${tripId}/budget-limits`,{category:limit.category,amount:Number(limit.amount)});setLimit({...limit,amount:''});load();};
     const addDocument=async(e:React.FormEvent)=>{e.preventDefault();if(!document.title)return;await axios.post(`/api/v1/trips/${tripId}/documents`,{...document,expires_on:document.expires_on||null,assigned_to:document.assigned_to?Number(document.assigned_to):null});setDocument({...document,title:'',expires_on:'',assigned_to:''});load();};
@@ -394,7 +396,7 @@ function TripPackingPanel({ tripId }: { tripId: number }) {
     const [assignedTo, setAssignedTo] = useState('');
     const [busy, setBusy] = useState(false);
     const load = () => axios.get(`/api/v1/trips/${tripId}/packing-items`).then(response => setItems(response.data ?? [])).catch(() => {});
-    useEffect(() => { load(); axios.get(`/api/v1/trips/${tripId}/packing-members`).then(response => setMembers(response.data ?? [])).catch(() => setMembers([])); }, [tripId]);
+    useEffect(() => { load(); sdilenyGet<any>(`ucastnici:${tripId}`, `/api/v1/trips/${tripId}/packing-members`).then(lide => setMembers(lide ?? [])).catch(() => setMembers([])); }, [tripId]);
     const add = async (event: React.FormEvent) => { event.preventDefault(); if (!title.trim()) return; setBusy(true); try { await axios.post(`/api/v1/trips/${tripId}/packing-items`, { title: title.trim(), category, assigned_to: assignedTo ? Number(assignedTo) : null }); setTitle(''); setAssignedTo(''); load(); } finally { setBusy(false); } };
     const apply = async (template: string) => { setBusy(true); try { await axios.post(`/api/v1/trips/${tripId}/packing-items/apply-template`, { template }); load(); } finally { setBusy(false); } };
     const toggle = async (item: any) => { await axios.patch(`/api/v1/trips/${tripId}/packing-items/${item.id}`, { is_packed: !item.is_packed }); load(); };

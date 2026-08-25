@@ -1,4 +1,5 @@
 import AppInstallButton from '@/Components/AppInstallButton';
+import { sdilenyGet } from '@/lib/sdilenyDotaz';
 import { useViewportSafePanel } from '@/lib/useViewportSafePanel';
 import ChatDock from '@/Components/ChatDock';
 import TopNav from '@/Components/TopNav';
@@ -326,10 +327,14 @@ function NotificationBell() {
     const [meta, setMeta] = useState<NotificationMeta>({total:0,unread:0,important:0,critical:0,quiet_now:false,categories:{}});
     const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-    const load = useCallback(async () => {
+    // Zvonek je v rozvržení dvakrát — v postranním panelu a v hlavičce pro telefon —
+    // a schovaná kopie stahovala a doptávala se stejně jako ta viditelná. Dotaz se proto
+    // sdílí. Po zápisu se obnovuje `cerstve`, aby se nepůjčila odpověď z doby před ním.
+    const load = useCallback(async (cerstve = false) => {
         setLoading(true);
         try {
-            const r = await axios.get('/api/v1/notifications', {params:{focus,category:categoryFilter==='all'?undefined:categoryFilter,limit:30}});
+            const params = {focus,category:categoryFilter==='all'?undefined:categoryFilter,limit:30};
+            const r = { data: await sdilenyGet<any>(`oznameni:${focus}:${categoryFilter}`, '/api/v1/notifications', {params, cerstve}) };
             const items:GalleryNotif[] = r.data?.data ?? [];
             const nextPreferences:NotificationPreferences|null = r.data?.preferences ?? null;
             setNotifs(items);
@@ -355,7 +360,7 @@ function NotificationBell() {
     // Load on mount + every 60s
     useEffect(() => {
         load();
-        pollRef.current = setInterval(load, 60_000);
+        pollRef.current = setInterval(() => load(), 60_000);
         return () => { if (pollRef.current) clearInterval(pollRef.current); };
     }, [load]);
 
@@ -370,7 +375,7 @@ function NotificationBell() {
         await axios.post('/api/v1/notifications/read-all', categoryFilter === 'all' ? {} : {category:categoryFilter}).catch(() => {});
         setNotifs(prev => focus === 'unread' ? [] : prev.map(n => ({ ...n, read_at: n.read_at ?? new Date().toISOString() })));
         if (categoryFilter === 'all') setMeta(current => ({...current,unread:0}));
-        else await load();
+        else await load(true);
     };
 
     const unread = meta.unread;
@@ -389,7 +394,7 @@ function NotificationBell() {
         try {
             await axios.post(`/api/v1/reminders/${reminderId}/${action}`, minutes ? { minutes } : {});
             setNotifs(current => current.filter(item => item.id !== notification.id));
-            await load();
+            await load(true);
         } catch (reason: any) {
             setActionError(reason.response?.data?.message ?? 'Připomínku se nepodařilo změnit.');
         } finally {
@@ -402,7 +407,7 @@ function NotificationBell() {
         try {
             await axios.post(`/api/v1/notifications/${notification.id}/${action}`, action === 'snooze' ? {minutes} : {});
             setNotifs(current => current.filter(item => item.id !== notification.id));
-            await load();
+            await load(true);
         } catch (reason:any) { setActionError(reason.response?.data?.message ?? 'Notifikaci se nepodařilo změnit.'); }
         finally { setActionBusy(''); }
     };
@@ -414,7 +419,7 @@ function NotificationBell() {
             const response = await axios.patch('/api/v1/notifications/preferences', preferenceDraft);
             setPreferences(response.data.preferences); setPreferenceDraft(response.data.preferences);
             setMeta(current => ({...current,quiet_now:response.data.quiet_now ?? current.quiet_now}));
-            setShowSettings(false); await load();
+            setShowSettings(false); await load(true);
         } catch (reason:any) { setActionError(reason.response?.data?.message ?? 'Nastavení upozornění se nepodařilo uložit.'); }
         finally { setActionBusy(''); }
     };
