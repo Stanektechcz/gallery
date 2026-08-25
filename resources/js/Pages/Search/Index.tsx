@@ -42,7 +42,10 @@ const QUICK_FILTERS = [
 function paramsFor(filters: SearchFilters) {
     const params: Record<string, string> = {};
     Object.entries(filters).forEach(([key, value]) => {
-        if (value === '' || value === false) return;
+        // `null` a `undefined` se sem dostanou z uloženého pohledu, který vznikl ve starší
+        // verzi rozhraní. Bez téhle podmínky by odešly jako text „null" a server by je
+        // odmítl stejně jako „true".
+        if (value === '' || value === false || value === null || value === undefined) return;
 
         params[key] = value === true ? '1' : String(value);
     });
