@@ -27,6 +27,8 @@ export default function FilterBar({
     active,
     summary,
     onClearAll,
+    leading,
+    className = 'mb-5',
     children,
 }: {
     /** Zapnuté filtry. Prázdné pole = nic se nefiltruje. */
@@ -35,14 +37,21 @@ export default function FilterBar({
     summary: string;
     /** Vrátí všechno do výchozího stavu. Bez něj se tlačítko „Zrušit vše" nezobrazí. */
     onClearAll?: () => void;
+    /**
+     * Co má být vidět i po sbalení — typicky hledání. Stojí v tomtéž řádku jako
+     * tlačítko „Filtry", takže na širokém displeji nezabírá vlastní řádek navíc.
+     */
+    leading?: React.ReactNode;
+    className?: string;
     /** Skupiny odznaků. Každá skupina ať je jeden prvek s vlastním aria-label. */
     children: React.ReactNode;
 }) {
     const [open, setOpen] = useState(false);
 
     return (
-        <div className="mb-5">
+        <div className={className}>
             <div className="flex flex-wrap items-center gap-2">
+                {leading}
                 <button
                     type="button"
                     onClick={() => setOpen(value => !value)}
