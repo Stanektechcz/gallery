@@ -122,25 +122,38 @@ export default function UploadZone({ albumId, onUploadComplete }: Props) {
     return (
         <div onDragEnter={onDE} onDragLeave={onDL} onDragOver={onDO} onDrop={onDrop}
             onClick={() => inputRef.current?.click()}
-            className={['flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed cursor-pointer transition-all select-none py-8 px-4',
+            className={['flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed cursor-pointer transition-all select-none py-4 px-4 sm:py-8 pointer-coarse:flex-row pointer-coarse:gap-3 pointer-coarse:py-3',
                 dragging ? 'border-[var(--color-accent)] bg-[var(--color-accent)]/10' : 'border-[var(--color-border)] hover:border-[var(--color-accent)]/60 hover:bg-[var(--color-surface-hover)]',
             ].join(' ')}>
             <Upload size={28} className={dragging ? 'text-[var(--color-accent)]' : 'text-[var(--color-text-secondary)]'}/>
+            {/* „Přetáhněte" platí jen tam, kde je čím táhnout. Rozhoduje o tom schopnost
+                ukazovátka, ne šířka okna — úzké okno na počítači přetahovat umí, široký
+                tablet ne. */}
             <p className="text-sm text-[var(--color-text-primary)] font-medium">
                 {busy
                     ? `Rozbaluji ${busy}…`
-                    : dragging ? 'Pusťte soubory sem' : queued ? `✓ ${queued} souborů přidáno` : 'Přetáhněte nebo klikněte'}
+                    : dragging ? 'Pusťte soubory sem' : queued ? `✓ ${queued} souborů přidáno` : (
+                        <>
+                            <span className="pointer-coarse:hidden">Přetáhněte nebo klikněte</span>
+                            <span className="hidden pointer-coarse:inline">Přidat fotky a videa</span>
+                        </>
+                    )}
             </p>
-            <p className="text-xs text-[var(--color-text-secondary)]">Fotky, videa, RAW i ZIP · JPG PNG HEIC AVIF CR2 NEF ARW DNG MP4 MOV MKV…</p>
-            <p className="text-[10px] text-[var(--color-text-secondary)] opacity-60">Kontrola duplicit · pokračování po výpadku · archivy i složky se rozbalí samy</p>
+            {/* Výčet formátů a schopností je na telefonu 100 bodů textu nad fotkami. Kdo
+                nahrává z mobilu, vybírá z galerie a co je za příponou neřeší. */}
+            <p className="hidden text-xs text-[var(--color-text-secondary)] sm:block">Fotky, videa, RAW i ZIP · JPG PNG HEIC AVIF CR2 NEF ARW DNG MP4 MOV MKV…</p>
+            <p className="hidden text-[10px] text-[var(--color-text-secondary)] opacity-60 sm:block">Kontrola duplicit · pokračování po výpadku · archivy i složky se rozbalí samy</p>
 
             {/* A folder needs its own picker: one input cannot offer both files and
                 directories, and the drop target alone leaves anyone who does not drag
                 without a way in at all. On iOS, where directories cannot be chosen at
                 all, this offers the thing that does work there instead of a dead button. */}
+            {/* Když prohlížeč složky vybrat neumí, dělá tohle tlačítko přesně totéž co
+                klepnutí na plochu — vstup pro soubory má `multiple`. Na dotyku, kde se
+                složka vybrat nedá nikdy, je proto jen řádkem navíc nad fotkami. */}
             <button type="button"
                 onClick={event => { event.stopPropagation(); (folders ? folderRef : inputRef).current?.click(); }}
-                className="mt-1 inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-[var(--color-border)] px-3 py-1.5 text-xs text-[var(--color-text-secondary)] transition-colors hover:border-[var(--color-accent)]/60 hover:text-[var(--color-text-primary)]">
+                className={`mt-1 inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-[var(--color-border)] px-3 py-1.5 text-xs text-[var(--color-text-secondary)] transition-colors hover:border-[var(--color-accent)]/60 hover:text-[var(--color-text-primary)] ${folders ? '' : 'pointer-coarse:hidden'}`}>
                 <FolderOpen size={13}/> {folders ? 'Vybrat celou složku' : 'Vybrat víc fotek najednou'}
             </button>
 
