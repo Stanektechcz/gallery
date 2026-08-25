@@ -394,7 +394,7 @@ export default function ChatDock() {
                                                 ))}
                                             </div>
                                         ))}
-                                        <Link href="/chat" className="mt-1 block border-t border-[var(--color-border)] px-2 pt-2 text-[11px] text-[var(--color-accent)]">Spravovat konverzace →</Link>
+                                        <Link href="/chat" className="panel-link mt-1 w-full border-t border-[var(--color-border)] px-2 pt-2 text-[11px] text-[var(--color-accent)]">Spravovat konverzace →</Link>
                                     </div>
                                 </>
                             )}

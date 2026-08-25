@@ -76,7 +76,7 @@ function CycleQuickStart({ day }: { day: string }) {
         return (
             <div className="rounded-xl border border-emerald-400/30 bg-emerald-500/5 p-4">
                 <p className="text-sm text-emerald-100">Zapsáno. Zbytek týdne je předvyplněný jako odhad.</p>
-                <Link href="/cyklus" className="mt-2 inline-block text-xs text-emerald-200">Upravit v kalendáři →</Link>
+                <Link href="/cyklus" className="panel-link mt-2 text-xs text-emerald-200">Upravit v kalendáři →</Link>
             </div>
         );
     }
