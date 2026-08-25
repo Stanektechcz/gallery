@@ -33,9 +33,15 @@ class PersonalSummaryService
     {
         $today ??= Carbon::today();
 
+        $cyklus = $this->cycle($space, $user, $today);
+
         return [
             'budget' => $this->budget($space, $user, $today),
-            'cycle' => $this->cycle($space, $user, $today),
+            'cycle' => $cyklus === null ? null : $cyklus + [
+                // Jedním klepnutím z nástěnky místo pěti kroků přes kalendář.
+                'can_log_start' => $this->nabidnoutZapis($user, $cyklus, $today),
+                'today' => $today->toDateString(),
+            ],
         ];
     }
 
@@ -120,5 +126,34 @@ class PersonalSummaryService
             'cycle_day' => $dnes['cycle_day'] ?? null,
             'confidence' => $predpoved['confidence'],
         ];
+    }
+
+    /**
+     * Má se na nástěnce nabídnout „začalo to dnes"?
+     *
+     * Zapsat první den šlo dosud jedině přes menu, kalendář, výběr dne, výběr síly
+     * a uložení — pět kroků pro věc, kterou člověk dělá dvanáctkrát ročně ve chvíli,
+     * kdy se mu do proklikávání nechce. Přitom právě první den je ten, na kterém stojí
+     * celá předpověď: bez něj se posune všechno ostatní.
+     *
+     * Nabízí se jen ve dnech kolem očekávaného termínu a jen tehdy, když dnešek ještě
+     * není zapsaný. Tlačítko, které svítí pořád, by v kalendáři nadělalo víc škody než
+     * užitku — omylem zapsaný začátek posune předpověď stejně jako ten skutečný.
+     *
+     * Cizí cyklus tlačítko nedostane nikdy. Sdílet termíny znamená „můžeš se podívat",
+     * ne „zapisuj mi to".
+     */
+    private function nabidnoutZapis(User $user, ?array $cyklus, Carbon $dnes): bool
+    {
+        if ($cyklus === null || $cyklus['owner'] !== null) return false;
+
+        // Od tří dnů před očekávaným termínem po pět dní po něm. Dřív je to plané,
+        // později už si toho člověk všiml sám.
+        if ($cyklus['days_until'] > 3 || $cyklus['days_until'] < -5) return false;
+
+        return ! CycleDay::where('user_id', $user->id)
+            ->whereDate('day', $dnes->toDateString())
+            ->where('is_predicted', false)
+            ->exists();
     }
 }

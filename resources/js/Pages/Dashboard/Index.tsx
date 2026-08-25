@@ -21,7 +21,12 @@ interface DashboardData {
     personal_hub?: {
         budget: { uuid:string; name:string; currency:string; per_day:number|null; left:number; days_left:number|null; warnings:number; runs_out_on:string|null } | null;
         /** owner je null, když jde o vlastní cyklus — pak se u dlaždice nepíše jméno. */
-        cycle: { owner:string|null; next_period_on:string; days_until:number; phase:string|null; cycle_day:number|null; confidence:string } | null;
+        cycle: {
+            owner:string|null; next_period_on:string; days_until:number;
+            phase:string|null; cycle_day:number|null; confidence:string;
+            /** Jen kolem očekávaného termínu a jen u vlastního, nezapsaného dne. */
+            can_log_start?:boolean; today?:string;
+        } | null;
     };
     partner_hub: { space_id:number; album_suggestion?:{fingerprint:string;title:string;reason:string;media_count:number;photo_count:number;video_count:number;context?:{type:string;name:string}|null}|null; milestones: Array<{ uuid:string; title:string; icon:string; kind?:string; relationship?:string|null; person_name?:string|null; is_highlighted?:boolean; days_until:number; next_anniversary:string }>; reminders?:ActionableReminder[]; next_event?:{uuid:string;title:string;starts_at:string;place_name?:string|null;trip_id?:number|null;open_tasks_count?:number;planning_items_count?:number}|null; next_actions?:NextAction[]; coordination?:PartnerPulse|null; decisions?:PartnerDecisionSnapshot|null; reflection_prompt?:{id:number;name:string;end_date:string}|null; event_reflection_prompt?:{uuid:string;title:string;starts_at:string}|null; experience_recommendation?:ExperienceRecommendation|null; experience_follow_up?:ExperienceFollowUp|null; date_follow_up?:{uuid:string;title:string;event_uuid:string;starts_at:string;needs_feedback:boolean;needs_memory:boolean}|null; recipe?:{kind:'planned'|'suggestion';uuid:string;title:string;planned_for?:string;servings?:number;times_cooked?:number}|null; memory_evening?:{uuid:string;title:string;status:'planned'|'active';scheduled_for:string;event_uuid?:string|null;media_count:number;selected_count:number}|null; date_idea?:{uuid:string;title:string;summary:string;estimated_cost:number;currency:string;suggested_starts_at?:string|null;destination?:string|null;status:'saved'|'generated'}|null };
 }
@@ -34,6 +39,61 @@ const ACTION_LABEL: Record<CoordinationAction['type'], string> = { shared_todo: 
 
 interface Props {
     data: DashboardData | null;
+}
+
+/**
+ * Zápis prvního dne cyklu jedním klepnutím.
+ *
+ * Dosud to šlo jedině přes menu, kalendář, výběr dne, výběr síly a uložení — pět kroků
+ * pro věc, kterou člověk dělá dvanáctkrát ročně ve chvíli, kdy se mu do proklikávání
+ * nechce. Přitom právě první den je ten, na kterém stojí celá předpověď.
+ *
+ * Zapíše střední krvácení a označí začátek cyklu; zbytek týdne si server předvyplní sám
+ * jako odhad, který se dá kdykoli přepsat. Sílu ani příznaky se tady neptáme — kdo je
+ * chce doplnit, otevře kalendář, a kdo ne, má to hotové.
+ */
+function CycleQuickStart({ day }: { day: string }) {
+    const [stav, setStav] = useState<'nabidka' | 'uklada' | 'hotovo' | 'chyba'>('nabidka');
+
+    const zapsat = async () => {
+        setStav('uklada');
+        try {
+            await axios.post('/api/v1/cyklus/den', { day, flow: 'medium', is_cycle_start: true });
+            setStav('hotovo');
+
+            // Dlaždice výš ukazuje předpověď, která se právě změnila — bez načtení by
+            // vedle „zapsáno" svítilo staré datum. Se zpožděním, protože načtení tuhle
+            // nabídku odpojí (už není co nabízet) a potvrzení by zmizelo dřív, než ho
+            // člověk stihne přečíst; zůstalo by po něm jen prázdné místo.
+            window.setTimeout(() => router.reload({ only: ['data'] }), 1600);
+        } catch {
+            setStav('chyba');
+        }
+    };
+
+    if (stav === 'hotovo') {
+        return (
+            <div className="rounded-xl border border-emerald-400/30 bg-emerald-500/5 p-4">
+                <p className="text-sm text-emerald-100">Zapsáno. Zbytek týdne je předvyplněný jako odhad.</p>
+                <Link href="/cyklus" className="mt-2 inline-block text-xs text-emerald-200">Upravit v kalendáři →</Link>
+            </div>
+        );
+    }
+
+    return (
+        <div className="rounded-xl border border-rose-400/30 bg-rose-500/5 p-4">
+            <p className="text-xs font-medium uppercase tracking-wider text-rose-200">Podle předpovědi to má být teď</p>
+            <p className="mt-1.5 text-sm text-[var(--color-text-primary)]">Začalo to dnes?</p>
+            <p className="mt-1 text-[11px] text-[var(--color-text-secondary)]">
+                Zapíše se dnešek jako první den. Sílu i příznaky můžete doplnit později.
+            </p>
+            <button type="button" onClick={() => void zapsat()} disabled={stav === 'uklada'}
+                className="mt-3 inline-flex min-h-10 items-center gap-1.5 rounded-lg bg-rose-500 px-4 text-sm font-medium text-white hover:bg-rose-400 disabled:opacity-50">
+                <Droplet size={14}/> {stav === 'uklada' ? 'Zapisuji…' : 'Ano, začalo'}
+            </button>
+            {stav === 'chyba' && <p className="mt-2 text-xs text-red-300">Nepodařilo se zapsat. Zkuste to v kalendáři.</p>}
+        </div>
+    );
 }
 
 function DashCard({ icon: Icon, label, children, href, color = 'var(--color-accent)' }: {
@@ -200,6 +260,13 @@ export default function DashboardIndex({ data }: Props) {
                                 )}
                                 <p className="mt-3 text-xs text-rose-200">Otevřít kalendář →</p>
                             </DashCard>
+                        )}
+
+                        {/* Zápis prvního dne bez proklikávání.
+                            Karta výš je odkaz, takže tlačítko nemůže být uvnitř ní —
+                            klepnutí by odešlo formulář i otevřelo kalendář. */}
+                        {data.personal_hub.cycle?.can_log_start && (
+                            <CycleQuickStart day={data.personal_hub.cycle.today!}/>
                         )}
 
                         <DashCard icon={TrendingUp} label="Společné finance" href="/finances" color="#10b981">
