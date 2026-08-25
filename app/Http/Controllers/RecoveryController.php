@@ -126,9 +126,20 @@ class RecoveryController extends Controller
             ];
         }
 
+        // Kolik souborů se nedalo porovnat. Shoda se hledá podle otisku sha256 a médium,
+        // které ho nemá — nahrávání spadlo, zpracování skončilo chybou — z porovnání tiše
+        // vypadne. Bez tohohle čísla stránka hlásila „každý soubor v galerii je jedinečný"
+        // i ve chvíli, kdy neporovnala ani jeden.
+        $bezOtisku = DB::table('media_items')
+            ->where('gallery_space_id', $space->id)
+            ->whereNull('trashed_at')
+            ->whereNull('sha256')
+            ->count();
+
         return response()->json([
             'group_count'  => count($groups),
             'total_extras' => array_sum(array_map(fn($g) => $g['count'] - 1, $groups)),
+            'unchecked'    => $bezOtisku,
             'groups'       => $groups,
         ]);
     }

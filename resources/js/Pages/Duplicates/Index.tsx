@@ -1,4 +1,5 @@
 import AppLayout from '@/Layouts/AppLayout';
+import { pocet } from '@/lib/cestina';
 import { takenAtLabel } from '@/lib/takenAt';
 import { Head, Link } from '@inertiajs/react';
 import axios from 'axios';
@@ -59,6 +60,8 @@ export default function DuplicatesIndex() {
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
     const [done, setDone] = useState('');
+    /** Kolik souborů nešlo porovnat, protože nemají otisk. */
+    const [unchecked, setUnchecked] = useState(0);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -66,6 +69,7 @@ export default function DuplicatesIndex() {
             const response = await axios.get('/api/v1/recovery/duplicates');
             const found: Group[] = response.data.groups ?? [];
             setGroups(found);
+            setUnchecked(Number(response.data.unchecked ?? 0));
 
             // Předvybráno: v každé skupině zůstane jedna, zbytek jde pryč.
             const navrh = new Set<number>();
@@ -141,12 +145,27 @@ export default function DuplicatesIndex() {
                 {error && <p className="text-sm text-red-400">{error}</p>}
                 {done && <p className="mb-4 rounded-xl bg-emerald-500/10 px-3 py-2 text-sm text-emerald-200">{done}</p>}
 
+                {/* Slib „každý soubor je jedinečný" smí padnout jen tehdy, když se
+                    doopravdy porovnalo všechno. Shoda se hledá podle otisku a soubor bez
+                    otisku z porovnání vypadne — dokud se to neříkalo nahlas, hlásila
+                    stránka jedinečnost i ve chvíli, kdy neporovnala ani jeden soubor. */}
                 {! loading && ! error && groups.length === 0 && (
                     <div className="rounded-2xl border border-dashed border-[var(--color-border)] p-8 text-center">
                         <Check size={26} className="mx-auto text-emerald-300"/>
                         <p className="mt-2 text-sm text-[var(--color-text-primary)]">Žádné duplicity.</p>
-                        <p className="mt-1 text-xs text-[var(--color-text-secondary)]">Každý soubor v galerii je jedinečný.</p>
+                        <p className="mt-1 text-xs text-[var(--color-text-secondary)]">
+                            {unchecked === 0
+                                ? 'Každý soubor v galerii je jedinečný.'
+                                : 'Mezi porovnanými soubory se žádná shoda nenašla.'}
+                        </p>
                     </div>
+                )}
+
+                {! loading && ! error && unchecked > 0 && (
+                    <p className="mt-4 rounded-xl border border-amber-400/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
+                        {pocet(unchecked, 'soubor nemá', 'soubory nemají', 'souborů nemá')} spočítaný otisk, takže {unchecked === 1 ? 'se do porovnání nedostal' : 'se do porovnání nedostaly'}.
+                        Stává se to, když nahrávání nebo zpracování skončilo chybou. Zkuste je nahrát znovu — galerie si otisk spočítá při uložení.
+                    </p>
                 )}
 
                 {groups.length > 0 && (
