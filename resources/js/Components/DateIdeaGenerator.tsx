@@ -1,4 +1,5 @@
 import LocationPicker, { LocationValue } from '@/Components/LocationPicker';
+import { dny } from '@/lib/cestina';
 import { Link } from '@inertiajs/react';
 import axios from 'axios';
 import { CalendarDays, Clock, CloudRain, Heart, MapPin, RefreshCw, Route, Sparkles, Wallet } from 'lucide-react';
@@ -121,7 +122,7 @@ function DateIdeaCard({idea,busy,start,createTrip,onStart,onTrip,onReact,onPlan}
 
 function Metric({icon:Icon,value,label}:{icon:any;value:string;label:string}) { return <div className="min-w-0 rounded-lg bg-[var(--color-surface-muted)] p-2"><Icon size={13} className="text-pink-200"/><p className="mt-1 truncate text-xs font-medium text-[var(--color-text-primary)]" title={value}>{value}</p><p className="truncate text-[9px] text-[var(--color-text-secondary)]">{label}</p></div>; }
 function money(value:number){return Math.round(Number(value||0)).toLocaleString('cs-CZ');}
-function durationLabel(minutes:number){if(minutes>=1440)return `${Math.round(minutes/1440)} dny`;if(minutes>=60)return `${Math.floor(minutes/60)} h ${minutes%60?`${minutes%60} min`:''}`.trim();return `${minutes} min`;}
+function durationLabel(minutes:number){if(minutes>=1440)return dny(Math.round(minutes/1440));if(minutes>=60)return `${Math.floor(minutes/60)} h ${minutes%60?`${minutes%60} min`:''}`.trim();return `${minutes} min`;}
 function themeLabel(theme:string){return Object.fromEntries(THEMES)[theme]??theme;}
 function scopeLabel(scope:string){return ({home:'Doma',nearby:'V okolí',city:'Po městě',day_trip:'Jednodenně',weekend:'Víkend'} as Record<string,string>)[scope]??scope;}
 function transportLabel(mode:string){return ({walk:'pěšky',bike:'na kole',transit:'MHD / bus',car:'autem',train:'vlakem'} as Record<string,string>)[mode]??mode;}

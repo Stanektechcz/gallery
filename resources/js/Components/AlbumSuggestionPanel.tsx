@@ -1,3 +1,4 @@
+import { polozky } from '@/lib/cestina';
 import axios from 'axios';
 import { Link } from '@inertiajs/react';
 import { Check, ChevronDown, Images, Sparkles, Video, X } from 'lucide-react';
@@ -82,7 +83,7 @@ function SuggestionCard({ suggestion, gallerySpaceId, onRemove }: { suggestion: 
         <div className="rounded-2xl border border-emerald-400/25 bg-emerald-500/10 p-4">
             <div className="flex items-start gap-3"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-400/15 text-emerald-200"><Check size={18}/></span><div>
                 <p className="font-medium text-[var(--color-text-primary)]">{suggestion.target_album ? 'Album bylo doplněno' : 'Společné album je připravené'}</p>
-                <p className="mt-1 text-xs text-emerald-100">{result.title} · {result.media_count} položek · příběh a vzpomínka jsou propojené.</p>
+                <p className="mt-1 text-xs text-emerald-100">{result.title} · {polozky(result.media_count)} · příběh a vzpomínka jsou propojené.</p>
                 <Link href={`/albums/${result.uuid}`} className="mt-3 inline-flex text-sm font-medium text-emerald-200">Otevřít album →</Link>
             </div></div>
         </div>

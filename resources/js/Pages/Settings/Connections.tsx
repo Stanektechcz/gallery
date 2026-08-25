@@ -1,4 +1,5 @@
 import ServiceLogo from '@/Components/ServiceLogo';
+import { pocet } from '@/lib/cestina';
 import AppLayout from '@/Layouts/AppLayout';
 import { Head, router, usePage } from '@inertiajs/react';
 import axios from 'axios';
@@ -345,7 +346,7 @@ export default function Connections() {
                                             : backup.provider === 'local'
                                                 ? 'Zatím není připojený žádný cloud — kopie existuje jen na tomto serveru.'
                                                 : 'Zbytek se zkopíruje na pozadí. Pokud se to nehne, spusťte na serveru gallery:sync-drive --all.'}
-                                        {backup.failed > 0 && ` · ${backup.failed} položek hlásí chybu.`}
+                                        {backup.failed > 0 && ` · ${pocet(backup.failed, 'položka hlásí', 'položky hlásí', 'položek hlásí')} chybu.`}
                                     </p>
                                 </div>
                             )}

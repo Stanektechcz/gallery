@@ -1,4 +1,5 @@
 import AppLayout from '@/Layouts/AppLayout';
+import { pocet, tvar } from '@/lib/cestina';
 import { Head } from '@inertiajs/react';
 import axios from 'axios';
 import { localizedCountry } from '@/lib/localizedMap';
@@ -336,7 +337,7 @@ export default function TicketsIndex() {
                                                             <p className="text-[10px] text-[var(--color-text-secondary)]">{trip.price_per_pax} Kč/os</p>
                                                         )}
                                                         {trip.seats !== null && trip.seats <= 10 && (
-                                                            <p className="text-[10px] text-orange-400">zbývá {trip.seats} míst</p>
+                                                            <p className="text-[10px] text-orange-400">{tvar(trip.seats, 'zbývá', 'zbývají', 'zbývá')} {pocet(trip.seats, 'místo', 'místa', 'míst')}</p>
                                                         )}
                                                     </>
                                                 ) : (

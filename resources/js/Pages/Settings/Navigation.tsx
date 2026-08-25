@@ -1,4 +1,5 @@
 import AppLayout, { flattenNavItems, navGroups, PINNED_NAV_KEY } from '@/Layouts/AppLayout';
+import { polozky } from '@/lib/cestina';
 import { Head, router, usePage } from '@inertiajs/react';
 import axios from 'axios';
 import {
@@ -408,7 +409,7 @@ export default function NavigationSettings() {
                     )}
 
                     <span className="text-[11px] text-[var(--color-text-secondary)]">
-                        {rows.filter(row => !row.group).length} položek
+                        {polozky(rows.filter(row => !row.group).length)}
                         {hiddenCount > 0 && ` · ${hiddenCount} skrytých`}
                     </span>
                 </div>

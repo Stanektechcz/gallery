@@ -1,3 +1,4 @@
+import { polozky } from '@/lib/cestina';
 import axios from 'axios';
 import { Check, FileText, Loader2, X } from 'lucide-react';
 import { useState } from 'react';
@@ -67,7 +68,7 @@ export default function StatementImport({ budget, categories, onDone, onCancel }
 
             setNote(nactene.length === 0
                 ? 'V souboru se nenašla žádná platná řádka. Zkontrolujte, že jde o CSV výpis se sloupci datum a částka.'
-                : `Načteno ${nactene.length} položek${data.skipped ? `, ${data.skipped} přeskočeno` : ''}${data.duplicates ? `, ${data.duplicates} už v rozpočtu je` : ''}${data.categorised ? `, ${data.categorised} zařazeno podle obchodníka` : ''}.`);
+                : `Načteno: ${polozky(nactene.length)}${data.skipped ? `, ${data.skipped} přeskočeno` : ''}${data.duplicates ? `, ${data.duplicates} už v rozpočtu je` : ''}${data.categorised ? `, ${data.categorised} zařazeno podle obchodníka` : ''}.`);
         } catch (problem: any) {
             setError(problem?.response?.data?.message ?? 'Soubor se nepodařilo přečíst.');
         } finally {

@@ -1,3 +1,4 @@
+import { pocet } from '@/lib/cestina';
 import axios from 'axios';
 import { router } from '@inertiajs/react';
 import { Bot, Check, ChevronDown, Compass, Gift, ImagePlus, LoaderCircle, Search, Send, Sparkles, Trash2, X } from 'lucide-react';
@@ -98,7 +99,7 @@ const commandHints = [
 ];
 
 function planSummary(plan: Plan): string {
-    const recipeMeta = [plan.recipe_details?.servings ? `${plan.recipe_details.servings} porce` : '', plan.recipe_details?.prep_minutes ? `příprava ${plan.recipe_details.prep_minutes} min` : '', plan.recipe_details?.cook_minutes ? `vaření ${plan.recipe_details.cook_minutes} min` : '', plan.recipe_details?.source_url ? 'zdroj uložen' : ''].filter(Boolean);
+    const recipeMeta = [plan.recipe_details?.servings ? pocet(plan.recipe_details.servings, 'porce', 'porce', 'porcí') : '', plan.recipe_details?.prep_minutes ? `příprava ${plan.recipe_details.prep_minutes} min` : '', plan.recipe_details?.cook_minutes ? `vaření ${plan.recipe_details.cook_minutes} min` : '', plan.recipe_details?.source_url ? 'zdroj uložen' : ''].filter(Boolean);
     const details = [
         plan.activities.length ? `Aktivity: ${plan.activities.join(', ')}.` : '',
         plan.titles.length ? `Ke zhlédnutí: ${plan.titles.map((item) => item.title).join(', ')}.` : '',

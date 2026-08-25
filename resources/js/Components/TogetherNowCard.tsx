@@ -1,3 +1,4 @@
+import { dny } from '@/lib/cestina';
 import { Link } from '@inertiajs/react';
 import axios from 'axios';
 import { Camera, Flame, Lock } from 'lucide-react';
@@ -30,12 +31,8 @@ const minutes = (count: number): string => {
     return `${count} minut`;
 };
 
-const days = (count: number): string => {
-    if (count === 1) return '1 den';
-    if (count >= 2 && count <= 4) return `${count} dny`;
-
-    return `${count} dní`;
-};
+/** Pátá kopie téhož pravidla; teď ukazuje na to jedno v cestina.ts. */
+const days = dny;
 
 export default function TogetherNowCard() {
     const [state, setState] = useState<State | null>(null);

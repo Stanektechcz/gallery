@@ -1,3 +1,4 @@
+import { pocet, polozky } from '@/lib/cestina';
 import { previewUrl } from '@/lib/mediaUrl';
 import AlbumEvent from '@/Components/AlbumEvent';
 import AlbumCurationAssistant from '@/Components/AlbumCurationAssistant';
@@ -198,7 +199,7 @@ export default function AlbumShow({ album, breadcrumb, children, media, filters:
                         {album.description && <p className="text-sm text-[var(--color-text-secondary)] mb-1">{album.description}</p>}
                         <div className="flex flex-wrap items-center gap-3 mt-1 text-xs text-[var(--color-text-secondary)]">
                             {album.media_count > 0 && <span className="flex items-center gap-1"><Image size={12}/>{album.media_count} médií</span>}
-                            {album.descendant_count > 0 && <span className="flex items-center gap-1"><FolderOpen size={12}/>{album.descendant_count} alb</span>}
+                            {album.descendant_count > 0 && <span className="flex items-center gap-1"><FolderOpen size={12}/>{pocet(album.descendant_count, 'album', 'alba', 'alb')}</span>}
                             {album.event_date_start && <span className="flex items-center gap-1"><Clock size={12}/>{new Date(album.event_date_start).toLocaleDateString('cs-CZ')}</span>}
                             {album.trip_id && <Link href={`/trips/${album.trip_id}/plan`} className="flex items-center gap-1 rounded-full border border-fuchsia-400/25 bg-fuchsia-500/10 px-2 py-1 text-fuchsia-100 hover:bg-fuchsia-500/20">🧭 Otevřít cestu a itinerář</Link>}
                             {/* Location display */}
@@ -359,7 +360,7 @@ export default function AlbumShow({ album, breadcrumb, children, media, filters:
                     </div>
 
                     {media.total > 0 && (
-                        <span className="ml-auto text-xs text-[var(--color-text-secondary)]">{media.total} položek</span>
+                        <span className="ml-auto text-xs text-[var(--color-text-secondary)]">{polozky(media.total)}</span>
                     )}
                 </div>
 

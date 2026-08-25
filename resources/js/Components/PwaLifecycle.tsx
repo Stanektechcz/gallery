@@ -1,3 +1,4 @@
+import { pocet } from '@/lib/cestina';
 import { router } from '@inertiajs/react';
 import { flushWorkspaceWrites, workspaceWriteSummary } from '@/lib/workspaceWriteQueue';
 import { usePwaInstall } from '@/Contexts/PwaInstallContext';
@@ -145,7 +146,7 @@ export default function PwaLifecycle() {
             ) : offlineWrites.needsAttention > 0 ? (
                 <div className="flex items-center gap-3">
                     <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-500/15 text-red-200">!</span>
-                    <div className="min-w-0 flex-1"><p className="text-sm font-semibold text-[var(--color-text-primary)]">Offline zápis vyžaduje kontrolu</p><p className="text-xs text-[var(--color-text-secondary)]">{offlineWrites.needsAttention} položek se nepodařilo bezpečně sloučit.</p></div>
+                    <div className="min-w-0 flex-1"><p className="text-sm font-semibold text-[var(--color-text-primary)]">Offline zápis vyžaduje kontrolu</p><p className="text-xs text-[var(--color-text-secondary)]">Nepodařilo se bezpečně sloučit {pocet(offlineWrites.needsAttention, 'položku', 'položky', 'položek')}.</p></div>
                     <button type="button" onClick={() => router.visit('/calendar')} className="min-h-10 rounded-xl border border-red-300/30 px-3 text-xs text-red-100">Otevřít</button>
                 </div>
             ) : offlineWrites.pending > 0 ? (

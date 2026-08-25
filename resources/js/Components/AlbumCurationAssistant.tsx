@@ -1,3 +1,4 @@
+import { pocet } from '@/lib/cestina';
 import axios from 'axios';
 import { Check, ChevronDown, ChevronUp, CloudUpload, Heart, ImageOff, ShieldAlert, ShieldCheck, Sparkles, ThumbsDown, ThumbsUp, WandSparkles } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -81,7 +82,7 @@ export default function AlbumCurationAssistant({ albumUuid }: { albumUuid: strin
                     <span className="mt-1 block text-xs text-[var(--color-text-secondary)]">
                         {data.summary.media_count === 0
                             ? 'Po nahrání médií doporučíme nejlepší záběry a zkontrolujeme originály.'
-                            : `${data.backup.coverage_percent} % originálů v cloudu · ${cover ? 'doporučená titulní fotografie připravena' : 'čeká na vhodný titulní záběr'}${issueCount ? ` · ${issueCount} položek vyžaduje pozornost` : ''}`}
+                            : `${data.backup.coverage_percent} % originálů v cloudu · ${cover ? 'doporučená titulní fotografie připravena' : 'čeká na vhodný titulní záběr'}${issueCount ? ` · ${pocet(issueCount, 'položka vyžaduje', 'položky vyžadují', 'položek vyžaduje')} pozornost` : ''}`}
                     </span>
                 </span>
                 {expanded ? <ChevronUp size={18} className="text-[var(--color-text-secondary)]"/> : <ChevronDown size={18} className="text-[var(--color-text-secondary)]"/>}
