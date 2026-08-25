@@ -1,3 +1,4 @@
+import { naSirokeObrazovce } from '@/lib/zobrazeni';
 import { Link } from '@inertiajs/react';
 import axios from 'axios';
 import { AlertTriangle, ArrowRight, CheckCircle2, ChevronDown, ChevronUp, Landmark, PiggyBank, Plus, RefreshCw, Route, Trash2, Users, Wallet } from 'lucide-react';
@@ -18,7 +19,7 @@ const CATEGORY:Record<string,string>={transport:'Doprava',accommodation:'Ubytov√
 const field='min-h-10 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-3 text-xs text-[var(--color-text-primary)] focus:border-emerald-400 focus:outline-none';
 
 export default function UnifiedTripFinancePanel({trip}:{trip:Trip}){
-    const [open,setOpen]=useState(true);const [planning,setPlanning]=useState<Planning|null>(null);const [summary,setSummary]=useState<Summary|null>(null);
+    const [open,setOpen]=useState(naSirokeObrazovce);const [planning,setPlanning]=useState<Planning|null>(null);const [summary,setSummary]=useState<Summary|null>(null);
     const [loading,setLoading]=useState(true);const [busy,setBusy]=useState('');const [message,setMessage]=useState('');const [error,setError]=useState('');
     const [expense,setExpense]=useState({title:'',amount:'',category:'other',state:'actual',payment_source:'personal',paid_by_user_id:'',split_mode:'equal',occurred_at:new Date().toISOString().slice(0,10)});
     const [percentages,setPercentages]=useState<Record<number,string>>({});

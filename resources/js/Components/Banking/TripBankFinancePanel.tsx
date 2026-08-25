@@ -1,4 +1,5 @@
 import BankConnectionManager from '@/Components/Banking/BankConnectionManager';
+import { naSirokeObrazovce } from '@/lib/zobrazeni';
 import { Link } from '@inertiajs/react';
 import axios from 'axios';
 import { ArrowDownRight, ArrowUpRight, ChevronDown, ChevronUp, CircleDollarSign, Link2, RefreshCw, ShieldCheck, WalletCards } from 'lucide-react';
@@ -15,7 +16,7 @@ const TIMING:Record<string,string>={before:'Před cestou',during:'Během cesty',
 const empty:Snapshot={available:true,connected:false,balances:[],summary:{spent_by_currency:{},refunds_by_currency:{},fees_by_currency:{},cash_withdrawals:0,internal_transfers:0,suggested_count:0,confirmed_count:0,before_count:0,during_count:0,after_count:0},categories:[],days:[],merchants:[],transactions:[]};
 
 export default function TripBankFinancePanel({tripId,gallerySpaceId,currency}:{tripId:number;gallerySpaceId:number;currency:string}){
-    const [data,setData]=useState<Snapshot>(empty);const [loading,setLoading]=useState(true);const [open,setOpen]=useState(true);const [manager,setManager]=useState(false);const [busy,setBusy]=useState('');const [error,setError]=useState('');
+    const [data,setData]=useState<Snapshot>(empty);const [loading,setLoading]=useState(true);const [open,setOpen]=useState(naSirokeObrazovce);const [manager,setManager]=useState(false);const [busy,setBusy]=useState('');const [error,setError]=useState('');
     const load=useCallback(async()=>{try{const response=await axios.get<Snapshot>(`/api/v1/trips/${tripId}/banking-finance`);setData(response.data);setError('');}catch(reason:any){setError(reason.response?.data?.message??'Bankovní výdaje se nepodařilo načíst.');}finally{setLoading(false);}},[tripId]);
     useEffect(()=>{load();},[load]);
     const patch=async(item:Transaction,values:Record<string,unknown>)=>{setBusy(String(item.link_id));setError('');try{const response=await axios.patch<Snapshot>(`/api/v1/trips/${tripId}/banking-finance/${item.link_id}`,values);setData(response.data);}catch(reason:any){setError(reason.response?.data?.message??'Přiřazení transakce se nepodařilo uložit.');}finally{setBusy('');}};

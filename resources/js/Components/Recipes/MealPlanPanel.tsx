@@ -1,4 +1,5 @@
 import { pocet } from '@/lib/cestina';
+import { naSirokeObrazovce } from '@/lib/zobrazeni';
 import { Link } from '@inertiajs/react';
 import axios from 'axios';
 import { Check, ChefHat, ClipboardCopy, Plus, ShoppingBasket, Trash2, Users, Wallet } from 'lucide-react';
@@ -18,7 +19,7 @@ const field='min-h-10 min-w-0 rounded-xl border border-[var(--color-border)] bg-
 export default function MealPlanPanel({eventUuid,tripId,days=[],onChanged}:{eventUuid?:string;tripId?:number;days?:TripDayOption[];onChanged?:()=>void|Promise<void>}) {
     const endpoint=eventUuid?`/api/v1/calendar/events/${eventUuid}/meal-plan`:`/api/v1/trips/${tripId}/meal-plan`;
     const shoppingEndpoint=(key:string)=>eventUuid?`/api/v1/calendar/events/${eventUuid}/meal-shopping/${key}`:`/api/v1/trips/${tripId}/meal-shopping/${key}`;
-    const [data,setData]=useState<MealPlan|null>(null);const [loading,setLoading]=useState(true);const [busy,setBusy]=useState(false);const [error,setError]=useState('');const [notice,setNotice]=useState('');const [expanded,setExpanded]=useState(true);
+    const [data,setData]=useState<MealPlan|null>(null);const [loading,setLoading]=useState(true);const [busy,setBusy]=useState(false);const [error,setError]=useState('');const [notice,setNotice]=useState('');const [expanded,setExpanded]=useState(naSirokeObrazovce);
     const [form,setForm]=useState({recipe_uuid:'',meal_type:'dinner',servings:'2',trip_day_id:'',time:'18:00',notes:''});
     const load=async()=>{try{const response=await axios.get(endpoint);setData(response.data);setError('');setForm(current=>({...current,recipe_uuid:current.recipe_uuid||response.data.available_recipes?.[0]?.uuid||'',servings:current.recipe_uuid?current.servings:String(response.data.available_recipes?.[0]?.base_servings??2),trip_day_id:current.trip_day_id||String(days[0]?.id??'')}));}catch(reason:any){if(reason.response?.status!==503)setError(reason.response?.data?.message??'Jídelní plán se nepodařilo načíst.');}finally{setLoading(false);}};
     useEffect(()=>{load();},[endpoint]);
