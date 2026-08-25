@@ -39,6 +39,13 @@ const MediaCardComponent = memo(function MediaCardComponent({ item, size, select
         ?? item.variants?.find(v => v.type === 'video_poster');
     const thumbUrl = thumb?.url ?? previewUrl(item.uuid, item.media_type);
     const dom   = item.variants?.find(v => v.type === 'placeholder')?.dominant_color;
+
+    // Odečítač četl tlačítka nad fotkou jen jako „tlačítko, tlačítko, tlačítko" — a jsou
+    // nad každou dlaždicí v mřížce třikrát. Karta nezná název souboru, takže se popisek
+    // skládá z toho, co ví: druh a datum. „Přesunout do koše: fotka z 10. ledna 2026".
+    const popis = (item.media_type === 'video' ? 'video' : 'fotka')
+        + (item.taken_at ? ' z ' + new Date(item.taken_at).toLocaleDateString('cs-CZ', { day: 'numeric', month: 'long', year: 'numeric' }) : '');
+
     return (
         <div
             className={`media-timeline-card relative group cursor-pointer rounded overflow-hidden bg-[var(--color-bg-card)] shrink-0 ${selected ? 'ring-2 ring-[var(--color-accent)] ring-offset-1 ring-offset-[var(--color-bg-primary)]' : ''}`}
@@ -60,12 +67,12 @@ const MediaCardComponent = memo(function MediaCardComponent({ item, size, select
                 pod palcem málo. Od sm výš zůstává původní hustota. */}
             {!selected && (
                 <div className="absolute bottom-0 left-0 right-0 p-1 flex justify-between opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button onClick={e => { e.stopPropagation(); onFav(item.uuid, item.is_favorite); }} className="w-8 h-8 sm:w-6 sm:h-6 rounded-full bg-black/60 flex items-center justify-center hover:bg-black/80">
+                    <button aria-label={`${item.is_favorite ? 'Odebrat z oblíbených' : 'Přidat do oblíbených'}: ${popis}`} onClick={e => { e.stopPropagation(); onFav(item.uuid, item.is_favorite); }} className="w-8 h-8 sm:w-6 sm:h-6 rounded-full bg-black/60 flex items-center justify-center hover:bg-black/80">
                         <Heart size={10} className={item.is_favorite ? 'text-red-400 fill-red-400' : 'text-[var(--color-text-primary)]'} />
                     </button>
                     <div className="flex gap-1">
-                        <button onClick={e => { e.stopPropagation(); onSlideshow(item.uuid); }} className="w-8 h-8 sm:w-6 sm:h-6 rounded-full bg-black/60 flex items-center justify-center hover:bg-black/80"><Maximize2 size={10} className="text-white" /></button>
-                        <button onClick={e => { e.stopPropagation(); onTrash(item.uuid); }} className="w-8 h-8 sm:w-6 sm:h-6 rounded-full bg-black/60 flex items-center justify-center hover:bg-red-500/80"><Trash2 size={10} className="text-white" /></button>
+                        <button aria-label={`Spustit prezentaci od: ${popis}`} onClick={e => { e.stopPropagation(); onSlideshow(item.uuid); }} className="w-8 h-8 sm:w-6 sm:h-6 rounded-full bg-black/60 flex items-center justify-center hover:bg-black/80"><Maximize2 size={10} className="text-white" /></button>
+                        <button aria-label={`Přesunout do koše: ${popis}`} onClick={e => { e.stopPropagation(); onTrash(item.uuid); }} className="w-8 h-8 sm:w-6 sm:h-6 rounded-full bg-black/60 flex items-center justify-center hover:bg-red-500/80"><Trash2 size={10} className="text-white" /></button>
                     </div>
                 </div>
             )}
@@ -500,7 +507,7 @@ export default function TimelineIndex() {
                                             uuids.forEach(u => allIn?n.delete(u):n.add(u));
                                             return n;
                                         });
-                                    }} className="-my-1.5 px-1.5 py-1.5 text-[10px] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors">
+                                    }} className="-my-2 inline-flex min-h-8 items-center px-1.5 text-[10px] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors">
                                         vybrat měsíc
                                     </button>
                                 </div>

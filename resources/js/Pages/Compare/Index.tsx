@@ -279,7 +279,7 @@ export default function CompareIndex() {
 
                 {/* Top bar */}
                 <div className="shrink-0 h-11 px-3 border-b border-[var(--color-border)] bg-[var(--color-bg-secondary)] flex items-center gap-3">
-                    <Link href="/timeline" className="p-1.5 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] rounded hover:bg-[var(--color-surface-hover)]">
+                    <Link href="/timeline" aria-label="Zpět na fotky" className="flex h-9 w-9 items-center justify-center text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] rounded hover:bg-[var(--color-surface-hover)]">
                         <ArrowLeft size={16}/>
                     </Link>
 
@@ -295,7 +295,7 @@ export default function CompareIndex() {
 
                     {/* Sync zoom toggle */}
                     <button onClick={() => setSyncEnabled(v => !v)}
-                        className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border transition-colors ${syncEnabled ? 'bg-[var(--color-accent)] border-[var(--color-accent)] text-[var(--color-accent-contrast)]' : 'border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}>
+                        className={`flex items-center gap-1.5 text-xs px-3 py-1.5 min-h-9 rounded-lg border transition-colors ${syncEnabled ? 'bg-[var(--color-accent)] border-[var(--color-accent)] text-[var(--color-accent-contrast)]' : 'border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}>
                         {syncEnabled ? <Link2 size={13}/> : <Link2Off size={13}/>}
                         Synchronní zoom
                     </button>

@@ -128,8 +128,15 @@ export const MediaCard = memo(function MediaCard({ item, selected, onSelect, onA
         </div>
     );
 
+    // Odkaz kolem dlaždice nemá co přečíst: uvnitř je jen obrázek s prázdným `alt`,
+    // který je prázdný správně, protože náhled sám o sobě nic neříká. Bez názvu tady
+    // odečítač oznámí jen „odkaz" a u mřížky o padesáti fotkách padesátkrát totéž.
+    // Karta nezná jméno souboru, takže se popisek skládá z druhu a data.
     if (!onSelect && href) {
-        return <Link href={href}>{content}</Link>;
+        const popis = (item.media_type === 'video' ? 'video' : 'fotka')
+            + (item.taken_at ? ' z ' + new Date(item.taken_at).toLocaleDateString('cs-CZ', { day: 'numeric', month: 'long', year: 'numeric' }) : '');
+
+        return <Link href={href} aria-label={`Otevřít ${popis}`}>{content}</Link>;
     }
     return content;
 });
