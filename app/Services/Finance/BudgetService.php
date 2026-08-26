@@ -103,6 +103,8 @@ class BudgetService
             'outlook' => $this->outlook($budget, $today),
             // Průběh čerpání den po dni — jsem teď napřed, nebo pozadu.
             'burndown' => $this->burndown($budget, $today),
+            // Kdo kolik zaplatil. Jiná otázka než „kdo komu dluží".
+            'by_payer' => $this->byPayer($budget),
             // Historie uzávěrek. Bez ní by po vyrovnání zmizel dluh i důkaz, že se platil.
             'settlements' => $budget->settlements->take(6)->map(fn (\App\Models\BudgetSettlement $s) => [
                 'uuid' => $s->uuid,
@@ -715,6 +717,57 @@ class BudgetService
                 ? 'short'
                 : ($zbudeNaKonci < $rozvaha['planned_total'] * self::TESNA_REZERVA ? 'tight' : 'ok'),
         ];
+    }
+
+    /**
+     * Kdo kolik zaplatil.
+     *
+     * Údaj o plátci se u každé položky sbírá a používá se k vyrovnání — kdo komu dluží.
+     * To je ale jiná otázka než tahle. Vyrovnání počítá jen s tím, co se dělí; kdo víc
+     * platil věci, které dělené nejsou, v něm není vidět vůbec.
+     *
+     * U dvou lidí na dálku je „kolikátý měsíc platím nájem já" informace, kvůli které
+     * se vedou hovory, a dosud se dala zjistit jen listováním v položkách.
+     *
+     * Po měnách zvlášť, jako všude jinde. Kdo nemá zapsaného plátce, spadne pod autora
+     * zápisu — u starých položek nemáme nic lepšího a tvářit se, že ano, by čísla
+     * rozhodilo.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function byPayer(Budget $budget): array
+    {
+        $budget->loadMissing(['entries.payer:id,name', 'entries.author:id,name']);
+
+        $vydaje = $budget->entries->where('kind', 'expense');
+        $celkem = [];
+
+        foreach ($vydaje as $polozka) {
+            $kdo = $polozka->payer ?? $polozka->author;
+
+            if (! $kdo) {
+                continue;
+            }
+
+            $celkem[$kdo->id]['name'] = $kdo->name;
+            $celkem[$kdo->id]['currencies'][$polozka->currency] =
+                ($celkem[$kdo->id]['currencies'][$polozka->currency] ?? 0) + (float) $polozka->amount;
+            $celkem[$kdo->id]['count'] = ($celkem[$kdo->id]['count'] ?? 0) + 1;
+        }
+
+        return collect($celkem)
+            ->map(fn (array $radek, int $id) => [
+                'id' => $id,
+                'name' => $radek['name'],
+                'count' => $radek['count'],
+                'currencies' => collect($radek['currencies'])->map(fn (float $c) => round($c, 2))->all(),
+                // Podíl se počítá jen v měně rozpočtu — sečíst přes měny by znamenalo
+                // hádat kurz, a procento z hádaného čísla je hádané dvakrát.
+                'main' => round($radek['currencies'][$budget->currency] ?? 0, 2),
+            ])
+            ->sortByDesc('main')
+            ->values()
+            ->all();
     }
 
     /**

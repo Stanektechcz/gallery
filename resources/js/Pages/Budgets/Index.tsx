@@ -95,6 +95,8 @@ interface Overview {
     } | null;
     /** Průběh čerpání den po dni. Null bez konce období nebo bez plánu. */
     burndown?: Cerpani | null;
+    /** Kdo kolik zaplatil — všechny výdaje, ne jen dělené. */
+    by_payer?: Array<{ id: number; name: string; count: number; currencies: Record<string, number>; main: number }>;
     /** Kolik položek rozpočet má. Samotný seznam si načítá vlastní koncový bod. */
     entries_total: number;
 }
@@ -633,6 +635,9 @@ function Overview({ data, members, requests, onChanged, onDeleted }: {
                     <PanelGrid max={2}>
                         <Categories budget={budget} categories={categories} onChanged={onChanged}/>
                         {categories.some(c => c.spent > 0) && <BreakdownPanel categories={categories} currency={budget.currency}/>}
+                        {/* Rozdělení mezi lidi patří k rozpadu podle kategorií: obojí je
+                            odpověď na „kam to jde", jen jinou osou. */}
+                        {(data.by_payer?.length ?? 0) > 1 && <PayerPanel rows={data.by_payer!} currency={budget.currency}/>}
                     </PanelGrid>
 
                     {(data.recurring?.length ?? 0) > 0 && (
@@ -997,19 +1002,98 @@ function RecurringPanel({ budget, rows, onChanged }: {
  * Koláč by ukázal totéž, ale porovnat dvě výseče od oka nikdo neumí — délky vedle
  * sebe ano.
  */
-function BreakdownPanel({ categories, currency }: { categories: Overview['categories']; currency: string }) {
-    const utracene = categories.filter(c => c.spent > 0).sort((a, b) => b.spent - a.spent);
-    const celkem = utracene.reduce((sum, c) => sum + c.spent, 0);
-    const nejvic = Math.max(...utracene.map(c => c.spent), 1);
-    const BARVY = ['bg-violet-400', 'bg-sky-400', 'bg-emerald-400', 'bg-amber-400', 'bg-rose-400', 'bg-teal-400'];
+/**
+ * Kdo kolik zaplatil.
+ *
+ * Vedle „kdo komu dluží" to vypadá jako totéž, ale není. Vyrovnání počítá jen s tím, co
+ * se dělí — kdo víc platil věci, které dělené nejsou, v něm není vidět vůbec. A přitom
+ * „kolikátý měsíc platím nájem já" je otázka, kvůli které se vedou hovory.
+ *
+ * Proužky jsou proti sobě, ne pod sebou: poměr dvou čísel se čte líp z délky než
+ * z porovnávání dvou částek očima.
+ */
+function PayerPanel({ rows, currency }: { rows: NonNullable<Overview['by_payer']>; currency: string }) {
+    const nejvic = Math.max(...rows.map(r => r.main), 1);
+    const celkem = rows.reduce((soucet, r) => soucet + r.main, 0);
 
     return (
-        <Panel icon={PieChart} title="Kam to jde">
-            {/* Jeden pruh složený z podílů — poměr celku je vidět dřív než částky. */}
-            <div className="mb-4 flex h-3 overflow-hidden rounded-full">
+        <Panel icon={Scale} title="Kdo kolik zaplatil"
+            footnote="Součet toho, co kdo zaplatil — ne toho, kdo komu dluží. Do rozvahy vstupují jen dělené položky, tady jsou všechny.">
+            <div className="space-y-3">
+                {rows.map((radek, poradi) => {
+                    const ostatniMeny = Object.entries(radek.currencies).filter(([mena]) => mena !== currency);
+
+                    return (
+                        <div key={radek.id}>
+                            <div className="flex items-baseline justify-between gap-2 text-sm">
+                                <span className="truncate text-[var(--color-text-primary)]">{radek.name}</span>
+                                <span className="shrink-0 tabular-nums text-[var(--color-text-primary)]">{money(radek.main, currency)}</span>
+                            </div>
+                            <div className="mt-1 flex items-center gap-2">
+                                <div className="h-2 flex-1 overflow-hidden rounded-full bg-[var(--color-bg-primary)]">
+                                    <div className="h-full" style={{ width: `${radek.main / nejvic * 100}%`, backgroundColor: `var(--graf-${poradi + 1})` }}/>
+                                </div>
+                                <span className="w-9 shrink-0 text-right text-[11px] tabular-nums text-[var(--color-text-secondary)]">
+                                    {celkem > 0 ? `${Math.round(radek.main / celkem * 100)} %` : '—'}
+                                </span>
+                            </div>
+                            <p className="mt-0.5 text-[11px] text-[var(--color-text-secondary)]">
+                                {pocetPolozek(radek.count)}
+                                {ostatniMeny.length > 0 && <> · k tomu {ostatniMeny.map(([mena, castka]) => money(castka, mena)).join(', ')}</>}
+                            </p>
+                        </div>
+                    );
+                })}
+            </div>
+        </Panel>
+    );
+}
+
+/** Nejvíc odstínů, které se dají udržet rozlišitelné. Devátý se s některým plete. */
+const GRAF_SLOTU = 8;
+
+function BreakdownPanel({ categories, currency }: { categories: Overview['categories']; currency: string }) {
+    const vsechny = categories.filter(c => c.spent > 0).sort((a, b) => b.spent - a.spent);
+
+    /*
+     * Barvy se dřív braly z pevného seznamu šesti a cyklily se: sedmá kategorie dostala
+     * barvu první a v jednom pruhu tak byly dva stejné díly. Vlastní barva kategorie,
+     * kterou si člověk nastavil, se přitom ignorovala úplně.
+     *
+     * Teď platí pořadí: co má kategorie svoje, to se použije; zbytek bere z ověřené
+     * osmice v pevném pořadí. Devátá a další se slučují do „Ostatní" — devátý odstín
+     * by se s některým z předchozích pletl a raději jedna položka navíc než dvě, které
+     * vypadají stejně.
+     */
+    const utracene = vsechny.length > GRAF_SLOTU
+        ? [
+            ...vsechny.slice(0, GRAF_SLOTU - 1),
+            {
+                id: -1,
+                name: 'Ostatní',
+                color: null,
+                spent: vsechny.slice(GRAF_SLOTU - 1).reduce((soucet, c) => soucet + c.spent, 0),
+            },
+        ]
+        : vsechny;
+
+    const celkem = utracene.reduce((sum, c) => sum + c.spent, 0);
+    const nejvic = Math.max(...utracene.map(c => c.spent), 1);
+    const barva = (category: { color: string | null }, index: number) =>
+        category.color ?? `var(--graf-${(index % GRAF_SLOTU) + 1})`;
+
+    return (
+        <Panel icon={PieChart} title="Kam to jde"
+            footnote={vsechny.length > GRAF_SLOTU
+                ? `Nejmenší kategorie jsou sloučené do „Ostatní" — víc než ${GRAF_SLOTU} barev se v jednom pruhu přestane rozlišovat.`
+                : undefined}>
+            {/* Jeden pruh složený z podílů — poměr celku je vidět dřív než částky.
+                Díly odděluje dvoubodová mezera v barvě plochy, ne obrys: obrys přidává
+                inkoust, který nenese data, a sousední odstíny se stejně spolehlivě
+                oddělí mezerou. */}
+            <div className="mb-4 flex h-3 gap-0.5 overflow-hidden rounded-full">
                 {utracene.map((category, index) => (
-                    <div key={category.id} className={BARVY[index % BARVY.length]}
-                        style={{ width: `${category.spent / celkem * 100}%` }}
+                    <div key={category.id} style={{ width: `${category.spent / celkem * 100}%`, backgroundColor: barva(category, index) }}
                         title={`${category.name}: ${money(category.spent, currency)}`}/>
                 ))}
             </div>
@@ -1017,11 +1101,10 @@ function BreakdownPanel({ categories, currency }: { categories: Overview['catego
             <div className="space-y-2.5">
                 {utracene.map((category, index) => (
                     <div key={category.id} className="flex items-center gap-2.5">
-                        <span className={`h-2.5 w-2.5 shrink-0 rounded-sm ${BARVY[index % BARVY.length]}`}/>
+                        <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ backgroundColor: barva(category, index) }}/>
                         <span className="w-20 shrink-0 truncate text-xs text-[var(--color-text-primary)]">{category.name}</span>
                         <div className="h-2 min-w-8 flex-1 overflow-hidden rounded-full bg-[var(--color-bg-primary)]">
-                            <div className={`h-full ${BARVY[index % BARVY.length]} opacity-70`}
-                                style={{ width: `${category.spent / nejvic * 100}%` }}/>
+                            <div className="h-full opacity-70" style={{ width: `${category.spent / nejvic * 100}%`, backgroundColor: barva(category, index) }}/>
                         </div>
                         <span className="shrink-0 text-right text-xs tabular-nums text-[var(--color-text-secondary)]">
                             {money(category.spent, currency)}

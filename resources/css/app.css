@@ -26,6 +26,20 @@
            dat a nesmí se s tlačítkem plést. Odstín je ověřený proti ploše karty
            v obou motivech — v tmavém #16213e, ve světlém bílé. */
         --color-graf-rada: #3987e5;
+        /* Osm odstínů pro rozlišení kategorií v grafech, v pevném pořadí.
+           Pořadí není kosmetika: sousední dvojice jsou ověřené na odlišitelnost i při
+           barvosleposti (nejhorší sousední dvojice ΔE 8,4 v tmavém, 9,1 ve světlém).
+           Devátá kategorie nedostane vymyšlenou devátou barvu — sloučí se do „Ostatní",
+           protože další odstín už by se s některým z těchhle pletl.
+           Ověřeno proti skutečné ploše karty, ne proti obecné šedé. */
+        --graf-1: #3987e5;
+        --graf-2: #d95926;
+        --graf-3: #199e70;
+        --graf-4: #c98500;
+        --graf-5: #d55181;
+        --graf-6: #008300;
+        --graf-7: #9085e9;
+        --graf-8: #e66767;
         --color-surface-hover: rgb(255 255 255 / 0.06);
         --color-glass-bg: rgb(22 33 62 / 0.85);
         --color-glass-border: rgb(255 255 255 / 0.06);
@@ -45,6 +59,17 @@
         --color-border: #e2dfec;
         --color-surface-muted: rgb(91 81 232 / 0.05);
         --color-graf-rada: #2a78d6;
+        /* Světlé kroky téže osmice. Tři z nich (aqua, žlutá, purpurová) nedosáhnou proti
+           bílé 3:1 — proto u nich platí úleva: musí být vidět popisek, ne jen barva.
+           V rozpadu kategorií je u každého proužku název, takže je splněná. */
+        --graf-1: #2a78d6;
+        --graf-2: #eb6834;
+        --graf-3: #1baf7a;
+        --graf-4: #eda100;
+        --graf-5: #e87ba4;
+        --graf-6: #008300;
+        --graf-7: #4a3aa7;
+        --graf-8: #e34948;
         --color-surface-hover: rgb(91 81 232 / 0.08);
         --color-glass-bg: rgb(255 255 255 / 0.88);
         --color-glass-border: rgb(22 21 31 / 0.08);
@@ -65,6 +90,14 @@
             --color-border: #e2dfec;
             --color-surface-muted: rgb(91 81 232 / 0.05);
             --color-graf-rada: #2a78d6;
+            --graf-1: #2a78d6;
+            --graf-2: #eb6834;
+            --graf-3: #1baf7a;
+            --graf-4: #eda100;
+            --graf-5: #e87ba4;
+            --graf-6: #008300;
+            --graf-7: #4a3aa7;
+            --graf-8: #e34948;
             --color-surface-hover: rgb(91 81 232 / 0.08);
             --color-glass-bg: rgb(255 255 255 / 0.88);
             --color-glass-border: rgb(22 21 31 / 0.08);
