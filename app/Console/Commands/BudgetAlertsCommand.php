@@ -91,9 +91,41 @@ class BudgetAlertsCommand extends Command
     {
         $ven = [];
 
+        // Do konce období to podle známých plateb nevyjde.
+        //
+        // Tohle je jediná zpráva, která se dívá dopředu. Zbytek hlásí, co se už stalo —
+        // že kategorie přetekla nebo že při dosavadním tempu peníze dojdou. Výhled ví
+        // navíc, co teprve přijde: nájem třetího a jízdenku patnáctého. Když z toho
+        // vyjde záporný zůstatek, je to o týden dřív než zpráva o tempu, a hlavně to
+        // jde ještě zařídit.
+        $vyhled = $prehled['outlook'] ?? null;
+        $nevyjde = $vyhled !== null && $vyhled['verdict'] === 'short';
+
+        if ($nevyjde) {
+            $chybi = abs((float) $vyhled['projected_left']);
+
+            $ven[] = [
+                // Klíč nese týden a chybějící částku po stovkách: drobné zhoršení se
+                // neohlásí znovu, výrazné ano.
+                'klic' => 'outlook:'.$dnes->format('o-W').':'.(int) floor($chybi / 100),
+                'text' => sprintf(
+                    'Rozpočet „%s": do konce období chybí %s. Pravidelné platby do té doby jsou %s, ostatní výdaje odhadem %s.',
+                    $budget->name,
+                    $this->castka($chybi, $budget->currency),
+                    $this->castka((float) $vyhled['recurring_expense'], $budget->currency),
+                    $this->castka((float) $vyhled['variable_estimate'], $budget->currency),
+                ),
+                'ikona' => '📉',
+            ];
+        }
+
         // Peníze dojdou dřív než období. Klíč nese týden vyčerpání, takže se posun
         // o pár dní neohlásí znovu, ale posun o týden ano — to už je jiná zpráva.
-        $tempo = $prehled['runway'] ?? null;
+        //
+        // Když už promluvil výhled, tahle zpráva se přeskočí: obě říkají „nevyjde to",
+        // jen jinak spočítané, a dvě upozornění o téže věci v jednom běhu působí jako
+        // porucha. Výhled má přednost, protože zná jmenovitě, co ještě přijde.
+        $tempo = $nevyjde ? null : ($prehled['runway'] ?? null);
 
         if ($tempo && ! $tempo['covers_period'] && $budget->ends_on) {
             $dojde = Carbon::parse($tempo['runs_out_on']);
