@@ -139,6 +139,68 @@ class BudgetController extends Controller
     }
 
     /**
+     * Návrh plánu podle toho, co se v kategoriích opravdu utrácí.
+     *
+     * Vyplnit šest částek je nejtupější práce na celém rozpočtu a zároveň ta, kterou
+     * člověk odbude — buď si vymyslí kulaté číslo, nebo pole nechá prázdné a plán pak
+     * neřídí nic. Přitom odpověď v datech je: po dvou měsících aplikace ví, kolik za
+     * jídlo padne, líp než ten, kdo to má odhadnout.
+     *
+     * Průměruje se přes uplynulé měsíce, ne přes celé období — jinak by rozpočet
+     * otevřený v půlce vydělil dvěma měsíci útraty šesti a navrhl polovinu.
+     *
+     * Pravidelné položky se počítají zvlášť a nezprůměrují: nájem je každý měsíc stejný
+     * a průměr by ho rozmělnil podle toho, kolikátého se rozpočet založil.
+     *
+     * Nic se nezapisuje. Vrací se návrh, který člověk v přehledu vidí vedle dosavadního
+     * plánu a může ho přijmout jen u některých kategorií.
+     */
+    public function suggestPlan(Request $request, string $uuid): JsonResponse
+    {
+        $budget = $this->budget($request, $uuid);
+        $dnes = \Illuminate\Support\Carbon::today();
+
+        $konec = $budget->ends_on && $dnes->greaterThan($budget->ends_on) ? $budget->ends_on : $dnes;
+        $mesicu = max(0.5, $budget->starts_on->diffInDays($konec) / $budget->periodDays());
+
+        $budget->loadMissing(['categories', 'entries']);
+
+        $navrhy = $budget->categories->map(function (BudgetCategory $kategorie) use ($budget, $mesicu) {
+            $vydaje = $budget->entries
+                ->where('kind', 'expense')
+                ->where('budget_category_id', $kategorie->id)
+                ->where('currency', $budget->currency);
+
+            $pravidelne = (float) $vydaje->where('is_recurring', true)
+                ->groupBy(fn ($e) => $e->spent_on->format('Y-m'))
+                ->map(fn ($mesic) => $mesic->sum('amount'))
+                ->avg() ?: 0.0;
+
+            $nepravidelne = (float) $vydaje->where('is_recurring', false)->sum('amount') / $mesicu;
+
+            // Zaokrouhluje se na desítky. Návrh „417,32" předstírá přesnost, kterou
+            // odhad z pár měsíců nemá, a člověk by ho stejně přepsal na kulaté číslo.
+            $navrh = round(($pravidelne + $nepravidelne) / 10) * 10;
+
+            return [
+                'id' => $kategorie->id,
+                'name' => $kategorie->name,
+                'current' => (float) $kategorie->planned_monthly,
+                'suggested' => $navrh,
+                'from_entries' => $vydaje->count(),
+                'recurring_part' => round($pravidelne, 2),
+            ];
+        })->values()->all();
+
+        return response()->json([
+            'months_measured' => round($mesicu, 1),
+            'currency' => $budget->currency,
+            'period_label' => $budget->periodLabel(),
+            'suggestions' => $navrhy,
+        ]);
+    }
+
+    /**
      * Obvyklé kategorie pro nový rozpočet.
      *
      * Rozpočet bez kategorií neumí nic: plán je nula, „zbývá na den" je nula a přehled

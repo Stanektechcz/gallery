@@ -28,9 +28,16 @@ export function tvar(pocet: number, jeden: string, dva: string, pet: string): st
     return pet;
 }
 
-/** Číslo i s tvarem: `pocet(4, 'osoba', 'osoby', 'osob')` → „4 osoby". */
+/**
+ * Číslo i s tvarem: `pocet(4, 'osoba', 'osoby', 'osob')` → „4 osoby".
+ *
+ * Číslo se píše česky, ne tak, jak ho vypíše JavaScript. Šablonový řetězec dělá
+ * z 3,8 „3.8" a z tisíce „1000" — desetinná tečka je anglická a tisíce se u nás
+ * oddělují mezerou. U celých čísel do tisíce je to jedno, jenže právě proto si toho
+ * nikdo nevšimne, dokud se někde neobjeví zlomek nebo velké číslo.
+ */
 export function pocet(cislo: number, jeden: string, dva: string, pet: string): string {
-    return `${cislo} ${tvar(cislo, jeden, dva, pet)}`;
+    return `${cislo.toLocaleString('cs-CZ', { maximumFractionDigits: 1 })} ${tvar(cislo, jeden, dva, pet)}`;
 }
 
 /** Nejčastější případ v téhle aplikaci, aby se pořád nepsaly tytéž tři tvary. */

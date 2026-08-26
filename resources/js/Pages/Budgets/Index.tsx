@@ -11,8 +11,8 @@ import { Head } from '@inertiajs/react';
 import axios from 'axios';
 import {
     AlertTriangle, ArrowRightLeft, BarChart3, CalendarDays, Check, Download, LayoutDashboard, ListPlus,
-    Pencil, PieChart, PiggyBank, Plus, Receipt, Repeat, Scale, Search, Settings2, Tags, Target,
-    TrendingDown, TrendingUp, Upload, Wallet, X,
+    Pencil, PieChart, PiggyBank, Plus, Receipt, Repeat, Scale, Search, Settings2, Sparkles, Tags,
+    Target, TrendingDown, TrendingUp, Upload, Wallet, X,
 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import StatementImport from './StatementImport';
@@ -97,6 +97,14 @@ interface Overview {
     burndown?: Cerpani | null;
     /** Kolik položek rozpočet má. Samotný seznam si načítá vlastní koncový bod. */
     entries_total: number;
+}
+
+/** Návrh plánu spočítaný ze skutečných výdajů. Odpovídá /rozpocty/{uuid}/kategorie/navrh. */
+interface Navrh {
+    months_measured: number;
+    currency: string;
+    period_label: string;
+    suggestions: Array<{ id: number; name: string; current: number; suggested: number; from_entries: number; recurring_part: number }>;
 }
 
 /** Jedna položka ze seznamu. Odpovídá tomu, co vrací /rozpocty/{uuid}/polozky. */
@@ -1309,6 +1317,51 @@ function Categories({ budget, categories, onChanged }: { budget: Overview['budge
     const [name, setName] = useState('');
     const [planned, setPlanned] = useState('');
     const [zaklada, setZaklada] = useState(false);
+    const [navrh, setNavrh] = useState<Navrh | null>(null);
+    const [vybrane, setVybrane] = useState<Set<number>>(new Set());
+    const [pracuje, setPracuje] = useState(false);
+
+    /**
+     * Vyplnit šest částek je nejtupější práce na celém rozpočtu a zároveň ta, kterou
+     * člověk odbude — buď si vymyslí kulaté číslo, nebo pole nechá prázdné a plán
+     * pak neřídí nic. Přitom po dvou měsících aplikace ví, kolik za jídlo padne,
+     * líp než ten, kdo to má odhadnout.
+     */
+    const nactiNavrh = async () => {
+        setPracuje(true);
+
+        try {
+            const { data } = await axios.get<Navrh>(`/api/v1/rozpocty/${budget.uuid}/kategorie/navrh`);
+
+            setNavrh(data);
+            // Předvybrané jsou jen ty, kde se návrh od dosavadního plánu opravdu liší.
+            setVybrane(new Set(data.suggestions.filter(s => s.suggested !== s.current).map(s => s.id)));
+        } catch {
+            hlaska('Návrh se nepodařilo spočítat.', 'chyba');
+        } finally {
+            setPracuje(false);
+        }
+    };
+
+    const pouzijNavrh = async () => {
+        if (! navrh || vybrane.size === 0) return;
+
+        setPracuje(true);
+
+        try {
+            for (const polozka of navrh.suggestions.filter(s => vybrane.has(s.id))) {
+                await axios.patch(`/api/v1/rozpocty/${budget.uuid}/kategorie/${polozka.id}`, { planned_monthly: polozka.suggested });
+            }
+
+            hlaska(`Plán je upravený u ${pocet(vybrane.size, 'kategorie', 'kategorií', 'kategorií')}.`, 'uspech');
+            setNavrh(null);
+            onChanged();
+        } catch (problem: any) {
+            hlaska(problem?.response?.data?.message ?? 'Plán se nepodařilo uložit.', 'chyba');
+        } finally {
+            setPracuje(false);
+        }
+    };
 
     const zalozZaklad = async () => {
         setZaklada(true);
@@ -1333,7 +1386,13 @@ function Categories({ budget, categories, onChanged }: { budget: Overview['budge
 
     return (
         <Panel icon={Tags} title="Plán proti skutečnosti"
-            description={`Kolik mělo padnout do dneška — přepočteno na to, co z období uplynulo. Plán se zadává ${budget.period_label}.`}>
+            description={`Kolik mělo padnout do dneška — přepočteno na to, co z období uplynulo. Plán se zadává ${budget.period_label}.`}
+            actions={categories.length > 0 && ! navrh && (
+                <button type="button" onClick={() => void nactiNavrh()} disabled={pracuje}
+                    className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-[var(--color-border)] px-3 text-xs text-[var(--color-text-secondary)] hover:border-[var(--color-accent)] hover:text-[var(--color-text-primary)] disabled:opacity-40">
+                    <Sparkles size={13}/> {pracuje ? 'Počítám…' : 'Navrhnout plán'}
+                </button>
+            )}>
             <div className="space-y-3.5">
                 {/* Prázdný stav něco nabízí, ne jen konstatuje. Rozpočet bez kategorií
                     neumí nic — plán je nula a přehled nemá co ukázat — a založit šest
@@ -1358,6 +1417,59 @@ function Categories({ budget, categories, onChanged }: { budget: Overview['budge
                     <CategoryRow key={category.id} budget={budget} category={category} onChanged={onChanged}/>
                 ))}
             </div>
+
+            {/* Návrh se ukazuje vedle dosavadního plánu, ne místo něj, a přijímá se po
+                kategoriích. Přepsat všech šest čísel najednou by u rozpočtu, který si
+                člověk sám nastavil, bylo víc než pomoc. */}
+            {navrh && (
+                <div className="mt-4 rounded-xl border border-[var(--color-accent)]/30 bg-[var(--color-surface-muted)] p-3">
+                    <p className="text-xs font-medium text-[var(--color-text-primary)]">
+                        Návrh podle skutečnosti za {pocet(navrh.months_measured, 'měsíc', 'měsíce', 'měsíců')}
+                    </p>
+
+                    <ul className="mt-2.5 space-y-1.5">
+                        {navrh.suggestions.map(polozka => {
+                            const stejne = polozka.suggested === polozka.current;
+
+                            return (
+                                <li key={polozka.id}>
+                                    <label className={`flex items-center gap-2 text-xs ${stejne ? 'opacity-50' : ''}`}>
+                                        <input type="checkbox" disabled={stejne}
+                                            checked={vybrane.has(polozka.id)}
+                                            onChange={e => setVybrane(soucasne => {
+                                                const dalsi = new Set(soucasne);
+                                                e.target.checked ? dalsi.add(polozka.id) : dalsi.delete(polozka.id);
+
+                                                return dalsi;
+                                            })}
+                                            className="h-4 w-4 shrink-0 accent-[var(--color-accent)]"/>
+                                        <span className="min-w-0 flex-1 truncate text-[var(--color-text-primary)]">{polozka.name}</span>
+                                        <span className="shrink-0 tabular-nums text-[var(--color-text-secondary)]">
+                                            {money(polozka.current, navrh.currency)} → <strong className="text-[var(--color-text-primary)]">{money(polozka.suggested, navrh.currency)}</strong>
+                                        </span>
+                                    </label>
+                                </li>
+                            );
+                        })}
+                    </ul>
+
+                    <div className="mt-3 flex flex-wrap gap-2">
+                        <button type="button" onClick={() => void pouzijNavrh()} disabled={pracuje || vybrane.size === 0}
+                            className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-[var(--color-accent)] px-3 text-xs font-medium text-[var(--color-accent-contrast)] disabled:opacity-40">
+                            <Check size={14}/> Použít vybrané
+                        </button>
+                        <button type="button" onClick={() => setNavrh(null)}
+                            className="inline-flex min-h-9 items-center rounded-lg border border-[var(--color-border)] px-3 text-xs text-[var(--color-text-secondary)]">
+                            Zavřít
+                        </button>
+                    </div>
+
+                    <p className="mt-2 text-[10px] leading-relaxed text-[var(--color-text-secondary)]">
+                        Pravidelné platby se berou v plné výši, zbytek jako průměr na měsíc. Zaokrouhluje se
+                        na desítky — návrh na koruny by předstíral přesnost, kterou odhad z pár měsíců nemá.
+                    </p>
+                </div>
+            )}
 
             <div className="mt-4 flex flex-col gap-2 border-t border-[var(--color-border)] pt-4 sm:flex-row">
                 <input value={name} onChange={e => setName(e.target.value)} placeholder="Nájem, jídlo, doprava…" className={FIELD}/>
