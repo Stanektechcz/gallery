@@ -2,7 +2,7 @@ import DeleteButton from '@/Components/DeleteButton';
 import { hlaska } from '@/Components/Hlasky';
 import Panel, { PanelGrid, Stat } from '@/Components/Panel';
 import SekceNav, { type Sekce as SekceTyp } from '@/Components/SekceNav';
-import { dny, polozky as pocetPolozek } from '@/lib/cestina';
+import { dny, pocet, polozky as pocetPolozek } from '@/lib/cestina';
 import { naSirokeObrazovce } from '@/lib/zobrazeni';
 import AppLayout from '@/Layouts/AppLayout';
 import { uploadManager, waitForUploads } from '@/lib/uploadManager';
@@ -1023,6 +1023,7 @@ function BreakdownPanel({ categories, currency }: { categories: Overview['catego
 /** Měsíc po měsíci — příjem i výdaj v jednom měřítku, ať je vidět ztrátový měsíc. */
 function MonthsPanel({ months, currency }: { months: Overview['months']; currency: string }) {
     const nejvic = Math.max(...months.flatMap(m => [m.spent, m.income]), 1);
+    const celkem = months.reduce((soucet, m) => soucet + m.income - m.spent, 0);
 
     return (
         <Panel icon={BarChart3} title="Měsíc po měsíci"
@@ -1070,6 +1071,20 @@ function MonthsPanel({ months, currency }: { months: Overview['months']; currenc
                     );
                 })}
             </div>
+
+            {/* Součet za celé období. Jednotlivé měsíce odpovídají na „jak dopadl
+                srpen"; tohle na „jsme celkově v plusu", což je jiná otázka a z řady
+                čísel pod sebou se sečíst nedá. */}
+            {months.length > 1 && (
+                <div className="mt-4 flex items-baseline justify-between gap-2 border-t border-[var(--color-border)] pt-3">
+                    <span className="text-xs text-[var(--color-text-secondary)]">
+                        Za {pocet(months.length, 'měsíc', 'měsíce', 'měsíců')} dohromady
+                    </span>
+                    <span className={`text-sm font-semibold tabular-nums ${celkem >= 0 ? 'text-emerald-300' : 'text-red-300'}`}>
+                        {celkem >= 0 ? '+' : '−'}{money(Math.abs(celkem), currency)}
+                    </span>
+                </div>
+            )}
         </Panel>
     );
 }
