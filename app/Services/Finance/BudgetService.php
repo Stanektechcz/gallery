@@ -101,6 +101,8 @@ class BudgetService
             'recurring' => $this->recurring($budget),
             // Co teprve přijde. Zbytek přehledu se dívá dozadu; tohle dopředu.
             'outlook' => $this->outlook($budget, $today),
+            // Průběh čerpání den po dni — jsem teď napřed, nebo pozadu.
+            'burndown' => $this->burndown($budget, $today),
             // Historie uzávěrek. Bez ní by po vyrovnání zmizel dluh i důkaz, že se platil.
             'settlements' => $budget->settlements->take(6)->map(fn (\App\Models\BudgetSettlement $s) => [
                 'uuid' => $s->uuid,
@@ -712,6 +714,106 @@ class BudgetService
             'verdict' => $zbudeNaKonci < 0
                 ? 'short'
                 : ($zbudeNaKonci < $rozvaha['planned_total'] * self::TESNA_REZERVA ? 'tight' : 'ok'),
+        ];
+    }
+
+    /**
+     * Průběh čerpání proti plánu, den po dni.
+     *
+     * Měsíční sloupce řeknou, že srpen vyšel dráž než červenec. Neřeknou ale to, na co
+     * se člověk v cizině ptá průběžně: jsem teď napřed, nebo pozadu? Odpověď je v tom,
+     * jak rychle ubývá plán — a to je vidět teprve na křivce, ne na číslech.
+     *
+     * Kreslí se zbývající částka, ne utracená. Klesající čára, která má trefit nulu
+     * přesně na konci období, je otázka „vyjde to" převedená do obrázku: kdo je pod
+     * ideální čarou, má rezervu, kdo nad ní, utrácí rychleji, než plán unese.
+     *
+     * Ke skutečnosti se připojuje i odhad do konce, protože průběh sám o sobě odpovídá
+     * jen na to, co bylo. Je vedený zvlášť, aby se nedal splést s tím, co se opravdu
+     * stalo — jedno jsou zapsané výdaje, druhé dopočet.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function burndown(Budget $budget, ?Carbon $today = null): ?array
+    {
+        $today ??= Carbon::today();
+
+        if ($budget->ends_on === null) {
+            return null;
+        }
+
+        $rozvaha = $this->allowance($budget, $budget->entries->where('kind', 'expense'), $today);
+        $plan = $rozvaha['planned_total'];
+
+        if ($plan <= 0) {
+            // Bez plánu není proti čemu čerpání poměřovat a graf by byl jen čára k nule.
+            return null;
+        }
+
+        $zacatek = $budget->starts_on->copy()->startOfDay();
+        $konec = $budget->ends_on->copy()->startOfDay();
+        $dniCelkem = max(1, (int) $zacatek->diffInDays($konec));
+
+        // Výdaje v měně rozpočtu po dnech. Jiné měny se nesčítají, stejně jako všude jinde.
+        $poDnech = $budget->entries
+            ->where('kind', 'expense')
+            ->where('currency', $budget->currency)
+            ->groupBy(fn (BudgetEntry $e) => $e->spent_on->toDateString())
+            ->map(fn (Collection $den) => (float) $den->sum('amount'));
+
+        $body = [];
+        $narusto = 0.0;
+        $dnesniIndex = null;
+
+        for ($i = 0; $i <= $dniCelkem; $i++) {
+            $den = $zacatek->copy()->addDays($i);
+            $jeBudoucnost = $den->greaterThan($today);
+
+            if (! $jeBudoucnost) {
+                $narusto += $poDnech[$den->toDateString()] ?? 0.0;
+                $dnesniIndex = $i;
+            }
+
+            $body[] = [
+                'day' => $i,
+                'date' => $den->toDateString(),
+                // Zbývá ze skutečnosti — jen do dneška. Dál už by to nebyl záznam.
+                'left' => $jeBudoucnost ? null : round($plan - $narusto, 2),
+                // Ideální tempo: rovnoměrné čerpání od plánu k nule.
+                'pace' => round($plan * (1 - $i / $dniCelkem), 2),
+            ];
+        }
+
+        // Odhad do konce, navázaný na poslední skutečný bod. Pravidelné platby známe
+        // jmenovitě, zbytek je dosavadní tempo nepravidelných výdajů.
+        $vyhled = $this->outlook($budget, $today);
+
+        if ($vyhled !== null && $dnesniIndex !== null) {
+            $odsud = $plan - $narusto;
+            $doKonce = $vyhled['recurring_expense'] + $vyhled['variable_estimate'];
+            $zbyvaDnu = max(1, $dniCelkem - $dnesniIndex);
+
+            foreach ($body as $i => $bod) {
+                if ($i < $dnesniIndex) {
+                    continue;
+                }
+
+                $body[$i]['forecast'] = round($odsud - $doKonce * (($i - $dnesniIndex) / $zbyvaDnu), 2);
+            }
+        }
+
+        return [
+            'currency' => $budget->currency,
+            'planned_total' => $plan,
+            'days_total' => $dniCelkem,
+            'today_index' => $dnesniIndex,
+            'starts_on' => $zacatek->toDateString(),
+            'ends_on' => $konec->toDateString(),
+            // Kladné číslo znamená rezervu proti ideálnímu tempu, záporné náskok ve výdajích.
+            'vs_pace' => $dnesniIndex !== null
+                ? round(($plan - $narusto) - ($plan * (1 - $dnesniIndex / $dniCelkem)), 2)
+                : null,
+            'points' => $body,
         ];
     }
 

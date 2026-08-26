@@ -1,3 +1,4 @@
+import CerpaniGraf, { type Cerpani } from '@/Components/Budgets/CerpaniGraf';
 import DeleteButton from '@/Components/DeleteButton';
 import { hlaska } from '@/Components/Hlasky';
 import Panel, { PanelGrid, Stat } from '@/Components/Panel';
@@ -92,6 +93,8 @@ interface Overview {
         recurring_expense: number; recurring_income: number; variable_estimate: number;
         projected_left: number; verdict: 'ok' | 'tight' | 'short';
     } | null;
+    /** Průběh čerpání den po dni. Null bez konce období nebo bez plánu. */
+    burndown?: Cerpani | null;
     /** Kolik položek rozpočet má. Samotný seznam si načítá vlastní koncový bod. */
     entries_total: number;
 }
@@ -630,12 +633,17 @@ function Overview({ data, members, requests, onChanged, onDeleted }: {
                 </div>
             )}
 
-            {/* Čas: celé období vlevo, poslední dva měsíce podrobně vpravo. */}
+            {/* Čas: nejdřív průběh celého období jednou křivkou, pak měsíce po sobě
+                a nakonec dva měsíce vedle sebe. Od hrubého k podrobnému. */}
             {sekce === 'vyvoj' && (
-                <PanelGrid max={2}>
-                    {months.length > 0 && <MonthsPanel months={months} currency={budget.currency}/>}
-                    {data.comparison && <Comparison data={data.comparison}/>}
-                </PanelGrid>
+                <div className="space-y-4">
+                    {data.burndown && <CerpaniPanel data={data.burndown}/>}
+
+                    <PanelGrid max={2}>
+                        {months.length > 0 && <MonthsPanel months={months} currency={budget.currency}/>}
+                        {data.comparison && <Comparison data={data.comparison}/>}
+                    </PanelGrid>
+                </div>
             )}
 
             {sekce === 'nastaveni' && (
@@ -1021,6 +1029,31 @@ function BreakdownPanel({ categories, currency }: { categories: Overview['catego
 }
 
 /** Měsíc po měsíci — příjem i výdaj v jednom měřítku, ať je vidět ztrátový měsíc. */
+/**
+ * Průběh čerpání jako graf — a jednou větou, co z něj plyne.
+ *
+ * Samotná křivka je krásná a němá. Nadpis proto říká rovnou závěr, protože na ten se
+ * člověk ptá, a graf ho dokládá: kdy se rezerva utrácela rychle, kdy pomalu a jestli
+ * odhad míří nad nulu, nebo pod ni.
+ */
+function CerpaniPanel({ data }: { data: NonNullable<Overview['burndown']> }) {
+    const napred = (data.vs_pace ?? 0) >= 0;
+
+    return (
+        <Panel icon={BarChart3}
+            title={data.vs_pace === null
+                ? 'Průběh čerpání'
+                : napred
+                    ? `Proti tempu máte rezervu ${money(data.vs_pace, data.currency)}`
+                    : `Utraceno o ${money(Math.abs(data.vs_pace), data.currency)} víc, než tempo unese`}
+            tone={napred ? 'plain' : 'warn'}
+            description="Kolik z plánu zbývá den po dni. Ideální tempo je rovnoměrné čerpání, které trefí nulu přesně na konci období."
+            footnote="Do grafu vstupují jen výdaje v měně rozpočtu — položky v jiné měně by se musely přepočítat kurzem, který nemáme odkud vzít.">
+            <CerpaniGraf data={data}/>
+        </Panel>
+    );
+}
+
 function MonthsPanel({ months, currency }: { months: Overview['months']; currency: string }) {
     const nejvic = Math.max(...months.flatMap(m => [m.spent, m.income]), 1);
     const celkem = months.reduce((soucet, m) => soucet + m.income - m.spent, 0);
