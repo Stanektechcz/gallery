@@ -19,7 +19,7 @@ import { useEffect, useState } from 'react';
 
 export type DruhHlasky = 'uspech' | 'chyba' | 'info';
 
-type Zprava = { id: number; text: string; druh: DruhHlasky };
+type Zprava = { id: number; text: string; druh: DruhHlasky; kdy: number };
 
 /** Jak dlouho zpráva zůstane. Chyba déle — je delší a je potřeba si ji přečíst. */
 const TRVANI: Record<DruhHlasky, number> = { uspech: 4500, info: 5500, chyba: 9000 };
@@ -30,8 +30,24 @@ const NEJVIC = 3;
 let posluchaci: Array<(z: Zprava) => void> = [];
 let dalsiId = 0;
 
+/**
+ * Živé zprávy drží modul, ne komponenta.
+ *
+ * Kvůli mazání s přesměrováním: „Osoba je smazaná" se pošle a hned nato se přechází na
+ * seznam. Komponenta se při přechodu vykreslí znovu, a kdyby zprávy žily jen v jejím
+ * stavu, oznámení by zmizelo dřív, než ho někdo stačil přečíst — tedy přesně u akce,
+ * po které člověk nejvíc potřebuje vědět, že proběhla.
+ */
+let zive: Zprava[] = [];
+
+/** Jak dlouho po odeslání se zpráva ještě ukáže i komponentě, která vznikla až potom. */
+const PREZIJE_MS = 1500;
+
 export function hlaska(text: string, druh: DruhHlasky = 'info'): void {
-    const zprava = { id: ++dalsiId, text, druh };
+    const zprava = { id: ++dalsiId, text, druh, kdy: Date.now() };
+
+    zive = [...zive, zprava].slice(-NEJVIC);
+    window.setTimeout(() => { zive = zive.filter((z) => z.id !== zprava.id); }, TRVANI[druh]);
 
     posluchaci.forEach((posluchac) => posluchac(zprava));
 }
@@ -49,7 +65,20 @@ const IKONA: Record<DruhHlasky, typeof Info> = {
 };
 
 export default function Hlasky() {
-    const [zpravy, setZpravy] = useState<Zprava[]>([]);
+    // Zprávy poslané těsně před přechodem na jinou stránku se doberou z modulu. Starší
+    // se nedoberou schválně — jinak by se při každém přechodu zopakovaly.
+    const [zpravy, setZpravy] = useState<Zprava[]>(() => zive.filter((z) => Date.now() - z.kdy < PREZIJE_MS));
+
+    useEffect(() => {
+        // Doplněné zprávy musí zmizet samy stejně jako ty přijaté za běhu.
+        zpravy.forEach((zprava) => {
+            window.setTimeout(
+                () => setZpravy((soucasne) => soucasne.filter((z) => z.id !== zprava.id)),
+                Math.max(0, TRVANI[zprava.druh] - (Date.now() - zprava.kdy)),
+            );
+        });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     useEffect(() => {
         const prijmi = (zprava: Zprava) => {
