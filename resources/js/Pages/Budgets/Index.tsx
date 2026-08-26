@@ -10,8 +10,8 @@ import { Head } from '@inertiajs/react';
 import axios from 'axios';
 import {
     AlertTriangle, ArrowRightLeft, BarChart3, CalendarDays, Check, Download, LayoutDashboard, ListPlus,
-    Pencil, PieChart, PiggyBank, Plus, Receipt, Repeat, Scale, Search, Tags, Target, TrendingDown,
-    TrendingUp, Upload, Wallet, X,
+    Pencil, PieChart, PiggyBank, Plus, Receipt, Repeat, Scale, Search, Settings2, Tags, Target,
+    TrendingDown, TrendingUp, Upload, Wallet, X,
 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import StatementImport from './StatementImport';
@@ -187,7 +187,8 @@ export default function BudgetsIndex() {
                             proto jdou dovnitř, ne vedle. */}
                         {active && (
                             <Overview data={active} members={members} requests={requests}
-                                onChanged={() => void load(active.budget.uuid)}/>
+                                onChanged={() => void load(active.budget.uuid)}
+                                onDeleted={() => void load()}/>
                         )}
 
                         {! active && <MoneyRequests requests={requests} members={members} onChanged={() => void load()}/>}
@@ -326,6 +327,171 @@ function BudgetPicker({ budgets, active, onPick, onCreated }: {
  * vedle sebe a potřebuje celou šířku; kdo komu dluží je jedna věta a v půlce se ztratí.
  */
 /**
+ * Nastavení rozpočtu — a jeho smazání.
+ *
+ * Rozpočet se dosud dal jen založit. Server uměl změnit název, měnu, období, příjem,
+ * cíl spoření i sdílení už dřív, ale obrazovka to nikdy nezavolala: špatně zadané datum
+ * konce nebo změněný příjem se tedy nedaly opravit jinak než založením nového rozpočtu,
+ * a tím se přišlo o všechny zapsané položky. Totéž platilo o mazání — rozpočet založený
+ * omylem zůstal v přepínači navždycky.
+ *
+ * Uloží se jen to, co se opravdu změnilo. Posílat celý formulář by u měny znamenalo
+ * přepsat ji stejnou hodnotou i tehdy, když na ni člověk nesáhl, a v historii by to
+ * vypadalo jako změna.
+ */
+function Settings({ budget, onChanged, onDeleted }: {
+    budget: Overview['budget'];
+    onChanged: () => void;
+    onDeleted: () => void;
+}) {
+    const vychozi = {
+        name: budget.name,
+        currency: budget.currency,
+        starts_on: budget.starts_on,
+        ends_on: budget.ends_on ?? '',
+        monthly_income: budget.monthly_income !== null ? String(budget.monthly_income) : '',
+        savings_target: budget.savings_target !== null ? String(budget.savings_target) : '',
+        savings_target_on: budget.savings_target_on ?? '',
+        period_unit: budget.period_unit,
+        note: budget.note ?? '',
+        is_shared: budget.is_shared,
+    };
+
+    const [form, setForm] = useState(vychozi);
+    const [uklada, setUklada] = useState(false);
+
+    // Rozpočet se může přepnout pod rukama (jiný v přepínači), a pak musí formulář
+    // ukázat ten nový, ne rozpracované hodnoty toho předchozího.
+    useEffect(() => { setForm(vychozi); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [budget.uuid]);
+
+    const zmeneno = JSON.stringify(form) !== JSON.stringify(vychozi);
+
+    const uloz = async () => {
+        if (! form.name.trim() || ! form.starts_on) return;
+
+        setUklada(true);
+
+        try {
+            await axios.patch(`/api/v1/rozpocty/${budget.uuid}`, {
+                name: form.name.trim(),
+                currency: form.currency,
+                starts_on: form.starts_on,
+                ends_on: form.ends_on || null,
+                monthly_income: form.monthly_income === '' ? null : Number(form.monthly_income),
+                savings_target: form.savings_target === '' ? null : Number(form.savings_target),
+                savings_target_on: form.savings_target_on || null,
+                period_unit: form.period_unit,
+                note: form.note || null,
+                is_shared: form.is_shared,
+            });
+
+            hlaska('Nastavení rozpočtu je uložené.', 'uspech');
+            onChanged();
+        } catch (problem: any) {
+            hlaska(problem?.response?.data?.message ?? 'Nastavení se nepodařilo uložit.', 'chyba');
+        } finally {
+            setUklada(false);
+        }
+    };
+
+    return (
+        <div className="space-y-4">
+            <Panel icon={Wallet} title="Nastavení rozpočtu"
+                description="Období, měna a plán. Změna se projeví ve všech přehledech — položky zůstanou, jak jsou."
+                footnote="Měna se týká plánu a součtů. Položky si svou měnu nesou samy a přepnutím měny rozpočtu se nepřepočítají.">
+
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    <div className="sm:col-span-2">
+                        <label className={LABEL} htmlFor="rozpocet-nazev">Název</label>
+                        <input id="rozpocet-nazev" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className={FIELD}/>
+                    </div>
+                    <div>
+                        <label className={LABEL} htmlFor="rozpocet-mena">Měna</label>
+                        <select id="rozpocet-mena" value={form.currency} onChange={e => setForm(f => ({ ...f, currency: e.target.value }))} className={FIELD}>
+                            {MENY.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                    </div>
+
+                    <div>
+                        <label className={LABEL} htmlFor="rozpocet-od">Od</label>
+                        <input id="rozpocet-od" type="date" value={form.starts_on} onChange={e => setForm(f => ({ ...f, starts_on: e.target.value }))} className={FIELD}/>
+                    </div>
+                    <div>
+                        <label className={LABEL} htmlFor="rozpocet-do">Do</label>
+                        <input id="rozpocet-do" type="date" value={form.ends_on} onChange={e => setForm(f => ({ ...f, ends_on: e.target.value }))} className={FIELD}/>
+                        <p className="mt-1 text-[11px] text-[var(--color-text-secondary)]">Prázdné znamená otevřený konec. Bez něj se nepočítá výhled ani zbytek na den.</p>
+                    </div>
+                    <div>
+                        <label className={LABEL} htmlFor="rozpocet-jednotka">Plán se zadává</label>
+                        <select id="rozpocet-jednotka" value={form.period_unit}
+                            onChange={e => setForm(f => ({ ...f, period_unit: e.target.value as 'month' | 'week' }))} className={FIELD}>
+                            <option value="month">měsíčně</option>
+                            <option value="week">týdně</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label className={LABEL} htmlFor="rozpocet-prijem">Příjem {form.period_unit === 'week' ? 'týdně' : 'měsíčně'}</label>
+                        <input id="rozpocet-prijem" type="number" inputMode="decimal" value={form.monthly_income}
+                            onChange={e => setForm(f => ({ ...f, monthly_income: e.target.value }))} className={FIELD}/>
+                    </div>
+                    <div>
+                        <label className={LABEL} htmlFor="rozpocet-cil">Cíl spoření</label>
+                        <input id="rozpocet-cil" type="number" inputMode="decimal" value={form.savings_target}
+                            onChange={e => setForm(f => ({ ...f, savings_target: e.target.value }))} className={FIELD}/>
+                    </div>
+                    <div>
+                        <label className={LABEL} htmlFor="rozpocet-cil-do">Cíl do</label>
+                        <input id="rozpocet-cil-do" type="date" value={form.savings_target_on}
+                            onChange={e => setForm(f => ({ ...f, savings_target_on: e.target.value }))} className={FIELD}/>
+                    </div>
+
+                    <div className="sm:col-span-2 lg:col-span-3">
+                        <label className={LABEL} htmlFor="rozpocet-poznamka">Poznámka</label>
+                        <textarea id="rozpocet-poznamka" rows={2} value={form.note}
+                            onChange={e => setForm(f => ({ ...f, note: e.target.value }))} className={FIELD}/>
+                    </div>
+                </div>
+
+                <label className="mt-3 flex cursor-pointer items-start gap-2 text-xs text-[var(--color-text-secondary)]">
+                    <input type="checkbox" checked={form.is_shared} onChange={e => setForm(f => ({ ...f, is_shared: e.target.checked }))}
+                        className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--color-accent)]"/>
+                    <span>
+                        <strong className="text-[var(--color-text-primary)]">Sdílet s partnerem</strong>
+                        <span className="mt-0.5 block leading-relaxed">Bez toho rozpočet uvidíte jen vy — i společné výdaje a rozvahu.</span>
+                    </span>
+                </label>
+
+                <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-[var(--color-border)] pt-4">
+                    <button type="button" onClick={() => void uloz()} disabled={uklada || ! zmeneno || ! form.name.trim()}
+                        className="inline-flex min-h-10 items-center gap-1.5 rounded-lg bg-[var(--color-accent)] px-4 text-sm font-medium text-[var(--color-accent-contrast)] disabled:opacity-40">
+                        <Check size={15}/> Uložit změny
+                    </button>
+                    {zmeneno && (
+                        <button type="button" onClick={() => setForm(vychozi)}
+                            className="inline-flex min-h-10 items-center rounded-lg border border-[var(--color-border)] px-3 text-sm text-[var(--color-text-secondary)]">
+                            Vrátit zpět
+                        </button>
+                    )}
+                    {! zmeneno && <span className="text-xs text-[var(--color-text-secondary)]">Zatím není co uložit.</span>}
+                </div>
+            </Panel>
+
+            <Panel tone="danger" icon={AlertTriangle} title="Smazat rozpočet"
+                description="Zmizí i všechny jeho položky, kategorie a uzávěrky. Vrátit to nejde.">
+                <DeleteButton
+                    label={`Smazat rozpočet ${budget.name}`}
+                    onDelete={async () => {
+                        await axios.delete(`/api/v1/rozpocty/${budget.uuid}`);
+                        hlaska(`Rozpočet „${budget.name}" je smazaný.`, 'uspech');
+                        onDeleted();
+                    }}/>
+            </Panel>
+        </div>
+    );
+}
+
+/**
  * Která sekce je otevřená. Drží se v adrese, ne ve stavu.
  *
  * Odkaz na položky pak vede na položky, tlačítko zpět projde sekce po jedné a obnovení
@@ -361,11 +527,13 @@ function useSekce(vychozi: string): [string, (id: string) => void] {
     return [sekce, zmen];
 }
 
-function Overview({ data, members, requests, onChanged }: {
+function Overview({ data, members, requests, onChanged, onDeleted }: {
     data: Overview;
     members: Array<{ id: number; name: string }>;
     requests: MoneyRow[];
     onChanged: () => void;
+    /** Rozpočet zmizel — načíst seznam znovu a otevřít, co zbylo. */
+    onDeleted: () => void;
 }) {
     const { budget, period, totals, categories, months, allowance } = data;
     const meny = Object.keys({ ...totals.spent, ...totals.income });
@@ -391,6 +559,7 @@ function Overview({ data, members, requests, onChanged }: {
         { id: 'polozky', label: 'Položky', icon: Receipt, pocet: data.entries_total },
         { id: 'plan', label: 'Plán', icon: Target, pocet: categories.length },
         { id: 'vyvoj', label: 'Vývoj', icon: TrendingUp },
+        { id: 'nastaveni', label: 'Nastavení', icon: Settings2 },
     ];
 
     return (
@@ -467,6 +636,10 @@ function Overview({ data, members, requests, onChanged }: {
                     {months.length > 0 && <MonthsPanel months={months} currency={budget.currency}/>}
                     {data.comparison && <Comparison data={data.comparison}/>}
                 </PanelGrid>
+            )}
+
+            {sekce === 'nastaveni' && (
+                <Settings budget={budget} onChanged={onChanged} onDeleted={onDeleted}/>
             )}
         </div>
     );
@@ -1087,6 +1260,21 @@ function CategoryRow({ budget, category, onChanged }: {
 function Categories({ budget, categories, onChanged }: { budget: Overview['budget']; categories: Overview['categories']; onChanged: () => void }) {
     const [name, setName] = useState('');
     const [planned, setPlanned] = useState('');
+    const [zaklada, setZaklada] = useState(false);
+
+    const zalozZaklad = async () => {
+        setZaklada(true);
+
+        try {
+            await axios.post(`/api/v1/rozpocty/${budget.uuid}/kategorie/zaklad`);
+            hlaska('Kategorie jsou založené. Teď jim doplňte částky.', 'uspech');
+            onChanged();
+        } catch (problem: any) {
+            hlaska(problem?.response?.data?.message ?? 'Kategorie se nepodařilo založit.', 'chyba');
+        } finally {
+            setZaklada(false);
+        }
+    };
 
     const add = async () => {
         if (! name.trim()) return;
@@ -1099,10 +1287,24 @@ function Categories({ budget, categories, onChanged }: { budget: Overview['budge
         <Panel icon={Tags} title="Plán proti skutečnosti"
             description={`Kolik mělo padnout do dneška — přepočteno na to, co z období uplynulo. Plán se zadává ${budget.period_label}.`}>
             <div className="space-y-3.5">
+                {/* Prázdný stav něco nabízí, ne jen konstatuje. Rozpočet bez kategorií
+                    neumí nic — plán je nula a přehled nemá co ukázat — a založit šest
+                    kategorií po jedné je zrovna to první, co po člověku aplikace chce.
+                    Částky zůstávají prázdné schválně; vymýšlet za někoho, kolik dá za
+                    jídlo, je horší než nechat pole nevyplněné. */}
                 {categories.length === 0 && (
-                    <p className="rounded-xl border border-dashed border-[var(--color-border)] px-3 py-5 text-center text-xs text-[var(--color-text-secondary)]">
-                        Zatím žádné kategorie. Bez nich rozpočet jen sčítá — s nimi řekne, na čem se přepálilo.
-                    </p>
+                    <div className="rounded-xl border border-dashed border-[var(--color-border)] px-4 py-5 text-center">
+                        <p className="text-xs leading-relaxed text-[var(--color-text-secondary)]">
+                            Zatím žádné kategorie. Bez nich rozpočet jen sčítá — s nimi řekne, na čem se přepálilo.
+                        </p>
+                        <button type="button" onClick={() => void zalozZaklad()} disabled={zaklada}
+                            className="mt-3 inline-flex min-h-10 items-center gap-1.5 rounded-lg bg-[var(--color-accent)] px-4 text-sm font-medium text-[var(--color-accent-contrast)] disabled:opacity-40">
+                            <Plus size={15}/> {zaklada ? 'Zakládám…' : 'Přidat obvyklé kategorie'}
+                        </button>
+                        <p className="mt-2 text-[11px] text-[var(--color-text-secondary)]">
+                            Bydlení, jídlo, doprava, zdraví, volný čas a ostatní. Částky si doplníte sami.
+                        </p>
+                    </div>
                 )}
                 {categories.map(category => (
                     <CategoryRow key={category.id} budget={budget} category={category} onChanged={onChanged}/>

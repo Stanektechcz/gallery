@@ -70,6 +70,10 @@ export default function DeleteButton({
                     type="button"
                     onClick={run}
                     disabled={busy}
+                    // Vidět je jen „Smazat", protože co se maže, plyne z toho, u čeho
+                    // tlačítko stojí. Odečítač ale kontext kolem nepředčítá, takže by
+                    // uslyšel „Smazat" bez předmětu — popisek proto nese celý text.
+                    aria-label={label}
                     className="min-h-9 rounded-lg border border-red-400/40 bg-red-500/10 px-2.5 text-[11px] font-medium text-red-200 disabled:opacity-50"
                 >
                     {confirmLabel}

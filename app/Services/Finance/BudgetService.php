@@ -635,6 +635,15 @@ class BudgetService
             return null;
         }
 
+        $rozvaha = $this->allowance($budget, $budget->entries->where('kind', 'expense'), $today);
+
+        if ($rozvaha['planned_total'] <= 0) {
+            // Bez plánu nemá věta „zbude z plánu" o čem mluvit. Čerstvý rozpočet bez
+            // kategorií by jinak hlásil „do konce období to vychází" s nulou — což je
+            // formálně pravda a prakticky lež, protože se nic neporovnávalo.
+            return null;
+        }
+
         $pravidelne = $this->recurring($budget);
         $konec = $budget->ends_on->copy();
 
@@ -676,7 +685,6 @@ class BudgetService
         $dniDoKonce = max(1, (int) $today->diffInDays($konec, false));
         $odhadNepravidelnych = $this->tempoNepravidelnych($budget, $today) * $dniDoKonce;
 
-        $rozvaha = $this->allowance($budget, $budget->entries->where('kind', 'expense'), $today);
         $zbyva = $rozvaha['left'];
 
         // Příjem se do předpovědi nepřičítá, i když ho známe. `left` není zůstatek na

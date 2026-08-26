@@ -139,6 +139,52 @@ class BudgetController extends Controller
     }
 
     /**
+     * Obvyklé kategorie pro nový rozpočet.
+     *
+     * Rozpočet bez kategorií neumí nic: plán je nula, „zbývá na den" je nula a přehled
+     * nemá co ukázat. Založit šest kategorií po jedné je přitom prvních pět minut práce,
+     * které vypadají jako administrativa, a je to poslední místo, kde chce mít člověk
+     * pocit, že mu aplikace nepomáhá.
+     *
+     * Částky zůstávají nulové schválně. Vymyslet za někoho, že na jídlo padne pět tisíc,
+     * je horší než nechat pole prázdné — kdo si to nastaví sám, ví, proti čemu se měří.
+     * Doplňuje se, nepřepisuje: kategorie, které už podle jména existují, se přeskočí.
+     */
+    public function storeStarterCategories(Request $request, string $uuid): JsonResponse
+    {
+        $this->write($request);
+        $budget = $this->budget($request, $uuid, owned: true);
+
+        $zaklad = [
+            ['Bydlení', '#6366f1'],
+            ['Jídlo a nákupy', '#22c55e'],
+            ['Doprava', '#f59e0b'],
+            ['Zdraví', '#ef4444'],
+            ['Volný čas', '#ec4899'],
+            ['Ostatní', '#64748b'],
+        ];
+
+        $uzJsou = $budget->categories()->pluck('name')->map(fn (string $n) => mb_strtolower($n))->flip();
+        $poradi = (int) $budget->categories()->max('sort_order');
+
+        foreach ($zaklad as [$nazev, $barva]) {
+            if ($uzJsou->has(mb_strtolower($nazev))) {
+                continue;
+            }
+
+            BudgetCategory::create([
+                'budget_id' => $budget->id,
+                'name' => $nazev,
+                'planned_monthly' => 0,
+                'color' => $barva,
+                'sort_order' => $poradi += 10,
+            ]);
+        }
+
+        return response()->json($this->budgets->overview($budget->fresh()), 201);
+    }
+
+    /**
      * Úprava kategorie.
      *
      * Dosud šla kategorie jen založit a smazat. Změnit „Jídlo 420" na „Jídlo 450" tedy
