@@ -139,6 +139,318 @@ class BudgetController extends Controller
     }
 
     /**
+     * Cíle spoření uvnitř rozpočtu.
+     *
+     * Rozpočet měl jedno pole na cíl. „Letenky domů za čtyři sta" a „notebook za dvanáct
+     * set" jsou ale dva různé cíle s různými termíny.
+     */
+    public function storeGoal(Request $request, string $uuid): JsonResponse
+    {
+        $this->write($request);
+        $budget = $this->budget($request, $uuid, owned: true);
+
+        $data = $request->validate([
+            'name' => 'required|string|max:160',
+            'target_amount' => 'required|numeric|min:0.01',
+            'currency' => 'nullable|string|size:3',
+            'saved_amount' => 'nullable|numeric|min:0',
+            'target_on' => 'nullable|date',
+            'note' => 'nullable|string|max:500',
+        ]);
+
+        \App\Models\BudgetGoal::create($data + [
+            'budget_id' => $budget->id,
+            'currency' => strtoupper($data['currency'] ?? $budget->currency),
+            'saved_amount' => $data['saved_amount'] ?? 0,
+            'sort_order' => (int) $budget->goals()->max('sort_order') + 10,
+        ]);
+
+        return response()->json($this->budgets->overview($budget->fresh()), 201);
+    }
+
+    public function updateGoal(Request $request, string $uuid, string $goalUuid): JsonResponse
+    {
+        $this->write($request);
+        $budget = $this->budget($request, $uuid, owned: true);
+
+        $data = $request->validate([
+            'name' => 'sometimes|required|string|max:160',
+            'target_amount' => 'sometimes|required|numeric|min:0.01',
+            'saved_amount' => 'sometimes|nullable|numeric|min:0',
+            'target_on' => 'sometimes|nullable|date',
+            'note' => 'sometimes|nullable|string|max:500',
+        ]);
+
+        $budget->goals()->where('uuid', $goalUuid)->firstOrFail()->update($data);
+
+        return response()->json($this->budgets->overview($budget->fresh()));
+    }
+
+    public function destroyGoal(Request $request, string $uuid, string $goalUuid): JsonResponse
+    {
+        $this->write($request);
+        $budget = $this->budget($request, $uuid, owned: true);
+        $budget->goals()->where('uuid', $goalUuid)->delete();
+
+        return response()->json($this->budgets->overview($budget->fresh()));
+    }
+
+    /**
+     * Kdo a kdy měnil plán kategorie.
+     *
+     * U společného rozpočtu je to informace, která předchází hádce: „jídlo je najednou
+     * o padesát víc" má jinou váhu, když je vidět, že to zvedl ten, kdo se ptá.
+     *
+     * Čte se z kroniky, která v systému už je — vlastní tabulka na historii jednoho pole
+     * by znamenala druhý systém na totéž.
+     */
+    public function categoryHistory(Request $request, string $uuid, int $categoryId): JsonResponse
+    {
+        $budget = $this->budget($request, $uuid);
+        $kategorie = $budget->categories()->whereKey($categoryId)->firstOrFail();
+
+        $zaznamy = \App\Models\AuditLog::where('subject_type', 'BudgetCategory')
+            ->where('subject_id', $kategorie->id)
+            ->where('action', 'budget.category.plan')
+            ->with('user:id,name')
+            ->orderByDesc('created_at')
+            ->limit(20)
+            ->get();
+
+        return response()->json([
+            'category' => ['id' => $kategorie->id, 'name' => $kategorie->name],
+            'changes' => $zaznamy->map(fn ($z) => [
+                'at' => $z->created_at?->toDateTimeString(),
+                'by' => $z->user?->name,
+                'from' => $z->payload['from'] ?? null,
+                'to' => $z->payload['to'] ?? null,
+            ])->values(),
+        ]);
+    }
+
+    /**
+     * Souhrn napříč všemi rozpočty, ke kterým člověk má přístup.
+     *
+     * Kdo má osobní i společný rozpočet, nevidí nikde součet — „kolik nás to dohromady
+     * stálo" se musí sčítat ručně mezi dvěma obrazovkami.
+     *
+     * Po měnách zvlášť, jako všude jinde. Rozpočty se můžou lišit měnou a sečíst je do
+     * jednoho čísla by znamenalo hádat kurz.
+     */
+    public function summary(Request $request): JsonResponse
+    {
+        $space = $this->space($request);
+        $user = $request->user();
+
+        $radky = $this->budgets->forUser($space, $user)->map(function (Budget $budget) {
+            $budget->loadMissing(['entries', 'categories']);
+
+            [$od, $do] = $budget->activeWindow();
+
+            $vObdobi = $budget->isRolling()
+                ? $budget->entries->filter(fn (BudgetEntry $e) => $e->spent_on->betweenIncluded($od, $do ?? now()))
+                : $budget->entries;
+
+            return [
+                'uuid' => $budget->uuid,
+                'name' => $budget->name,
+                'currency' => $budget->currency,
+                'is_shared' => (bool) $budget->is_shared,
+                'is_rolling' => $budget->isRolling(),
+                'spent' => round((float) $vObdobi->where('kind', 'expense')->where('currency', $budget->currency)->sum('amount'), 2),
+                'income' => round((float) $vObdobi->where('kind', 'income')->where('currency', $budget->currency)->sum('amount'), 2),
+                'planned' => round((float) $budget->categories->sum('planned_monthly') * $budget->monthsCovered(), 2),
+                'entries' => $vObdobi->count(),
+            ];
+        })->values();
+
+        $poMenach = $radky->groupBy('currency')->map(fn ($skupina) => [
+            'spent' => round($skupina->sum('spent'), 2),
+            'income' => round($skupina->sum('income'), 2),
+            'planned' => round($skupina->sum('planned'), 2),
+            'budgets' => $skupina->count(),
+        ]);
+
+        return response()->json([
+            'budgets' => $radky,
+            'by_currency' => $poMenach,
+        ]);
+    }
+
+    /**
+     * Kopie rozpočtu na další období.
+     *
+     * Po půl roce v Německu přijde další pobyt a s ním šest kategorií, jejich plány,
+     * přenosy, výchozí dělení a příjmy — všechno znovu ručně. Kopíruje se nastavení,
+     * ne historie: zapsané položky patří k minulému období a v novém by lhaly o tom,
+     * kolik už je utraceno.
+     *
+     * Pravidelné platby se dají převzít jako první výskyt v novém období. Bez nich by
+     * nový rozpočet neuměl předpovídat ani upozorňovat, dokud by nájem nepřišel podruhé.
+     */
+    public function duplicate(Request $request, string $uuid): JsonResponse
+    {
+        $this->write($request);
+        $vzor = $this->budget($request, $uuid);
+
+        $data = $request->validate([
+            'name' => 'required|string|max:255',
+            'starts_on' => 'required|date',
+            'ends_on' => 'nullable|date|after_or_equal:starts_on',
+            'with_recurring' => 'sometimes|boolean',
+        ]);
+
+        $vzor->loadMissing(['categories', 'members', 'entries']);
+
+        $novy = Budget::create([
+            'gallery_space_id' => $vzor->gallery_space_id,
+            'owner_user_id' => $vzor->owner_user_id,
+            'name' => $data['name'],
+            'currency' => $vzor->currency,
+            'starts_on' => $data['starts_on'],
+            'ends_on' => $data['ends_on'] ?? null,
+            'monthly_income' => $vzor->monthly_income,
+            'savings_target' => null,
+            'savings_target_on' => null,
+            'period_unit' => $vzor->period_unit,
+            'period_mode' => $vzor->period_mode ?? 'fixed',
+            'note' => $vzor->note,
+            'is_shared' => $vzor->is_shared,
+            'created_by' => $request->user()->id,
+        ]);
+
+        $mapaKategorii = [];
+
+        foreach ($vzor->categories as $kategorie) {
+            $mapaKategorii[$kategorie->id] = BudgetCategory::create([
+                'budget_id' => $novy->id,
+                'name' => $kategorie->name,
+                'planned_monthly' => $kategorie->planned_monthly,
+                'rollover' => $kategorie->rollover,
+                'default_split' => $kategorie->default_split,
+                'default_payer' => $kategorie->default_payer,
+                'color' => $kategorie->color,
+                'icon' => $kategorie->icon,
+                'sort_order' => $kategorie->sort_order,
+            ])->id;
+        }
+
+        foreach ($vzor->members as $clen) {
+            \App\Models\BudgetMember::create([
+                'budget_id' => $novy->id,
+                'user_id' => $clen->user_id,
+                'monthly_income' => $clen->monthly_income,
+                'currency' => $clen->currency,
+            ]);
+        }
+
+        $prevzato = 0;
+
+        if ($data['with_recurring'] ?? false) {
+            $zacatek = \Illuminate\Support\Carbon::parse($data['starts_on']);
+
+            foreach ($this->budgets->recurring($vzor) as $platba) {
+                // Den v měsíci se přenáší, ale nesmí přetéct do dalšího měsíce —
+                // třicátý první v únoru neexistuje.
+                $den = $zacatek->copy()->day(min($platba['day_of_month'], $zacatek->daysInMonth));
+
+                BudgetEntry::create([
+                    'budget_id' => $novy->id,
+                    'budget_category_id' => $mapaKategorii[$this->kategoriePodleJmena($vzor, $platba['category'])] ?? null,
+                    'user_id' => $request->user()->id,
+                    'paid_by' => $request->user()->id,
+                    'split' => $platba['split'],
+                    'kind' => $platba['kind'],
+                    'amount' => $platba['amount'],
+                    'currency' => $platba['currency'],
+                    'spent_on' => $den,
+                    'note' => $platba['note'],
+                    'is_recurring' => true,
+                ]);
+
+                $prevzato++;
+            }
+        }
+
+        return response()->json($this->budgets->overview($novy->fresh()) + ['copied_recurring' => $prevzato], 201);
+    }
+
+    /** Id kategorie podle jména — opakované platby nesou jméno, ne id. */
+    private function kategoriePodleJmena(Budget $vzor, ?string $jmeno): ?int
+    {
+        if ($jmeno === null) {
+            return null;
+        }
+
+        return $vzor->categories->firstWhere('name', $jmeno)?->id;
+    }
+
+    /**
+     * Rozdělení jednoho nákupu mezi kategorie.
+     *
+     * Účtenka za devadesát eur, z toho šedesát jídlo a třicet drogerie. Dosud to musely
+     * být dvě položky zapsané zvlášť a účtenka šla jen k jedné.
+     *
+     * Původní položka se nahradí několika novými se stejným datem, plátcem, dělením
+     * i účtenkou. Zůstávají samostatné, takže součty nemají jak začít lhát — jen o sobě
+     * vědí přes společnou značku a v seznamu se dají ukázat pohromadě.
+     *
+     * Součet dílů musí sedět na původní částku. Rozdělit devadesát na šedesát a dvacet
+     * znamená, že deset zmizelo z rozpočtu, aniž by to kdokoliv poznal.
+     */
+    public function splitEntry(Request $request, string $uuid, string $entryUuid): JsonResponse
+    {
+        $this->write($request);
+        $budget = $this->budget($request, $uuid);
+
+        $data = $request->validate([
+            'parts' => 'required|array|min:2|max:10',
+            'parts.*.amount' => 'required|numeric|min:0.01',
+            'parts.*.budget_category_id' => 'nullable|integer',
+            'parts.*.note' => 'nullable|string|max:500',
+        ]);
+
+        $puvodni = $budget->entries()->where('uuid', $entryUuid)->firstOrFail();
+
+        $soucet = collect($data['parts'])->sum('amount');
+
+        abort_if(
+            abs($soucet - (float) $puvodni->amount) > 0.01,
+            422,
+            sprintf('Součet dílů (%s) nesedí na původní částku (%s).', number_format($soucet, 2, ',', ' '), number_format((float) $puvodni->amount, 2, ',', ' ')),
+        );
+
+        $platneKategorie = $budget->categories()->pluck('id')->flip();
+        $znacka = (string) \Illuminate\Support\Str::uuid();
+
+        foreach ($data['parts'] as $dil) {
+            BudgetEntry::create([
+                'budget_id' => $budget->id,
+                'budget_category_id' => isset($dil['budget_category_id']) && $platneKategorie->has($dil['budget_category_id'])
+                    ? (int) $dil['budget_category_id']
+                    : null,
+                'user_id' => $puvodni->user_id,
+                'paid_by' => $puvodni->paid_by,
+                'split' => $puvodni->split,
+                'split_group' => $znacka,
+                'kind' => $puvodni->kind,
+                'amount' => $dil['amount'],
+                'currency' => $puvodni->currency,
+                'exchange_rate' => $puvodni->exchange_rate,
+                'spent_on' => $puvodni->spent_on,
+                'note' => $dil['note'] ?? $puvodni->note,
+                'is_recurring' => false,
+                // Účtenka jde ke všem dílům: patří k celému nákupu, ne k jedné jeho části.
+                'media_item_id' => $puvodni->media_item_id,
+            ]);
+        }
+
+        $puvodni->delete();
+
+        return response()->json($this->budgets->overview($budget->fresh()));
+    }
+
+    /**
      * Příjmy účastníků — podklad pro poměrné dělení.
      *
      * „Napůl" je férové jen tehdy, když oba vydělávají zhruba stejně. U nájmu za devět
@@ -324,6 +636,20 @@ class BudgetController extends Controller
 
         if (array_key_exists('planned_monthly', $data) && $data['planned_monthly'] === null) {
             $data['planned_monthly'] = 0;
+        }
+
+        // Změna plánu do kroniky. U společného rozpočtu je „jídlo je najednou o padesát
+        // víc" informace, která předchází hádce — a bez záznamu se nedá zjistit ani kdo,
+        // ani kdy. Ostatní pole se nezaznamenávají: přejmenování kategorie nikoho
+        // nepřipraví o peníze.
+        if (array_key_exists('planned_monthly', $data)
+            && abs((float) $data['planned_monthly'] - (float) $kategorie->planned_monthly) > 0.001) {
+            \App\Models\AuditLog::record('budget.category.plan', $kategorie, [
+                'from' => (float) $kategorie->planned_monthly,
+                'to' => (float) $data['planned_monthly'],
+                'budget' => $budget->name,
+                'category' => $kategorie->name,
+            ]);
         }
 
         $kategorie->update($data);

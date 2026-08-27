@@ -36,6 +36,9 @@ class BudgetAlertsCommand extends Command
     /** Jak dlouho se pamatuje, na co už bylo upozorněno. */
     private const PAMET_DNU = 40;
 
+    /** Od kolika dní se nevyrovnaný dluh připomíná. Tři dny starý není o čem psát. */
+    private const DLUH_DNI = 30;
+
     public function handle(BudgetService $budgets): int
     {
         // Jednou denně dopoledne, stejně jako ostatní připomínky. Bez toho by hodinový
@@ -145,6 +148,38 @@ class BudgetAlertsCommand extends Command
                         $this->dny(max(1, $chybiDnu)),
                     ),
                 'ikona' => '⚠️',
+            ];
+        }
+
+        /*
+         * Dluh, který se odkládá.
+         *
+         * Vyrovnání se spouští ručně a nic o něm nepřipomene, takže se odkládá — a čím
+         * déle se odkládá, tím nepříjemnější částka z toho je. Hlásí se jednou za měsíc
+         * a jen tehdy, když je co vyrovnávat déle než měsíc: připomínka u dluhu starého
+         * tři dny by byla otravná, u dluhu starého půl roku užitečná.
+         */
+        // `since` je den po poslední uzávěrce. Null znamená, že se ještě nikdy
+        // nevyrovnávalo — a to je zrovna ten případ, kde připomínka dává největší smysl,
+        // takže se počítá od začátku rozpočtu, ne že se přeskočí.
+        $odKdy = fn (array $r) => $r['since'] !== null ? Carbon::parse($r['since']) : $budget->starts_on->copy();
+
+        $rozvaha = collect($prehled['settlement'] ?? [])
+            ->filter(fn (array $r) => $r['amount'] > 0)
+            ->filter(fn (array $r) => $odKdy($r)->diffInDays($dnes) >= self::DLUH_DNI);
+
+        if ($rozvaha->isNotEmpty()) {
+            $nejstarsi = $rozvaha->sortBy(fn (array $r) => $odKdy($r)->timestamp)->first();
+
+            $ven[] = [
+                'klic' => 'settle:'.$dnes->format('o-m'),
+                'text' => sprintf(
+                    'Rozpočet „%s": nevyrovnáno od %s — %s. Uzávěrku jde udělat i ke konci minulého měsíce.',
+                    $budget->name,
+                    $odKdy($nejstarsi)->locale('cs')->isoFormat('D. M.'),
+                    $rozvaha->map(fn (array $r) => $this->castka((float) $r['amount'], $r['currency']))->implode(', '),
+                ),
+                'ikona' => '🤝',
             ];
         }
 

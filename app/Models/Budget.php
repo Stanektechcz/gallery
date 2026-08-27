@@ -17,8 +17,41 @@ class Budget extends Model
     protected $fillable = [
         'uuid', 'gallery_space_id', 'owner_user_id', 'name', 'currency',
         'starts_on', 'ends_on', 'monthly_income', 'note', 'is_shared', 'created_by',
-        'savings_target', 'savings_target_on', 'period_unit',
+        'savings_target', 'savings_target_on', 'period_unit', 'period_mode',
     ];
+
+    /**
+     * Hranice období, ve kterém se právě počítá.
+     *
+     * U pevného rozpočtu je to prostě od–do. U klouzavého je to aktuální měsíc: plán se
+     * každý první resetuje sám, protože běžná domácnost nekončí, jen začíná znovu.
+     *
+     * Celý zbytek služby se ptá na tohle místo místo aby si sahal na `starts_on`
+     * a `ends_on` — jinak by se klouzavý režim musel ošetřit v každém výpočtu zvlášť
+     * a jeden by se určitě zapomněl.
+     *
+     * @return array{0: \Illuminate\Support\Carbon, 1: \Illuminate\Support\Carbon|null}
+     */
+    public function activeWindow(?\Illuminate\Support\Carbon $today = null): array
+    {
+        $today ??= \Illuminate\Support\Carbon::today();
+
+        if (($this->period_mode ?? 'fixed') !== 'rolling') {
+            return [$this->starts_on->copy(), $this->ends_on?->copy()];
+        }
+
+        // Klouzavý rozpočet nezačal dřív, než byl založen — jinak by v prvním měsíci
+        // tvrdil, že období běží od prvního, i když vznikl dvacátého.
+        $zacatek = $today->copy()->startOfMonth()->max($this->starts_on);
+
+        return [$zacatek, $today->copy()->endOfMonth()];
+    }
+
+    /** Běží rozpočet po měsících dokola, nebo má pevný konec? */
+    public function isRolling(): bool
+    {
+        return ($this->period_mode ?? 'fixed') === 'rolling';
+    }
 
     protected function casts(): array
     {
@@ -46,6 +79,12 @@ class Budget extends Model
     public function members()
     {
         return $this->hasMany(BudgetMember::class);
+    }
+
+    /** Cíle spoření. Několik zvlášť, ne jedno číslo na celý rozpočet. */
+    public function goals()
+    {
+        return $this->hasMany(BudgetGoal::class)->orderBy('sort_order');
     }
 
     /**
@@ -116,6 +155,13 @@ class Budget extends Model
     /** Kolik celých měsíců období pokrývá; nedokončený měsíc se počítá celý. */
     public function monthsCovered(): int
     {
+        // Klouzavý rozpočet pokrývá vždycky jednu jednotku plánu. Bez téhle větve by
+        // po půl roce tvrdil, že plán na měsíc platí šestkrát, a „zbývá celkem" by
+        // ukazovalo šestinásobek toho, co je doopravdy k dispozici.
+        if ($this->isRolling()) {
+            return 1;
+        }
+
         $konec = $this->ends_on ?? now();
 
         return max(1, (int) ceil($this->starts_on->diffInDays($konec) / $this->periodDays()));

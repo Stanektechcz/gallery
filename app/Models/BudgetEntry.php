@@ -10,7 +10,7 @@ class BudgetEntry extends Model
     protected $fillable = [
         'uuid', 'budget_id', 'budget_category_id', 'user_id',
         'kind', 'amount', 'currency', 'spent_on', 'note', 'is_recurring',
-        'paid_by', 'split', 'media_item_id',
+        'paid_by', 'split', 'media_item_id', 'split_group', 'exchange_rate',
     ];
 
     protected function casts(): array

@@ -102,7 +102,14 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
         Route::patch('/{uuid}', [App\Http\Controllers\Api\BudgetController::class, 'update'])->name('update');
         Route::delete('/{uuid}', [App\Http\Controllers\Api\BudgetController::class, 'destroy'])->name('destroy');
         Route::post('/{uuid}/kategorie', [App\Http\Controllers\Api\BudgetController::class, 'storeCategory'])->name('categories.store');
+        Route::get('/souhrn', [App\Http\Controllers\Api\BudgetController::class, 'summary'])->name('summary');
         Route::put('/{uuid}/ucastnici', [App\Http\Controllers\Api\BudgetController::class, 'updateMembers'])->name('members.update');
+        Route::post('/{uuid}/kopie', [App\Http\Controllers\Api\BudgetController::class, 'duplicate'])->name('duplicate');
+        Route::post('/{uuid}/cile', [App\Http\Controllers\Api\BudgetController::class, 'storeGoal'])->name('goals.store');
+        Route::patch('/{uuid}/cile/{goalUuid}', [App\Http\Controllers\Api\BudgetController::class, 'updateGoal'])->name('goals.update');
+        Route::delete('/{uuid}/cile/{goalUuid}', [App\Http\Controllers\Api\BudgetController::class, 'destroyGoal'])->name('goals.destroy');
+        Route::get('/{uuid}/kategorie/{categoryId}/historie', [App\Http\Controllers\Api\BudgetController::class, 'categoryHistory'])->name('categories.history');
+        Route::post('/{uuid}/polozky/{entryUuid}/rozdelit', [App\Http\Controllers\Api\BudgetController::class, 'splitEntry'])->name('entries.split');
         Route::get('/{uuid}/kategorie/navrh', [App\Http\Controllers\Api\BudgetController::class, 'suggestPlan'])->name('categories.suggest');
         Route::post('/{uuid}/kategorie/zaklad', [App\Http\Controllers\Api\BudgetController::class, 'storeStarterCategories'])->name('categories.starter');
         Route::patch('/{uuid}/kategorie/{categoryId}', [App\Http\Controllers\Api\BudgetController::class, 'updateCategory'])->name('categories.update');

@@ -56,10 +56,26 @@ class BudgetService
         $budget->loadMissing([
             'categories', 'entries.category', 'entries.author:id,name',
             'settlements.from:id,name', 'settlements.to:id,name',
+            'goals',
         ]);
 
-        $vydaje = $budget->entries->where('kind', 'expense');
-        $prijmy = $budget->entries->where('kind', 'income');
+        /*
+         * Okno, ve kterém se právě počítá. U pevného rozpočtu je to celé období, u
+         * klouzavého aktuální měsíc.
+         *
+         * Filtruje se jen to, co odpovídá na „jak jsem na tom teď": součty, kategorie,
+         * zbytek na den, varování. Pohledy do historie — měsíc po měsíci, srovnání,
+         * předpověď, rozvaha — se filtrovat nesmějí. Klouzavý rozpočet by jinak přišel
+         * o všechno, co se stalo minulý měsíc, a předpověď by neměla z čeho počítat.
+         */
+        [$oknoOd, $oknoDo] = $budget->activeWindow($today);
+
+        $vObdobi = fn (Collection $polozky) => $budget->isRolling()
+            ? $polozky->filter(fn (BudgetEntry $e) => $e->spent_on->betweenIncluded($oknoOd, $oknoDo ?? $today))
+            : $polozky;
+
+        $vydaje = $vObdobi($budget->entries->where('kind', 'expense'));
+        $prijmy = $vObdobi($budget->entries->where('kind', 'income'));
 
         return [
             'budget' => [
@@ -115,6 +131,27 @@ class BudgetService
             'balance_trend' => $this->balanceTrend($budget),
             // Předpověď po kategoriích na příští měsíc, včetně toho, jak je spolehlivá.
             'prediction' => $this->prediction($budget, $today),
+            // Platby, které vypadají jako pravidelné, ale nikdo je tak neoznačil.
+            'recurring_candidates' => $this->recurringCandidates($budget),
+            // Cíle spoření. Několik zvlášť, ne jedno číslo na celý rozpočet.
+            'goals' => $budget->goals->map(fn (\App\Models\BudgetGoal $cil) => [
+                'uuid' => $cil->uuid,
+                'name' => $cil->name,
+                'target_amount' => (float) $cil->target_amount,
+                'saved_amount' => (float) $cil->saved_amount,
+                'currency' => $cil->currency,
+                'target_on' => $cil->target_on?->toDateString(),
+                'note' => $cil->note,
+                'percent' => (float) $cil->target_amount > 0
+                    ? min(100, (int) round((float) $cil->saved_amount / (float) $cil->target_amount * 100))
+                    : null,
+                // Kolik měsíčně zbývá odkládat, aby se to stihlo. Null bez termínu.
+                'monthly_needed' => $cil->target_on && $cil->target_on->isFuture()
+                    ? round(max(0, (float) $cil->target_amount - (float) $cil->saved_amount)
+                        / max(1, $today->diffInMonths($cil->target_on) ?: 1), 2)
+                    : null,
+            ])->values()->all(),
+            'period_mode' => $budget->period_mode ?? 'fixed',
             // Historie uzávěrek. Bez ní by po vyrovnání zmizel dluh i důkaz, že se platil.
             'settlements' => $budget->settlements->take(6)->map(fn (\App\Models\BudgetSettlement $s) => [
                 'uuid' => $s->uuid,
@@ -135,8 +172,9 @@ class BudgetService
     /** Kde v období jsme — kolik uplynulo a kolik zbývá. */
     private function period(Budget $budget, Carbon $today): array
     {
-        $zacatek = $budget->starts_on;
-        $konec = $budget->ends_on;
+        // Klouzavý rozpočet má období „tenhle měsíc", ne „od založení dodneška" —
+        // bez toho by po půl roce hlásil, že uplynulo sto osmdesát dní z plánu na měsíc.
+        [$zacatek, $konec] = $budget->activeWindow($today);
 
         $uplynulo = max(0, (int) $zacatek->diffInDays($today->min($konec ?? $today), false));
         $zbyva = $konec ? max(0, (int) $today->diffInDays($konec, false)) : null;
@@ -159,24 +197,28 @@ class BudgetService
      */
     private function categories(Budget $budget, Carbon $today): array
     {
-        $konecObdobi = $budget->ends_on && $today->greaterThan($budget->ends_on) ? $budget->ends_on : $today;
+        [$zacatek, $konecPlanu] = $budget->activeWindow($today);
+        $konecObdobi = $konecPlanu && $today->greaterThan($konecPlanu) ? $konecPlanu : $today;
 
         // Spodní hranice je pětina období, ne celé období. S jedničkou by čtvrtý den
         // z týdne tvrdil, že se smělo utratit všech sedm tisíc, a plán by nic neřídil.
         // Nula by zase v první den dělila skoro nulou a všechno by svítilo červeně;
         // pětina je kompromis — stejný, jaký používají varování.
-        $mesicu = max(0.2, $budget->starts_on->diffInDays($konecObdobi) / $budget->periodDays());
+        $mesicu = max(0.2, $zacatek->diffInDays($konecObdobi) / $budget->periodDays());
 
         // Kategorie s přenosem počítá celé započaté měsíce, ne poměrnou část. Obálka na
         // jízdenku domů se naplní prvního; tvrdit patnáctého, že je v ní půlka měsíčního
         // vkladu, by u nepravidelného výdaje neodpovídalo tomu, jak se s ní zachází.
         $mesicuCelych = max(1.0, ceil($mesicu));
 
-        return $budget->categories->map(function ($category) use ($budget, $mesicu, $mesicuCelych) {
+        return $budget->categories->map(function ($category) use ($budget, $mesicu, $mesicuCelych, $zacatek, $konecObdobi) {
             $utraceno = $budget->entries
                 ->where('kind', 'expense')
                 ->where('budget_category_id', $category->id)
                 ->where('currency', $budget->currency)
+                // U klouzavého rozpočtu jen aktuální měsíc — plán je měsíční a skutečnost
+                // za celé půlroční trvání by proti němu vyšla jako šestinásobné přetečení.
+                ->filter(fn (BudgetEntry $e) => ! $budget->isRolling() || $e->spent_on->betweenIncluded($zacatek, $konecObdobi))
                 ->sum('amount');
 
             $prenos = (bool) ($category->rollover ?? false);
@@ -245,7 +287,8 @@ class BudgetService
         $utraceno = (float) $vydaje->where('currency', $budget->currency)->sum('amount');
         $zbyva = round($rozpocet - $utraceno, 2);
 
-        $dniDoKonce = $budget->ends_on ? max(1, (int) $today->diffInDays($budget->ends_on, false)) : null;
+        [, $konecOkna] = $budget->activeWindow($today);
+        $dniDoKonce = $konecOkna ? max(1, (int) $today->diffInDays($konecOkna, false)) : null;
 
         return [
             'planned_total' => round($rozpocet, 2),
@@ -271,8 +314,9 @@ class BudgetService
         $today ??= Carbon::today();
         $budget->loadMissing(['categories', 'entries']);
 
-        $konec = $budget->ends_on && $today->greaterThan($budget->ends_on) ? $budget->ends_on : $today;
-        $mesicu = max(0.2, $budget->starts_on->diffInDays($konec) / $budget->periodDays());
+        [$zacatek, $konecOkna] = $budget->activeWindow($today);
+        $konec = $konecOkna && $today->greaterThan($konecOkna) ? $konecOkna : $today;
+        $mesicu = max(0.2, $zacatek->diffInDays($konec) / $budget->periodDays());
 
         $varovani = [];
 
@@ -283,6 +327,10 @@ class BudgetService
                 ->where('kind', 'expense')
                 ->where('budget_category_id', $category->id)
                 ->where('currency', $budget->currency)
+                // Klouzavý rozpočet varuje za aktuální měsíc. Bez tohohle filtru by
+                // po čtvrtém měsíci hlásil přetečení pořád, protože by k plánu na měsíc
+                // sčítal útratu za celé půlrok.
+                ->filter(fn (BudgetEntry $e) => ! $budget->isRolling() || $e->spent_on->betweenIncluded($zacatek, $konec))
                 ->sum('amount');
 
             $melo = (float) $category->planned_monthly * $mesicu;
@@ -744,6 +792,73 @@ class BudgetService
                 : ($zbudeNaKonci < $rozvaha['planned_total'] * self::TESNA_REZERVA ? 'tight' : 'ok'),
         ];
     }
+
+    /**
+     * Platby, které vypadají jako pravidelné, ale nikdo je tak neoznačil.
+     *
+     * Rozpočet umí pravidelné položky sám dopisovat, upozorňovat na ně dopředu a počítat
+     * s nimi v předpovědi — jenže jen u těch, u kterých někdo zaškrtl políčko. Kdo ho
+     * zapomene zaškrtnout u telefonu za třicet eur, přijde o všechny tři výhody a nikdy
+     * se to nedozví, protože nic nechybí.
+     *
+     * Hledá se stejný popis a podobná částka ve třech a víc různých měsících. Tři jsou
+     * minimum, u kterého se dá mluvit o opakování — dvakrát je náhoda.
+     *
+     * Částka se porovnává s tolerancí. Nájem bývá na korunu stejný, ale energie kolísají
+     * a trvat na shodě na haléř by znamenalo nenajít nic z toho, co je potřeba najít.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function recurringCandidates(Budget $budget): array
+    {
+        $budget->loadMissing(['entries.category']);
+
+        return $budget->entries
+            ->where('kind', 'expense')
+            ->where('is_recurring', false)
+            ->filter(fn (BudgetEntry $e) => trim((string) $e->note) !== '')
+            ->groupBy(fn (BudgetEntry $e) => mb_strtolower(trim($e->note)).'|'.$e->currency)
+            ->filter(function (Collection $skupina) {
+                $mesicu = $skupina->map(fn (BudgetEntry $e) => $e->spent_on->format('Y-m'))->unique()->count();
+
+                if ($mesicu < self::OPAKOVANI_MESICU) {
+                    return false;
+                }
+
+                // Kolísání částky. Nájem je na korunu stejný, energie ne — a trvat na
+                // shodě na haléř by znamenalo nenajít nic z toho, co hledáme.
+                $castky = $skupina->map(fn (BudgetEntry $e) => (float) $e->amount);
+                $prumer = $castky->avg();
+
+                return $prumer > 0 && ($castky->max() - $castky->min()) / $prumer <= self::OPAKOVANI_ROZPTYL;
+            })
+            ->map(function (Collection $skupina) {
+                $posledni = $skupina->sortByDesc('spent_on')->first();
+
+                return [
+                    'uuid' => $posledni->uuid,
+                    'note' => $posledni->note,
+                    'category' => $posledni->category?->name,
+                    'currency' => $posledni->currency,
+                    'average' => round((float) $skupina->avg('amount'), 2),
+                    'occurrences' => $skupina->map(fn (BudgetEntry $e) => $e->spent_on->format('Y-m'))->unique()->count(),
+                    'day_of_month' => (int) $posledni->spent_on->day,
+                    'last_on' => $posledni->spent_on->toDateString(),
+                    // uuid všech výskytů: označit jako pravidelný má smysl u celé řady,
+                    // ne jen u posledního kusu.
+                    'entry_uuids' => $skupina->pluck('uuid')->values()->all(),
+                ];
+            })
+            ->sortByDesc('average')
+            ->values()
+            ->all();
+    }
+
+    /** Kolik různých měsíců dělá z výdaje opakovaný. Dvakrát je náhoda. */
+    private const OPAKOVANI_MESICU = 3;
+
+    /** Jak moc smí částka kolísat, aby to pořád byla táž platba. */
+    private const OPAKOVANI_ROZPTYL = 0.25;
 
     /**
      * Předpověď výdajů po kategoriích na příští měsíc.
