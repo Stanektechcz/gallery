@@ -100,6 +100,15 @@ class BudgetTestDataSeeder extends Seeder
             return [$nazev => $kategorie->id];
         });
 
+        // Příjmy po lidech, aby šlo ukázat poměrné dělení. Rozdílné schválně — na
+        // stejných příjmech není na poměru co vidět a „napůl" by stačilo.
+        foreach ([[$ja, 2400], [$druhy, 1200]] as [$clovek, $prijem]) {
+            \App\Models\BudgetMember::updateOrCreate(
+                ['budget_id' => $budget->id, 'user_id' => $clovek->id],
+                ['monthly_income' => $prijem, 'currency' => 'EUR'],
+            );
+        }
+
         $polozky = 0;
 
         // Pravidelné měsíční položky za celé dosavadní období.

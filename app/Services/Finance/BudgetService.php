@@ -189,6 +189,8 @@ class BudgetService
                 'icon' => $category->icon,
                 'planned_monthly' => (float) $category->planned_monthly,
                 'rollover' => $prenos,
+                'default_split' => $category->default_split,
+                'default_payer' => $category->default_payer !== null ? (int) $category->default_payer : null,
                 'planned_to_date' => round($planovano, 2),
                 'spent' => round((float) $utraceno, 2),
                 // Zbývající částka, ne jen procenta. Podle procent se nikdo nerozhoduje —

@@ -60,6 +60,8 @@ interface Overview {
         left: number;
         /** Nevyčerpané se přenáší do dalšího měsíce — obálka na nepravidelný výdaj. */
         rollover: boolean;
+        /** Předvyplní se u nové položky. Null znamená „vybrat pokaždé". */
+        default_split?: string | null;
         used_percent: number | null;
     }>;
     months: Array<{ month: string; spent: number; income: number; count: number; other_currency_count?: number }>;
@@ -97,6 +99,31 @@ interface Overview {
     burndown?: Cerpani | null;
     /** Kdo kolik zaplatil — všechny výdaje, ne jen dělené. */
     by_payer?: Array<{ id: number; name: string; count: number; currencies: Record<string, number>; main: number }>;
+    /** Účastníci i s příjmem. `share` je null, dokud se poměr nedá spočítat. */
+    members?: Array<{ user_id: number; name: string; monthly_income: number | null; currency: string; share: number | null }>;
+    /** Kdo utrácí za co. Null u jednoho člověka. */
+    category_by_payer?: {
+        currency: string;
+        people: Array<{ id: number; name: string }>;
+        rows: Array<{ category_id: number | null; name: string; total: number; by_payer: Record<string, number> }>;
+    } | null;
+    /** Vývoj salda mezi dvěma lidmi po měsících. */
+    balance_trend?: {
+        currency: string;
+        first: { id: number; name: string };
+        second: { id: number; name: string };
+        points: Array<{ month: string; change: number; balance: number }>;
+    } | null;
+    /** Předpověď výdajů na příští měsíc po kategoriích. */
+    prediction?: {
+        currency: string; for_month: string; months_measured: number; reliable: boolean;
+        total: number; planned_total: number;
+        rows: Array<{
+            id: number; name: string; color: string | null;
+            recurring: number; variable: number; predicted: number;
+            trend: 'up' | 'down' | 'flat' | 'unknown'; months: number; planned_monthly: number;
+        }>;
+    } | null;
     /** Kolik položek rozpočet má. Samotný seznam si načítá vlastní koncový bod. */
     entries_total: number;
 }
@@ -130,7 +157,7 @@ const datum = (iso: string) => new Date(`${iso}T12:00:00`).toLocaleDateString('c
 const mesic = (klic: string) =>
     new Date(`${klic}-01T12:00:00`).toLocaleDateString('cs-CZ', { month: 'long', year: 'numeric' });
 
-const DELENI: Record<string, string> = { none: 'moje', equal: 'napůl', other: 'za druhého' };
+const DELENI: Record<string, string> = { none: 'moje', equal: 'napůl', other: 'za druhého', ratio: 'podle příjmů' };
 
 /** Měny, které nabízíme. Na jednom místě, ať se seznam v zápisu a v úpravě nerozejde. */
 const MENY = ['EUR', 'CZK', 'USD', 'GBP', 'PLN', 'CHF'];
@@ -352,8 +379,89 @@ function BudgetPicker({ budgets, active, onPick, onCreated }: {
  * přepsat ji stejnou hodnotou i tehdy, když na ni člověk nesáhl, a v historii by to
  * vypadalo jako změna.
  */
-function Settings({ budget, onChanged, onDeleted }: {
+/**
+ * Příjmy účastníků — podklad pro poměrné dělení.
+ *
+ * „Napůl" je férové jen tehdy, když oba vydělávají zhruba stejně. Vyplnění je
+ * dobrovolné a dokud ho neudělá aspoň dvojice, dělí se dál napůl: hádat, kolik druhý
+ * vydělává, je u peněz horší než to nevědět.
+ */
+function MembersPanel({ budget, members, onChanged }: {
     budget: Overview['budget'];
+    members: NonNullable<Overview['members']>;
+    onChanged: () => void;
+}) {
+    const vychozi = Object.fromEntries(members.map(c => [c.user_id, c.monthly_income !== null ? String(c.monthly_income) : '']));
+    const [prijmy, setPrijmy] = useState<Record<number, string>>(vychozi);
+    const [uklada, setUklada] = useState(false);
+
+    useEffect(() => { setPrijmy(vychozi); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [budget.uuid]);
+
+    const zmeneno = JSON.stringify(prijmy) !== JSON.stringify(vychozi);
+    const poměrPlati = members.every(c => c.share !== null) && members.length > 1;
+
+    const uloz = async () => {
+        setUklada(true);
+
+        try {
+            await axios.put(`/api/v1/rozpocty/${budget.uuid}/ucastnici`, {
+                members: members.map(c => ({
+                    user_id: c.user_id,
+                    monthly_income: prijmy[c.user_id] === '' ? null : Number(prijmy[c.user_id]),
+                    currency: budget.currency,
+                })),
+            });
+
+            hlaska('Příjmy jsou uložené.', 'uspech');
+            onChanged();
+        } catch (problem: any) {
+            hlaska(problem?.response?.data?.message ?? 'Příjmy se nepodařilo uložit.', 'chyba');
+        } finally {
+            setUklada(false);
+        }
+    };
+
+    return (
+        <Panel icon={Scale} title="Příjmy a poměrné dělení"
+            description="Když je vyplní oba, dá se u položek vybrat dělení podle poměru příjmů — kdo vydělává víc, nese větší část společných výdajů."
+            footnote={poměrPlati
+                ? `Poměr vychází na ${members.map(c => `${c.name} ${Math.round((c.share ?? 0) * 100)} %`).join(' a ')}.`
+                : 'Dokud příjem nevyplní aspoň dva, dělí se „podle poměru" stejně jako napůl. Hádat cizí příjem je horší než ho neznat.'}>
+
+            <div className="space-y-2.5">
+                {members.map(clovek => (
+                    <div key={clovek.user_id} className="flex items-center gap-2">
+                        <label htmlFor={`prijem-${clovek.user_id}`} className="min-w-0 flex-1 truncate text-sm text-[var(--color-text-primary)]">
+                            {clovek.name}
+                        </label>
+                        {clovek.share !== null && (
+                            <span className="shrink-0 rounded bg-[var(--color-surface-muted)] px-1.5 py-0.5 text-[11px] tabular-nums text-[var(--color-text-secondary)]">
+                                {Math.round(clovek.share * 100)} %
+                            </span>
+                        )}
+                        <input id={`prijem-${clovek.user_id}`} type="number" inputMode="decimal"
+                            value={prijmy[clovek.user_id] ?? ''}
+                            onChange={e => setPrijmy(s => ({ ...s, [clovek.user_id]: e.target.value }))}
+                            placeholder={`měsíčně (${budget.currency})`}
+                            className={`${FIELD} w-40 shrink-0`}/>
+                    </div>
+                ))}
+            </div>
+
+            <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-[var(--color-border)] pt-3">
+                <button type="button" onClick={() => void uloz()} disabled={uklada || ! zmeneno}
+                    className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-[var(--color-accent)] px-3 text-xs font-medium text-[var(--color-accent-contrast)] disabled:opacity-40">
+                    <Check size={14}/> Uložit příjmy
+                </button>
+                {! zmeneno && <span className="text-[11px] text-[var(--color-text-secondary)]">Zatím není co uložit.</span>}
+            </div>
+        </Panel>
+    );
+}
+
+function Settings({ budget, members, onChanged, onDeleted }: {
+    budget: Overview['budget'];
+    members?: Overview['members'];
     onChanged: () => void;
     onDeleted: () => void;
 }) {
@@ -490,6 +598,8 @@ function Settings({ budget, onChanged, onDeleted }: {
                 </div>
             </Panel>
 
+            {(members?.length ?? 0) > 1 && <MembersPanel budget={budget} members={members!} onChanged={onChanged}/>}
+
             <Panel tone="danger" icon={AlertTriangle} title="Smazat rozpočet"
                 description="Zmizí i všechny jeho položky, kategorie a uzávěrky. Vrátit to nejde.">
                 <DeleteButton
@@ -625,7 +735,8 @@ function Overview({ data, members, requests, onChanged, onDeleted }: {
             {/* Zápis a výpis položek. Celá šířka, protože formulář má šest polí vedle
                 sebe — v půlce obrazovky by se zlomil na tři řádky. */}
             {sekce === 'polozky' && (
-                <Entries budget={budget} categories={categories} members={members} total={data.entries_total} onChanged={onChanged}/>
+                <Entries budget={budget} categories={categories} members={members}
+                    ucastnici={data.members ?? []} total={data.entries_total} onChanged={onChanged}/>
             )}
 
             {/* Plán vedle skutečnosti. Dvě odpovědi na jednu otázku — kolik mělo padnout
@@ -638,6 +749,7 @@ function Overview({ data, members, requests, onChanged, onDeleted }: {
                         {/* Rozdělení mezi lidi patří k rozpadu podle kategorií: obojí je
                             odpověď na „kam to jde", jen jinou osou. */}
                         {(data.by_payer?.length ?? 0) > 1 && <PayerPanel rows={data.by_payer!} currency={budget.currency}/>}
+                        {data.category_by_payer && <CrossPanel data={data.category_by_payer}/>}
                     </PanelGrid>
 
                     {(data.recurring?.length ?? 0) > 0 && (
@@ -653,14 +765,16 @@ function Overview({ data, members, requests, onChanged, onDeleted }: {
                     {data.burndown && <CerpaniPanel data={data.burndown}/>}
 
                     <PanelGrid max={2}>
+                        {data.prediction && <PredictionPanel data={data.prediction}/>}
                         {months.length > 0 && <MonthsPanel months={months} currency={budget.currency}/>}
                         {data.comparison && <Comparison data={data.comparison}/>}
+                        {data.balance_trend && <BalanceTrendPanel data={data.balance_trend}/>}
                     </PanelGrid>
                 </div>
             )}
 
             {sekce === 'nastaveni' && (
-                <Settings budget={budget} onChanged={onChanged} onDeleted={onDeleted}/>
+                <Settings budget={budget} members={data.members} onChanged={onChanged} onDeleted={onDeleted}/>
             )}
         </div>
     );
@@ -1003,6 +1117,193 @@ function RecurringPanel({ budget, rows, onChanged }: {
  * sebe ano.
  */
 /**
+ * Jak se saldo vyvíjí po měsících.
+ *
+ * Rozvaha řekne, kdo komu dluží dnes. Neřekne, jestli se to zhoršuje — a dva tisíce,
+ * které se každý měsíc srovnávají, jsou něco jiného než dva tisíce, které každý měsíc
+ * rostou o pět set, i když dnešní číslo je stejné.
+ *
+ * Proužky jdou na obě strany od středu, protože saldo má znaménko. Sloupec vpravo
+ * znamená, že první z dvojice vydal víc za druhého; vlevo naopak.
+ */
+function BalanceTrendPanel({ data }: { data: NonNullable<Overview['balance_trend']> }) {
+    const rozsah = Math.max(...data.points.map(b => Math.abs(b.balance)), 1);
+    const posledni = data.points[data.points.length - 1];
+    const predposledni = data.points[data.points.length - 2];
+
+    // Celá věta, ne jedno slovo do šablony: „se rozdíl roste" a „se rozdíl srovnává se"
+    // jsou obojí špatně česky a při skládání z útržků to není vidět.
+    const smer = predposledni
+        ? Math.abs(posledni.balance) > Math.abs(predposledni.balance) ? 'rozdíl vzrostl' : 'se rozdíl srovnal'
+        : null;
+
+    return (
+        <Panel icon={ArrowRightLeft} title="Jak se rozdíl vyvíjí"
+            description={smer
+                ? `Za poslední měsíc ${smer}.`
+                : 'Zatím jen jeden měsíc — na vývoj je brzy.'}
+            footnote={`Vpravo znamená, že víc vydal(a) ${data.first.name}, vlevo ${data.second.name}. Počítá se z položek, ne z uzávěrek — uzávěrka je zaplacení, ne důvod, proč rozdíl vznikl.`}>
+            <div className="space-y-2">
+                {data.points.map(bod => {
+                    const doprava = bod.balance >= 0;
+                    const sirka = Math.abs(bod.balance) / rozsah * 50;
+
+                    return (
+                        <div key={bod.month} className="flex items-center gap-2 text-[11px]">
+                            <span className="w-20 shrink-0 truncate text-[var(--color-text-secondary)]">{mesic(bod.month)}</span>
+                            {/* Střed je nula. Bez osy uprostřed by se znaménko dalo poznat
+                                jen z čísla a proužek by nenesl vůbec nic. */}
+                            <div className="relative h-2.5 flex-1">
+                                <span className="absolute inset-y-0 left-1/2 w-px bg-[var(--color-border)]"/>
+                                <span className="absolute inset-y-0 rounded-sm"
+                                    style={{
+                                        [doprava ? 'left' : 'right']: '50%',
+                                        width: `${sirka}%`,
+                                        backgroundColor: doprava ? 'var(--graf-1)' : 'var(--graf-2)',
+                                    }}/>
+                            </div>
+                            <span className="w-24 shrink-0 text-right tabular-nums text-[var(--color-text-primary)]">
+                                {money(Math.abs(bod.balance), data.currency)}
+                            </span>
+                        </div>
+                    );
+                })}
+            </div>
+        </Panel>
+    );
+}
+
+/** Šipka trendu. Slovo, ne jen znak — samotná šipka nahoru se dá číst obojím směrem. */
+const TREND: Record<string, { znak: string; slovo: string; trida: string }> = {
+    up: { znak: '↑', slovo: 'roste', trida: 'text-amber-400' },
+    down: { znak: '↓', slovo: 'klesá', trida: 'text-emerald-400' },
+    flat: { znak: '→', slovo: 'drží se', trida: 'text-[var(--color-text-secondary)]' },
+    unknown: { znak: '·', slovo: 'málo dat', trida: 'text-[var(--color-text-secondary)]' },
+};
+
+/**
+ * Předpověď výdajů na příští měsíc.
+ *
+ * Výhled odpovídá na „vyjde to do konce období". Tenhle panel na „kde to praskne" —
+ * a to je informace, se kterou se dá něco udělat ještě předtím, než praskne.
+ *
+ * Spolehlivost se přiznává nahoře, ne v poznámce pod čarou. Z jednoho měsíce se
+ * předpovídat nedá a tvářit se u peněz, že ano, je horší než mlčet.
+ */
+function PredictionPanel({ data }: { data: NonNullable<Overview['prediction']> }) {
+    const nadPlan = data.total > data.planned_total && data.planned_total > 0;
+
+    return (
+        <Panel icon={Sparkles} tone={data.reliable && nadPlan ? 'warn' : 'plain'}
+            title={`Předpověď na ${mesic(data.for_month)}`}
+            description={data.reliable
+                ? 'Pravidelné platby v plné výši, ostatní jako vážený průměr — novější měsíce mají větší váhu.'
+                : `Zatím jen ${pocet(data.months_measured, 'dokončený měsíc', 'dokončené měsíce', 'dokončených měsíců')}. Ber to spíš jako dojem než předpověď.`}
+            footnote="Trend porovnává poslední měsíc s průměrem předchozích. Pásmo deseti procent je schválně široké — pár procent nahoru a dolů se u domácnosti děje pořád.">
+
+            <div className="mb-3 flex items-baseline justify-between gap-3 border-b border-[var(--color-border)] pb-3">
+                <span className="text-xs text-[var(--color-text-secondary)]">Celkem podle historie</span>
+                <span className="text-right">
+                    <span className={`block text-lg font-semibold tabular-nums ${nadPlan ? 'text-amber-400' : 'text-[var(--color-text-primary)]'}`}>
+                        {money(data.total, data.currency)}
+                    </span>
+                    {data.planned_total > 0 && (
+                        <span className="block text-[11px] text-[var(--color-text-secondary)]">
+                            plán {money(data.planned_total, data.currency)}
+                        </span>
+                    )}
+                </span>
+            </div>
+
+            <div className="space-y-2">
+                {data.rows.filter(r => r.predicted > 0).map(radek => {
+                    // Kategorie, ve které je jen nájem, není „málo dat" — je to ta
+                    // nejjistější položka z celého rozpočtu. Trend u ní nedává smysl,
+                    // protože se nemá čemu měnit.
+                    const trend = radek.variable === 0 && radek.recurring > 0
+                        ? { znak: '=', slovo: 'pravidelné', trida: 'text-[var(--color-text-secondary)]' }
+                        : TREND[radek.trend];
+                    const presPlan = radek.planned_monthly > 0 && radek.predicted > radek.planned_monthly;
+
+                    return (
+                        <div key={radek.id} className="flex items-baseline justify-between gap-2 text-xs">
+                            <span className="flex min-w-0 items-baseline gap-1.5">
+                                <span className="truncate text-[var(--color-text-primary)]">{radek.name}</span>
+                                <span className={`shrink-0 ${trend.trida}`} title={`Trend: ${trend.slovo}`}>
+                                    {trend.znak} {trend.slovo}
+                                </span>
+                            </span>
+                            <span className="shrink-0 text-right">
+                                <span className={`tabular-nums ${presPlan ? 'text-amber-400' : 'text-[var(--color-text-primary)]'}`}>
+                                    {money(radek.predicted, data.currency)}
+                                </span>
+                                {radek.planned_monthly > 0 && (
+                                    <span className="ml-1.5 text-[var(--color-text-secondary)]">z {money(radek.planned_monthly, data.currency)}</span>
+                                )}
+                            </span>
+                        </div>
+                    );
+                })}
+            </div>
+        </Panel>
+    );
+}
+
+/**
+ * Kdo utrácí za co — kategorie křížem s lidmi.
+ *
+ * Tabulka, ne graf: čte se po řádcích („kdo z nás platí nájem") i po sloupcích
+ * („za co utrácí Makinka") a obojí naráz umí jen mřížka čísel.
+ */
+function CrossPanel({ data }: { data: NonNullable<Overview['category_by_payer']> }) {
+    return (
+        <Panel icon={Scale} title="Kdo utrácí za co"
+            footnote="Jen výdaje v měně rozpočtu. Sečíst přes měny by znamenalo hádat kurz — a v tabulce, kde je jedna buňka v eurech a druhá v korunách, se řádky nedají porovnat.">
+            {/* Vlastní posuv, aby stránka nepřetekla do šířky. */}
+            <div className="-mx-1 overflow-x-auto px-1">
+                <table className="w-full min-w-[20rem] border-collapse text-xs">
+                    <thead>
+                        <tr>
+                            <th className="pb-2 text-left font-medium text-[var(--color-text-secondary)]">Kategorie</th>
+                            {data.people.map(clovek => (
+                                <th key={clovek.id} className="pb-2 pl-3 text-right font-medium text-[var(--color-text-secondary)]">{clovek.name}</th>
+                            ))}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {data.rows.map(radek => {
+                            const nejvic = Math.max(...data.people.map(c => radek.by_payer[c.id] ?? 0), 1);
+
+                            return (
+                                <tr key={radek.category_id ?? 'bez'} className="border-t border-[var(--color-border)]">
+                                    <td className="py-1.5 pr-2 text-[var(--color-text-primary)]">{radek.name}</td>
+                                    {data.people.map(clovek => {
+                                        const castka = radek.by_payer[clovek.id] ?? 0;
+
+                                        return (
+                                            <td key={clovek.id} className="py-1.5 pl-3 text-right tabular-nums">
+                                                {/* Podbarvení podle podílu v řádku: kdo v téhle kategorii
+                                                    utrácí víc, je vidět dřív než se přečtou obě čísla. */}
+                                                <span className="rounded px-1.5 py-0.5"
+                                                    style={castka > 0 ? { backgroundColor: `color-mix(in srgb, var(--color-accent) ${Math.round(castka / nejvic * 22)}%, transparent)` } : undefined}>
+                                                    <span className={castka > 0 ? 'text-[var(--color-text-primary)]' : 'text-[var(--color-text-secondary)]'}>
+                                                        {castka > 0 ? money(castka, data.currency) : '—'}
+                                                    </span>
+                                                </span>
+                                            </td>
+                                        );
+                                    })}
+                                </tr>
+                            );
+                        })}
+                    </tbody>
+                </table>
+            </div>
+        </Panel>
+    );
+}
+
+/**
  * Kdo kolik zaplatil.
  *
  * Vedle „kdo komu dluží" to vypadá jako totéž, ale není. Vyrovnání počítá jen s tím, co
@@ -1284,6 +1585,7 @@ function CategoryRow({ budget, category, onChanged }: {
     const [nazev, setNazev] = useState(category.name);
     const [plan, setPlan] = useState(String(category.planned_monthly || ''));
     const [prenos, setPrenos] = useState(Boolean(category.rollover));
+    const [deleni, setDeleni] = useState(category.default_split ?? '');
     const [uklada, setUklada] = useState(false);
 
     const preteklo = (category.used_percent ?? 0) > 100;
@@ -1298,6 +1600,7 @@ function CategoryRow({ budget, category, onChanged }: {
                 name: nazev.trim(),
                 planned_monthly: Number(plan || 0),
                 rollover: prenos,
+                default_split: deleni || null,
             });
 
             setUprava(false);
@@ -1318,6 +1621,20 @@ function CategoryRow({ budget, category, onChanged }: {
                         aria-label={`Plán ${budget.period_label}`}
                         placeholder={`${budget.period_unit === 'week' ? 'za týden' : 'za měsíc'} (${budget.currency})`}
                         className={`${FIELD} sm:w-40`}/>
+                </div>
+
+                {/* Výchozí dělení se předvyplní u nové položky v téhle kategorii. Nákupy
+                    jsou vždycky napůl a oblečení nikdy — vybírat to znovu u každé
+                    položky znamená stovky kliknutí za pololetí. */}
+                <div className="mt-2.5">
+                    <label className={LABEL} htmlFor={`deleni-${category.id}`}>Výchozí dělení u nových položek</label>
+                    <select id={`deleni-${category.id}`} value={deleni} onChange={e => setDeleni(e.target.value)} className={`${FIELD} sm:w-56`}>
+                        <option value="">Neurčeno — vybrat pokaždé</option>
+                        <option value="none">Jen moje</option>
+                        <option value="equal">Napůl</option>
+                        <option value="other">Za druhého</option>
+                        <option value="ratio">Podle příjmů</option>
+                    </select>
                 </div>
 
                 <label className="mt-2.5 flex cursor-pointer items-start gap-2 text-xs text-[var(--color-text-secondary)]">
@@ -1575,9 +1892,12 @@ function Categories({ budget, categories, onChanged }: { budget: Overview['budge
  * smazat. Teď má seznam hledání, filtry a stránkování a s přehledem se potkává jen
  * v tom, že se po každé změně obojí načte znovu.
  */
-function Entries({ budget, categories, members, total, onChanged }: {
+function Entries({ budget, categories, members, ucastnici, total, onChanged }: {
     budget: Overview['budget']; categories: Overview['categories'];
+    /** Protistrany pro výběr plátce u položky — bez přihlášeného. */
     members: Array<{ id: number; name: string }>;
+    /** Všichni účastníci rozpočtu včetně přihlášeného — pro filtr „kdo platil". */
+    ucastnici: NonNullable<Overview['members']>;
     /** Kolik položek rozpočet má celkem — ze souhrnu, aby šlo napsat „50 z 512". */
     total: number;
     onChanged: () => void;
@@ -1598,7 +1918,7 @@ function Entries({ budget, categories, members, total, onChanged }: {
     const [page, setPage] = useState(1);
     const [loading, setLoading] = useState(true);
     const [editing, setEditing] = useState<string | null>(null);
-    const [filter, setFilter] = useState({ q: '', kind: '', category: '', month: '' });
+    const [filter, setFilter] = useState({ q: '', kind: '', category: '', month: '', payer: '', no_receipt: false });
 
     // Na monitoru je pro formulář místo vedle seznamu, na telefonu ne — tam by zabral
     // celou první obrazovku. Rozhoduje se jednou při prvním vykreslení; kdo si ho otevře
@@ -1622,6 +1942,8 @@ function Entries({ budget, categories, members, total, onChanged }: {
                     kind: filter.kind || undefined,
                     category: filter.category || undefined,
                     month: filter.month || undefined,
+                    payer: filter.payer || undefined,
+                    no_receipt: filter.no_receipt ? 1 : undefined,
                 },
             });
 
@@ -1690,7 +2012,7 @@ function Entries({ budget, categories, members, total, onChanged }: {
         } finally { setBusy(false); }
     };
 
-    const filtrovano = Boolean(filter.q || filter.kind || filter.category || filter.month);
+    const filtrovano = Boolean(filter.q || filter.kind || filter.category || filter.month || filter.payer || filter.no_receipt);
 
     return (
         <Panel icon={ListPlus} title="Položky"
@@ -1773,6 +2095,7 @@ function Entries({ budget, categories, members, total, onChanged }: {
                             <option value="none">Jen moje</option>
                             <option value="equal">Napůl</option>
                             <option value="other">Za druhého</option>
+                            <option value="ratio">Podle příjmů</option>
                         </select>
                         <select value={form.paid_by} onChange={e => setForm(f => ({ ...f, paid_by: e.target.value }))} className={`${FIELD} lg:col-span-2`}>
                             <option value="">Platil jsem já</option>
@@ -1834,8 +2157,31 @@ function Entries({ budget, categories, members, total, onChanged }: {
                             {months.map(m => <option key={m} value={m}>{mesic(m)}</option>)}
                         </select>
                     )}
+                    {/* Kdo platil. Seznam uměl hledat text, druh, kategorii i měsíc, ale
+                        ne plátce — a „ukaž, co jsem platil já" se pak dalo zjistit jen
+                        scrollováním. */}
+                    {/* Účastníci z přehledu, ne `members` ze stránky: ten seznam záměrně
+                        vynechává přihlášeného (slouží k výběru protistrany), takže by
+                        ve filtru chyběl zrovna ten, koho člověk hledá nejčastěji. */}
+                    {ucastnici.length > 1 && (
+                        <select value={filter.payer} onChange={e => setFilter(f => ({ ...f, payer: e.target.value }))}
+                            aria-label="Kdo platil" className={`${FIELD} w-40`}>
+                            <option value="">Kdokoliv platil</option>
+                            {ucastnici.map(clen => (
+                                <option key={clen.user_id} value={clen.user_id}>{clen.name}</option>
+                            ))}
+                        </select>
+                    )}
+
+                    <label className="flex min-h-9 shrink-0 items-center gap-1.5 text-xs text-[var(--color-text-secondary)]">
+                        <input type="checkbox" checked={filter.no_receipt}
+                            onChange={e => setFilter(f => ({ ...f, no_receipt: e.target.checked }))}
+                            className="h-4 w-4 accent-[var(--color-accent)]"/>
+                        Bez účtenky
+                    </label>
+
                     {filtrovano && (
-                        <button type="button" onClick={() => setFilter({ q: '', kind: '', category: '', month: '' })}
+                        <button type="button" onClick={() => setFilter({ q: '', kind: '', category: '', month: '', payer: '', no_receipt: false })}
                             className="text-xs text-[var(--color-text-secondary)] underline-offset-2 hover:underline">
                             Zrušit filtry
                         </button>
@@ -1997,6 +2343,7 @@ function EntryEditor({ budget, categories, members, entry, onClose, onSaved }: {
                             <option value="none">Jen moje</option>
                             <option value="equal">Napůl</option>
                             <option value="other">Za druhého</option>
+                            <option value="ratio">Podle příjmů</option>
                         </select>
                         <select value={form.paid_by} onChange={e => setForm(f => ({ ...f, paid_by: e.target.value }))} className={`${FIELD} lg:col-span-2`}>
                             <option value="">Platil jsem já</option>
