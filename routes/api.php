@@ -97,12 +97,14 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
         Route::post('/', [App\Http\Controllers\Api\BudgetController::class, 'store'])->name('store');
         Route::post('/zadost', [App\Http\Controllers\Api\BudgetController::class, 'requestMoney'])->name('request');
         Route::post('/zadost/{uuid}', [App\Http\Controllers\Api\BudgetController::class, 'respondToRequest'])->name('request.respond');
+        // Musí být před `/{uuid}`, jinak si Laravel přečte „souhrn" jako uuid rozpočtu
+        // a hledá rozpočet toho jména.
+        Route::get('/souhrn', [App\Http\Controllers\Api\BudgetController::class, 'summary'])->name('summary');
         Route::get('/{uuid}', [App\Http\Controllers\Api\BudgetController::class, 'show'])->name('show');
         Route::get('/{uuid}/export', [App\Http\Controllers\Api\BudgetController::class, 'export'])->name('export');
         Route::patch('/{uuid}', [App\Http\Controllers\Api\BudgetController::class, 'update'])->name('update');
         Route::delete('/{uuid}', [App\Http\Controllers\Api\BudgetController::class, 'destroy'])->name('destroy');
         Route::post('/{uuid}/kategorie', [App\Http\Controllers\Api\BudgetController::class, 'storeCategory'])->name('categories.store');
-        Route::get('/souhrn', [App\Http\Controllers\Api\BudgetController::class, 'summary'])->name('summary');
         Route::put('/{uuid}/ucastnici', [App\Http\Controllers\Api\BudgetController::class, 'updateMembers'])->name('members.update');
         Route::post('/{uuid}/kopie', [App\Http\Controllers\Api\BudgetController::class, 'duplicate'])->name('duplicate');
         Route::post('/{uuid}/cile', [App\Http\Controllers\Api\BudgetController::class, 'storeGoal'])->name('goals.store');

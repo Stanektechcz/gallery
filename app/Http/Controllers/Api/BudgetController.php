@@ -64,6 +64,7 @@ class BudgetController extends Controller
             'savings_target' => 'nullable|numeric|min:0',
             'savings_target_on' => 'nullable|date',
             'period_unit' => 'sometimes|in:month,week',
+            'period_mode' => 'sometimes|in:fixed,rolling',
         ]);
 
         $budget = Budget::create([
@@ -78,6 +79,7 @@ class BudgetController extends Controller
             'savings_target' => $data['savings_target'] ?? null,
             'savings_target_on' => $data['savings_target_on'] ?? null,
             'period_unit' => $data['period_unit'] ?? 'month',
+            'period_mode' => $data['period_mode'] ?? 'fixed',
             'note' => $data['note'] ?? null,
             'is_shared' => $data['is_shared'] ?? false,
             'created_by' => $request->user()->id,
@@ -102,6 +104,7 @@ class BudgetController extends Controller
             'savings_target' => 'nullable|numeric|min:0',
             'savings_target_on' => 'nullable|date',
             'period_unit' => 'sometimes|in:month,week',
+            'period_mode' => 'sometimes|in:fixed,rolling',
         ]);
 
         $budget->update($data);

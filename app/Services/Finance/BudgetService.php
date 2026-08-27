@@ -88,6 +88,7 @@ class BudgetService
                 'savings_target' => $budget->savings_target !== null ? (float) $budget->savings_target : null,
                 'savings_target_on' => $budget->savings_target_on?->toDateString(),
                 'period_unit' => $budget->period_unit ?? 'month',
+                'period_mode' => $budget->period_mode ?? 'fixed',
                 'period_label' => $budget->periodLabel(),
                 'note' => $budget->note,
                 'is_shared' => $budget->is_shared,
@@ -151,7 +152,6 @@ class BudgetService
                         / max(1, $today->diffInMonths($cil->target_on) ?: 1), 2)
                     : null,
             ])->values()->all(),
-            'period_mode' => $budget->period_mode ?? 'fixed',
             // Historie uzávěrek. Bez ní by po vyrovnání zmizel dluh i důkaz, že se platil.
             'settlements' => $budget->settlements->take(6)->map(fn (\App\Models\BudgetSettlement $s) => [
                 'uuid' => $s->uuid,

@@ -46,7 +46,7 @@ interface MoneyRow {
 
 interface Overview {
     budget: { uuid: string; name: string; currency: string; starts_on: string; ends_on: string | null; monthly_income: number | null; note: string | null; is_shared: boolean; owner: { id: number; name: string } | null;
-        savings_target: number | null; savings_target_on: string | null; period_unit: 'month' | 'week'; period_label: string };
+        savings_target: number | null; savings_target_on: string | null; period_unit: 'month' | 'week'; period_mode: 'fixed' | 'rolling'; period_label: string };
     period: { days_elapsed: number; days_left: number | null; days_total: number | null; has_started: boolean; has_ended: boolean };
     totals: {
         spent: Record<string, number>; income: Record<string, number>;
@@ -114,6 +114,18 @@ interface Overview {
         second: { id: number; name: string };
         points: Array<{ month: string; change: number; balance: number }>;
     } | null;
+    /** Cíle spoření. Několik zvlášť, ne jedno číslo na rozpočet. */
+    goals?: Array<{
+        uuid: string; name: string; target_amount: number; saved_amount: number;
+        currency: string; target_on: string | null; note: string | null;
+        percent: number | null; monthly_needed: number | null;
+    }>;
+    /** Platby, které vypadají jako pravidelné, ale nikdo je tak neoznačil. */
+    recurring_candidates?: Array<{
+        uuid: string; note: string | null; category: string | null; currency: string;
+        average: number; occurrences: number; day_of_month: number; last_on: string;
+        entry_uuids: string[];
+    }>;
     /** Předpověď výdajů na příští měsíc po kategoriích. */
     prediction?: {
         currency: string; for_month: string; months_measured: number; reliable: boolean;
@@ -474,6 +486,7 @@ function Settings({ budget, members, onChanged, onDeleted }: {
         savings_target: budget.savings_target !== null ? String(budget.savings_target) : '',
         savings_target_on: budget.savings_target_on ?? '',
         period_unit: budget.period_unit,
+        period_mode: budget.period_mode ?? 'fixed',
         note: budget.note ?? '',
         is_shared: budget.is_shared,
     };
@@ -502,6 +515,7 @@ function Settings({ budget, members, onChanged, onDeleted }: {
                 savings_target: form.savings_target === '' ? null : Number(form.savings_target),
                 savings_target_on: form.savings_target_on || null,
                 period_unit: form.period_unit,
+                period_mode: form.period_mode,
                 note: form.note || null,
                 is_shared: form.is_shared,
             });
@@ -549,6 +563,23 @@ function Settings({ budget, members, onChanged, onDeleted }: {
                             <option value="month">měsíčně</option>
                             <option value="week">týdně</option>
                         </select>
+                    </div>
+
+                    {/* Klouzavý režim je pro běžnou domácnost, která nekončí — jen každý
+                        měsíc začíná znovu. Bez něj by si člověk musel dvanáctkrát ročně
+                        zakládat nový rozpočet. */}
+                    <div className="sm:col-span-2 lg:col-span-3">
+                        <label className={LABEL} htmlFor="rozpocet-rezim">Jak rozpočet běží</label>
+                        <select id="rozpocet-rezim" value={form.period_mode}
+                            onChange={e => setForm(f => ({ ...f, period_mode: e.target.value as 'fixed' | 'rolling' }))} className={`${FIELD} lg:w-96`}>
+                            <option value="fixed">Pevné období od–do (pobyt, cesta, projekt)</option>
+                            <option value="rolling">Klouzavý měsíc — plán se každý první resetuje</option>
+                        </select>
+                        <p className="mt-1 text-[11px] leading-relaxed text-[var(--color-text-secondary)]">
+                            {form.period_mode === 'rolling'
+                                ? 'Přehledy počítají aktuální měsíc. Historie zůstává — měsíc po měsíci, srovnání i předpověď se dívají dál dozadu.'
+                                : 'Přehledy počítají celé období od začátku do konce.'}
+                        </p>
                     </div>
 
                     <div>
@@ -727,6 +758,12 @@ function Overview({ data, members, requests, onChanged, onDeleted }: {
                 osamoceného panelu vypadá, jako by se něco nenačetlo. */}
             {sekce === 'prehled' && (
                 <div className="space-y-4">
+                    {/* Návrh na označení pravidelné platby jde nad panely: je to jediná
+                        věc na téhle obrazovce, která něco chce, a pod čtyřmi panely by
+                        ji nikdo nenašel. */}
+                    {(data.recurring_candidates?.length ?? 0) > 0 && (
+                        <RecurringCandidates budget={budget} rows={data.recurring_candidates!} onChanged={onChanged}/>
+                    )}
                     <PanelGrid max={2}>{stav}</PanelGrid>
                     <MoneyRequests requests={requests} members={members} onChanged={onChanged}/>
                 </div>
@@ -755,6 +792,8 @@ function Overview({ data, members, requests, onChanged, onDeleted }: {
                     {(data.recurring?.length ?? 0) > 0 && (
                         <RecurringPanel budget={budget} rows={data.recurring!} onChanged={onChanged}/>
                     )}
+
+                    <GoalsPanel budget={budget} goals={data.goals ?? []} onChanged={onChanged}/>
                 </div>
             )}
 
@@ -1116,6 +1155,198 @@ function RecurringPanel({ budget, rows, onChanged }: {
  * Koláč by ukázal totéž, ale porovnat dvě výseče od oka nikdo neumí — délky vedle
  * sebe ano.
  */
+/**
+ * Cíle spoření uvnitř rozpočtu.
+ *
+ * Jedno pole na rozpočet nepobere „letenky za čtyři sta" a „notebook za dvanáct set"
+ * zároveň — mají různé částky i termíny.
+ *
+ * Uspořená částka se zadává ručně. Odvozovat ji ze zůstatku by u dvou cílů znamenalo
+ * tvrdit o týchž penězích, že patří oběma.
+ */
+function GoalsPanel({ budget, goals, onChanged }: {
+    budget: Overview['budget'];
+    goals: NonNullable<Overview['goals']>;
+    onChanged: () => void;
+}) {
+    const [pridava, setPridava] = useState(false);
+    const [form, setForm] = useState({ name: '', target_amount: '', saved_amount: '', target_on: '' });
+    const [pracuje, setPracuje] = useState(false);
+
+    const pridej = async () => {
+        if (! form.name.trim() || ! form.target_amount) return;
+
+        setPracuje(true);
+
+        try {
+            await axios.post(`/api/v1/rozpocty/${budget.uuid}/cile`, {
+                name: form.name.trim(),
+                target_amount: Number(form.target_amount),
+                saved_amount: form.saved_amount === '' ? 0 : Number(form.saved_amount),
+                target_on: form.target_on || null,
+            });
+
+            setForm({ name: '', target_amount: '', saved_amount: '', target_on: '' });
+            setPridava(false);
+            hlaska('Cíl je založený.', 'uspech');
+            onChanged();
+        } catch (problem: any) {
+            hlaska(problem?.response?.data?.message ?? 'Cíl se nepodařilo založit.', 'chyba');
+        } finally {
+            setPracuje(false);
+        }
+    };
+
+    const uprav = async (uuid: string, saved: number) => {
+        try {
+            await axios.patch(`/api/v1/rozpocty/${budget.uuid}/cile/${uuid}`, { saved_amount: saved });
+            onChanged();
+        } catch {
+            hlaska('Změnu se nepodařilo uložit.', 'chyba');
+        }
+    };
+
+    return (
+        <Panel icon={PiggyBank} title="Cíle spoření"
+            description="Kolik už je stranou se zadává ručně — ze zůstatku se to odvodit nedá, protože u dvou cílů by to o týchž penězích tvrdilo, že patří oběma."
+            actions={! pridava && (
+                <button type="button" onClick={() => setPridava(true)}
+                    className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-[var(--color-border)] px-3 text-xs text-[var(--color-text-secondary)] hover:border-[var(--color-accent)] hover:text-[var(--color-text-primary)]">
+                    <Plus size={13}/> Nový cíl
+                </button>
+            )}>
+
+            {goals.length === 0 && ! pridava && (
+                <p className="rounded-xl border border-dashed border-[var(--color-border)] px-3 py-5 text-center text-xs text-[var(--color-text-secondary)]">
+                    Zatím žádný cíl. Letenky domů, nový notebook, rezerva na nečekané — každý zvlášť, s vlastním termínem.
+                </p>
+            )}
+
+            <div className="space-y-3.5">
+                {goals.map(cil => {
+                    const hotovo = (cil.percent ?? 0) >= 100;
+
+                    return (
+                        <div key={cil.uuid}>
+                            <div className="flex items-baseline justify-between gap-2 text-sm">
+                                <span className="truncate text-[var(--color-text-primary)]">{cil.name}</span>
+                                <span className={`shrink-0 tabular-nums ${hotovo ? 'text-emerald-400' : 'text-[var(--color-text-primary)]'}`}>
+                                    {money(cil.saved_amount, cil.currency)} <span className="text-[var(--color-text-secondary)]">z {money(cil.target_amount, cil.currency)}</span>
+                                </span>
+                            </div>
+
+                            <div className="mt-1 flex items-center gap-2">
+                                <div className="h-2 flex-1 overflow-hidden rounded-full bg-[var(--color-bg-primary)]">
+                                    <div className={`h-full ${hotovo ? 'bg-emerald-400' : 'bg-[var(--color-accent)]'}`}
+                                        style={{ width: `${Math.min(100, cil.percent ?? 0)}%` }}/>
+                                </div>
+                                <span className="w-10 shrink-0 text-right text-[11px] tabular-nums text-[var(--color-text-secondary)]">
+                                    {cil.percent ?? 0} %
+                                </span>
+                                <input type="number" inputMode="decimal" defaultValue={cil.saved_amount}
+                                    onBlur={e => { const v = Number(e.target.value); if (v !== cil.saved_amount) void uprav(cil.uuid, v); }}
+                                    aria-label={`Uspořeno na cíl ${cil.name}`}
+                                    className="min-h-9 w-24 shrink-0 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-primary)] px-2 text-xs tabular-nums text-[var(--color-text-primary)]"/>
+                                <DeleteButton label={`Smazat cíl ${cil.name}`}
+                                    onDelete={async () => { await axios.delete(`/api/v1/rozpocty/${budget.uuid}/cile/${cil.uuid}`); hlaska(`Cíl „${cil.name}" je smazaný.`, 'uspech'); onChanged(); }}/>
+                            </div>
+
+                            <p className="mt-0.5 text-[11px] text-[var(--color-text-secondary)]">
+                                {hotovo
+                                    ? 'Cíl je splněný.'
+                                    : cil.monthly_needed !== null
+                                        ? <>do {datum(cil.target_on!)} zbývá odkládat {money(cil.monthly_needed, cil.currency)} měsíčně</>
+                                        : cil.target_on ? `termín ${datum(cil.target_on)}` : 'bez termínu'}
+                            </p>
+                        </div>
+                    );
+                })}
+            </div>
+
+            {pridava && (
+                <div className="mt-3 grid gap-2 border-t border-[var(--color-border)] pt-3 sm:grid-cols-2">
+                    <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                        placeholder="Letenky domů" aria-label="Název cíle" className={`${FIELD} sm:col-span-2`}/>
+                    <input type="number" inputMode="decimal" value={form.target_amount}
+                        onChange={e => setForm(f => ({ ...f, target_amount: e.target.value }))}
+                        placeholder={`Cílová částka (${budget.currency})`} aria-label="Cílová částka" className={FIELD}/>
+                    <input type="number" inputMode="decimal" value={form.saved_amount}
+                        onChange={e => setForm(f => ({ ...f, saved_amount: e.target.value }))}
+                        placeholder="Už mám stranou" aria-label="Už uspořeno" className={FIELD}/>
+                    <input type="date" value={form.target_on} onChange={e => setForm(f => ({ ...f, target_on: e.target.value }))}
+                        aria-label="Termín" className={FIELD}/>
+                    <div className="flex gap-2">
+                        <button type="button" onClick={() => void pridej()} disabled={pracuje || ! form.name.trim() || ! form.target_amount}
+                            className="inline-flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-lg bg-[var(--color-accent)] px-3 text-sm font-medium text-[var(--color-accent-contrast)] disabled:opacity-40">
+                            <Check size={14}/> Založit
+                        </button>
+                        <button type="button" onClick={() => setPridava(false)}
+                            className="min-h-10 rounded-lg border border-[var(--color-border)] px-3 text-sm text-[var(--color-text-secondary)]">Zrušit</button>
+                    </div>
+                </div>
+            )}
+        </Panel>
+    );
+}
+
+/**
+ * Platby, které vypadají jako pravidelné, ale nikdo je tak neoznačil.
+ *
+ * Rozpočet umí pravidelné položky sám dopisovat, hlásit dopředu a počítat do předpovědi —
+ * jenže jen u těch, u kterých někdo zaškrtl políčko. Kdo ho zapomene u telefonu, přijde
+ * o všechny tři výhody a nikdy se to nedozví, protože nic nechybí.
+ */
+function RecurringCandidates({ budget, rows, onChanged }: {
+    budget: Overview['budget'];
+    rows: NonNullable<Overview['recurring_candidates']>;
+    onChanged: () => void;
+}) {
+    const [pracuje, setPracuje] = useState('');
+
+    const oznac = async (radek: NonNullable<Overview['recurring_candidates']>[number]) => {
+        setPracuje(radek.uuid);
+
+        try {
+            // Označí se celá řada, ne jen poslední kus — opakování je vlastnost té
+            // platby, ne jednoho jejího výskytu.
+            for (const uuid of radek.entry_uuids) {
+                await axios.patch(`/api/v1/rozpocty/${budget.uuid}/polozky/${uuid}`, { is_recurring: true });
+            }
+
+            hlaska(`„${radek.note}" je teď pravidelná platba.`, 'uspech');
+            onChanged();
+        } catch (problem: any) {
+            hlaska(problem?.response?.data?.message ?? 'Nepodařilo se to označit.', 'chyba');
+        } finally {
+            setPracuje('');
+        }
+    };
+
+    return (
+        <Panel tone="accent" icon={Repeat} title="Vypadá to na pravidelnou platbu"
+            description="Tohle chodí každý měsíc, ale není to označené jako pravidelné — takže se to nedopisuje samo, nehlásí dopředu a nepočítá do předpovědi."
+            footnote="Hledá se stejný popis ve třech a víc měsících s kolísáním do čtvrtiny částky. Nájem bývá na korunu stejný, energie ne.">
+            <div className="space-y-2.5">
+                {rows.map(radek => (
+                    <div key={radek.uuid} className="flex flex-wrap items-center gap-2">
+                        <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm text-[var(--color-text-primary)]">{radek.note}</span>
+                            <span className="block text-[11px] text-[var(--color-text-secondary)]">
+                                {pocet(radek.occurrences, 'měsíc', 'měsíce', 'měsíců')} po sobě · průměrně {money(radek.average, radek.currency)} · kolem {radek.day_of_month}. dne
+                                {radek.category && ` · ${radek.category}`}
+                            </span>
+                        </span>
+                        <button type="button" onClick={() => void oznac(radek)} disabled={pracuje === radek.uuid}
+                            className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg bg-[var(--color-accent)] px-3 text-xs font-medium text-[var(--color-accent-contrast)] disabled:opacity-40">
+                            <Check size={13}/> {pracuje === radek.uuid ? 'Označuji…' : 'Označit'}
+                        </button>
+                    </div>
+                ))}
+            </div>
+        </Panel>
+    );
+}
+
 /**
  * Jak se saldo vyvíjí po měsících.
  *
