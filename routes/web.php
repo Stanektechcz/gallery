@@ -192,6 +192,8 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/hlasovky', fn() => Inertia::render('VoiceNotes/Index'))->name('voice-notes');
     Route::get('/zaroven', fn() => Inertia::render('TogetherNow/Index'))->name('together-now');
     Route::get('/rozpocty', fn() => Inertia::render('Budgets/Index'))->name('budgets');
+    // Účetní kniha pro víc subjektů a měn. Vedle rozpočtů, ne místo nich.
+    Route::get('/kniha', fn() => Inertia::render('Ledger/Index'))->name('ledger');
     Route::get('/duplicity', fn() => Inertia::render('Duplicates/Index'))->name('duplicates');
     Route::get('/cyklus', fn() => Inertia::render('Cycle/Index'))->name('cycle');
     Route::get('/krkance', fn() => Inertia::render('Burps/Index'))->name('burps');
