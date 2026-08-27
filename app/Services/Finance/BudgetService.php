@@ -85,6 +85,7 @@ class BudgetService
                 'starts_on' => $budget->starts_on->toDateString(),
                 'ends_on' => $budget->ends_on?->toDateString(),
                 'monthly_income' => $budget->monthly_income !== null ? (float) $budget->monthly_income : null,
+                'starting_funds' => $budget->starting_funds !== null ? (float) $budget->starting_funds : null,
                 'savings_target' => $budget->savings_target !== null ? (float) $budget->savings_target : null,
                 'savings_target_on' => $budget->savings_target_on?->toDateString(),
                 'period_unit' => $budget->period_unit ?? 'month',
@@ -119,6 +120,8 @@ class BudgetService
             'recurring' => $this->recurring($budget),
             // Co teprve přijde. Zbytek přehledu se dívá dozadu; tohle dopředu.
             'outlook' => $this->outlook($budget, $today),
+            // Fond: jedna suma na celý pobyt. Null u běžného měsíčního rozpočtu.
+            'fund' => $this->fund($budget, $today),
             // Průběh čerpání den po dni — jsem teď napřed, nebo pozadu.
             'burndown' => $this->burndown($budget, $today),
             // Kdo kolik zaplatil. Jiná otázka než „kdo komu dluží".
@@ -584,6 +587,208 @@ class BudgetService
             // Jestli to vydrží do konce období — jediná otázka, na které opravdu záleží.
             'covers_period' => $budget->ends_on === null || $dojde->greaterThanOrEqualTo($budget->ends_on),
         ];
+    }
+
+    /**
+     * Fond: jedna suma, se kterou se přijelo, a otázka, jestli vydrží do konce.
+     *
+     * Tohle je jiný druh rozpočtu než měsíční a plete se to snadno. Měsíční rozpočet se
+     * ptá „kolik smím tenhle měsíc" a jeho stropem je plán — překročit ho znamená mít
+     * mínus na papíře. Fond se ptá „vyjdeme s tím, co máme" a jeho stropem je hotovost —
+     * překročit ji znamená nemít v pátém měsíci na nájem.
+     *
+     * Zbývající peníze se proto dělí na dvě části, protože každá znamená něco jiného:
+     *
+     *  - **závazky** jsou pravidelné platby, které do konce ještě přijdou. Nájem 280 na
+     *    čtyři zbývající měsíce je 1120, které nejsou k dispozici — jsou to peníze, které
+     *    už mají majitele, i když ještě leží na účtu.
+     *  - **volné** je zbytek. Teprve z něj se dá počítat, kolik smí padnout na jídlo,
+     *    dopravu a všechno ostatní.
+     *
+     * Tenhle rozdíl je celý smysl téhle metody. „Zbývá 3000 a do konce je 100 dní, takže
+     * 30 na den" je věta, která zní rozumně a je nebezpečně špatně — dvě třetiny té sumy
+     * jsou nájem, na který ještě nedošlo. Skutečná denní částka je pod deseti.
+     *
+     * Počítá i před prvním výdajem. To je záměr: nejvíc na tom záleží den před odjezdem,
+     * kdy se rozhoduje, jestli je ta suma vůbec dost. `runway()` v ten okamžik mlčí,
+     * protože nemá z čeho odvodit tempo — tady tempo být nemusí, závazky se znají dopředu.
+     *
+     * Jen v měně rozpočtu. Fond je hotovost v jedné měně a přepočítávat do něj výdaje
+     * v jiné by znamenalo hádat kurz — položky v cizí měně se hlásí zvlášť.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function fund(Budget $budget, ?Carbon $today = null): ?array
+    {
+        if (! $budget->isFund()) {
+            return null;
+        }
+
+        $today ??= Carbon::today();
+        $budget->loadMissing(['entries', 'categories']);
+
+        $vlastniMena = fn (BudgetEntry $e) => $e->currency === $budget->currency;
+
+        $zaklad = (float) $budget->starting_funds;
+        // Příjem se do fondu přičítá — na rozdíl od měsíčního rozpočtu, kde `left` je
+        // zbytek plánu a výplata ho nezvětší. Tady je to zůstatek skutečných peněz a
+        // poslané euro navíc je euro, se kterým se dá počítat.
+        $prislo = (float) $budget->entries->where('kind', 'income')->filter($vlastniMena)->sum('amount');
+        $utraceno = (float) $budget->entries->where('kind', 'expense')->filter($vlastniMena)->sum('amount');
+        $zbyva = $zaklad + $prislo - $utraceno;
+
+        $konec = $budget->ends_on?->copy();
+        $dniDoKonce = $konec ? max(0, (int) $today->diffInDays($konec, false)) : null;
+        $dniCelkem = $konec ? max(1, (int) $budget->starts_on->diffInDays($konec)) : null;
+        $dniUteklo = max(0, (int) $budget->starts_on->diffInDays($today, false));
+
+        // Závazky: pravidelné výdaje, které do konce ještě přijdou.
+        $zavazky = 0.0;
+        $rozpis = [];
+
+        if ($konec) {
+            foreach ($this->recurring($budget) as $polozka) {
+                if ($polozka['kind'] !== 'expense' || $polozka['currency'] !== $budget->currency) {
+                    continue;
+                }
+
+                $terminy = $this->dalsiTerminy($polozka['day_of_month'], $today, $konec);
+
+                if ($terminy === []) {
+                    continue;
+                }
+
+                $celkem = $polozka['amount'] * count($terminy);
+                $zavazky += $celkem;
+
+                $rozpis[] = [
+                    'note' => $polozka['note'],
+                    'category' => $polozka['category'],
+                    'amount' => $polozka['amount'],
+                    'times' => count($terminy),
+                    'total' => round($celkem, 2),
+                    'next_on' => $terminy[0]->toDateString(),
+                ];
+            }
+        }
+
+        usort($rozpis, fn (array $a, array $b) => $b['total'] <=> $a['total']);
+
+        $volne = $zbyva - $zavazky;
+
+        // Plán do konce — druhá odpověď, a den před odjezdem ta jediná, která existuje.
+        //
+        // Závazky se počítají ze zapsaných pravidelných plateb, takže dokud se poprvé
+        // nezaplatí nájem, vyjdou nula. To by znamenalo, že se den před odjezdem ukáže
+        // celý fond dělený počtem dní jako kapesné — a nájem, o kterém se ví od začátku,
+        // by v té částce byl schovaný.
+        //
+        // Plán ho zná: kategorie „Nájem" s 280 měsíčně je zadaná dřív, než se poprvé
+        // zaplatí. Proto se vedle skutečnosti počítá i to, co plán říká o zbytku období,
+        // a hlavní otázka „vyjdeme s tím" má odpověď od prvního dne.
+        $mesicuDoKonce = $dniDoKonce !== null ? $dniDoKonce / 30.44 : null;
+        $planMesicne = (float) $budget->categories->sum('planned_monthly');
+        $planZbytek = $mesicuDoKonce !== null ? $planMesicne * $mesicuDoKonce : null;
+        $planRezerva = $planZbytek !== null ? round($zbyva - $planZbytek, 2) : null;
+
+        // Denní částka se počítá z volných peněz, ne ze zbývajících. Viz komentář výše —
+        // je to celý rozdíl mezi „vyjde to" a „v pátém měsíci nemáme na nájem".
+        //
+        // Když volné peníze klesnou pod nulu, žádná denní částka neexistuje — „můžete
+        // utrácet −26 na den" je věta bez významu a v přehledu vypadá jako číslo, podle
+        // kterého se dá řídit. Místo ní se ukáže, kolik chybí; to je ta skutečná zpráva.
+        $naDen = $dniDoKonce > 0 && $volne > 0 ? $volne / $dniDoKonce : null;
+
+        $tempo = $this->tempoNepravidelnych($budget, $today);
+        $odhad = $dniDoKonce !== null ? $tempo * $dniDoKonce : null;
+        $zbudeNaKonci = $odhad !== null ? round($volne - $odhad, 2) : null;
+
+        // Kdy peníze dojdou při současném tempu, i se závazky. Závazky se rozpouštějí
+        // rovnoměrně — přesný den, kdy zůstatek klesne pod nulu, by chtěl simulovat
+        // kalendář plateb, a takhle přesná ta odpověď stejně není: tempo je odhad.
+        $denniZatez = $tempo + ($dniDoKonce > 0 ? $zavazky / $dniDoKonce : 0);
+        $dojdouZa = $denniZatez > 0 ? (int) floor(max(0, $zbyva) / $denniZatez) : null;
+
+        return [
+            'currency' => $budget->currency,
+            'starting' => round($zaklad, 2),
+            'added' => round($prislo, 2),
+            'spent' => round($utraceno, 2),
+            'left' => round($zbyva, 2),
+            'committed' => round($zavazky, 2),
+            'commitments' => $rozpis,
+            'free' => round($volne, 2),
+            'plan_monthly' => round($planMesicne, 2),
+            'plan_rest' => $planZbytek !== null ? round($planZbytek, 2) : null,
+            'plan_spare' => $planRezerva,
+            // Kolik měsíčně fond unese, když se má rozdělit rovnoměrně do konce. Proti
+            // `plan_monthly` je vidět, jestli je plán pod tím, co si můžeme dovolit.
+            'affordable_monthly' => $mesicuDoKonce !== null && $mesicuDoKonce > 0 && $zbyva > 0
+                ? round($zbyva / $mesicuDoKonce, 2)
+                : null,
+            'per_day' => $naDen !== null ? round($naDen, 2) : null,
+            // Měsíc jako 30,44 dne, ne jako kalendářní: „kolik měsíčně" je tu odvozená
+            // veličina z denní částky, ne samostatné období.
+            'per_month' => $naDen !== null ? round($naDen * 30.44, 2) : null,
+            'pace_per_day' => round($tempo, 2),
+            'variable_estimate' => $odhad !== null ? round($odhad, 2) : null,
+            'projected_left' => $zbudeNaKonci,
+            'starts_on' => $budget->starts_on->toDateString(),
+            'ends_on' => $konec?->toDateString(),
+            'days_total' => $dniCelkem,
+            'days_gone' => $dniUteklo,
+            'days_left' => $dniDoKonce,
+            'runs_out_in_days' => $dojdouZa,
+            'runs_out_on' => $dojdouZa !== null && $dniDoKonce !== null && $dojdouZa < $dniDoKonce
+                ? $today->copy()->addDays($dojdouZa)->toDateString()
+                : null,
+            // Bez konce období se nedá říct „vydrží to" — chybí do kdy.
+            'verdict' => $this->fundVerdict($zbyva, $volne, $zbudeNaKonci, $dniDoKonce, $tempo, $planRezerva),
+            // Co se do fondu nepočítá, protože je to v jiné měně. Radši ať to je vidět,
+            // než aby to tiše chybělo a součet nesouhlasil s tím, co lidé utratili.
+            'other_currencies' => $budget->entries
+                ->where('kind', 'expense')
+                ->reject($vlastniMena)
+                ->groupBy('currency')
+                ->map(fn (Collection $s) => round((float) $s->sum('amount'), 2))
+                ->all(),
+        ];
+    }
+
+    /**
+     * Čtyři stavy, ne dva.
+     *
+     * „Nevyjde to" se dělí na dvě různě naléhavé věci: `committed_short` znamená, že
+     * nezbývá ani na pravidelné platby — to není o utrácení, to je o tom, že chybí na
+     * nájem a je potřeba shánět peníze. `short` znamená, že při současném tempu se
+     * nedojede, ale zpomalit ještě jde. To jsou dvě různé rady a jedno slovo by je
+     * slilo dohromady.
+     *
+     * Dokud se nezačalo utrácet, soudí se podle plánu. Tempo je tehdy nula a soudit
+     * podle něj by znamenalo, že každý fond na světě vydrží — nula za den vydrží věčně.
+     * To je zrovna okamžik, kdy se rozhoduje, jestli je ta suma dost, a odpověď „vyjde
+     * to" bez ohledu na plán by byla horší než žádná.
+     */
+    private function fundVerdict(
+        float $zbyva, float $volne, ?float $zbudeNaKonci, ?int $dniDoKonce,
+        float $tempo, ?float $planRezerva,
+    ): string {
+        if ($dniDoKonce === null) return 'unknown';
+        if ($volne < 0) return 'committed_short';
+
+        if ($tempo <= 0) {
+            if ($planRezerva === null) return 'unknown';
+            if ($planRezerva < 0) return 'short';
+
+            return $planRezerva < max($zbyva, 1) * 0.1 ? 'tight' : 'ok';
+        }
+
+        if ($zbudeNaKonci === null) return 'unknown';
+        if ($zbudeNaKonci < 0) return 'short';
+
+        // Těsně = rezerva pod desetinou toho, co ještě zbývá. Poměr, ne pevná částka:
+        // sto eur je rezerva u měsíčního výletu a nic u půlročního pobytu.
+        return $zbudeNaKonci < max($zbyva, 1) * 0.1 ? 'tight' : 'ok';
     }
 
     /**

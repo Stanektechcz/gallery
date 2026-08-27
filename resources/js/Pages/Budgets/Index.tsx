@@ -45,7 +45,7 @@ interface MoneyRow {
 }
 
 interface Overview {
-    budget: { uuid: string; name: string; currency: string; starts_on: string; ends_on: string | null; monthly_income: number | null; note: string | null; is_shared: boolean; owner: { id: number; name: string } | null;
+    budget: { uuid: string; name: string; currency: string; starts_on: string; ends_on: string | null; monthly_income: number | null; starting_funds: number | null; note: string | null; is_shared: boolean; owner: { id: number; name: string } | null;
         savings_target: number | null; savings_target_on: string | null; period_unit: 'month' | 'week'; period_mode: 'fixed' | 'rolling'; period_label: string };
     period: { days_elapsed: number; days_left: number | null; days_total: number | null; has_started: boolean; has_ended: boolean };
     totals: {
@@ -94,6 +94,29 @@ interface Overview {
         }>;
         recurring_expense: number; recurring_income: number; variable_estimate: number;
         projected_left: number; verdict: 'ok' | 'tight' | 'short';
+    } | null;
+    /**
+     * Fond — jedna suma na celý pobyt. Null u rozpočtu, který stojí na měsíčním příjmu.
+     *
+     * `free` je zbytek po odečtení pravidelných plateb, které do konce ještě přijdou;
+     * `per_day` se počítá z něj, ne ze zůstatku. Null znamená, že žádná denní částka
+     * neexistuje, protože už teď chybí na závazky.
+     */
+    fund?: {
+        currency: string;
+        starting: number; added: number; spent: number; left: number;
+        committed: number;
+        commitments: Array<{ note: string | null; category: string | null; amount: number; times: number; total: number; next_on: string }>;
+        free: number;
+        plan_monthly: number; plan_rest: number | null; plan_spare: number | null;
+        affordable_monthly: number | null;
+        per_day: number | null; per_month: number | null;
+        pace_per_day: number; variable_estimate: number | null; projected_left: number | null;
+        starts_on: string; ends_on: string | null;
+        days_total: number | null; days_gone: number; days_left: number | null;
+        runs_out_in_days: number | null; runs_out_on: string | null;
+        verdict: 'ok' | 'tight' | 'short' | 'committed_short' | 'unknown';
+        other_currencies: Record<string, number>;
     } | null;
     /** Průběh čerpání den po dni. Null bez konce období nebo bez plánu. */
     burndown?: Cerpani | null;
@@ -255,7 +278,7 @@ function BudgetPicker({ budgets, active, onPick, onCreated }: {
     budgets: BudgetRow[]; active?: string; onPick: (uuid: string) => void; onCreated: (uuid: string) => void;
 }) {
     const [adding, setAdding] = useState(false);
-    const [form, setForm] = useState({ name: '', currency: 'EUR', starts_on: '', ends_on: '', monthly_income: '', is_shared: true, period_unit: 'month', savings_target: '', savings_target_on: '' });
+    const [form, setForm] = useState({ name: '', currency: 'EUR', starts_on: '', ends_on: '', monthly_income: '', starting_funds: '', is_shared: true, period_unit: 'month', savings_target: '', savings_target_on: '' });
     const [busy, setBusy] = useState(false);
 
     const create = async () => {
@@ -266,12 +289,13 @@ function BudgetPicker({ budgets, active, onPick, onCreated }: {
             const created = await axios.post('/api/v1/rozpocty', {
                 ...form,
                 monthly_income: form.monthly_income === '' ? null : Number(form.monthly_income),
+                starting_funds: form.starting_funds === '' ? null : Number(form.starting_funds),
                 savings_target: form.savings_target === '' ? null : Number(form.savings_target),
                 savings_target_on: form.savings_target_on || null,
                 ends_on: form.ends_on || null,
             });
             setAdding(false);
-            setForm({ name: '', currency: 'EUR', starts_on: '', ends_on: '', monthly_income: '', is_shared: true, period_unit: 'month', savings_target: '', savings_target_on: '' });
+            setForm({ name: '', currency: 'EUR', starts_on: '', ends_on: '', monthly_income: '', starting_funds: '', is_shared: true, period_unit: 'month', savings_target: '', savings_target_on: '' });
             onCreated(created.data.budget.uuid);
         } finally { setBusy(false); }
     };
@@ -325,6 +349,19 @@ function BudgetPicker({ budgets, active, onPick, onCreated }: {
                             <label className={LABEL}>Měsíční příjem</label>
                             <input type="number" inputMode="decimal" value={form.monthly_income}
                                 onChange={e => setForm(f => ({ ...f, monthly_income: e.target.value }))} className={FIELD}/>
+                        </div>
+
+                        {/* Fond je alternativa k měsíčnímu příjmu, ne doplněk: buď každý
+                            měsíc něco přijde, nebo se přijelo s jednou sumou. */}
+                        <div>
+                            <label className={LABEL}>Suma na celé období</label>
+                            <input type="number" inputMode="decimal" value={form.starting_funds}
+                                onChange={e => setForm(f => ({ ...f, starting_funds: e.target.value }))}
+                                placeholder="např. 8000" className={FIELD}/>
+                            <p className="mt-1 text-[11px] text-[var(--color-text-secondary)]">
+                                Když jedete s pevnou částkou a další příjem nečekáte. Rozpočet pak počítá,
+                                jestli vydrží do konce, a kolik z ní zbývá na den.
+                            </p>
                         </div>
 
                         {/* Jednotka plánu. Na čtyřdenní výlet je měsíc špatná míra — plán
@@ -483,6 +520,7 @@ function Settings({ budget, members, onChanged, onDeleted }: {
         starts_on: budget.starts_on,
         ends_on: budget.ends_on ?? '',
         monthly_income: budget.monthly_income !== null ? String(budget.monthly_income) : '',
+        starting_funds: budget.starting_funds !== null ? String(budget.starting_funds) : '',
         savings_target: budget.savings_target !== null ? String(budget.savings_target) : '',
         savings_target_on: budget.savings_target_on ?? '',
         period_unit: budget.period_unit,
@@ -512,6 +550,7 @@ function Settings({ budget, members, onChanged, onDeleted }: {
                 starts_on: form.starts_on,
                 ends_on: form.ends_on || null,
                 monthly_income: form.monthly_income === '' ? null : Number(form.monthly_income),
+                starting_funds: form.starting_funds === '' ? null : Number(form.starting_funds),
                 savings_target: form.savings_target === '' ? null : Number(form.savings_target),
                 savings_target_on: form.savings_target_on || null,
                 period_unit: form.period_unit,
@@ -586,6 +625,18 @@ function Settings({ budget, members, onChanged, onDeleted }: {
                         <label className={LABEL} htmlFor="rozpocet-prijem">Příjem {form.period_unit === 'week' ? 'týdně' : 'měsíčně'}</label>
                         <input id="rozpocet-prijem" type="number" inputMode="decimal" value={form.monthly_income}
                             onChange={e => setForm(f => ({ ...f, monthly_income: e.target.value }))} className={FIELD}/>
+                    </div>
+                    {/* Fond místo příjmu: přijelo se s jednou sumou a další nepřijde. */}
+                    <div>
+                        <label className={LABEL} htmlFor="rozpocet-fond">Suma na celé období</label>
+                        <input id="rozpocet-fond" type="number" inputMode="decimal" value={form.starting_funds}
+                            onChange={e => setForm(f => ({ ...f, starting_funds: e.target.value }))}
+                            placeholder="např. 8000" className={FIELD}/>
+                        <p className="mt-1 text-[11px] leading-relaxed text-[var(--color-text-secondary)]">
+                            {form.starting_funds === ''
+                                ? 'Vyplňte, když jedete s pevnou částkou a další příjem nečekáte.'
+                                : 'Přehled počítá, jestli suma vydrží do konce, a kolik z ní zbývá na den po odečtení pravidelných plateb.'}
+                        </p>
                     </div>
                     <div>
                         <label className={LABEL} htmlFor="rozpocet-cil">Cíl spoření</label>
@@ -697,6 +748,9 @@ function Overview({ data, members, requests, onChanged, onDeleted }: {
     // o dvou sloupcích s jedním potomkem nechá půlku řádku prázdnou a vypadá jako
     // nedokreslená — tohle podle počtu přepne na jeden sloupec.
     const stav = [
+        // Fond úplně první. U rozpočtu z jedné sumy je „vydrží to" hlavní otázka a
+        // výhled proti plánu je vedle ní podružný — plán se dá přepsat, hotovost ne.
+        data.fund && <FundPanel key="fund" fund={data.fund}/>,
         // Výhled první: „vyjde mi to do konce" je otázka, kvůli které se sem člověk dívá.
         data.outlook && <OutlookPanel key="outlook" outlook={data.outlook}/>,
         data.runway && ! data.runway.covers_period && <RunwayPanel key="runway" runway={data.runway} budget={budget}/>,
@@ -709,7 +763,11 @@ function Overview({ data, members, requests, onChanged, onDeleted }: {
     ].filter(Boolean);
 
     const sekce_seznam: SekceTyp[] = [
-        { id: 'prehled', label: 'Přehled', icon: LayoutDashboard, upozorneni: (data.warnings?.length ?? 0) > 0 || data.outlook?.verdict === 'short' },
+        { id: 'prehled', label: 'Přehled', icon: LayoutDashboard,
+            upozorneni: (data.warnings?.length ?? 0) > 0
+                || data.outlook?.verdict === 'short'
+                || data.fund?.verdict === 'short'
+                || data.fund?.verdict === 'committed_short' },
         { id: 'polozky', label: 'Položky', icon: Receipt, pocet: data.entries_total },
         { id: 'plan', label: 'Plán', icon: Target, pocet: categories.length },
         { id: 'vyvoj', label: 'Vývoj', icon: TrendingUp },
@@ -831,6 +889,176 @@ function Overview({ data, members, requests, onChanged, onDeleted }: {
  * i datem, tempo nepravidelných výdajů je odhad z dosavadního průběhu. Slepit obojí do
  * jednoho čísla by vypadalo přesněji, než to je.
  */
+/**
+ * Fond — jedna suma na celý pobyt.
+ *
+ * Nejdřív dvojice pruhů: kolik peněz je pryč proti tomu, kolik času uplynulo. Když
+ * peníze utíkají rychleji než dny, je to vidět dřív, než to spočítá jakákoli
+ * předpověď — a je to jediné srovnání, které dává smysl i bez znalosti plánu.
+ *
+ * Denní částka se ukazuje až pod závazky, ne nad nimi. Pořadí je tu obsah: „zbývá
+ * 3000" a „na den 30" vedle sebe svádí k tomu spočítat si to zpaměti a nezahrnout
+ * nájem. Závazky mezi tím říkají, proč to číslo vyšlo jinak.
+ */
+function FundPanel({ fund }: { fund: NonNullable<Overview['fund']> }) {
+    const f = fund;
+    const spatne = f.verdict === 'short' || f.verdict === 'committed_short';
+    const ton = spatne ? 'danger' : f.verdict === 'tight' ? 'warn' : 'accent';
+
+    const nadpis = f.verdict === 'committed_short'
+        ? 'Nezbývá ani na pravidelné platby'
+        : f.verdict === 'short'
+            ? 'S touhle sumou to do konce nevyjde'
+            : f.verdict === 'tight'
+                ? 'Vyjde to těsně'
+                : 'Suma na celé období vychází';
+
+    // Podíly pro pruhy. Utracené se poměřuje s tím, co bylo k dispozici celkem —
+    // tedy včetně toho, co během pobytu přišlo, jinak by připoslané peníze vypadaly
+    // jako utrácení navíc.
+    const kDispozici = f.starting + f.added;
+    const utracenoPct = kDispozici > 0 ? Math.min(100, Math.round(f.spent / kDispozici * 100)) : 0;
+    const casPct = f.days_total && f.days_total > 0
+        ? Math.min(100, Math.round(f.days_gone / f.days_total * 100))
+        : null;
+
+    // Napřed = utrácí se rychleji, než ubývá čas. O pár procent to kolísá vždycky,
+    // takže se hlásí až rozdíl, který znamená něco jiného než zaokrouhlení.
+    const napred = casPct !== null && utracenoPct - casPct >= 5;
+
+    return (
+        <Panel tone={ton} icon={spatne ? AlertTriangle : PiggyBank} title={nadpis}
+            footnote="Pravidelné platby se odečítají dopředu v plné výši — nájem, na který ještě nedošlo, nejsou volné peníze. Tempo nepravidelných výdajů je odhad z dosavadního průběhu.">
+
+            <p className="text-2xl font-semibold tabular-nums text-[var(--color-text-primary)]">
+                {money(f.left, f.currency)}
+            </p>
+            <p className="mt-0.5 text-xs text-[var(--color-text-secondary)]">
+                zbývá z {money(f.starting, f.currency)}
+                {f.added > 0 && <> a {money(f.added, f.currency)} připoslaných</>}
+                {f.days_left !== null && <> · do konce {dny(f.days_left)}</>}
+            </p>
+
+            {casPct !== null && (
+                <div className="mt-3 space-y-1.5">
+                    <Pruh label="utraceno" procenta={utracenoPct}
+                        barva={napred ? 'var(--graf-2)' : 'var(--graf-1)'}/>
+                    <Pruh label="uplynulo" procenta={casPct} barva="var(--color-text-secondary)"/>
+                    {napred && (
+                        <p className="pt-0.5 text-[11px] text-[var(--color-text-secondary)]">
+                            Peníze ubývají rychleji než dny — utraceno {utracenoPct} % při {casPct} % pobytu.
+                        </p>
+                    )}
+                </div>
+            )}
+
+            {f.committed > 0 && (
+                <div className="mt-3 border-t border-[var(--color-border)] pt-3">
+                    <div className="flex items-baseline justify-between gap-2 text-sm">
+                        <span className="text-[var(--color-text-secondary)]">Pravidelné platby do konce</span>
+                        <span className="shrink-0 tabular-nums text-[var(--color-text-primary)]">
+                            − {money(f.committed, f.currency)}
+                        </span>
+                    </div>
+                    <ul className="mt-1.5 space-y-1">
+                        {f.commitments.map((z, i) => (
+                            <li key={`${z.note}-${i}`} className="flex items-baseline justify-between gap-2 text-[11px] text-[var(--color-text-secondary)]">
+                                <span className="truncate">
+                                    {z.note ?? z.category ?? 'Pravidelná platba'} · {z.times}× {money(z.amount, f.currency)}
+                                </span>
+                                <span className="shrink-0 tabular-nums">{money(z.total, f.currency)}</span>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            )}
+
+            <div className="mt-3 border-t border-[var(--color-border)] pt-3">
+                {f.per_day !== null && f.per_month !== null ? (
+                    <>
+                        <div className="flex items-baseline justify-between gap-2">
+                            <span className="text-sm text-[var(--color-text-secondary)]">
+                                {f.committed > 0 ? 'Zbývá volných' : 'K dispozici'}
+                            </span>
+                            <span className="shrink-0 tabular-nums font-medium text-[var(--color-text-primary)]">
+                                {money(f.free, f.currency)}
+                            </span>
+                        </div>
+                        <p className="mt-1.5 text-sm text-[var(--color-text-primary)]">
+                            <strong className="tabular-nums">{money(f.per_day, f.currency)}</strong>
+                            <span className="text-[var(--color-text-secondary)]"> na den</span>
+                            <span className="text-[var(--color-text-secondary)]">, tedy </span>
+                            <strong className="tabular-nums">{money(f.per_month, f.currency)}</strong>
+                            <span className="text-[var(--color-text-secondary)]"> měsíčně</span>
+                        </p>
+                        <p className="mt-0.5 text-[11px] text-[var(--color-text-secondary)]">
+                            {f.committed > 0
+                                ? 'Na všechno kromě pravidelných plateb — ty jsou už odečtené.'
+                                : 'Na všechno včetně nájmu — žádná pravidelná platba zatím není zapsaná.'}
+                        </p>
+                    </>
+                ) : (
+                    <p className="text-sm text-[var(--color-text-primary)]">
+                        {f.free < 0
+                            ? <>Na pravidelné platby do konce chybí <strong className="tabular-nums">{money(Math.abs(f.free), f.currency)}</strong>.</>
+                            : 'Období skončilo, denní částka se už nepočítá.'}
+                    </p>
+                )}
+            </div>
+
+            {/* Plán proti tomu, co si fond může dovolit. Tohle je jediná část, která
+                funguje i den před odjezdem, kdy se ještě nic neutratilo. */}
+            {f.plan_monthly > 0 && f.plan_spare !== null && f.affordable_monthly !== null && (
+                <div className="mt-3 border-t border-[var(--color-border)] pt-3">
+                    <div className="flex items-baseline justify-between gap-2 text-sm">
+                        <span className="text-[var(--color-text-secondary)]">Plán počítá měsíčně</span>
+                        <span className="shrink-0 tabular-nums text-[var(--color-text-primary)]">{money(f.plan_monthly, f.currency)}</span>
+                    </div>
+                    <div className="mt-1 flex items-baseline justify-between gap-2 text-sm">
+                        <span className="text-[var(--color-text-secondary)]">Fond unese měsíčně</span>
+                        <span className={`shrink-0 tabular-nums ${f.affordable_monthly >= f.plan_monthly ? 'text-emerald-400' : 'text-red-400'}`}>
+                            {money(f.affordable_monthly, f.currency)}
+                        </span>
+                    </div>
+                    <p className="mt-1.5 text-[11px] text-[var(--color-text-secondary)]">
+                        {f.plan_spare >= 0
+                            ? <>Podle plánu zbude do konce {money(f.plan_spare, f.currency)}.</>
+                            : <>Podle plánu bude do konce chybět {money(Math.abs(f.plan_spare), f.currency)}.</>}
+                    </p>
+                </div>
+            )}
+
+            {f.runs_out_on && (
+                <p className="mt-3 rounded-xl border border-red-500/30 bg-[var(--color-surface-muted)] px-3 py-2 text-xs leading-relaxed text-[var(--color-text-secondary)]">
+                    Při současném tempu peníze dojdou <strong className="text-[var(--color-text-primary)]">{datum(f.runs_out_on)}</strong>
+                    {f.ends_on && <>, tedy {dny(Math.max(0, (f.days_left ?? 0) - (f.runs_out_in_days ?? 0)))} před koncem</>}.
+                </p>
+            )}
+
+            {Object.keys(f.other_currencies).length > 0 && (
+                <p className="mt-3 text-[11px] text-[var(--color-text-secondary)]">
+                    Mimo fond ještě{' '}
+                    {Object.entries(f.other_currencies).map(([m, c]) => money(c, m)).join(', ')}
+                    {' '}v jiné měně — do součtu se nepočítá, aby se nemusel hádat kurz.
+                </p>
+            )}
+        </Panel>
+    );
+}
+
+/** Vodorovný pruh s popiskem. Dvě čísla pod sebou se porovnávají líp než dvě procenta v textu. */
+function Pruh({ label, procenta, barva }: { label: string; procenta: number; barva: string }) {
+    return (
+        <div className="flex items-center gap-2">
+            <span className="w-16 shrink-0 text-[11px] text-[var(--color-text-secondary)]">{label}</span>
+            <div className="h-2 flex-1 overflow-hidden rounded-full bg-[var(--color-surface-muted)]">
+                <div className="h-full rounded-full" style={{ width: `${procenta}%`, background: barva }}/>
+            </div>
+            <span className="w-9 shrink-0 text-right text-[11px] tabular-nums text-[var(--color-text-secondary)]">{procenta} %</span>
+        </div>
+    );
+}
+
 function OutlookPanel({ outlook }: { outlook: NonNullable<Overview['outlook']> }) {
     const ton = outlook.verdict === 'short' ? 'danger' : outlook.verdict === 'tight' ? 'warn' : 'accent';
 

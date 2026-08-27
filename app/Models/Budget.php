@@ -18,7 +18,19 @@ class Budget extends Model
         'uuid', 'gallery_space_id', 'owner_user_id', 'name', 'currency',
         'starts_on', 'ends_on', 'monthly_income', 'note', 'is_shared', 'created_by',
         'savings_target', 'savings_target_on', 'period_unit', 'period_mode',
+        'starting_funds',
     ];
+
+    /**
+     * Rozpočet z jedné sumy, ne z měsíčního příjmu.
+     *
+     * Poznává se podle fondu, ne podle `period_mode` — kdo vyplní částku, se kterou
+     * přijel, tím řekl všechno potřebné a nemusí ještě někde přepínat režim.
+     */
+    public function isFund(): bool
+    {
+        return $this->starting_funds !== null;
+    }
 
     /**
      * Hranice období, ve kterém se právě počítá.
@@ -59,6 +71,7 @@ class Budget extends Model
             'starts_on' => 'date',
             'ends_on' => 'date',
             'monthly_income' => 'decimal:2',
+            'starting_funds' => 'decimal:2',
             'savings_target' => 'decimal:2',
             'savings_target_on' => 'date',
             'is_shared' => 'boolean',
