@@ -42,6 +42,44 @@ class Budget extends Model
         return $this->hasMany(BudgetCategory::class)->orderBy('sort_order');
     }
 
+    /** Účastníci i s příjmem. Prázdné je běžný stav — pak se dělí napůl. */
+    public function members()
+    {
+        return $this->hasMany(BudgetMember::class);
+    }
+
+    /**
+     * Podíl každého člověka na společných výdajích podle příjmu.
+     *
+     * Vrací null, když se poměr nedá spočítat — chybí příjmy, je vyplněný jen jeden,
+     * nebo jsou v různých měnách a přepočítat je nemáme čím. Volající pak dělí napůl,
+     * protože odhadovaný poměr je horší než přiznaná polovina.
+     *
+     * @return array<int, float>|null  id uživatele → podíl 0–1
+     */
+    public function incomeShares(): ?array
+    {
+        $this->loadMissing('members');
+
+        $sPrijmem = $this->members->filter(fn (BudgetMember $c) => $c->monthly_income !== null && (float) $c->monthly_income > 0);
+
+        if ($sPrijmem->count() < 2) {
+            return null;
+        }
+
+        // Různé měny by se musely přepočítat kurzem, který si tenhle systém zásadně
+        // nevymýšlí. Raději žádný poměr než poměr postavený na hádaném kurzu.
+        if ($sPrijmem->pluck('currency')->map(fn (?string $m) => $m ?? $this->currency)->unique()->count() > 1) {
+            return null;
+        }
+
+        $soucet = (float) $sPrijmem->sum('monthly_income');
+
+        return $sPrijmem->mapWithKeys(fn (BudgetMember $c) => [
+            (int) $c->user_id => round((float) $c->monthly_income / $soucet, 4),
+        ])->all();
+    }
+
     public function entries()
     {
         return $this->hasMany(BudgetEntry::class);

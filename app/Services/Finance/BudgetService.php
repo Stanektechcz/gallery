@@ -3,6 +3,7 @@
 namespace App\Services\Finance;
 
 use App\Models\Budget;
+use App\Models\BudgetCategory;
 use App\Models\BudgetEntry;
 use App\Models\GallerySpace;
 use App\Models\MoneyRequest;
@@ -105,6 +106,15 @@ class BudgetService
             'burndown' => $this->burndown($budget, $today),
             // Kdo kolik zaplatil. Jiná otázka než „kdo komu dluží".
             'by_payer' => $this->byPayer($budget),
+            // Účastníci i s příjmem a podílem. Podíl je null, dokud nejsou vyplněné
+            // aspoň dva příjmy ve stejné měně — pak se dělí napůl.
+            'members' => $this->members($budget),
+            // Kdo utrácí za co. Null u jednoho člověka, kde by to byl opsaný rozpad.
+            'category_by_payer' => $this->categoryByPayer($budget),
+            // Vývoj salda po měsících — jestli se rozdíl zvětšuje, nebo srovnává.
+            'balance_trend' => $this->balanceTrend($budget),
+            // Předpověď po kategoriích na příští měsíc, včetně toho, jak je spolehlivá.
+            'prediction' => $this->prediction($budget, $today),
             // Historie uzávěrek. Bez ní by po vyrovnání zmizel dluh i důkaz, že se platil.
             'settlements' => $budget->settlements->take(6)->map(fn (\App\Models\BudgetSettlement $s) => [
                 'uuid' => $s->uuid,
@@ -316,6 +326,9 @@ class BudgetService
             ->groupBy('currency')
             ->map(fn (Collection $skupina) => $skupina->max('settled_through'));
 
+        // Podíly podle příjmu, když jsou vyplněné. Null znamená „dělí se napůl".
+        $podily = $budget->incomeShares();
+
         // Kdo za koho utratil. Klíč je měna, pak plátce.
         $saldo = [];
 
@@ -328,10 +341,21 @@ class BudgetService
             $platce = $entry->paid_by ?? $entry->user_id;
             if (! $platce) continue;
 
-            // Napůl znamená, že druhý dluží polovinu; „za druhého" celou částku.
-            $dluh = $entry->split === 'equal'
-                ? (float) $entry->amount / 2
-                : (float) $entry->amount;
+            $dluh = match ($entry->split) {
+                // Za druhého: dluží celou částku.
+                'other' => (float) $entry->amount,
+                /*
+                 * Podle poměru příjmů. Druhý dluží svůj podíl — kdo vydělává dvakrát
+                 * tolik, nese dvě třetiny. Když poměr neznáme (chybí příjem, je vyplněný
+                 * jen u jednoho, nebo jsou v různých měnách), spadne to na půlku:
+                 * odhadovaný poměr by u peněz byl horší než přiznaná polovina.
+                 */
+                'ratio' => $podily !== null && isset($podily[$platce])
+                    ? (float) $entry->amount * (1 - $podily[$platce])
+                    : (float) $entry->amount / 2,
+                // Napůl.
+                default => (float) $entry->amount / 2,
+            };
 
             $saldo[$entry->currency][$platce] = ($saldo[$entry->currency][$platce] ?? 0) + $dluh;
         }
@@ -717,6 +741,337 @@ class BudgetService
                 ? 'short'
                 : ($zbudeNaKonci < $rozvaha['planned_total'] * self::TESNA_REZERVA ? 'tight' : 'ok'),
         ];
+    }
+
+    /**
+     * Předpověď výdajů po kategoriích na příští měsíc.
+     *
+     * Odhad, který výhled používá pro celý rozpočet, je jedno číslo: dosavadní tempo krát
+     * zbývající dny. To stačí na otázku „vyjde to", ale ne na „kde to praskne" — a právě
+     * to je informace, se kterou se dá něco udělat ještě předtím, než praskne.
+     *
+     * Počítá se po kategoriích a ze tří věcí zvlášť, protože každá se chová jinak:
+     *
+     *   — Pravidelné platby se neodhadují. Nájem je devět set padesát, ne „přibližně
+     *     devět set padesát podle historie", a průměrovat ho by znamenalo zanést chybu
+     *     do jediného čísla, které je jisté.
+     *   — U nepravidelných se bere průměr posledních měsíců, ale s větší vahou na ty
+     *     bližší. Kdo v květnu utrácel jinak než v srpnu, má srpen blíž pravdě.
+     *   — Trend se hlásí zvlášť, ne zapracovaný do čísla. „Roste to" a „bude to tolik"
+     *     jsou dvě různá tvrzení a slepit je znamená tvrdit víc, než data unesou.
+     *
+     * Spolehlivost se přiznává. Z jednoho měsíce se předpovídat nedá a předstírat, že
+     * ano, je u peněz horší než mlčet — proto se u každé kategorie posílá, z kolika
+     * měsíců odhad vznikl, a volající to má ukázat.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function prediction(Budget $budget, ?Carbon $today = null): ?array
+    {
+        $today ??= Carbon::today();
+        $budget->loadMissing(['categories', 'entries']);
+
+        $vydaje = $budget->entries
+            ->where('kind', 'expense')
+            ->where('currency', $budget->currency);
+
+        if ($vydaje->isEmpty()) {
+            return null;
+        }
+
+        // Jen dokončené měsíce. Rozestavěný měsíc by táhl odhad dolů tím, že v něm
+        // ještě nestihlo přijít to, co obvykle chodí ke konci.
+        $zacatekTohoto = $today->copy()->startOfMonth();
+
+        $radky = $budget->categories->map(function (BudgetCategory $kategorie) use ($vydaje, $zacatekTohoto) {
+            $moje = $vydaje->where('budget_category_id', $kategorie->id);
+
+            $pravidelne = (float) $moje->where('is_recurring', true)
+                ->groupBy(fn (BudgetEntry $e) => $e->spent_on->format('Y-m'))
+                ->map(fn (Collection $m) => $m->sum('amount'))
+                ->avg() ?: 0.0;
+
+            $poMesicich = $moje
+                ->where('is_recurring', false)
+                ->filter(fn (BudgetEntry $e) => $e->spent_on->lessThan($zacatekTohoto))
+                ->groupBy(fn (BudgetEntry $e) => $e->spent_on->format('Y-m'))
+                ->map(fn (Collection $m) => (float) $m->sum('amount'))
+                ->sortKeys();
+
+            return [
+                'id' => $kategorie->id,
+                'name' => $kategorie->name,
+                'color' => $kategorie->color,
+                'recurring' => round($pravidelne, 2),
+                'variable' => round($this->vazenyPrumer($poMesicich->values()->all()), 2),
+                'trend' => $this->trend($poMesicich->values()->all()),
+                'months' => $poMesicich->count(),
+                'planned_monthly' => (float) $kategorie->planned_monthly,
+            ];
+        })->map(fn (array $r) => $r + ['predicted' => round($r['recurring'] + $r['variable'], 2)])
+            ->sortByDesc('predicted')
+            ->values();
+
+        $mesicu = $radky->max('months') ?? 0;
+
+        return [
+            'currency' => $budget->currency,
+            'for_month' => $today->copy()->addMonthNoOverflow()->format('Y-m'),
+            'months_measured' => $mesicu,
+            // Pod třemi dokončenými měsíci je z toho spíš dojem než předpověď a obrazovka
+            // to má říct rovnou, ne to schovat do poznámky pod čarou.
+            'reliable' => $mesicu >= 3,
+            'total' => round($radky->sum('predicted'), 2),
+            'planned_total' => round($radky->sum('planned_monthly'), 2),
+            'rows' => $radky->all(),
+        ];
+    }
+
+    /**
+     * Průměr s větší vahou na novější měsíce.
+     *
+     * Prostý průměr bere půlroční útratu stejně vážně jako minulý měsíc, a to je u výdajů
+     * špatně — ceny se mění, zvyky taky. Váhy rostou lineárně (1, 2, 3…), což je hrubé,
+     * ale u pěti šesti měsíců to stačí a hlavně je na tom vidět, co se počítá.
+     *
+     * @param  list<float>  $hodnoty  od nejstaršího po nejnovější
+     */
+    private function vazenyPrumer(array $hodnoty): float
+    {
+        if ($hodnoty === []) {
+            return 0.0;
+        }
+
+        $soucet = 0.0;
+        $vahy = 0.0;
+
+        foreach (array_values($hodnoty) as $i => $hodnota) {
+            $vaha = $i + 1;
+            $soucet += $hodnota * $vaha;
+            $vahy += $vaha;
+        }
+
+        return $vahy > 0 ? $soucet / $vahy : 0.0;
+    }
+
+    /**
+     * Kam to jde — nahoru, dolů, nebo nikam.
+     *
+     * Porovnává se poslední měsíc s průměrem předchozích. Pásmo deseti procent je
+     * schválně široké: u výdajů domácnosti se pár procent nahoru a dolů děje pořád
+     * a hlásit to jako trend by znamenalo hlásit šum.
+     *
+     * @param  list<float>  $hodnoty
+     */
+    private function trend(array $hodnoty): string
+    {
+        if (count($hodnoty) < 3) {
+            return 'unknown';
+        }
+
+        $posledni = (float) end($hodnoty);
+        $predchozi = array_slice($hodnoty, 0, -1);
+        $zaklad = array_sum($predchozi) / count($predchozi);
+
+        if ($zaklad <= 0) {
+            return 'unknown';
+        }
+
+        $zmena = ($posledni - $zaklad) / $zaklad;
+
+        return $zmena > 0.1 ? 'up' : ($zmena < -0.1 ? 'down' : 'flat');
+    }
+
+    /**
+     * Jak se saldo vyvíjí po měsících.
+     *
+     * Rozvaha řekne, kdo komu dluží dnes. Neřekne, jestli se to zhoršuje — a to je jiná
+     * otázka. Dva tisíce, které se každý měsíc srovnávají, jsou něco jiného než dva tisíce,
+     * které každý měsíc rostou o pět set, i když dnešní číslo je stejné.
+     *
+     * Kladné číslo znamená, že první z dvojice vydal víc za druhého; záporné naopak.
+     * Bere se hrubé saldo z položek, ne po uzávěrkách — uzávěrka je zaplacení, ne důvod,
+     * proč rozdíl vznikl, a graf má ukázat právě ten důvod.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function balanceTrend(Budget $budget): ?array
+    {
+        $budget->loadMissing(['entries.payer:id,name', 'entries.author:id,name']);
+
+        $delene = $budget->entries
+            ->where('kind', 'expense')
+            ->where('currency', $budget->currency)
+            ->filter(fn (BudgetEntry $e) => $e->split !== 'none');
+
+        if ($delene->isEmpty()) {
+            return null;
+        }
+
+        $podily = $budget->incomeShares();
+        $lide = [];
+
+        foreach ($delene as $polozka) {
+            $kdo = $polozka->payer ?? $polozka->author;
+
+            if ($kdo) {
+                $lide[$kdo->id] = $kdo->name;
+            }
+        }
+
+        if (count($lide) !== 2) {
+            // Trend má smysl mezi dvěma. U tří a víc by jedna čára slučovala nesouvisející
+            // dvojice a její znaménko by neznamenalo nic.
+            return null;
+        }
+
+        [$prvni, $druhy] = array_keys($lide);
+
+        $mesice = $delene
+            ->groupBy(fn (BudgetEntry $e) => $e->spent_on->format('Y-m'))
+            ->sortKeys()
+            ->map(function (Collection $skupina) use ($prvni, $podily) {
+                $rozdil = 0.0;
+
+                foreach ($skupina as $polozka) {
+                    $platce = $polozka->paid_by ?? $polozka->user_id;
+
+                    $dluh = match ($polozka->split) {
+                        'other' => (float) $polozka->amount,
+                        'ratio' => $podily !== null && isset($podily[$platce])
+                            ? (float) $polozka->amount * (1 - $podily[$platce])
+                            : (float) $polozka->amount / 2,
+                        default => (float) $polozka->amount / 2,
+                    };
+
+                    // Znaménko podle toho, kdo platil: co vydal první, jde nahoru.
+                    $rozdil += $platce === $prvni ? $dluh : -$dluh;
+                }
+
+                return round($rozdil, 2);
+            });
+
+        $narustajici = 0.0;
+        $body = [];
+
+        foreach ($mesice as $klic => $zaMesic) {
+            $narustajici += $zaMesic;
+
+            $body[] = [
+                'month' => $klic,
+                'change' => $zaMesic,
+                // Kumulativní saldo je to zajímavé číslo: měsíční rozdíl kolísá,
+                // ale jestli se dluh celkově srovnává, je vidět až na součtu.
+                'balance' => round($narustajici, 2),
+            ];
+        }
+
+        return [
+            'currency' => $budget->currency,
+            'first' => ['id' => $prvni, 'name' => $lide[$prvni]],
+            'second' => ['id' => $druhy, 'name' => $lide[$druhy]],
+            'points' => $body,
+        ];
+    }
+
+    /**
+     * Kategorie křížem s lidmi — kdo utrácí za co.
+     *
+     * Rozpad po kategoriích a rozpad po lidech jsou dvě osy téhož a každá zvlášť
+     * odpovídá jen na půlku otázky. „Jídlo stojí 540" a „Adrian zaplatil 4700" nedají
+     * dohromady „kdo z nás nakupuje jídlo" — a přitom právě tahle otázka vede k tomu,
+     * že se výdaje přerozdělí jinak.
+     *
+     * Jen měna rozpočtu. Sečíst přes měny by znamenalo hádat kurz a tabulka, ve které je
+     * jedna buňka v eurech a druhá v korunách, se nedá porovnávat po řádcích.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function categoryByPayer(Budget $budget): ?array
+    {
+        $budget->loadMissing(['categories', 'entries.payer:id,name', 'entries.author:id,name']);
+
+        $vydaje = $budget->entries
+            ->where('kind', 'expense')
+            ->where('currency', $budget->currency);
+
+        if ($vydaje->isEmpty()) {
+            return null;
+        }
+
+        $lide = [];
+        $bunky = [];
+
+        foreach ($vydaje as $polozka) {
+            $kdo = $polozka->payer ?? $polozka->author;
+
+            if (! $kdo) {
+                continue;
+            }
+
+            $lide[$kdo->id] = $kdo->name;
+            // Položka bez kategorie má klíč 0 — „nezařazeno" je taky odpověď a vynechat
+            // ji by znamenalo, že součty v tabulce nesedí s celkem.
+            $klic = $polozka->budget_category_id ?? 0;
+            $bunky[$klic][$kdo->id] = ($bunky[$klic][$kdo->id] ?? 0) + (float) $polozka->amount;
+        }
+
+        if (count($lide) < 2) {
+            // U jednoho člověka je křížení jen opsaný rozpad po kategoriích.
+            return null;
+        }
+
+        $nazvy = $budget->categories->pluck('name', 'id')->all() + [0 => 'Bez kategorie'];
+
+        $radky = collect($bunky)
+            ->map(fn (array $podleLidi, int $klic) => [
+                'category_id' => $klic ?: null,
+                'name' => $nazvy[$klic] ?? 'Bez kategorie',
+                'total' => round(array_sum($podleLidi), 2),
+                'by_payer' => collect($podleLidi)->map(fn (float $c) => round($c, 2))->all(),
+            ])
+            ->sortByDesc('total')
+            ->values()
+            ->all();
+
+        return [
+            'currency' => $budget->currency,
+            'people' => collect($lide)->map(fn (string $jmeno, int $id) => ['id' => $id, 'name' => $jmeno])->values()->all(),
+            'rows' => $radky,
+        ];
+    }
+
+    /**
+     * Účastníci rozpočtu i s příjmem a podílem na společných výdajích.
+     *
+     * Vypisují se všichni členové prostoru, ne jen ti s vyplněným příjmem — obrazovka
+     * potřebuje vědět, koho se zeptat, a prázdné pole je informace („tenhle to neuvedl"),
+     * kterou by seznam jen vyplněných zatajil.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function members(Budget $budget): array
+    {
+        $budget->loadMissing(['members.user:id,name', 'gallerySpace']);
+
+        $podily = $budget->incomeShares();
+        $zapsani = $budget->members->keyBy('user_id');
+
+        $lide = $budget->gallerySpace?->members()->get(['users.id', 'users.name']) ?? collect();
+
+        return $lide->map(function ($clovek) use ($zapsani, $podily, $budget) {
+            $radek = $zapsani->get($clovek->id);
+
+            return [
+                'user_id' => (int) $clovek->id,
+                'name' => $clovek->name,
+                'monthly_income' => $radek?->monthly_income !== null ? (float) $radek->monthly_income : null,
+                'currency' => $radek?->currency ?? $budget->currency,
+                // Podíl na společných výdajích. Null znamená, že se poměr nedá spočítat
+                // a dělí se napůl.
+                'share' => $podily[$clovek->id] ?? null,
+            ];
+        })->values()->all();
     }
 
     /**

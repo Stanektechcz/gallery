@@ -139,6 +139,49 @@ class BudgetController extends Controller
     }
 
     /**
+     * Příjmy účastníků — podklad pro poměrné dělení.
+     *
+     * „Napůl" je férové jen tehdy, když oba vydělávají zhruba stejně. U nájmu za devět
+     * set eur to při dvojnásobném rozdílu férové není a končí to tím, že se výdaje raději
+     * nedělí vůbec a účtuje se „nějak potom".
+     *
+     * Vyplnění je dobrovolné. Kdo příjem neuvede, u toho se poměrné dělení nepoužije
+     * a spadne zpátky na půlku — hádat, kolik druhý vydělává, je horší než to nevědět.
+     */
+    public function updateMembers(Request $request, string $uuid): JsonResponse
+    {
+        $this->write($request);
+        $budget = $this->budget($request, $uuid, owned: true);
+
+        $data = $request->validate([
+            'members' => 'required|array|max:10',
+            'members.*.user_id' => 'required|integer',
+            'members.*.monthly_income' => 'nullable|numeric|min:0',
+            'members.*.currency' => 'nullable|string|size:3',
+        ]);
+
+        $prostor = $budget->gallerySpace;
+
+        foreach ($data['members'] as $radek) {
+            // Jen členové prostoru. Bez téhle kontroly by šlo do rozpočtu přidat kohokoliv
+            // a jeho příjem by pak ovlivňoval poměr, ve kterém se dělí cizí výdaje.
+            if (! $prostor?->members()->whereKey($radek['user_id'])->exists()) {
+                continue;
+            }
+
+            \App\Models\BudgetMember::updateOrCreate(
+                ['budget_id' => $budget->id, 'user_id' => (int) $radek['user_id']],
+                [
+                    'monthly_income' => $radek['monthly_income'] ?? null,
+                    'currency' => isset($radek['currency']) ? strtoupper($radek['currency']) : $budget->currency,
+                ],
+            );
+        }
+
+        return response()->json($this->budgets->overview($budget->fresh()));
+    }
+
+    /**
      * Návrh plánu podle toho, co se v kategoriích opravdu utrácí.
      *
      * Vyplnit šest částek je nejtupější práce na celém rozpočtu a zároveň ta, kterou
@@ -263,9 +306,19 @@ class BudgetController extends Controller
             'name' => 'sometimes|required|string|max:120',
             'planned_monthly' => 'sometimes|nullable|numeric|min:0',
             'rollover' => 'sometimes|boolean',
+            // Předvyplní se u nové položky v téhle kategorii. Nákupy bývají vždycky
+            // napůl a oblečení nikdy — vybírat to znovu u každé položky znamená stovky
+            // kliknutí za pololetí a jednu chybu, která se najde až u vyrovnání.
+            'default_split' => 'sometimes|nullable|in:none,equal,other,ratio',
+            'default_payer' => 'sometimes|nullable|integer',
             'color' => 'sometimes|nullable|string|max:20',
             'icon' => 'sometimes|nullable|string|max:50',
         ]);
+
+        if (! empty($data['default_payer'])
+            && ! $budget->gallerySpace?->members()->whereKey($data['default_payer'])->exists()) {
+            $data['default_payer'] = null;
+        }
 
         $kategorie = $budget->categories()->whereKey($categoryId)->firstOrFail();
 
@@ -303,13 +356,32 @@ class BudgetController extends Controller
             // Kdo zaplatil a jak se to dělí — bez toho se společné výdaje na dálku
             // po půl roce nedopočítají.
             'paid_by' => 'nullable|integer',
-            'split' => 'sometimes|in:none,equal,other',
+            'split' => 'sometimes|in:none,equal,other,ratio',
             'receipt_uuid' => 'nullable|uuid',
         ]);
 
         // Kategorie musí patřit tomuhle rozpočtu, jinak by šlo zapsat do cizího.
+        $kategorie = null;
+
         if (! empty($data['budget_category_id'])) {
-            abort_unless($budget->categories()->whereKey($data['budget_category_id'])->exists(), 422, 'Kategorie do tohoto rozpočtu nepatří.');
+            $kategorie = $budget->categories()->whereKey($data['budget_category_id'])->first();
+
+            abort_unless($kategorie !== null, 422, 'Kategorie do tohoto rozpočtu nepatří.');
+        }
+
+        /*
+         * Výchozí dělení a plátce z kategorie — ale jen tam, kde volající nic neposlal.
+         * Doplňuje se, nepřepisuje: kdo u konkrétního nákupu vybere jinak, má přednost
+         * před tím, co je u kategorie nastavené obecně.
+         */
+        if ($kategorie !== null) {
+            if (! array_key_exists('split', $data) && $kategorie->default_split !== null) {
+                $data['split'] = $kategorie->default_split;
+            }
+
+            if (empty($data['paid_by']) && $kategorie->default_payer !== null) {
+                $data['paid_by'] = $kategorie->default_payer;
+            }
         }
 
         // Účtenka se hledá v prostoru rozpočtu, ne kdekoli — jinak by šlo k položce
@@ -327,7 +399,7 @@ class BudgetController extends Controller
                 ? (int) $data['paid_by']
                 : $request->user()->id;
 
-        BudgetEntry::create(collect($data)->except(['receipt_uuid', 'paid_by'])->all() + [
+        $zapsana = BudgetEntry::create(collect($data)->except(['receipt_uuid', 'paid_by'])->all() + [
             'budget_id' => $budget->id,
             'user_id' => $request->user()->id,
             'paid_by' => $paidBy,
@@ -335,7 +407,76 @@ class BudgetController extends Controller
             'currency' => strtoupper($data['currency'] ?? $budget->currency),
         ]);
 
+        $this->ohlasVetsiVydaj($budget, $zapsana, $request->user());
+
         return response()->json($this->budgets->overview($budget->fresh()), 201);
+    }
+
+    /**
+     * Kolikanásobek obvyklého výdaje se považuje za velký.
+     *
+     * Poměr, ne pevná částka: co je hodně, se liší podle rozpočtu i měny. Trojnásobek
+     * obvyklého výdaje je dost na to, aby to nebyl běžný nákup, a málo na to, aby zpráva
+     * chodila každý druhý den.
+     */
+    private const VELKY_NASOBEK = 3.0;
+
+    /** Pod tímhle počtem položek se obvyklá částka nedá odhadnout a nehlásí se nic. */
+    private const MIN_POLOZEK_PRO_ODHAD = 5;
+
+    /**
+     * Dá vědět druhému, když někdo zapsal nezvykle velký výdaj.
+     *
+     * Pro dva lidi ve dvou zemích je „Makinka zapsala 180 € zubař" zpráva, kvůli které
+     * se telefonuje — a dosud se o ní ten druhý dozvěděl, jen když se sám podíval.
+     *
+     * Hranice je poměrná k tomu, co se v rozpočtu obvykle utrácí, ne pevná částka: pět
+     * tisíc korun je jinak velké číslo v rozpočtu na týden a jinak v pololetním. Bere se
+     * medián, ne průměr — jeden nájem by průměr vytáhl tak vysoko, že by se nehlásilo nic.
+     */
+    private function ohlasVetsiVydaj(Budget $budget, BudgetEntry $polozka, $autor): void
+    {
+        if ($polozka->kind !== 'expense' || ! $budget->is_shared) {
+            return;
+        }
+
+        $castky = $budget->entries()
+            ->where('kind', 'expense')
+            ->where('currency', $polozka->currency)
+            ->where('id', '!=', $polozka->id)
+            ->where('is_recurring', false)
+            ->pluck('amount')
+            ->map(fn ($c) => (float) $c)
+            ->sort()
+            ->values();
+
+        if ($castky->count() < self::MIN_POLOZEK_PRO_ODHAD) {
+            return;
+        }
+
+        $stred = (float) $castky[(int) floor($castky->count() / 2)];
+
+        if ($stred <= 0 || (float) $polozka->amount < $stred * self::VELKY_NASOBEK) {
+            return;
+        }
+
+        $castka = number_format((float) $polozka->amount, 0, ',', ' ').' '.$polozka->currency;
+        $popis = $polozka->note ? sprintf(' — %s', $polozka->note) : '';
+
+        foreach ($budget->gallerySpace?->members()->get() ?? [] as $clen) {
+            // Sobě ne: kdo výdaj zapsal, o něm ví.
+            if ($clen->id === $autor->id) {
+                continue;
+            }
+
+            $clen->notify(new \App\Notifications\GalleryNotification(
+                'finance.budget',
+                sprintf('%s zapsal(a) do rozpočtu „%s" větší výdaj %s%s.', $autor->name, $budget->name, $castka, $popis),
+                '/rozpocty?sekce=polozky',
+                '💸',
+                ['budget_uuid' => $budget->uuid, 'entry_uuid' => $polozka->uuid],
+            ));
+        }
     }
 
     public function destroyEntry(Request $request, string $uuid, string $entryUuid): JsonResponse
@@ -425,7 +566,7 @@ class BudgetController extends Controller
             'note' => 'nullable|string|max:500',
             'is_recurring' => 'sometimes|boolean',
             'paid_by' => 'nullable|integer',
-            'split' => 'sometimes|in:none,equal,other',
+            'split' => 'sometimes|in:none,equal,other,ratio',
             'receipt_uuid' => 'nullable|uuid',
         ]);
 
@@ -516,6 +657,12 @@ class BudgetController extends Controller
             'kind' => 'nullable|in:expense,income',
             'category' => 'nullable|string|max:20',
             'month' => 'nullable|date_format:Y-m',
+            // Kdo platil. Seznam uměl hledat text, druh, kategorii i měsíc, ale ne
+            // plátce — a „ukaž, co jsem platil já" se pak dalo zjistit jen scrollováním.
+            'payer' => 'nullable|integer',
+            // Jen položky bez účtenky. U velkých částek je to jediný způsob, jak zpětně
+            // dohledat, co to vlastně bylo.
+            'no_receipt' => 'nullable|boolean',
             'page' => 'nullable|integer|min:1',
         ]);
 
@@ -533,6 +680,14 @@ class BudgetController extends Controller
                     ? $q->whereNull('budget_category_id')
                     : $q->where('budget_category_id', (int) $data['category']);
             })
+            // paid_by je nepovinný sloupec: u starých položek je prázdný a platí, že
+            // platil ten, kdo zapsal. Filtr proto musí hledat v obojím, jinak by
+            // „co platil Adrian" vynechalo všechno zapsané před zavedením plátce.
+            ->when($data['payer'] ?? null, fn ($q, $kdo) => $q->where(function ($vnitrni) use ($kdo) {
+                $vnitrni->where('paid_by', $kdo)
+                    ->orWhere(fn ($bez) => $bez->whereNull('paid_by')->where('user_id', $kdo));
+            }))
+            ->when($data['no_receipt'] ?? false, fn ($q) => $q->whereNull('media_item_id'))
             ->when($data['month'] ?? null, function ($q, $mesic) {
                 $od = \Illuminate\Support\Carbon::createFromFormat('Y-m', $mesic)->startOfMonth();
                 $q->whereBetween('spent_on', [$od->toDateString(), $od->copy()->endOfMonth()->toDateString()]);
