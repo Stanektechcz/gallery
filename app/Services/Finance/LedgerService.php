@@ -210,6 +210,135 @@ class LedgerService
     }
 
     /**
+     * Co teprve přijde — transakce se stavem, který ještě není hotový.
+     *
+     * `draft` a `pending` jsou zapsané, ale nezaúčtované: čekají na schválení nebo na
+     * doplnění. Do zůstatků se nepočítají, ale do rozhodování ano — kdo se dívá, kolik
+     * má na účtu, potřebuje vědět, kolik z toho je už slíbené.
+     *
+     * @return array<string, mixed>
+     */
+    public function upcoming(GallerySpace $space, ?int $projectId = null): array
+    {
+        $cekajici = Transaction::where('gallery_space_id', $space->id)
+            ->whereIn('state', ['draft', 'pending'])
+            ->when($projectId, fn ($q) => $q->where('finance_project_id', $projectId))
+            ->with(['walletFrom:id,name,currency', 'payer:id,name'])
+            ->orderBy('occurred_at')
+            ->limit(20)
+            ->get();
+
+        $podleMen = [];
+
+        foreach ($cekajici as $t) {
+            if ($t->type !== 'expense') {
+                continue;
+            }
+
+            $mena = $t->currency_from ?? $t->currency_to;
+            $podleMen[$mena] = ($podleMen[$mena] ?? 0) + (float) $t->amount_from;
+        }
+
+        return [
+            'pending_by_currency' => collect($podleMen)->map(fn (float $c) => round($c, 2))->all(),
+            'items' => $cekajici->map(fn (Transaction $t) => [
+                'uuid' => $t->uuid,
+                'type_label' => $t->typeLabel(),
+                'occurred_at' => $t->occurred_at->toDateString(),
+                'amount' => (float) ($t->amount_from ?? $t->amount_to),
+                'currency' => $t->currency_from ?? $t->currency_to,
+                'description' => $t->description,
+                'payer' => $t->payer?->name,
+                'state' => $t->state,
+            ])->values()->all(),
+        ];
+    }
+
+    /**
+     * Položky, které si zaslouží pozornost.
+     *
+     * Tři druhy, každý z jiného důvodu. Výdaj bez dokladu se po půl roce nedá doložit.
+     * Peněženka v mínusu znamená, že se buď něco zapsalo špatně, nebo se opravdu čerpalo
+     * do minusu — obojí je potřeba vidět. A směna, u které chybí referenční kurz, se
+     * později nedá zkontrolovat proti tomu, co bylo férové.
+     *
+     * @return array<string, mixed>
+     */
+    public function flagged(GallerySpace $space, ?int $projectId = null): array
+    {
+        $vydajeBezDokladu = Transaction::where('gallery_space_id', $space->id)
+            ->where('type', 'expense')
+            ->whereNull('receipt_media_id')
+            ->when($projectId, fn ($q) => $q->where('finance_project_id', $projectId))
+            ->orderByDesc('amount_from')
+            ->limit(10)
+            ->get(['uuid', 'amount_from', 'currency_from', 'occurred_at', 'description']);
+
+        $smenyBezKurzu = Transaction::where('gallery_space_id', $space->id)
+            ->where('type', 'exchange')
+            ->whereNull('reference_rate')
+            ->when($projectId, fn ($q) => $q->where('finance_project_id', $projectId))
+            ->limit(10)
+            ->get(['uuid', 'occurred_at', 'amount_from', 'currency_from', 'amount_to', 'currency_to']);
+
+        $minusove = $this->walletBalances($space)->filter(fn (array $p) => $p['balance'] < 0);
+
+        return [
+            'no_receipt' => $vydajeBezDokladu->map(fn (Transaction $t) => [
+                'uuid' => $t->uuid,
+                'amount' => (float) $t->amount_from,
+                'currency' => $t->currency_from,
+                'occurred_at' => $t->occurred_at->toDateString(),
+                'description' => $t->description,
+            ])->values()->all(),
+            'exchange_without_reference' => $smenyBezKurzu->map(fn (Transaction $t) => [
+                'uuid' => $t->uuid,
+                'occurred_at' => $t->occurred_at->toDateString(),
+                'summary' => sprintf('%s %s → %s %s', $t->amount_from, $t->currency_from, $t->amount_to, $t->currency_to),
+            ])->values()->all(),
+            'negative_wallets' => $minusove->values()->all(),
+        ];
+    }
+
+    /**
+     * Vývoj příjmů a výdajů po měsících.
+     *
+     * Jen typy, které mění výsledek — u přesunů by graf ukazoval hory a doly podle toho,
+     * kdy kdo směnil peníze, což o hospodaření neříká nic.
+     *
+     * @return array<string, mixed>
+     */
+    public function trend(GallerySpace $space, ?int $projectId = null): array
+    {
+        $pohyby = Transaction::where('gallery_space_id', $space->id)
+            ->whereIn('type', Transaction::VYSLEDKOVE)
+            ->whereIn('state', ['approved', 'settled'])
+            ->when($projectId, fn ($q) => $q->where('finance_project_id', $projectId))
+            ->get(['type', 'occurred_at', 'amount_from', 'currency_from', 'amount_to', 'currency_to']);
+
+        $mesice = [];
+
+        foreach ($pohyby as $t) {
+            $klic = $t->occurred_at->format('Y-m');
+            $mena = $t->type === 'income' ? ($t->currency_to ?? $t->currency_from) : ($t->currency_from ?? $t->currency_to);
+            $castka = (float) ($t->type === 'income' ? $t->amount_to : $t->amount_from);
+
+            $mesice[$mena][$klic][$t->type] = ($mesice[$mena][$klic][$t->type] ?? 0) + $castka;
+        }
+
+        return collect($mesice)->map(fn (array $poMesicich) => collect($poMesicich)
+            ->sortKeys()
+            ->map(fn (array $m, string $klic) => [
+                'month' => $klic,
+                'income' => round($m['income'] ?? 0, 2),
+                'expense' => round($m['expense'] ?? 0, 2),
+                'net' => round(($m['income'] ?? 0) - ($m['expense'] ?? 0), 2),
+            ])
+            ->values()
+            ->all())->all();
+    }
+
+    /**
      * Nejmenší počet převodů, kterými se dluhy vyrovnají.
      *
      * Naivní vyrovnání „každý každému" vyžaduje u čtyř lidí až šest převodů. Když se

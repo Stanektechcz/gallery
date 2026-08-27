@@ -91,6 +91,20 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
         Route::patch('/nastaveni', [App\Http\Controllers\Api\CycleController::class, 'updateSettings'])->name('settings');
     });
 
+    /*
+     * Účetní kniha pro víc subjektů, měn a peněženek.
+     *
+     * Vedle `rozpocty`, ne místo nich: párový rozpočet řeší jinou úlohu a funguje dál.
+     */
+    Route::prefix('kniha')->name('api.ledger.')->group(function () {
+        Route::get('/prehled', [App\Http\Controllers\Api\LedgerController::class, 'dashboard'])->name('dashboard');
+        Route::get('/partneri', [App\Http\Controllers\Api\LedgerController::class, 'partners'])->name('partners');
+        Route::post('/partneri', [App\Http\Controllers\Api\LedgerController::class, 'storePartner'])->name('partners.store');
+        Route::post('/penezenky', [App\Http\Controllers\Api\LedgerController::class, 'storeWallet'])->name('wallets.store');
+        Route::get('/transakce', [App\Http\Controllers\Api\LedgerController::class, 'transactions'])->name('transactions');
+        Route::post('/transakce', [App\Http\Controllers\Api\LedgerController::class, 'storeTransaction'])->name('transactions.store');
+    });
+
     // Rozpočty na období a žádosti o peníze mezi partnery.
     Route::prefix('rozpocty')->name('api.budgets.')->group(function () {
         Route::get('/', [App\Http\Controllers\Api\BudgetController::class, 'index'])->name('index');
