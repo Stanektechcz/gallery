@@ -2,13 +2,13 @@ import { hlaska } from '@/Components/Hlasky';
 import Panel, { PanelGrid, Stat } from '@/Components/Panel';
 import SekceNav, { type Sekce as SekceTyp } from '@/Components/SekceNav';
 import AppLayout from '@/Layouts/AppLayout';
-import { pocet } from '@/lib/cestina';
+import { pocet, transakce } from '@/lib/cestina';
 import { naSirokeObrazovce } from '@/lib/zobrazeni';
 import { Head } from '@inertiajs/react';
 import axios from 'axios';
 import {
-    AlertTriangle, ArrowRightLeft, Banknote, Building2, Check, LayoutDashboard, Plus,
-    Receipt, Scale, TrendingUp, Users, Wallet as WalletIcon, X,
+    AlertTriangle, ArrowRightLeft, Banknote, Building2, Check, LayoutDashboard, Pencil,
+    Plus, Receipt, Scale, Trash2, TrendingUp, Users, Wallet as WalletIcon, X,
 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
@@ -44,6 +44,18 @@ type Prehled = {
     };
     trend: Record<string, Array<{ month: string; income: number; expense: number; net: number }>>;
     not_available: Record<string, string>;
+};
+
+/** Řádek výpisu. Nese uuid peněženek, aby šel otevřít zpátky do formuláře. */
+type Pohyb = {
+    uuid: string; type: string; type_label: string; affects_result: boolean;
+    occurred_at: string;
+    from: { uuid: string; name: string; amount: number; currency: string } | null;
+    to: { uuid: string; name: string; amount: number; currency: string } | null;
+    fee: number; fee_currency: string | null;
+    rate: number | null; reference_rate: number | null;
+    payer: string | null; payer_partner_id: number | null;
+    project: string | null; counterparty: string | null; description: string | null; state: string;
 };
 
 const castka = (c: number, mena: string) =>
@@ -83,6 +95,9 @@ export default function LedgerIndex() {
     const [nacita, setNacita] = useState(true);
     const [chyba, setChyba] = useState('');
     const [sekce, setSekce] = useState('prehled');
+    const [upravovana, setUpravovana] = useState<Pohyb | null>(null);
+    // Po uložení opravy musí výpis načíst znovu, i když se na něj vrací z jiné sekce.
+    const [verze, setVerze] = useState(0);
 
     const nacti = useCallback(async () => {
         try {
@@ -107,7 +122,8 @@ export default function LedgerIndex() {
 
     const sekce_seznam: SekceTyp[] = [
         { id: 'prehled', label: 'Přehled', icon: LayoutDashboard, upozorneni: (prehled?.flagged.negative_wallets.length ?? 0) > 0 },
-        { id: 'zapis', label: 'Zápis', icon: Plus },
+        { id: 'zapis', label: upravovana ? 'Oprava' : 'Zápis', icon: upravovana ? Pencil : Plus },
+        { id: 'pohyby', label: 'Pohyby', icon: Receipt },
         { id: 'penezenky', label: 'Peněženky', icon: WalletIcon, pocet: prehled?.wallets.length },
         { id: 'partneri', label: 'Partneři', icon: Users, pocet: partneri.length },
     ];
@@ -135,7 +151,23 @@ export default function LedgerIndex() {
                         <SekceNav sekce={sekce_seznam} aktivni={sekce} onZmena={setSekce}/>
 
                         {sekce === 'prehled' && <Dashboard data={prehled}/>}
-                        {sekce === 'zapis' && <Zapis wallets={prehled.wallets} partners={partneri} onSaved={() => void nacti()}/>}
+
+                        {/* `key` je tu schválně: přepnutí mezi opravou a novým zápisem musí
+                            formulář postavit znovu, jinak by si nechal hodnoty předchozí
+                            transakce a uložil je do jiné. */}
+                        {sekce === 'zapis' && (
+                            <Zapis key={upravovana?.uuid ?? 'novy'}
+                                wallets={prehled.wallets} partners={partneri}
+                                upravovana={upravovana}
+                                onSaved={() => { setUpravovana(null); setVerze(v => v + 1); void nacti(); }}
+                                onZrusit={() => setUpravovana(null)}/>
+                        )}
+
+                        {sekce === 'pohyby' && (
+                            <Pohyby key={verze} wallets={prehled.wallets}
+                                onUpravit={p => { setUpravovana(p); setSekce('zapis'); }}
+                                onZmena={() => void nacti()}/>
+                        )}
                         {sekce === 'penezenky' && <Penezenky wallets={prehled.wallets} partners={partneri} onChanged={() => void nacti()}/>}
                         {sekce === 'partneri' && <Partneri partners={partneri} onChanged={() => void nacti()}/>}
                     </div>
@@ -308,14 +340,43 @@ function Dashboard({ data }: { data: Prehled }) {
  * významy by znamenalo, že se výběr hotovosti zapíše jako výdaj — což je přesně chyba,
  * kvůli které celá kniha rozlišuje typy.
  */
-function Zapis({ wallets, partners, onSaved }: { wallets: Wallet[]; partners: Partner[]; onSaved: () => void }) {
-    const [typ, setTyp] = useState<typeof TYPY[number]['id']>('expense');
-    const [form, setForm] = useState({
-        occurred_at: new Date().toISOString().slice(0, 10),
-        wallet_from: '', wallet_to: '', amount_from: '', amount_to: '',
-        fee_amount: '', reference_rate: '', rate_source: '',
-        payer_partner_id: '', counterparty: '', description: '',
-    });
+const PRAZDNY_FORMULAR = {
+    occurred_at: new Date().toISOString().slice(0, 10),
+    wallet_from: '', wallet_to: '', amount_from: '', amount_to: '',
+    fee_amount: '', reference_rate: '', rate_source: '',
+    payer_partner_id: '', counterparty: '', description: '',
+};
+
+/** Rozloží zapsaný pohyb zpátky do formuláře. */
+const doFormulare = (p: Pohyb) => ({
+    occurred_at: p.occurred_at,
+    wallet_from: p.from?.uuid ?? '',
+    wallet_to: p.to?.uuid ?? '',
+    amount_from: p.from ? String(p.from.amount) : '',
+    amount_to: p.to ? String(p.to.amount) : '',
+    fee_amount: p.fee ? String(p.fee) : '',
+    reference_rate: p.reference_rate !== null ? String(p.reference_rate) : '',
+    rate_source: '',
+    payer_partner_id: p.payer_partner_id !== null ? String(p.payer_partner_id) : '',
+    counterparty: p.counterparty ?? '',
+    description: p.description ?? '',
+});
+
+/**
+ * Zápis i oprava.
+ *
+ * Jeden formulář pro obojí, protože po opravě musí platit stejná pravidla jako po
+ * zápisu — dva formuláře by znamenaly dvě sady kontrol, které se časem rozejdou.
+ * Při opravě se posílá celá transakce, ne jen změněná pole; server ji pak kontroluje
+ * úplně stejně, jako by se zapisovala poprvé.
+ */
+function Zapis({ wallets, partners, upravovana, onSaved, onZrusit }: {
+    wallets: Wallet[]; partners: Partner[]; upravovana: Pohyb | null;
+    onSaved: () => void; onZrusit: () => void;
+}) {
+    const [typ, setTyp] = useState<typeof TYPY[number]['id']>(
+        (upravovana?.type as typeof TYPY[number]['id']) ?? 'expense');
+    const [form, setForm] = useState(upravovana ? doFormulare(upravovana) : PRAZDNY_FORMULAR);
     const [uklada, setUklada] = useState(false);
 
     const nastaveni = TYPY.find(t => t.id === typ)!;
@@ -326,7 +387,7 @@ function Zapis({ wallets, partners, onSaved }: { wallets: Wallet[]; partners: Pa
         setUklada(true);
 
         try {
-            await axios.post('/api/v1/kniha/transakce', {
+            const telo = {
                 type: typ,
                 occurred_at: form.occurred_at,
                 wallet_from: nastaveni.zdroj ? form.wallet_from : undefined,
@@ -339,15 +400,23 @@ function Zapis({ wallets, partners, onSaved }: { wallets: Wallet[]; partners: Pa
                 payer_partner_id: form.payer_partner_id === '' ? undefined : Number(form.payer_partner_id),
                 counterparty: form.counterparty || undefined,
                 description: form.description || undefined,
-            });
+            };
 
-            hlaska(nastaveni.potvrzeni, 'uspech');
-            setForm(f => ({ ...f, amount_from: '', amount_to: '', fee_amount: '', counterparty: '', description: '' }));
+            if (upravovana) {
+                await axios.patch(`/api/v1/kniha/transakce/${upravovana.uuid}`, telo);
+                hlaska('Změna je uložená.', 'uspech');
+            } else {
+                await axios.post('/api/v1/kniha/transakce', telo);
+                hlaska(nastaveni.potvrzeni, 'uspech');
+                setForm(f => ({ ...f, amount_from: '', amount_to: '', fee_amount: '', counterparty: '', description: '' }));
+            }
+
             onSaved();
         } catch (problem: any) {
             // Hlášky o nesmyslných kombinacích posílá server a stojí za to je ukázat
             // doslova — říkají přesně, co je špatně, a nabízejí správný typ.
-            hlaska(problem?.response?.data?.message ?? 'Transakci se nepodařilo zapsat.', 'chyba');
+            hlaska(problem?.response?.data?.message
+                ?? (upravovana ? 'Změnu se nepodařilo uložit.' : 'Transakci se nepodařilo zapsat.'), 'chyba');
         } finally {
             setUklada(false);
         }
@@ -359,9 +428,17 @@ function Zapis({ wallets, partners, onSaved }: { wallets: Wallet[]; partners: Pa
         && (form.amount_from !== '' || form.amount_to !== '');
 
     return (
-        <Panel icon={Plus} title="Zápis do knihy"
+        <Panel icon={upravovana ? Pencil : Plus}
+            title={upravovana ? 'Oprava zápisu' : 'Zápis do knihy'}
             description={nastaveni.popis}
             tone={nastaveni.presun ? 'accent' : 'plain'}>
+
+            {upravovana && (
+                <p className="mb-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-muted)] px-3 py-2 text-xs leading-relaxed text-[var(--color-text-secondary)]">
+                    Opravujete zápis z {new Date(upravovana.occurred_at).toLocaleDateString('cs-CZ')}. Po uložení
+                    se přepočítají zůstatky peněženek i vyrovnání mezi partnery.
+                </p>
+            )}
 
             {/* Typ napřed. Podle něj se formulář přestaví — u výběru hotovosti nemá být
                 vidět pole na obchodníka, protože z kapsy do kapsy se nenakupuje. */}
@@ -479,12 +556,173 @@ function Zapis({ wallets, partners, onSaved }: { wallets: Wallet[]; partners: Pa
             <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-[var(--color-border)] pt-4">
                 <button type="button" onClick={() => void uloz()} disabled={uklada || ! hotovo}
                     className="inline-flex min-h-10 items-center gap-1.5 rounded-lg bg-[var(--color-accent)] px-4 text-sm font-medium text-[var(--color-accent-contrast)] disabled:opacity-40">
-                    <Check size={15}/> Zapsat {nastaveni.akuzativ}
+                    <Check size={15}/> {upravovana ? 'Uložit změnu' : `Zapsat ${nastaveni.akuzativ}`}
                 </button>
+                {upravovana && (
+                    <button type="button" onClick={onZrusit}
+                        className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-[var(--color-border)] px-4 text-sm text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]">
+                        <X size={15}/> Zrušit opravu
+                    </button>
+                )}
                 {wallets.length === 0 && (
                     <span className="text-xs text-red-400">Nejdřív založte aspoň jednu peněženku.</span>
                 )}
             </div>
+        </Panel>
+    );
+}
+
+/**
+ * Výpis pohybů.
+ *
+ * Do teď šlo zapsat a nešlo opravit — překlep v částce zůstal v knize navždycky a
+ * zůstatek podle něj nesouhlasil. Řádek proto nabízí opravu i smazání.
+ *
+ * Filtry drží typ a rozsah, ne text: hledání ve stovkách řádků potřebuje jiný index
+ * a bez něj by se to na telefonu jen zaseklo. Kdo hledá konkrétní nákup, zúží typ a
+ * období — to zvládne i malá kniha.
+ */
+function Pohyby({ wallets, onUpravit, onZmena }: {
+    wallets: Wallet[]; onUpravit: (p: Pohyb) => void; onZmena: () => void;
+}) {
+    const [radky, setRadky] = useState<Pohyb[]>([]);
+    const [nalezeno, setNalezeno] = useState(0);
+    const [nacita, setNacita] = useState(true);
+    const [filtr, setFiltr] = useState({ type: '', wallet: '', from: '', to: '' });
+    const [mazany, setMazany] = useState<string | null>(null);
+
+    const nacti = useCallback(async () => {
+        setNacita(true);
+
+        try {
+            const { data } = await axios.get<{ found: number; transactions: Pohyb[] }>(
+                '/api/v1/kniha/transakce',
+                { params: {
+                    type: filtr.type || undefined,
+                    wallet: filtr.wallet || undefined,
+                    from: filtr.from || undefined,
+                    to: filtr.to || undefined,
+                } },
+            );
+
+            setRadky(data.transactions);
+            setNalezeno(data.found);
+        } catch {
+            hlaska('Výpis se nepodařilo načíst.', 'chyba');
+        } finally {
+            setNacita(false);
+        }
+    }, [filtr]);
+
+    useEffect(() => { void nacti(); }, [nacti]);
+
+    const smaz = async (p: Pohyb) => {
+        setMazany(p.uuid);
+
+        try {
+            await axios.delete(`/api/v1/kniha/transakce/${p.uuid}`);
+            hlaska('Zápis je smazaný, zůstatky se přepočítaly.', 'uspech');
+            await nacti();
+            onZmena();
+        } catch (problem: any) {
+            hlaska(problem?.response?.data?.message ?? 'Zápis se nepodařilo smazat.', 'chyba');
+        } finally {
+            setMazany(null);
+        }
+    };
+
+    return (
+        <Panel icon={Receipt} title="Pohyby"
+            description={nacita ? 'Načítám…' : `${transakce(nalezeno)} v knize.`}>
+
+            <div className="mb-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                <div>
+                    <label className={LABEL} htmlFor="pohyby-typ">Typ</label>
+                    <select id="pohyby-typ" value={filtr.type}
+                        onChange={e => setFiltr(f => ({ ...f, type: e.target.value }))} className={FIELD}>
+                        <option value="">Všechny</option>
+                        {TYPY.map(t => <option key={t.id} value={t.id}>{t.nazev}</option>)}
+                    </select>
+                </div>
+                <div>
+                    <label className={LABEL} htmlFor="pohyby-penezenka">Peněženka</label>
+                    <select id="pohyby-penezenka" value={filtr.wallet}
+                        onChange={e => setFiltr(f => ({ ...f, wallet: e.target.value }))} className={FIELD}>
+                        <option value="">Všechny</option>
+                        {wallets.map(p => <option key={p.uuid} value={p.uuid}>{p.name}</option>)}
+                    </select>
+                </div>
+                <div>
+                    <label className={LABEL} htmlFor="pohyby-od">Od</label>
+                    <input id="pohyby-od" type="date" value={filtr.from}
+                        onChange={e => setFiltr(f => ({ ...f, from: e.target.value }))} className={FIELD}/>
+                </div>
+                <div>
+                    <label className={LABEL} htmlFor="pohyby-do">Do</label>
+                    <input id="pohyby-do" type="date" value={filtr.to}
+                        onChange={e => setFiltr(f => ({ ...f, to: e.target.value }))} className={FIELD}/>
+                </div>
+            </div>
+
+            {! nacita && radky.length === 0 && (
+                <p className="rounded-xl border border-dashed border-[var(--color-border)] px-3 py-6 text-center text-sm text-[var(--color-text-secondary)]">
+                    {nalezeno === 0 && ! filtr.type && ! filtr.wallet && ! filtr.from && ! filtr.to
+                        ? 'V knize zatím nic není. Začněte zápisem.'
+                        : 'Tomuhle výběru nic neodpovídá. Zkuste rozšířit období nebo zrušit filtr typu.'}
+                </p>
+            )}
+
+            <ul className="space-y-2">
+                {radky.map(p => (
+                    <li key={p.uuid}
+                        className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-muted)] p-3">
+                        <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
+                            <div className="min-w-0">
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <span className="text-sm font-medium text-[var(--color-text-primary)]">{p.type_label}</span>
+                                    {/* Přesuny se odlišují, protože v přehledu výdajů nejsou — a kdo
+                                        je hledá mezi výdaji, má hned vidět proč tam nejsou. */}
+                                    {! p.affects_result && (
+                                        <span className="rounded-full border border-[var(--color-border)] px-2 py-0.5 text-[11px] text-[var(--color-text-secondary)]">
+                                            přesun, ne výdaj
+                                        </span>
+                                    )}
+                                    <span className="text-xs text-[var(--color-text-secondary)]">
+                                        {new Date(p.occurred_at).toLocaleDateString('cs-CZ')}
+                                    </span>
+                                </div>
+
+                                <p className="mt-1 truncate text-xs text-[var(--color-text-secondary)]">
+                                    {p.from && <>{p.from.name} −{castka(p.from.amount, p.from.currency)}</>}
+                                    {p.from && p.to && ' → '}
+                                    {p.to && <>{p.to.name} +{castka(p.to.amount, p.to.currency)}</>}
+                                    {p.fee > 0 && p.fee_currency && <> · poplatek {castka(p.fee, p.fee_currency)}</>}
+                                </p>
+
+                                {(p.counterparty || p.description || p.payer) && (
+                                    <p className="mt-0.5 truncate text-xs text-[var(--color-text-secondary)]">
+                                        {[p.counterparty, p.description, p.payer && `platil ${p.payer}`]
+                                            .filter(Boolean).join(' · ')}
+                                    </p>
+                                )}
+                            </div>
+
+                            <div className="flex shrink-0 gap-1">
+                                <button type="button" onClick={() => onUpravit(p)}
+                                    aria-label={`Opravit zápis z ${new Date(p.occurred_at).toLocaleDateString('cs-CZ')}`}
+                                    className="inline-flex min-h-9 min-w-9 items-center justify-center rounded-lg border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]">
+                                    <Pencil size={15}/>
+                                </button>
+                                <button type="button" onClick={() => void smaz(p)} disabled={mazany === p.uuid}
+                                    aria-label={`Smazat zápis z ${new Date(p.occurred_at).toLocaleDateString('cs-CZ')}`}
+                                    className="inline-flex min-h-9 min-w-9 items-center justify-center rounded-lg border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-red-500/40 hover:text-red-400 disabled:opacity-40">
+                                    <Trash2 size={15}/>
+                                </button>
+                            </div>
+                        </div>
+                    </li>
+                ))}
+            </ul>
         </Panel>
     );
 }

@@ -100,9 +100,15 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
         Route::get('/prehled', [App\Http\Controllers\Api\LedgerController::class, 'dashboard'])->name('dashboard');
         Route::get('/partneri', [App\Http\Controllers\Api\LedgerController::class, 'partners'])->name('partners');
         Route::post('/partneri', [App\Http\Controllers\Api\LedgerController::class, 'storePartner'])->name('partners.store');
+        Route::patch('/partneri/{id}', [App\Http\Controllers\Api\LedgerController::class, 'updatePartner'])->name('partners.update');
+        Route::delete('/partneri/{id}', [App\Http\Controllers\Api\LedgerController::class, 'destroyPartner'])->name('partners.destroy');
         Route::post('/penezenky', [App\Http\Controllers\Api\LedgerController::class, 'storeWallet'])->name('wallets.store');
+        Route::patch('/penezenky/{uuid}', [App\Http\Controllers\Api\LedgerController::class, 'updateWallet'])->name('wallets.update');
+        Route::delete('/penezenky/{uuid}', [App\Http\Controllers\Api\LedgerController::class, 'destroyWallet'])->name('wallets.destroy');
         Route::get('/transakce', [App\Http\Controllers\Api\LedgerController::class, 'transactions'])->name('transactions');
         Route::post('/transakce', [App\Http\Controllers\Api\LedgerController::class, 'storeTransaction'])->name('transactions.store');
+        Route::patch('/transakce/{uuid}', [App\Http\Controllers\Api\LedgerController::class, 'updateTransaction'])->name('transactions.update');
+        Route::delete('/transakce/{uuid}', [App\Http\Controllers\Api\LedgerController::class, 'destroyTransaction'])->name('transactions.destroy');
     });
 
     // Rozpočty na období a žádosti o peníze mezi partnery.

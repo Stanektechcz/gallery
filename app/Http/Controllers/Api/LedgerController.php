@@ -146,6 +146,105 @@ class LedgerController extends Controller
     }
 
     /**
+     * Oprava peněženky.
+     *
+     * Měna se měnit nedá. Zapsané transakce si u sebe drží měnu, ve které se staly, a
+     * přepnutí peněženky z korun na eura by je nepřepočítalo — jen by k číslům přidalo
+     * jinou značku. Kdo se splete v měně, založí novou peněženku.
+     */
+    public function updateWallet(Request $request, string $uuid): JsonResponse
+    {
+        $this->write($request);
+        $space = $this->space($request);
+
+        $penezenka = Wallet::where('gallery_space_id', $space->id)->where('uuid', $uuid)->firstOrFail();
+
+        $data = $request->validate([
+            'name' => 'sometimes|string|max:160',
+            'kind' => 'sometimes|in:bank,cash,card,other',
+            'partner_id' => 'nullable|integer',
+            'opening_balance' => 'sometimes|numeric',
+            'iban' => 'nullable|string|max:40',
+            'is_active' => 'sometimes|boolean',
+        ]);
+
+        if (! empty($data['partner_id'])
+            && ! Partner::where('gallery_space_id', $space->id)->whereKey($data['partner_id'])->exists()) {
+            unset($data['partner_id']);
+        }
+
+        $penezenka->update($data);
+
+        return response()->json(['wallets' => $this->ledger->walletBalances($space)]);
+    }
+
+    /**
+     * Smazání peněženky.
+     *
+     * Jen dokud je prázdná. Peněženka, na kterou ukazují transakce, drží jejich zůstatek
+     * — smazat ji by znamenalo řádky odkazující na peněženku, která není, a přehled by
+     * počítal s částkami, jejichž původ zmizel. Kdo ji už nepoužívá, ať ji odloží.
+     */
+    public function destroyWallet(Request $request, string $uuid): JsonResponse
+    {
+        $this->write($request);
+        $space = $this->space($request);
+
+        $penezenka = Wallet::where('gallery_space_id', $space->id)->where('uuid', $uuid)->firstOrFail();
+
+        $pouzita = Transaction::where('gallery_space_id', $space->id)
+            ->where(fn ($q) => $q->where('wallet_from_id', $penezenka->id)->orWhere('wallet_to_id', $penezenka->id))
+            ->count();
+
+        abort_if($pouzita > 0, 409, 'Peněženka je použitá v zapsaných transakcích, proto ji nejde smazat. Můžete ji odložit — přestane nabízet, ale zůstatky zůstanou sedět.');
+
+        $penezenka->delete();
+
+        return response()->json(['wallets' => $this->ledger->walletBalances($space)]);
+    }
+
+    /** Oprava partnera. */
+    public function updatePartner(Request $request, int $id): JsonResponse
+    {
+        $this->write($request);
+        $space = $this->space($request);
+
+        $partner = Partner::where('gallery_space_id', $space->id)->whereKey($id)->firstOrFail();
+
+        $partner->update($request->validate([
+            'name' => 'sometimes|string|max:160',
+            'kind' => 'sometimes|in:person,company,organization',
+            'default_currency' => 'sometimes|string|size:3',
+            'note' => 'nullable|string|max:500',
+        ]));
+
+        // Stejný tvar jako zápis, aby si obrazovka po opravě i po založení sáhla pro
+        // seznam jedním způsobem.
+        return $this->partners($request);
+    }
+
+    /** Smazání partnera. Stejné pravidlo jako u peněženky — jen dokud na něj nic neukazuje. */
+    public function destroyPartner(Request $request, int $id): JsonResponse
+    {
+        $this->write($request);
+        $space = $this->space($request);
+
+        $partner = Partner::where('gallery_space_id', $space->id)->whereKey($id)->firstOrFail();
+
+        $penezenky = Wallet::where('gallery_space_id', $space->id)->where('partner_id', $partner->id)->count();
+        $transakce = Transaction::where('gallery_space_id', $space->id)
+            ->where(fn ($q) => $q->where('payer_partner_id', $partner->id)->orWhere('beneficiary_partner_id', $partner->id))
+            ->count();
+        $podily = TransactionShare::where('partner_id', $partner->id)->count();
+
+        abort_if($penezenky + $transakce + $podily > 0, 409, 'Partner má v knize peněženky nebo transakce, proto ho nejde smazat — smazání by je nechalo bez majitele.');
+
+        $partner->delete();
+
+        return response()->json(['deleted' => true]);
+    }
+
+    /**
      * Zápis transakce.
      *
      * Typ určuje, které strany musí být vyplněné, a kontrola to vynucuje. Bez ní by šlo
@@ -157,6 +256,71 @@ class LedgerController extends Controller
         $this->write($request);
         $space = $this->space($request);
 
+        [$atributy, $podily] = $this->transactionPayload($request, $space);
+
+        $transakce = Transaction::create($atributy + [
+            'gallery_space_id' => $space->id,
+            'created_by' => $request->user()->id,
+        ]);
+
+        $this->syncShares($transakce, $podily, $space);
+
+        return response()->json(['uuid' => $transakce->uuid], 201);
+    }
+
+    /**
+     * Oprava zapsané transakce.
+     *
+     * Jede stejnou cestou jako zápis, protože po opravě musí platit úplně stejná
+     * pravidla — kdyby oprava měla vlastní kontroly, dala by se jí do knihy dostat
+     * směna mezi stejnými měnami, kterou zápis nepustí. Formulář proto posílá celou
+     * transakci, ne jen změněná pole.
+     */
+    public function updateTransaction(Request $request, string $uuid): JsonResponse
+    {
+        $this->write($request);
+        $space = $this->space($request);
+
+        $transakce = Transaction::where('gallery_space_id', $space->id)->where('uuid', $uuid)->firstOrFail();
+
+        [$atributy, $podily] = $this->transactionPayload($request, $space);
+
+        $transakce->update($atributy);
+        $this->syncShares($transakce, $podily, $space);
+
+        return response()->json(['uuid' => $transakce->uuid]);
+    }
+
+    /**
+     * Smazání transakce.
+     *
+     * Transakce má `softDeletes`, takže řádek v databázi zůstane. Ze zůstatků ale
+     * zmizí hned — všechny součty v LedgerService jdou přes Eloquent, který smazané
+     * sám vynechává. Peníze se tedy chovají, jako by zápis nikdy nebyl, a přitom je
+     * u sporu pořád vidět, co se smazalo. Podíly odcházejí s ní — bez transakce
+     * nemají co dělit.
+     */
+    public function destroyTransaction(Request $request, string $uuid): JsonResponse
+    {
+        $this->write($request);
+        $space = $this->space($request);
+
+        $transakce = Transaction::where('gallery_space_id', $space->id)->where('uuid', $uuid)->firstOrFail();
+
+        TransactionShare::where('transaction_id', $transakce->id)->delete();
+        $transakce->delete();
+
+        return response()->json(['deleted' => true]);
+    }
+
+    /**
+     * Zkontroluje vstup a přeloží ho na sloupce transakce.
+     *
+     * Vrací dvojici [atributy, podíly] — podíly se ukládají zvlášť, až transakce
+     * existuje a má id.
+     */
+    private function transactionPayload(Request $request, GallerySpace $space): array
+    {
         $data = $request->validate([
             'type' => 'required|in:income,expense,transfer,exchange,withdrawal,deposit',
             'occurred_at' => 'required|date',
@@ -215,8 +379,7 @@ class LedgerController extends Controller
             ? FinanceProject::where('gallery_space_id', $space->id)->where('uuid', $data['project'])->first()
             : null;
 
-        $transakce = Transaction::create([
-            'gallery_space_id' => $space->id,
+        $atributy = [
             'type' => $data['type'],
             'occurred_at' => $data['occurred_at'],
             'booked_on' => $data['booked_on'] ?? null,
@@ -240,10 +403,24 @@ class LedgerController extends Controller
             'payment_method' => $data['payment_method'] ?? null,
             'description' => $data['description'] ?? null,
             'state' => $data['state'] ?? 'approved',
-            'created_by' => $request->user()->id,
-        ]);
+        ];
 
-        foreach ($data['shares'] ?? [] as $podil) {
+        $podily = array_map(fn (array $p) => $p + ['currency' => $z?->currency ?? $do?->currency], $data['shares'] ?? []);
+
+        return [$atributy, $podily];
+    }
+
+    /**
+     * Uloží rozdělení mezi partnery.
+     *
+     * Nejdřív smaže staré. Při opravě se totiž podíly posílají jako celý seznam, takže
+     * přidávat je k tomu, co už tam je, by po druhém uložení dělilo dvojnásobek.
+     */
+    private function syncShares(Transaction $transakce, array $podily, GallerySpace $space): void
+    {
+        TransactionShare::where('transaction_id', $transakce->id)->delete();
+
+        foreach ($podily as $podil) {
             if (! Partner::where('gallery_space_id', $space->id)->whereKey($podil['partner_id'])->exists()) {
                 continue;
             }
@@ -252,13 +429,11 @@ class LedgerController extends Controller
                 'transaction_id' => $transakce->id,
                 'partner_id' => (int) $podil['partner_id'],
                 'amount' => $podil['amount'],
-                'currency' => $z?->currency ?? $do?->currency,
+                'currency' => $podil['currency'],
                 'basis' => $podil['basis'] ?? null,
                 'basis_value' => $podil['basis_value'] ?? null,
             ]);
         }
-
-        return response()->json(['uuid' => $transakce->uuid], 201);
     }
 
     /** Seznam transakcí s filtry. */
@@ -279,7 +454,7 @@ class LedgerController extends Controller
         $naStranku = 50;
 
         $dotaz = Transaction::where('gallery_space_id', $space->id)
-            ->with(['walletFrom:id,name,currency', 'walletTo:id,name,currency', 'payer:id,name', 'project:id,name'])
+            ->with(['walletFrom:id,uuid,name,currency', 'walletTo:id,uuid,name,currency', 'payer:id,name', 'project:id,name'])
             ->when($data['type'] ?? null, fn ($q, $t) => $q->where('type', $t))
             ->when($data['from'] ?? null, fn ($q, $d) => $q->whereDate('occurred_at', '>=', $d))
             ->when($data['to'] ?? null, fn ($q, $d) => $q->whereDate('occurred_at', '<=', $d))
@@ -303,12 +478,16 @@ class LedgerController extends Controller
                 'type_label' => $t->typeLabel(),
                 'affects_result' => $t->affectsResult(),
                 'occurred_at' => $t->occurred_at->toDateString(),
-                'from' => $t->walletFrom ? ['name' => $t->walletFrom->name, 'amount' => (float) $t->amount_from, 'currency' => $t->currency_from] : null,
-                'to' => $t->walletTo ? ['name' => $t->walletTo->name, 'amount' => (float) $t->amount_to, 'currency' => $t->currency_to] : null,
+                // Peněženky nesou i uuid, aby šel řádek otevřít k opravě — formulář
+                // vybírá peněženku podle uuid a ze samotného jména ji poznat nejde.
+                'from' => $t->walletFrom ? ['uuid' => $t->walletFrom->uuid, 'name' => $t->walletFrom->name, 'amount' => (float) $t->amount_from, 'currency' => $t->currency_from] : null,
+                'to' => $t->walletTo ? ['uuid' => $t->walletTo->uuid, 'name' => $t->walletTo->name, 'amount' => (float) $t->amount_to, 'currency' => $t->currency_to] : null,
                 'fee' => (float) $t->fee_amount,
                 'fee_currency' => $t->fee_currency,
                 'rate' => $t->rate !== null ? (float) $t->rate : null,
+                'reference_rate' => $t->reference_rate !== null ? (float) $t->reference_rate : null,
                 'payer' => $t->payer?->name,
+                'payer_partner_id' => $t->payer_partner_id,
                 'project' => $t->project?->name,
                 'counterparty' => $t->counterparty,
                 'description' => $t->description,
