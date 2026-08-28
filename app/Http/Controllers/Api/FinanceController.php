@@ -194,7 +194,20 @@ class FinanceController extends Controller
      */
     private function rozpocetStavu(GallerySpace $space, FinanceFilter $filtr, Collection $pohyby, string $mena): ?array
     {
-        $cesta = $filtr->cesta;
+        // Když se jede, má cestovní rozpočet přednost i bez přepnutí období. Kdo je
+        // v Německu, ptá se „kolik zbývá do konce pobytu", ne „kolik do konce měsíce"
+        // — a musel by na to klepnout, aby to uviděl.
+        $cesta = $filtr->cesta ?? $this->finance->activeTrip($space);
+
+        // Když přehled ukazuje měsíc a rozpočet patří cestě, počítá se čerpání z celé
+        // cesty. Jinak by proti limitu na celý pobyt stály útraty za pár dní a zbývalo
+        // by pořád skoro všechno.
+        if ($cesta && $filtr->cesta === null) {
+            $pohyby = Transaction::where('gallery_space_id', $space->id)
+                ->with(['walletFrom:id,name,currency,partner_id,kind', 'category:id,name,color,icon', 'refundOf:id,category_id'])
+                ->where('finance_project_id', $cesta->id)
+                ->get();
+        }
 
         $limit = $cesta?->budget_amount !== null ? (float) $cesta->budget_amount : null;
         $rezerva = $cesta?->reserve_amount !== null ? (float) $cesta->reserve_amount : 0.0;
