@@ -278,6 +278,17 @@ class FinanceSetupController extends Controller
 
     // ------------------------------------------------------------ kategorie
 
+    /**
+     * Seznam kategorií pro správu.
+     *
+     * Na rozdíl od číselníku pro formulář vrací i odložené a u každé počet použití —
+     * podle něj se pozná, kterou jde ještě smazat a která už je v historii.
+     */
+    public function categories(Request $request): JsonResponse
+    {
+        return response()->json(['categories' => $this->kategorie($this->space($request))]);
+    }
+
     public function storeCategory(Request $request): JsonResponse
     {
         $space = $this->space($request);

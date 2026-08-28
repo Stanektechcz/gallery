@@ -3,7 +3,9 @@ import Cesty from '@/Components/Rozpocet/Cesty';
 import Prehled from '@/Components/Rozpocet/Prehled';
 import Rozpocty from '@/Components/Rozpocet/Rozpocty';
 import PridatZaznam from '@/Components/Rozpocet/PridatZaznam';
+import Nastaveni from '@/Components/Rozpocet/Nastaveni';
 import Smeny from '@/Components/Rozpocet/Smeny';
+import Statistiky from '@/Components/Rozpocet/Statistiky';
 import SpodniNavigace, { TABY } from '@/Components/Rozpocet/SpodniNavigace';
 import Transakce from '@/Components/Rozpocet/Transakce';
 import Ucty from '@/Components/Rozpocet/Ucty';
@@ -176,7 +178,15 @@ export default function RozpocetIndex() {
                                 <Rozpocty ciselniky={ciselniky} onZmena={() => void nacti()}/>
                             )}
 
-                            {! ['prehled', 'transakce', 'cesty', 'ucty', 'smeny', 'rozpocty'].includes(stav.tab) && (
+                            {stav.tab === 'statistiky' && (
+                                <Statistiky obdobi={stav.obdobi} onTransakce={naTransakce}/>
+                            )}
+
+                            {stav.tab === 'nastaveni' && (
+                                <Nastaveni ciselniky={ciselniky} onZmena={() => void nacti()}/>
+                            )}
+
+                            {! ['prehled', 'transakce', 'cesty', 'ucty', 'smeny', 'rozpocty', 'statistiky', 'nastaveni'].includes(stav.tab) && (
                                 <Pripravuje tab={stav.tab} onZpet={() => naTab('prehled')}/>
                             )}
                         </>

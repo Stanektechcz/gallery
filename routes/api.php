@@ -107,6 +107,7 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
         Route::get('/prehled', [App\Http\Controllers\Api\FinanceController::class, 'dashboard'])->name('dashboard');
         Route::get('/transakce', [App\Http\Controllers\Api\FinanceController::class, 'transactions'])->name('transactions');
         Route::get('/smeny', [App\Http\Controllers\Api\FinanceController::class, 'exchanges'])->name('exchanges');
+        Route::get('/statistiky', [App\Http\Controllers\Api\FinanceController::class, 'statistics'])->name('statistics');
         Route::post('/transakce', [App\Http\Controllers\Api\FinanceEntryController::class, 'store'])->name('entries.store');
         Route::patch('/transakce/{uuid}', [App\Http\Controllers\Api\FinanceEntryController::class, 'update'])->name('entries.update');
         Route::delete('/transakce/{uuid}', [App\Http\Controllers\Api\FinanceEntryController::class, 'destroy'])->name('entries.destroy');
@@ -126,6 +127,7 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
         Route::get('/cesty/{uuid}/shrnuti', [App\Http\Controllers\Api\FinanceSetupController::class, 'tripSummary'])->name('trips.summary');
         Route::delete('/cesty/{uuid}', [App\Http\Controllers\Api\FinanceSetupController::class, 'destroyTrip'])->name('trips.destroy');
 
+        Route::get('/kategorie', [App\Http\Controllers\Api\FinanceSetupController::class, 'categories'])->name('categories');
         Route::post('/kategorie', [App\Http\Controllers\Api\FinanceSetupController::class, 'storeCategory'])->name('categories.store');
         Route::patch('/kategorie/{uuid}', [App\Http\Controllers\Api\FinanceSetupController::class, 'updateCategory'])->name('categories.update');
         Route::delete('/kategorie/{uuid}', [App\Http\Controllers\Api\FinanceSetupController::class, 'destroyCategory'])->name('categories.destroy');

@@ -115,6 +115,252 @@ class FinanceController extends Controller
     }
 
     /**
+     * Statistiky — vysvětlit vývoj, ne nakreslit hezké grafy.
+     *
+     * Všechno počítá **týž filtr** jako Přehled i Transakce, takže se čísla mezi taby
+     * nemůžou rozejít. A všechno je v jedné měně: sečíst koruny s eury do jednoho
+     * grafu by dalo tvar, který nic neznamená. Měna se volí, ostatní se hlásí zvlášť.
+     */
+    public function statistics(Request $request): JsonResponse
+    {
+        $space = $this->space($request);
+        $filtr = FinanceFilter::zDotazu($request->all(), $space);
+        $pohyby = $filtr->dotaz($space)->get();
+
+        $souhrn = $this->finance->summary($pohyby);
+        $mena = $request->input('mena') ?: $this->hlavniMena($souhrn, $filtr);
+        $dni = $filtr->dni();
+
+        $minule = $filtr->predchozi();
+        $pohybyMinule = $minule ? $minule->dotaz($space)->get() : collect();
+        $souhrnMinule = $minule ? $this->finance->summary($pohybyMinule) : [];
+
+        $tento = collect($souhrn)->firstWhere('currency', $mena);
+        $predtim = collect($souhrnMinule)->firstWhere('currency', $mena);
+
+        $partneri = Partner::where('gallery_space_id', $space->id)->where('is_active', true)->get();
+
+        return response()->json([
+            'filter' => [
+                'label' => $filtr->popis, 'from' => $filtr->od->toDateString(),
+                'to' => $filtr->do?->toDateString(), 'days' => $dni,
+                'chips' => $filtr->stitky(),
+            ],
+            'currency' => $mena,
+            'currencies' => collect($souhrn)->pluck('currency')->values(),
+            'summary' => [
+                'income' => $tento['income'] ?? 0,
+                'expense' => $tento['spent'] ?? 0,
+                'net' => $tento['net'] ?? 0,
+                'per_day' => $dni ? round(($tento['spent'] ?? 0) / $dni, 2) : null,
+            ],
+            'previous' => $predtim ? [
+                'income' => $predtim['income'], 'expense' => $predtim['spent'], 'net' => $predtim['net'],
+                'per_day' => $minule?->dni() ? round($predtim['spent'] / $minule->dni(), 2) : null,
+                'label' => 'předchozí stejně dlouhé období',
+            ] : null,
+            'by_currency' => $souhrn,
+            'flow' => $this->tokVCase($pohyby, $mena, $filtr),
+            'categories' => $this->finance->byCategory($pohyby, $mena),
+            'daily' => $filtr->do ? $this->finance->daily($pohyby, $mena, $filtr->od, $filtr->do) : [],
+            'largest' => $this->nejvetsiVydaje($pohyby, $mena),
+            'partners' => $this->rozdeleniPartneru($pohyby, $partneri, $mena),
+            'wallets' => $this->podleUctu($pohyby, $mena),
+            'exchange' => [
+                'acquisition' => $this->finance->eurAcquisition($space),
+                'fees' => $pohyby->groupBy(fn (Transaction $t) => $t->fee_currency ?? $t->currency_from)
+                    ->map(fn (Collection $s, string $m) => ['currency' => $m, 'amount' => round($s->sum(fn (Transaction $t) => $t->feePaidExtra()), 2)])
+                    ->filter(fn (array $r) => $r['amount'] > 0)->values(),
+            ],
+            'insights' => $this->postrehy($pohyby, $pohybyMinule, $mena, $filtr),
+            'transactions' => $pohyby->count(),
+        ]);
+    }
+
+    /**
+     * Příjmy a výdaje v čase.
+     *
+     * Krok se volí podle délky období: dny u krátkého, týdny u delšího, měsíce
+     * u dlouhého. Tři sta šedesát pět sloupců vedle sebe je pod pixel široký proužek
+     * a graf je z toho jen šedá plocha.
+     *
+     * @param  Collection<int, Transaction>  $pohyby
+     */
+    private function tokVCase(Collection $pohyby, string $mena, FinanceFilter $filtr): array
+    {
+        $dni = $filtr->dni() ?? 30;
+        $krok = $dni <= 45 ? 'den' : ($dni <= 200 ? 'tyden' : 'mesic');
+
+        $klic = fn (Transaction $t) => match ($krok) {
+            'den' => $t->occurred_at->toDateString(),
+            'tyden' => $t->occurred_at->copy()->startOfWeek()->toDateString(),
+            default => $t->occurred_at->format('Y-m'),
+        };
+
+        $body = [];
+
+        foreach ($pohyby as $t) {
+            /** @var Transaction $t */
+            $k = $klic($t);
+            $body[$k] ??= ['key' => $k, 'income' => 0.0, 'expense' => 0.0];
+
+            if ($t->type === 'income' && ! $t->is_settlement && $t->currency_to === $mena) {
+                $body[$k]['income'] += (float) $t->amount_to;
+            }
+
+            if ($t->countsTowardsBudget() && $t->currency_from === $mena) {
+                $body[$k]['expense'] += (float) $t->amount_from;
+            }
+
+            if (($t->fee_currency ?? $t->currency_from) === $mena) {
+                $body[$k]['expense'] += $t->feePaidExtra();
+            }
+        }
+
+        ksort($body);
+
+        return [
+            'step' => $krok,
+            'points' => array_values(array_map(fn (array $b) => [
+                'key' => $b['key'],
+                'income' => round($b['income'], 2),
+                'expense' => round($b['expense'], 2),
+                'net' => round($b['income'] - $b['expense'], 2),
+            ], $body)),
+        ];
+    }
+
+    /** @param  Collection<int, Transaction>  $pohyby */
+    private function nejvetsiVydaje(Collection $pohyby, string $mena): array
+    {
+        return $pohyby
+            ->filter(fn (Transaction $t) => $t->countsTowardsBudget() && $t->currency_from === $mena)
+            ->sortByDesc('amount_from')
+            ->take(8)
+            ->map(fn (Transaction $t) => [
+                'uuid' => $t->uuid,
+                'amount' => (float) $t->amount_from,
+                'currency' => $mena,
+                'occurred_at' => $t->occurred_at->toDateString(),
+                'category' => $t->category?->name,
+                'color' => $t->category?->color,
+                'counterparty' => $t->counterparty,
+                'description' => $t->description,
+            ])->values()->all();
+    }
+
+    /**
+     * Kdo kolik zaplatil a kolik z toho nesl.
+     *
+     * Dvě různé věci: „zaplatil" je, co odešlo z jeho účtu; „nesl" je jeho podíl.
+     * Rozdíl mezi nimi je dluh a bez obojího by z grafu nešlo poznat, jestli někdo
+     * utrácí víc, nebo jen víc platí.
+     *
+     * @param  Collection<int, Transaction>  $pohyby
+     */
+    private function rozdeleniPartneru(Collection $pohyby, Collection $partneri, string $mena): array
+    {
+        $saldo = $this->finance->partnerBalance($pohyby, $partneri);
+        $vMene = collect($saldo['by_currency'])->firstWhere('currency', $mena);
+
+        // Společné výdaje: ty, u kterých nese podíl víc než jeden partner.
+        $spolecne = $pohyby
+            ->filter(fn (Transaction $t) => $t->countsTowardsBudget() && $t->currency_from === $mena
+                && $t->shares->pluck('partner_id')->unique()->count() > 1)
+            ->sum('amount_from');
+
+        return [
+            'partners' => $vMene['partners'] ?? [],
+            'settlement' => $vMene['settlement'] ?? [],
+            'shared' => round((float) $spolecne, 2),
+            'currency' => $mena,
+        ];
+    }
+
+    /** @param  Collection<int, Transaction>  $pohyby */
+    private function podleUctu(Collection $pohyby, string $mena): array
+    {
+        return $pohyby
+            ->filter(fn (Transaction $t) => $t->countsTowardsBudget() && $t->currency_from === $mena && $t->walletFrom)
+            ->groupBy('wallet_from_id')
+            ->map(fn (Collection $s) => [
+                'name' => $s->first()->walletFrom->name,
+                'kind' => $s->first()->walletFrom->kind,
+                'amount' => round((float) $s->sum('amount_from'), 2),
+                'count' => $s->count(),
+                'currency' => $mena,
+            ])
+            ->sortByDesc('amount')
+            ->values()->all();
+    }
+
+    /**
+     * Krátké poznatky, každý prokliknutelný na svá data.
+     *
+     * Jen to, co jde poctivě srovnat. Kategorie, která minule neexistovala, nezpůsobila
+     * „nárůst o nekonečno" — takové věty se nepíšou, protože znějí přesně jako ty
+     * smysluplné a naučí člověka je přeskakovat.
+     *
+     * @param  Collection<int, Transaction>  $pohyby
+     * @param  Collection<int, Transaction>  $minule
+     */
+    private function postrehy(Collection $pohyby, Collection $minule, string $mena, FinanceFilter $filtr): array
+    {
+        if ($minule->isEmpty()) {
+            return [];
+        }
+
+        $ted = collect($this->finance->byCategory($pohyby, $mena))->keyBy('name');
+        $pred = collect($this->finance->byCategory($minule, $mena))->keyBy('name');
+
+        $postrehy = [];
+
+        foreach ($ted as $nazev => $k) {
+            $drive = $pred->get($nazev);
+
+            // Bez srovnatelného základu se nesrovnává. A drobné částky taky ne:
+            // z pěti eur na deset je „o sto procent víc" a neznamená to nic.
+            if (! $drive || $drive['amount'] < 20 || $k['amount'] < 20) {
+                continue;
+            }
+
+            $zmena = ($k['amount'] - $drive['amount']) / $drive['amount'] * 100;
+
+            if (abs($zmena) < 15) {
+                continue;
+            }
+
+            /*
+             * Název kategorie stojí samostatně před dvojtečkou, ne uvnitř věty.
+             *
+             * „Za %s jste utratili" vypadá v kódu dobře a na obrazovce z toho vyjde
+             * „Za doprava" — čeština má po předložce čtvrtý pád a ten se z názvu
+             * odvodit nedá. Skloňovat by šlo jen tak, že by každá kategorie nesla
+             * všechny tvary, což je při vlastních kategoriích uživatele nemožné.
+             * Dvojtečka ten problém obchází a čte se stejně dobře.
+             *
+             * Částky se posílají jako čísla a formátuje je obrazovka — tady by z nich
+             * byl kód měny („116,00 EUR") místo značky.
+             */
+            $postrehy[] = [
+                'key' => 'kategorie-'.$k['category_id'],
+                'category' => $nazev,
+                'text' => sprintf('o %d %% %s než minule',
+                    abs(round($zmena)), $zmena > 0 ? 'víc' : 'míň'),
+                'now' => $k['amount'],
+                'before' => $drive['amount'],
+                'currency' => $mena,
+                'direction' => $zmena > 0 ? 'up' : 'down',
+                'filter' => ['kategorie' => (string) ($k['category_id'] ?? '')],
+            ];
+        }
+
+        usort($postrehy, fn ($a, $b) => strcmp($a['direction'], $b['direction']));
+
+        return array_slice($postrehy, 0, 4);
+    }
+
+    /**
      * Směny — historie, skutečné výsledky a co ty směny stály.
      *
      * KPI se počítají z celé historie, ne z období: „kolik eur držíme" a „za kolik jsme
