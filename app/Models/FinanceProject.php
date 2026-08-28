@@ -27,11 +27,50 @@ class FinanceProject extends Model
         'uuid', 'gallery_space_id', 'kind', 'name', 'purpose',
         'country', 'city', 'starts_on', 'ends_on',
         'base_currency', 'responsible_partner_id', 'state',
+        'budget_amount', 'reserve_amount', 'default_wallet_id', 'is_active', 'note',
     ];
 
     protected function casts(): array
     {
-        return ['starts_on' => 'date', 'ends_on' => 'date'];
+        return [
+            'starts_on' => 'date',
+            'ends_on' => 'date',
+            'budget_amount' => 'decimal:2',
+            'reserve_amount' => 'decimal:2',
+            'is_active' => 'boolean',
+        ];
+    }
+
+    /**
+     * Označí tuhle cestu jako aktivní a ostatní zhasne.
+     *
+     * Aktivních smí být jen jedna. Dvě by znamenaly, že se nový výdaj tiše přiřadí
+     * k jednomu ze dvou pobytů podle pořadí v databázi — a nikdo by si toho nevšiml,
+     * dokud by na konci nesouhlasily součty obou cest.
+     */
+    public function aktivuj(): void
+    {
+        static::withoutGlobalScopes()
+            ->where('gallery_space_id', $this->gallery_space_id)
+            ->where('id', '!=', $this->id)
+            ->update(['is_active' => false]);
+
+        $this->forceFill(['is_active' => true])->save();
+    }
+
+    /** Kolik dní z cesty ještě zbývá. Null u cesty bez konce. */
+    public function dniDoKonce(?\Illuminate\Support\Carbon $dnes = null): ?int
+    {
+        if ($this->ends_on === null) return null;
+
+        $dnes ??= \Illuminate\Support\Carbon::today();
+
+        return max(0, (int) $dnes->diffInDays($this->ends_on, false));
+    }
+
+    public function defaultWallet(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(Wallet::class, 'default_wallet_id');
     }
 
     protected static function booted(): void

@@ -40,6 +40,8 @@ class Transaction extends Model
         'finance_project_id', 'category_id', 'payer_partner_id', 'beneficiary_partner_id',
         'counterparty', 'payment_method', 'description', 'receipt_media_id',
         'state', 'created_by', 'approved_by', 'approved_at',
+        'fee_included', 'provider', 'place',
+        'excluded_from_budget', 'exclusion_reason', 'refund_of_id', 'is_settlement',
     ];
 
     protected function casts(): array
@@ -53,7 +55,52 @@ class Transaction extends Model
             'fee_amount' => 'decimal:2',
             'rate' => 'decimal:8',
             'reference_rate' => 'decimal:8',
+            'fee_included' => 'boolean',
+            'excluded_from_budget' => 'boolean',
+            'is_settlement' => 'boolean',
         ];
+    }
+
+    /**
+     * Počítá se tenhle záznam do čerpání rozpočtu?
+     *
+     * Do rozpočtu jde jen spotřeba. Převod, směna ani vklad spotřebou nejsou — u směny
+     * je nákladem jen poplatek, a ten se do rozpočtu přičítá zvlášť, ne přes typ.
+     * Vyrovnání mezi partnery je převod, který mění saldo a nic neutrácí. A výdaj
+     * ručně vyřazený z rozpočtu se sem nepočítá, i když spotřebou je — proto k němu
+     * patří povinný důvod, aby šlo za půl roku zjistit proč.
+     */
+    public function countsTowardsBudget(): bool
+    {
+        return $this->type === 'expense'
+            && ! $this->excluded_from_budget
+            && ! $this->is_settlement;
+    }
+
+    /**
+     * Skutečný poplatek v korunách nebo eurech, které opravdu odešly navíc.
+     *
+     * Poplatek zahrnutý v částce je už odečtený ze zůstatku — přičíst ho ještě jednou
+     * do výdajů by ho zaplatilo dvakrát.
+     */
+    public function feePaidExtra(): float
+    {
+        return $this->fee_included ? 0.0 : (float) $this->fee_amount;
+    }
+
+    public function category()
+    {
+        return $this->belongsTo(FinanceCategory::class, 'category_id');
+    }
+
+    public function refundOf()
+    {
+        return $this->belongsTo(self::class, 'refund_of_id');
+    }
+
+    public function refunds()
+    {
+        return $this->hasMany(self::class, 'refund_of_id');
     }
 
     protected static function booted(): void
