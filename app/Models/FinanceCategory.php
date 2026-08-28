@@ -94,21 +94,27 @@ class FinanceCategory extends Model
 
         $poradi = 0;
 
+        /*
+         * `firstOrCreate`, ne `create`.
+         *
+         * Obrazovka načítá číselníky a přehled dvěma paralelními požadavky a oba sem
+         * dojdou. Kontrola nahoře je jen zkratka pro běžný případ — mezi ní a zápisem
+         * je mezera, do které se druhý požadavek vejde, a pak vznikne dvacet kategorií
+         * dvakrát. Unikát v databázi to zaručí i tak; tohle jen zajistí, že druhý
+         * požadavek neskončí chybou, ale tichým „už je".
+         */
         foreach (static::VYCHOZI as $k) {
-            static::create($k + [
-                'gallery_space_id' => $spaceId,
-                'kind' => 'expense',
-                'sort_order' => $poradi += 10,
-            ]);
+            static::firstOrCreate(
+                ['gallery_space_id' => $spaceId, 'name' => $k['name'], 'kind' => 'expense'],
+                $k + ['sort_order' => $poradi += 10],
+            );
         }
 
         foreach (static::VYCHOZI_PRIJMY as $k) {
-            static::create($k + [
-                'gallery_space_id' => $spaceId,
-                'kind' => 'income',
-                'color' => 'var(--graf-3)',
-                'sort_order' => $poradi += 10,
-            ]);
+            static::firstOrCreate(
+                ['gallery_space_id' => $spaceId, 'name' => $k['name'], 'kind' => 'income'],
+                $k + ['color' => 'var(--graf-3)', 'sort_order' => $poradi += 10],
+            );
         }
     }
 }

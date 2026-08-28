@@ -113,6 +113,32 @@ export default function PridatZaznam({
     const [sablony, setSablony] = useState<Sablona[]>([]);
 
     /**
+     * Nabídka směnáren: nejdřív ty, které už tu byly, pak obvyklé.
+     *
+     * Vlastní historie napřed, protože kdo směňuje přes Revolut, směňuje přes Revolut
+     * pořád. Doplní se jen tolik obvyklých, aby jich dohromady bylo pět — víc se na
+     * telefon vedle sebe nevejde a šesté už se posouvá mimo obraz.
+     */
+    const [historiePoskytovatelu, setHistoriePoskytovatelu] = useState<string[]>([]);
+
+    const poskytovatele = useMemo(() => {
+        const obvykli = ['Revolut', 'Wise', 'Banka', 'Směnárna'];
+        const vsichni = [...historiePoskytovatelu, ...obvykli.filter(o => ! historiePoskytovatelu.includes(o))];
+
+        return vsichni.slice(0, 5);
+    }, [historiePoskytovatelu]);
+
+    useEffect(() => {
+        if (typ !== 'exchange') return;
+
+        void axios.get('/api/v1/rozpocet/smeny')
+            .then(({ data }) => setHistoriePoskytovatelu(
+                (data.providers ?? []).map((p: { name: string }) => p.name).filter((n: string) => n !== 'Neuvedeno'),
+            ))
+            .catch(() => setHistoriePoskytovatelu([]));
+    }, [typ]);
+
+    /**
      * Kategorie, kterou u tohohle obchodníka používáme.
      *
      * Ptá se až po chvíli klidu v psaní — dotaz po každém písmeně by u „Restaurace"
@@ -556,13 +582,36 @@ export default function PridatZaznam({
                                 <input id="fin-poplatek" type="text" inputMode="decimal" value={form.fee_amount}
                                     onChange={e => uprav({ fee_amount: e.target.value })} placeholder="0,00" className={`${POLE} tabular-nums`}/>
                             </div>
-                            <div>
+                            {/*
+                                Kde se směňovalo. Dřív to bylo prázdné pole s nabídkou,
+                                která se objeví až po klepnutí a na telefonu je z ní
+                                systémový seznam přes půl obrazovky. Přitom se skoro
+                                vždycky vybírá z těch, které už člověk použil.
+
+                                Teď jsou to dlaždice: nejdřív vlastní historie, pak
+                                obvyklé. Psát jde pořád — jen se to nemusí.
+                            */}
+                            <div className="sm:col-span-2">
                                 <label className={POPISEK} htmlFor="fin-poskytovatel">Kde jste směnili</label>
-                                <input id="fin-poskytovatel" list="fin-poskytovatele" value={form.provider}
-                                    onChange={e => uprav({ provider: e.target.value })} placeholder="Revolut" className={POLE}/>
-                                <datalist id="fin-poskytovatele">
-                                    {['Revolut', 'Trading 212', 'IBKR', 'Banka', 'Směnárna'].map(p => <option key={p} value={p}/>)}
-                                </datalist>
+
+                                <div className="-mx-1 mb-1.5 flex gap-1.5 overflow-x-auto px-1 pb-1">
+                                    {poskytovatele.map(p => (
+                                        <button key={p} type="button"
+                                            onClick={() => uprav({ provider: form.provider === p ? '' : p })}
+                                            aria-pressed={form.provider === p}
+                                            className={`min-h-11 shrink-0 rounded-xl border px-3 text-[13px] ${
+                                                form.provider === p
+                                                    ? 'border-[var(--color-accent)] bg-[var(--color-surface-muted)] text-[var(--color-text-primary)]'
+                                                    : 'border-[var(--color-border)] text-[var(--color-text-secondary)]'
+                                            }`}>
+                                            {p}
+                                        </button>
+                                    ))}
+                                </div>
+
+                                <input id="fin-poskytovatel" value={form.provider}
+                                    onChange={e => uprav({ provider: e.target.value })}
+                                    placeholder="…nebo napište jiné" className={POLE}/>
                             </div>
                         </div>
 

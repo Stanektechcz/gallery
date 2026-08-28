@@ -304,6 +304,15 @@ export default function RozpocetIndex() {
     );
 }
 
+/** Kolik dní zbývá do začátku cesty. Nula nebo míň znamená, že už běží. */
+function zacinaZa(zacatek: string): number {
+    const den = new Date(`${zacatek}T12:00:00`);
+    const dnes = new Date();
+    dnes.setHours(12, 0, 0, 0);
+
+    return Math.round((den.getTime() - dnes.getTime()) / 86400000);
+}
+
 /** Hlavička: kde jsme, jaké období a hlavní akce. */
 function Hlavicka({ cesta, obdobi, popisObdobi, onObdobi, onPridat }: {
     cesta: Ciselniky['active_trip'];
@@ -328,8 +337,15 @@ function Hlavicka({ cesta, obdobi, popisObdobi, onObdobi, onPridat }: {
                         {popisObdobi}
                         {cesta && (
                             <span className="ml-1.5 inline-flex items-center gap-1 rounded-full border border-[var(--color-border)] px-2 py-0.5 text-[11px]">
+                                {/* U cesty, která teprve začne, se nepíše „do konce".
+                                    Kalendářně je to pravda, ale vedle denní částky
+                                    počítané z délky pobytu by to byla dvě různá čísla —
+                                    a hlavně před odjezdem nikoho nezajímá konec, ale
+                                    začátek. */}
                                 <MapPin size={11}/> {cesta.name}
-                                {cesta.days_left !== null && ` · ${dny(cesta.days_left)} do konce`}
+                                {cesta.starts_on && zacinaZa(cesta.starts_on) > 0
+                                    ? ` · začíná za ${dny(zacinaZa(cesta.starts_on))}`
+                                    : cesta.days_left !== null && ` · ${dny(cesta.days_left)} do konce`}
                             </span>
                         )}
                     </p>
@@ -373,11 +389,51 @@ function Sesle({ children, onZavrit }: { children: React.ReactNode; onZavrit: ()
         return () => window.removeEventListener('keydown', zavriEscape);
     }, [onZavrit]);
 
+    /*
+     * Výška podle skutečně viditelné plochy, ne podle `dvh`.
+     *
+     * Tohle je ta chyba, kvůli které nešlo uložit směnu: `dvh` se při vyjeté
+     * klávesnici nezmenší. Formulář si dál myslí, že má celou obrazovku, patička
+     * s tlačítkem sedí na jeho spodním okraji — a ten je tři sta bodů pod klávesnicí.
+     * Kdo vyplňoval poslední pole, se k „Zapsat směnu" nedostal.
+     *
+     * `visualViewport` hlásí, co je doopravdy vidět. Dialog se tím zmenší a patička
+     * vyjede nad klávesnici. Prohlížeče, které API nemají, spadnou zpátky na `dvh` —
+     * tam se nic nezhorší.
+     */
+    const [vyska, setVyska] = useState<number | null>(null);
+
+    useEffect(() => {
+        const vv = window.visualViewport;
+
+        if (! vv) return;
+
+        /*
+         * Zasahuje se jen tehdy, když klávesnice opravdu ubrala místo.
+         *
+         * Bez téhle podmínky by inline výška přebila `sm:h-auto` i na monitoru a dialog
+         * by byl vždycky přes celou obrazovku, i kdyby v něm byla tři pole. Sto bodů je
+         * práh, pod který se běžné lišty prohlížeče nedostanou, ale klávesnice ano.
+         */
+        const zmer = () => setVyska(window.innerHeight - vv.height > 100 ? vv.height : null);
+
+        zmer();
+        vv.addEventListener('resize', zmer);
+        vv.addEventListener('scroll', zmer);
+
+        return () => {
+            vv.removeEventListener('resize', zmer);
+            vv.removeEventListener('scroll', zmer);
+        };
+    }, []);
+
     return (
         <div className="fixed inset-0 z-[950] flex items-end justify-center sm:items-center" role="dialog" aria-modal="true" aria-label="Nový záznam">
             <button type="button" aria-label="Zavřít" onClick={onZavrit}
                 className="absolute inset-0 bg-black/50"/>
-            <div className="relative flex h-[92dvh] w-full flex-col overflow-hidden rounded-t-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] sm:h-auto sm:max-h-[88dvh] sm:max-w-lg sm:rounded-2xl">
+            <div
+                className="relative flex h-[92dvh] w-full flex-col overflow-hidden rounded-t-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] sm:h-auto sm:max-h-[88dvh] sm:max-w-lg sm:rounded-2xl"
+                style={vyska ? { height: Math.min(vyska * 0.96, vyska - 8), maxHeight: vyska - 8 } : undefined}>
                 {children}
             </div>
         </div>

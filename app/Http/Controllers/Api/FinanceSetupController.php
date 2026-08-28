@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\FinanceCategory;
 use App\Models\FinanceProject;
+use App\Models\FinanceRecurring;
 use App\Models\FinanceTemplate;
 use App\Models\GallerySpace;
 use App\Models\Partner;
@@ -12,6 +13,7 @@ use App\Models\Transaction;
 use App\Models\Wallet;
 use App\Services\Finance\FinanceFilter;
 use App\Services\Finance\FinanceService;
+use App\Services\Finance\RecurringService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -601,6 +603,147 @@ class FinanceSetupController extends Controller
         $k->delete();
 
         return response()->json(['categories' => $this->kategorie($space)]);
+    }
+
+    // ---------------------------------------------------- pravidelné platby
+
+    /**
+     * Předpisy pravidelných plateb.
+     *
+     * Vrací i to, co z nich ještě přijde do konce aktivní cesty — to je celý důvod,
+     * proč předpisy existují. Čtyři nezaplacené nájmy jsou peníze, které už mají
+     * majitele, i když ještě leží na účtu.
+     */
+    public function recurring(Request $request): JsonResponse
+    {
+        $space = $this->space($request);
+
+        // Dopsat, co mělo proběhnout. Jen do dneška — budoucí splátka z účtu neodešla.
+        app(RecurringService::class)->generovat($space);
+
+        return response()->json(['recurring' => $this->predpisy($space)]);
+    }
+
+    public function storeRecurring(Request $request): JsonResponse
+    {
+        $space = $this->space($request);
+
+        $data = $request->validate([
+            'name' => 'required|string|max:120',
+            'type' => 'sometimes|in:expense,income',
+            'amount' => 'required|numeric|min:0.01',
+            'wallet_uuid' => 'required|uuid',
+            'category_uuid' => 'nullable|uuid',
+            'trip_uuid' => 'nullable|uuid',
+            'day_of_month' => 'required|integer|min:1|max:31',
+            'starts_on' => 'required|date',
+            'ends_on' => 'nullable|date|after_or_equal:starts_on',
+            'split' => 'nullable|in:equal,first,second',
+            'payer_partner_id' => 'nullable|integer',
+        ]);
+
+        $ucet = Wallet::where('gallery_space_id', $space->id)->where('uuid', $data['wallet_uuid'])->firstOrFail();
+        $cesta = ! empty($data['trip_uuid'])
+            ? FinanceProject::where('gallery_space_id', $space->id)->where('uuid', $data['trip_uuid'])->first()
+            : null;
+
+        $predpis = FinanceRecurring::create([
+            'gallery_space_id' => $space->id,
+            'name' => $data['name'],
+            'type' => $data['type'] ?? 'expense',
+            'amount' => $data['amount'],
+            // Měna se bere z účtu, ne z formuláře. Nájem placený z eurové karty je
+            // v eurech a nabídnout u něj jinou měnu by znamenalo zápis, který nesedí
+            // s účtem, ze kterého odchází.
+            'currency' => $ucet->currency,
+            'wallet_id' => $ucet->id,
+            'finance_category_id' => $this->idKategorie($space, $data['category_uuid'] ?? null),
+            'finance_project_id' => $cesta?->id,
+            'payer_partner_id' => $data['payer_partner_id'] ?? null,
+            'split' => $data['split'] ?? null,
+            'day_of_month' => $data['day_of_month'],
+            'starts_on' => $data['starts_on'],
+            'ends_on' => $data['ends_on'] ?? null,
+            'created_by' => $request->user()->id,
+            'is_active' => true,
+        ]);
+
+        // Splátky, které už měly proběhnout, se dopíšou hned — předpis založený
+        // uprostřed pobytu má doplnit i to, co uteklo.
+        app(RecurringService::class)->generovat($space);
+
+        return response()->json(['recurring' => $this->predpisy($space)], 201);
+    }
+
+    public function updateRecurring(Request $request, string $uuid): JsonResponse
+    {
+        $space = $this->space($request);
+        $predpis = FinanceRecurring::where('gallery_space_id', $space->id)->where('uuid', $uuid)->firstOrFail();
+
+        $predpis->update($request->validate([
+            'name' => 'sometimes|string|max:120',
+            'amount' => 'sometimes|numeric|min:0.01',
+            'day_of_month' => 'sometimes|integer|min:1|max:31',
+            'ends_on' => 'nullable|date',
+            'is_active' => 'sometimes|boolean',
+        ]));
+
+        return response()->json(['recurring' => $this->predpisy($space)]);
+    }
+
+    /**
+     * Smazání předpisu.
+     *
+     * Zapsané splátky zůstávají. Jsou to peníze, které opravdu odešly — smazat je
+     * spolu s předpisem by změnilo zůstatky na účtech zpětně a nikdo by nepoznal proč.
+     * Předpis jen přestane vyrábět další.
+     */
+    public function destroyRecurring(Request $request, string $uuid): JsonResponse
+    {
+        $space = $this->space($request);
+        $predpis = FinanceRecurring::where('gallery_space_id', $space->id)->where('uuid', $uuid)->firstOrFail();
+
+        $pocet = Transaction::where('recurring_id', $predpis->id)->count();
+        $predpis->delete();
+
+        return response()->json([
+            'recurring' => $this->predpisy($space),
+            'kept' => $pocet,
+        ]);
+    }
+
+    private function predpisy(GallerySpace $space)
+    {
+        $cesta = $this->finance->activeTrip($space);
+        $sluzba = app(RecurringService::class);
+
+        return FinanceRecurring::where('gallery_space_id', $space->id)
+            ->with(['wallet:id,uuid,name,currency', 'category:id,uuid,name,color', 'project:id,uuid,name'])
+            ->orderByDesc('is_active')->orderBy('day_of_month')
+            ->get()
+            ->map(function (FinanceRecurring $p) use ($cesta) {
+                $doKonce = $cesta?->ends_on
+                    ? $p->zbyvaDoKonce(Carbon::today(), $cesta->ends_on)
+                    : 0.0;
+
+                return [
+                    'uuid' => $p->uuid,
+                    'name' => $p->name,
+                    'type' => $p->type,
+                    'amount' => (float) $p->amount,
+                    'currency' => $p->currency,
+                    'wallet' => $p->wallet ? ['uuid' => $p->wallet->uuid, 'name' => $p->wallet->name] : null,
+                    'category' => $p->category ? ['uuid' => $p->category->uuid, 'name' => $p->category->name, 'color' => $p->category->color] : null,
+                    'trip' => $p->project?->name,
+                    'day_of_month' => $p->day_of_month,
+                    'starts_on' => $p->starts_on->toDateString(),
+                    'ends_on' => $p->ends_on?->toDateString(),
+                    'split' => $p->split,
+                    'is_active' => (bool) $p->is_active,
+                    'paid_count' => Transaction::where('recurring_id', $p->id)->count(),
+                    'remaining_to_trip_end' => round($doKonce, 2),
+                ];
+            })->values();
     }
 
     // -------------------------------------------------------------- šablony

@@ -138,6 +138,11 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
         Route::post('/partneri', [App\Http\Controllers\Api\FinanceSetupController::class, 'storePartner'])->name('partners.store');
 
         // Šablony předvyplní formulář vším kromě částky.
+        // Pravidelné platby — nájem se zapíše jednou a chodí sám.
+        Route::get('/pravidelne', [App\Http\Controllers\Api\FinanceSetupController::class, 'recurring'])->name('recurring');
+        Route::post('/pravidelne', [App\Http\Controllers\Api\FinanceSetupController::class, 'storeRecurring'])->name('recurring.store');
+        Route::patch('/pravidelne/{uuid}', [App\Http\Controllers\Api\FinanceSetupController::class, 'updateRecurring'])->name('recurring.update');
+        Route::delete('/pravidelne/{uuid}', [App\Http\Controllers\Api\FinanceSetupController::class, 'destroyRecurring'])->name('recurring.destroy');
         Route::get('/sablony', [App\Http\Controllers\Api\FinanceSetupController::class, 'templates'])->name('templates');
         Route::post('/sablony', [App\Http\Controllers\Api\FinanceSetupController::class, 'storeTemplate'])->name('templates.store');
         Route::post('/sablony/{uuid}/pouzito', [App\Http\Controllers\Api\FinanceSetupController::class, 'useTemplate'])->name('templates.use');

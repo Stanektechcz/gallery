@@ -12,6 +12,7 @@ use App\Models\TransactionShare;
 use App\Models\Wallet;
 use App\Services\Finance\FinanceFilter;
 use App\Services\Finance\FinanceService;
+use App\Services\Finance\RecurringService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -72,6 +73,8 @@ class FinanceController extends Controller
     {
         $space = $this->space($request);
         $this->finance->prepare($space);
+        // Dopsat splátky, které měly proběhnout. Jen do dneška — viz RecurringService.
+        app(RecurringService::class)->generovat($space);
 
         $filtr = FinanceFilter::zDotazu($request->all(), $space);
         $pohyby = $filtr->dotaz($space)->get();
@@ -636,13 +639,27 @@ class FinanceController extends Controller
 
         $ciste = max(0, (float) $utraceno - (float) $vraceno);
 
+        $od = $cesta?->starts_on ?? $filtr->od;
+        $do = $cesta?->ends_on ?? $filtr->do;
+
+        /*
+         * Nájem, který ještě přijde, není volná částka.
+         *
+         * Bez tohohle řádku říká „bezpečně na den" o nájem víc, než kolik doopravdy
+         * zbývá — a je to ta nejhorší možná chyba, protože zní přesvědčivě a projeví
+         * se až v pátém měsíci, kdy na nájem nezbude.
+         *
+         * Odečítají se jako rezerva: peníze, které z rozdělení vypadnou, ale ze
+         * zbývající částky ne. Ta pořád ukazuje, co je na účtu.
+         */
+        $zavazky = app(RecurringService::class)->zavazky($space, $menaLimitu, $do);
+
         $bezpecne = $this->finance->safeDaily(
-            $limit, $ciste, $rezerva,
-            $cesta?->starts_on ?? $filtr->od,
-            $cesta?->ends_on ?? $filtr->do,
+            $limit, $ciste, $rezerva + $zavazky['total'], $od, $do,
         );
 
         return [
+            'commitments' => $zavazky,
             'name' => $cesta?->name,
             'kind' => $cesta ? 'trip' : 'monthly',
             'currency' => $menaLimitu,

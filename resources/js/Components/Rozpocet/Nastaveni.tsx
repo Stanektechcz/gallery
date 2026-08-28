@@ -2,9 +2,10 @@ import { hlaska } from '@/Components/Hlasky';
 import Panel from '@/Components/Panel';
 import axios from 'axios';
 import {
-    ChevronRight, Eye, EyeOff, Palette, Plus, Star, Tags, Trash2, Users, Wallet, Zap,
+    CalendarClock, ChevronRight, Eye, EyeOff, Palette, Plus, Star, Tags, Trash2, Users, Wallet, Zap,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import Pravidelne from './Pravidelne';
 import { Dialog } from './Ucty';
 import type { Ciselniky, Sablona } from './typy';
 
@@ -31,6 +32,7 @@ export default function Nastaveni({ ciselniky, onZmena }: { ciselniky: Ciselniky
             pocet: `${ciselniky.partners.length}` },
         { id: 'kategorie', nazev: 'Kategorie', popis: 'Názvy, barvy a co se nabízí jako první', ikona: Tags,
             pocet: `${ciselniky.categories.length}` },
+        { id: 'pravidelne', nazev: 'Pravidelné platby', popis: 'Nájem a spol. — zapíše se jednou a chodí sám', ikona: CalendarClock },
         { id: 'sablony', nazev: 'Rychlý zápis', popis: 'Šablony, které předvyplní všechno kromě částky', ikona: Zap },
         { id: 'ucty', nazev: 'Účty', popis: 'Spravují se v tabu Účty', ikona: Wallet,
             pocet: `${ciselniky.wallets.length}` },
@@ -61,6 +63,7 @@ export default function Nastaveni({ ciselniky, onZmena }: { ciselniky: Ciselniky
             {sekce === 'partneri' && <SekcePartneru ciselniky={ciselniky} onZmena={onZmena} onZavrit={() => setSekce(null)}/>}
             {sekce === 'kategorie' && <SekceKategorii onZmena={onZmena} onZavrit={() => setSekce(null)}/>}
             {sekce === 'sablony' && <SekceSablon ciselniky={ciselniky} onZavrit={() => setSekce(null)}/>}
+            {sekce === 'pravidelne' && <Pravidelne ciselniky={ciselniky} onZmena={onZmena} onZavrit={() => setSekce(null)}/>}
 
             {sekce === 'ucty' && (
                 <Dialog nadpis="Účty" onZavrit={() => setSekce(null)}>

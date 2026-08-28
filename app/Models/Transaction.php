@@ -41,7 +41,7 @@ class Transaction extends Model
         'counterparty', 'payment_method', 'description', 'receipt_media_id',
         'state', 'created_by', 'approved_by', 'approved_at',
         'fee_included', 'provider', 'place',
-        'excluded_from_budget', 'exclusion_reason', 'refund_of_id', 'is_settlement',
+        'excluded_from_budget', 'exclusion_reason', 'refund_of_id', 'is_settlement', 'recurring_id',
     ];
 
     protected function casts(): array
