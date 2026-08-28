@@ -2,11 +2,11 @@ import { hlaska } from '@/Components/Hlasky';
 import Panel from '@/Components/Panel';
 import axios from 'axios';
 import {
-    ChevronRight, Eye, EyeOff, Palette, Plus, Star, Tags, Trash2, Users, Wallet,
+    ChevronRight, Eye, EyeOff, Palette, Plus, Star, Tags, Trash2, Users, Wallet, Zap,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Dialog } from './Ucty';
-import type { Ciselniky } from './typy';
+import type { Ciselniky, Sablona } from './typy';
 
 const POLE = 'w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-primary)] px-3 py-2.5 text-base text-[var(--color-text-primary)] focus:border-[var(--color-accent)] focus:outline-none';
 const POPISEK = 'block text-xs font-medium text-[var(--color-text-secondary)] mb-1.5';
@@ -31,6 +31,7 @@ export default function Nastaveni({ ciselniky, onZmena }: { ciselniky: Ciselniky
             pocet: `${ciselniky.partners.length}` },
         { id: 'kategorie', nazev: 'Kategorie', popis: 'Názvy, barvy a co se nabízí jako první', ikona: Tags,
             pocet: `${ciselniky.categories.length}` },
+        { id: 'sablony', nazev: 'Rychlý zápis', popis: 'Šablony, které předvyplní všechno kromě částky', ikona: Zap },
         { id: 'ucty', nazev: 'Účty', popis: 'Spravují se v tabu Účty', ikona: Wallet,
             pocet: `${ciselniky.wallets.length}` },
         { id: 'vzhled', nazev: 'Vzhled a zobrazení', popis: 'Motiv se přepíná v nastavení galerie', ikona: Palette },
@@ -59,6 +60,7 @@ export default function Nastaveni({ ciselniky, onZmena }: { ciselniky: Ciselniky
 
             {sekce === 'partneri' && <SekcePartneru ciselniky={ciselniky} onZmena={onZmena} onZavrit={() => setSekce(null)}/>}
             {sekce === 'kategorie' && <SekceKategorii onZmena={onZmena} onZavrit={() => setSekce(null)}/>}
+            {sekce === 'sablony' && <SekceSablon ciselniky={ciselniky} onZavrit={() => setSekce(null)}/>}
 
             {sekce === 'ucty' && (
                 <Dialog nadpis="Účty" onZavrit={() => setSekce(null)}>
@@ -78,6 +80,165 @@ export default function Nastaveni({ ciselniky, onZmena }: { ciselniky: Ciselniky
                 </Dialog>
             )}
         </div>
+    );
+}
+
+/**
+ * Šablony rychlého zápisu.
+ *
+ * „Potraviny, EUR karta, Maki, společné" jedním klepnutím. Částku šablona nenese —
+ * je to jediný údaj, který se pokaždé liší, a předvyplnit ho znamená riskovat, že se
+ * jednou uloží útrata, která se nestala.
+ */
+function SekceSablon({ ciselniky, onZavrit }: { ciselniky: Ciselniky; onZavrit: () => void }) {
+    const [sablony, setSablony] = useState<Sablona[]>([]);
+    const [nacita, setNacita] = useState(true);
+    const [form, setForm] = useState({ name: '', category_uuid: '', wallet_uuid: '', split: 'equal' });
+    const [uklada, setUklada] = useState(false);
+
+    useEffect(() => {
+        void axios.get<{ templates: Sablona[] }>('/api/v1/rozpocet/sablony')
+            .then(({ data }) => setSablony(data.templates))
+            .catch(() => hlaska('Šablony se nepodařilo načíst.', 'chyba'))
+            .finally(() => setNacita(false));
+    }, []);
+
+    const kategorie = ciselniky.categories.filter(k => k.kind === 'expense');
+
+    // Název se nabídne podle kategorie — málokdo si vymyslí lepší než „Potraviny".
+    const navrhNazvu = kategorie.find(k => k.uuid === form.category_uuid)?.name ?? '';
+
+    const pridej = async () => {
+        setUklada(true);
+
+        try {
+            const { data } = await axios.post<{ templates: Sablona[] }>('/api/v1/rozpocet/sablony', {
+                name: form.name || navrhNazvu,
+                type: 'expense',
+                category_uuid: form.category_uuid || null,
+                wallet_uuid: form.wallet_uuid || null,
+                split: form.split,
+            });
+
+            setSablony(data.templates);
+            setForm({ name: '', category_uuid: '', wallet_uuid: '', split: 'equal' });
+            hlaska('Šablona je uložená.', 'uspech');
+        } catch {
+            hlaska('Šablonu se nepodařilo uložit.', 'chyba');
+        } finally {
+            setUklada(false);
+        }
+    };
+
+    const smaz = async (s: Sablona) => {
+        try {
+            const { data } = await axios.delete<{ templates: Sablona[] }>(`/api/v1/rozpocet/sablony/${s.uuid}`);
+            setSablony(data.templates);
+        } catch {
+            hlaska('Šablonu se nepodařilo smazat.', 'chyba');
+        }
+    };
+
+    return (
+        <Dialog nadpis="Rychlý zápis" onZavrit={onZavrit}>
+            <p className="mb-3 text-xs leading-relaxed text-[var(--color-text-secondary)]">
+                Šablona předvyplní účet, kategorii i rozdělení — zbude zadat částku.
+                V nabídce u výdaje se zobrazí šest nejpoužívanějších.
+            </p>
+
+            {nacita && <p className="text-xs text-[var(--color-text-secondary)]">Načítám…</p>}
+
+            {! nacita && sablony.length > 0 && (
+                <ul className="mb-4 space-y-1.5">
+                    {sablony.map(s => (
+                        <li key={s.uuid} className="flex items-center gap-2 rounded-xl border border-[var(--color-border)] px-3 py-2">
+                            {s.category?.color && (
+                                <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: s.category.color }}/>
+                            )}
+                            <span className="min-w-0 flex-1">
+                                <span className="block truncate text-sm text-[var(--color-text-primary)]">{s.name}</span>
+                                <span className="block truncate text-[11px] text-[var(--color-text-secondary)]">
+                                    {[s.category?.name, s.wallet?.name,
+                                        s.split === 'equal' ? 'společné' : s.split === 'first' ? ciselniky.partners[0]?.name : ciselniky.partners[1]?.name,
+                                    ].filter(Boolean).join(' · ')}
+                                    {s.used_count > 0 && ` · použitá ${s.used_count}×`}
+                                </span>
+                            </span>
+                            <button type="button" onClick={() => void smaz(s)}
+                                aria-label={`Smazat šablonu ${s.name}`}
+                                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-[var(--color-text-secondary)] hover:text-red-400">
+                                <Trash2 size={15}/>
+                            </button>
+                        </li>
+                    ))}
+                </ul>
+            )}
+
+            {! nacita && sablony.length === 0 && (
+                <p className="mb-4 rounded-xl border border-dashed border-[var(--color-border)] px-3 py-4 text-center text-xs leading-relaxed text-[var(--color-text-secondary)]">
+                    Zatím žádná. Vyplatí se na to, co se opakuje — nákup potravin, MHD,
+                    kafe. Ušetří pokaždé tři klepnutí.
+                </p>
+            )}
+
+            <div className="space-y-3 border-t border-[var(--color-border)] pt-3">
+                <p className={POPISEK}>Nová šablona</p>
+
+                <div>
+                    <label className={POPISEK} htmlFor="sablona-kategorie">Kategorie</label>
+                    <select id="sablona-kategorie" value={form.category_uuid}
+                        onChange={e => setForm(f => ({ ...f, category_uuid: e.target.value }))} className={POLE}>
+                        <option value="">Vyberte</option>
+                        {kategorie.map(k => <option key={k.uuid} value={k.uuid}>{k.name}</option>)}
+                    </select>
+                </div>
+
+                <div>
+                    <label className={POPISEK} htmlFor="sablona-ucet">Účet</label>
+                    <select id="sablona-ucet" value={form.wallet_uuid}
+                        onChange={e => setForm(f => ({ ...f, wallet_uuid: e.target.value }))} className={POLE}>
+                        <option value="">Nechat na výběru</option>
+                        {ciselniky.wallets.map(u => <option key={u.uuid} value={u.uuid}>{u.name} ({u.currency})</option>)}
+                    </select>
+                </div>
+
+                {ciselniky.partners.length === 2 && (
+                    <div>
+                        <label className={POPISEK}>Čí výdaj</label>
+                        <div className="grid grid-cols-3 gap-1.5">
+                            {[
+                                { v: 'equal', p: 'Společné' },
+                                { v: 'first', p: ciselniky.partners[0].name },
+                                { v: 'second', p: ciselniky.partners[1].name },
+                            ].map(m => (
+                                <button key={m.v} type="button" onClick={() => setForm(f => ({ ...f, split: m.v }))}
+                                    aria-pressed={form.split === m.v}
+                                    className={`min-h-11 rounded-xl border px-2 text-sm ${
+                                        form.split === m.v
+                                            ? 'border-[var(--color-accent)] bg-[var(--color-surface-muted)] text-[var(--color-text-primary)]'
+                                            : 'border-[var(--color-border)] text-[var(--color-text-secondary)]'
+                                    }`}>
+                                    {m.p}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                <div>
+                    <label className={POPISEK} htmlFor="sablona-nazev">Název</label>
+                    <input id="sablona-nazev" value={form.name}
+                        onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                        placeholder={navrhNazvu || 'Např. Nákup'} className={POLE}/>
+                </div>
+
+                <button type="button" onClick={() => void pridej()}
+                    disabled={uklada || (! form.name && ! navrhNazvu)}
+                    className="min-h-11 w-full rounded-xl bg-[var(--color-accent)] px-4 text-sm font-medium text-[var(--color-accent-contrast)] disabled:opacity-40">
+                    Uložit šablonu
+                </button>
+            </div>
+        </Dialog>
     );
 }
 

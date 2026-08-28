@@ -27,6 +27,18 @@ export type Kategorie = {
 
 export type Partner = { id: number; uuid: string; name: string; kind: string };
 
+/** Šablona rychlého zápisu. Částku nenese nikdy — ta se pokaždé liší. */
+export type Sablona = {
+    uuid: string;
+    name: string;
+    type: 'expense' | 'income';
+    category: { uuid: string; name: string; color: string | null } | null;
+    wallet: { uuid: string; name: string; currency: string } | null;
+    payer: { id: number; name: string } | null;
+    split: 'equal' | 'first' | 'second' | null;
+    used_count: number;
+};
+
 export type Cesta = {
     uuid: string;
     name: string;

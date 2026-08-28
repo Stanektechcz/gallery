@@ -3,7 +3,7 @@ import { castka as prectiCastku, dnesniDatum, kurz, penize, TYPY_ZAZNAMU, type T
 import axios from 'axios';
 import { AlertTriangle, ArrowRightLeft, ArrowUpDown, Check, ChevronDown, Minus, Plus, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { Ciselniky, Kategorie, Ucet } from './typy';
+import type { Ciselniky, Kategorie, Sablona, Ucet } from './typy';
 
 /**
  * Zápis nového záznamu.
@@ -86,10 +86,44 @@ export default function PridatZaznam({ ciselniky, vychoziTyp = 'expense', onHoto
         description: '',
         excluded_from_budget: false,
         exclusion_reason: '',
-        deleni: 'equal' as 'equal' | 'adri' | 'maki',
+        deleni: 'equal' as 'equal' | 'adri' | 'maki' | 'vlastni',
+        podil_prvni: '50',
     }));
 
     const poleCastky = useRef<HTMLInputElement>(null);
+
+    const [sablony, setSablony] = useState<Sablona[]>([]);
+
+    useEffect(() => {
+        void axios.get<{ templates: Sablona[] }>('/api/v1/rozpocet/sablony')
+            .then(({ data }) => setSablony(data.templates.filter(s => s.type === 'expense').slice(0, 6)))
+            .catch(() => setSablony([]));
+    }, []);
+
+    /**
+     * Použití šablony.
+     *
+     * Přepíše účet, kategorii, plátce i rozdělení. Částku ne — ta se nepředvyplňuje
+     * nikdy, protože je jediná, co se pokaždé liší, a nabídnout u ní číslo znamená,
+     * že ho jednou někdo přehlédne a uloží útratu, která se nestala.
+     *
+     * Zbytek přepisuje celý, ne jen prázdná pole. Šablona je vědomé klepnutí a čeká
+     * se od ní, že nastaví přesně to, co má; míchat ji s předchozími volbami by dalo
+     * kombinaci, kterou nikdo nezvolil.
+     */
+    const pouzijSablonu = (s: Sablona) => {
+        uprav({
+            wallet_from: s.wallet?.uuid ?? form.wallet_from,
+            category: s.category?.uuid ?? form.category,
+            payer_partner_id: s.payer ? String(s.payer.id) : form.payer_partner_id,
+            deleni: s.split === 'first' ? 'adri' : s.split === 'second' ? 'maki' : 'equal',
+        });
+
+        poleCastky.current?.focus();
+
+        // Pořadí v nabídce se řídí použitím, takže se to musí započítat.
+        void axios.post(`/api/v1/rozpocet/sablony/${s.uuid}/pouzito`).catch(() => {});
+    };
 
     // Kurzor rovnou v částce. Je to jediné pole, které se musí vyplnit pokaždé —
     // všechno ostatní se dá nechat předvyplněné.
@@ -173,11 +207,19 @@ export default function PridatZaznam({ ciselniky, vychoziTyp = 'expense', onHoto
         let split: Array<{ partner_id: number; amount: number; basis: string }> = [];
 
         if (typ === 'expense' && partneri.length === 2 && c) {
-            if (form.deleni === 'equal') {
-                const polovina = Math.round((c / 2) * 100) / 100;
+            if (form.deleni === 'equal' || form.deleni === 'vlastni') {
+                // Vlastní poměr, nebo půl na půl. Haléř navíc dostává vždycky první —
+                // aby dvě uložení téže částky dala týž výsledek a saldo se nekývalo
+                // o cent podle toho, kdo zrovna klikl.
+                const podil = form.deleni === 'vlastni'
+                    ? (prectiCastku(form.podil_prvni) ?? 50) / 100
+                    : 0.5;
+
+                const druhy = Math.round(c * (1 - podil) * 100) / 100;
+
                 split = [
-                    { partner_id: partneri[0].id, amount: Math.round((c - polovina) * 100) / 100, basis: 'equal' },
-                    { partner_id: partneri[1].id, amount: polovina, basis: 'equal' },
+                    { partner_id: partneri[0].id, amount: Math.round((c - druhy) * 100) / 100, basis: form.deleni === 'vlastni' ? 'percent' : 'equal' },
+                    { partner_id: partneri[1].id, amount: druhy, basis: form.deleni === 'vlastni' ? 'percent' : 'equal' },
                 ];
             } else {
                 const kdo = form.deleni === 'adri' ? partneri[0] : partneri[1];
@@ -276,6 +318,25 @@ export default function PridatZaznam({ ciselniky, vychoziTyp = 'expense', onHoto
                         className={`${POLE} !text-3xl !font-semibold tabular-nums`}/>
                     {chyby.amount_from && <p className="mt-1 text-xs text-red-400">{chyby.amount_from}</p>}
                 </div>
+
+                {/* Šablony. Předvyplní všechno kromě částky — ta se nepředvyplňuje
+                    nikdy, protože je to jediný údaj, který se pokaždé liší. */}
+                {typ === 'expense' && sablony.length > 0 && (
+                    <div className="mt-4">
+                        <label className={POPISEK}>Rychlý zápis</label>
+                        <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1">
+                            {sablony.map(s => (
+                                <button key={s.uuid} type="button" onClick={() => pouzijSablonu(s)}
+                                    className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-xl border border-[var(--color-border)] px-3 text-[13px] text-[var(--color-text-secondary)] hover:border-[var(--color-accent)] hover:text-[var(--color-text-primary)]">
+                                    {s.category?.color && (
+                                        <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: s.category.color }}/>
+                                    )}
+                                    {s.name}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                )}
 
                 {/* Rychlé kategorie — jen u výdaje a příjmu. */}
                 {(typ === 'expense' || typ === 'income') && (
@@ -420,15 +481,16 @@ export default function PridatZaznam({ ciselniky, vychoziTyp = 'expense', onHoto
                 {typ === 'expense' && ciselniky.partners.length === 2 && (
                     <div className="mt-4">
                         <label className={POPISEK}>Čí to byl výdaj</label>
-                        <div className="grid grid-cols-3 gap-1.5">
+                        <div className="grid grid-cols-4 gap-1.5">
                             {[
                                 { id: 'equal' as const, popis: 'Společné' },
                                 { id: 'adri' as const, popis: ciselniky.partners[0].name },
                                 { id: 'maki' as const, popis: ciselniky.partners[1].name },
+                                { id: 'vlastni' as const, popis: 'Jiný poměr' },
                             ].map(m => (
                                 <button key={m.id} type="button" onClick={() => uprav({ deleni: m.id })}
                                     aria-pressed={form.deleni === m.id}
-                                    className={`min-h-[2.75rem] rounded-xl border px-2 text-sm ${
+                                    className={`min-h-[2.75rem] rounded-xl border px-1 text-[13px] leading-tight ${
                                         form.deleni === m.id
                                             ? 'border-[var(--color-accent)] bg-[var(--color-surface-muted)] text-[var(--color-text-primary)]'
                                             : 'border-[var(--color-border)] text-[var(--color-text-secondary)]'
@@ -437,6 +499,39 @@ export default function PridatZaznam({ ciselniky, vychoziTyp = 'expense', onHoto
                                 </button>
                             ))}
                         </div>
+
+                        {/* Vlastní poměr. Zadává se jedno číslo, druhé se dopočítá —
+                            dvě pole by dovolila napsat 60 a 60 a formulář by musel
+                            odmítat něco, co vůbec nemuselo jít zadat. */}
+                        {form.deleni === 'vlastni' && (
+                            <div className="mt-2 rounded-xl border border-[var(--color-border)] p-3">
+                                <label className={POPISEK} htmlFor="fin-podil">
+                                    Podíl pro {ciselniky.partners[0].name}
+                                </label>
+                                <div className="flex items-center gap-2">
+                                    <input id="fin-podil" type="range" min="0" max="100" step="5"
+                                        value={form.podil_prvni}
+                                        onChange={e => uprav({ podil_prvni: e.target.value })}
+                                        className="min-h-11 flex-1 accent-[var(--color-accent)]"/>
+                                    <span className="w-12 shrink-0 text-right text-sm tabular-nums text-[var(--color-text-primary)]">
+                                        {form.podil_prvni} %
+                                    </span>
+                                </div>
+                                <p className="mt-1 text-[11px] text-[var(--color-text-secondary)]">
+                                    {ciselniky.partners[0].name} nese {form.podil_prvni} %,{' '}
+                                    {ciselniky.partners[1].name} zbylých {100 - Number(form.podil_prvni)} %
+                                    {(() => {
+                                        const c = prectiCastku(form.amount_from);
+                                        if (! c || c <= 0) return null;
+                                        const podil = Number(form.podil_prvni) / 100;
+                                        const druhy = Math.round(c * (1 - podil) * 100) / 100;
+
+                                        return ` — tedy ${penize(Math.round((c - druhy) * 100) / 100, zdroj?.currency ?? 'EUR')} a ${penize(druhy, zdroj?.currency ?? 'EUR')}`;
+                                    })()}.
+                                </p>
+                            </div>
+                        )}
+
                         {chyby.split && <p className="mt-1 text-xs text-red-400">{chyby.split}</p>}
                     </div>
                 )}

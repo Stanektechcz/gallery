@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\FinanceCategory;
 use App\Models\FinanceProject;
+use App\Models\FinanceTemplate;
 use App\Models\GallerySpace;
 use App\Models\Partner;
 use App\Models\Transaction;
@@ -348,6 +349,102 @@ class FinanceSetupController extends Controller
         $k->delete();
 
         return response()->json(['categories' => $this->kategorie($space)]);
+    }
+
+    // -------------------------------------------------------------- šablony
+
+    /**
+     * Šablony rychlého zápisu.
+     *
+     * Předvyplní všechno kromě částky. Ta se nepředvyplňuje nikdy — je to jediný údaj,
+     * který se pokaždé liší, a nabídnout u něj číslo by znamenalo, že ho někdo jednou
+     * přehlédne a zapíše cizí částku.
+     *
+     * Řadí se podle použití, ne podle abecedy. Šablona, která se používá denně, má být
+     * první; ta z loňska může být poslední.
+     */
+    public function templates(Request $request): JsonResponse
+    {
+        return response()->json(['templates' => $this->sablony($this->space($request))]);
+    }
+
+    public function storeTemplate(Request $request): JsonResponse
+    {
+        $space = $this->space($request);
+
+        $data = $request->validate([
+            'name' => 'required|string|max:80',
+            'type' => 'sometimes|in:expense,income',
+            'category_uuid' => 'nullable|uuid',
+            'wallet_uuid' => 'nullable|uuid',
+            'payer_partner_id' => 'nullable|integer',
+            'split' => 'nullable|in:equal,first,second',
+        ]);
+
+        FinanceTemplate::create([
+            'gallery_space_id' => $space->id,
+            'name' => $data['name'],
+            'type' => $data['type'] ?? 'expense',
+            'finance_category_id' => $this->idKategorie($space, $data['category_uuid'] ?? null),
+            'wallet_id' => $this->idUctu($space, $data['wallet_uuid'] ?? null),
+            'payer_partner_id' => $data['payer_partner_id'] ?? null,
+            'split' => $data['split'] ?? null,
+            'sort_order' => (int) FinanceTemplate::where('gallery_space_id', $space->id)->max('sort_order') + 10,
+        ]);
+
+        return response()->json(['templates' => $this->sablony($space)], 201);
+    }
+
+    /** Započítá použití, aby se často používané šablony držely nahoře. */
+    public function useTemplate(Request $request, string $uuid): JsonResponse
+    {
+        $space = $this->space($request);
+
+        FinanceTemplate::where('gallery_space_id', $space->id)->where('uuid', $uuid)
+            ->increment('used_count');
+
+        return response()->json(['ok' => true]);
+    }
+
+    public function destroyTemplate(Request $request, string $uuid): JsonResponse
+    {
+        $space = $this->space($request);
+
+        FinanceTemplate::where('gallery_space_id', $space->id)->where('uuid', $uuid)->delete();
+
+        return response()->json(['templates' => $this->sablony($space)]);
+    }
+
+    private function sablony(GallerySpace $space)
+    {
+        return FinanceTemplate::where('gallery_space_id', $space->id)
+            ->with(['category:id,uuid,name,color', 'wallet:id,uuid,name,currency', 'payer:id,name'])
+            ->orderByDesc('used_count')->orderBy('sort_order')
+            ->get()
+            ->map(fn (FinanceTemplate $s) => [
+                'uuid' => $s->uuid,
+                'name' => $s->name,
+                'type' => $s->type,
+                'category' => $s->category ? ['uuid' => $s->category->uuid, 'name' => $s->category->name, 'color' => $s->category->color] : null,
+                'wallet' => $s->wallet ? ['uuid' => $s->wallet->uuid, 'name' => $s->wallet->name, 'currency' => $s->wallet->currency] : null,
+                'payer' => $s->payer ? ['id' => $s->payer->id, 'name' => $s->payer->name] : null,
+                'split' => $s->split,
+                'used_count' => $s->used_count,
+            ])->values();
+    }
+
+    private function idKategorie(GallerySpace $space, ?string $uuid): ?int
+    {
+        return $uuid
+            ? FinanceCategory::where('gallery_space_id', $space->id)->where('uuid', $uuid)->value('id')
+            : null;
+    }
+
+    private function idUctu(GallerySpace $space, ?string $uuid): ?int
+    {
+        return $uuid
+            ? Wallet::where('gallery_space_id', $space->id)->where('uuid', $uuid)->value('id')
+            : null;
     }
 
     // ------------------------------------------------------------- partneři

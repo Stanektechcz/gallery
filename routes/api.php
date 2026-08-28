@@ -134,6 +134,12 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
 
         Route::post('/partneri', [App\Http\Controllers\Api\FinanceSetupController::class, 'storePartner'])->name('partners.store');
 
+        // Šablony předvyplní formulář vším kromě částky.
+        Route::get('/sablony', [App\Http\Controllers\Api\FinanceSetupController::class, 'templates'])->name('templates');
+        Route::post('/sablony', [App\Http\Controllers\Api\FinanceSetupController::class, 'storeTemplate'])->name('templates.store');
+        Route::post('/sablony/{uuid}/pouzito', [App\Http\Controllers\Api\FinanceSetupController::class, 'useTemplate'])->name('templates.use');
+        Route::delete('/sablony/{uuid}', [App\Http\Controllers\Api\FinanceSetupController::class, 'destroyTemplate'])->name('templates.destroy');
+
         // Rozpočty jsou strop nad knihou, ne vlastní evidence útrat.
         Route::get('/rozpocty', [App\Http\Controllers\Api\FinanceBudgetController::class, 'index'])->name('budgets');
         Route::post('/rozpocty', [App\Http\Controllers\Api\FinanceBudgetController::class, 'store'])->name('budgets.store');

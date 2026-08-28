@@ -148,6 +148,45 @@ export default function Transakce({ obdobi, filtr, ciselniky, onFiltr, onZmena }
                         <Vyber popisek="Měna" hodnota={filtr.mena ?? ''}
                             onZmena={v => onFiltr({ ...filtr, mena: v })}
                             moznosti={ciselniky.balances.map(b => ({ v: b.currency, p: b.currency }))}/>
+
+                        {ciselniky.partners.length > 0 && (
+                            <Vyber popisek="Kdo platil" hodnota={filtr.platce ?? ''}
+                                onZmena={v => onFiltr({ ...filtr, platce: v })}
+                                moznosti={ciselniky.partners.map(p => ({ v: String(p.id), p: p.name }))}/>
+                        )}
+
+                        {ciselniky.trips.length > 0 && (
+                            <Vyber popisek="Cesta" hodnota={filtr.cesta ?? ''}
+                                onZmena={v => onFiltr({ ...filtr, cesta: v })}
+                                moznosti={ciselniky.trips.map(c => ({ v: c.uuid, p: c.name }))}/>
+                        )}
+
+                        <div>
+                            <label className="mb-1.5 block text-xs font-medium text-[var(--color-text-secondary)]" htmlFor="filtr-misto">
+                                Město nebo místo
+                            </label>
+                            <input id="filtr-misto" value={filtr.misto ?? ''}
+                                onChange={e => onFiltr({ ...filtr, misto: e.target.value })}
+                                placeholder="Drážďany" className={POLE}/>
+                        </div>
+
+                        {/* Rozsah částky. Užitečný hlavně obráceně, než by člověk čekal:
+                            „od 100" najde velké útraty, které jsou obvykle ty, na které
+                            se někdo ptá — ne drobné nákupy, kterých jsou stovky. */}
+                        <div className="sm:col-span-2">
+                            <label className="mb-1.5 block text-xs font-medium text-[var(--color-text-secondary)]">
+                                Částka
+                            </label>
+                            <div className="flex items-center gap-2">
+                                <input value={filtr.od_castky ?? ''} inputMode="decimal"
+                                    onChange={e => onFiltr({ ...filtr, od_castky: e.target.value })}
+                                    aria-label="Částka od" placeholder="od" className={`${POLE} tabular-nums`}/>
+                                <span className="shrink-0 text-xs text-[var(--color-text-secondary)]">až</span>
+                                <input value={filtr.do_castky ?? ''} inputMode="decimal"
+                                    onChange={e => onFiltr({ ...filtr, do_castky: e.target.value })}
+                                    aria-label="Částka do" placeholder="do" className={`${POLE} tabular-nums`}/>
+                            </div>
+                        </div>
                     </div>
                 </Panel>
             )}
@@ -250,9 +289,14 @@ function popisFiltru(klic: string, hodnota: string, c: Ciselniky): string {
     if (klic === 'typ') return { expense: 'Výdaj', income: 'Příjem', transfer: 'Převod', exchange: 'Směna' }[hodnota] ?? hodnota;
     if (klic === 'ucet') return c.wallets.find(u => u.uuid === hodnota)?.name ?? 'Účet';
     if (klic === 'kategorie') return c.categories.find(k => k.uuid === hodnota)?.name ?? 'Kategorie';
-    if (klic === 'hledat') return `„${hodnota}"`;
+    if (klic === 'hledat') return `„${hodnota}“`;
     if (klic === 'od') return `od ${hodnota}`;
     if (klic === 'do') return `do ${hodnota}`;
+    if (klic === 'platce') return c.partners.find(p => String(p.id) === hodnota)?.name ?? 'Plátce';
+    if (klic === 'cesta') return c.trips.find(t => t.uuid === hodnota)?.name ?? 'Cesta';
+    if (klic === 'misto') return `místo: ${hodnota}`;
+    if (klic === 'od_castky') return `od ${hodnota}`;
+    if (klic === 'do_castky') return `do ${hodnota}`;
 
     return `${klic}: ${hodnota}`;
 }

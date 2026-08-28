@@ -44,7 +44,8 @@ export default function RozpocetIndex() {
             tab: p.get('tab') ?? 'prehled',
             obdobi: p.get('obdobi') ?? 'mesic',
             filtr: Object.fromEntries(
-                ['typ', 'mena', 'ucet', 'kategorie', 'platce', 'misto', 'hledat', 'od', 'do', 'cesta']
+                ['typ', 'mena', 'ucet', 'kategorie', 'platce', 'misto', 'hledat', 'od', 'do', 'cesta',
+                    'od_castky', 'do_castky']
                     .map(k => [k, p.get(k) ?? ''])
                     .filter(([, v]) => v !== ''),
             ) as Record<string, string>,
