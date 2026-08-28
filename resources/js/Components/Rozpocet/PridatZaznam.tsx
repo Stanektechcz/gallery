@@ -112,6 +112,30 @@ export default function PridatZaznam({
 
     const [sablony, setSablony] = useState<Sablona[]>([]);
 
+    /**
+     * Kategorie, kterou u tohohle obchodníka používáme.
+     *
+     * Ptá se až po chvíli klidu v psaní — dotaz po každém písmeně by u „Restaurace"
+     * poslal deset požadavků a nabídka by pod prstem poskakovala.
+     */
+    const [navrh, setNavrh] = useState<{ uuid: string; name: string; color: string | null } | null>(null);
+
+    useEffect(() => {
+        if (typ !== 'expense' || form.counterparty.trim().length < 3) {
+            setNavrh(null);
+
+            return;
+        }
+
+        const casovac = setTimeout(() => {
+            void axios.get('/api/v1/rozpocet/navrh-kategorie', { params: { obchodnik: form.counterparty.trim() } })
+                .then(({ data }) => setNavrh(data.category))
+                .catch(() => setNavrh(null));
+        }, 500);
+
+        return () => clearTimeout(casovac);
+    }, [form.counterparty, typ]);
+
     useEffect(() => {
         void axios.get<{ templates: Sablona[] }>('/api/v1/rozpocet/sablony')
             .then(({ data }) => setSablony(data.templates.filter(s => s.type === 'expense').slice(0, 6)))
@@ -670,6 +694,19 @@ export default function PridatZaznam({
                                 <label className={POPISEK} htmlFor="fin-obchodnik">Obchodník</label>
                                 <input id="fin-obchodnik" value={form.counterparty}
                                     onChange={e => uprav({ counterparty: e.target.value })} className={POLE}/>
+
+                                {/* Návrh, ne rozhodnutí. Kategorie se vyplní až klepnutím —
+                                    vyplnit ji automaticky podle názvu by znamenalo, že se
+                                    jednou uloží špatná a nikdo si toho nevšimne, protože
+                                    ji nikdo nevybíral. */}
+                                {navrh && navrh.uuid !== form.category && (
+                                    <button type="button" onClick={() => uprav({ category: navrh.uuid })}
+                                        className="mt-1.5 inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-dashed border-[var(--color-accent)] px-3 text-xs text-[var(--color-text-primary)]">
+                                        <span className="h-2 w-2 shrink-0 rounded-full"
+                                            style={{ background: navrh.color ?? 'var(--color-text-secondary)' }}/>
+                                        Minule tu byla „{navrh.name}“ — použít?
+                                    </button>
+                                )}
                             </div>
                         )}
 

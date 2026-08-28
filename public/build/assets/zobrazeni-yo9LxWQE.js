@@ -1,1 +1,0 @@
-function e(){return typeof window>`u`||typeof window.matchMedia!=`function`?!0:window.matchMedia(`(min-width: 1024px)`).matches}export{e as t};

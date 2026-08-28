@@ -3,7 +3,7 @@ import Panel from '@/Components/Panel';
 import { dny } from '@/lib/cestina';
 import { castka as prectiCastku, datum, penize, penizeZbyva, procenta } from '@/lib/penize';
 import axios from 'axios';
-import { AlertTriangle, CalendarDays, PiggyBank, Plus, Trash2, TrendingUp } from 'lucide-react';
+import { AlertTriangle, Calculator, CalendarDays, PiggyBank, Plus, RotateCcw, Trash2, TrendingUp } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Dialog } from './Ucty';
 import type { BezpecneNaDen, Ciselniky } from './typy';
@@ -184,6 +184,8 @@ function KartaRozpoctu({ rozpocet: r, onUpravit }: { rozpocet: Rozpocet; onUprav
                     ton={r.projected_verdict === 'over' ? 'spatne' : 'plain'}/>
             </dl>
 
+            <CoKdyz rozpocet={r}/>
+
             {r.categories.length > 0 && (
                 <div className="mt-3 border-t border-[var(--color-border)] pt-3">
                     <p className={POPISEK}>Limity kategorií</p>
@@ -233,6 +235,120 @@ function KartaRozpoctu({ rozpocet: r, onUpravit }: { rozpocet: Rozpocet; onUprav
                 </div>
             )}
         </Panel>
+    );
+}
+
+/**
+ * „Co když" — simulace, která nic neukládá.
+ *
+ * Otázka „a co když budeme utrácet dvacet eur denně" má odpověď, kterou si člověk
+ * jinak počítá na papíře. Tady ji spočítá rozpočet, ale **nesmí přitom nic změnit**:
+ * simulace, která zapíše plánovaný výdaj, by z pomůcky udělala past.
+ *
+ * Proto žádné ukládání a jednoznačné „Zrušit simulaci", které vrátí skutečná čísla.
+ * Dokud je otevřená, je vidět, že jde o hypotézu — jiný rám a jiný nadpis.
+ */
+function CoKdyz({ rozpocet: r }: { rozpocet: Rozpocet }) {
+    const [otevrene, setOtevrene] = useState(false);
+    const [denne, setDenne] = useState('');
+    const [mimoradny, setMimoradny] = useState('');
+    const [rezervaNavic, setRezervaNavic] = useState('');
+
+    const dni = r.safe_daily.days_left ?? 0;
+
+    const vysledek = (() => {
+        if (dni <= 0) return null;
+
+        const naDen = prectiCastku(denne);
+        const navic = prectiCastku(mimoradny) ?? 0;
+        const rezerva = prectiCastku(rezervaNavic) ?? 0;
+
+        if (naDen === null && navic === 0 && rezerva === 0) return null;
+
+        // Nezadaná denní útrata znamená nulu, ne dosavadní tempo. Simulace odpovídá
+        // přesně na to, co se do ní napsalo — dosadit za člověka číslo, které nezadal,
+        // by dalo výsledek, u kterého by nevěděl, odkud se vzal.
+        const predpokladaneVydaje = (naDen ?? 0) * dni + navic;
+
+        const zbudeNaKonci = r.limit - r.spent - predpokladaneVydaje - rezerva;
+
+        return {
+            dni,
+            vydaje: predpokladaneVydaje,
+            zbude: zbudeNaKonci,
+            prekroci: zbudeNaKonci < 0,
+            // Kolik by se dalo utrácet, aby to vyšlo i s mimořádným výdajem a rezervou.
+            doporucene: (r.limit - r.spent - navic - rezerva) / dni,
+        };
+    })();
+
+    const zrusit = () => { setDenne(''); setMimoradny(''); setRezervaNavic(''); };
+
+    if (dni <= 0) return null;
+
+    return (
+        <div className="mt-3 border-t border-[var(--color-border)] pt-3">
+            <button type="button" onClick={() => setOtevrene(o => ! o)}
+                aria-expanded={otevrene}
+                className="inline-flex min-h-11 items-center gap-1.5 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]">
+                <Calculator size={14}/> Co když…
+            </button>
+
+            {otevrene && (
+                <div className="mt-2 rounded-xl border border-dashed border-[var(--color-accent)] p-3">
+                    <p className="mb-2 text-[11px] leading-relaxed text-[var(--color-text-secondary)]">
+                        Zkusmý výpočet. Nic se neuloží a rozpočet se nezmění.
+                    </p>
+
+                    <div className="grid gap-2 sm:grid-cols-3">
+                        <div>
+                            <label className={POPISEK} htmlFor={`cokdyz-den-${r.uuid}`}>Denně utratíme</label>
+                            <input id={`cokdyz-den-${r.uuid}`} type="text" inputMode="decimal" value={denne}
+                                onChange={e => setDenne(e.target.value)} placeholder="30"
+                                className={`${POLE} !py-2 tabular-nums`}/>
+                        </div>
+                        <div>
+                            <label className={POPISEK} htmlFor={`cokdyz-mimo-${r.uuid}`}>Navíc jednorázově</label>
+                            <input id={`cokdyz-mimo-${r.uuid}`} type="text" inputMode="decimal" value={mimoradny}
+                                onChange={e => setMimoradny(e.target.value)} placeholder="0"
+                                className={`${POLE} !py-2 tabular-nums`}/>
+                        </div>
+                        <div>
+                            <label className={POPISEK} htmlFor={`cokdyz-rez-${r.uuid}`}>Rezerva navíc</label>
+                            <input id={`cokdyz-rez-${r.uuid}`} type="text" inputMode="decimal" value={rezervaNavic}
+                                onChange={e => setRezervaNavic(e.target.value)} placeholder="0"
+                                className={`${POLE} !py-2 tabular-nums`}/>
+                        </div>
+                    </div>
+
+                    {vysledek && (
+                        <div className="mt-3 border-t border-[var(--color-border)] pt-2">
+                            <p className="text-sm text-[var(--color-text-primary)]">
+                                Na konci by {vysledek.prekroci ? 'chybělo' : 'zbylo'}{' '}
+                                <strong className="tabular-nums"
+                                    style={{ color: vysledek.prekroci ? 'var(--fin-vydaj)' : 'var(--fin-prijem)' }}>
+                                    {penize(Math.abs(vysledek.zbude), r.currency)}
+                                </strong>.
+                            </p>
+                            <p className="mt-1 text-[11px] leading-relaxed text-[var(--color-text-secondary)]">
+                                Za {dny(vysledek.dni)} by to dalo {penize(vysledek.vydaje, r.currency)} výdajů.
+                                {vysledek.prekroci && vysledek.doporucene > 0 && (
+                                    <> Aby to vyšlo, muselo by se utrácet nejvýš{' '}
+                                    <strong className="text-[var(--color-text-primary)]">
+                                        {penize(vysledek.doporucene, r.currency)}
+                                    </strong>{' '}denně.</>
+                                )}
+                            </p>
+
+                            <button type="button" onClick={zrusit}
+                                className="mt-2 inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-[var(--color-border)] px-3 text-xs text-[var(--color-text-primary)]">
+                                <RotateCcw size={13}/> Zrušit simulaci
+                            </button>
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
     );
 }
 

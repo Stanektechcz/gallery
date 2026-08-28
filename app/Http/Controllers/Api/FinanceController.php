@@ -757,6 +757,48 @@ class FinanceController extends Controller
         ];
     }
 
+    /**
+     * Kategorie, kterou u tohohle obchodníka používáme.
+     *
+     * Vrací návrh, ne rozhodnutí — obrazovka ho ukáže jako nabídku a bez klepnutí se
+     * neuloží. Automaticky vyplnit kategorii podle názvu by znamenalo, že se jednou
+     * uloží špatná a nikdo si toho nevšimne, protože ji nikdo nevybíral.
+     *
+     * Hledá se přesná shoda názvu, ne podobnost. „Lidl" a „Lidl Drážďany" jsou dva
+     * různé zápisy a hádat, že jde o totéž, by u „Kaufland" a „Kaufmann" selhalo.
+     */
+    public function suggestCategory(Request $request): JsonResponse
+    {
+        $space = $this->space($request);
+        $nazev = trim((string) $request->input('obchodnik'));
+
+        if (mb_strlen($nazev) < 3) {
+            return response()->json(['category' => null]);
+        }
+
+        $posledni = Transaction::where('gallery_space_id', $space->id)
+            ->where('type', 'expense')
+            ->whereNotNull('category_id')
+            ->where('counterparty', $nazev)
+            ->with('category:id,uuid,name,color')
+            ->orderByDesc('id')
+            ->first();
+
+        if (! $posledni?->category) {
+            return response()->json(['category' => null]);
+        }
+
+        return response()->json([
+            'category' => [
+                'uuid' => $posledni->category->uuid,
+                'name' => $posledni->category->name,
+                'color' => $posledni->category->color,
+            ],
+            'used' => Transaction::where('gallery_space_id', $space->id)
+                ->where('counterparty', $nazev)->where('category_id', $posledni->category_id)->count(),
+        ]);
+    }
+
     /** Naposledy použité volby — návrh pro formulář, ne pravidlo. */
     private function posledniVolby(GallerySpace $space): array
     {

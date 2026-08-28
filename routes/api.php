@@ -107,6 +107,7 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
         Route::get('/prehled', [App\Http\Controllers\Api\FinanceController::class, 'dashboard'])->name('dashboard');
         Route::get('/transakce', [App\Http\Controllers\Api\FinanceController::class, 'transactions'])->name('transactions');
         Route::get('/smeny', [App\Http\Controllers\Api\FinanceController::class, 'exchanges'])->name('exchanges');
+        Route::get('/navrh-kategorie', [App\Http\Controllers\Api\FinanceController::class, 'suggestCategory'])->name('suggest.category');
         Route::get('/statistiky', [App\Http\Controllers\Api\FinanceController::class, 'statistics'])->name('statistics');
         Route::post('/transakce', [App\Http\Controllers\Api\FinanceEntryController::class, 'store'])->name('entries.store');
         Route::patch('/transakce/{uuid}', [App\Http\Controllers\Api\FinanceEntryController::class, 'update'])->name('entries.update');

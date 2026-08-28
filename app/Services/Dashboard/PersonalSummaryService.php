@@ -4,9 +4,11 @@ namespace App\Services\Dashboard;
 
 use App\Models\Budget;
 use App\Models\CycleDay;
+use App\Models\FinanceProject;
 use App\Models\GallerySpace;
+use App\Models\Transaction;
 use App\Models\User;
-use App\Services\Finance\BudgetService;
+use App\Services\Finance\FinanceService;
 use App\Services\Health\CycleService;
 use Illuminate\Support\Carbon;
 
@@ -24,7 +26,7 @@ use Illuminate\Support\Carbon;
 class PersonalSummaryService
 {
     public function __construct(
-        private readonly BudgetService $budgets,
+        private readonly FinanceService $finance,
         private readonly CycleService $cycles,
     ) {}
 
@@ -46,39 +48,59 @@ class PersonalSummaryService
     }
 
     /**
-     * Rozpočet, který právě běží.
+     * Rozpočet na domovské stránce.
      *
-     * Když jich běží víc, vyhraje ten, co končí nejdřív — tomu docházejí peníze jako
-     * prvnímu a je to ten, o kterém má smysl vědět.
+     * Bere se z modulu Rozpočet, ne ze staré evidence s vlastními položkami. Kdyby
+     * domovská stránka počítala z jednoho zdroje a `/rozpocty` z druhého, ukázaly by
+     * dvě různá čísla o téže věci — a nikdo by nepoznal, které platí.
      *
-     * @return array<string, mixed>|null
+     * Přednost má aktivní cesta: kdo je v Německu, se ptá na pobyt, ne na měsíc.
+     * Teprve když se nikam nejede, ukáže se měsíční rozpočet.
      */
     private function budget(GallerySpace $space, User $user, Carbon $today): ?array
     {
-        $bezici = $this->budgets->forUser($space, $user)
-            ->filter(fn (Budget $b) => $b->starts_on->lessThanOrEqualTo($today)
-                && ($b->ends_on === null || $b->ends_on->greaterThanOrEqualTo($today)))
-            ->sortBy(fn (Budget $b) => $b->ends_on?->timestamp ?? PHP_INT_MAX)
+        $cesta = FinanceProject::where('gallery_space_id', $space->id)
+            ->where('kind', 'trip')->where('is_active', true)
+            ->whereNotNull('budget_amount')
             ->first();
 
-        if (! $bezici) return null;
+        $rozpocet = $cesta ? null : Budget::where('gallery_space_id', $space->id)
+            ->where('scope', 'ledger')->where('budget_kind', 'monthly')
+            ->orderByDesc('id')->first();
 
-        $prehled = $this->budgets->overview($bezici, $today);
-        $prideI = $prehled['allowance'];
+        if (! $cesta && ! $rozpocet) return null;
+
+        $mena = $cesta?->base_currency ?? $rozpocet->currency;
+        $limit = (float) ($cesta?->budget_amount ?? $rozpocet->starting_funds ?? 0);
+        $rezerva = (float) ($cesta?->reserve_amount ?? $rozpocet->reserve_amount ?? 0);
+
+        [$od, $do] = $cesta
+            ? [$cesta->starts_on, $cesta->ends_on]
+            : [$today->copy()->startOfMonth(), $today->copy()->endOfMonth()];
+
+        $pohyby = Transaction::where('gallery_space_id', $space->id)
+            ->whereDate('occurred_at', '>=', $od)
+            ->when($do, fn ($q) => $q->whereDate('occurred_at', '<=', $do))
+            ->when($cesta, fn ($q) => $q->where('finance_project_id', $cesta->id))
+            ->get();
+
+        $utraceno = (float) $pohyby
+            ->filter(fn (Transaction $t) => $t->countsTowardsBudget() && $t->currency_from === $mena)
+            ->sum('amount_from')
+            + $pohyby->sum(fn (Transaction $t) => ($t->fee_currency ?? $t->currency_from) === $mena ? $t->feePaidExtra() : 0);
+
+        $bezpecne = $this->finance->safeDaily($limit, $utraceno, $rezerva, $od, $do, $today);
 
         return [
-            'uuid' => $bezici->uuid,
-            'name' => $bezici->name,
-            'currency' => $prideI['currency'],
-            'per_day' => $prideI['per_day'],
-            'left' => $prideI['left'],
-            'days_left' => $prideI['days_left'],
-            // Kolik kategorií je přes plán. Jedno číslo místo celého panelu varování.
-            'warnings' => count($prehled['warnings'] ?? []),
-            // Jestli to podle současného tempa nevyjde do konce období.
-            'runs_out_on' => ($prehled['runway'] ?? null) && ! $prehled['runway']['covers_period']
-                ? $prehled['runway']['runs_out_on']
-                : null,
+            'uuid' => $cesta?->uuid ?? $rozpocet->uuid,
+            'name' => $cesta?->name ?? $rozpocet->name,
+            'currency' => $mena,
+            'per_day' => $bezpecne['per_day'],
+            'left' => $bezpecne['remaining'],
+            'days_left' => $bezpecne['days_left'],
+            // Jedno číslo místo celého panelu: kolik procent je vyčerpáno.
+            'percent' => $limit > 0 ? min(999, (int) round($utraceno / $limit * 100)) : 0,
+            'over_by' => $bezpecne['over_by'],
         ];
     }
 
