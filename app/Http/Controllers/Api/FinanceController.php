@@ -1,0 +1,392 @@
+<?php
+
+namespace App\Http\Controllers\Api;
+
+use App\Http\Controllers\Controller;
+use App\Models\FinanceCategory;
+use App\Models\FinanceProject;
+use App\Models\GallerySpace;
+use App\Models\Partner;
+use App\Models\Transaction;
+use App\Models\TransactionShare;
+use App\Models\Wallet;
+use App\Services\Finance\FinanceFilter;
+use App\Services\Finance\FinanceService;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
+
+/**
+ * Modul Rozpočet — společné finance na cestách.
+ *
+ * Kniha je jediný zdroj pravdy; přehledy, rozpočty i statistiky jsou pohledy na ni.
+ * Filtr období se počítá ve `FinanceFilter`, aby všechny obrazovky mluvily o témž.
+ */
+class FinanceController extends Controller
+{
+    public function __construct(private readonly FinanceService $finance) {}
+
+    /**
+     * Číselníky pro formuláře — jedním dotazem.
+     *
+     * Formulář výdaje potřebuje kategorie, účty, partnery, cesty i šablony. Čtyři
+     * dotazy by znamenaly, že se u pokladny čeká na čtyři odpovědi a rychlý zápis
+     * přestane být rychlý.
+     */
+    public function lookups(Request $request): JsonResponse
+    {
+        $space = $this->space($request);
+        $this->finance->prepare($space);
+
+        $cesta = $this->finance->activeTrip($space);
+        $zustatky = $this->finance->balances($space);
+
+        return response()->json([
+            'categories' => FinanceCategory::where('gallery_space_id', $space->id)
+                ->where('is_active', true)->orderBy('sort_order')->get()
+                ->map(fn (FinanceCategory $k) => [
+                    'uuid' => $k->uuid, 'id' => $k->id, 'name' => $k->name, 'kind' => $k->kind,
+                    'icon' => $k->icon, 'color' => $k->color, 'is_favourite' => $k->is_favourite,
+                    'default_wallet_id' => $k->default_wallet_id,
+                    'default_split' => $k->default_split,
+                ])->values(),
+            'wallets' => $zustatky['wallets'],
+            'balances' => $zustatky['by_currency'],
+            'partners' => Partner::where('gallery_space_id', $space->id)->where('is_active', true)
+                ->orderBy('name')->get(['id', 'uuid', 'name', 'kind']),
+            'trips' => FinanceProject::where('gallery_space_id', $space->id)->where('kind', 'trip')
+                ->orderByDesc('starts_on')->get()
+                ->map(fn (FinanceProject $c) => $this->cestaRadek($c))->values(),
+            'active_trip' => $cesta ? $this->cestaRadek($cesta) : null,
+            // Poslední volby. Předvyplnění šetří u pokladny tři klepnutí a spec ho
+            // vyžaduje — ale musí jít jedním klepnutím změnit, proto je to jen návrh.
+            'last_used' => $this->posledniVolby($space),
+        ]);
+    }
+
+    /**
+     * Přehled — čtyři otázky, na které má odpovědět do několika sekund.
+     */
+    public function dashboard(Request $request): JsonResponse
+    {
+        $space = $this->space($request);
+        $this->finance->prepare($space);
+
+        $filtr = FinanceFilter::zDotazu($request->all(), $space);
+        $pohyby = $filtr->dotaz($space)->get();
+
+        $zustatky = $this->finance->balances($space);
+        $partneri = Partner::where('gallery_space_id', $space->id)->where('is_active', true)->get();
+
+        $souhrn = $this->finance->summary($pohyby);
+        $hlavniMena = $this->hlavniMena($souhrn, $filtr);
+
+        // Předchozí srovnatelné období — jen pro trend, ne pro součty.
+        $minule = $filtr->predchozi();
+        $souhrnMinule = $minule ? $this->finance->summary($minule->dotaz($space)->get()) : [];
+
+        $rozpocet = $this->rozpocetStavu($space, $filtr, $pohyby, $hlavniMena);
+
+        return response()->json([
+            'filter' => [
+                'period' => $filtr->obdobi,
+                'label' => $filtr->popis,
+                'from' => $filtr->od->toDateString(),
+                'to' => $filtr->do?->toDateString(),
+                'days' => $filtr->dni(),
+                'trip' => $filtr->cesta ? $this->cestaRadek($filtr->cesta) : null,
+                'chips' => $filtr->stitky(),
+            ],
+            'summary' => $souhrn,
+            'previous' => $souhrnMinule,
+            'main_currency' => $hlavniMena,
+            'budget' => $rozpocet,
+            'balances' => $zustatky['by_currency'],
+            'wallets' => $zustatky['wallets'],
+            'daily' => $filtr->do ? $this->finance->daily($pohyby, $hlavniMena, $filtr->od, $filtr->do) : [],
+            'categories' => $this->finance->byCategory($pohyby, $hlavniMena),
+            'partner_balance' => $this->finance->partnerBalance($pohyby, $partneri),
+            'exchange' => $this->smenyPrehled($space, $pohyby),
+            'recent' => $this->radky($filtr->dotaz($space)->orderByDesc('occurred_at')->orderByDesc('id')->limit(8)->get()),
+            'alerts' => $this->upozorneni($space, $pohyby, $rozpocet, $zustatky),
+            'active_trip' => ($c = $this->finance->activeTrip($space)) ? $this->cestaRadek($c) : null,
+        ]);
+    }
+
+    /** Seznam transakcí — hlavní místo dohledání. */
+    public function transactions(Request $request): JsonResponse
+    {
+        $space = $this->space($request);
+        $filtr = FinanceFilter::zDotazu($request->all(), $space);
+
+        $dotaz = $filtr->dotaz($space)->orderByDesc('occurred_at')->orderByDesc('id');
+        $celkem = (clone $dotaz)->count();
+        $stranka = max(1, (int) $request->input('strana', 1));
+
+        $radky = $dotaz->forPage($stranka, 60)->get();
+
+        return response()->json([
+            'found' => $celkem,
+            'has_more' => $celkem > $stranka * 60,
+            'summary' => $this->finance->summary($filtr->dotaz($space)->get()),
+            'filter' => ['label' => $filtr->popis, 'chips' => $filtr->stitky()],
+            'transactions' => $this->radky($radky),
+        ]);
+    }
+
+    /**
+     * Jeden řádek seznamu.
+     *
+     * Směna i převod se ukazují jako **jeden** záznam s oběma stranami. Dva řádky
+     * („odešlo z CZK", „přišlo na EUR") by vypadaly jako dvě různé věci a součet
+     * transakcí by se zdvojnásobil.
+     *
+     * @param  Collection<int, Transaction>  $pohyby
+     */
+    private function radky(Collection $pohyby): array
+    {
+        return $pohyby->map(function (Transaction $t) {
+            $kurz = $this->finance->exchangeRate($t);
+
+            return [
+                'uuid' => $t->uuid,
+                'type' => $t->type,
+                'type_label' => $this->nazevTypu($t),
+                'counts_to_budget' => $t->countsTowardsBudget(),
+                'occurred_at' => $t->occurred_at->toDateString(),
+                'from' => $t->walletFrom ? [
+                    'uuid' => $t->walletFrom->uuid ?? null, 'name' => $t->walletFrom->name,
+                    'amount' => (float) $t->amount_from, 'currency' => $t->currency_from,
+                ] : null,
+                'to' => $t->walletTo ? [
+                    'uuid' => $t->walletTo->uuid ?? null, 'name' => $t->walletTo->name,
+                    'amount' => (float) $t->amount_to, 'currency' => $t->currency_to,
+                ] : null,
+                'category' => $t->category ? ['name' => $t->category->name, 'color' => $t->category->color, 'icon' => $t->category->icon] : null,
+                'payer' => $t->payer?->name,
+                'trip' => $t->project?->name,
+                'counterparty' => $t->counterparty,
+                'provider' => $t->provider,
+                'place' => $t->place,
+                'description' => $t->description,
+                'fee' => (float) $t->fee_amount,
+                'fee_currency' => $t->fee_currency,
+                'fee_included' => (bool) $t->fee_included,
+                'rate' => $kurz,
+                'is_settlement' => (bool) $t->is_settlement,
+                'is_refund' => $t->refund_of_id !== null,
+                'excluded' => (bool) $t->excluded_from_budget,
+                'exclusion_reason' => $t->exclusion_reason,
+                'has_split' => $t->shares->isNotEmpty(),
+                'state' => $t->state,
+                'updated_at' => $t->updated_at?->toDateTimeString(),
+            ];
+        })->values()->all();
+    }
+
+    /**
+     * Stav rozpočtu pro zvolené období.
+     *
+     * Přednost má rozpočet cesty: kdo se dívá na pobyt, chce vidět jeho limit, ne
+     * měsíční. Když žádný rozpočet není, vrací se null a obrazovka místo prázdného
+     * ukazatele nabídne, ať se založí.
+     */
+    private function rozpocetStavu(GallerySpace $space, FinanceFilter $filtr, Collection $pohyby, string $mena): ?array
+    {
+        $cesta = $filtr->cesta;
+
+        $limit = $cesta?->budget_amount !== null ? (float) $cesta->budget_amount : null;
+        $rezerva = $cesta?->reserve_amount !== null ? (float) $cesta->reserve_amount : 0.0;
+        $menaLimitu = $cesta?->base_currency ?? $mena;
+
+        if ($limit === null) {
+            return null;
+        }
+
+        $utraceno = $pohyby
+            ->filter(fn (Transaction $t) => $t->countsTowardsBudget() && $t->currency_from === $menaLimitu)
+            ->sum('amount_from');
+
+        // Poplatky jsou skutečný náklad a do čerpání patří.
+        $utraceno += $pohyby->sum(fn (Transaction $t) => ($t->fee_currency ?? $t->currency_from) === $menaLimitu ? $t->feePaidExtra() : 0);
+
+        // Vrácené peníze snižují čerpání — jinak by reklamovaný nákup rozpočet zatížil
+        // navždycky, přestože se peníze vrátily.
+        $vraceno = $pohyby
+            ->filter(fn (Transaction $t) => $t->type === 'income' && $t->refund_of_id !== null && $t->currency_to === $menaLimitu)
+            ->sum('amount_to');
+
+        $ciste = max(0, (float) $utraceno - (float) $vraceno);
+
+        $bezpecne = $this->finance->safeDaily(
+            $limit, $ciste, $rezerva,
+            $cesta?->starts_on ?? $filtr->od,
+            $cesta?->ends_on ?? $filtr->do,
+        );
+
+        return [
+            'name' => $cesta?->name,
+            'kind' => $cesta ? 'trip' : 'monthly',
+            'currency' => $menaLimitu,
+            'limit' => round($limit, 2),
+            'spent' => round($ciste, 2),
+            'refunded' => round((float) $vraceno, 2),
+            'remaining' => round($limit - $ciste, 2),
+            'reserve' => round($rezerva, 2),
+            'percent' => $limit > 0 ? min(999, (int) round($ciste / $limit * 100)) : 0,
+            'safe_daily' => $bezpecne,
+            'state' => $ciste > $limit ? 'over' : ($ciste >= $limit * 0.8 ? 'near' : 'ok'),
+        ];
+    }
+
+    /** Souhrn směn pro Přehled. */
+    private function smenyPrehled(GallerySpace $space, Collection $pohyby): array
+    {
+        $porizeni = $this->finance->eurAcquisition($space);
+
+        $smeny = $pohyby->where('type', 'exchange');
+        $posledni = $smeny->sortByDesc('occurred_at')->first();
+
+        return [
+            'acquisition' => $porizeni,
+            'last' => $posledni ? [
+                'occurred_at' => $posledni->occurred_at->toDateString(),
+                'provider' => $posledni->provider,
+                'rate' => $this->finance->exchangeRate($posledni),
+            ] : null,
+            'period_volume' => $smeny->groupBy('currency_from')
+                ->map(fn (Collection $s, string $m) => ['currency' => $m, 'amount' => round((float) $s->sum('amount_from'), 2)])
+                ->values()->all(),
+            'period_fees' => $smeny->groupBy(fn (Transaction $t) => $t->fee_currency ?? $t->currency_from)
+                ->map(fn (Collection $s, string $m) => ['currency' => $m, 'amount' => round($s->sum(fn (Transaction $t) => $t->feePaidExtra()), 2)])
+                ->filter(fn (array $r) => $r['amount'] > 0)
+                ->values()->all(),
+            'count' => $smeny->count(),
+        ];
+    }
+
+    /**
+     * Kontextová upozornění.
+     *
+     * Jen to, co je právě teď pravda, a ke každému konkrétní akce. Upozornění, které
+     * visí pořád, se po týdnu přestane číst — a pak nezabere ani tehdy, kdy má.
+     */
+    private function upozorneni(GallerySpace $space, Collection $pohyby, ?array $rozpocet, array $zustatky): array
+    {
+        $u = [];
+
+        if ($rozpocet && $rozpocet['percent'] >= 80) {
+            $u[] = [
+                'key' => 'rozpocet-'.$rozpocet['percent'],
+                'tone' => $rozpocet['state'] === 'over' ? 'danger' : 'warn',
+                'title' => $rozpocet['state'] === 'over'
+                    ? 'Rozpočet je vyčerpaný'
+                    : "Z rozpočtu zbývá {$rozpocet['percent']} % vyčerpáno",
+                'body' => $rozpocet['state'] === 'over'
+                    ? "Přesáhli jsme o ".number_format($rozpocet['safe_daily']['over_by'] ?? 0, 2, ',', ' ')." {$rozpocet['currency']}."
+                    : "Utraceno {$rozpocet['percent']} % z limitu.",
+                'action' => ['label' => 'Zobrazit rozpočet', 'tab' => 'rozpocty'],
+            ];
+        }
+
+        foreach ($zustatky['wallets'] as $p) {
+            if ($p['balance'] < 0) {
+                $u[] = [
+                    'key' => 'zustatek-'.$p['uuid'],
+                    'tone' => 'danger',
+                    'title' => "Účet {$p['name']} je v mínusu",
+                    'body' => 'Zůstatek podle zapsaných pohybů je záporný — nejspíš chybí zápis příjmu nebo směny.',
+                    'action' => ['label' => 'Otevřít účty', 'tab' => 'ucty'],
+                ];
+            }
+        }
+
+        // Možná duplicita: stejná částka, účet a den. Varuje, neblokuje.
+        $duplicity = $pohyby->where('type', 'expense')
+            ->groupBy(fn (Transaction $t) => $t->occurred_at->toDateString().'|'.$t->wallet_from_id.'|'.(string) $t->amount_from)
+            ->filter(fn (Collection $s) => $s->count() > 1);
+
+        foreach ($duplicity as $skupina) {
+            $t = $skupina->first();
+            $u[] = [
+                'key' => 'duplicita-'.$t->uuid,
+                'tone' => 'warn',
+                'title' => 'Dva stejné výdaje ve stejný den',
+                'body' => number_format((float) $t->amount_from, 2, ',', ' ')." {$t->currency_from} ze stejného účtu {$skupina->count()}×. Může to být v pořádku — dvakrát nakoupit se dá.",
+                'action' => ['label' => 'Zobrazit je', 'tab' => 'transakce', 'filter' => ['od' => $t->occurred_at->toDateString(), 'do' => $t->occurred_at->toDateString()]],
+            ];
+        }
+
+        return $u;
+    }
+
+    private function cestaRadek(FinanceProject $c): array
+    {
+        return [
+            'uuid' => $c->uuid,
+            'name' => $c->name,
+            'country' => $c->country,
+            'city' => $c->city,
+            'starts_on' => $c->starts_on?->toDateString(),
+            'ends_on' => $c->ends_on?->toDateString(),
+            'days_left' => $c->dniDoKonce(),
+            'budget' => $c->budget_amount !== null ? (float) $c->budget_amount : null,
+            'reserve' => $c->reserve_amount !== null ? (float) $c->reserve_amount : null,
+            'currency' => $c->base_currency,
+            'default_wallet_id' => $c->default_wallet_id,
+            'is_active' => (bool) $c->is_active,
+            'state' => $c->state,
+        ];
+    }
+
+    /** Naposledy použité volby — návrh pro formulář, ne pravidlo. */
+    private function posledniVolby(GallerySpace $space): array
+    {
+        $posledni = Transaction::where('gallery_space_id', $space->id)
+            ->where('type', 'expense')->orderByDesc('id')->first();
+
+        return [
+            'wallet_id' => $posledni?->wallet_from_id,
+            'payer_partner_id' => $posledni?->payer_partner_id,
+            'category_id' => $posledni?->category_id,
+        ];
+    }
+
+    /**
+     * Měna, ve které se přehled ukazuje.
+     *
+     * Ta, ve které se v tomhle období nejvíc utratilo — na cestě do Německa eura,
+     * doma koruny. Bez toho by se přehled musel ptát hned na začátku, nebo by natvrdo
+     * ukazoval koruny i uprostřed pobytu, kde nejsou.
+     */
+    private function hlavniMena(array $souhrn, FinanceFilter $filtr): string
+    {
+        if ($filtr->cesta?->base_currency) {
+            return $filtr->cesta->base_currency;
+        }
+
+        return $souhrn[0]['currency'] ?? 'CZK';
+    }
+
+    private function nazevTypu(Transaction $t): string
+    {
+        if ($t->is_settlement) return 'Vyrovnání';
+        if ($t->refund_of_id !== null) return 'Vrácené peníze';
+
+        return match ($t->type) {
+            'income' => 'Příjem',
+            'expense' => 'Výdaj',
+            'transfer' => 'Převod',
+            'exchange' => 'Směna',
+            'withdrawal' => 'Výběr hotovosti',
+            'deposit' => 'Vklad hotovosti',
+            default => $t->type,
+        };
+    }
+
+    private function space(Request $request): GallerySpace
+    {
+        return $request->user()->gallerySpaces()->firstOrFail();
+    }
+}

@@ -96,6 +96,21 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
      *
      * Vedle `rozpocty`, ne místo nich: párový rozpočet řeší jinou úlohu a funguje dál.
      */
+    /*
+     * Modul Rozpočet — společné finance Adriho a Maki.
+     *
+     * Stojí na téže knize jako `/kniha`, ale ptá se jinak: kniha eviduje, rozpočet
+     * odpovídá na „kolik nám zbývá do konce cesty".
+     */
+    Route::prefix('rozpocet')->name('api.finance.')->group(function () {
+        Route::get('/ciselniky', [App\Http\Controllers\Api\FinanceController::class, 'lookups'])->name('lookups');
+        Route::get('/prehled', [App\Http\Controllers\Api\FinanceController::class, 'dashboard'])->name('dashboard');
+        Route::get('/transakce', [App\Http\Controllers\Api\FinanceController::class, 'transactions'])->name('transactions');
+        Route::post('/transakce', [App\Http\Controllers\Api\FinanceEntryController::class, 'store'])->name('entries.store');
+        Route::patch('/transakce/{uuid}', [App\Http\Controllers\Api\FinanceEntryController::class, 'update'])->name('entries.update');
+        Route::delete('/transakce/{uuid}', [App\Http\Controllers\Api\FinanceEntryController::class, 'destroy'])->name('entries.destroy');
+    });
+
     Route::prefix('kniha')->name('api.ledger.')->group(function () {
         Route::get('/prehled', [App\Http\Controllers\Api\LedgerController::class, 'dashboard'])->name('dashboard');
         Route::get('/partneri', [App\Http\Controllers\Api\LedgerController::class, 'partners'])->name('partners');
