@@ -106,6 +106,7 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
         Route::get('/ciselniky', [App\Http\Controllers\Api\FinanceController::class, 'lookups'])->name('lookups');
         Route::get('/prehled', [App\Http\Controllers\Api\FinanceController::class, 'dashboard'])->name('dashboard');
         Route::get('/transakce', [App\Http\Controllers\Api\FinanceController::class, 'transactions'])->name('transactions');
+        Route::get('/smeny', [App\Http\Controllers\Api\FinanceController::class, 'exchanges'])->name('exchanges');
         Route::post('/transakce', [App\Http\Controllers\Api\FinanceEntryController::class, 'store'])->name('entries.store');
         Route::patch('/transakce/{uuid}', [App\Http\Controllers\Api\FinanceEntryController::class, 'update'])->name('entries.update');
         Route::delete('/transakce/{uuid}', [App\Http\Controllers\Api\FinanceEntryController::class, 'destroy'])->name('entries.destroy');
@@ -130,6 +131,12 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
         Route::delete('/kategorie/{uuid}', [App\Http\Controllers\Api\FinanceSetupController::class, 'destroyCategory'])->name('categories.destroy');
 
         Route::post('/partneri', [App\Http\Controllers\Api\FinanceSetupController::class, 'storePartner'])->name('partners.store');
+
+        // Rozpočty jsou strop nad knihou, ne vlastní evidence útrat.
+        Route::get('/rozpocty', [App\Http\Controllers\Api\FinanceBudgetController::class, 'index'])->name('budgets');
+        Route::post('/rozpocty', [App\Http\Controllers\Api\FinanceBudgetController::class, 'store'])->name('budgets.store');
+        Route::patch('/rozpocty/{uuid}', [App\Http\Controllers\Api\FinanceBudgetController::class, 'update'])->name('budgets.update');
+        Route::delete('/rozpocty/{uuid}', [App\Http\Controllers\Api\FinanceBudgetController::class, 'destroy'])->name('budgets.destroy');
     });
 
     Route::prefix('kniha')->name('api.ledger.')->group(function () {

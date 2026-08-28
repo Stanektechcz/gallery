@@ -19,7 +19,15 @@ class Budget extends Model
         'starts_on', 'ends_on', 'monthly_income', 'note', 'is_shared', 'created_by',
         'savings_target', 'savings_target_on', 'period_unit', 'period_mode',
         'starting_funds',
+        // Modul Rozpočet: limity počítané z knihy, ne z vlastních položek.
+        'scope', 'budget_kind', 'finance_project_id', 'reserve_amount', 'alert_thresholds',
     ];
+
+    /** Cesta, ke které rozpočet patří. Null u měsíčního. */
+    public function financeProject(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(FinanceProject::class, 'finance_project_id');
+    }
 
     /**
      * Rozpočet z jedné sumy, ne z měsíčního příjmu.
@@ -72,6 +80,7 @@ class Budget extends Model
             'ends_on' => 'date',
             'monthly_income' => 'decimal:2',
             'starting_funds' => 'decimal:2',
+            'reserve_amount' => 'decimal:2',
             'savings_target' => 'decimal:2',
             'savings_target_on' => 'date',
             'is_shared' => 'boolean',

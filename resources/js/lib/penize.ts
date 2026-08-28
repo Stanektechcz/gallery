@@ -50,6 +50,17 @@ export const penizeZbyva = (castka: number, mena: string): string => {
 export const kurz = (hodnota: number): string =>
     hodnota.toLocaleString('cs-CZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+/**
+ * Procenta v české podobě.
+ *
+ * `{cislo} %` vypíše „45.3 %" s anglickou tečkou — JavaScript čísla takhle
+ * převádí na text a v česky psané aplikaci to trčí. Celá čísla zůstávají celá,
+ * desetinné dostanou čárku a jedno místo; víc než jedno je u procent přesnost,
+ * kterou nikdo nepotřebuje.
+ */
+export const procenta = (hodnota: number): string =>
+    `${hodnota.toLocaleString('cs-CZ', { maximumFractionDigits: 1 })} %`;
+
 /** `28. 8. 2026` */
 export const datum = (iso: string): string =>
     new Date(`${iso}T12:00:00`).toLocaleDateString('cs-CZ', { day: 'numeric', month: 'numeric', year: 'numeric' });

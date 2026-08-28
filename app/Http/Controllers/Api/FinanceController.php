@@ -114,6 +114,111 @@ class FinanceController extends Controller
         ]);
     }
 
+    /**
+     * Směny — historie, skutečné výsledky a co ty směny stály.
+     *
+     * KPI se počítají z celé historie, ne z období: „kolik eur držíme" a „za kolik jsme
+     * je pořídili" jsou stavové údaje, které filtr na měsíc nedává smysl zužovat.
+     * Objem a poplatky naopak patří do zvoleného období — tam otázka zní „kolik nás to
+     * stálo tenhle měsíc".
+     */
+    public function exchanges(Request $request): JsonResponse
+    {
+        $space = $this->space($request);
+        $filtr = FinanceFilter::zDotazu($request->all(), $space);
+
+        $vsechny = Transaction::where('gallery_space_id', $space->id)
+            ->where('type', 'exchange')
+            ->with(['walletFrom:id,name,currency', 'walletTo:id,name,currency', 'project:id,name'])
+            ->orderBy('occurred_at')->orderBy('id')
+            ->get();
+
+        $vObdobi = $vsechny->filter(fn (Transaction $t) => $t->occurred_at->betweenIncluded(
+            $filtr->od, $filtr->do ?? Carbon::today()->addYears(50),
+        ));
+
+        $radky = $vsechny->map(function (Transaction $t) {
+            $k = $this->finance->exchangeRate($t);
+
+            return [
+                'uuid' => $t->uuid,
+                'occurred_at' => $t->occurred_at->toDateString(),
+                'provider' => $t->provider,
+                'from' => ['name' => $t->walletFrom?->name, 'amount' => (float) $t->amount_from, 'currency' => $t->currency_from],
+                'to' => ['name' => $t->walletTo?->name, 'amount' => (float) $t->amount_to, 'currency' => $t->currency_to],
+                'trip' => $t->project?->name,
+                'rate' => $k,
+            ];
+        })->values();
+
+        return response()->json([
+            'acquisition' => $this->finance->eurAcquisition($space),
+            'period' => ['label' => $filtr->popis, 'from' => $filtr->od->toDateString(), 'to' => $filtr->do?->toDateString()],
+            'period_volume' => $vObdobi->groupBy('currency_from')
+                ->map(fn (Collection $s, string $m) => ['currency' => $m, 'amount' => round((float) $s->sum('amount_from'), 2), 'count' => $s->count()])
+                ->values(),
+            'period_fees' => $vObdobi->groupBy(fn (Transaction $t) => $t->fee_currency ?? $t->currency_from)
+                ->map(fn (Collection $s, string $m) => ['currency' => $m, 'amount' => round($s->sum(fn (Transaction $t) => $t->feePaidExtra()), 2)])
+                ->filter(fn (array $r) => $r['amount'] > 0)->values(),
+            'providers' => $this->poskytovatele($vsechny),
+            'exchanges' => $radky->reverse()->values(),
+            'count' => $vsechny->count(),
+        ]);
+    }
+
+    /**
+     * Porovnání poskytovatelů podle skutečného výsledku, ne podle nabízeného kurzu.
+     *
+     * Měří se, kolik cílové měny doopravdy přišlo po odečtení poplatků. Poskytovatel
+     * s lepším kurzem a vyšším poplatkem vyjde hůř než ten, kdo si nechá rozdíl
+     * v kurzu — a z reklamního čísla to poznat nejde.
+     *
+     * Nejlepší se označí jen tehdy, když má aspoň dvě směny. Z jediné směny závěr
+     * neplyne: mohla padnout na výjimečně dobrý den a nesouvisí s poskytovatelem.
+     *
+     * @param  Collection<int, Transaction>  $smeny
+     * @return array<int, array<string, mixed>>
+     */
+    private function poskytovatele(Collection $smeny): array
+    {
+        $radky = $smeny
+            ->filter(fn (Transaction $t) => $t->currency_to === 'EUR')
+            ->groupBy(fn (Transaction $t) => $t->provider ?: 'Neuvedeno')
+            ->map(function (Collection $s, string $jmeno) {
+                $kurzy = $s->map(fn (Transaction $t) => $this->finance->exchangeRate($t))->filter();
+
+                if ($kurzy->isEmpty()) return null;
+
+                // Vážený průměr, ne prostý: jedna stokorunová směna nemá vážit stejně
+                // jako padesátitisícová.
+                $koruny = $kurzy->sum(fn (array $k) => $k['received'] * $k['effective']);
+                $eura = $kurzy->sum('received');
+
+                return [
+                    'name' => $jmeno,
+                    'count' => $s->count(),
+                    'volume' => round($kurzy->sum('spent'), 2),
+                    'volume_currency' => $s->first()->currency_from,
+                    'received' => round($eura, 2),
+                    'average_rate' => $eura > 0 ? round($koruny / $eura, 4) : null,
+                    'fees' => round($kurzy->sum('fee'), 2),
+                    'eur_per_1000_czk' => $eura > 0 ? round(1000 / ($koruny / $eura), 2) : null,
+                    'comparable' => $s->count() >= 2,
+                ];
+            })
+            ->filter()
+            ->sortBy('average_rate')
+            ->values();
+
+        // Nejlepší a nejhorší jen mezi porovnatelnými — a jen když jsou aspoň dva.
+        $porovnatelne = $radky->where('comparable', true);
+
+        return $radky->map(fn (array $r) => $r + [
+            'is_best' => $porovnatelne->count() >= 2 && $r['comparable'] && $r['name'] === $porovnatelne->first()['name'],
+            'is_worst' => $porovnatelne->count() >= 2 && $r['comparable'] && $r['name'] === $porovnatelne->last()['name'],
+        ])->all();
+    }
+
     /** Seznam transakcí — hlavní místo dohledání. */
     public function transactions(Request $request): JsonResponse
     {

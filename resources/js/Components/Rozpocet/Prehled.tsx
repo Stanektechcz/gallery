@@ -1,6 +1,6 @@
 import Panel from '@/Components/Panel';
 import { dny } from '@/lib/cestina';
-import { datum, kurz, penize, penizeKratce, penizeZbyva, zahlaviDne } from '@/lib/penize';
+import { datum, kurz, penize, penizeKratce, penizeZbyva, procenta, zahlaviDne } from '@/lib/penize';
 import {
     AlertTriangle, ArrowRightLeft, Banknote, CalendarDays, ChevronRight, Coins,
     PiggyBank, TrendingDown, TrendingUp, Wallet,
@@ -80,7 +80,7 @@ export default function Prehled({ data, naTab, naTransakce }: {
                         hodnota={penizeZbyva(rozpocet.remaining, rozpocet.currency)}
                         ikona={PiggyBank}
                         ton={rozpocet.state === 'over' ? 'danger' : rozpocet.state === 'near' ? 'warn' : 'plain'}
-                        popisek={`vyčerpáno ${rozpocet.percent} %`}
+                        popisek={`vyčerpáno ${procenta(rozpocet.percent)}`}
                         pruh={Math.min(100, rozpocet.percent)}
                         onClick={() => naTab('rozpocty')}/>
                 ) : (
@@ -144,7 +144,7 @@ export default function Prehled({ data, naTab, naTransakce }: {
                                                         style={{ width: `${k.percent}%`, background: k.color ?? 'var(--color-text-secondary)' }}/>
                                                 </div>
                                                 <span className="w-10 shrink-0 text-right text-[11px] tabular-nums text-[var(--color-text-secondary)]">
-                                                    {k.percent} %
+                                                    {procenta(k.percent)}
                                                 </span>
                                             </div>
                                         </button>

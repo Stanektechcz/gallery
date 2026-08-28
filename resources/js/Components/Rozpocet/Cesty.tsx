@@ -1,7 +1,7 @@
 import { hlaska } from '@/Components/Hlasky';
 import Panel from '@/Components/Panel';
 import { dny, zaznamy } from '@/lib/cestina';
-import { castka as prectiCastku, datum, kurz, penize, penizeZbyva } from '@/lib/penize';
+import { castka as prectiCastku, datum, kurz, penize, penizeZbyva, procenta } from '@/lib/penize';
 import axios from 'axios';
 import { CheckCircle2, Flag, MapPin, Pencil, Play, Plus } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
@@ -506,7 +506,7 @@ function ShrnutiCesty({ cesta, data, onZavrit }: { cesta: CestaStav; data: any; 
                                             <span className="truncate text-[var(--color-text-primary)]">{k.name}</span>
                                         </span>
                                         <span className="shrink-0 tabular-nums text-[var(--color-text-secondary)]">
-                                            {penize(k.amount, k.currency)} · {k.percent} %
+                                            {penize(k.amount, k.currency)} · {procenta(k.percent)}
                                         </span>
                                     </li>
                                 ))}
