@@ -251,11 +251,13 @@ export default function RozpocetIndex() {
                             )}
 
                             {stav.tab === 'cesty' && (
-                                <Cesty ciselniky={ciselniky} onZmena={() => void nacti()}/>
+                                <Cesty ciselniky={ciselniky} onZmena={() => void nacti()} onTransakce={naTransakce}/>
                             )}
 
                             {stav.tab === 'ucty' && (
-                                <Ucty ciselniky={ciselniky} onZmena={() => void nacti()}/>
+                                <Ucty ciselniky={ciselniky} obdobi={stav.obdobi}
+                                    onZmena={() => void nacti()}
+                                    onPrevod={() => setPridava('transfer')}/>
                             )}
 
                             {stav.tab === 'smeny' && (

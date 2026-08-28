@@ -10,6 +10,7 @@ use App\Models\GallerySpace;
 use App\Models\Partner;
 use App\Models\Transaction;
 use App\Models\Wallet;
+use App\Services\Finance\FinanceFilter;
 use App\Services\Finance\FinanceService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -174,6 +175,141 @@ class FinanceSetupController extends Controller
         return response()->json($this->finance->balances($space));
     }
 
+    /**
+     * Detail účtu — kde se ten zůstatek vzal.
+     *
+     * Vývoj se počítá **zpětně od dneška**, ne dopředu od počátečního stavu. Zůstatek
+     * ke konci je jistý (je to ten, co ukazuje seznam účtů) a dopočítat z něj minulost
+     * dá vždycky navazující řadu. Opačně by se každá chybějící transakce projevila
+     * jako trvalý posun celé křivky.
+     */
+    public function walletDetail(Request $request, string $uuid): JsonResponse
+    {
+        $space = $this->space($request);
+        $ucet = Wallet::where('gallery_space_id', $space->id)->where('uuid', $uuid)
+            ->with('partner:id,name')->firstOrFail();
+
+        $filtr = FinanceFilter::zDotazu($request->all(), $space);
+
+        $vsechny = Transaction::where('gallery_space_id', $space->id)
+            ->where(fn ($q) => $q->where('wallet_from_id', $ucet->id)->orWhere('wallet_to_id', $ucet->id))
+            ->with(['walletFrom:id,uuid,name,currency', 'walletTo:id,uuid,name,currency',
+                'category:id,uuid,name,color,icon', 'payer:id,name', 'project:id,name,uuid', 'shares'])
+            ->orderBy('occurred_at')->orderBy('id')
+            ->get();
+
+        $zustatek = (float) collect($this->finance->balances($space)['wallets'])
+            ->firstWhere('uuid', $ucet->uuid)['balance'];
+
+        return response()->json([
+            'wallet' => [
+                'uuid' => $ucet->uuid,
+                'name' => $ucet->name,
+                'kind' => $ucet->kind,
+                'currency' => $ucet->currency,
+                'owner' => $ucet->partner?->name,
+                'opening_balance' => (float) $ucet->opening_balance,
+                'balance' => $zustatek,
+                'is_active' => (bool) $ucet->is_active,
+                'transactions' => $vsechny->count(),
+            ],
+            'history' => $this->vyvojZustatku($ucet, $vsechny, $zustatek),
+            'period' => $this->obdobiUctu($ucet, $vsechny, $filtr),
+            'recent' => $this->pohybyUctu($ucet, $vsechny->reverse()->take(30)),
+        ]);
+    }
+
+    /**
+     * Zůstatek den po dni za posledních devadesát dnů.
+     *
+     * @param  \Illuminate\Support\Collection<int, Transaction>  $pohyby
+     */
+    private function vyvojZustatku(Wallet $ucet, $pohyby, float $konecny): array
+    {
+        $od = Carbon::today()->subDays(89);
+        $dnes = Carbon::today();
+
+        // Denní změny zůstatku, aby se dalo jít zpětně.
+        $zmeny = [];
+
+        foreach ($pohyby as $t) {
+            /** @var Transaction $t */
+            $den = $t->occurred_at->toDateString();
+            $zmeny[$den] ??= 0.0;
+
+            if ($t->wallet_from_id === $ucet->id) {
+                $zmeny[$den] -= (float) $t->amount_from + $t->feePaidExtra();
+            }
+
+            if ($t->wallet_to_id === $ucet->id) {
+                $zmeny[$den] += (float) $t->amount_to;
+            }
+        }
+
+        // Od konce dozadu: k dnešku známe zůstatek, každý krok zpět odečte změnu dne.
+        $body = [];
+        $stav = $konecny;
+        $den = $dnes->copy();
+
+        while ($den->greaterThanOrEqualTo($od)) {
+            $klic = $den->toDateString();
+            array_unshift($body, ['date' => $klic, 'balance' => round($stav, 2)]);
+            $stav -= $zmeny[$klic] ?? 0;
+            $den->subDay();
+        }
+
+        return $body;
+    }
+
+    /** Souhrn pohybů účtu za zvolené období. */
+    private function obdobiUctu(Wallet $ucet, $pohyby, FinanceFilter $filtr): array
+    {
+        $vObdobi = $pohyby->filter(fn (Transaction $t) => $t->occurred_at->betweenIncluded(
+            $filtr->od, $filtr->do ?? Carbon::today()->addYears(50),
+        ));
+
+        $prislo = (float) $vObdobi->filter(fn (Transaction $t) => $t->wallet_to_id === $ucet->id)->sum('amount_to');
+        $odeslo = (float) $vObdobi->filter(fn (Transaction $t) => $t->wallet_from_id === $ucet->id)
+            ->sum(fn (Transaction $t) => (float) $t->amount_from + $t->feePaidExtra());
+
+        return [
+            'label' => $filtr->popis,
+            'currency' => $ucet->currency,
+            'in' => round($prislo, 2),
+            'out' => round($odeslo, 2),
+            'net' => round($prislo - $odeslo, 2),
+            'count' => $vObdobi->count(),
+        ];
+    }
+
+    /** @param  \Illuminate\Support\Collection<int, Transaction>  $pohyby */
+    private function pohybyUctu(Wallet $ucet, $pohyby): array
+    {
+        return $pohyby->map(function (Transaction $t) use ($ucet) {
+            // Znaménko z pohledu tohohle účtu — u převodu mezi vlastními účty je
+            // táž transakce jednou minus a podruhé plus a bez toho by nešlo poznat,
+            // která strana se právě prohlíží.
+            $prichozi = $t->wallet_to_id === $ucet->id;
+            $castka = $prichozi ? (float) $t->amount_to : (float) $t->amount_from;
+
+            return [
+                'uuid' => $t->uuid,
+                'occurred_at' => $t->occurred_at->toDateString(),
+                'type' => $t->type,
+                'direction' => $prichozi ? 'in' : 'out',
+                'amount' => round($castka, 2),
+                'currency' => $ucet->currency,
+                'fee' => $prichozi ? 0.0 : round($t->feePaidExtra(), 2),
+                'category' => $t->category?->name,
+                'color' => $t->category?->color,
+                'counterparty' => $t->counterparty,
+                'description' => $t->description,
+                'other_side' => $prichozi ? $t->walletFrom?->name : $t->walletTo?->name,
+                'trip' => $t->project?->name,
+            ];
+        })->values()->all();
+    }
+
     // ---------------------------------------------------------------- cesty
 
     public function trips(Request $request): JsonResponse
@@ -259,6 +395,122 @@ class FinanceSetupController extends Controller
             'trip' => $this->cestaSeStavem($space, $cesta),
             'summary' => $this->shrnutiCesty($space, $cesta),
         ]);
+    }
+
+    /**
+     * Detail cesty — všechno o jednom pobytu na jedné obrazovce.
+     *
+     * Denní vývoj se počítá jen do dneška, ne do konce cesty. Nuly za dny, které
+     * ještě nebyly, by vypadaly jako dny, kdy se nic neutratilo, a průměr by srazily
+     * na polovinu.
+     */
+    public function tripDetail(Request $request, string $uuid): JsonResponse
+    {
+        $space = $this->space($request);
+        $cesta = FinanceProject::where('gallery_space_id', $space->id)->where('uuid', $uuid)->firstOrFail();
+
+        $pohyby = Transaction::where('gallery_space_id', $space->id)
+            ->where('finance_project_id', $cesta->id)
+            ->with(['walletFrom:id,uuid,name,currency,partner_id,kind', 'walletTo:id,uuid,name,currency',
+                'category:id,uuid,name,color,icon', 'payer:id,name', 'shares', 'refundOf:id,category_id'])
+            ->orderByDesc('occurred_at')->orderByDesc('id')
+            ->get();
+
+        $mena = $cesta->base_currency;
+        $stav = $this->cestaSeStavem($space, $cesta);
+
+        // Denní útrata do dneška, případně do konce, pokud už cesta skončila.
+        $konecVyvoje = $cesta->ends_on && $cesta->ends_on->lessThan(Carbon::today())
+            ? $cesta->ends_on
+            : Carbon::today();
+
+        $denni = $cesta->starts_on && $cesta->starts_on->lessThanOrEqualTo($konecVyvoje)
+            ? $this->finance->daily($pohyby, $mena, $cesta->starts_on, $konecVyvoje)
+            : [];
+
+        $partneri = Partner::where('gallery_space_id', $space->id)->where('is_active', true)->get();
+
+        return response()->json([
+            'trip' => $stav,
+            'daily' => $denni,
+            'categories' => $this->finance->byCategory($pohyby, $mena),
+            'partners' => $this->finance->partnerBalance($pohyby, $partneri),
+            'wallets' => $pohyby
+                ->filter(fn (Transaction $t) => $t->countsTowardsBudget() && $t->currency_from === $mena && $t->walletFrom)
+                ->groupBy('wallet_from_id')
+                ->map(fn ($s) => [
+                    'name' => $s->first()->walletFrom->name,
+                    'kind' => $s->first()->walletFrom->kind,
+                    'amount' => round((float) $s->sum('amount_from'), 2),
+                    'count' => $s->count(),
+                    'currency' => $mena,
+                ])->sortByDesc('amount')->values(),
+            'exchanges' => $pohyby->where('type', 'exchange')->map(fn (Transaction $t) => [
+                'uuid' => $t->uuid,
+                'occurred_at' => $t->occurred_at->toDateString(),
+                'provider' => $t->provider,
+                'from' => ['amount' => (float) $t->amount_from, 'currency' => $t->currency_from],
+                'to' => ['amount' => (float) $t->amount_to, 'currency' => $t->currency_to],
+                'rate' => $this->finance->exchangeRate($t),
+            ])->values(),
+            'largest' => $pohyby
+                ->filter(fn (Transaction $t) => $t->countsTowardsBudget() && $t->currency_from === $mena)
+                ->sortByDesc('amount_from')->take(6)
+                ->map(fn (Transaction $t) => [
+                    'uuid' => $t->uuid,
+                    'amount' => (float) $t->amount_from,
+                    'currency' => $mena,
+                    'occurred_at' => $t->occurred_at->toDateString(),
+                    'category' => $t->category?->name,
+                    'counterparty' => $t->counterparty,
+                ])->values(),
+            'prediction' => $this->predpovedCesty($cesta, $pohyby, $stav),
+            'transactions' => $pohyby->count(),
+        ]);
+    }
+
+    /**
+     * Jak cesta pravděpodobně dopadne.
+     *
+     * Tempo se počítá z **uplynulých** dnů, ne z celé délky pobytu. Dělit útratu
+     * délkou cesty by třetí den z čtrnáctidenního pobytu dalo pětinové tempo a
+     * předpověď, že vyjde všechno, i kdyby se utrácelo dvojnásobně.
+     *
+     * Spolehlivost se hlásí slovem, ne procentem. Procento by naznačovalo přesnost,
+     * kterou odhad z pěti dnů nemá — a lidé by podle něj rozhodovali.
+     */
+    private function predpovedCesty(FinanceProject $cesta, $pohyby, array $stav): ?array
+    {
+        if ($cesta->budget_amount === null || ! $cesta->starts_on || ! $cesta->ends_on) {
+            return null;
+        }
+
+        $dnes = Carbon::today();
+        $uteklo = max(0, (int) $cesta->starts_on->diffInDays($dnes->min($cesta->ends_on), false) + 1);
+        $celkem = (int) $cesta->starts_on->diffInDays($cesta->ends_on) + 1;
+
+        if ($uteklo <= 0) {
+            return ['quality' => 'not_started', 'expected_total' => null, 'expected_left' => null, 'runs_out_on' => null];
+        }
+
+        $tempo = (float) $stav['spent'] / $uteklo;
+        $ocekavane = $tempo * $celkem;
+        $limit = (float) $cesta->budget_amount;
+
+        $dojdouZa = $tempo > 0 ? (int) floor(($limit - (float) $stav['spent']) / $tempo) : null;
+
+        return [
+            'quality' => $uteklo < 3 ? 'low' : ($uteklo < 7 ? 'rough' : 'stable'),
+            'days_elapsed' => $uteklo,
+            'days_total' => $celkem,
+            'pace' => round($tempo, 2),
+            'expected_total' => round($ocekavane, 2),
+            'expected_left' => round($limit - $ocekavane, 2),
+            'runs_out_on' => $dojdouZa !== null && $dojdouZa >= 0 && $dojdouZa < ($celkem - $uteklo)
+                ? $dnes->copy()->addDays($dojdouZa)->toDateString()
+                : null,
+            'currency' => $cesta->base_currency,
+        ];
     }
 
     public function destroyTrip(Request $request, string $uuid): JsonResponse

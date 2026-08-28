@@ -117,6 +117,7 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
         Route::post('/ucty', [App\Http\Controllers\Api\FinanceSetupController::class, 'storeWallet'])->name('wallets.store');
         Route::patch('/ucty/{uuid}', [App\Http\Controllers\Api\FinanceSetupController::class, 'updateWallet'])->name('wallets.update');
         Route::post('/ucty/{uuid}/korekce', [App\Http\Controllers\Api\FinanceSetupController::class, 'correctWallet'])->name('wallets.correct');
+        Route::get('/ucty/{uuid}', [App\Http\Controllers\Api\FinanceSetupController::class, 'walletDetail'])->name('wallets.detail');
         Route::delete('/ucty/{uuid}', [App\Http\Controllers\Api\FinanceSetupController::class, 'destroyWallet'])->name('wallets.destroy');
 
         Route::get('/cesty', [App\Http\Controllers\Api\FinanceSetupController::class, 'trips'])->name('trips');
@@ -124,6 +125,7 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
         Route::patch('/cesty/{uuid}', [App\Http\Controllers\Api\FinanceSetupController::class, 'updateTrip'])->name('trips.update');
         Route::post('/cesty/{uuid}/aktivovat', [App\Http\Controllers\Api\FinanceSetupController::class, 'activateTrip'])->name('trips.activate');
         Route::post('/cesty/{uuid}/ukoncit', [App\Http\Controllers\Api\FinanceSetupController::class, 'closeTrip'])->name('trips.close');
+        Route::get('/cesty/{uuid}/detail', [App\Http\Controllers\Api\FinanceSetupController::class, 'tripDetail'])->name('trips.detail');
         Route::get('/cesty/{uuid}/shrnuti', [App\Http\Controllers\Api\FinanceSetupController::class, 'tripSummary'])->name('trips.summary');
         Route::delete('/cesty/{uuid}', [App\Http\Controllers\Api\FinanceSetupController::class, 'destroyTrip'])->name('trips.destroy');
 

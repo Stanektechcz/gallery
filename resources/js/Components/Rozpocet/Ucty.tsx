@@ -4,6 +4,7 @@ import { castka as prectiCastku, penize } from '@/lib/penize';
 import axios from 'axios';
 import { Banknote, CreditCard, Landmark, Pencil, Plus, Scale, Trash2, Wallet, X } from 'lucide-react';
 import { useState } from 'react';
+import DetailUctu from './DetailUctu';
 import type { Ciselniky, Ucet } from './typy';
 
 const POLE = 'w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-primary)] px-3 py-2.5 text-base text-[var(--color-text-primary)] focus:border-[var(--color-accent)] focus:outline-none';
@@ -27,9 +28,15 @@ const DRUHY = [
  * přestal být odvoditelný. Proto je místo přepsání korekce: zapíše se rozdíl
  * i s důvodem a je vidět, kdy a proč se to stalo.
  */
-export default function Ucty({ ciselniky, onZmena }: { ciselniky: Ciselniky; onZmena: () => void }) {
+export default function Ucty({ ciselniky, obdobi, onZmena, onPrevod }: {
+    ciselniky: Ciselniky;
+    obdobi: string;
+    onZmena: () => void;
+    onPrevod: () => void;
+}) {
     const [formular, setFormular] = useState<'novy' | Ucet | null>(null);
     const [korekce, setKorekce] = useState<Ucet | null>(null);
+    const [detail, setDetail] = useState<string | null>(null);
 
     const poMenach = ciselniky.balances;
 
@@ -76,7 +83,11 @@ export default function Ucty({ ciselniky, onZmena }: { ciselniky: Ciselniky; onZ
                             return (
                                 <li key={u.uuid}
                                     className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-muted)] p-3">
-                                    <div className="flex min-w-0 items-center gap-2.5">
+                                    {/* Celý blok s názvem a zůstatkem otevírá detail —
+                                        „kde se ten zůstatek vzal" je otázka, kvůli které
+                                        se na účet kliká nejčastěji. */}
+                                    <button type="button" onClick={() => setDetail(u.uuid)}
+                                        className="flex min-w-0 flex-1 items-center gap-2.5 text-left">
                                         <druh.ikona size={17} className="shrink-0 text-[var(--color-text-secondary)]"/>
                                         <div className="min-w-0">
                                             <p className="truncate text-sm font-medium text-[var(--color-text-primary)]">{u.name}</p>
@@ -85,12 +96,13 @@ export default function Ucty({ ciselniky, onZmena }: { ciselniky: Ciselniky; onZ
                                                 {u.owner ? ` · ${u.owner}` : ' · společný'}
                                             </p>
                                         </div>
-                                    </div>
+                                    </button>
 
                                     <div className="flex items-center gap-2">
-                                        <span className={`tabular-nums text-sm font-medium ${u.is_negative ? 'text-red-400' : 'text-[var(--color-text-primary)]'}`}>
+                                        <button type="button" onClick={() => setDetail(u.uuid)}
+                                            className={`tabular-nums text-sm font-medium ${u.is_negative ? 'text-red-400' : 'text-[var(--color-text-primary)]'}`}>
                                             {penize(u.balance, u.currency)}
-                                        </span>
+                                        </button>
                                         <button type="button" onClick={() => setKorekce(u)}
                                             aria-label={`Srovnat zůstatek účtu ${u.name}`}
                                             className="flex h-11 w-11 items-center justify-center rounded-lg border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]">
@@ -120,6 +132,12 @@ export default function Ucty({ ciselniky, onZmena }: { ciselniky: Ciselniky; onZ
                 <FormularKorekce ucet={korekce}
                     onHotovo={() => { setKorekce(null); onZmena(); }}
                     onZavrit={() => setKorekce(null)}/>
+            )}
+
+            {detail && (
+                <DetailUctu uuid={detail} obdobi={obdobi}
+                    onZavrit={() => setDetail(null)}
+                    onPrevod={() => { setDetail(null); onPrevod(); }}/>
             )}
         </div>
     );

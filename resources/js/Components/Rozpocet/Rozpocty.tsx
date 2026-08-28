@@ -382,7 +382,7 @@ function FormularRozpoctu({ rozpocet, ciselniky, onHotovo, onSmazat, onZavrit }:
                                 </span>
                                 <input type="text" inputMode="decimal" value={limity[k.uuid] ?? ''}
                                     onChange={e => setLimity(l => ({ ...l, [k.uuid]: e.target.value }))}
-                                    aria-label={`Limit pro ${k.name}`}
+                                    aria-label={`Limit kategorie ${k.name}`}
                                     placeholder="—"
                                     className="w-24 shrink-0 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-primary)] px-2 py-1.5 text-right text-sm tabular-nums text-[var(--color-text-primary)] focus:border-[var(--color-accent)] focus:outline-none"/>
                             </li>

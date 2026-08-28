@@ -5,6 +5,7 @@ import { castka as prectiCastku, datum, kurz, penize, penizeZbyva, procenta } fr
 import axios from 'axios';
 import { CheckCircle2, Flag, MapPin, Pencil, Play, Plus } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
+import DetailCesty from './DetailCesty';
 import { Dialog } from './Ucty';
 import type { Ciselniky } from './typy';
 
@@ -32,13 +33,16 @@ type CestaStav = {
  * znamenaly, že se výdaje tiše rozdělí mezi dva pobyty — a nikdo by si toho nevšiml,
  * dokud by na konci nesouhlasily součty obou.
  */
-export default function Cesty({ ciselniky, onZmena }: { ciselniky: Ciselniky; onZmena: () => void }) {
+export default function Cesty({ ciselniky, onZmena, onTransakce }: {
+    ciselniky: Ciselniky; onZmena: () => void; onTransakce: (f: Record<string, string>) => void;
+}) {
     const [cesty, setCesty] = useState<CestaStav[]>([]);
     const [nacita, setNacita] = useState(true);
     const [chyba, setChyba] = useState('');
     const [formular, setFormular] = useState<'nova' | CestaStav | null>(null);
     const [shrnuti, setShrnuti] = useState<{ cesta: CestaStav; data: any } | null>(null);
     const [skupina, setSkupina] = useState<'aktivni' | 'ukoncene'>('aktivni');
+    const [detail, setDetail] = useState<string | null>(null);
 
     const nacti = useCallback(async () => {
         setNacita(true);
@@ -59,7 +63,7 @@ export default function Cesty({ ciselniky, onZmena }: { ciselniky: Ciselniky; on
     const aktivuj = async (c: CestaStav) => {
         try {
             await axios.post(`/api/v1/rozpocet/cesty/${c.uuid}/aktivovat`);
-            hlaska(`Jedeme na ${c.name}. Nové záznamy se k té cestě přiřadí samy.`, 'uspech');
+            hlaska(`Aktivní cesta: ${c.name}. Nové záznamy se k ní přiřadí samy.`, 'uspech');
             await nacti();
             onZmena();
         } catch {
@@ -142,7 +146,7 @@ export default function Cesty({ ciselniky, onZmena }: { ciselniky: Ciselniky; on
                         onAktivovat={() => void aktivuj(c)}
                         onUkoncit={() => void ukonci(c)}
                         onUpravit={() => setFormular(c)}
-                        onShrnuti={() => void otevriShrnuti(c)}/>
+                        onShrnuti={() => setDetail(c.uuid)}/>
                 ))}
             </div>
 
@@ -151,6 +155,10 @@ export default function Cesty({ ciselniky, onZmena }: { ciselniky: Ciselniky; on
                     ucty={ciselniky.wallets}
                     onHotovo={() => { setFormular(null); void nacti(); onZmena(); }}
                     onZavrit={() => setFormular(null)}/>
+            )}
+
+            {detail && (
+                <DetailCesty uuid={detail} onZavrit={() => setDetail(null)} onTransakce={onTransakce}/>
             )}
 
             {shrnuti && (
@@ -237,7 +245,11 @@ function KartaCesty({ cesta, onAktivovat, onUkoncit, onUpravit, onShrnuti }: {
             )}
 
             <p className="mt-2 text-[11px] text-[var(--color-text-secondary)]">
-                {cesta.days_left !== null && ! ukoncena && `${dny(cesta.days_left)} do konce · `}
+                {/* Týž počet dní, jakým dělí bezpečná částka — včetně dneška. Kalendářní
+                    rozdíl je o jedna menší a vedle denní částky by z dvojice čísel
+                    nevyšlo totéž, co ukazuje karta. */}
+                {! ukoncena && (cesta.safe_daily?.days_left ?? cesta.days_left) !== null
+                    && `${dny(cesta.safe_daily?.days_left ?? cesta.days_left ?? 0)} do konce · `}
                 {zaznamy(cesta.transactions)}
             </p>
 

@@ -289,7 +289,7 @@ export default function Prehled({ data, naTab, naTransakce, onPridat, onUpravitP
                             {data.exchange.last?.rate && (
                                 <p className="mt-2 border-t border-[var(--color-border)] pt-2 text-[11px] text-[var(--color-text-secondary)]">
                                     Naposledy {datum(data.exchange.last.occurred_at)}
-                                    {data.exchange.last.provider && ` přes ${data.exchange.last.provider}`}:{' '}
+                                    {data.exchange.last.provider && ` · ${data.exchange.last.provider}`}:{' '}
                                     <strong className="tabular-nums text-[var(--color-text-primary)]">
                                         {kurz(data.exchange.last.rate.effective)} Kč/€
                                     </strong>
