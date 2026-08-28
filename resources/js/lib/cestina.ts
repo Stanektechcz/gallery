@@ -54,6 +54,7 @@ export const serie = (cislo: number) => pocet(cislo, 'série', 'série', 'séri�
 export const recepty = (cislo: number) => pocet(cislo, 'recept', 'recepty', 'receptů');
 export const transakce = (cislo: number) => pocet(cislo, 'transakce', 'transakce', 'transakcí');
 export const zaznamy = (cislo: number) => pocet(cislo, 'záznam', 'záznamy', 'záznamů');
+export const nakupy = (cislo: number) => pocet(cislo, 'nákup', 'nákupy', 'nákupů');
 export const ucty = (cislo: number) => pocet(cislo, 'účet', 'účty', 'účtů');
 export const podklady = (cislo: number) => pocet(cislo, 'podklad', 'podklady', 'podkladů');
 export const limity = (cislo: number) => pocet(cislo, 'limit', 'limity', 'limitů');

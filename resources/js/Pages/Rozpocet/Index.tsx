@@ -9,7 +9,7 @@ import Statistiky from '@/Components/Rozpocet/Statistiky';
 import SpodniNavigace, { TABY } from '@/Components/Rozpocet/SpodniNavigace';
 import Transakce from '@/Components/Rozpocet/Transakce';
 import Ucty from '@/Components/Rozpocet/Ucty';
-import type { Ciselniky, Prehled as PrehledData } from '@/Components/Rozpocet/typy';
+import type { Ciselniky, Pohyb, Prehled as PrehledData } from '@/Components/Rozpocet/typy';
 import AppLayout from '@/Layouts/AppLayout';
 import { dny, zaznamy } from '@/lib/cestina';
 import { odeslatFrontu, sledujFrontu, type CekajiciZapis } from '@/lib/frontaZapisu';
@@ -36,6 +36,7 @@ export default function RozpocetIndex() {
     const [nacita, setNacita] = useState(true);
     const [chyba, setChyba] = useState('');
     const [pridava, setPridava] = useState<TypZaznamu | null>(null);
+    const [upravovany, setUpravovany] = useState<Pohyb | null>(null);
 
     // Stav obrazovky žije v URL, ne v paměti komponenty.
     const [stav, setStav] = useState(() => {
@@ -94,8 +95,36 @@ export default function RozpocetIndex() {
     /** Po uložení se přepočítá všechno naráz — ne jeden widget teď a druhý za chvíli. */
     const poZmene = useCallback(async () => {
         setPridava(null);
+        setUpravovany(null);
         await nacti();
     }, [nacti]);
+
+    const zavriFormular = useCallback(() => {
+        setPridava(null);
+        setUpravovany(null);
+    }, []);
+
+    /**
+     * Otevře existující záznam k opravě.
+     *
+     * Načítá se přes seznam transakcí, ne z toho, co je zrovna na obrazovce: „poslední
+     * záznam" v pruhu Dnes nese jen částku a kategorii, ale formulář potřebuje účty,
+     * poplatek i rozdělení.
+     */
+    const otevriOpravu = useCallback(async (uuid: string) => {
+        try {
+            const { data } = await axios.get('/api/v1/rozpocet/transakce', { params: { obdobi: 'dnes' } });
+            const zaznam = (data.transactions as Pohyb[]).find(t => t.uuid === uuid);
+
+            if (zaznam) {
+                setUpravovany(zaznam);
+            } else {
+                hlaska('Záznam se nepodařilo otevřít — najdete ho v Transakcích.', 'chyba');
+            }
+        } catch {
+            hlaska('Záznam se nepodařilo načíst.', 'chyba');
+        }
+    }, []);
 
     const naTab = (tab: string) => setStav(s => ({ ...s, tab }));
 
@@ -209,7 +238,9 @@ export default function RozpocetIndex() {
                     {! nacita && ! chyba && prehled && ciselniky && (
                         <>
                             {stav.tab === 'prehled' && (
-                                <Prehled data={prehled} naTab={naTab} naTransakce={naTransakce}/>
+                                <Prehled data={prehled} naTab={naTab} naTransakce={naTransakce}
+                                    onPridat={() => setPridava('expense')}
+                                    onUpravitPosledni={uuid => void otevriOpravu(uuid)}/>
                             )}
 
                             {stav.tab === 'transakce' && (
@@ -253,10 +284,18 @@ export default function RozpocetIndex() {
 
             <SpodniNavigace aktivni={stav.tab} onTab={naTab} onPridat={() => setPridava('expense')}/>
 
-            {pridava && ciselniky && (
-                <Sesle onZavrit={() => setPridava(null)}>
-                    <PridatZaznam ciselniky={ciselniky} vychoziTyp={pridava}
-                        onHotovo={() => void poZmene()} onZavrit={() => setPridava(null)}/>
+            {(pridava || upravovany) && ciselniky && (
+                <Sesle onZavrit={zavriFormular}>
+                    {/* `key` je tu schválně: přepnutí mezi opravou a novým zápisem musí
+                        formulář postavit znovu, jinak by si nechal hodnoty předchozího
+                        záznamu a uložil je do jiného. */}
+                    <PridatZaznam key={upravovany?.uuid ?? 'novy'}
+                        ciselniky={ciselniky}
+                        vychoziTyp={pridava ?? 'expense'}
+                        upravovany={upravovany}
+                        onHotovo={() => void poZmene()}
+                        onZmena={() => void nacti()}
+                        onZavrit={zavriFormular}/>
                 </Sesle>
             )}
         </AppLayout>

@@ -120,7 +120,7 @@ class FinanceFilter
     {
         return Transaction::where('gallery_space_id', $space->id)
             ->with(['walletFrom:id,name,currency,partner_id,kind', 'walletTo:id,name,currency,partner_id,kind',
-                'category:id,name,color,icon', 'shares', 'refundOf:id,category_id',
+                'category:id,uuid,name,color,icon', 'shares', 'refundOf:id,category_id',
                 'payer:id,name', 'project:id,name,uuid'])
             ->whereDate('occurred_at', '>=', $this->od)
             ->when($this->do, fn ($q) => $q->whereDate('occurred_at', '<=', $this->do))

@@ -551,6 +551,10 @@ class FinanceService
 
                 return [
                     'category_id' => $id ?: null,
+                    // uuid je to, čím se filtruje. Bez něj posílal proklik z grafu
+                    // číselné id, filtr hledal podle uuid a seznam vyšel prázdný —
+                    // s hláškou „tomuhle výběru nic neodpovídá", která zněla věrohodně.
+                    'category_uuid' => $kategorie?->uuid,
                     'name' => $kategorie?->name ?? 'Bez kategorie',
                     'color' => $kategorie?->color,
                     'icon' => $kategorie?->icon,

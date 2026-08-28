@@ -18,7 +18,7 @@ type Data = {
     previous: { income: number; expense: number; net: number; per_day: number | null; label: string } | null;
     by_currency: Array<{ currency: string; income: number; expense: number; fees: number; spent: number; net: number }>;
     flow: { step: 'den' | 'tyden' | 'mesic'; points: Bod[] };
-    categories: Array<{ category_id: number | null; name: string; color: string | null; amount: number; percent: number; currency: string; count: number }>;
+    categories: Array<{ category_id: number | null; category_uuid: string | null; name: string; color: string | null; amount: number; percent: number; currency: string; count: number }>;
     daily: Array<{ date: string; amount: number }>;
     largest: Array<{ uuid: string; amount: number; currency: string; occurred_at: string; category: string | null; color: string | null; counterparty: string | null; description: string | null }>;
     partners: {
@@ -204,7 +204,7 @@ export default function Statistiky({ obdobi, onTransakce }: {
                                 {data.categories.slice(0, 8).map(k => (
                                     <li key={k.category_id ?? 'bez'}>
                                         <button type="button"
-                                            onClick={() => onTransakce({ kategorie: String(k.category_id ?? '') })}
+                                            onClick={() => onTransakce({ kategorie: k.category_uuid ?? '' })}
                                             className="w-full text-left">
                                             <div className="flex items-baseline justify-between gap-2 text-sm">
                                                 <span className="flex min-w-0 items-center gap-1.5">

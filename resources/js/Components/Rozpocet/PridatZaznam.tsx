@@ -4,7 +4,7 @@ import { castka as prectiCastku, dnesniDatum, kurz, penize, TYPY_ZAZNAMU, type T
 import axios from 'axios';
 import { AlertTriangle, ArrowRightLeft, ArrowUpDown, Check, ChevronDown, Minus, Plus, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { Ciselniky, Kategorie, Sablona, Ucet } from './typy';
+import type { Ciselniky, Kategorie, Pohyb, Sablona, Ucet } from './typy';
 
 /**
  * Zápis nového záznamu.
@@ -27,7 +27,12 @@ type Vlastnosti = {
     ciselniky: Ciselniky;
     /** Předvolený typ. Výdaj, pokud se neřekne jinak. */
     vychoziTyp?: TypZaznamu;
+    /** Existující záznam k opravě. Null u nového. */
+    upravovany?: Pohyb | null;
+    /** Uloženo a hotovo — zavře formulář. */
     onHotovo: () => void;
+    /** Uloženo, ale pokračuje se — obnoví data a nechá formulář otevřený. */
+    onZmena: () => void;
     onZavrit: () => void;
 };
 
@@ -42,8 +47,10 @@ const NABIDKA: Array<{ id: TypZaznamu; popis: string }> = [
     { id: 'exchange', popis: 'Koruny na eura a zpátky' },
 ];
 
-export default function PridatZaznam({ ciselniky, vychoziTyp = 'expense', onHotovo, onZavrit }: Vlastnosti) {
-    const [typ, setTyp] = useState<TypZaznamu>(vychoziTyp);
+export default function PridatZaznam({
+    ciselniky, vychoziTyp = 'expense', upravovany = null, onHotovo, onZmena, onZavrit,
+}: Vlastnosti) {
+    const [typ, setTyp] = useState<TypZaznamu>((upravovany?.type as TypZaznamu) ?? vychoziTyp);
     const [ukladam, setUkladam] = useState(false);
     const [chyby, setChyby] = useState<Record<string, string>>({});
     const [varovani, setVarovani] = useState<Array<{ key: string; title: string; body: string }>>([]);
@@ -67,26 +74,28 @@ export default function PridatZaznam({ ciselniky, vychoziTyp = 'expense', onHoto
         return podleCesty ?? posledni ?? podleMeny ?? ciselniky.wallets[0] ?? null;
     }, [ciselniky, cesta]);
 
+    // Při opravě se předvyplní ze záznamu, jinak z kontextu.
     const [form, setForm] = useState(() => ({
-        amount_from: '',
-        amount_to: '',
-        occurred_at: dnesniDatum(),
-        wallet_from: vychoziUcet?.uuid ?? '',
-        wallet_to: '',
-        category: '',
-        trip: cesta?.uuid ?? '',
+        amount_from: upravovany?.from ? String(upravovany.from.amount) : '',
+        amount_to: upravovany?.to ? String(upravovany.to.amount) : '',
+        occurred_at: upravovany?.occurred_at ?? dnesniDatum(),
+        wallet_from: upravovany?.from?.uuid ?? vychoziUcet?.uuid ?? '',
+        wallet_to: upravovany?.to?.uuid ?? '',
+        category: upravovany?.category_uuid ?? '',
+        trip: upravovany?.trip_uuid ?? cesta?.uuid ?? '',
         payer_partner_id: ciselniky.last_used.payer_partner_id ? String(ciselniky.last_used.payer_partner_id) : '',
         beneficiary_partner_id: '',
-        fee_amount: '',
-        fee_currency: '',
-        fee_included: false,
-        reference_rate: '',
-        provider: '',
-        counterparty: '',
-        place: '',
-        description: '',
-        excluded_from_budget: false,
-        exclusion_reason: '',
+        fee_amount: upravovany?.fee ? String(upravovany.fee) : '',
+        fee_currency: upravovany?.fee_currency ?? '',
+        fee_included: upravovany?.fee_included ?? false,
+        reference_rate: upravovany?.rate?.reference !== null && upravovany?.rate?.reference !== undefined
+            ? String(upravovany.rate.reference) : '',
+        provider: upravovany?.provider ?? '',
+        counterparty: upravovany?.counterparty ?? '',
+        place: upravovany?.place ?? '',
+        description: upravovany?.description ?? '',
+        excluded_from_budget: upravovany?.excluded ?? false,
+        exclusion_reason: upravovany?.exclusion_reason ?? '',
         deleni: 'equal' as 'equal' | 'adri' | 'maki' | 'vlastni',
         podil_prvni: '50',
     }));
@@ -191,6 +200,28 @@ export default function PridatZaznam({ ciselniky, vychoziTyp = 'expense', onHoto
         };
     }, [typ, form.amount_from, form.amount_to, form.fee_amount, form.fee_currency, form.fee_included, zdroj, cil]);
 
+    /**
+     * Zavření rozepsaného formuláře se ptá.
+     *
+     * Rozepsaná částka je práce, kterou už někdo udělal, a zavřít formulář se dá
+     * i omylem — klepnutím vedle na tmavé pozadí. Ptát se pokaždé by ale obtěžovalo,
+     * takže se ptá jen tehdy, když je v něm něco navíc proti tomu, co se předvyplnilo.
+     */
+    const [ptamSeNaZavreni, setPtamSeNaZavreni] = useState(false);
+
+    const jeRozepsany = form.amount_from !== '' || form.amount_to !== ''
+        || form.counterparty !== '' || form.description !== '' || form.place !== '';
+
+    const zkusZavrit = () => {
+        if (jeRozepsany && ! upravovany) {
+            setPtamSeNaZavreni(true);
+
+            return;
+        }
+
+        onZavrit();
+    };
+
     const muzeUlozit = (() => {
         const c = prectiCastku(form.amount_from) ?? prectiCastku(form.amount_to);
 
@@ -203,7 +234,11 @@ export default function PridatZaznam({ ciselniky, vychoziTyp = 'expense', onHoto
         return true;
     })();
 
-    const uloz = async (potvrzeno = false) => {
+    /**
+     * @param potvrzeno  Odklepnutá varování — pošle se `potvrzeno: true`.
+     * @param dalsi      Po uložení nechat formulář otevřený pro další podobný záznam.
+     */
+    const uloz = async (potvrzeno = false, dalsi = false) => {
         setUkladam(true);
         setChyby({});
 
@@ -262,6 +297,14 @@ export default function PridatZaznam({ ciselniky, vychoziTyp = 'expense', onHoto
         };
 
         try {
+            if (upravovany) {
+                await axios.patch(`/api/v1/rozpocet/transakce/${upravovany.uuid}`, telo);
+                hlaska('Změna je uložená.', 'uspech');
+                onHotovo();
+
+                return;
+            }
+
             const { data } = await axios.post('/api/v1/rozpocet/transakce', telo);
 
             /*
@@ -287,6 +330,21 @@ export default function PridatZaznam({ ciselniky, vychoziTyp = 'expense', onHoto
                     }
                     : undefined,
             );
+
+            if (dalsi) {
+                /*
+                 * Další podobný: zůstane účet, kategorie, cesta i rozdělení, vyprázdní
+                 * se jen částka a popisy. A hlavně nový klíč — bez něj by druhý zápis
+                 * server považoval za opakované odeslání toho prvního a neuložil ho.
+                 */
+                klicZapisu.current = novyKlic();
+                uprav({ amount_from: '', amount_to: '', counterparty: '', description: '', fee_amount: '' });
+                setVarovani([]);
+                poleCastky.current?.focus();
+                onZmena();
+
+                return;
+            }
 
             onHotovo();
         } catch (problem: any) {
@@ -697,7 +755,7 @@ export default function PridatZaznam({ ciselniky, vychoziTyp = 'expense', onHoto
             {/* Uložit dole a přilepené, ale nad bezpečnou zónou a nad klávesnicí. */}
             <div className="shrink-0 border-t border-[var(--color-border)] bg-[var(--color-bg-card)] px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))]">
                 <div className="flex gap-2">
-                    <button type="button" onClick={onZavrit}
+                    <button type="button" onClick={zkusZavrit} aria-label="Zavřít formulář"
                         className="inline-flex min-h-[2.75rem] items-center justify-center rounded-xl border border-[var(--color-border)] px-4 text-sm text-[var(--color-text-secondary)]">
                         <X size={16}/>
                     </button>
@@ -706,9 +764,39 @@ export default function PridatZaznam({ ciselniky, vychoziTyp = 'expense', onHoto
                         className="inline-flex min-h-[2.75rem] flex-1 items-center justify-center gap-1.5 rounded-xl px-4 text-sm font-medium text-white disabled:opacity-40"
                         style={{ background: nastaveniTypu.barva }}>
                         <Check size={16}/>
-                        {varovani.length > 0 ? 'Uložit i tak' : `Zapsat ${nastaveniTypu.akuzativ}`}
+                        {varovani.length > 0
+                            ? 'Uložit i tak'
+                            : upravovany ? 'Uložit změnu' : `Zapsat ${nastaveniTypu.akuzativ}`}
                     </button>
                 </div>
+
+                {/* Uložit a hned další podobný. Nákup, MHD a kafe chodí po sobě —
+                    zavřít formulář a znovu ho otevřít znamená projít celé předvyplnění
+                    ještě jednou, ačkoli se mění jen částka. */}
+                {! upravovany && typ === 'expense' && muzeUlozit && varovani.length === 0 && (
+                    <button type="button" onClick={() => void uloz(false, true)} disabled={ukladam}
+                        className="mt-2 inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-xl border border-[var(--color-border)] px-4 text-sm text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] disabled:opacity-40">
+                        <Plus size={15}/> Uložit a přidat podobný
+                    </button>
+                )}
+                {ptamSeNaZavreni && (
+                    <div className="mt-2 rounded-xl border border-amber-500/40 bg-[var(--color-surface-muted)] p-3">
+                        <p className="text-xs leading-relaxed text-[var(--color-text-primary)]">
+                            Rozepsaný záznam se zavřením ztratí. Zahodit ho?
+                        </p>
+                        <div className="mt-2 flex gap-2">
+                            <button type="button" onClick={onZavrit}
+                                className="min-h-11 rounded-lg border border-[var(--color-border)] px-3 text-xs text-[var(--color-text-primary)]">
+                                Zahodit
+                            </button>
+                            <button type="button" onClick={() => setPtamSeNaZavreni(false)}
+                                className="min-h-11 rounded-lg px-3 text-xs text-[var(--color-text-secondary)]">
+                                Zpátky k zápisu
+                            </button>
+                        </div>
+                    </div>
+                )}
+
                 {ciselniky.wallets.length === 0 && (
                     <p className="mt-2 text-xs text-amber-400">Nejdřív si v Účtech založte aspoň jeden účet.</p>
                 )}

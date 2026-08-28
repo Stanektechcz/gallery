@@ -1,9 +1,9 @@
 import Panel from '@/Components/Panel';
-import { dny } from '@/lib/cestina';
+import { dny, nakupy } from '@/lib/cestina';
 import { datum, kurz, penize, penizeKratce, penizeZbyva, procenta, zahlaviDne } from '@/lib/penize';
 import {
     AlertTriangle, ArrowRightLeft, Banknote, CalendarDays, ChevronRight, Coins,
-    PiggyBank, TrendingDown, TrendingUp, Wallet,
+    Pencil, PiggyBank, Plus, TrendingDown, TrendingUp, Wallet,
 } from 'lucide-react';
 import { useMemo } from 'react';
 import RadekPohybu from './RadekPohybu';
@@ -17,10 +17,12 @@ import type { Prehled as PrehledData } from './typy';
  * Pořadí widgetů je na mobilu i na desktopu totéž, jen se jinak skládá. Čtyři KPI
  * jsou nahoře v mřížce, ne v posuvném carouselu — co je za okrajem, to se nečte.
  */
-export default function Prehled({ data, naTab, naTransakce }: {
+export default function Prehled({ data, naTab, naTransakce, onPridat, onUpravitPosledni }: {
     data: PrehledData;
     naTab: (tab: string) => void;
     naTransakce: (filtr: Record<string, string>) => void;
+    onPridat: () => void;
+    onUpravitPosledni: (uuid: string) => void;
 }) {
     const mena = data.main_currency;
     const soucet = data.summary.find(s => s.currency === mena);
@@ -39,8 +41,77 @@ export default function Prehled({ data, naTab, naTransakce }: {
     const rozpocet = data.budget;
     const bezpecne = rozpocet?.safe_daily;
 
+    const dnes = data.today;
+
     return (
         <div className="space-y-3">
+            {/*
+             * Dnešek úplně nahoře.
+             *
+             * „Kolik ještě dnes můžu" je otázka, kterou si člověk na cestě klade
+             * několikrát denně, a odpověď na ni nemá být schovaná mezi grafy. Pruh
+             * počítá vždycky dnešek, i když je vybrané jiné období — přepočítat ho
+             * podle filtru by dalo číslo, které v tu chvíli nikoho nezajímá.
+             */}
+            <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-3"
+                aria-label="Dnešní stav">
+                <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                    <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
+                        <button type="button" onClick={() => naTransakce({ obdobi: 'dnes' })}
+                            className="text-left">
+                            <span className="block text-[11px] font-medium uppercase tracking-wider text-[var(--color-text-secondary)]">
+                                Dnes utraceno
+                            </span>
+                            <span className="block text-xl font-semibold tabular-nums text-[var(--color-text-primary)]">
+                                {penize(dnes.spent, dnes.currency)}
+                            </span>
+                        </button>
+
+                        {dnes.daily_limit !== null && (
+                            <span className="text-xs text-[var(--color-text-secondary)]">
+                                {dnes.over_today !== null ? (
+                                    <>
+                                        o <strong style={{ color: 'var(--fin-vydaj)' }}>{penize(dnes.over_today, dnes.currency)}</strong>{' '}
+                                        nad dnešní částkou {penize(dnes.daily_limit, dnes.currency)}
+                                    </>
+                                ) : (
+                                    <>
+                                        dnes ještě{' '}
+                                        <strong className="text-[var(--color-text-primary)]">
+                                            {penize(dnes.left_today ?? 0, dnes.currency)}
+                                        </strong>{' '}
+                                        z {penize(dnes.daily_limit, dnes.currency)}
+                                    </>
+                                )}
+                            </span>
+                        )}
+
+                        {dnes.count > 0 && (
+                            <span className="text-[11px] text-[var(--color-text-secondary)]">
+                                {nakupy(dnes.count)}
+                            </span>
+                        )}
+                    </div>
+
+                    <div className="flex shrink-0 items-center gap-2">
+                        {/* Oprava posledního zápisu bez procházení historie — nejčastější
+                            oprava je ta hned po uložení, kdy si člověk všimne překlepu. */}
+                        {dnes.last && (
+                            <button type="button" onClick={() => onUpravitPosledni(dnes.last!.uuid)}
+                                className="inline-flex min-h-11 items-center gap-1.5 rounded-xl border border-[var(--color-border)] px-3 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]">
+                                <Pencil size={13}/>
+                                <span className="hidden sm:inline">{dnes.last.category ?? 'Poslední'} </span>
+                                {penize(dnes.last.amount, dnes.last.currency)}
+                            </button>
+                        )}
+                        <button type="button" onClick={onPridat}
+                            className="inline-flex min-h-11 items-center gap-1.5 rounded-xl bg-[var(--color-accent)] px-4 text-sm font-medium text-[var(--color-accent-contrast)]">
+                            <Plus size={16}/> Přidat
+                        </button>
+                    </div>
+                </div>
+            </section>
+
             {data.alerts.length > 0 && (
                 <div className="space-y-2">
                     {data.alerts.slice(0, 3).map(u => (
@@ -126,7 +197,7 @@ export default function Prehled({ data, naTab, naTransakce }: {
                                 {data.categories.slice(0, 7).map(k => (
                                     <li key={k.category_id ?? 'bez'}>
                                         <button type="button"
-                                            onClick={() => naTransakce({ kategorie: String(k.category_id ?? '') })}
+                                            onClick={() => naTransakce({ kategorie: k.category_uuid ?? '' })}
                                             className="w-full text-left">
                                             <div className="flex items-baseline justify-between gap-2 text-sm">
                                                 <span className="flex min-w-0 items-center gap-1.5">

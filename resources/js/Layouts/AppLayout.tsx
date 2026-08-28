@@ -550,7 +550,10 @@ export const navGroups: NavigationGroup[] = [
         id: 'together', label: 'Společně', description: 'Plány, zážitky a domácnost', icon: Heart,
         items: [
             { href: '/planning', label: 'Plánování a úkoly', icon: Calendar },
-            { href: '/finances', label: 'Společné finance', icon: CircleDollarSign, feature: 'finance' },
+            // Přejmenováno z „Společné finance": ta položka stála hned nad „Rozpočty"
+            // a obě zněly jako totéž. Tahle je import výpisů z Revolutu, rozpočet je
+            // rozpočet — jméno to teď říká, takže se nehledá, kam se co zapisuje.
+            { href: '/finances', label: 'Import z Revolutu', icon: CircleDollarSign, feature: 'finance' },
             // Real children now that the sidebar nests. The arrows in these labels used to
             // draw the hierarchy by hand, and the parent pointed at the same page as its
             // own first child — which is what gave the menu two entries with one identity.

@@ -191,12 +191,20 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/chat', fn() => Inertia::render('Chat/Index'))->name('chat');
     Route::get('/hlasovky', fn() => Inertia::render('VoiceNotes/Index'))->name('voice-notes');
     Route::get('/zaroven', fn() => Inertia::render('TogetherNow/Index'))->name('together-now');
-    Route::get('/rozpocty', fn() => Inertia::render('Budgets/Index'))->name('budgets');
-    // Účetní kniha pro víc subjektů a měn. Vedle rozpočtů, ne místo nich.
-    Route::get('/kniha', fn() => Inertia::render('Ledger/Index'))->name('ledger');
-    // Modul Rozpočet — společné finance na cestách. Stojí na téže knize, ale ptá se
-    // jinak: kniha eviduje, rozpočet odpovídá na „kolik nám zbývá do konce".
-    Route::get('/rozpocet', fn() => Inertia::render('Rozpocet/Index'))->name('rozpocet');
+    /*
+     * Rozpočet — jediné místo pro společné finance.
+     *
+     * Dřív tu stály tři obrazovky nad týmiž penězi: `/rozpocty` s vlastními položkami,
+     * `/kniha` s transakcemi a `/finances` s importem. Tři vchody do jedné věci znamenají,
+     * že se dvě čísla rozejdou a nikdo nepozná které platí — a hlavně že se hledá, kam
+     * se to vlastně zapisuje.
+     *
+     * Modul má osm tabů a `/rozpocty` je jeho adresa. Starší adresy sem přesměrovávají,
+     * aby uložené odkazy a záložky nekončily na prázdné stránce.
+     */
+    Route::get('/rozpocty', fn() => Inertia::render('Rozpocet/Index'))->name('budgets');
+    Route::get('/rozpocet', fn() => redirect()->route('budgets', request()->query()))->name('rozpocet');
+    Route::get('/kniha', fn() => redirect()->route('budgets', ['tab' => 'transakce']))->name('ledger');
     Route::get('/duplicity', fn() => Inertia::render('Duplicates/Index'))->name('duplicates');
     Route::get('/cyklus', fn() => Inertia::render('Cycle/Index'))->name('cycle');
     Route::get('/krkance', fn() => Inertia::render('Burps/Index'))->name('burps');

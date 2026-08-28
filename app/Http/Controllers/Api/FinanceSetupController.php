@@ -556,7 +556,7 @@ class FinanceSetupController extends Controller
     {
         $pohyby = Transaction::where('gallery_space_id', $space->id)
             ->where('finance_project_id', $c->id)
-            ->with(['category:id,name,color', 'walletFrom:id,name,currency,partner_id'])
+            ->with(['category:id,uuid,name,color', 'walletFrom:id,name,currency,partner_id'])
             ->get();
 
         $mena = $c->base_currency;

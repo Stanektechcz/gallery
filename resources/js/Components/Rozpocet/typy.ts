@@ -84,6 +84,9 @@ export type Pohyb = {
     from: { uuid: string | null; name: string; amount: number; currency: string } | null;
     to: { uuid: string | null; name: string; amount: number; currency: string } | null;
     category: { name: string; color: string | null; icon: string | null } | null;
+    category_uuid: string | null;
+    trip_uuid: string | null;
+    payer_partner_id: number | null;
     payer: string | null;
     trip: string | null;
     counterparty: string | null;
@@ -150,7 +153,7 @@ export type Prehled = {
     wallets: Ucet[];
     daily: Array<{ date: string; amount: number }>;
     categories: Array<{
-        category_id: number | null; name: string; color: string | null; icon: string | null;
+        category_id: number | null; category_uuid: string | null; name: string; color: string | null; icon: string | null;
         amount: number; gross: number; refunded: number; count: number; currency: string; percent: number;
     }>;
     partner_balance: {
@@ -169,6 +172,19 @@ export type Prehled = {
         period_volume: Array<{ currency: string; amount: number }>;
         period_fees: Array<{ currency: string; amount: number }>;
         count: number;
+    };
+    /**
+     * Dnešek. Počítá se vždycky za dnešek, i když je vybrané jiné období —
+     * „kolik ještě dnes můžu" je otázka, která na filtru nezávisí.
+     */
+    today: {
+        currency: string;
+        spent: number;
+        count: number;
+        daily_limit: number | null;
+        left_today: number | null;
+        over_today: number | null;
+        last: { uuid: string; amount: number; currency: string; category: string | null; wallet: string | null } | null;
     };
     recent: Pohyb[];
     alerts: Array<{

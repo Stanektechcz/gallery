@@ -192,7 +192,7 @@ class FinanceBudgetController extends Controller
         }
 
         $pohyby = Transaction::where('gallery_space_id', $space->id)
-            ->with(['category:id,name,color,icon', 'refundOf:id,category_id'])
+            ->with(['category:id,uuid,name,color,icon', 'refundOf:id,category_id'])
             ->whereDate('occurred_at', '>=', $od)
             ->when($do, fn ($q) => $q->whereDate('occurred_at', '<=', $do))
             ->when($cesta, fn ($q) => $q->where('finance_project_id', $cesta->id))

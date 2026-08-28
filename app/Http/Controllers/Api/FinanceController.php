@@ -108,6 +108,7 @@ class FinanceController extends Controller
             'categories' => $this->finance->byCategory($pohyby, $hlavniMena),
             'partner_balance' => $this->finance->partnerBalance($pohyby, $partneri),
             'exchange' => $this->smenyPrehled($space, $pohyby),
+            'today' => $this->dnesniStav($space, $rozpocet),
             'recent' => $this->radky($filtr->dotaz($space)->orderByDesc('occurred_at')->orderByDesc('id')->limit(8)->get()),
             'alerts' => $this->upozorneni($space, $pohyby, $rozpocet, $zustatky),
             'active_trip' => ($c = $this->finance->activeTrip($space)) ? $this->cestaRadek($c) : null,
@@ -465,6 +466,53 @@ class FinanceController extends Controller
         ])->all();
     }
 
+    /**
+     * Dnešek — nejčastější otázka, na kterou se přehled ptá.
+     *
+     * Počítá se **vždycky za dnešek**, bez ohledu na zvolené období. Kdo se dívá na
+     * minulý měsíc, se stejně ptá „kolik ještě dnes můžu", a přepočítat tenhle pruh
+     * podle filtru by dalo číslo, které v tu chvíli nikoho nezajímá.
+     *
+     * `left_today` je denní částka minus to, co dnes odešlo. Záporná se nehlásí jako
+     * doporučení — nikdo neumí utratit mínus deset eur; místo toho se řekne, o kolik
+     * se dnešek přetáhl.
+     */
+    private function dnesniStav(GallerySpace $space, ?array $rozpocet): array
+    {
+        $dnes = Carbon::today();
+
+        $pohyby = Transaction::where('gallery_space_id', $space->id)
+            ->with(['walletFrom:id,name,currency', 'category:id,uuid,name,color'])
+            ->whereDate('occurred_at', $dnes)
+            ->get();
+
+        $mena = $rozpocet['currency'] ?? $pohyby->first()?->currency_from ?? 'CZK';
+
+        $utraceno = (float) $pohyby
+            ->filter(fn (Transaction $t) => $t->countsTowardsBudget() && $t->currency_from === $mena)
+            ->sum('amount_from')
+            + $pohyby->sum(fn (Transaction $t) => ($t->fee_currency ?? $t->currency_from) === $mena ? $t->feePaidExtra() : 0);
+
+        $limit = $rozpocet['safe_daily']['per_day'] ?? null;
+        $posledni = $pohyby->where('type', 'expense')->sortByDesc('id')->first();
+
+        return [
+            'currency' => $mena,
+            'spent' => round($utraceno, 2),
+            'count' => $pohyby->where('type', 'expense')->count(),
+            'daily_limit' => $limit,
+            'left_today' => $limit !== null ? round($limit - $utraceno, 2) : null,
+            'over_today' => $limit !== null && $utraceno > $limit ? round($utraceno - $limit, 2) : null,
+            'last' => $posledni ? [
+                'uuid' => $posledni->uuid,
+                'amount' => (float) $posledni->amount_from,
+                'currency' => $posledni->currency_from,
+                'category' => $posledni->category?->name,
+                'wallet' => $posledni->walletFrom?->name,
+            ] : null,
+        ];
+    }
+
     /** Seznam transakcí — hlavní místo dohledání. */
     public function transactions(Request $request): JsonResponse
     {
@@ -515,6 +563,11 @@ class FinanceController extends Controller
                     'amount' => (float) $t->amount_to, 'currency' => $t->currency_to,
                 ] : null,
                 'category' => $t->category ? ['name' => $t->category->name, 'color' => $t->category->color, 'icon' => $t->category->icon] : null,
+                // uuid navíc: podle nich se předvyplní formulář při opravě. Ze jména
+                // kategorie ani cesty se vybraná položka poznat nedá.
+                'category_uuid' => $t->category?->uuid,
+                'trip_uuid' => $t->project?->uuid,
+                'payer_partner_id' => $t->payer_partner_id,
                 'payer' => $t->payer?->name,
                 'trip' => $t->project?->name,
                 'counterparty' => $t->counterparty,
@@ -555,7 +608,7 @@ class FinanceController extends Controller
         // by pořád skoro všechno.
         if ($cesta && $filtr->cesta === null) {
             $pohyby = Transaction::where('gallery_space_id', $space->id)
-                ->with(['walletFrom:id,name,currency,partner_id,kind', 'category:id,name,color,icon', 'refundOf:id,category_id'])
+                ->with(['walletFrom:id,name,currency,partner_id,kind', 'category:id,uuid,name,color,icon', 'refundOf:id,category_id'])
                 ->where('finance_project_id', $cesta->id)
                 ->get();
         }
