@@ -1,8 +1,10 @@
 import { hlaska } from '@/Components/Hlasky';
+import Cesty from '@/Components/Rozpocet/Cesty';
 import Prehled from '@/Components/Rozpocet/Prehled';
 import PridatZaznam from '@/Components/Rozpocet/PridatZaznam';
 import SpodniNavigace, { TABY } from '@/Components/Rozpocet/SpodniNavigace';
 import Transakce from '@/Components/Rozpocet/Transakce';
+import Ucty from '@/Components/Rozpocet/Ucty';
 import type { Ciselniky, Prehled as PrehledData } from '@/Components/Rozpocet/typy';
 import AppLayout from '@/Layouts/AppLayout';
 import { dny } from '@/lib/cestina';
@@ -156,7 +158,15 @@ export default function RozpocetIndex() {
                                     onZmena={() => void nacti()}/>
                             )}
 
-                            {! ['prehled', 'transakce'].includes(stav.tab) && (
+                            {stav.tab === 'cesty' && (
+                                <Cesty ciselniky={ciselniky} onZmena={() => void nacti()}/>
+                            )}
+
+                            {stav.tab === 'ucty' && (
+                                <Ucty ciselniky={ciselniky} onZmena={() => void nacti()}/>
+                            )}
+
+                            {! ['prehled', 'transakce', 'cesty', 'ucty'].includes(stav.tab) && (
                                 <Pripravuje tab={stav.tab} onZpet={() => naTab('prehled')}/>
                             )}
                         </>

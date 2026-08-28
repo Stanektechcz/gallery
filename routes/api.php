@@ -109,6 +109,27 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
         Route::post('/transakce', [App\Http\Controllers\Api\FinanceEntryController::class, 'store'])->name('entries.store');
         Route::patch('/transakce/{uuid}', [App\Http\Controllers\Api\FinanceEntryController::class, 'update'])->name('entries.update');
         Route::delete('/transakce/{uuid}', [App\Http\Controllers\Api\FinanceEntryController::class, 'destroy'])->name('entries.destroy');
+
+        // Účty. Zůstatek se nepřepisuje ručně — vzniká z pohybů a opravit ho jde jen
+        // zapsanou korekcí s důvodem.
+        Route::post('/ucty', [App\Http\Controllers\Api\FinanceSetupController::class, 'storeWallet'])->name('wallets.store');
+        Route::patch('/ucty/{uuid}', [App\Http\Controllers\Api\FinanceSetupController::class, 'updateWallet'])->name('wallets.update');
+        Route::post('/ucty/{uuid}/korekce', [App\Http\Controllers\Api\FinanceSetupController::class, 'correctWallet'])->name('wallets.correct');
+        Route::delete('/ucty/{uuid}', [App\Http\Controllers\Api\FinanceSetupController::class, 'destroyWallet'])->name('wallets.destroy');
+
+        Route::get('/cesty', [App\Http\Controllers\Api\FinanceSetupController::class, 'trips'])->name('trips');
+        Route::post('/cesty', [App\Http\Controllers\Api\FinanceSetupController::class, 'storeTrip'])->name('trips.store');
+        Route::patch('/cesty/{uuid}', [App\Http\Controllers\Api\FinanceSetupController::class, 'updateTrip'])->name('trips.update');
+        Route::post('/cesty/{uuid}/aktivovat', [App\Http\Controllers\Api\FinanceSetupController::class, 'activateTrip'])->name('trips.activate');
+        Route::post('/cesty/{uuid}/ukoncit', [App\Http\Controllers\Api\FinanceSetupController::class, 'closeTrip'])->name('trips.close');
+        Route::get('/cesty/{uuid}/shrnuti', [App\Http\Controllers\Api\FinanceSetupController::class, 'tripSummary'])->name('trips.summary');
+        Route::delete('/cesty/{uuid}', [App\Http\Controllers\Api\FinanceSetupController::class, 'destroyTrip'])->name('trips.destroy');
+
+        Route::post('/kategorie', [App\Http\Controllers\Api\FinanceSetupController::class, 'storeCategory'])->name('categories.store');
+        Route::patch('/kategorie/{uuid}', [App\Http\Controllers\Api\FinanceSetupController::class, 'updateCategory'])->name('categories.update');
+        Route::delete('/kategorie/{uuid}', [App\Http\Controllers\Api\FinanceSetupController::class, 'destroyCategory'])->name('categories.destroy');
+
+        Route::post('/partneri', [App\Http\Controllers\Api\FinanceSetupController::class, 'storePartner'])->name('partners.store');
     });
 
     Route::prefix('kniha')->name('api.ledger.')->group(function () {

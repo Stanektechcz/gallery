@@ -135,9 +135,12 @@ class LedgerController extends Controller
             $data['partner_id'] = null;
         }
 
+        // Přepsat v `$data`, ne přidat vedle: operátor `+` u polí nechává přednost levé
+        // straně, takže by se uložilo „eur" z formuláře a bylo by to jiná měna než „EUR".
+        $data['currency'] = strtoupper($data['currency']);
+
         Wallet::create($data + [
             'gallery_space_id' => $space->id,
-            'currency' => strtoupper($data['currency']),
             'opening_balance' => $data['opening_balance'] ?? 0,
             'sort_order' => (int) Wallet::where('gallery_space_id', $space->id)->max('sort_order') + 10,
         ]);
