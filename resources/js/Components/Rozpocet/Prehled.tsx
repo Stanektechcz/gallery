@@ -5,7 +5,8 @@ import {
     AlertTriangle, ArrowRightLeft, Banknote, CalendarDays, ChevronRight, Coins,
     Pencil, PiggyBank, Plus, TrendingDown, TrendingUp, Wallet,
 } from 'lucide-react';
-import { useMemo } from 'react';
+import { useMemo, type ReactNode } from 'react';
+import JakSePocita from './JakSePocita';
 import RadekPohybu from './RadekPohybu';
 import SloupceDnu from './SloupceDnu';
 import type { Prehled as PrehledData } from './typy';
@@ -166,7 +167,22 @@ export default function Prehled({ data, naTab, naTransakce, onPridat, onUpravitP
                         : '—'}
                     ikona={CalendarDays}
                     ton={bezpecne?.state === 'over' ? 'danger' : 'plain'}
-                    popisek={popisekDenni(bezpecne, rozpocet?.currency)}/>
+                    popisek={popisekDenni(bezpecne, rozpocet?.currency)}
+                    vysvetleni={rozpocet && bezpecne?.per_day !== null && bezpecne?.per_day !== undefined ? (
+                        <JakSePocita
+                            nadpis="Kolik se dá utratit denně, aby rozpočet vydržel"
+                            radky={[
+                                { popis: 'Rozpočet', hodnota: penize(rozpocet.limit, rozpocet.currency) },
+                                { popis: 'Už utraceno', hodnota: `− ${penize(rozpocet.spent, rozpocet.currency)}` },
+                                ...(rozpocet.reserve > 0
+                                    ? [{ popis: 'Rezerva stranou', hodnota: `− ${penize(rozpocet.reserve, rozpocet.currency)}` }]
+                                    : []),
+                                { popis: `Zbývá k rozdělení na ${dny(bezpecne.days_left ?? 0)}`,
+                                    hodnota: penize(rozpocet.limit - rozpocet.spent - rozpocet.reserve, rozpocet.currency) },
+                                { popis: 'Na jeden den', hodnota: penize(bezpecne.per_day, rozpocet.currency), vysledek: true },
+                            ]}
+                            poznamka="Dnešek se počítá jako celý den — poslední den období tedy zbývá jeden, ne nula."/>
+                    ) : undefined}/>
 
                 <Kpi
                     label="Máme k dispozici"
@@ -279,6 +295,20 @@ export default function Prehled({ data, naTab, naTransakce, onPridat, onUpravitP
                                     </strong>
                                 </p>
                             )}
+
+                            <JakSePocita
+                                nadpis="Jak vzniká průměrný pořizovací kurz"
+                                radky={[
+                                    { popis: 'Eura pořízená směnou', hodnota: penize(data.exchange.acquisition.known_eur, 'EUR') },
+                                    { popis: 'Co stála celkem', hodnota: penize(data.exchange.acquisition.cost_czk, 'CZK') },
+                                    { popis: 'Průměr na jedno euro',
+                                        hodnota: `${kurz(data.exchange.acquisition.average_rate ?? 0)} Kč`, vysledek: true },
+                                    ...(data.exchange.acquisition.has_unknown
+                                        ? [{ popis: 'Eura s neznámou cenou (mimo průměr)',
+                                            hodnota: penize(data.exchange.acquisition.unknown_eur, 'EUR') }]
+                                        : []),
+                                ]}
+                                poznamka="Útrata v eurech ubere ze zásoby i z pořizovací hodnoty poměrně, takže průměr nemění — z peněženky nejde utratit „to euro z března“. Poplatek je v ceně započítaný podle toho, jestli se platil navíc, nebo byl v částce."/>
                         </>
                     ) : (
                         <Prazdno text="Až směníte koruny na eura, uvidíte tu skutečný kurz včetně poplatků."/>
@@ -338,35 +368,54 @@ function PanelPartneru({ data, naTransakce }: { data: PrehledData; naTransakce: 
                 </ul>
             )}
 
+            {/*
+             * Rozpis, ze kterého to saldo vzniklo.
+             *
+             * Částka „dlužíš mi třicet eur" bez možnosti kontroly je přesně to, kvůli
+             * čemu se lidé o peníze hádají. Rozdíl mezi „zaplatil" a „nese" je celý
+             * výpočet a je vidět na jednom řádku.
+             */}
             {data.partner_balance.by_currency.map(m => (
-                <details key={m.currency} className="mt-2 border-t border-[var(--color-border)] pt-2">
-                    <summary className="cursor-pointer text-xs text-[var(--color-text-secondary)]">
-                        Jak to vyšlo ({m.currency})
-                    </summary>
-                    <ul className="mt-1.5 space-y-1">
-                        {m.partners.map(p => (
-                            <li key={p.partner_id} className="flex items-baseline justify-between gap-2 text-[11px]">
-                                <span className="text-[var(--color-text-secondary)]">{p.name}</span>
-                                <span className="shrink-0 tabular-nums text-[var(--color-text-secondary)]">
-                                    zaplatil {penize(p.paid, m.currency)} · nese {penize(p.owes, m.currency)}
-                                </span>
-                            </li>
-                        ))}
-                    </ul>
-                    <button type="button" onClick={() => naTransakce({ typ: 'expense' })}
-                        className="mt-1.5 inline-flex min-h-11 items-center text-[11px] text-[var(--color-text-secondary)] underline">
-                        Zobrazit výdaje ve výpočtu
-                    </button>
-                </details>
+                <div key={m.currency}>
+                    <JakSePocita
+                        nadpis={`Jak vzniklo saldo v ${m.currency}`}
+                        radky={[
+                            ...m.partners.flatMap(p => [
+                                { popis: `${p.name} — zaplatil ze svého`, hodnota: penize(p.paid, m.currency) },
+                                { popis: `${p.name} — jeho podíl na výdajích`, hodnota: `− ${penize(p.owes, m.currency)}` },
+                                { popis: `${p.name} — rozdíl`, hodnota: penize(p.balance, m.currency), vysledek: true },
+                            ]),
+                        ]}
+                        poznamka={
+                            <>
+                                Kdo zaplatil víc, než kolik nese, má u druhého rozdíl. Výdaj ze
+                                společného účtu se do „zaplatil" nikomu nepočítá — ty peníze byly
+                                obou už předtím.
+                                <button type="button" onClick={() => naTransakce({ typ: 'expense' })}
+                                    className="mt-1 block min-h-11 text-[11px] text-[var(--color-text-secondary)] underline">
+                                    Zobrazit výdaje ve výpočtu
+                                </button>
+                            </>
+                        }/>
+                </div>
             ))}
         </Panel>
     );
 }
 
-function Kpi({ label, hodnota, popisek, ikona: Ikona, ton = 'plain', pruh, onClick }: {
+/**
+ * Karta s jedním číslem.
+ *
+ * Obal je vždycky `div`, i když je karta prokliknutelná. Kdyby byl `button`, nešlo by
+ * do něj vložit rozbalovací „Jak se to počítá" — tlačítko v tlačítku je neplatné HTML
+ * a prohlížeče to řeší každý jinak, včetně toho, že vnitřní přestane fungovat.
+ * Klikací je proto jen horní část s číslem.
+ */
+function Kpi({ label, hodnota, popisek, ikona: Ikona, ton = 'plain', pruh, onClick, vysvetleni }: {
     label: string; hodnota: string; popisek: string;
     ikona: any; ton?: 'plain' | 'warn' | 'danger'; pruh?: number;
     onClick?: () => void;
+    vysvetleni?: ReactNode;
 }) {
     const barvy = {
         plain: 'border-[var(--color-border)] bg-[var(--color-bg-card)]',
@@ -374,11 +423,8 @@ function Kpi({ label, hodnota, popisek, ikona: Ikona, ton = 'plain', pruh, onCli
         danger: 'border-red-500/40 bg-[var(--color-bg-card)]',
     }[ton];
 
-    const Obal = onClick ? 'button' : 'div';
-
-    return (
-        <Obal type={onClick ? 'button' : undefined} onClick={onClick}
-            className={`rounded-2xl border p-3 text-left ${barvy} ${onClick ? 'transition-colors hover:border-[var(--color-accent)]' : ''}`}>
+    const Vnitrek = (
+        <>
             <p className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-[var(--color-text-secondary)]">
                 <Ikona size={12}/> {label}
             </p>
@@ -390,7 +436,16 @@ function Kpi({ label, hodnota, popisek, ikona: Ikona, ton = 'plain', pruh, onCli
                 </div>
             )}
             <p className="mt-1 text-[11px] leading-tight text-[var(--color-text-secondary)]">{popisek}</p>
-        </Obal>
+        </>
+    );
+
+    return (
+        <div className={`rounded-2xl border p-3 text-left ${barvy} ${onClick ? 'transition-colors hover:border-[var(--color-accent)]' : ''}`}>
+            {onClick
+                ? <button type="button" onClick={onClick} className="w-full text-left">{Vnitrek}</button>
+                : Vnitrek}
+            {vysvetleni}
+        </div>
     );
 }
 
