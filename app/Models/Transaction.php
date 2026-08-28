@@ -33,7 +33,7 @@ class Transaction extends Model
     public const TYPES = [...self::VYSLEDKOVE, ...self::PRESUNY];
 
     protected $fillable = [
-        'uuid', 'gallery_space_id', 'type', 'occurred_at', 'booked_on',
+        'uuid', 'client_key', 'gallery_space_id', 'type', 'occurred_at', 'booked_on',
         'wallet_from_id', 'wallet_to_id',
         'amount_from', 'currency_from', 'amount_to', 'currency_to',
         'rate', 'reference_rate', 'rate_source', 'fee_amount', 'fee_currency',

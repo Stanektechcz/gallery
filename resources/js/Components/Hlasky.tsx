@@ -19,10 +19,30 @@ import { useEffect, useState } from 'react';
 
 export type DruhHlasky = 'uspech' | 'chyba' | 'info';
 
-type Zprava = { id: number; text: string; druh: DruhHlasky; kdy: number };
+/**
+ * `akce` je nepovinné tlačítko ve zprávě — typicky „Vrátit".
+ *
+ * Patří sem, a ne někam vedle, protože vrácení má smysl jen v tom krátkém okamžiku,
+ * kdy si člověk uvědomí, že klepl vedle. Kdyby se na to muselo někam přejít, je
+ * rychlejší záznam prostě smazat ručně a tlačítko by nikdo nepoužil.
+ */
+type Akce = { popis: string; provest: () => void };
+
+type Zprava = { id: number; text: string; druh: DruhHlasky; kdy: number; akce?: Akce };
 
 /** Jak dlouho zpráva zůstane. Chyba déle — je delší a je potřeba si ji přečíst. */
 const TRVANI: Record<DruhHlasky, number> = { uspech: 4500, info: 5500, chyba: 9000 };
+
+/**
+ * Zpráva s tlačítkem zůstane déle.
+ *
+ * „Vrátit" u úspěšného zápisu se jinak nestihne. Čtyři a půl vteřiny stačí na
+ * přečtení, ale ne na přečtení, rozmyšlení a trefení tlačítka — a nabídnout akci,
+ * kterou nikdo nestihne, je horší než ji nenabídnout vůbec.
+ */
+const TRVANI_S_AKCI = 9000;
+
+const jakDlouho = (z: Zprava): number => (z.akce ? TRVANI_S_AKCI : TRVANI[z.druh]);
 
 /** Víc než tři zprávy naráz by na telefonu zakryly obsah, kterého se týkají. */
 const NEJVIC = 3;
@@ -43,11 +63,11 @@ let zive: Zprava[] = [];
 /** Jak dlouho po odeslání se zpráva ještě ukáže i komponentě, která vznikla až potom. */
 const PREZIJE_MS = 1500;
 
-export function hlaska(text: string, druh: DruhHlasky = 'info'): void {
-    const zprava = { id: ++dalsiId, text, druh, kdy: Date.now() };
+export function hlaska(text: string, druh: DruhHlasky = 'info', akce?: Akce): void {
+    const zprava = { id: ++dalsiId, text, druh, kdy: Date.now(), akce };
 
     zive = [...zive, zprava].slice(-NEJVIC);
-    window.setTimeout(() => { zive = zive.filter((z) => z.id !== zprava.id); }, TRVANI[druh]);
+    window.setTimeout(() => { zive = zive.filter((z) => z.id !== zprava.id); }, jakDlouho(zprava));
 
     posluchaci.forEach((posluchac) => posluchac(zprava));
 }
@@ -74,7 +94,7 @@ export default function Hlasky() {
         zpravy.forEach((zprava) => {
             window.setTimeout(
                 () => setZpravy((soucasne) => soucasne.filter((z) => z.id !== zprava.id)),
-                Math.max(0, TRVANI[zprava.druh] - (Date.now() - zprava.kdy)),
+                Math.max(0, jakDlouho(zprava) - (Date.now() - zprava.kdy)),
             );
         });
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -86,7 +106,7 @@ export default function Hlasky() {
 
             window.setTimeout(
                 () => setZpravy((soucasne) => soucasne.filter((z) => z.id !== zprava.id)),
-                TRVANI[zprava.druh],
+                jakDlouho(zprava),
             );
         };
 
@@ -119,6 +139,18 @@ export default function Hlasky() {
                         <p className="min-w-0 flex-1 break-words text-xs leading-relaxed text-[var(--color-text-primary)]">
                             {zprava.text}
                         </p>
+                        {zprava.akce && (
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    zprava.akce!.provest();
+                                    setZpravy((soucasne) => soucasne.filter((z) => z.id !== zprava.id));
+                                }}
+                                className="-my-1 shrink-0 rounded-lg px-2 py-2 text-xs font-medium text-[var(--color-accent)] hover:underline"
+                            >
+                                {zprava.akce.popis}
+                            </button>
+                        )}
                         <button
                             type="button"
                             onClick={() => setZpravy((soucasne) => soucasne.filter((z) => z.id !== zprava.id))}

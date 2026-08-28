@@ -36,6 +36,27 @@ class FinanceEntryController extends Controller
     public function store(Request $request): JsonResponse
     {
         $space = $this->space($request);
+
+        /*
+         * Opakované odeslání téhož zápisu.
+         *
+         * Zápis pořízený bez signálu čeká v telefonu a odešle se později. Klient ale
+         * nemusí vědět, jestli první pokus prošel — požadavek mohl dojít a odpověď se
+         * cestou ztratit. Bez klíče by se výdaj zapsal dvakrát a nikdo by nepoznal,
+         * který z nich je ten skutečný.
+         *
+         * Odhadovat to podle částky a času nejde: dva stejné nákupy za den jsou
+         * legitimní a modul je jinde výslovně povoluje.
+         */
+        if ($klic = $request->input('client_key')) {
+            $existuje = Transaction::where('gallery_space_id', $space->id)
+                ->where('client_key', $klic)->first();
+
+            if ($existuje) {
+                return response()->json(['uuid' => $existuje->uuid, 'duplicate' => true], 200);
+            }
+        }
+
         [$atributy, $podily, $varovani] = $this->priprav($request, $space);
 
         if ($varovani !== [] && ! $request->boolean('potvrzeno')) {
@@ -47,6 +68,7 @@ class FinanceEntryController extends Controller
         $t = Transaction::create($atributy + [
             'gallery_space_id' => $space->id,
             'created_by' => $request->user()->id,
+            'client_key' => $request->input('client_key'),
         ]);
 
         $this->ulozPodily($t, $podily, $space);
@@ -91,6 +113,18 @@ class FinanceEntryController extends Controller
         }
 
         TransactionShare::where('transaction_id', $t->id)->delete();
+
+        /*
+         * Klíč se při smazání uvolní.
+         *
+         * Transakce má `softDeletes`, takže řádek zůstane — a s ním by zůstal i klíč,
+         * na kterém visí unikát. Kdo klepne na „Vrátit" a pak si to rozmyslí, by pak
+         * narazil na chybu databáze, protože „ten klíč už tu je".
+         *
+         * Klíč slouží jen k rozpoznání opakovaného odeslání téhož zápisu. Smazaný
+         * záznam se neodesílá, takže žádnou takovou roli nemá.
+         */
+        $t->forceFill(['client_key' => null])->save();
         $t->delete();
 
         return response()->json(['deleted' => true, 'impact' => $dopad]);

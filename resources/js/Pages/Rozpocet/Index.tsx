@@ -11,11 +11,12 @@ import Transakce from '@/Components/Rozpocet/Transakce';
 import Ucty from '@/Components/Rozpocet/Ucty';
 import type { Ciselniky, Prehled as PrehledData } from '@/Components/Rozpocet/typy';
 import AppLayout from '@/Layouts/AppLayout';
-import { dny } from '@/lib/cestina';
+import { dny, zaznamy } from '@/lib/cestina';
+import { odeslatFrontu, sledujFrontu, type CekajiciZapis } from '@/lib/frontaZapisu';
 import type { TypZaznamu } from '@/lib/penize';
 import { Head } from '@inertiajs/react';
 import axios from 'axios';
-import { ChevronDown, MapPin, Plus, RefreshCw, X } from 'lucide-react';
+import { ChevronDown, CloudOff, MapPin, Plus, RefreshCw, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 /**
@@ -110,6 +111,43 @@ export default function RozpocetIndex() {
 
     const cesta = ciselniky?.active_trip ?? null;
 
+    /*
+     * Zápisy, které čekají na spojení.
+     *
+     * Zkouší se odeslat, když se prohlížeč vrátí online a při otevření stránky.
+     * Opakovat je v nekonečné smyčce by na špatném připojení znamenalo požadavek
+     * každou vteřinu a vybitý telefon — od toho je `online`, který přijde právě
+     * jednou, když se dá něco dělat.
+     */
+    const [cekajici, setCekajici] = useState<CekajiciZapis[]>([]);
+
+    useEffect(() => sledujFrontu(setCekajici), []);
+
+    const odeslatCekajici = useCallback(async () => {
+        const hotovo = await odeslatFrontu();
+
+        if (hotovo > 0) {
+            /*
+             * Dvojtečka, ne vedlejší věta.
+             *
+             * „Odesláno 1 záznam, které čekaly" míchá jednotné číslo s množným
+             * přísudkem — a správně to nejde napsat jednou šablonou, protože čeština
+             * potřebuje jiný tvar pro jedna, dva až čtyři a pět a víc. Dvojtečka tu
+             * shodu přeruší a věta sedí u každého počtu.
+             */
+            hlaska(`Odesláno z fronty: ${zaznamy(hotovo)}.`, 'uspech');
+            await nacti();
+        }
+    }, [nacti]);
+
+    useEffect(() => {
+        void odeslatCekajici();
+
+        window.addEventListener('online', odeslatCekajici);
+
+        return () => window.removeEventListener('online', odeslatCekajici);
+    }, [odeslatCekajici]);
+
     return (
         <AppLayout>
             <Head title="Rozpočet" />
@@ -136,6 +174,24 @@ export default function RozpocetIndex() {
                         </button>
                     ))}
                 </nav>
+
+                {cekajici.length > 0 && (
+                    <div className="mt-3 flex flex-wrap items-center gap-2 rounded-2xl border border-amber-500/40 bg-[var(--color-surface-muted)] p-3">
+                        <CloudOff size={16} className="shrink-0 text-amber-400"/>
+                        <p className="min-w-0 flex-1 text-xs leading-relaxed text-[var(--color-text-primary)]">
+                            {/* Zase dvojtečka místo přísudku: „3 záznamy čeká" nesedí a
+                                „čekají" zase nesedí u jednoho. */}
+                            Čeká na spojení: {zaznamy(cekajici.length)} — {cekajici.map(z => z.popis).join(', ')}.
+                            <span className="block text-[var(--color-text-secondary)]">
+                                Odešlou se samy, jakmile bude signál. Dvakrát se nezapíšou.
+                            </span>
+                        </p>
+                        <button type="button" onClick={() => void odeslatCekajici()}
+                            className="min-h-11 shrink-0 rounded-lg border border-[var(--color-border)] px-3 text-xs text-[var(--color-text-primary)]">
+                            Zkusit teď
+                        </button>
+                    </div>
+                )}
 
                 <div className="mt-4">
                     {nacita && <Kostra/>}

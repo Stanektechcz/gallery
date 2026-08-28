@@ -1,4 +1,5 @@
 import { hlaska } from '@/Components/Hlasky';
+import { novyKlic, zaradit } from '@/lib/frontaZapisu';
 import { castka as prectiCastku, dnesniDatum, kurz, penize, TYPY_ZAZNAMU, type TypZaznamu } from '@/lib/penize';
 import axios from 'axios';
 import { AlertTriangle, ArrowRightLeft, ArrowUpDown, Check, ChevronDown, Minus, Plus, X } from 'lucide-react';
@@ -91,6 +92,14 @@ export default function PridatZaznam({ ciselniky, vychoziTyp = 'expense', onHoto
     }));
 
     const poleCastky = useRef<HTMLInputElement>(null);
+
+    /*
+     * Klíč se vyrábí jednou při otevření formuláře, ne při odeslání.
+     *
+     * Kdyby vznikal až u odeslání, měl by každý pokus jiný a ochrana proti duplicitě
+     * by nefungovala právě tehdy, kdy je potřeba — při opakování po výpadku.
+     */
+    const klicZapisu = useRef(novyKlic());
 
     const [sablony, setSablony] = useState<Sablona[]>([]);
 
@@ -227,8 +236,7 @@ export default function PridatZaznam({ ciselniky, vychoziTyp = 'expense', onHoto
             }
         }
 
-        try {
-            await axios.post('/api/v1/rozpocet/transakce', {
+        const telo = {
                 type: typ,
                 occurred_at: form.occurred_at,
                 wallet_from: potrebaZdroj ? form.wallet_from : undefined,
@@ -249,13 +257,60 @@ export default function PridatZaznam({ ciselniky, vychoziTyp = 'expense', onHoto
                 excluded_from_budget: form.excluded_from_budget,
                 exclusion_reason: form.exclusion_reason || undefined,
                 split: split.length ? split : undefined,
+                client_key: klicZapisu.current,
                 potvrzeno,
-            });
+        };
 
-            hlaska(`${nastaveniTypu.nazev} je zapsaný${typ === 'exchange' ? 'á' : ''}.`, 'uspech');
+        try {
+            const { data } = await axios.post('/api/v1/rozpocet/transakce', telo);
+
+            /*
+             * Vrácení posledního zápisu.
+             *
+             * Nabízí se přímo v hlášce, protože smysl má jen v tom krátkém okamžiku,
+             * kdy si člověk uvědomí, že klepl vedle. Kdyby se kvůli tomu muselo někam
+             * přejít, je rychlejší záznam prostě smazat ručně a tlačítko by nikdo
+             * nepoužil.
+             */
+            hlaska(
+                `${nastaveniTypu.nazev} je zapsaný${typ === 'exchange' ? 'á' : ''}.`,
+                'uspech',
+                data?.uuid
+                    ? {
+                        popis: 'Vrátit',
+                        provest: () => {
+                            void axios
+                                .delete(`/api/v1/rozpocet/transakce/${data.uuid}`, { data: { potvrzeno: true } })
+                                .then(() => { hlaska('Zápis je vzatý zpátky.', 'info'); onHotovo(); })
+                                .catch(() => hlaska('Zápis se nepodařilo vrátit — smažte ho v Transakcích.', 'chyba'));
+                        },
+                    }
+                    : undefined,
+            );
+
             onHotovo();
         } catch (problem: any) {
             const stav = problem?.response?.status;
+
+            /*
+             * Bez odpovědi = bez signálu. Zápis se uloží do fronty místo zahození.
+             *
+             * Rozepsaný výdaj je práce, kterou už někdo udělal, a ztratit ji kvůli
+             * chvilce bez signálu v obchodě je to nejhorší, co může modul udělat —
+             * odsune se to „na potom" a potom už nikdo neví, kolik to bylo.
+             */
+            if (! stav) {
+                zaradit({
+                    client_key: klicZapisu.current,
+                    telo,
+                    popis: `${nastaveniTypu.nazev} ${form.amount_from || form.amount_to} ${zdroj?.currency ?? cil?.currency ?? ''}`.trim(),
+                });
+
+                hlaska('Není signál — zápis počká a odešle se sám, až bude spojení.', 'info');
+                onHotovo();
+
+                return;
+            }
 
             if (stav === 409 && problem.response.data?.needs_confirmation) {
                 // Neobvyklé, ne špatné. Ptáme se, neodmítáme — rozepsaná data zůstávají.
