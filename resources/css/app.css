@@ -628,3 +628,23 @@
 body.modul-rozpocet .mobile-bottom-nav {
     display: none;
 }
+
+/*
+ * Hustota seznamů v Rozpočtu.
+ *
+ * Řeší se jedním atributem na kořeni modulu, ne propem protaženým do každé
+ * komponenty se seznamem — deset míst, kde se předává totéž, je devět míst,
+ * kde se to dá zapomenout.
+ *
+ * Zmenšuje se jen svislé odsazení řádků, ne velikost písma ani terče tlačítek.
+ * Hustý seznam nesmí znamenat seznam, do kterého se nedá trefit prstem.
+ */
+[data-hustota='husté'] li > button,
+[data-hustota='husté'] li > a {
+    padding-top: 0.375rem;
+    padding-bottom: 0.375rem;
+}
+
+[data-hustota='husté'] .space-y-2 > * + * {
+    margin-top: 0.25rem;
+}

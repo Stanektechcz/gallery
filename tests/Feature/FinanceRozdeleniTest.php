@@ -345,6 +345,55 @@ class FinanceRozdeleniTest extends TestCase
         $this->assertNull($radky->firstWhere('name', 'Výlety'));
     }
 
+    /**
+     * Změny plánu se zapisují i s tím, kdo je udělal.
+     *
+     * Kniha vede historii peněz, ne historii toho, na čem se lidi dohodli. Bez tohohle
+     * záznamu nejde poznat, jestli na jídlo přibylo ruční změnou, nebo vyrovnáním.
+     */
+    public function test_zmeny_planu_se_zapisuji(): void
+    {
+        $uuid = $this->rozpocet(1000, incomeAdds: false);
+        $jidlo = FinanceCategory::where('gallery_space_id', $this->space->id)->where('name', 'Jídlo')->first();
+
+        $this->patchJson("/api/v1/rozpocet/rozpocty/{$uuid}/vyhrazeni", [
+            'category_uuid' => $jidlo->uuid, 'amount' => 350,
+        ])->assertOk();
+
+        $historie = collect($this->getJson('/api/v1/rozpocet/rozpocty')->json('budgets.0.history'));
+        $zaznam = $historie->firstWhere('action', 'rucne');
+
+        $this->assertNotNull($zaznam);
+        $this->assertSame('Jídlo', $zaznam['category']);
+        $this->assertEqualsWithDelta(200, $zaznam['from'], 0.01);
+        $this->assertEqualsWithDelta(350, $zaznam['to'], 0.01);
+        $this->assertSame($this->uzivatel->name, $zaznam['who']);
+
+        // Vyřazení z plánu je taky změna a musí být vidět.
+        $this->patchJson("/api/v1/rozpocet/rozpocty/{$uuid}/vyhrazeni", [
+            'category_uuid' => $jidlo->uuid, 'amount' => 0,
+        ])->assertOk();
+
+        $this->assertSame('zruseno', $this->getJson('/api/v1/rozpocet/rozpocty')->json('budgets.0.history.0.action'));
+    }
+
+    /** Vyrovnání, které běží při každém načtení, se do historie nezapisuje. */
+    public function test_automaticke_vyrovnani_historii_nezaplavi(): void
+    {
+        $this->rozpocet(1000, incomeAdds: false);
+
+        foreach ([100, 100, 50] as $castka) {
+            $this->vydaj('Jídlo', $castka);
+        }
+
+        // Třikrát načíst — vyrovnání proběhne pokaždé, zapsat se nesmí ani jednou.
+        foreach (range(1, 3) as $ignorovano) {
+            $this->getJson('/api/v1/rozpocet/rozpocty')->assertOk();
+        }
+
+        $this->assertSame([], $this->getJson('/api/v1/rozpocet/rozpocty')->json('budgets.0.history'));
+    }
+
     /** Kdo smí jen číst, plán nepřepíše — ani jednou částkou, ani přerozdělením. */
     public function test_bez_prava_upravy_to_neprojde(): void
     {

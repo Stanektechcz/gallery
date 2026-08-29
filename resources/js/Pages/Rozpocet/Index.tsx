@@ -9,7 +9,7 @@ import Statistiky from '@/Components/Rozpocet/Statistiky';
 import SpodniNavigace, { TABY } from '@/Components/Rozpocet/SpodniNavigace';
 import Transakce from '@/Components/Rozpocet/Transakce';
 import Ucty from '@/Components/Rozpocet/Ucty';
-import type { Ciselniky, Pohyb, Prehled as PrehledData } from '@/Components/Rozpocet/typy';
+import type { Ciselniky, Pohyb, Predvolby, Prehled as PrehledData } from '@/Components/Rozpocet/typy';
 import AppLayout from '@/Layouts/AppLayout';
 import { dny, zaznamy } from '@/lib/cestina';
 import { odeslatFrontu, sledujFrontu, type CekajiciZapis } from '@/lib/frontaZapisu';
@@ -30,7 +30,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
  * Období je v URL. Kdo pošle odkaz nebo se vrátí zpátky, uvidí totéž co předtím —
  * a proklik z grafu do Transakcí si nese filtr s sebou, místo aby ho zahodil.
  */
-export default function RozpocetIndex() {
+export default function RozpocetIndex({ nastaveni }: { nastaveni?: Predvolby | null }) {
     const [ciselniky, setCiselniky] = useState<Ciselniky | null>(null);
     const [prehled, setPrehled] = useState<PrehledData | null>(null);
     const [nacita, setNacita] = useState(true);
@@ -42,9 +42,11 @@ export default function RozpocetIndex() {
     const [stav, setStav] = useState(() => {
         const p = new URLSearchParams(window.location.search);
 
+        // Odkaz v URL má přednost před předvolbou: kdo dostal odkaz na konkrétní
+        // záložku, chce vidět ji, ne to, co má nastavené doma.
         return {
-            tab: p.get('tab') ?? 'prehled',
-            obdobi: p.get('obdobi') ?? 'mesic',
+            tab: p.get('tab') ?? nastaveni?.default_tab ?? 'prehled',
+            obdobi: p.get('obdobi') ?? nastaveni?.default_period ?? 'mesic',
             filtr: Object.fromEntries(
                 ['typ', 'mena', 'ucet', 'kategorie', 'platce', 'misto', 'hledat', 'od', 'do', 'cesta',
                     'od_castky', 'do_castky']
@@ -181,7 +183,11 @@ export default function RozpocetIndex() {
         <AppLayout>
             <Head title="Rozpočet" />
 
-            <div role="main" className="mx-auto max-w-[1600px] px-4 pb-28 pt-4 sm:px-6 lg:pb-8">
+            {/* Hustota se řeší jedním atributem a CSS, ne propem protaženým do každého
+                seznamu. Deset komponent, kterým se předává totéž, znamená devět míst,
+                kde se to dá zapomenout. */}
+            <div role="main" data-hustota={ciselniky?.settings?.list_density ?? nastaveni?.list_density ?? 'pohodlne'}
+                className="mx-auto max-w-[1600px] px-4 pb-28 pt-4 sm:px-6 lg:pb-8">
                 <Hlavicka
                     cesta={cesta}
                     obdobi={stav.obdobi}
@@ -238,7 +244,8 @@ export default function RozpocetIndex() {
                     {! nacita && ! chyba && prehled && ciselniky && (
                         <>
                             {stav.tab === 'prehled' && (
-                                <Prehled data={prehled} naTab={naTab} naTransakce={naTransakce}
+                                <Prehled data={prehled} predvolby={ciselniky?.settings ?? nastaveni}
+                                    naTab={naTab} naTransakce={naTransakce}
                                     onPridat={() => setPridava('expense')}
                                     onUpravitPosledni={uuid => void otevriOpravu(uuid)}/>
                             )}

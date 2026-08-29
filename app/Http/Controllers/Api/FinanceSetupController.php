@@ -7,6 +7,7 @@ use App\Models\FinanceAccess;
 use App\Models\FinanceCategory;
 use App\Models\FinanceProject;
 use App\Models\FinanceRecurring;
+use App\Models\FinanceSettings;
 use App\Models\FinanceTemplate;
 use App\Models\GallerySpace;
 use App\Models\Partner;
@@ -314,6 +315,47 @@ class FinanceSetupController extends Controller
     }
 
     // ---------------------------------------------------------------- cesty
+
+    /**
+     * Předvolby modulu.
+     *
+     * Vystavuje se jen to, co něco doopravdy dělá. Přepínač bez účinku je horší než
+     * chybějící: jednou se přepne, nic se nestane a od té chvíle nikdo nevěří ani
+     * ostatním.
+     */
+    public function settings(Request $request): JsonResponse
+    {
+        return response()->json([
+            'settings' => FinanceSettings::proProstor($this->space($request)->id)->proObrazovku(),
+        ]);
+    }
+
+    public function updateSettings(Request $request): JsonResponse
+    {
+        $space = $this->space($request);
+
+        $data = $request->validate([
+            'home_currency' => 'sometimes|string|size:3',
+            'travel_currency' => 'sometimes|string|size:3',
+            'default_period' => 'sometimes|in:dnes,tyden,mesic,minuly-mesic,cesta,vse',
+            'default_tab' => 'sometimes|in:prehled,transakce,rozpocty,smeny,cesty,statistiky,ucty,nastaveni',
+            'list_density' => 'sometimes|in:pohodlne,husté',
+            'default_reserve' => 'sometimes|numeric|min:0',
+            'alert_thresholds' => 'sometimes|string|max:40',
+            'show_partner_balance' => 'sometimes|boolean',
+        ]);
+
+        foreach (['home_currency', 'travel_currency'] as $mena) {
+            if (isset($data[$mena])) {
+                $data[$mena] = strtoupper($data[$mena]);
+            }
+        }
+
+        $nastaveni = FinanceSettings::proProstor($space->id);
+        $nastaveni->update($data);
+
+        return response()->json(['settings' => $nastaveni->fresh()->proObrazovku()]);
+    }
 
     public function trips(Request $request): JsonResponse
     {

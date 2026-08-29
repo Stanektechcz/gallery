@@ -131,6 +131,10 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
         Route::delete('/cesty/{uuid}', [App\Http\Controllers\Api\FinanceSetupController::class, 'destroyTrip'])->name('trips.destroy');
         Route::post('/cesty/{uuid}/sdileni', [App\Http\Controllers\Api\FinanceSetupController::class, 'shareTrip'])->name('trips.share');
 
+        // Předvolby modulu — vystavené jsou jen ty, které něco doopravdy dělají.
+        Route::get('/nastaveni', [App\Http\Controllers\Api\FinanceSetupController::class, 'settings'])->name('settings');
+        Route::patch('/nastaveni', [App\Http\Controllers\Api\FinanceSetupController::class, 'updateSettings'])->name('settings.update');
+
         Route::get('/kategorie', [App\Http\Controllers\Api\FinanceSetupController::class, 'categories'])->name('categories');
         Route::post('/kategorie', [App\Http\Controllers\Api\FinanceSetupController::class, 'storeCategory'])->name('categories.store');
         Route::patch('/kategorie/{uuid}', [App\Http\Controllers\Api\FinanceSetupController::class, 'updateCategory'])->name('categories.update');

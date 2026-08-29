@@ -58,6 +58,23 @@ export type Cesta = {
     access?: Pristup[];
 };
 
+/**
+ * Předvolby modulu — jak se má rozpočet chovat, než mu kdo cokoli řekne.
+ *
+ * Jen to, co něco doopravdy dělá. Přepínač bez účinku je horší než chybějící:
+ * jednou se přepne, nic se nestane a od té chvíle nikdo nevěří ani ostatním.
+ */
+export type Predvolby = {
+    home_currency: string;
+    travel_currency: string;
+    default_period: string;
+    default_tab: string;
+    list_density: 'pohodlne' | 'husté';
+    default_reserve: number;
+    alert_thresholds: string;
+    show_partner_balance: boolean;
+};
+
 /** Komu je cizí rozpočet nebo cesta nasdílená. */
 export type Pristup = { user_id: number; name: string | null; can_edit: boolean };
 
@@ -73,6 +90,7 @@ export type Ciselniky = {
     last_used: { wallet_id: number | null; payer_partner_id: number | null; category_id: number | null };
     members: Clen[];
     me: number;
+    settings: Predvolby;
 };
 
 export type Kurz = {

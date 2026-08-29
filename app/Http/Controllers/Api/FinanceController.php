@@ -70,6 +70,10 @@ class FinanceController extends Controller
             // Poslední volby. Předvyplnění šetří u pokladny tři klepnutí a spec ho
             // vyžaduje — ale musí jít jedním klepnutím změnit, proto je to jen návrh.
             'last_used' => $this->posledniVolby($space),
+            // Předvolby jdou s číselníky, ne dalším požadavkem. Formuláře je potřebují
+            // hned při otevření a druhé kolečko by znamenalo prázdné pole, které se za
+            // okamžik samo vyplní — přesně ve chvíli, kdy do něj člověk začal psát.
+            'settings' => \App\Models\FinanceSettings::proProstor($space->id)->proObrazovku(),
         ]);
     }
 

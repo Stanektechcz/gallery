@@ -2,12 +2,13 @@ import { hlaska } from '@/Components/Hlasky';
 import Panel from '@/Components/Panel';
 import axios from 'axios';
 import {
-    CalendarClock, ChevronRight, Eye, EyeOff, Palette, Plus, Star, Tags, Trash2, Users, Wallet, Zap,
+    CalendarClock, ChevronRight, Eye, EyeOff, Palette, Plus, Sliders, Star, Tags, Trash2, Users, Wallet, Zap,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import Pravidelne from './Pravidelne';
 import { Dialog } from './Ucty';
-import type { Ciselniky, Sablona } from './typy';
+import { castka as prectiCastku } from '@/lib/penize';
+import type { Ciselniky, Predvolby as PredvolbyTyp, Sablona } from './typy';
 
 const POLE = 'w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-primary)] px-3 py-2.5 text-base text-[var(--color-text-primary)] focus:border-[var(--color-accent)] focus:outline-none';
 const POPISEK = 'block text-xs font-medium text-[var(--color-text-secondary)] mb-1.5';
@@ -36,6 +37,7 @@ export default function Nastaveni({ ciselniky, onZmena }: { ciselniky: Ciselniky
         { id: 'sablony', nazev: 'Rychlý zápis', popis: 'Šablony, které předvyplní všechno kromě částky', ikona: Zap },
         { id: 'ucty', nazev: 'Účty', popis: 'Spravují se v tabu Účty', ikona: Wallet,
             pocet: `${ciselniky.wallets.length}` },
+        { id: 'predvolby', nazev: 'Výchozí nastavení', popis: 'Čím se modul otevře a s čím počítá', ikona: Sliders },
         { id: 'vzhled', nazev: 'Vzhled a zobrazení', popis: 'Motiv se přepíná v nastavení galerie', ikona: Palette },
     ];
 
@@ -74,6 +76,8 @@ export default function Nastaveni({ ciselniky, onZmena }: { ciselniky: Ciselniky
                 </Dialog>
             )}
 
+            {sekce === 'predvolby' && <Predvolby onZavrit={() => setSekce(null)}/>}
+
             {sekce === 'vzhled' && (
                 <Dialog nadpis="Vzhled a zobrazení" onZavrit={() => setSekce(null)}>
                     <p className="text-sm leading-relaxed text-[var(--color-text-secondary)]">
@@ -83,6 +87,148 @@ export default function Nastaveni({ ciselniky, onZmena }: { ciselniky: Ciselniky
                 </Dialog>
             )}
         </div>
+    );
+}
+
+/**
+ * Výchozí nastavení modulu.
+ *
+ * Nabízí se **jen to, co něco doopravdy dělá.** Tabulka předvoleb má sloupců dvacet,
+ * napojených je osm — zbylé by byly přepínače bez účinku, a ty jsou horší než žádné:
+ * jednou se s nimi pohne, nic se nestane a od té chvíle nikdo nevěří ani ostatním.
+ *
+ * Ukládá se hned při změně. Formulář s tlačítkem Uložit by u osmi voleb znamenal, že
+ * půlka lidí odejde a změny se zahodí.
+ */
+function Predvolby({ onZavrit }: { onZavrit: () => void }) {
+    const [hodnoty, setHodnoty] = useState<PredvolbyTyp | null>(null);
+    const [uklada, setUklada] = useState(false);
+
+    useEffect(() => {
+        void (async () => {
+            try {
+                const { data } = await axios.get<{ settings: PredvolbyTyp }>('/api/v1/rozpocet/nastaveni');
+                setHodnoty(data.settings);
+            } catch {
+                hlaska('Nastavení se nepodařilo načíst.', 'chyba');
+            }
+        })();
+    }, []);
+
+    const zmen = async (zmena: Partial<PredvolbyTyp>) => {
+        setHodnoty(h => (h ? { ...h, ...zmena } : h));
+        setUklada(true);
+
+        try {
+            const { data } = await axios.patch<{ settings: PredvolbyTyp }>('/api/v1/rozpocet/nastaveni', zmena);
+            setHodnoty(data.settings);
+        } catch {
+            hlaska('Změnu se nepodařilo uložit.', 'chyba');
+        } finally {
+            setUklada(false);
+        }
+    };
+
+    return (
+        <Dialog nadpis="Výchozí nastavení" onZavrit={onZavrit}>
+            {hodnoty === null ? (
+                <div className="h-40 animate-pulse rounded-xl bg-[var(--color-surface-muted)]" aria-busy="true" aria-label="Načítám"/>
+            ) : (
+                <div className="space-y-3" aria-busy={uklada}>
+                    <div>
+                        <label className={POPISEK} htmlFor="pred-tab">Čím se modul otevře</label>
+                        <select id="pred-tab" value={hodnoty.default_tab} className={POLE}
+                            onChange={e => void zmen({ default_tab: e.target.value })}>
+                            {[['prehled', 'Přehled'], ['transakce', 'Transakce'], ['rozpocty', 'Rozpočty'],
+                                ['smeny', 'Směny'], ['cesty', 'Cesty'], ['statistiky', 'Statistiky'],
+                                ['ucty', 'Účty']].map(([k, p]) => <option key={k} value={k}>{p}</option>)}
+                        </select>
+                        <p className="mt-1 text-[11px] leading-relaxed text-[var(--color-text-secondary)]">
+                            Odkaz na konkrétní záložku má přednost — kdo ho dostane, uvidí ji.
+                        </p>
+                    </div>
+
+                    <div>
+                        <label className={POPISEK} htmlFor="pred-obdobi">Jaké období se předvybere</label>
+                        <select id="pred-obdobi" value={hodnoty.default_period} className={POLE}
+                            onChange={e => void zmen({ default_period: e.target.value })}>
+                            {[['dnes', 'Dnes'], ['tyden', 'Tento týden'], ['mesic', 'Tento měsíc'],
+                                ['minuly-mesic', 'Minulý měsíc'], ['cesta', 'Probíhající cesta'],
+                                ['vse', 'Vše']].map(([k, p]) => <option key={k} value={k}>{p}</option>)}
+                        </select>
+                    </div>
+
+                    <div className="grid gap-3 sm:grid-cols-2">
+                        <div>
+                            <label className={POPISEK} htmlFor="pred-domaci">Domácí měna</label>
+                            <select id="pred-domaci" value={hodnoty.home_currency} className={POLE}
+                                onChange={e => void zmen({ home_currency: e.target.value })}>
+                                {['CZK', 'EUR'].map(m => <option key={m} value={m}>{m}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label className={POPISEK} htmlFor="pred-cestovni">Měna na cestách</label>
+                            <select id="pred-cestovni" value={hodnoty.travel_currency} className={POLE}
+                                onChange={e => void zmen({ travel_currency: e.target.value })}>
+                                {['EUR', 'CZK'].map(m => <option key={m} value={m}>{m}</option>)}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div className="grid gap-3 sm:grid-cols-2">
+                        <div>
+                            <label className={POPISEK} htmlFor="pred-rezerva">Výchozí rezerva</label>
+                            <input id="pred-rezerva" type="text" inputMode="decimal"
+                                defaultValue={hodnoty.default_reserve || ''}
+                                onBlur={e => void zmen({ default_reserve: prectiCastku(e.target.value) ?? 0 })}
+                                placeholder="0" className={`${POLE} tabular-nums`}/>
+                            <p className="mt-1 text-[11px] leading-relaxed text-[var(--color-text-secondary)]">
+                                Předvyplní se u nového rozpočtu. Rezerva se nerozpočítá do denní částky.
+                            </p>
+                        </div>
+                        <div>
+                            <label className={POPISEK} htmlFor="pred-hranice">Kdy upozornit (%)</label>
+                            <input id="pred-hranice" type="text" inputMode="numeric"
+                                defaultValue={hodnoty.alert_thresholds}
+                                onBlur={e => void zmen({ alert_thresholds: e.target.value })}
+                                placeholder="80,90,100" className={`${POLE} tabular-nums`}/>
+                            <p className="mt-1 text-[11px] leading-relaxed text-[var(--color-text-secondary)]">
+                                Hranice čerpání oddělené čárkou.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div>
+                        <span className={POPISEK}>Hustota seznamů</span>
+                        <div className="grid grid-cols-2 gap-2">
+                            {([['pohodlne', 'Pohodlná'], ['husté', 'Hustá']] as const).map(([k, p]) => (
+                                <button key={k} type="button" onClick={() => void zmen({ list_density: k })}
+                                    aria-pressed={hodnoty.list_density === k}
+                                    className={`min-h-11 rounded-xl border px-3 text-sm ${hodnoty.list_density === k
+                                        ? 'border-[var(--color-accent)] bg-[var(--color-accent)]/10 text-[var(--color-text-primary)]'
+                                        : 'border-[var(--color-border)] text-[var(--color-text-secondary)]'}`}>
+                                    {p}
+                                </button>
+                            ))}
+                        </div>
+                        <p className="mt-1 text-[11px] leading-relaxed text-[var(--color-text-secondary)]">
+                            Hustá se vejde na obrazovku o třetinu víc řádků, pohodlná se líp trefuje prstem.
+                        </p>
+                    </div>
+
+                    <label className="flex items-start gap-2 border-t border-[var(--color-border)] pt-3 text-sm text-[var(--color-text-primary)]">
+                        <input type="checkbox" checked={hodnoty.show_partner_balance} className="mt-1 h-4 w-4"
+                            onChange={e => void zmen({ show_partner_balance: e.target.checked })}/>
+                        <span>
+                            Ukazovat vyrovnání mezi námi
+                            <span className="block text-[11px] leading-relaxed text-[var(--color-text-secondary)]">
+                                Kdo komu kolik dluží. Když jedete ze společné kasy, nemá to co říct.
+                            </span>
+                        </span>
+                    </label>
+                </div>
+            )}
+        </Dialog>
     );
 }
 

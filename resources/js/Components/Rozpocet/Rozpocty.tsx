@@ -3,7 +3,7 @@ import Panel from '@/Components/Panel';
 import { dny } from '@/lib/cestina';
 import { castka as prectiCastku, datum, penize, penizeZbyva, procenta } from '@/lib/penize';
 import axios from 'axios';
-import { AlertTriangle, Calculator, CalendarDays, PiggyBank, Plus, RotateCcw, Trash2, TrendingUp } from 'lucide-react';
+import { AlertTriangle, Calculator, CalendarDays, History, PiggyBank, Plus, RotateCcw, Trash2, TrendingUp } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import GrafCerpani, { type Cerpani } from './GrafCerpani';
 import { Dialog } from './Ucty';
@@ -99,6 +99,18 @@ type Rozpocet = {
     can_edit: boolean;
     burndown: Cerpani;
     advice: Rada[];
+    history: ZmenaPlanu[];
+};
+
+/** Jedna změna plánu — kdo, kdy a z čeho na co. */
+type ZmenaPlanu = {
+    action: 'rucne' | 'zruseno' | 'podle-skutecnosti' | 'puvodni-odhad';
+    category: string | null;
+    from: number | null;
+    to: number | null;
+    currency: string;
+    who: string | null;
+    at: string;
 };
 
 /**
@@ -512,8 +524,71 @@ function TabulkaRozdeleni({ rozpocet: r, onZmena }: { rozpocet: Rozpocet; onZmen
 
             <Prerozdeleni rozpocet={r} lzeUpravit={lzeUpravit} onZmena={onZmena}/>
             <MimoPlanSeznam rozpocet={r} lzeUpravit={lzeUpravit} onUloz={uloz}/>
+            <HistoriePlanu zaznamy={r.history}/>
         </div>
     );
+}
+
+/**
+ * Co se s plánem dělo.
+ *
+ * Kniha vede historii peněz, ne historii toho, na čem se lidi dohodli. Když se ve
+ * dvou dívají na rozpočet a na jídlo je najednou o dvě stě víc, není jak zjistit,
+ * jestli to někdo posunul ručně, nebo se to dorovnalo samo.
+ *
+ * Zabalené, dokud si o to nikdo neřekne. Většinu času nikoho nezajímá a rozbalené
+ * by z karty rozpočtu udělalo výpis událostí.
+ */
+function HistoriePlanu({ zaznamy }: { zaznamy: ZmenaPlanu[] }) {
+    const [otevreno, setOtevreno] = useState(false);
+
+    if (zaznamy.length === 0) return null;
+
+    return (
+        <div className="mt-3 border-t border-[var(--color-border)] pt-3">
+            <button type="button" onClick={() => setOtevreno(! otevreno)}
+                aria-expanded={otevreno}
+                className="inline-flex min-h-11 items-center gap-1.5 text-[11px] text-[var(--color-text-secondary)] underline decoration-dotted underline-offset-4">
+                <History size={13}/> Co se s plánem dělo ({zaznamy.length})
+            </button>
+
+            {otevreno && (
+                <ul className="mt-1.5 space-y-1">
+                    {zaznamy.map((z, i) => (
+                        <li key={`${z.at}-${i}`} className="text-[11px] leading-relaxed text-[var(--color-text-secondary)]">
+                            <span className="tabular-nums">{datum(z.at.slice(0, 10))}</span>
+                            {z.who && <> · {z.who}</>}
+                            {' · '}
+                            <span className="text-[var(--color-text-primary)]">{popisZmeny(z)}</span>
+                        </li>
+                    ))}
+                </ul>
+            )}
+        </div>
+    );
+}
+
+/**
+ * Věta o jedné změně.
+ *
+ * Název kategorie stojí před dvojtečkou, ne uvnitř věty — po předložce by se musel
+ * skloňovat a u kategorií, které si pojmenoval uživatel, to nejde odvodit.
+ */
+function popisZmeny(z: ZmenaPlanu): string {
+    const c = (v: number | null) => (v === null ? '—' : penize(v, z.currency));
+
+    switch (z.action) {
+        case 'rucne':
+            return `${z.category ?? 'plán'}: ${z.from === null ? 'nově' : c(z.from) + ' →'} ${c(z.to)}`;
+        case 'zruseno':
+            return `${z.category ?? 'položka'}: vyřazeno z plánu (bylo ${c(z.from)})`;
+        case 'podle-skutecnosti':
+            return `${z.category ?? 'plán'}: přepsáno podle skutečnosti, ${c(z.from)} → ${c(z.to)}`;
+        case 'puvodni-odhad':
+            return 'plán vrácen na původní odhad';
+        default:
+            return z.action;
+    }
 }
 
 /**
@@ -860,7 +935,11 @@ function FormularRozpoctu({ rozpocet, ciselniky, onHotovo, onSmazat, onZavrit }:
         budget_kind: rozpocet?.kind ?? 'monthly' as 'monthly' | 'trip',
         currency: rozpocet?.currency ?? 'EUR',
         amount: rozpocet ? String(rozpocet.limit) : '',
-        reserve_amount: rozpocet?.reserve ? String(rozpocet.reserve) : '',
+        // Nový rozpočet začíná s rezervou z předvoleb — kdo si ji jednou nastavil,
+        // nemusí ji psát u každého dalšího.
+        reserve_amount: rozpocet?.reserve
+            ? String(rozpocet.reserve)
+            : (ciselniky.settings?.default_reserve ? String(ciselniky.settings.default_reserve) : ''),
         trip_uuid: rozpocet?.trip?.uuid ?? '',
         owner_user_id: rozpocet ? (rozpocet.owner_user_id ?? 0) : 0,
         income_adds: rozpocet ? rozpocet.income_adds : false,

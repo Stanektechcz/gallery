@@ -9,7 +9,7 @@ import { useMemo, type ReactNode } from 'react';
 import JakSePocita from './JakSePocita';
 import RadekPohybu from './RadekPohybu';
 import SloupceDnu from './SloupceDnu';
-import type { Prehled as PrehledData } from './typy';
+import type { Predvolby, Prehled as PrehledData } from './typy';
 
 /**
  * Přehled — čtyři otázky, na které má odpovědět dřív, než se člověk stihne zamyslet:
@@ -18,8 +18,9 @@ import type { Prehled as PrehledData } from './typy';
  * Pořadí widgetů je na mobilu i na desktopu totéž, jen se jinak skládá. Čtyři KPI
  * jsou nahoře v mřížce, ne v posuvném carouselu — co je za okrajem, to se nečte.
  */
-export default function Prehled({ data, naTab, naTransakce, onPridat, onUpravitPosledni }: {
+export default function Prehled({ data, predvolby, naTab, naTransakce, onPridat, onUpravitPosledni }: {
     data: PrehledData;
+    predvolby?: Predvolby | null;
     naTab: (tab: string) => void;
     naTransakce: (filtr: Record<string, string>) => void;
     onPridat: () => void;
@@ -324,7 +325,11 @@ export default function Prehled({ data, naTab, naTransakce, onPridat, onUpravitP
                     </button>
                 </Panel>
 
-                <PanelPartneru data={data} naTransakce={naTransakce}/>
+                {/* Vyrovnání mezi partnery jde vypnout v předvolbách. Kdo jede ze
+                    společné kasy, nemá si co vyrovnávat a panel jen zabírá místo. */}
+                {predvolby?.show_partner_balance !== false && (
+                    <PanelPartneru data={data} naTransakce={naTransakce}/>
+                )}
             </div>
 
             <Panel icon={CalendarDays} title="Poslední aktivita"

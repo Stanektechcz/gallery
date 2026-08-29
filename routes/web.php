@@ -202,7 +202,18 @@ Route::middleware(['auth'])->group(function () {
      * Modul má osm tabů a `/rozpocty` je jeho adresa. Starší adresy sem přesměrovávají,
      * aby uložené odkazy a záložky nekončily na prázdné stránce.
      */
-    Route::get('/rozpocty', fn() => Inertia::render('Rozpocet/Index'))->name('budgets');
+    /*
+     * Předvolby jdou už se stránkou, ne až dalším požadavkem.
+     *
+     * Výchozí záložka a období se rozhodují dřív, než by odpověď z API dorazila —
+     * modul by se otevřel na přehledu a po chvíli přeskočil jinam. Přeskakující
+     * obrazovka působí rozbitě, i když nakonec ukáže správnou věc.
+     */
+    Route::get('/rozpocty', fn (\Illuminate\Http\Request $request) => Inertia::render('Rozpocet/Index', [
+        'nastaveni' => ($space = $request->user()?->gallerySpaces()->first())
+            ? \App\Models\FinanceSettings::proProstor($space->id)->proObrazovku()
+            : null,
+    ]))->name('budgets');
     Route::get('/rozpocet', fn() => redirect()->route('budgets', request()->query()))->name('rozpocet');
     Route::get('/kniha', fn() => redirect()->route('budgets', ['tab' => 'transakce']))->name('ledger');
     Route::get('/duplicity', fn() => Inertia::render('Duplicates/Index'))->name('duplicates');

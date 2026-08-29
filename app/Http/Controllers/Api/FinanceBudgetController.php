@@ -82,8 +82,11 @@ class FinanceBudgetController extends Controller
         $radek = DB::table('budget_category_limits')
             ->where('budget_id', $rozpocet->id)->where('finance_category_id', $kategorie->id);
 
+        $puvodni = $radek->value('amount');
+
         if ((float) $data['amount'] <= 0) {
             $radek->delete();
+            $this->zapisDoLogu($space, $rozpocet, 'zruseno', $kategorie->id, (float) $puvodni, null, $request);
         } else {
             // Ruční změna je nový záměr, takže přepisuje i původní odhad. Kdyby ho
             // nechala být, tabulka by donekonečna ukazovala „původně" číslo, na kterém
@@ -96,6 +99,11 @@ class FinanceBudgetController extends Controller
                 'priority' => (int) ($data['priority'] ?? $radek->value('priority') ?? 50),
                 'created_at' => now(), 'updated_at' => now(),
             ]], ['budget_id', 'finance_category_id'], ['amount', 'baseline_amount', 'priority', 'updated_at']);
+
+            if ($puvodni === null || abs((float) $puvodni - (float) $data['amount']) >= 0.01) {
+                $this->zapisDoLogu($space, $rozpocet, 'rucne', $kategorie->id,
+                    $puvodni === null ? null : (float) $puvodni, (float) $data['amount'], $request);
+            }
         }
 
         return response()->json(['budget' => $this->stav($space, $rozpocet->fresh(), $request->user()->id)]);
@@ -126,7 +134,7 @@ class FinanceBudgetController extends Controller
 
         // Zapisuje se jen `amount`. Původní odhad zůstává, takže i po přepsání je vidět,
         // s čím se do toho šlo — a dá se k němu vrátit.
-        DB::transaction(function () use ($space, $rozpocet, $zmenene) {
+        DB::transaction(function () use ($space, $rozpocet, $zmenene, $request) {
             foreach ($zmenene as $radek) {
                 $id = FinanceCategory::where('gallery_space_id', $space->id)
                     ->where('uuid', $radek['category_uuid'])->value('id');
@@ -138,6 +146,9 @@ class FinanceBudgetController extends Controller
                 DB::table('budget_category_limits')
                     ->where('budget_id', $rozpocet->id)->where('finance_category_id', $id)
                     ->update(['amount' => max(0, $radek['planned']), 'updated_at' => now()]);
+
+                $this->zapisDoLogu($space, $rozpocet, 'podle-skutecnosti', $id,
+                    (float) $radek['original'], (float) $radek['planned'], $request);
             }
         });
 
@@ -164,6 +175,8 @@ class FinanceBudgetController extends Controller
             ->where('budget_id', $rozpocet->id)
             ->whereNotNull('baseline_amount')
             ->update(['amount' => DB::raw('baseline_amount'), 'updated_at' => now()]);
+
+        $this->zapisDoLogu($space, $rozpocet, 'puvodni-odhad', null, null, null, $request);
 
         return response()->json([
             'budget' => $this->stav($space, $rozpocet->fresh(), $request->user()->id),
@@ -578,6 +591,7 @@ class FinanceBudgetController extends Controller
         // dny pohromadě. Sestavovat je dřív by znamenalo počítat tytéž věci dvakrát.
         return $vysledek + [
             'advice' => $this->strategie->proRozpocet($vysledek),
+            'history' => $this->historiePlanu($b),
             'owner_user_id' => $b->owner_user_id,
             'owner_name' => $b->owner_user_id ? optional(\App\Models\User::find($b->owner_user_id))->name : null,
             'access' => FinanceAccess::sdileniPro('budget', $b->id),
@@ -637,6 +651,52 @@ class FinanceBudgetController extends Controller
             'days' => $dni,
             'points' => $body,
         ];
+    }
+
+    /**
+     * Zápis do historie plánu.
+     *
+     * Jméno se ukládá vedle odkazu na uživatele. Kdyby se účet smazal, zůstane
+     * aspoň „změnila Makinka" — „změnil někdo" je informace, která nikomu nepomůže.
+     */
+    private function zapisDoLogu(GallerySpace $space, Budget $rozpocet, string $akce, ?int $kategorie, ?float $z, ?float $na, Request $request): void
+    {
+        DB::table('finance_plan_log')->insert([
+            'gallery_space_id' => $space->id,
+            'budget_id' => $rozpocet->id,
+            'finance_category_id' => $kategorie,
+            'action' => $akce,
+            'amount_from' => $z,
+            'amount_to' => $na,
+            'currency' => $rozpocet->currency,
+            'user_id' => $request->user()->id,
+            'user_name' => $request->user()->name,
+            'created_at' => now(),
+        ]);
+    }
+
+    /**
+     * Co se s plánem dělo.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function historiePlanu(Budget $rozpocet): array
+    {
+        return DB::table('finance_plan_log as l')
+            ->leftJoin('finance_categories as k', 'k.id', '=', 'l.finance_category_id')
+            ->where('l.budget_id', $rozpocet->id)
+            ->orderByDesc('l.created_at')->orderByDesc('l.id')
+            ->limit(20)
+            ->get(['l.action', 'l.amount_from', 'l.amount_to', 'l.currency', 'l.user_name', 'l.created_at', 'k.name as category'])
+            ->map(fn ($r) => [
+                'action' => $r->action,
+                'category' => $r->category,
+                'from' => $r->amount_from === null ? null : (float) $r->amount_from,
+                'to' => $r->amount_to === null ? null : (float) $r->amount_to,
+                'currency' => $r->currency,
+                'who' => $r->user_name,
+                'at' => (string) $r->created_at,
+            ])->all();
     }
 
     /** Nejvyšší překročená hranice, nebo null. */
