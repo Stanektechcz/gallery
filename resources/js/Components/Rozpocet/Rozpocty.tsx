@@ -5,6 +5,7 @@ import { castka as prectiCastku, datum, penize, penizeZbyva, procenta } from '@/
 import axios from 'axios';
 import { AlertTriangle, Calculator, CalendarDays, PiggyBank, Plus, RotateCcw, Trash2, TrendingUp } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
+import GrafCerpani, { type Cerpani } from './GrafCerpani';
 import { Dialog } from './Ucty';
 import type { BezpecneNaDen, Ciselniky, Pristup } from './typy';
 
@@ -49,6 +50,23 @@ type Rozdeleni = {
     balanced: boolean;
 };
 
+/** Rada, co s penězi dělat. Vždycky nese číslo — „šetřete" nikoho nikam neposune. */
+type Rada = {
+    key: string;
+    tone: 'dobre' | 'pozor' | 'spatne' | 'tip';
+    title: string;
+    text: string;
+    amount: number;
+    currency: string;
+};
+
+const TON_BARVA: Record<Rada['tone'], string> = {
+    dobre: 'var(--fin-prijem)',
+    pozor: 'var(--fin-upozorneni)',
+    spatne: 'var(--fin-vydaj)',
+    tip: 'var(--color-text-secondary)',
+};
+
 /** Kategorie, ve které se utrácí, ale nic na ni vyhrazeno není. */
 type MimoPlan = {
     category_uuid: string; name: string; color: string | null;
@@ -79,6 +97,8 @@ type Rozpocet = {
     owner_name: string | null;
     access: Pristup[];
     can_edit: boolean;
+    burndown: Cerpani;
+    advice: Rada[];
 };
 
 /**
@@ -261,6 +281,12 @@ function KartaRozpoctu({ rozpocet: r, ja, onUpravit, onZmena }: {
                     ton={r.projected_verdict === 'over' ? 'spatne' : 'plain'}/>
             </dl>
 
+            <div className="mt-3 border-t border-[var(--color-border)] pt-3">
+                <GrafCerpani data={r.burndown}/>
+            </div>
+
+            <Rady rady={r.advice}/>
+
             <CoKdyz rozpocet={r}/>
 
             {r.categories.length > 0 && <TabulkaRozdeleni rozpocet={r} onZmena={onZmena}/>}
@@ -285,6 +311,53 @@ function KartaRozpoctu({ rozpocet: r, ja, onUpravit, onZmena }: {
                 </div>
             )}
         </Panel>
+    );
+}
+
+/**
+ * Co s tím dělat — rady, ne další čísla.
+ *
+ * Údaj říká, co se stalo; rada říká, co s tím. „Za potraviny 4 800" versus „utrácíte
+ * o třetinu rychleji a peníze dojdou 12. ledna" — první se přečte a zapomene, druhé
+ * změní, co se koupí k večeři.
+ *
+ * Nejvýš tři napoprvé. Šest rad najednou je seznam, který nikdo nedočte, a rada,
+ * kterou nikdo nedočte, je k ničemu.
+ */
+function Rady({ rady }: { rady: Rada[] }) {
+    const [vse, setVse] = useState(false);
+
+    if (rady.length === 0) return null;
+
+    const videt = vse ? rady : rady.slice(0, 3);
+
+    return (
+        <div className="mt-3 border-t border-[var(--color-border)] pt-3">
+            <p className={POPISEK}>Co s tím</p>
+            <ul className="space-y-2">
+                {videt.map(rada => (
+                    <li key={rada.key} className="flex gap-2">
+                        <span aria-hidden="true" className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full"
+                            style={{ background: TON_BARVA[rada.tone] }}/>
+                        <span className="min-w-0">
+                            <span className="block text-xs font-medium text-[var(--color-text-primary)]">
+                                {rada.title}
+                            </span>
+                            <span className="block text-[11px] leading-relaxed text-[var(--color-text-secondary)]">
+                                {rada.text}
+                            </span>
+                        </span>
+                    </li>
+                ))}
+            </ul>
+
+            {rady.length > 3 && (
+                <button type="button" onClick={() => setVse(! vse)}
+                    className="mt-2 min-h-11 text-[11px] text-[var(--color-text-secondary)] underline decoration-dotted underline-offset-4">
+                    {vse ? 'Zobrazit méně' : `Zobrazit další (${rady.length - 3})`}
+                </button>
+            )}
+        </div>
     );
 }
 

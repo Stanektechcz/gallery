@@ -109,6 +109,9 @@ class RozdeleniService
                 'percent' => $plan > 0 ? min(999, (int) round($utraceno / $plan * 100)) : 0,
                 'state' => $stav,
                 'count' => (int) ($p['count'] ?? 0),
+                // Má kategorie pravidelný předpis? Nájem se z toho pozná spolehlivěji
+                // než z počtu zápisů — a hned, ne až po druhé platbě.
+                'recurring' => (bool) ($p['recurring'] ?? false),
                 'currency' => $mena,
             ];
         }

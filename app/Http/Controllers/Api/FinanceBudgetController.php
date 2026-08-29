@@ -11,6 +11,7 @@ use App\Models\GallerySpace;
 use App\Models\Transaction;
 use App\Services\Finance\FinanceService;
 use App\Services\Finance\RozdeleniService;
+use App\Services\Finance\StrategieService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -32,6 +33,7 @@ class FinanceBudgetController extends Controller
     public function __construct(
         private readonly FinanceService $finance,
         private readonly RozdeleniService $rozdeleni,
+        private readonly StrategieService $strategie,
     ) {}
 
     public function index(Request $request): JsonResponse
@@ -450,6 +452,12 @@ class FinanceBudgetController extends Controller
 
         // Kategorie s vyhrazenou částkou se ukazují i tehdy, když se v nich ještě nic
         // neutratilo — jinak by nová položka zmizela a vypadalo by to, že se neuložila.
+        // Kategorie, které mají pravidelný předpis. Nájem se z nich pozná spolehlivě
+        // a hned — nemusí se čekat, až se dvakrát zaplatí.
+        $sPredpisem = DB::table('finance_recurring')
+            ->where('gallery_space_id', $space->id)->where('is_active', true)
+            ->pluck('finance_category_id')->filter()->all();
+
         $polozky = FinanceCategory::where('gallery_space_id', $space->id)
             ->whereIn('id', $limity->keys())->get()
             ->map(fn (FinanceCategory $k) => [
@@ -463,6 +471,7 @@ class FinanceBudgetController extends Controller
                 'spent' => (float) (collect($rozpad)->firstWhere('category_id', $k->id)['amount'] ?? 0),
                 // Kolik zápisů kategorii tvoří. Z jednoho se tempo odvodit nedá.
                 'count' => (int) (collect($rozpad)->firstWhere('category_id', $k->id)['count'] ?? 0),
+                'recurring' => in_array($k->id, $sPredpisem, true),
             ])->all();
 
         // Příjem zapsaný v období se rozdělí sám. Proto se tu nepočítá se stropem, ale
@@ -504,7 +513,7 @@ class FinanceBudgetController extends Controller
         $kMereni = $limit + $prijem;
         $procenta = $kMereni > 0 ? (int) round($ciste / $kMereni * 100) : 0;
 
-        return [
+        $vysledek = [
             'uuid' => $b->uuid,
             'name' => $b->name,
             'kind' => $b->budget_kind,
@@ -545,10 +554,73 @@ class FinanceBudgetController extends Controller
             'alert' => $this->hranice($procenta, $hranice),
             'alert_thresholds' => implode(',', $hranice),
             'is_current' => $do === null || Carbon::today()->betweenIncluded($od, $do),
+            // Průběh čerpání proti rovnoměrnému tempu. Odpovídá na jedinou otázku,
+            // kvůli které se sem lidi dívají: vyjdeme s tím?
+            'burndown' => $this->prubeh($pohyby, $mena, $od, $do, $kMereni, $rezerva),
+        ];
+
+        // Rady se počítají až z hotového stavu — potřebují tempo, rozdělení i zbývající
+        // dny pohromadě. Sestavovat je dřív by znamenalo počítat tytéž věci dvakrát.
+        return $vysledek + [
+            'advice' => $this->strategie->proRozpocet($vysledek),
             'owner_user_id' => $b->owner_user_id,
             'owner_name' => $b->owner_user_id ? optional(\App\Models\User::find($b->owner_user_id))->name : null,
             'access' => FinanceAccess::sdileniPro('budget', $b->id),
             'can_edit' => $ja === null || FinanceAccess::smiUpravit('budget', $b->id, $b->owner_user_id, $ja),
+        ];
+    }
+
+    /**
+     * Průběh čerpání den po dni proti rovnoměrnému tempu.
+     *
+     * Dvě křivky vedle sebe: kolik už je pryč a kolik by bylo pryč, kdyby se utrácelo
+     * rovnoměrně. Kde se rozejdou, tam se pozná, jestli to vyjde — a to je jediná
+     * otázka, kvůli které se do rozpočtu člověk dívá.
+     *
+     * Skutečnost končí dneškem. Kreslit ji dál by znamenalo tvrdit, že se v budoucnu
+     * neutratí nic.
+     *
+     * @param  Collection<int, Transaction>  $pohyby
+     * @return array<string, mixed>
+     */
+    private function prubeh(Collection $pohyby, string $mena, Carbon $od, ?Carbon $do, float $limit, float $rezerva): array
+    {
+        $konec = $do ?? Carbon::today();
+        $dni = max(1, (int) $od->diffInDays($konec) + 1);
+        $dnes = Carbon::today();
+
+        // Přes zhruba šest týdnů se na telefonu jednotlivé dny stejně nerozliší, tak se
+        // bere každý n-tý. Poslední bod je vždycky poslední den, ne ten, na který zrovna
+        // vyšel krok — jinak by graf končil dřív než období.
+        $krok = max(1, (int) ceil($dni / 45));
+
+        $poDnech = collect($this->finance->daily($pohyby, $mena, $od, $konec))->keyBy('date');
+        $kRozdeleni = max(0, $limit - $rezerva);
+
+        $body = [];
+        $soucet = 0.0;
+
+        for ($i = 0; $i < $dni; $i++) {
+            $den = $od->copy()->addDays($i);
+            $soucet += (float) ($poDnech[$den->toDateString()]['amount'] ?? 0);
+
+            if ($i % $krok !== 0 && $i !== $dni - 1) {
+                continue;
+            }
+
+            $body[] = [
+                'date' => $den->toDateString(),
+                'spent' => $den->lessThanOrEqualTo($dnes) ? round($soucet, 2) : null,
+                'plan' => round($kRozdeleni / $dni * ($i + 1), 2),
+                'today' => $den->isSameDay($dnes),
+            ];
+        }
+
+        return [
+            'currency' => $mena,
+            'limit' => round($kRozdeleni, 2),
+            'days' => $dni,
+            'points' => $body,
         ];
     }
 

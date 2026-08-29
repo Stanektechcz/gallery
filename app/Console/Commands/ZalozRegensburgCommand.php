@@ -99,7 +99,7 @@ class ZalozRegensburgCommand extends Command
             }
 
             $najem = FinanceCategory::firstOrCreate(
-                ['gallery_space_id' => $space->id, 'name' => 'Bydlení', 'kind' => 'expense'],
+                ['gallery_space_id' => $space->id, 'name' => 'Ubytování', 'kind' => 'expense'],
                 ['color' => '#6366f1', 'is_active' => true],
             );
 
@@ -153,7 +153,17 @@ class ZalozRegensburgCommand extends Command
                 'reserve_amount' => 150,
             ]);
 
+            // Předpis, který vznikl při dřívějším spuštění, může ukazovat na jinou
+            // kategorii, než jakou hlídá plán. Pak by nájem padal mimo rozpočet a
+            // vypadalo by to, že se na bydlení nic neutrácí.
+            $najemPredpis->update([
+                'finance_category_id' => $najem->id,
+                'finance_project_id' => $cesta->id,
+                'wallet_id' => $karta->id,
+            ]);
+
             $this->vyhrad($space, $rozpocet);
+            $this->uklidZdvojenou($space, 'Bydlení');
 
             $this->pristup($space, 'trip', $cesta->id, $divak);
             $this->pristup($space, 'budget', $rozpocet->id, $divak);
@@ -209,7 +219,10 @@ class ZalozRegensburgCommand extends Command
      * @var array<string, array{0: float, 1: int}>  název kategorie => [částka, pořadí]
      */
     private const PLAN = [
-        'Bydlení' => [1680, 10],            // 6 × 280 €, jediná pevně daná položka
+        // Kategorie musí být ta, kterou aplikace nabízí sama. Vlastní „Bydlení" vedle
+        // dodávaného „Ubytování" znamená dvě kategorie pro totéž — a nájem se zapíše
+        // do té, kterou plán nehlídá.
+        'Ubytování' => [1680, 10],          // 6 × 280 €, jediná pevně daná položka
         'Potraviny' => [720, 10],           // necelá 4 € na den — velmi málo
         'Doprava' => [120, 20],             // MHD, ne cesty domů
         'Drogerie a domácnost' => [120, 50], // 6 × 20 €
@@ -266,6 +279,35 @@ class ZalozRegensburgCommand extends Command
         throw new \RuntimeException($nalezeni->isEmpty()
             ? "Uživatele „{$zadani}\" jsem nenašel. Použijte jméno, e-mail nebo ID z tabulky níž."
             : "Jméno „{$zadani}\" sedí na víc lidí. Použijte e-mail nebo ID z tabulky níž.");
+    }
+
+    /**
+     * Odklidí kategorii, kterou dřívější verze příkazu založila zbytečně.
+     *
+     * Aplikace nabízí „Ubytování"; starší běh k němu přidal ještě „Bydlení" a nájem
+     * skončil v jedné z nich, zatímco plán hlídal druhou. Odkládá se jen tehdy, když
+     * na ni nic neukazuje — cizí kategorii se stejným jménem by to jinak smazalo
+     * uživateli pod rukama.
+     */
+    private function uklidZdvojenou(GallerySpace $space, string $nazev): void
+    {
+        $kategorie = FinanceCategory::where('gallery_space_id', $space->id)
+            ->where('name', $nazev)->where('kind', 'expense')->first();
+
+        if ($kategorie === null) {
+            return;
+        }
+
+        $pouzita = DB::table('transactions')->where('category_id', $kategorie->id)->exists()
+            || DB::table('finance_recurring')->where('finance_category_id', $kategorie->id)->exists()
+            || DB::table('budget_category_limits')->where('finance_category_id', $kategorie->id)->exists();
+
+        if ($pouzita) {
+            return;
+        }
+
+        $kategorie->delete();
+        $this->line('  odklizeno  zdvojená kategorie „'.$nazev.'" — nájem patří do „Ubytování"');
     }
 
     /** Náhled pro druhého — vidí, jak se cesta vyvíjí, ale nezapisuje do ní. */
