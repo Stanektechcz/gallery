@@ -159,6 +159,7 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
         // Úprava jedné vyhrazené částky a přerozdělení podle skutečného tempa.
         Route::patch('/rozpocty/{uuid}/vyhrazeni', [App\Http\Controllers\Api\FinanceBudgetController::class, 'setLimit'])->name('budgets.limit');
         Route::post('/rozpocty/{uuid}/prerozdelit', [App\Http\Controllers\Api\FinanceBudgetController::class, 'redistribute'])->name('budgets.redistribute');
+        Route::post('/rozpocty/{uuid}/puvodni-plan', [App\Http\Controllers\Api\FinanceBudgetController::class, 'resetPlan'])->name('budgets.reset');
     });
 
     Route::prefix('kniha')->name('api.ledger.')->group(function () {

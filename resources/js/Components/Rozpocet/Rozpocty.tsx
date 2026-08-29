@@ -15,7 +15,7 @@ type LimitKategorie = {
     category_uuid: string; name: string; color: string | null;
     limit: number; spent: number; remaining: number; percent: number; currency: string;
     order: number; priority: number;
-    planned: number; covered: number; missing: number;
+    planned: number; original: number; covered: number; missing: number;
     state: 'pokryto' | 'castecne' | 'nepokryto';
     projected: number | null;
     verdict: 'vyjde' | 'tesne' | 'nevyjde' | 'unknown';
@@ -46,6 +46,7 @@ type Rozdeleni = {
     first_uncovered: string | null;
     rows: LimitKategorie[];
     release: Uvolneni;
+    balanced: boolean;
 };
 
 /** Kategorie, ve které se utrácí, ale nic na ni vyhrazeno není. */
@@ -68,6 +69,7 @@ type Rozpocet = {
     unplanned: MimoPlan[];
     income: number;
     income_adds: boolean;
+    auto_balance: boolean;
     available: number;
     top_categories: Array<{ category_id: number | null; name: string; color: string | null; amount: number; percent: number; currency: string }>;
     alert: number | null;
@@ -364,6 +366,13 @@ function TabulkaRozdeleni({ rozpocet: r, onZmena }: { rozpocet: Rozpocet; onZmen
                                         ? <CastkaNaMiste hodnota={k.planned} mena={k.currency} popisek={k.name}
                                             onUloz={c => uloz(k.category_uuid, c)}/>
                                         : penize(k.planned, k.currency)}
+                                    {/* Původní odhad zůstává vidět. Bez něj se nedá poznat,
+                                        jestli se člověk spletl v plánu, nebo se změnil život. */}
+                                    {Math.abs(k.original - k.planned) >= 0.01 && (
+                                        <span className="block text-[10px] text-[var(--color-text-secondary)]">
+                                            původně {penize(k.original, k.currency)}
+                                        </span>
+                                    )}
                                     {k.state !== 'pokryto' && (
                                         <span className="block text-[10px] text-amber-400">
                                             {k.state === 'nepokryto'
@@ -494,17 +503,20 @@ function Prerozdeleni({ rozpocet: r, lzeUpravit, onZmena }: {
     const [bezi, setBezi] = useState(false);
     const u = r.allocation.release;
 
-    if (u.moved <= 0) return null;
+    // Vyrovnaný plán se od uloženého liší — pak je co nabídnout k zapsání i k vrácení.
+    const upraveno = r.allocation.rows.filter(k => Math.abs(k.original - k.planned) >= 0.01);
 
-    const prerozdel = async () => {
+    if (u.moved <= 0 && upraveno.length === 0) return null;
+
+    const zavolej = async (kam: string, nedarilo: string) => {
         setBezi(true);
 
         try {
-            const { data } = await axios.post(`/api/v1/rozpocet/rozpocty/${r.uuid}/prerozdelit`);
+            const { data } = await axios.post(`/api/v1/rozpocet/rozpocty/${r.uuid}/${kam}`);
             hlaska(data.message, 'uspech');
             onZmena?.();
         } catch {
-            hlaska('Přerozdělit se nepodařilo.', 'chyba');
+            hlaska(nedarilo, 'chyba');
         } finally {
             setBezi(false);
         }
@@ -513,7 +525,9 @@ function Prerozdeleni({ rozpocet: r, lzeUpravit, onZmena }: {
     return (
         <div className="mt-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-muted)] p-3">
             <p className="text-xs font-medium text-[var(--color-text-primary)]">
-                Podle dosavadního tempa jde přesunout {penize(u.moved, u.currency)}
+                {r.auto_balance
+                    ? `Podle skutečnosti je přerovnáno ${penize(u.moved || soucet(upraveno), u.currency)}`
+                    : `Podle dosavadního tempa jde přesunout ${penize(u.moved, u.currency)}`}
             </p>
             <ul className="mt-1.5 space-y-0.5 text-[11px] leading-relaxed text-[var(--color-text-secondary)]">
                 {u.from_free > 0 && <li>z volných peněz: {penize(u.from_free, u.currency)}</li>}
@@ -542,14 +556,39 @@ function Prerozdeleni({ rozpocet: r, lzeUpravit, onZmena }: {
                 </p>
             )}
 
-            {lzeUpravit && (
-                <button type="button" onClick={() => void prerozdel()} disabled={bezi}
-                    className="mt-2 inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-[var(--color-border)] px-3 text-xs text-[var(--color-text-primary)] hover:border-[var(--color-accent)] disabled:opacity-40">
-                    <RotateCcw size={14}/> Přerozdělit
-                </button>
+            {/* Když se vyrovnává samo, není co zapisovat ani vracet: plán se počítá
+                z knihy pokaždé znovu a původní odhad zůstává uložený. Tlačítko, po
+                kterém se viditelně nic nestane, je horší než žádné. */}
+            {r.auto_balance ? (
+                <p className="mt-2 text-[11px] leading-relaxed text-[var(--color-text-secondary)]">
+                    Přepočítává se samo z každého zapsaného výdaje. Původní odhad zůstává
+                    u každé položky, takže je pořád vidět, oč se skutečnost rozešla.
+                </p>
+            ) : lzeUpravit && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                    {u.moved > 0 && (
+                        <button type="button" onClick={() => void zavolej('prerozdelit', 'Plán se nepodařilo přepsat.')}
+                            disabled={bezi}
+                            className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-[var(--color-border)] px-3 text-xs text-[var(--color-text-primary)] hover:border-[var(--color-accent)] disabled:opacity-40">
+                            <Calculator size={14}/> Přepsat plán podle skutečnosti
+                        </button>
+                    )}
+                    {upraveno.length > 0 && (
+                        <button type="button" onClick={() => void zavolej('puvodni-plan', 'Původní plán se nepodařilo vrátit.')}
+                            disabled={bezi}
+                            className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-[var(--color-border)] px-3 text-xs text-[var(--color-text-secondary)] hover:border-[var(--color-accent)] disabled:opacity-40">
+                            <RotateCcw size={14}/> Vrátit původní odhad
+                        </button>
+                    )}
+                </div>
             )}
         </div>
     );
+}
+
+/** Kolik peněz se v přerovnání celkem hnulo. */
+function soucet(radky: LimitKategorie[]): number {
+    return radky.reduce((s, k) => s + Math.max(0, k.planned - k.original), 0);
 }
 
 /**
@@ -752,6 +791,7 @@ function FormularRozpoctu({ rozpocet, ciselniky, onHotovo, onSmazat, onZavrit }:
         trip_uuid: rozpocet?.trip?.uuid ?? '',
         owner_user_id: rozpocet ? (rozpocet.owner_user_id ?? 0) : 0,
         income_adds: rozpocet ? rozpocet.income_adds : false,
+        auto_balance: rozpocet ? rozpocet.auto_balance : true,
     });
 
     // Komu je rozpočet nasdílený. Drží se stranou od `form`, protože se ukládá vlastním
@@ -793,6 +833,7 @@ function FormularRozpoctu({ rozpocet, ciselniky, onHotovo, onSmazat, onZavrit }:
             owner_user_id: form.owner_user_id || null,
             access: pristupy,
             income_adds: form.income_adds,
+            auto_balance: form.auto_balance,
             limits: Object.entries(limity)
                 .map(([uuid, v]) => ({
                     category_uuid: uuid,
@@ -1005,7 +1046,24 @@ function FormularRozpoctu({ rozpocet, ciselniky, onHotovo, onSmazat, onZavrit }:
                     U cesty s pevnou sumou je každý příjem opravdu navíc. U měsíčního
                     rozpočtu je výplata sám ten rozpočet a přičíst ji by znamenalo počítat
                     s dvojnásobkem — tichá chyba, která se projeví, až peníze dojdou dřív. */}
+                {/* Vyrovnávat plán sám od sebe.
+                    Ruční přepočítávání nikdo nedělá a plán tím zestárne. Nic se přitom
+                    neztrácí — původní odhad zůstává uložený a je pořád vidět u každé
+                    položky, takže se dá kdykoli poznat, oč se skutečnost rozešla. */}
                 <label className="flex items-start gap-2 border-t border-[var(--color-border)] pt-3 text-sm text-[var(--color-text-primary)]">
+                    <input type="checkbox" checked={form.auto_balance} className="mt-1 h-4 w-4"
+                        onChange={e => setForm(f => ({ ...f, auto_balance: e.target.checked }))}/>
+                    <span>
+                        Vyrovnávat plán podle skutečnosti
+                        <span className="block text-[11px] leading-relaxed text-[var(--color-text-secondary)]">
+                            {form.auto_balance
+                                ? 'Co jedna kategorie podle tempa nevyčerpá, se ukáže tam, kde chybí. Původní odhad zůstává vidět.'
+                                : 'Plán zůstane, jak je zadaný. Přerozdělit se dá ručně tlačítkem u tabulky.'}
+                        </span>
+                    </span>
+                </label>
+
+                <label className="flex items-start gap-2 text-sm text-[var(--color-text-primary)]">
                     <input type="checkbox" checked={form.income_adds} className="mt-1 h-4 w-4"
                         onChange={e => setForm(f => ({ ...f, income_adds: e.target.checked }))}/>
                     <span>

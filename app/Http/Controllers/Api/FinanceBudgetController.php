@@ -83,13 +83,17 @@ class FinanceBudgetController extends Controller
         if ((float) $data['amount'] <= 0) {
             $radek->delete();
         } else {
+            // Ruční změna je nový záměr, takže přepisuje i původní odhad. Kdyby ho
+            // nechala být, tabulka by donekonečna ukazovala „původně" číslo, na kterém
+            // se nikdo nedohodl a které už dávno nikdo nemyslel vážně.
             $radek->upsert([[
                 'budget_id' => $rozpocet->id,
                 'finance_category_id' => $kategorie->id,
                 'amount' => $data['amount'],
+                'baseline_amount' => $data['amount'],
                 'priority' => (int) ($data['priority'] ?? $radek->value('priority') ?? 50),
                 'created_at' => now(), 'updated_at' => now(),
-            ]], ['budget_id', 'finance_category_id'], ['amount', 'priority', 'updated_at']);
+            ]], ['budget_id', 'finance_category_id'], ['amount', 'baseline_amount', 'priority', 'updated_at']);
         }
 
         return response()->json(['budget' => $this->stav($space, $rozpocet->fresh(), $request->user()->id)]);
@@ -107,36 +111,61 @@ class FinanceBudgetController extends Controller
         $space = $this->space($request);
         $rozpocet = $this->rozpocet($space, $uuid, $request->user()->id);
 
-        $navrh = $this->stav($space, $rozpocet, $request->user()->id)['allocation']['release'];
+        $rozdeleni = $this->stav($space, $rozpocet, $request->user()->id)['allocation'];
+        $zmenene = collect($rozdeleni['rows'])->filter(fn (array $r) => abs($r['planned'] - $r['original']) >= 0.01);
 
-        if ($navrh['moved'] <= 0) {
+        if ($zmenene->isEmpty()) {
             return response()->json([
                 'budget' => $this->stav($space, $rozpocet, $request->user()->id),
                 'moved' => 0,
-                'message' => 'Přerozdělovat není co — buď zatím není z čeho brát, nebo nikde nechybí.',
+                'message' => 'Plán už skutečnosti odpovídá — přepisovat není co.',
             ]);
         }
 
-        DB::transaction(function () use ($space, $rozpocet, $navrh) {
-            foreach ([...$navrh['givers'], ...$navrh['receivers']] as $zmena) {
-                $kategorie = FinanceCategory::where('gallery_space_id', $space->id)
-                    ->where('uuid', $zmena['category_uuid'])->first();
+        // Zapisuje se jen `amount`. Původní odhad zůstává, takže i po přepsání je vidět,
+        // s čím se do toho šlo — a dá se k němu vrátit.
+        DB::transaction(function () use ($space, $rozpocet, $zmenene) {
+            foreach ($zmenene as $radek) {
+                $id = FinanceCategory::where('gallery_space_id', $space->id)
+                    ->where('uuid', $radek['category_uuid'])->value('id');
 
-                if (! $kategorie) {
+                if ($id === null) {
                     continue;
                 }
 
                 DB::table('budget_category_limits')
-                    ->where('budget_id', $rozpocet->id)
-                    ->where('finance_category_id', $kategorie->id)
-                    ->update(['amount' => max(0, $zmena['new_planned']), 'updated_at' => now()]);
+                    ->where('budget_id', $rozpocet->id)->where('finance_category_id', $id)
+                    ->update(['amount' => max(0, $radek['planned']), 'updated_at' => now()]);
             }
         });
 
         return response()->json([
             'budget' => $this->stav($space, $rozpocet->fresh(), $request->user()->id),
-            'moved' => $navrh['moved'],
-            'message' => 'Přerozděleno '.number_format($navrh['moved'], 2, ',', ' ').' '.$navrh['currency'].'.',
+            'moved' => $rozdeleni['release']['moved'],
+            'message' => 'Plán přepsaný podle skutečnosti u '.$zmenene->count().' z '
+                .count($rozdeleni['rows']).' položek. Původní odhad zůstává vidět.',
+        ]);
+    }
+
+    /**
+     * Návrat k původnímu odhadu.
+     *
+     * Bez téhle cesty by přepsání plánu bylo nevratné a nikdo by si ho netroufl zkusit.
+     * Vrací se to, co člověk kdysi určil — ne to, co z toho udělalo vyrovnávání.
+     */
+    public function resetPlan(Request $request, string $uuid): JsonResponse
+    {
+        $space = $this->space($request);
+        $rozpocet = $this->rozpocet($space, $uuid, $request->user()->id);
+
+        DB::table('budget_category_limits')
+            ->where('budget_id', $rozpocet->id)
+            ->whereNotNull('baseline_amount')
+            ->update(['amount' => DB::raw('baseline_amount'), 'updated_at' => now()]);
+
+        return response()->json([
+            'budget' => $this->stav($space, $rozpocet->fresh(), $request->user()->id),
+            'message' => 'Plán je zpátky na původním odhadu.',
         ]);
     }
 
@@ -276,6 +305,7 @@ class FinanceBudgetController extends Controller
             'finance_project_id' => 'nullable|integer',
             'alert_thresholds' => 'nullable|string|max:40',
             'income_adds' => 'sometimes|boolean',
+            'auto_balance' => 'sometimes|boolean',
         ]);
 
         // Cesta se jede s pevnou sumou, takže každý příjem je navíc. U měsíčního
@@ -363,6 +393,7 @@ class FinanceBudgetController extends Controller
                 'budget_id' => $rozpocet->id,
                 'finance_category_id' => $kategorie->id,
                 'amount' => $l['amount'],
+                'baseline_amount' => $l['amount'],
                 'priority' => (int) ($l['priority'] ?? 100),
                 'created_at' => now(), 'updated_at' => now(),
             ]);
@@ -427,6 +458,7 @@ class FinanceBudgetController extends Controller
                 'name' => $k->name,
                 'color' => $k->color,
                 'planned' => (float) $limity[$k->id]->amount,
+                'original' => (float) ($limity[$k->id]->baseline_amount ?? $limity[$k->id]->amount),
                 'priority' => (int) ($limity[$k->id]->priority ?? 100),
                 'spent' => (float) (collect($rozpad)->firstWhere('category_id', $k->id)['amount'] ?? 0),
                 // Kolik zápisů kategorii tvoří. Z jednoho se tempo odvodit nedá.
@@ -449,7 +481,9 @@ class FinanceBudgetController extends Controller
         $celkemDni = $do ? (int) $od->diffInDays($do) + 1 : null;
 
         $kDispozici = max(0, $limit + $prijem - $rezerva);
-        $rozdeleni = $this->rozdeleni->rozdel($polozky, $kDispozici, $mena, $celkemDni, $uteklo);
+        $rozdeleni = $this->rozdeleni->rozdel(
+            $polozky, $kDispozici, $mena, $celkemDni, $uteklo, (bool) $b->auto_balance,
+        );
 
         $sLimity = collect($rozdeleni['rows'])->map(fn (array $r) => $r + ['limit' => $r['planned']]);
 
@@ -505,6 +539,7 @@ class FinanceBudgetController extends Controller
                 ])->values(),
             'income' => round($prijem, 2),
             'income_adds' => (bool) $b->income_adds,
+            'auto_balance' => (bool) $b->auto_balance,
             'available' => round($limit + $prijem, 2),
             'top_categories' => array_slice($rozpad, 0, 6),
             'alert' => $this->hranice($procenta, $hranice),

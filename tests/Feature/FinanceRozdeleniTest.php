@@ -270,16 +270,47 @@ class FinanceRozdeleniTest extends TestCase
             $this->vydaj('Jídlo', $castka);
         }
 
-        $pred = $this->getJson('/api/v1/rozpocet/rozpocty')->json('budgets.0.allocation');
-        $this->assertGreaterThan(0, $pred['release']['moved'], 'Je z čeho brát i komu dát.');
+        // Rozpočet se vyrovnává sám, takže plán se od původního odhadu liší hned —
+        // aniž by na cokoli někdo klepnul.
+        $pred = collect($this->getJson('/api/v1/rozpocet/rozpocty')->json('budgets.0.allocation.rows'));
+        $jidlo = $pred->firstWhere('name', 'Jídlo');
 
-        $odpoved = $this->postJson("/api/v1/rozpocet/rozpocty/{$uuid}/prerozdelit")->assertOk();
+        $this->assertTrue($this->getJson('/api/v1/rozpocet/rozpocty')->json('budgets.0.allocation.balanced'));
+        $this->assertGreaterThan($jidlo['original'], $jidlo['planned'], 'Jídlu se přidalo samo.');
+        $this->assertEqualsWithDelta(200, $jidlo['original'], 0.01, 'Původní odhad zůstal.');
 
-        $this->assertGreaterThan(0, $odpoved->json('moved'));
+        // Zapsání jen ukládá to, co už je vidět. Původní odhad přežije i to.
+        $this->postJson("/api/v1/rozpocet/rozpocty/{$uuid}/prerozdelit")->assertOk();
+
+        $po = collect($this->getJson('/api/v1/rozpocet/rozpocty')->json('budgets.0.allocation.rows'));
+
+        $this->assertEqualsWithDelta(200, $po->firstWhere('name', 'Jídlo')['original'], 0.01);
         $this->assertEqualsWithDelta(
-            0, $odpoved->json('budget.allocation.release.moved'), 0.01,
-            'Po přerozdělení plán sedí a přesouvat není co.',
+            $jidlo['planned'], $po->firstWhere('name', 'Jídlo')['planned'], 0.01,
+            'Zapsání nic dalšího nepřesouvá.',
         );
+    }
+
+    /** Původní odhad se dá vrátit — jinak by si přepsání plánu nikdo netroufl zkusit. */
+    public function test_puvodni_odhad_jde_vratit(): void
+    {
+        $uuid = $this->rozpocet(1000, incomeAdds: false);
+
+        foreach ([100, 100, 50] as $castka) {
+            $this->vydaj('Jídlo', $castka);
+        }
+
+        $this->postJson("/api/v1/rozpocet/rozpocty/{$uuid}/prerozdelit")->assertOk();
+        $this->postJson("/api/v1/rozpocet/rozpocty/{$uuid}/puvodni-plan")->assertOk();
+
+        $ulozene = \DB::table('budget_category_limits')
+            ->join('budgets', 'budgets.id', '=', 'budget_category_limits.budget_id')
+            ->where('budgets.uuid', $uuid)
+            ->get(['amount', 'baseline_amount']);
+
+        foreach ($ulozene as $radek) {
+            $this->assertEqualsWithDelta((float) $radek->baseline_amount, (float) $radek->amount, 0.01);
+        }
     }
 
     /** Jedna částka jde změnit samostatně, bez posílání celého rozpočtu. */

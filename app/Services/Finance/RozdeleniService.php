@@ -25,7 +25,42 @@ class RozdeleniService
      * @param  int  $uteklo  kolik dní z období už uběhlo včetně dneška
      * @return array<string, mixed>
      */
-    public function rozdel(array $polozky, float $kDispozici, string $mena, ?int $dni = null, int $uteklo = 1): array
+    public function rozdel(array $polozky, float $kDispozici, string $mena, ?int $dni = null, int $uteklo = 1, bool $vyrovnavat = false): array
+    {
+        $vysledek = $this->spocitej($polozky, $kDispozici, $mena, $dni, $uteklo);
+
+        // Vyrovnání se nikam neukládá — počítá se pokaždé znovu z knihy, takže se s ní
+        // nemůže rozejít. Uložený zůstává jen původní odhad; kdyby se přepisoval, nikdo
+        // by po půl roce nepoznal, jestli se spletl v plánu, nebo se změnil život.
+        if (! $vyrovnavat || $vysledek['release']['moved'] <= 0) {
+            return $vysledek + ['balanced' => false];
+        }
+
+        $zmeny = collect([...$vysledek['release']['givers'], ...$vysledek['release']['receivers']])
+            ->keyBy('category_uuid');
+
+        $vyrovnane = array_map(fn (array $p) => [
+            ...$p,
+            'planned' => $zmeny->has($p['category_uuid'])
+                ? max(0, (float) $zmeny[$p['category_uuid']]['new_planned'])
+                : $p['planned'],
+        ], $polozky);
+
+        // Druhý průchod s vyrovnanými částkami. Pokrytí i předpověď se musí přepočítat:
+        // po přesunu peněz platí jiná čísla a ukázat stará by znamenalo tvrdit, že
+        // něco pořád chybí, ačkoli už je to dorovnané.
+        $po = $this->spocitej($vyrovnane, $kDispozici, $mena, $dni, $uteklo);
+
+        return $po + ['balanced' => true, 'baseline' => $vysledek['rows']];
+    }
+
+    /**
+     * Jeden průchod: pokrytí odshora, předpověď a nabídka na uvolnění.
+     *
+     * @param  array<int, array<string, mixed>>  $polozky
+     * @return array<string, mixed>
+     */
+    private function spocitej(array $polozky, float $kDispozici, string $mena, ?int $dni, int $uteklo): array
     {
         // Stejná priorita se řadí podle plánované částky odshora: když dvě položky
         // soupeří o poslední peníze, dostane je ta větší celá, místo aby obě zůstaly
@@ -61,6 +96,10 @@ class RozdeleniService
                 'order' => $poradi + 1,
                 'priority' => $p['priority'],
                 'planned' => $plan,
+                // Původní odhad. Zůstává vidět vedle aktuálního plánu, protože rozpočet
+                // je odhad, ne slib — a bez toho, co se plánovalo, se nedá poznat,
+                // jestli se člověk spletl, nebo se změnil život.
+                'original' => round((float) ($p['original'] ?? $p['planned']), 2),
                 'covered' => $pokryto,
                 'missing' => round($plan - $pokryto, 2),
                 'spent' => $utraceno,
