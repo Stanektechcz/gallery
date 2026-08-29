@@ -56,9 +56,16 @@ class FinanceController extends Controller
             'balances' => $zustatky['by_currency'],
             'partners' => Partner::where('gallery_space_id', $space->id)->where('is_active', true)
                 ->orderBy('name')->get(['id', 'uuid', 'name', 'kind']),
-            'trips' => FinanceProject::where('gallery_space_id', $space->id)->where('kind', 'trip')
-                ->orderByDesc('starts_on')->get()
+            // Jen cesty, do kterých uživatel vidí — nabízet mu v formuláři cizí cestu
+            // by znamenalo nabídnout zápis do rozpočtu, na který se nedostane.
+            'trips' => \App\Models\FinanceAccess::viditelne(
+                FinanceProject::where('gallery_space_id', $space->id)->where('kind', 'trip'),
+                'trip', $request->user()->id,
+            )->orderByDesc('starts_on')->get()
                 ->map(fn (FinanceProject $c) => $this->cestaRadek($c))->values(),
+            'members' => $space->members()->get(['users.id', 'users.name'])
+                ->map(fn ($u) => ['id' => $u->id, 'name' => $u->name])->values(),
+            'me' => $request->user()->id,
             'active_trip' => $cesta ? $this->cestaRadek($cesta) : null,
             // Poslední volby. Předvyplnění šetří u pokladny tři klepnutí a spec ho
             // vyžaduje — ale musí jít jedním klepnutím změnit, proto je to jen návrh.

@@ -331,6 +331,17 @@ class FinanceServiceTest extends TestCase
         // Ještě nezačalo.
         $n = $this->sluzba->safeDaily(1000, 0, 0, $od, $do, Carbon::parse('2026-07-20'));
         $this->assertSame('not_started', $n['state']);
+
+        // Počet dnů se nesmí přes noc odjezdu změnit. Období 1.–5. 9. je pět dní jak
+        // den před ním, tak první den v něm — jinak by denní částka poskočila, aniž by
+        // se cokoli utratilo, a nikdo by nevěděl, které z těch dvou čísel platí.
+        $zari = [Carbon::parse('2026-09-01'), Carbon::parse('2026-09-05')];
+        $pred = $this->sluzba->safeDaily(1000, 0, 0, ...$zari, dnes: Carbon::parse('2026-08-31'));
+        $prvni = $this->sluzba->safeDaily(1000, 0, 0, ...$zari, dnes: Carbon::parse('2026-09-01'));
+
+        $this->assertSame(5, $pred['days_left']);
+        $this->assertSame(5, $prvni['days_left']);
+        $this->assertSame($pred['per_day'], $prvni['per_day']);
     }
 
     /** Refundace snižuje čisté čerpání kategorie, ale zůstává samostatně vidět. */

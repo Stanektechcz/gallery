@@ -6,7 +6,7 @@ import axios from 'axios';
 import { AlertTriangle, Calculator, CalendarDays, PiggyBank, Plus, RotateCcw, Trash2, TrendingUp } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Dialog } from './Ucty';
-import type { BezpecneNaDen, Ciselniky } from './typy';
+import type { BezpecneNaDen, Ciselniky, Pristup } from './typy';
 
 const POLE = 'w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-primary)] px-3 py-2.5 text-base text-[var(--color-text-primary)] focus:border-[var(--color-accent)] focus:outline-none';
 const POPISEK = 'block text-xs font-medium text-[var(--color-text-secondary)] mb-1.5';
@@ -14,6 +14,20 @@ const POPISEK = 'block text-xs font-medium text-[var(--color-text-secondary)] mb
 type LimitKategorie = {
     category_uuid: string; name: string; color: string | null;
     limit: number; spent: number; remaining: number; percent: number; currency: string;
+    order: number; priority: number;
+    planned: number; covered: number; missing: number;
+    state: 'pokryto' | 'castecne' | 'nepokryto';
+};
+
+/** Kolik je na co vyhrazeno a co z toho peníze pokryjí. */
+type Rozdeleni = {
+    currency: string;
+    available: number;
+    planned: number;
+    free: number;
+    missing: number;
+    first_uncovered: string | null;
+    rows: LimitKategorie[];
 };
 
 type Rozpocet = {
@@ -26,11 +40,34 @@ type Rozpocet = {
     projected_total: number | null;
     projected_verdict: 'ok' | 'tight' | 'over' | 'unknown';
     categories: LimitKategorie[];
+    allocation: Rozdeleni;
+    income: number;
+    income_adds: boolean;
+    available: number;
     top_categories: Array<{ category_id: number | null; name: string; color: string | null; amount: number; percent: number; currency: string }>;
     alert: number | null;
     alert_thresholds: string;
     is_current: boolean;
+    owner_user_id: number | null;
+    owner_name: string | null;
+    access: Pristup[];
+    can_edit: boolean;
 };
+
+/**
+ * Komu rozpočet patří — jednou větou.
+ *
+ * Skládá se z hotových kusů, ne z jména vsazeného za předložku: „rozpočet pro Adri"
+ * by u jiného jména vyšlo špatně a čeština to nedovoluje odvodit.
+ */
+function ciJeTo(r: { owner_user_id: number | null; owner_name: string | null; access: Pristup[] }, ja: number): string {
+    if (r.owner_user_id === null) return 'Společný';
+
+    const cist = r.access.map(p => p.name).filter(Boolean);
+    const majitel = r.owner_user_id === ja ? 'Můj' : `Patří: ${r.owner_name ?? 'někomu jinému'}`;
+
+    return cist.length > 0 ? `${majitel} · vidí i ${cist.join(', ')}` : majitel;
+}
 
 /**
  * Rozpočty — jednoduché stropy, ne účetní plánování.
@@ -117,7 +154,10 @@ export default function Rozpocty({ ciselniky, onZmena }: { ciselniky: Ciselniky;
                 </div>
             )}
 
-            {rozpocty.map(r => <KartaRozpoctu key={r.uuid} rozpocet={r} onUpravit={() => setFormular(r)}/>)}
+            {rozpocty.map(r => (
+                <KartaRozpoctu key={r.uuid} rozpocet={r} ja={ciselniky.me}
+                    onUpravit={r.can_edit ? () => setFormular(r) : undefined}/>
+            ))}
 
             {formular && (
                 <FormularRozpoctu rozpocet={formular === 'novy' ? null : formular}
@@ -130,7 +170,7 @@ export default function Rozpocty({ ciselniky, onZmena }: { ciselniky: Ciselniky;
     );
 }
 
-function KartaRozpoctu({ rozpocet: r, onUpravit }: { rozpocet: Rozpocet; onUpravit: () => void }) {
+function KartaRozpoctu({ rozpocet: r, ja, onUpravit }: { rozpocet: Rozpocet; ja: number; onUpravit?: () => void }) {
     const prekroceno = r.percent > 100;
     const ton = prekroceno ? 'danger' : r.percent >= 80 ? 'warn' : 'plain';
     const b = r.safe_daily;
@@ -141,13 +181,20 @@ function KartaRozpoctu({ rozpocet: r, onUpravit }: { rozpocet: Rozpocet; onUprav
             description={[
                 r.kind === 'monthly' ? 'Měsíční' : `Cesta${r.trip ? ` · ${r.trip.name}` : ''}`,
                 `${datum(r.starts_on)}${r.ends_on ? ` – ${datum(r.ends_on)}` : ''}`,
+                ciJeTo(r, ja),
             ].join(' · ')}
-            actions={
+            actions={onUpravit ? (
                 <button type="button" onClick={onUpravit}
                     className="inline-flex min-h-11 items-center px-2 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]">
                     Upravit
                 </button>
-            }>
+            ) : (
+                // Cizí rozpočet bez práva zápisu: vidět ho smí, měnit ne. Tlačítko, které
+                // by skončilo chybou od serveru, je horší než žádné.
+                <span className="inline-flex min-h-11 items-center px-2 text-[11px] text-[var(--color-text-secondary)]">
+                    jen ke čtení
+                </span>
+            )}>
 
             <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <span className="text-2xl font-semibold tabular-nums text-[var(--color-text-primary)]">
@@ -186,34 +233,7 @@ function KartaRozpoctu({ rozpocet: r, onUpravit }: { rozpocet: Rozpocet; onUprav
 
             <CoKdyz rozpocet={r}/>
 
-            {r.categories.length > 0 && (
-                <div className="mt-3 border-t border-[var(--color-border)] pt-3">
-                    <p className={POPISEK}>Limity kategorií</p>
-                    <ul className="space-y-2">
-                        {r.categories.map(k => (
-                            <li key={k.category_uuid}>
-                                <div className="flex items-baseline justify-between gap-2 text-xs">
-                                    <span className="flex min-w-0 items-center gap-1.5">
-                                        <span className="h-2 w-2 shrink-0 rounded-full"
-                                            style={{ background: k.color ?? 'var(--color-text-secondary)' }}/>
-                                        <span className="truncate text-[var(--color-text-primary)]">{k.name}</span>
-                                    </span>
-                                    <span className="shrink-0 tabular-nums text-[var(--color-text-secondary)]">
-                                        {penize(k.spent, k.currency)} z {penize(k.limit, k.currency)}
-                                    </span>
-                                </div>
-                                <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-[var(--color-surface-muted)]">
-                                    <div className="h-full rounded-full"
-                                        style={{
-                                            width: `${Math.min(100, k.percent)}%`,
-                                            background: k.percent > 100 ? 'var(--fin-vydaj)' : (k.color ?? 'var(--fin-prijem)'),
-                                        }}/>
-                                </div>
-                            </li>
-                        ))}
-                    </ul>
-                </div>
-            )}
+            {r.categories.length > 0 && <TabulkaRozdeleni rozpocet={r}/>}
 
             {r.top_categories.length > 0 && r.categories.length === 0 && (
                 <div className="mt-3 border-t border-[var(--color-border)] pt-3">
@@ -235,6 +255,122 @@ function KartaRozpoctu({ rozpocet: r, onUpravit }: { rozpocet: Rozpocet; onUprav
                 </div>
             )}
         </Panel>
+    );
+}
+
+/**
+ * Na co jsou peníze vyhrazené — tabulka, ne seznam pruhů.
+ *
+ * Čísla ve sloupcích pod sebou jde srovnat pohledem; pruhy vedle sebe ne. A právě
+ * srovnání je celý smysl: proti sobě stojí, kolik je na co vyhrazeno a kolik z toho
+ * peníze doopravdy pokryjí.
+ *
+ * Řadí se podle pořadí důležitosti, ne podle čerpání. Pořadí je to, co rozhoduje,
+ * když peníze nevyjdou — přeskládat tabulku podle procent by ten vztah schovalo.
+ */
+function TabulkaRozdeleni({ rozpocet: r }: { rozpocet: Rozpocet }) {
+    const a = r.allocation;
+    const chybi = a.missing > 0;
+
+    return (
+        <div className="mt-3 border-t border-[var(--color-border)] pt-3">
+            <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                <p className={POPISEK}>Na co jsou peníze vyhrazené</p>
+                <p className="text-[11px] tabular-nums text-[var(--color-text-secondary)]">
+                    k rozdělení {penize(a.available, a.currency)}
+                    {r.income > 0 && ` · z toho příjem ${penize(r.income, a.currency)}`}
+                </p>
+            </div>
+
+            {/* Široká tabulka se posouvá uvnitř svého rámečku, ne celou stránkou. */}
+            <div className="-mx-1 overflow-x-auto px-1">
+                <table className="w-full table-fixed border-collapse text-xs">
+                    <caption className="sr-only">
+                        Vyhrazené částky podle pořadí důležitosti, jejich pokrytí a čerpání
+                    </caption>
+                    <thead>
+                        <tr className="text-[10px] uppercase tracking-wide text-[var(--color-text-secondary)]">
+                            <th scope="col" className="py-1 pr-2 text-left font-medium">Na co</th>
+                            <th scope="col" className="w-[5.5rem] py-1 px-2 text-right font-medium">Vyhrazeno</th>
+                            {/* Na úzkém displeji by čtvrtý sloupec vytlačil „Zbývá" mimo
+                                obraz. Utracené se tam píše pod název — je to doplňující
+                                údaj, kdežto zbývající částka je ta, kvůli které se sem lidi
+                                dívají. */}
+                            <th scope="col" className="hidden w-[5.5rem] py-1 px-2 text-right font-medium sm:table-cell">
+                                Utraceno
+                            </th>
+                            <th scope="col" className="w-[5.5rem] py-1 pl-2 text-right font-medium">Zbývá</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {a.rows.map(k => (
+                            <tr key={k.category_uuid} className="border-t border-[var(--color-border)]">
+                                <th scope="row" className="py-1.5 pr-2 text-left font-normal">
+                                    <span className="flex min-w-0 items-center gap-1.5">
+                                        <span className="w-4 shrink-0 text-right text-[10px] tabular-nums text-[var(--color-text-secondary)]">
+                                            {k.order}.
+                                        </span>
+                                        <span className="h-2 w-2 shrink-0 rounded-full"
+                                            style={{ background: k.color ?? 'var(--color-text-secondary)' }}/>
+                                        <span className="truncate text-[var(--color-text-primary)]">{k.name}</span>
+                                    </span>
+                                    <span className="block pl-[1.625rem] text-[10px] tabular-nums text-[var(--color-text-secondary)] sm:hidden">
+                                        utraceno {penize(k.spent, k.currency)}
+                                    </span>
+                                </th>
+                                <td className="py-1.5 px-2 text-right tabular-nums text-[var(--color-text-primary)]">
+                                    {penize(k.planned, k.currency)}
+                                    {k.state !== 'pokryto' && (
+                                        <span className="block text-[10px] text-amber-400">
+                                            {k.state === 'nepokryto'
+                                                ? 'nepokryto'
+                                                : `chybí ${penize(k.missing, k.currency)}`}
+                                        </span>
+                                    )}
+                                </td>
+                                <td className="hidden py-1.5 px-2 text-right tabular-nums text-[var(--color-text-secondary)] sm:table-cell">
+                                    {penize(k.spent, k.currency)}
+                                </td>
+                                <td className={`py-1.5 pl-2 text-right tabular-nums ${
+                                    k.remaining < 0 ? 'text-[var(--fin-vydaj)]' : 'text-[var(--color-text-primary)]'
+                                }`}>
+                                    {penize(k.remaining, k.currency)}
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                    <tfoot>
+                        <tr className="border-t-2 border-[var(--color-border)] font-medium">
+                            <th scope="row" className="py-1.5 pr-2 text-left text-[var(--color-text-secondary)]">
+                                Volné peníze
+                            </th>
+                            {/* Prázdné buňky kopírují sloupce těla, aby částka zůstala pod
+                                „Zbývá" i po skrytí sloupce na úzkém displeji. */}
+                            <td/>
+                            <td className="hidden sm:table-cell"/>
+                            <td className="py-1.5 pl-2 text-right tabular-nums text-[var(--color-text-primary)]">
+                                {penize(a.free, a.currency)}
+                            </td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+
+            {chybi ? (
+                <p className="mt-2 text-[11px] leading-relaxed text-amber-400">
+                    Vyhrazeno je o {penize(a.missing, a.currency)} víc, než kolik je k rozdělení.
+                    Pokrývá se odshora, takže první nepokryté je{' '}
+                    <strong className="text-[var(--color-text-primary)]">{a.first_uncovered}</strong>.
+                    {r.income_adds && ' Až přijde příjem, dorovná se to samo.'}
+                </p>
+            ) : (
+                <p className="mt-2 text-[11px] leading-relaxed text-[var(--color-text-secondary)]">
+                    {r.income_adds
+                        ? 'Zapsaný příjem se rozdělí sám — odshora podle pořadí, zbytek zůstane volný.'
+                        : 'Rozpočet je pevná měsíční částka, zapsané příjmy se k ní nepřičítají.'}
+                </p>
+            )}
+        </div>
     );
 }
 
@@ -398,10 +534,22 @@ function FormularRozpoctu({ rozpocet, ciselniky, onHotovo, onSmazat, onZavrit }:
         amount: rozpocet ? String(rozpocet.limit) : '',
         reserve_amount: rozpocet?.reserve ? String(rozpocet.reserve) : '',
         trip_uuid: rozpocet?.trip?.uuid ?? '',
+        owner_user_id: rozpocet ? (rozpocet.owner_user_id ?? 0) : 0,
+        income_adds: rozpocet ? rozpocet.income_adds : false,
     });
 
+    // Komu je rozpočet nasdílený. Drží se stranou od `form`, protože se ukládá vlastním
+    // požadavkem — nový rozpočet ještě nemá uuid, pod kterým by šlo sdílení zapsat.
+    const [sdileni, setSdileni] = useState<Record<number, 'ne' | 'cist' | 'psat'>>(() =>
+        Object.fromEntries((rozpocet?.access ?? []).map(p => [p.user_id, p.can_edit ? 'psat' : 'cist'])));
+
     const [limity, setLimity] = useState<Record<string, string>>(() =>
-        Object.fromEntries((rozpocet?.categories ?? []).map(k => [k.category_uuid, String(k.limit)])));
+        Object.fromEntries((rozpocet?.categories ?? []).map(k => [k.category_uuid, String(k.planned)])));
+
+    // Pořadí důležitosti. Drží se odděleně od částek, protože se mění samostatně —
+    // přesunout položku výš je jiné rozhodnutí než změnit, kolik na ni jde.
+    const [poradi, setPoradi] = useState<Record<string, number>>(() =>
+        Object.fromEntries((rozpocet?.categories ?? []).map(k => [k.category_uuid, k.priority])));
 
     const [uklada, setUklada] = useState(false);
     const [chyba, setChyba] = useState('');
@@ -415,7 +563,9 @@ function FormularRozpoctu({ rozpocet, ciselniky, onHotovo, onSmazat, onZavrit }:
         setUklada(true);
         setChyba('');
 
-        const cesta = ciselniky.trips.find(c => c.uuid === form.trip_uuid);
+        const pristupy = Object.entries(sdileni)
+            .filter(([, v]) => v !== 'ne')
+            .map(([id, v]) => ({ user_id: Number(id), can_edit: v === 'psat' }));
 
         const telo = {
             name: form.name,
@@ -423,21 +573,35 @@ function FormularRozpoctu({ rozpocet, ciselniky, onHotovo, onSmazat, onZavrit }:
             currency: form.currency,
             amount: prectiCastku(form.amount),
             reserve_amount: prectiCastku(form.reserve_amount),
-            finance_project_id: null as number | null,
+            trip_uuid: form.budget_kind === 'trip' ? form.trip_uuid : '',
+            owner_user_id: form.owner_user_id || null,
+            access: pristupy,
+            income_adds: form.income_adds,
             limits: Object.entries(limity)
-                .map(([uuid, v]) => ({ category_uuid: uuid, amount: prectiCastku(v) ?? 0 }))
+                .map(([uuid, v]) => ({
+                    category_uuid: uuid,
+                    amount: prectiCastku(v) ?? 0,
+                    priority: poradi[uuid] ?? 100,
+                }))
                 .filter(l => l.amount > 0),
         };
 
         try {
             if (rozpocet) {
                 await axios.patch(`/api/v1/rozpocet/rozpocty/${rozpocet.uuid}`, telo);
-                hlaska('Rozpočet je upravený.', 'uspech');
+
+                // Vlastník a přístupy mají vlastní koncový bod — úprava rozpočtu je
+                // něco jiného než změna toho, kdo do něj smí.
+                await axios.post(`/api/v1/rozpocet/rozpocty/${rozpocet.uuid}/sdileni`, {
+                    owner_user_id: form.owner_user_id || null, access: pristupy,
+                });
             } else {
+                // Při zakládání jedním požadavkem: kdo rozpočet rovnou předá druhému,
+                // ztratí k němu právo a druhý požadavek by skončil chybou.
                 await axios.post('/api/v1/rozpocet/rozpocty', telo);
-                hlaska('Rozpočet je založený.', 'uspech');
             }
 
+            hlaska(rozpocet ? 'Rozpočet je upravený.' : 'Rozpočet je založený.', 'uspech');
             onHotovo();
         } catch (problem: any) {
             setChyba(problem?.response?.data?.message ?? 'Rozpočet se nepodařilo uložit.');
@@ -456,6 +620,48 @@ function FormularRozpoctu({ rozpocet, ciselniky, onHotovo, onSmazat, onZavrit }:
                         placeholder="Měsíční rozpočet" className={POLE}/>
                 </div>
 
+                <div>
+                    <span className={POPISEK}>Na co je</span>
+                    <div className="grid grid-cols-2 gap-2">
+                        {([['monthly', 'Každý měsíc'], ['trip', 'Na jednu cestu']] as const).map(([klic, popis]) => (
+                            <button key={klic} type="button"
+                                onClick={() => setForm(f => ({
+                                    ...f,
+                                    budget_kind: klic,
+                                    // U nového rozpočtu jde volba s druhem: cesta se jede
+                                    // s pevnou sumou, tam je příjem navíc. Rozpočet, který
+                                    // už existuje, si svoje nastavení nechá.
+                                    income_adds: rozpocet ? f.income_adds : klic === 'trip',
+                                }))}
+                                aria-pressed={form.budget_kind === klic}
+                                className={`min-h-11 rounded-xl border px-3 text-sm ${form.budget_kind === klic
+                                    ? 'border-[var(--color-accent)] bg-[var(--color-accent)]/10 text-[var(--color-text-primary)]'
+                                    : 'border-[var(--color-border)] text-[var(--color-text-secondary)]'}`}>
+                                {popis}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                {form.budget_kind === 'trip' && (
+                    <div>
+                        <label className={POPISEK} htmlFor="rozp-cesta">Která cesta</label>
+                        <select id="rozp-cesta" value={form.trip_uuid} className={POLE}
+                            onChange={e => setForm(f => ({ ...f, trip_uuid: e.target.value }))}>
+                            <option value="">— vyberte cestu —</option>
+                            {ciselniky.trips.map(c => <option key={c.uuid} value={c.uuid}>{c.name}</option>)}
+                        </select>
+                        <p className="mt-1 text-[11px] leading-relaxed text-[var(--color-text-secondary)]">
+                            Období si rozpočet vezme z cesty a počítá jen útraty, které k ní patří.
+                        </p>
+                        {ciselniky.trips.length === 0 && (
+                            <p className="mt-1 text-[11px] leading-relaxed text-amber-400">
+                                Zatím není žádná cesta. Nejdřív ji založte v záložce Cesty.
+                            </p>
+                        )}
+                    </div>
+                )}
+
                 <div className="grid gap-3 sm:grid-cols-2">
                     <div>
                         <label className={POPISEK} htmlFor="rozp-mena">Měna</label>
@@ -465,7 +671,9 @@ function FormularRozpoctu({ rozpocet, ciselniky, onHotovo, onSmazat, onZavrit }:
                         </select>
                     </div>
                     <div>
-                        <label className={POPISEK} htmlFor="rozp-castka">Kolik měsíčně</label>
+                        <label className={POPISEK} htmlFor="rozp-castka">
+                            {form.budget_kind === 'monthly' ? 'Kolik měsíčně' : 'Kolik na celou cestu'}
+                        </label>
                         <input id="rozp-castka" type="text" inputMode="decimal" value={form.amount}
                             onChange={e => setForm(f => ({ ...f, amount: e.target.value }))}
                             placeholder="800" className={`${POLE} tabular-nums`}/>
@@ -481,40 +689,118 @@ function FormularRozpoctu({ rozpocet, ciselniky, onHotovo, onSmazat, onZavrit }:
                     </div>
                 </div>
 
-                <p className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-muted)] px-3 py-2 text-[11px] leading-relaxed text-[var(--color-text-secondary)]">
-                    Měsíční rozpočet měří vždycky <strong className="text-[var(--color-text-primary)]">aktuální měsíc</strong>{' '}
-                    a každý první se posune sám. Nemusíte ho zakládat znovu.
-                </p>
+                {form.budget_kind === 'monthly' && (
+                    <p className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-muted)] px-3 py-2 text-[11px] leading-relaxed text-[var(--color-text-secondary)]">
+                        Měsíční rozpočet měří vždycky <strong className="text-[var(--color-text-primary)]">aktuální měsíc</strong>{' '}
+                        a každý první se posune sám. Nemusíte ho zakládat znovu.
+                    </p>
+                )}
+
+                {/* Kdo rozpočet vlastní a kdo do něj vidí.
+                    Společný je výchozí — je to dosavadní stav a nejčastější případ. Vlastní
+                    dává smysl tam, kde se dvě situace nemají sčítat: cesta do Německa a život
+                    v Česku jsou dvě peněženky, ne jeden součet. */}
+                <div className="border-t border-[var(--color-border)] pt-3">
+                    <label className={POPISEK} htmlFor="rozp-vlastnik">Pro koho je</label>
+                    <select id="rozp-vlastnik" value={form.owner_user_id} className={POLE}
+                        onChange={e => setForm(f => ({ ...f, owner_user_id: Number(e.target.value) }))}>
+                        <option value={0}>Společný — vidí ho oba</option>
+                        {ciselniky.members.map(c => (
+                            <option key={c.id} value={c.id}>
+                                {c.id === ciselniky.me ? `Můj (${c.name})` : c.name}
+                            </option>
+                        ))}
+                    </select>
+
+                    {form.owner_user_id !== 0 && (
+                        <div className="mt-2">
+                            <p className="text-[11px] leading-relaxed text-[var(--color-text-secondary)]">
+                                Vlastní rozpočet vidí jen majitel. Komu ho ještě ukázat:
+                            </p>
+                            <ul className="mt-1.5 space-y-1.5">
+                                {ciselniky.members.filter(c => c.id !== form.owner_user_id).map(c => (
+                                    <li key={c.id} className="flex items-center gap-2">
+                                        <span className="min-w-0 flex-1 truncate text-xs text-[var(--color-text-primary)]">{c.name}</span>
+                                        <select value={sdileni[c.id] ?? 'ne'}
+                                            aria-label={`Přístup k rozpočtu — ${c.name}`}
+                                            onChange={e => setSdileni(s => ({ ...s, [c.id]: e.target.value as 'ne' | 'cist' | 'psat' }))}
+                                            className="shrink-0 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-primary)] px-2 py-1.5 text-xs text-[var(--color-text-primary)] focus:border-[var(--color-accent)] focus:outline-none">
+                                            <option value="ne">nevidí</option>
+                                            <option value="cist">jen se dívá</option>
+                                            <option value="psat">může i měnit</option>
+                                        </select>
+                                    </li>
+                                ))}
+                            </ul>
+                            <p className="mt-1.5 text-[11px] leading-relaxed text-[var(--color-text-secondary)]">
+                                Skrývá se rozpočet, ne zapsané útraty — ty zůstávají v knize vidět oběma.
+                            </p>
+                        </div>
+                    )}
+                </div>
 
                 <div className="border-t border-[var(--color-border)] pt-3">
-                    <p className={POPISEK}>Limity kategorií (nepovinné)</p>
+                    <p className={POPISEK}>Na co vyhradit peníze (nepovinné)</p>
+                    <p className="-mt-1 mb-2 text-[11px] leading-relaxed text-[var(--color-text-secondary)]">
+                        Pořadí rozhoduje, až peníze nevyjdou: pokrývá se odshora, takže nutné
+                        věci jsou celé dřív, než dojde na to, co počká.
+                    </p>
                     <ul className="space-y-1.5">
                         {kategorie.map(k => (
-                            <li key={k.uuid} className="flex items-center gap-2">
-                                <span className="flex min-w-0 flex-1 items-center gap-1.5">
+                            <li key={k.uuid} className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                                <span className="flex min-w-0 flex-1 basis-32 items-center gap-1.5">
                                     <span className="h-2 w-2 shrink-0 rounded-full"
                                         style={{ background: k.color ?? 'var(--color-text-secondary)' }}/>
                                     <span className="truncate text-xs text-[var(--color-text-primary)]">{k.name}</span>
                                 </span>
+                                {/* Pořadí se nabízí jen tam, kde je co řadit. U prázdné
+                                    částky by to byla volba bez následku. */}
+                                {(prectiCastku(limity[k.uuid] ?? '') ?? 0) > 0 && (
+                                    <select value={poradi[k.uuid] ?? 50}
+                                        aria-label={`Důležitost — ${k.name}`}
+                                        onChange={e => setPoradi(p => ({ ...p, [k.uuid]: Number(e.target.value) }))}
+                                        className="shrink-0 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-primary)] px-2 py-1.5 text-xs text-[var(--color-text-primary)] focus:border-[var(--color-accent)] focus:outline-none">
+                                        <option value={10}>nutné</option>
+                                        <option value={50}>důležité</option>
+                                        <option value={90}>když zbyde</option>
+                                    </select>
+                                )}
                                 <input type="text" inputMode="decimal" value={limity[k.uuid] ?? ''}
                                     onChange={e => setLimity(l => ({ ...l, [k.uuid]: e.target.value }))}
-                                    aria-label={`Limit kategorie ${k.name}`}
+                                    aria-label={`Vyhrazeno na ${k.name}`}
                                     placeholder="—"
                                     className="w-24 shrink-0 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-primary)] px-2 py-1.5 text-right text-sm tabular-nums text-[var(--color-text-primary)] focus:border-[var(--color-accent)] focus:outline-none"/>
                             </li>
                         ))}
                     </ul>
 
-                    {/* Součet limitů nad stropem není chyba — kategorie se obvykle
-                        nevyčerpají všechny. Ale stojí za to o tom vědět. */}
+                    {/* Vyhradit víc, než kolik je, není chyba — dá se to. Ale musí být
+                        vidět, že na poslední položky v pořadí peníze nezbudou. */}
                     {soucetLimitu > 0 && strop > 0 && soucetLimitu > strop && (
                         <p className="mt-2 text-[11px] leading-relaxed text-amber-400">
-                            Limity kategorií dávají dohromady {penize(soucetLimitu, form.currency)}, což je
-                            víc než celý rozpočet. Není to chyba — všechny se obvykle nevyčerpají — ale
-                            hlídat se pak dá jen každá zvlášť, ne součet.
+                            Vyhrazeno je {penize(soucetLimitu, form.currency)}, k dispozici{' '}
+                            {penize(strop, form.currency)}. Pokrývá se odshora, takže na to,
+                            co je na konci pořadí, peníze nezbudou.
                         </p>
                     )}
                 </div>
+
+                {/* Co s příjmem, který v období přibude.
+                    U cesty s pevnou sumou je každý příjem opravdu navíc. U měsíčního
+                    rozpočtu je výplata sám ten rozpočet a přičíst ji by znamenalo počítat
+                    s dvojnásobkem — tichá chyba, která se projeví, až peníze dojdou dřív. */}
+                <label className="flex items-start gap-2 border-t border-[var(--color-border)] pt-3 text-sm text-[var(--color-text-primary)]">
+                    <input type="checkbox" checked={form.income_adds} className="mt-1 h-4 w-4"
+                        onChange={e => setForm(f => ({ ...f, income_adds: e.target.checked }))}/>
+                    <span>
+                        Zapsaný příjem přičíst k rozpočtu
+                        <span className="block text-[11px] leading-relaxed text-[var(--color-text-secondary)]">
+                            {form.income_adds
+                                ? 'Co v období přijde, se rozdělí samo — odshora podle pořadí.'
+                                : 'Rozpočet zůstane pevná částka. Vhodné tam, kde je výplata sám ten rozpočet — jinak by se počítala dvakrát.'}
+                        </span>
+                    </span>
+                </label>
 
                 {chyba && (
                     <p className="rounded-xl border border-red-500/40 bg-[var(--color-surface-muted)] p-3 text-xs leading-relaxed text-[var(--color-text-primary)]">
@@ -523,7 +809,8 @@ function FormularRozpoctu({ rozpocet, ciselniky, onHotovo, onSmazat, onZavrit }:
                 )}
 
                 <div className="flex gap-2 border-t border-[var(--color-border)] pt-3">
-                    <button type="button" onClick={() => void uloz()} disabled={uklada || ! form.name || ! strop}
+                    <button type="button" onClick={() => void uloz()}
+                        disabled={uklada || ! form.name || ! strop || (form.budget_kind === 'trip' && ! form.trip_uuid)}
                         className="min-h-11 flex-1 rounded-xl bg-[var(--color-accent)] px-4 text-sm font-medium text-[var(--color-accent-contrast)] disabled:opacity-40">
                         {rozpocet ? 'Uložit' : 'Založit rozpočet'}
                     </button>

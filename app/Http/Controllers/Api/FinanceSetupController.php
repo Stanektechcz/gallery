@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\FinanceAccess;
 use App\Models\FinanceCategory;
 use App\Models\FinanceProject;
 use App\Models\FinanceRecurring;
@@ -318,12 +319,107 @@ class FinanceSetupController extends Controller
     {
         $space = $this->space($request);
 
-        $cesty = FinanceProject::where('gallery_space_id', $space->id)
-            ->where('kind', 'trip')->orderByDesc('starts_on')->get();
+        // Jen to, co uživatel smí vidět: společné, vlastní a nasdílené.
+        $cesty = FinanceAccess::viditelne(
+            FinanceProject::where('gallery_space_id', $space->id)->where('kind', 'trip'),
+            'trip', $request->user()->id,
+        )->orderByDesc('starts_on')->get();
 
         return response()->json([
             'trips' => $cesty->map(fn (FinanceProject $c) => $this->cestaSeStavem($space, $c))->values(),
+            'members' => $this->clenove($space),
         ]);
+    }
+
+    /**
+     * Sdílení cesty nebo rozpočtu.
+     *
+     * Posílá se celý seznam, ne jeden přírůstek. Odebrání přístupu je stejně častá
+     * akce jako přidání a dvě cesty by znamenaly dvě místa, kde se dá zapomenout,
+     * že se má něco odebrat.
+     */
+    public function shareTrip(Request $request, string $uuid): JsonResponse
+    {
+        $space = $this->space($request);
+        $cesta = FinanceProject::where('gallery_space_id', $space->id)->where('uuid', $uuid)->firstOrFail();
+
+        $this->overitPravoUpravy('trip', $cesta->id, $cesta->owner_user_id, $request->user()->id);
+
+        $data = $request->validate([
+            'owner_user_id' => 'nullable|integer',
+            'access' => 'nullable|array|max:10',
+            'access.*.user_id' => 'required|integer',
+            'access.*.can_edit' => 'sometimes|boolean',
+        ]);
+
+        if (array_key_exists('owner_user_id', $data)) {
+            $cesta->update(['owner_user_id' => $data['owner_user_id'] ?: null]);
+        }
+
+        $this->ulozitPristup($space, 'trip', $cesta->id, $data['access'] ?? [], $cesta->owner_user_id);
+
+        return response()->json(['trip' => $this->cestaSeStavem($space, $cesta->fresh())]);
+    }
+
+    /** @return array<int, array<string, mixed>> */
+    private function clenove(GallerySpace $space): array
+    {
+        return $space->members()->get(['users.id', 'users.name'])
+            ->map(fn ($u) => ['id' => $u->id, 'name' => $u->name])->all();
+    }
+
+    private function overitPravoUpravy(string $druh, int $id, ?int $vlastnik, int $uzivatel): void
+    {
+        abort_unless(FinanceAccess::smiUpravit($druh, $id, $vlastnik, $uzivatel), 403,
+            'Tohle patří někomu jinému a nemáte právo to měnit. Můžete si o něj říct.');
+    }
+
+    /**
+     * Cesta podle uuid — a když je zadaný uživatel, ověří i právo do ní zapsat.
+     *
+     * Jedna cesta pro všechny zapisující akce: úpravu, aktivaci, ukončení i smazání.
+     * Kdyby si každá dělala kontrolu sama, další přibylá akce by na ni zapomněla.
+     */
+    private function cestaProUpravu(GallerySpace $space, string $uuid, ?int $ja = null): FinanceProject
+    {
+        $cesta = FinanceProject::where('gallery_space_id', $space->id)->where('uuid', $uuid)->firstOrFail();
+
+        if ($ja !== null) {
+            $this->overitPravoUpravy('trip', $cesta->id, $cesta->owner_user_id, $ja);
+        }
+
+        return $cesta;
+    }
+
+    /**
+     * Přepíše seznam přístupů.
+     *
+     * Vlastník se do seznamu nepřidává — přístup má z podstaty a mít ho tam dvakrát
+     * by znamenalo, že si ho jde odebrat a přijít o vlastní rozpočet.
+     *
+     * @param  array<int, array<string, mixed>>  $pristupy
+     */
+    private function ulozitPristup(GallerySpace $space, string $druh, int $id, array $pristupy, ?int $vlastnik): void
+    {
+        FinanceAccess::where('subject_type', $druh)->where('subject_id', $id)->delete();
+
+        $clenove = collect($this->clenove($space))->pluck('id');
+
+        foreach ($pristupy as $p) {
+            $userId = (int) $p['user_id'];
+
+            if ($userId === $vlastnik || ! $clenove->contains($userId)) {
+                continue;
+            }
+
+            FinanceAccess::create([
+                'gallery_space_id' => $space->id,
+                'subject_type' => $druh,
+                'subject_id' => $id,
+                'user_id' => $userId,
+                'can_edit' => (bool) ($p['can_edit'] ?? false),
+            ]);
+        }
     }
 
     public function storeTrip(Request $request): JsonResponse
@@ -340,13 +436,17 @@ class FinanceSetupController extends Controller
             $cesta->aktivuj();
         }
 
+        // Přístupy se ukládají spolu se založením: kdo cestu předá druhému, ztratí k ní
+        // právo hned tímhle uložením a samostatný požadavek na sdílení by mu vrátil 403.
+        $this->ulozitPristup($space, 'trip', $cesta->id, $request->input('access', []), $cesta->owner_user_id);
+
         return response()->json(['trip' => $this->cestaSeStavem($space, $cesta->fresh())], 201);
     }
 
     public function updateTrip(Request $request, string $uuid): JsonResponse
     {
         $space = $this->space($request);
-        $cesta = FinanceProject::where('gallery_space_id', $space->id)->where('uuid', $uuid)->firstOrFail();
+        $cesta = $this->cestaProUpravu($space, $uuid, $request->user()->id);
 
         $cesta->update($this->cestaData($request, true));
 
@@ -361,7 +461,7 @@ class FinanceSetupController extends Controller
     public function activateTrip(Request $request, string $uuid): JsonResponse
     {
         $space = $this->space($request);
-        $cesta = FinanceProject::where('gallery_space_id', $space->id)->where('uuid', $uuid)->firstOrFail();
+        $cesta = $this->cestaProUpravu($space, $uuid, $request->user()->id);
 
         $cesta->aktivuj();
 
@@ -378,7 +478,7 @@ class FinanceSetupController extends Controller
     public function closeTrip(Request $request, string $uuid): JsonResponse
     {
         $space = $this->space($request);
-        $cesta = FinanceProject::where('gallery_space_id', $space->id)->where('uuid', $uuid)->firstOrFail();
+        $cesta = $this->cestaProUpravu($space, $uuid, $request->user()->id);
 
         $cesta->update(['state' => 'closed', 'is_active' => false]);
 
@@ -518,7 +618,7 @@ class FinanceSetupController extends Controller
     public function destroyTrip(Request $request, string $uuid): JsonResponse
     {
         $space = $this->space($request);
-        $cesta = FinanceProject::where('gallery_space_id', $space->id)->where('uuid', $uuid)->firstOrFail();
+        $cesta = $this->cestaProUpravu($space, $uuid, $request->user()->id);
 
         $pocet = Transaction::where('gallery_space_id', $space->id)
             ->where('finance_project_id', $cesta->id)->count();
@@ -885,7 +985,14 @@ class FinanceSetupController extends Controller
             'default_wallet_id' => 'nullable|integer',
             'state' => 'sometimes|in:draft,active,closed',
             'note' => 'nullable|string|max:2000',
+            // Prázdné znamená společná cesta — dosavadní stav, ve kterém všechno vidí
+            // oba. Vyplněné ji přiřadí jednomu a druhý ji uvidí, až mu ji nasdílí.
+            'owner_user_id' => 'nullable|integer',
         ]);
+
+        if (array_key_exists('owner_user_id', $data)) {
+            $data['owner_user_id'] = $data['owner_user_id'] ?: null;
+        }
 
         if (isset($data['base_currency'])) {
             $data['base_currency'] = strtoupper($data['base_currency']);
@@ -943,6 +1050,9 @@ class FinanceSetupController extends Controller
             'state' => $c->state,
             'note' => $c->note,
             'transactions' => $pohyby->count(),
+            'owner_user_id' => $c->owner_user_id,
+            'owner_name' => $c->owner_user_id ? optional(\App\Models\User::find($c->owner_user_id))->name : null,
+            'access' => FinanceAccess::sdileniPro('trip', $c->id),
         ];
     }
 

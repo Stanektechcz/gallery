@@ -129,6 +129,7 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
         Route::get('/cesty/{uuid}/detail', [App\Http\Controllers\Api\FinanceSetupController::class, 'tripDetail'])->name('trips.detail');
         Route::get('/cesty/{uuid}/shrnuti', [App\Http\Controllers\Api\FinanceSetupController::class, 'tripSummary'])->name('trips.summary');
         Route::delete('/cesty/{uuid}', [App\Http\Controllers\Api\FinanceSetupController::class, 'destroyTrip'])->name('trips.destroy');
+        Route::post('/cesty/{uuid}/sdileni', [App\Http\Controllers\Api\FinanceSetupController::class, 'shareTrip'])->name('trips.share');
 
         Route::get('/kategorie', [App\Http\Controllers\Api\FinanceSetupController::class, 'categories'])->name('categories');
         Route::post('/kategorie', [App\Http\Controllers\Api\FinanceSetupController::class, 'storeCategory'])->name('categories.store');
@@ -153,6 +154,7 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
         Route::post('/rozpocty', [App\Http\Controllers\Api\FinanceBudgetController::class, 'store'])->name('budgets.store');
         Route::patch('/rozpocty/{uuid}', [App\Http\Controllers\Api\FinanceBudgetController::class, 'update'])->name('budgets.update');
         Route::delete('/rozpocty/{uuid}', [App\Http\Controllers\Api\FinanceBudgetController::class, 'destroy'])->name('budgets.destroy');
+        Route::post('/rozpocty/{uuid}/sdileni', [App\Http\Controllers\Api\FinanceBudgetController::class, 'share'])->name('budgets.share');
     });
 
     Route::prefix('kniha')->name('api.ledger.')->group(function () {

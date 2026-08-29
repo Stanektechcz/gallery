@@ -27,7 +27,7 @@ class FinanceProject extends Model
         'uuid', 'gallery_space_id', 'kind', 'name', 'purpose',
         'country', 'city', 'starts_on', 'ends_on',
         'base_currency', 'responsible_partner_id', 'state',
-        'budget_amount', 'reserve_amount', 'default_wallet_id', 'is_active', 'note',
+        'budget_amount', 'reserve_amount', 'default_wallet_id', 'is_active', 'note', 'owner_user_id',
     ];
 
     protected function casts(): array

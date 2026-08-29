@@ -53,7 +53,15 @@ export type Cesta = {
     default_wallet_id: number | null;
     is_active: boolean;
     state: string;
+    owner_user_id?: number | null;
+    owner_name?: string | null;
+    access?: Pristup[];
 };
+
+/** Komu je cizí rozpočet nebo cesta nasdílená. */
+export type Pristup = { user_id: number; name: string | null; can_edit: boolean };
+
+export type Clen = { id: number; name: string };
 
 export type Ciselniky = {
     categories: Kategorie[];
@@ -63,6 +71,8 @@ export type Ciselniky = {
     trips: Cesta[];
     active_trip: Cesta | null;
     last_used: { wallet_id: number | null; payer_partner_id: number | null; category_id: number | null };
+    members: Clen[];
+    me: number;
 };
 
 export type Kurz = {

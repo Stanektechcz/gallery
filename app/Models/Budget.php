@@ -21,6 +21,7 @@ class Budget extends Model
         'starting_funds',
         // Modul Rozpočet: limity počítané z knihy, ne z vlastních položek.
         'scope', 'budget_kind', 'finance_project_id', 'reserve_amount', 'alert_thresholds',
+        'income_adds',
     ];
 
     /** Cesta, ke které rozpočet patří. Null u měsíčního. */
@@ -84,6 +85,7 @@ class Budget extends Model
             'savings_target' => 'decimal:2',
             'savings_target_on' => 'date',
             'is_shared' => 'boolean',
+            'income_adds' => 'boolean',
         ];
     }
 

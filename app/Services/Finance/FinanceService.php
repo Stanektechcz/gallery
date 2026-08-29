@@ -303,7 +303,10 @@ class FinanceService
         $kRozdeleni = $zbyva - $rezerva;
 
         if ($dnes->lessThan($od)) {
-            $dni = max(1, (int) $od->diffInDays($do ?? $od));
+            // I tady se počítá první i poslední den, stejně jako u rozjeté cesty níž.
+            // Bez +1 by cesta den před odjezdem měla o den míň než den po něm — a denní
+            // částka by se přes noc změnila, aniž by se cokoli utratilo.
+            $dni = max(1, (int) $od->diffInDays($do ?? $od) + 1);
 
             return [
                 'state' => 'not_started',

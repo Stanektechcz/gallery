@@ -4,11 +4,13 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Budget;
+use App\Models\FinanceAccess;
 use App\Models\FinanceCategory;
 use App\Models\FinanceProject;
 use App\Models\GallerySpace;
 use App\Models\Transaction;
 use App\Services\Finance\FinanceService;
+use App\Services\Finance\RozdeleniService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -27,21 +29,97 @@ use Illuminate\Support\Facades\DB;
  */
 class FinanceBudgetController extends Controller
 {
-    public function __construct(private readonly FinanceService $finance) {}
+    public function __construct(
+        private readonly FinanceService $finance,
+        private readonly RozdeleniService $rozdeleni,
+    ) {}
 
     public function index(Request $request): JsonResponse
     {
         $space = $this->space($request);
 
-        $rozpocty = Budget::where('gallery_space_id', $space->id)
-            ->where('scope', 'ledger')
+        $rozpocty = FinanceAccess::viditelne(
+            Budget::where('gallery_space_id', $space->id)->where('scope', 'ledger'),
+            'budget', $request->user()->id,
+        )
             ->with('financeProject:id,uuid,name,starts_on,ends_on,base_currency')
             ->orderByDesc('starts_on')
             ->get();
 
         return response()->json([
-            'budgets' => $rozpocty->map(fn (Budget $b) => $this->stav($space, $b))->values(),
+            'budgets' => $rozpocty->map(fn (Budget $b) => $this->stav($space, $b, $request->user()->id))->values(),
+            'members' => $space->members()->get(['users.id', 'users.name'])
+                ->map(fn ($u) => ['id' => $u->id, 'name' => $u->name])->values(),
         ]);
+    }
+
+    /**
+     * Komu rozpočet patří a kdo do něj vidí.
+     *
+     * Posílá se celý seznam přístupů, ne přírůstek — odebrat přístup je stejně častá
+     * potřeba jako přidat ho a dvě různé cesty by znamenaly dvě místa, kde se dá
+     * odebrání zapomenout.
+     */
+    public function share(Request $request, string $uuid): JsonResponse
+    {
+        $space = $this->space($request);
+        $rozpocet = $this->rozpocet($space, $uuid);
+        $ja = $request->user()->id;
+
+        abort_unless(FinanceAccess::smiUpravit('budget', $rozpocet->id, $rozpocet->owner_user_id, $ja), 403,
+            'Tenhle rozpočet patří někomu jinému a nemáte právo měnit, kdo do něj vidí.');
+
+        $data = $request->validate([
+            'owner_user_id' => 'nullable|integer',
+            'access' => 'nullable|array|max:10',
+            'access.*.user_id' => 'required|integer',
+            'access.*.can_edit' => 'sometimes|boolean',
+        ]);
+
+        if (array_key_exists('owner_user_id', $data)) {
+            $rozpocet->update([
+                'owner_user_id' => $data['owner_user_id'] ?: null,
+                'is_shared' => $data['owner_user_id'] ? false : true,
+            ]);
+        }
+
+        $this->ulozPristup($space, $rozpocet, $data['access'] ?? []);
+
+        return response()->json(['budget' => $this->stav($space, $rozpocet->fresh(), $ja)]);
+    }
+
+    /**
+     * Přepíše seznam přístupů k rozpočtu.
+     *
+     * Volá se i ze zakládání, ne jen ze sdílení — kdo rozpočet předá druhému, ztratí
+     * k němu právo hned tím uložením a druhý požadavek by mu vrátil 403. Jedno uložení
+     * to řeší tím, že vlastnictví a přístupy vzniknou zároveň.
+     *
+     * @param  array<int, array<string, mixed>>  $pristupy
+     */
+    private function ulozPristup(GallerySpace $space, Budget $rozpocet, array $pristupy): void
+    {
+        FinanceAccess::where('subject_type', 'budget')->where('subject_id', $rozpocet->id)->delete();
+
+        $clenove = $space->members()->pluck('users.id');
+
+        foreach ($pristupy as $p) {
+            $userId = (int) ($p['user_id'] ?? 0);
+
+            // Vlastník se do přístupů nepíše — má je z podstaty a jako řádek navíc
+            // by šel odebrat, čímž by přišel o vlastní rozpočet.
+            if ($userId === $rozpocet->owner_user_id || ! $clenove->contains($userId)) {
+                continue;
+            }
+
+            FinanceAccess::create([
+                'gallery_space_id' => $space->id,
+                'subject_type' => 'budget',
+                'subject_id' => $rozpocet->id,
+                'user_id' => $userId,
+                'can_edit' => (bool) ($p['can_edit'] ?? false),
+            ]);
+        }
     }
 
     public function store(Request $request): JsonResponse
@@ -49,28 +127,34 @@ class FinanceBudgetController extends Controller
         $space = $this->space($request);
         $data = $this->data($request);
 
+        // Vlastník se zadává při zakládání: „společný" (null) je běžnější případ, ale
+        // Makinčin německý rozpočet a Adriho život v Česku jsou dvě různé peněženky
+        // a v jednom součtu nemají co dělat.
+        $vlastnik = $request->input('owner_user_id') ?: null;
+
         $rozpocet = Budget::create($data + [
             'gallery_space_id' => $space->id,
-            'owner_user_id' => null,
+            'owner_user_id' => $vlastnik,
             'scope' => 'ledger',
-            'is_shared' => true,
+            'is_shared' => $vlastnik === null,
             'created_by' => $request->user()->id,
         ]);
 
         $this->ulozLimity($request, $space, $rozpocet);
+        $this->ulozPristup($space, $rozpocet, $request->input('access', []));
 
-        return response()->json(['budget' => $this->stav($space, $rozpocet->fresh())], 201);
+        return response()->json(['budget' => $this->stav($space, $rozpocet->fresh(), $request->user()->id)], 201);
     }
 
     public function update(Request $request, string $uuid): JsonResponse
     {
         $space = $this->space($request);
-        $rozpocet = $this->rozpocet($space, $uuid);
+        $rozpocet = $this->rozpocet($space, $uuid, $request->user()->id);
 
         $rozpocet->update($this->data($request, true));
         $this->ulozLimity($request, $space, $rozpocet);
 
-        return response()->json(['budget' => $this->stav($space, $rozpocet->fresh())]);
+        return response()->json(['budget' => $this->stav($space, $rozpocet->fresh(), $request->user()->id)]);
     }
 
     /**
@@ -82,7 +166,7 @@ class FinanceBudgetController extends Controller
     public function destroy(Request $request, string $uuid): JsonResponse
     {
         $space = $this->space($request);
-        $rozpocet = $this->rozpocet($space, $uuid);
+        $rozpocet = $this->rozpocet($space, $uuid, $request->user()->id);
 
         DB::table('budget_category_limits')->where('budget_id', $rozpocet->id)->delete();
         $rozpocet->delete();
@@ -104,10 +188,27 @@ class FinanceBudgetController extends Controller
             'reserve_amount' => 'nullable|numeric|min:0',
             'finance_project_id' => 'nullable|integer',
             'alert_thresholds' => 'nullable|string|max:40',
+            'income_adds' => 'sometimes|boolean',
         ]);
+
+        // Cesta se jede s pevnou sumou, takže každý příjem je navíc. U měsíčního
+        // rozpočtu je výplata sám ten rozpočet a přičíst ji by znamenalo počítat
+        // s dvojnásobkem. Výchozí hodnota jde přebít, ale musí sedět bez ptaní.
+        if (! $uprava && ! $request->exists('income_adds')) {
+            $data['income_adds'] = ($data['budget_kind'] ?? 'monthly') === 'trip';
+        }
 
         if (isset($data['currency'])) {
             $data['currency'] = strtoupper($data['currency']);
+        }
+
+        // Obrazovka zná cesty podle uuid, ne podle id — vnitřní čísla nemá kam vzít
+        // a posílat je do prohlížeče by znamenalo vystavit pořadí v databázi.
+        if ($request->filled('trip_uuid')) {
+            $data['finance_project_id'] = FinanceProject::where('gallery_space_id', $this->space($request)->id)
+                ->where('uuid', $request->input('trip_uuid'))->value('id');
+        } elseif ($request->exists('trip_uuid')) {
+            $data['finance_project_id'] = null;
         }
 
         if (! empty($data['amount']) && ! empty($data['reserve_amount'])
@@ -123,6 +224,19 @@ class FinanceBudgetController extends Controller
             $data['period_mode'] = 'rolling';
         } else {
             $data['period_mode'] = 'fixed';
+
+            // Období si rozpočet na cestu bere z cesty. Ptát se na ně zvlášť by znamenalo
+            // dvě data téhož pobytu, která se dřív nebo později rozejdou — a čerpání by
+            // se pak počítalo za jiné dny, než za které cesta trvá.
+            if (! empty($data['finance_project_id'])) {
+                $cesta = FinanceProject::find($data['finance_project_id']);
+
+                $data['starts_on'] = $data['starts_on'] ?? $cesta?->starts_on?->toDateString();
+                $data['ends_on'] = $data['ends_on'] ?? $cesta?->ends_on?->toDateString();
+            }
+
+            abort_if(empty($data['starts_on']) && ! $uprava, 422,
+                'Rozpočet na cestu potřebuje vědět, odkdy platí. Vyberte cestu, která má zadané datum začátku.');
         }
 
         // `amount` je v modelu `monthly_income`? Ne — limit má vlastní význam a ukládá
@@ -145,6 +259,7 @@ class FinanceBudgetController extends Controller
             'limits' => 'array|max:40',
             'limits.*.category_uuid' => 'required|uuid',
             'limits.*.amount' => 'required|numeric|min:0',
+            'limits.*.priority' => 'sometimes|integer|min:1|max:999',
         ])['limits'];
 
         DB::table('budget_category_limits')->where('budget_id', $rozpocet->id)->delete();
@@ -161,6 +276,7 @@ class FinanceBudgetController extends Controller
                 'budget_id' => $rozpocet->id,
                 'finance_category_id' => $kategorie->id,
                 'amount' => $l['amount'],
+                'priority' => (int) ($l['priority'] ?? 100),
                 'created_at' => now(), 'updated_at' => now(),
             ]);
         }
@@ -173,7 +289,7 @@ class FinanceBudgetController extends Controller
      * půl roce stálo proti měsíčnímu limitu půl roku útrat a rozpočet by hlásil
      * šestinásobné překročení, které se nestalo.
      */
-    private function stav(GallerySpace $space, Budget $b): array
+    private function stav(GallerySpace $space, Budget $b, ?int $ja = null): array
     {
         $mena = $b->currency;
         $limit = (float) ($b->starting_funds ?? 0);
@@ -212,32 +328,40 @@ class FinanceBudgetController extends Controller
         $rozpad = $this->finance->byCategory($pohyby, $mena);
         $limity = DB::table('budget_category_limits')
             ->where('budget_id', $b->id)
-            ->pluck('amount', 'finance_category_id');
+            ->get()->keyBy('finance_category_id');
 
-        // Kategorie s limitem se ukazují i tehdy, když se v nich ještě nic neutratilo —
-        // jinak by nový limit zmizel a vypadalo by to, že se neuložil.
-        $sLimity = FinanceCategory::where('gallery_space_id', $space->id)
+        // Kategorie s vyhrazenou částkou se ukazují i tehdy, když se v nich ještě nic
+        // neutratilo — jinak by nová položka zmizela a vypadalo by to, že se neuložila.
+        $polozky = FinanceCategory::where('gallery_space_id', $space->id)
             ->whereIn('id', $limity->keys())->get()
-            ->map(function (FinanceCategory $k) use ($rozpad, $limity, $mena) {
-                $skutecnost = collect($rozpad)->firstWhere('category_id', $k->id);
-                $utraceno = (float) ($skutecnost['amount'] ?? 0);
-                $limit = (float) $limity[$k->id];
+            ->map(fn (FinanceCategory $k) => [
+                'category_id' => $k->id,
+                'category_uuid' => $k->uuid,
+                'name' => $k->name,
+                'color' => $k->color,
+                'planned' => (float) $limity[$k->id]->amount,
+                'priority' => (int) ($limity[$k->id]->priority ?? 100),
+                'spent' => (float) (collect($rozpad)->firstWhere('category_id', $k->id)['amount'] ?? 0),
+            ])->all();
 
-                return [
-                    'category_uuid' => $k->uuid,
-                    'name' => $k->name,
-                    'color' => $k->color,
-                    'limit' => round($limit, 2),
-                    'spent' => round($utraceno, 2),
-                    'remaining' => round($limit - $utraceno, 2),
-                    'percent' => $limit > 0 ? min(999, (int) round($utraceno / $limit * 100)) : 0,
-                    'currency' => $mena,
-                ];
-            })
-            ->sortByDesc('percent')
-            ->values();
+        // Příjem zapsaný v období se rozdělí sám. Proto se tu nepočítá se stropem, ale
+        // s tím, co je opravdu k dispozici — jinak by nečekaná výplata ležela stranou
+        // a rozpočet by dál tvrdil, že na výlety není.
+        $prijem = $b->income_adds
+            ? (float) $pohyby
+                ->filter(fn (Transaction $t) => $t->type === 'income' && $t->refund_of_id === null && $t->currency_to === $mena)
+                ->sum('amount_to')
+            : 0.0;
 
-        $bezpecne = $this->finance->safeDaily($limit, $ciste, $rezerva, $od, $do);
+        $kDispozici = max(0, $limit + $prijem - $rezerva);
+        $rozdeleni = $this->rozdeleni->rozdel($polozky, $kDispozici, $mena);
+
+        $sLimity = collect($rozdeleni['rows'])->map(fn (array $r) => $r + ['limit' => $r['planned']]);
+
+        // Bezpečná částka počítá s tím, co je opravdu k dispozici. Kdyby počítala jen
+        // se stropem, přišlá výplata by ležela stranou a rozpočet by dál doporučoval
+        // šetřit — přesně to „samo se to nepřepočítá", kvůli kterému lidi rozpočty vzdají.
+        $bezpecne = $this->finance->safeDaily($limit + $prijem, $ciste, $rezerva, $od, $do);
 
         // Odhad konce podle dosavadního tempa. Jen když je z čeho — pár dnů měsíce
         // nestačí na to, aby se z nich dal odvodit celý.
@@ -247,7 +371,11 @@ class FinanceBudgetController extends Controller
         $odhad = $celkemDni !== null && $uteklo >= 3 ? round($tempo * $celkemDni, 2) : null;
 
         $hranice = array_map('intval', array_filter(explode(',', $b->alert_thresholds ?? '80,90,100')));
-        $procenta = $limit > 0 ? (int) round($ciste / $limit * 100) : 0;
+
+        // Čerpání se měří proti tomu, co je k dispozici, ne proti původnímu stropu —
+        // jinak by rozpočet hlásil překročení i po příjmu, který přesah pokryl.
+        $kMereni = $limit + $prijem;
+        $procenta = $kMereni > 0 ? (int) round($ciste / $kMereni * 100) : 0;
 
         return [
             'uuid' => $b->uuid,
@@ -261,16 +389,24 @@ class FinanceBudgetController extends Controller
             'reserve' => round($rezerva, 2),
             'spent' => round($ciste, 2),
             'refunded' => round($vraceno, 2),
-            'remaining' => round($limit - $ciste, 2),
+            'remaining' => round($kMereni - $ciste, 2),
             'percent' => min(999, $procenta),
             'safe_daily' => $bezpecne,
             'projected_total' => $odhad,
             'projected_verdict' => $odhad === null ? 'unknown' : ($odhad > $limit ? 'over' : ($odhad > $limit * 0.95 ? 'tight' : 'ok')),
             'categories' => $sLimity,
+            'allocation' => $rozdeleni,
+            'income' => round($prijem, 2),
+            'income_adds' => (bool) $b->income_adds,
+            'available' => round($limit + $prijem, 2),
             'top_categories' => array_slice($rozpad, 0, 6),
             'alert' => $this->hranice($procenta, $hranice),
             'alert_thresholds' => implode(',', $hranice),
             'is_current' => $do === null || Carbon::today()->betweenIncluded($od, $do),
+            'owner_user_id' => $b->owner_user_id,
+            'owner_name' => $b->owner_user_id ? optional(\App\Models\User::find($b->owner_user_id))->name : null,
+            'access' => FinanceAccess::sdileniPro('budget', $b->id),
+            'can_edit' => $ja === null || FinanceAccess::smiUpravit('budget', $b->id, $b->owner_user_id, $ja),
         ];
     }
 
@@ -286,10 +422,23 @@ class FinanceBudgetController extends Controller
         return null;
     }
 
-    private function rozpocet(GallerySpace $space, string $uuid): Budget
+    /**
+     * Rozpočet podle uuid — a když je zadaný uživatel, ověří i právo do něj zapsat.
+     *
+     * Kontrola je tady, ne v každé akci zvlášť: úprava, mazání i limity procházejí
+     * touhle jednou cestou a přidání další akce tím dostane kontrolu automaticky.
+     */
+    private function rozpocet(GallerySpace $space, string $uuid, ?int $ja = null): Budget
     {
-        return Budget::where('gallery_space_id', $space->id)
+        $rozpocet = Budget::where('gallery_space_id', $space->id)
             ->where('scope', 'ledger')->where('uuid', $uuid)->firstOrFail();
+
+        if ($ja !== null) {
+            abort_unless(FinanceAccess::smiUpravit('budget', $rozpocet->id, $rozpocet->owner_user_id, $ja), 403,
+                'Do tohohle rozpočtu se smíte dívat, ale ne v něm měnit. Majitel vám může dát právo úprav.');
+        }
+
+        return $rozpocet;
     }
 
     private function space(Request $request): GallerySpace

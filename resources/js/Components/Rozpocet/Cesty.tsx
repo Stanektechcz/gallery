@@ -7,7 +7,7 @@ import { CheckCircle2, Flag, MapPin, Pencil, Play, Plus } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import DetailCesty from './DetailCesty';
 import { Dialog } from './Ucty';
-import type { Ciselniky } from './typy';
+import type { Ciselniky, Pristup } from './typy';
 
 const POLE = 'w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-primary)] px-3 py-2.5 text-base text-[var(--color-text-primary)] focus:border-[var(--color-accent)] focus:outline-none';
 const POPISEK = 'block text-xs font-medium text-[var(--color-text-secondary)] mb-1.5';
@@ -21,6 +21,7 @@ type CestaStav = {
     per_day_so_far: number | null;
     safe_daily: { state: string; per_day: number | null; days_left: number | null; over_by: number | null } | null;
     is_active: boolean; state: string; note: string | null; transactions: number;
+    owner_user_id: number | null; owner_name: string | null; access: Pristup[];
 };
 
 /**
@@ -152,7 +153,7 @@ export default function Cesty({ ciselniky, onZmena, onTransakce }: {
 
             {formular && (
                 <FormularCesty cesta={formular === 'nova' ? null : formular}
-                    ucty={ciselniky.wallets}
+                    ucty={ciselniky.wallets} clenove={ciselniky.members} ja={ciselniky.me}
                     onHotovo={() => { setFormular(null); void nacti(); onZmena(); }}
                     onZavrit={() => setFormular(null)}/>
             )}
@@ -275,11 +276,18 @@ function KartaCesty({ cesta, onAktivovat, onUkoncit, onUpravit, onShrnuti }: {
     );
 }
 
-function FormularCesty({ cesta, ucty, onHotovo, onZavrit }: {
+function FormularCesty({ cesta, ucty, clenove, ja, onHotovo, onZavrit }: {
     cesta: CestaStav | null;
     ucty: Ciselniky['wallets'];
+    clenove: Ciselniky['members'];
+    ja: number;
     onHotovo: () => void; onZavrit: () => void;
 }) {
+    // Komu cesta patří a kdo do ní vidí. Sdílení se ukládá vlastním požadavkem až po
+    // uložení cesty — nová cesta do té chvíle nemá uuid, pod kterým by šlo zapsat.
+    const [vlastnik, setVlastnik] = useState<number>(cesta?.owner_user_id ?? 0);
+    const [sdileni, setSdileni] = useState<Record<number, 'ne' | 'cist' | 'psat'>>(() =>
+        Object.fromEntries((cesta?.access ?? []).map(p => [p.user_id, p.can_edit ? 'psat' : 'cist'])));
     const [form, setForm] = useState({
         name: cesta?.name ?? '',
         country: cesta?.country ?? 'Německo',
@@ -316,6 +324,10 @@ function FormularCesty({ cesta, ucty, onHotovo, onZavrit }: {
         setUklada(true);
         setChyby({});
 
+        const pristupy = Object.entries(sdileni)
+            .filter(([, v]) => v !== 'ne')
+            .map(([id, v]) => ({ user_id: Number(id), can_edit: v === 'psat' }));
+
         const telo = {
             name: form.name,
             country: form.country || null,
@@ -327,17 +339,23 @@ function FormularCesty({ cesta, ucty, onHotovo, onZavrit }: {
             reserve_amount: prectiCastku(form.reserve_amount),
             default_wallet_id: form.default_wallet_id ? Number(form.default_wallet_id) : null,
             activate: form.activate,
+            owner_user_id: vlastnik || null,
+            access: pristupy,
         };
 
         try {
             if (cesta) {
                 await axios.patch(`/api/v1/rozpocet/cesty/${cesta.uuid}`, telo);
-                hlaska('Cesta je upravená.', 'uspech');
+                await axios.post(`/api/v1/rozpocet/cesty/${cesta.uuid}/sdileni`, {
+                    owner_user_id: vlastnik || null, access: pristupy,
+                });
             } else {
+                // Jedním požadavkem: kdo cestu rovnou předá druhému, ztratí k ní právo
+                // a samostatné sdílení by hned nato skončilo chybou.
                 await axios.post('/api/v1/rozpocet/cesty', telo);
-                hlaska('Cesta je založená.', 'uspech');
             }
 
+            hlaska(cesta ? 'Cesta je upravená.' : 'Cesta je založená.', 'uspech');
             onHotovo();
         } catch (problem: any) {
             if (problem?.response?.status === 422) {
@@ -452,6 +470,43 @@ function FormularCesty({ cesta, ucty, onHotovo, onZavrit }: {
                         </span>
                     </span>
                 </label>
+
+                {/* Čí cesta to je. Společná je výchozí — když jedou oba, sdílet se nemá co.
+                    Vlastní dává smysl, když jede jeden: Makinčino Německo nemá co dělat
+                    v jednom součtu s Adriho životem v Česku. */}
+                <div className="border-t border-[var(--color-border)] pt-3">
+                    <label className={POPISEK} htmlFor="cesta-vlastnik">Čí je cesta</label>
+                    <select id="cesta-vlastnik" value={vlastnik} className={POLE}
+                        onChange={e => setVlastnik(Number(e.target.value))}>
+                        <option value={0}>Společná — jedeme oba</option>
+                        {clenove.map(c => (
+                            <option key={c.id} value={c.id}>{c.id === ja ? `Moje (${c.name})` : c.name}</option>
+                        ))}
+                    </select>
+
+                    {vlastnik !== 0 && (
+                        <div className="mt-2">
+                            <p className="text-[11px] leading-relaxed text-[var(--color-text-secondary)]">
+                                Vlastní cestu vidí jen majitel. Komu ji ještě ukázat:
+                            </p>
+                            <ul className="mt-1.5 space-y-1.5">
+                                {clenove.filter(c => c.id !== vlastnik).map(c => (
+                                    <li key={c.id} className="flex items-center gap-2">
+                                        <span className="min-w-0 flex-1 truncate text-xs text-[var(--color-text-primary)]">{c.name}</span>
+                                        <select value={sdileni[c.id] ?? 'ne'}
+                                            aria-label={`Přístup k cestě — ${c.name}`}
+                                            onChange={e => setSdileni(s => ({ ...s, [c.id]: e.target.value as 'ne' | 'cist' | 'psat' }))}
+                                            className="shrink-0 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-primary)] px-2 py-1.5 text-xs text-[var(--color-text-primary)] focus:border-[var(--color-accent)] focus:outline-none">
+                                            <option value="ne">nevidí</option>
+                                            <option value="cist">jen se dívá</option>
+                                            <option value="psat">může i měnit</option>
+                                        </select>
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    )}
+                </div>
 
                 {chyby.obecna && (
                     <p className="rounded-xl border border-red-500/40 bg-[var(--color-surface-muted)] p-3 text-xs leading-relaxed text-[var(--color-text-primary)]">
