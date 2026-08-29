@@ -2,16 +2,32 @@ import { hlaska } from '@/Components/Hlasky';
 import Panel from '@/Components/Panel';
 import axios from 'axios';
 import {
-    CalendarClock, ChevronRight, Eye, EyeOff, Palette, Plus, Sliders, Star, Tags, Trash2, Users, Wallet, Zap,
+    CalendarClock, ChevronRight, Eye, EyeOff, Merge, Palette, Plus, Sliders, Star, Tags, Trash2, Users, Wallet, Zap,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import Pravidelne from './Pravidelne';
 import { Dialog } from './Ucty';
-import { castka as prectiCastku } from '@/lib/penize';
+import { castka as prectiCastku, penize } from '@/lib/penize';
 import type { Ciselniky, Predvolby as PredvolbyTyp, Sablona } from './typy';
 
 const POLE = 'w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-primary)] px-3 py-2.5 text-base text-[var(--color-text-primary)] focus:border-[var(--color-accent)] focus:outline-none';
 const POPISEK = 'block text-xs font-medium text-[var(--color-text-secondary)] mb-1.5';
+
+/** Skupina účtů, které drží tytéž peníze. */
+type SkupinaDuplicit = {
+    currency: string;
+    kind: string;
+    wallets: Array<{ uuid: string; name: string; opening_balance: number }>;
+};
+
+/** Co se stane sloučením. Napřed se řekne, teprve pak se to udělá. */
+type NahledSlouceni = {
+    from: { uuid: string; name: string };
+    to: { uuid: string; name: string };
+    transactions: number;
+    new_opening_balance: number;
+    suspicious_double: boolean;
+};
 
 type KategorieSpravy = {
     uuid: string; id: number; name: string; kind: 'expense' | 'income';
@@ -38,6 +54,7 @@ export default function Nastaveni({ ciselniky, onZmena }: { ciselniky: Ciselniky
         { id: 'ucty', nazev: 'Účty', popis: 'Spravují se v tabu Účty', ikona: Wallet,
             pocet: `${ciselniky.wallets.length}` },
         { id: 'predvolby', nazev: 'Výchozí nastavení', popis: 'Čím se modul otevře a s čím počítá', ikona: Sliders },
+        { id: 'duplicity', nazev: 'Zdvojené položky', popis: 'Dva účty na tytéž peníze, dvě kategorie na totéž', ikona: Merge },
         { id: 'vzhled', nazev: 'Vzhled a zobrazení', popis: 'Motiv se přepíná v nastavení galerie', ikona: Palette },
     ];
 
@@ -77,6 +94,7 @@ export default function Nastaveni({ ciselniky, onZmena }: { ciselniky: Ciselniky
             )}
 
             {sekce === 'predvolby' && <Predvolby onZavrit={() => setSekce(null)}/>}
+            {sekce === 'duplicity' && <Duplicity onZmena={onZmena} onZavrit={() => setSekce(null)}/>}
 
             {sekce === 'vzhled' && (
                 <Dialog nadpis="Vzhled a zobrazení" onZavrit={() => setSekce(null)}>
@@ -87,6 +105,143 @@ export default function Nastaveni({ ciselniky, onZmena }: { ciselniky: Ciselniky
                 </Dialog>
             )}
         </div>
+    );
+}
+
+/**
+ * Zdvojené účty a kategorie.
+ *
+ * Duplicity vzniknou samy — „EUR karta" a „Eura na kartě" znamenají totéž a peníze
+ * jsou pak rozdělené mezi dvě položky, ze kterých ani jedna neukazuje celý obrázek.
+ *
+ * Nabízí se, nespouští se, a před sloučením se řekne, kolik záznamů se pohne. Slití
+ * je nevratné; kdo předem nevidí, co se stane, si jednou omylem slije půl roku dat.
+ */
+function Duplicity({ onZmena, onZavrit }: { onZmena: () => void; onZavrit: () => void }) {
+    const [skupiny, setSkupiny] = useState<SkupinaDuplicit[] | null>(null);
+    const [navrh, setNavrh] = useState<{ from: string; to: string; nazvy: [string, string]; mena: string } | null>(null);
+    const [nahled, setNahled] = useState<NahledSlouceni | null>(null);
+    const [bezi, setBezi] = useState(false);
+
+    const nacti = async () => {
+        try {
+            const { data } = await axios.get<{ wallets: SkupinaDuplicit[] }>('/api/v1/rozpocet/duplicity');
+            setSkupiny(data.wallets);
+        } catch {
+            hlaska('Zdvojené položky se nepodařilo načíst.', 'chyba');
+        }
+    };
+
+    useEffect(() => { void nacti(); }, []);
+
+    const pripravSlouceni = async (from: string, to: string, nazvy: [string, string], mena: string) => {
+        setNavrh({ from, to, nazvy, mena });
+
+        try {
+            const { data } = await axios.post('/api/v1/rozpocet/sloucit', { kind: 'wallet', from, to });
+            setNahled(data.preview);
+        } catch {
+            hlaska('Náhled se nepodařilo připravit.', 'chyba');
+            setNavrh(null);
+        }
+    };
+
+    const sluc = async () => {
+        if (! navrh) return;
+
+        setBezi(true);
+
+        try {
+            const { data } = await axios.post('/api/v1/rozpocet/sloucit',
+                { kind: 'wallet', from: navrh.from, to: navrh.to, potvrzeno: true });
+            hlaska(data.message, 'uspech');
+            setNavrh(null);
+            setNahled(null);
+            await nacti();
+            onZmena();
+        } catch (problem: any) {
+            hlaska(problem?.response?.data?.message ?? 'Sloučit se nepodařilo.', 'chyba');
+        } finally {
+            setBezi(false);
+        }
+    };
+
+    return (
+        <Dialog nadpis="Zdvojené položky" onZavrit={onZavrit}>
+            {skupiny === null ? (
+                <div className="h-24 animate-pulse rounded-xl bg-[var(--color-surface-muted)]" aria-busy="true" aria-label="Načítám"/>
+            ) : skupiny.length === 0 ? (
+                <p className="text-sm leading-relaxed text-[var(--color-text-secondary)]">
+                    Nic zdvojeného. Na každou měnu je jeden účet a jedna hotovost —
+                    přesně tak, aby zůstatek ukazoval celou částku.
+                </p>
+            ) : (
+                <div className="space-y-3">
+                    {skupiny.map(s => (
+                        <div key={`${s.currency}-${s.kind}`} className="rounded-xl border border-[var(--color-border)] p-3">
+                            <p className="text-xs font-medium text-[var(--color-text-primary)]">
+                                {s.wallets.length}× {s.kind} v {s.currency}
+                            </p>
+                            <p className="mt-0.5 text-[11px] leading-relaxed text-[var(--color-text-secondary)]">
+                                Peníze jsou rozdělené mezi ně a ani jeden neukazuje celý zůstatek.
+                            </p>
+                            <ul className="mt-2 space-y-1.5">
+                                {s.wallets.map((u, i) => (
+                                    <li key={u.uuid} className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+                                        <span className="min-w-0 flex-1 basis-28 truncate text-[var(--color-text-primary)]">{u.name}</span>
+                                        <span className="shrink-0 tabular-nums text-[var(--color-text-secondary)]">
+                                            počátek {penize(u.opening_balance, s.currency)}
+                                        </span>
+                                        {i > 0 && (
+                                            <button type="button"
+                                                onClick={() => void pripravSlouceni(u.uuid, s.wallets[0].uuid, [u.name, s.wallets[0].name], s.currency)}
+                                                className="shrink-0 rounded-lg border border-[var(--color-border)] px-2 py-1 text-[11px] text-[var(--color-text-primary)] hover:border-[var(--color-accent)]">
+                                                Slít do „{s.wallets[0].name}"
+                                            </button>
+                                        )}
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            {navrh && nahled && (
+                <div className="mt-3 rounded-xl border border-amber-500/40 bg-[var(--color-surface-muted)] p-3">
+                    <p className="text-xs font-medium text-[var(--color-text-primary)]">
+                        Slít „{navrh.nazvy[0]}" do „{navrh.nazvy[1]}"?
+                    </p>
+                    <ul className="mt-1 space-y-0.5 text-[11px] leading-relaxed text-[var(--color-text-secondary)]">
+                        <li>Přepojí se záznamů: <strong className="text-[var(--color-text-primary)]">{nahled.transactions}</strong></li>
+                        <li>
+                            Počáteční zůstatek se sečte na{' '}
+                            <strong className="tabular-nums text-[var(--color-text-primary)]">
+                                {penize(nahled.new_opening_balance, navrh.mena)}
+                            </strong>
+                        </li>
+                        <li>Slití je nevratné. Historie zůstane, jen bude pod jedním účtem.</li>
+                    </ul>
+                    {nahled.suspicious_double && (
+                        <p className="mt-1.5 text-[11px] leading-relaxed text-amber-400">
+                            Oba účty mají stejný počáteční zůstatek. Bývá to podpis omylem zdvojeného
+                            účtu — tytéž peníze zapsané dvakrát. Součet by vyrobil peníze, které nikdy
+                            nebyly. Pokud jde o tenhle případ, prázdný účet radši smažte v tabu Účty.
+                        </p>
+                    )}
+                    <div className="mt-2 flex flex-wrap gap-2">
+                        <button type="button" onClick={() => void sluc()} disabled={bezi}
+                            className="min-h-11 rounded-lg bg-[var(--color-accent)] px-3 text-sm font-medium text-[var(--color-accent-contrast)] disabled:opacity-40">
+                            Opravdu slít
+                        </button>
+                        <button type="button" onClick={() => { setNavrh(null); setNahled(null); }}
+                            className="min-h-11 rounded-lg px-3 text-sm text-[var(--color-text-secondary)]">
+                            Zpět
+                        </button>
+                    </div>
+                </div>
+            )}
+        </Dialog>
     );
 }
 

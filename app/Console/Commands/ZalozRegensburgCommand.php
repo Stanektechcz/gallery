@@ -168,9 +168,19 @@ class ZalozRegensburgCommand extends Command
             $this->pristup($space, 'trip', $cesta->id, $divak);
             $this->pristup($space, 'budget', $rozpocet->id, $divak);
 
-            $this->radek('Koruny na cestu', number_format(self::KORUN, 0, ',', ' ').' Kč', $koruny->wasRecentlyCreated);
-            $this->radek('Eura na kartě', '0 €', $karta->wasRecentlyCreated);
-            $this->radek('Eura v hotovosti', '0 €', $hotovost->wasRecentlyCreated);
+            // Vypisuje se jméno účtu, který se doopravdy použil, ne to, které chtěl
+            // příkaz. Kdo má eurovou kartu pojmenovanou „EUR karta", musí v protokolu
+            // vidět ji — jinak by hledal „Eura na kartě", které nikde není.
+            $this->radek($koruny->name, number_format((float) $koruny->opening_balance, 0, ',', ' ').' Kč', $koruny->wasRecentlyCreated);
+            $this->radek($karta->name, number_format((float) $karta->opening_balance, 0, ',', ' ').' €', $karta->wasRecentlyCreated);
+            $this->radek($hotovost->name, number_format((float) $hotovost->opening_balance, 0, ',', ' ').' €', $hotovost->wasRecentlyCreated);
+
+            // Na cestu se počítá se 70 000 Kč. Když má nalezený účet jiný počátek,
+            // musí to zaznít — jinak se rozpočet opře o částku, která na účtu není.
+            if (abs((float) $koruny->opening_balance - self::KORUN) > 0.5) {
+                $this->warn('  pozor      účet „'.$koruny->name.'" má '
+                    .number_format((float) $koruny->opening_balance, 0, ',', ' ').' Kč, plán počítá se 70 000 Kč.');
+            }
             $this->radek('Cesta Regensburg', number_format($eur, 2, ',', ' ').' € na 181 dní', $cesta->wasRecentlyCreated);
             $this->radek('Rozpočet Německo — Regensburg', 'strop nad cestou', $rozpocet->wasRecentlyCreated);
             $this->radek('Nájem', '280 € každého 1.', $najemPredpis->wasRecentlyCreated);
@@ -199,12 +209,43 @@ class ZalozRegensburgCommand extends Command
         return self::SUCCESS;
     }
 
+    /**
+     * Účet na peníze dané měny a druhu — přednostně ten, který už existuje.
+     *
+     * Hledá se podle **měny a druhu, ne podle jména.** Kdo si eurovou kartu pojmenoval
+     * „EUR karta", nechce vedle ní druhou jménem „Eura na kartě" — a přesně to dělalo
+     * hledání podle názvu: každé spuštění vedle sebe postavilo paralelní sadu účtů,
+     * mezi kterými se peníze rozdělily a ani jeden neukazoval celý zůstatek.
+     *
+     * Počáteční zůstatek se u nalezeného účtu nepřepisuje. Je to údaj, ze kterého se
+     * počítá celá historie, a tiše ho posunout znamená posunout ji taky.
+     */
     private function ucet(GallerySpace $space, string $nazev, string $mena, string $druh, float $pocatek): Wallet
     {
-        return Wallet::firstOrCreate(
-            ['gallery_space_id' => $space->id, 'name' => $nazev],
-            ['currency' => $mena, 'kind' => $druh, 'opening_balance' => $pocatek, 'is_active' => true],
-        );
+        // Hotovost je jiná věc než účet; karta a bankovní účet jsou z pohledu peněz
+        // totéž. Kdyby se párovalo přesně podle druhu, „EUR karta" a „Eura na kartě"
+        // by vedle sebe stály dál — jedna jako `card`, druhá jako `bank`.
+        $hotovost = $druh === 'cash';
+
+        $existujici = Wallet::where('gallery_space_id', $space->id)
+            ->where('currency', $mena)
+            ->when($hotovost, fn ($q) => $q->where('kind', 'cash'))
+            ->when(! $hotovost, fn ($q) => $q->where('kind', '!=', 'cash'))
+            ->orderBy('id')
+            ->first();
+
+        if ($existujici !== null) {
+            return $existujici;
+        }
+
+        return Wallet::create([
+            'gallery_space_id' => $space->id,
+            'name' => $nazev,
+            'currency' => $mena,
+            'kind' => $druh,
+            'opening_balance' => $pocatek,
+            'is_active' => true,
+        ]);
     }
 
     /**

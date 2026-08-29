@@ -135,6 +135,10 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
         Route::get('/nastaveni', [App\Http\Controllers\Api\FinanceSetupController::class, 'settings'])->name('settings');
         Route::patch('/nastaveni', [App\Http\Controllers\Api\FinanceSetupController::class, 'updateSettings'])->name('settings.update');
 
+        // Zdvojené kategorie a účty: napřed náhled, teprve pak sloučení.
+        Route::get('/duplicity', [App\Http\Controllers\Api\FinanceSetupController::class, 'duplicates'])->name('duplicates');
+        Route::post('/sloucit', [App\Http\Controllers\Api\FinanceSetupController::class, 'merge'])->name('merge');
+
         Route::get('/kategorie', [App\Http\Controllers\Api\FinanceSetupController::class, 'categories'])->name('categories');
         Route::post('/kategorie', [App\Http\Controllers\Api\FinanceSetupController::class, 'storeCategory'])->name('categories.store');
         Route::patch('/kategorie/{uuid}', [App\Http\Controllers\Api\FinanceSetupController::class, 'updateCategory'])->name('categories.update');

@@ -16,6 +16,7 @@ use App\Models\Wallet;
 use App\Services\Finance\FinanceFilter;
 use App\Services\Finance\FinanceService;
 use App\Services\Finance\RecurringService;
+use App\Services\Finance\SlucovaniService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -355,6 +356,63 @@ class FinanceSetupController extends Controller
         $nastaveni->update($data);
 
         return response()->json(['settings' => $nastaveni->fresh()->proObrazovku()]);
+    }
+
+    /**
+     * Co v prostoru vypadá na duplicitu.
+     *
+     * Nabízí se, nespouští se. Dvě položky se stejným smyslem pozná člověk, ne
+     * porovnání řetězců.
+     */
+    public function duplicates(Request $request): JsonResponse
+    {
+        return response()->json(app(SlucovaniService::class)->navrhy($this->space($request)));
+    }
+
+    /**
+     * Sloučení dvou kategorií nebo dvou účtů.
+     *
+     * Bez `potvrzeno` se jen řekne, co se stane. Sloučení je nevratné a člověk musí
+     * předem vidět, kolik záznamů se pohne — jinak si omylem slije půl roku dat.
+     */
+    public function merge(Request $request): JsonResponse
+    {
+        $space = $this->space($request);
+        $sluc = app(SlucovaniService::class);
+
+        $data = $request->validate([
+            'kind' => 'required|in:category,wallet',
+            'from' => 'required|uuid',
+            'to' => 'required|uuid',
+            'potvrzeno' => 'sometimes|boolean',
+        ]);
+
+        $najdi = fn (string $trida, string $uuid) => $trida::where('gallery_space_id', $space->id)
+            ->where('uuid', $uuid)->firstOrFail();
+
+        if ($data['kind'] === 'category') {
+            $z = $najdi(FinanceCategory::class, $data['from']);
+            $do = $najdi(FinanceCategory::class, $data['to']);
+            $nahled = $sluc->nahledKategorii($space, $z, $do);
+        } else {
+            $z = $najdi(Wallet::class, $data['from']);
+            $do = $najdi(Wallet::class, $data['to']);
+            $nahled = $sluc->nahledUctu($space, $z, $do);
+        }
+
+        if (! $request->boolean('potvrzeno')) {
+            return response()->json(['preview' => $nahled, 'merged' => false]);
+        }
+
+        $vysledek = $data['kind'] === 'category'
+            ? $sluc->kategorie($space, $z, $do)
+            : $sluc->ucet($space, $z, $do);
+
+        return response()->json([
+            'merged' => true,
+            'result' => $vysledek,
+            'message' => 'Sloučeno do „'.$do->name.'". Přepojeno záznamů: '.$vysledek['transactions'].'.',
+        ]);
     }
 
     public function trips(Request $request): JsonResponse
