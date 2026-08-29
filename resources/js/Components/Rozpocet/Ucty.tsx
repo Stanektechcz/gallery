@@ -99,8 +99,12 @@ export default function Ucty({ ciselniky, obdobi, onZmena, onPrevod }: {
                                     </button>
 
                                     <div className="flex items-center gap-2">
+                                        {/* Zůstatek dělá totéž co blok s názvem, ale byl
+                                            vysoký dvacet bodů — na telefonu se do něj
+                                            netrefí prst. Vedle stojí čtyřicetičtyřbodová
+                                            tlačítka, takže zvětšení nic neposune. */}
                                         <button type="button" onClick={() => setDetail(u.uuid)}
-                                            className={`tabular-nums text-sm font-medium ${u.is_negative ? 'text-red-400' : 'text-[var(--color-text-primary)]'}`}>
+                                            className={`inline-flex min-h-11 items-center px-1 tabular-nums text-sm font-medium ${u.is_negative ? 'text-red-400' : 'text-[var(--color-text-primary)]'}`}>
                                             {penize(u.balance, u.currency)}
                                         </button>
                                         <button type="button" onClick={() => setKorekce(u)}

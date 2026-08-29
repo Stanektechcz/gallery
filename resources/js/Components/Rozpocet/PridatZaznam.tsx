@@ -691,8 +691,11 @@ export default function PridatZaznam({
                             odmítat něco, co vůbec nemuselo jít zadat. */}
                         {form.deleni === 'vlastni' && (
                             <div className="mt-2 rounded-xl border border-[var(--color-border)] p-3">
+                                {/* Jméno partnera si volí uživatel, takže se za předložku
+                                    nedá vsadit — „pro Petra" místo „pro Petru". Dvojtečka
+                                    to obejde a u každého jména vyjde správně. */}
                                 <label className={POPISEK} htmlFor="fin-podil">
-                                    Podíl pro {ciselniky.partners[0].name}
+                                    Podíl — {ciselniky.partners[0].name}
                                 </label>
                                 <div className="flex items-center gap-2">
                                     <input id="fin-podil" type="range" min="0" max="100" step="5"

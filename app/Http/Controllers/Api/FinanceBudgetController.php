@@ -499,7 +499,21 @@ class FinanceBudgetController extends Controller
         // Bezpečná částka počítá s tím, co je opravdu k dispozici. Kdyby počítala jen
         // se stropem, přišlá výplata by ležela stranou a rozpočet by dál doporučoval
         // šetřit — přesně to „samo se to nepřepočítá", kvůli kterému lidi rozpočty vzdají.
-        $bezpecne = $this->finance->safeDaily($limit + $prijem, $ciste, $rezerva, $od, $do);
+        /*
+         * Nájem, který ještě přijde, není volná částka.
+         *
+         * Přehled ho odečítal, rozpočet a cesta ne — a ukazovaly tak o nájem vyšší
+         * denní částku než přehled téhož pobytu. Dvě čísla pro totéž, obě vypadala
+         * správně a nešlo poznat, které platí.
+         *
+         * Odečítá se jako rezerva: z rozdělení peníze vypadnou, ze zbývající částky ne.
+         * Ta pořád ukazuje, co je na účtu.
+         */
+        $zavazky = app(\App\Services\Finance\RecurringService::class)->zavazky($space, $mena, $do);
+
+        $bezpecne = $this->finance->safeDaily(
+            $limit + $prijem, $ciste, $rezerva + $zavazky['total'], $od, $do,
+        );
 
         // Odhad konce podle dosavadního tempa. Jen když je z čeho — pár dnů měsíce
         // nestačí na to, aby se z nich dal odvodit celý.
@@ -528,6 +542,7 @@ class FinanceBudgetController extends Controller
             'remaining' => round($kMereni - $ciste, 2),
             'percent' => min(999, $procenta),
             'safe_daily' => $bezpecne,
+            'commitments' => $zavazky,
             'projected_total' => $odhad,
             'projected_verdict' => $odhad === null ? 'unknown' : ($odhad > $limit ? 'over' : ($odhad > $limit * 0.95 ? 'tight' : 'ok')),
             'categories' => $sLimity,

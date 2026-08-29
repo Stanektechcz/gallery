@@ -163,11 +163,15 @@ class FinanceController extends Controller
                 'income' => $tento['income'] ?? 0,
                 'expense' => $tento['spent'] ?? 0,
                 'net' => $tento['net'] ?? 0,
-                'per_day' => $dni ? round(($tento['spent'] ?? 0) / $dni, 2) : null,
+                // Dělí se uběhlými dny, ne délkou období. Prvního v měsíci uběhl jeden
+                // den a dělit třiceti by ukázalo třicetinu toho, co člověk ten den
+                // doopravdy utratil — průměr by se do pravdy dostal až poslední den.
+                'per_day' => round(($tento['spent'] ?? 0) / $filtr->dniUteklo(), 2),
+                'days_elapsed' => $filtr->dniUteklo(),
             ],
             'previous' => $predtim ? [
                 'income' => $predtim['income'], 'expense' => $predtim['spent'], 'net' => $predtim['net'],
-                'per_day' => $minule?->dni() ? round($predtim['spent'] / $minule->dni(), 2) : null,
+                'per_day' => $minule ? round($predtim['spent'] / $minule->dniUteklo(), 2) : null,
                 'label' => 'předchozí stejně dlouhé období',
             ] : null,
             'by_currency' => $souhrn,
@@ -417,6 +421,14 @@ class FinanceController extends Controller
             'period_fees' => $vObdobi->groupBy(fn (Transaction $t) => $t->fee_currency ?? $t->currency_from)
                 ->map(fn (Collection $s, string $m) => ['currency' => $m, 'amount' => round($s->sum(fn (Transaction $t) => $t->feePaidExtra()), 2)])
                 ->filter(fn (array $r) => $r['amount'] > 0)->values(),
+            // Poplatek započtený v kurzu se neplatí navíc, ale zaplatil se. Bez tohohle
+            // řádku hlásí obrazovka nulové poplatky u směny, kde šedesát korun padlo —
+            // jen jsou schované v kurzu, a z toho plyne špatný závěr, že směna byla zdarma.
+            'period_fees_included' => $vObdobi
+                ->filter(fn (Transaction $t) => $t->fee_included && (float) $t->fee_amount > 0)
+                ->groupBy(fn (Transaction $t) => $t->fee_currency ?? $t->currency_from)
+                ->map(fn (Collection $s, string $m) => ['currency' => $m, 'amount' => round((float) $s->sum('fee_amount'), 2)])
+                ->values(),
             'providers' => $this->poskytovatele($vsechny),
             'exchanges' => $radky->reverse()->values(),
             'count' => $vsechny->count(),

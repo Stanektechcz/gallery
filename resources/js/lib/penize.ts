@@ -79,8 +79,12 @@ export const denVTydnu = (iso: string): string =>
  * Datum dnešního dne je informace, kterou člověk zná — „Dnes" mu řekne víc a hned.
  */
 export function zahlaviDne(iso: string, dnes = new Date()): string {
+    // Obě data se stavějí na poledne. Odečítat poledne od půlnoci dá půl dne a
+    // `Math.round` z toho udělá celý — dnešek se pak jmenoval datem, včerejšek
+    // „Dnes" a předevčírem „Včera". Posunuté o den, a přitom to vypadalo správně.
     const d = new Date(`${iso}T12:00:00`);
-    const rozdil = Math.round((d.getTime() - new Date(dnes.toDateString()).getTime()) / 86400000);
+    const zaklad = new Date(dnes.getFullYear(), dnes.getMonth(), dnes.getDate(), 12);
+    const rozdil = Math.round((d.getTime() - zaklad.getTime()) / 86400000);
 
     if (rozdil === 0) return 'Dnes';
     if (rozdil === -1) return 'Včera';

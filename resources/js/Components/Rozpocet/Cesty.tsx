@@ -24,6 +24,16 @@ type CestaStav = {
     owner_user_id: number | null; owner_name: string | null; access: Pristup[];
 };
 
+/** Začíná cesta až někdy? Porovnává se den, ne okamžik — dnešek už se počítá jako běžící. */
+function jesteNezacala(cesta: { starts_on: string | null }): boolean {
+    if (! cesta.starts_on) return false;
+
+    const dnes = new Date();
+
+    return new Date(`${cesta.starts_on}T12:00:00`)
+        > new Date(dnes.getFullYear(), dnes.getMonth(), dnes.getDate(), 12);
+}
+
 /**
  * Cesty — seskupení rozpočtu a útrat za jeden pobyt.
  *
@@ -191,9 +201,12 @@ function KartaCesty({ cesta, onAktivovat, onUkoncit, onUpravit, onShrnuti }: {
                 </button>
             }>
 
+            {/* Aktivní cesta znamená „sem se zapisují nové záznamy", ne „právě tam jsme".
+                U cesty, která začíná za tři dny, je „Právě jedeme" prostě nepravda —
+                a nepravda na štítku podkopá důvěru ve všechna čísla vedle něj. */}
             {cesta.is_active && (
                 <p className="mb-2 inline-flex items-center gap-1 rounded-full border border-[var(--color-accent)] px-2 py-0.5 text-[11px] text-[var(--color-text-primary)]">
-                    <MapPin size={11}/> Právě jedeme
+                    <MapPin size={11}/> {jesteNezacala(cesta) ? 'Chystáme se' : 'Právě jedeme'}
                 </p>
             )}
 

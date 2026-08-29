@@ -73,8 +73,20 @@ class FinanceStatsTest extends TestCase
         $this->assertEqualsWithDelta(500, $s->json('summary.income'), 0.001);
         $this->assertEqualsWithDelta(300, $s->json('summary.expense'), 0.001);
         $this->assertEqualsWithDelta(200, $s->json('summary.net'), 0.001);
-        // 300 za 31 dní srpna
-        $this->assertEqualsWithDelta(9.68, $s->json('summary.per_day'), 0.01);
+        /*
+         * 300 za dvacet uběhlých dní, ne za celý srpen.
+         *
+         * Dělit délkou období znamená tvářit se, že jedenáct budoucích dnů už proběhlo
+         * s nulovou útratou. Průměr pak vychází nižší, než jaký doopravdy je, a do
+         * pravdy se dostane až poslední den v měsíci — kdy už je k ničemu.
+         */
+        $this->assertEqualsWithDelta(15.0, $s->json('summary.per_day'), 0.01);
+        $this->assertSame(20, $s->json('summary.days_elapsed'));
+
+        // Skončené období se počítá celé.
+        Carbon::setTestNow(Carbon::parse('2026-09-15'));
+        $minuly = $this->getJson('/api/v1/rozpocet/statistiky?obdobi=minuly-mesic')->assertOk();
+        $this->assertSame(31, $minuly->json('summary.days_elapsed'));
 
         Carbon::setTestNow();
     }

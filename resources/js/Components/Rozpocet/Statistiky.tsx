@@ -14,7 +14,7 @@ type Data = {
     filter: { label: string; from: string; to: string | null; days: number | null };
     currency: string;
     currencies: string[];
-    summary: { income: number; expense: number; net: number; per_day: number | null };
+    summary: { income: number; expense: number; net: number; per_day: number | null; days_elapsed: number };
     previous: { income: number; expense: number; net: number; per_day: number | null; label: string } | null;
     by_currency: Array<{ currency: string; income: number; expense: number; fees: number; spent: number; net: number }>;
     flow: { step: 'den' | 'tyden' | 'mesic'; points: Bod[] };
@@ -158,7 +158,11 @@ export default function Statistiky({ obdobi, onTransakce }: {
                 <Kpi label="Průměrně za den"
                     hodnota={s.per_day !== null ? penize(s.per_day, m) : '—'}
                     ikona={CalendarDays}
-                    popisek={data.filter.days ? `${data.filter.days} dní v období` : undefined}/>
+                    popisek={data.filter.days && s.days_elapsed
+                        ? (s.days_elapsed < data.filter.days
+                            ? `${s.days_elapsed} z ${data.filter.days} dní`
+                            : `${data.filter.days} dní v období`)
+                        : undefined}/>
             </div>
 
             {data.insights.length > 0 && (
@@ -336,13 +340,16 @@ export default function Statistiky({ obdobi, onTransakce }: {
                             do průměru nevstupují.
                         </p>
                     )}
+                    {/* Popis období může být jméno cesty, které si zvolil uživatel.
+                        „za regensburg" je špatně dvakrát: vlastní jméno s malým písmenem
+                        a čtvrtý pád, který se z názvu odvodit nedá. Dvojtečka to obejde
+                        a čte se stejně dobře. */}
                     {data.exchange.fees.length > 0 && (
                         <p className="mt-2 border-t border-[var(--color-border)] pt-2 text-xs text-[var(--color-text-secondary)]">
-                            Na poplatcích padlo{' '}
+                            {data.filter.label} — na poplatcích padlo{' '}
                             <strong className="text-[var(--color-text-primary)]">
                                 {data.exchange.fees.map(f => penize(f.amount, f.currency)).join(' + ')}
-                            </strong>{' '}
-                            za {data.filter.label.toLowerCase()}.
+                            </strong>.
                         </p>
                     )}
                 </Panel>

@@ -111,6 +111,24 @@ class FinanceFilter
     }
 
     /**
+     * Kolik dní z období už uběhlo, včetně dneška.
+     *
+     * Průměr na den se musí dělit tímhle, ne délkou období. Prvního v měsíci uběhl
+     * jeden den — dělit třiceti by znamenalo ukázat třicetinu toho, co člověk ten den
+     * doopravdy utratil, a průměr by se do pravdy dostal až poslední den v měsíci.
+     *
+     * U období, které skončilo, je to jeho celá délka. U budoucího aspoň jeden den,
+     * aby se nedělilo nulou.
+     */
+    public function dniUteklo(?Carbon $dnes = null): int
+    {
+        $dnes ??= Carbon::today();
+        $konec = $this->do === null ? $dnes : $dnes->copy()->min($this->do);
+
+        return max(1, (int) $this->od->diffInDays($konec, false) + 1);
+    }
+
+    /**
      * Dotaz na pohyby v tomhle rozsahu i s rozšířenými filtry.
      *
      * Načítá i vazby, které všechny výpočty potřebují. Bez nich by se u tisíce

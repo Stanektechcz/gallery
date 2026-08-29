@@ -1042,8 +1042,17 @@ class FinanceSetupController extends Controller
             'remaining' => $limit !== null ? round($limit - $utraceno, 2) : null,
             'percent' => $limit > 0 ? min(999, (int) round($utraceno / $limit * 100)) : null,
             'per_day_so_far' => $uteklo > 0 ? round($utraceno / min($uteklo, $dni ?? $uteklo), 2) : null,
+            // Nájem, který ještě přijde, se odečítá stejně jako v přehledu a v rozpočtu.
+            // Jinak by tatáž cesta na třech obrazovkách slibovala tři různé denní částky.
             'safe_daily' => $limit !== null && $c->starts_on
-                ? $this->finance->safeDaily($limit, $utraceno, (float) ($c->reserve_amount ?? 0), $c->starts_on, $c->ends_on)
+                ? $this->finance->safeDaily(
+                    $limit,
+                    $utraceno,
+                    (float) ($c->reserve_amount ?? 0)
+                        + app(RecurringService::class)->zavazky($space, $mena, $c->ends_on)['total'],
+                    $c->starts_on,
+                    $c->ends_on,
+                )
                 : null,
             'default_wallet_id' => $c->default_wallet_id,
             'is_active' => (bool) $c->is_active,

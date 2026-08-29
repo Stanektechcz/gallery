@@ -87,9 +87,14 @@ export default function Prehled({ data, naTab, naTransakce, onPridat, onUpravitP
                             </span>
                         )}
 
+                        {/* Nula v eurech vedle „1 nákup" vypadá jako chyba. Není: dnešní
+                            nákup byl v korunách a tenhle panel počítá měnu rozpočtu.
+                            Bez téhle věty si člověk myslí, že se zápis ztratil. */}
                         {dnes.count > 0 && (
                             <span className="text-[11px] text-[var(--color-text-secondary)]">
                                 {nakupy(dnes.count)}
+                                {dnes.spent === 0 && dnes.last && dnes.last.currency !== dnes.currency
+                                    && `, ale v ${dnes.last.currency} — do částky v ${dnes.currency} se nepočítá`}
                             </span>
                         )}
                     </div>

@@ -28,6 +28,7 @@ type Data = {
     period: { label: string; from: string; to: string | null };
     period_volume: Array<{ currency: string; amount: number; count: number }>;
     period_fees: Array<{ currency: string; amount: number }>;
+    period_fees_included: Array<{ currency: string; amount: number }>;
     providers: Poskytovatel[];
     exchanges: Smena[];
     count: number;
@@ -116,10 +117,15 @@ export default function Smeny({ obdobi, onPridat }: { obdobi: string; onPridat: 
                     hodnota={data.period_volume[0] ? penizeKratce(data.period_volume[0].amount, data.period_volume[0].currency) : '—'}
                     ikona={ArrowRightLeft}
                     popisek={data.period_volume[0] ? `${data.period_volume[0].count}×` : 'žádná směna'}/>
-                <Kpi label="Poplatky"
+                {/* Poplatek započtený v kurzu se neplatí navíc, ale zaplatil se. Samotná
+                    nula tady vede k závěru „směna byla zdarma", což je o šedesát korun
+                    vedle. Popisek proto říká, kolik je schované v kurzu. */}
+                <Kpi label="Poplatky navíc"
                     hodnota={data.period_fees[0] ? penizeKratce(data.period_fees[0].amount, data.period_fees[0].currency) : penize(0, 'CZK')}
                     ikona={Coins}
-                    popisek={data.period.label.toLowerCase()}/>
+                    popisek={data.period_fees_included?.[0]
+                        ? `${penize(data.period_fees_included[0].amount, data.period_fees_included[0].currency)} je v kurzu`
+                        : data.period.label}/>
             </div>
 
             <div className="grid gap-3 lg:grid-cols-3">
