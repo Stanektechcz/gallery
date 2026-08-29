@@ -75,6 +75,17 @@ class BudgetAlertsCommand extends Command
     private function beziciRozpocty(Carbon $dnes)
     {
         return Budget::whereNull('deleted_at')
+            /*
+             * Rozpočty modulu Rozpočet se tímhle příkazem nehodnotí.
+             *
+             * Čerpání se u nich počítá z knihy transakcí, ne z `budget_entries`, do
+             * kterých tenhle příkaz kouká. Bez tohohle řádku by od prvního dne cesty
+             * každou hodinu hlásil, že se neutratilo nic — a protože zpráva zní
+             * věrohodně, nikdo by nepoznal, že se dívá do prázdné tabulky.
+             *
+             * Modul si vlastní upozornění počítá sám a ukazuje je v přehledu.
+             */
+            ->where(fn ($q) => $q->whereNull('scope')->orWhere('scope', '!=', 'ledger'))
             ->whereDate('starts_on', '<=', $dnes)
             ->where(fn ($q) => $q->whereNull('ends_on')->orWhereDate('ends_on', '>=', $dnes))
             ->with('gallerySpace')

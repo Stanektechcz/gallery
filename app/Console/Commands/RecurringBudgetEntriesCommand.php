@@ -37,7 +37,12 @@ class RecurringBudgetEntriesCommand extends Command
         $zapsat = (bool) $this->option('apply');
         $vzniklo = 0;
 
-        foreach (Budget::whereNull('deleted_at')->get() as $budget) {
+        // Rozpočty modulu Rozpočet se přeskakují: pravidelné platby si generuje sám do
+        // knihy transakcí. Zapsat je i sem by znamenalo tutéž platbu dvakrát — jednou
+        // v knize a jednou v položkách, které modul nečte, ale starý přehled ano.
+        foreach (Budget::whereNull('deleted_at')
+            ->where(fn ($q) => $q->whereNull('scope')->orWhere('scope', '!=', 'ledger'))
+            ->get() as $budget) {
             // Rozpočet, který v tomhle měsíci neběží, nic nedostane.
             if ($budget->starts_on->greaterThan($mesic->copy()->endOfMonth())) continue;
             if ($budget->ends_on && $budget->ends_on->lessThan($mesic)) continue;
