@@ -170,12 +170,210 @@ class FinanceRozdeleniTest extends TestCase
         $this->assertSame([1, 2, 3], $radky->pluck('order')->all());
     }
 
+    /**
+     * Předpověď mlčí, dokud není z čeho počítat.
+     *
+     * Z jednoho nákupu za 60 € nejde odvodit měsíc. Číslo by vyšlo, vypadalo by
+     * věrohodně a bylo by nesmyslné — a podle nesmyslu by se pak přerozdělovalo.
+     */
+    public function test_predpoved_mlci_prvni_dva_dny(): void
+    {
+        $r = (new RozdeleniService)->rozdel(
+            [$this->polozka('Jídlo', 300, 10, spent: 60)], 300, 'EUR', dni: 30, uteklo: 2,
+        );
+
+        $this->assertNull($r['rows'][0]['projected']);
+        $this->assertSame('unknown', $r['rows'][0]['verdict']);
+        $this->assertEqualsWithDelta(0, $r['release']['moved'], 0.01, 'Bez předpovědi se nepřerozděluje.');
+    }
+
+    /** Tempo se přepočítá na celé období, ne na uběhlou část. */
+    public function test_predpoved_pocita_z_dosavadniho_tempa(): void
+    {
+        $r = (new RozdeleniService)->rozdel(
+            [$this->polozka('Jídlo', 300, 10, spent: 100)], 300, 'EUR', dni: 30, uteklo: 10,
+        );
+
+        // 100 € za 10 dní → 300 € za 30 dní. Vyjde přesně, tedy „těsně".
+        $this->assertEqualsWithDelta(300, $r['rows'][0]['projected'], 0.01);
+        $this->assertSame('tesne', $r['rows'][0]['verdict']);
+    }
+
+    /**
+     * Uvolňuje se z toho, co je nejmíň důležité, a dorovnává to nejdůležitější.
+     *
+     * Opačné pořadí by znamenalo vzít peníze nájmu ve prospěch výletů — to je přesně
+     * ten druh „automatizace", po které rozpočet přestane platit.
+     */
+    public function test_uvolnuje_se_odspodu_a_dorovnava_odshora(): void
+    {
+        $r = (new RozdeleniService)->rozdel([
+            // Nájem má jediný zápis, takže se nepředpovídá — a právě proto se od něj
+            // ani nebere. Jednorázová platba natažená na měsíc by vyšla šestinásobně.
+            $this->polozka('Nájem', 280, 10, spent: 280, pocet: 1),
+            $this->polozka('Jídlo', 200, 20, spent: 150, pocet: 12),   // odhad 300 → chybí 100
+            $this->polozka('Výlety', 120, 90, spent: 10, pocet: 3),    // odhad 20 → zbude 100
+        ], 600, 'EUR', dni: 30, uteklo: 15);
+
+        $u = $r['release'];
+
+        $this->assertSame(['Výlety'], array_column($u['givers'], 'name'), 'Dává nejmíň důležitá.');
+        $this->assertSame(['Jídlo'], array_column($u['receivers'], 'name'), 'Bere ta, které chybí.');
+        $this->assertEqualsWithDelta(100, $u['moved'], 0.01);
+        $this->assertEqualsWithDelta(20, $u['givers'][0]['new_planned'], 0.01);
+        $this->assertEqualsWithDelta(300, $u['receivers'][0]['new_planned'], 0.01);
+    }
+
+    /**
+     * Uvolnit se dá i ve prospěch kategorie, na kterou peníze vůbec nezbyly.
+     *
+     * Potřeba je dvojí: buď kategorie podle tempa přeteče svůj plán, nebo se na ni
+     * nedostalo peněz. Kdyby se počítala jen ta první, seděla by doprava na tisícovce,
+     * kterou neutratí, zatímco na volný čas by nebylo nic — a nabídka by mlčela.
+     */
+    public function test_uvolneni_pokryje_i_to_na_co_penize_nezbyly(): void
+    {
+        $r = (new RozdeleniService)->rozdel([
+            $this->polozka('Doprava', 2000, 50, spent: 300, pocet: 5),   // odhad 600 → zbude 1 400
+            $this->polozka('Výlety', 2000, 90, spent: 0, pocet: 0),      // nepokryto, chybí 1 000
+        ], 3000, 'EUR', dni: 30, uteklo: 15);
+
+        $u = $r['release'];
+
+        $this->assertSame([], $u['receivers'], 'Nikdo neutrácí nad plán, takže nikdo nedostává jmenovitě.');
+        $this->assertEqualsWithDelta(1000, $u['moved'], 0.01, 'Uvolní se přesně to, co chybí.');
+        $this->assertEqualsWithDelta(1000, $u['frees_up'], 0.01);
+        $this->assertSame('Výlety', $u['covers']);
+        $this->assertEqualsWithDelta(1000, $u['givers'][0]['new_planned'], 0.01, 'Dopravě zůstane 1 000.');
+    }
+
+    /** Když se nesejde dost, řekne se to — ne že se přesune část a mlčí se. */
+    public function test_kdyz_nestaci_rekne_kolik_porad_chybi(): void
+    {
+        $r = (new RozdeleniService)->rozdel([
+            $this->polozka('Jídlo', 100, 10, spent: 100),   // odhad 200 → chybí 100
+            $this->polozka('Výlety', 40, 90, spent: 10),    // odhad 20 → zbude 20
+        ], 140, 'EUR', dni: 30, uteklo: 15);
+
+        $this->assertEqualsWithDelta(20, $r['release']['moved'], 0.01);
+        $this->assertEqualsWithDelta(80, $r['release']['still_short'], 0.01);
+    }
+
+    /** Přerozdělení přepíše plán a po něm už není co přesouvat. */
+    public function test_prerozdeleni_zapise_novy_plan(): void
+    {
+        $uuid = $this->rozpocet(1000, incomeAdds: false);
+
+        // Jídlo má vyhrazeno 200 a utratilo se v něm 250 nadvakrát… tedy natřikrát:
+        // pod třemi zápisy se tempo neodvozuje a předpověď by mlčela.
+        foreach ([100, 100, 50] as $castka) {
+            $this->vydaj('Jídlo', $castka);
+        }
+
+        $pred = $this->getJson('/api/v1/rozpocet/rozpocty')->json('budgets.0.allocation');
+        $this->assertGreaterThan(0, $pred['release']['moved'], 'Je z čeho brát i komu dát.');
+
+        $odpoved = $this->postJson("/api/v1/rozpocet/rozpocty/{$uuid}/prerozdelit")->assertOk();
+
+        $this->assertGreaterThan(0, $odpoved->json('moved'));
+        $this->assertEqualsWithDelta(
+            0, $odpoved->json('budget.allocation.release.moved'), 0.01,
+            'Po přerozdělení plán sedí a přesouvat není co.',
+        );
+    }
+
+    /** Jedna částka jde změnit samostatně, bez posílání celého rozpočtu. */
+    public function test_jednu_castku_jde_zmenit_zvlast(): void
+    {
+        $uuid = $this->rozpocet(1000, incomeAdds: false);
+        $jidlo = FinanceCategory::where('gallery_space_id', $this->space->id)->where('name', 'Jídlo')->first();
+
+        $this->patchJson("/api/v1/rozpocet/rozpocty/{$uuid}/vyhrazeni", [
+            'category_uuid' => $jidlo->uuid, 'amount' => 350,
+        ])->assertOk();
+
+        $radky = collect($this->getJson('/api/v1/rozpocet/rozpocty')->json('budgets.0.allocation.rows'));
+
+        $this->assertEqualsWithDelta(350, $radky->firstWhere('name', 'Jídlo')['planned'], 0.01);
+        $this->assertCount(3, $radky, 'Ostatní položky zůstaly.');
+    }
+
+    /** Nula položku zruší — vyhrazená nula a žádná vyhrazená částka je totéž. */
+    public function test_nula_polozku_zrusi(): void
+    {
+        $uuid = $this->rozpocet(1000, incomeAdds: false);
+        $vylety = FinanceCategory::where('gallery_space_id', $this->space->id)->where('name', 'Výlety')->first();
+
+        $this->patchJson("/api/v1/rozpocet/rozpocty/{$uuid}/vyhrazeni", [
+            'category_uuid' => $vylety->uuid, 'amount' => 0,
+        ])->assertOk();
+
+        $radky = collect($this->getJson('/api/v1/rozpocet/rozpocty')->json('budgets.0.allocation.rows'));
+
+        $this->assertCount(2, $radky);
+        $this->assertNull($radky->firstWhere('name', 'Výlety'));
+    }
+
+    /** Kdo smí jen číst, plán nepřepíše — ani jednou částkou, ani přerozdělením. */
+    public function test_bez_prava_upravy_to_neprojde(): void
+    {
+        $druhy = User::factory()->create(['name' => 'Druhý']);
+        $druhy->gallerySpaces()->syncWithoutDetaching([$this->space->id => ['role' => 'owner']]);
+
+        $uuid = $this->postJson('/api/v1/rozpocet/rozpocty', [
+            'name' => 'Moje', 'budget_kind' => 'monthly', 'currency' => 'EUR', 'amount' => 500,
+            'owner_user_id' => $this->uzivatel->id,
+            'access' => [['user_id' => $druhy->id, 'can_edit' => false]],
+        ])->assertCreated()->json('budget.uuid');
+
+        $kategorie = FinanceCategory::where('gallery_space_id', $this->space->id)->first();
+
+        $this->actingAs($druhy)
+            ->patchJson("/api/v1/rozpocet/rozpocty/{$uuid}/vyhrazeni", [
+                'category_uuid' => $kategorie->uuid, 'amount' => 999,
+            ])->assertForbidden();
+
+        $this->actingAs($druhy)
+            ->postJson("/api/v1/rozpocet/rozpocty/{$uuid}/prerozdelit")->assertForbidden();
+    }
+
+    /** Utrácení v kategorii bez vyhrazené částky nesmí z tabulky zmizet. */
+    public function test_utraty_mimo_plan_jsou_videt(): void
+    {
+        $this->rozpocet(1000, incomeAdds: false);
+        $this->vydaj('Zábava', 80);
+
+        $mimo = collect($this->getJson('/api/v1/rozpocet/rozpocty')->json('budgets.0.unplanned'));
+
+        $this->assertSame('Zábava', $mimo->firstWhere('name', 'Zábava')['name']);
+        $this->assertEqualsWithDelta(80, $mimo->firstWhere('name', 'Zábava')['spent'], 0.01);
+    }
+
+    private function vydaj(string $kategorie, float $castka): void
+    {
+        $k = FinanceCategory::firstOrCreate(
+            ['gallery_space_id' => $this->space->id, 'name' => $kategorie, 'kind' => 'expense'],
+            ['is_active' => true],
+        );
+
+        Transaction::create([
+            'gallery_space_id' => $this->space->id,
+            'type' => 'expense',
+            'occurred_at' => Carbon::today(),
+            'wallet_from_id' => $this->ucet->id,
+            'amount_from' => $castka, 'currency_from' => 'EUR',
+            'amount_to' => $castka, 'currency_to' => 'EUR',
+            'category_id' => $k->id,
+            'created_by' => $this->uzivatel->id,
+        ]);
+    }
+
     /** @return array<string, mixed> */
-    private function polozka(string $nazev, float $castka, int $poradi): array
+    private function polozka(string $nazev, float $castka, int $poradi, float $spent = 0.0, int $pocet = 12): array
     {
         return [
             'category_id' => crc32($nazev), 'category_uuid' => $nazev, 'name' => $nazev,
-            'color' => null, 'planned' => $castka, 'spent' => 0.0, 'priority' => $poradi,
+            'color' => null, 'planned' => $castka, 'spent' => $spent, 'priority' => $poradi, 'count' => $pocet,
         ];
     }
 

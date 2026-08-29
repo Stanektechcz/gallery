@@ -17,6 +17,23 @@ type LimitKategorie = {
     order: number; priority: number;
     planned: number; covered: number; missing: number;
     state: 'pokryto' | 'castecne' | 'nepokryto';
+    projected: number | null;
+    verdict: 'vyjde' | 'tesne' | 'nevyjde' | 'unknown';
+    surplus: number;
+    shortfall: number;
+};
+
+/** Co se dá uvolnit z jedněch peněz do druhých. */
+type Uvolneni = {
+    currency: string;
+    available: number;
+    from_free: number;
+    moved: number;
+    still_short: number;
+    frees_up: number;
+    covers: string | null;
+    givers: Array<{ category_uuid: string; name: string; amount: number; new_planned: number }>;
+    receivers: Array<{ category_uuid: string; name: string; amount: number; new_planned: number }>;
 };
 
 /** Kolik je na co vyhrazeno a co z toho peníze pokryjí. */
@@ -28,6 +45,13 @@ type Rozdeleni = {
     missing: number;
     first_uncovered: string | null;
     rows: LimitKategorie[];
+    release: Uvolneni;
+};
+
+/** Kategorie, ve které se utrácí, ale nic na ni vyhrazeno není. */
+type MimoPlan = {
+    category_uuid: string; name: string; color: string | null;
+    spent: number; suggested: number; currency: string;
 };
 
 type Rozpocet = {
@@ -41,6 +65,7 @@ type Rozpocet = {
     projected_verdict: 'ok' | 'tight' | 'over' | 'unknown';
     categories: LimitKategorie[];
     allocation: Rozdeleni;
+    unplanned: MimoPlan[];
     income: number;
     income_adds: boolean;
     available: number;
@@ -156,6 +181,7 @@ export default function Rozpocty({ ciselniky, onZmena }: { ciselniky: Ciselniky;
 
             {rozpocty.map(r => (
                 <KartaRozpoctu key={r.uuid} rozpocet={r} ja={ciselniky.me}
+                    onZmena={() => { void nacti(); onZmena(); }}
                     onUpravit={r.can_edit ? () => setFormular(r) : undefined}/>
             ))}
 
@@ -170,7 +196,9 @@ export default function Rozpocty({ ciselniky, onZmena }: { ciselniky: Ciselniky;
     );
 }
 
-function KartaRozpoctu({ rozpocet: r, ja, onUpravit }: { rozpocet: Rozpocet; ja: number; onUpravit?: () => void }) {
+function KartaRozpoctu({ rozpocet: r, ja, onUpravit, onZmena }: {
+    rozpocet: Rozpocet; ja: number; onUpravit?: () => void; onZmena: () => void;
+}) {
     const prekroceno = r.percent > 100;
     const ton = prekroceno ? 'danger' : r.percent >= 80 ? 'warn' : 'plain';
     const b = r.safe_daily;
@@ -233,7 +261,7 @@ function KartaRozpoctu({ rozpocet: r, ja, onUpravit }: { rozpocet: Rozpocet; ja:
 
             <CoKdyz rozpocet={r}/>
 
-            {r.categories.length > 0 && <TabulkaRozdeleni rozpocet={r}/>}
+            {r.categories.length > 0 && <TabulkaRozdeleni rozpocet={r} onZmena={onZmena}/>}
 
             {r.top_categories.length > 0 && r.categories.length === 0 && (
                 <div className="mt-3 border-t border-[var(--color-border)] pt-3">
@@ -268,9 +296,22 @@ function KartaRozpoctu({ rozpocet: r, ja, onUpravit }: { rozpocet: Rozpocet; ja:
  * Řadí se podle pořadí důležitosti, ne podle čerpání. Pořadí je to, co rozhoduje,
  * když peníze nevyjdou — přeskládat tabulku podle procent by ten vztah schovalo.
  */
-function TabulkaRozdeleni({ rozpocet: r }: { rozpocet: Rozpocet }) {
+function TabulkaRozdeleni({ rozpocet: r, onZmena }: { rozpocet: Rozpocet; onZmena?: () => void }) {
     const a = r.allocation;
     const chybi = a.missing > 0;
+    const lzeUpravit = r.can_edit && onZmena !== undefined;
+
+    /** Uloží jednu částku. Jeden požadavek, ne celý formulář. */
+    const uloz = async (uuid: string, castka: number) => {
+        try {
+            await axios.patch(`/api/v1/rozpocet/rozpocty/${r.uuid}/vyhrazeni`, {
+                category_uuid: uuid, amount: castka,
+            });
+            onZmena?.();
+        } catch {
+            hlaska('Částku se nepodařilo uložit.', 'chyba');
+        }
+    };
 
     return (
         <div className="mt-3 border-t border-[var(--color-border)] pt-3">
@@ -319,7 +360,10 @@ function TabulkaRozdeleni({ rozpocet: r }: { rozpocet: Rozpocet }) {
                                     </span>
                                 </th>
                                 <td className="py-1.5 px-2 text-right tabular-nums text-[var(--color-text-primary)]">
-                                    {penize(k.planned, k.currency)}
+                                    {lzeUpravit
+                                        ? <CastkaNaMiste hodnota={k.planned} mena={k.currency} popisek={k.name}
+                                            onUloz={c => uloz(k.category_uuid, c)}/>
+                                        : penize(k.planned, k.currency)}
                                     {k.state !== 'pokryto' && (
                                         <span className="block text-[10px] text-amber-400">
                                             {k.state === 'nepokryto'
@@ -335,6 +379,19 @@ function TabulkaRozdeleni({ rozpocet: r }: { rozpocet: Rozpocet }) {
                                     k.remaining < 0 ? 'text-[var(--fin-vydaj)]' : 'text-[var(--color-text-primary)]'
                                 }`}>
                                     {penize(k.remaining, k.currency)}
+                                    {/* Předpověď z dosavadního tempa. Mlčí, dokud není z čeho
+                                        počítat — číslo z jednoho nákupu vypadá věrohodně
+                                        a je nesmyslné. */}
+                                    {k.verdict === 'nevyjde' && (
+                                        <span className="block text-[10px] text-[var(--fin-vydaj)]">
+                                            nevyjde o {penize(k.shortfall, k.currency)}
+                                        </span>
+                                    )}
+                                    {k.verdict === 'vyjde' && k.surplus > 0 && (
+                                        <span className="block text-[10px] text-[var(--color-text-secondary)]">
+                                            zbude {penize(k.surplus, k.currency)}
+                                        </span>
+                                    )}
                                 </td>
                             </tr>
                         ))}
@@ -370,6 +427,165 @@ function TabulkaRozdeleni({ rozpocet: r }: { rozpocet: Rozpocet }) {
                         : 'Rozpočet je pevná měsíční částka, zapsané příjmy se k ní nepřičítají.'}
                 </p>
             )}
+
+            <Prerozdeleni rozpocet={r} lzeUpravit={lzeUpravit} onZmena={onZmena}/>
+            <MimoPlanSeznam rozpocet={r} lzeUpravit={lzeUpravit} onUloz={uloz}/>
+        </div>
+    );
+}
+
+/**
+ * Částka, kterou jde přepsat na místě.
+ *
+ * Kvůli padesáti eurům na jídlo otevřít formulář, najít řádek mezi patnácti
+ * kategoriemi a přepsat ho nikdo nebude — a plán tím zestárne. Klepnutí na číslo
+ * a Enter je ta nejčastější úprava vůbec, takže má stát nejmíň.
+ *
+ * Escape vrátí původní hodnotu. Bez toho by omylem přepsané číslo šlo zachránit
+ * jen tím, že si ho člověk pamatuje.
+ */
+function CastkaNaMiste({ hodnota, mena, popisek, onUloz }: {
+    hodnota: number; mena: string; popisek: string; onUloz: (castka: number) => void;
+}) {
+    const [upravuje, setUpravuje] = useState(false);
+    const [text, setText] = useState(String(hodnota));
+
+    if (! upravuje) {
+        return (
+            <button type="button"
+                onClick={() => { setText(String(hodnota)); setUpravuje(true); }}
+                aria-label={`Upravit částku na ${popisek}, teď ${penize(hodnota, mena)}`}
+                className="rounded px-1 tabular-nums underline decoration-dotted underline-offset-4 hover:bg-[var(--color-surface-muted)]">
+                {penize(hodnota, mena)}
+            </button>
+        );
+    }
+
+    const potvrd = () => {
+        const c = prectiCastku(text);
+        setUpravuje(false);
+
+        if (c !== null && c !== hodnota) onUloz(c);
+    };
+
+    return (
+        <input type="text" inputMode="decimal" value={text} autoFocus
+            aria-label={`Částka na ${popisek}`}
+            onChange={e => setText(e.target.value)}
+            onBlur={potvrd}
+            onKeyDown={e => {
+                if (e.key === 'Enter') potvrd();
+                if (e.key === 'Escape') { setText(String(hodnota)); setUpravuje(false); }
+            }}
+            className="w-20 rounded border border-[var(--color-accent)] bg-[var(--color-bg-primary)] px-1 py-0.5 text-right text-xs tabular-nums text-[var(--color-text-primary)] focus:outline-none"/>
+    );
+}
+
+/**
+ * Uvolnění peněz z jedněch kategorií do druhých.
+ *
+ * Výpočet běží sám z každého zapsaného výdaje; přepis plánu je jedno klepnutí.
+ * Kdyby se plán měnil sám, přestal by to být plán a nikdo by nevěděl, na čem se
+ * vlastně dohodli.
+ */
+function Prerozdeleni({ rozpocet: r, lzeUpravit, onZmena }: {
+    rozpocet: Rozpocet; lzeUpravit: boolean; onZmena?: () => void;
+}) {
+    const [bezi, setBezi] = useState(false);
+    const u = r.allocation.release;
+
+    if (u.moved <= 0) return null;
+
+    const prerozdel = async () => {
+        setBezi(true);
+
+        try {
+            const { data } = await axios.post(`/api/v1/rozpocet/rozpocty/${r.uuid}/prerozdelit`);
+            hlaska(data.message, 'uspech');
+            onZmena?.();
+        } catch {
+            hlaska('Přerozdělit se nepodařilo.', 'chyba');
+        } finally {
+            setBezi(false);
+        }
+    };
+
+    return (
+        <div className="mt-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-muted)] p-3">
+            <p className="text-xs font-medium text-[var(--color-text-primary)]">
+                Podle dosavadního tempa jde přesunout {penize(u.moved, u.currency)}
+            </p>
+            <ul className="mt-1.5 space-y-0.5 text-[11px] leading-relaxed text-[var(--color-text-secondary)]">
+                {u.from_free > 0 && <li>z volných peněz: {penize(u.from_free, u.currency)}</li>}
+                {u.givers.map(d => (
+                    <li key={d.category_uuid}>
+                        {d.name}: zřejmě nevyčerpá {penize(d.amount, u.currency)}
+                    </li>
+                ))}
+                {u.receivers.map(p => (
+                    <li key={p.category_uuid} className="text-[var(--color-text-primary)]">
+                        → {p.name}: dorovnat o {penize(p.amount, u.currency)}
+                    </li>
+                ))}
+                {u.frees_up > 0 && (
+                    <li className="text-[var(--color-text-primary)]">
+                        → uvolní se {penize(u.frees_up, u.currency)}
+                        {u.covers && <> a pokryje se {u.covers}</>}
+                    </li>
+                )}
+            </ul>
+
+            {u.still_short > 0 && (
+                <p className="mt-1.5 text-[11px] leading-relaxed text-amber-400">
+                    I potom by chybělo {penize(u.still_short, u.currency)} — uvolnit se dá jen to,
+                    co někde doopravdy zbývá.
+                </p>
+            )}
+
+            {lzeUpravit && (
+                <button type="button" onClick={() => void prerozdel()} disabled={bezi}
+                    className="mt-2 inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-[var(--color-border)] px-3 text-xs text-[var(--color-text-primary)] hover:border-[var(--color-accent)] disabled:opacity-40">
+                    <RotateCcw size={14}/> Přerozdělit
+                </button>
+            )}
+        </div>
+    );
+}
+
+/**
+ * Kategorie, ve kterých se utrácí mimo plán.
+ *
+ * Bez nich by tabulka tvrdila, že plán sedí, zatímco peníze odtékají vedle. Návrh
+ * částky vychází z dosavadního tempa, takže vyhradit ji je jedno klepnutí.
+ */
+function MimoPlanSeznam({ rozpocet: r, lzeUpravit, onUloz }: {
+    rozpocet: Rozpocet; lzeUpravit: boolean; onUloz: (uuid: string, castka: number) => void;
+}) {
+    if (r.unplanned.length === 0) return null;
+
+    return (
+        <div className="mt-3 border-t border-[var(--color-border)] pt-3">
+            <p className={POPISEK}>Utrácí se i mimo plán</p>
+            <ul className="space-y-1.5">
+                {r.unplanned.map(k => (
+                    <li key={k.category_uuid} className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+                        <span className="flex min-w-0 flex-1 basis-28 items-center gap-1.5">
+                            <span className="h-2 w-2 shrink-0 rounded-full"
+                                style={{ background: k.color ?? 'var(--color-text-secondary)' }}/>
+                            <span className="truncate text-[var(--color-text-primary)]">{k.name}</span>
+                        </span>
+                        <span className="shrink-0 tabular-nums text-[var(--color-text-secondary)]">
+                            utraceno {penize(k.spent, k.currency)}
+                        </span>
+                        {lzeUpravit && (
+                            <button type="button" onClick={() => onUloz(k.category_uuid, k.suggested)}
+                                className="shrink-0 rounded-lg border border-[var(--color-border)] px-2 py-1 text-[11px] text-[var(--color-text-primary)] hover:border-[var(--color-accent)]">
+                                Vyhradit {penize(k.suggested, k.currency)}
+                            </button>
+                        )}
+                    </li>
+                ))}
+            </ul>
         </div>
     );
 }
