@@ -126,6 +126,7 @@ function DragGrid({ items, onReorder, onRemove }: {
                     <button
                         onMouseDown={e => e.stopPropagation()}
                         onClick={e => { e.stopPropagation(); onRemove(item.id); }}
+                        aria-label="Odebrat z výběru k tisku"
                         className="absolute bottom-1 right-1 p-0.5 rounded bg-red-500/80 text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500">
                         <X size={10}/>
                     </button>
@@ -304,6 +305,7 @@ export default function PrintIndex() {
                                     </p>
                                 </div>
                                 <button onClick={e=>{e.stopPropagation();deleteBook(book.uuid);}}
+                                    aria-label="Smazat fotoknihu"
                                     className="p-1 text-[var(--color-text-secondary)] hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all shrink-0">
                                     <Trash2 size={12}/>
                                 </button>

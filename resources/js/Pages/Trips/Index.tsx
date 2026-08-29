@@ -637,6 +637,7 @@ export default function TripsIndex() {
                                             <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
                                                 <span className="text-[10px] text-[var(--color-text-secondary)]">{trip.duration_days}d</span>
                                                 <button onClick={() => deleteTrip(trip.id)}
+                                                    aria-label={`Smazat cestu ${trip.name}`}
                                                     className="p-0.5 text-[var(--color-text-secondary)] hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all">
                                                     <Trash2 size={11}/>
                                                 </button>

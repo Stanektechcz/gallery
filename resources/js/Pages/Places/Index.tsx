@@ -430,6 +430,7 @@ export default function PlacesIndex() {
                                     {selectedPlaceIds.includes(place.id) && <span className="absolute left-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-sky-500 text-xs font-bold text-white">{selectedPlaceIds.indexOf(place.id) + 1}</span>}
                                     {/* Delete button */}
                                     {!planningMode && <button onClick={e => deletePlace(place.id, e)}
+                                        aria-label={`Smazat místo ${place.name}`}
                                         className="absolute top-2 right-2 p-1.5 bg-black/50 backdrop-blur-sm text-white rounded-full opacity-0 group-hover:opacity-100 hover:text-red-400 transition-all">
                                         <Trash2 size={12}/>
                                     </button>}

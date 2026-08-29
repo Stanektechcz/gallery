@@ -648,3 +648,20 @@ body.modul-rozpocet .mobile-bottom-nav {
 [data-hustota='husté'] .space-y-2 > * + * {
     margin-top: 0.25rem;
 }
+
+/*
+ * Ovládací prvky odkryté najetím myší jsou na dotyku trvale neviditelné.
+ *
+ * `opacity-0 group-hover:opacity-100` funguje na počítači: karta se najede, objeví se
+ * křížek. Na telefonu hover neexistuje, takže se tlačítko neobjeví nikdy — a přitom
+ * zůstává klikatelné, protože průhlednost nula kliknutí neblokuje. Celá akce (smazat
+ * místo, odebrat z výběru) je tím na mobilu nedostupná a zároveň se dá trefit omylem.
+ *
+ * Míří to schválně jen na `button`, ne na každý překryv: náhledy fotek se na hover
+ * odkrývat mají a na dotyku je nahrazuje klepnutí do detailu.
+ */
+@media (hover: none) {
+    button.opacity-0.group-hover\:opacity-100 {
+        opacity: 1;
+    }
+}

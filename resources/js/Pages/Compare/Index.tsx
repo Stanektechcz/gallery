@@ -157,7 +157,7 @@ function ComparePanel({
                 </div>
 
                 {/* Remove */}
-                <button onClick={onRemove}
+                <button onClick={onRemove} aria-label="Odebrat z porovnání"
                     className="absolute top-2 right-2 z-10 p-1 rounded-full bg-black/60 text-white hover:bg-red-500/80 transition-colors opacity-0 group-hover:opacity-100">
                     <X size={12}/>
                 </button>
