@@ -46,10 +46,21 @@ class FinanceAccess extends Model
         });
     }
 
-    /** Smí uživatel do téhle věci zapisovat? */
+    /**
+     * Smí uživatel do téhle věci zapisovat?
+     *
+     * Kromě vlastníka a toho, komu se právo dalo, smí vždycky i **majitel prostoru.**
+     * Bez téhle pojistky vzniká slepá ulička: kdo rozpočet vidí, ale nesmí ho měnit,
+     * nemůže změnit ani to, kdo ho smí měnit — a když vlastník zrovna není u telefonu,
+     * nedá se s tím udělat vůbec nic. Ve dvou lidech je to nepoužitelné.
+     */
     public static function smiUpravit(string $druh, int $subjectId, ?int $ownerId, int $userId): bool
     {
         if ($ownerId === null || $ownerId === $userId) {
+            return true;
+        }
+
+        if (static::jeMajitelProstoru($subjectId, $druh, $userId)) {
             return true;
         }
 
@@ -58,6 +69,18 @@ class FinanceAccess extends Model
             ->where('user_id', $userId)
             ->where('can_edit', true)
             ->exists();
+    }
+
+    /** Založil tenhle člověk celý prostor? Pak se mu nic zamknout nedá. */
+    private static function jeMajitelProstoru(int $subjectId, string $druh, int $userId): bool
+    {
+        $tabulka = $druh === 'trip' ? 'finance_projects' : 'budgets';
+
+        $spaceId = \Illuminate\Support\Facades\DB::table($tabulka)
+            ->where('id', $subjectId)->value('gallery_space_id');
+
+        return $spaceId !== null && \Illuminate\Support\Facades\DB::table('gallery_spaces')
+            ->where('id', $spaceId)->where('owner_id', $userId)->exists();
     }
 
     /**

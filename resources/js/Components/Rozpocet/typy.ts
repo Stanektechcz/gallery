@@ -165,6 +165,11 @@ export type StavRozpoctu = {
     percent: number;
     safe_daily: BezpecneNaDen;
     state: 'ok' | 'near' | 'over';
+    /** Kolik ještě zbývá na jednotlivé kategorie, od nejtěsnější. */
+    categories: Array<{
+        category_uuid: string; name: string; color: string | null;
+        planned: number; spent: number; remaining: number; percent: number; currency: string;
+    }>;
 };
 
 export type Prehled = {

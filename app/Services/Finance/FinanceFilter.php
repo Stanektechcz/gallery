@@ -76,6 +76,28 @@ class FinanceFilter
                 Carbon::parse($data['do'] ?? $dnes),
                 'Vlastní období',
             ],
+            /*
+             * Celé období běžícího rozpočtu.
+             *
+             * Půlroční pobyt se do „tohoto měsíce" nevejde. Kdo jede s jednou sumou na
+             * šest měsíců, potřebuje vidět celou dobu — jinak by proti půlročnímu
+             * rozpočtu stály útraty za pár dnů a zbývalo by pořád skoro všechno.
+             */
+            'obdobi-rozpoctu' => (function () use ($space, $dnes) {
+                $dotaz = fn () => \App\Models\Budget::where('gallery_space_id', $space->id)
+                    ->where('scope', 'ledger')->whereNotNull('ends_on');
+
+                // Přednost má běžící rozpočet. Když žádný neběží, vezme se nejbližší
+                // budoucí — týden před odjezdem je „celé období" to jediné, co dává
+                // smysl, a spadnout přitom na aktuální měsíc znamená ukázat prázdno.
+                $b = $dotaz()->whereDate('starts_on', '<=', $dnes)->whereDate('ends_on', '>=', $dnes)
+                    ->orderByDesc('starts_on')->first()
+                    ?? $dotaz()->whereDate('starts_on', '>', $dnes)->orderBy('starts_on')->first();
+
+                return $b === null
+                    ? [$dnes->copy()->startOfMonth(), $dnes->copy()->endOfMonth(), 'Tento měsíc']
+                    : [$b->starts_on->copy(), $b->ends_on->copy(), 'Celé období rozpočtu'];
+            })(),
             default => [$dnes->copy()->startOfMonth(), $dnes->copy()->endOfMonth(), 'Tento měsíc'],
         };
 

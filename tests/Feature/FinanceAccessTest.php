@@ -24,6 +24,8 @@ class FinanceAccessTest extends TestCase
 
     private User $makinka;
 
+    private User $host;
+
     private GallerySpace $space;
 
     protected function setUp(): void
@@ -33,9 +35,13 @@ class FinanceAccessTest extends TestCase
         $this->adri = User::factory()->create(['name' => 'Adri']);
         $this->makinka = User::factory()->create(['name' => 'Makinka']);
 
+        // Třetí člověk, který prostor nezaložil. Na něm se testuje právo jen ke čtení —
+        // majitel prostoru ho z principu obejít smí, takže by na něm nešlo ověřit nic.
+        $this->host = User::factory()->create(['name' => 'Host']);
+
         $this->space = GallerySpace::create(['name' => 'Zkouška', 'owner_id' => $this->adri->id]);
 
-        foreach ([$this->adri, $this->makinka] as $u) {
+        foreach ([$this->adri, $this->makinka, $this->host] as $u) {
             $u->gallerySpaces()->syncWithoutDetaching([$this->space->id => ['role' => 'owner']]);
         }
     }
@@ -71,19 +77,35 @@ class FinanceAccessTest extends TestCase
         $this->actingAs($this->makinka)
             ->postJson("/api/v1/rozpocet/rozpocty/{$uuid}/sdileni", [
                 'owner_user_id' => $this->makinka->id,
-                'access' => [['user_id' => $this->adri->id, 'can_edit' => false]],
+                'access' => [['user_id' => $this->host->id, 'can_edit' => false]],
             ])->assertOk();
 
         // Vidí ho — a obrazovka od serveru rovnou ví, že tlačítko Upravit nemá nabízet.
-        $this->actingAs($this->adri)->getJson('/api/v1/rozpocet/rozpocty')
+        $this->actingAs($this->host)->getJson('/api/v1/rozpocet/rozpocty')
             ->assertOk()
             ->assertJsonPath('budgets.0.uuid', $uuid)
             ->assertJsonPath('budgets.0.can_edit', false)
             ->assertJsonPath('budgets.0.owner_name', 'Makinka');
 
-        $this->actingAs($this->adri)
+        $this->actingAs($this->host)
             ->patchJson("/api/v1/rozpocet/rozpocty/{$uuid}", ['amount' => 999])
             ->assertForbidden();
+    }
+
+    /**
+     * Majitel prostoru se zamknout nedá.
+     *
+     * Bez téhle pojistky vznikne slepá ulička: kdo rozpočet vidí, ale nesmí ho měnit,
+     * nemůže změnit ani to, kdo ho smí měnit. Když vlastník zrovna není u telefonu,
+     * nedá se s tím udělat vůbec nic — a ve dvou lidech je to nepoužitelné.
+     */
+    public function test_majitel_prostoru_smi_upravit_i_cizi_rozpocet(): void
+    {
+        $uuid = $this->vlastniRozpocetMakinky();
+
+        $this->actingAs($this->adri)
+            ->patchJson("/api/v1/rozpocet/rozpocty/{$uuid}", ['amount' => 777])
+            ->assertOk()->assertJsonPath('budget.limit', 777);
     }
 
     public function test_pravo_zapisu_se_da_dat(): void
@@ -145,10 +167,10 @@ class FinanceAccessTest extends TestCase
             ->postJson('/api/v1/rozpocet/rozpocty', [
                 'name' => 'Německo', 'budget_kind' => 'monthly', 'currency' => 'EUR', 'amount' => 480,
                 'owner_user_id' => $this->makinka->id,
-                'access' => [['user_id' => $this->adri->id, 'can_edit' => false]],
+                'access' => [['user_id' => $this->host->id, 'can_edit' => false]],
             ])->assertCreated()->json('budget.uuid');
 
-        $this->actingAs($this->adri)->getJson('/api/v1/rozpocet/rozpocty')
+        $this->actingAs($this->host)->getJson('/api/v1/rozpocet/rozpocty')
             ->assertOk()
             ->assertJsonPath('budgets.0.uuid', $uuid)
             ->assertJsonPath('budgets.0.owner_name', 'Makinka')
@@ -221,8 +243,8 @@ class FinanceAccessTest extends TestCase
                 'base_currency' => 'EUR', 'owner_user_id' => $this->makinka->id,
             ])->json('trip.uuid');
 
-        $this->actingAs($this->adri)->postJson("/api/v1/rozpocet/cesty/{$uuid}/aktivovat")->assertForbidden();
-        $this->actingAs($this->adri)->deleteJson("/api/v1/rozpocet/cesty/{$uuid}")->assertForbidden();
+        $this->actingAs($this->host)->postJson("/api/v1/rozpocet/cesty/{$uuid}/aktivovat")->assertForbidden();
+        $this->actingAs($this->host)->deleteJson("/api/v1/rozpocet/cesty/{$uuid}")->assertForbidden();
 
         $this->assertDatabaseHas('finance_projects', ['uuid' => $uuid, 'deleted_at' => null]);
     }

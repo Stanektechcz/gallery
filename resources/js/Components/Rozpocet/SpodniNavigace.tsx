@@ -11,19 +11,25 @@ import { useEffect, useState } from 'react';
  * Přehled a zapisování jsou nahoře, protože se používají denně; Nastavení poslední,
  * protože se otevře dvakrát za pobyt.
  */
+/*
+ * Cesty tu byly do 29. 8. 2026 a odešly.
+ *
+ * Půlroční pobyt není výlet. Rozpočet na něj má vlastní období a vlastní peníze, takže
+ * cesta k němu nic nepřidávala — jen další obrazovku, kterou bylo potřeba vyplnit,
+ * aby šel rozpočet vůbec založit.
+ */
 export const TABY = [
     { id: 'prehled', label: 'Přehled', ikona: LayoutDashboard },
     { id: 'transakce', label: 'Transakce', ikona: Receipt },
     { id: 'rozpocty', label: 'Rozpočty', ikona: PiggyBank },
     { id: 'smeny', label: 'Směny', ikona: ArrowRightLeft },
-    { id: 'cesty', label: 'Cesty', ikona: MapPin },
     { id: 'statistiky', label: 'Statistiky', ikona: BarChart3 },
     { id: 'ucty', label: 'Účty', ikona: Wallet },
     { id: 'nastaveni', label: 'Nastavení', ikona: Settings2 },
 ] as const;
 
 /** Co se na mobilu schová pod „Více" — v pořadí ze zadání. */
-const POD_VICE = ['rozpocty', 'smeny', 'cesty', 'ucty', 'nastaveni'];
+const POD_VICE = ['rozpocty', 'smeny', 'ucty', 'nastaveni'];
 
 /**
  * Spodní lišta pro telefon.

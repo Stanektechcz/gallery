@@ -940,7 +940,8 @@ function FormularRozpoctu({ rozpocet, ciselniky, onHotovo, onSmazat, onZavrit }:
         reserve_amount: rozpocet?.reserve
             ? String(rozpocet.reserve)
             : (ciselniky.settings?.default_reserve ? String(ciselniky.settings.default_reserve) : ''),
-        trip_uuid: rozpocet?.trip?.uuid ?? '',
+        starts_on: rozpocet?.starts_on ?? new Date().toISOString().slice(0, 10),
+        ends_on: rozpocet?.ends_on ?? '',
         owner_user_id: rozpocet ? (rozpocet.owner_user_id ?? 0) : 0,
         income_adds: rozpocet ? rozpocet.income_adds : false,
         auto_balance: rozpocet ? rozpocet.auto_balance : true,
@@ -963,6 +964,18 @@ function FormularRozpoctu({ rozpocet, ciselniky, onHotovo, onSmazat, onZavrit }:
     const [chyba, setChyba] = useState('');
     const [mazani, setMazani] = useState(false);
 
+    // Kolik dní období pokrývá — ještě než se uloží. Nejužitečnější je to právě tady,
+    // při rozhodování, jestli je ta částka na tolik dní vůbec dost.
+    const nahledDnu = (() => {
+        if (form.budget_kind !== 'trip' || ! form.starts_on || ! form.ends_on) return null;
+
+        const od = new Date(`${form.starts_on}T12:00:00`);
+        const doD = new Date(`${form.ends_on}T12:00:00`);
+        const pocet = Math.round((doD.getTime() - od.getTime()) / 86400000) + 1;
+
+        return pocet > 0 ? pocet : null;
+    })();
+
     const kategorie = ciselniky.categories.filter(k => k.kind === 'expense');
     const soucetLimitu = Object.values(limity).reduce((s, v) => s + (prectiCastku(v) ?? 0), 0);
     const strop = prectiCastku(form.amount) ?? 0;
@@ -981,7 +994,8 @@ function FormularRozpoctu({ rozpocet, ciselniky, onHotovo, onSmazat, onZavrit }:
             currency: form.currency,
             amount: prectiCastku(form.amount),
             reserve_amount: prectiCastku(form.reserve_amount),
-            trip_uuid: form.budget_kind === 'trip' ? form.trip_uuid : '',
+            starts_on: form.budget_kind === 'trip' ? form.starts_on : null,
+            ends_on: form.budget_kind === 'trip' ? (form.ends_on || null) : null,
             owner_user_id: form.owner_user_id || null,
             access: pristupy,
             income_adds: form.income_adds,
@@ -1032,7 +1046,7 @@ function FormularRozpoctu({ rozpocet, ciselniky, onHotovo, onSmazat, onZavrit }:
                 <div>
                     <span className={POPISEK}>Na co je</span>
                     <div className="grid grid-cols-2 gap-2">
-                        {([['monthly', 'Každý měsíc'], ['trip', 'Na jednu cestu']] as const).map(([klic, popis]) => (
+                        {([['monthly', 'Každý měsíc'], ['trip', 'Na jedno období']] as const).map(([klic, popis]) => (
                             <button key={klic} type="button"
                                 onClick={() => setForm(f => ({
                                     ...f,
@@ -1052,22 +1066,26 @@ function FormularRozpoctu({ rozpocet, ciselniky, onHotovo, onSmazat, onZavrit }:
                     </div>
                 </div>
 
+                {/* Období se zadává přímo. Dřív se muselo vzít z cesty, což znamenalo
+                    založit napřed cestu — obrazovku navíc kvůli dvěma datům. */}
                 {form.budget_kind === 'trip' && (
-                    <div>
-                        <label className={POPISEK} htmlFor="rozp-cesta">Která cesta</label>
-                        <select id="rozp-cesta" value={form.trip_uuid} className={POLE}
-                            onChange={e => setForm(f => ({ ...f, trip_uuid: e.target.value }))}>
-                            <option value="">— vyberte cestu —</option>
-                            {ciselniky.trips.map(c => <option key={c.uuid} value={c.uuid}>{c.name}</option>)}
-                        </select>
-                        <p className="mt-1 text-[11px] leading-relaxed text-[var(--color-text-secondary)]">
-                            Období si rozpočet vezme z cesty a počítá jen útraty, které k ní patří.
-                        </p>
-                        {ciselniky.trips.length === 0 && (
-                            <p className="mt-1 text-[11px] leading-relaxed text-amber-400">
-                                Zatím není žádná cesta. Nejdřív ji založte v záložce Cesty.
-                            </p>
-                        )}
+                    <div className="grid gap-3 sm:grid-cols-2">
+                        <div>
+                            <label className={POPISEK} htmlFor="rozp-od">Od</label>
+                            <input id="rozp-od" type="date" value={form.starts_on} className={POLE}
+                                onChange={e => setForm(f => ({ ...f, starts_on: e.target.value }))}/>
+                        </div>
+                        <div>
+                            <label className={POPISEK} htmlFor="rozp-do">Do</label>
+                            <input id="rozp-do" type="date" value={form.ends_on} className={POLE}
+                                onChange={e => setForm(f => ({ ...f, ends_on: e.target.value }))}/>
+                            {nahledDnu !== null && (
+                                <p className="mt-1 text-[11px] leading-relaxed text-[var(--color-text-secondary)]">
+                                    {dny(nahledDnu)}
+                                    {strop > 0 && `, tedy ${penize((strop - (prectiCastku(form.reserve_amount) ?? 0)) / nahledDnu, form.currency)} na den`}
+                                </p>
+                            )}
+                        </div>
                     </div>
                 )}
 
@@ -1130,7 +1148,11 @@ function FormularRozpoctu({ rozpocet, ciselniky, onHotovo, onSmazat, onZavrit }:
                                 {ciselniky.members.filter(c => c.id !== form.owner_user_id).map(c => (
                                     <li key={c.id} className="flex items-center gap-2">
                                         <span className="min-w-0 flex-1 truncate text-xs text-[var(--color-text-primary)]">{c.name}</span>
-                                        <select value={sdileni[c.id] ?? 'ne'}
+                                        {/* Kdo se rozhodl sdílet, obvykle chce, aby ten druhý
+                                            mohl i pomoct. Jen čtení zůstává na výběr, ale
+                                            výchozí být nemá — vede to k tomu, že se rozpočet
+                                            nedá upravit a nikdo neví proč. */}
+                                        <select value={sdileni[c.id] ?? 'psat'}
                                             aria-label={`Přístup k rozpočtu — ${c.name}`}
                                             onChange={e => setSdileni(s => ({ ...s, [c.id]: e.target.value as 'ne' | 'cist' | 'psat' }))}
                                             className="shrink-0 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-primary)] px-2 py-1.5 text-xs text-[var(--color-text-primary)] focus:border-[var(--color-accent)] focus:outline-none">
@@ -1236,7 +1258,7 @@ function FormularRozpoctu({ rozpocet, ciselniky, onHotovo, onSmazat, onZavrit }:
 
                 <div className="flex gap-2 border-t border-[var(--color-border)] pt-3">
                     <button type="button" onClick={() => void uloz()}
-                        disabled={uklada || ! form.name || ! strop || (form.budget_kind === 'trip' && ! form.trip_uuid)}
+                        disabled={uklada || ! form.name || ! strop || (form.budget_kind === 'trip' && ! form.starts_on)}
                         className="min-h-11 flex-1 rounded-xl bg-[var(--color-accent)] px-4 text-sm font-medium text-[var(--color-accent-contrast)] disabled:opacity-40">
                         {rozpocet ? 'Uložit' : 'Založit rozpočet'}
                     </button>

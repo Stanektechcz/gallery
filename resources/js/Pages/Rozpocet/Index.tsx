@@ -1,5 +1,4 @@
 import { hlaska } from '@/Components/Hlasky';
-import Cesty from '@/Components/Rozpocet/Cesty';
 import Prehled from '@/Components/Rozpocet/Prehled';
 import Rozpocty from '@/Components/Rozpocet/Rozpocty';
 import PridatZaznam from '@/Components/Rozpocet/PridatZaznam';
@@ -16,7 +15,7 @@ import { odeslatFrontu, sledujFrontu, type CekajiciZapis } from '@/lib/frontaZap
 import type { TypZaznamu } from '@/lib/penize';
 import { Head } from '@inertiajs/react';
 import axios from 'axios';
-import { ChevronDown, CloudOff, MapPin, Plus, RefreshCw, X } from 'lucide-react';
+import { ChevronDown, CloudOff, Plus, RefreshCw, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 /**
@@ -140,8 +139,6 @@ export default function RozpocetIndex({ nastaveni }: { nastaveni?: Predvolby | n
             filtr: Object.fromEntries(Object.entries(filtr).filter(([k]) => k !== 'obdobi')) as Record<string, string>,
         }));
 
-    const cesta = ciselniky?.active_trip ?? null;
-
     /*
      * Zápisy, které čekají na spojení.
      *
@@ -189,7 +186,6 @@ export default function RozpocetIndex({ nastaveni }: { nastaveni?: Predvolby | n
             <div role="main" data-hustota={ciselniky?.settings?.list_density ?? nastaveni?.list_density ?? 'pohodlne'}
                 className="mx-auto max-w-[1600px] px-4 pb-28 pt-4 sm:px-6 lg:pb-8">
                 <Hlavicka
-                    cesta={cesta}
                     obdobi={stav.obdobi}
                     popisObdobi={prehled?.filter.label ?? ''}
                     onObdobi={o => setStav(s => ({ ...s, obdobi: o }))}
@@ -257,10 +253,6 @@ export default function RozpocetIndex({ nastaveni }: { nastaveni?: Predvolby | n
                                     onZmena={() => void nacti()}/>
                             )}
 
-                            {stav.tab === 'cesty' && (
-                                <Cesty ciselniky={ciselniky} onZmena={() => void nacti()} onTransakce={naTransakce}/>
-                            )}
-
                             {stav.tab === 'ucty' && (
                                 <Ucty ciselniky={ciselniky} obdobi={stav.obdobi}
                                     onZmena={() => void nacti()}
@@ -283,7 +275,11 @@ export default function RozpocetIndex({ nastaveni }: { nastaveni?: Predvolby | n
                                 <Nastaveni ciselniky={ciselniky} onZmena={() => void nacti()}/>
                             )}
 
-                            {! ['prehled', 'transakce', 'cesty', 'ucty', 'smeny', 'rozpocty', 'statistiky', 'nastaveni'].includes(stav.tab) && (
+                            {/* Neznámá záložka končí na přehledu. Dřív se tu ukazovalo
+                                „připravujeme"; po odstranění Cest by to viděl každý,
+                                kdo má starý odkaz s `?tab=cesty` — a hlásit rozpracovanost
+                                u něčeho, co jsme zrušili, je matoucí dvakrát. */}
+                            {! ['prehled', 'transakce', 'ucty', 'smeny', 'rozpocty', 'statistiky', 'nastaveni'].includes(stav.tab) && (
                                 <Pripravuje tab={stav.tab} onZpet={() => naTab('prehled')}/>
                             )}
                         </>
@@ -311,18 +307,8 @@ export default function RozpocetIndex({ nastaveni }: { nastaveni?: Predvolby | n
     );
 }
 
-/** Kolik dní zbývá do začátku cesty. Nula nebo míň znamená, že už běží. */
-function zacinaZa(zacatek: string): number {
-    const den = new Date(`${zacatek}T12:00:00`);
-    const dnes = new Date();
-    dnes.setHours(12, 0, 0, 0);
-
-    return Math.round((den.getTime() - dnes.getTime()) / 86400000);
-}
-
 /** Hlavička: kde jsme, jaké období a hlavní akce. */
-function Hlavicka({ cesta, obdobi, popisObdobi, onObdobi, onPridat }: {
-    cesta: Ciselniky['active_trip'];
+function Hlavicka({ obdobi, popisObdobi, onObdobi, onPridat }: {
     obdobi: string; popisObdobi: string;
     onObdobi: (o: string) => void;
     onPridat: () => void;
@@ -332,7 +318,10 @@ function Hlavicka({ cesta, obdobi, popisObdobi, onObdobi, onPridat }: {
         { id: 'tyden', label: 'Tento týden' },
         { id: 'mesic', label: 'Tento měsíc' },
         { id: 'minuly-mesic', label: 'Minulý měsíc' },
-        ...(cesta ? [{ id: 'cesta', label: cesta.name }] : []),
+        // Půlroční pobyt se do „tohoto měsíce" nevejde. Kdo jede s jednou sumou na půl
+        // roku, potřebuje vidět celou dobu — proti měsíčnímu výřezu by proti půlročnímu
+        // rozpočtu stály útraty za pár dnů a zbývalo by pořád skoro všechno.
+        { id: 'obdobi-rozpoctu', label: 'Celé období' },
     ];
 
     return (
@@ -342,19 +331,6 @@ function Hlavicka({ cesta, obdobi, popisObdobi, onObdobi, onPridat }: {
                     <h1 className="text-xl font-semibold text-[var(--color-text-primary)]">Náš rozpočet</h1>
                     <p className="mt-0.5 text-sm text-[var(--color-text-secondary)]">
                         {popisObdobi}
-                        {cesta && (
-                            <span className="ml-1.5 inline-flex items-center gap-1 rounded-full border border-[var(--color-border)] px-2 py-0.5 text-[11px]">
-                                {/* U cesty, která teprve začne, se nepíše „do konce".
-                                    Kalendářně je to pravda, ale vedle denní částky
-                                    počítané z délky pobytu by to byla dvě různá čísla —
-                                    a hlavně před odjezdem nikoho nezajímá konec, ale
-                                    začátek. */}
-                                <MapPin size={11}/> {cesta.name}
-                                {cesta.starts_on && zacinaZa(cesta.starts_on) > 0
-                                    ? ` · začíná za ${dny(zacinaZa(cesta.starts_on))}`
-                                    : cesta.days_left !== null && ` · ${dny(cesta.days_left)} do konce`}
-                            </span>
-                        )}
                     </p>
                 </div>
 

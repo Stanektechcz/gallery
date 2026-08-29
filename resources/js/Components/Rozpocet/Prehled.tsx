@@ -141,16 +141,20 @@ export default function Prehled({ data, predvolby, naTab, naTransakce, onPridat,
                 </div>
             )}
 
-            {/* Čtyři KPI. Na mobilu dva sloupce, na širokém čtyři. */}
+            {/*
+             * Pořadí podle naléhavosti, ne podle abecedy.
+             *
+             * „Kolik mám" a „kolik dnes můžu" jsou otázky, které si člověk v cizině
+             * klade u pokladny. „Kolik jsem utratil" je zajímavé večer. Utraceno bylo
+             * dřív první a kolik zbývá na účtu poslední — přesně obráceně.
+             */}
             <div className="grid grid-cols-2 gap-2.5 xl:grid-cols-4">
                 <Kpi
-                    label="Utraceno"
-                    hodnota={soucet ? penizeKratce(soucet.spent, mena) : penize(0, mena)}
-                    ikona={TrendingDown}
-                    popisek={trend
-                        ? `${trend.vic ? 'o ' : 'o '}${Math.abs(trend.procenta)} % ${trend.vic ? 'víc' : 'míň'} než minule`
-                        : data.filter.label.toLowerCase()}
-                    onClick={() => naTransakce({ typ: 'expense' })}/>
+                    label="Kolik mám"
+                    hodnota={data.balances[0] ? penizeKratce(data.balances[0].total, data.balances[0].currency) : '—'}
+                    ikona={Wallet}
+                    popisek={data.balances.slice(1).map(b => penizeKratce(b.total, b.currency)).join(' · ') || 'na všech účtech'}
+                    onClick={() => naTab('ucty')}/>
 
                 {rozpocet ? (
                     <Kpi
@@ -191,12 +195,16 @@ export default function Prehled({ data, predvolby, naTab, naTransakce, onPridat,
                     ) : undefined}/>
 
                 <Kpi
-                    label="Máme k dispozici"
-                    hodnota={data.balances[0] ? penizeKratce(data.balances[0].total, data.balances[0].currency) : '—'}
-                    ikona={Wallet}
-                    popisek={data.balances.slice(1).map(b => penizeKratce(b.total, b.currency)).join(' · ') || 'na všech účtech'}
-                    onClick={() => naTab('ucty')}/>
+                    label="Utraceno"
+                    hodnota={soucet ? penizeKratce(soucet.spent, mena) : penize(0, mena)}
+                    ikona={TrendingDown}
+                    popisek={trend
+                        ? `o ${Math.abs(trend.procenta)} % ${trend.vic ? 'víc' : 'míň'} než minule`
+                        : data.filter.label.toLowerCase()}
+                    onClick={() => naTransakce({ typ: 'expense' })}/>
             </div>
+
+            <NaCoZbyva rozpocet={rozpocet} naTab={naTab}/>
 
             {/* Výdaje po dnech a kategorie. Na širokém vedle sebe 8/4. */}
             <div className="grid gap-3 lg:grid-cols-3">
@@ -356,6 +364,67 @@ function popisekDenni(b: PrehledData['budget'] extends null ? never : any, mena?
     if (b.state === 'open_ended') return 'bez konce období';
 
     return `${dny(b.days_left ?? 0)} do konce${b.reserve_kept > 0 ? ', rezerva odečtená' : ''}`;
+}
+
+/**
+ * Kolik ještě zbývá na jednotlivé kategorie.
+ *
+ * „Kam peníze šly" přehled ukazoval odjakživa. U pokladny je ale potřeba opačná
+ * otázka — kolik ještě můžu utratit za jídlo — a ta se dosud dala zjistit jen
+ * přepnutím do jiné záložky a přečtením celé tabulky.
+ *
+ * Řadí se podle toho, kde zbývá nejmíň. Co dochází, má být první; co je pohodlně
+ * v plusu, počká.
+ */
+function NaCoZbyva({ rozpocet, naTab }: { rozpocet: PrehledData['budget']; naTab: (tab: string) => void }) {
+    const polozky = rozpocet?.categories ?? [];
+
+    if (polozky.length === 0) return null;
+
+    return (
+        <Panel icon={Coins} title="Na co ještě zbývá"
+            description="Vyhrazené peníze podle toho, kde jich je nejmíň"
+            actions={
+                <button type="button" onClick={() => naTab('rozpocty')}
+                    className="inline-flex min-h-11 items-center px-2 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]">
+                    Upravit
+                </button>
+            }>
+            <ul className="space-y-2">
+                {polozky.slice(0, 6).map(k => {
+                    const dosly = k.remaining <= 0;
+
+                    return (
+                        <li key={k.category_uuid}>
+                            <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5">
+                                <span className="flex min-w-0 items-center gap-1.5">
+                                    <span className="h-2 w-2 shrink-0 rounded-full"
+                                        style={{ background: k.color ?? 'var(--color-text-secondary)' }}/>
+                                    <span className="truncate text-xs text-[var(--color-text-primary)]">{k.name}</span>
+                                </span>
+                                <span className={`shrink-0 text-xs tabular-nums ${
+                                    dosly ? 'text-[var(--fin-vydaj)]' : 'text-[var(--color-text-primary)]'
+                                }`}>
+                                    {dosly
+                                        ? `přečerpáno o ${penize(Math.abs(k.remaining), k.currency)}`
+                                        : `zbývá ${penize(k.remaining, k.currency)}`}
+                                </span>
+                            </div>
+                            <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-[var(--color-surface-muted)]">
+                                <div className="h-full rounded-full"
+                                    style={{
+                                        width: `${Math.min(100, k.percent)}%`,
+                                        background: dosly ? 'var(--fin-vydaj)'
+                                            : k.percent >= 80 ? 'var(--fin-upozorneni)'
+                                                : (k.color ?? 'var(--fin-prijem)'),
+                                    }}/>
+                            </div>
+                        </li>
+                    );
+                })}
+            </ul>
+        </Panel>
+    );
 }
 
 function PanelPartneru({ data, naTransakce }: { data: PrehledData; naTransakce: (f: Record<string, string>) => void }) {

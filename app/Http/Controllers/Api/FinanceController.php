@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Budget;
 use App\Models\FinanceCategory;
 use App\Models\FinanceProject;
 use App\Models\GallerySpace;
@@ -17,6 +18,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Modul Rozpočet — společné finance na cestách.
@@ -622,6 +624,56 @@ class FinanceController extends Controller
      * měsíční. Když žádný rozpočet není, vrací se null a obrazovka místo prázdného
      * ukazatele nabídne, ať se založí.
      */
+    /**
+     * Kolik ještě zbývá na jednotlivé kategorie.
+     *
+     * Bere se z běžícího rozpočtu se `scope = ledger` — z toho, který má vyhrazené
+     * částky. Řadí se podle toho, kde zbývá nejmíň: co dochází, má být vidět první,
+     * ne co je pohodlně v plusu.
+     *
+     * @param  Collection<int, Transaction>  $pohyby
+     * @return array<int, array<string, mixed>>
+     */
+    private function zbyvaNaKategorie(GallerySpace $space, Collection $pohyby, string $mena): array
+    {
+        $rozpocet = Budget::where('gallery_space_id', $space->id)
+            ->where('scope', 'ledger')->where('currency', $mena)
+            ->orderByDesc('starts_on')->first();
+
+        if ($rozpocet === null) {
+            return [];
+        }
+
+        $limity = DB::table('budget_category_limits')
+            ->where('budget_id', $rozpocet->id)->pluck('amount', 'finance_category_id');
+
+        if ($limity->isEmpty()) {
+            return [];
+        }
+
+        $utraceno = collect($this->finance->byCategory($pohyby, $mena))->keyBy('category_id');
+
+        return FinanceCategory::where('gallery_space_id', $space->id)
+            ->whereIn('id', $limity->keys())->get()
+            ->map(function (FinanceCategory $k) use ($limity, $utraceno, $mena) {
+                $vyhrazeno = (float) $limity[$k->id];
+                $padlo = (float) ($utraceno[$k->id]['amount'] ?? 0);
+
+                return [
+                    'category_uuid' => $k->uuid,
+                    'name' => $k->name,
+                    'color' => $k->color,
+                    'planned' => round($vyhrazeno, 2),
+                    'spent' => round($padlo, 2),
+                    'remaining' => round($vyhrazeno - $padlo, 2),
+                    'percent' => $vyhrazeno > 0 ? min(999, (int) round($padlo / $vyhrazeno * 100)) : 0,
+                    'currency' => $mena,
+                ];
+            })
+            ->sortBy('remaining')
+            ->values()->all();
+    }
+
     private function rozpocetStavu(GallerySpace $space, FinanceFilter $filtr, Collection $pohyby, string $mena): ?array
     {
         // Když se jede, má cestovní rozpočet přednost i bez přepnutí období. Kdo je
@@ -694,6 +746,12 @@ class FinanceController extends Controller
             'percent' => $limit > 0 ? min(999, (int) round($ciste / $limit * 100)) : 0,
             'safe_daily' => $bezpecne,
             'state' => $ciste > $limit ? 'over' : ($ciste >= $limit * 0.8 ? 'near' : 'ok'),
+            // Kolik ještě zbývá na jednotlivé kategorie.
+            //
+            // „Kam peníze šly" už přehled ukazoval. U pokladny je ale potřeba opačná
+            // otázka — kolik ještě můžu utratit za jídlo — a ta se dosud dala zjistit
+            // jen přepnutím do jiné záložky a přečtením tabulky.
+            'categories' => $this->zbyvaNaKategorie($space, $pohyby, $menaLimitu),
         ];
     }
 

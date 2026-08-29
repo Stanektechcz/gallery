@@ -357,18 +357,19 @@ class FinanceBudgetController extends Controller
         } else {
             $data['period_mode'] = 'fixed';
 
-            // Období si rozpočet na cestu bere z cesty. Ptát se na ně zvlášť by znamenalo
-            // dvě data téhož pobytu, která se dřív nebo později rozejdou — a čerpání by
-            // se pak počítalo za jiné dny, než za které cesta trvá.
-            if (! empty($data['finance_project_id'])) {
+            // Období se zadává přímo u rozpočtu. Dřív se muselo vzít z cesty, takže se
+            // kvůli dvěma datům musela nejdřív založit cesta — obrazovka navíc za nic.
+            // Když je rozpočet ke starší cestě přivázaný, období se z ní ještě vezme,
+            // aby se dosavadní rozpočty nasazením nerozešly s tím, co ukazovaly.
+            if (empty($data['starts_on']) && ! empty($data['finance_project_id'])) {
                 $cesta = FinanceProject::find($data['finance_project_id']);
 
-                $data['starts_on'] = $data['starts_on'] ?? $cesta?->starts_on?->toDateString();
+                $data['starts_on'] = $cesta?->starts_on?->toDateString();
                 $data['ends_on'] = $data['ends_on'] ?? $cesta?->ends_on?->toDateString();
             }
 
             abort_if(empty($data['starts_on']) && ! $uprava, 422,
-                'Rozpočet na cestu potřebuje vědět, odkdy platí. Vyberte cestu, která má zadané datum začátku.');
+                'Rozpočet na období potřebuje vědět, odkdy platí.');
         }
 
         // `amount` je v modelu `monthly_income`? Ne — limit má vlastní význam a ukládá
