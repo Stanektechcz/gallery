@@ -155,6 +155,27 @@ class FinanceAccessTest extends TestCase
             ->assertJsonPath('budgets.0.can_edit', false);
     }
 
+    /**
+     * Země se ukládá celým názvem, ne dvoupísmenným kódem.
+     *
+     * Sloupec byl `string(2)`, takže na MySQL neprošla žádná cesta se zemí delší než
+     * dva znaky. Ve vývoji je SQLite, která délku textu nehlídá — tenhle test tedy
+     * lokálně projde i s vadným sloupcem a hlídá hlavně úmysl: do „Země" patří to,
+     * co tam člověk napíše, a stejné se to má vrátit.
+     */
+    public function test_zeme_se_ulozi_celym_nazvem(): void
+    {
+        $this->actingAs($this->adri)
+            ->postJson('/api/v1/rozpocet/cesty', [
+                'name' => 'Regensburg', 'starts_on' => '2026-09-01',
+                'base_currency' => 'EUR', 'country' => 'Německo', 'city' => 'Regensburg',
+            ])
+            ->assertCreated()
+            ->assertJsonPath('trip.country', 'Německo');
+
+        $this->assertDatabaseHas('finance_projects', ['name' => 'Regensburg', 'country' => 'Německo']);
+    }
+
     /** Rozpočet na cestu si bere období z cesty — jinak by neměl odkdy počítat. */
     public function test_rozpocet_na_cestu_prebira_obdobi(): void
     {
