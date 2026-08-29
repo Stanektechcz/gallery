@@ -38,27 +38,21 @@ Schedule::command('gallery:auto-tag --apply --no-interaction')
     ->withoutOverlapping()
     ->name('auto-tag');
 
-// Nevyřízené žádosti o peníze. Jednou denně stačí — a příkaz si sám hlídá, aby tutéž
-// žádost nepřipomínal opakovaně.
-Schedule::command('gallery:money-request-reminders --no-interaction')
-    ->dailyAt('09:30')
-    ->withoutOverlapping()
-    ->name('money-request-reminders');
-
-// Docházející rozpočet a přetečené kategorie. Příkaz si sám hlídá denní dobu i to, aby
-// tutéž zprávu neposlal dvakrát — plánovač ho proto může volat každou hodinu.
-Schedule::command('gallery:budget-alerts --no-interaction')
-    ->hourly()
-    ->withoutOverlapping()
-    ->name('budget-alerts');
-
-// Pravidelné položky rozpočtu na nový měsíc. Prvního ráno, jinak by nájem chyběl
-// v přehledu právě ve dnech, kdy se člověk dívá, jestli mu vyjde měsíc.
-Schedule::command('gallery:recurring-entries --apply --no-interaction')
-    ->monthlyOn(1, '06:30')
-    ->withoutOverlapping()
-    ->name('recurring-budget-entries');
-
+/*
+ * Tři úlohy vyřazeného rozpočtového systému tady byly do 29. 8. 2026 a odešly s ním.
+ *
+ * `money-request-reminders` připomínal žádosti o peníze, které se od odstranění
+ * `BudgetController` nedají založit ani zodpovědět — žádnou obrazovku nikdy neměly.
+ * `budget-alerts` a `recurring-entries` pracovaly nad rozpočty, které po smazání
+ * starých obrazovek a API nejde otevřít. Upozornění na něco, co se nedá otevřít, je
+ * horší než ticho: člověk ho jde hledat a nenajde.
+ *
+ * Data v `budget_entries` a `money_requests` zůstala. Odešel jen kód, který na ně
+ * sahal, takže se dají kdykoli přečíst z databáze.
+ *
+ * Modul Rozpočet si upozornění počítá sám a ukazuje je v přehledu. Push notifikace
+ * pro něj zatím nejsou — je to samostatná práce, ne něco, co by tímhle zaniklo.
+ */
 // Old plans should never remain in current views simply because nobody opened the calendar.
 Schedule::command('gallery:close-elapsed-events --no-interaction')
     ->dailyAt('00:05')

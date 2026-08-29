@@ -170,56 +170,6 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
         Route::post('/rozpocty/{uuid}/puvodni-plan', [App\Http\Controllers\Api\FinanceBudgetController::class, 'resetPlan'])->name('budgets.reset');
     });
 
-    Route::prefix('kniha')->name('api.ledger.')->group(function () {
-        Route::get('/prehled', [App\Http\Controllers\Api\LedgerController::class, 'dashboard'])->name('dashboard');
-        Route::get('/partneri', [App\Http\Controllers\Api\LedgerController::class, 'partners'])->name('partners');
-        Route::post('/partneri', [App\Http\Controllers\Api\LedgerController::class, 'storePartner'])->name('partners.store');
-        Route::patch('/partneri/{id}', [App\Http\Controllers\Api\LedgerController::class, 'updatePartner'])->name('partners.update');
-        Route::delete('/partneri/{id}', [App\Http\Controllers\Api\LedgerController::class, 'destroyPartner'])->name('partners.destroy');
-        Route::post('/penezenky', [App\Http\Controllers\Api\LedgerController::class, 'storeWallet'])->name('wallets.store');
-        Route::patch('/penezenky/{uuid}', [App\Http\Controllers\Api\LedgerController::class, 'updateWallet'])->name('wallets.update');
-        Route::delete('/penezenky/{uuid}', [App\Http\Controllers\Api\LedgerController::class, 'destroyWallet'])->name('wallets.destroy');
-        Route::get('/transakce', [App\Http\Controllers\Api\LedgerController::class, 'transactions'])->name('transactions');
-        Route::post('/transakce', [App\Http\Controllers\Api\LedgerController::class, 'storeTransaction'])->name('transactions.store');
-        Route::patch('/transakce/{uuid}', [App\Http\Controllers\Api\LedgerController::class, 'updateTransaction'])->name('transactions.update');
-        Route::delete('/transakce/{uuid}', [App\Http\Controllers\Api\LedgerController::class, 'destroyTransaction'])->name('transactions.destroy');
-    });
-
-    // Rozpočty na období a žádosti o peníze mezi partnery.
-    Route::prefix('rozpocty')->name('api.budgets.')->group(function () {
-        Route::get('/', [App\Http\Controllers\Api\BudgetController::class, 'index'])->name('index');
-        Route::post('/', [App\Http\Controllers\Api\BudgetController::class, 'store'])->name('store');
-        Route::post('/zadost', [App\Http\Controllers\Api\BudgetController::class, 'requestMoney'])->name('request');
-        Route::post('/zadost/{uuid}', [App\Http\Controllers\Api\BudgetController::class, 'respondToRequest'])->name('request.respond');
-        // Musí být před `/{uuid}`, jinak si Laravel přečte „souhrn" jako uuid rozpočtu
-        // a hledá rozpočet toho jména.
-        Route::get('/souhrn', [App\Http\Controllers\Api\BudgetController::class, 'summary'])->name('summary');
-        Route::get('/{uuid}', [App\Http\Controllers\Api\BudgetController::class, 'show'])->name('show');
-        Route::get('/{uuid}/export', [App\Http\Controllers\Api\BudgetController::class, 'export'])->name('export');
-        Route::patch('/{uuid}', [App\Http\Controllers\Api\BudgetController::class, 'update'])->name('update');
-        Route::delete('/{uuid}', [App\Http\Controllers\Api\BudgetController::class, 'destroy'])->name('destroy');
-        Route::post('/{uuid}/kategorie', [App\Http\Controllers\Api\BudgetController::class, 'storeCategory'])->name('categories.store');
-        Route::put('/{uuid}/ucastnici', [App\Http\Controllers\Api\BudgetController::class, 'updateMembers'])->name('members.update');
-        Route::post('/{uuid}/kopie', [App\Http\Controllers\Api\BudgetController::class, 'duplicate'])->name('duplicate');
-        Route::post('/{uuid}/cile', [App\Http\Controllers\Api\BudgetController::class, 'storeGoal'])->name('goals.store');
-        Route::patch('/{uuid}/cile/{goalUuid}', [App\Http\Controllers\Api\BudgetController::class, 'updateGoal'])->name('goals.update');
-        Route::delete('/{uuid}/cile/{goalUuid}', [App\Http\Controllers\Api\BudgetController::class, 'destroyGoal'])->name('goals.destroy');
-        Route::get('/{uuid}/kategorie/{categoryId}/historie', [App\Http\Controllers\Api\BudgetController::class, 'categoryHistory'])->name('categories.history');
-        Route::post('/{uuid}/polozky/{entryUuid}/rozdelit', [App\Http\Controllers\Api\BudgetController::class, 'splitEntry'])->name('entries.split');
-        Route::get('/{uuid}/kategorie/navrh', [App\Http\Controllers\Api\BudgetController::class, 'suggestPlan'])->name('categories.suggest');
-        Route::post('/{uuid}/kategorie/zaklad', [App\Http\Controllers\Api\BudgetController::class, 'storeStarterCategories'])->name('categories.starter');
-        Route::patch('/{uuid}/kategorie/{categoryId}', [App\Http\Controllers\Api\BudgetController::class, 'updateCategory'])->name('categories.update');
-        Route::delete('/{uuid}/kategorie/{categoryId}', [App\Http\Controllers\Api\BudgetController::class, 'destroyCategory'])->name('categories.destroy');
-        Route::post('/{uuid}/vypis/nahled', [App\Http\Controllers\Api\BudgetController::class, 'previewStatement'])->name('statement.preview');
-        Route::post('/{uuid}/vypis', [App\Http\Controllers\Api\BudgetController::class, 'importStatement'])->name('statement.import');
-        Route::post('/{uuid}/vyrovnani', [App\Http\Controllers\Api\BudgetController::class, 'settleUp'])->name('settlement.store');
-        Route::delete('/{uuid}/vyrovnani/{settlementUuid}', [App\Http\Controllers\Api\BudgetController::class, 'destroySettlement'])->name('settlement.destroy');
-        Route::get('/{uuid}/polozky', [App\Http\Controllers\Api\BudgetController::class, 'entries'])->name('entries.index');
-        Route::post('/{uuid}/polozky', [App\Http\Controllers\Api\BudgetController::class, 'storeEntry'])->name('entries.store');
-        Route::patch('/{uuid}/polozky/{entryUuid}', [App\Http\Controllers\Api\BudgetController::class, 'updateEntry'])->name('entries.update');
-        Route::delete('/{uuid}/polozky/{entryUuid}', [App\Http\Controllers\Api\BudgetController::class, 'destroyEntry'])->name('entries.destroy');
-    });
-
     // Zároveň — the day's shared moment.
     Route::get('/daily-moment', [App\Http\Controllers\Api\DailyMomentController::class, 'show'])->name('api.daily-moment.show');
     Route::post('/daily-moment', [App\Http\Controllers\Api\DailyMomentController::class, 'store'])->name('api.daily-moment.store');
