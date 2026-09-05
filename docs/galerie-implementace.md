@@ -160,6 +160,12 @@ obrazovka překresluje z databáze, ne z toho, co si klient myslí.
       skončil ve frontě workera (202) a doručil se, jakmile server naběhl**
 - [x] Testy (16 doručení + 2 PWA přepsané)
 
+- [x] Dotazování na změny partnera. Klient stav načte jednou při startu a pak už
+      jen posílá vlastní změny; kontrakt na to má nepovinný SSE proud, jenže ten
+      by znamenal držet PHP proces pro každou otevřenou kartu a klient pro něj
+      nemá kód. Dotaz jednou za dvacet vteřin je levnější a stačí — neptá se,
+      když je karta schovaná ani když čeká vlastní zápis.
+
 ## Co zůstává na prototypu
 
 Runtime prototypu si React a Babel bere z unpkg a šablonu (2 MB) překládá až

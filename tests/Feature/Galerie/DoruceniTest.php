@@ -36,6 +36,22 @@ class DoruceniTest extends TestCase
     }
 
     /**
+     * Druhý musí vidět, co první napsal.
+     *
+     * Klient stav načte jednou při startu a pak už jen posílá vlastní změny —
+     * bez dotazování by se partnerova změna objevila teprve po obnovení stránky
+     * a nikdo by nepoznal, že kouká na včerejšek.
+     */
+    public function test_dokument_se_ptá_na_zmeny_partnera(): void
+    {
+        $telo = $this->get('/')->assertOk()->getContent();
+
+        $this->assertStringContainsString('api.load()', $telo);
+        $this->assertStringContainsString('document.hidden', $telo);
+        $this->assertStringContainsString('visibilitychange', $telo);
+    }
+
+    /**
      * Hlavička musí být uvnitř `<head>`.
      *
      * `galerie-api.js` se načítá v těle dokumentu a podle `GALERIE_API_BASE`

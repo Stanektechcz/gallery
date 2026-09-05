@@ -34,6 +34,33 @@
       navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(function () {});
     });
   }
+
+  /*
+   * Aby druhý viděl, co první napsal.
+   *
+   * Klient stav načte jednou při startu a pak už jen posílá vlastní změny —
+   * co mezitím napsal partner, se objeví teprve po obnovení stránky. Kontrakt
+   * na to má nepovinný SSE proud, jenže ten by znamenal držet PHP proces pro
+   * každou otevřenou kartu, a klient pro něj stejně nemá kód.
+   *
+   * Dotaz jednou za dvacet vteřin je levnější a stačí: stav je jeden dokument
+   * a odpověď na nezměněný jde z paměti service workera. Neptá se, když je
+   * karta schovaná (nikdo se nedívá) ani když čeká vlastní zápis (přišel by
+   * o něj, než se stihne odeslat).
+   */
+  setInterval(function () {
+    var api = window.GalerieApi;
+    if (! api || api.mode !== 'http' || ! window.GALERIE_API_TOKEN) return;
+    if (document.hidden) return;
+    if ((api.status() || {}).pending) return;
+
+    api.load();
+  }, 20000);
+
+  window.addEventListener('visibilitychange', function () {
+    var api = window.GalerieApi;
+    if (! document.hidden && api && api.mode === 'http' && window.GALERIE_API_TOKEN) api.load();
+  });
 })();
 </script>
 {{-- Data administrace ze serveru. Prototyp je má staticky v galerie-data.js;
