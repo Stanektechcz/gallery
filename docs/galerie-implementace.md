@@ -84,12 +84,24 @@ se klíče později vytahují do vlastních tabulek.
       v čitelné podobě; účty zakládá `GallerySpaceSeeder` s náhodným heslem.
 - [x] Testy (8): 24 klíčů, 503, poškozený soubor, 304, `private`, seeder dvakrát
 
-### 6. Upozornění a úlohy
-- [ ] `PushController` nad existující tabulkou `push_subscriptions` a `WebPushService`
-      (klíče VAPID se berou z `config/push.php`; druhá dvojice by znamenala, že
-      prohlížeč odběr registrovaný na jeden klíč u druhého odmítne)
-- [ ] `galerie:expire` (tichá), `galerie:notify` (jen revize rozhodnutí), `galerie:clean-trash`
-- [ ] Testy: neplatný odběr se maže, vypršení neposílá nic
+### 6. Upozornění a úlohy — hotovo
+- [x] `POST` / `DELETE /api/push/subscribe` míří na **existující** kontroler
+      odběrů. Druhá implementace téhož by byla druhé místo, kde se dá zapomenout
+      smazat odběr odhlášeného zařízení; tělo požadavku je shodné.
+- [x] Klíče VAPID z `config/push.php` — druhá dvojice by znamenala, že prohlížeč
+      odběr registrovaný na jeden klíč u druhého odmítne
+- [x] `galerie:expire` (03:10, **tichá**) — scaffold tu snižoval čítač `expDays`,
+      jenže takový klíč prototyp nemá. Skutečné klíče jsou `expRen`, `expEt`
+      a `expDead` a zbývající dny se počítají z data vzniku; příkaz počítá stejně
+      jako `expVals()` v `galerie-mechanismy-logika.js`. Běh, který nic nezmění,
+      nezvedne `rev` — jinak by otevřená aplikace dostala po půlnoci 409.
+- [x] `galerie:notify` (18:00) — jediné upozornění, jen `decs` se stavem
+      „k revizi"; ukázková data klienta se neposílají
+- [x] `gallery:purge-trash` (04:20) — aplikace `purge_after` dosud jen zapisovala
+      a nikdo podle něj neuklízel: smazaná fotka zůstávala na disku i v součtu
+      úložiště navždy
+- [x] Testy (17): odběr se neduplikuje, vypršení po lhůtě i obnovené a trvalé
+      domluvy, druhý běh nezvedne `rev`, koš maže až po lhůtě a nasucho nemaže
 
 ### 7. Administrace — chybí celá
 Prototyp má data jen na klientovi. Backend potřebuje:

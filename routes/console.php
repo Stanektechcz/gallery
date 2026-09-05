@@ -118,6 +118,31 @@ Schedule::command('gallery:scan-duplicates')
     ->weekly()
     ->name('weekly-duplicate-scan');
 
+// Koš po třiceti dnech.
+//
+// `purge_after` se dosud jen zapisovalo a nikdo podle něj neuklízel — smazaná
+// fotka zůstávala na disku i v součtu úložiště navždy, takže se platilo za místo,
+// které podle obrazovky ubylo. V noci, protože maže z disku.
+Schedule::command('gallery:purge-trash --no-interaction')
+    ->dailyAt('04:20')
+    ->withoutOverlapping()
+    ->name('trash-purge');
+
+// ——— Prototyp Galerie ———
+
+// Domluvy, kterým vypršela platnost. Musí běžet na serveru: klient si odpočet
+// sice počítá sám, ale zapsat vypršení může jen tehdy, když si někdo aplikaci
+// otevře. Schválně bez upozornění — domluva zmizí a nikdo ji neporušil.
+Schedule::command('galerie:expire --no-interaction')
+    ->dailyAt('03:10')
+    ->name('galerie-expire');
+
+// Jediné upozornění, které prototyp posílá: rozhodnutí čeká na revizi.
+// Podvečer, ne ráno — revize je věc na doma, ne do práce.
+Schedule::command('galerie:notify --no-interaction')
+    ->dailyAt('18:00')
+    ->name('galerie-notify');
+
 // Scheduler heartbeat (for doctor check)
 Schedule::call(function () {
     \App\Models\SystemSetting::set('scheduler_last_heartbeat', now()->toIso8601String());

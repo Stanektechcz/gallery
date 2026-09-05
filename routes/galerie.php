@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\CalendarPlanningController;
 use App\Http\Controllers\Api\Galerie\MechanismController;
 use App\Http\Controllers\Api\Galerie\MediaController;
 use App\Http\Controllers\Api\Galerie\StateController;
@@ -40,6 +41,19 @@ Route::middleware(['auth:sanctum', 'throttle:120,1'])->prefix('api')->group(func
     Route::post('logout', [TokenController::class, 'destroy'])->name('galerie.logout');
 
     Route::get('mechanisms', [MechanismController::class, 'index'])->name('galerie.mechanisms');
+
+    /*
+     * Odběr upozornění.
+     *
+     * Míří rovnou na kontroler, který tuhle tabulku obsluhuje pro zbytek
+     * aplikace. Druhá implementace téhož by znamenala dvě místa, kde se dá
+     * zapomenout smazat odběr odhlášeného zařízení — a tělo požadavku je
+     * shodné, prototyp posílá `PushSubscription` z prohlížeče tak, jak je.
+     */
+    Route::post('push/subscribe', [CalendarPlanningController::class, 'storePushSubscription'])
+        ->name('galerie.push.subscribe');
+    Route::delete('push/subscribe', [CalendarPlanningController::class, 'destroyPushSubscription'])
+        ->name('galerie.push.unsubscribe');
 
     // Klíč se registruje až přihlášenému člověku — jinak by si otisk k účtu
     // připojil kdokoli, kdo zná e-mail.
