@@ -1,0 +1,1148 @@
+{
+  "MECH_LABELS": {
+    "arbDone": "arbitr rozhodl",
+    "arbMech": "mechanismus arbitra",
+    "surpSrc": "zdroj odběru",
+    "surpMoved": "odběr do plánu",
+    "surpExtra": "nový odběr překvapení",
+    "verSteps": "nová verze rozhodnutí",
+    "expRen": "obnovená domluva",
+    "expDead": "vypršelá domluva",
+    "expEt": "trvalost domluvy",
+    "fsAdd": "spouštěč hádky",
+    "fsTry": "zkoušený protilék",
+    "fsWin": "protilék zabral",
+    "quartTalk": "čtvrtletní rozhovor",
+    "quartPlan": "čtvrtletní okno",
+    "quartTook": "zápis z rozhovoru",
+    "indepLearn": "předaná znalost",
+    "indepSwap": "předání na měsíc",
+    "trustCalled": "ozvání se blízkému",
+    "trustTold": "doplněná druhá strana",
+    "svedAdj": "váha svědomí",
+    "exitOff": "obsah odchodového balíčku",
+    "exitMade": "odchodový balíček",
+    "dayBonus": "zátěž dne",
+    "dayGiven": "vzdaná výhoda dne",
+    "dayShift": "přehozená práce",
+    "blizAdd": "zápis blízkosti",
+    "blizWA": "chuť Adriana",
+    "blizWM": "chuť Makinky",
+    "blizBlock": "vyřešená překážka",
+    "kidsStance": "pozice k dětem",
+    "kidsYear": "rok u dětí",
+    "kidsFixed": "vyřešená překážka u dětí",
+    "kidsTalks": "rozhovor o dětech",
+    "mineInc": "přepsaný příjem",
+    "mineEven": "podíly na výdajích",
+    "parDone": "vyřízená věc u rodičů",
+    "decs": "zápis rozhodnutí",
+    "optIn": "zapnutá funkce"
+  },
+  "DC_GRPS": [
+    [
+      "Paměť",
+      [
+        "mem",
+        "ver",
+        "auto",
+        "hours"
+      ]
+    ],
+    [
+      "Spory",
+      [
+        "truth",
+        "spor",
+        "veto",
+        "loop",
+        "past"
+      ]
+    ],
+    [
+      "Domluvy",
+      [
+        "prom",
+        "exp",
+        "tacit",
+        "forg"
+      ]
+    ],
+    [
+      "Rozvaha",
+      [
+        "cool",
+        "pm"
+      ]
+    ],
+    [
+      "Citlivé",
+      [
+        "kids"
+      ]
+    ]
+  ],
+  "KL_GRPS": [
+    [
+      "Nálada",
+      [
+        "klMood",
+        "klEnergy",
+        "klBurn",
+        "klDnes"
+      ]
+    ],
+    [
+      "Pozornost",
+      [
+        "klAttn",
+        "klPat",
+        "klQuiet",
+        "klTicho"
+      ]
+    ],
+    [
+      "Rozhovor",
+      [
+        "klAsk",
+        "klPause",
+        "klJoy"
+      ]
+    ],
+    [
+      "Sami",
+      [
+        "klSolo",
+        "klQuart",
+        "klBliz"
+      ]
+    ],
+    [
+      "Vzorce",
+      [
+        "klStart",
+        "klBlind"
+      ]
+    ]
+  ],
+  "HS_GRPS": [
+    [
+      "Práce",
+      [
+        "chores",
+        "cap",
+        "fav",
+        "head"
+      ]
+    ],
+    [
+      "Byt a lhůty",
+      [
+        "flat",
+        "due"
+      ]
+    ],
+    [
+      "Lidé",
+      [
+        "fam",
+        "vis",
+        "trust",
+        "spk",
+        "par"
+      ]
+    ],
+    [
+      "Odolnost",
+      [
+        "bus",
+        "indep",
+        "away",
+        "later"
+      ]
+    ]
+  ],
+  "FIN_GRPS": [
+    [
+      "Přehled",
+      [
+        0,
+        1,
+        2,
+        3
+      ]
+    ],
+    [
+      "Investice a výhled",
+      [
+        4,
+        5,
+        6,
+        7,
+        8,
+        9
+      ]
+    ],
+    [
+      "Rozhodování",
+      [
+        10,
+        11
+      ]
+    ]
+  ],
+  "BUD_GRPS": [
+    [
+      "Měsíc",
+      [
+        0,
+        1,
+        2
+      ]
+    ],
+    [
+      "Pravidla",
+      [
+        3,
+        4
+      ]
+    ],
+    [
+      "Rozbor",
+      [
+        5,
+        6,
+        7,
+        9
+      ]
+    ],
+    [
+      "Osobní",
+      [
+        8,
+        10
+      ]
+    ]
+  ],
+  "DAY_LOAD": [
+    {
+      "who": "Adrian",
+      "items": [
+        [
+          "Spal 5,5 hodiny",
+          2
+        ],
+        [
+          "Šest schůzek za sebou",
+          2
+        ],
+        [
+          "70 minut v autě",
+          1
+        ],
+        [
+          "Bez přesčasu",
+          0
+        ]
+      ]
+    },
+    {
+      "who": "Makinka",
+      "items": [
+        [
+          "Spala 7 hodin",
+          0
+        ],
+        [
+          "Dvanáctka na oddělení",
+          3
+        ],
+        [
+          "Volala s mámou 40 minut",
+          1
+        ],
+        [
+          "Bez cesty",
+          0
+        ]
+      ]
+    }
+  ],
+  "DAY_HIST": [
+    {
+      "d": "včera",
+      "who": "Adrian",
+      "pts": "5 : 3"
+    },
+    {
+      "d": "předevčírem",
+      "who": "Makinka",
+      "pts": "2 : 6"
+    },
+    {
+      "d": "v pondělí",
+      "who": "nikdo",
+      "pts": "3 : 3"
+    },
+    {
+      "d": "v sobotu",
+      "who": "Makinka",
+      "pts": "1 : 4"
+    },
+    {
+      "d": "ve čtvrtek",
+      "who": "Adrian",
+      "pts": "6 : 2"
+    }
+  ],
+  "BLIZ": {
+    "weeks": [
+      [
+        "28.",
+        2
+      ],
+      [
+        "29.",
+        1
+      ],
+      [
+        "30.",
+        3
+      ],
+      [
+        "31.",
+        0
+      ],
+      [
+        "32.",
+        1
+      ],
+      [
+        "33.",
+        0
+      ],
+      [
+        "34.",
+        2
+      ],
+      [
+        "35.",
+        1
+      ]
+    ],
+    "init": {
+      "Adrian": 11,
+      "Makinka": 4
+    },
+    "no": {
+      "Adrian": 2,
+      "Makinka": 7
+    },
+    "block": [
+      [
+        "Únava po dvanáctkách",
+        9,
+        "x-klid"
+      ],
+      [
+        "Pozdní hodina",
+        6,
+        "x-klid"
+      ],
+      [
+        "Nikdo nenavrhl",
+        5,
+        null
+      ],
+      [
+        "Nedořešená hádka",
+        4,
+        "x-rozhodnuti"
+      ],
+      [
+        "Bolestivé dny",
+        3,
+        "x-cyklus"
+      ]
+    ]
+  },
+  "SOLO_MONEY": [
+    {
+      "who": "Adrian",
+      "income": 58000,
+      "debt": 0,
+      "debtNote": "bez dluhu",
+      "own": 412000,
+      "share": 52,
+      "note": "Investice a rezerva vedené na jeho jméno."
+    },
+    {
+      "who": "Makinka",
+      "income": 47000,
+      "debt": 86000,
+      "debtNote": "auto, 3 400 měsíčně do 3/2028",
+      "own": 268000,
+      "share": 48,
+      "note": "Spoření a podíl na rezervě."
+    }
+  ],
+  "SOLO_COST": {
+    "rent": 18400,
+    "life": 21000,
+    "alone": 14200
+  },
+  "KIDS": {
+    "pos": [
+      {
+        "who": "Adrian",
+        "stance": "ano",
+        "year": 2028,
+        "sure": 4,
+        "note": "Chce, ale nechce o tom mluvit každý měsíc."
+      },
+      {
+        "who": "Makinka",
+        "stance": "nevím",
+        "year": 2030,
+        "sure": 2,
+        "note": "Nevím není ne. Je to nevím, a má na něj právo."
+      }
+    ],
+    "blockers": [
+      {
+        "what": "Byt se dvěma ložnicemi",
+        "kind": "byt",
+        "state": "otevřené",
+        "route": "x-rozhodnuti"
+      },
+      {
+        "what": "Makinčiny směny",
+        "kind": "práce",
+        "state": "otevřené",
+        "route": null
+      },
+      {
+        "what": "Rezerva na rok bez jednoho příjmu",
+        "kind": "peníze",
+        "state": "částečně",
+        "route": "x-rozpocty"
+      },
+      {
+        "what": "Vyšetření, které se odkládá",
+        "kind": "zdraví",
+        "state": "nezačato",
+        "route": null
+      }
+    ],
+    "talks": [
+      {
+        "when": "3. 5. 2026",
+        "mins": 40,
+        "out": "Nedohodli jste se a bylo to v pohodě."
+      },
+      {
+        "when": "21. 8. 2026",
+        "mins": 25,
+        "out": "Makinka řekla, že nechce termín. Adrian to přijal."
+      }
+    ]
+  },
+  "PARENTS": [
+    {
+      "id": "p1",
+      "name": "Adrianova máma",
+      "age": 68,
+      "health": "dobrá, léčený tlak",
+      "dist": 12,
+      "who": "Adrian",
+      "done": [
+        "dokumenty"
+      ],
+      "missing": [
+        "plná moc",
+        "financování"
+      ],
+      "cost": 0
+    },
+    {
+      "id": "p2",
+      "name": "Adrianův otec",
+      "age": 71,
+      "health": "půl roku po operaci kolena",
+      "dist": 12,
+      "who": "Adrian",
+      "done": [],
+      "missing": [
+        "plná moc",
+        "dokumenty",
+        "financování"
+      ],
+      "cost": 0
+    },
+    {
+      "id": "p3",
+      "name": "Makinčina máma",
+      "age": 64,
+      "health": "dobrá",
+      "dist": 210,
+      "who": "Makinka",
+      "done": [
+        "plná moc"
+      ],
+      "missing": [
+        "dokumenty",
+        "financování"
+      ],
+      "cost": 0
+    },
+    {
+      "id": "p4",
+      "name": "Makinčin otec",
+      "age": 70,
+      "health": "diabetes 2. typu",
+      "dist": 210,
+      "who": "Makinka",
+      "done": [
+        "dokumenty",
+        "financování"
+      ],
+      "missing": [
+        "plná moc"
+      ],
+      "cost": 4200
+    }
+  ],
+  "ARB_MECH": [
+    {
+      "id": "last",
+      "name": "Poslední slovo",
+      "how": "V téhle oblasti má rozhodující hlas jeden z vás. Domluvené předem, ne uprostřed sporu.",
+      "icon": "ph-crown-simple"
+    },
+    {
+      "id": "los",
+      "name": "Losování",
+      "how": "Padne to na 50 : 50. Použitelné jen tam, kde jsou obě varianty snesitelné.",
+      "icon": "ph-dice-three"
+    },
+    {
+      "id": "minimax",
+      "name": "Minimaximum",
+      "how": "Vyhrává varianta, u které ten druhý ztrácí méně. Rozhoduje menší škoda, ne větší chuť.",
+      "icon": "ph-scales"
+    },
+    {
+      "id": "delay",
+      "name": "Odklad o týden",
+      "how": "Nerozhodne se nic. Za sedm dní se to otevře znovu — a pak už mechanismus padnout musí.",
+      "icon": "ph-hourglass"
+    }
+  ],
+  "ARB_ROWS": [
+    {
+      "id": "a1",
+      "what": "Kam s letošní dovolenou",
+      "area": "cesty",
+      "mech": "los",
+      "stake": 46000,
+      "lossA": 3,
+      "lossM": 3,
+      "owner": "Adrian",
+      "days": 11,
+      "optA": "Norsko",
+      "optM": "Chorvatsko",
+      "note": "Obě varianty jsou snesitelné a rozpočet je stejný. Přesně případ pro losování — jinak se o tom bude mluvit do června."
+    },
+    {
+      "id": "a2",
+      "what": "Kolik nechat v rezervě místo investic",
+      "area": "peníze",
+      "mech": "last",
+      "stake": 120000,
+      "lossA": 4,
+      "lossM": 2,
+      "owner": "Makinka",
+      "days": 24,
+      "optA": "Víc do investic",
+      "optM": "Víc do rezervy",
+      "note": "Peníze na účtu má na starost Makinka a nese je i psychicky. Poslední slovo v téhle oblasti dostala v lednu."
+    },
+    {
+      "id": "a3",
+      "what": "Rekonstrukce koupelny letos, nebo za dva roky",
+      "area": "byt",
+      "mech": "minimax",
+      "stake": 210000,
+      "lossA": 2,
+      "lossM": 5,
+      "owner": null,
+      "days": 38,
+      "optA": "Za dva roky",
+      "optM": "Letos na jaře",
+      "note": "Odklad bolí Makinku pětkrát víc než Adriana. Minimaximum tady má jednoznačný výsledek — a oba to vědí dopředu."
+    },
+    {
+      "id": "a4",
+      "what": "Pes dřív než za dva roky",
+      "area": "život",
+      "mech": null,
+      "stake": 0,
+      "lossA": 5,
+      "lossM": 1,
+      "owner": null,
+      "days": 96,
+      "optA": "Pes do roka",
+      "optM": "Až po únoru 2027",
+      "note": "Bez mechanismu se to vrací každé tři týdny. Veto Makinky platí do února 2027 — do té doby má smysl jen odklad."
+    }
+  ],
+  "SURP": {
+    "pct": 3,
+    "spendYear": 964000,
+    "draws": [
+      {
+        "id": "s1",
+        "what": "Prasklá hadice u pračky",
+        "amount": 4380,
+        "date": "14. 3.",
+        "src": "surprise",
+        "note": "Nikdo to nemohl vědět. Instalatér byl do dvou hodin."
+      },
+      {
+        "id": "s2",
+        "what": "Servis kola po zimě",
+        "amount": 3100,
+        "date": "2. 4.",
+        "src": "omission",
+        "note": "Servis je každý rok od 2021. Do rozpočtu se prostě nezapsal."
+      },
+      {
+        "id": "s3",
+        "what": "Dárek k svatbě Terezy",
+        "amount": 5000,
+        "date": "19. 5.",
+        "src": "omission",
+        "note": "Datum svatby jste znali od ledna. Bylo i v přáních."
+      },
+      {
+        "id": "s4",
+        "what": "Zubař — plomba mimo pojištění",
+        "amount": 2900,
+        "date": "3. 6.",
+        "src": "surprise",
+        "note": "Bolelo to ve čtvrtek, řešilo se v pátek."
+      },
+      {
+        "id": "s5",
+        "what": "Nový bojler místo opravy",
+        "amount": 18600,
+        "date": "27. 7.",
+        "src": "both",
+        "note": "Překvapení bylo, že praskl. Opomenutí bylo, že mu bylo čtrnáct let a nikdo to nesledoval."
+      },
+      {
+        "id": "s6",
+        "what": "Odtah auta z modré zóny",
+        "amount": 2300,
+        "date": "9. 8.",
+        "src": "omission",
+        "note": "Parkovací karta propadla v červenci. Byla mezi lhůtami, jen ji nikdo neotevřel."
+      }
+    ]
+  },
+  "VERS": [
+    {
+      "id": "w1",
+      "title": "Kolik maximálně za byt",
+      "unit": "Kč",
+      "money": true,
+      "route": "x-rozhodnuti",
+      "steps": [
+        {
+          "v": 2500000,
+          "by": "Adrian",
+          "when": "9. 1.",
+          "why": "První nápad — kolik si myslíme, že uneseme."
+        },
+        {
+          "v": 2800000,
+          "by": "Makinka",
+          "when": "16. 1.",
+          "why": "Za 2,5 se nedá koupit nic se dvěma ložnicemi ve Slovanech."
+        },
+        {
+          "v": 2300000,
+          "by": "Banka",
+          "when": "2. 2.",
+          "why": "Úvěr schválen na míň, než jste čekali. Nikdo z vás to nezpůsobil."
+        },
+        {
+          "v": 2500000,
+          "by": "Adrian a Makinka",
+          "when": "14. 2.",
+          "why": "Doplníte 200 tisíc z rezervy. Finální číslo, zapsané do paměti rozhodnutí."
+        }
+      ]
+    },
+    {
+      "id": "w2",
+      "title": "Kolik dní dovolené spolu",
+      "unit": "dní",
+      "money": false,
+      "route": "x-plan",
+      "steps": [
+        {
+          "v": 14,
+          "by": "Makinka",
+          "when": "4. 2.",
+          "why": "Dva celé týdny, jako loni."
+        },
+        {
+          "v": 10,
+          "by": "Adrian",
+          "when": "11. 2.",
+          "why": "Uzávěrka projektu padla do druhé poloviny června."
+        },
+        {
+          "v": 12,
+          "by": "Adrian a Makinka",
+          "when": "19. 2.",
+          "why": "Dvanáct dní, z toho čtyři na cestě. Kompromis, na kterém oba ztratili stejně."
+        }
+      ]
+    },
+    {
+      "id": "w3",
+      "title": "Do kolika hodin se řeší vážné věci",
+      "unit": "h",
+      "money": false,
+      "route": "x-klid",
+      "steps": [
+        {
+          "v": 23,
+          "by": "Adrian",
+          "when": "18. 4.",
+          "why": "Původně bez hranice — kdy to přijde, tehdy se to řeší."
+        },
+        {
+          "v": 22,
+          "by": "Makinka",
+          "when": "2. 5.",
+          "why": "Po dvou nocích, které skončily nesmyslně."
+        },
+        {
+          "v": 21,
+          "by": "Adrian a Makinka",
+          "when": "18. 5.",
+          "why": "Data z tichých hodin: dvanáct ze čtrnácti pozdních rozhovorů skončilo špatně."
+        }
+      ]
+    },
+    {
+      "id": "w4",
+      "title": "Kolik dáme rodičům na Vánoce",
+      "unit": "Kč",
+      "money": true,
+      "route": "x-darky",
+      "steps": [
+        {
+          "v": 8000,
+          "by": "Makinka",
+          "when": "3. 10.",
+          "why": "Po čtyřech tisících na každou stranu."
+        },
+        {
+          "v": 5000,
+          "by": "Adrian",
+          "when": "9. 10.",
+          "why": "Loni to bylo pět a nikdo si nestěžoval."
+        },
+        {
+          "v": 6000,
+          "by": "Makinka",
+          "when": "21. 10.",
+          "why": "Tři tisíce na stranu a ušetří se na společném dárku."
+        }
+      ]
+    }
+  ],
+  "EXIT_PACK": [
+    {
+      "key": "veta",
+      "name": "Veta a poslední slova",
+      "mb": 0.2,
+      "note": "Co jsi kdy zastavil a proč. Bez druhé strany to bude vypadat tvrdě — proto se exportuje i důvod."
+    },
+    {
+      "key": "prom",
+      "name": "Slíbené a nedodržené",
+      "mb": 0.3,
+      "note": "Tvoje sliby i ty, které ti dal druhý. Odnášíš si obojí, ne jen tu příjemnější polovinu."
+    },
+    {
+      "key": "tacit",
+      "name": "Tichá pravidla",
+      "mb": 0.1,
+      "note": "Vzorce, na kterých jste se nikdy nedohodli. Každý si je odnese celé — nedělí se."
+    },
+    {
+      "key": "forg",
+      "name": "Co jsme si odpustili",
+      "mb": 0.1,
+      "note": "Odpuštění se nepůlí. Kopie jde oběma."
+    },
+    {
+      "key": "truth",
+      "name": "Dvě verze jedné události",
+      "mb": 0.4,
+      "note": "Obě verze, i ta druhá. Právě proto, aby v balíčku zbyla i cizí pravda."
+    },
+    {
+      "key": "dec",
+      "name": "Rozhodnutí a jejich důvody",
+      "mb": 1.1,
+      "note": "Proč jste to tehdy udělali takhle. Nejcennější věc v celém balíčku."
+    },
+    {
+      "key": "money",
+      "name": "Peníze — kdo co platil",
+      "mb": 2400,
+      "note": "Kompletní výpis, ne souhrn. Ne pro soud, pro vlastní klid."
+    },
+    {
+      "key": "photo",
+      "name": "Fotografie a vzpomínky",
+      "mb": 41200,
+      "note": "Originály, ne náhledy. Obě knihovny odejdou celé — z jedné vzpomínky se nedá vystřihnout jeden člověk."
+    }
+  ],
+  "SVED": [
+    {
+      "id": "g1",
+      "what": "Fitness, kam jste šli třikrát",
+      "who": "Adrian",
+      "kind": "protlačil jsem to",
+      "w0": 4,
+      "months": 9,
+      "cost": 10680,
+      "note": "Adrian to chtěl, Makinka mlčela. Zrušeno v srpnu. Mlčení není souhlas, ale svědomí ho tak čte."
+    },
+    {
+      "id": "g2",
+      "what": "Odložená rekonstrukce koupelny",
+      "who": "Adrian",
+      "kind": "odmítl jsem to",
+      "w0": 5,
+      "months": 5,
+      "cost": 34000,
+      "note": "Adrian to zastavil kvůli rezervě. Makinka se od té doby sprchuje v tom, co chtěla předělat."
+    },
+    {
+      "id": "g3",
+      "what": "Rozdělené Vánoce 2022",
+      "who": "oba",
+      "kind": "rozhodli jste špatně",
+      "w0": 5,
+      "months": 44,
+      "cost": 0,
+      "note": "Nálada 2 z 5 na obou stranách. Od té doby to je vaše nejcitovanější rozhodnutí — a nikdo za něj nemůže sám."
+    },
+    {
+      "id": "g4",
+      "what": "Nekoupený byt v Bolevci",
+      "who": "Makinka",
+      "kind": "odmítla jsem to",
+      "w0": 3,
+      "months": 22,
+      "cost": 380000,
+      "note": "Cena od té doby vyrostla. Rozhodnutí bylo v té době správné a přesto tíží — to se stává nejčastěji."
+    },
+    {
+      "id": "g5",
+      "what": "Pes odložený vetem",
+      "who": "Makinka",
+      "kind": "odmítla jsem to",
+      "w0": 4,
+      "months": 7,
+      "cost": 0,
+      "note": "Veto z února. Makinka ho nelituje, ale ví, co Adriana stálo."
+    },
+    {
+      "id": "g6",
+      "what": "Zrušené nedělní obědy s rodinou",
+      "who": "Makinka",
+      "kind": "protlačila jsem to",
+      "w0": 2,
+      "months": 11,
+      "cost": 0,
+      "note": "Zůstalo raz v měsíci a nikdo se neurazil. Svědomí, které se ukázalo jako zbytečné."
+    }
+  ],
+  "FIGHT_START": [
+    {
+      "id": "f1",
+      "trig": "„Ty vždycky…“",
+      "kind": "výčitka",
+      "n": 14,
+      "esc": 0.79,
+      "who": "Adrian",
+      "anti": "Přeformulovat na jednu konkrétní věc z posledních tří dní",
+      "antiN": 6,
+      "antiWin": 5
+    },
+    {
+      "id": "f2",
+      "trig": "Otázka „proč jsi to neudělal?“",
+      "kind": "otázka",
+      "n": 11,
+      "esc": 0.64,
+      "who": "Makinka",
+      "anti": "Místo otázky říct, co potřebuju a do kdy",
+      "antiN": 7,
+      "antiWin": 6
+    },
+    {
+      "id": "f3",
+      "trig": "Ticho prvních deset minut po příchodu domů",
+      "kind": "ticho",
+      "n": 9,
+      "esc": 0.55,
+      "who": "oba",
+      "anti": "Deset minut nic — a pak jedna věta o dni, ne otázka",
+      "antiN": 5,
+      "antiWin": 4
+    },
+    {
+      "id": "f4",
+      "trig": "Otevřená aplikace s výdaji u večeře",
+      "kind": "akce",
+      "n": 7,
+      "esc": 0.71,
+      "who": "Adrian",
+      "anti": "Peníze jen v neděli v desetiminutovce, nikdy u jídla",
+      "antiN": 4,
+      "antiWin": 4
+    },
+    {
+      "id": "f5",
+      "trig": "Zmínka o rodičích po 22:00",
+      "kind": "téma a čas",
+      "n": 6,
+      "esc": 0.83,
+      "who": "oba",
+      "anti": "Tiché hodiny — vážné věci do 21:00",
+      "antiN": 6,
+      "antiWin": 5
+    }
+  ],
+  "QUART": [
+    {
+      "id": "q1",
+      "q": "Q1",
+      "when": "14.–16. 2. 2026",
+      "a": "Adrian — Šumava, sám",
+      "m": "Makinka — Praha, u sestry",
+      "talked": true,
+      "mins": 105,
+      "took": "Že vám chybí jeden večer v týdnu úplně bez plánu.",
+      "state": "done"
+    },
+    {
+      "id": "q2",
+      "q": "Q2",
+      "when": "22.–24. 5. 2026",
+      "a": "Adrian — kolo, Vysočina",
+      "m": "Makinka — doma sama",
+      "talked": true,
+      "mins": 75,
+      "took": "Makinka chce zpátky k plavání. Zapsáno do Až budeme mít čas.",
+      "state": "done"
+    },
+    {
+      "id": "q3",
+      "q": "Q3",
+      "when": "4.–6. 9. 2026",
+      "a": "Adrian — bez plánu",
+      "m": "Makinka — Brno, kamarádky",
+      "talked": false,
+      "mins": 0,
+      "took": "",
+      "state": "booked"
+    },
+    {
+      "id": "q4",
+      "q": "Q4",
+      "when": null,
+      "a": null,
+      "m": null,
+      "talked": false,
+      "mins": 0,
+      "took": "",
+      "state": "empty"
+    }
+  ],
+  "INDEP": [
+    {
+      "id": "i1",
+      "what": "Investiční portfolio a přehled",
+      "axis": "peníze",
+      "holder": "Adrian",
+      "pain": 5,
+      "hours": 6,
+      "note": "Makinka nezná přístupy ani logiku rozdělení. V nejhorší den by řešila i to, kde to vůbec je.",
+      "fix": "Půlhodina u obrazovky a jeden zápis do trezoru."
+    },
+    {
+      "id": "i2",
+      "what": "Nájem, energie, přepisy",
+      "axis": "peníze",
+      "holder": "Makinka",
+      "pain": 4,
+      "hours": 3,
+      "note": "Adrian neví, kdo je dodavatel elektřiny ani kdy se odečítá.",
+      "fix": "Tři telefony a fotky smluv do trezoru."
+    },
+    {
+      "id": "i3",
+      "what": "Návštěvy a kdo se s kým baví",
+      "axis": "duše",
+      "holder": "Makinka",
+      "pain": 5,
+      "hours": 0,
+      "note": "Adrian by síť neudržel — a ona to ví. Tohle je nejdražší položka celé matice, i když nestojí korunu.",
+      "fix": "Nedá se naučit za odpoledne. Dá se začít jedním telefonem měsíčně."
+    },
+    {
+      "id": "i4",
+      "what": "Plánování dovolených a rezervace",
+      "axis": "duše",
+      "holder": "Adrian",
+      "pain": 3,
+      "hours": 4,
+      "note": "Makinka by jela, ale nikam by se nedostala dřív než v září.",
+      "fix": "Jedna cesta naplánovaná od začátku do konce Makinkou."
+    },
+    {
+      "id": "i5",
+      "what": "Servis auta, pneu, technická",
+      "axis": "provoz",
+      "holder": "Adrian",
+      "pain": 2,
+      "hours": 2,
+      "note": "Dá se koupit. Nepříjemné, ne vážné.",
+      "fix": "Kontakt na servis do trezoru a jeden společný odvoz."
+    },
+    {
+      "id": "i6",
+      "what": "Léky, objednávky k lékařům",
+      "axis": "provoz",
+      "holder": "Makinka",
+      "pain": 4,
+      "hours": 1,
+      "note": "Adrian nezná jména léků, které bere Makinka. To je věc, kterou řeší sanitka za vás.",
+      "fix": "Seznam do trezoru. Patnáct minut, jednou."
+    }
+  ],
+  "TRUST": [
+    {
+      "id": "n1",
+      "name": "Jana — Makinčina sestra",
+      "side": "Makinka",
+      "believes": 5,
+      "worries": 1,
+      "last": "3 dny",
+      "kind": "věří",
+      "signal": "Ptá se, kdy přijedete na víkend. Bere to, jak to máte, jako danou věc."
+    },
+    {
+      "id": "n2",
+      "name": "Petr — Adrianův bratr",
+      "side": "Adrian",
+      "believes": 4,
+      "worries": 2,
+      "last": "5 týdnů",
+      "kind": "věří s otázkou",
+      "signal": "Naposledy se ptal, jestli se pořád tak hádáte o peníze. Nebylo to zlomyslně, ale zapamatoval si to z jednoho večera před rokem."
+    },
+    {
+      "id": "n3",
+      "name": "Tereza a Michal",
+      "side": "oba",
+      "believes": 5,
+      "worries": 0,
+      "last": "11 dní",
+      "kind": "věří",
+      "signal": "Berou vás jako důkaz, že to jde. To je závazek, o kterém jste nikdy nehlasovali."
+    },
+    {
+      "id": "n4",
+      "name": "Adrianova máma",
+      "side": "Adrian",
+      "believes": 3,
+      "worries": 4,
+      "last": "2 dny",
+      "kind": "bojí se",
+      "signal": "Volá častěji, když je Adrian potichu. Tohle je ten člověk, který se kvůli vám budí v noci."
+    },
+    {
+      "id": "n5",
+      "name": "Lucie — kolegyně",
+      "side": "Makinka",
+      "believes": 2,
+      "worries": 3,
+      "last": "9 dní",
+      "kind": "slyší jen jednu stranu",
+      "signal": "Slyší jednu stranu každý čtvrtek u kávy. Bez druhé strany si skládá vlastní verzi a věří jí víc než vy."
+    }
+  ],
+  "EXPIRE": [
+    {
+      "id": "e1",
+      "rule": "Nekomentovat, co kdo koupil pod tisíc korun",
+      "made": "2. 3. 2026",
+      "days": 179,
+      "eternal": false,
+      "why": "Vzniklo po hádce o boty. Mělo platit rok a nikdo ho od té doby neporušil."
+    },
+    {
+      "id": "e2",
+      "rule": "Vážné věci se neřeší po 21:00",
+      "made": "18. 5. 2026",
+      "days": 255,
+      "eternal": false,
+      "why": "Dvanáct ze čtrnácti pozdních rozhovorů skončilo špatně. Data z tichých hodin."
+    },
+    {
+      "id": "e3",
+      "rule": "Nikdy na sebe nekřičet před rodinou",
+      "made": "24. 12. 2022",
+      "days": 0,
+      "eternal": true,
+      "why": "Tohle nevyprší. Nemá datum a nikdy ho mít nebude."
+    },
+    {
+      "id": "e4",
+      "rule": "Každý má 5 000 Kč měsíčně, které nikomu nevysvětluje",
+      "made": "1. 1. 2026",
+      "days": 118,
+      "eternal": false,
+      "why": "Obálka jen pro sebe. Drží bez jediné výjimky."
+    },
+    {
+      "id": "e5",
+      "rule": "Kdo vaří, nemyje",
+      "made": "7. 11. 2025",
+      "days": 21,
+      "eternal": false,
+      "why": "Platí, ale rotace to poslední měsíc dvakrát obešla. Vyprší dřív, než si někdo všimne."
+    },
+    {
+      "id": "e6",
+      "rule": "Nemluvit o rozchodu jako o argumentu",
+      "made": "9. 4. 2023",
+      "days": 0,
+      "eternal": true,
+      "why": "Trvalá. Bez data, bez obnovy, bez výjimky."
+    }
+  ]
+}
