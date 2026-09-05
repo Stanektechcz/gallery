@@ -128,6 +128,47 @@
 
   window.GalerieAdminObnov = nacti;
 
+  /*
+   * Po zásahu v administraci si vyžádat skutečnost.
+   *
+   * Prototyp posílá administraci jako změnu stavu; server ji provede a v odpovědi
+   * vrátí, jak to dopadlo. Klient si ale odpověď na `PATCH` jen uloží a nikomu
+   * o ní neřekne (`notify()` volá až `load()`), takže by obrazovka do dalšího
+   * dotazu ukazovala, co si přál uživatel, ne co server udělal.
+   */
+  var cekaObnova = null;
+
+  function hlidejSpravu(api) {
+    if (! api || api.__galerieHlidano) return;
+    api.__galerieHlidano = true;
+
+    var puvodni = api.save.bind(api);
+
+    api.save = function (patch) {
+      var vysledek = puvodni(patch);
+
+      if (patch && Object.keys(patch).some(function (k) { return k.indexOf('adm') === 0; })) {
+        clearTimeout(cekaObnova);
+        cekaObnova = setTimeout(function () { api.load(); nacti(); }, 1200);
+      }
+
+      return vysledek;
+    };
+  }
+
+  // Runtime prototypu své skripty načítá znovu, takže `GalerieApi` může být
+  // v průběhu nahrazen novým objektem. Hlídá se proto samotná vlastnost —
+  // s jednorázovým čekáním by se obal po prvním překreslení tiše ztratil.
+  var api = window.GalerieApi;
+  hlidejSpravu(api);
+  try {
+    Object.defineProperty(window, 'GalerieApi', {
+      configurable: true,
+      get: function () { return api; },
+      set: function (v) { api = v; hlidejSpravu(v); }
+    });
+  } catch (e) {}
+
   var hotovo = false;
   var bezi = false;
   var pokusu = 0;

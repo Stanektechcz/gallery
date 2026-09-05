@@ -90,6 +90,15 @@ Route::middleware([])->withoutMiddleware([App\Http\Middleware\HandleInertiaReque
     Route::get('/', App\Http\Controllers\Galerie\PrototypController::class)->name('galerie.prototyp');
     Route::get('/sw.js', [App\Http\Controllers\Galerie\PrototypController::class, 'serviceWorker'])
         ->name('galerie.sw');
+
+    /*
+     * Obrázkové sloty prototypu hledají vedle dokumentu soubor s tím, co do nich
+     * někdo při návrhu přetáhl. V nasazené aplikaci nikdy neexistuje, takže se
+     * při každém načtení vracela 404 — v protokolu i v nástrojích prohlížeče
+     * vypadá jako chyba, a přitom je to jen prázdno. Prázdno se tedy vrátí rovnou.
+     */
+    Route::get('/.image-slots.state.json', fn () => response()->json(new stdClass))
+        ->name('galerie.image-slots');
 });
 
 /*

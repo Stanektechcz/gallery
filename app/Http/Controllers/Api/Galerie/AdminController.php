@@ -41,11 +41,14 @@ class AdminController extends Controller
         private readonly AdministraceGalerie $administrace,
         private readonly PlanovaneUlohy $ulohy,
         private readonly EntitlementService $tarify,
+        private readonly \App\Services\Provoz\AdministraceZasahy $zasahy,
+        private readonly \App\Services\Provoz\AdminVeStavu $veStavu,
     ) {}
 
     public function index(Request $request): JsonResponse
     {
-        return $this->prehled($this->prostor($request));
+        // Čtení stav nepřepisuje — viz `prehled()`.
+        return response()->json(['data' => $this->administrace->prehled($this->prostor($request))]);
     }
 
     // ——— účty ———
@@ -68,43 +71,11 @@ class AdminController extends Controller
         abort_if($stavajici && $prostor->members()->where('users.id', $stavajici->id)->exists(),
             422, 'Tenhle e-mail už do galerie přístup má.');
 
-        $token = Str::random(60);
+        $pozvany = $this->zasahy->pozvi($prostor, $request->user(), $data['email'], $data['role'] ?? 'host');
 
-        $pozvany = $stavajici ?? User::create([
-            'uuid' => (string) Str::uuid(),
-            // Jméno z e-mailu je jen do chvíle, než si ho člověk při přijetí změní.
-            'name' => Str::of(Str::before($data['email'], '@'))->replaceMatches('/[._-]+/', ' ')->title()->toString(),
-            'email' => $data['email'],
-            'role' => 'partner',
-            // Náhodné heslo, které nikdo nezná: účet se otevírá odkazem z pozvánky.
-            'password' => Hash::make(Str::random(32)),
-            'invitation_token' => $token,
-            'invited_by' => true,
-            'invited_by_user_id' => $request->user()->id,
-            'is_active' => true,
-        ]);
+        abort_if($pozvany === null, 422, 'Pozvánku se nepodařilo vytvořit.');
 
-        if ($stavajici) {
-            $pozvany->update(['invitation_token' => $token, 'invitation_accepted_at' => null]);
-        }
-
-        /*
-         * Členství vzniká hned, ne až přijetím pozvánky.
-         *
-         * Dosavadní pozvánka zakládala účet, ale k prostoru ho nepřipojila —
-         * kdo ji přijal, přihlásil se do aplikace bez jediné galerie. Prototyp
-         * navíc pozvaný účet v seznamu ukazuje a bez členství by tam nebyl.
-         */
-        $prostor->members()->syncWithoutDetaching([
-            $pozvany->id => [
-                'role' => AdministraceGalerie::ROLE_DOVNITR[$data['role'] ?? 'host'],
-                'joined_at' => now(),
-            ],
-        ]);
-
-        $this->zapis($request, 'admin.invite', $pozvany, 'Pozvánka odeslána na '.$pozvany->email);
-
-        return $this->prehled($prostor, ['invite_url' => $this->posliPozvanku($pozvany, $request->user(), $token)]);
+        return $this->prehled($prostor, ['invite_url' => url('/invite/'.$pozvany['token'])]);
     }
 
     public function resend(Request $request, int $id): JsonResponse
@@ -120,7 +91,9 @@ class AdminController extends Controller
 
         $this->zapis($request, 'admin.invite.resend', $clen, 'Pozvánka pro '.$clen->name.' odeslána znovu na '.$clen->email);
 
-        return $this->prehled($prostor, ['invite_url' => $this->posliPozvanku($clen, $request->user(), $token)]);
+        return $this->prehled($prostor, [
+            'invite_url' => $this->zasahy->posliPozvanku($clen, $request->user(), $token),
+        ]);
     }
 
     public function role(Request $request, int $id): JsonResponse
@@ -141,11 +114,7 @@ class AdminController extends Controller
         abort_if($clen->id === $prostor->owner_id, 422,
             'Vlastník musí být právě jeden — nejdřív předejte vlastnictví.');
 
-        $prostor->members()->updateExistingPivot($clen->id, [
-            'role' => AdministraceGalerie::ROLE_DOVNITR[$data['role']],
-        ]);
-
-        $this->zapis($request, 'admin.role', $clen, $clen->name.' má nyní roli '.$data['role']);
+        $this->zasahy->zmenRoli($prostor, $request->user(), $clen->id, $data['role']);
 
         return $this->prehled($prostor);
     }
@@ -159,19 +128,7 @@ class AdminController extends Controller
         abort_if($novy->id === $prostor->owner_id, 422, 'Tenhle účet je vlastníkem už teď.');
         abort_if(! $novy->is_active, 422, 'Vlastnictví nejde předat účtu bez přístupu.');
 
-        $puvodni = User::find($prostor->owner_id);
-
-        // Z předchozího vlastníka se stane správce — přijít o vlastní galerii
-        // předáním tarifu není to, co kdokoli tím tlačítkem myslí.
-        $prostor->update(['owner_id' => $novy->id]);
-        $prostor->members()->updateExistingPivot($novy->id, ['role' => 'owner']);
-
-        if ($puvodni) {
-            $prostor->members()->updateExistingPivot($puvodni->id, ['role' => 'admin']);
-        }
-
-        $this->zapis($request, 'admin.transfer', $novy,
-            'Vlastnictví předáno · '.$novy->name.' platí tarif'.($puvodni ? ', '.$puvodni->name.' je správce' : ''));
+        $this->zasahy->predejVlastnictvi($prostor, $request->user(), $novy->id);
 
         return $this->prehled($prostor);
     }
@@ -186,17 +143,7 @@ class AdminController extends Controller
 
         abort_if($clen->id === $prostor->owner_id, 422, 'Vlastníkovi nejde odebrat přístup.');
 
-        $clen->update(['is_active' => $data['active']]);
-
-        if (! $data['active']) {
-            // Odebraný přístup musí platit hned. Bez zrušení tokenů by se telefon
-            // s uloženým přihlášením dostal dovnitř dál — a to je celý smysl akce.
-            $clen->tokens()->delete();
-        }
-
-        $this->zapis($request, 'admin.access', $clen, $data['active']
-            ? 'Přístup pro '.$clen->name.' obnoven'
-            : $clen->name.' už do galerie nemá přístup');
+        $this->zasahy->nastavPristup($prostor, $request->user(), $clen->id, (bool) $data['active']);
 
         return $this->prehled($prostor);
     }
@@ -388,9 +335,21 @@ class AdminController extends Controller
         return GallerySpace::findOrFail($this->parId($request));
     }
 
-    /** @param  array<string, mixed>  $navic */
+    /**
+     * Odpověď na **zásah**.
+     *
+     * Kopie ve stavu se srovná se skutečností — jinak by otevřená aplikace
+     * ukazovala seznam z posledního kliknutí v obrazovce, dokud by na něj někdo
+     * znovu neklikl. Čtení (`index`) tudy nechodí: zápis do stavu zvedá `rev`
+     * a pouhé otevření administrace by otevřené aplikaci shodilo příští uložení
+     * na konflikt.
+     *
+     * @param  array<string, mixed>  $navic
+     */
     private function prehled(GallerySpace $prostor, array $navic = []): JsonResponse
     {
+        $this->veStavu->uloz($prostor);
+
         return response()->json($navic + ['data' => $this->administrace->prehled($prostor)]);
     }
 
@@ -439,22 +398,4 @@ class AdminController extends Controller
         AuditLog::record($akce, $koho, ['popis' => $popis]);
     }
 
-    /**
-     * Pošle pozvánku a vrátí odkaz.
-     *
-     * Odkaz se vrací i při úspěchu schválně: když e-mail nedorazí (a u pozvánek
-     * to bývá spam složka), je jediná cesta dovnitř to, že ho vlastník předá sám.
-     */
-    private function posliPozvanku(User $komu, User $odKoho, string $token): string
-    {
-        $odkaz = url('/invite/'.$token);
-
-        try {
-            $komu->notify(new InvitationNotification($odkaz, $odKoho->name));
-        } catch (\Throwable $e) {
-            report($e);
-        }
-
-        return $odkaz;
-    }
 }

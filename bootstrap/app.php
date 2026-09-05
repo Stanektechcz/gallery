@@ -36,10 +36,26 @@ return Application::configure(basePath: dirname(__DIR__))
             \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
         ]);
 
-        // The payment gateway posts server-to-server and carries no session token.
+        /*
+         * The payment gateway posts server-to-server and carries no session token.
+         *
+         * `sanctum/token` je tu proto, že vydává token proti heslu — kdo ho volá,
+         * ještě žádný nemá. Prototyp ani nativní klient z README na něj token
+         * proti CSRF neposílají a v prohlížeči to procházelo jen díky hlavičce
+         * `Sec-Fetch-Site`; mimo prohlížeč se přihlásit nešlo vůbec.
+         */
         $middleware->validateCsrfTokens(except: [
             'platby/comgate/notifikace',
+            'sanctum/token',
         ]);
+
+        // Zápisy s platným tokenem CSRF nepotřebují — viz třída.
+        // `replaceInGroup`, ne `replace`: ochrana je ve skupině `web`, ne v globální řadě.
+        $middleware->replaceInGroup(
+            'web',
+            \Illuminate\Foundation\Http\Middleware\PreventRequestForgery::class,
+            \App\Http\Middleware\PreventRequestForgery::class,
+        );
 
         $middleware->alias([
             'can:admin' => \App\Http\Middleware\RequireAdminRole::class,

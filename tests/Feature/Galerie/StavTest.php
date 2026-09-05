@@ -79,6 +79,55 @@ class StavTest extends TestCase
         $this->assertSame(['nové'], CoupleState::first()->toClientArray()['favs']);
     }
 
+    /**
+     * Heslo k trezoru se neuloží, ani když dorazí.
+     *
+     * Klient si hlídá, co na server neposílá, jenže `vaultPwd` v tom seznamu
+     * chybí — při psaní se odešle. Spoléhat se na kázeň klienta nejde: mobilní
+     * aplikace, starší verze i překlep v jednom seznamu jsou tři různé cesty,
+     * jak sem heslo poslat.
+     */
+    public function test_hesla_a_kody_se_neukladaji(): void
+    {
+        $this->actingAs($this->adri)->patchJson('/api/state', [
+            'data' => [
+                'vaultPwd' => 'tajneheslo',
+                'lockPin' => '240613',
+                'gvPwd' => 'heslo pro hosty',
+                'joy' => ['tohle uložit ano'],
+            ],
+            'rev' => 0,
+        ])->assertOk();
+
+        $ulozeno = CoupleState::first();
+        $vse = json_encode([$ulozeno->data, $ulozeno->private], JSON_UNESCAPED_UNICODE);
+
+        $this->assertStringNotContainsString('tajneheslo', $vse);
+        $this->assertStringNotContainsString('240613', $vse);
+        $this->assertStringNotContainsString('heslo pro hosty', $vse);
+        $this->assertSame(['tohle uložit ano'], $ulozeno->data['joy'], 'Zbytek patche projít musí.');
+    }
+
+    /**
+     * Prázdný stav je `{}`, ne `[]`.
+     *
+     * Klient si odpověď vezme jako svou lokální kopii a ukládá ji přes
+     * `JSON.stringify`. To u pole zapíše jen číselné indexy, takže první uložení
+     * v prohlížeči zahodí všechno, co do stavu mezitím přibylo — a stane se to
+     * jen novému páru, tedy tam, kde si toho nikdo nevšimne.
+     */
+    public function test_prazdny_stav_je_objekt_ne_pole(): void
+    {
+        $telo = $this->actingAs($this->adri)->getJson('/api/state')->assertOk()->getContent();
+
+        $this->assertStringContainsString('"data":{}', $telo);
+        $this->assertStringNotContainsString('"data":[]', $telo);
+
+        $smazano = $this->actingAs($this->adri)->deleteJson('/api/state')->assertOk()->getContent();
+
+        $this->assertStringContainsString('"data":{}', $smazano);
+    }
+
     /** Shodná verze projde — klient staví na tom, co server má. */
     public function test_shodny_rev_projde(): void
     {
