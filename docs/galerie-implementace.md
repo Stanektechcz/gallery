@@ -134,11 +134,39 @@ obrazovka překresluje z databáze, ne z toho, co si klient myslí.
 - [x] Protokol se jménem přihlášeného, jen zásahy vlastního prostoru
 - [x] Testy (28)
 
-### 8. Doručení
-- [ ] Blade rozvržení, `window.GALERIE_API_BASE`, CSRF
-- [ ] `sw.js` z kořene se `Service-Worker-Allowed: /`
-- [ ] Statické soubory prototypu do `public/`
-- [ ] Ověření: prototyp běží proti serveru bez jediné změny v `.dc.html`
+### 8. Doručení — hotovo
+- [x] Prototyp je na `/`. Dosavadní rozcestník se přestěhoval na `/prehled`
+      a **jméno routy `dashboard` zůstalo**, takže odkazy ve starém rozhraní drží.
+- [x] Napojení (`GALERIE_API_BASE`, CSRF, klíč VAPID, registrace workera) se
+      vkládá **při odeslání**, ne do souborů — další verze prototypu se dá jen
+      přepsat, místo ručního slučování
+- [x] `sw.js` se podává z `resources/`, ne z `public/`: statický soubor by web
+      server vydal dřív, než požadavek dojde do PHP, a bez
+      `Service-Worker-Allowed: /` by worker neviděl `/api/` — fronta offline
+      zápisů by tiše nefungovala
+- [x] Worker ze ZIPu počítá se statickým hostem a po kliknutí na upozornění
+      otevíral `Galerie mobil aplikace.dc.html`. Na serveru je aplikace na `/`,
+      takže by kliknutí skončilo na neexistující adrese; opravuje se to při
+      odeslání, soubor zůstává nedotčený.
+- [x] Administrace: server data se **přimíchávají při čtení**, ne přiřazují.
+      Prostý zápis do `GalerieData.ADMIN` vydržel jen do chvíle, než runtime
+      načetl `galerie-data.js` znovu — a podle načasování to jednou vyšlo
+      a jindy ne.
+- [x] Rychlost: dokument chodí zabalený (2 047 648 → 402 254 B, −80 %),
+      `preconnect` na unpkg a fonty, `preload` na největší soubory, a routa
+      běží **bez Inertia middleware** — sdílená data by se počítala pro nic
+- [x] Ověřeno v prohlížeči proti běžícímu serveru: přihlášení heslem → token →
+      kód → aplikace; zápis stavu tam a zpět; **zápis s vypnutým serverem
+      skončil ve frontě workera (202) a doručil se, jakmile server naběhl**
+- [x] Testy (16 doručení + 2 PWA přepsané)
+
+## Co zůstává na prototypu
+
+Runtime prototypu si React a Babel bere z unpkg a šablonu (2 MB) překládá až
+v prohlížeči. První vykreslení je proto v řádu sekund a backend s tím nic nesvede
+— zabalení dokumentu a předpřipojení jsou strop toho, co jde udělat, aniž by se
+do prototypu sáhlo. Kdyby na tom mělo záležet, jediná skutečná cesta je šablonu
+přeložit předem při nasazení (a tím prototyp přestat brát jako zdroj pravdy).
 
 ## Hotovo je, když
 

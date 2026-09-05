@@ -73,14 +73,33 @@ Route::delete('/share-target',            [MediaController::class, 'clearShareTa
     ->middleware(['auth']);
 
 /*
- | The front door. A visitor sees what the service is; a member goes straight to their
- | gallery. Previously "/" was behind auth, so anyone arriving at the domain met a login
- | form and never saw the offering at all.
+ | Vchod. Od nasazení prototypu je jím prototyp — má vlastní zámek (e-mail, heslo,
+ | kód aplikace, otisk), takže adresa zůstává veřejná a přihlašuje se až uvnitř.
+ |
+ | Service worker se **nesmí** podávat jako statický soubor z public/: web server
+ | by ho vydal dřív, než požadavek dojde do PHP, a bez hlavičky `Service-Worker-Allowed: /`
+ | by neviděl `/api/` — offline fronta zápisů by tiše nefungovala.
+ */
+/*
+ | Bez Inertia middleware: prototyp není Inertia stránka, takže sdílená data
+ | (a dotazy, které si vyžádají) by se počítala pro nic. Middleware navíc přepisuje
+ | hlavičku `Vary` na `X-Inertia`, čímž by proxy zapomněla, že dokument existuje
+ | ve dvou rozvrženích a ve dvou kódováních.
+ */
+Route::middleware([])->withoutMiddleware([App\Http\Middleware\HandleInertiaRequests::class])->group(function () {
+    Route::get('/', App\Http\Controllers\Galerie\PrototypController::class)->name('galerie.prototyp');
+    Route::get('/sw.js', [App\Http\Controllers\Galerie\PrototypController::class, 'serviceWorker'])
+        ->name('galerie.sw');
+});
+
+/*
+ | Dosavadní rozcestník. Zůstává pod jménem `dashboard`, protože na něj míří
+ | odkazy v celém starém rozhraní — jen se přestěhoval z kořene.
  |
  | app()->call() is used rather than calling the controller directly so its injected
  | services are resolved from the container exactly as normal routing would.
  */
-Route::get('/', function (Illuminate\Http\Request $request) {
+Route::get('/prehled', function (Illuminate\Http\Request $request) {
     if (! $request->user()) return Inertia::render('Landing/Index');
 
     return app()->call([app(App\Http\Controllers\DashboardController::class), 'index']);

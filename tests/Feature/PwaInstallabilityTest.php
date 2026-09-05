@@ -29,17 +29,42 @@ class PwaInstallabilityTest extends TestCase
         }
     }
 
-    public function test_root_service_worker_does_not_cache_authenticated_api_or_media(): void
+    /**
+     * Kořenový service worker je od nasazení prototypu ten jeho.
+     *
+     * Původní test hlídal, že worker `/api/` **necachuje**. To už neplatí, a je
+     * to záměr: prototyp bez toho neumí offline. Podstatné zůstává, že se z paměti
+     * nikdy nečte, dokud je síť — jinak by dvojice viděla včerejší čísla a nepoznala
+     * to. Zbytek (dosah, hlavička) hlídá `Galerie\DoruceniTest`.
+     */
+    public function test_root_service_worker_prefers_the_network_for_documents_and_api(): void
     {
-        $workerPath = public_path('sw.js');
-        $this->assertFileExists($workerPath);
+        $worker = (string) $this->get('/sw.js')->assertOk()->getContent();
 
-        $worker = (string) file_get_contents($workerPath);
         $this->assertStringContainsString("navigator.serviceWorker.register('/sw.js'", (string) file_get_contents(resource_path('js/Components/PwaLifecycle.tsx')));
-        $this->assertStringContainsString("request.mode === 'navigate'", $worker);
-        $this->assertStringNotContainsString("startsWith('/api/", $worker);
-        $this->assertStringNotContainsString("startsWith('/files/", $worker);
-        $this->assertStringNotContainsString("startsWith('/media/", $worker);
+
+        // Dokument i data: nejdřív síť, paměť je jen záložka pro offline.
+        $this->assertStringContainsString("req.mode === 'navigate'", $worker);
+        $this->assertStringContainsString('const r = await fetch(req);', $worker);
+
+        // Zápisy, které vznikly bez signálu, se nesmí ztratit — jdou do fronty.
+        $this->assertStringContainsString("req.method === 'PATCH'", $worker);
+        $this->assertStringContainsString('queuePush', $worker);
+    }
+
+    /**
+     * Upozornění musí otevřít aplikaci, ne soubor ze statického hostu.
+     *
+     * Worker ze ZIPu otevírá `Galerie mobil aplikace.dc.html`; na serveru je
+     * aplikace na `/`, takže by kliknutí skončilo na neexistující adrese.
+     */
+    public function test_notification_opens_the_application_not_a_file(): void
+    {
+        $worker = (string) $this->get('/sw.js')->assertOk()->getContent();
+
+        $this->assertStringNotContainsString('Galerie%20mobil%20aplikace.dc.html', $worker);
+        $this->assertStringContainsString("const target = '/' + (route ? '#' + route : '');", $worker);
+        $this->assertStringContainsString('self.registration.scope', $worker);
     }
 
     public function test_application_template_links_root_manifest_and_uses_safe_area_viewport(): void

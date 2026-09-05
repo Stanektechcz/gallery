@@ -36,7 +36,7 @@ class MemoryEveningLifecycleTest extends TestCase
         $this->assertDatabaseHas('calendar_events', ['uuid' => $evening['event']['uuid'], 'type' => 'memory_evening']);
         $this->assertDatabaseCount('event_participants', 2); $this->assertDatabaseCount('event_reminders', 4);
         $this->assertDatabaseCount('curation_board_items', 3);
-        $this->get('/')->assertOk()->assertInertia(fn (Assert $page) => $page
+        $this->get('/prehled')->assertOk()->assertInertia(fn (Assert $page) => $page
             ->where('data.partner_hub.memory_evening.uuid', $evening['uuid'])
             ->where('data.partner_hub.memory_evening.media_count', 3));
 

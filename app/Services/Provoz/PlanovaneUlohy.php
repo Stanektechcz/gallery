@@ -27,7 +27,7 @@ class PlanovaneUlohy
         $behy = ScheduledTaskRun::posledni();
         $pozastavene = $this->pozastavene();
 
-        return collect(app(Schedule::class)->events())
+        return collect($this->udalosti())
             ->map(function (Event $uloha) use ($behy, $pozastavene) {
                 $nazev = $this->nazev($uloha);
                 $beh = $behy->get($nazev);
@@ -40,7 +40,8 @@ class PlanovaneUlohy
                     'last' => $beh?->started_at ? $this->kdyBezela($beh->started_at) : 'nikdy',
                     'dur' => $beh?->duration_ms !== null ? $this->trvani($beh->duration_ms) : '—',
                     'state' => $stojí ? 'pozastavená' : $this->stav($beh?->state),
-                    'command' => $uloha->command,
+                    // Příkaz se ven neposílá: nese celou cestu k PHP na serveru
+                    // a v administraci pro dva lidi z toho nikdo nic nemá.
                 ];
             })
             ->values();
@@ -86,7 +87,7 @@ class PlanovaneUlohy
 
     public function najdi(string $nazev): ?Event
     {
-        foreach (app(Schedule::class)->events() as $uloha) {
+        foreach ($this->udalosti() as $uloha) {
             if ($this->nazev($uloha) === $nazev) {
                 return $uloha;
             }
@@ -94,6 +95,30 @@ class PlanovaneUlohy
 
         return null;
     }
+
+    /**
+     * Naplánované úlohy — i mimo konzoli.
+     *
+     * `routes/console.php` načítá konzolové jádro, takže ve **webovém** požadavku
+     * je plán prázdný. Bez tohohle by administrace ukazovala nula úloh a vypadalo
+     * by to, že plánovač není nastavený.
+     *
+     * @return array<int, Event>
+     */
+    private function udalosti(): array
+    {
+        $plan = app(Schedule::class);
+
+        if ($plan->events() === [] && ! app()->runningInConsole() && ! self::$nacteno) {
+            self::$nacteno = true;
+            require base_path('routes/console.php');
+        }
+
+        return $plan->events();
+    }
+
+    /** Jednou za požadavek; podruhé by se každá úloha zdvojila. */
+    private static bool $nacteno = false;
 
     public function nazev(Event $uloha): string
     {
@@ -153,6 +178,7 @@ class PlanovaneUlohy
         return match (true) {
             $vyraz === '* * * * *' => 'každou minutu',
             str_starts_with($min, '*/') && $hod === '*' => 'každých '.substr($min, 2).' minut',
+            $hod === '*' && $min === '0' => 'každou hodinu',
             $hod === '*' && ctype_digit($min) => 'každou hodinu v '.((int) $min).'. minutě',
             str_starts_with($hod, '*/') => 'každých '.substr($hod, 2).' hodin',
             $tyden !== '*' => 'týdně '.$this->den($tyden).' '.$cas(),

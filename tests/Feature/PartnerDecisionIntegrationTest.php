@@ -71,7 +71,7 @@ class PartnerDecisionIntegrationTest extends TestCase
             ->assertOk()->assertJsonPath('summary.total', 4)->assertJsonPath('summary.date_ideas', 1)
             ->assertJsonPath('summary.watchlist', 2)->assertJsonPath('summary.polls', 1);
         $this->assertSame(['viewing_date', 'poll', 'date_idea', 'entertainment_title'], collect($inbox->json('items'))->pluck('type')->all());
-        $this->get('/')->assertOk()->assertInertia(fn (Assert $page) => $page
+        $this->get('/prehled')->assertOk()->assertInertia(fn (Assert $page) => $page
             ->where('data.partner_hub.decisions.summary.total', 4)
             ->where('data.partner_hub.decisions.items.0.type', 'viewing_date'));
 

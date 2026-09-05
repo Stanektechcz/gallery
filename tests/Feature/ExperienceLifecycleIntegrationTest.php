@@ -72,7 +72,7 @@ class ExperienceLifecycleIntegrationTest extends TestCase
         $this->assertDatabaseHas('albums', ['id' => $event->fresh()->album_id, 'default_place_id' => $place->id]);
         $this->assertDatabaseHas('places', ['id' => $place->id, 'next_time_note' => 'Objednat znovu dezert.']);
 
-        $this->get('/')->assertOk()->assertInertia(fn (Assert $page) => $page
+        $this->get('/prehled')->assertOk()->assertInertia(fn (Assert $page) => $page
             ->where('data.partner_hub.experience_follow_up.uuid', $event->uuid)
             ->where('data.partner_hub.experience_follow_up.next_action', 'review_place')
             ->where('data.partner_hub.experience_follow_up.progress_percent', 80));

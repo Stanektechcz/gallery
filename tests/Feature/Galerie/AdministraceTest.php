@@ -85,6 +85,20 @@ class AdministraceTest extends TestCase
         $this->assertSame('nikdy', $ulohy->firstWhere('id', 'trash-purge')['last']);
     }
 
+    /**
+     * Do prohlížeče nesmí celý příkaz.
+     *
+     * Nese cestu k PHP na serveru a administraci pro dva lidi to k ničemu není —
+     * je to jen informace navíc pro toho, kdo se k obrazovce dostane.
+     */
+    public function test_ulohy_neposilaji_prikaz_serveru(): void
+    {
+        $ulohy = $this->getJson('/api/admin')->assertOk()->json('data.jobs');
+
+        $this->assertArrayNotHasKey('command', $ulohy[0]);
+        $this->assertStringNotContainsString('artisan', json_encode($ulohy));
+    }
+
     public function test_posledni_beh_pochazi_ze_zaznamu(): void
     {
         ScheduledTaskRun::create([

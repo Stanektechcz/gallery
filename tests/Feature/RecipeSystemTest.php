@@ -71,7 +71,7 @@ class RecipeSystemTest extends TestCase
         $this->assertDatabaseCount('event_reminders', 2);
         $this->getJson('/api/v1/calendar/events/' . $session['calendar_event']['uuid'])->assertOk()
             ->assertJsonPath('origin.kind', 'recipe_cooking')->assertJsonPath('origin.recipe.uuid', $recipe['uuid']);
-        $this->get('/')->assertOk()->assertInertia(fn (Assert $page) => $page
+        $this->get('/prehled')->assertOk()->assertInertia(fn (Assert $page) => $page
             ->where('data.partner_hub.recipe.kind', 'planned')->where('data.partner_hub.recipe.uuid', $recipe['uuid']));
 
         $this->postJson('/api/v1/recipes/' . $recipe['uuid'] . '/cooking-sessions/start', ['session_uuid' => $session['uuid'], 'servings' => 3])

@@ -56,7 +56,9 @@ class GalerieNotifyCommand extends Command
                 'body' => $ceka->count() === 1
                     ? 'Jedno rozhodnutí čeká na revizi — vraťte se k němu, dokud je čerstvé.'
                     : $ceka->count().' rozhodnutí čeká na revizi.',
-                'url' => '/?x=x-rozhodnuti',
+                'url' => '/',
+                // Obrazovka rozhodnutí; worker prototypu podle toho otevře přímo ji.
+                'route' => 'x-rozhodnuti',
                 // Stejná značka znamená, že nové upozornění to včerejší nahradí,
                 // místo aby se v telefonu vršila.
                 'tag' => 'galerie-revize',

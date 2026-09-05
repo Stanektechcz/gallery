@@ -52,6 +52,9 @@ class WebPushService
             'title' => $payload['title'],
             'body'  => $payload['body'],
             'url'   => $payload['url'] ?? '/',
+            // The prototype's worker opens a screen by name rather than by URL;
+            // sending both means one payload works whichever worker is installed.
+            'route' => $payload['route'] ?? null,
             // Devices collapse notifications sharing a tag, so a re-sent reminder
             // replaces the earlier one instead of stacking up.
             'tag'   => $payload['tag'] ?? 'maki',

@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mapa archivu</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
+<style>
+  html, body { margin: 0; height: 100%; font-family: 'Barlow', system-ui, sans-serif; }
+  #map { position: absolute; inset: 0; background: #e6e7e4; }
+  body[data-theme="dark"] #map { background: #131615; }
+  body[data-theme="dark"] .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(.92) contrast(.9) saturate(.7); }
+  body[data-theme="dark"] .leaflet-control-zoom a,
+  body[data-theme="dark"] .leaflet-control-attribution { background: #1a1a2e; color: #cfd3e4; }
+  body[data-theme="dark"] .leaflet-control-attribution a { color: #9085e9; }
+  .leaflet-container { font: 400 12px 'Barlow', system-ui, sans-serif; }
+  .leaflet-control-zoom a { border-radius: 2px !important; color: #16151f; }
+  .pin { position: relative; box-sizing: border-box; border: 2px solid #fff; border-radius: 2px;
+         box-shadow: 0 3px 12px rgba(0,0,0,.32); cursor: pointer; transition: outline-color .12s ease; outline: 0 solid transparent; }
+  .pin.sel { outline: 3px solid #5b51e8; outline-offset: 2px; }
+  .pin .count { position: absolute; right: -9px; top: -9px; min-width: 20px; height: 20px; padding: 0 5px;
+                border-radius: 10px; background: #16151f; color: #f6f5fb; font-size: 11px; line-height: 20px;
+                text-align: center; white-space: nowrap; }
+  body[data-theme="dark"] .pin .count { background: #f0f0f5; color: #0f0f1a; }
+  .lbl { font: 500 12px 'Barlow', system-ui, sans-serif; color: #16151f; background: rgba(255,255,255,.86);
+         padding: 2px 6px; border-radius: 2px; border: 0; box-shadow: none; }
+  body[data-theme="dark"] .lbl { color: #f0f0f5; background: rgba(19,22,21,.8); }
+  .leaflet-tooltip-top:before, .leaflet-tooltip:before { display: none; }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<script>
+// Místa archivu se skutečnými souřadnicemi — geometrie se nikdy nekreslí od ruky.
+var PLACES = [
+  { key: 'zadar',    name: 'Zadar',             lat: 44.1194, lon: 15.2314, count: 512,  size: 62, hue: 200 },
+  { key: 'plitvice', name: 'Plitvická jezera',  lat: 44.8654, lon: 15.5820, count: 441,  size: 54, hue: 150 },
+  { key: 'krka',     name: 'Krka',              lat: 43.8009, lon: 15.9714, count: 308,  size: 48, hue: 175 },
+  { key: 'brac',     name: 'Brač',              lat: 43.3167, lon: 16.6500, count: 196,  size: 44, hue: 190 },
+  { key: 'praha',    name: 'Praha',             lat: 50.0755, lon: 14.4378, count: 3190, size: 70, hue: 30  },
+  { key: 'ostrava',  name: 'Ostrava',           lat: 49.8209, lon: 18.2625, count: 6402, size: 76, hue: 275 },
+  { key: 'brno',     name: 'Brno',              lat: 49.1951, lon: 16.6068, count: 884,  size: 52, hue: 60  },
+  { key: 'beskydy',  name: 'Pustevny',          lat: 49.4917, lon: 18.2711, count: 1106, size: 50, hue: 95  },
+  { key: 'viden',    name: 'Vídeň',             lat: 48.2082, lon: 16.3738, count: 318,  size: 46, hue: 340 },
+  { key: 'krakov',   name: 'Krakov',            lat: 50.0647, lon: 19.9450, count: 204,  size: 42, hue: 220 }
+];
+
+var params = new URLSearchParams(location.search);
+var selected = params.get('place') || 'zadar';
+var mini = params.get('mini') === '1';
+document.body.dataset.theme = params.get('theme') === 'dark' ? 'dark' : 'light';
+
+var map = L.map('map', {
+  zoomControl: false, attributionControl: true, worldCopyJump: true,
+  dragging: !mini, scrollWheelZoom: !mini, doubleClickZoom: !mini, boxZoom: !mini, keyboard: !mini, touchZoom: !mini
+});
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '© OpenStreetMap contributors', maxZoom: 18
+}).addTo(map);
+if (!mini) L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+function pinHtml(p, sel) {
+  var bg = 'linear-gradient(140deg, hsl(' + p.hue + ' 26% 58%), hsl(' + ((p.hue + 34) % 360) + ' 30% 30%))';
+  var n = p.count > 999 ? (p.count / 1000).toFixed(1).replace('.', ',') + ' k' : p.count;
+  return '<div class="pin' + (sel ? ' sel' : '') + '" style="width:' + p.size + 'px;height:' + p.size +
+    'px;background:' + bg + '"><span class="count">' + n + '</span></div>';
+}
+
+var markers = {};
+PLACES.forEach(function (p) {
+  if (mini && p.key !== selected) return;
+  var m = L.marker([p.lat, p.lon], {
+    icon: L.divIcon({ className: '', html: pinHtml(p, p.key === selected), iconSize: [p.size, p.size], iconAnchor: [p.size / 2, p.size / 2] }),
+    title: p.name, keyboard: true, riseOnHover: true
+  }).addTo(map);
+  if (!mini) m.bindTooltip(p.name + ' · ' + p.count.toLocaleString('cs-CZ'), { className: 'lbl', direction: 'top', offset: [0, -p.size / 2 - 2] });
+  m.on('click', function () { select(p.key, true); });
+  m.on('keypress', function (e) { if (e.originalEvent.key === 'Enter') select(p.key, true); });
+  markers[p.key] = { marker: m, place: p };
+});
+
+function redraw() {
+  PLACES.forEach(function (p) {
+    if (!markers[p.key]) return;
+    markers[p.key].marker.setIcon(L.divIcon({
+      className: '', html: pinHtml(p, p.key === selected),
+      iconSize: [p.size, p.size], iconAnchor: [p.size / 2, p.size / 2]
+    }));
+  });
+}
+
+function select(key, tell) {
+  if (!markers[key]) return;
+  selected = key;
+  redraw();
+  if (tell) parent.postMessage({ source: 'galerie-mapa', type: 'place', key: key }, '*');
+}
+
+function focus(key) {
+  if (!markers[key]) return;
+  select(key, false);
+  map.flyTo(markers[key].marker.getLatLng(), Math.max(map.getZoom(), 9), { duration: .6 });
+}
+
+function fitAll() {
+  map.fitBounds(L.latLngBounds(PLACES.map(function (p) { return [p.lat, p.lon]; })).pad(0.18));
+}
+if (mini) {
+  var one = markers[selected] || markers.zadar;
+  map.setView(one.marker.getLatLng(), 10);
+} else fitAll();
+
+// Řízení z aplikace: výběr místa, přiblížení na vše, přepnutí tématu.
+addEventListener('message', function (e) {
+  var d = e.data || {};
+  if (d.target !== 'galerie-mapa') return;
+  if (d.type === 'focus') focus(d.key);
+  if (d.type === 'select') select(d.key, false);
+  if (d.type === 'fit') fitAll();
+  if (d.type === 'theme') { document.body.dataset.theme = d.theme === 'dark' ? 'dark' : 'light'; }
+});
+parent.postMessage({ source: 'galerie-mapa', type: 'ready', place: selected }, '*');
+</script>
+</body>
+</html>

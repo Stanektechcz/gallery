@@ -64,7 +64,7 @@ class CoupleExperienceRecommendationTest extends TestCase
         $this->assertStringContainsString('shodli jste se', $idea['reason']);
         $this->assertStringContainsString('low-cost', $idea['reason']);
 
-        $this->get('/')->assertOk()->assertInertia(fn (Assert $page) => $page
+        $this->get('/prehled')->assertOk()->assertInertia(fn (Assert $page) => $page
             ->component('Dashboard/Index')
             ->where('data.partner_hub.experience_recommendation.id', $this->favorite->id)
             ->where('data.partner_hub.experience_recommendation.top_item.name', 'Dýňové risotto'));

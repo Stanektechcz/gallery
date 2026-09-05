@@ -71,7 +71,7 @@ class ExperienceWorkspaceTest extends TestCase
             'gallery_space_id' => $this->space->id, 'title' => 'Porovnat ubytování', 'trip_id' => $tripId, 'kind' => 'idea',
         ])->assertCreated();
 
-        $this->get('/')->assertOk()->assertInertia(fn (Assert $page) => $page
+        $this->get('/prehled')->assertOk()->assertInertia(fn (Assert $page) => $page
             ->component('Dashboard/Index')
             ->has('data.partner_hub.next_actions', 3)
             ->where('data.partner_hub.next_actions.0.type', 'event_task')

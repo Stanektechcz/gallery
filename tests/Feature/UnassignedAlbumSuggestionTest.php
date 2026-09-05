@@ -54,7 +54,7 @@ class UnassignedAlbumSuggestionTest extends TestCase
         $this->get('/albums')->assertOk()->assertInertia(fn (Assert $page) => $page
             ->component('Albums/Index')->has('albumSuggestions', 1)
             ->where('albumSuggestions.0.fingerprint', $payload['fingerprint']));
-        $this->get('/')->assertOk()->assertInertia(fn (Assert $page) => $page
+        $this->get('/prehled')->assertOk()->assertInertia(fn (Assert $page) => $page
             ->where('data.partner_hub.album_suggestion.fingerprint', $payload['fingerprint']));
 
         $created = $this->postJson('/api/v1/album-suggestions/' . $payload['fingerprint'] . '/accept', [

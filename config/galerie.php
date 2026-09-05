@@ -29,6 +29,11 @@ return [
     // (node tools/export-seeds.js) — klíče jsou stejné, aby klient nemusel nic mapovat.
     'mechanisms_path' => resource_path('galerie/mechanismy.json'),
 
+    // Dokumenty prototypu a jeho service worker. Leží mimo `public/` schválně:
+    // do dokumentu se při odeslání vkládá napojení na backend a service worker
+    // potřebuje hlavičku, kterou by statický soubor nedostal.
+    'prototyp_path' => resource_path('galerie'),
+
     // Kam se ukládají originály: 'local' pro vlastní úložiště, 's3' pro S3/MinIO.
     // Kód nahrávání je pro obojí stejný — mění se jen disk.
     'media_disk' => env('GALERIE_MEDIA_DISK', 'local'),

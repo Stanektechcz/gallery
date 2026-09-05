@@ -48,7 +48,7 @@ class RelationshipAnniversaryRecapTest extends TestCase
             ->assertJsonCount(2, 'candidates')->json();
         $this->assertEqualsCanonicalizing([$summer->uuid, $spring->uuid], collect($overview['candidates'])->pluck('uuid')->all());
         $this->assertTrue(collect($overview['candidates'])->contains(fn ($item) => $item['uuid'] === $summer->uuid && $item['suggested']));
-        $this->get('/')->assertOk()->assertInertia(fn (Assert $page) => $page
+        $this->get('/prehled')->assertOk()->assertInertia(fn (Assert $page) => $page
             ->where('data.partner_hub.anniversary_recap.year', 2)
             ->where('data.partner_hub.anniversary_recap.candidate_count', 2));
 
@@ -83,7 +83,7 @@ class RelationshipAnniversaryRecapTest extends TestCase
             ->assertJsonPath('album.memory.uuid', $created['memory']['uuid']);
         $this->getJson('/api/v1/shared-memory-moments')->assertOk()
             ->assertJsonPath('0.album.uuid', $created['album']['uuid']);
-        $this->get('/')->assertOk()->assertInertia(fn (Assert $page) => $page
+        $this->get('/prehled')->assertOk()->assertInertia(fn (Assert $page) => $page
             ->where('data.partner_hub.anniversary_recap', null));
     }
 

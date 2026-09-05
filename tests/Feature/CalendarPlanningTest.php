@@ -143,7 +143,7 @@ class CalendarPlanningTest extends TestCase
 
         $this->travel(61)->minutes();
         $this->artisan(DeliverPlanningRemindersCommand::class)->assertSuccessful();
-        $this->get('/')->assertOk()->assertInertia(fn (Assert $page) => $page
+        $this->get('/prehled')->assertOk()->assertInertia(fn (Assert $page) => $page
             ->component('Dashboard/Index')
             ->where('data.partner_hub.reminders.0.id', $reminderId)
             ->where('data.partner_hub.reminders.0.status', 'delivered'));
