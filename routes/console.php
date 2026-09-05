@@ -147,3 +147,21 @@ Schedule::command('galerie:notify --no-interaction')
 Schedule::call(function () {
     \App\Models\SystemSetting::set('scheduler_last_heartbeat', now()->toIso8601String());
 })->everyMinute()->name('scheduler-heartbeat');
+
+/*
+ * Pozastavení z administrace platí pro každou úlohu výš.
+ *
+ * Jedním průchodem, ne `->skip()` u každé definice: přidaná úloha by se na
+ * takový řádek zaručeně zapomněla a v administraci by šla pozastavit tlačítkem,
+ * které nic nedělá. Tep plánovače se nepozastavuje — bez něj by doktor hlásil,
+ * že plánovač neběží, i když jen stojí jedna úloha.
+ */
+foreach (app(\Illuminate\Console\Scheduling\Schedule::class)->events() as $uloha) {
+    $nazev = app(\App\Services\Provoz\PlanovaneUlohy::class)->nazev($uloha);
+
+    if ($nazev === 'scheduler-heartbeat') {
+        continue;
+    }
+
+    $uloha->skip(fn () => app(\App\Services\Provoz\PlanovaneUlohy::class)->pozastavena($nazev));
+}

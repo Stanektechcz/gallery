@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\CalendarPlanningController;
+use App\Http\Controllers\Api\Galerie\AdminController;
 use App\Http\Controllers\Api\Galerie\MechanismController;
 use App\Http\Controllers\Api\Galerie\MediaController;
 use App\Http\Controllers\Api\Galerie\StateController;
@@ -54,6 +55,32 @@ Route::middleware(['auth:sanctum', 'throttle:120,1'])->prefix('api')->group(func
         ->name('galerie.push.subscribe');
     Route::delete('push/subscribe', [CalendarPlanningController::class, 'destroyPushSubscription'])
         ->name('galerie.push.unsubscribe');
+
+    /*
+     * Administrace prostoru.
+     *
+     * Každá akce vrací celý přehled znovu — obrazovka se překresluje z databáze,
+     * ne z toho, co si klient myslí, že se stalo.
+     */
+    Route::prefix('admin')->name('galerie.admin.')->group(function () {
+        Route::get('/', [AdminController::class, 'index'])->name('index');
+
+        Route::post('users', [AdminController::class, 'invite'])->name('users.invite');
+        Route::post('users/{id}/resend', [AdminController::class, 'resend'])->name('users.resend');
+        Route::patch('users/{id}/role', [AdminController::class, 'role'])->name('users.role');
+        Route::post('users/{id}/transfer', [AdminController::class, 'transfer'])->name('users.transfer');
+        Route::post('users/{id}/access', [AdminController::class, 'access'])->name('users.access');
+
+        Route::post('keys', [AdminController::class, 'storeKey'])->name('keys.store');
+        Route::post('keys/{id}/regenerate', [AdminController::class, 'regenerateKey'])->name('keys.regenerate');
+        Route::delete('keys/{id}', [AdminController::class, 'destroyKey'])->name('keys.destroy');
+
+        Route::post('jobs/{uloha}/run', [AdminController::class, 'runJob'])->name('jobs.run');
+        Route::post('jobs/{uloha}/pause', [AdminController::class, 'pauseJob'])->name('jobs.pause');
+
+        Route::post('plan', [AdminController::class, 'plan'])->name('plan');
+        Route::post('risks/{riziko}/fix', [AdminController::class, 'fixRisk'])->name('risks.fix');
+    });
 
     // Klíč se registruje až přihlášenému člověku — jinak by si otisk k účtu
     // připojil kdokoli, kdo zná e-mail.

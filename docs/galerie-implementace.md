@@ -103,12 +103,36 @@ se klíče později vytahují do vlastních tabulek.
 - [x] Testy (17): odběr se neduplikuje, vypršení po lhůtě i obnovené a trvalé
       domluvy, druhý běh nezvedne `rev`, koš maže až po lhůtě a nasucho nemaže
 
-### 7. Administrace — chybí celá
-Prototyp má data jen na klientovi. Backend potřebuje:
-- [ ] Uživatelé a role (vlastník právě jeden, mění se jen předáním)
-- [ ] Protokol změn se jménem přihlášeného
-- [ ] Úlohy, klíče k API, tarify, riziko úložiště počítané ze stavu
-- [ ] Testy: vlastník nejde odebrat, role se necykluje, každý zásah v protokolu
+### 7. Administrace — hotovo
+Prototyp měl administraci celou na klientovi: účty, úlohy, klíče i tarify byly
+ve `GalerieData.ADMIN` vymyšlené a tlačítka měnila jen stav v prohlížeči.
+`GET /api/admin` teď vrací tytéž klíče ze skutečných dat a dvanáct dalších cest
+provádí skutečné akce. Každá odpověď vrací **celý přehled znovu**, takže se
+obrazovka překresluje z databáze, ne z toho, co si klient myslí.
+
+- [x] Účty ze členů prostoru; vlastník právě jeden a jeho role se necykluje —
+      mění se jen předáním, po kterém je z předchozího správce
+- [x] Odebrání přístupu ruší i tokeny: bez toho by telefon s uloženým přihlášením
+      chodil dál, a to je přesně ta věc, kvůli které se tlačítko mačká
+- [x] Pozvánka zakládá **i členství** — dosud vznikl účet, který se po přijetí
+      přihlásil do aplikace bez jediné galerie
+- [x] Klíče k API = tokeny Sanctum. Celý klíč jednou, pak čtyři znaky (nový
+      sloupec `suffix`); zrušený klíč **zůstává v seznamu** s prošlou platností,
+      jinak by po kliknutí zmizel řádek a nikdo by nezjistil, který to byl
+- [x] Úlohy se čtou z `routes/console.php`, ne z druhé tabulky — přidaná úloha by
+      v administraci jinak chyběla a zrušená by tam zůstala navždy. Pozastavení
+      platí přes jeden `->skip()` pro celý plán.
+- [x] Nová tabulka `scheduled_task_runs` + posluchač: aplikace o plánovači dosud
+      věděla jedinou věc, že tepe. „Poslední běh" a „incidenty za 30 dní" by bez
+      ní byla vymyšlená čísla.
+- [x] Ruční spuštění jde do fronty a spouští **úlohu z plánu**, ne příkaz
+      z požadavku — jinak by tlačítko bylo cestou, jak přes API spustit cokoli
+- [x] Tarify: placený se **nepřiděluje, kupuje se**. Kdyby backend bral tlačítko
+      doslova, dostala by dvojice úložiště, které nezaplatila.
+- [x] Riziko úložiště počítané ze skutečných dat; „vysypat koš" posune lhůtu do
+      minulosti a spustí úklid
+- [x] Protokol se jménem přihlášeného, jen zásahy vlastního prostoru
+- [x] Testy (28)
 
 ### 8. Doručení
 - [ ] Blade rozvržení, `window.GALERIE_API_BASE`, CSRF

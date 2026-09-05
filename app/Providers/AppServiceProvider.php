@@ -73,9 +73,28 @@ class AppServiceProvider extends ServiceProvider
         });
     }
 
+    /**
+     * Zapisuje běhy plánovaných úloh.
+     *
+     * Aplikace o plánovači dosud věděla jedinou věc — že tepe. Jestli noční
+     * záloha proběhla a jak dopadla, se nedalo zjistit odnikud, takže chybující
+     * úloha byla přesně ta, o které se člověk dozví měsíc po tom, co přestala
+     * fungovat. Administrace to teď ukazuje ze skutečných dat.
+     */
+    private function registerScheduleLogging(): void
+    {
+        $listener = \App\Listeners\ZaznamenejBehUlohy::class;
+
+        \Illuminate\Support\Facades\Event::listen(\Illuminate\Console\Events\ScheduledTaskStarting::class, [$listener, 'zacal']);
+        \Illuminate\Support\Facades\Event::listen(\Illuminate\Console\Events\ScheduledTaskFinished::class, [$listener, 'skoncil']);
+        \Illuminate\Support\Facades\Event::listen(\Illuminate\Console\Events\ScheduledTaskFailed::class, [$listener, 'selhal']);
+        \Illuminate\Support\Facades\Event::listen(\Illuminate\Console\Events\ScheduledTaskSkipped::class, [$listener, 'preskocen']);
+    }
+
     public function boot(): void
     {
         $this->registerAutomationTriggers();
+        $this->registerScheduleLogging();
 
         // Register policies
         Gate::policy(Album::class,     AlbumPolicy::class);
