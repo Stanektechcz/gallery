@@ -15,7 +15,8 @@
         "laravel/tinker": "^3.0",
         "minishlink/web-push": "^8.0",
         "phpoffice/phpspreadsheet": "^5.7",
-        "tightenco/ziggy": "^2.6"
+        "tightenco/ziggy": "^2.6",
+        "web-auth/webauthn-lib": "^5.3"
     },
     "require-dev": {
         "fakerphp/faker": "^1.23",

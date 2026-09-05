@@ -48,7 +48,15 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
+        /*
+         * `sanctum/*` je tu kvůli přihlášení prototypu.
+         *
+         * Klient volá `POST /sanctum/token` a čeká JSON — čte `b.message` z těla.
+         * Bez téhle cesty by mu Laravel na chybnou validaci poslal přesměrování
+         * s HTML a klient by hlásil neurčitou chybu místo „E-mail nebo heslo
+         * nesouhlasí". Ostatní cesty zůstávají, jak byly.
+         */
         $exceptions->shouldRenderJsonWhen(
-            fn(Request $request) => $request->is('api/*'),
+            fn(Request $request) => $request->is('api/*') || $request->is('sanctum/*'),
         );
     })->create();

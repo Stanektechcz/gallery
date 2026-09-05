@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\Galerie\StateController;
+use App\Http\Controllers\Api\Galerie\TokenController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -12,8 +13,14 @@ use Illuminate\Support\Facades\Route;
  *
  * Stav patří páru, ne uživateli: oba partneři čtou a píší tentýž záznam.
  */
+// Přihlášení je vstupní cesta, proto tvrdší limit než na zbytek.
+Route::middleware(['throttle:20,1'])->post('sanctum/token', [TokenController::class, 'store'])
+    ->name('galerie.token.store');
+
 Route::middleware(['auth:sanctum', 'throttle:120,1'])->prefix('api')->group(function () {
     Route::get('state', [StateController::class, 'show'])->name('galerie.state.show');
     Route::patch('state', [StateController::class, 'update'])->name('galerie.state.update');
     Route::delete('state', [StateController::class, 'destroy'])->name('galerie.state.destroy');
+
+    Route::post('logout', [TokenController::class, 'destroy'])->name('galerie.logout');
 });
