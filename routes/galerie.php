@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\Galerie\MediaController;
 use App\Http\Controllers\Api\Galerie\StateController;
 use App\Http\Controllers\Api\Galerie\TokenController;
 use App\Http\Controllers\Api\Galerie\WebauthnController;
@@ -43,4 +44,18 @@ Route::middleware(['auth:sanctum', 'throttle:120,1'])->prefix('api')->group(func
         ->name('galerie.webauthn.register.options');
     Route::post('webauthn/register', [WebauthnController::class, 'register'])
         ->name('galerie.webauthn.register');
+});
+
+/*
+ * Média.
+ *
+ * Mimo skupinu výš kvůli limitu: nahrávání velkého videa po osmimegabajtových
+ * částech je klidně sto požadavků za sebou a do 120 za minutu se nevejde.
+ * Adresy i hlavičky jsou dané prototypem (`galerie-api.js`) a nemění se.
+ */
+Route::middleware(['auth:sanctum', 'throttle:600,1'])->prefix('api')->group(function () {
+    Route::post('media', [MediaController::class, 'store'])->name('galerie.media.store');
+    Route::post('media/chunk', [MediaController::class, 'chunk'])->name('galerie.media.chunk');
+    Route::get('media/{uuid}/raw', [MediaController::class, 'raw'])->name('galerie.media.raw');
+    Route::delete('media/{uuid}', [MediaController::class, 'destroy'])->name('galerie.media.destroy');
 });

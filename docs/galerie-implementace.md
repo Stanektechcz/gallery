@@ -60,12 +60,17 @@ se klíče později vytahují do vlastních tabulek.
       skládá CBOR a podepisuje ES256, takže projde i podvržený origin, klesající
       počítadlo, přehraná challenge a změněný podpis
 
-### 4. Média
-- [ ] `MediaController` nad existující `media_items`
-- [ ] Deduplikace podle `sha256`, části po 8 MB, koš 30 dní
-- [ ] `GET /api/media/{id}/raw` přes aplikaci, ne z `public`
-- [ ] `POST /share-target` + přepnutí manifestu na POST
-- [ ] Testy: duplicita, části, koš, cizí pár nedostane cizí soubor
+### 4. Média — hotovo
+- [x] `MediaController` nad existující `media_items` + variantou `original`
+      (fotka z prototypu se tím objeví i v časové ose a v koši)
+- [x] Deduplikace podle `sha256`, části po 8 MB skládané **proudem**, koš 30 dní
+- [x] Limit tarifu platí i tady — jinak by se přes prototyp dal obejít
+- [x] Náhledy a metadata do fronty (`media`), aby nahrávání skončilo hned
+- [x] `GET /api/media/{id}/raw` přes aplikaci, ne z `public`
+- [x] `POST /share-target` — v aplikaci **už je** (`routes/web.php`), manifest
+      aplikace ho má metodou POST; přepnout zbývá jen manifest prototypu (kap. 8)
+- [x] Testy (13): duplicita, soubor z koše jde znovu, části v pořadí, podvržený
+      identifikátor i cesta ve jménu, cizí pár nedostane cizí soubor, tarif
 
 ### 5. Mechanismy
 - [ ] `MechanismController` + `resources/galerie/mechanismy.json`
