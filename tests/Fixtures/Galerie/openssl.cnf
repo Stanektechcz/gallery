@@ -1,0 +1,18 @@
+#
+# Nejmenší možná konfigurace OpenSSL, jen aby šel v testu vyrobit klíč.
+#
+# PHP bez ní odmítne `openssl_pkey_new()` s hláškou „configuration file routines:
+# no such file" — na Windows totiž nebývá `openssl.cnf` tam, kde ho PHP hledá.
+# Vlastní soubor v repozitáři znamená, že testy otisku běží stejně na notebooku
+# i na serveru a nezáleží na tom, co má kdo nainstalované.
+#
+# Pro nic jiného než pro generování klíče v testech se nepoužívá.
+
+[ req ]
+# `default_bits` musí být uvedené, i když se klíč dělá nad eliptickou křivkou —
+# PHP si tu hodnotu přečte dřív, než se na typ klíče vůbec podívá.
+default_bits = 2048
+default_md = sha256
+distinguished_name = req_distinguished_name
+
+[ req_distinguished_name ]

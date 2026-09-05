@@ -33,23 +33,32 @@ se klíče později vytahují do vlastních tabulek.
 
 ## Úkoly
 
-### 1. Základ
-- [ ] `config/galerie.php`, `routes/galerie.php`, registrace bez prefixu
-- [ ] Migrace: `couple_states`, `webauthn_credentials`, `push_subscriptions`
-- [ ] Model `CoupleState` (otevřený + šifrovaný sloupec, `applyPatch`, `rev`)
-- [ ] `StateController`: GET / PATCH / DELETE, konflikt `409` s aktuálním stavem
-- [ ] Testy: sloučení po klíčích, konflikt, šifrované klíče, izolace mezi páry
+### 1. Základ — hotovo
+- [x] `config/galerie.php`, `routes/galerie.php`, registrace bez prefixu
+- [x] Migrace: `couple_states`, `webauthn_credentials`
+      (`push_subscriptions` ne — tabulka v aplikaci už je, viz kapitola 6)
+- [x] Model `CoupleState` (otevřený + šifrovaný sloupec, `applyPatch`, `rev`)
+- [x] `StateController`: GET / PATCH / DELETE, konflikt `409` s aktuálním stavem
+- [x] Testy: sloučení po klíčích, konflikt, šifrované klíče, izolace mezi páry (10)
 
-### 2. Přihlášení
-- [ ] `TokenController`: `POST /sanctum/token`, `POST /api/logout`
-- [ ] Jedno zařízení = jeden token (nové přihlášení ruší staré)
-- [ ] Testy: platné, neplatné, limit 20/min, zrušení starého tokenu
+### 2. Přihlášení — hotovo
+- [x] `TokenController`: `POST /sanctum/token`, `POST /api/logout`
+- [x] Jedno zařízení = jeden token (nové přihlášení ruší staré)
+- [x] Odhlášení ruší token **i sezení** — routy běží ve skupině `web`
+- [x] Testy: platné, neplatné, stejná hláška pro neznámý e-mail, dvě zařízení (7)
 
-### 3. Otisk (WebAuthn)
-- [ ] `composer require web-auth/webauthn-lib`
-- [ ] 4 endpointy, challenge v cache, kontrola `sign_count`
-- [ ] `/login/options` neprozradí existenci e-mailu
-- [ ] Testy: registrace, přihlášení, klesající `sign_count`, vypršelá challenge
+### 3. Otisk (WebAuthn) — hotovo
+- [x] `web-auth/webauthn-lib` **5.3** (README chce 4.7, ta neumí `symfony/uid` v8)
+- [x] 4 endpointy; challenge registrace v cache pod účtem, challenge přihlášení
+      v sezení (před přihlášením není podle čeho jiného ceremonii poznat)
+- [x] Kontrolu `sign_count` dělá knihovna (`ThrowExceptionIfInvalid`) — vlastní
+      kontrola navíc by byla mrtvý kód
+- [x] `GALERIE_RP_ORIGINS` — bez seznamu originů knihovna trvá na HTTPS a otisk
+      by se na vývojovém serveru nedal ani vyzkoušet
+- [x] `/login/options` neprozradí existenci e-mailu
+- [x] Testy (16) proti **skutečně podepsaným** odpovědím — `FalesnyAutentikator`
+      skládá CBOR a podepisuje ES256, takže projde i podvržený origin, klesající
+      počítadlo, přehraná challenge a změněný podpis
 
 ### 4. Média
 - [ ] `MediaController` nad existující `media_items`
@@ -64,7 +73,9 @@ se klíče později vytahují do vlastních tabulek.
 - [ ] Testy: 24 klíčů, 503 bez souboru
 
 ### 6. Upozornění a úlohy
-- [ ] `PushController` + `PushSender` (VAPID)
+- [ ] `PushController` nad existující tabulkou `push_subscriptions` a `WebPushService`
+      (klíče VAPID se berou z `config/push.php`; druhá dvojice by znamenala, že
+      prohlížeč odběr registrovaný na jeden klíč u druhého odmítne)
 - [ ] `galerie:expire` (tichá), `galerie:notify` (jen revize rozhodnutí), `galerie:clean-trash`
 - [ ] Testy: neplatný odběr se maže, vypršení neposílá nic
 
