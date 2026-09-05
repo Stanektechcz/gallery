@@ -166,6 +166,46 @@ obrazovka překresluje z databáze, ne z toho, co si klient myslí.
       nemá kód. Dotaz jednou za dvacet vteřin je levnější a stačí — neptá se,
       když je karta schovaná ani když čeká vlastní zápis.
 
+## Kontrola shody s prototypem
+
+Projeté proti tomu, co prototyp **skutečně volá a čte**, ne proti README:
+11 adres, tvary všech odpovědí, všechna pole administrace, 24 klíčů mechanismů,
+soubory skořápky service workera, klíče stavu.
+
+Pět neshod, dvě z nich tiché:
+
+1. **Zápis tokenem padal na CSRF (419).** Klient prototypu ani nativní klient
+   z README token proti CSRF neposílají; v prohlížeči to procházelo jen za
+   hlavičkou `Sec-Fetch-Site`. Nejhůř u offline fronty — service worker
+   přehrával zápis s uloženým, po vypršení sezení neplatným tokenem donekonečna.
+2. **Prázdný stav chodil jako `[]` místo `{}`.** `JSON.stringify` u pole ukládá
+   jen číselné indexy, takže první uložení v prohlížeči zahodilo všechno, co do
+   stavu mezitím přibylo — a stalo se to jen novému páru.
+3. **Heslo k trezoru se ukládalo na server.** `vaultPwd` chybí v seznamu, který
+   si klient nechává pro sebe. Server teď hesla a kódy zahazuje sám.
+4. **Administrace se po prvním kliknutí rozešla s databází.** Prototyp ji celou
+   drží v komponentě a posílá do `/api/state`; na `/api/admin` nesáhne. Záměr se
+   z patche přečte a provede; do stavu se ukládá skutečnost.
+5. **Čtení `/api/admin` zvedalo `rev`,** takže otevřená aplikace dostala při svém
+   dalším uložení konflikt.
+
+## Co nejde bez zásahu do prototypu
+
+Čtyři místa ukazují pevná čísla zapsaná v souborech prototypu, ne data ze serveru:
+
+| Kde | Co | Kde je to napsané |
+| --- | --- | --- |
+| Postranní panel | „57 %", „114,5 GB ze 200 GB", „3 originály čekají" | `.dc.html` (design) |
+| Riziko úložiště | 8,1 GB v jedné kopii, 1,2 GB v koši, růst 2,4 GB/měsíc | `galerie-admin.js` |
+| Zdraví systému | „dostupnost 99,98 %, disk 57 %", „poslední kontrola 4:40" | `galerie-admin.js` |
+| Klíče k API | celý klíč se skládá na klientovi (`gal_ + id + suffix`) | `galerie-admin.js` |
+
+První tři jsou kosmetika: zaplněnost i rizika se ze serveru počítají a jdou do
+`ADMIN.usedGb` a `ADMIN.risks`, jen tyhle konkrétní popisky je obcházejí.
+Čtvrté je funkční: **vytvořit použitelný klíč k API jde jen přes `/api/admin/keys`**,
+protože prototyp tajemství nikdy nedostane od serveru. Zrušení klíče z obrazovky
+funguje.
+
 ## Co zůstává na prototypu
 
 Runtime prototypu si React a Babel bere z unpkg a šablonu (2 MB) překládá až
