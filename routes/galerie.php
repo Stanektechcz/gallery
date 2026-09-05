@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\Galerie\MechanismController;
 use App\Http\Controllers\Api\Galerie\MediaController;
 use App\Http\Controllers\Api\Galerie\StateController;
 use App\Http\Controllers\Api\Galerie\TokenController;
@@ -37,6 +38,8 @@ Route::middleware(['auth:sanctum', 'throttle:120,1'])->prefix('api')->group(func
     Route::delete('state', [StateController::class, 'destroy'])->name('galerie.state.destroy');
 
     Route::post('logout', [TokenController::class, 'destroy'])->name('galerie.logout');
+
+    Route::get('mechanisms', [MechanismController::class, 'index'])->name('galerie.mechanisms');
 
     // Klíč se registruje až přihlášenému člověku — jinak by si otisk k účtu
     // připojil kdokoli, kdo zná e-mail.

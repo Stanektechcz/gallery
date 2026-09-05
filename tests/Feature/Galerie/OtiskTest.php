@@ -164,8 +164,17 @@ class OtiskTest extends TestCase
         $volby = $this->postJson('/api/webauthn/login/options', ['email' => 'adrian@vzpominky.test'])->assertOk();
         $telo = $autentikator->prihlaseni($volby->json('challenge'));
 
-        $podpis = $telo['response']['signature'];
-        $telo['response']['signature'] = substr($podpis, 0, -1).($podpis[-1] === 'A' ? 'B' : 'A');
+        /*
+         * Mění se **bajt podpisu**, ne znak base64.
+         *
+         * Poslední znak base64 nese jen část bitů posledního bajtu, takže jeho
+         * změna se občas do dekódovaných dat vůbec nepromítne — test by pak
+         * jednou za čas prošel s platným podpisem. Poslední bajt DER podpisu
+         * je nejnižší bajt čísla s: nikdy to není značka ani délka.
+         */
+        $podpis = $this->zB64u($telo['response']['signature']);
+        $podpis[-1] = chr(ord($podpis[-1]) ^ 0xFF);
+        $telo['response']['signature'] = rtrim(strtr(base64_encode($podpis), '+/', '-_'), '=');
 
         $this->postJson('/api/webauthn/login', $telo)
             ->assertStatus(422)

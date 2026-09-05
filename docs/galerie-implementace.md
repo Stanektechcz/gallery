@@ -72,10 +72,17 @@ se klíče později vytahují do vlastních tabulek.
 - [x] Testy (13): duplicita, soubor z koše jde znovu, části v pořadí, podvržený
       identifikátor i cesta ve jménu, cizí pár nedostane cizí soubor, tarif
 
-### 5. Mechanismy
-- [ ] `MechanismController` + `resources/galerie/mechanismy.json`
-- [ ] Seeder z `galerie-data.json` (180 kolekcí)
-- [ ] Testy: 24 klíčů, 503 bez souboru
+### 5. Mechanismy — hotovo
+- [x] `MechanismController` + `resources/galerie/mechanismy.json` (24 klíčů)
+- [x] 503 při chybějícím souboru — prázdná odpověď by klientovi smazala všechny
+      mechanismy najednou
+- [x] Cache podle času změny souboru + `ETag` → podruhé 304, `private` cache
+- [x] Seeder zakládá **prázdný** stav pro každý prostor. 180 kolekcí
+      z `galerie-data.json` se do stavu **nelije** — jsou to výchozí hodnoty
+      klienta a jejich zamrznutí do stavu by znamenalo, že pozdější změna
+      výchozích čísel dvojici navždy mine. Soubor navíc obsahuje heslo a PINy
+      v čitelné podobě; účty zakládá `GallerySpaceSeeder` s náhodným heslem.
+- [x] Testy (8): 24 klíčů, 503, poškozený soubor, 304, `private`, seeder dvakrát
 
 ### 6. Upozornění a úlohy
 - [ ] `PushController` nad existující tabulkou `push_subscriptions` a `WebPushService`

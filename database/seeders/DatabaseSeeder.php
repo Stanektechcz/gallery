@@ -10,6 +10,8 @@ class DatabaseSeeder extends Seeder
     {
         $this->call([
             GallerySpaceSeeder::class,
+            // Musí až za prostorem — stav se zakládá pro každý existující prostor.
+            GalerieSeeder::class,
             RecipeTestDataSeeder::class,
         ]);
     }
