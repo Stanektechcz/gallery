@@ -58,11 +58,12 @@ Změřeno v prohlížeči proti běžícímu serveru, ne odhadem:
 | --- | --- |
 | Klíčů v `window.GalerieData` | **190** — z toho 8 jsou pomocné funkce, ne data |
 | Kolekcí celkem | **182** |
-| Obsluhuje server | **80** (78 přes `/api/data`, `ADMIN` a `STORAGE` přes přístupovou vrstvu) |
+| Obsluhuje server | **83** (81 přes `/api/data`, `ADMIN` a `STORAGE` přes přístupovou vrstvu) |
+| Z toho kolekcí, které prototyp má | **72** |
 | Katalogy rozhraní — zůstávají statické záměrně | ~50 |
-| **Obsah dvojice, který ještě není napojený** | **~52** |
+| **Obsah dvojice, který ještě není napojený** | **~60** |
 
-Devět z osmdesáti kolekcí prototyp v `GalerieData` vůbec nemá — mřížku fotek
+Devět z osmdesáti jedna kolekcí prototyp v `GalerieData` vůbec nemá — mřížku fotek
 (`PHOTOS`, `DAYS`, `ALBUMS`, `ATREE`), čísla u nabídky (`NAVCNT`, `TOTAL`),
 měnu, spíž a odkazy si dokument vyráběl sám ve funkcích. Server je dodává
 navíc a přepínače v dokumentu je berou přednostně.
