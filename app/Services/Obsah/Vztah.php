@@ -34,6 +34,8 @@ class Vztah implements PoskytovatelObsahu
     /** Žádosti se čtou dvakrát — pro seznam i pro přehled trpělivosti. */
     private ?Collection $zadostiCache = null;
 
+    public function __construct(private readonly TichaPravidla $pravidla) {}
+
     public function skupina(): string
     {
         return 'vztah';
@@ -71,6 +73,8 @@ class Vztah implements PoskytovatelObsahu
             'DISP' => $this->vracejiciSeTemata($body, $prostor),
             // Co rozhodl čas místo nich.
             'AUTO_DEC' => $this->rozhodlCas($prostor),
+            // Vzorce, na kterých se nikdo nedohodl a přesto platí.
+            'TACIT' => $this->pravidla->najdi($prostor),
             // Telefon kreslí sliby z vlastní kolekce; tvar je tentýž.
             'MOBIL' => $sliby ? ['PROMISES' => $sliby] : [],
         ], fn ($v) => $v !== null && $v !== []);

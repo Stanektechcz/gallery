@@ -150,6 +150,7 @@ class PlanovaniVeStavu
             'title' => (string) $e['t'],
             'description' => $e['note'] ?? null,
             'type' => $this->typ((string) ($e['kind'] ?? 'jine')),
+            'activity_kind' => $this->cinnost($e),
             'starts_at' => $zacatek,
             'all_day' => ($e['time'] ?? '') === '',
             'album_id' => $this->albumId($e, $prostor),
@@ -175,6 +176,7 @@ class PlanovaniVeStavu
             'title' => (string) $e['t'],
             'description' => $e['note'] ?? null,
             'type' => $this->typ((string) ($e['kind'] ?? 'jine')),
+            'activity_kind' => $this->cinnost($e),
             'status' => 'planned',
             'starts_at' => $zacatek,
             'all_day' => ($e['time'] ?? '') === '',
@@ -750,6 +752,25 @@ class PlanovaniVeStavu
             'platba' => 'reservation',
             default => 'event',
         };
+    }
+
+    /**
+     * Co to byla za společnou věc.
+     *
+     * Nepovinné a jiné než `type`: ten popisuje chování události v kalendáři,
+     * tohle druh společně stráveného času. Účet radosti podle něj počítá,
+     * co doopravdy vyrobilo dobré dny — bez toho se seskupovat nemá podle čeho.
+     *
+     * Prázdné je `null`, ne prázdný řetězec: „nezařazeno" a „zařazeno do
+     * ničeho" musí jít od sebe rozeznat.
+     *
+     * @param  array<string, mixed>  $e
+     */
+    private function cinnost(array $e): ?string
+    {
+        $druh = trim((string) ($e['act'] ?? ''));
+
+        return $druh === '' ? null : mb_substr($druh, 0, 60);
     }
 
     /** @param  array<string, mixed>  $e */

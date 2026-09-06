@@ -80,13 +80,13 @@ Změřeno v prohlížeči proti běžícímu serveru, ne odhadem:
 | --- | --- |
 | Klíčů v `window.GalerieData` | **190** — z toho 9 jsou pomocné funkce, ne data |
 | Kolekcí celkem | **181** |
-| Obsluhuje server | **135** (133 přes `/api/data`, `ADMIN` a `STORAGE` přes přístupovou vrstvu) |
-| Z toho kolekcí, které prototyp má | **113** |
+| Obsluhuje server | **139** (137 přes `/api/data`, `ADMIN` a `STORAGE` přes přístupovou vrstvu) |
+| Z toho kolekcí, které prototyp má | **117** |
 | Katalogy rozhraní — zůstávají statické záměrně | ~53 (`SCEN` a `RITUALS` se ukázaly být číselníky) |
 | Přihlašovací záslepky prototypu — **daty se stát nesmí** | 6 |
-| **Obsah dvojice, který ještě není napojený** | **7** |
+| **Obsah dvojice, který ještě není napojený** | **3** |
 
-Dvacet ze sto třiceti tří kolekcí prototyp v `GalerieData` vůbec nemá — mřížku fotek
+Dvacet ze sto třiceti sedmi kolekcí prototyp v `GalerieData` vůbec nemá — mřížku fotek
 (`PHOTOS`, `DAYS`, `ALBUMS`, `ATREE`), čísla u nabídky (`NAVCNT`, `TOTAL`),
 měnu, spíž a odkazy si dokument vyráběl sám ve funkcích. Server je dodává
 navíc a přepínače v dokumentu je berou přednostně.
@@ -136,6 +136,9 @@ Podle toho, kde už skutečný obsah je a kde na něm záleží:
 | 29 | **Úložiště a koš** | `DISK`, `TRASH`, `DVOJICE` | `storage_connections`, `media_items`, `media_variants`, `gallery_space_user` | hotovo, **maže i na Disku** (`/api/kos/…`, `/api/uloziste/prenest`) |
 | 30 | **Předpověď a horizont** | `P60`, `HORIZON` | `finance_recurring`, `wallets`, `transactions` | hotovo — počítá se, neukládá |
 | 31 | **Rozhodl čas** | `AUTO_DEC` | `couple_cooling_purchases`, `shared_todos` | hotovo — tři vzorce, žádná nová tabulka |
+| 32 | **Účet radosti** | `JOY` | `calendar_events.activity_kind`, `wellbeing_moods`, `transactions` | hotovo — počítá se, **zařazení události zapisuje dvojice** |
+| 33 | **Kdo to vyřídil** | `VIS_ROWS`, `SPEAK` | `couple_outreach_log`, `couple_family_contacts` | hotovo, **zapisuje se formulářem** (`/api/zaznamy/vyrizeno`) |
+| 34 | **Mlčky platná pravidla** | `TACIT` | `house_chore_log`, `transactions`, `calendar_events`, `couple_cooling_purchases` | hotovo — čtyři hledače, žádná nová tabulka |
 
 ## Knihovna: co se muselo změnit v dokumentu
 
@@ -470,47 +473,59 @@ Tohle **není** katalog rozhraní — je to obsah dvojice, který se pořád kre
 z `galerie-data.js`. Seřazeno podle toho, co je hotové nejdřív: první skupina
 má tabulky i data, poslední je potřeba teprve vymyslet.
 
-Zbývá sedm kolekcí a dělí se na dvě skupiny podle toho, **proč** ještě nejsou
-napojené. To je ten rozdíl, na kterém záleží: první je rozhodnutí, druhá slepá
-ulička.
+Zbývají tři kolekce a ani jedna z nich není obsah dvojice: dvě nemají odkud
+brát data (`WEATHER`, `POSTEPS`) a jednu vyplňují hosté, ne dvojice
+(`GV_VOICE_POOL` — hlasovky u sdíleného odkazu patří ke `guest_comments`).
 
-### Nemá to kdo zapsat — a nemá to ani kdo počítat
+## Poslední čtyři: dva chybějící sloupce
 
-Obrazovka ta čísla ukazuje, ale nikde je nezadává. Napojit je znamená **nejdřív
-domyslet, odkud se vezmou**.
+`JOY`, `VIS_ROWS`, `TACIT` a `SPEAK` se dlouho nedaly napojit — ne proto, že by
+chyběl nápad, jak je spočítat, ale proto, že v databázi nebyl **jeden konkrétní
+údaj**. Doplnily se dva:
 
-`JOY` (účet radosti), `VIS_ROWS` (neviditelná práce), `TACIT` (tiché dohody),
-`SPEAK` (kdo mluví za koho).
-
-U každé z nich chybí **jeden konkrétní sloupec**, ne nápad, jak to spočítat:
-
-| Kolekce | Co chybí |
+| Sloupec | Co bez něj nešlo |
 | --- | --- |
-| `JOY` | vazba mezi činností, útratou a náladou toho dne — kalendář nemá druh činnosti |
-| `VIS_ROWS` | hodiny strávené kontaktem s rodinou; tabulka zná jen jak často a kdo naposled |
-| `TACIT` | dvojice pravidlo–událost, na které by šlo měřit, kolikrát platilo |
-| `SPEAK` | oblast u zprávy nebo kontaktu; bez ní se nedá říct, kdo za koho mluví v čem |
+| `calendar_events.activity_kind` | co to za společnou věc vlastně bylo. `type` (`event`, `birthday`) říká, jak se to chová v kalendáři, ne jestli to byla snídaně mimo domov nebo návštěva u rodiny |
+| `couple_outreach_log` (nová tabulka) | kdo to vyřídil. Tabulka kontaktů zná jen „naposledy" a „jak často", takže se z ní nedalo spočítat, kolik hodin to komu sebralo ani kdo za koho mluví s úřady |
 
-Doplnit sloupec a nechat ho vyplňovat je řešení. Dopočítat ho z toho, co je,
-řešení není — vyšlo by číslo, kterým se pak měří chování dvojice.
+**Účet radosti** (`JOY`) teď počítá přesně to, co obrazovka slibuje: hodiny
+z kalendáře, útratu z transakcí, zdvih nálady proti průměru všech dnů. Útrata
+se bere jen ze **dnů, kdy se dělo jen tohle jedno** — den, ve kterém je
+randíčko i velký nákup do bytu, aplikace rozdělit neumí, a přiřadit celou
+útratu oběma by znamenalo tvrdit, že randíčko stálo čtyři tisíce. Zařazení je
+nepovinné; nezařazená událost se do výpočtu nedostane, což je správně —
+nezařazené není „nic", je to „nevíme co".
 
-Pozor na to, **jak** se napojí: každá z těchhle obrazovek si na sebe říká, že
-počítá, ne že se vyplňuje. „Tohle nejsou pravidla, na kterých jste se dohodli.
-Jsou to vzorce, které aplikace našla" (`TACIT`). „Zdvih nálady se bere
-z korelací, útrata z transakcí, hodiny z kalendáře. Nic se nehodnotí dojmem"
-(`JOY`). Formulář by u nich šel proti smyslu obrazovky — patří k nim výpočet
-z transakcí, kalendáře a deníku, ne pole k vyplnění.
+**Neviditelná práce** (`VIS_ROWS`) a **kdo mluví za koho** (`SPEAK`) jsou týž
+protokol viděný dvakrát: první je jeho část navázaná na kontakt s rodinou,
+druhý týž protokol seskupený po oblastech. `asked_partner` je jediná věc, která
+se odvodit nedá — jestli se ten, kdo to vyřizoval, předem zeptal druhého. Bez
+ní by obrazovka tvrdila buď že se ptá vždycky, nebo nikdy, a obojí by byla lež.
 
-`P60`, `HORIZON` a `AUTO_DEC` už spočítané jsou — viz pořadí výš.
+**Mlčky platná pravidla** (`TACIT`) nový sloupec nepotřebovala. Obrazovka o sobě
+říká „vzorce, které aplikace našla" — tak se čtyřmi hledači opravdu hledají:
 
-### Zapsané formulářem
+| Hledač | Nad čím | Co najde |
+| --- | --- | --- |
+| dělba práce | `house_chore_log` | „Kdo dělá A, nedělá B" mezi pracemi téhož dne |
+| klid na peníze | `transactions.created_at` | hodina, po které se do financí skoro nesahá |
+| velký nákup | `transactions` + `couple_cooling_purchases` | jestli má výdaj nad devátým desetilem předem rozvahu |
+| den bez plánu | `calendar_events` | den v týdnu, který zůstává skoro vždy prázdný |
+
+Dva prahy platí pro všechny: vzorec se ukáže, jen když měl aspoň osm
+příležitostí projevit se a drží aspoň ve třech případech z pěti. Pod tím to není
+tichá dohoda, to je náhoda — a půlka testů hlídá právě tohle. Vyhýbání se hlásí
+jen v jednom směru; „kdo vaří, neuklízí kuchyň" a „kdo uklízí kuchyň, nevaří"
+je totéž dvakrát.
+
+## Zapsané formulářem
 
 Čtyři věci se počítat nedají a nikdy nedaly: kdo umí přepnout bojler, čeho se
 kdo u rozhodnutí bojí, jak dopadl podobný případ před dvěma lety a na jakém
 čísle rozhodnutí stálo. Ty mají skupinu `rozhodovani`, vlastní tabulky
-a formuláře — viz níž.
+a formuláře — viz výš.
 
-### Číselníky, které vypadají jako obsah
+## Číselníky, které vypadají jako obsah
 
 `SCEN` a `RITUALS` se dlouho počítaly mezi nenapojené kolekce. Nejsou to data
 dvojice, jsou to **číselníky zabudovaných funkcí**: přepínač scénáře se váže na

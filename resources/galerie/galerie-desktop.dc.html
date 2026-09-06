@@ -10343,6 +10343,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                   <div style="font-size:17px; text-wrap:pretty">{{ spkHead }}</div>
                   <div style="font-size:13px; color:var(--g-ink2); margin-top:3px; text-wrap:pretty">{{ spkNote }}</div>
                 </div>
+                <button class="btn btn-secondary" onClick="{{ spkAdd }}" style="gap:6px"><i class="ph-duotone ph-plus" style="font-size:16px"></i>Zapsat, kdo to vyřídil</button>
                 <button class="btn btn-ghost" onClick="{{ spkToZad }}" style="gap:6px"><i class="ph-duotone ph-hand-heart" style="font-size:16px"></i>Zeptat se předem</button>
               </div>
 
@@ -13275,6 +13276,14 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
               </sc-for>
             </select>
           </div>
+          <div class="field"><label>Co to bylo za společnou věc</label>
+            <select class="input" value="{{ evAct }}" onChange="{{ evSetAct }}" aria-label="Co to bylo za společnou věc">
+              <sc-for list="{{ evActOpts }}" as="a" hint-placeholder-count="6">
+                <option value="{{ a.value }}">{{ a.label }}</option>
+              </sc-for>
+            </select>
+            <div style="font-size:12px; color:var(--g-ink3); margin-top:4px; text-wrap:pretty">{{ evActNote }}</div>
+          </div>
           <div class="field"><label>Opakování</label>
             <select class="input" value="{{ evRepeat }}" onChange="{{ evSetRepeat }}" aria-label="Opakování">
               <sc-for list="{{ evRepeatOpts }}" as="r" hint-placeholder-count="4">
@@ -14181,6 +14190,20 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 // Data prototypu žijí v galerie-data.js — jeden zdroj pro desktop i mobil.
 const { RTRIG, RACT, RULEDEF, MONTHN, RULEXP, SRCHMSG, RULOG, APP, KL_DAYS, KL_MOOD, KL_EV, KL_HELP, KL_EN, KL_TASKS, KL_ATTN, KL_QUESTIONS, ARB, SURPRISE, VERSIONS, AUTO_DEC, HOURS, PAUSE_PLAN, PAUSE_LOG, JOY, HORIZON, SPEAK, TACIT, PATIENCE, FORGIVEN, DISP, BUS, DELAY, FAV, INFL, ENV, SOLO, PM_DEC, PM_MINE, PM_THEIRS, PM_HIST, KAPS, KAP_TRIG, TICHO, TICHO_TOPICS, P60, SCEN, EST, CAS_ROWS, ANTI, SPOR_MINE, SPOR_THEIRS, VETO_USED, VETO_PROP, PAST_DEC, PAST_CASES, ML_LOAD, VIS_ROWS, LATER_ITEMS, KL_ASK_LOG, AL, ABARS, ADIARY, CUSTOM_KEYS, EVKIND, CALEV, ATASKS, ATX, AFORMS, APEOPLE, ATAGS, SETOPT, SETBIND, SETACT, MSGS, MSGFILES, MSGREPLIES, MEMS, MEMKIND, PKIND, PJOBS, PSIZE, PORDERS, POSTEPS, STORY, STORYMS, ROWACT, AGRID, AMISS, AMSG, NOWTRIP, TRIPS, TRIP_BY_TITLE, PERSONS, RECIPES, PANTRY, WEATHER, RWEATHER, WHEELDEF, WHEELCOL, OFFPACKS, YBCH, CONFLICTS, RITUALS, COSTMEAN, EVSEED, EVKINDS, OBSTEPS, OBCODE, OBROUTES, OBSECS, OBIMPORT, NUDGEKIND, NUDGES, CAPKIND, BOOKFMT, BOOKCOVER, EMPTYDEF, PLACES, BUD, TX, TXCATS, FIN, GRAF, RECIPE_BY_TITLE, PLACE_BY_TITLE, PLACE_KEY, VAULT_PWD, LOCKPIN, LOCKWHO, LOCKREC, LOCKMAIL, LOCKPWD, VAULT_ITEMS, DATA_HEALTH, SECLIFE, PAPER_ROWS, TRIPCOST, REVISIT, TRUTHS, INCOMES, SHARED, RECON, SEASON, PROMISES, FAMILY, EM_ITEMS, EM_LOG, DATING, QUAR, HOUSE_CHORES, HOUSE_LOG, HOUSE_WEEK, HOUSE_DUES, HOUSE_INV, DEC_LIST, DEC_COOL, GIFT_WISHES, GIFT_BUYS, GIFT_IDEAS, GIFT_OCC, GV_VOICE_POOL, GV_C, GUEST_Q, DUP_GROUPS, MON_CS, MON_NOM, CYC_TODAY, CYC_STARTS, FLOWS, FLOW_DOT, CYC_SYMPTOMS, CYC_MOODS, PHASES, PH_KEY, CONF, CYC_SHARE, CYC_BASE } = window.GalerieData;
 const { SETROWS, SETSEC, NAV_GROUPS, placeKey, shortPlace, byTitle, dParse, dIso, dAdd, dDiff, dShort, dLong } = window.GalerieData;
+/*
+ * Druhy společně stráveného času.
+ *
+ * Katalog rozhraní, ne data dvojice — stejně jako druhy událostí (`EVKIND`).
+ * Účet radosti podle nich seskupuje, co doopravdy vyrobilo dobré dny; bez
+ * zařazení se událost do výpočtu vůbec nedostane, což je správně: nezařazená
+ * událost není „nic", je to „nevíme co".
+ */
+const CINNOSTI = [
+  'Snídaně mimo domov', 'Randíčko', 'Sport nebo procházka', 'Kultura',
+  'Návštěva u rodiny', 'Přátelé', 'Večer doma', 'Víkend někde jinde',
+  'Velký nákup do bytu', 'Čas sám pro sebe', 'Práce navíc', 'Úřady a papíry'
+];
+
 // Data mechanismů žijí v galerie-mechanismy.js.
 const { DC_GRPS, KL_GRPS, HS_GRPS, FIN_GRPS, BUD_GRPS, DAY_LOAD, DAY_HIST, BLIZ, SOLO_MONEY, SOLO_COST, KIDS, PARENTS, ARB_MECH, ARB_ROWS, SURP, VERS, EXIT_PACK, SVED, FIGHT_START, QUART, INDEP, TRUST, EXPIRE } = window.GalerieMech;
 
@@ -16797,7 +16820,11 @@ class Component extends DCLogic {
         w: Math.round(Math.min(1, Math.abs(r.lift) / 1.5) * 100) + '%',
         fill: r.lift >= 0 ? 'var(--g-acc)' : 'var(--g-mag)'
       })),
-      joyBest: 'Nejlepší poměr má „' + best.name.toLowerCase() + '“ za ' + this.kc(best.cost) + '. Nejhorší „' + worstPaid.name.toLowerCase() + '“ — ' + this.kc(worstPaid.cost) + ' za zdvih ' + (worstPaid.lift < 0 ? '\u2212' : '+') + Math.abs(worstPaid.lift).toFixed(1).replace('.', ',') + '.',
+      // Bez jediné zařazené činnosti není co porovnávat; `best.name`
+      // by shodilo celou obrazovku.
+      joyBest: (best && worstPaid)
+        ? 'Nejlepší poměr má „' + best.name.toLowerCase() + '“ za ' + this.kc(best.cost) + '. Nejhorší „' + worstPaid.name.toLowerCase() + '“ — ' + this.kc(worstPaid.cost) + ' za zdvih ' + (worstPaid.lift < 0 ? '\u2212' : '+') + Math.abs(worstPaid.lift).toFixed(1).replace('.', ',') + '.'
+        : 'Zatím není co porovnávat. Zařaďte u událostí v kalendáři, co to bylo za společnou věc — účet radosti se pak spočítá sám.',
       joyPlan: () => { this.setState({ route: 'x-randicka' }); this.toast('Naplánujte to, co podle dat funguje — ne to, co zbyde', { icon: 'ph-sparkle' }); },
       joyToMood: () => this.setState({ klTab: 'klMood' })
     };
@@ -16811,11 +16838,11 @@ class Component extends DCLogic {
     const sumA = rows.reduce((a, r) => a + r.a, 0), sumK = rows.reduce((a, r) => a + r.k, 0);
     const noAsk = rows.filter(r => r.ask);
     return {
-      spkHead: 'Za posledních 90 dní odpověděla ' + (sumK > sumA ? 'Makinka' : 'Adrian') + ' na ' + Math.round((Math.max(sumA, sumK) / Math.max(tot, 1)) * 100) + ' % toho, co přišlo zvenčí.',
+      spkHead: 'Za posledních 90 dní odpovídal' + (this.rodPripona(sumK > sumA ? this.dva()[1] : this.dva()[0]) || '') + ' ' + (sumK > sumA ? this.dva()[1] : this.dva()[0]) + ' na ' + Math.round((Math.max(sumA, sumK) / Math.max(tot, 1)) * 100) + ' % toho, co přišlo zvenčí.',
       spkNote: 'Mluvit za dva je práce, kterou nikdo nevidí — a taky moc, o kterou nikdo nežádal. Aplikace hlídá jen dvě věci: kdo odpovídá a kde se přitom nikdo neptá druhého.',
       spkBars: [
-        { name: 'Adrian', v: String(sumA), w: Math.round((sumA / Math.max(tot, 1)) * 100) + '%', color: 'var(--g-acc)' },
-        { name: 'Makinka', v: String(sumK), w: Math.round((sumK / Math.max(tot, 1)) * 100) + '%', color: 'var(--g-mag)' }
+        { name: this.dva()[0], v: String(sumA), w: Math.round((sumA / Math.max(tot, 1)) * 100) + '%', color: 'var(--g-acc)' },
+        { name: this.dva()[1], v: String(sumK), w: Math.round((sumK / Math.max(tot, 1)) * 100) + '%', color: 'var(--g-mag)' }
       ],
       spkAskHead: noAsk.length
         ? this.pl(noAsk.length, 'kanál, kde se za oba mluví bez ptaní', 'kanály, kde se za oba mluví bez ptaní', 'kanálů, kde se za oba mluví bez ptaní')
@@ -16827,20 +16854,22 @@ class Component extends DCLogic {
           a: String(r.a), k: String(r.k),
           aW: Math.round((r.a / Math.max(t, 1)) * 100) + '%',
           kW: Math.round((r.k / Math.max(t, 1)) * 100) + '%',
-          lead: r.a > r.k ? 'Adrian' : r.k > r.a ? 'Makinka' : 'napůl',
+          lead: r.a > r.k ? this.dva()[0] : r.k > r.a ? this.dva()[1] : 'napůl',
           leadTag: r.a > r.k ? 'tag-accent' : r.k > r.a ? 'tag-accent-2' : 'tag-neutral',
-          ask: r.taken ? 'přebírá Adrian od 4. 9. — měřená čísla zůstávají' : r.ask ? 'rozhoduje bez ptaní' : '',
+          // Kanál přebírá ten druhý — ne jméno napsané v kódu.
+          ask: r.taken ? 'přebírá ' + this.druhy(r.a > r.k ? this.dva()[0] : this.dva()[1]) + ' — měřená čísla zůstávají' : r.ask ? 'rozhoduje bez ptaní' : '',
           askColor: r.taken ? 'var(--g-acc)' : 'var(--g-mag)',
           canFlip: !flip[r.area],
           flip: () => {
             this.setState({ spkFlip: Object.assign({}, flip, { [r.area]: true }) });
-            this.toast('„' + r.area + '“ přebírá Adrian — na tři měsíce, pak se to vyhodnotí', { icon: 'ph-arrows-left-right', undo: () => this.setState({ spkFlip: flip }) });
+            this.toast('„' + r.area + '“ přebírá ' + this.druhy(r.a > r.k ? this.dva()[0] : this.dva()[1]) + ' — na tři měsíce, pak se to vyhodnotí', { icon: 'ph-arrows-left-right', undo: () => this.setState({ spkFlip: flip }) });
           }
         };
       }),
       spkVerdict: noAsk.length
         ? 'Nejde o to přestat mluvit za druhého. Jde o to, aby ' + (noAsk.length === 1 ? 'u tohoto jednoho kanálu' : 'u těchto ' + (noAsk.length <= 4 ? ['dvou', 'tří', 'čtyř'][noAsk.length - 2] : noAsk.length) + ' kanálů') + ' padla jedna otázka předem: „můžu za tebe říct ano?“'
         : 'Tohle je vzácný stav — každý mluví jen za sebe, nebo se předem zeptá.',
+      spkAdd: () => this.setState({ xaOpen: true, xaMode: 'vyrizeno', xaA: '', xaB: '', xaC: '', xaD: '' }),
       spkToZad: () => { this.setState({ route: 'x-zadosti' }); this.toast('Otázka „můžu za tebe říct ano?“ je přesně to, na co jsou žádosti', { icon: 'ph-hand-heart' }); }
     };
   }
@@ -17209,6 +17238,28 @@ class Component extends DCLogic {
           if (out) PAST_CASES.push({ name: a, tags: stitky, out: out, note: d || '' });
           else PAST_DEC.push({ q: a, tags: stitky });
         }
+      },
+      navsteva: {
+        druh: 'vyrizeno',
+        t: 'Ozvali jsme se',
+        a: 'Kolik minut to zabralo',
+        b: 'Domluvil to někdo předem s tím druhým? ano / ne',
+        h: 'Minuty jsou jediné, z čeho se dá spočítat, kolik ta neviditelná práce komu sebere. Bez nich se zapíše jen návštěva.',
+        telo: (a, b, c, d, ctx) => ({ contact: ctx, area: 'Rodina', minutes: parseInt(a, 10) || null, asked: /^a/i.test(b) }),
+        mistni: (a, b, c, d, ctx) => {
+          const radek = VIS_ROWS.filter(v => v.label === ctx)[0];
+          if (radek) { radek.y += 1; radek.hours += Math.round((parseInt(a, 10) || 0) / 60); }
+        }
+      },
+      vyrizeno: {
+        druh: 'vyrizeno',
+        t: 'Kdo to vyřídil',
+        a: 'Čeho se to týkalo — úřady, škola, sousedi…',
+        b: 'Kolik minut to zabralo',
+        c: 'Ptal ses předem toho druhého? ano / ne',
+        h: 'Poslední otázka je jediná, kterou aplikace odvodit neumí — a je to právě ta, ze které se pozná, kde se rozhoduje za oba bez ptaní.',
+        telo: (a, b, c) => ({ area: a, minutes: parseInt(b, 10) || null, asked: /^a/i.test(c) }),
+        mistni: (a) => SPEAK.push({ area: a, a: 1, k: 0, ask: true, note: 'zapsáno teď' })
       },
       vstup: {
         druh: 'vstup',
@@ -18414,10 +18465,28 @@ class Component extends DCLogic {
   visList() { return this.state.hsVisits || VIS_ROWS; }
   visSide(who) { return this.visList().filter(v => v.side === who).reduce((a, v) => ({ y: a.y + v.y, hours: a.hours + v.hours }), { y: 0, hours: 0 }); }
   visDiff() { return Math.abs(this.visSide('Adrian').y - this.visSide('Makinka').y); }
+  /*
+   * Věta pod počtem návštěv.
+   *
+   * Stálo tam „kratší návštěvy, ale skoro vždy o svátcích" a „tři čtvrtiny
+   * hodin padnou na jedno auto a jednu dálnici" — tvrzení o dvojici, kterou
+   * aplikace nezná. Ze zapsaných minut se dá říct jen průměrná délka jedné
+   * návštěvy, a to je věta, která opravdu platí.
+   */
+  visNota(strana) {
+    if (! strana.y) return 'Letos ještě žádná návštěva.';
+    if (! strana.hours) return 'Návštěvy jsou zapsané, minuty u nich ne.';
+
+    const prumer = strana.hours / strana.y;
+    const h = (Math.round(prumer * 10) / 10).toFixed(1).replace('.', ',');
+
+    return 'Jedna návštěva vyjde v průměru na ' + h + ' hodiny.';
+  }
+
   visitVals() {
     const rows = this.visList();
     const set = next => this.setState({ hsVisits: next });
-    const a = this.visSide('Adrian'), m = this.visSide('Makinka');
+    const a = this.visSide(this.dva()[0]), m = this.visSide(this.dva()[1]);
     const diff = Math.abs(a.y - m.y), hDiff = Math.abs(a.hours - m.hours);
     const initM = rows.filter(v => v.init === this.dva()[1]).length;
     return {
@@ -18425,18 +18494,21 @@ class Component extends DCLogic {
         ? 'Letos to vyšlo nastejno — což se stane málokdy.'
         : 'Rozdíl je ' + this.pl(diff, 'návštěva', 'návštěvy', 'návštěv') + ' a ' + this.pl(hDiff, 'hodina', 'hodiny', 'hodin') + '. Nikdo si to nepamatuje správně, tak je to spočítané.',
       visSides: [
-        { name: 'Rodina · Adrian', y: String(a.y), hours: a.hours + ' h', color: a.y > m.y ? 'var(--g-acc)' : 'var(--g-ink)', note: 'Kratší návštěvy, ale skoro vždy o svátcích — proto se zdají delší.' },
-        { name: 'Rodina · Makinka', y: String(m.y), hours: m.hours + ' h', color: m.y > a.y ? 'var(--g-mag)' : 'var(--g-ink)', note: 'Tři čtvrtiny hodin padnou na jedno auto a jednu dálnici.' }
+        { name: 'Rodina · ' + this.dva()[0], y: String(a.y), hours: a.hours + ' h', color: a.y > m.y ? 'var(--g-acc)' : 'var(--g-ink)', note: this.visNota(a) },
+        { name: 'Rodina · ' + this.dva()[1], y: String(m.y), hours: m.hours + ' h', color: m.y > a.y ? 'var(--g-mag)' : 'var(--g-ink)', note: this.visNota(m) }
       ],
       visRows: rows.map((v, i) => ({
         label: v.label, side: v.side, sideTag: this.tagKdo(v.side),
         y: String(v.y), hours: v.hours + ' h', init: v.init,
         initColor: v.init === this.dva()[1] && initM >= 4 ? 'var(--g-mag)' : 'var(--g-ink2)',
-        add: () => {
-          const prev = rows;
-          set(rows.map((x, j) => j === i ? { ...x, y: x.y + 1, hours: x.hours + Math.max(2, Math.round(x.hours / Math.max(1, x.y))) } : x));
-          this.toast('Návštěva u „' + v.label + '“ zapsána · rok přepočítán', { icon: 'ph-house-heart', undo: () => set(prev) });
-        },
+        /*
+         * Návštěva se zapisuje do protokolu, ne odhadem do stavu.
+         *
+         * Dřív se k hodinám přičetl průměr z dosavadních — číslo, které nikdo
+         * neměřil, a přitom je to jediný sloupec, kvůli kterému ta obrazovka
+         * existuje.
+         */
+        add: () => this.setState({ xaOpen: true, xaMode: 'navsteva', xaCtx: v.label, xaA: '', xaB: '', xaC: '', xaD: '' }),
         flip: () => {
           const prev = rows;
           set(rows.map((x, j) => j === i ? { ...x, init: this.druhy(x.init) } : x));
@@ -25173,8 +25245,19 @@ class Component extends DCLogic {
         bd: d.kind === k ? 'var(--g-ink)' : 'var(--g-line)',
         go: () => set({ kind: k })
       })),
+      /*
+       * Co to byla za společnou věc.
+       *
+       * Nepovinné a jiné než druh nahoře: ten říká, jak se událost chová
+       * v kalendáři, tohle druh společně stráveného času. Účet radosti podle
+       * něj počítá, co doopravdy vyrobilo dobré dny — bez toho nemá co
+       * seskupovat a obrazovka drží ukázková data.
+       */
+      evAct: d.act || '', evSetAct: e => set({ act: e.target.value }),
+      evActOpts: [{ value: '', label: 'Nezařazeno' }].concat(CINNOSTI.map(c => ({ value: c, label: c }))),
+      evActNote: 'Nepovinné. Podle tohohle se v účtu radosti pozná, co vám dělá dobré dny a za kolik.',
       evWho: d.who, evSetWho: e => set({ who: e.target.value }),
-      evWhoOpts: [{ value: 'spolu', label: 'Oba' }, { value: 'Adrian', label: 'Adrian' }, { value: 'Makinka', label: 'Makinka' }],
+      evWhoOpts: [{ value: 'spolu', label: 'Oba' }].concat(this.dva().map(w => ({ value: w, label: w }))),
       evRemind: d.remind || '', evSetRemind: e => set({ remind: e.target.value }),
       evRemindOpts: [{ value: '', label: 'Bez připomenutí' }, { value: 'ráno', label: 'Ráno v den události' }, { value: 'den předem', label: 'Den předem' }, { value: 'týden předem', label: 'Týden předem' }],
       evRepeat: d.repeat || '', evSetRepeat: e => set({ repeat: e.target.value }),
@@ -25219,7 +25302,7 @@ class Component extends DCLogic {
         const prev = this.events();
         const rep = d.repeat || '';
         const seq = s.xSeq || 1;
-        const base = { id: d.id || 'ev-n' + seq, y: +p[0], m: +p[1] - 1, d: +p[2], time: d.time || '', t: t, kind: d.kind, who: d.who, remind: d.remind || '', note: (d.note || '').trim(), repeat: rep, album: d.album || '', photos: d.photos || [] };
+        const base = { id: d.id || 'ev-n' + seq, y: +p[0], m: +p[1] - 1, d: +p[2], time: d.time || '', t: t, kind: d.kind, act: d.act || '', who: d.who, remind: d.remind || '', note: (d.note || '').trim(), repeat: rep, album: d.album || '', photos: d.photos || [] };
         const clones = [];
         if (rep && d.mode !== 'edit') {
           const n = rep === 'ročně' ? 3 : rep === 'měsíčně' ? 11 : 11;
@@ -26018,7 +26101,7 @@ class Component extends DCLogic {
       return n === 0 ? 'dnes' : n === 1 ? 'zítra' : n < 7 ? 'za ' + n + ' dny' : n < 32 ? 'za ' + n + ' dní' : 'za ' + Math.round(n / 30) + ' měsíce';
     };
     const openEv = e => () => this.setState({
-      evDlg: { mode: 'edit', id: e.id, repeat: e.repeat || '', album: e.album || '', photos: (e.photos || []).slice(), t: e.t, date: e.y + '-' + String(e.m + 1).padStart(2, '0') + '-' + String(e.d).padStart(2, '0'), time: e.time || '', kind: e.kind, who: e.who, remind: e.remind || '', note: e.note || '' }
+      evDlg: { mode: 'edit', id: e.id, act: e.act || '', repeat: e.repeat || '', album: e.album || '', photos: (e.photos || []).slice(), t: e.t, date: e.y + '-' + String(e.m + 1).padStart(2, '0') + '-' + String(e.d).padStart(2, '0'), time: e.time || '', kind: e.kind, who: e.who, remind: e.remind || '', note: e.note || '' }
     });
     const evRow = e => {
       const done = this.evDone(e.id);

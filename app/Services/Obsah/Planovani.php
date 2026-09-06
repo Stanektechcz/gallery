@@ -129,6 +129,9 @@ class Planovani implements PoskytovatelObsahu
                     'time' => $e->all_day ? '' : $kdy->format('G:i'),
                     't' => $e->title,
                     'kind' => $this->druh((string) $e->type),
+                    // Co to byla za společnou věc. Účet radosti podle toho
+                    // seskupuje; bez toho by se neměl podle čeho.
+                    'act' => $e->activity_kind ?? '',
                     'who' => $this->kdo($e->id, $e->created_by, $jmena, $ucastnici),
                     'note' => (string) ($e->description ?? ''),
                     'remind' => $pripomenuti[$e->id] ?? '',

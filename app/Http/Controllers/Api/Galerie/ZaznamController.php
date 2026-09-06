@@ -6,10 +6,12 @@ use App\Http\Controllers\Api\Galerie\Concerns\UrcujePar;
 use App\Http\Controllers\Api\Galerie\Concerns\VraciObsah;
 use App\Http\Controllers\Controller;
 use App\Models\GallerySpace;
+use App\Services\Obsah\Mechanismy;
 use App\Services\Obsah\Rozhodovani;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
@@ -32,9 +34,12 @@ class ZaznamController extends Controller
     use VraciObsah;
 
     /** Co se dá zapsat. Neznámý druh je 404, ne tiché nic. */
-    public const DRUHY = ['bus', 'bus-zapsano', 'premortem', 'riziko', 'pripad', 'vstup'];
+    public const DRUHY = ['bus', 'bus-zapsano', 'premortem', 'riziko', 'pripad', 'vstup', 'vyrizeno'];
 
-    public function __construct(private readonly Rozhodovani $obsah) {}
+    public function __construct(
+        private readonly Rozhodovani $obsah,
+        private readonly Mechanismy $mechanismy,
+    ) {}
 
     public function __invoke(Request $request, string $druh): JsonResponse
     {
@@ -47,13 +52,18 @@ class ZaznamController extends Controller
             'riziko' => $this->riziko($request, $prostor),
             'pripad' => $this->pripad($request, $prostor),
             'vstup' => $this->vstup($request, $prostor),
+            'vyrizeno' => $this->vyrizeno($request, $prostor),
             default => abort(404, 'Takový záznam server nezná.'),
         };
+
+        // Kdo to vyřídil patří k mechanismům, ne k rozhodování — odpověď
+        // proto nese tu skupinu, kterou zápis opravdu změnil.
+        $poskytovatel = $druh === 'vyrizeno' ? $this->mechanismy : $this->obsah;
 
         return response()->json([
             'zprava' => $zprava,
             'ok' => true,
-        ] + $this->obsahPoAkci($this->obsah, $prostor));
+        ] + $this->obsahPoAkci($poskytovatel, $prostor));
     }
 
     /**
@@ -257,6 +267,77 @@ class ZaznamController extends Controller
         ]);
 
         return 'Vstup sledovaný — revize se ozve, až se pohne';
+    }
+
+    /**
+     * Kdo to vyřídil.
+     *
+     * Jeden protokol pro dvě obrazovky: „neviditelná práce" je jeho část
+     * navázaná na kontakt s rodinou, „kdo mluví za koho" je týž protokol
+     * seskupený po oblastech.
+     *
+     * `asked` je jediná věc, kterou nejde odvodit — jestli se ten, kdo to
+     * vyřizoval, předem zeptal druhého. Bez ní se nedá říct, kde se rozhoduje
+     * za oba, aniž by o tom druhý věděl.
+     */
+    private function vyrizeno(Request $request, GallerySpace $prostor): string
+    {
+        $data = $request->validate([
+            'area' => ['required', 'string', 'max:120'],
+            'minutes' => ['nullable', 'integer', 'min:0', 'max:1440'],
+            'asked' => ['nullable', 'boolean'],
+            'contact' => ['nullable', 'string', 'max:180'],
+            'note' => ['nullable', 'string', 'max:200'],
+        ]);
+
+        $kontakt = null;
+        $oblast = trim($data['area']);
+
+        if (($data['contact'] ?? '') !== '' && Schema::hasTable('couple_family_contacts')) {
+            $kontakt = DB::table('couple_family_contacts')
+                ->where('gallery_space_id', $prostor->id)
+                ->where('name', trim((string) $data['contact']))
+                ->first();
+
+            if ($kontakt === null) {
+                throw ValidationException::withMessages([
+                    'contact' => 'Takový kontakt v rotaci rodiny není.',
+                ]);
+            }
+
+            // U rodiny je oblast dané jméno; jinak by se každý kontakt počítal
+            // jako vlastní kanál a „kdo mluví za koho" by se rozpadlo na deset
+            // řádků po jednom.
+            $oblast = 'Rodina — '.$kontakt->name;
+        }
+
+        DB::table('couple_outreach_log')->insert([
+            'uuid' => (string) Str::uuid(),
+            'gallery_space_id' => $prostor->id,
+            'couple_family_contact_id' => $kontakt?->id,
+            'area' => $oblast,
+            'by_user_id' => $request->user()?->id,
+            'happened_on' => now()->toDateString(),
+            'minutes' => $data['minutes'] ?? null,
+            'asked_partner' => (bool) ($data['asked'] ?? false),
+            'note' => $this->text($data['note'] ?? null),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        // Rotace kontaktu si drží „naposledy" u sebe; bez toho by lhůta běžela
+        // dál, i když se právě zavolalo.
+        if ($kontakt !== null) {
+            DB::table('couple_family_contacts')
+                ->where('id', $kontakt->id)
+                ->update([
+                    'last_contact_on' => now()->toDateString(),
+                    'last_contact_by' => $request->user()?->id,
+                    'updated_at' => now(),
+                ]);
+        }
+
+        return 'Zapsáno — '.$oblast;
     }
 
     /**

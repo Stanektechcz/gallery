@@ -14,7 +14,7 @@ class CalendarEvent extends Model
 
     protected $fillable = [
         'uuid', 'gallery_space_id', 'created_by', 'trip_id', 'source_trip_id', 'album_id', 'title',
-        'description', 'type', 'status', 'starts_at', 'ends_at', 'all_day', 'timezone',
+        'description', 'type', 'activity_kind', 'status', 'starts_at', 'ends_at', 'all_day', 'timezone',
         'place_name', 'latitude', 'longitude', 'departure_buffer_minutes', 'recurrence_rule',
         'color', 'is_private', 'metadata', 'created_from', 'source_reference', 'last_reminder_at',
     ];

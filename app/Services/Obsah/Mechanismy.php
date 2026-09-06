@@ -63,7 +63,124 @@ class Mechanismy implements PoskytovatelObsahu
             'PAUSE_PLAN' => $this->pravidlaPauzy($prostor),
             'TICHO' => $this->ticho($prostor),
             'CAS_ROWS' => $this->casVersusSluzba($prostor, $jmena),
+            'VIS_ROWS' => $this->neviditelnaPrace($prostor, $jmena),
+            'SPEAK' => $this->kdoMluvi($prostor, $jmena),
         ], fn ($v) => $v !== null && $v !== []);
+    }
+
+    /**
+     * Neviditelná práce: `[{ side, label, y, hours, init }]`.
+     *
+     * Kontakt s rodinou stojí čas, který nikde nefiguruje — nikdo si ho
+     * nepamatuje a nikdo za něj neděkuje. Tabulka kontaktů uměla říct jen
+     * „naposledy" a „jak často"; kolik hodin to komu sebralo, se z ní vyčíst
+     * nedalo. Proto protokol `couple_outreach_log`.
+     *
+     * `y` je **skutečný počet** za poslední rok, ne plánovaná rotace: jestli
+     * se to opravdu děje, je celý smysl té obrazovky.
+     *
+     * @param  array<int, string>  $jmena
+     * @return list<array<string, mixed>>
+     */
+    private function neviditelnaPrace(GallerySpace $prostor, array $jmena): array
+    {
+        if (! Schema::hasTable('couple_outreach_log') || ! Schema::hasTable('couple_family_contacts')) {
+            return [];
+        }
+
+        $od = CarbonImmutable::now()->subYear()->toDateString();
+
+        $zapisy = DB::table('couple_outreach_log as z')
+            ->join('couple_family_contacts as k', 'k.id', '=', 'z.couple_family_contact_id')
+            ->where('z.gallery_space_id', $prostor->id)
+            ->where('z.happened_on', '>=', $od)
+            ->orderBy('k.sort_order')
+            ->limit(2000)
+            ->get(['k.id', 'k.name', 'k.side_user_id', 'z.minutes', 'z.by_user_id']);
+
+        if ($zapisy->isEmpty()) {
+            return [];
+        }
+
+        return $zapisy
+            ->groupBy('id')
+            ->map(function ($radky) use ($jmena) {
+                $prvni = $radky->first();
+
+                // Kdo to domlouvá: ten, kdo to dělal nejčastěji, ne naposledy.
+                $kdo = $radky->groupBy('by_user_id')->sortByDesc(fn ($s) => $s->count())->keys()->first();
+
+                return [
+                    'side' => $jmena[$prvni->side_user_id] ?? 'oba',
+                    'label' => $prvni->name,
+                    'y' => $radky->count(),
+                    // Nezměřený kontakt přispívá nulou; nula znamená
+                    // „nikdo to neměřil", ne „nezabralo to čas".
+                    'hours' => (int) round($radky->sum('minutes') / 60),
+                    'init' => $jmena[$kdo] ?? 'oba',
+                ];
+            })
+            ->sortByDesc('y')
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Kdo mluví za koho: `[{ area, a, k, ask, note }]`.
+     *
+     * Týž protokol, jen seskupený po oblastech. `a` a `k` jsou počty za oba
+     * z dvojice v tom pořadí, ve kterém je kreslí prototyp.
+     *
+     * `ask` znamená „rozhoduje se tu za oba, aniž by se někdo ptal". Je to
+     * jediná věc, kterou nejde odvodit — proto je to sloupec, který se
+     * u zápisu vyplňuje. Bez něj by obrazovka tvrdila buď že se ptá vždycky,
+     * nebo nikdy, a obojí by byla lež.
+     *
+     * @param  array<int, string>  $jmena
+     * @return list<array<string, mixed>>
+     */
+    private function kdoMluvi(GallerySpace $prostor, array $jmena): array
+    {
+        if (! Schema::hasTable('couple_outreach_log')) {
+            return [];
+        }
+
+        $od = CarbonImmutable::now()->subDays(90)->toDateString();
+
+        $zapisy = DB::table('couple_outreach_log')
+            ->where('gallery_space_id', $prostor->id)
+            ->where('happened_on', '>=', $od)
+            ->limit(2000)
+            ->get(['area', 'by_user_id', 'asked_partner', 'happened_on']);
+
+        if ($zapisy->isEmpty()) {
+            return [];
+        }
+
+        $poradi = array_keys($jmena);
+        $prvni = $poradi[0] ?? null;
+        $druhy = $poradi[1] ?? null;
+
+        return $zapisy
+            ->groupBy('area')
+            ->map(function ($radky, string $oblast) use ($prvni, $druhy) {
+                $a = $radky->where('by_user_id', $prvni)->count();
+                $k = $druhy === null ? 0 : $radky->where('by_user_id', $druhy)->count();
+                $ptalSe = $radky->filter(fn (object $z) => (bool) $z->asked_partner)->count();
+                $naposledy = CarbonImmutable::parse($radky->max('happened_on'));
+
+                return [
+                    'area' => $oblast,
+                    'a' => $a,
+                    'k' => $k,
+                    // Pod čtvrtinou dotazů se tu rozhoduje za oba bez ptaní.
+                    'ask' => $radky->count() > 0 && $ptalSe / $radky->count() < 0.25,
+                    'note' => $radky->count().'× za 90 dní · naposledy '.$naposledy->format('j. n.'),
+                ];
+            })
+            ->sortByDesc(fn (array $r) => $r['a'] + $r['k'])
+            ->values()
+            ->all();
     }
 
     /**

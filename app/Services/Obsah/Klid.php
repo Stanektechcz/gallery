@@ -40,6 +40,8 @@ class Klid implements PoskytovatelObsahu
         ['sam', 'Každý sám za sebe', 14, 'none', 'Nejmenší položka — a nikdo ji nehájí.', null, null],
     ];
 
+    public function __construct(private readonly UcetRadosti $radost) {}
+
     public function skupina(): string
     {
         return 'klid';
@@ -65,6 +67,8 @@ class Klid implements PoskytovatelObsahu
             'KL_ASK_LOG' => $this->otazky($prostor),
             'KL_ASK_NOW' => $this->dnesniOtazka($prostor),
             'SOLO' => $this->casProSebe($prostor),
+            // Co doopravdy vyrobilo dobré dny — a za kolik.
+            'JOY' => $this->radost->spocitej($prostor),
         ], fn ($v) => $v !== null && $v !== []);
     }
 
