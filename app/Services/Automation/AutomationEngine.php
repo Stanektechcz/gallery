@@ -6,6 +6,7 @@ use App\Models\AutomationRule;
 use App\Models\GallerySpace;
 use App\Models\JournalEntry;
 use App\Models\SharedTodo;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
@@ -96,12 +97,22 @@ class AutomationEngine
                         'last_run_at' => now(),
                         'run_count' => $rule->run_count + 1,
                     ])->save();
+                    $this->record($rule, $space, true, $this->describe($rule, $payload));
                     $ran++;
                 } catch (\Throwable $e) {
                     // Logged, not thrown: the upload that fired this must still succeed.
                     Log::warning('Automatizace selhala', [
                         'rule' => $rule->uuid, 'action' => $rule->action, 'error' => $e->getMessage(),
                     ]);
+
+                    /*
+                     * A zapsáno i tam, kam se dvojice dívá.
+                     *
+                     * Do téhle chvíle šlo selhání jen do logu Laravelu, takže
+                     * pravidlo, které tři týdny padá, vypadalo na obrazovce
+                     * stejně jako pravidlo, na které nic nesedlo.
+                     */
+                    $this->record($rule, $space, false, 'Nepovedlo se: '.$e->getMessage());
                 }
             }
         } finally {
@@ -109,6 +120,43 @@ class AutomationEngine
         }
 
         return $ran;
+    }
+
+    /**
+     * Zapíše, co pravidlo udělalo — nebo proč to nešlo.
+     *
+     * Nikdy nesmí shodit běh, který ho vyvolal: nahrání fotky se nemá nepovést
+     * proto, že se nepovedlo zapsat řádek do historie.
+     */
+    private function record(AutomationRule $rule, GallerySpace $space, bool $succeeded, string $message): void
+    {
+        try {
+            if (! Schema::hasTable('automation_runs')) return;
+
+            DB::table('automation_runs')->insert([
+                'automation_rule_id' => $rule->id,
+                'gallery_space_id' => $space->id,
+                'succeeded' => $succeeded,
+                'message' => mb_substr($message, 0, 500),
+                'created_at' => now(),
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('Historii automatizace se nepodařilo zapsat', ['error' => $e->getMessage()]);
+        }
+    }
+
+    /** Jedna věta o tom, co se stalo — přesně jak to obrazovka vypisuje. */
+    private function describe(AutomationRule $rule, array $payload): string
+    {
+        $co = $payload['title'] ?? $payload['filename'] ?? null;
+
+        $akce = match ($rule->action) {
+            'todo.create' => 'Úkol vytvořen',
+            'journal.entry' => 'Zápis v deníku založen',
+            default => 'Pravidlo provedeno',
+        };
+
+        return $co ? $akce.' — '.$co : $akce;
     }
 
     /** Every condition must hold. A rule with none always matches — that is what "always" means. */
