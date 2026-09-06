@@ -14674,7 +14674,9 @@ class Component extends DCLogic {
     };
   }
   placeVals() {
-    const s = this.state, p = PLACES[s.placeId] || PLACES.skblin;
+    // `PLACES.skblin` je záložka z doby, kdy byla místa napsaná v dokumentu.
+    // Se skutečnými místy ta konoba neexistuje a obrazovka spadla na `photoMatch`.
+    const s = this.state, p = PLACES[s.placeId] || PLACES.skblin || PLACES[Object.keys(PLACES)[0]];
     const vis = s.visited[s.placeId] !== undefined ? s.visited[s.placeId] : p.tag === 'byli jsme';
     const ph = this.photoStrip(p.photoMatch, 10);
     const spend = p.visits.filter(v => v[3]).reduce((a, v) => a + parseInt(v[3].replace(/\D/g, ''), 10), 0);
@@ -15124,7 +15126,7 @@ class Component extends DCLogic {
       })) : [],
       txDetailLinks: open ? [
         open.f.trip && { icon: 'ph-airplane-tilt', label: 'Cesta', value: TRIPS[open.f.trip] ? TRIPS[open.f.trip].title : open.f.trip, go: () => this.setState({ route: 'trip', tripId: open.f.trip }) },
-        open.f.place && { icon: 'ph-map-pin', label: 'Místo', value: PLACES[open.f.place].title, go: () => this.openPlace(open.f.place) },
+        open.f.place && { icon: 'ph-map-pin', label: 'Místo', value: (PLACES[open.f.place] || {}).title || open.f.place, go: () => this.openPlace(open.f.place) },
         open.f.recipe && { icon: 'ph-cooking-pot', label: 'Recept', value: RECIPES[open.f.recipe].title, go: () => this.openRecipe(open.f.recipe) },
         open.f.goal && { icon: 'ph-piggy-bank', label: 'Vyhrazená částka', value: open.f.goal, go: () => this.setState({ route: 'x-rozpocty', budTab: 2 }) },
         { icon: 'ph-chart-donut', label: 'Rozpočet', value: open.cat, go: () => this.setState({ route: 'x-rozpocty', budTab: 1 }) },
@@ -26765,12 +26767,16 @@ class Component extends DCLogic {
         }))
       };
     });
-    const trip = TRIPS[s.tripId] || TRIPS.chorvatsko;
+    // Záložky z doby, kdy byly cesty a lidé napsaní v dokumentu. Se skutečnými
+    // daty žádná „chorvatsko“ ani „Makinka“ být nemusí a `renderVals` se počítá
+    // při každém překreslení — spadla by celá aplikace, ne jen ta obrazovka.
+    const trip = TRIPS[s.tripId] || TRIPS.chorvatsko || TRIPS[Object.keys(TRIPS)[0]] || { photoMatch: null, pack: [], days: [], stats: [], budget: [], docs: [], diary: null, title: '', when: '', where: '', desc: '', tag: '', n: 0 };
     const tripTag = t => t === 'čeká platba' || t === 'čeká akci' || t === 'zařadit' ? 'tag-accent-2' : t === 'zaplaceno' || t === 'do tisku' ? 'tag-accent' : 'tag-neutral';
     const tripPhotoSrc = trip.photoMatch ? this.photos().filter(p => p.place.indexOf(trip.photoMatch) >= 0) : [];
     const packDone = i => { const k = s.tripId + '-' + i; return s.pack[k] !== undefined ? s.pack[k] : trip.pack[i][2] === 1; };
     const packCount = trip.pack.filter((r, i) => packDone(i)).length;
-    const person = PERSONS[s.personId] || PERSONS.Makinka;
+    const person = PERSONS[s.personId] || PERSONS.Makinka || PERSONS[Object.keys(PERSONS)[0]]
+      || { n: 0, tag: 'potvrzeno', meta: '', photosMeta: '', stats: [], years: [], co: [], albums: [], idx: [], sug: [] };
     const personConfirmedNow = person.tag !== 'návrh' || !!s.confirmed[s.personId];
     const personSugLeft = (person.sug || []).filter(i => !s.sugSeen[s.personId + '-' + i]);
     const personHiddenNow = (s.pHidden || {})[s.personId] !== undefined

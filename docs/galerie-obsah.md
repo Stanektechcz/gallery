@@ -60,7 +60,7 @@ Podle toho, kde už skutečný obsah je a kde na něm záleží:
 | 2 | **Knihovna** | `DAYS`, `PHOTOS`, `ALBUMS`, `ATREE`, `PERSONS`, `DUP_GROUPS`, `YBCH`, `NAVCNT`, `TOTAL`, `MOBIL` | `media_items`, `media_variants`, `people`, `media_person`, `tags`, `albums`, `album_media`, `duplicate_groups` | hotovo |
 | 3 | **Plánování** | `CALEV`, `ATASKS`, `LATER_ITEMS`, `AL.doneTasks`, `EVSEED` | `calendar_events`, `event_participants`, `event_reminders`, `shared_todos`, `life_events` | hotovo |
 | 4 | **Domácnost** | `HOUSE_CHORES`, `HOUSE_LOG`, `HOUSE_WEEK`, `HOUSE_DUES`, `HOUSE_INV`, `PANTRY` | `house_chores`, `house_chore_log`, `house_dues`, `house_inventory`, `house_pantry`, `house_week(_capacity)` | hotovo |
-| 5 | Cesty a místa | `TRIPS`, `NOWTRIP`, `PLACES`, `REVISIT`, `WEATHER`, `RWEATHER` | `trips`, `places`, `trip_*` | zbývá |
+| 5 | **Cesty a místa** | `TRIPS`, `TRIP_BY_TITLE`, `NOWTRIP`, `PLACES`, `PLACE_BY_TITLE` | `trips`, `trip_days`, `trip_activities`, `trip_expenses`, `trip_budget_limits`, `trip_packing_items`, `trip_document_checks`, `travel_journal_entries`, `places`, `place_plans`, `place_notes` | hotovo |
 | 6 | Vztah | `DEC_LIST`, `DEC_COOL`, `PAST_DEC`, `ARB`, `VERSIONS`, `TACIT`, `SPEAK`, `PM_*`, `SPOR_*`, `VETO_*` | **chybí tabulky** | zbývá |
 | 7 | Zdraví a cyklus | `CYC_BASE`, `CYC_TODAY`, `CYC_STARTS`, `CYC_SHARE`, `KL_*` | `cycle_days`, `cycle_settings`, **část chybí** | zbývá |
 | 8 | Sdílení a systém | `GV_*`, `GUEST_Q`, `VAULT_ITEMS`, `OFFPACKS`, `KAPS` | `shared_links`, `guest_uploads`, **trezor chybí** | zbývá |
@@ -136,6 +136,33 @@ Tři místa, kde to nejde dělat naivně:
 
 Lhůta, která ze seznamu zmizí, se **nemaže**: dostane `settled_at`. Rok co rok
 se ptáme, kdy naposledy byla STK.
+
+## Cesty: co se neposílá a proč
+
+**Počasí (`WEATHER`) zůstává napsané.** Aplikace předpověď odnikud nebere;
+vymyslet ji by znamenalo tvrdit dvojici na cestě něco o obloze nad nimi. Totéž
+platí pro západ slunce v běžící cestě. `RWEATHER` je slovník receptů k počasí —
+katalog rozhraní, ne obsah.
+
+**`REVISIT` sem nepatří.** Klíče jsou identifikátory rozhodnutí (`r1`, `r2`),
+takže se posílá se skupinou Vztah, ne s cestami.
+
+Cesty a místa jdou ven jako **úplné kolekce** i s rejstříky `TRIP_BY_TITLE`
+a `PLACE_BY_TITLE`. Prototyp si je staví při načtení z ukázkových dat, takže by
+po výměně ukazovaly na klíče, které už neexistují.
+
+### Tři záložky, které se skutečnými daty padaly
+
+`renderVals()` se počítá při **každém** překreslení, takže tyhle řádky neshodily
+jen svou obrazovku, ale celou aplikaci:
+
+- `TRIPS[s.tripId] || TRIPS.chorvatsko`
+- `PERSONS[s.personId] || PERSONS.Makinka`
+- `PLACES[s.placeId] || PLACES.skblin`
+
+Se sedmi napsanými cestami to fungovalo. Se skutečnými nemusí žádná „chorvatsko"
+existovat — a `Makinka` neexistuje u nikoho, kdo se tak nejmenuje. Za každou
+záložkou je teď první dostupný záznam a prázdná struktura jako poslední pojistka.
 
 ## Co bude potřebovat nové tabulky
 

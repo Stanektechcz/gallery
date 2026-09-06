@@ -4817,7 +4817,7 @@ const PHOTOS = MOB.PHOTOS || (MOB.PHOTOS = (() => {
 // Data mohla dorazit dřív, než runtime dokument přeložil; tohle si je vyžádá.
 if (window.GalerieObsahMobil) window.GalerieObsahMobil();
 
-const TRIPS = {
+const TRIPS = MOB.TRIPS || (MOB.TRIPS = {
   chorvatsko: {
     title: 'Chorvatsko 2026', when: '19. – 26. července 2026', tag: 'byli jsme', place: 'Zadar', seed: 4,
     desc: 'Osm dní mezi Zadarem, Splitem a Bračem. Fotky, jízdenky i útraty drží u sebe pod jednou cestou.',
@@ -4846,7 +4846,7 @@ const TRIPS = {
       ['Den 2', 'so', [['Hřeben na Radhošť', 'ráno', 0], ['Servis kola', 'předem', 0]]]
     ]
   }
-};
+});
 
 const TXS = [
   ['t1', '29. 8.', 'Albert · velký nákup', 'Potraviny', -1284, 'Společný účet', 'ph-basket', null],
