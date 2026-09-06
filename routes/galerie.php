@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\CalendarPlanningController;
 use App\Http\Controllers\Api\Galerie\AdminController;
+use App\Http\Controllers\Api\Galerie\DataController;
 use App\Http\Controllers\Api\Galerie\MechanismController;
 use App\Http\Controllers\Api\Galerie\MediaController;
 use App\Http\Controllers\Api\Galerie\StateController;
@@ -46,6 +47,16 @@ Route::middleware(['auth:sanctum', 'throttle:120,1'])->prefix('api')->group(func
 
     // Čísla pro postranní panel — vidí je každý, na rozdíl od administrace.
     Route::get('storage', StorageController::class)->name('galerie.storage');
+
+    /*
+     * Obsah obrazovek ze skutečné databáze, po skupinách.
+     *
+     * Prototyp kreslí z `GalerieData`; tohle jsou tytéž kolekce, jen se skutečnými
+     * řádky. Neznámá skupina je 404, ne prázdno — ať se překlep pozná hned.
+     */
+    Route::get('data/{skupina}', DataController::class)
+        ->whereAlpha('skupina')
+        ->name('galerie.data');
 
     /*
      * Odběr upozornění.

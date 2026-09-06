@@ -8056,7 +8056,7 @@ class Component extends DCLogic {
     document.body.appendChild(inp);
     inp.click();
   }
-  kc(n) { return Math.round(n).toLocaleString('cs-CZ') + ' Kč'; }
+  kc(n) { return Math.round(n).toLocaleString('cs-CZ') + ' ' + ((window.GalerieData || {}).MENA || 'Kč'); }
   pl(n, one, few, many) { return n + ' ' + (n === 1 ? one : n >= 2 && n <= 4 ? few : many); }
   push(k, extra) { this.setState(Object.assign({ stack: this.state.stack.concat([k]), sheet: null, sel: [], selectMode: false }, extra || {})); }
   goTab(t, extra) { this.setState(Object.assign({ tab: t, stack: [], sheet: null, sel: [], selectMode: false }, extra || {})); }

@@ -82,6 +82,9 @@
    */
   var zeServeru = null;
   var uloziste = null;
+  // Kolekce obsahu ze serveru (finance, knihovna, …). Klíč = jméno kolekce,
+  // kterou prototyp kreslí; hodnota = skutečné řádky z databáze.
+  var obsah = {};
 
   function obal(data) {
     if (! data || data.__galerieObaleno) return;
@@ -105,6 +108,54 @@
         set: function (v) { uloziste = v; }
       });
     } catch (e) {}
+
+    // A znovu vyměnit kolekce, které už ze serveru dorazily — runtime načítá
+    // `galerie-data.js` znovu a s ním se vrátí i ukázková data.
+    Object.keys(obsah).forEach(function (klic) { navlec(data, klic, obsah[klic]); });
+  }
+
+  /*
+   * Kolekce se přepisuje **na místě**, ne přiřazením.
+   *
+   * Dokument prototypu si při načtení rozebere všech 180 kolekcí do konstant
+   * (`const { TX, BUD, ... } = window.GalerieData`). Pozdější `GalerieData.TX = …`
+   * proto nikam nedojde — obrazovka drží původní pole. Když se ale obsah toho
+   * pole vymění, konstanta ukazuje pořád na ně a při dalším překreslení se objeví
+   * skutečná data.
+   *
+   * Skalární kolekce (číslo, řetězec) takhle vyměnit nejdou — u těch zůstává
+   * hodnota z načtení a jsou proto vypsané v `docs/galerie-obsah.md`.
+   */
+  function navlec(data, klic, hodnota) {
+    if (! data) return false;
+
+    var cil = data[klic];
+
+    try {
+      if (Array.isArray(cil) && Array.isArray(hodnota)) {
+        cil.length = 0;
+        Array.prototype.push.apply(cil, hodnota);
+        return true;
+      }
+
+      if (cil && typeof cil === 'object' && hodnota && typeof hodnota === 'object') {
+        /*
+         * Klíče se **přepisují, nemažou.**
+         *
+         * `FIN` má vedle účtů ještě `upcoming`, `alerts`, `rules` a `imports`.
+         * Když se objekt vyprázdnil a naplnil jen tím, co server posílá, zbytek
+         * zmizel a obrazovka spadla na `undefined.filter`. Co server nedodá,
+         * zůstává ukázkové — stejné pravidlo jako u celých kolekcí.
+         */
+        Object.keys(hodnota).forEach(function (k) { cil[k] = hodnota[k]; });
+        return true;
+      }
+
+      // Kolekce, kterou dokument ještě nezná, jde přiřadit normálně.
+      if (cil === undefined) { data[klic] = hodnota; return true; }
+    } catch (e) {}
+
+    return false;
   }
 
   // `galerie-data.js` přiřazuje celé `window.GalerieData`, takže se hlídá i ono —
@@ -155,10 +206,55 @@
       })
       .catch(function () { return false; });
 
-    return Promise.all([admin, panel]).then(function (v) { return v[0] || v[1]; });
+    return Promise.all([admin, panel].concat(skupiny())).then(function (v) { return v[0] || v[1]; });
+  }
+
+  /*
+   * Obsah obrazovek ze skutečné databáze, po skupinách.
+   *
+   * Po skupinách, ne jednou odpovědí: obrazovka financí nemá čekat, až se spočítá
+   * kuchařka. Každá skupina se navlékne, jakmile dorazí — na pořadí nezáleží.
+   */
+  var SKUPINY = ['finance'];
+
+  function skupiny() {
+    return SKUPINY.map(function (jmeno) {
+      return fetch('/api/data/' + jmeno, { headers: hlavicky(), credentials: 'same-origin' })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (b) {
+          if (! b || ! b.data) return false;
+
+          var neslo = [];
+
+          Object.keys(b.data).forEach(function (klic) {
+            obsah[klic] = b.data[klic];
+            if (! navlec(window.GalerieData, klic, b.data[klic])) neslo.push(klic);
+          });
+
+          // Aplikace už běží; překreslit, ať se data objeví bez čekání na klik.
+          if (window.GalerieObnovObrazovku) window.GalerieObnovObrazovku();
+
+          if (neslo.length) console.info('Galerie: skalární kolekce se projeví až po obnovení stránky —', neslo.join(', '));
+
+          return true;
+        })
+        .catch(function () { return false; });
+    });
   }
 
   window.GalerieAdminObnov = nacti;
+
+  /*
+   * Šťouchnutí k překreslení.
+   *
+   * Vyměněná kolekce se sama neprojeví — aplikace překresluje na změnu stavu.
+   * Šířku okna si drží ve stavu, takže událost `resize` je nejlevnější způsob,
+   * jak ji požádat o překreslení, aniž bych sahal na její komponentu. Bez toho
+   * by obrazovka financí ukazovala ukázková data, dokud na ni někdo neklikne.
+   */
+  window.GalerieObnovObrazovku = function () {
+    try { window.dispatchEvent(new Event('resize')); } catch (e) {}
+  };
 
   /*
    * Administrace si po každém zásahu bere odpověď serveru sama (galerie-admin.js).

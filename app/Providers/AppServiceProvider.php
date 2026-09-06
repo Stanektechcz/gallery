@@ -20,6 +20,18 @@ class AppServiceProvider extends ServiceProvider
         // Also a singleton, and for a sharper reason: its re-entry guard is per instance,
         // and a fresh instance per resolution would let a rule trigger itself.
         $this->app->singleton(\App\Services\Automation\AutomationEngine::class);
+
+        /*
+         * Skupiny obsahu, které prototyp kreslí.
+         *
+         * Přidat další znamená napsat poskytovatele a dopsat ho sem — kontroler
+         * ani routa se nemění, takže se nedá zapomenout na půlku.
+         */
+        $this->app->when(\App\Http\Controllers\Api\Galerie\DataController::class)
+            ->needs('$poskytovatele')
+            ->give(fn ($app) => [
+                $app->make(\App\Services\Obsah\Finance::class),
+            ]);
     }
 
     /**

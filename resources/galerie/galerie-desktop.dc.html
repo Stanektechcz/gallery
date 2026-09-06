@@ -14768,7 +14768,7 @@ class Component extends DCLogic {
   amount(n, unit) {
     return unit !== 'porce' ? n + ' ' + unit : n + (n < 5 ? ' porce' : ' porcí');
   }
-  kc(n) { return Math.round(n).toLocaleString('cs-CZ').replace(/\u00a0/g, ' ') + ' Kč'; }
+  kc(n) { return Math.round(n).toLocaleString('cs-CZ').replace(/\u00a0/g, ' ') + ' ' + ((window.GalerieData || {}).MENA || 'Kč'); }
   budgetVals() {
     const s = this.state, C = 427.26, R = 68;
     const lim = i => { const v = s.budLimits[i]; return v === undefined ? BUD.cats[i][1] : v; };
