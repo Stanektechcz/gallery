@@ -54,7 +54,227 @@ class FinanceRozbory implements PoskytovatelObsahu
             'SURPRISE' => $this->necekane($prostor),
             'EST' => $this->odhadySkutecnost($prostor),
             'COSTMEAN' => $this->coToZnamenalo($prostor),
+            'P60' => $this->predpoved($prostor),
+            'HORIZON' => $this->horizont($prostor),
         ], fn ($v) => $v !== null && $v !== []);
+    }
+
+    /**
+     * Předpověď na šedesát dní: `{ start, daily, events: [{ d, label, amt, move }] }`.
+     *
+     * Obrazovka o sobě říká: „Počítá se s pevnými platbami, oběma mzdami
+     * a průměrnou denní útratou. Nic se nemodeluje ručně." Přesně tak se to
+     * teď počítá — z peněženek, pravidelných plateb a skutečných transakcí.
+     *
+     * `move` znamená „dá se s tím pohnout": mzda ne, předplatné ano. Pozná se
+     * podle typu položky, ne podle názvu.
+     *
+     * Bez pravidelných plateb se **neposílá nic**. Čára, která šedesát dní jen
+     * rovnoměrně klesá, není předpověď, je to odečítání.
+     *
+     * @return array<string, mixed>
+     */
+    private function predpoved(GallerySpace $prostor): array
+    {
+        if (! Schema::hasTable('finance_recurring') || ! Schema::hasTable('wallets')) {
+            return [];
+        }
+
+        $dnes = CarbonImmutable::now()->startOfDay();
+
+        $platby = DB::table('finance_recurring')
+            ->where('gallery_space_id', $prostor->id)
+            ->where('is_active', true)
+            ->whereNull('deleted_at')
+            ->where(fn ($q) => $q->whereNull('ends_on')->orWhere('ends_on', '>=', $dnes->toDateString()))
+            ->whereNotNull('day_of_month')
+            ->get(['name', 'type', 'amount', 'day_of_month']);
+
+        if ($platby->isEmpty()) {
+            return [];
+        }
+
+        $zustatek = $this->zustatek($prostor);
+        $denne = $this->prumernaDenniUtrata($prostor);
+
+        /*
+         * Den v měsíci na pořadí v šedesátidenní ose.
+         *
+         * Platba splatná 4. připadne na dva dny — jednou v tomhle měsíci
+         * a jednou v příštím. Kdyby se bral jen nejbližší výskyt, druhá půlka
+         * osy by byla podezřele klidná.
+         */
+        $udalosti = [];
+
+        foreach ($platby as $p) {
+            $prijem = $p->type === 'income';
+            $castka = (int) round(abs((float) $p->amount)) * ($prijem ? 1 : -1);
+
+            if ($castka === 0) {
+                continue;
+            }
+
+            for ($mesic = 0; $mesic <= 2; $mesic++) {
+                $den = $dnes->addMonths($mesic)->startOfMonth();
+                $splatnost = $den->addDays(min((int) $p->day_of_month, (int) $den->daysInMonth) - 1);
+                $poradi = (int) $dnes->diffInDays($splatnost, false);
+
+                if ($poradi < 1 || $poradi > 60) {
+                    continue;
+                }
+
+                $udalosti[] = [
+                    'd' => $poradi,
+                    'label' => $p->name,
+                    'amt' => $castka,
+                    // Mzdou se pohnout nedá, splátkou nájmu prakticky taky ne.
+                    // Posunout jde to, co si dvojice objednala sama.
+                    'move' => ! $prijem,
+                ];
+            }
+        }
+
+        if ($udalosti === []) {
+            return [];
+        }
+
+        usort($udalosti, fn (array $a, array $b) => $a['d'] <=> $b['d']);
+
+        return [
+            'start' => $zustatek,
+            'daily' => $denne,
+            'events' => $udalosti,
+        ];
+    }
+
+    /**
+     * Zůstatek na společných účtech k dnešku, zaokrouhlený na koruny.
+     *
+     * Hotovost se nepočítá: předpověď je o tom, co odejde z účtu, a peníze
+     * v peněžence žádnou pevnou platbu nezaplatí.
+     */
+    private function zustatek(GallerySpace $prostor): int
+    {
+        $penezenky = DB::table('wallets')
+            ->where('gallery_space_id', $prostor->id)
+            ->whereNull('deleted_at')
+            ->where('is_active', true)
+            ->where('kind', '!=', 'cash')
+            ->get(['id', 'opening_balance']);
+
+        if ($penezenky->isEmpty()) {
+            return 0;
+        }
+
+        $ids = $penezenky->pluck('id')->all();
+        $zustatek = (float) $penezenky->sum('opening_balance');
+
+        $pohyby = DB::table('transactions')
+            ->where('gallery_space_id', $prostor->id)
+            ->whereIn('state', ['approved', 'settled'])
+            ->where(fn ($q) => $q->whereIn('wallet_from_id', $ids)->orWhereIn('wallet_to_id', $ids))
+            ->get(['wallet_from_id', 'wallet_to_id', 'amount_from', 'amount_to', 'fee_amount']);
+
+        foreach ($pohyby as $p) {
+            if (in_array($p->wallet_to_id, $ids, true)) {
+                $zustatek += (float) $p->amount_to;
+            }
+
+            if (in_array($p->wallet_from_id, $ids, true)) {
+                $zustatek -= (float) $p->amount_from + (float) $p->fee_amount;
+            }
+        }
+
+        return (int) round($zustatek);
+    }
+
+    /**
+     * Průměrná denní útrata z posledních devadesáti dnů.
+     *
+     * Pevné platby se odečítají: v předpovědi stojí jako události ve svůj den
+     * a v denním průměru by byly podruhé. Bez toho by čára klesala dvakrát
+     * rychleji, než jak peníze doopravdy ubývají.
+     */
+    private function prumernaDenniUtrata(GallerySpace $prostor): int
+    {
+        $od = CarbonImmutable::now()->subDays(90)->startOfDay();
+
+        $utrata = (float) Transaction::withoutGlobalScope(SpaceContext::SCOPE)
+            ->where('gallery_space_id', $prostor->id)
+            ->where('type', 'expense')
+            ->whereIn('state', ['approved', 'settled'])
+            ->where('occurred_at', '>=', $od)
+            ->sum('amount_from');
+
+        $pevne = Schema::hasTable('finance_recurring')
+            ? (float) DB::table('finance_recurring')
+                ->where('gallery_space_id', $prostor->id)
+                ->where('is_active', true)
+                ->whereNull('deleted_at')
+                ->where('type', '!=', 'income')
+                ->sum('amount') * 3
+            : 0.0;
+
+        return max(0, (int) round(max(0, $utrata - $pevne) / 90));
+    }
+
+    /**
+     * Desetiletý horizont: `[{ what, monthly, oneOff, note }]`.
+     *
+     * Obrazovka bere pravidelné platby a ukazuje, na kolik vyjdou za deset let.
+     * Sloupec si počítá sama; sem patří jen to, co se opravdu platí.
+     *
+     * `note` je věta o **té platbě**, ne o životě: od kdy běží a kolikátého
+     * odchází. Vymýšlet k ní úvahu („druhé auto stojí 22 hodin denně") by
+     * znamenalo mluvit za dvojici o něčem, co aplikace neví.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function horizont(GallerySpace $prostor): array
+    {
+        if (! Schema::hasTable('finance_recurring')) {
+            return [];
+        }
+
+        $dnes = CarbonImmutable::now();
+
+        return DB::table('finance_recurring')
+            ->where('gallery_space_id', $prostor->id)
+            ->where('is_active', true)
+            ->whereNull('deleted_at')
+            ->where('type', '!=', 'income')
+            ->where(fn ($q) => $q->whereNull('ends_on')->orWhere('ends_on', '>=', $dnes->toDateString()))
+            ->orderByDesc('amount')
+            ->limit(12)
+            ->get(['name', 'amount', 'day_of_month', 'starts_on'])
+            ->map(function (object $p) use ($dnes) {
+                $mesicne = (int) round(abs((float) $p->amount));
+                $bezi = $p->starts_on ? CarbonImmutable::parse($p->starts_on) : null;
+                $mesicu = $bezi && $bezi->lt($dnes) ? (int) $bezi->diffInMonths($dnes) : 0;
+
+                return [
+                    'what' => $p->name.' '.number_format($mesicne, 0, ',', ' ').' / měs.',
+                    'monthly' => $mesicne,
+                    // Jednorázová část se u pravidelné platby nikde nevede;
+                    // dopsat odhad by znamenalo přičíst číslo, které nikdo nezadal.
+                    'oneOff' => 0,
+                    'note' => $mesicu >= 1
+                        ? 'Platí se '.$this->pocetMesicu($mesicu).' · dohromady už '
+                            .number_format($mesicne * $mesicu, 0, ',', ' ').' Kč.'
+                        : 'Nová pravidelná platba.',
+                ];
+            })
+            ->values()
+            ->all();
+    }
+
+    private function pocetMesicu(int $mesicu): string
+    {
+        return $mesicu.' '.match (true) {
+            $mesicu === 1 => 'měsíc',
+            $mesicu <= 4 => 'měsíce',
+            default => 'měsíců',
+        };
     }
 
     /**
