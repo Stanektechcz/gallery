@@ -61,7 +61,7 @@ Podle toho, kde už skutečný obsah je a kde na něm záleží:
 | 3 | **Plánování** | `CALEV`, `ATASKS`, `LATER_ITEMS`, `AL.doneTasks`, `EVSEED` | `calendar_events`, `event_participants`, `event_reminders`, `shared_todos`, `life_events` | hotovo |
 | 4 | **Domácnost** | `HOUSE_CHORES`, `HOUSE_LOG`, `HOUSE_WEEK`, `HOUSE_DUES`, `HOUSE_INV`, `PANTRY` | `house_chores`, `house_chore_log`, `house_dues`, `house_inventory`, `house_pantry`, `house_week(_capacity)` | hotovo |
 | 5 | **Cesty a místa** | `TRIPS`, `TRIP_BY_TITLE`, `NOWTRIP`, `PLACES`, `PLACE_BY_TITLE` | `trips`, `trip_days`, `trip_activities`, `trip_expenses`, `trip_budget_limits`, `trip_packing_items`, `trip_document_checks`, `travel_journal_entries`, `places`, `place_plans`, `place_notes` | hotovo |
-| 6 | Vztah | `DEC_LIST`, `DEC_COOL`, `PAST_DEC`, `ARB`, `VERSIONS`, `TACIT`, `SPEAK`, `PM_*`, `SPOR_*`, `VETO_*` | **chybí tabulky** | zbývá |
+| 6 | **Vztah** | `DEC_LIST`, `ARB`, `VERSIONS`, `DEC_COOL`, `SPOR_MINE`, `SPOR_THEIRS`, `VETO_USED`, `VETO_PROP` | `couple_decisions`, `couple_decision_revisions`, `couple_cooling_purchases`, `couple_disagreement_points`, `couple_veto_proposals`, `couple_vetoes` | hotovo |
 | 7 | Zdraví a cyklus | `CYC_BASE`, `CYC_TODAY`, `CYC_STARTS`, `CYC_SHARE`, `KL_*` | `cycle_days`, `cycle_settings`, **část chybí** | zbývá |
 | 8 | Sdílení a systém | `GV_*`, `GUEST_Q`, `VAULT_ITEMS`, `OFFPACKS`, `KAPS` | `shared_links`, `guest_uploads`, **trezor chybí** | zbývá |
 
@@ -163,6 +163,32 @@ jen svou obrazovku, ale celou aplikaci:
 Se sedmi napsanými cestami to fungovalo. Se skutečnými nemusí žádná „chorvatsko"
 existovat — a `Makinka` neexistuje u nikoho, kdo se tak nejmenuje. Za každou
 záložkou je teď první dostupný záznam a prázdná struktura jako poslední pojistka.
+
+## Vztah: tabulku dostalo jen to, co jde měnit
+
+Prototyp má patnáct mechanismů vztahu, ale upravovat jde **pět**: paměť
+rozhodnutí, rozvahu před nákupem, protokol nesouhlasu a veto banku (návrhy
+i použití). Právě ty mají tabulku. Tiché dohody, kdo mluví za nás, premortem
+a druhý názor od minulosti zůstávají v katalogu — obrazovka, na které by se daly
+změnit, v prototypu není, a tabulka bez zápisu je horší než žádná.
+
+Dvě věci se **odvozují z rozhodnutí**, ne z vlastního seznamu:
+
+- **Arbitráž** (`ARB`) jsou rozhodnutí, která mají arbitra a klíč („poslední
+  slovo", „kdo to používá víc").
+- **Záznam verzí** (`VERSIONS`) jsou revize rozhodnutí. Vznikají samy: když se
+  rozhodnutí označí za změněné, uloží se znění, které do té chvíle platilo.
+  Původní zápis se nepřepisuje — právě proto, aby za rok bylo vidět, co jste si
+  tehdy mysleli.
+
+**Protokol nesouhlasu vypadá jinak pro každého z dvojice.** „Moje podmínky"
+a „jeho podmínky" jsou tytéž řádky obrácené, takže se dělí podle přihlášeného
+člověka, ne podle uloženého sloupce — a partnerova strana je konečně jeho
+skutečná, ne napsaná ukázka.
+
+Nic z toho se **nemaže**: rozhodnutí, které zmizí ze seznamu, je změněné,
+rozvaha zavřená, lhůta vyřízená. Veto navíc nese datum, ne popisek — vrací se
+po dvanácti měsících a bez data by se nedalo spočítat, kolik jich komu zbývá.
 
 ## Co bude potřebovat nové tabulky
 

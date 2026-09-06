@@ -8,6 +8,7 @@ use App\Models\CoupleState;
 use App\Models\GallerySpace;
 use App\Services\Provoz\AdminVeStavu;
 use App\Services\Provoz\DomacnostVeStavu;
+use App\Services\Provoz\VztahVeStavu;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -19,6 +20,7 @@ class StateController extends Controller
     public function __construct(
         private readonly AdminVeStavu $sprava,
         private readonly DomacnostVeStavu $domacnost,
+        private readonly VztahVeStavu $vztah,
     ) {}
 
     public function show(Request $request): JsonResponse
@@ -91,6 +93,19 @@ class StateController extends Controller
                 $this->domacnost->zpracuj($patch, GallerySpace::findOrFail($coupleId));
                 $patch = $this->domacnost->bezDomacnosti($patch);
                 $state->zapomen(DomacnostVeStavu::SERVEROVE);
+            }
+
+            /*
+             * A mechanismy vztahu z téhož důvodu.
+             *
+             * Paměť rozhodnutí, rozvaha před nákupem, protokol nesouhlasu
+             * a veto banka nemají v aplikaci jiného vlastníka — tabulka bez
+             * zápisu by znamenala jen druhou pravdu.
+             */
+            if ($this->vztah->tykaSe($patch)) {
+                $this->vztah->zpracuj($patch, GallerySpace::findOrFail($coupleId), $uzivatel);
+                $patch = $this->vztah->bezVztahu($patch);
+                $state->zapomen(VztahVeStavu::SERVEROVE);
             }
 
             $state->applyPatch($patch);

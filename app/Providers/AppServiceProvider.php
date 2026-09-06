@@ -35,6 +35,7 @@ class AppServiceProvider extends ServiceProvider
                 $app->make(\App\Services\Obsah\Planovani::class),
                 $app->make(\App\Services\Obsah\Domacnost::class),
                 $app->make(\App\Services\Obsah\Cesty::class),
+                $app->make(\App\Services\Obsah\Vztah::class),
             ]);
     }
 
