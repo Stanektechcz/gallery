@@ -3,6 +3,7 @@
 namespace Tests\Feature\Galerie;
 
 use App\Jobs\SpustPlanovanouUlohu;
+use App\Models\BillingPlan;
 use App\Models\CoupleState;
 use App\Models\GallerySpace;
 use App\Models\PersonalAccessToken;
@@ -225,8 +226,8 @@ class SpravaVeStavuTest extends TestCase
      */
     public function test_placeny_tarif_se_ve_stavu_neprideli(): void
     {
-        $zdarma = \App\Models\BillingPlan::create(['code' => 'zdarma', 'name' => 'Zdarma', 'price_monthly' => 0, 'storage_limit_mb' => 5000, 'is_default' => true]);
-        $placeny = \App\Models\BillingPlan::create(['code' => 'velky', 'name' => 'Velký', 'price_monthly' => 349, 'storage_limit_mb' => 1_000_000]);
+        $zdarma = BillingPlan::create(['code' => 'zdarma', 'name' => 'Zdarma', 'price_monthly' => 0, 'storage_limit_mb' => 5000, 'is_default' => true]);
+        $placeny = BillingPlan::create(['code' => 'velky', 'name' => 'Velký', 'price_monthly' => 349, 'storage_limit_mb' => 1_000_000]);
 
         $odpoved = $this->patchStav(['admPlan' => (string) $placeny->id])->assertOk();
 

@@ -5,6 +5,7 @@ namespace Tests\Feature\Galerie;
 use App\Models\ChatMessage;
 use App\Models\GallerySpace;
 use App\Models\User;
+use App\Support\SpaceContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -218,7 +219,7 @@ class ObsahZpravyTest extends TestCase
         $kdy = $navic['created_at'] ?? now();
         unset($navic['created_at']);
 
-        $z = ChatMessage::withoutGlobalScope(\App\Support\SpaceContext::SCOPE)->create(array_merge([
+        $z = ChatMessage::withoutGlobalScope(SpaceContext::SCOPE)->create(array_merge([
             'gallery_space_id' => $this->prostor->id,
             'created_by' => $this->maki->id,
             'body' => 'Zpráva',

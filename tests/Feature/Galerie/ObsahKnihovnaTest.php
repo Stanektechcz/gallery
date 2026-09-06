@@ -9,6 +9,7 @@ use App\Models\Person;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
@@ -247,7 +248,8 @@ class ObsahKnihovnaTest extends TestCase
 
         $odpoved = $this->getJson('/api/data/knihovna')->assertOk();
 
-        $this->assertSame(['PERSONS'], $odpoved->json('uplne'));
+        // Úzké rozvržení kreslí tytéž lidi z `APEOPLE`, takže platí totéž.
+        $this->assertSame(['PERSONS', 'APEOPLE'], $odpoved->json('uplne'));
     }
 
     /** Skrytá osoba se pozná — prototyp podle toho plní záložku „Skryté". */
@@ -421,7 +423,7 @@ class ObsahKnihovnaTest extends TestCase
             'updated_at' => now(),
         ]);
 
-        \Illuminate\Support\Facades\Storage::disk('local')->put('nahledy/'.$m->uuid.'.jpg', 'x');
+        Storage::disk('local')->put('nahledy/'.$m->uuid.'.jpg', 'x');
     }
 
     private function album(string $jmeno, ?Album $rodic = null): Album

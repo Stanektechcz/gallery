@@ -8,9 +8,11 @@ use App\Models\MediaItem;
 use App\Models\Person;
 use App\Support\SpaceContext;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\URL;
 
 /**
  * Knihovna ve tvaru, ve kterém ji kreslí prototyp.
@@ -43,15 +45,16 @@ class Knihovna implements PoskytovatelObsahu
     }
 
     /**
-     * Lidé přicházejí celí.
+     * Lidé a štítky přicházejí celí.
      *
      * Nechat vedle skutečných tváří ukázkové znamená lhát: dvojice by
      * v „Lidech" našla Kláru, kterou nikdy neoznačila, a na jejím profilu
-     * osm tisíc fotek, které nemá.
+     * osm tisíc fotek, které nemá. U štítků totéž — a ještě navíc by na ně
+     * šlo kliknout a hledání by nenašlo nic.
      */
     public function uplne(): array
     {
-        return ['PERSONS'];
+        return ['PERSONS', 'ATAGS', 'APEOPLE'];
     }
 
     public function kolekce(GallerySpace $prostor): array
@@ -67,13 +70,17 @@ class Knihovna implements PoskytovatelObsahu
         $dny = $this->dny($media);
         $fotky = $this->fotky($media, $dny);
         $alba = $this->alba($prostor);
+        $lide = $this->osoby($prostor, $fotky);
 
         return array_filter([
             'DAYS' => $dny->values()->all(),
             'PHOTOS' => $fotky,
             'ALBUMS' => $alba,
             'ATREE' => $this->strom($alba),
-            'PERSONS' => $this->osoby($prostor, $fotky),
+            'PERSONS' => $lide,
+            // Táž jména, jen ve tvaru, na který je napsané úzké rozvržení.
+            'APEOPLE' => $this->osobyDoZalozek($lide),
+            'ATAGS' => $this->stitkyKnihovny($prostor),
             'YBCH' => $this->roky($prostor),
             // Čísla u položek postranního panelu a součet na úvodní obrazovce.
             'NAVCNT' => $this->navPocty($prostor),
@@ -593,7 +600,7 @@ class Knihovna implements PoskytovatelObsahu
      *
      * @param  list<int>  $id
      */
-    private function tagy(GallerySpace $prostor, array $id): \Illuminate\Database\Query\Builder
+    private function tagy(GallerySpace $prostor, array $id): Builder
     {
         return DB::table('media_person as mp')
             ->join('media_items as m', 'm.id', '=', 'mp.media_item_id')
@@ -825,7 +832,7 @@ class Knihovna implements PoskytovatelObsahu
             return $this->prechod((int) $m->id);
         }
 
-        $adresa = \Illuminate\Support\Facades\URL::temporarySignedRoute(
+        $adresa = URL::temporarySignedRoute(
             'galerie.media.thumb',
             CarbonImmutable::tomorrow()->endOfDay(),
             ['uuid' => $m->uuid],
@@ -947,6 +954,82 @@ class Knihovna implements PoskytovatelObsahu
     }
 
     /** Číslo s mezerou po tisících — prototyp je tak píše všude. */
+    /**
+     * Štítky knihovny: `{ all: [[název, počet]], sug: [] }`.
+     *
+     * Prototyp měl napsané, že knihovna má 4 812 fotek s tagem „léto" — a dalo
+     * se na něj kliknout. Hledání pak nenašlo nic. Tady jsou skutečné štítky
+     * i s tím, kolika fotek se opravdu týkají.
+     *
+     * Návrhy zůstávají prázdné **schválně**: štítky nikdo nenavrhuje, aplikace
+     * nemá rozpoznávání obsahu. Prázdná záložka je odpověď, vymyšlené návrhy
+     * jsou práce navíc pro dvojici.
+     *
+     * @return array<string, list<array{0: string, 1: string}>>
+     */
+    private function stitkyKnihovny(GallerySpace $prostor): array
+    {
+        $stitky = DB::table('tags as t')
+            ->leftJoin('media_tag as mt', 'mt.tag_id', '=', 't.id')
+            ->leftJoin('media_items as m', function ($j) {
+                $j->on('m.id', '=', 'mt.media_item_id')
+                    ->whereNull('m.trashed_at')
+                    ->where('m.is_hidden', false);
+            })
+            ->where('t.gallery_space_id', $prostor->id)
+            ->groupBy('t.id', 't.name')
+            ->orderByDesc(DB::raw('COUNT(m.id)'))
+            ->orderBy('t.name')
+            ->limit(60)
+            ->get(['t.name', DB::raw('COUNT(m.id) AS pocet')]);
+
+        if ($stitky->isEmpty()) {
+            return [];
+        }
+
+        return [
+            'all' => $stitky
+                ->map(fn (object $s) => [(string) $s->name, $this->cislo((int) $s->pocet)])
+                ->values()
+                ->all(),
+            'sug' => [],
+        ];
+    }
+
+    /**
+     * Lidé ve tvaru záložek: `{ ok, sug, hidden }`, řádek `[jméno, popis, pořadí]`.
+     *
+     * Široké rozvržení si tytéž lidi bere z `PERSONS`; úzké má vlastní seznam.
+     * Skládá se proto z už spočítaného, ne druhým dotazem — jinak by na telefonu
+     * stálo jiné číslo než na počítači.
+     *
+     * Návrhy jsou prázdné: rozpoznávání tváří, které by je vyrábělo, aplikace
+     * nemá, a `PERSONS` proto nikdy neoznačí osobu jako návrh.
+     *
+     * @param  array<string, array<string, mixed>>  $lide
+     * @return array<string, list<array{0: string, 1: string, 2: int}>>
+     */
+    private function osobyDoZalozek(array $lide): array
+    {
+        if (! $lide) {
+            return [];
+        }
+
+        $zalozky = ['ok' => [], 'sug' => [], 'hidden' => []];
+
+        foreach ($lide as $jmeno => $o) {
+            $kam = ($o['tag'] ?? '') === 'skryto' ? 'hidden' : 'ok';
+
+            $zalozky[$kam][] = [
+                (string) $jmeno,
+                (string) ($o['meta'] ?? ''),
+                (int) (($o['idx'] ?? [])[0] ?? 0),
+            ];
+        }
+
+        return $zalozky;
+    }
+
     private function cislo(int $kolik): string
     {
         return number_format($kolik, 0, ',', ' ');

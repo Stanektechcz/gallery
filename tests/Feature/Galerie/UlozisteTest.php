@@ -8,6 +8,7 @@ use App\Models\GallerySpace;
 use App\Models\MediaItem;
 use App\Models\StorageConnection;
 use App\Models\User;
+use Carbon\CarbonInterface;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
 use Laravel\Sanctum\Sanctum;
@@ -195,7 +196,7 @@ class UlozisteTest extends TestCase
 
     // ——— pomocné ———
 
-    private function disk(?int $zabrano, ?int $celkem, ?\Carbon\CarbonInterface $obnoveno = null): StorageConnection
+    private function disk(?int $zabrano, ?int $celkem, ?CarbonInterface $obnoveno = null): StorageConnection
     {
         return StorageConnection::create([
             'provider' => 'google_drive',

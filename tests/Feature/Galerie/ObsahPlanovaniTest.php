@@ -6,6 +6,7 @@ use App\Models\CalendarEvent;
 use App\Models\GallerySpace;
 use App\Models\SharedTodo;
 use App\Models\User;
+use App\Services\Planning\SharedTodoService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -318,7 +319,7 @@ class ObsahPlanovaniTest extends TestCase
 
         $ukol = $this->ukol(['title' => 'Vysát obývák', 'due_at' => now()->addDay()]);
 
-        app(\App\Services\Planning\SharedTodoService::class)->complete($ukol, $this->adri, true);
+        app(SharedTodoService::class)->complete($ukol, $this->adri, true);
 
         $this->assertDatabaseHas('shared_todos', [
             'gallery_space_id' => $this->prostor->id,

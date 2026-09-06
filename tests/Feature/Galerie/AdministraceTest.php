@@ -9,6 +9,7 @@ use App\Models\GallerySpace;
 use App\Models\MediaItem;
 use App\Models\PersonalAccessToken;
 use App\Models\ScheduledTaskRun;
+use App\Models\SpaceSubscription;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Notification;
@@ -380,7 +381,7 @@ class AdministraceTest extends TestCase
 
         $this->postJson('/api/admin/plan', ['plan' => $placeny->id]);
 
-        $this->assertSame(0, \App\Models\SpaceSubscription::where('billing_plan_id', $placeny->id)->where('status', 'active')->count(),
+        $this->assertSame(0, SpaceSubscription::where('billing_plan_id', $placeny->id)->where('status', 'active')->count(),
             'Placený tarif nesmí začít platit dřív, než je zaplacený.');
         $this->assertSame((string) $zdarma->id, $this->getJson('/api/admin')->json('data.plan'));
     }

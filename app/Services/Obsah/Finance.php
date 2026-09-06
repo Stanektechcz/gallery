@@ -3,7 +3,6 @@
 namespace App\Services\Obsah;
 
 use App\Models\Budget;
-use App\Models\FinanceCategory;
 use App\Models\GallerySpace;
 use App\Models\Transaction;
 use App\Models\Wallet;
@@ -11,6 +10,8 @@ use App\Services\Finance\LedgerService;
 use App\Support\SpaceContext;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * Finance ve tvaru, ve kterém je kreslí prototyp.
@@ -44,13 +45,16 @@ class Finance implements PoskytovatelObsahu
     }
 
     /**
-     * Nic. `FIN` má vedle účtů ještě splátky, upozornění, pravidla a importy,
-     * které se počítají jinde; `BUD` zase části, které aplikace nevede. Smazat
-     * je znamená prázdné obrazovky, ne pravdu.
+     * `FIN` má vedle účtů ještě splátky, upozornění, pravidla a importy, které
+     * se počítají jinde; `BUD` zase části, které aplikace nevede. Smazat je
+     * znamená prázdné obrazovky, ne pravdu.
+     *
+     * `ATX` je opačný případ: čtyři záložky téže knihy. Nechat mezi nimi jednu
+     * ukázkovou znamená, že „Opakované" ukazují platby, které dvojice nemá.
      */
     public function uplne(): array
     {
-        return [];
+        return ['ATX'];
     }
 
     public function kolekce(GallerySpace $prostor): array
@@ -72,9 +76,25 @@ class Finance implements PoskytovatelObsahu
             return [];
         }
 
-        return [
+        $mena = $rozpocet?->currency ?: 'CZK';
+        $bud = $rozpocet ? $this->rozpocetVen($prostor, $rozpocet) : null;
+
+        // Co spočítat nejde, se **neposílá** — ne posílá jako `null`. Prototyp by
+        // takovou kolekci nechal ukázkovou tak jako tak, jen by o tom mlčel.
+        return array_filter([
             'TX' => $this->transakce($pohyby),
-            'BUD' => $rozpocet ? $this->rozpocetVen($prostor, $rozpocet) : null,
+            /*
+             * Tytéž pohyby ve čtyřech záložkách obrazovky Transakce.
+             *
+             * Prázdné `ATX` se **neposílá**: je to úplná kolekce, takže by
+             * u klienta smazala i ukázkové záložky — a obrazovka, která čte
+             * `ATX[key] || ATX.all` bez pojistky, by spadla na `undefined.rows`.
+             */
+            'ATX' => $this->zalozkyTransakci($prostor, $pohyby, $mena) ?: null,
+            // A tentýž rozpočet ve sloupcích. Druhý výpočet by dřív nebo později
+            // ukázal na dvou záložkách dvě různá čísla o téže kategorii.
+            'ABARS' => ($bud ? $this->sloupceRozpoctu($bud, $mena) : []) ?: null,
+            'BUD' => $bud,
             'FIN' => ['accounts' => $this->ucty($prostor, $penezenky)],
             // Totéž číslo jako v hlavičce rozpočtu — dvě různá by si na dvou
             // obrazovkách protiřečila.
@@ -88,7 +108,7 @@ class Finance implements PoskytovatelObsahu
              * měnu, ve které rozpočet není — a rozhodovalo by se podle toho.
              */
             'MENA' => $this->znakMeny($rozpocet?->currency ?: 'CZK'),
-        ];
+        ], fn ($v) => $v !== null);
     }
 
     // ——— transakce ———
@@ -133,6 +153,335 @@ class Finance implements PoskytovatelObsahu
                 (string) ($t->place ?? ''),
             ];
         })->values()->all();
+    }
+
+    /**
+     * Záložky obrazovky Transakce: `{ all, un, rec, imp }`.
+     *
+     * Každá je `{ rows: [[den, popis, kategorie, částka]], foot, sum }`. Jsou to
+     * tytéž pohyby jako v `TX`, jen pohledy na ně — proto se počítají z už
+     * načtené knihy a ne čtyřmi dalšími dotazy.
+     *
+     * @param  Collection<int, Transaction>  $pohyby
+     * @return array<string, array<string, mixed>>
+     */
+    private function zalozkyTransakci(GallerySpace $prostor, Collection $pohyby, string $mena): array
+    {
+        if ($pohyby->isEmpty()) {
+            return [];
+        }
+
+        $nezarazene = $pohyby->filter(fn (Transaction $t) => $t->category_id === null);
+        $opakovane = $pohyby->filter(fn (Transaction $t) => $t->recurring_id !== null);
+        $importovane = $pohyby->filter(fn (Transaction $t) => (string) $t->provider !== '');
+
+        $mesic = $this->mesic(CarbonImmutable::parse($pohyby->first()->occurred_at ?? now()));
+
+        /*
+         * Všechny čtyři záložky se posílají i prázdné.
+         *
+         * Kdyby se prázdná vynechala, prototyp by na ni sáhl přes `ATX[key] ||
+         * ATX.all` a v „Opakovaných" by se objevily úplně všechny transakce.
+         * A nechat tam ukázku znamená poslat dvojici hledat platbu, kterou nemá.
+         */
+        return [
+            'all' => $this->zalozka($pohyby, $mena,
+                $this->pocet($pohyby->count(), 'transakce', 'transakce', 'transakcí').' · '.$mesic,
+                'Zatím žádné transakce'),
+
+            'un' => $this->zalozka($nezarazene, $mena,
+                $this->pocet($nezarazene->count(), 'nezařazená transakce', 'nezařazené transakce', 'nezařazených transakcí').' — zařaďte je',
+                'Všechno je zařazené'),
+
+            'rec' => $this->zalozka($opakovane, $mena,
+                $this->pocet($opakovane->count(), 'opakovaná platba', 'opakované platby', 'opakovaných plateb'),
+                'Žádná opakovaná platba'),
+
+            'imp' => $this->zalozka($importovane, $mena,
+                $this->pocet($importovane->count(), 'importovaná', 'importované', 'importovaných').$this->kdySync($prostor),
+                'Zatím nic naimportováno'),
+        ];
+    }
+
+    /**
+     * @param  Collection<int, Transaction>  $pohyby
+     * @return array<string, mixed>
+     */
+    private function zalozka(Collection $pohyby, string $mena, string $popisek, string $prazdno): array
+    {
+        if ($pohyby->isEmpty()) {
+            return ['rows' => [], 'foot' => $prazdno, 'sum' => ''];
+        }
+
+        $soucet = $pohyby->sum(fn (Transaction $t) => $this->podepsana($t));
+
+        return [
+            'rows' => $pohyby->map(fn (Transaction $t) => [
+                $this->den($t->occurred_at ?? $t->booked_on),
+                $t->description ?: ($t->counterparty ?: 'Bez popisu'),
+                $this->popisKategorie($t),
+                $this->sCznamenkem($this->podepsana($t), $mena),
+            ])->values()->all(),
+            'foot' => $popisek,
+            'sum' => $this->sCznamenkem($soucet, $mena),
+        ];
+    }
+
+    /**
+     * Kategorie tak, jak ji čeká obrazovka: u opakovaných a importovaných
+     * s tím, odkud pocházejí.
+     */
+    private function popisKategorie(Transaction $t): string
+    {
+        $nazev = $t->category?->name ?? 'Nezařazeno';
+
+        if ((string) $t->provider !== '') {
+            return $t->provider.' · import';
+        }
+
+        return $t->recurring_id !== null ? $nazev.' · měsíčně' : $nazev;
+    }
+
+    private function podepsana(Transaction $t): float
+    {
+        $castka = (float) ($t->amount_from ?? $t->amount_to ?? 0);
+
+        return $t->type === 'income' ? abs($castka) : -abs($castka);
+    }
+
+    /** Částka se znaménkem — prototyp podle prvního znaku volí barvu i řazení. */
+    private function sCznamenkem(float $castka, string $mena): string
+    {
+        $znak = $castka < 0 ? '−' : '+';
+
+        return $znak.$this->castka(abs($castka), $mena);
+    }
+
+    /** „ · sync dnes 8:14" — nebo nic, když se ještě nesynchronizovalo. */
+    private function kdySync(GallerySpace $prostor): string
+    {
+        $kdy = Schema::hasTable('bank_connections')
+            ? DB::table('bank_connections')
+                ->where('gallery_space_id', $prostor->id)
+                ->max('last_synced_at')
+            : null;
+
+        if (! $kdy) {
+            return '';
+        }
+
+        $kdy = CarbonImmutable::parse($kdy);
+
+        return ' · sync '.($kdy->isToday() ? 'dnes' : $kdy->format('j. n.')).' '.$kdy->format('G:i');
+    }
+
+    /**
+     * Sloupce rozpočtu: `{ bud, year, res, fc }`, řádek `[popisek, údaj, %, barva]`.
+     *
+     * Barva 1 je varovná, 2 tlumená, 0 základní — tak to prototyp kreslí.
+     *
+     * Ostatní klíče (`tier`, `health`, `cycle`, …) patří jiným obrazovkám a
+     * zůstávají, jak jsou: server tady odpovídá za peníze, ne za tierlisty.
+     *
+     * @param  array<string, mixed>  $bud
+     * @return array<string, list<array{0: string, 1: string, 2: int, 3: int}>>
+     */
+    private function sloupceRozpoctu(array $bud, string $mena): array
+    {
+        $kategorie = $bud['cats'] ?? [];
+
+        if (! $kategorie) {
+            return [];
+        }
+
+        return array_filter([
+            'bud' => $this->sloupceKategorii($kategorie, $mena),
+            'year' => $this->sloupceCtvrtleti($bud['months'] ?? [], $mena),
+            'res' => $this->sloupceVyhrazenych($kategorie, $bud, $mena),
+            'fc' => $this->sloupcePredpovedi($kategorie, $bud, $mena),
+        ], fn ($v) => $v !== []);
+    }
+
+    /**
+     * @param  list<array<int, mixed>>  $kategorie
+     * @return list<array{0: string, 1: string, 2: int, 3: int}>
+     */
+    private function sloupceKategorii(array $kategorie, string $mena): array
+    {
+        return array_map(function (array $k) use ($mena) {
+            $plan = (int) $k[1];
+            $utraceno = (int) $k[2];
+            $pomer = $plan > 0 ? (int) round($utraceno / $plan * 100) : 0;
+
+            return [
+                (string) $k[0],
+                $plan > 0
+                    ? number_format($utraceno, 0, ',', ' ').' '.$this->zNeboZe($plan).' '.$this->castka($plan, $mena)
+                    : $this->castka($utraceno, $mena).' · bez limitu',
+                $pomer,
+                // Varovně jen to, co je za hranou nebo těsně před ní.
+                $pomer >= 95 ? 1 : ($pomer <= 35 ? 2 : 0),
+            ];
+        }, $kategorie);
+    }
+
+    /**
+     * Rok po čtvrtletích. Poslední, ve kterém se ještě utrácí, je plán.
+     *
+     * @param  list<array{0: string, 1: int}>  $mesice
+     * @return list<array{0: string, 1: string, 2: int, 3: int}>
+     */
+    private function sloupceCtvrtleti(array $mesice, string $mena): array
+    {
+        if (count($mesice) < 12) {
+            return [];
+        }
+
+        $ctvrtleti = ['Leden – březen', 'Duben – červen', 'Červenec – září', 'Říjen – prosinec'];
+        $rok = CarbonImmutable::today()->year;
+        $ted = (int) ceil(CarbonImmutable::today()->month / 3);
+
+        // `mesice` jde dvanáct měsíců zpět; pro rok se berou ty z letoška.
+        $letos = [];
+        foreach ($mesice as $i => $m) {
+            $kdy = CarbonImmutable::today()->startOfMonth()->subMonths(11 - $i);
+            if ($kdy->year === $rok) {
+                $letos[(int) ceil($kdy->month / 3)] = ($letos[(int) ceil($kdy->month / 3)] ?? 0) + (int) $m[1];
+            }
+        }
+
+        if (! $letos) {
+            return [];
+        }
+
+        $nejvic = max(array_map('abs', $letos)) ?: 1;
+        $radky = [];
+
+        foreach ($ctvrtleti as $i => $nazev) {
+            $q = $i + 1;
+
+            if (! isset($letos[$q])) {
+                continue;
+            }
+
+            $radky[] = [
+                $nazev,
+                $this->castka($letos[$q], $mena),
+                (int) round(abs($letos[$q]) / $nejvic * 100),
+                $q === $ted ? 1 : ($q > $ted ? 2 : 0),
+            ];
+        }
+
+        return $radky;
+    }
+
+    /**
+     * Vyhrazené částky: nedotknutelné, ostatní plán a co z příjmu zbývá volné.
+     *
+     * @param  list<array<int, mixed>>  $kategorie
+     * @param  array<string, mixed>  $bud
+     * @return list<array{0: string, 1: string, 2: int, 3: int}>
+     */
+    private function sloupceVyhrazenych(array $kategorie, array $bud, string $mena): array
+    {
+        $prijem = (int) ($bud['income'] ?? 0);
+
+        if ($prijem <= 0) {
+            return [];
+        }
+
+        $pevne = array_filter($kategorie, fn (array $k) => ($k[5] ?? null) === 'nedotknutelné');
+        $volitelne = array_filter($kategorie, fn (array $k) => ($k[5] ?? null) !== 'nedotknutelné');
+
+        $soucet = fn (array $list) => array_sum(array_map(fn (array $k) => (int) $k[1], $list));
+        $radky = [];
+
+        foreach ($pevne as $k) {
+            $radky[] = [
+                'Nedotknutelné · '.mb_strtolower((string) $k[0]),
+                $this->castka((int) $k[1], $mena),
+                (int) round(min(100, (int) $k[1] / $prijem * 100)),
+                2,
+            ];
+        }
+
+        if ($volitelne) {
+            $radky[] = [
+                'Vyhrazeno · zbytek plánu',
+                $this->castka($soucet($volitelne), $mena),
+                (int) round(min(100, $soucet($volitelne) / $prijem * 100)),
+                0,
+            ];
+        }
+
+        $volne = $prijem - $soucet($kategorie);
+
+        $radky[] = [
+            'Volné',
+            $this->castka($volne, $mena),
+            (int) round(max(0, min(100, $volne / $prijem * 100))),
+            $volne < 0 ? 1 : 0,
+        ];
+
+        return $radky;
+    }
+
+    /**
+     * Předpověď čerpání: kolik zbývá do konce měsíce a kdo utrácí rychleji, než
+     * měsíc ubíhá.
+     *
+     * @param  list<array<int, mixed>>  $kategorie
+     * @param  array<string, mixed>  $bud
+     * @return list<array{0: string, 1: string, 2: int, 3: int}>
+     */
+    private function sloupcePredpovedi(array $kategorie, array $bud, string $mena): array
+    {
+        $den = (int) ($bud['today'] ?? 0);
+        $dni = (int) ($bud['days'] ?? 0);
+
+        if ($den <= 0 || $dni <= 0) {
+            return [];
+        }
+
+        $tempo = $den / $dni;
+        $plan = array_sum(array_map(fn (array $k) => (int) $k[1], $kategorie));
+        $utraceno = array_sum(array_map(fn (array $k) => (int) $k[2], $kategorie));
+        $zbyva = $plan - $utraceno;
+        $zbyvaDni = $dni - $den;
+
+        $rychleji = [];
+        $vPlanu = [];
+        $sRezervou = [];
+
+        foreach ($kategorie as $k) {
+            if ((int) $k[1] <= 0) {
+                continue;
+            }
+
+            $pomer = (int) $k[2] / (int) $k[1];
+
+            // Tempo je, kolik měsíce uběhlo. Kdo je nad ním, utrácí rychleji;
+            // kdo je pod polovinou, má rezervu.
+            if ($pomer > $tempo + 0.1) {
+                $rychleji[] = (string) $k[0];
+            } elseif ($pomer < $tempo / 2) {
+                $sRezervou[] = (string) $k[0];
+            } else {
+                $vPlanu[] = (string) $k[0];
+            }
+        }
+
+        return array_values(array_filter([
+            [
+                'Do konce měsíce zbývá',
+                $this->castka($zbyva, $mena).' na '.$this->pocet($zbyvaDni, 'den', 'dny', 'dní'),
+                (int) round(max(0, min(100, $plan > 0 ? $utraceno / $plan * 100 : 0))),
+                $zbyva < 0 ? 1 : 0,
+            ],
+            $rychleji ? ['Čerpáno rychleji než plán', implode(', ', array_slice($rychleji, 0, 3)), 99, 1] : null,
+            $vPlanu ? ['V plánu', implode(', ', array_slice($vPlanu, 0, 3)), 60, 0] : null,
+            $sRezervou ? ['S rezervou', implode(', ', array_slice($sRezervou, 0, 3)), 32, 2] : null,
+        ], fn ($v) => $v !== null));
     }
 
     // ——— rozpočet ———
@@ -312,7 +661,7 @@ class Finance implements PoskytovatelObsahu
      */
     private function limity(Budget $rozpocet): Collection
     {
-        return collect(\Illuminate\Support\Facades\DB::table('budget_category_limits as l')
+        return collect(DB::table('budget_category_limits as l')
             ->leftJoin('finance_categories as k', 'k.id', '=', 'l.finance_category_id')
             ->where('l.budget_id', $rozpocet->id)
             // Vzestupně, jako je aplikace financuje: nejdřív to, co se neshazuje.
@@ -474,6 +823,29 @@ class Finance implements PoskytovatelObsahu
     private function castka(float $castka, string $mena): string
     {
         return number_format($castka, 0, ',', ' ').' '.$this->znakMeny($mena);
+    }
+
+    /**
+     * „ze 6 000" proti „z 5 000".
+     *
+     * Předložka se řídí tím, jak se číslo čte — „ze dvou tisíc", „ze šesti",
+     * „ze sedmi". Napsat všude „z" je drobnost, kterou pozná každý, kdo česky
+     * mluví.
+     */
+    private function zNeboZe(int $castka): string
+    {
+        $prvni = (int) substr((string) abs($castka), 0, 1);
+
+        return in_array($prvni, [2, 6, 7], true) ? 'ze' : 'z';
+    }
+
+    private function pocet(int $kolik, string $jeden, string $dva, string $pet): string
+    {
+        return $kolik.' '.match (true) {
+            $kolik === 1 => $jeden,
+            $kolik >= 2 && $kolik <= 4 => $dva,
+            default => $pet,
+        };
     }
 
     private function znakMeny(string $mena): string
