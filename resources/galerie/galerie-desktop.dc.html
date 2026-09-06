@@ -26991,8 +26991,20 @@ class Component extends DCLogic {
       backLabel: (this.hist || []).length ? this.histLabel(this.hist[this.hist.length - 1]) : 'Zpět',
       backTitle: (this.hist || []).length ? 'Zpět na ' + this.histLabel(this.hist[this.hist.length - 1]) + ' (Alt + ←)' : 'Zpět',
       navGroups,
-      storagePct: '57 %', storageLabel: '114,5 GB ze 200 GB',
-      syncLabel: '3 originály čekají', syncIcon: 'ph-cloud-arrow-up', syncColor: 'var(--g-warn)',
+      // Úložiště ze serveru (GET /api/storage). Když je připojený Google Disk,
+      // počítá se podle něj — je to jeho místo, které dojde dřív než tarif.
+      // Bez odpovědi zůstanou ukázková čísla, ať panel nezůstane prázdný.
+      ...(() => {
+        const u = (window.GalerieData || {}).STORAGE;
+        const tón = { ok: 'var(--g-ok)', warn: 'var(--g-warn)' };
+        return u ? {
+          storagePct: u.pct, storageLabel: u.label,
+          syncLabel: u.sync, syncIcon: u.syncIcon, syncColor: tón[u.syncTon] || 'var(--g-ink2)'
+        } : {
+          storagePct: '57 %', storageLabel: '114,5 GB ze 200 GB',
+          syncLabel: '3 originály čekají', syncIcon: 'ph-cloud-arrow-up', syncColor: 'var(--g-warn)'
+        };
+      })(),
       ...this.notifVals(),
       ...this.histVals(),
       ...this.offVals(),

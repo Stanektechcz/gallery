@@ -233,11 +233,35 @@ ne parametr v dotazu: service worker prototypu ukládá dokument pod adresu bez 
 a čte ji s `ignoreSearch`, takže jedno otevření `/?rozvrzeni=telefon` přepsalo
 uloženou kopii `/` a prohlížeč pak i na počítači nabízel telefonní verzi.
 
-## Co zůstává napsané v designu
+## Postranní panel
 
-Postranní panel ukazuje „57 %", „114,5 GB ze 200 GB" a „3 originály čekají" jako
-text v `.dc.html`. To je designový soubor, do kterého se nesahá — a jsou to jediná
-zbylá pevná čísla. Skutečná zaplněnost je vidět v Riziku úložiště i v Tarifech.
+`GET /api/storage` — vlastní adresa, ne součást `/api/admin`: panel vidí na každé
+obrazovce každý, kdežto do administrace smí jen vlastník a správce a její přehled
+je mnohem dražší na spočítání.
+
+**Když je připojený Google Disk, počítá se podle něj.** Je to totiž jeho místo,
+které dojde: tarif hlídá, co si dvojice smí uložit, ale zaplnit se může dřív účet
+na Disku, a to by z čísel podle tarifu nikdo nepoznal. Bez Disku se počítá podle
+tarifu; účet bez limitu (firemní Workspace) ukáže jen objem, protože pruh by u něj
+byl vždycky na nule.
+
+Kvótu z Disku dosud **nikdo neobnovoval** — zapsala se při připojení účtu a od té
+chvíle ukazovala stav toho dne. Starší než půl hodiny se teď zařadí k obnovení do
+fronty, aby se na Google nečekalo při vykreslení stránky.
+
+„Druhá kopie" říká, kolik originálů ještě není v cloudu. Bez připojeného Disku se
+kopírovat nemá kam, takže se to řekne rovnou — mlčet by znamenalo tvrdit, že je
+všechno zálohované.
+
+Kapacita se počítá v **desítkových** gigabajtech, stejně jako v záložce Tarify a na
+Google Disku. `EntitlementService` násobí megabajty 1024×1024, takže tarif „25 GB"
+by v panelu vyšel na 24,4 GB — dvě různá čísla pro totéž místo jsou horší než jedno
+nepřesné.
+
+V designových souborech se změnily tři řádky: `storagePct`, `storageLabel` a
+`syncLabel` teď berou hodnotu z `GalerieData.STORAGE`, a když odpověď nedorazí,
+zůstanou původní ukázková čísla, ať panel nezůstane prázdný. Nic jiného —
+ani značky, ani styly, ani texty.
 
 ## Co zůstává na prototypu
 

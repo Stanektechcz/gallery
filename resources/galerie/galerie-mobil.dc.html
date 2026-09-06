@@ -10437,7 +10437,14 @@ class Component extends DCLogic {
       moreSetQuery: e => this.setState({ moreQuery: e.target.value }),
       moreHasQuery: !!(s.moreQuery || '').trim(),
       moreClear: () => this.setState({ moreQuery: '' }),
-      storagePct: '57%', storageMeta: '114,5 GB ze 200 GB · záloha dnes 3:00',
+      // Úložiště ze serveru (GET /api/storage) — stejná čísla jako v širokém
+      // rozvržení. Bez odpovědi zůstanou ukázková, ať panel nezůstane prázdný.
+      ...(() => {
+        const u = (window.GalerieData || {}).STORAGE;
+        return u
+          ? { storagePct: u.pct.replace(' ', ''), storageMeta: u.label + ' · ' + u.sync }
+          : { storagePct: '57%', storageMeta: '114,5 GB ze 200 GB · záloha dnes 3:00' };
+      })(),
 
       // deník
       diaryList: this.diaryList().map(d => ({

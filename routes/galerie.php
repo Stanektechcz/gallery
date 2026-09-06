@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\Galerie\AdminController;
 use App\Http\Controllers\Api\Galerie\MechanismController;
 use App\Http\Controllers\Api\Galerie\MediaController;
 use App\Http\Controllers\Api\Galerie\StateController;
+use App\Http\Controllers\Api\Galerie\StorageController;
 use App\Http\Controllers\Api\Galerie\TokenController;
 use App\Http\Controllers\Api\Galerie\WebauthnController;
 use Illuminate\Support\Facades\Route;
@@ -42,6 +43,9 @@ Route::middleware(['auth:sanctum', 'throttle:120,1'])->prefix('api')->group(func
     Route::post('logout', [TokenController::class, 'destroy'])->name('galerie.logout');
 
     Route::get('mechanisms', [MechanismController::class, 'index'])->name('galerie.mechanisms');
+
+    // Čísla pro postranní panel — vidí je každý, na rozdíl od administrace.
+    Route::get('storage', StorageController::class)->name('galerie.storage');
 
     /*
      * Odběr upozornění.

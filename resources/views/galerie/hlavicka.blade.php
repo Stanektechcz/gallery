@@ -81,6 +81,7 @@
    * chce, a čtenář dostane jeho hodnotu doplněnou o to, co ví server.
    */
   var zeServeru = null;
+  var uloziste = null;
 
   function obal(data) {
     if (! data || data.__galerieObaleno) return;
@@ -94,6 +95,14 @@
         enumerable: true,
         get: function () { return zeServeru ? Object.assign({}, vlastni, zeServeru) : vlastni; },
         set: function (v) { vlastni = v; }
+      });
+      // Čísla postranního panelu musí přežít totéž: bez přístupové vlastnosti
+      // by je nové `GalerieData` shodilo a panel by se vrátil k ukázkovým.
+      Object.defineProperty(data, 'STORAGE', {
+        configurable: true,
+        enumerable: true,
+        get: function () { return uloziste; },
+        set: function (v) { uloziste = v; }
       });
     } catch (e) {}
   }
@@ -110,11 +119,21 @@
     });
   } catch (e) {}
 
-  function nacti() {
+  function hlavicky() {
     var h = { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' };
     if (window.GALERIE_API_TOKEN) h['Authorization'] = 'Bearer ' + window.GALERIE_API_TOKEN;
+    return h;
+  }
 
-    return fetch('/api/admin', { headers: h, credentials: 'same-origin' })
+  function nacti() {
+    /*
+     * Dvě věci najednou: administrace a čísla postranního panelu.
+     *
+     * Panel je na každé obrazovce a jeho čísla vidí každý; administrace je jen
+     * pro vlastníka a správce. Kdyby se čekalo na obojí, panel by se u hosta
+     * nenačetl nikdy — proto se výsledky vyhodnocují zvlášť.
+     */
+    var admin = fetch('/api/admin', { headers: hlavicky(), credentials: 'same-origin' })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (b) {
         if (! b || ! b.data) return false;
@@ -124,6 +143,19 @@
       // Když se to nepovede, zůstanou data prototypu. Prázdná administrace
       // by vypadala jako rozbitá aplikace.
       .catch(function () { return false; });
+
+    var panel = fetch('/api/storage', { headers: hlavicky(), credentials: 'same-origin' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (b) {
+        if (! b || ! b.data) return false;
+        // Do proměnné, ne na objekt: `galerie-data.js` se načítá znovu a nový
+        // objekt by čísla shodil.
+        uloziste = b.data;
+        return true;
+      })
+      .catch(function () { return false; });
+
+    return Promise.all([admin, panel]).then(function (v) { return v[0] || v[1]; });
   }
 
   window.GalerieAdminObnov = nacti;
