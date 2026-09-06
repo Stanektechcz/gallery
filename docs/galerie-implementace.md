@@ -282,3 +282,32 @@ přeložit předem při nasazení (a tím prototyp přestat brát jako zdroj pra
 - Otisk projde přes serverovou challenge.
 - V administraci se každý zásah objeví v protokolu.
 - V `.dc.html` se nezměnil jediný řádek.
+
+## Kde poslední bod přestal platit
+
+Napojení obsahu (`docs/galerie-obsah.md`) si na designových souborech vyžádalo
+zásahy, které se bez nich udělat nedaly — a bylo by nepoctivé je zamlčet. Jsou
+dvojího druhu:
+
+**Výhybky na skutečná data.** `days()`, `photos()`, `baseAlbums()`, `tree()`,
+`albumsList()` a `shareRows` se nejdřív ptají serveru a bez odpovědi kreslí
+původní ukázku. Beze změny značek, stylů i textů.
+
+**Opravy záložek, které se skutečnými daty padaly.** Tyhle řádky fungovaly jen
+proto, že v dokumentu bylo sedm napsaných alb, tři cesty a dva lidé se jmény
+Adrian a Makinka:
+
+| Řádek | Co se stalo |
+| --- | --- |
+| `albums[1]` | dvě skutečná alba → `undefined.name` |
+| `TRIPS.chorvatsko` | jiná cesta → spadla **celá aplikace**, ne jen ta obrazovka |
+| `PERSONS.Makinka` | dvojice, kde se tak nikdo nejmenuje |
+| `PLACES.skblin` | jiná místa |
+
+`renderVals()` se počítá při každém překreslení, takže tři z těch čtyř neshodily
+svou obrazovku, ale celý dokument. Za každou záložkou je teď první dostupný
+záznam a prázdná struktura jako poslední pojistka.
+
+Kolekce telefonu (`DAYS`, `PHOTOS`, `TRIPS`, `HOUSE_*`, `MPANTRY`) navíc žily
+v modulových konstantách, kam se zvenčí nedalo dosáhnout; drží se teď ve
+`window.GalerieMobil`, aby se daly vyměnit na místě.
