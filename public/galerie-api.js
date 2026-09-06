@@ -471,6 +471,46 @@
       });
     },
 
+    /*
+     * Nahrávka hlasu.
+     *
+     * Zvlášť od `post`, protože jde o soubor: `FormData` si hranici těla
+     * skládá sám a `Content-Type` se k němu nesmí přidat ručně.
+     */
+    nahrajHlas: function (blob, vteriny, nazev) {
+      if (mode !== 'http') return Promise.resolve(null);
+      var telo = new FormData();
+      telo.append('audio', blob, 'hlasovka.webm');
+      if (nazev) telo.append('title', nazev);
+      if (vteriny) telo.append('duration_ms', String(Math.round(vteriny * 1000)));
+
+      var h = headers();
+      delete h['Content-Type'];
+
+      // `/api/v1`, ne `/api`: modul hlasovek je za verzovanou cestou.
+      return fetch(base + '/v1/voice-notes', { method: 'POST', headers: h, credentials: 'same-origin', body: telo })
+        .then(function (r) {
+          return r.json().then(function (b) {
+            if (! r.ok) throw Object.assign(new Error('HTTP ' + r.status), { body: b, status: r.status });
+            return b;
+          });
+        });
+    },
+
+    /*
+     * Adresa k přehrání hlasovky.
+     *
+     * Přes `fetch` do `blob:`, ne přímým odkazem: proud je za přihlášením
+     * a `<audio src>` k němu hlavičku `Authorization` nepřidá.
+     */
+    adresaHlasu: function (uuid) {
+      if (mode !== 'http' || ! uuid) return Promise.resolve(null);
+      return fetch(base + '/v1/voice-notes/' + uuid + '/stream', { headers: headers(), credentials: 'same-origin' })
+        .then(function (r) { return r.ok ? r.blob() : null; })
+        .then(function (b) { return b ? URL.createObjectURL(b) : null; })
+        .catch(function () { return null; });
+    },
+
     // Smazání jedné položky (fotka do koše). Stejná cesta jako post: v lokálním
     // režimu vrací null, aby volající poznal, že backend není.
     del: function (path) {

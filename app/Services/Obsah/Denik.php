@@ -43,7 +43,60 @@ class Denik implements PoskytovatelObsahu
             'cycleLog' => $this->cyklus($prostor),
         ], fn ($v) => $v !== []);
 
-        return $adiary ? ['ADIARY' => $adiary] : [];
+        $hlasovky = $this->hlasovky($prostor);
+
+        return array_filter([
+            'ADIARY' => $adiary,
+            'AL' => $hlasovky ? ['voice' => $hlasovky] : [],
+        ], fn ($v) => $v !== []);
+    }
+
+    /**
+     * Nahrané hlasovky: `[název, kdy a jak dlouho, štítek]`.
+     *
+     * Záložka „Hlasovky" v deníku brala řádky z `galerie-data.js` — čtyři
+     * nahrávky cizí dvojice včetně délek. Tabulka `voice_notes` přitom
+     * v aplikaci je a plní ji nahrávání z prototypu i z chatu.
+     *
+     * Štítek „přepsáno" dostane jen nahrávka, která přepis opravdu má.
+     * Aplikace řeč na text nepřevádí, takže je to informace, ne slib.
+     *
+     * @return list<array<int, ?string>>
+     */
+    private function hlasovky(GallerySpace $prostor): array
+    {
+        if (! Schema::hasTable('voice_notes')) {
+            return [];
+        }
+
+        return DB::table('voice_notes')
+            ->where('gallery_space_id', $prostor->id)
+            ->orderByDesc('recorded_at')
+            ->orderByDesc('created_at')
+            ->limit(40)
+            ->get(['title', 'duration_ms', 'transcript', 'recorded_at', 'created_at'])
+            ->map(function (object $h) {
+                $kdy = CarbonImmutable::parse($h->recorded_at ?? $h->created_at);
+
+                return [
+                    (string) ($h->title ?: 'Hlasovka'),
+                    trim(implode(' · ', array_filter([
+                        $kdy->day.'. '.$kdy->month.'.',
+                        $h->duration_ms ? $this->delka((int) $h->duration_ms) : null,
+                    ]))),
+                    trim((string) ($h->transcript ?? '')) !== '' ? 'přepsáno' : null,
+                ];
+            })
+            ->values()
+            ->all();
+    }
+
+    /** Délka nahrávky jako `m:ss`. */
+    private function delka(int $ms): string
+    {
+        $vteriny = (int) round($ms / 1000);
+
+        return intdiv($vteriny, 60).':'.str_pad((string) ($vteriny % 60), 2, '0', STR_PAD_LEFT);
     }
 
     /**

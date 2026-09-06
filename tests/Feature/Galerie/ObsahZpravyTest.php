@@ -229,4 +229,40 @@ class ObsahZpravyTest extends TestCase
 
         return $z;
     }
+
+    /**
+     * Hlasovka v chatu nese odkaz na nahrávku.
+     *
+     * Bez něj byla bublina „hlasovka · 0:12" jen popiskem: pod ní nebylo
+     * co pustit, ani hned, ani za rok. A délka se brala z toho, co si
+     * napsal prohlížeč, ne z nahrávky.
+     */
+    public function test_hlasovka_nese_odkaz_na_nahravku(): void
+    {
+        $uuid = (string) Str::uuid();
+
+        DB::table('voice_notes')->insert([
+            'uuid' => $uuid,
+            'gallery_space_id' => $this->prostor->id,
+            'created_by' => $this->adri->id,
+            'title' => 'Hlasovka z 9:12',
+            'path' => 'voice-notes/1/x.webm',
+            'mime_type' => 'audio/webm',
+            'size_bytes' => 2048,
+            'duration_ms' => 74000,
+            'recorded_at' => now(),
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $this->patchJson('/api/state', ['data' => ['msgList' => [
+            ['id' => 'g-n1', 'who' => 'A', 'type' => 'v', 'text' => 'Hlasovka z 9:12', 'audio' => $uuid],
+        ]]])->assertOk();
+
+        $radek = collect($this->getJson('/api/data/zpravy')->assertOk()->json('data.MSGS'))
+            ->first(fn (array $m) => $m[5] === 'Hlasovka z 9:12');
+
+        $this->assertSame('v', $radek[4], 'Zpráva s nahrávkou je hlasovka.');
+        $this->assertSame('1:14', $radek[6], 'Délka se čte z nahrávky, ne z prohlížeče.');
+        $this->assertSame($uuid, $radek[7]);
+    }
 }

@@ -75,6 +75,8 @@ class Vztah implements PoskytovatelObsahu
             'AUTO_DEC' => $this->rozhodlCas($prostor),
             // Vzorce, na kterých se nikdo nedohodl a přesto platí.
             'TACIT' => $this->pravidla->najdi($prostor),
+            // Uložené nápady na randíčko.
+            'AL' => ($napady = $this->randicka($prostor)) ? ['datesSaved' => $napady] : [],
             // Telefon kreslí sliby z vlastní kolekce; tvar je tentýž.
             'MOBIL' => $sliby ? ['PROMISES' => $sliby] : [],
         ], fn ($v) => $v !== null && $v !== []);
@@ -557,5 +559,51 @@ class Vztah implements PoskytovatelObsahu
     private function denCesky(CarbonImmutable $den): string
     {
         return $den->day.'. '.self::MESICE[$den->month].' '.$den->year;
+    }
+
+    /**
+     * Uložené nápady na randíčko: `[název, kdy a za kolik, štítek]`.
+     *
+     * Záložka „Uložené" brala řádky z `galerie-data.js` — tři nápady cizí
+     * dvojice včetně cen. `couple_date_ideas` přitom v aplikaci je a plní ji
+     * generátor návrhů i ruční zápis.
+     *
+     * Vygenerované návrhy (`datesGen`) tu nejsou schválně: ty vznikají při
+     * kliknutí na „Zamíchat návrh" a uložený návrh z minulého týdne by se
+     * tvářil jako čerstvý.
+     *
+     * @return list<array<int, ?string>>
+     */
+    private function randicka(GallerySpace $prostor): array
+    {
+        if (! Schema::hasTable('couple_date_ideas')) {
+            return [];
+        }
+
+        return DB::table('couple_date_ideas')
+            ->where('gallery_space_id', $prostor->id)
+            ->whereIn('status', ['saved', 'planned', 'done'])
+            ->orderByDesc('created_at')
+            ->limit(40)
+            ->get(['title', 'status', 'estimated_cost', 'currency', 'estimated_minutes', 'created_at'])
+            ->map(function (object $n) {
+                $kdy = CarbonImmutable::parse($n->created_at);
+
+                return [
+                    (string) $n->title,
+                    trim(implode(' · ', array_filter([
+                        'uloženo '.$kdy->day.'. '.$kdy->month.'.',
+                        $n->estimated_cost ? ((int) round((float) $n->estimated_cost)).' '.($n->currency ?: 'Kč') : null,
+                        $n->estimated_minutes ? ((int) $n->estimated_minutes).' minut' : null,
+                    ]))),
+                    match ($n->status) {
+                        'planned' => 'naplánováno',
+                        'done' => 'bylo',
+                        default => 'uloženo',
+                    },
+                ];
+            })
+            ->values()
+            ->all();
     }
 }

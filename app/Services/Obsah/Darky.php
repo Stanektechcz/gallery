@@ -39,12 +39,62 @@ class Darky implements PoskytovatelObsahu
         $jmena = $prostor->members()->pluck('users.name', 'users.id')->all();
         $polozky = $this->polozky($prostor);
 
+        $prilezitosti = $this->prilezitosti($prostor);
+
         return array_filter([
             'GIFT_WISHES' => $this->prani($polozky, $jmena),
             'GIFT_BUYS' => $this->nakupy($polozky, $jmena),
-            'GIFT_IDEAS' => $this->napady($polozky, $jmena),
-            'GIFT_OCC' => $this->prilezitosti($prostor),
+            'GIFT_IDEAS' => $napady = $this->napady($polozky, $jmena),
+            'GIFT_OCC' => $prilezitosti,
+            // Obrazovka „Milníky a výročí“ kreslí totéž jako seznam.
+            'AL' => ($seznam = $this->seznam($prilezitosti, $napady)) ? ['gifts' => $seznam] : [],
         ], fn ($v) => $v !== null && $v !== []);
+    }
+
+    /**
+     * Nápady a příležitosti jako `[název, popis, štítek]`.
+     *
+     * Seznam u milníků se bral z `galerie-data.js`: stálo v něm „Narozeniny
+     * Makinka" a „poznámka od Adriana" bez ohledu na to, kdo dvojici tvoří
+     * a co si zapsala.
+     *
+     * Odpočet „za 42 dní" se počítá teď — uložený by den po výročí tvrdil,
+     * že je za týden.
+     *
+     * @param  list<array<string, mixed>>  $prilezitosti
+     * @param  list<array<string, mixed>>  $napady
+     * @return list<array<int, ?string>>
+     */
+    private function seznam(array $prilezitosti, array $napady): array
+    {
+        $radky = [];
+
+        foreach ($prilezitosti as $p) {
+            $dni = (int) $p['days'];
+
+            $radky[] = [
+                (string) $p['name'],
+                trim(implode(' · ', array_filter([
+                    (string) $p['when'],
+                    $dni > 0 ? 'za '.$this->pocet($dni, 'den', 'dny', 'dní') : ($dni === 0 ? 'dnes' : null),
+                ]))),
+                $dni >= 0 && $dni <= 60 ? 'blíží se' : null,
+            ];
+        }
+
+        foreach ($napady as $n) {
+            $radky[] = [
+                'Nápad: '.$n['title'],
+                trim(implode(' · ', array_filter([
+                    $n['forWhom'] ? 'pro '.$n['forWhom'] : null,
+                    $n['price'] ? $this->castka((int) $n['price']) : null,
+                    $n['source'] ?: null,
+                ]))) ?: 'bez poznámky',
+                'nápad',
+            ];
+        }
+
+        return $radky;
     }
 
     /**
@@ -248,6 +298,21 @@ class Darky implements PoskytovatelObsahu
             'assistant' => 'ph-sparkle',
             default => 'ph-gift',
         };
+    }
+
+    private function pocet(int $kolik, string $jeden, string $dva, string $pet): string
+    {
+        return $kolik.' '.match (true) {
+            $kolik === 1 => $jeden,
+            $kolik >= 2 && $kolik <= 4 => $dva,
+            default => $pet,
+        };
+    }
+
+    /** Částka s měnou a mezerou po tisících — tak, jak ji píše zbytek aplikace. */
+    private function castka(int $kolik): string
+    {
+        return number_format($kolik, 0, ',', ' ').' Kč';
     }
 
     private function denCesky(CarbonImmutable $den): string

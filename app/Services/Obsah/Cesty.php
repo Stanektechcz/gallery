@@ -48,9 +48,114 @@ class Cesty implements PoskytovatelObsahu
             'NOWTRIP' => $this->prave($prostor, $cesty),
             'PLACES' => $mista,
             'PLACE_BY_TITLE' => $this->rejstrik($mista),
+            // Tytéž cesty a místa ve tvaru seznamu — víc dotazů to nestojí.
+            'AL' => $this->seznamy($cesty, $mista, $prostor),
             // Telefon kreslí cesty z mnohem menšího tvaru a drží si ho stranou.
             'MOBIL' => $cesty ? ['TRIPS' => $this->proTelefon($cesty)] : [],
         ], fn ($v) => $v !== null && $v !== []);
+    }
+
+    /**
+     * Seznamy `AL`: cesty, místa a jízdenky jako `[název, popis, štítek]`.
+     *
+     * Obrazovky „Cesty a výlety" a „Místa a podniky" kreslí tytéž věci ještě
+     * jednou — jako seznam. Ten se ale bral z `galerie-data.js`, takže vedle
+     * skutečné cesty do Chorvatska stálo Lisabon a Vídeň někoho cizího.
+     *
+     * Počítá se z toho, co už je načtené; databáze se kvůli tomu neptá znovu.
+     *
+     * @param  array<string, array<string, mixed>>  $cesty
+     * @param  array<string, array<string, mixed>>  $mista
+     * @return array<string, list<array<int, ?string>>>
+     */
+    private function seznamy(array $cesty, array $mista, GallerySpace $prostor): array
+    {
+        $doCesty = fn (array $c) => [
+            $c['title'],
+            trim(implode(' · ', array_filter([$c['when'], $c['where']]))),
+            $c['tag'],
+        ];
+
+        $doMista = fn (array $m) => [
+            $m['title'],
+            trim(implode(' · ', array_filter([$m['city'], $m['kind']]))),
+            $m['tag'],
+        ];
+
+        $budouci = array_values(array_filter($cesty, fn (array $c) => ! $c['past']));
+        $minule = array_values(array_filter($cesty, fn (array $c) => $c['past']));
+        // „Byli jsme" pozná místo podle štítku, který mu dal `znacka()`.
+        $navstivena = array_values(array_filter($mista, fn (array $m) => $m['tag'] === 'byli jsme'));
+        $chteji = array_values(array_filter($mista, fn (array $m) => $m['tag'] !== 'byli jsme'));
+
+        return array_filter([
+            'tripsPlanned' => array_map($doCesty, $budouci),
+            'tripsPast' => array_map($doCesty, $minule),
+            'placesWish' => array_map($doMista, $chteji),
+            'placesVisited' => array_map($doMista, $navstivena),
+            'ticket' => $this->jizdenky($prostor),
+            'travelInbox' => $this->cestovniInbox($prostor),
+        ], fn (array $v) => $v !== []);
+    }
+
+    /**
+     * Uložená spojení a rezervace.
+     *
+     * `saved_transport_routes` drží trasy, které si dvojice uložila; obrazovka
+     * z nich dělá „jízdenky". Datum ani cenu tabulka nenese, takže se
+     * nevymýšlejí — v popisku je trasa a kdy se uložila.
+     *
+     * @return list<array<int, ?string>>
+     */
+    private function jizdenky(GallerySpace $prostor): array
+    {
+        if (! Schema::hasTable('saved_transport_routes')) {
+            return [];
+        }
+
+        return DB::table('saved_transport_routes')
+            ->where('gallery_space_id', $prostor->id)
+            ->orderByDesc('created_at')
+            ->limit(30)
+            ->get(['name', 'origin', 'destination', 'created_at'])
+            ->map(fn (object $t) => [
+                (string) ($t->name ?: trim($t->origin.' – '.$t->destination)),
+                trim(implode(' · ', array_filter([
+                    $t->origin && $t->destination ? $t->origin.' – '.$t->destination : null,
+                    'uloženo '.CarbonImmutable::parse($t->created_at)->format('j. n. Y'),
+                ]))),
+                'uloženo',
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Co přišlo do cestovní schránky a čeká na zařazení.
+     *
+     * @return list<array<int, ?string>>
+     */
+    private function cestovniInbox(GallerySpace $prostor): array
+    {
+        if (! Schema::hasTable('travel_inbox_items')) {
+            return [];
+        }
+
+        return DB::table('travel_inbox_items')
+            ->where('gallery_space_id', $prostor->id)
+            ->orderByDesc('created_at')
+            ->limit(40)
+            ->get(['title', 'kind', 'state', 'created_at'])
+            ->map(fn (object $p) => [
+                (string) $p->title,
+                trim(implode(' · ', array_filter([
+                    $p->kind ?: null,
+                    CarbonImmutable::parse($p->created_at)->format('j. n.'),
+                ]))),
+                $p->state === 'filed' || $p->state === 'zarazeno' ? 'zařazeno' : 'zařadit',
+            ])
+            ->values()
+            ->all();
     }
 
     /**

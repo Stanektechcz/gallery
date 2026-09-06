@@ -7,6 +7,7 @@ use App\Models\GallerySpace;
 use App\Support\SpaceContext;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 /**
@@ -28,6 +29,12 @@ class Zpravy implements PoskytovatelObsahu
     private const MESICE = [1 => 'ledna', 'února', 'března', 'dubna', 'května', 'června',
         'července', 'srpna', 'září', 'října', 'listopadu', 'prosince'];
 
+    /** Prostor, ze kterého se zrovna čte — kvůli dohledání hlasovek. */
+    private ?int $prostorId = null;
+
+    /** @var array<string, array{ms: ?int}>|null */
+    private ?array $nahravky = null;
+
     public function skupina(): string
     {
         return 'zpravy';
@@ -43,6 +50,9 @@ class Zpravy implements PoskytovatelObsahu
         if (! Schema::hasTable('chat_messages')) {
             return [];
         }
+
+        $this->prostorId = $prostor->id;
+        $this->nahravky = null;
 
         $zpravy = $this->zpravy($prostor)
             // Prázdná bublina není zpráva. Zůstávají po hrách a po zrušených
@@ -84,7 +94,11 @@ class Zpravy implements PoskytovatelObsahu
     }
 
     /**
-     * Zpráva: `[id, strana, den, čas, druh, text, doplněk]`.
+     * Zpráva: `[id, strana, den, čas, druh, text, doplněk, nahrávka]`.
+     *
+     * Poslední pole je identifikátor hlasovky. Bez něj byla bublina
+     * „hlasovka · 0:12" jen popiskem: přehrát se nedalo nic, protože
+     * odkaz na nahrávku nikam nevedl.
      *
      * @param  Collection<int, object>  $zpravy
      * @return list<array<int, mixed>>
@@ -104,6 +118,7 @@ class Zpravy implements PoskytovatelObsahu
                 $this->druh($m),
                 $this->text($m),
                 $this->doplnek($m),
+                $this->nahravka($m),
             ];
         })->values()->all();
     }
@@ -237,10 +252,57 @@ class Zpravy implements PoskytovatelObsahu
 
     private function delka(object $m): string
     {
-        // Délka hlasovky se drží v odkazu na přílohu; bez ní se nic nepředstírá.
         $ref = (string) ($m->attachment_ref ?? '');
 
-        return preg_match('/^\d{1,2}:\d{2}$/', $ref) ? $ref : '';
+        // Starší zprávy mají v odkazu rovnou délku; novější identifikátor
+        // nahrávky, ze které se délka přečte.
+        if (preg_match('/^\d{1,2}:\d{2}$/', $ref)) {
+            return $ref;
+        }
+
+        $ms = $this->hlasovky()[$ref]['ms'] ?? null;
+
+        if ($ms === null) {
+            return '';
+        }
+
+        $vteriny = (int) round($ms / 1000);
+
+        return intdiv($vteriny, 60).':'.str_pad((string) ($vteriny % 60), 2, '0', STR_PAD_LEFT);
+    }
+
+    /** Identifikátor nahrávky, ze které jde hlasovku přehrát. */
+    private function nahravka(object $m): string
+    {
+        if ($this->druh($m) !== 'v') {
+            return '';
+        }
+
+        $ref = (string) ($m->attachment_ref ?? '');
+
+        return isset($this->hlasovky()[$ref]) ? $ref : '';
+    }
+
+    /**
+     * Hlasovky prostoru podle uuid — jedním dotazem na celý hovor.
+     *
+     * @return array<string, array{ms: ?int}>
+     */
+    private function hlasovky(): array
+    {
+        if ($this->nahravky !== null) {
+            return $this->nahravky;
+        }
+
+        if (! Schema::hasTable('voice_notes')) {
+            return $this->nahravky = [];
+        }
+
+        return $this->nahravky = DB::table('voice_notes')
+            ->where('gallery_space_id', $this->prostorId)
+            ->get(['uuid', 'duration_ms'])
+            ->mapWithKeys(fn (object $h) => [(string) $h->uuid => ['ms' => $h->duration_ms === null ? null : (int) $h->duration_ms]])
+            ->all();
     }
 
     private function velikost(int $bajtu): string

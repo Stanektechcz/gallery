@@ -98,10 +98,12 @@ class ZpravyVeStavu
             return;
         }
 
-        $this->posli($text, $prostor, $uzivatel);
+        // Hlasovka nese identifikátor nahrávky. Bez něj by z ní zbyla
+        // bublina „hlasovka · 0:12", pod kterou není co pustit.
+        $this->posli($text, $prostor, $uzivatel, trim((string) ($m['audio'] ?? '')) ?: null);
     }
 
-    private function posli(string $text, GallerySpace $prostor, User $uzivatel): void
+    private function posli(string $text, GallerySpace $prostor, User $uzivatel, ?string $nahravka = null): void
     {
         // Dvakrát odeslaná táž věta během pěti minut je jedna věta: patch se
         // opakuje po výpadku sítě a hovor by z toho koktal.
@@ -121,6 +123,8 @@ class ZpravyVeStavu
             'gallery_space_id' => $prostor->id,
             'created_by' => $uzivatel->id,
             'body' => $text,
+            'attachment_type' => $nahravka === null ? null : 'voice',
+            'attachment_ref' => $nahravka,
         ]);
     }
 
@@ -157,6 +161,8 @@ class ZpravyVeStavu
             $vlakno[] = [
                 'id' => $m[0], 'who' => $m[1], 'day' => $m[2], 'time' => $m[3],
                 'type' => $m[4], 'text' => $m[5], 'extra' => $m[6], 'n' => $i * 5,
+                // Bez odkazu na nahrávku by z hlasovky zbyl popisek.
+                'audio' => $m[7] ?? null,
             ];
         }
 

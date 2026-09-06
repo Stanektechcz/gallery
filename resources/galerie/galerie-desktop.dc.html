@@ -5571,13 +5571,11 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                           <span style="font-size:15.5px">{{ v.title }}</span>
                           <span style="font-size:12px; color:var(--g-ink3)">{{ v.who }} · {{ v.when }} · {{ v.len }}</span>
                         </div>
-                        <div style="display:flex; align-items:flex-end; gap:2px; height:26px; margin-top:8px">
-                          <sc-for list="{{ v.bars }}" as="b" hint-placeholder-count="28">
-                            <div style="flex:1; height:{{ b.h }}; background:{{ b.bg }}; border-radius:1px"></div>
-                          </sc-for>
-                        </div>
-                        <sc-if value="{{ v.playing }}">
-                          <div style="font-size:12.5px; color:var(--g-ink2); margin-top:9px; max-width:64ch">{{ v.transcript }}</div>
+                        <sc-if value="{{ v.hasAudio }}">
+                          <audio src="{{ v.src }}" controls="{{ v.hasAudio }}" preload="none" style="width:100%; margin-top:8px; height:34px"></audio>
+                        </sc-if>
+                        <sc-if value="{{ v.noAudio }}">
+                          <div style="font-size:12.5px; color:var(--g-ink3); margin-top:8px">{{ v.note }}</div>
                         </sc-if>
                       </div>
                       <div style="display:flex; gap:4px; flex:none; flex-wrap:wrap">
@@ -19720,28 +19718,115 @@ class Component extends DCLogic {
   msgsOf() {
     const s = this.state;
     if (s.msgList) return s.msgList;
-    return MSGS.map((m, i) => ({ id: m[0], who: m[1], day: m[2], time: m[3], type: m[4], text: m[5], extra: m[6], n: i * 5 }));
+    return MSGS.map((m, i) => ({ id: m[0], who: m[1], day: m[2], time: m[3], type: m[4], text: m[5], extra: m[6], audio: m[7] || null, n: i * 5 }));
   }
   msgsSet(list) { this.setState({ msgList: list }); }
+  /*
+   * Nahrávání hlasu — doopravdy.
+   *
+   * Tohle byl jen odpočet: po zastavení vznikla bublina „hlasovka · 0:12",
+   * pod kterou nikdy nic nebylo. Dvojice si ji přečetla jako vzkaz, který
+   * si může pustit, a přehrát nešlo nic — ani hned, ani za rok.
+   *
+   * Když mikrofon není nebo ho člověk nepovolí, řekne se to. Předstírat
+   * nahrávání je horší než ho neumět.
+   */
+  /*
+   * Adresa k přehrání hlasovky.
+   *
+   * Proud je za přihlášením, takže `<audio src>` na něj přímo nesmí —
+   * hlavičku `Authorization` by k němu prohlížeč nepřidal. Stahuje se
+   * proto přes `fetch` do `blob:` a výsledek si držíme, aby se totéž
+   * nestahovalo při každém překreslení znovu.
+   */
+  hlasSrc(m) {
+    const id = m && m.audio;
+    if (! id) return null;
+
+    this._hlasy = this._hlasy || {};
+    if (this._hlasy[id] !== undefined) return this._hlasy[id];
+
+    const api = window.GalerieApi;
+    if (! api || ! api.adresaHlasu) return null;
+
+    // `null` znamená „stahuje se"; zapsané `undefined` by se ptalo dokola.
+    this._hlasy[id] = null;
+    api.adresaHlasu(id).then(url => { this._hlasy[id] = url; this.forceUpdate(); });
+
+    return null;
+  }
+  hlasZacni() {
+    if (! navigator.mediaDevices || ! window.MediaRecorder) {
+      this.toast('Tenhle prohlížeč neumí nahrávat zvuk', { icon: 'ph-microphone-slash', color: 'var(--g-mag)' });
+      return Promise.resolve(false);
+    }
+
+    return navigator.mediaDevices.getUserMedia({ audio: true }).then(proud => {
+      const kusy = [];
+      const rec = new MediaRecorder(proud);
+      rec.ondataavailable = e => { if (e.data && e.data.size) kusy.push(e.data); };
+      this._rec = { rec, kusy, proud, od: Date.now() };
+      rec.start();
+      return true;
+    }).catch(() => {
+      this.toast('Bez přístupu k mikrofonu nahrát nejde', { icon: 'ph-microphone-slash', color: 'var(--g-mag)' });
+      return false;
+    });
+  }
+  /** Zastaví nahrávání a vrátí `{ blob, vteriny }`, nebo `null`. */
+  hlasUkonci() {
+    const n = this._rec;
+    this._rec = null;
+    if (! n) return Promise.resolve(null);
+
+    return new Promise(hotovo => {
+      n.rec.onstop = () => {
+        n.proud.getTracks().forEach(t => t.stop());
+        const blob = new Blob(n.kusy, { type: n.rec.mimeType || 'audio/webm' });
+        hotovo(blob.size ? { blob, vteriny: Math.max(1, Math.round((Date.now() - n.od) / 1000)) } : null);
+      };
+      try { n.rec.stop(); } catch (e) { hotovo(null); }
+    });
+  }
   msgRecStart() {
     clearInterval(this._recI);
-    this.setState({ msgRec: true, msgRecT: 0, appTab: 0 });
-    this._recI = setInterval(() => this.setState(st => ({ msgRecT: (st.msgRecT || 0) + 1 })), 1000);
+    this.hlasZacni().then(bezi => {
+      if (! bezi) return;
+      this.setState({ msgRec: true, msgRecT: 0, appTab: 0 });
+      this._recI = setInterval(() => this.setState(st => ({ msgRecT: (st.msgRecT || 0) + 1 })), 1000);
+    });
   }
   msgRecStop() {
     clearInterval(this._recI);
-    const sec = this.state.msgRecT || 1;
     const now = new Date();
+    const nazev = 'Hlasovka z ' + now.getHours() + ':' + String(now.getMinutes()).padStart(2, '0');
     this.setState({ msgRec: false, msgRecT: 0 });
-    this.msgSend('v', 'Hlasovka z ' + now.getHours() + ':' + String(now.getMinutes()).padStart(2, '0'),
-      Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0'));
+
+    this.hlasUkonci().then(v => {
+      if (! v) { this.toast('Nahrávka je prázdná', { icon: 'ph-warning' }); return; }
+      const delka = Math.floor(v.vteriny / 60) + ':' + String(v.vteriny % 60).padStart(2, '0');
+      const api = window.GalerieApi;
+
+      if (! api || ! api.nahrajHlas) { this.msgSend('v', nazev, delka); return; }
+
+      api.nahrajHlas(v.blob, v.vteriny, nazev).then(res => {
+        // Bez odpovědi serveru se bublina nepošle: hlasovka, kterou nejde
+        // přehrát, je jen popisek.
+        if (! res) { this.msgSend('v', nazev, delka); return; }
+        this.msgSend('v', nazev, delka, res.uuid || res.id || null);
+        this.toast('Hlasovka nahrána · ' + delka, { icon: 'ph-microphone' });
+      }).catch(() => {
+        this.toast('Nahrávku se nepodařilo uložit', { icon: 'ph-warning', color: 'var(--g-mag)' });
+      });
+    });
   }
-  msgSend(type, text, extra) {
+  msgSend(type, text, extra, audio) {
     const list = this.msgsOf();
     const now = new Date();
     const time = now.getHours() + ':' + String(now.getMinutes()).padStart(2, '0');
     const id = 'g-n' + (this.state.xSeq || 1);
-    const row = { id, who: 'A', day: 'Dnes', time, type, text, extra: extra || '', n: list.length * 3, fresh: true };
+    // `audio` je identifikátor nahrávky — podle něj se hlasovka přehraje.
+    const row = { id, who: 'A', day: 'Dnes', time, type, text, extra: extra || '', audio: audio || null, n: list.length * 3, fresh: true };
     this.msgsSet(list.concat([row]));
     this.setState({ xSeq: (this.state.xSeq || 1) + 1, msgDraft: '' });
     clearTimeout(this._typT); clearTimeout(this._repT);
@@ -19909,20 +19994,25 @@ class Component extends DCLogic {
       const playing = s.msgPlay;
       return {
         ...base,
-        vmHead: this.pl(voices.length, 'hlasovka', 'hlasovky', 'hlasovek') + ' · přepis vzniká automaticky a dá se v něm hledat',
+        /*
+         * Hlasovka, kterou jde opravdu pustit.
+         *
+         * Tenhle seznam byl celý namalovaný: vlnovka se počítala z pořadového
+         * čísla zprávy, „přehrávání" jen přepnulo barvu a jako přepis se
+         * ukazoval text bubliny napsaný malými písmeny. Tlačítko „stáhnout
+         * přepis" pak uložilo tentýž text ještě jednou.
+         *
+         * Aplikace řeč na text nepřevádí, tak to ani netvrdí — a nahrávka se
+         * přehrává v `<audio>`, ne v obrázku.
+         */
+        vmHead: this.pl(voices.length, 'hlasovka', 'hlasovky', 'hlasovek') + ' · nahrané v chatu',
         vmRows: voices.map(m => ({
-          title: m.text, who: m.who === 'A' ? 'Adrian' : 'Makinka', when: m.day + ' · ' + m.time, len: m.extra,
-          playing: playing === m.id,
-          playIcon: playing === m.id ? 'ph-pause' : 'ph-play',
-          pct: playing === m.id ? '64%' : '0%',
-          bars: Array.from({ length: 28 }, (_, i) => ({ h: (6 + ((i * 7 + m.n) % 22)) + 'px', bg: playing === m.id && i < 18 ? 'var(--g-acc)' : 'var(--g-line)' })),
-          transcript: 'Přepis: „' + m.text.toLowerCase() + '“ — celý text je součástí hledání napříč aplikací.',
-          play: () => this.setState({ msgPlay: playing === m.id ? null : m.id }),
+          title: m.text, who: this.dva()[m.who === 'A' ? 0 : 1], when: m.day + ' · ' + m.time, len: m.extra,
+          hasAudio: !! this.hlasSrc(m),
+          src: this.hlasSrc(m) || '',
+          noAudio: ! this.hlasSrc(m),
+          note: m.audio ? 'Nahrávka se načítá…' : 'K téhle bublině žádná nahrávka není.',
           toDiary: () => decorate(m).toDiary(),
-          save: () => {
-            const ok = this.download('hlasovka-' + m.id + '.txt', m.text + '\n' + m.day + ' ' + m.time + '\n\nPřepis:\n' + m.text, 'text/plain;charset=utf-8');
-            this.toast(ok ? 'Přepis hlasovky stažen' : 'Stažení se nepovedlo', { icon: 'ph-download-simple' });
-          },
           pin: () => decorate(m).pin(),
           pinned: !!pins[m.id]
         })),
@@ -21754,6 +21844,18 @@ class Component extends DCLogic {
       // původce — třeba mezi knihovnou a Diskem. Ukázka je nemá.
       merged: c[8], sides: c[9] || null, state: 'open'
     }));
+  }
+  /*
+   * Popisky obrazovek, které slibovaly víc, než aplikace umí.
+   *
+   * Klíčem je název obrazovky, ne její adresa: `APP` je katalog prototypu
+   * a ten se nemění — mění se to, co je pod ním pravda.
+   */
+  opravaPopisku(nazev) {
+    const OPRAVY = {
+      'Zprávy a hlasovky': 'Náš vlastní chat — historie se ukládá u obou a cokoliv jde připnout mezi vzpomínky. Hlasovky se nahrávají a přehrávají; přepis aplikace nedělá.'
+    };
+    return OPRAVY[nazev] || null;
   }
   // „Moje verze" na začátku věty, „moji verzi" uvnitř — malé písmeno a bez
   // slova „verze", když ho popisek už nese.
@@ -28380,7 +28482,15 @@ class Component extends DCLogic {
       showFilterCount: !appPage && s.filters.length > 0,
       searchPlaceholder: appPage && !appPage.photo ? 'Hledat napříč vším — fotky, úkoly, transakce, místa…' : 'Hledat fotky, alba, místa, štítky…',
       appGroup: appPage ? appPage.g : '', appTitle: appPage ? appPage.title : '',
-      appNote: appPage ? appPage.note : '',
+      /*
+       * Popisek obrazovky — bez slibů, které aplikace neplní.
+       *
+       * U hlasovek stálo „hlasovky se přepisují". Aplikace řeč na text
+       * nepřevádí a nikdy to nedělala; dvojice pak marně hledala, kde
+       * ten přepis je. Opravuje se to tady, protože `galerie-data.js`
+       * je soubor prototypu a do něj se nesahá.
+       */
+      appNote: appPage ? (this.opravaPopisku(appKey && appPage.title) || appPage.note) : '',
       appBadge: badgeLeft[R] !== undefined
         ? (badgeLeft[R] > 0 ? badgeLeft[R] + (R === 'x-inbox' ? ' položek' : R === 'x-transakce' ? ' nezařazená' : ' čeká') : 'vyřízeno')
         : R === 'x-vzpominky'
@@ -28478,10 +28588,32 @@ class Component extends DCLogic {
           return;
         }
         if (appKey === 'voice') {
-          const n = s.xSeq || 1, prev = this.rowsOf('voice');
-          this.setRows('voice', [{ t: 'Nová hlasovka', m: 'dnes · 0:12', g: 'nové', id: 'voice-n' + n }].concat(prev));
-          this.setState({ xSeq: n + 1 });
-          this.toast('Nahráno 0:12 — přepis bude za chvíli', { icon: 'ph-microphone', undo: () => this.setRows('voice', prev) });
+          /*
+           * Nahrát hlasovku — doopravdy.
+           *
+           * Tohle přidalo řádek „Nová hlasovka · dnes · 0:12" a slíbilo
+           * přepis, který nikdy nepřišel. Pod řádkem nebyla nahrávka
+           * a přehrát se nedalo nic.
+           */
+          if (this._rec) {
+            this.hlasUkonci().then(v => {
+              if (! v) { this.toast('Nahrávka je prázdná', { icon: 'ph-warning' }); return; }
+              const api = window.GalerieApi;
+              const delka = Math.floor(v.vteriny / 60) + ':' + String(v.vteriny % 60).padStart(2, '0');
+              if (! api || ! api.nahrajHlas) { this.toast('Bez serveru se nahrávka neuloží', { icon: 'ph-warning' }); return; }
+              const now = new Date();
+              api.nahrajHlas(v.blob, v.vteriny, 'Hlasovka z ' + now.getHours() + ':' + String(now.getMinutes()).padStart(2, '0')).then(() => {
+                this.setRows('voice', null);
+                if (window.GalerieObnovit) window.GalerieObnovit('denik');
+                this.toast('Hlasovka nahrána · ' + delka, { icon: 'ph-microphone' });
+              }).catch(() => this.toast('Nahrávku se nepodařilo uložit', { icon: 'ph-warning', color: 'var(--g-mag)' }));
+            });
+            return;
+          }
+
+          this.hlasZacni().then(bezi => {
+            if (bezi) this.toast('Nahrávám — klepněte znovu pro ukončení', { icon: 'ph-microphone' });
+          });
           return;
         }
         if (appKey === 'accounts') { this.toast('Napojení nové banky — vyberte poskytovatele a potvrďte v bankovní aplikaci', { icon: 'ph-bank' }); return; }

@@ -104,7 +104,19 @@ class Finance implements PoskytovatelObsahu
              * v účetnictví nemá.
              */
             'TXCATS' => $this->nazvyKategorii($prostor),
-            'FIN' => ['accounts' => $this->ucty($prostor, $penezenky)],
+            'FIN' => ['accounts' => $ucty = $this->ucty($prostor, $penezenky)],
+            /*
+             * Tytéž účty jako seznam.
+             *
+             * Záložka „Účty a napojení" je kreslí ještě jednou a brala je
+             * z `galerie-data.js`: vedle skutečné peněženky stál „Revolut ·
+             * Adrian" a „ČSOB · Makinka" někoho cizího, u toho „sync dnes
+             * 8:14" jako by se opravdu synchronizovalo.
+             */
+            'AL' => $ucty ? ['accounts' => array_map(
+                fn (array $u) => [$u[0], trim($u[1].' · '.$u[5]), $u[4]],
+                $ucty,
+            )] : [],
             // Totéž číslo jako v hlavičce rozpočtu — dvě různá by si na dvou
             // obrazovkách protiřečila.
             'INCOMES' => $rozpocet ? (int) round($this->mesicniPrijem($rozpocet)) : 0,

@@ -18,6 +18,7 @@ use App\Services\Provoz\PlanovaniVeStavu;
 use App\Services\Provoz\PravidlaVeStavu;
 use App\Services\Provoz\PribehVeStavu;
 use App\Services\Provoz\RozboryVeStavu;
+use App\Services\Provoz\SeznamyVeStavu;
 use App\Services\Provoz\TrezorVeStavu;
 use App\Services\Provoz\UklidVeStavu;
 use App\Services\Provoz\VztahVeStavu;
@@ -49,6 +50,7 @@ class StateController extends Controller
         private readonly PribehVeStavu $pribeh,
         private readonly MechanismyVeStavu $mechanismy,
         private readonly FilmyVeStavu $filmy,
+        private readonly SeznamyVeStavu $seznamy,
     ) {}
 
     public function show(Request $request): JsonResponse
@@ -341,6 +343,20 @@ class StateController extends Controller
                 $skutecnost += $this->filmy->zpracuj($patch, GallerySpace::findOrFail($coupleId), $uzivatel);
                 $patch = $this->filmy->bezFilmu($patch);
                 $state->zapomenFilmy(FilmyVeStavu::SEZNAMY);
+            }
+
+            /*
+             * Seznamy, které mají vlastní tabulku.
+             *
+             * `xRows` je společný sklad třiceti dvou seznamů; ty, které
+             * v aplikaci tabulku mají — nápady na dárky, uložená randíčka,
+             * jízdenky, cestovní schránka —, se ukládají do ní. Zbytek klíče
+             * projde beze změny: nákupní seznam tabulku nemá a vyhodit ho
+             * kvůli sousedovi by znamenalo ho ztratit.
+             */
+            if ($this->seznamy->tykaSe($patch)) {
+                $this->seznamy->zpracuj($patch, GallerySpace::findOrFail($coupleId), $uzivatel);
+                $patch = $this->seznamy->bezSeznamu($patch);
             }
 
             $state->applyPatch($patch);

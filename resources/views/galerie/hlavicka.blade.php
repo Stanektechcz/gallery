@@ -362,8 +362,11 @@
     'mechanismy', 'rozhodovani'];
 
   function skupiny() {
-    return SKUPINY.map(function (jmeno) {
-      return fetch('/api/data/' + jmeno, { headers: hlavicky(), credentials: 'same-origin' })
+    return SKUPINY.map(nactiSkupinu);
+  }
+
+  function nactiSkupinu(jmeno) {
+    return fetch('/api/data/' + jmeno, { headers: hlavicky(), credentials: 'same-origin' })
         .then(function (r) { return r.ok ? r.json() : null; })
         .then(function (b) {
           if (! b || ! b.data) return false;
@@ -388,9 +391,20 @@
 
           return true;
         })
-        .catch(function () { return false; });
-    });
+      .catch(function () { return false; });
   }
+
+  /*
+   * Znovu načíst jednu skupinu obsahu.
+   *
+   * Po zápisu, který nejde přes `/api/state` — nahraná hlasovka, založený
+   * odkaz —, potřebuje obrazovka svá data znovu. Načítat všech dvacet skupin
+   * kvůli jedné je zbytečné.
+   */
+  window.GalerieObnovit = function (jmeno) {
+    if (SKUPINY.indexOf(jmeno) < 0) return Promise.resolve(false);
+    return nactiSkupinu(jmeno);
+  };
 
   window.GalerieAdminObnov = nacti;
 

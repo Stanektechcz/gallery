@@ -21,6 +21,9 @@ use Illuminate\Support\Facades\Schema;
  */
 class Kucharka implements PoskytovatelObsahu
 {
+    /** Dny v týdnu tak, jak je píše menu. `dayOfWeek` má neděli na nule. */
+    private const DNY = ['Neděle', 'Pondělí', 'Úterý', 'Středa', 'Čtvrtek', 'Pátek', 'Sobota'];
+
     public function __construct(private readonly Predpoved $pocasi) {}
 
     public function skupina(): string
@@ -51,9 +54,76 @@ class Kucharka implements PoskytovatelObsahu
         return array_filter([
             'RECIPES' => $recepty,
             'RECIPE_BY_TITLE' => $this->rejstrik($recepty),
+            // Tytéž recepty a naplánovaná jídla jako seznam.
+            'AL' => $this->seznamy($recepty, $prostor),
             // Předpověď na pět dní — podle ní obrazovka řadí návrhy.
             'WEATHER' => $this->pocasi->naPetDni($prostor),
         ], fn ($v) => $v !== null && $v !== []);
+    }
+
+    /**
+     * Seznamy `AL`: recepty a menu na týden jako `[název, popis, štítek]`.
+     *
+     * Záložky kuchařky kreslí tytéž věci ještě jednou, jen jako seznam — a ten
+     * se bral z `galerie-data.js`. Dvojice tak v jedné záložce viděla své
+     * recepty a ve vedlejší cizí.
+     *
+     * Nákupní seznam mezi nimi není: aplikace pro něj tabulku nemá a vyrobit
+     * ho z receptů by znamenalo tvrdit, že něco chybí ve spíži, o které nic
+     * nevíme. Zůstává tam, kde dosud byl — ve stavu prohlížeče.
+     *
+     * @param  array<string, array<string, mixed>>  $recepty
+     * @return array<string, list<array<int, ?string>>>
+     */
+    private function seznamy(array $recepty, GallerySpace $prostor): array
+    {
+        $doRadku = fn (array $r) => [
+            $r['title'],
+            trim(implode(' · ', array_filter([$r['time'], $r['kind']]))),
+            $r['tag'] ?: null,
+        ];
+
+        return array_filter([
+            'recipes' => array_map($doRadku, array_values($recepty)),
+            'weekMenu' => $this->menu($prostor),
+        ], fn (array $v) => $v !== []);
+    }
+
+    /**
+     * Co je naplánované k jídlu — z `planned_meals`, ne z ukázky.
+     *
+     * @return list<array<int, ?string>>
+     */
+    private function menu(GallerySpace $prostor): array
+    {
+        if (! Schema::hasTable('planned_meals')) {
+            return [];
+        }
+
+        $od = CarbonImmutable::now()->startOfWeek();
+
+        return DB::table('planned_meals as j')
+            ->leftJoin('recipes as r', 'r.id', '=', 'j.recipe_id')
+            ->where('j.gallery_space_id', $prostor->id)
+            ->where('j.planned_for', '>=', $od)
+            ->where('j.planned_for', '<', $od->addDays(14))
+            ->orderBy('j.planned_for')
+            ->limit(20)
+            ->get(['j.planned_for', 'j.meal_type', 'j.status', 'j.notes', 'r.title'])
+            ->map(function (object $j) {
+                $kdy = CarbonImmutable::parse($j->planned_for);
+
+                return [
+                    self::DNY[$kdy->dayOfWeek].' · '.($j->title ?: ($j->notes ?: 'Bez receptu')),
+                    trim(implode(' · ', array_filter([
+                        $kdy->format('j. n.'),
+                        $j->meal_type ?: null,
+                    ]))),
+                    $j->status === 'cooked' ? 'uvařeno' : 'plán',
+                ];
+            })
+            ->values()
+            ->all();
     }
 
     /**
