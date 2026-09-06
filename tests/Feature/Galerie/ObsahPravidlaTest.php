@@ -73,9 +73,36 @@ class ObsahPravidlaTest extends TestCase
     /** Pravidlo, které nikdy neběželo, to řekne rovnou. */
     public function test_pravidlo_bez_behu(): void
     {
-        $this->pravidlo(['name' => 'Nové', 'last_run_at' => null, 'run_count' => 0]);
+        $this->pravidlo([
+            'name' => 'Nové',
+            'trigger' => 'todo.completed',
+            'action' => 'todo.create',
+            'last_run_at' => null,
+            'run_count' => 0,
+        ]);
 
-        $this->assertSame('zatím nikdy', $this->getJson('/api/data/pravidla')->assertOk()->json('data.RULEDEF.0.last'));
+        $p = $this->getJson('/api/data/pravidla')->assertOk()->json('data.RULEDEF.0');
+
+        $this->assertSame('zatím nikdy', $p['last']);
+        $this->assertTrue($p['canRun']);
+    }
+
+    /**
+     * Pravidlo, které aplikace spustit neumí, to řekne místo „zatím nikdy".
+     *
+     * „Zatím nikdy" vypadá jako pravidlo, na které jen nic nesedlo — a dvojice
+     * na ně čeká. Tohle nepřijde nikdy: podnět z nahrané fotky žádné tagy
+     * nenese, ty se na ni věší až potom.
+     */
+    public function test_nespustitelne_pravidlo_rekne_proc(): void
+    {
+        $this->pravidlo(['name' => 'Hory do alba', 'trigger' => 'media.uploaded', 'action' => 'album.add']);
+
+        $p = $this->getJson('/api/data/pravidla')->assertOk()->json('data.RULEDEF.0');
+
+        $this->assertSame('tuhle akci aplikace zatím neumí provést', $p['last']);
+        $this->assertFalse($p['canRun']);
+        $this->assertSame('album', $p['act']);
     }
 
     /**

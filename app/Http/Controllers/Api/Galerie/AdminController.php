@@ -11,15 +11,14 @@ use App\Models\GallerySpace;
 use App\Models\MediaItem;
 use App\Models\PersonalAccessToken;
 use App\Models\User;
-use App\Notifications\InvitationNotification;
 use App\Services\Billing\CheckoutService;
 use App\Services\Billing\EntitlementService;
 use App\Services\Provoz\AdministraceGalerie;
+use App\Services\Provoz\AdministraceZasahy;
 use App\Services\Provoz\PlanovaneUlohy;
 use App\Support\SpaceContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 
 /**
@@ -41,7 +40,7 @@ class AdminController extends Controller
         private readonly AdministraceGalerie $administrace,
         private readonly PlanovaneUlohy $ulohy,
         private readonly EntitlementService $tarify,
-        private readonly \App\Services\Provoz\AdministraceZasahy $zasahy,
+        private readonly AdministraceZasahy $zasahy,
     ) {}
 
     public function index(Request $request): JsonResponse
@@ -410,5 +409,4 @@ class AdminController extends Controller
     {
         AuditLog::record($akce, $koho, ['popis' => $popis]);
     }
-
 }

@@ -9,6 +9,8 @@ use App\Models\GallerySpace;
 use App\Services\Provoz\AdminVeStavu;
 use App\Services\Provoz\DomacnostVeStavu;
 use App\Services\Provoz\PlanovaniVeStavu;
+use App\Services\Provoz\PravidlaVeStavu;
+use App\Services\Provoz\RozboryVeStavu;
 use App\Services\Provoz\TrezorVeStavu;
 use App\Services\Provoz\UklidVeStavu;
 use App\Services\Provoz\VztahVeStavu;
@@ -29,6 +31,8 @@ class StateController extends Controller
         private readonly TrezorVeStavu $trezor,
         private readonly PlanovaniVeStavu $planovani,
         private readonly UklidVeStavu $uklid,
+        private readonly PravidlaVeStavu $pravidla,
+        private readonly RozboryVeStavu $rozbory,
     ) {}
 
     public function show(Request $request): JsonResponse
@@ -167,6 +171,34 @@ class StateController extends Controller
                 $patch = $this->uklid->zpracuj($patch, GallerySpace::findOrFail($coupleId));
             }
 
+            /*
+             * Automatizace.
+             *
+             * `rulesAll()` v prototypu vrací `state.rules || RULEDEF`, takže
+             * jedno přepnutí vypínače navždy zastínilo skutečná pravidla:
+             * obrazovka od té chvíle kreslila kopii z prohlížeče, nová
+             * pravidla nikde nedoběhla a ta skutečná z ní zmizela.
+             */
+            if ($this->pravidla->tykaSe($patch)) {
+                $skutecnost += $this->pravidla->zpracuj($patch, GallerySpace::findOrFail($coupleId), $uzivatel);
+                $patch = $this->pravidla->bezPravidel($patch);
+                $state->zapomen(PravidlaVeStavu::SERVEROVE);
+            }
+
+            /*
+             * Sezónní fondy.
+             *
+             * `seasonVals()` čte `state.season || SEASON`, takže po prvním
+             * kliknutí přestal platit `budget_goals` a začala platit kopie —
+             * a v Rozpočtech pak stál jiný stav fondu než v jeho vlastní
+             * obrazovce.
+             */
+            if ($this->rozbory->tykaSe($patch)) {
+                $skutecnost += $this->rozbory->zpracuj($patch, GallerySpace::findOrFail($coupleId));
+                $patch = $this->rozbory->bezRozboru($patch);
+                $state->zapomen(RozboryVeStavu::SERVEROVE);
+            }
+
             $state->applyPatch($patch);
 
             return response()->json([
@@ -174,6 +206,14 @@ class StateController extends Controller
                 // zdroj pravdy, a to `/api/admin`. Druhá kopie ve stavu by se
                 // dřív nebo později rozešla s tou první.
                 'data' => (object) array_merge((array) $state->toClientObject(), $skutecnost),
+                /*
+                 * A klient si ji nemá ukládat ani k sobě.
+                 *
+                 * Do lokální kopie patří jen to, co server uložil. Uložená
+                 * skutečnost by se při dalším spuštění postavila před data
+                 * ze serveru — tedy přesně to, čemu se tahle vrstva vyhýbá.
+                 */
+                'docasne' => array_keys($skutecnost),
                 'updated_at' => $state->updated_at?->toIso8601String(),
                 'rev' => $state->rev,
             ]);

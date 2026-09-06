@@ -13,6 +13,7 @@ use App\Models\GallerySpace;
 use App\Models\MediaItem;
 use App\Services\Billing\EntitlementService;
 use App\Services\Media\MediaFormatService;
+use App\Support\SpaceContext;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -153,7 +154,7 @@ class MediaController extends Controller
      */
     public function thumb(Request $request, string $uuid): StreamedResponse
     {
-        $media = MediaItem::withoutGlobalScope(\App\Support\SpaceContext::SCOPE)
+        $media = MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
             ->where('uuid', $uuid)
             ->first();
 

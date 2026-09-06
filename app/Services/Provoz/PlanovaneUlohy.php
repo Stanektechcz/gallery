@@ -6,6 +6,7 @@ use App\Models\ScheduledTaskRun;
 use App\Models\SystemSetting;
 use Illuminate\Console\Scheduling\Event;
 use Illuminate\Console\Scheduling\Schedule;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 
 /**
@@ -207,7 +208,7 @@ class PlanovaneUlohy
         };
     }
 
-    private function kdyBezela(\Illuminate\Support\Carbon $kdy): string
+    private function kdyBezela(Carbon $kdy): string
     {
         return match (true) {
             $kdy->isToday() => 'dnes '.$kdy->format('G:i'),

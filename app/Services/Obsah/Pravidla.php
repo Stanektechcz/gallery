@@ -19,6 +19,8 @@ class Pravidla implements PoskytovatelObsahu
     private const MESICE = [1 => 'ledna', 'února', 'března', 'dubna', 'května', 'června',
         'července', 'srpna', 'září', 'října', 'listopadu', 'prosince'];
 
+    public function __construct(private readonly SlovnikPravidel $slovnik) {}
+
     public function skupina(): string
     {
         return 'pravidla';
@@ -58,18 +60,30 @@ class Pravidla implements PoskytovatelObsahu
             ->map(function (object $p) use ($jmena) {
                 $nastaveni = json_decode((string) ($p->action_config ?? '{}'), true) ?: [];
                 $podminky = json_decode((string) ($p->conditions ?? '[]'), true) ?: [];
+                $umi = $this->slovnik->umiSpustit((string) $p->trigger, (string) $p->action);
 
                 return [
                     'id' => $p->uuid,
                     'name' => $p->name,
-                    'trig' => $this->spoustec((string) $p->trigger),
+                    'trig' => $this->slovnik->spoustecVen((string) $p->trigger),
                     'targ' => (string) ($podminky[0]['value'] ?? ''),
-                    'act' => $this->akce((string) $p->action),
+                    'act' => $this->slovnik->akceVen((string) $p->action),
                     'aarg' => (string) ($nastaveni['title'] ?? ''),
                     'on' => (bool) $p->is_enabled,
                     'who' => $p->created_by ? ($jmena[$p->created_by] ?? 'oba') : 'oba',
                     'runs' => (int) $p->run_count,
-                    'last' => $p->last_run_at ? $this->kdy(CarbonImmutable::parse($p->last_run_at)) : 'zatím nikdy',
+                    /*
+                     * Pravidlo, které aplikace neumí spustit, to o sobě řekne.
+                     *
+                     * „Zatím nikdy" vypadá jako pravidlo, na které jen nic
+                     * nesedlo — a dvojice na ně čeká. Tohle nepřijde nikdy.
+                     */
+                    'last' => match (true) {
+                        $p->last_run_at !== null => $this->kdy(CarbonImmutable::parse($p->last_run_at)),
+                        ! $umi => $this->slovnik->proc((string) $p->trigger, (string) $p->action),
+                        default => 'zatím nikdy',
+                    },
+                    'canRun' => $umi,
                 ];
             })
             ->values()
@@ -144,26 +158,6 @@ class Pravidla implements PoskytovatelObsahu
     }
 
     // ——— překlady ———
-
-    /** Spouštěč motoru → druh, který prototyp umí nakreslit. */
-    private function spoustec(string $spoustec): string
-    {
-        return match ($spoustec) {
-            'media.uploaded' => 'tag',
-            'todo.completed' => 'task',
-            'event.created' => 'anniv',
-            default => 'week',
-        };
-    }
-
-    private function akce(string $akce): string
-    {
-        return match ($akce) {
-            'todo.create' => 'task',
-            'journal.entry' => 'diary',
-            default => 'notify',
-        };
-    }
 
     private function kdy(CarbonImmutable $kdy): string
     {

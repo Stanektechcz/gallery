@@ -8,6 +8,7 @@ use App\Models\HouseChoreLogEntry;
 use App\Models\HouseDue;
 use App\Models\HouseInventoryItem;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Schema;
 
 /**
@@ -178,9 +179,9 @@ class DomacnostVeStavu
      *
      * @param  array<int, mixed>  $radky
      * @param  array<string, int>  $jmena
-     * @return \Illuminate\Support\Collection<string, HouseChore>
+     * @return Collection<string, HouseChore>
      */
-    private function prvniPrace(array $radky, GallerySpace $prostor, array $jmena): \Illuminate\Support\Collection
+    private function prvniPrace(array $radky, GallerySpace $prostor, array $jmena): Collection
     {
         $zalozene = collect();
 
@@ -305,9 +306,9 @@ class DomacnostVeStavu
      * Založení bytu při prvním doteku.
      *
      * @param  array<int, mixed>  $radky
-     * @return \Illuminate\Support\Collection<string, HouseInventoryItem>
+     * @return Collection<string, HouseInventoryItem>
      */
-    private function prvniByt(array $radky, GallerySpace $prostor): \Illuminate\Support\Collection
+    private function prvniByt(array $radky, GallerySpace $prostor): Collection
     {
         $zalozene = collect();
 
@@ -369,10 +370,10 @@ class DomacnostVeStavu
      *
      * @template T of \Illuminate\Database\Eloquent\Model
      *
-     * @param  \Illuminate\Support\Collection<int, T>  $radky
-     * @return \Illuminate\Support\Collection<string, T>
+     * @param  Collection<int, T>  $radky
+     * @return Collection<string, T>
      */
-    private function podleId(\Illuminate\Support\Collection $radky): \Illuminate\Support\Collection
+    private function podleId(Collection $radky): Collection
     {
         $mapa = collect();
 

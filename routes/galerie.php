@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\Galerie\AdminController;
 use App\Http\Controllers\Api\Galerie\DataController;
 use App\Http\Controllers\Api\Galerie\MechanismController;
 use App\Http\Controllers\Api\Galerie\MediaController;
+use App\Http\Controllers\Api\Galerie\PravidloController;
 use App\Http\Controllers\Api\Galerie\StateController;
 use App\Http\Controllers\Api\Galerie\StorageController;
 use App\Http\Controllers\Api\Galerie\TokenController;
@@ -57,6 +58,16 @@ Route::middleware(['auth:sanctum', 'throttle:120,1'])->prefix('api')->group(func
     Route::get('data/{skupina}', DataController::class)
         ->whereAlpha('skupina')
         ->name('galerie.data');
+
+    /*
+     * „Spustit teď" u automatizace.
+     *
+     * Tlačítko dosud jen napsalo do historie, co by se bylo stalo. Tohle
+     * pravidlo doopravdy provede a odpověď nese jeho novou historii.
+     */
+    Route::post('pravidla/{pravidlo}/spustit', PravidloController::class)
+        ->whereUuid('pravidlo')
+        ->name('galerie.pravidlo.spustit');
 
     /*
      * Odběr upozornění.

@@ -123,6 +123,40 @@ class AutomationEngine
     }
 
     /**
+     * Spustí pravidlo ručně — teď, bez čekání na podnět.
+     *
+     * Tlačítko „Spustit teď" dosud jen napsalo do historie větu o tom, co by
+     * se bylo stalo („Do albumu přidáno 6 fotek"), a nestalo se nic. Zápis
+     * o něčem, co neproběhlo, je horší než prázdná historie — tohle to tedy
+     * doopravdy provede, se stejným zápisem i stejným počítadlem jako podnět.
+     *
+     * @return string věta o tom, co se stalo
+     *
+     * @throws \RuntimeException když akci aplikace zatím neumí provést
+     */
+    public function spustRucne(AutomationRule $rule, GallerySpace $space): string
+    {
+        if (! isset(self::ACTIONS[$rule->action])) {
+            throw new \RuntimeException('Tuhle akci aplikace zatím neumí provést.');
+        }
+
+        try {
+            $this->perform($rule, $space, []);
+        } catch (\Throwable $e) {
+            $this->record($rule, $space, false, 'Nepovedlo se: '.$e->getMessage());
+
+            throw $e;
+        }
+
+        $rule->forceFill(['last_run_at' => now(), 'run_count' => $rule->run_count + 1])->save();
+
+        $zprava = $this->describe($rule, []).' — ručně';
+        $this->record($rule, $space, true, $zprava);
+
+        return $zprava;
+    }
+
+    /**
      * Zapíše, co pravidlo udělalo — nebo proč to nešlo.
      *
      * Nikdy nesmí shodit běh, který ho vyvolal: nahrání fotky se nemá nepovést

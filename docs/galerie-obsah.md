@@ -67,16 +67,16 @@ Devět z osmdesáti kolekcí prototyp v `GalerieData` vůbec nemá — mřížku
 měnu, spíž a odkazy si dokument vyráběl sám ve funkcích. Server je dodává
 navíc a přepínače v dokumentu je berou přednostně.
 
-Ze stavu páru se pořád ukládá **25 obsahových klíčů** (`wishes`, `ideas`,
-`buys`, `quar`, `paper`, `season`, `emItems`, `emLog`, `kapsules`, `rules`,
-`ruleLog`, `chat`, `favList`, `forgList`, `antiList`, `mlLoad`, `hsVisits`,
-`tichoData`, `pauseLog`, `pausePlan`, `klAttn`, `klEn`, `klAskLog`, `pmMine`,
-`cycSel`). Zachycených je dvacet jedna; tyhle čekají na svoji vrstvu.
+Ze stavu páru se pořád ukládá **22 obsahových klíčů** (`wishes`, `ideas`,
+`buys`, `quar`, `paper`, `emItems`, `emLog`, `kapsules`, `chat`, `favList`,
+`forgList`, `antiList`, `mlLoad`, `hsVisits`, `tichoData`, `pauseLog`,
+`pausePlan`, `klAttn`, `klEn`, `klAskLog`, `pmMine`, `cycSel`). Zachycených je
+dvacet čtyři; tyhle čekají na svoji vrstvu.
 
-Dva z nich jsou **naléhavější než ostatní**, protože se v nich píše do kolekce,
-kterou zároveň dodává server: `rules` (pravidla založená v prototypu nikdy
-nedoběhnou — `automation_rules` o nich neví) a `season` (sezónní fond upravený
-na obrazovce se nedostane do `budget_goals`).
+Nejnaléhavější tři už zachycené jsou: `rules` a `ruleLog` (pravidlo založené
+v prototypu se dřív nikde nespustilo a `state.rules` navíc navždy zastínil ta
+skutečná) a `season` (sezónní fond upravený na obrazovce se nedostal do
+`budget_goals`).
 
 ## Pořadí
 
@@ -403,7 +403,14 @@ Kde prototyp obsah drží ve svém stavu, vzniká i cesta zpátky:
 | `ZdraviVeStavu` | zapsané dny cyklu, nálada | cyklus vlastní modul |
 | `TrezorVeStavu` | co je schované z knihovny | jinak fotku schová jen jeden prohlížeč |
 | `UklidVeStavu` | karanténa a slučování duplicit | „Pustit" jinak zmizí jen tomu, kdo klikl, a originál leží dál na disku |
+| `PravidlaVeStavu` | automatizace a její historie | `state.rules \|\| RULEDEF` — jedno přepnutí vypínače navždy zastínilo skutečná pravidla |
+| `RozboryVeStavu` | sezónní fondy | totéž u `state.season \|\| SEASON`; fond měl v Rozpočtech jiný stav než ve své vlastní obrazovce |
 | `AdminVeStavu` | administrace ze staršího klienta | záchranná síť |
+
+Vrstvy, které skutečnost **vracejí, ale neukládají** (pravidla, historie běhů,
+sezónní fondy), ji zároveň označí jako `docasne`. Klient si ji díky tomu
+nepřidá do lokální kopie: uložená by se při dalším spuštění postavila před
+data ze serveru — tedy přesně to, čemu se tahle vrstva vyhýbá.
 
 Kde tabulky vlastní jiný modul (kalendář, úkoly, cyklus), je zápis **opatrnější**:
 ukázkové řádky se neimportují a maže se jen to, co server sám poslal.

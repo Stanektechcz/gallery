@@ -2,13 +2,13 @@
 
 namespace App\Services\Provoz;
 
+use App\Jobs\SpustPlanovanouUlohu;
 use App\Models\AuditLog;
 use App\Models\GallerySpace;
 use App\Models\MediaItem;
 use App\Models\PersonalAccessToken;
 use App\Models\User;
 use App\Support\SpaceContext;
-use App\Jobs\SpustPlanovanouUlohu;
 
 /**
  * Administrace, která přišla jako změna stavu.

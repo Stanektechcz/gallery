@@ -11,6 +11,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 
 /**
  * Kalendář a úkoly, které přišly jako změna stavu.
@@ -168,7 +169,7 @@ class PlanovaniVeStavu
         }
 
         $u = CalendarEvent::create([
-            'uuid' => (string) \Illuminate\Support\Str::uuid(),
+            'uuid' => (string) Str::uuid(),
             'gallery_space_id' => $prostor->id,
             'created_by' => $kdo->id,
             'title' => (string) $e['t'],
@@ -633,7 +634,7 @@ class PlanovaniVeStavu
         }
 
         return (int) DB::table('shared_todo_lists')->insertGetId([
-            'uuid' => (string) \Illuminate\Support\Str::uuid(),
+            'uuid' => (string) Str::uuid(),
             'gallery_space_id' => $prostor->id,
             'created_by' => $kdo->id,
             'title' => 'Domácnost',

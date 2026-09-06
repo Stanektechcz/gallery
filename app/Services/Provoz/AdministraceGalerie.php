@@ -12,6 +12,7 @@ use App\Models\SystemSetting;
 use App\Models\User;
 use App\Services\Billing\EntitlementService;
 use App\Support\SpaceContext;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
@@ -125,7 +126,7 @@ class AdministraceGalerie
     private function zdravi(GallerySpace $prostor, float $obsazeno, array $mira): array
     {
         $tep = SystemSetting::get('scheduler_last_heartbeat');
-        $tepKdy = $tep ? \Illuminate\Support\Carbon::parse($tep) : null;
+        $tepKdy = $tep ? Carbon::parse($tep) : null;
         $planovacZije = $tepKdy !== null && $tepKdy->gt(now()->subMinutes(5));
 
         $volno = @disk_free_space(storage_path()) ?: 0;
@@ -265,7 +266,7 @@ class AdministraceGalerie
     /** @return list<array<string, mixed>> */
     public function rizika(GallerySpace $prostor, float $obsazenoGb): array
     {
-        $media = fn () => MediaItem::withoutGlobalScope(\App\Support\SpaceContext::SCOPE)
+        $media = fn () => MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
             ->where('gallery_space_id', $prostor->id);
 
         $jednaKopie = (clone $media())->whereNull('trashed_at')->where('storage_status', 'local_only');
@@ -356,7 +357,7 @@ class AdministraceGalerie
         return $this->cislo($hodnota).' GB';
     }
 
-    private function kdy(\Illuminate\Support\Carbon $kdy): string
+    private function kdy(Carbon $kdy): string
     {
         return match (true) {
             $kdy->isToday() => 'dnes '.$kdy->format('G:i'),

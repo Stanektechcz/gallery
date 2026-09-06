@@ -44,8 +44,35 @@
     } catch (e) {}
     return {};
   }
+  /*
+   * Klíče, které server v odpovědi posílá, ale neukládá.
+   *
+   * Jsou to pravidla, sezónní fondy a podobné věci, které mají vlastní
+   * tabulku: v odpovědi jsou proto, aby obrazovka po kliknutí neblikla, ale
+   * do lokální kopie nepatří. Uložené by se při dalším spuštění postavily
+   * před skutečná data ze serveru — přesně to, čemu se ta vrstva vyhýbá.
+   *
+   * Jednou označený klíč zůstává dočasný po celou relaci: další odpověď už
+   * ho zmiňovat nemusí.
+   */
+  var docasne = {};
+
+  function oznacDocasne(b) {
+    if (! b || ! b.docasne) return;
+    (b.docasne || []).forEach(function (k) { docasne[k] = true; });
+  }
+
   function writeLocal() {
-    try { localStorage.setItem(LS, JSON.stringify({ data: data, rev: rev, updated_at: new Date().toISOString() })); } catch (e) {}
+    try {
+      var ulozit = data;
+
+      if (Object.keys(docasne).length) {
+        ulozit = {};
+        Object.keys(data).forEach(function (k) { if (! docasne[k]) ulozit[k] = data[k]; });
+      }
+
+      localStorage.setItem(LS, JSON.stringify({ data: ulozit, rev: rev, updated_at: new Date().toISOString() }));
+    } catch (e) {}
   }
   data = readLocal();
 
@@ -108,7 +135,7 @@
         return r.json();
       })
       .then(function (b) {
-        if (b) { rev = b.rev || rev + 1; if (b.data) data = b.data; writeLocal(); }
+        if (b) { rev = b.rev || rev + 1; oznacDocasne(b); if (b.data) data = b.data; writeLocal(); }
         lastSync = new Date(); lastError = null;
       })
       .catch(function (e) {

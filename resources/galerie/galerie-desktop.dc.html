@@ -23575,6 +23575,34 @@ class Component extends DCLogic {
   rulRunNow(r) {
     const dry = this.rulDry(r);
     const log = this.rulLogAll();
+    const api = window.GalerieApi;
+
+    /*
+     * Se serverem se pravidlo doopravdy provede.
+     *
+     * Bez něj se do historie zapisovala věta o tom, co by se bývalo stalo —
+     * „Do albumu přidáno 6 fotek", a nepřidalo se nic. Zápis o něčem, co
+     * neproběhlo, je horší než prázdná historie.
+     */
+    // `canRun` má jen pravidlo ze serveru. Ukázkové ho nemá vůbec a jde svou
+    // vlastní cestou — jinak by prototyp bez backendu přestal fungovat.
+    if (api && api.post && api.mode === 'http' && r.canRun !== undefined) {
+      if (!r.canRun) {
+        this.toast('Tohle pravidlo aplikace zatím neumí spustit — ' + (r.last || 'chybí spouštěč nebo akce'), { icon: 'ph-warning' });
+        return;
+      }
+      api.post('pravidla/' + r.id + '/spustit', {}).then(b => {
+        if (!b) return;
+        this.setState({ rules: b.rules || this.rulesAll(), ruleLog: b.ruleLog || log });
+        this.toast('Pravidlo spuštěno — ' + b.zprava, { icon: 'ph-play' });
+      }).catch(e => {
+        const b = (e && e.body) || {};
+        if (b.ruleLog) this.setState({ ruleLog: b.ruleLog });
+        this.toast(b.zprava || 'Pravidlo se nepodařilo spustit', { icon: 'ph-warning' });
+      });
+      return;
+    }
+
     const now = 'právě teď';
     const text = r.act === 'album' ? 'Do albumu ' + (r.aarg || '—') + ' přidáno ' + this.pl(dry.n, 'fotka', 'fotky', 'fotek')
       : r.act === 'notify' ? 'Oznámení odesláno — ' + (r.aarg || '—') + (dry.n ? ' (' + this.pl(dry.n, 'podnět', 'podněty', 'podnětů') + ')' : '')

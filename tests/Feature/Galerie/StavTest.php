@@ -46,16 +46,22 @@ class StavTest extends TestCase
             ->assertJsonPath('rev', 0);
     }
 
-    /** Patch je částečný: co v něm není, zůstává. */
+    /**
+     * Patch je částečný: co v něm není, zůstává.
+     *
+     * Klíče jsou schválně takové, které si stav vede sám. Ty, které patří
+     * databázi (`rules`, `season`, `quarGone`, …), se cestou vyzvedávají
+     * a ve stavu nezůstávají — na to jsou vlastní testy.
+     */
     public function test_patch_sloucí_po_klicich(): void
     {
-        $this->actingAs($this->adri)->patchJson('/api/state', ['data' => ['favs' => ['a'], 'rules' => ['r1']]])
+        $this->actingAs($this->adri)->patchJson('/api/state', ['data' => ['favs' => ['a'], 'pins' => ['p1']]])
             ->assertOk()->assertJsonPath('rev', 1);
 
         $this->actingAs($this->adri)->patchJson('/api/state', ['data' => ['favs' => ['a', 'b']]])
             ->assertOk()
             ->assertJsonPath('data.favs', ['a', 'b'])
-            ->assertJsonPath('data.rules', ['r1'])
+            ->assertJsonPath('data.pins', ['p1'])
             ->assertJsonPath('rev', 2);
     }
 
