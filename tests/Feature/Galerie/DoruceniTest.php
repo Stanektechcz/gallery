@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Galerie;
 
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\File;
 use Tests\TestCase;
@@ -48,7 +49,7 @@ class DoruceniTest extends TestCase
         $telo = $this->get('/')->assertOk()->getContent();
         $this->assertStringContainsString('window.GALERIE_USER = null', $telo);
 
-        $clovek = \App\Models\User::factory()->create(['name' => 'Makinka']);
+        $clovek = User::factory()->create(['name' => 'Makinka']);
         $telo = $this->actingAs($clovek)->get('/')->assertOk()->getContent();
 
         $this->assertStringContainsString('"name":"Makinka"', $telo);
@@ -101,6 +102,28 @@ class DoruceniTest extends TestCase
             ->assertOk()
             ->assertHeader('Service-Worker-Allowed', '/')
             ->assertHeader('Content-Type', 'application/javascript; charset=utf-8');
+    }
+
+    /**
+     * Verze paměti se mění s nasazením.
+     *
+     * V souboru je napsané `v4` a zůstalo by tam napořád. Skořápka se přitom
+     * uklízí podle názvu: co se jmenuje stejně, zůstane v paměti i po nasazení
+     * — a prohlížeč pak podával starý balík designového systému, dokud si někdo
+     * nevymazal paměť ručně.
+     */
+    public function test_verze_workera_se_meni_s_nasazenim(): void
+    {
+        $worker = (string) $this->get('/sw.js')->assertOk()->getContent();
+
+        $this->assertMatchesRegularExpression("/const VERSION = 'v4-[0-9a-f]{10}';/", $worker);
+
+        $puvodni = $this->verze($worker);
+
+        touch(resource_path('galerie/sw.js'));
+        clearstatcache();
+
+        $this->assertNotSame($puvodni, $this->verze((string) $this->get('/sw.js')->getContent()));
     }
 
     /** A nesmí ho zastínit statický soubor, který by šel kolem PHP. */
@@ -255,5 +278,12 @@ class DoruceniTest extends TestCase
 
         $this->get('/')->assertStatus(503);
         $this->get('/sw.js')->assertNotFound();
+    }
+
+    private function verze(string $worker): string
+    {
+        preg_match("/const VERSION = '([^']+)';/", $worker, $c);
+
+        return $c[1] ?? '';
     }
 }

@@ -31,7 +31,39 @@
   // /api/ a fronta zápisů by nefungovala.
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', function () {
-      navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(function () {});
+      navigator.serviceWorker.register('/sw.js', { scope: '/' }).then(function (reg) {
+        if (! reg) return;
+
+        /*
+         * Nová verze se převezme sama.
+         *
+         * Bez tohohle drží stránku ten worker, který ji načetl, dokud se
+         * nezavřou všechny karty aplikace — a to se u aplikace, kterou má
+         * dvojice pořád otevřenou na druhém monitoru, nestane celé dny. Po
+         * nasazení pak jeden z nich viděl starou verzi a druhý novou.
+         *
+         * Ptát se každou hodinu stačí: dvojice nasazuje jednou za čas, ne
+         * každou minutu.
+         */
+        setInterval(function () { reg.update().catch(function () {}); }, 3600000);
+
+        /*
+         * Načíst znovu, ale jen když šlo o **výměnu**.
+         *
+         * Při první návštěvě stránku nikdo neřídí a nový worker ji převezme
+         * hned po instalaci — načítat kvůli tomu znovu by znamenalo, že se
+         * aplikace při každém prvním otevření sama restartuje.
+         */
+        var rizena = !! navigator.serviceWorker.controller;
+        var prebiral = false;
+
+        navigator.serviceWorker.addEventListener('controllerchange', function () {
+          // Jednou. Bez pojistky by se stránka po převzetí načítala dokola.
+          if (! rizena || prebiral) return;
+          prebiral = true;
+          window.location.reload();
+        });
+      }).catch(function () {});
     });
   }
 

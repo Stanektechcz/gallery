@@ -89,10 +89,52 @@ class PrototypController extends Controller
 
         abort_unless(File::exists($soubor), 404);
 
-        return response($this->naServeru(File::get($soubor)))
+        return response($this->sVerzi($this->naServeru(File::get($soubor))))
             ->header('Content-Type', 'application/javascript; charset=utf-8')
             ->header('Service-Worker-Allowed', '/')
             ->header('Cache-Control', 'no-cache');
+    }
+
+    /**
+     * Verze paměti, která se mění s nasazením.
+     *
+     * V souboru je napsané `v4` a zůstalo by tam napořád. Skořápka se přitom
+     * uklízí právě podle názvu: co se jmenuje stejně, zůstane v paměti i po
+     * nasazení. Většina souborů se bere „nejdřív ze sítě", takže to bylo vidět
+     * jen na ikonách, písmech a balíku designového systému — ten se po změně
+     * podával starý, dokud si někdo nevymazal paměť prohlížeče.
+     *
+     * Otisk se počítá z toho, co se nasazením mění: souborů prototypu
+     * a manifestu sestavení. Když ani jedno není po ruce, zůstane napsaná
+     * verze — horší než nic, ale ne chyba.
+     */
+    private function sVerzi(string $worker): string
+    {
+        $casy = [];
+
+        foreach (['sw.js', self::SIROKE, self::TELEFON] as $soubor) {
+            $cesta = $this->cesta($soubor);
+
+            if (File::exists($cesta)) {
+                $casy[] = File::lastModified($cesta);
+            }
+        }
+
+        $manifest = public_path('build/manifest.json');
+
+        if (File::exists($manifest)) {
+            $casy[] = File::lastModified($manifest);
+        }
+
+        if ($casy === []) {
+            return $worker;
+        }
+
+        return str_replace(
+            "const VERSION = 'v4';",
+            "const VERSION = 'v4-".substr(sha1(implode('-', $casy)), 0, 10)."';",
+            $worker,
+        );
     }
 
     /**
@@ -110,12 +152,9 @@ class PrototypController extends Controller
     private function naServeru(string $worker): string
     {
         return strtr($worker, [
-            "const target = 'Galerie%20mobil%20aplikace.dc.html' + (route ? '#' + route : '');"
-                => "const target = '/' + (route ? '#' + route : '');",
-            "if (c.url.indexOf('Galerie') >= 0) {"
-                => 'if (c.url.indexOf(self.registration.scope) === 0) {',
-            'data: { route: d.route || null },'
-                => 'data: { route: d.route || d.url || null },',
+            "const target = 'Galerie%20mobil%20aplikace.dc.html' + (route ? '#' + route : '');" => "const target = '/' + (route ? '#' + route : '');",
+            "if (c.url.indexOf('Galerie') >= 0) {" => 'if (c.url.indexOf(self.registration.scope) === 0) {',
+            'data: { route: d.route || null },' => 'data: { route: d.route || d.url || null },',
         ]);
     }
 

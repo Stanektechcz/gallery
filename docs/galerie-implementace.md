@@ -330,3 +330,33 @@ Hlavička teď `window.GalerieMech` obaluje stejně: přiřazení zachytí a kl�
 přimíchá **na místo**. Vlastnost se zakládá dřív, než se `galerie-mechanismy.js`
 vůbec načte, protože ten se v dokumentu načítá až za hlavičkou — první přiřazení
 je proto jeho soubor a ten je základ.
+
+## Nasazení: co se kontroluje samo
+
+`.env.example` má správné produkční hodnoty, jenže tím nikdo nezaručí, že se
+na serveru použily. „Před nasazením zkontrolovat" je věta, na kterou se jednou
+zapomene — a `APP_DEBUG=true` na veřejném serveru ukáže při první chybě celý
+zásobník volání, cesty na disku i připojovací údaje.
+
+Do nasazovacího skriptu proto patří:
+
+```bash
+php artisan galerie:pred-nasazenim
+```
+
+Skončí nenulově, když neplatí něco, s čím se nasazovat nemá: zapnuté ladění,
+chybějící `APP_KEY`, `APP_URL` bez HTTPS, sezení po nešifrovaném spojení,
+fronta v režimu `sync`, chybějící dokument prototypu nebo sestavené rozhraní.
+Zbytek (nezašifrované sezení, sezení v souborech, ladicí úroveň logu, chybějící
+odkaz na úložiště) jen vypíše — je to vada, ale ne taková, aby kvůli ní nešlo
+nasadit opravu něčeho horšího.
+
+Mimo produkci se přeskočí; `--vzdy` to vynutí.
+
+### Service worker po nasazení
+
+Verze paměti se počítá z časů souborů prototypu a manifestu sestavení, takže
+se s každým nasazením změní a stará skořápka se při aktivaci smaže. Otevřená
+karta si o novou verzi řekne jednou za hodinu a po převzetí se načte znovu —
+jinak by dvojice, která má aplikaci pořád otevřenou na druhém monitoru, viděla
+starou verzi celé dny.
