@@ -22,9 +22,11 @@ trait BelongsToGallerySpace
     {
         static::addGlobalScope(SpaceContext::SCOPE, function (Builder $query): void {
             $ids = SpaceContext::currentSpaceIds();
-            if ($ids === null) return;   // no authenticated user: leave the query alone
+            if ($ids === null) {
+                return;
+            }   // no authenticated user: leave the query alone
 
-            $query->whereIn($query->getModel()->getTable() . '.gallery_space_id', $ids);
+            $query->whereIn($query->getModel()->getTable().'.gallery_space_id', $ids);
         });
     }
 }

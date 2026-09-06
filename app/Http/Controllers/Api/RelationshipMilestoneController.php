@@ -7,12 +7,12 @@ use App\Models\CalendarEvent;
 use App\Models\EventAttachment;
 use App\Models\EventReminder;
 use App\Models\MediaItem;
+use App\Services\Planning\CalendarEventCreationService;
+use App\Services\Planning\RelationshipMilestoneService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use App\Services\Planning\RelationshipMilestoneService;
-use App\Services\Planning\CalendarEventCreationService;
 use Illuminate\Validation\ValidationException;
 
 class RelationshipMilestoneController extends Controller
@@ -27,8 +27,11 @@ class RelationshipMilestoneController extends Controller
         $data = $this->validated($request);
         $data = $this->normalizePersonalDay($data);
         abort_unless($request->user()->gallerySpaces()->whereKey($data['gallery_space_id'])->exists(), 404);
-        if (!empty($data['media_item_id'])) DB::table('media_items')->where('id', $data['media_item_id'])->where('gallery_space_id', $data['gallery_space_id'])->whereNull('trashed_at')->firstOrFail();
+        if (! empty($data['media_item_id'])) {
+            DB::table('media_items')->where('id', $data['media_item_id'])->where('gallery_space_id', $data['gallery_space_id'])->whereNull('trashed_at')->firstOrFail();
+        }
         $milestone = $milestones->create((int) $data['gallery_space_id'], $request->user()->id, $data, 'manual');
+
         return response()->json($this->withLinkedMedia(collect([$milestone]))->first(), 201);
     }
 
@@ -41,8 +44,11 @@ class RelationshipMilestoneController extends Controller
         // through a PATCH request would bypass the membership check from store().
         unset($data['gallery_space_id']);
         $data = $this->normalizePersonalDay($data, $milestone);
-        if (!empty($data['media_item_id'])) DB::table('media_items')->where('id', $data['media_item_id'])->where('gallery_space_id', $milestone->gallery_space_id)->whereNull('trashed_at')->firstOrFail();
+        if (! empty($data['media_item_id'])) {
+            DB::table('media_items')->where('id', $data['media_item_id'])->where('gallery_space_id', $milestone->gallery_space_id)->whereNull('trashed_at')->firstOrFail();
+        }
         DB::table('relationship_milestones')->where('id', $milestone->id)->update($data + ['updated_at' => now()]);
+
         return response()->json($this->withLinkedMedia(collect([DB::table('relationship_milestones')->find($milestone->id)]))->first());
     }
 
@@ -51,13 +57,23 @@ class RelationshipMilestoneController extends Controller
         $milestone = $this->visible($request)->where('uuid', $uuid)->firstOrFail();
         abort_unless($milestone->created_by === $request->user()->id, 403);
         DB::table('relationship_milestones')->where('id', $milestone->id)->delete();
+
         return response()->json(['status' => 'deleted']);
     }
 
     public function upcoming(Request $request): JsonResponse
     {
         $today = now();
-        $items = $this->visible($request)->where('remind_annually', true)->get()->map(function ($item) use ($today) { $next = \Carbon\Carbon::parse($item->occurred_on)->year($today->year); if ($next->lt($today->copy()->startOfDay())) $next->addYear(); $item->next_anniversary = $next->toDateString(); $item->days_until = $today->startOfDay()->diffInDays($next->startOfDay()); return $item; })->sortBy('days_until')->values();
+        $items = $this->visible($request)->where('remind_annually', true)->get()->map(function ($item) use ($today) {
+            $next = Carbon::parse($item->occurred_on)->year($today->year);
+            if ($next->lt($today->copy()->startOfDay())) {
+                $next->addYear();
+            } $item->next_anniversary = $next->toDateString();
+            $item->days_until = $today->startOfDay()->diffInDays($next->startOfDay());
+
+            return $item;
+        })->sortBy('days_until')->values();
+
         return response()->json($this->withLinkedMedia($items));
     }
 
@@ -66,7 +82,9 @@ class RelationshipMilestoneController extends Controller
     {
         $user = $request->user();
         $milestone = $this->visible($request)->where('uuid', $uuid)->firstOrFail();
-        if ($milestone->visibility === 'private') abort_unless($milestone->created_by === $user->id, 403);
+        if ($milestone->visibility === 'private') {
+            abort_unless($milestone->created_by === $user->id, 403);
+        }
 
         $data = $request->validate([
             'starts_at' => 'required|date|after:now',
@@ -79,13 +97,15 @@ class RelationshipMilestoneController extends Controller
             ->where('starts_at', $startsAt)
             ->where('metadata->source_milestone_uuid', $milestone->uuid)
             ->first();
-        if ($existing) return response()->json($this->celebrationPayload($existing));
+        if ($existing) {
+            return response()->json($this->celebrationPayload($existing));
+        }
 
         $shared = $milestone->visibility === 'shared';
         $space = $user->gallerySpaces()->whereKey($milestone->gallery_space_id)->firstOrFail();
         $event = $calendarEvents->create($space, $user, [
             'title' => $data['title'] ?? (($milestone->kind ?? 'milestone') === 'birthday' ? "Oslava narozenin: {$milestone->person_name}" : "Oslava: {$milestone->title}"),
-            'description' => $milestone->description ?: (($milestone->kind ?? 'milestone') === 'birthday' ? "Společná oslava narozenin pro {$milestone->person_name}." : "Společná oslava milníku „{$milestone->title}“." ),
+            'description' => $milestone->description ?: (($milestone->kind ?? 'milestone') === 'birthday' ? "Společná oslava narozenin pro {$milestone->person_name}." : "Společná oslava milníku „{$milestone->title}“."),
             'type' => ($milestone->kind ?? 'milestone') === 'birthday' ? 'birthday' : 'anniversary', 'status' => 'planned',
             'starts_at' => $startsAt, 'ends_at' => $startsAt->copy()->addHours(3), 'timezone' => 'Europe/Prague',
             'color' => ($milestone->kind ?? 'milestone') === 'birthday' ? '#f59e0b' : '#ec4899', 'is_private' => ! $shared,
@@ -166,12 +186,12 @@ class RelationshipMilestoneController extends Controller
         return $request->validate([
             'gallery_space_id' => $partial ? 'sometimes|integer' : 'required|integer',
             'title' => 'nullable|string|max:160',
-            'kind' => ($partial ? 'sometimes|' : 'nullable|') . 'in:milestone,birthday',
+            'kind' => ($partial ? 'sometimes|' : 'nullable|').'in:milestone,birthday',
             'person_name' => 'nullable|string|max:120',
             'relationship' => 'nullable|in:partner,parent,grandparent,sibling,child,friend,relative,aunt_uncle,cousin,colleague,other',
             'is_highlighted' => 'nullable|boolean',
             'description' => 'nullable|string|max:5000',
-            'occurred_on' => $prefix . 'date',
+            'occurred_on' => $prefix.'date',
             'icon' => 'nullable|string|max:16',
             'visibility' => 'nullable|in:shared,private',
             'remind_annually' => 'nullable|boolean',

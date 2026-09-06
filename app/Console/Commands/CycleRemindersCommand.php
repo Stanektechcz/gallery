@@ -8,6 +8,7 @@ use App\Notifications\GalleryNotification;
 use App\Services\Health\CycleService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 
 /**
  * Připomene blížící se menstruaci.
@@ -41,26 +42,34 @@ class CycleRemindersCommand extends Command
             $user = User::find($settings->user_id);
             $space = $user?->gallerySpaces()->whereKey($settings->gallery_space_id)->first();
 
-            if (! $user || ! $space) continue;
+            if (! $user || ! $space) {
+                continue;
+            }
 
             $prehled = $cycles->overview($space, $user, $dnes);
             $predpoved = $prehled['prediction'] ?? null;
 
-            if (! $predpoved) continue;
+            if (! $predpoved) {
+                continue;
+            }
 
             $zbyva = (int) $predpoved['days_until'];
 
-            if ($zbyva !== (int) $settings->remind_days_before) continue;
+            if ($zbyva !== (int) $settings->remind_days_before) {
+                continue;
+            }
 
             // Klíč na den, aby dvojí běh za stejné dopoledne neposlal dvě zprávy.
-            $klic = "cycle:reminded:{$user->id}:" . $dnes->toDateString();
-            if (! \Illuminate\Support\Facades\Cache::add($klic, true, now()->addHours(20))) continue;
+            $klic = "cycle:reminded:{$user->id}:".$dnes->toDateString();
+            if (! Cache::add($klic, true, now()->addHours(20))) {
+                continue;
+            }
 
             $user->notify(new GalleryNotification(
                 'health.cycle',
                 $zbyva === 0
                     ? 'Menstruace by měla začít dnes.'
-                    : 'Menstruace se blíží — čekaná ' . Carbon::parse($predpoved['next_period_on'])->locale('cs')->isoFormat('D. M.') . '.',
+                    : 'Menstruace se blíží — čekaná '.Carbon::parse($predpoved['next_period_on'])->locale('cs')->isoFormat('D. M.').'.',
                 '/cyklus',
                 '🩸',
                 ['days_until' => $zbyva],

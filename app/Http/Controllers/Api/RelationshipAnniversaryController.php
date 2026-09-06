@@ -18,6 +18,7 @@ class RelationshipAnniversaryController extends Controller
     public function show(Request $request): JsonResponse
     {
         $space = $this->space($request, $request->integer('gallery_space_id') ?: null);
+
         return response()->json($this->payload($space));
     }
 
@@ -77,7 +78,9 @@ class RelationshipAnniversaryController extends Controller
 
     private function upsertMilestone(GallerySpace $space, int $userId, Carbon $startedOn, ?int $id): ?int
     {
-        if (!Schema::hasTable('relationship_milestones')) return null;
+        if (! Schema::hasTable('relationship_milestones')) {
+            return null;
+        }
 
         $values = [
             'gallery_space_id' => $space->id,
@@ -92,6 +95,7 @@ class RelationshipAnniversaryController extends Controller
         $existing = $id ? DB::table('relationship_milestones')->where('id', $id)->where('gallery_space_id', $space->id)->first() : null;
         if ($existing) {
             DB::table('relationship_milestones')->where('id', $existing->id)->update($values);
+
             return $existing->id;
         }
 
@@ -112,7 +116,7 @@ class RelationshipAnniversaryController extends Controller
         $ids = [];
 
         foreach ($definitions as $key => $definition) {
-            $event = !empty($knownIds[$key])
+            $event = ! empty($knownIds[$key])
                 ? CalendarEvent::where('id', $knownIds[$key])->where('gallery_space_id', $space->id)->first()
                 : null;
             $event ??= new CalendarEvent(['gallery_space_id' => $space->id, 'created_by' => $userId]);
@@ -149,9 +153,13 @@ class RelationshipAnniversaryController extends Controller
             if ($key !== 'annual') {
                 $event->reminders()->delete();
                 if ($startsAt->isFuture()) {
-                    foreach ($members as $memberId) foreach ($reminderDays as $days) {
-                        $remindAt = $startsAt->copy()->subDays($days);
-                        if ($remindAt->gte(now())) $event->reminders()->create(['user_id' => $memberId, 'channel' => 'database', 'remind_at' => $remindAt, 'status' => 'pending']);
+                    foreach ($members as $memberId) {
+                        foreach ($reminderDays as $days) {
+                            $remindAt = $startsAt->copy()->subDays($days);
+                            if ($remindAt->gte(now())) {
+                                $event->reminders()->create(['user_id' => $memberId, 'channel' => 'database', 'remind_at' => $remindAt, 'status' => 'pending']);
+                            }
+                        }
                     }
                 }
             }
@@ -164,6 +172,7 @@ class RelationshipAnniversaryController extends Controller
     private function space(Request $request, ?int $id): GallerySpace
     {
         $query = $request->user()->gallerySpaces();
+
         return $id ? $query->whereKey($id)->firstOrFail() : $query->firstOrFail();
     }
 }

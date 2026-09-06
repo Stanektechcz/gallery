@@ -15,6 +15,7 @@ class AlbumSuggestionController extends Controller
     public function index(Request $request): JsonResponse
     {
         $space = $this->space($request, $request->integer('gallery_space_id'));
+
         return response()->json(['available' => $this->suggestions->available(), 'suggestions' => $this->suggestions->suggestions($space, $request->user())]);
     }
 
@@ -29,12 +30,14 @@ class AlbumSuggestionController extends Controller
         $space = $this->space($request, (int) $data['gallery_space_id']);
         if ($decision = $this->suggestions->decision($space, $fingerprint)) {
             abort_unless($decision->action === 'accepted' && $decision->album, 409, 'Tento návrh už byl odmítnut.');
+
             return response()->json(['album' => ['uuid' => $decision->album->uuid, 'title' => $decision->album->title,
                 'media_count' => (int) $decision->album->media_count], 'created' => false, 'already_decided' => true]);
         }
         $suggestion = $this->suggestions->find($space, $request->user(), $fingerprint);
         abort_unless($suggestion, 404, 'Návrh už není aktuální. Obnovte seznam návrhů.');
         $result = $this->suggestions->accept($space, $request->user(), $suggestion, $data);
+
         return response()->json($result, $result['created'] ? 201 : 200);
     }
 
@@ -47,12 +50,14 @@ class AlbumSuggestionController extends Controller
         $suggestion = $this->suggestions->find($space, $request->user(), $fingerprint);
         abort_unless($suggestion, 404, 'Návrh už není aktuální.');
         $this->suggestions->dismiss($space, $request->user(), $suggestion);
+
         return response()->json(['dismissed' => true]);
     }
 
     private function space(Request $request, ?int $id): GallerySpace
     {
         $query = $request->user()->gallerySpaces();
+
         return $id ? $query->whereKey($id)->firstOrFail() : $query->firstOrFail();
     }
 

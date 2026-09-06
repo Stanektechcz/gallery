@@ -19,33 +19,43 @@ class SharedLink extends Model
     protected function casts(): array
     {
         return [
-            'expires_at'        => 'datetime',
-            'allow_download'    => 'boolean',
-            'allow_guest_upload'=> 'boolean',
-            'allow_comments'    => 'boolean',
-            'show_metadata'     => 'boolean',
-            'hide_gps'          => 'boolean',
-            'is_active'         => 'boolean',
+            'expires_at' => 'datetime',
+            'allow_download' => 'boolean',
+            'allow_guest_upload' => 'boolean',
+            'allow_comments' => 'boolean',
+            'show_metadata' => 'boolean',
+            'hide_gps' => 'boolean',
+            'is_active' => 'boolean',
         ];
     }
 
     protected static function booted(): void
     {
         static::creating(function (SharedLink $link) {
-            $link->uuid  ??= (string) Str::uuid();
+            $link->uuid ??= (string) Str::uuid();
             $link->token ??= Str::random(40);
         });
     }
 
-    public function creator()      { return $this->belongsTo(User::class, 'created_by'); }
-    public function gallerySpace() { return $this->belongsTo(GallerySpace::class); }
+    public function creator()
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function gallerySpace()
+    {
+        return $this->belongsTo(GallerySpace::class);
+    }
 
     public function mediaItems()
     {
         return $this->belongsToMany(MediaItem::class, 'shared_link_media');
     }
 
-    public function guestUploads() { return $this->hasMany(GuestUpload::class); }
+    public function guestUploads()
+    {
+        return $this->hasMany(GuestUpload::class);
+    }
 
     public function isExpired(): bool
     {
@@ -59,12 +69,15 @@ class SharedLink extends Model
 
     public function isAccessible(): bool
     {
-        return $this->is_active && !$this->isExpired() && !$this->isUsageLimitReached();
+        return $this->is_active && ! $this->isExpired() && ! $this->isUsageLimitReached();
     }
 
     public function verifyPassword(string $password): bool
     {
-        if ($this->password_hash === null) return true;
+        if ($this->password_hash === null) {
+            return true;
+        }
+
         return password_verify($password, $this->password_hash);
     }
 }

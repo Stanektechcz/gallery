@@ -42,7 +42,7 @@ class RelationshipAnniversaryRecapTest extends TestCase
         $this->media($space, $owner, 'před-vztahem.jpg', '2024-05-01 10:00:00');
         $this->media($space, $owner, 'další-rok.jpg', '2026-07-10 10:00:00');
 
-        $overview = $this->getJson('/api/v1/relationship-milestones/relationship-anniversary/recap?gallery_space_id=' . $space->id)
+        $overview = $this->getJson('/api/v1/relationship-milestones/relationship-anniversary/recap?gallery_space_id='.$space->id)
             ->assertOk()->assertJsonPath('available', true)->assertJsonPath('year', 2)
             ->assertJsonPath('period.starts_on', '2025-07-01')->assertJsonPath('period.ends_on', '2026-07-01')
             ->assertJsonCount(2, 'candidates')->json();
@@ -78,7 +78,7 @@ class RelationshipAnniversaryRecapTest extends TestCase
         $this->assertSame(1, DB::table('shared_memory_moments')->where('album_id', $albumId)->count());
         $this->assertSame($blocksBefore, DB::table('album_story_blocks')->where('album_id', $albumId)->count());
 
-        $this->actingAs($partner)->getJson('/api/v1/relationship-milestones/relationship-anniversary/recap?gallery_space_id=' . $space->id)
+        $this->actingAs($partner)->getJson('/api/v1/relationship-milestones/relationship-anniversary/recap?gallery_space_id='.$space->id)
             ->assertOk()->assertJsonPath('album.uuid', $created['album']['uuid'])
             ->assertJsonPath('album.memory.uuid', $created['memory']['uuid']);
         $this->getJson('/api/v1/shared-memory-moments')->assertOk()

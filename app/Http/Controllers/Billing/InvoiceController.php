@@ -21,7 +21,9 @@ class InvoiceController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        if (! Schema::hasTable('invoices')) return response()->json(['invoices' => []]);
+        if (! Schema::hasTable('invoices')) {
+            return response()->json(['invoices' => []]);
+        }
 
         $space = $this->space($request);
 

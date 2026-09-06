@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\Album;
 use App\Models\AuditLog;
 use App\Models\MediaItem;
 use App\Models\StorageConnection;
@@ -13,6 +14,7 @@ use App\Support\SpaceContext;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -27,21 +29,21 @@ class AdminController extends Controller
         // global scope has to be lifted deliberately rather than by accident.
         $media = fn () => MediaItem::withoutGlobalScope(SpaceContext::SCOPE);
         $stats = [
-            'users'       => User::count(),
+            'users' => User::count(),
             'media_total' => $media()->count(),
-            'photos'      => $media()->where('media_type', 'photo')->count(),
-            'videos'      => $media()->where('media_type', 'video')->count(),
-            'ready'       => $media()->where('status', 'ready')->count(),
-            'failed'      => $media()->where('status', 'failed')->count(),
-            'trashed'     => $media()->whereNotNull('trashed_at')->count(),
-            'albums'      => \App\Models\Album::withoutGlobalScope(SpaceContext::SCOPE)->count(),
+            'photos' => $media()->where('media_type', 'photo')->count(),
+            'videos' => $media()->where('media_type', 'video')->count(),
+            'ready' => $media()->where('status', 'ready')->count(),
+            'failed' => $media()->where('status', 'failed')->count(),
+            'trashed' => $media()->whereNotNull('trashed_at')->count(),
+            'albums' => Album::withoutGlobalScope(SpaceContext::SCOPE)->count(),
         ];
 
         $connection = StorageConnection::where('provider', 'google_drive')->first();
 
         $queue = [
             'pending' => DB::table('jobs')->count(),
-            'failed'  => DB::table('failed_jobs')->count(),
+            'failed' => DB::table('failed_jobs')->count(),
         ];
 
         return Inertia::render('Admin/Dashboard', compact('stats', 'connection', 'queue'));
@@ -50,15 +52,16 @@ class AdminController extends Controller
     public function users(): Response
     {
         $users = User::orderBy('created_at', 'desc')->get();
+
         return Inertia::render('Admin/Users', compact('users'));
     }
 
     public function invite(Request $request): RedirectResponse
     {
         $data = $request->validate([
-            'name'  => 'required|string|max:100',
+            'name' => 'required|string|max:100',
             'email' => 'required|email|unique:users,email',
-            'role'  => 'required|in:partner,viewer,admin',
+            'role' => 'required|in:partner,viewer,admin',
         ]);
 
         // The plan caps how many people may share a space.
@@ -69,16 +72,16 @@ class AdminController extends Controller
         }
 
         $token = Str::random(60);
-        $user  = User::create([
-            'uuid'             => (string) Str::uuid(),
-            'name'             => $data['name'],
-            'email'            => $data['email'],
-            'role'             => $data['role'],
-            'password'         => \Hash::make(Str::random(32)),
+        $user = User::create([
+            'uuid' => (string) Str::uuid(),
+            'name' => $data['name'],
+            'email' => $data['email'],
+            'role' => $data['role'],
+            'password' => \Hash::make(Str::random(32)),
             'invitation_token' => $token,
-            'invited_by'       => true,
+            'invited_by' => true,
             'invited_by_user_id' => $request->user()->id,
-            'is_active'        => true,
+            'is_active' => true,
         ]);
 
         AuditLog::record('admin.invite', $user, ['email' => $data['email']]);
@@ -98,14 +101,16 @@ class AdminController extends Controller
 
     public function jobs(): Response
     {
-        $pending    = DB::table('jobs')->orderBy('created_at', 'desc')->limit(50)->get();
-        $failed     = DB::table('failed_jobs')->orderBy('failed_at', 'desc')->limit(50)->get();
+        $pending = DB::table('jobs')->orderBy('created_at', 'desc')->limit(50)->get();
+        $failed = DB::table('failed_jobs')->orderBy('failed_at', 'desc')->limit(50)->get();
+
         return Inertia::render('Admin/Jobs', compact('pending', 'failed'));
     }
 
     public function audit(): Response
     {
         $logs = AuditLog::with('user')->orderBy('created_at', 'desc')->paginate(50);
+
         return Inertia::render('Admin/Audit', compact('logs'));
     }
 
@@ -114,24 +119,24 @@ class AdminController extends Controller
         // Run gallery:doctor checks programmatically
         $checks = [
             'laravel' => [
-                'app_key'   => !empty(config('app.key')),
+                'app_key' => ! empty(config('app.key')),
                 'app_debug' => config('app.debug') === false,
-                'app_url'   => !empty(config('app.url')),
+                'app_url' => ! empty(config('app.url')),
             ],
             'database' => [
                 'connected' => $this->checkDb(),
             ],
             'storage' => [
-                'writable'  => is_writable(storage_path('app')),
-                'free_gb'   => round(disk_free_space(storage_path()) / 1024 / 1024 / 1024, 1),
+                'writable' => is_writable(storage_path('app')),
+                'free_gb' => round(disk_free_space(storage_path()) / 1024 / 1024 / 1024, 1),
             ],
             'binaries' => [
-                'ffmpeg'    => is_executable(config('gallery.ffmpeg_path', '/usr/bin/ffmpeg')),
-                'exiftool'  => is_executable(config('gallery.exiftool_path', '/usr/bin/exiftool')),
+                'ffmpeg' => is_executable(config('gallery.ffmpeg_path', '/usr/bin/ffmpeg')),
+                'exiftool' => is_executable(config('gallery.exiftool_path', '/usr/bin/exiftool')),
             ],
             'queue' => [
-                'pending'   => DB::table('jobs')->count(),
-                'failed'    => DB::table('failed_jobs')->count(),
+                'pending' => DB::table('jobs')->count(),
+                'failed' => DB::table('failed_jobs')->count(),
             ],
             // Customers' clouds. A revoked token stops copies silently — the gallery keeps
             // working, so nobody reports it, and the operator is the only one placed to
@@ -149,19 +154,19 @@ class AdminController extends Controller
      */
     private function cloudHealth(): array
     {
-        if (! \Illuminate\Support\Facades\Schema::hasTable('storage_connections')) {
+        if (! Schema::hasTable('storage_connections')) {
             return ['connected' => 0, 'errored' => 0, 'stale' => 0];
         }
 
-        $rows = \App\Models\StorageConnection::all();
+        $rows = StorageConnection::all();
 
         return [
-            'connected' => $rows->where('connection_status', \App\Models\StorageConnection::STATUS_HEALTHY)->count(),
+            'connected' => $rows->where('connection_status', StorageConnection::STATUS_HEALTHY)->count(),
             'errored' => $rows->where('connection_status', 'error')->count(),
             // Connected but silent for a fortnight. Not proof of a fault, but the shape a
             // fault takes when nothing throws: copies stop and the gallery looks fine.
             'stale' => $rows
-                ->where('connection_status', \App\Models\StorageConnection::STATUS_HEALTHY)
+                ->where('connection_status', StorageConnection::STATUS_HEALTHY)
                 ->filter(fn ($row) => ! $row->last_successful_request_at
                     || $row->last_successful_request_at->lt(now()->subDays(14)))
                 ->count(),
@@ -172,6 +177,7 @@ class AdminController extends Controller
     {
         try {
             DB::connection()->getPdo();
+
             return true;
         } catch (\Throwable) {
             return false;

@@ -2,8 +2,11 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToGallerySpace;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 
 /**
@@ -11,8 +14,8 @@ use Illuminate\Support\Str;
  */
 class Budget extends Model
 {
+    use BelongsToGallerySpace;
     use SoftDeletes;
-    use \App\Models\Concerns\BelongsToGallerySpace;
 
     protected $fillable = [
         'uuid', 'gallery_space_id', 'owner_user_id', 'name', 'currency',
@@ -25,7 +28,7 @@ class Budget extends Model
     ];
 
     /** Cesta, ke které rozpočet patří. Null u měsíčního. */
-    public function financeProject(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    public function financeProject(): BelongsTo
     {
         return $this->belongsTo(FinanceProject::class, 'finance_project_id');
     }
@@ -51,11 +54,11 @@ class Budget extends Model
      * a `ends_on` — jinak by se klouzavý režim musel ošetřit v každém výpočtu zvlášť
      * a jeden by se určitě zapomněl.
      *
-     * @return array{0: \Illuminate\Support\Carbon, 1: \Illuminate\Support\Carbon|null}
+     * @return array{0: Carbon, 1: Carbon|null}
      */
-    public function activeWindow(?\Illuminate\Support\Carbon $today = null): array
+    public function activeWindow(?Carbon $today = null): array
     {
-        $today ??= \Illuminate\Support\Carbon::today();
+        $today ??= Carbon::today();
 
         if (($this->period_mode ?? 'fixed') !== 'rolling') {
             return [$this->starts_on->copy(), $this->ends_on?->copy()];
@@ -119,7 +122,7 @@ class Budget extends Model
      * nebo jsou v různých měnách a přepočítat je nemáme čím. Volající pak dělí napůl,
      * protože odhadovaný poměr je horší než přiznaná polovina.
      *
-     * @return array<int, float>|null  id uživatele → podíl 0–1
+     * @return array<int, float>|null id uživatele → podíl 0–1
      */
     public function incomeShares(): ?array
     {

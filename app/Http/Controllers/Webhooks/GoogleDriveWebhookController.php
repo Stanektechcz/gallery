@@ -19,13 +19,13 @@ class GoogleDriveWebhookController extends Controller
     public function handle(Request $request): Response
     {
         // Verify required headers
-        $channelId   = $request->header('X-Goog-Channel-Id');
+        $channelId = $request->header('X-Goog-Channel-Id');
         $channelToken = $request->header('X-Goog-Channel-Token');
-        $state       = $request->header('X-Goog-Resource-State');
-        $resourceId  = $request->header('X-Goog-Resource-Id');
-        $messageNum  = $request->header('X-Goog-Message-Number');
+        $state = $request->header('X-Goog-Resource-State');
+        $resourceId = $request->header('X-Goog-Resource-Id');
+        $messageNum = $request->header('X-Goog-Message-Number');
 
-        if (!$channelId) {
+        if (! $channelId) {
             return response('', 400);
         }
 
@@ -34,13 +34,15 @@ class GoogleDriveWebhookController extends Controller
             ->where('is_active', true)
             ->first();
 
-        if (!$channel) {
+        if (! $channel) {
             Log::warning("Unknown Drive webhook channel: {$channelId}");
+
             return response('', 404);
         }
 
-        if ($channelToken && $channel->channel_token && !hash_equals($channel->channel_token, $channelToken)) {
+        if ($channelToken && $channel->channel_token && ! hash_equals($channel->channel_token, $channelToken)) {
             Log::warning("Drive webhook token mismatch for channel {$channelId}");
+
             return response('', 403);
         }
 

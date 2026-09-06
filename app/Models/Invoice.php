@@ -17,6 +17,13 @@ class Invoice extends Model
         return ['issued_at' => 'datetime', 'paid_at' => 'datetime'];
     }
 
-    public function payment() { return $this->belongsTo(Payment::class); }
-    public function space() { return $this->belongsTo(GallerySpace::class, 'gallery_space_id'); }
+    public function payment()
+    {
+        return $this->belongsTo(Payment::class);
+    }
+
+    public function space()
+    {
+        return $this->belongsTo(GallerySpace::class, 'gallery_space_id');
+    }
 }

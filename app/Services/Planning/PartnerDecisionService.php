@@ -28,7 +28,10 @@ class PartnerDecisionService
             ->concat($available['watchlist'] ? $this->entertainment($space, $viewer) : [])
             ->sort(function (array $left, array $right): int {
                 $priority = ($left['_priority'] ?? 9) <=> ($right['_priority'] ?? 9);
-                if ($priority !== 0) return $priority;
+                if ($priority !== 0) {
+                    return $priority;
+                }
+
                 return ($left['_sort_at'] ?? PHP_INT_MAX) <=> ($right['_sort_at'] ?? PHP_INT_MAX);
             })->values();
 
@@ -59,9 +62,9 @@ class PartnerDecisionService
             ->whereNull('idea.calendar_event_id')->whereNull('mine.id')->latest('idea.created_at')->limit(20)
             ->get(['idea.uuid', 'idea.title', 'idea.summary', 'idea.theme', 'idea.estimated_cost', 'idea.currency', 'idea.estimated_minutes', 'idea.suggested_starts_at', 'idea.created_at'])
             ->map(fn ($idea) => [
-                'key' => 'date-idea-' . $idea->uuid, 'type' => 'date_idea', 'source_key' => $idea->uuid,
+                'key' => 'date-idea-'.$idea->uuid, 'type' => 'date_idea', 'source_key' => $idea->uuid,
                 'title' => $idea->title, 'description' => $idea->summary,
-                'context' => 'Randíčko · ' . number_format((float) $idea->estimated_cost, 0, ',', ' ') . ' ' . $idea->currency . ' · ' . (int) $idea->estimated_minutes . ' min',
+                'context' => 'Randíčko · '.number_format((float) $idea->estimated_cost, 0, ',', ' ').' '.$idea->currency.' · '.(int) $idea->estimated_minutes.' min',
                 'due_at' => $idea->suggested_starts_at, 'href' => '/date-ideas', 'accent' => 'pink',
                 'options' => [
                     ['value' => 'love', 'label' => '❤️ Chci', 'tone' => 'positive'],
@@ -83,11 +86,11 @@ class PartnerDecisionService
             ->whereNull('mine.id')->latest('title.created_at')->limit(20)
             ->get(['title.uuid', 'title.title', 'title.media_type', 'title.overview', 'title.runtime_minutes', 'title.release_year', 'title.poster_url', 'title.created_at'])
             ->map(fn ($title) => [
-                'key' => 'entertainment-' . $title->uuid, 'type' => 'entertainment_title', 'source_key' => $title->uuid,
+                'key' => 'entertainment-'.$title->uuid, 'type' => 'entertainment_title', 'source_key' => $title->uuid,
                 'title' => $title->title, 'description' => $title->overview,
                 'context' => ($title->media_type === 'series' ? 'Seriál' : 'Film')
-                    . ($title->release_year ? ' · ' . $title->release_year : '')
-                    . ($title->runtime_minutes ? ' · ' . $title->runtime_minutes . ' min' : ''),
+                    .($title->release_year ? ' · '.$title->release_year : '')
+                    .($title->runtime_minutes ? ' · '.$title->runtime_minutes.' min' : ''),
                 'cover_url' => $title->poster_url, 'href' => '/watchlist', 'accent' => 'violet',
                 'options' => [
                     ['value' => 'love', 'label' => 'Chci vidět', 'tone' => 'positive'],
@@ -109,9 +112,9 @@ class PartnerDecisionService
             ->where('proposal.starts_at', '>', now())->whereNull('mine.id')->orderBy('proposal.starts_at')->limit(20)
             ->get(['proposal.uuid', 'proposal.starts_at', 'proposal.venue', 'proposal.place_name', 'proposal.note', 'title.title'])
             ->map(fn ($proposal) => [
-                'key' => 'viewing-date-' . $proposal->uuid, 'type' => 'viewing_date', 'source_key' => $proposal->uuid,
-                'title' => 'Termín pro „' . $proposal->title . '“', 'description' => $proposal->note,
-                'context' => $proposal->venue === 'cinema' ? 'Kino · ' . ($proposal->place_name ?: 'Cinema City') : 'Filmový večer doma',
+                'key' => 'viewing-date-'.$proposal->uuid, 'type' => 'viewing_date', 'source_key' => $proposal->uuid,
+                'title' => 'Termín pro „'.$proposal->title.'“', 'description' => $proposal->note,
+                'context' => $proposal->venue === 'cinema' ? 'Kino · '.($proposal->place_name ?: 'Cinema City') : 'Filmový večer doma',
                 'due_at' => $proposal->starts_at, 'href' => '/watchlist', 'accent' => 'violet',
                 'options' => [
                     ['value' => 'yes', 'label' => 'Termín mi sedí', 'tone' => 'positive'],
@@ -137,7 +140,7 @@ class PartnerDecisionService
             ->orderBy('sort_order')->get(['id', 'poll_id', 'title'])->groupBy('poll_id');
 
         return $polls->map(fn ($poll) => [
-            'key' => 'poll-' . $poll->uuid, 'type' => 'poll', 'source_key' => $poll->uuid,
+            'key' => 'poll-'.$poll->uuid, 'type' => 'poll', 'source_key' => $poll->uuid,
             'title' => $poll->question, 'context' => 'Společné hlasování', 'due_at' => $poll->closes_at,
             'href' => '/planning', 'accent' => 'teal',
             'options' => $options->get($poll->id, collect())->map(fn ($option) => [

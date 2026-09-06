@@ -33,9 +33,15 @@ class GiftIdeaService
             'updated_at' => $now,
         ];
 
-        if (! Schema::hasColumn('gift_ideas', 'person_id')) unset($row['person_id']);
-        if (! Schema::hasColumn('gift_ideas', 'assigned_to')) unset($row['assigned_to']);
-        if (! Schema::hasColumn('gift_ideas', 'source_url')) unset($row['source_url']);
+        if (! Schema::hasColumn('gift_ideas', 'person_id')) {
+            unset($row['person_id']);
+        }
+        if (! Schema::hasColumn('gift_ideas', 'assigned_to')) {
+            unset($row['assigned_to']);
+        }
+        if (! Schema::hasColumn('gift_ideas', 'source_url')) {
+            unset($row['source_url']);
+        }
         if (Schema::hasColumn('gift_ideas', 'visibility') && Schema::hasColumn('gift_ideas', 'private_to_user_id')) {
             $row['visibility'] = $isPrivate ? 'private' : 'shared';
             $row['private_to_user_id'] = $isPrivate ? $actorId : null;
@@ -43,12 +49,18 @@ class GiftIdeaService
         if (Schema::hasColumn('gift_ideas', 'lifecycle')) {
             $row['lifecycle'] = json_encode([['stage' => 'idea', 'at' => now('Europe/Prague')->toIso8601String(), 'by' => $actorId]]);
         }
-        if (Schema::hasColumn('gift_ideas', 'created_from')) $row['created_from'] = $source;
-        if (Schema::hasColumn('gift_ideas', 'source_reference')) $row['source_reference'] = $attributes['source_reference'] ?? null;
+        if (Schema::hasColumn('gift_ideas', 'created_from')) {
+            $row['created_from'] = $source;
+        }
+        if (Schema::hasColumn('gift_ideas', 'source_reference')) {
+            $row['source_reference'] = $attributes['source_reference'] ?? null;
+        }
 
         $id = DB::table('gift_ideas')->insertGetId($row);
         $gift = DB::table('gift_ideas')->find($id);
-        if (!$isPrivate) $this->lifeEvents->record($spaceId, $actorId, 'gift.idea.created', $gift->title, $source, 'gift_idea', $id, $gift->due_date, ['occasion' => $gift->occasion, 'budget' => $gift->budget]);
+        if (! $isPrivate) {
+            $this->lifeEvents->record($spaceId, $actorId, 'gift.idea.created', $gift->title, $source, 'gift_idea', $id, $gift->due_date, ['occasion' => $gift->occasion, 'budget' => $gift->budget]);
+        }
 
         return $gift;
     }
@@ -63,10 +75,14 @@ class GiftIdeaService
             }
             $data['lifecycle'] = json_encode($lifecycle);
         }
-        $data['status'] = match ($stage) { 'idea' => 'idea', 'planned' => 'planned', default => 'purchased' };
+        $data['status'] = match ($stage) {
+            'idea' => 'idea', 'planned' => 'planned', default => 'purchased'
+        };
         DB::table('gift_ideas')->where('id', $gift->id)->update($data);
         $updated = DB::table('gift_ideas')->find($gift->id);
-        if (($updated->visibility ?? 'shared') !== 'private') $this->lifeEvents->record((int) $updated->gallery_space_id, $actorId, 'gift.lifecycle.' . $stage, $updated->title, $source, 'gift_idea', $updated->id, now('Europe/Prague'));
+        if (($updated->visibility ?? 'shared') !== 'private') {
+            $this->lifeEvents->record((int) $updated->gallery_space_id, $actorId, 'gift.lifecycle.'.$stage, $updated->title, $source, 'gift_idea', $updated->id, now('Europe/Prague'));
+        }
 
         return $updated;
     }

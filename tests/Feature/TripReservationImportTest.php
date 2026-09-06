@@ -16,10 +16,15 @@ class TripReservationImportTest extends TestCase
     use RefreshDatabase;
 
     private User $owner;
+
     private User $partner;
+
     private GallerySpace $space;
+
     private int $tripId;
+
     private int $dayId;
+
     private int $tripEventId;
 
     protected function setUp(): void

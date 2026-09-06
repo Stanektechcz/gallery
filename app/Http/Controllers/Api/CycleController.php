@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\CycleDay;
-use App\Models\CycleSetting;
 use App\Models\GallerySpace;
 use App\Services\Health\CycleService;
 use Illuminate\Http\JsonResponse;
@@ -46,7 +45,7 @@ class CycleController extends Controller
 
         return response()->json($this->cycles->statistics($space, $user) + [
             // Rozbor stavu vedle čísel: co z historie plyne, ne jen kolik toho je.
-            "analysis" => $this->cycles->analysis($space, $user),
+            'analysis' => $this->cycles->analysis($space, $user),
         ]);
     }
 

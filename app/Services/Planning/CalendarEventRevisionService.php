@@ -29,12 +29,15 @@ class CalendarEventRevisionService
             $value = $event->getAttribute($field);
             $snapshot[$field] = $value instanceof \DateTimeInterface ? $value->format('Y-m-d H:i:s') : $value;
         }
+
         return $snapshot;
     }
 
     public function record(CalendarEvent $event, int $actorId, string $action, array $snapshot, array $changedFields = []): void
     {
-        if (! $this->available()) return;
+        if (! $this->available()) {
+            return;
+        }
         DB::table('calendar_event_revisions')->insert([
             'uuid' => (string) Str::uuid(),
             'calendar_event_id' => $event->id,
@@ -48,7 +51,10 @@ class CalendarEventRevisionService
 
     public function history(CalendarEvent $event): Collection
     {
-        if (! $this->available()) return collect();
+        if (! $this->available()) {
+            return collect();
+        }
+
         return DB::table('calendar_event_revisions as revision')
             ->leftJoin('users as user', 'user.id', '=', 'revision.created_by')
             ->where('revision.calendar_event_id', $event->id)
@@ -66,14 +72,20 @@ class CalendarEventRevisionService
 
     public function revision(CalendarEvent $event, string $uuid): ?object
     {
-        if (! $this->available()) return null;
+        if (! $this->available()) {
+            return null;
+        }
+
         return DB::table('calendar_event_revisions')->where('calendar_event_id', $event->id)->where('uuid', $uuid)->first();
     }
 
     public function restoreData(object $revision): array
     {
         $snapshot = json_decode((string) $revision->snapshot, true);
-        if (! is_array($snapshot)) return [];
+        if (! is_array($snapshot)) {
+            return [];
+        }
+
         return collect($snapshot)->only(self::FIELDS)->all();
     }
 }

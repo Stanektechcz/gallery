@@ -32,5 +32,8 @@ class PlaceReviewItem extends Model
         static::creating(fn (PlaceReviewItem $item) => $item->uuid ??= (string) Str::uuid());
     }
 
-    public function review() { return $this->belongsTo(PlaceReview::class, 'place_review_id'); }
+    public function review()
+    {
+        return $this->belongsTo(PlaceReview::class, 'place_review_id');
+    }
 }

@@ -26,7 +26,7 @@ class TransportSearchService
         if (! $this->hasCoordinates($input) && config('gallery.transport.transitous_enabled', true) && ! app()->environment('testing')) {
             $input = $this->resolveCoordinates($input);
         }
-        $cacheKey = 'transport:v4:' . hash('sha256', json_encode($input, JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION));
+        $cacheKey = 'transport:v4:'.hash('sha256', json_encode($input, JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION));
 
         return Cache::remember($cacheKey, now()->addMinutes((int) config('gallery.transport.cache_minutes', 15)), function () use ($input) {
             $results = [];
@@ -77,10 +77,11 @@ class TransportSearchService
     {
         foreach (['from', 'to'] as $field) {
             try {
-                $place = Cache::remember('transport:geocode:' . hash('sha256', Str::lower($input[$field])), now()->addDays(14), function () use ($input, $field) {
+                $place = Cache::remember('transport:geocode:'.hash('sha256', Str::lower($input[$field])), now()->addDays(14), function () use ($input, $field) {
                     $matches = $this->client(5)->get((string) config('gallery.transport.transitous_geocode_url', 'https://api.transitous.org/api/v1/geocode'), [
                         'text' => $input[$field], 'language' => 'cs', 'numResults' => 4,
                     ])->throw()->json();
+
                     return collect($matches)->first(fn ($item) => is_array($item) && isset($item['lat'], $item['lon']));
                 });
                 if ($place) {
@@ -91,6 +92,7 @@ class TransportSearchService
                 Log::info('Transport geocoding unavailable', ['field' => $field, 'message' => $exception->getMessage()]);
             }
         }
+
         return $input;
     }
 
@@ -190,7 +192,9 @@ class TransportSearchService
         });
         $fromId = $this->fuzzyCity($cities, $input['from']);
         $toId = $this->fuzzyCity($cities, $input['to']);
-        if (! $fromId || ! $toId || $fromId === $toId) return [];
+        if (! $fromId || ! $toId || $fromId === $toId) {
+            return [];
+        }
 
         $response = $this->client(7)->withHeaders(['X-Currency' => 'CZK'])
             ->get('https://brn-ybus-pubapi.sa.cz/restapi/routes/search/simple', [
@@ -204,7 +208,9 @@ class TransportSearchService
                 $vehicleTypes = collect($route['vehicleTypes'] ?? [])->map(fn ($mode) => strtoupper((string) $mode));
                 $mode = $vehicleTypes->contains('TRAIN') ? 'train' : 'bus';
                 $perPassenger = (float) $route['priceFrom'];
-                $departure = $route['departureTime'] ?? null; $arrival = $route['arrivalTime'] ?? null;
+                $departure = $route['departureTime'] ?? null;
+                $arrival = $route['arrivalTime'] ?? null;
+
                 return $this->identified([
                     'carrier' => $mode === 'train' ? 'RegioJet vlak' : 'RegioJet autobus', 'provider' => 'RegioJet',
                     'icon' => '🟡', 'mode' => $mode, 'modes' => [$mode], 'departure' => $departure, 'arrival' => $arrival,
@@ -222,13 +228,20 @@ class TransportSearchService
     {
         $cities = [];
         $walk = function (mixed $value) use (&$walk, &$cities): void {
-            if (! is_array($value)) return;
+            if (! is_array($value)) {
+                return;
+            }
             if (isset($value['id'], $value['name']) && (! isset($value['type']) || strtoupper((string) $value['type']) === 'CITY')) {
                 $cities[(string) $value['id']] = ['id' => (int) $value['id'], 'name' => (string) $value['name']];
             }
-            foreach ($value as $child) if (is_array($child)) $walk($child);
+            foreach ($value as $child) {
+                if (is_array($child)) {
+                    $walk($child);
+                }
+            }
         };
         $walk($node);
+
         return array_values($cities);
     }
 
@@ -236,15 +249,22 @@ class TransportSearchService
     {
         $providers = collect($existing)->pluck('provider')->all();
         $fallback = [];
-        if (! in_array('RegioJet', $providers, true) && in_array($input['mode'], ['all', 'train', 'bus'], true)) $fallback[] = $this->portalEntry('RegioJet', 'RegioJet', '🟡', 'train_bus', 'https://regiojet.cz/', 'Vyhledat vlak nebo autobus u dopravce');
-        if (in_array($input['mode'], ['all', 'bus'], true)) $fallback[] = $this->portalEntry('FlixBus', 'FlixBus', '🟢', 'bus', 'https://www.flixbus.cz/', 'Vyhledat autobus u dopravce');
+        if (! in_array('RegioJet', $providers, true) && in_array($input['mode'], ['all', 'train', 'bus'], true)) {
+            $fallback[] = $this->portalEntry('RegioJet', 'RegioJet', '🟡', 'train_bus', 'https://regiojet.cz/', 'Vyhledat vlak nebo autobus u dopravce');
+        }
+        if (in_array($input['mode'], ['all', 'bus'], true)) {
+            $fallback[] = $this->portalEntry('FlixBus', 'FlixBus', '🟢', 'bus', 'https://www.flixbus.cz/', 'Vyhledat autobus u dopravce');
+        }
         if (in_array($input['mode'], ['all', 'train'], true)) {
             $fallback[] = $this->idosEntry($input, 'vlak');
             $fallback[] = $this->portalEntry('České dráhy', 'České dráhy', '🔵', 'train', 'https://www.cd.cz/spojeni-a-jizdenka/', 'Vyhledat a koupit jízdenku');
             $fallback[] = $this->portalEntry('Leo Express', 'Leo Express', '⚫', 'train', 'https://www.leoexpress.com/cs/rezervace', 'Vyhledat vlak nebo autobus');
         }
-        if (in_array($input['mode'], ['all', 'bus'], true)) $fallback[] = $this->idosEntry($input, 'autobus');
+        if (in_array($input['mode'], ['all', 'bus'], true)) {
+            $fallback[] = $this->idosEntry($input, 'autobus');
+        }
         $fallback[] = $this->portalEntry('Omio', 'Omio', '🟣', 'comparison', 'https://www.omio.com/', 'Porovnat další dopravce');
+
         return $fallback;
     }
 
@@ -256,6 +276,7 @@ class TransportSearchService
     private function idosUrl(array $input, string $type): string
     {
         $time = str_replace(':', '', (string) $input['time']);
+
         return sprintf('https://idos.idnes.cz/%s/spojeni/?%s', $type === 'autobus' ? 'autobus' : 'vlak', http_build_query([
             'f' => $input['from'], 't' => $input['to'], 'date' => $input['date'], 'time' => $time,
         ]));
@@ -266,7 +287,7 @@ class TransportSearchService
         return $this->identified(['carrier' => $carrier, 'provider' => $provider, 'icon' => $icon, 'mode' => $mode, 'modes' => [$mode],
             'departure' => null, 'arrival' => null, 'duration_min' => null, 'price' => null, 'price_per_pax' => null, 'currency' => 'CZK',
             'seats' => null, 'transfers' => null, 'source' => 'link', 'data_source' => $provider, 'provider_status' => 'external_search',
-            'is_realtime' => false, 'cancelled' => false, 'note' => $note . ' →', 'book_url' => $url, 'legs' => []]);
+            'is_realtime' => false, 'cancelled' => false, 'note' => $note.' →', 'book_url' => $url, 'legs' => []]);
     }
 
     private function filterAndRank(array $results, array $input): array
@@ -278,14 +299,21 @@ class TransportSearchService
         $filtered = $filtered->sort(function (array $a, array $b) {
             $sourceRank = ['live' => 0, 'schedule' => 1, 'link' => 2];
             $rank = ($sourceRank[$a['source']] ?? 9) <=> ($sourceRank[$b['source']] ?? 9);
-            if ($rank !== 0) return $rank;
-            if ($a['price'] !== null || $b['price'] !== null) return ($a['price'] ?? PHP_INT_MAX) <=> ($b['price'] ?? PHP_INT_MAX);
+            if ($rank !== 0) {
+                return $rank;
+            }
+            if ($a['price'] !== null || $b['price'] !== null) {
+                return ($a['price'] ?? PHP_INT_MAX) <=> ($b['price'] ?? PHP_INT_MAX);
+            }
+
             return ($a['departure'] ?? 'z') <=> ($b['departure'] ?? 'z');
         })->values();
 
         $recommended = $filtered->first(fn (array $item) => in_array($item['source'], ['live', 'schedule'], true));
+
         return $filtered->map(function (array $item) use ($recommended) {
             $item['is_recommended'] = $recommended && $item['result_id'] === $recommended['result_id'];
+
             return $item;
         })->all();
     }
@@ -295,35 +323,45 @@ class TransportSearchService
         $result['result_id'] = substr(hash('sha256', implode('|', [
             $result['provider'], $result['carrier'], $result['departure'] ?? '', $result['arrival'] ?? '', $result['price'] ?? '',
         ])), 0, 24);
+
         return $result;
     }
 
     private function client(int $timeout): PendingRequest
     {
         $contact = (string) config('gallery.transport.contact', config('app.url'));
+
         return Http::acceptJson()->timeout($timeout)->connectTimeout(3)->withUserAgent("MakiGallery/2026 (+{$contact})");
     }
 
     private function fuzzyCity(array $cities, string $name): ?int
     {
         $needle = $this->normalizedCity($name);
-        foreach ($cities as $city) if ($this->normalizedCity((string) $city['name']) === $needle) return (int) $city['id'];
+        foreach ($cities as $city) {
+            if ($this->normalizedCity((string) $city['name']) === $needle) {
+                return (int) $city['id'];
+            }
+        }
         foreach ($cities as $city) {
             $candidate = $this->normalizedCity((string) $city['name']);
-            if (str_starts_with($candidate, $needle) || str_starts_with($needle, $candidate)) return (int) $city['id'];
+            if (str_starts_with($candidate, $needle) || str_starts_with($needle, $candidate)) {
+                return (int) $city['id'];
+            }
         }
+
         return null;
     }
 
     private function normalizedCity(string $value): string
     {
         $value = preg_replace('/\s+(hlavní|hl\.|nádraží|bus|vlak|letiště|airport|centrum|město)\b.*/iu', '', trim($value)) ?? '';
+
         return Str::lower(Str::ascii($value));
     }
 
     private function coordinate(float|int|string $lat, float|int|string $lng): string
     {
-        return number_format((float) $lat, 6, '.', '') . ',' . number_format((float) $lng, 6, '.', '');
+        return number_format((float) $lat, 6, '.', '').','.number_format((float) $lng, 6, '.', '');
     }
 
     private function applicationMode(string $mode): string
@@ -338,6 +376,8 @@ class TransportSearchService
 
     private function modeIcon(string $mode): string
     {
-        return match ($mode) { 'bus' => '🚌', 'tram' => '🚋', 'metro' => '🚇', 'ferry' => '⛴️', 'flight' => '✈️', 'bike' => '🚲', 'car' => '🚗', default => '🚆' };
+        return match ($mode) {
+            'bus' => '🚌', 'tram' => '🚋', 'metro' => '🚇', 'ferry' => '⛴️', 'flight' => '✈️', 'bike' => '🚲', 'car' => '🚗', default => '🚆'
+        };
     }
 }

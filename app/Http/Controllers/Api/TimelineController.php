@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Album;
 use App\Models\MediaItem;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -16,7 +17,7 @@ class TimelineController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $user  = $request->user();
+        $user = $request->user();
         $space = $user->gallerySpaces()->first();
 
         $query = MediaItem::query()
@@ -32,9 +33,9 @@ class TimelineController extends Controller
                     ->where('media_stack_items.is_cover', false);
             })
             ->with([
-                'variants'     => fn($q) => $q->whereIn('type', ['thumbnail', 'video_poster', 'placeholder']),
-                'primaryAlbum' => fn($q) => $q->select('id', 'uuid', 'title', 'slug', 'materialized_path', 'parent_id'),
-                'stacks' => fn($q) => $q->withCount('items'),
+                'variants' => fn ($q) => $q->whereIn('type', ['thumbnail', 'video_poster', 'placeholder']),
+                'primaryAlbum' => fn ($q) => $q->select('id', 'uuid', 'title', 'slug', 'materialized_path', 'parent_id'),
+                'stacks' => fn ($q) => $q->withCount('items'),
             ])
             ->select([
                 'id',
@@ -90,14 +91,14 @@ class TimelineController extends Controller
         $query->orderBy('taken_at', 'desc')
             ->orderBy('id', 'desc');
 
-        $perPage  = min((int) $request->input('per_page', 60), 200);
+        $perPage = min((int) $request->input('per_page', 60), 200);
         $paginated = $query->cursorPaginate($perPage);
 
         return response()->json([
             'data' => $paginated->items(),
             'meta' => [
                 'next_cursor' => $paginated->nextCursor()?->encode(),
-                'has_more'    => $paginated->hasMorePages(),
+                'has_more' => $paginated->hasMorePages(),
             ],
         ]);
     }
@@ -108,7 +109,7 @@ class TimelineController extends Controller
      */
     public function buckets(Request $request): JsonResponse
     {
-        $user  = $request->user();
+        $user = $request->user();
         $space = $user->gallerySpaces()->first();
         $driver = DB::connection()->getDriverName();
         $yearSql = $driver === 'sqlite' ? "CAST(strftime('%Y', taken_at) AS INTEGER)" : 'YEAR(taken_at)';
@@ -123,7 +124,7 @@ class TimelineController extends Controller
             ->whereNotNull('taken_at')
             ->selectRaw("{$yearSql} as year, {$monthSql} as month, COUNT(*) as count")
             ->groupByRaw("{$yearSql}, {$monthSql}")
-            ->orderByRaw("year DESC, month DESC")
+            ->orderByRaw('year DESC, month DESC')
             ->get();
 
         return response()->json(['buckets' => $buckets]);
@@ -135,7 +136,7 @@ class TimelineController extends Controller
      */
     public function mapPoints(Request $request): JsonResponse
     {
-        $user  = $request->user();
+        $user = $request->user();
         $space = $user->gallerySpaces()->first();
 
         $points = MediaItem::query()
@@ -147,8 +148,8 @@ class TimelineController extends Controller
             ->whereNotNull('longitude')
             ->select(['id', 'uuid', 'latitude', 'longitude', 'taken_at', 'media_type', 'primary_album_id', 'original_filename'])
             ->with([
-                'variants'     => fn($q) => $q->whereIn('type', ['thumbnail', 'video_poster', 'placeholder']),
-                'primaryAlbum' => fn($q) => $q->select('id', 'uuid', 'title'),
+                'variants' => fn ($q) => $q->whereIn('type', ['thumbnail', 'video_poster', 'placeholder']),
+                'primaryAlbum' => fn ($q) => $q->select('id', 'uuid', 'title'),
             ])
             ->limit(5000)
             ->get();
@@ -156,26 +157,26 @@ class TimelineController extends Controller
         // Albums with location set (wrapped in try-catch - requires 2026_07_06_130000 migration)
         $albums = collect();
         try {
-            $albums = \App\Models\Album::where('gallery_space_id', $space->id)
+            $albums = Album::where('gallery_space_id', $space->id)
                 ->whereNull('deleted_at')
                 ->whereNotNull('latitude')
                 ->whereNotNull('longitude')
                 ->select(['id', 'uuid', 'title', 'latitude', 'longitude', 'location_name', 'location_country', 'event_date_start', 'event_date_end', 'color', 'icon', 'media_count'])
-                ->with(['cover' => fn($q) => $q->with(['variants' => fn($q2) => $q2->where('type', 'thumbnail')])])
+                ->with(['cover' => fn ($q) => $q->with(['variants' => fn ($q2) => $q2->where('type', 'thumbnail')])])
                 ->get()
-                ->map(fn($a) => [
-                    'id'             => $a->id,
-                    'uuid'           => $a->uuid,
-                    'title'          => $a->title,
-                    'latitude'       => $a->latitude,
-                    'longitude'      => $a->longitude,
-                    'location_name'  => $a->location_name,
+                ->map(fn ($a) => [
+                    'id' => $a->id,
+                    'uuid' => $a->uuid,
+                    'title' => $a->title,
+                    'latitude' => $a->latitude,
+                    'longitude' => $a->longitude,
+                    'location_name' => $a->location_name,
                     'location_country' => $a->location_country,
                     'event_date_start' => $a->event_date_start?->toDateString(),
-                    'event_date_end'   => $a->event_date_end?->toDateString(),
-                    'color'          => $a->color,
-                    'media_count'    => $a->media_count,
-                    'cover_thumb'    => null, // URL set via getVariant which needs disk context
+                    'event_date_end' => $a->event_date_end?->toDateString(),
+                    'color' => $a->color,
+                    'media_count' => $a->media_count,
+                    'cover_thumb' => null, // URL set via getVariant which needs disk context
                 ]);
         } catch (\Throwable) {
             // Migration not yet applied — return empty albums list
@@ -190,12 +191,12 @@ class TimelineController extends Controller
      */
     public function memories(Request $request): JsonResponse
     {
-        $user  = $request->user();
+        $user = $request->user();
         $space = $user->gallerySpaces()->first();
 
         $today = now();
         $month = $today->month;
-        $day   = $today->day;
+        $day = $today->day;
 
         $memories = MediaItem::query()
             ->where('gallery_space_id', $space->id)
@@ -207,15 +208,15 @@ class TimelineController extends Controller
             ->whereMonth('taken_at', $month)
             ->whereDay('taken_at', $day)
             ->whereYear('taken_at', '<', $today->year)
-            ->with(['variants' => fn($q) => $q->where('type', 'thumbnail')])
+            ->with(['variants' => fn ($q) => $q->where('type', 'thumbnail')])
             ->orderBy('taken_at', 'desc')
             ->limit(50)
             ->get();
 
-        $grouped = $memories->groupBy(fn($m) => $m->taken_at->year);
+        $grouped = $memories->groupBy(fn ($m) => $m->taken_at->year);
 
         return response()->json([
-            'date'     => $today->format('d.m.'),
+            'date' => $today->format('d.m.'),
             'memories' => $grouped,
         ]);
     }
@@ -226,10 +227,10 @@ class TimelineController extends Controller
      */
     public function calendar(Request $request): JsonResponse
     {
-        $user  = $request->user();
+        $user = $request->user();
         $space = $user->gallerySpaces()->first();
 
-        $year  = (int) $request->input('year',  now()->year);
+        $year = (int) $request->input('year', now()->year);
         $month = (int) $request->input('month', now()->month);
         $daySql = DB::connection()->getDriverName() === 'sqlite' ? "CAST(strftime('%d', taken_at) AS INTEGER)" : 'DAY(taken_at)';
 
@@ -239,7 +240,7 @@ class TimelineController extends Controller
             ->where('is_archived', false)
             ->where('is_hidden', false)
             ->whereNotNull('taken_at')
-            ->whereYear('taken_at',  $year)
+            ->whereYear('taken_at', $year)
             ->whereMonth('taken_at', $month)
             ->selectRaw("{$daySql} as day,
                 COUNT(*) as total,
@@ -258,7 +259,7 @@ class TimelineController extends Controller
                 ->whereYear('taken_at', $year)
                 ->whereMonth('taken_at', $month)
                 ->whereDay('taken_at', $d->day)
-                ->with(['variants' => fn($q) => $q->where('type', 'thumbnail')])
+                ->with(['variants' => fn ($q) => $q->where('type', 'thumbnail')])
                 ->first(['id', 'uuid']);
             $thumbs[$d->day] = $item ? [
                 'uuid' => $item->uuid,
@@ -267,9 +268,9 @@ class TimelineController extends Controller
         }
 
         return response()->json([
-            'year'  => $year,
+            'year' => $year,
             'month' => $month,
-            'days'  => $days->map(fn($d) => array_merge($d->toArray(), ['thumb' => $thumbs[$d->day]])),
+            'days' => $days->map(fn ($d) => array_merge($d->toArray(), ['thumb' => $thumbs[$d->day]])),
         ]);
     }
 }

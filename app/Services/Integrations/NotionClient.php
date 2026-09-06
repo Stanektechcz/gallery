@@ -5,6 +5,7 @@ namespace App\Services\Integrations;
 use App\Models\IntegrationDocument;
 use App\Models\UserIntegration;
 use Illuminate\Http\Client\PendingRequest;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 
@@ -35,7 +36,7 @@ class NotionClient
     /** Verifies a token and reports who it belongs to, without storing anything. */
     public function probe(string $token): array
     {
-        $response = $this->http($token)->get(self::BASE . '/users/me');
+        $response = $this->http($token)->get(self::BASE.'/users/me');
 
         if (! $response->successful()) {
             return ['ok' => false, 'error' => $this->readableError($response->json(), $response->status())];
@@ -61,14 +62,16 @@ class NotionClient
     public function sync(UserIntegration $integration): array
     {
         $token = $integration->credentials()['token'] ?? null;
-        if (! $token) return ['synced' => 0, 'error' => 'Chybí token.'];
+        if (! $token) {
+            return ['synced' => 0, 'error' => 'Chybí token.'];
+        }
 
         $cursor = null;
         $seen = [];
         $synced = 0;
 
         do {
-            $response = $this->http($token)->post(self::BASE . '/search', array_filter([
+            $response = $this->http($token)->post(self::BASE.'/search', array_filter([
                 'page_size' => self::PAGE_SIZE,
                 'start_cursor' => $cursor,
                 'sort' => ['direction' => 'descending', 'timestamp' => 'last_edited_time'],
@@ -83,7 +86,9 @@ class NotionClient
 
             foreach ($response->json('results') ?? [] as $result) {
                 $document = $this->toDocument($integration, $result);
-                if (! $document) continue;
+                if (! $document) {
+                    continue;
+                }
 
                 IntegrationDocument::updateOrCreate(
                     ['user_integration_id' => $integration->id, 'external_id' => $document['external_id']],
@@ -116,9 +121,11 @@ class NotionClient
     public function page(UserIntegration $integration, string $pageId): array
     {
         $token = $integration->credentials()['token'] ?? null;
-        if (! $token) return ['title' => '', 'blocks' => [], 'error' => 'Chybí token.'];
+        if (! $token) {
+            return ['title' => '', 'blocks' => [], 'error' => 'Chybí token.'];
+        }
 
-        $response = $this->http($token)->get(self::BASE . "/blocks/{$pageId}/children", ['page_size' => self::PAGE_SIZE]);
+        $response = $this->http($token)->get(self::BASE."/blocks/{$pageId}/children", ['page_size' => self::PAGE_SIZE]);
 
         if (! $response->successful()) {
             return ['title' => '', 'blocks' => [], 'error' => $this->readableError($response->json(), $response->status())];
@@ -128,7 +135,9 @@ class NotionClient
         foreach ($response->json('results') ?? [] as $block) {
             $type = $block['type'] ?? '';
             $text = $this->plainText($block[$type]['rich_text'] ?? []);
-            if ($text === '' && $type !== 'divider') continue;
+            if ($text === '' && $type !== 'divider') {
+                continue;
+            }
 
             $blocks[] = ['type' => $type, 'text' => $text];
         }
@@ -146,7 +155,9 @@ class NotionClient
     public function createPage(UserIntegration $integration, string $parentId, string $title, string $body): array
     {
         $token = $integration->credentials()['token'] ?? null;
-        if (! $token) return ['ok' => false, 'url' => null, 'error' => 'Chybí token.'];
+        if (! $token) {
+            return ['ok' => false, 'url' => null, 'error' => 'Chybí token.'];
+        }
 
         // Notion refuses a block over 2000 characters, so long text is split on lines.
         $paragraphs = collect(preg_split('/\n{2,}/u', $body) ?: [])
@@ -159,7 +170,7 @@ class NotionClient
                 'paragraph' => ['rich_text' => [['type' => 'text', 'text' => ['content' => $chunk]]]],
             ])->values()->all();
 
-        $response = $this->http($token)->post(self::BASE . '/pages', [
+        $response = $this->http($token)->post(self::BASE.'/pages', [
             'parent' => ['page_id' => $parentId],
             'properties' => [
                 'title' => [['type' => 'text', 'text' => ['content' => Str::limit($title, 190, '')]]],
@@ -183,7 +194,9 @@ class NotionClient
     private function toDocument(UserIntegration $integration, array $result): ?array
     {
         $id = $result['id'] ?? null;
-        if (! $id) return null;
+        if (! $id) {
+            return null;
+        }
 
         $object = $result['object'] ?? 'page';
         $title = $object === 'database'
@@ -201,7 +214,7 @@ class NotionClient
             'icon' => $result['icon']['emoji'] ?? null,
             'excerpt' => null,
             'external_updated_at' => isset($result['last_edited_time'])
-                ? \Illuminate\Support\Carbon::parse($result['last_edited_time'])
+                ? Carbon::parse($result['last_edited_time'])
                 : null,
             'synced_at' => now(),
         ];

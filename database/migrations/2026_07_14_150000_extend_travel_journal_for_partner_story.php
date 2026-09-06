@@ -9,7 +9,9 @@ return new class extends Migration
 {
     public function up(): void
     {
-        if (! Schema::hasTable('travel_journal_entries')) return;
+        if (! Schema::hasTable('travel_journal_entries')) {
+            return;
+        }
 
         Schema::table('travel_journal_entries', function (Blueprint $table) {
             if (! Schema::hasColumn('travel_journal_entries', 'trip_day_id')) {
@@ -34,12 +36,18 @@ return new class extends Migration
 
     public function down(): void
     {
-        if (! Schema::hasTable('travel_journal_entries')) return;
+        if (! Schema::hasTable('travel_journal_entries')) {
+            return;
+        }
 
         Schema::table('travel_journal_entries', function (Blueprint $table) {
-            if (Schema::hasColumn('travel_journal_entries', 'trip_day_id')) $table->dropConstrainedForeignId('trip_day_id');
+            if (Schema::hasColumn('travel_journal_entries', 'trip_day_id')) {
+                $table->dropConstrainedForeignId('trip_day_id');
+            }
             $columns = array_values(array_filter(['visibility', 'mood', 'is_story_worthy'], fn ($column) => Schema::hasColumn('travel_journal_entries', $column)));
-            if ($columns) $table->dropColumn($columns);
+            if ($columns) {
+                $table->dropColumn($columns);
+            }
         });
     }
 };

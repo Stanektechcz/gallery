@@ -16,9 +16,13 @@ class TravelJournalRecordingTest extends TestCase
     use RefreshDatabase;
 
     private User $owner;
+
     private User $partner;
+
     private GallerySpace $space;
+
     private int $tripId;
+
     private int $albumId;
 
     protected function setUp(): void

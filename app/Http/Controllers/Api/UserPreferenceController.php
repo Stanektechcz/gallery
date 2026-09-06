@@ -18,11 +18,11 @@ class UserPreferenceController extends Controller
     {
         $data = $request->validate([
             'interface_density' => 'sometimes|in:comfortable,standard,compact',
-            'theme'             => 'sometimes|in:dark,light,system',
+            'theme' => 'sometimes|in:dark,light,system',
             // A member's own colours, one palette per mode. Values are sanitised below.
-            'theme_palette'         => 'sometimes|array',
-            'theme_palette.dark'    => 'sometimes|array',
-            'theme_palette.light'   => 'sometimes|array',
+            'theme_palette' => 'sometimes|array',
+            'theme_palette.dark' => 'sometimes|array',
+            'theme_palette.light' => 'sometimes|array',
         ]);
 
         abort_if($data === [], 422, 'Nebyla poslána žádná změna nastavení.');
@@ -35,9 +35,10 @@ class UserPreferenceController extends Controller
                 // Only known tokens with a valid hex value survive, so nothing a client
                 // sends can reach the stylesheet.
                 $preferences['theme_palette'] = [
-                    'dark'  => ThemePalette::clean($value['dark'] ?? []),
+                    'dark' => ThemePalette::clean($value['dark'] ?? []),
                     'light' => ThemePalette::clean($value['light'] ?? []),
                 ];
+
                 continue;
             }
             $preferences[$key] = $value;
@@ -47,8 +48,8 @@ class UserPreferenceController extends Controller
 
         return response()->json([
             'interface_density' => $preferences['interface_density'] ?? null,
-            'theme'             => $preferences['theme'] ?? null,
-            'theme_palette'     => ThemePalette::forUser($user->fresh()),
+            'theme' => $preferences['theme'] ?? null,
+            'theme_palette' => ThemePalette::forUser($user->fresh()),
         ]);
     }
 }

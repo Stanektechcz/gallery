@@ -2,12 +2,22 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\Media\ApplyMediaEditJob;
+use App\Models\Album;
 use App\Models\AuditLog;
 use App\Models\MediaItem;
+use App\Models\MediaVariant;
+use App\Models\StorageConnection;
+use App\Models\User;
+use App\Services\Media\ImageVariantService;
+use App\Services\Storage\GoogleDriveStorageProvider;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
@@ -23,21 +33,21 @@ class MediaController extends Controller
 
         Gate::authorize('view', $media);
 
-        $album      = $media->primaryAlbum;
+        $album = $media->primaryAlbum;
         $breadcrumb = $album ? $album->breadcrumb : [];
 
         // Attach URL to each variant (uses model getUrlAttribute, explicit here for clarity)
         $media->variants->each(function ($v) {
             $v->url = $v->disk === 'public'
-                ? \App\Models\MediaVariant::proxyUrl($v->path)
-                : url('media-stream/' . $v->path);
+                ? MediaVariant::proxyUrl($v->path)
+                : url('media-stream/'.$v->path);
         });
 
         $prevNext = $this->getPrevNext($media);
 
         // Per-user data for the current viewer
-        $user       = $request->user();
-        $memberIds  = $user->gallerySpaces()->first()->members()->pluck('users.id');
+        $user = $request->user();
+        $memberIds = $user->gallerySpaces()->first()->members()->pluck('users.id');
 
         $isMyFav = DB::table('user_favorites')
             ->where('user_id', $user->id)
@@ -56,17 +66,17 @@ class MediaController extends Controller
             ->value('rating');
 
         // Merge per-user fields into the serialized media array
-        $mediaData                       = $media->toArray();
-        $mediaData['is_my_favorite']     = $isMyFav;
+        $mediaData = $media->toArray();
+        $mediaData['is_my_favorite'] = $isMyFav;
         $mediaData['is_shared_favorite'] = $isShared;
-        $mediaData['my_rating']          = $myRating;
-        $mediaData['experience_links']   = $this->experienceLinks($media, $user);
+        $mediaData['my_rating'] = $myRating;
+        $mediaData['experience_links'] = $this->experienceLinks($media, $user);
 
         return Inertia::render('Media/Show', [
-            'media'      => $mediaData,
+            'media' => $mediaData,
             'breadcrumb' => $breadcrumb,
-            'prev'       => $prevNext['prev'],
-            'next'       => $prevNext['next'],
+            'prev' => $prevNext['prev'],
+            'next' => $prevNext['next'],
         ]);
     }
 
@@ -76,6 +86,7 @@ class MediaController extends Controller
         Gate::authorize('view', $media);
         $payload = $media->toArray();
         $payload['experience_links'] = $this->experienceLinks($media, $request->user());
+
         return response()->json($payload);
     }
 
@@ -84,7 +95,9 @@ class MediaController extends Controller
     {
         $media = MediaItem::where('uuid', $uuid)->firstOrFail();
         Gate::authorize('view', $media);
-        if (! $media->taken_at || ! Schema::hasTable('calendar_events')) return response()->json(['events' => []]);
+        if (! $media->taken_at || ! Schema::hasTable('calendar_events')) {
+            return response()->json(['events' => []]);
+        }
 
         $from = $media->taken_at->copy()->subDay();
         $to = $media->taken_at->copy()->addDay();
@@ -101,11 +114,12 @@ class MediaController extends Controller
             // The narrow date window bounds the small in-memory sort below.
             ->orderBy('event.starts_at')
             ->limit(24)->get(['event.id', 'event.uuid', 'event.title', 'event.starts_at', 'event.place_name', 'event.trip_id'])
-            ->sortBy(fn ($event) => abs(\Carbon\Carbon::parse($event->starts_at)->getTimestamp() - $media->taken_at->getTimestamp()))
+            ->sortBy(fn ($event) => abs(Carbon::parse($event->starts_at)->getTimestamp() - $media->taken_at->getTimestamp()))
             ->take(8)
             ->values();
 
         $linked = Schema::hasTable('event_attachments') ? DB::table('event_attachments')->where('media_item_id', $media->id)->whereIn('event_id', $events->pluck('id'))->pluck('event_id')->flip() : collect();
+
         return response()->json(['events' => $events->map(fn ($event) => ['uuid' => $event->uuid, 'title' => $event->title, 'starts_at' => $event->starts_at, 'place_name' => $event->place_name, 'trip_id' => $event->trip_id, 'already_linked' => $linked->has($event->id)])->values()]);
     }
 
@@ -127,10 +141,10 @@ class MediaController extends Controller
             ->get();
 
         // Preserve request order
-        $ordered = collect($uuids)->map(fn($uuid) => $items->firstWhere('uuid', $uuid))->filter()->values();
+        $ordered = collect($uuids)->map(fn ($uuid) => $items->firstWhere('uuid', $uuid))->filter()->values();
 
-        $user     = $request->user();
-        $spaceId  = $user->gallerySpaces()->first()->id;
+        $user = $request->user();
+        $spaceId = $user->gallerySpaces()->first()->id;
 
         // Per-user favorites for this user
         $myFavIds = DB::table('user_favorites')->where('user_id', $user->id)->pluck('media_item_id')->flip();
@@ -139,38 +153,38 @@ class MediaController extends Controller
         return response()->json($ordered->map(function ($m) use ($myFavIds, $myRatings) {
             Gate::authorize('view', $m);
 
-            $thumb = $m->variants->first(fn($v) => $v->type === 'thumbnail')
-                ?? $m->variants->first(fn($v) => $v->type === 'small')
+            $thumb = $m->variants->first(fn ($v) => $v->type === 'thumbnail')
+                ?? $m->variants->first(fn ($v) => $v->type === 'small')
                 ?? $m->variants->first();
 
-            $large = $m->variants->first(fn($v) => $v->type === 'large')
-                ?? $m->variants->first(fn($v) => $v->type === 'medium')
+            $large = $m->variants->first(fn ($v) => $v->type === 'large')
+                ?? $m->variants->first(fn ($v) => $v->type === 'medium')
                 ?? $thumb;
 
-            $makeUrl = fn($v) => $v ? ($v->disk === 'public' ? \App\Models\MediaVariant::proxyUrl($v->path) : url('media-stream/' . $v->path)) : null;
+            $makeUrl = fn ($v) => $v ? ($v->disk === 'public' ? MediaVariant::proxyUrl($v->path) : url('media-stream/'.$v->path)) : null;
 
             return [
-                'id'            => $m->id,
-                'uuid'          => $m->uuid,
-                'media_type'    => $m->media_type,
-                'filename'      => $m->original_filename,
+                'id' => $m->id,
+                'uuid' => $m->uuid,
+                'media_type' => $m->media_type,
+                'filename' => $m->original_filename,
                 'display_title' => $m->display_title,
-                'taken_at'      => $m->taken_at?->toIso8601String(),
-                'width'         => $m->width,
-                'height'        => $m->height,
-                'is_favorite'   => $m->is_favorite,
+                'taken_at' => $m->taken_at?->toIso8601String(),
+                'width' => $m->width,
+                'height' => $m->height,
+                'is_favorite' => $m->is_favorite,
                 'is_my_favorite' => $myFavIds->has($m->id),
-                'rating'        => $m->rating,
-                'my_rating'     => $myRatings->get($m->id, 0),
-                'camera_make'   => $m->camera_make,
-                'camera_model'  => $m->camera_model,
-                'aperture'      => $m->aperture,
+                'rating' => $m->rating,
+                'my_rating' => $myRatings->get($m->id, 0),
+                'camera_make' => $m->camera_make,
+                'camera_model' => $m->camera_model,
+                'aperture' => $m->aperture,
                 'shutter_speed' => $m->shutter_speed,
-                'iso'           => $m->iso,
-                'focal_length'  => $m->focal_length,
-                'full_url'      => "/media/{$m->uuid}/full",
-                'thumb_url'     => $makeUrl($thumb),
-                'large_url'     => $makeUrl($large),
+                'iso' => $m->iso,
+                'focal_length' => $m->focal_length,
+                'full_url' => "/media/{$m->uuid}/full",
+                'thumb_url' => $makeUrl($thumb),
+                'large_url' => $makeUrl($large),
             ];
         }));
     }
@@ -181,7 +195,7 @@ class MediaController extends Controller
      */
     public function ratings(Request $request, string $uuid): JsonResponse
     {
-        $user  = $request->user();
+        $user = $request->user();
         $media = MediaItem::where('uuid', $uuid)->firstOrFail();
 
         $members = $user->gallerySpaces()->first()->members()->get(['users.id', 'users.name']);
@@ -192,12 +206,12 @@ class MediaController extends Controller
             ->get(['user_id', 'rating'])
             ->keyBy('user_id');
 
-        $result = $members->map(fn($m) => [
+        $result = $members->map(fn ($m) => [
             'user_id' => $m->id,
-            'name'    => $m->name,
+            'name' => $m->name,
             'initial' => mb_strtoupper(mb_substr($m->name, 0, 1)),
-            'rating'  => $userRatings->get($m->id)?->rating ?? 0,
-            'is_me'   => $m->id === $user->id,
+            'rating' => $userRatings->get($m->id)?->rating ?? 0,
+            'is_me' => $m->id === $user->id,
         ]);
 
         return response()->json($result);
@@ -214,20 +228,20 @@ class MediaController extends Controller
 
         $data = $request->validate([
             'display_title' => 'nullable|string|max:512',
-            'description'   => 'nullable|string',
-            'caption'       => 'nullable|string',
-            'notes'         => 'nullable|string',
-            'rating'        => 'nullable|integer|min:0|max:5',
-            'taken_at'      => 'nullable|date',
-            'latitude'      => 'nullable|numeric|between:-90,90',
-            'longitude'     => 'nullable|numeric|between:-180,180',
-            'tag_ids'       => 'nullable|array',
-            'tag_ids.*'     => 'integer|exists:tags,id',
-            'person_ids'    => 'nullable|array',
-            'person_ids.*'  => 'integer|exists:people,id',
+            'description' => 'nullable|string',
+            'caption' => 'nullable|string',
+            'notes' => 'nullable|string',
+            'rating' => 'nullable|integer|min:0|max:5',
+            'taken_at' => 'nullable|date',
+            'latitude' => 'nullable|numeric|between:-90,90',
+            'longitude' => 'nullable|numeric|between:-180,180',
+            'tag_ids' => 'nullable|array',
+            'tag_ids.*' => 'integer|exists:tags,id',
+            'person_ids' => 'nullable|array',
+            'person_ids.*' => 'integer|exists:people,id',
         ]);
 
-        $media->update(array_filter($data, fn($v, $k) => !in_array($k, ['tag_ids', 'person_ids']), ARRAY_FILTER_USE_BOTH));
+        $media->update(array_filter($data, fn ($v, $k) => ! in_array($k, ['tag_ids', 'person_ids']), ARRAY_FILTER_USE_BOTH));
 
         // Per-user rating: save to user_ratings table when rating is in request
         if (array_key_exists('rating', $data)) {
@@ -264,10 +278,12 @@ class MediaController extends Controller
         $media = MediaItem::where('uuid', $uuid)->firstOrFail();
         Gate::authorize('delete', $media);
 
-        if ($request->user()->read_only_mode) abort(403);
+        if ($request->user()->read_only_mode) {
+            abort(403);
+        }
 
         $media->update([
-            'trashed_at'  => now(),
+            'trashed_at' => now(),
             'purge_after' => now()->addDays((int) config('gallery.trash_retention_days', 30)),
         ]);
 
@@ -313,16 +329,16 @@ class MediaController extends Controller
         // Trash on Drive synchronously (best-effort)
         if ($media->drive_file_id) {
             try {
-                $conn = \App\Models\StorageConnection::whereHas(
+                $conn = StorageConnection::whereHas(
                     'owner',
-                    fn($q) => $q->whereHas('gallerySpaces', fn($q2) => $q2->where('gallery_spaces.id', $media->gallery_space_id))
+                    fn ($q) => $q->whereHas('gallerySpaces', fn ($q2) => $q2->where('gallery_spaces.id', $media->gallery_space_id))
                 )->where('provider', 'google_drive')->where('connection_status', 'healthy')->first();
 
                 if ($conn) {
-                    (new \App\Services\Storage\GoogleDriveStorageProvider($conn))->trash($media->drive_file_id);
+                    (new GoogleDriveStorageProvider($conn))->trash($media->drive_file_id);
                 }
             } catch (\Throwable $e) {
-                \Illuminate\Support\Facades\Log::warning('Drive trash failed', ['error' => $e->getMessage()]);
+                Log::warning('Drive trash failed', ['error' => $e->getMessage()]);
             }
         }
 
@@ -369,7 +385,7 @@ class MediaController extends Controller
             if ($originalForPreview) {
                 $sourcePath = Storage::disk($originalForPreview->disk)->path($originalForPreview->path);
                 if (file_exists($sourcePath)) {
-                    app(\App\Services\Media\ImageVariantService::class)->generateVariant(
+                    app(ImageVariantService::class)->generateVariant(
                         $media,
                         $sourcePath,
                         'browser_full',
@@ -395,7 +411,9 @@ class MediaController extends Controller
             // more useful than a broken detail page.
             foreach (['large', 'medium', 'small', 'thumbnail'] as $type) {
                 $variant = $media->variants()->where('type', $type)->first();
-                if (!$variant) continue;
+                if (! $variant) {
+                    continue;
+                }
                 $path = Storage::disk($variant->disk)->path($variant->path);
                 if (file_exists($path)) {
                     return response()->file($path, [
@@ -413,7 +431,7 @@ class MediaController extends Controller
             $localPath = Storage::disk($original->disk)->path($original->path);
             if (file_exists($localPath)) {
                 return response()->file($localPath, [
-                    'Content-Type'  => $original->mime_type ?: $media->mime_type,
+                    'Content-Type' => $original->mime_type ?: $media->mime_type,
                     'Cache-Control' => 'private, max-age=86400',
                 ]);
             }
@@ -421,28 +439,29 @@ class MediaController extends Controller
 
         // 2. Stream from Drive (full original quality, no local file needed)
         if ($media->drive_file_id) {
-            $connection = \App\Models\StorageConnection::whereHas(
+            $connection = StorageConnection::whereHas(
                 'owner',
-                fn($q) => $q->whereHas('gallerySpaces', fn($q2) => $q2->where('gallery_spaces.id', $media->gallery_space_id))
+                fn ($q) => $q->whereHas('gallerySpaces', fn ($q2) => $q2->where('gallery_spaces.id', $media->gallery_space_id))
             )->where('provider', 'google_drive')->where('connection_status', 'healthy')->first();
 
             if ($connection) {
-                $provider = new \App\Services\Storage\GoogleDriveStorageProvider($connection);
+                $provider = new GoogleDriveStorageProvider($connection);
                 try {
                     $stream = $provider->download($media->drive_file_id);
-                    $size   = $media->size_bytes;
+                    $size = $media->size_bytes;
+
                     return response()->stream(function () use ($stream) {
-                        while (!$stream->eof()) {
+                        while (! $stream->eof()) {
                             echo $stream->read(65536);
                             flush();
                         }
                     }, 200, array_filter([
-                        'Content-Type'   => $media->mime_type,
+                        'Content-Type' => $media->mime_type,
                         'Content-Length' => $size ?: null,
-                        'Cache-Control'  => 'private, max-age=86400',
+                        'Cache-Control' => 'private, max-age=86400',
                     ]));
                 } catch (\Throwable $e) {
-                    \Illuminate\Support\Facades\Log::warning('Drive full stream failed', ['uuid' => $uuid, 'error' => $e->getMessage()]);
+                    Log::warning('Drive full stream failed', ['uuid' => $uuid, 'error' => $e->getMessage()]);
                 }
             }
         }
@@ -470,21 +489,22 @@ class MediaController extends Controller
 
         if ($wantOriginal && $media->drive_file_id) {
             // Stream from Drive
-            $connection = \App\Models\StorageConnection::where('owner_user_id', $media->owner_user_id)
+            $connection = StorageConnection::where('owner_user_id', $media->owner_user_id)
                 ->where('connection_status', 'healthy')
                 ->first();
 
             if ($connection) {
-                $provider = new \App\Services\Storage\GoogleDriveStorageProvider($connection);
-                $stream   = $provider->download($media->drive_file_id);
+                $provider = new GoogleDriveStorageProvider($connection);
+                $stream = $provider->download($media->drive_file_id);
+
                 return response()->stream(function () use ($stream) {
-                    while (!$stream->eof()) {
+                    while (! $stream->eof()) {
                         echo $stream->read(8192);
                         flush();
                     }
                 }, 200, [
-                    'Content-Type'        => $media->mime_type,
-                    'Content-Disposition' => 'attachment; filename="' . $media->original_filename . '"',
+                    'Content-Type' => $media->mime_type,
+                    'Content-Disposition' => 'attachment; filename="'.$media->original_filename.'"',
                 ]);
             }
         }
@@ -539,14 +559,15 @@ class MediaController extends Controller
 
         // Stream from Drive
         if ($media->drive_file_id) {
-            $connection = \App\Models\StorageConnection::where('owner_user_id', $media->owner_user_id)
+            $connection = StorageConnection::where('owner_user_id', $media->owner_user_id)
                 ->where('connection_status', 'healthy')->first();
 
             if ($connection) {
-                $provider = new \App\Services\Storage\GoogleDriveStorageProvider($connection);
-                $stream   = $provider->download($media->drive_file_id);
+                $provider = new GoogleDriveStorageProvider($connection);
+                $stream = $provider->download($media->drive_file_id);
+
                 return response()->stream(function () use ($stream) {
-                    while (!$stream->eof()) {
+                    while (! $stream->eof()) {
                         echo $stream->read(8192);
                         flush();
                     }
@@ -562,8 +583,8 @@ class MediaController extends Controller
         $media = MediaItem::where('uuid', $uuid)->firstOrFail();
         Gate::authorize('view', $media);
 
-        $user    = $request->user();
-        $exists  = $user->favorites()->where('media_item_id', $media->id)->exists();
+        $user = $request->user();
+        $exists = $user->favorites()->where('media_item_id', $media->id)->exists();
 
         if ($exists) {
             $user->favorites()->detach($media->id);
@@ -581,7 +602,7 @@ class MediaController extends Controller
         $media = MediaItem::where('uuid', $uuid)->firstOrFail();
         Gate::authorize('update', $media);
 
-        $archived = !$media->is_archived;
+        $archived = ! $media->is_archived;
         $media->update(['is_archived' => $archived]);
 
         AuditLog::record($archived ? 'media.archive' : 'media.unarchive', $media);
@@ -605,15 +626,15 @@ class MediaController extends Controller
         $media->edits()->where('is_current', true)->update(['is_current' => false]);
 
         $edit = $media->edits()->create([
-            'version'        => $newVersion,
+            'version' => $newVersion,
             'operations_json' => $data['operations'],
-            'is_current'     => true,
-            'created_by'     => $request->user()->id,
-            'created_at'     => now(),
+            'is_current' => true,
+            'created_by' => $request->user()->id,
+            'created_at' => now(),
         ]);
 
         // Queue regeneration of display variant
-        \App\Jobs\Media\ApplyMediaEditJob::dispatch($media, $edit)->onQueue('media');
+        ApplyMediaEditJob::dispatch($media, $edit)->onQueue('media');
 
         return response()->json(['version' => $newVersion, 'status' => 'processing']);
     }
@@ -621,28 +642,28 @@ class MediaController extends Controller
     public function bulkAction(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'action'       => 'required|in:trash,restore,archive,unarchive,favorite,unfavorite,tag,untag,add_to_album,move,add_person,add_place,rate,shift_date,set_location',
+            'action' => 'required|in:trash,restore,archive,unarchive,favorite,unfavorite,tag,untag,add_to_album,move,add_person,add_place,rate,shift_date,set_location',
             // Accept UUIDs (frontend) or integer IDs (legacy)
-            'uuids'        => 'nullable|array|max:500',
-            'uuids.*'      => 'string',
-            'media_ids'    => 'nullable|array|max:500',
-            'media_ids.*'  => 'integer',
+            'uuids' => 'nullable|array|max:500',
+            'uuids.*' => 'string',
+            'media_ids' => 'nullable|array|max:500',
+            'media_ids.*' => 'integer',
             // Action-specific fields
-            'tag_id'       => 'nullable|integer|exists:tags,id',
-            'album_id'     => 'nullable|integer|exists:albums,id',
-            'album_uuid'   => 'nullable|string|exists:albums,uuid',
-            'person_id'    => 'nullable|integer|exists:people,id',
-            'place_id'     => 'nullable|integer|exists:places,id',
-            'rating'       => 'nullable|integer|min:0|max:5',
+            'tag_id' => 'nullable|integer|exists:tags,id',
+            'album_id' => 'nullable|integer|exists:albums,id',
+            'album_uuid' => 'nullable|string|exists:albums,uuid',
+            'person_id' => 'nullable|integer|exists:people,id',
+            'place_id' => 'nullable|integer|exists:places,id',
+            'rating' => 'nullable|integer|min:0|max:5',
             'hours_offset' => 'nullable|numeric',
             // Poloha doplněná ručně u snímků, kterým ji fotoaparát nezapsal.
-            'latitude'     => 'nullable|numeric|between:-90,90',
-            'longitude'    => 'nullable|numeric|between:-180,180',
-            'location_name'    => 'nullable|string|max:255',
+            'latitude' => 'nullable|numeric|between:-90,90',
+            'longitude' => 'nullable|numeric|between:-180,180',
+            'location_name' => 'nullable|string|max:255',
             'location_country' => 'nullable|string|max:100',
             // Bez tohohle by hromadné doplnění přemazalo i skutečné GPS ze snímků, které
             // ji mají — a to je údaj, který už nikdo nezíská zpátky.
-            'overwrite_gps'    => 'sometimes|boolean',
+            'overwrite_gps' => 'sometimes|boolean',
         ]);
 
         $user = $request->user();
@@ -657,49 +678,49 @@ class MediaController extends Controller
         // Resolve album by UUID if provided
         $album = null;
         if (! empty($data['album_uuid'])) {
-            $album = \App\Models\Album::where('uuid', $data['album_uuid'])->first();
+            $album = Album::where('uuid', $data['album_uuid'])->first();
         } elseif (! empty($data['album_id'])) {
-            $album = \App\Models\Album::find($data['album_id']);
+            $album = Album::find($data['album_id']);
         }
 
-        $action       = $data['action'];
-        $hoursOffset  = (float) ($data['hours_offset'] ?? 0);
-        $ratingVal    = $data['rating'] ?? null;
-        $processed    = 0;
+        $action = $data['action'];
+        $hoursOffset = (float) ($data['hours_offset'] ?? 0);
+        $ratingVal = $data['rating'] ?? null;
+        $processed = 0;
 
         foreach ($media as $item) {
             try {
                 Gate::authorize(in_array($action, ['trash']) ? 'delete' : 'update', $item);
 
                 match ($action) {
-                    'trash'        => $item->update(['trashed_at' => now(), 'purge_after' => now()->addDays(30)]),
-                    'restore'      => $item->update(['trashed_at' => null, 'purge_after' => null]),
-                    'archive'      => $item->update(['is_archived' => true]),
-                    'unarchive'    => $item->update(['is_archived' => false]),
+                    'trash' => $item->update(['trashed_at' => now(), 'purge_after' => now()->addDays(30)]),
+                    'restore' => $item->update(['trashed_at' => null, 'purge_after' => null]),
+                    'archive' => $item->update(['is_archived' => true]),
+                    'unarchive' => $item->update(['is_archived' => false]),
 
                     // Per-user favorites (use user_favorites table)
-                    'favorite'     => DB::table('user_favorites')->insertOrIgnore(['user_id' => $user->id, 'media_item_id' => $item->id, 'created_at' => now()]),
-                    'unfavorite'   => DB::table('user_favorites')->where('user_id', $user->id)->where('media_item_id', $item->id)->delete(),
+                    'favorite' => DB::table('user_favorites')->insertOrIgnore(['user_id' => $user->id, 'media_item_id' => $item->id, 'created_at' => now()]),
+                    'unfavorite' => DB::table('user_favorites')->where('user_id', $user->id)->where('media_item_id', $item->id)->delete(),
 
-                    'tag'          => $item->tags()->syncWithoutDetaching([$data['tag_id']]),
-                    'untag'        => $item->tags()->detach($data['tag_id'] ?? []),
+                    'tag' => $item->tags()->syncWithoutDetaching([$data['tag_id']]),
+                    'untag' => $item->tags()->detach($data['tag_id'] ?? []),
 
                     'add_to_album' => $album ? DB::table('album_media')->insertOrIgnore(['album_id' => $album->id, 'media_item_id' => $item->id, 'added_at' => now(), 'added_by' => $user->id]) : null,
 
-                    'move'         => $album ? $item->update(['primary_album_id' => $album->id]) : null,
+                    'move' => $album ? $item->update(['primary_album_id' => $album->id]) : null,
 
-                    'add_person'   => isset($data['person_id']) ? $item->people()->syncWithoutDetaching([$data['person_id']]) : null,
+                    'add_person' => isset($data['person_id']) ? $item->people()->syncWithoutDetaching([$data['person_id']]) : null,
 
-                    'add_place'    => isset($data['place_id']) ? DB::table('media_place')->insertOrIgnore(['media_item_id' => $item->id, 'place_id' => $data['place_id'], 'is_primary' => false]) : null,
+                    'add_place' => isset($data['place_id']) ? DB::table('media_place')->insertOrIgnore(['media_item_id' => $item->id, 'place_id' => $data['place_id'], 'is_primary' => false]) : null,
 
-                    'rate'         => $ratingVal === null || $ratingVal === 0
+                    'rate' => $ratingVal === null || $ratingVal === 0
                         ? DB::table('user_ratings')->where('user_id', $user->id)->where('media_item_id', $item->id)->delete()
                         : DB::table('user_ratings')->updateOrInsert(
                             ['user_id' => $user->id, 'media_item_id' => $item->id],
                             ['rating' => $ratingVal, 'updated_at' => now(), 'created_at' => now()]
                         ),
 
-                    'shift_date'   => $hoursOffset != 0 && $item->taken_at
+                    'shift_date' => $hoursOffset != 0 && $item->taken_at
                         ? $item->update(['taken_at' => $item->taken_at->copy()->addSeconds((int) ($hoursOffset * 3600))])
                         : null,
 
@@ -735,17 +756,17 @@ class MediaController extends Controller
         return response()->json(['processed' => $processed]);
     }
 
-    public function shareTarget(Request $request): \Illuminate\Http\RedirectResponse
+    public function shareTarget(Request $request): RedirectResponse
     {
         // Handle PWA Web Share Target — store files in session, redirect to album picker
         if ($request->hasFile('media')) {
             $request->session()->put(
                 'share_target_files',
-                collect($request->file('media'))->map(fn($f) => [
-                    'name'     => $f->getClientOriginalName(),
+                collect($request->file('media'))->map(fn ($f) => [
+                    'name' => $f->getClientOriginalName(),
                     'tmp_path' => $f->store('share_target', 'local'),
-                    'mime'     => $f->getMimeType(),
-                    'size'     => $f->getSize(),
+                    'mime' => $f->getMimeType(),
+                    'size' => $f->getSize(),
                 ])->values()->toArray()
             );
         }
@@ -757,15 +778,15 @@ class MediaController extends Controller
      * GET /share-target
      * Show the "save to album" picker for files received via Web Share Target.
      */
-    public function showShareTarget(Request $request): \Inertia\Response
+    public function showShareTarget(Request $request): Response
     {
         $files = $request->session()->get('share_target_files', []);
 
-        $filesMeta = collect($files)->map(fn($f, $i) => [
+        $filesMeta = collect($files)->map(fn ($f, $i) => [
             'index' => $i,
-            'name'  => $f['name'],
-            'mime'  => $f['mime'],
-            'size'  => $f['size'],
+            'name' => $f['name'],
+            'mime' => $f['mime'],
+            'size' => $f['size'],
         ])->values()->all();
 
         return Inertia::render('ShareTarget/Index', [
@@ -790,8 +811,8 @@ class MediaController extends Controller
         }
 
         return response()->file($path, [
-            'Content-Type'        => $files[$index]['mime'],
-            'Content-Disposition' => 'inline; filename="' . $files[$index]['name'] . '"',
+            'Content-Type' => $files[$index]['mime'],
+            'Content-Disposition' => 'inline; filename="'.$files[$index]['name'].'"',
         ]);
     }
 
@@ -799,18 +820,21 @@ class MediaController extends Controller
      * DELETE /share-target
      * Clean up temp files and clear session after upload completes.
      */
-    public function clearShareTarget(Request $request): \Illuminate\Http\JsonResponse
+    public function clearShareTarget(Request $request): JsonResponse
     {
         $files = $request->session()->pull('share_target_files', []);
         foreach ($files as $f) {
             Storage::disk('local')->delete($f['tmp_path']);
         }
+
         return response()->json(['ok' => true]);
     }
 
     private function getPrevNext(MediaItem $media): array
     {
-        if (!$media->primary_album_id || !$media->taken_at) return ['prev' => null, 'next' => null];
+        if (! $media->primary_album_id || ! $media->taken_at) {
+            return ['prev' => null, 'next' => null];
+        }
 
         $query = MediaItem::where('primary_album_id', $media->primary_album_id)
             ->whereNull('trashed_at')
@@ -826,10 +850,12 @@ class MediaController extends Controller
     }
 
     /** Return only the shared-plan contexts that the current viewer may open. */
-    private function experienceLinks(MediaItem $media, \App\Models\User $user): array
+    private function experienceLinks(MediaItem $media, User $user): array
     {
         $empty = ['events' => [], 'trips' => [], 'memories' => []];
-        if (! Schema::hasTable('event_attachments') || ! Schema::hasTable('calendar_events')) return $empty;
+        if (! Schema::hasTable('event_attachments') || ! Schema::hasTable('calendar_events')) {
+            return $empty;
+        }
 
         $events = DB::table('event_attachments as attachment')
             ->join('calendar_events as event', 'event.id', '=', 'attachment.event_id')

@@ -35,7 +35,9 @@ return new class extends Migration
     {
         Schema::table('users', function (Blueprint $table) {
             foreach (['two_factor_secret', 'two_factor_recovery_codes', 'two_factor_confirmed_at'] as $column) {
-                if (Schema::hasColumn('users', $column)) $table->dropColumn($column);
+                if (Schema::hasColumn('users', $column)) {
+                    $table->dropColumn($column);
+                }
             }
         });
     }

@@ -17,7 +17,9 @@ class PlanningExpansionTest extends TestCase
     use RefreshDatabase;
 
     private User $owner;
+
     private User $partner;
+
     private GallerySpace $space;
 
     protected function setUp(): void
@@ -101,7 +103,7 @@ class PlanningExpansionTest extends TestCase
         $startsAt = now()->addDays(10)->setTime(18, 0);
         $event = $this->postJson('/api/v1/calendar/events', ['gallery_space_id' => $this->space->id, 'title' => 'Opakovaná večeře', 'starts_at' => $startsAt->toDateTimeString(), 'recurrence_rule' => ['frequency' => 'weekly', 'interval' => 1]])->assertCreated()->json();
         $this->postJson("/api/v1/calendar/events/{$event['uuid']}/exceptions", ['occurs_at' => $startsAt->toDateTimeString(), 'action' => 'skip'])->assertOk();
-        $calendar = $this->getJson('/api/v1/calendar/events?from=' . $startsAt->toDateString() . '&to=' . $startsAt->toDateString())->assertOk()->json('events');
+        $calendar = $this->getJson('/api/v1/calendar/events?from='.$startsAt->toDateString().'&to='.$startsAt->toDateString())->assertOk()->json('events');
         $this->assertSame([], $calendar);
     }
 
@@ -409,10 +411,10 @@ class PlanningExpansionTest extends TestCase
     {
         $gift = $this->postJson('/api/v1/calendar/gifts', ['gallery_space_id' => $this->space->id, 'title' => 'Kniha', 'due_date' => now()->toDateString(), 'reminder_days' => [0]])->assertCreated()->json();
         $this->putJson('/api/v1/calendar/day-note', ['gallery_space_id' => $this->space->id, 'content' => 'Nezapomenout na květiny'])->assertOk();
-        $this->getJson('/api/v1/calendar/day-note?gallery_space_id=' . $this->space->id)->assertOk()->assertJsonPath('content', 'Nezapomenout na květiny');
+        $this->getJson('/api/v1/calendar/day-note?gallery_space_id='.$this->space->id)->assertOk()->assertJsonPath('content', 'Nezapomenout na květiny');
         $tomorrow = now()->addDay()->toDateString();
         $this->putJson('/api/v1/calendar/day-note', ['gallery_space_id' => $this->space->id, 'date' => $tomorrow, 'content' => 'Koupit lístky na zítřek'])->assertOk();
-        $this->getJson('/api/v1/calendar/day-note?gallery_space_id=' . $this->space->id . '&date=' . $tomorrow)->assertOk()->assertJsonPath('content', 'Koupit lístky na zítřek');
+        $this->getJson('/api/v1/calendar/day-note?gallery_space_id='.$this->space->id.'&date='.$tomorrow)->assertOk()->assertJsonPath('content', 'Koupit lístky na zítřek');
         $this->assertDatabaseMissing('shared_day_notes', ['encrypted_content' => 'Nezapomenout na květiny']);
         $this->artisan(SendPlanningFollowupsCommand::class)->assertSuccessful();
         $this->assertDatabaseHas('gift_ideas', ['id' => $gift['id']]);

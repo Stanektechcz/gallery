@@ -37,17 +37,17 @@ class DateIdeaController extends Controller
         $data = $request->validate([
             'gallery_space_id' => 'required|integer',
             'count' => 'nullable|integer|between:1,6',
-            'theme' => ['nullable', Rule::in(['surprise','romantic','food','nature','culture','creative','adventure','relax','low_cost'])],
+            'theme' => ['nullable', Rule::in(['surprise', 'romantic', 'food', 'nature', 'culture', 'creative', 'adventure', 'relax', 'low_cost'])],
             'budget_max' => 'nullable|numeric|min:0|max:1000000',
             'currency' => 'nullable|string|size:3',
-            'travel_scope' => ['nullable', Rule::in(['home','nearby','city','day_trip','weekend'])],
-            'transport_mode' => ['nullable', Rule::in(['walk','bike','transit','car','train'])],
-            'duration' => ['nullable', Rule::in(['quick','evening','half_day','full_day','weekend'])],
-            'time_of_day' => ['nullable', Rule::in(['any','morning','afternoon','evening'])],
+            'travel_scope' => ['nullable', Rule::in(['home', 'nearby', 'city', 'day_trip', 'weekend'])],
+            'transport_mode' => ['nullable', Rule::in(['walk', 'bike', 'transit', 'car', 'train'])],
+            'duration' => ['nullable', Rule::in(['quick', 'evening', 'half_day', 'full_day', 'weekend'])],
+            'time_of_day' => ['nullable', Rule::in(['any', 'morning', 'afternoon', 'evening'])],
             'preferred_date' => 'nullable|date|after_or_equal:today',
-            'setting' => ['nullable', Rule::in(['any','indoor','outdoor'])],
-            'energy' => ['nullable', Rule::in(['low','medium','high'])],
-            'food' => ['nullable', Rule::in(['any','none','cafe','dinner','picnic'])],
+            'setting' => ['nullable', Rule::in(['any', 'indoor', 'outdoor'])],
+            'energy' => ['nullable', Rule::in(['low', 'medium', 'high'])],
+            'food' => ['nullable', Rule::in(['any', 'none', 'cafe', 'dinner', 'picnic'])],
             'surprise_level' => 'nullable|integer|between:0,3',
             'accessible_only' => 'nullable|boolean',
             'weather_aware' => 'nullable|boolean',
@@ -75,7 +75,7 @@ class DateIdeaController extends Controller
     {
         $this->write($request);
         $data = $request->validate([
-            'reaction' => ['required', Rule::in(['love','maybe','pass'])],
+            'reaction' => ['required', Rule::in(['love', 'maybe', 'pass'])],
             'rating' => 'nullable|integer|between:1,5',
             'note' => 'nullable|string|max:500',
         ]);
@@ -107,6 +107,7 @@ class DateIdeaController extends Controller
     {
         $plan = $idea->plan ?? [];
         $reactions = $idea->relationLoaded('reactions') ? $idea->reactions : collect();
+
         return [
             'uuid' => $idea->uuid,
             'title' => $idea->title,

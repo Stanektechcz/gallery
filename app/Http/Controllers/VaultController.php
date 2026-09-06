@@ -35,12 +35,14 @@ class VaultController extends Controller
         }
         $request->session()->put('vault_unlocked_until', now()->addMinutes(15)->timestamp);
         AuditLog::record('vault.unlock');
+
         return redirect()->route('vault.index');
     }
 
     public function lock(Request $request): RedirectResponse
     {
         $request->session()->forget('vault_unlocked_until');
+
         return redirect()->route('vault.index');
     }
 

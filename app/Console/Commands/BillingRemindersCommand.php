@@ -29,6 +29,7 @@ class BillingRemindersCommand extends Command
 
     /** Days before the end at which each kind of warning goes out. */
     private const TRIAL_WARNING = 3;
+
     private const RENEWAL_WARNING = 7;
 
     public function handle(): int
@@ -48,13 +49,17 @@ class BillingRemindersCommand extends Command
 
         foreach ($subscriptions as $subscription) {
             $notice = $this->noticeFor($subscription);
-            if (! $notice) continue;
+            if (! $notice) {
+                continue;
+            }
 
             $space = GallerySpace::find($subscription->gallery_space_id);
             $owner = $space?->members()->where('users.role', 'owner')->first()
                 ?? $space?->members()->first();
 
-            if (! $owner) continue;
+            if (! $owner) {
+                continue;
+            }
 
             // One of each kind per subscription period. Without this the command would say
             // the same thing every day it runs, which is how a warning becomes wallpaper.
@@ -65,11 +70,15 @@ class BillingRemindersCommand extends Command
                 ->get()
                 ->contains(fn ($row) => ($row->payload['kind'] ?? null) === $notice['kind']);
 
-            if ($already) continue;
+            if ($already) {
+                continue;
+            }
 
             $this->line("Prostor {$space->id}: {$notice['kind']} — {$notice['message']}");
 
-            if ($this->option('dry-run')) continue;
+            if ($this->option('dry-run')) {
+                continue;
+            }
 
             Notification::send($owner, new GalleryNotification(
                 type: 'billing.reminder',
@@ -93,10 +102,14 @@ class BillingRemindersCommand extends Command
      */
     private static function inDays(int $days): string
     {
-        if ($days <= 0) return 'dnes';
-        if ($days === 1) return 'zítra';
+        if ($days <= 0) {
+            return 'dnes';
+        }
+        if ($days === 1) {
+            return 'zítra';
+        }
 
-        return 'za ' . $days . ($days <= 4 ? ' dny' : ' dní');
+        return 'za '.$days.($days <= 4 ? ' dny' : ' dní');
     }
 
     /**
@@ -110,7 +123,9 @@ class BillingRemindersCommand extends Command
     private function noticeFor(SpaceSubscription $subscription): ?array
     {
         $endsAt = $subscription->ends_at;
-        if (! $endsAt) return null;
+        if (! $endsAt) {
+            return null;
+        }
 
         $plan = $subscription->plan?->name ?? 'tarif';
 
@@ -119,7 +134,7 @@ class BillingRemindersCommand extends Command
                 'kind' => 'expired',
                 'icon' => '⚠️',
                 'message' => $subscription->status === 'trialing'
-                    ? "Zkušební období skončilo. Galerie běží dál na základním tarifu."
+                    ? 'Zkušební období skončilo. Galerie běží dál na základním tarifu.'
                     : "Předplatné {$plan} skončilo. Galerie běží dál na základním tarifu.",
             ];
         }
@@ -130,7 +145,7 @@ class BillingRemindersCommand extends Command
             return [
                 'kind' => 'trial_ending',
                 'icon' => '⏳',
-                'message' => 'Zkušební období končí ' . self::inDays($days) . '. Bez předplatného se galerie vrátí na základní tarif.',
+                'message' => 'Zkušební období končí '.self::inDays($days).'. Bez předplatného se galerie vrátí na základní tarif.',
             ];
         }
 
@@ -138,7 +153,7 @@ class BillingRemindersCommand extends Command
             return [
                 'kind' => 'renewal',
                 'icon' => '📅',
-                'message' => "Předplatné {$plan} končí " . self::inDays($days) . '.',
+                'message' => "Předplatné {$plan} končí ".self::inDays($days).'.',
             ];
         }
 

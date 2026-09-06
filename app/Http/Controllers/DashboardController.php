@@ -3,18 +3,19 @@
 namespace App\Http\Controllers;
 
 use App\Models\MediaItem;
-use App\Models\GallerySpace;
 use App\Models\SavedSearch;
+use App\Services\Banking\TripFinancialInsightService;
+use App\Services\Dashboard\PersonalSummaryService;
 use App\Services\Media\UnassignedAlbumSuggestionService;
 use App\Services\Memories\RelationshipAnniversaryRecapService;
-use App\Services\Planning\TripPreparationTimelineService;
 use App\Services\Planning\CalendarEventLifecycleService;
 use App\Services\Planning\CoupleExperienceRecommendationService;
 use App\Services\Planning\ExperienceLifecycleService;
 use App\Services\Planning\PartnerCoordinationService;
 use App\Services\Planning\PartnerDecisionService;
 use App\Services\Planning\ReminderActionService;
-use App\Services\Banking\TripFinancialInsightService;
+use App\Services\Planning\TripPreparationTimelineService;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -25,24 +26,24 @@ class DashboardController extends Controller
 {
     public function index(Request $request, TripPreparationTimelineService $tripPreparation, CoupleExperienceRecommendationService $experienceRecommendations, ExperienceLifecycleService $experienceLifecycle, PartnerCoordinationService $partnerCoordination, PartnerDecisionService $partnerDecisions, UnassignedAlbumSuggestionService $albumSuggestions, TripFinancialInsightService $bankInsights, ReminderActionService $reminderActions, CalendarEventLifecycleService $eventLifecycle, RelationshipAnniversaryRecapService $anniversaryRecaps): Response
     {
-        $user  = $request->user();
+        $user = $request->user();
         $space = $user->gallerySpaces()->first();
 
-        if (!$space) {
+        if (! $space) {
             return Inertia::render('Dashboard/Index', ['data' => null]);
         }
 
-        $now   = now();
+        $now = now();
         $eventLifecycle->completeElapsedPlans([$space->id]);
-        $hour  = $now->hour;
-        $name  = $user->name;
+        $hour = $now->hour;
+        $name = $user->name;
 
         $greeting = match (true) {
-            $hour < 5  => "Dobrou noc",
-            $hour < 12 => "Dobré ráno",
-            $hour < 17 => "Dobré odpoledne",
-            $hour < 21 => "Dobrý večer",
-            default    => "Dobrou noc",
+            $hour < 5 => 'Dobrou noc',
+            $hour < 12 => 'Dobré ráno',
+            $hour < 17 => 'Dobré odpoledne',
+            $hour < 21 => 'Dobrý večer',
+            default => 'Dobrou noc',
         };
 
         // Pending uploads (upload sessions not completed)
@@ -81,7 +82,12 @@ class DashboardController extends Controller
             $eventId = DB::table('calendar_events')->where('uuid', $nextSharedEvent->uuid)->value('id');
             $nextSharedEvent->open_tasks_count = DB::table('event_tasks')->where('event_id', $eventId)->whereNull('completed_at')->count();
             $nextSharedEvent->planning_items_count = Schema::hasTable('travel_inbox_items')
-                ? DB::table('travel_inbox_items')->where('gallery_space_id', $space->id)->where('state', '!=', 'archived')->where(function ($query) use ($eventId, $nextSharedEvent) { $query->where('event_id', $eventId); if ($nextSharedEvent->trip_id) $query->orWhere('trip_id', $nextSharedEvent->trip_id); })->count()
+                ? DB::table('travel_inbox_items')->where('gallery_space_id', $space->id)->where('state', '!=', 'archived')->where(function ($query) use ($eventId, $nextSharedEvent) {
+                    $query->where('event_id', $eventId);
+                    if ($nextSharedEvent->trip_id) {
+                        $query->orWhere('trip_id', $nextSharedEvent->trip_id);
+                    }
+                })->count()
                 : 0;
         }
         $coordination = $partnerCoordination->snapshot($space, $user, 5);
@@ -93,9 +99,12 @@ class DashboardController extends Controller
             ->where(fn ($query) => $query->where('visibility', 'shared')->orWhere('created_by', $user->id))
             ->get(['uuid', 'title', 'icon', 'occurred_on', 'kind', 'relationship', 'person_name', 'is_highlighted'])
             ->map(function ($milestone) use ($now) {
-                $original = \Carbon\Carbon::parse($milestone->occurred_on);
-                $next = \Carbon\Carbon::create($now->year, $original->month, min($original->day, \Carbon\Carbon::create($now->year, $original->month, 1)->daysInMonth))->startOfDay();
-                if ($next->lt($now->copy()->startOfDay())) $next->addYear();
+                $original = Carbon::parse($milestone->occurred_on);
+                $next = Carbon::create($now->year, $original->month, min($original->day, Carbon::create($now->year, $original->month, 1)->daysInMonth))->startOfDay();
+                if ($next->lt($now->copy()->startOfDay())) {
+                    $next->addYear();
+                }
+
                 return ['uuid' => $milestone->uuid, 'title' => $milestone->title, 'icon' => $milestone->icon, 'kind' => $milestone->kind, 'relationship' => $milestone->relationship, 'person_name' => $milestone->person_name, 'is_highlighted' => (bool) $milestone->is_highlighted, 'days_until' => (int) $now->copy()->startOfDay()->diffInDays($next), 'next_anniversary' => $next->toDateString()];
             })->sortBy('days_until')->take(3)->values();
         $albumSuggestion = $albumSuggestions->prompt($space, $user);
@@ -132,11 +141,17 @@ class DashboardController extends Controller
                 ->where(fn ($query) => $query->whereNull('reaction.rating')->orWhereNull('memory.id'))
                 ->orderByDesc('event.starts_at')
                 ->first(['idea.uuid', 'idea.title', 'idea.status', 'event.uuid as event_uuid', 'event.starts_at', 'reaction.rating', 'memory.id as memory_id']);
-            if ($row) $dateFollowUp = ['uuid' => $row->uuid, 'title' => $row->title, 'event_uuid' => $row->event_uuid,
-                'starts_at' => $row->starts_at, 'needs_feedback' => $row->rating === null, 'needs_memory' => $row->memory_id === null];
+            if ($row) {
+                $dateFollowUp = ['uuid' => $row->uuid, 'title' => $row->title, 'event_uuid' => $row->event_uuid,
+                    'starts_at' => $row->starts_at, 'needs_feedback' => $row->rating === null, 'needs_memory' => $row->memory_id === null];
+            }
         }
-        if ($dateFollowUp && $experienceFollowUp && $experienceFollowUp['uuid'] === $dateFollowUp['event_uuid']) $experienceFollowUp = null;
-        if ($eventReflectionPrompt && $experienceFollowUp && $eventReflectionPrompt->uuid === $experienceFollowUp['uuid']) $eventReflectionPrompt = null;
+        if ($dateFollowUp && $experienceFollowUp && $experienceFollowUp['uuid'] === $dateFollowUp['event_uuid']) {
+            $experienceFollowUp = null;
+        }
+        if ($eventReflectionPrompt && $experienceFollowUp && $eventReflectionPrompt->uuid === $experienceFollowUp['uuid']) {
+            $eventReflectionPrompt = null;
+        }
         $recipeHub = null;
         if (Schema::hasTable('recipes') && Schema::hasTable('recipe_cooking_sessions')) {
             $plannedRecipe = DB::table('recipe_cooking_sessions as session')
@@ -195,25 +210,27 @@ class DashboardController extends Controller
         $actionInbox = collect([
             ['key' => 'media', 'label' => 'Fotky k zařazení', 'count' => MediaItem::where('gallery_space_id', $space->id)->whereNull('primary_album_id')->whereNull('trashed_at')->where('is_hidden', false)->whereIn('status', ['ready', 'received'])->count(), 'href' => '/inbox', 'tone' => 'violet'],
             ['key' => 'event-tasks', 'label' => 'Úkoly k aktuálním akcím', 'count' => Schema::hasTable('event_tasks') ? DB::table('event_tasks as task')->join('calendar_events as event', 'event.id', '=', 'task.event_id')->where('event.gallery_space_id', $space->id)->whereNull('task.completed_at')->whereNotIn('event.status', ['completed', 'cancelled'])->where(fn ($query) => $query->where('event.starts_at', '>=', $now->copy()->startOfDay())->orWhere('event.ends_at', '>=', $now))->count() : 0, 'href' => '/inbox', 'tone' => 'teal'],
-            ['key' => 'travel', 'label' => 'Cestovní podklady', 'count' => Schema::hasTable('travel_inbox_items') ? DB::table('travel_inbox_items as item')->leftJoin('trips as trip', 'trip.id', '=', 'item.trip_id')->leftJoin('calendar_events as event', 'event.id', '=', 'item.event_id')->where('item.gallery_space_id', $space->id)->whereIn('item.state', ['inbox', 'assigned'])->where(function ($active) use ($now) { $active->where(fn ($unlinked) => $unlinked->whereNull('item.trip_id')->whereNull('item.event_id'))->orWhere('trip.end_date', '>=', $now->toDateString())->orWhereRaw('COALESCE(event.ends_at, event.starts_at) >= ?', [$now->copy()->startOfDay()]); })->count() : 0, 'href' => '/inbox', 'tone' => 'sky'],
+            ['key' => 'travel', 'label' => 'Cestovní podklady', 'count' => Schema::hasTable('travel_inbox_items') ? DB::table('travel_inbox_items as item')->leftJoin('trips as trip', 'trip.id', '=', 'item.trip_id')->leftJoin('calendar_events as event', 'event.id', '=', 'item.event_id')->where('item.gallery_space_id', $space->id)->whereIn('item.state', ['inbox', 'assigned'])->where(function ($active) use ($now) {
+                $active->where(fn ($unlinked) => $unlinked->whereNull('item.trip_id')->whereNull('item.event_id'))->orWhere('trip.end_date', '>=', $now->toDateString())->orWhereRaw('COALESCE(event.ends_at, event.starts_at) >= ?', [$now->copy()->startOfDay()]);
+            })->count() : 0, 'href' => '/inbox', 'tone' => 'sky'],
             ['key' => 'gifts', 'label' => 'Dárky k rozhodnutí', 'count' => $visibleGiftCount, 'href' => '/inbox', 'tone' => 'pink'],
             ['key' => 'todos', 'label' => 'Otevřené společné úkoly', 'count' => Schema::hasTable('shared_todos') ? DB::table('shared_todos')->where('gallery_space_id', $space->id)->where('status', 'open')->count() : 0, 'href' => '/inbox', 'tone' => 'emerald'],
         ])->filter(fn (array $item) => $item['count'] > 0)->values();
 
         return Inertia::render('Dashboard/Index', [
             'data' => [
-                'generated_at'     => now('Europe/Prague')->toIso8601String(),
-                'greeting'         => $greeting,
-                'user_name'        => $name,
-                'pending_uploads'  => $pendingCount,
-                'pinned_views'     => $pinnedViews,
-                'upcoming_trip'    => $upcomingTrip,
-                'finance_hub'      => $financeHub,
+                'generated_at' => now('Europe/Prague')->toIso8601String(),
+                'greeting' => $greeting,
+                'user_name' => $name,
+                'pending_uploads' => $pendingCount,
+                'pinned_views' => $pinnedViews,
+                'upcoming_trip' => $upcomingTrip,
+                'finance_hub' => $financeHub,
                 // Rozpočet a cyklus byly dosud ostrovy dostupné jedině přes menu, přitom
                 // „kolik dneska můžu utratit" je údaj, kvůli kterému se aplikace otevírá.
-                'personal_hub'     => app(\App\Services\Dashboard\PersonalSummaryService::class)->forUser($space, $user),
-                'action_inbox'     => $actionInbox,
-                'partner_hub'      => ['space_id' => $space->id, 'album_suggestion' => $albumSuggestion, 'milestones' => $upcomingMilestones, 'next_event' => $nextSharedEvent, 'next_actions' => $nextActions, 'reminders' => $actionableReminders, 'coordination' => $coordination, 'decisions' => $decisions, 'reflection_prompt' => $reflectionPrompt, 'event_reflection_prompt' => $eventReflectionPrompt, 'experience_recommendation' => $experienceRecommendation, 'experience_follow_up' => $experienceFollowUp, 'date_follow_up' => $dateFollowUp, 'recipe' => $recipeHub, 'memory_evening' => $memoryEvening, 'date_idea' => $dateIdea, 'anniversary_recap' => $anniversaryRecap],
+                'personal_hub' => app(PersonalSummaryService::class)->forUser($space, $user),
+                'action_inbox' => $actionInbox,
+                'partner_hub' => ['space_id' => $space->id, 'album_suggestion' => $albumSuggestion, 'milestones' => $upcomingMilestones, 'next_event' => $nextSharedEvent, 'next_actions' => $nextActions, 'reminders' => $actionableReminders, 'coordination' => $coordination, 'decisions' => $decisions, 'reflection_prompt' => $reflectionPrompt, 'event_reflection_prompt' => $eventReflectionPrompt, 'experience_recommendation' => $experienceRecommendation, 'experience_follow_up' => $experienceFollowUp, 'date_follow_up' => $dateFollowUp, 'recipe' => $recipeHub, 'memory_evening' => $memoryEvening, 'date_idea' => $dateIdea, 'anniversary_recap' => $anniversaryRecap],
             ],
         ]);
     }

@@ -215,6 +215,7 @@ class DateIdeaGeneratorTest extends TestCase
         $space = GallerySpace::create(['name' => 'My dva', 'owner_id' => $owner->id, 'is_default' => true]);
         $space->members()->attach($owner->id, ['role' => 'owner', 'can_delete' => true, 'can_share' => true, 'joined_at' => now()]);
         $space->members()->attach($partner->id, ['role' => 'editor', 'can_delete' => true, 'can_share' => true, 'joined_at' => now()]);
+
         return [$owner, $partner, $space];
     }
 }

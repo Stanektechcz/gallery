@@ -26,7 +26,7 @@ class AlbumStoryController extends Controller
             ->get();
 
         // Resolve media for photo/video blocks
-        $enriched = $blocks->map(fn($b) => $this->enrichBlock($b));
+        $enriched = $blocks->map(fn ($b) => $this->enrichBlock($b));
 
         return response()->json($enriched->values());
     }
@@ -39,9 +39,9 @@ class AlbumStoryController extends Controller
         $album = $this->resolveAlbum($uuid, $request);
 
         $v = $request->validate([
-            'type'        => 'required|in:' . implode(',', self::ALLOWED_TYPES),
-            'content'     => 'nullable|array',
-            'sort_order'  => 'nullable|integer|min:0',
+            'type' => 'required|in:'.implode(',', self::ALLOWED_TYPES),
+            'content' => 'nullable|array',
+            'sort_order' => 'nullable|integer|min:0',
         ]);
 
         $maxOrder = DB::table('album_story_blocks')
@@ -49,10 +49,10 @@ class AlbumStoryController extends Controller
             ->max('sort_order') ?? -1;
 
         $id = DB::table('album_story_blocks')->insertGetId([
-            'album_id'   => $album->id,
+            'album_id' => $album->id,
             'created_by' => $request->user()->id,
-            'type'       => $v['type'],
-            'content'    => json_encode($v['content'] ?? []),
+            'type' => $v['type'],
+            'content' => json_encode($v['content'] ?? []),
             'sort_order' => $v['sort_order'] ?? $maxOrder + 1,
             'created_at' => now(),
             'updated_at' => now(),
@@ -69,7 +69,7 @@ class AlbumStoryController extends Controller
         $album = $this->resolveAlbum($uuid, $request);
 
         $v = $request->validate([
-            'content'    => 'nullable|array',
+            'content' => 'nullable|array',
             'sort_order' => 'nullable|integer|min:0',
         ]);
 
@@ -113,7 +113,7 @@ class AlbumStoryController extends Controller
         $album = $this->resolveAlbum($uuid, $request);
 
         $v = $request->validate([
-            'order'   => 'required|array',
+            'order' => 'required|array',
             'order.*' => 'integer',
         ]);
 
@@ -146,6 +146,7 @@ class AlbumStoryController extends Controller
     private function resolveAlbum(string $uuid, Request $request): Album
     {
         $space = $request->user()->gallerySpaces()->first();
+
         return Album::where('uuid', $uuid)
             ->where('gallery_space_id', $space->id)
             ->firstOrFail();
@@ -158,9 +159,9 @@ class AlbumStoryController extends Controller
             : ($block->content ?? []);
 
         $result = [
-            'id'         => $block->id,
-            'type'       => $block->type,
-            'content'    => $content,
+            'id' => $block->id,
+            'type' => $block->type,
+            'content' => $content,
             'sort_order' => $block->sort_order,
             'created_at' => $block->created_at,
         ];
@@ -171,10 +172,10 @@ class AlbumStoryController extends Controller
                 ->whereIn('uuid', $content['media_uuids'])
                 ->get();
 
-            $result['media'] = $items->map(fn($m) => [
-                'uuid'      => $m->uuid,
+            $result['media'] = $items->map(fn ($m) => [
+                'uuid' => $m->uuid,
                 'thumb_url' => $m->thumbnail_url,
-                'full_url'  => "/media/{$m->uuid}/full",
+                'full_url' => "/media/{$m->uuid}/full",
             ])->toArray();
         }
 
@@ -186,8 +187,8 @@ class AlbumStoryController extends Controller
             if ($item) {
                 $poster = $item->getVariant('video_poster') ?? $item->getVariant('thumbnail');
                 $result['media'] = [[
-                    'uuid'       => $item->uuid,
-                    'thumb_url'  => $item->thumbnail_url,
+                    'uuid' => $item->uuid,
+                    'thumb_url' => $item->thumbnail_url,
                     'stream_url' => "/media/{$item->uuid}/stream",
                     'poster_url' => $poster?->url,
                 ]];

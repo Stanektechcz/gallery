@@ -52,7 +52,7 @@ class IntegratedMealPlanningTest extends TestCase
         $this->assertDatabaseHas('planned_meals', ['uuid' => $plan['meals'][0]['uuid'], 'status' => 'prepared']);
         $this->assertDatabaseHas('calendar_events', ['uuid' => $event['uuid'], 'status' => 'planned']);
 
-        $this->deleteJson('/api/v1/planned-meals/' . $plan['meals'][0]['uuid'])->assertOk();
+        $this->deleteJson('/api/v1/planned-meals/'.$plan['meals'][0]['uuid'])->assertOk();
         $this->assertDatabaseMissing('planned_meals', ['uuid' => $plan['meals'][0]['uuid']]);
         $this->assertDatabaseMissing('event_tasks', ['event_id' => $event['id']]);
         $this->assertDatabaseHas('calendar_events', ['uuid' => $event['uuid'], 'status' => 'planned']);
@@ -74,7 +74,7 @@ class IntegratedMealPlanningTest extends TestCase
 
         $plan = $this->postJson("/api/v1/trips/{$tripId}/meal-plan", [
             'recipe_uuid' => $recipe['uuid'], 'meal_type' => 'dinner', 'servings' => 4,
-            'trip_day_id' => $dayId, 'planned_for' => $date . 'T18:30',
+            'trip_day_id' => $dayId, 'planned_for' => $date.'T18:30',
         ])->assertCreated()
             ->assertJsonPath('summary.budget.limit', 500)
             ->assertJsonPath('summary.budget.planned', 360)
@@ -112,9 +112,10 @@ class IntegratedMealPlanningTest extends TestCase
         Queue::fake();
         $owner = User::factory()->create(['role' => 'owner']);
         $partner = User::factory()->create(['role' => 'partner']);
-        $space = GallerySpace::create(['name' => 'Náš prostor', 'slug' => 'nas-prostor-' . $owner->id, 'owner_id' => $owner->id]);
+        $space = GallerySpace::create(['name' => 'Náš prostor', 'slug' => 'nas-prostor-'.$owner->id, 'owner_id' => $owner->id]);
         $space->members()->attach($owner->id, ['role' => 'owner', 'can_delete' => true, 'can_share' => true, 'joined_at' => now()]);
         $space->members()->attach($partner->id, ['role' => 'editor', 'can_delete' => true, 'can_share' => true, 'joined_at' => now()]);
+
         return [$owner, $partner, $space];
     }
 

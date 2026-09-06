@@ -14,20 +14,28 @@ class AlbumPolicy
 
     public function update(User $user, Album $album): bool
     {
-        if ($user->read_only_mode) return false;
-        if ($user->isAdmin()) return $this->userInSpace($user, $album->gallery_space_id);
+        if ($user->read_only_mode) {
+            return false;
+        }
+        if ($user->isAdmin()) {
+            return $this->userInSpace($user, $album->gallery_space_id);
+        }
 
         // Check explicit permission
         $perm = $album->userPermissions()->where('user_id', $user->id)->first();
+
         return $perm && in_array($perm->role, ['editor']) && $this->userInSpace($user, $album->gallery_space_id);
     }
 
     public function delete(User $user, Album $album): bool
     {
-        if ($user->read_only_mode) return false;
+        if ($user->read_only_mode) {
+            return false;
+        }
         $pivotData = $user->gallerySpaces()
             ->where('gallery_spaces.id', $album->gallery_space_id)
             ->first()?->pivot;
+
         return $pivotData && $pivotData->can_delete;
     }
 

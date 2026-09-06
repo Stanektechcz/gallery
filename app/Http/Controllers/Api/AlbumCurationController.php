@@ -89,7 +89,7 @@ class AlbumCurationController extends Controller
                     'album_id' => $album->id,
                     'purpose' => 'album_selection',
                     'created_by' => $request->user()->id,
-                    'title' => 'Společný výběr · ' . $album->title,
+                    'title' => 'Společný výběr · '.$album->title,
                     'description' => 'Doporučené záběry z alba. Oba partneři mohou hlasovat; ruční poznámky a rozhodnutí zůstávají zachované.',
                     'visibility' => 'shared',
                     'created_at' => now(),
@@ -102,6 +102,7 @@ class AlbumCurationController extends Controller
                 $existing = DB::table('curation_board_items')->where('curation_board_id', $board->id)->where('media_item_id', $candidate['id'])->first();
                 if ($existing) {
                     DB::table('curation_board_items')->where('id', $existing->id)->update(['sort_order' => $sortOrder, 'updated_at' => now()]);
+
                     continue;
                 }
                 DB::table('curation_board_items')->insert([
@@ -109,7 +110,7 @@ class AlbumCurationController extends Controller
                     'media_item_id' => $candidate['id'],
                     'added_by' => $request->user()->id,
                     'status' => 'shortlisted',
-                    'note' => $candidate['reasons'] ? 'Doporučeno: ' . implode(', ', array_slice($candidate['reasons'], 0, 3)) : null,
+                    'note' => $candidate['reasons'] ? 'Doporučeno: '.implode(', ', array_slice($candidate['reasons'], 0, 3)) : null,
                     'sort_order' => $sortOrder,
                     'created_at' => now(),
                     'updated_at' => now(),
@@ -119,6 +120,7 @@ class AlbumCurationController extends Controller
         });
 
         AuditLog::record('album.curation_shortlist.prepare', $album, ['items_count' => $shortlist->count()]);
+
         return response()->json(['board' => $this->assistant->boardPayload($album, $request->user()->id)], 201);
     }
 

@@ -48,8 +48,8 @@ class ApiSurfaceSmokeTest extends TestCase
     public function test_ticket_api_degrades_to_provider_links_without_external_calls(): void
     {
         Cache::put('rj_cities_v2', [], 60);
-        Cache::put('fb_city:' . md5('praha'), [], 60);
-        Cache::put('fb_city:' . md5('brno'), [], 60);
+        Cache::put('fb_city:'.md5('praha'), [], 60);
+        Cache::put('fb_city:'.md5('brno'), [], 60);
         $response = $this->getJson('/api/v1/tickets/search?from=Praha&to=Brno&date=2026-08-01&adults=1')->assertOk();
         $this->assertGreaterThanOrEqual(5, count($response->json()));
     }

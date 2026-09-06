@@ -26,23 +26,27 @@ class PublishAndroidAppCommand extends Command
             $this->line('1. Aktualizujte repozitář příkazem git pull --ff-only.');
             $this->line('2. Ověřte soubor release-assets/android/maki-gallery-1.0.0.apk.');
             $this->line('3. Spusťte příkaz s cestou $PWD/release-assets/android/maki-gallery-1.0.0.apk.');
+
             return self::FAILURE;
         }
 
         if (strtolower((string) pathinfo($source, PATHINFO_EXTENSION)) !== 'apk') {
             $this->error('Publikovat lze pouze soubor s příponou .apk.');
+
             return self::FAILURE;
         }
 
         $header = file_get_contents($source, false, null, 0, 4);
-        if ($header === false || ! str_starts_with($header, "PK")) {
+        if ($header === false || ! str_starts_with($header, 'PK')) {
             $this->error('Soubor nemá platnou APK/ZIP hlavičku.');
+
             return self::FAILURE;
         }
 
         $version = trim((string) ($this->option('app-version') ?: config('mobile.android.version', '1.0.0')));
         if ($version === '' || preg_match('/^[0-9A-Za-z][0-9A-Za-z._+-]{0,63}$/', $version) !== 1) {
             $this->error('Verze obsahuje nepovolené znaky.');
+
             return self::FAILURE;
         }
 
@@ -50,6 +54,7 @@ class PublishAndroidAppCommand extends Command
         $size = filesize($source);
         if ($sha256 === false || $size === false) {
             $this->error('Nepodařilo se spočítat kontrolní údaje APK.');
+
             return self::FAILURE;
         }
 
@@ -60,13 +65,18 @@ class PublishAndroidAppCommand extends Command
         $stream = fopen($source, 'rb');
         if ($stream === false) {
             $this->error('APK se nepodařilo otevřít.');
+
             return self::FAILURE;
         }
 
         try {
             $disk = Storage::disk($diskName);
-            if (! $disk->put($temporaryTarget, $stream)) throw new \RuntimeException('Nahrání do dočasného souboru selhalo.');
-            if (! $disk->move($temporaryTarget, $target)) throw new \RuntimeException('Aktivace nového APK selhala.');
+            if (! $disk->put($temporaryTarget, $stream)) {
+                throw new \RuntimeException('Nahrání do dočasného souboru selhalo.');
+            }
+            if (! $disk->move($temporaryTarget, $target)) {
+                throw new \RuntimeException('Aktivace nového APK selhala.');
+            }
             if (! $disk->put($metadataTarget, json_encode([
                 'version' => $version,
                 'sha256' => $sha256,
@@ -77,9 +87,12 @@ class PublishAndroidAppCommand extends Command
             }
         } catch (Throwable $error) {
             $this->error('Publikování selhalo: '.$error->getMessage());
+
             return self::FAILURE;
         } finally {
-            if (is_resource($stream)) fclose($stream);
+            if (is_resource($stream)) {
+                fclose($stream);
+            }
             try {
                 Storage::disk($diskName)->delete($temporaryTarget);
             } catch (Throwable) {

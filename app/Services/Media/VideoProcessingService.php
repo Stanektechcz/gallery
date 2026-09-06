@@ -4,17 +4,19 @@ namespace App\Services\Media;
 
 use App\Models\MediaItem;
 use App\Models\MediaVariant;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 
 class VideoProcessingService
 {
     private string $ffmpegPath;
+
     private string $ffprobePath;
 
     public function __construct()
     {
-        $this->ffmpegPath  = config('gallery.ffmpeg_path', '/usr/bin/ffmpeg');
+        $this->ffmpegPath = config('gallery.ffmpeg_path', '/usr/bin/ffmpeg');
         $this->ffprobePath = config('gallery.ffprobe_path', '/usr/bin/ffprobe');
     }
 
@@ -28,16 +30,20 @@ class VideoProcessingService
      */
     public function extractMetadata(string $path): array
     {
-        if (!$this->isAvailable()) return [];
+        if (! $this->isAvailable()) {
+            return [];
+        }
 
         $cmd = escapeshellcmd($this->ffprobePath)
-            . ' -v quiet -print_format json -show_streams -show_format '
-            . escapeshellarg($path);
+            .' -v quiet -print_format json -show_streams -show_format '
+            .escapeshellarg($path);
 
         $output = shell_exec($cmd);
-        if (!$output) return [];
+        if (! $output) {
+            return [];
+        }
 
-        $data   = json_decode($output, true);
+        $data = json_decode($output, true);
         $format = $data['format'] ?? [];
         $streams = $data['streams'] ?? [];
 
@@ -47,22 +53,22 @@ class VideoProcessingService
         $durationSec = (float) ($format['duration'] ?? 0);
 
         $metadata = [
-            'duration_ms'  => (int) ($durationSec * 1000),
-            'bitrate'      => (int) ($format['bit_rate'] ?? 0),
-            'width'        => (int) ($videoStream['width'] ?? 0),
-            'height'       => (int) ($videoStream['height'] ?? 0),
+            'duration_ms' => (int) ($durationSec * 1000),
+            'bitrate' => (int) ($format['bit_rate'] ?? 0),
+            'width' => (int) ($videoStream['width'] ?? 0),
+            'height' => (int) ($videoStream['height'] ?? 0),
             // r_frame_rate může být u HEVC pouze časová základna (např.
             // 90000/1), nikoliv skutečná frekvence snímků. avg_frame_rate
             // je správná hodnota pro zobrazení i databázi.
-            'frame_rate'   => $this->parseFrameRate($videoStream['avg_frame_rate'] ?? $videoStream['r_frame_rate'] ?? '0/1'),
-            'video_codec'  => $videoStream['codec_name'] ?? null,
-            'audio_codec'  => $audioStream['codec_name'] ?? null,
+            'frame_rate' => $this->parseFrameRate($videoStream['avg_frame_rate'] ?? $videoStream['r_frame_rate'] ?? '0/1'),
+            'video_codec' => $videoStream['codec_name'] ?? null,
+            'audio_codec' => $audioStream['codec_name'] ?? null,
         ];
 
         $createdAt = $format['tags']['creation_time'] ?? $videoStream['tags']['creation_time'] ?? null;
         if ($createdAt) {
             try {
-                $metadata['taken_at'] = \Carbon\Carbon::parse($createdAt);
+                $metadata['taken_at'] = Carbon::parse($createdAt);
             } catch (\Throwable) {
             }
         }
@@ -75,13 +81,15 @@ class VideoProcessingService
      */
     public function generatePoster(MediaItem $mediaItem, string $sourcePath, float $timeSeconds = 2.0): ?MediaVariant
     {
-        if (!$this->isAvailable()) return null;
+        if (! $this->isAvailable()) {
+            return null;
+        }
 
         // Stejný adresář jako originál. Má ověřená oprávnění z uploadu a
         // obsah médií jde takto smazat i archivovat jako jeden celek.
-        $dir      = "media/{$mediaItem->uuid}";
+        $dir = "media/{$mediaItem->uuid}";
         $filename = 'video_poster.jpg';
-        $tmpPath  = storage_path("app/temp/poster_{$mediaItem->uuid}.jpg");
+        $tmpPath = storage_path("app/temp/poster_{$mediaItem->uuid}.jpg");
 
         @mkdir(dirname($tmpPath), 0755, true);
 
@@ -97,28 +105,32 @@ class VideoProcessingService
 
         exec($cmd, $out, $exitCode);
 
-        if ($exitCode !== 0 || !file_exists($tmpPath)) {
+        if ($exitCode !== 0 || ! file_exists($tmpPath)) {
             Log::warning("FFmpeg poster generation failed for media #{$mediaItem->id}");
+
             return null;
         }
 
         $path = "{$dir}/{$filename}";
         $stream = fopen($tmpPath, 'rb');
         $stored = $stream && Storage::disk('public')->put($path, $stream, 'public');
-        if (is_resource($stream)) fclose($stream);
+        if (is_resource($stream)) {
+            fclose($stream);
+        }
         @unlink($tmpPath);
 
-        if (!$stored) {
+        if (! $stored) {
             Log::error("Video poster could not be stored for media #{$mediaItem->id}", ['path' => $path]);
+
             return null;
         }
 
         $poster = MediaVariant::updateOrCreate(
             ['media_item_id' => $mediaItem->id, 'type' => 'video_poster'],
             [
-                'disk'       => 'public',
-                'path'       => $path,
-                'format'     => 'jpg',
+                'disk' => 'public',
+                'path' => $path,
+                'format' => 'jpg',
                 'size_bytes' => Storage::disk('public')->size($path),
             ]
         );
@@ -128,13 +140,13 @@ class VideoProcessingService
         MediaVariant::updateOrCreate(
             ['media_item_id' => $mediaItem->id, 'type' => 'thumbnail'],
             [
-                'disk'       => 'public',
-                'path'       => $path,
-                'format'     => 'jpg',
-                'mime_type'  => 'image/jpeg',
+                'disk' => 'public',
+                'path' => $path,
+                'format' => 'jpg',
+                'mime_type' => 'image/jpeg',
                 'size_bytes' => $poster->size_bytes,
-                'width'      => $poster->width,
-                'height'     => $poster->height,
+                'width' => $poster->width,
+                'height' => $poster->height,
             ]
         );
 
@@ -159,7 +171,7 @@ class VideoProcessingService
 </svg>
 SVG;
 
-        if (!Storage::disk('public')->put($path, $svg, 'public')) {
+        if (! Storage::disk('public')->put($path, $svg, 'public')) {
             throw new \RuntimeException("Nepodařilo se uložit náhradní náhled videa: {$path}");
         }
 
@@ -178,9 +190,11 @@ SVG;
      */
     public function generateCompatibilityVariant(MediaItem $mediaItem, string $sourcePath): ?MediaVariant
     {
-        if (!$this->isAvailable()) return null;
+        if (! $this->isAvailable()) {
+            return null;
+        }
 
-        $dir     = "media/{$mediaItem->uuid}";
+        $dir = "media/{$mediaItem->uuid}";
         $tmpPath = storage_path("app/temp/compat_{$mediaItem->uuid}.mp4");
 
         @mkdir(dirname($tmpPath), 0755, true);
@@ -205,7 +219,7 @@ SVG;
 
         exec($cmd, $out, $exitCode);
 
-        if ($exitCode !== 0 || !file_exists($tmpPath)) {
+        if ($exitCode !== 0 || ! file_exists($tmpPath)) {
             // Hardware encoders occasionally advertise themselves but reject
             // one source format. A software H.264 retry is slower to create
             // yet guarantees a playable result instead of a permanently
@@ -219,8 +233,9 @@ SVG;
                 escapeshellarg($tmpPath)
             );
             exec($cmd, $out, $exitCode);
-            if ($exitCode !== 0 || !file_exists($tmpPath)) {
+            if ($exitCode !== 0 || ! file_exists($tmpPath)) {
                 Log::warning("FFmpeg compat variant failed for media #{$mediaItem->id}");
+
                 return null;
             }
         }
@@ -228,20 +243,23 @@ SVG;
         $path = "{$dir}/video_compat.mp4";
         $stream = fopen($tmpPath, 'rb');
         $stored = $stream && Storage::disk('public')->put($path, $stream, 'public');
-        if (is_resource($stream)) fclose($stream);
+        if (is_resource($stream)) {
+            fclose($stream);
+        }
         @unlink($tmpPath);
 
-        if (!$stored) {
+        if (! $stored) {
             Log::error("Compatible video could not be stored for media #{$mediaItem->id}", ['path' => $path]);
+
             return null;
         }
 
         return MediaVariant::updateOrCreate(
             ['media_item_id' => $mediaItem->id, 'type' => 'video_compat'],
             [
-                'disk'       => 'public',
-                'path'       => $path,
-                'format'     => 'mp4',
+                'disk' => 'public',
+                'path' => $path,
+                'format' => 'mp4',
                 'size_bytes' => Storage::disk('public')->size($path),
             ]
         );
@@ -253,16 +271,22 @@ SVG;
     public function selectVideoEncoder(): string
     {
         // Try Intel Quick Sync
-        exec(escapeshellcmd($this->ffmpegPath) . ' -encoders 2>/dev/null | grep h264_qsv', $out);
-        if (!empty($out)) return 'h264_qsv';
+        exec(escapeshellcmd($this->ffmpegPath).' -encoders 2>/dev/null | grep h264_qsv', $out);
+        if (! empty($out)) {
+            return 'h264_qsv';
+        }
 
         // Try VAAPI
-        exec(escapeshellcmd($this->ffmpegPath) . ' -encoders 2>/dev/null | grep h264_vaapi', $out);
-        if (!empty($out)) return 'h264_vaapi';
+        exec(escapeshellcmd($this->ffmpegPath).' -encoders 2>/dev/null | grep h264_vaapi', $out);
+        if (! empty($out)) {
+            return 'h264_vaapi';
+        }
 
         // Try NVENC
-        exec(escapeshellcmd($this->ffmpegPath) . ' -encoders 2>/dev/null | grep h264_nvenc', $out);
-        if (!empty($out)) return 'h264_nvenc';
+        exec(escapeshellcmd($this->ffmpegPath).' -encoders 2>/dev/null | grep h264_nvenc', $out);
+        if (! empty($out)) {
+            return 'h264_nvenc';
+        }
 
         // Software fallback
         return 'libx264';

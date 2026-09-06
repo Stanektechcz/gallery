@@ -3,7 +3,6 @@
 namespace Tests\Feature;
 
 use App\Models\BillingModule;
-use App\Models\BillingPlan;
 use App\Models\GallerySpace;
 use App\Models\User;
 use App\Services\Billing\EntitlementService;

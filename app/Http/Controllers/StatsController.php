@@ -2,8 +2,8 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\MediaItem;
 use App\Models\Album;
+use App\Models\MediaItem;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
@@ -13,10 +13,10 @@ class StatsController extends Controller
 {
     public function index(Request $request): Response
     {
-        $user  = $request->user();
+        $user = $request->user();
         $space = $user->gallerySpaces()->first();
 
-        if (!$space) {
+        if (! $space) {
             return Inertia::render('Stats/Index', ['stats' => null]);
         }
 
@@ -26,15 +26,15 @@ class StatsController extends Controller
         $monthSql = $driver === 'sqlite' ? "CAST(strftime('%m', taken_at) AS INTEGER)" : 'MONTH(taken_at)';
 
         // Totals
-        $total   = (clone $base)->count();
-        $photos  = (clone $base)->where('media_type', 'photo')->count();
-        $videos  = (clone $base)->where('media_type', 'video')->count();
+        $total = (clone $base)->count();
+        $photos = (clone $base)->where('media_type', 'photo')->count();
+        $videos = (clone $base)->where('media_type', 'video')->count();
         // Obě souřadnice, ne jen šířku. Hledání i mapa vyžadují obojí, takže se šířkou
         // bez délky se médium počítalo do „S GPS", ale filtr „S polohou" ho nenašel a na
         // mapě nebylo — statistika slibovala něco, co se pak nedalo otevřít.
         $withGps = (clone $base)->whereNotNull('latitude')->whereNotNull('longitude')->count();
         $totalSize = (clone $base)->sum('size_bytes');
-        $albums  = Album::where('gallery_space_id', $space->id)->whereNull('deleted_at')->count();
+        $albums = Album::where('gallery_space_id', $space->id)->whereNull('deleted_at')->count();
 
         // Per year
         $perYear = (clone $base)
@@ -58,7 +58,7 @@ class StatsController extends Controller
         // Top cameras
         $cameras = (clone $base)
             ->whereNotNull('camera_model')
-            ->selectRaw("camera_model, COUNT(*) as count")
+            ->selectRaw('camera_model, COUNT(*) as count')
             ->groupBy('camera_model')
             ->orderByDesc('count')
             ->limit(5)
@@ -67,7 +67,7 @@ class StatsController extends Controller
         // Top formats
         $formats = (clone $base)
             ->whereNotNull('extension')
-            ->selectRaw("UPPER(extension) as ext, COUNT(*) as count")
+            ->selectRaw('UPPER(extension) as ext, COUNT(*) as count')
             ->groupBy('extension')
             ->orderByDesc('count')
             ->limit(8)
@@ -75,23 +75,23 @@ class StatsController extends Controller
 
         // Favorites + archived
         $favorites = (clone $base)->where('is_favorite', true)->count();
-        $archived  = MediaItem::where('gallery_space_id', $space->id)->where('is_archived', true)->count();
+        $archived = MediaItem::where('gallery_space_id', $space->id)->where('is_archived', true)->count();
 
         return Inertia::render('Stats/Index', [
             'stats' => [
-                'total'     => $total,
-                'photos'    => $photos,
-                'videos'    => $videos,
-                'with_gps'  => $withGps,
+                'total' => $total,
+                'photos' => $photos,
+                'videos' => $videos,
+                'with_gps' => $withGps,
                 'total_size' => $totalSize,
-                'albums'    => $albums,
+                'albums' => $albums,
                 'favorites' => $favorites,
-                'archived'  => $archived,
-                'per_year'  => $perYear,
+                'archived' => $archived,
+                'per_year' => $perYear,
                 'per_month' => array_values($perMonth->toArray()),
-                'cameras'   => $cameras,
-                'formats'   => $formats,
-                'year'      => $year,
+                'cameras' => $cameras,
+                'formats' => $formats,
+                'year' => $year,
             ],
         ]);
     }

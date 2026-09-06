@@ -49,10 +49,12 @@ class MentionSearchService
         if ($query === '') {
             $today = now()->startOfDay();
 
-            return ['kind' => 'date', 'label' => self::czechDate($today) . ' — dnes', 'items' => $this->onDate($space, $today)];
+            return ['kind' => 'date', 'label' => self::czechDate($today).' — dnes', 'items' => $this->onDate($space, $today)];
         }
 
-        if (mb_strlen($query) < 2) return ['kind' => 'empty', 'label' => null, 'items' => []];
+        if (mb_strlen($query) < 2) {
+            return ['kind' => 'empty', 'label' => null, 'items' => []];
+        }
 
         return ['kind' => 'search', 'label' => null, 'items' => $this->byWord($space, $user, $query)];
     }
@@ -69,7 +71,7 @@ class MentionSearchService
         $months = ['ledna', 'února', 'března', 'dubna', 'května', 'června',
             'července', 'srpna', 'září', 'října', 'listopadu', 'prosince'];
 
-        return $date->day . '. ' . $months[$date->month - 1] . ' ' . $date->year;
+        return $date->day.'. '.$months[$date->month - 1].' '.$date->year;
     }
 
     /**
@@ -84,22 +86,32 @@ class MentionSearchService
         $query = mb_strtolower($query);
 
         foreach (['dnes' => 0, 'zitra' => 1, 'zítra' => 1, 'pozitri' => 2, 'pozítří' => 2] as $word => $offset) {
-            if ($query === $word) return now()->startOfDay()->addDays($offset);
+            if ($query === $word) {
+                return now()->startOfDay()->addDays($offset);
+            }
         }
 
-        if (! preg_match('/^(\d{1,2})\s*\.\s*(\d{1,2})\s*\.?\s*(\d{4})?$/u', $query, $parts)) return null;
+        if (! preg_match('/^(\d{1,2})\s*\.\s*(\d{1,2})\s*\.?\s*(\d{4})?$/u', $query, $parts)) {
+            return null;
+        }
 
         $day = (int) $parts[1];
         $month = (int) $parts[2];
-        if ($day < 1 || $day > 31 || $month < 1 || $month > 12) return null;
+        if ($day < 1 || $day > 31 || $month < 1 || $month > 12) {
+            return null;
+        }
 
         $year = isset($parts[3]) ? (int) $parts[3] : now()->year;
         $date = Carbon::createFromDate($year, $month, 1)->startOfDay();
-        if ($day > $date->daysInMonth) return null;
+        if ($day > $date->daysInMonth) {
+            return null;
+        }
 
         $date = $date->setDay($day);
 
-        if (! isset($parts[3]) && $date->lt(now()->subMonth())) $date->addYear();
+        if (! isset($parts[3]) && $date->lt(now()->subMonth())) {
+            $date->addYear();
+        }
 
         return $date;
     }
@@ -107,7 +119,9 @@ class MentionSearchService
     /** @return list<array<string, mixed>> */
     private function onDate(GallerySpace $space, Carbon $date): array
     {
-        if (! Schema::hasTable('calendar_events')) return [];
+        if (! Schema::hasTable('calendar_events')) {
+            return [];
+        }
 
         return CalendarEvent::where('gallery_space_id', $space->id)
             ->whereDate('starts_at', $date->toDateString())
@@ -125,7 +139,7 @@ class MentionSearchService
     /** @return list<array<string, mixed>> */
     private function byWord(GallerySpace $space, User $user, string $query): array
     {
-        $needle = '%' . $query . '%';
+        $needle = '%'.$query.'%';
         $results = [];
 
         if (Schema::hasTable('recipes')) {
@@ -218,7 +232,9 @@ class MentionSearchService
     public static function url(string $type, string $id): string
     {
         $pattern = self::ROUTES[$type] ?? null;
-        if (! $pattern) return '/';
+        if (! $pattern) {
+            return '/';
+        }
 
         return str_contains($pattern, '%s') ? sprintf($pattern, rawurlencode($id)) : $pattern;
     }
@@ -231,6 +247,6 @@ class MentionSearchService
      */
     public static function token(string $type, string $id, string $title): string
     {
-        return '[[' . $type . ':' . $id . '|' . Str::limit(str_replace(['|', ']'], '', $title), 80, '') . ']]';
+        return '[['.$type.':'.$id.'|'.Str::limit(str_replace(['|', ']'], '', $title), 80, '').']]';
     }
 }

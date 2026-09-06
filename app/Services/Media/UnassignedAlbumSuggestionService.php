@@ -21,7 +21,9 @@ use Illuminate\Support\Str;
 class UnassignedAlbumSuggestionService
 {
     private const MIN_ITEMS = 3;
+
     private const MAX_ITEMS = 200;
+
     private const SESSION_GAP_HOURS = 8;
 
     public function available(): bool
@@ -33,11 +35,15 @@ class UnassignedAlbumSuggestionService
     /** @return array<int,array<string,mixed>> */
     public function suggestions(GallerySpace $space, User $viewer, int $limit = 5): array
     {
-        if (! $this->available()) return [];
+        if (! $this->available()) {
+            return [];
+        }
 
         $media = $this->candidateQuery($space)->with('variants')->limit(800)->get()
             ->sortBy(fn (MediaItem $item) => $this->moment($item)->timestamp)->values();
-        if ($media->count() < self::MIN_ITEMS) return [];
+        if ($media->count() < self::MIN_ITEMS) {
+            return [];
+        }
 
         $ignored = AlbumSuggestionDecision::where('gallery_space_id', $space->id)->pluck('fingerprint')->all();
 
@@ -52,18 +58,28 @@ class UnassignedAlbumSuggestionService
     /** Lightweight dashboard prompt without loading hundreds of media previews. */
     public function prompt(GallerySpace $space, User $viewer): ?array
     {
-        if (! $this->available()) return null;
+        if (! $this->available()) {
+            return null;
+        }
         $media = $this->candidateQuery($space)->limit(400)->get()
             ->sortBy(fn (MediaItem $item) => $this->moment($item)->timestamp)->values();
-        if ($media->count() < self::MIN_ITEMS) return null;
+        if ($media->count() < self::MIN_ITEMS) {
+            return null;
+        }
         $ignored = AlbumSuggestionDecision::where('gallery_space_id', $space->id)->pluck('fingerprint')->all();
         foreach ($this->clusters($media)->reverse() as $cluster) {
-            if ($cluster->count() < self::MIN_ITEMS) continue;
+            if ($cluster->count() < self::MIN_ITEMS) {
+                continue;
+            }
             $fingerprint = $this->fingerprint($space, $cluster);
-            if (in_array($fingerprint, $ignored, true)) continue;
+            if (in_array($fingerprint, $ignored, true)) {
+                continue;
+            }
+
             return collect($this->payload($space, $cluster, false))
                 ->only(['fingerprint', 'title', 'reason', 'media_count', 'photo_count', 'video_count', 'context'])->all();
         }
+
         return null;
     }
 
@@ -113,7 +129,7 @@ class UnassignedAlbumSuggestionService
             if (! $album) {
                 $album = Album::create([
                     'gallery_space_id' => $space->id, 'created_by' => $user->id, 'updated_by' => $user->id,
-                    'title' => $title, 'slug' => Str::slug($title . '-' . $start->format('Ymd')),
+                    'title' => $title, 'slug' => Str::slug($title.'-'.$start->format('Ymd')),
                     'description' => $description, 'cover_media_id' => $cover->id,
                     'event_date_start' => $start->toDateString(), 'event_date_end' => $end->toDateString(),
                     'story_mode' => true, 'event_mode' => true, 'event_start_at' => $start, 'event_end_at' => $end,
@@ -137,7 +153,9 @@ class UnassignedAlbumSuggestionService
                 ]);
             }
             MediaItem::whereIn('id', $ordered->pluck('id'))->whereNull('primary_album_id')->update(['primary_album_id' => $album->id]);
-            if ($created || ! $album->cover_media_id) $album->update(['cover_media_id' => $cover->id]);
+            if ($created || ! $album->cover_media_id) {
+                $album->update(['cover_media_id' => $cover->id]);
+            }
             DB::table('album_media')->where('album_id', $album->id)->update(['is_cover' => false]);
             DB::table('album_media')->where('album_id', $album->id)->where('media_item_id', $album->cover_media_id)->update(['is_cover' => true]);
             $album->update([
@@ -148,7 +166,9 @@ class UnassignedAlbumSuggestionService
             $this->linkContext($album, $ordered, $suggestion, $user);
 
             $storyCreated = DB::table('album_story_blocks')->where('album_id', $album->id)->doesntExist();
-            if ($storyCreated) $this->createStory($album, $ordered, $user->id, $suggestion, $description);
+            if ($storyCreated) {
+                $this->createStory($album, $ordered, $user->id, $suggestion, $description);
+            }
             $memory = ($data['create_memory'] ?? true) ? $this->memory($space, $album, $ordered, $suggestion, $user, $description) : null;
 
             AlbumSuggestionDecision::create([
@@ -163,7 +183,9 @@ class UnassignedAlbumSuggestionService
             return [$album->fresh('cover.variants'), $memory];
         });
 
-        if ($created) CreateDriveFolderJob::dispatch($album);
+        if ($created) {
+            CreateDriveFolderJob::dispatch($album);
+        }
 
         return [
             'album' => ['uuid' => $album->uuid, 'title' => $album->title, 'media_count' => (int) $album->media_count,
@@ -204,10 +226,16 @@ class UnassignedAlbumSuggestionService
                 $newSession = $this->distanceKm($previous->latitude, $previous->longitude, $item->latitude, $item->longitude) > 75
                     && $this->moment($previous)->diffInHours($this->moment($item)) > 2;
             }
-            if ($newSession) { $clusters->push($current); $current = collect(); }
+            if ($newSession) {
+                $clusters->push($current);
+                $current = collect();
+            }
             $current->push($item);
         }
-        if ($current->isNotEmpty()) $clusters->push($current);
+        if ($current->isNotEmpty()) {
+            $clusters->push($current);
+        }
+
         return $clusters;
     }
 
@@ -219,8 +247,8 @@ class UnassignedAlbumSuggestionService
         $place = $this->place($space, $cluster);
         $context ??= $place ? ['type' => 'place', 'id' => $place->id, 'name' => $place->name, 'uuid' => null] : null;
         $title = $context['name'] ?? ($start->isSameDay($end)
-            ? 'Vzpomínky · ' . $start->locale('cs')->translatedFormat('j. F Y')
-            : 'Vzpomínky · ' . $start->locale('cs')->translatedFormat('j. F') . ' – ' . $end->locale('cs')->translatedFormat('j. F Y'));
+            ? 'Vzpomínky · '.$start->locale('cs')->translatedFormat('j. F Y')
+            : 'Vzpomínky · '.$start->locale('cs')->translatedFormat('j. F').' – '.$end->locale('cs')->translatedFormat('j. F Y'));
         $reason = match ($context['type'] ?? null) {
             'event' => 'Čas pořízení odpovídá společné události v kalendáři.',
             'trip' => 'Média vznikla během naplánované cesty.',
@@ -230,7 +258,9 @@ class UnassignedAlbumSuggestionService
         $target = null;
         if (! empty($context['album_id'])) {
             $targetAlbum = Album::whereKey($context['album_id'])->where('gallery_space_id', $space->id)->first(['id', 'uuid', 'title']);
-            if ($targetAlbum) $target = ['id' => $targetAlbum->id, 'uuid' => $targetAlbum->uuid, 'title' => $targetAlbum->title];
+            if ($targetAlbum) {
+                $target = ['id' => $targetAlbum->id, 'uuid' => $targetAlbum->uuid, 'title' => $targetAlbum->title];
+            }
         }
         $ordered = $cluster->take(self::MAX_ITEMS)->values();
         $fingerprint = $this->fingerprint($space, $ordered);
@@ -238,7 +268,7 @@ class UnassignedAlbumSuggestionService
 
         return [
             'fingerprint' => $fingerprint, 'title' => $target['title'] ?? $title,
-            'description' => 'Společný výběr z ' . $start->locale('cs')->translatedFormat('j. F Y') . ($start->isSameDay($end) ? '.' : ' až ' . $end->locale('cs')->translatedFormat('j. F Y') . '.'),
+            'description' => 'Společný výběr z '.$start->locale('cs')->translatedFormat('j. F Y').($start->isSameDay($end) ? '.' : ' až '.$end->locale('cs')->translatedFormat('j. F Y').'.'),
             'reason' => $reason, 'starts_at' => $start->toIso8601String(), 'ends_at' => $end->toIso8601String(),
             'media_count' => $ordered->count(), 'photo_count' => $ordered->where('media_type', 'photo')->count(),
             'video_count' => $ordered->where('media_type', 'video')->count(), 'context' => $context,
@@ -249,7 +279,7 @@ class UnassignedAlbumSuggestionService
 
     private function fingerprint(GallerySpace $space, Collection $cluster): string
     {
-        return hash('sha256', $space->id . ':' . $cluster->take(self::MAX_ITEMS)->pluck('id')->sort()->implode(','));
+        return hash('sha256', $space->id.':'.$cluster->take(self::MAX_ITEMS)->pluck('id')->sort()->implode(','));
     }
 
     private function context(GallerySpace $space, Collection $cluster, Carbon $start, Carbon $end): ?array
@@ -259,17 +289,23 @@ class UnassignedAlbumSuggestionService
             ->sortBy(function (CalendarEvent $event) use ($start, $end) {
                 $eventEnd = $event->ends_at ?? $event->starts_at->copy()->addHours(3);
                 $overlaps = $start->lte($eventEnd->copy()->addHours(8)) && $end->gte($event->starts_at->copy()->subHours(6));
+
                 return $overlaps ? abs($event->starts_at->diffInMinutes($start)) : PHP_INT_MAX;
             })->first(fn (CalendarEvent $event) => $start->lte(($event->ends_at ?? $event->starts_at->copy()->addHours(3))->copy()->addHours(8))
                 && $end->gte($event->starts_at->copy()->subHours(6)));
-        if ($event) return ['type' => 'event', 'id' => $event->id, 'uuid' => $event->uuid, 'name' => $event->title,
-            'album_id' => $event->album_id, 'trip_id' => $event->trip_id];
+        if ($event) {
+            return ['type' => 'event', 'id' => $event->id, 'uuid' => $event->uuid, 'name' => $event->title,
+                'album_id' => $event->album_id, 'trip_id' => $event->trip_id];
+        }
 
         $trip = DB::table('trips')->where('gallery_space_id', $space->id)
             ->where('start_date', '<=', $end->toDateString())->where('end_date', '>=', $start->toDateString())
             ->orderBy('start_date')->first(['id', 'name']);
-        if ($trip) return ['type' => 'trip', 'id' => $trip->id, 'uuid' => null, 'name' => $trip->name,
-            'album_id' => Album::where('gallery_space_id', $space->id)->where('trip_id', $trip->id)->value('id'), 'trip_id' => $trip->id];
+        if ($trip) {
+            return ['type' => 'trip', 'id' => $trip->id, 'uuid' => null, 'name' => $trip->name,
+                'album_id' => Album::where('gallery_space_id', $space->id)->where('trip_id', $trip->id)->value('id'), 'trip_id' => $trip->id];
+        }
+
         return null;
     }
 
@@ -277,12 +313,22 @@ class UnassignedAlbumSuggestionService
     {
         $linked = DB::table('media_place')->whereIn('media_item_id', $cluster->pluck('id'))
             ->selectRaw('place_id, COUNT(*) as uses')->groupBy('place_id')->orderByDesc('uses')->first();
-        if ($linked) return Place::whereKey($linked->place_id)->where('gallery_space_id', $space->id)->first();
+        if ($linked) {
+            return Place::whereKey($linked->place_id)->where('gallery_space_id', $space->id)->first();
+        }
         $gps = $cluster->filter->hasGps();
-        if ($gps->isEmpty()) return null;
-        $lat = (float) $gps->avg('latitude'); $lng = (float) $gps->avg('longitude');
+        if ($gps->isEmpty()) {
+            return null;
+        }
+        $lat = (float) $gps->avg('latitude');
+        $lng = (float) $gps->avg('longitude');
+
         return Place::where('gallery_space_id', $space->id)->whereNotNull('latitude')->whereNotNull('longitude')->get()
-            ->map(function (Place $place) use ($lat, $lng) { $place->distance_km = $this->distanceKm($lat, $lng, $place->latitude, $place->longitude); return $place; })
+            ->map(function (Place $place) use ($lat, $lng) {
+                $place->distance_km = $this->distanceKm($lat, $lng, $place->latitude, $place->longitude);
+
+                return $place;
+            })
             ->filter(fn (Place $place) => $place->distance_km <= max(3, ((int) $place->radius_meters) / 1000))->sortBy('distance_km')->first();
     }
 
@@ -292,15 +338,25 @@ class UnassignedAlbumSuggestionService
         if (($context['type'] ?? null) === 'event') {
             $event = CalendarEvent::whereKey($context['id'])->where('gallery_space_id', $album->gallery_space_id)->first();
             if ($event) {
-                if (! $event->album_id) $event->update(['album_id' => $album->id]);
-                foreach ($media as $item) EventAttachment::firstOrCreate(['event_id' => $event->id, 'media_item_id' => $item->id], ['kind' => 'memory']);
+                if (! $event->album_id) {
+                    $event->update(['album_id' => $album->id]);
+                }
+                foreach ($media as $item) {
+                    EventAttachment::firstOrCreate(['event_id' => $event->id, 'media_item_id' => $item->id], ['kind' => 'memory']);
+                }
             }
         }
         $tripId = $context['trip_id'] ?? (($context['type'] ?? null) === 'trip' ? $context['id'] : null);
-        if ($tripId) foreach ($media as $item) DB::table('trip_media')->insertOrIgnore(['trip_id' => $tripId, 'media_item_id' => $item->id, 'added_at' => now()]);
+        if ($tripId) {
+            foreach ($media as $item) {
+                DB::table('trip_media')->insertOrIgnore(['trip_id' => $tripId, 'media_item_id' => $item->id, 'added_at' => now()]);
+            }
+        }
         if ($placeId = data_get($suggestion, 'place.id')) {
             DB::table('album_place')->insertOrIgnore(['album_id' => $album->id, 'place_id' => $placeId, 'is_primary' => true, 'created_at' => now()]);
-            foreach ($media as $item) DB::table('media_place')->insertOrIgnore(['media_item_id' => $item->id, 'place_id' => $placeId, 'is_primary' => false, 'created_at' => now()]);
+            foreach ($media as $item) {
+                DB::table('media_place')->insertOrIgnore(['media_item_id' => $item->id, 'place_id' => $placeId, 'is_primary' => false, 'created_at' => now()]);
+            }
         }
     }
 
@@ -308,7 +364,9 @@ class UnassignedAlbumSuggestionService
     {
         $userIds = DB::table('gallery_space_user')->where('gallery_space_id', $space->id)->pluck('user_id')->push($space->owner_id)->unique();
         $rows = $userIds->map(fn ($id) => ['album_id' => $album->id, 'user_id' => $id, 'role' => 'editor', 'inherited' => false, 'created_at' => now(), 'updated_at' => now()])->all();
-        if ($rows) DB::table('album_user_permissions')->upsert($rows, ['album_id', 'user_id'], ['role', 'inherited', 'updated_at']);
+        if ($rows) {
+            DB::table('album_user_permissions')->upsert($rows, ['album_id', 'user_id'], ['role', 'inherited', 'updated_at']);
+        }
     }
 
     private function createStory(Album $album, Collection $media, int $userId, array $suggestion, string $description): void
@@ -320,11 +378,17 @@ class UnassignedAlbumSuggestionService
                 'sort_order' => count($blocks), 'created_at' => now(), 'updated_at' => now()];
         };
         $push('heading', ['text' => $album->title, 'level' => 1]);
-        $push('text', ['body' => $description . "\n\n" . $suggestion['reason']]);
-        if ($suggestion['place'] ?? null) $push('map', ['latitude' => $suggestion['place']['latitude'], 'longitude' => $suggestion['place']['longitude'], 'label' => $suggestion['place']['name']]);
+        $push('text', ['body' => $description."\n\n".$suggestion['reason']]);
+        if ($suggestion['place'] ?? null) {
+            $push('map', ['latitude' => $suggestion['place']['latitude'], 'longitude' => $suggestion['place']['longitude'], 'label' => $suggestion['place']['name']]);
+        }
         $photos = $media->where('media_type', 'photo')->pluck('uuid')->values()->all();
-        if ($photos) $push('photo', ['media_uuids' => $photos, 'layout' => count($photos) > 1 ? 'grid' : 'full']);
-        foreach ($media->where('media_type', 'video') as $video) $push('video', ['media_uuid' => $video->uuid]);
+        if ($photos) {
+            $push('photo', ['media_uuids' => $photos, 'layout' => count($photos) > 1 ? 'grid' : 'full']);
+        }
+        foreach ($media->where('media_type', 'video') as $video) {
+            $push('video', ['media_uuid' => $video->uuid]);
+        }
         DB::table('album_story_blocks')->insert($blocks);
     }
 
@@ -335,9 +399,13 @@ class UnassignedAlbumSuggestionService
         $values = ['album_id' => $album->id, 'title' => $album->title, 'note' => $note,
             'happened_on' => Carbon::parse($suggestion['starts_at'])->toDateString(),
             'media_item_ids' => json_encode($media->take(30)->pluck('id')->values()->all()), 'updated_at' => now()];
-        if ($memory) DB::table('shared_memory_moments')->where('id', $memory->id)->update($values);
-        else DB::table('shared_memory_moments')->insert($values + ['uuid' => (string) Str::uuid(), 'gallery_space_id' => $space->id,
-            'created_by' => $user->id, 'calendar_event_id' => $eventId, 'is_favorite' => false, 'created_at' => now()]);
+        if ($memory) {
+            DB::table('shared_memory_moments')->where('id', $memory->id)->update($values);
+        } else {
+            DB::table('shared_memory_moments')->insert($values + ['uuid' => (string) Str::uuid(), 'gallery_space_id' => $space->id,
+                'created_by' => $user->id, 'calendar_event_id' => $eventId, 'is_favorite' => false, 'created_at' => now()]);
+        }
+
         return DB::table('shared_memory_moments')->where('album_id', $album->id)->firstOrFail();
     }
 
@@ -345,6 +413,7 @@ class UnassignedAlbumSuggestionService
     {
         $variant = collect(['thumbnail', 'small', 'video_poster', 'medium', 'placeholder'])
             ->map(fn ($type) => $item->variants->firstWhere('type', $type))->first();
+
         return ['uuid' => $item->uuid, 'title' => $item->display_title ?: $item->original_filename, 'media_type' => $item->media_type,
             'thumbnail_url' => $variant?->url, 'taken_at' => $this->moment($item)->toIso8601String(),
             'is_favorite' => (bool) $item->is_favorite, 'rating' => $item->rating, 'score' => $this->qualityScore($item)];
@@ -356,12 +425,17 @@ class UnassignedAlbumSuggestionService
             + min(999, (int) floor(((int) $item->width * (int) $item->height) / 100000));
     }
 
-    private function moment(MediaItem $item): Carbon { return $item->taken_at ?? $item->uploaded_at ?? $item->created_at; }
+    private function moment(MediaItem $item): Carbon
+    {
+        return $item->taken_at ?? $item->uploaded_at ?? $item->created_at;
+    }
 
     private function distanceKm(float $lat1, float $lng1, float $lat2, float $lng2): float
     {
-        $latDelta = deg2rad($lat2 - $lat1); $lngDelta = deg2rad($lng2 - $lng1);
+        $latDelta = deg2rad($lat2 - $lat1);
+        $lngDelta = deg2rad($lng2 - $lng1);
         $a = sin($latDelta / 2) ** 2 + cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * sin($lngDelta / 2) ** 2;
+
         return 6371 * 2 * atan2(sqrt($a), sqrt(1 - $a));
     }
 }

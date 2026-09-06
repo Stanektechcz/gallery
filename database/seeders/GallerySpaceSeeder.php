@@ -17,11 +17,11 @@ class GallerySpaceSeeder extends Seeder
         $adrian = User::firstOrCreate(
             ['email' => config('gallery.owner_email') ?: 'adrian@gallery.local'],
             [
-                'uuid'       => (string) Str::uuid(),
-                'name'       => config('gallery.owner_name', 'Adrian'),
-                'password'   => Hash::make('change-me-' . Str::random(16)),
-                'role'       => 'owner',
-                'is_active'  => true,
+                'uuid' => (string) Str::uuid(),
+                'name' => config('gallery.owner_name', 'Adrian'),
+                'password' => Hash::make('change-me-'.Str::random(16)),
+                'role' => 'owner',
+                'is_active' => true,
             ]
         );
 
@@ -29,11 +29,11 @@ class GallerySpaceSeeder extends Seeder
         $makinka = User::firstOrCreate(
             ['email' => config('gallery.partner_email') ?: 'makinka@gallery.local'],
             [
-                'uuid'       => (string) Str::uuid(),
-                'name'       => config('gallery.partner_name', 'Makinka'),
-                'password'   => Hash::make('change-me-' . Str::random(16)),
-                'role'       => 'partner',
-                'is_active'  => true,
+                'uuid' => (string) Str::uuid(),
+                'name' => config('gallery.partner_name', 'Makinka'),
+                'password' => Hash::make('change-me-'.Str::random(16)),
+                'role' => 'partner',
+                'is_active' => true,
             ]
         );
 
@@ -43,16 +43,16 @@ class GallerySpaceSeeder extends Seeder
         $space = GallerySpace::firstOrCreate(
             ['slug' => 'nase-galerie'],
             [
-                'uuid'       => (string) Str::uuid(),
-                'name'       => $spaceName,
-                'owner_id'   => $adrian->id,
+                'uuid' => (string) Str::uuid(),
+                'name' => $spaceName,
+                'owner_id' => $adrian->id,
                 'is_default' => true,
             ]
         );
 
         // Add both users to the space
         $space->members()->syncWithoutDetaching([
-            $adrian->id  => ['role' => 'owner',  'can_delete' => true,  'can_share' => true,  'joined_at' => now()],
+            $adrian->id => ['role' => 'owner',  'can_delete' => true,  'can_share' => true,  'joined_at' => now()],
             $makinka->id => ['role' => 'editor',  'can_delete' => true, 'can_share' => true,  'joined_at' => now()],
         ]);
 

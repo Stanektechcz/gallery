@@ -20,10 +20,16 @@ return new class extends Migration
     public function up(): void
     {
         foreach ($this->tables as $table) {
-            if (! Schema::hasTable($table)) continue;
+            if (! Schema::hasTable($table)) {
+                continue;
+            }
             Schema::table($table, function (Blueprint $blueprint) use ($table): void {
-                if (! Schema::hasColumn($table, 'created_from')) $blueprint->string('created_from', 32)->default('manual');
-                if (! Schema::hasColumn($table, 'source_reference')) $blueprint->string('source_reference', 120)->nullable();
+                if (! Schema::hasColumn($table, 'created_from')) {
+                    $blueprint->string('created_from', 32)->default('manual');
+                }
+                if (! Schema::hasColumn($table, 'source_reference')) {
+                    $blueprint->string('source_reference', 120)->nullable();
+                }
             });
         }
     }
@@ -31,11 +37,19 @@ return new class extends Migration
     public function down(): void
     {
         foreach ($this->tables as $table) {
-            if (! Schema::hasTable($table)) continue;
+            if (! Schema::hasTable($table)) {
+                continue;
+            }
             $columns = [];
-            if (Schema::hasColumn($table, 'created_from')) $columns[] = 'created_from';
-            if (Schema::hasColumn($table, 'source_reference')) $columns[] = 'source_reference';
-            if ($columns) Schema::table($table, fn (Blueprint $blueprint) => $blueprint->dropColumn($columns));
+            if (Schema::hasColumn($table, 'created_from')) {
+                $columns[] = 'created_from';
+            }
+            if (Schema::hasColumn($table, 'source_reference')) {
+                $columns[] = 'source_reference';
+            }
+            if ($columns) {
+                Schema::table($table, fn (Blueprint $blueprint) => $blueprint->dropColumn($columns));
+            }
         }
     }
 };

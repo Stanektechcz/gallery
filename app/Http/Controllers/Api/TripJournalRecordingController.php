@@ -39,7 +39,7 @@ class TripJournalRecordingController extends Controller
         $uuid = (string) Str::uuid();
         $path = $file->storeAs("travel-journal/{$id}", "{$uuid}.{$extension}", 'local');
         try {
-            $entryId = DB::transaction(function () use ($request, $trip, $id, $data, $file, $uuid, $path, $detectedMime) {
+            $entryId = DB::transaction(function () use ($request, $id, $data, $file, $uuid, $path, $detectedMime) {
                 $visibility = $data['visibility'] ?? 'shared';
                 $entryId = DB::table('travel_journal_entries')->insertGetId([
                     'trip_id' => $id,
@@ -57,6 +57,7 @@ class TripJournalRecordingController extends Controller
                     'size_bytes' => $file->getSize(), 'duration_ms' => $data['duration_ms'],
                     'sha256' => hash_file('sha256', Storage::disk('local')->path($path)), 'created_at' => now(), 'updated_at' => now(),
                 ]);
+
                 return $entryId;
             });
         } catch (Throwable $exception) {
@@ -65,6 +66,7 @@ class TripJournalRecordingController extends Controller
         }
         $stories->syncEntry($id, $entryId);
         $entry = DB::table('travel_journal_entries')->find($entryId);
+
         return response()->json((array) $entry + ['is_mine' => true, 'user_name' => $request->user()->name,
             'recording_url' => "/api/v1/trips/{$id}/journal/{$entryId}/recording", 'recording_duration_ms' => $data['duration_ms']], 201);
     }
@@ -79,6 +81,7 @@ class TripJournalRecordingController extends Controller
             ->where(fn ($visible) => $visible->where('entry.visibility', 'shared')->orWhere('entry.user_id', $request->user()->id))
             ->first(['recording.*']);
         abort_unless($recording && Storage::disk($recording->disk)->exists($recording->path), 404);
+
         return response()->file(Storage::disk($recording->disk)->path($recording->path), [
             'Content-Type' => $recording->mime_type,
             'Content-Disposition' => 'inline; filename="hlasova-vzpominka.'.pathinfo($recording->path, PATHINFO_EXTENSION).'"',

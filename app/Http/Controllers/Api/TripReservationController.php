@@ -8,8 +8,8 @@ use App\Services\Travel\TripReservationImportService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Crypt;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -23,6 +23,7 @@ class TripReservationController extends Controller
         $this->available();
         $rows = DB::table('trip_reservation_imports')->where('trip_id', $tripId)->latest()->get()
             ->map(fn (object $row) => $this->payload($row));
+
         return response()->json($rows);
     }
 
@@ -38,7 +39,9 @@ class TripReservationController extends Controller
         $sourceText = trim((string) ($data['source_text'] ?? ''));
         $hash = $file ? hash_file('sha256', (string) $file->getRealPath()) : hash('sha256', Str::squish($sourceText));
         $existing = DB::table('trip_reservation_imports')->where('trip_id', $tripId)->where('sha256', $hash)->first();
-        if ($existing) return response()->json(['duplicate' => true, 'import' => $this->payload($existing)]);
+        if ($existing) {
+            return response()->json(['duplicate' => true, 'import' => $this->payload($existing)]);
+        }
 
         $analysis = $service->analyse($file, $sourceText, $trip);
         $uuid = (string) Str::uuid();
@@ -77,8 +80,12 @@ class TripReservationController extends Controller
             'reminder_hours' => 'nullable|array|max:4', 'reminder_hours.*' => 'integer|min:1|max:720',
         ]);
         $dayId = $data['trip_day_id'] ?? null;
-        if ($dayId) abort_unless(DB::table('trip_days')->where('id', $dayId)->where('trip_id', $tripId)->exists(), 422, 'Vybraný den nepatří k této cestě.');
-        if (! $dayId && ! empty($data['starts_at'])) $dayId = DB::table('trip_days')->where('trip_id', $tripId)->where('date', Carbon::parse($data['starts_at'])->toDateString())->value('id');
+        if ($dayId) {
+            abort_unless(DB::table('trip_days')->where('id', $dayId)->where('trip_id', $tripId)->exists(), 422, 'Vybraný den nepatří k této cestě.');
+        }
+        if (! $dayId && ! empty($data['starts_at'])) {
+            $dayId = DB::table('trip_days')->where('trip_id', $tripId)->where('date', Carbon::parse($data['starts_at'])->toDateString())->value('id');
+        }
         $confirmed = array_replace([
             'provider' => null, 'reference' => null, 'starts_at' => null, 'ends_at' => null,
             'origin' => null, 'destination' => null, 'place_name' => null, 'amount' => null,
@@ -102,9 +109,12 @@ class TripReservationController extends Controller
                 'status' => 'confirmed', 'confirmed_data' => json_encode($confirmed, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
                 'confirmed_at' => now(), 'processing_error' => null, 'updated_at' => now(),
             ]);
+
             return DB::table('trip_reservation_imports')->find($import->id);
         });
-        if ($preparation->canSync()) $preparation->sync($trip);
+        if ($preparation->canSync()) {
+            $preparation->sync($trip);
+        }
 
         return response()->json($this->payload($result));
     }
@@ -115,8 +125,11 @@ class TripReservationController extends Controller
         $this->available();
         $import = DB::table('trip_reservation_imports')->where('trip_id', $tripId)->where('uuid', $uuid)->firstOrFail();
         abort_if($import->status === 'confirmed', 422, 'Potvrzený podklad je už propojený s cestou a nelze jej zahodit bez kontroly navázaných údajů.');
-        if ($import->storage_path) Storage::disk('local')->delete($import->storage_path);
+        if ($import->storage_path) {
+            Storage::disk('local')->delete($import->storage_path);
+        }
         DB::table('trip_reservation_imports')->where('id', $import->id)->delete();
+
         return response()->json(['status' => 'deleted']);
     }
 
@@ -127,18 +140,23 @@ class TripReservationController extends Controller
         $import = DB::table('trip_reservation_imports')->where('trip_id', $tripId)->where('uuid', $uuid)->firstOrFail();
         abort_unless($import->storage_path && Storage::disk('local')->exists($import->storage_path), 404);
         $name = preg_replace('/[^\pL\pN._ -]+/u', '-', (string) ($import->original_name ?: 'cestovni-podklad')) ?: 'cestovni-podklad';
+
         return response()->download(Storage::disk('local')->path($import->storage_path), $name, ['Content-Type' => $import->mime_type ?: 'application/octet-stream']);
     }
 
     private function syncDocument(Request $request, int $tripId, object $import, array $data): int
     {
         $values = ['trip_id' => $tripId, 'created_by' => $request->user()->id,
-            'type' => match ($data['type']) { 'ticket' => 'ticket', 'insurance' => 'insurance', default => 'booking' },
+            'type' => match ($data['type']) {
+                'ticket' => 'ticket', 'insurance' => 'insurance', default => 'booking'
+            },
             'title' => $data['title'], 'status' => 'ready', 'reference' => $data['reference'] ?: null, 'updated_at' => now()];
         if ($import->document_check_id && DB::table('trip_document_checks')->where('id', $import->document_check_id)->where('trip_id', $tripId)->exists()) {
             DB::table('trip_document_checks')->where('id', $import->document_check_id)->update($values);
+
             return (int) $import->document_check_id;
         }
+
         return DB::table('trip_document_checks')->insertGetId($values + ['created_at' => now()]);
     }
 
@@ -147,7 +165,9 @@ class TripReservationController extends Controller
         $route = collect([$data['origin'] ?? null, $data['destination'] ?? null])->filter()->implode(' → ');
         $description = collect([$data['provider'] ?? null, $route ?: null, $data['reference'] ? 'Kód: '.$data['reference'] : null, $data['notes'] ?? null])->filter()->implode("\n");
         $values = ['trip_day_id' => $dayId, 'created_by' => $request->user()->id,
-            'type' => match ($data['type']) { 'ticket' => 'transport', 'accommodation' => 'stay', default => 'reservation' },
+            'type' => match ($data['type']) {
+                'ticket' => 'transport', 'accommodation' => 'stay', default => 'reservation'
+            },
             'title' => $data['title'], 'description' => $description ?: null,
             'starts_at' => ! empty($data['starts_at']) ? Carbon::parse($data['starts_at'])->format('H:i:s') : null,
             'ends_at' => ! empty($data['ends_at']) ? Carbon::parse($data['ends_at'])->format('H:i:s') : null,
@@ -157,9 +177,11 @@ class TripReservationController extends Controller
             'updated_at' => now()];
         if ($import->trip_activity_id && DB::table('trip_activities')->where('id', $import->trip_activity_id)->exists()) {
             DB::table('trip_activities')->where('id', $import->trip_activity_id)->update($values);
+
             return (int) $import->trip_activity_id;
         }
         $values['sort_order'] = ((int) DB::table('trip_activities')->where('trip_day_id', $dayId)->max('sort_order')) + 1;
+
         return DB::table('trip_activities')->insertGetId($values + ['created_at' => now()]);
     }
 
@@ -173,8 +195,10 @@ class TripReservationController extends Controller
             'kind' => 'reservation', 'state' => 'assigned', 'metadata' => json_encode($metadata, JSON_UNESCAPED_UNICODE), 'updated_at' => now()];
         if ($import->travel_inbox_item_id && DB::table('travel_inbox_items')->where('id', $import->travel_inbox_item_id)->exists()) {
             DB::table('travel_inbox_items')->where('id', $import->travel_inbox_item_id)->update($values);
+
             return (int) $import->travel_inbox_item_id;
         }
+
         return DB::table('travel_inbox_items')->insertGetId($values + ['uuid' => (string) Str::uuid(), 'created_at' => now()]);
     }
 
@@ -198,11 +222,14 @@ class TripReservationController extends Controller
             DB::table('event_participants')->insertOrIgnore(['event_id' => $eventId, 'user_id' => $memberId, 'role' => (int) $memberId === (int) $request->user()->id ? 'organizer' : 'guest', 'response' => (int) $memberId === (int) $request->user()->id ? 'accepted' : 'pending', 'created_at' => now(), 'updated_at' => now()]);
             foreach ($reminderHours as $hours) {
                 $remindAt = $startsAt->copy()->subHours((int) $hours);
-                if ($remindAt->isPast()) continue;
+                if ($remindAt->isPast()) {
+                    continue;
+                }
                 DB::table('event_reminders')->updateOrInsert(['event_id' => $eventId, 'user_id' => $memberId, 'automation_key' => "reservation-{$import->uuid}-{$hours}h"], ['channel' => 'database', 'remind_at' => $remindAt, 'status' => 'pending', 'automation_source' => 'reservation_import', 'created_at' => now(), 'updated_at' => now()]);
             }
         }
         DB::table('event_attachments')->updateOrInsert(['event_id' => $eventId, 'label' => $data['title']], ['external_url' => $import->storage_path ? "/api/v1/trips/{$trip->id}/reservation-imports/{$import->uuid}/download" : null, 'reference_code' => $data['reference'] ?: null, 'kind' => $data['type'] === 'ticket' ? 'ticket' : 'reservation', 'created_at' => now(), 'updated_at' => now()]);
+
         return $eventId;
     }
 
@@ -214,12 +241,16 @@ class TripReservationController extends Controller
         $payload['confirmed_data'] = json_decode($row->confirmed_data ?: '{}', true) ?: null;
         $sourceText = null;
         if ($row->source_text) {
-            try { $sourceText = Crypt::decryptString($row->source_text); }
-            catch (\Throwable) { $sourceText = $row->source_text; } // Compatibility with an early local development row.
+            try {
+                $sourceText = Crypt::decryptString($row->source_text);
+            } catch (\Throwable) {
+                $sourceText = $row->source_text;
+            } // Compatibility with an early local development row.
         }
         $payload['source_excerpt'] = $sourceText ? Str::limit(Str::squish($sourceText), 500) : null;
         $payload['has_file'] = (bool) $row->storage_path;
         unset($payload['source_text'], $payload['storage_path'], $payload['sha256']);
+
         return $payload;
     }
 

@@ -13,7 +13,9 @@ class AlbumCrudTest extends TestCase
     use RefreshDatabase;
 
     private User $adrian;
+
     private User $makinka;
+
     private GallerySpace $space;
 
     protected function setUp(): void
@@ -21,28 +23,28 @@ class AlbumCrudTest extends TestCase
         parent::setUp();
 
         $this->adrian = User::factory()->create([
-            'name'      => 'Adrian',
-            'email'     => 'adrian@test.local',
-            'role'      => 'owner',
+            'name' => 'Adrian',
+            'email' => 'adrian@test.local',
+            'role' => 'owner',
             'is_active' => true,
         ]);
 
         $this->makinka = User::factory()->create([
-            'name'      => 'Makinka',
-            'email'     => 'makinka@test.local',
-            'role'      => 'partner',
+            'name' => 'Makinka',
+            'email' => 'makinka@test.local',
+            'role' => 'partner',
             'is_active' => true,
         ]);
 
         $this->space = GallerySpace::create([
-            'uuid'       => \Str::uuid(),
-            'name'       => 'Naše galerie',
-            'slug'       => 'nase-galerie',
-            'owner_id'   => $this->adrian->id,
+            'uuid' => \Str::uuid(),
+            'name' => 'Naše galerie',
+            'slug' => 'nase-galerie',
+            'owner_id' => $this->adrian->id,
             'is_default' => true,
         ]);
 
-        $this->space->members()->attach($this->adrian->id,  ['role' => 'owner',  'can_delete' => true,  'can_share' => true,  'joined_at' => now()]);
+        $this->space->members()->attach($this->adrian->id, ['role' => 'owner',  'can_delete' => true,  'can_share' => true,  'joined_at' => now()]);
         $this->space->members()->attach($this->makinka->id, ['role' => 'editor', 'can_delete' => false, 'can_share' => true,  'joined_at' => now()]);
     }
 
@@ -51,7 +53,7 @@ class AlbumCrudTest extends TestCase
     {
         $response = $this->actingAs($this->adrian)
             ->post('/albums', [
-                'title'      => 'Česká republika',
+                'title' => 'Česká republika',
                 'visibility' => 'private',
             ]);
 
@@ -64,7 +66,7 @@ class AlbumCrudTest extends TestCase
     {
         $response = $this->actingAs($this->makinka)
             ->post('/albums', [
-                'title'      => 'Makinkina alba',
+                'title' => 'Makinkina alba',
                 'visibility' => 'private',
             ]);
 

@@ -25,11 +25,13 @@ class DriveConnectionResolver
             ->pluck('user_id')
             ->all();
 
-        if ($preferredUserId && !in_array($preferredUserId, $memberIds, true)) {
+        if ($preferredUserId && ! in_array($preferredUserId, $memberIds, true)) {
             $memberIds[] = $preferredUserId;
         }
 
-        if (!$memberIds) return null;
+        if (! $memberIds) {
+            return null;
+        }
 
         return StorageConnection::query()
             ->where('provider', 'google_drive')

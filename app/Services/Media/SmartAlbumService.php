@@ -41,7 +41,7 @@ class SmartAlbumService
             ? json_decode($album->smart_rules, true)
             : $album->smart_rules;
 
-        $q    = MediaItem::where('gallery_space_id', $spaceId)->whereNull('trashed_at')->where('is_hidden', false);
+        $q = MediaItem::where('gallery_space_id', $spaceId)->whereNull('trashed_at')->where('is_hidden', false);
         $mode = ($rules['match'] ?? 'all') === 'any' ? 'or' : 'and';
 
         $conditions = $rules['conditions'] ?? [];
@@ -52,7 +52,7 @@ class SmartAlbumService
 
         $q->where(function (Builder $query) use ($conditions, $mode) {
             foreach ($conditions as $cond) {
-                $fn = fn(Builder $sub) => $this->applyCondition($sub, $cond);
+                $fn = fn (Builder $sub) => $this->applyCondition($sub, $cond);
                 if ($mode === 'or') {
                     $query->orWhere($fn);
                 } else {
@@ -87,34 +87,32 @@ class SmartAlbumService
     private function applyCondition(Builder $q, array $cond): void
     {
         $field = $cond['field'] ?? null;
-        $op    = $cond['op'] ?? 'eq';
+        $op = $cond['op'] ?? 'eq';
         $value = $cond['value'] ?? null;
 
         match ($field) {
-            'rating'      => $this->applyScalar($q, 'rating', $op, $value),
+            'rating' => $this->applyScalar($q, 'rating', $op, $value),
             'is_favorite' => $q->where('is_favorite', (bool) $value),
-            'has_gps'     => $value ? $q->whereNotNull('latitude') : $q->whereNull('latitude'),
-            'media_type'  => $q->where('media_type', $value),
-            'date_from'   => $q->whereDate('taken_at', '>=', $value),
-            'date_to'     => $q->whereDate('taken_at', '<=', $value),
-            'taken_year'  => $q->whereYear('taken_at', $value),
+            'has_gps' => $value ? $q->whereNotNull('latitude') : $q->whereNull('latitude'),
+            'media_type' => $q->where('media_type', $value),
+            'date_from' => $q->whereDate('taken_at', '>=', $value),
+            'date_to' => $q->whereDate('taken_at', '<=', $value),
+            'taken_year' => $q->whereYear('taken_at', $value),
             'camera_make' => $q->where('camera_make', 'like', "%{$value}%"),
-            'min_width'   => $q->where('width', '>=', $value),
+            'min_width' => $q->where('width', '>=', $value),
             'is_panorama' => $q->where('is_panorama', (bool) $value),
-            'is_360'      => $q->where('is_360', (bool) $value),
-            'is_raw'      => $q->where('is_raw', (bool) $value),
-            'extension'   => is_array($value)
+            'is_360' => $q->where('is_360', (bool) $value),
+            'is_raw' => $q->where('is_raw', (bool) $value),
+            'extension' => is_array($value)
                 ? $q->whereIn('extension', $value)
                 : $q->where('extension', $value),
-            'tag_id'      => $q->whereHas(
+            'tag_id' => $q->whereHas(
                 'tags',
-                fn($tq) =>
-                is_array($value) ? $tq->whereIn('tags.id', $value) : $tq->where('tags.id', $value)
+                fn ($tq) => is_array($value) ? $tq->whereIn('tags.id', $value) : $tq->where('tags.id', $value)
             ),
-            'person_id'   => $q->whereHas(
+            'person_id' => $q->whereHas(
                 'people',
-                fn($pq) =>
-                is_array($value) ? $pq->whereIn('people.id', $value) : $pq->where('people.id', $value)
+                fn ($pq) => is_array($value) ? $pq->whereIn('people.id', $value) : $pq->where('people.id', $value)
             ),
             default => null,
         };
@@ -123,13 +121,13 @@ class SmartAlbumService
     private function applyScalar(Builder $q, string $col, string $op, mixed $value): void
     {
         match ($op) {
-            'eq'  => $q->where($col, $value),
+            'eq' => $q->where($col, $value),
             'neq' => $q->where($col, '!=', $value),
             'gte' => $q->where($col, '>=', $value),
             'lte' => $q->where($col, '<=', $value),
-            'gt'  => $q->where($col, '>', $value),
-            'lt'  => $q->where($col, '<', $value),
-            'in'  => $q->whereIn($col, (array) $value),
+            'gt' => $q->where($col, '>', $value),
+            'lt' => $q->where($col, '<', $value),
+            'in' => $q->whereIn($col, (array) $value),
             default => null,
         };
     }
@@ -139,40 +137,45 @@ class SmartAlbumService
     public static function conditionLabel(array $cond): string
     {
         $field = $cond['field'] ?? '';
-        $op    = $cond['op']    ?? 'eq';
+        $op = $cond['op'] ?? 'eq';
         $value = $cond['value'] ?? '';
 
         $opLabel = match ($op) {
-            'gte'  => '≥',
-            'lte'  => '≤',
-            'gt'   => '>',
-            'lt'   => '<',
-            'neq'  => '≠',
-            'in'   => 'je v',
+            'gte' => '≥',
+            'lte' => '≤',
+            'gt' => '>',
+            'lt' => '<',
+            'neq' => '≠',
+            'in' => 'je v',
             default => '=',
         };
 
         $fieldLabel = match ($field) {
-            'rating'      => 'Hodnocení',
+            'rating' => 'Hodnocení',
             'is_favorite' => 'Oblíbené',
-            'has_gps'     => 'Má GPS',
-            'media_type'  => 'Typ',
-            'date_from'   => 'Datum od',
-            'date_to'     => 'Datum do',
-            'taken_year'  => 'Rok',
+            'has_gps' => 'Má GPS',
+            'media_type' => 'Typ',
+            'date_from' => 'Datum od',
+            'date_to' => 'Datum do',
+            'taken_year' => 'Rok',
             'camera_make' => 'Fotoaparát',
-            'min_width'   => 'Min. šířka (px)',
+            'min_width' => 'Min. šířka (px)',
             'is_panorama' => 'Panorama',
-            'is_360'      => '360°',
-            'is_raw'      => 'RAW',
-            'extension'   => 'Formát',
-            'tag_id'      => 'Tag',
-            'person_id'   => 'Osoba',
-            default       => $field,
+            'is_360' => '360°',
+            'is_raw' => 'RAW',
+            'extension' => 'Formát',
+            'tag_id' => 'Tag',
+            'person_id' => 'Osoba',
+            default => $field,
         };
 
-        if (is_bool($value)) return $fieldLabel . ' = ' . ($value ? 'ano' : 'ne');
-        if (is_array($value)) return $fieldLabel . ' ' . $opLabel . ' [' . implode(', ', $value) . ']';
-        return $fieldLabel . ' ' . $opLabel . ' ' . $value;
+        if (is_bool($value)) {
+            return $fieldLabel.' = '.($value ? 'ano' : 'ne');
+        }
+        if (is_array($value)) {
+            return $fieldLabel.' '.$opLabel.' ['.implode(', ', $value).']';
+        }
+
+        return $fieldLabel.' '.$opLabel.' '.$value;
     }
 }

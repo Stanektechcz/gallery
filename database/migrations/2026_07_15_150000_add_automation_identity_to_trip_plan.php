@@ -18,7 +18,9 @@ return new class extends Migration
     public function up(): void
     {
         foreach (self::TABLES as $tableName => $definition) {
-            if (! Schema::hasTable($tableName)) continue;
+            if (! Schema::hasTable($tableName)) {
+                continue;
+            }
 
             if (! Schema::hasColumn($tableName, 'automation_source')) {
                 Schema::table($tableName, fn (Blueprint $table) => $table->string('automation_source', 40)->nullable());
@@ -38,7 +40,9 @@ return new class extends Migration
     public function down(): void
     {
         foreach (array_reverse(self::TABLES, true) as $tableName => $definition) {
-            if (! Schema::hasTable($tableName)) continue;
+            if (! Schema::hasTable($tableName)) {
+                continue;
+            }
 
             if (Schema::hasIndex($tableName, $definition['index'])) {
                 Schema::table($tableName, fn (Blueprint $table) => $table->dropUnique($definition['index']));

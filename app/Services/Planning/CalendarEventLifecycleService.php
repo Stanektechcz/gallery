@@ -11,7 +11,9 @@ class CalendarEventLifecycleService
     public function completeElapsedPlans(array $spaceIds): int
     {
         $spaceIds = array_values(array_unique(array_filter($spaceIds)));
-        if ($spaceIds === []) return 0;
+        if ($spaceIds === []) {
+            return 0;
+        }
 
         $events = CalendarEvent::query()
             ->whereIn('gallery_space_id', $spaceIds)
@@ -21,7 +23,9 @@ class CalendarEventLifecycleService
 
         $completed = 0;
         foreach ($events as $event) {
-            if (($event->metadata['keep_open_after_end'] ?? false) === true) continue;
+            if (($event->metadata['keep_open_after_end'] ?? false) === true) {
+                continue;
+            }
             DB::transaction(function () use ($event): void {
                 $metadata = is_array($event->metadata) ? $event->metadata : [];
                 $metadata['auto_completed_at'] = now('Europe/Prague')->toIso8601String();

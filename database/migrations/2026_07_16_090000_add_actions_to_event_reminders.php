@@ -8,7 +8,9 @@ return new class extends Migration
 {
     public function up(): void
     {
-        if (! Schema::hasTable('event_reminders')) return;
+        if (! Schema::hasTable('event_reminders')) {
+            return;
+        }
 
         Schema::table('event_reminders', function (Blueprint $table): void {
             if (! Schema::hasColumn('event_reminders', 'original_remind_at')) {
@@ -31,7 +33,9 @@ return new class extends Migration
 
     public function down(): void
     {
-        if (! Schema::hasTable('event_reminders')) return;
+        if (! Schema::hasTable('event_reminders')) {
+            return;
+        }
 
         $columns = array_values(array_filter([
             'original_remind_at', 'snoozed_until', 'snooze_count', 'acknowledged_at', 'dismissed_at',

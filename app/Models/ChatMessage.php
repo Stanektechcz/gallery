@@ -2,13 +2,14 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToGallerySpace;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Str;
 
 class ChatMessage extends Model
 {
-    use \App\Models\Concerns\BelongsToGallerySpace;
+    use BelongsToGallerySpace;
     use SoftDeletes;
 
     protected $fillable = [

@@ -154,13 +154,18 @@ class CoupleExperienceRecommendationService
                 }
             } else {
                 $score += 10;
-                if (!$place->personal_rating) $reasons[] = 'čeká na první společnou návštěvu';
+                if (! $place->personal_rating) {
+                    $reasons[] = 'čeká na první společnou návštěvu';
+                }
             }
             if ($place->is_rain_friendly) {
                 $score += ($filters['theme'] ?? 'any') === 'rain' ? 12 : 2;
                 if (($filters['theme'] ?? null) === 'rain') {
-                    if ($reviewCount > 0) array_unshift($reasons, 'vhodné na déšť');
-                    else $reasons[] = 'vhodné na déšť';
+                    if ($reviewCount > 0) {
+                        array_unshift($reasons, 'vhodné na déšť');
+                    } else {
+                        $reasons[] = 'vhodné na déšť';
+                    }
                 }
             }
             if ($place->is_photogenic) {
@@ -169,7 +174,9 @@ class CoupleExperienceRecommendationService
             }
             if ($place->price_level && $place->price_level <= 2) {
                 $score += ($filters['theme'] ?? 'any') === 'budget' ? 12 : 2;
-                if (($filters['theme'] ?? null) === 'budget') array_unshift($reasons, 'odpovídá low-cost filtru');
+                if (($filters['theme'] ?? null) === 'budget') {
+                    array_unshift($reasons, 'odpovídá low-cost filtru');
+                }
             }
 
             $note = $latestReviewNotes->get($place->id);
@@ -204,22 +211,34 @@ class CoupleExperienceRecommendationService
     {
         $duration = $place->estimated_visit_minutes ?: 120;
         $base = $requestedDate ? Carbon::parse($requestedDate)->startOfDay() : now()->addDay()->startOfDay();
-        if ($base->isPast()) $base = now()->addDay()->startOfDay();
+        if ($base->isPast()) {
+            $base = now()->addDay()->startOfDay();
+        }
 
         for ($offset = 0; $offset < 28; $offset++) {
             $day = $base->copy()->addDays($offset);
-            if (!$requestedDate && !in_array($day->dayOfWeek, [Carbon::FRIDAY, Carbon::SATURDAY, Carbon::SUNDAY], true)) continue;
+            if (! $requestedDate && ! in_array($day->dayOfWeek, [Carbon::FRIDAY, Carbon::SATURDAY, Carbon::SUNDAY], true)) {
+                continue;
+            }
             $hour = in_array($place->type, ['restaurant', 'bar', 'cafe', 'coffee'], true) ? 18 : 10;
-            if (in_array($place->type, ['cafe', 'coffee'], true)) $hour = 15;
+            if (in_array($place->type, ['cafe', 'coffee'], true)) {
+                $hour = 15;
+            }
             $start = $day->copy()->setTime($hour, 0);
-            if ($start->lte(now())) continue;
+            if ($start->lte(now())) {
+                continue;
+            }
             $end = $start->copy()->addMinutes($duration);
             $busy = CalendarEvent::query()->where('gallery_space_id', $space->id)->whereNotIn('status', ['cancelled'])
                 ->where('starts_at', '<', $end)
                 ->where(fn ($query) => $query->whereNull('ends_at')->where('starts_at', '>=', $start)->orWhere('ends_at', '>', $start))
                 ->exists();
-            if (!$busy) return $start;
-            if ($requestedDate) break;
+            if (! $busy) {
+                return $start;
+            }
+            if ($requestedDate) {
+                break;
+            }
         }
 
         return $base->copy()->addWeek()->setTime(18, 0);

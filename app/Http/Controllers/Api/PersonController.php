@@ -16,6 +16,7 @@ class PersonController extends Controller
         $space = $request->user()->gallerySpaces()->firstOrFail();
         $people = Person::where('gallery_space_id', $space->id)->withCount('media')->orderBy('name')->get()
             ->map(fn (Person $person) => $this->personPayload($person));
+
         return response()->json($people);
     }
 
@@ -24,6 +25,7 @@ class PersonController extends Controller
         $data = $request->validate(['name' => 'required|string|max:100', 'nickname' => 'nullable|string|max:100', 'birth_date' => 'nullable|date', 'description' => 'nullable|string|max:5000']);
         $space = $request->user()->gallerySpaces()->firstOrFail();
         $person = Person::create($data + ['gallery_space_id' => $space->id, 'created_by' => $request->user()->id]);
+
         return response()->json($this->personPayload($person), 201);
     }
 
@@ -41,6 +43,7 @@ class PersonController extends Controller
         $gifts = Schema::hasTable('gift_ideas')
             ? $giftQuery->orderByRaw('due_date IS NULL, due_date')->limit(12)->get(['uuid', 'title', 'occasion', 'due_date', 'budget', 'currency', 'status'])
             : collect();
+
         return response()->json(['person' => $this->personPayload($person), 'media' => $media, 'albums' => $albums, 'gifts' => $gifts]);
     }
 
@@ -50,6 +53,7 @@ class PersonController extends Controller
         $this->authorizePerson($person, $space->id);
         $data = $request->validate(['name' => 'sometimes|string|max:100', 'nickname' => 'nullable|string|max:100', 'description' => 'nullable|string|max:5000', 'birth_date' => 'nullable|date', 'is_favorite' => 'nullable|boolean', 'is_hidden' => 'nullable|boolean']);
         $person->update($data);
+
         return response()->json($this->personPayload($person->fresh()));
     }
 
@@ -59,6 +63,7 @@ class PersonController extends Controller
         $person = Person::findOrFail($id);
         $this->authorizePerson($person, $space->id);
         $person->delete();
+
         return response()->json(['status' => 'deleted']);
     }
 
@@ -70,6 +75,7 @@ class PersonController extends Controller
         abort_unless(Schema::hasTable('person_notes'), 503, 'Poznámky budou dostupné po dokončení aktualizace databáze.');
         $shared = DB::table('person_notes')->where('person_id', $person->id)->where('scope_key', 'shared')->first();
         $mine = DB::table('person_notes')->where('person_id', $person->id)->where('scope_key', 'personal:'.$request->user()->id)->first();
+
         return response()->json(['shared' => $shared, 'mine' => $mine]);
     }
 
@@ -79,14 +85,21 @@ class PersonController extends Controller
         $this->authorizePerson($person, $space->id);
         abort_unless(Schema::hasTable('person_notes'), 503, 'Poznámky budou dostupné po dokončení aktualizace databáze.');
         $data = $request->validate(['visibility' => 'required|in:shared,personal', 'content' => 'nullable|string|max:10000']);
-        $user = $request->user(); $content = trim((string) ($data['content'] ?? ''));
+        $user = $request->user();
+        $content = trim((string) ($data['content'] ?? ''));
         $scopeKey = $data['visibility'] === 'shared' ? 'shared' : 'personal:'.$user->id;
         $query = DB::table('person_notes')->where('person_id', $person->id)->where('scope_key', $scopeKey);
-        if ($content === '') { $query->delete(); return response()->json(['note' => null]); }
+        if ($content === '') {
+            $query->delete();
+
+            return response()->json(['note' => null]);
+        }
         $now = now();
         DB::table('person_notes')->upsert([['person_id' => $person->id, 'gallery_space_id' => $space->id, 'user_id' => $data['visibility'] === 'personal' ? $user->id : null, 'visibility' => $data['visibility'], 'scope_key' => $scopeKey, 'content' => $content, 'created_by' => $user->id, 'updated_by' => $user->id, 'created_at' => $now, 'updated_at' => $now]], ['person_id', 'scope_key'], ['content', 'updated_by', 'updated_at']);
+
         return response()->json(['note' => $query->first()]);
     }
+
     private function authorizePerson(Person $person, int $spaceId): void
     {
         abort_unless((int) $person->gallery_space_id === $spaceId, 403);
@@ -95,6 +108,7 @@ class PersonController extends Controller
     private function personPayload(Person $person): array
     {
         $person->loadMissing('cover.variants');
+
         return ['id' => $person->id, 'name' => $person->name, 'nickname' => $person->nickname, 'description' => $person->description, 'birth_date' => optional($person->birth_date)->toDateString(), 'is_favorite' => (bool) $person->is_favorite, 'is_hidden' => (bool) $person->is_hidden, 'media_count' => (int) ($person->media_count ?? $person->media()->count()), 'latest_thumb' => $person->cover?->thumbnail_url];
     }
 }

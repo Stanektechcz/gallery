@@ -25,7 +25,9 @@ class InvoiceService
     public function forPayment(Payment $payment): Invoice
     {
         $existing = Invoice::where('payment_id', $payment->id)->first();
-        if ($existing) return $existing;
+        if ($existing) {
+            return $existing;
+        }
 
         $buyer = $payment->buyer;
 
@@ -61,14 +63,14 @@ class InvoiceService
         $year = now()->year;
         $prefix = (string) $year;
 
-        $last = Invoice::where('number', 'like', $prefix . '%')
+        $last = Invoice::where('number', 'like', $prefix.'%')
             ->orderByDesc('number')
             ->lockForUpdate()
             ->value('number');
 
         $sequence = $last ? ((int) substr($last, 4)) + 1 : 1;
 
-        return $prefix . str_pad((string) $sequence, 4, '0', STR_PAD_LEFT);
+        return $prefix.str_pad((string) $sequence, 4, '0', STR_PAD_LEFT);
     }
 
     /** What the customer bought, in words they will recognise on a bank statement. */
@@ -77,11 +79,11 @@ class InvoiceService
         $period = $payment->billing_period === 'yearly' ? 'roční' : 'měsíční';
 
         if ($payment->purchase_type === 'plan' && $payment->plan) {
-            return 'Tarif ' . $payment->plan->name . ' — ' . $period . ' předplatné';
+            return 'Tarif '.$payment->plan->name.' — '.$period.' předplatné';
         }
 
         if ($payment->purchase_type === 'module' && $payment->module) {
-            return 'Modul ' . $payment->module->name . ' — ' . $period . ' předplatné';
+            return 'Modul '.$payment->module->name.' — '.$period.' předplatné';
         }
 
         return 'Předplatné MAKI Gallery';

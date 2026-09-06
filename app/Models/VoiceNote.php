@@ -2,16 +2,33 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToGallerySpace;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
 
 class VoiceNote extends Model
 {
-    use \App\Models\Concerns\BelongsToGallerySpace;
+    use BelongsToGallerySpace;
 
     protected $fillable = ['uuid', 'gallery_space_id', 'created_by', 'source_message_uuid', 'title', 'path', 'mime_type', 'size_bytes', 'duration_ms', 'transcript', 'recorded_at'];
-    protected function casts(): array { return ['recorded_at' => 'datetime']; }
-    protected static function booted(): void { static::creating(fn (self $note) => $note->uuid ??= (string) Str::uuid()); }
-    public function author() { return $this->belongsTo(User::class, 'created_by'); }
-    public function listens() { return $this->hasMany(VoiceNoteListen::class); }
+
+    protected function casts(): array
+    {
+        return ['recorded_at' => 'datetime'];
+    }
+
+    protected static function booted(): void
+    {
+        static::creating(fn (self $note) => $note->uuid ??= (string) Str::uuid());
+    }
+
+    public function author()
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function listens()
+    {
+        return $this->hasMany(VoiceNoteListen::class);
+    }
 }

@@ -7,6 +7,7 @@ use App\Models\Tag;
 use App\Support\SpaceContext;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 /**
  * Doplní štítky, které jdou odvodit z toho, co u fotky už stojí.
@@ -46,15 +47,19 @@ class AutoTagCommand extends Command
 
         foreach ($media as $item) {
             $navrhy = $this->tagsFor($item);
-            if (! $navrhy) continue;
+            if (! $navrhy) {
+                continue;
+            }
 
             $uzMa = $item->tags->pluck('name')->map(fn ($n) => mb_strtolower($n))->all();
             $nove = array_values(array_filter($navrhy, fn ($t) => ! in_array(mb_strtolower($t), $uzMa, true)));
 
-            if (! $nove) continue;
+            if (! $nove) {
+                continue;
+            }
 
-            $this->line('  ' . mb_strimwidth($item->original_filename ?? ('#' . $item->id), 0, 32, '…')
-                . '  +' . implode(', +', $nove));
+            $this->line('  '.mb_strimwidth($item->original_filename ?? ('#'.$item->id), 0, 32, '…')
+                .'  +'.implode(', +', $nove));
 
             if ($zapsat) {
                 foreach ($nove as $jmeno) {
@@ -63,7 +68,7 @@ class AutoTagCommand extends Command
                     $tag = Tag::firstOrCreate(
                         ['gallery_space_id' => $item->gallery_space_id, 'name' => $jmeno],
                         [
-                            'slug' => \Illuminate\Support\Str::slug($jmeno) ?: mb_strtolower($jmeno),
+                            'slug' => Str::slug($jmeno) ?: mb_strtolower($jmeno),
                             'depth' => 0,
                             'created_by' => $item->uploaded_by ?? $item->owner_user_id,
                         ],
@@ -110,21 +115,29 @@ class AutoTagCommand extends Command
             default => 'podzim',
         };
 
-        if ($kdy->isWeekend()) $tagy[] = 'víkend';
+        if ($kdy->isWeekend()) {
+            $tagy[] = 'víkend';
+        }
 
         // Večerní a noční snímky se hledají jinak než denní. Hranice schválně široká —
         // „večer" je od šesti, ne od astronomického soumraku.
         $hodina = (int) $kdy->hour;
-        if ($hodina >= 18 || $hodina < 5) $tagy[] = 'večer';
+        if ($hodina >= 18 || $hodina < 5) {
+            $tagy[] = 'večer';
+        }
 
         // Město, kde to vzniklo. Jen z uloženého názvu místa, ne z geokódování — dotaz
         // na tisíce fotek by trval hodiny a jméno už u nich stojí.
         if (filled($item->location_name)) {
             $mesto = trim(explode(',', (string) $item->location_name)[0]);
-            if (mb_strlen($mesto) >= 2 && mb_strlen($mesto) <= 40) $tagy[] = $mesto;
+            if (mb_strlen($mesto) >= 2 && mb_strlen($mesto) <= 40) {
+                $tagy[] = $mesto;
+            }
         }
 
-        if (filled($item->location_country)) $tagy[] = (string) $item->location_country;
+        if (filled($item->location_country)) {
+            $tagy[] = (string) $item->location_country;
+        }
 
         return array_values(array_unique($tagy));
     }

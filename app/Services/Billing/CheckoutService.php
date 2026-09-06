@@ -8,7 +8,6 @@ use App\Models\BillingPlan;
 use App\Models\GallerySpace;
 use App\Models\Payment;
 use App\Models\SpaceSubscription;
-use App\Services\Billing\InvoiceService;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -53,7 +52,7 @@ class CheckoutService
             'currency' => $plan->currency,
         ]);
 
-        $created = $this->gateway->createPayment($payment, 'Tarif ' . $plan->code, $buyer->email);
+        $created = $this->gateway->createPayment($payment, 'Tarif '.$plan->code, $buyer->email);
 
         return ['payment' => $payment->fresh(), 'redirect' => $created['redirect'], 'credit' => $credit];
     }
@@ -76,7 +75,7 @@ class CheckoutService
             'currency' => $module->currency,
         ]);
 
-        $created = $this->gateway->createPayment($payment, 'Modul ' . $module->code, $buyer->email);
+        $created = $this->gateway->createPayment($payment, 'Modul '.$module->code, $buyer->email);
 
         return ['payment' => $payment->fresh(), 'redirect' => $created['redirect']];
     }
@@ -102,12 +101,16 @@ class CheckoutService
             ->latest('started_at')
             ->first();
 
-        if (! $current?->plan || ! $current->started_at || ! $current->ends_at) return 0;
+        if (! $current?->plan || ! $current->started_at || ! $current->ends_at) {
+            return 0;
+        }
 
         $total = $current->started_at->diffInSeconds($current->ends_at);
         $left = now()->diffInSeconds($current->ends_at, false);
 
-        if ($total <= 0 || $left <= 0) return 0;
+        if ($total <= 0 || $left <= 0) {
+            return 0;
+        }
 
         // The window tells us which price was paid: anything close to a year was yearly.
         $paid = $total > 60 * 60 * 24 * 60
@@ -130,7 +133,9 @@ class CheckoutService
      */
     public function settle(Payment $payment): Payment
     {
-        if ($payment->isPaid()) return $payment;
+        if ($payment->isPaid()) {
+            return $payment;
+        }
 
         // Never trust the caller: ask Comgate what really happened.
         $status = $payment->transaction_id ? $this->gateway->status($payment->transaction_id) : [];
@@ -155,7 +160,9 @@ class CheckoutService
     /** @param array<string,string> $status */
     public function markPaid(Payment $payment, array $status = []): Payment
     {
-        if ($payment->isPaid()) return $payment;
+        if ($payment->isPaid()) {
+            return $payment;
+        }
 
         DB::transaction(function () use ($payment, $status): void {
             $payment->update([
@@ -167,7 +174,9 @@ class CheckoutService
             ]);
 
             $space = $payment->space;
-            if (! $space) return;
+            if (! $space) {
+                return;
+            }
 
             $until = $payment->billing_period === 'yearly' ? now()->addYear() : now()->addMonth();
             $buyer = $payment->created_by ? User::find($payment->created_by) : null;

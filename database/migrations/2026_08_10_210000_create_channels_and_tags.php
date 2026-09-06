@@ -159,7 +159,9 @@ return new class extends Migration
     {
         Schema::table('conversations', function (Blueprint $table) {
             foreach (['topic', 'position', 'is_default', 'is_archived', 'visibility'] as $column) {
-                if (Schema::hasColumn('conversations', $column)) $table->dropColumn($column);
+                if (Schema::hasColumn('conversations', $column)) {
+                    $table->dropColumn($column);
+                }
             }
             if (Schema::hasColumn('conversations', 'conversation_category_id')) {
                 $table->dropForeign(['conversation_category_id']);

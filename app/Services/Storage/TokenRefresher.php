@@ -30,9 +30,7 @@ class TokenRefresher
     /** Refresh this far ahead of expiry, so a long upload does not start on a dying token. */
     private const MARGIN_MINUTES = 10;
 
-    public function __construct(private readonly StorageResolver $resolver)
-    {
-    }
+    public function __construct(private readonly StorageResolver $resolver) {}
 
     /**
      * A usable access token, refreshing first if the stored one is close to expiring.
@@ -43,7 +41,9 @@ class TokenRefresher
      */
     public function accessToken(StorageConnection $connection): ?string
     {
-        if (! isset(self::ENDPOINTS[$connection->provider])) return null;
+        if (! isset(self::ENDPOINTS[$connection->provider])) {
+            return null;
+        }
 
         $fresh = $connection->token_expires_at
             && $connection->token_expires_at->isAfter(now()->addMinutes(self::MARGIN_MINUTES));
@@ -132,7 +132,10 @@ class TokenRefresher
     /** A token encrypted under a rotated key is unreadable, not a reason to fall over. */
     private function decrypt(string $value): ?string
     {
-        try { return Crypt::decryptString($value); }
-        catch (\Throwable) { return null; }
+        try {
+            return Crypt::decryptString($value);
+        } catch (\Throwable) {
+            return null;
+        }
     }
 }

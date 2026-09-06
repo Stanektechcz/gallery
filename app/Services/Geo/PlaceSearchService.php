@@ -25,18 +25,21 @@ use Illuminate\Support\Facades\Http;
 class PlaceSearchService
 {
     private const AGENT = 'MakiGallery/1.0 (gallery.stanektech.cz)';
+
     private const CACHE_MINUTES = 60 * 24 * 7;
 
     /**
      * Návrhy pro rozepsaný text.
      *
-     * @param array{lat?: float|null, lon?: float|null} $near Bod, kolem kterého se má hledat.
+     * @param  array{lat?: float|null, lon?: float|null}  $near  Bod, kolem kterého se má hledat.
      * @return array<int, array<string, mixed>>
      */
     public function suggest(string $query, ?GallerySpace $space = null, array $near = []): array
     {
         $query = trim($query);
-        if (mb_strlen($query) < 2) return [];
+        if (mb_strlen($query) < 2) {
+            return [];
+        }
 
         // Souřadnice vlepené do políčka. Lidé je kopírují z map i ze zpráv a čekat, že
         // je někdo rozepíše na jméno místa, je zbytečná práce navíc.
@@ -62,7 +65,9 @@ class PlaceSearchService
                     }
                 }
 
-                if (! $duplicita) $svet[] = $navic;
+                if (! $duplicita) {
+                    $svet[] = $navic;
+                }
             }
         }
 
@@ -90,7 +95,7 @@ class PlaceSearchService
      */
     public function reverse(float $latitude, float $longitude): ?array
     {
-        $klic = 'geo:rev:' . round($latitude, 5) . ',' . round($longitude, 5);
+        $klic = 'geo:rev:'.round($latitude, 5).','.round($longitude, 5);
 
         return Cache::remember($klic, now()->addMinutes(self::CACHE_MINUTES), function () use ($latitude, $longitude) {
             $odpoved = $this->call('https://nominatim.openstreetmap.org/reverse', [
@@ -102,7 +107,9 @@ class PlaceSearchService
                 'lon' => $longitude,
             ]);
 
-            if (! is_array($odpoved) || empty($odpoved['lat'])) return null;
+            if (! is_array($odpoved) || empty($odpoved['lat'])) {
+                return null;
+            }
 
             return $this->shape($odpoved);
         });
@@ -111,7 +118,7 @@ class PlaceSearchService
     /** Místa, která už tenhle prostor zná. */
     private function ownPlaces(string $query, GallerySpace $space): array
     {
-        $like = '%' . str_replace(' ', '%', $query) . '%';
+        $like = '%'.str_replace(' ', '%', $query).'%';
 
         return Place::where('gallery_space_id', $space->id)
             ->where(fn ($q) => $q->where('name', 'like', $like)
@@ -162,11 +169,13 @@ class PlaceSearchService
             ]);
         }
 
-        $klic = 'geo:search:' . md5(json_encode($params));
+        $klic = 'geo:search:'.md5(json_encode($params));
 
         $vysledky = Cache::remember($klic, now()->addMinutes(self::CACHE_MINUTES), fn () => $this->call('https://nominatim.openstreetmap.org/search', $params));
 
-        if (! is_array($vysledky)) return [];
+        if (! is_array($vysledky)) {
+            return [];
+        }
 
         $mista = array_map(fn (array $item) => $this->shape($item), $vysledky);
 
@@ -196,10 +205,12 @@ class PlaceSearchService
             $params['lon'] = $near['lon'];
         }
 
-        $klic = 'geo:photon:' . md5(json_encode($params));
+        $klic = 'geo:photon:'.md5(json_encode($params));
         $odpoved = Cache::remember($klic, now()->addMinutes(self::CACHE_MINUTES), fn () => $this->call('https://photon.komoot.io/api/', $params));
 
-        if (! is_array($odpoved) || empty($odpoved['features'])) return [];
+        if (! is_array($odpoved) || empty($odpoved['features'])) {
+            return [];
+        }
 
         $mista = [];
 
@@ -207,7 +218,9 @@ class PlaceSearchService
             $p = $feature['properties'] ?? [];
             $souradnice = $feature['geometry']['coordinates'] ?? null;
 
-            if (! is_array($souradnice) || count($souradnice) < 2) continue;
+            if (! is_array($souradnice) || count($souradnice) < 2) {
+                continue;
+            }
 
             $ulice = collect([$p['street'] ?? null, $p['housenumber'] ?? null])->filter()->implode(' ');
 
@@ -284,10 +297,18 @@ class PlaceSearchService
             return in_array($typ, ['hotel', 'guest_house', 'hostel', 'apartment', 'camp_site'], true) ? 'stay' : 'landmark';
         }
 
-        if ($trida === 'man_made' || $typ === 'bridge') return 'landmark';
-        if ($trida === 'natural' || $trida === 'water' || $trida === 'leisure') return 'nature';
-        if ($trida === 'shop') return 'shop';
-        if ($trida === 'highway' || $adresni === 'road') return 'address';
+        if ($trida === 'man_made' || $typ === 'bridge') {
+            return 'landmark';
+        }
+        if ($trida === 'natural' || $trida === 'water' || $trida === 'leisure') {
+            return 'nature';
+        }
+        if ($trida === 'shop') {
+            return 'shop';
+        }
+        if ($trida === 'highway' || $adresni === 'road') {
+            return 'address';
+        }
 
         return match (true) {
             in_array($typ, ['city', 'town', 'village', 'hamlet', 'municipality', 'borough', 'suburb'], true) => 'city',
@@ -318,7 +339,9 @@ class PlaceSearchService
         $lat = (float) str_replace(',', '.', $m[1]);
         $lon = (float) str_replace(',', '.', $m[2]);
 
-        if (abs($lat) > 90 || abs($lon) > 180) return null;
+        if (abs($lat) > 90 || abs($lon) > 180) {
+            return null;
+        }
 
         return [
             'id' => null,

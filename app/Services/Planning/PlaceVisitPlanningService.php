@@ -13,13 +13,14 @@ use Illuminate\Support\Str;
 class PlaceVisitPlanningService
 {
     public function __construct(private readonly CalendarEventCreationService $calendarEvents) {}
+
     /**
      * Create one shared place plan, calendar event, participants and reminders.
      * Repeating the same request for the same start is idempotent.
      */
     public function schedule(GallerySpace $space, User $user, Place $place, array $data): array
     {
-        $startsAt = Carbon::parse($data['starts_at'] ?? (($data['planned_for'] ?? now()->addWeek()->toDateString()) . ' 10:00:00'));
+        $startsAt = Carbon::parse($data['starts_at'] ?? (($data['planned_for'] ?? now()->addWeek()->toDateString()).' 10:00:00'));
         $duration = (int) ($data['duration_minutes'] ?? $place->estimated_visit_minutes ?? 120);
         $reminderMinutes = (int) ($data['reminder_minutes'] ?? 1440);
 
@@ -41,11 +42,13 @@ class PlaceVisitPlanningService
             $recommendationReason = $data['recommendation_reason'] ?? null;
             $recommendedItem = $data['recommended_item'] ?? null;
             $description = $data['notes'] ?? $place->next_time_note ?? $place->description;
-            if ($recommendedItem && !$description) $description = "Příště si dát: {$recommendedItem}.";
+            if ($recommendedItem && ! $description) {
+                $description = "Příště si dát: {$recommendedItem}.";
+            }
 
             $event = $this->calendarEvents->create($space, $user, [
                 'created_by' => $user->id,
-                'title' => !empty($data['from_recommendation']) ? "Rande · {$place->name}" : $place->name,
+                'title' => ! empty($data['from_recommendation']) ? "Rande · {$place->name}" : $place->name,
                 'description' => $description,
                 'type' => 'outing',
                 'status' => 'planned',
@@ -57,8 +60,8 @@ class PlaceVisitPlanningService
                 'longitude' => $place->longitude,
                 'color' => '#f97316',
                 'metadata' => array_filter([
-                    'source' => !empty($data['from_recommendation']) ? 'couple_experience_recommendation' : 'saved_place',
-                    'kind' => !empty($data['from_recommendation']) ? 'place_recommendation_outing' : 'saved_place_outing',
+                    'source' => ! empty($data['from_recommendation']) ? 'couple_experience_recommendation' : 'saved_place',
+                    'kind' => ! empty($data['from_recommendation']) ? 'place_recommendation_outing' : 'saved_place_outing',
                     'place_id' => $place->id,
                     'recommendation_reason' => $recommendationReason,
                     'recommended_item' => $recommendedItem,
@@ -78,10 +81,10 @@ class PlaceVisitPlanningService
                 }
             }
 
-            if (!empty($data['reservation_reference']) || !empty($data['reservation_url'])) {
+            if (! empty($data['reservation_reference']) || ! empty($data['reservation_url'])) {
                 $event->attachments()->create([
                     'kind' => 'reservation',
-                    'label' => 'Rezervace · ' . $place->name,
+                    'label' => 'Rezervace · '.$place->name,
                     'reference_code' => $data['reservation_reference'] ?? null,
                     'external_url' => $data['reservation_url'] ?? null,
                 ]);

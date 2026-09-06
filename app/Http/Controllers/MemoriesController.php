@@ -14,8 +14,8 @@ class MemoriesController extends Controller
         $cards = $memories->discover($request->user());
 
         return Inertia::render('Memories/Index', [
-            'memories'     => $cards,
-            'today_label'  => now()->translatedFormat('j. F'),
+            'memories' => $cards,
+            'today_label' => now()->translatedFormat('j. F'),
             'has_memories' => $cards->isNotEmpty(),
         ]);
     }

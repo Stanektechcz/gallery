@@ -2,6 +2,8 @@
 
 namespace App\Services\Finance;
 
+use Illuminate\Support\Carbon;
+
 /**
  * Rady, co s penězi dělat — ne jen čísla, co se s nimi stalo.
  *
@@ -311,9 +313,9 @@ class StrategieService
     /** Kolik dní z období už uběhlo. */
     private function uteklo(array $r): int
     {
-        $od = \Illuminate\Support\Carbon::parse($r['starts_on']);
-        $do = $r['ends_on'] ? \Illuminate\Support\Carbon::parse($r['ends_on']) : null;
-        $dnes = \Illuminate\Support\Carbon::today();
+        $od = Carbon::parse($r['starts_on']);
+        $do = $r['ends_on'] ? Carbon::parse($r['ends_on']) : null;
+        $dnes = Carbon::today();
 
         return max(0, (int) $od->diffInDays($dnes->min($do ?? $dnes), false) + 1);
     }

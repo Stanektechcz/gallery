@@ -23,16 +23,33 @@ class Payment extends Model
         static::creating(function (self $payment): void {
             $payment->uuid ??= (string) Str::uuid();
             // The gateway reference must be unguessable and unique per attempt.
-            $payment->reference ??= 'MG-' . strtoupper(Str::random(16));
+            $payment->reference ??= 'MG-'.strtoupper(Str::random(16));
         });
     }
 
-    public function plan() { return $this->belongsTo(BillingPlan::class, 'billing_plan_id'); }
-    public function module() { return $this->belongsTo(BillingModule::class, 'billing_module_id'); }
-    public function space() { return $this->belongsTo(GallerySpace::class, 'gallery_space_id'); }
+    public function plan()
+    {
+        return $this->belongsTo(BillingPlan::class, 'billing_plan_id');
+    }
+
+    public function module()
+    {
+        return $this->belongsTo(BillingModule::class, 'billing_module_id');
+    }
+
+    public function space()
+    {
+        return $this->belongsTo(GallerySpace::class, 'gallery_space_id');
+    }
 
     /** Who paid. Needed by the invoice, which names the customer rather than an id. */
-    public function buyer() { return $this->belongsTo(User::class, 'created_by'); }
+    public function buyer()
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
 
-    public function isPaid(): bool { return $this->status === 'paid'; }
+    public function isPaid(): bool
+    {
+        return $this->status === 'paid';
+    }
 }

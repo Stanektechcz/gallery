@@ -3,18 +3,21 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\Album\CreateAlbumRequest;
-use App\Models\MediaItem;
 use App\Http\Requests\Album\MoveAlbumRequest;
 use App\Http\Requests\Album\UpdateAlbumRequest;
 use App\Jobs\Drive\CreateDriveFolderJob;
 use App\Jobs\Drive\MoveDriveFolderJob;
 use App\Jobs\Drive\RenameDriveFolderJob;
 use App\Models\Album;
-use App\Models\GallerySpace;
+use App\Models\MediaItem;
 use App\Services\AlbumService;
+use App\Services\Media\SmartAlbumService;
 use App\Services\Media\UnassignedAlbumSuggestionService;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -38,14 +41,14 @@ class AlbumController extends Controller
             ->whereNull('deleted_at')
             ->orderBy('materialized_path')
             ->get(['id', 'uuid', 'title', 'depth', 'materialized_path'])
-            ->map(fn($a) => [
-                'id'    => $a->id,
-                'uuid'  => $a->uuid,
-                'title' => str_repeat('— ', $a->depth) . $a->title,
+            ->map(fn ($a) => [
+                'id' => $a->id,
+                'uuid' => $a->uuid,
+                'title' => str_repeat('— ', $a->depth).$a->title,
             ]);
 
         return Inertia::render('Albums/Create', [
-            'allAlbums'  => $allAlbums,
+            'allAlbums' => $allAlbums,
             'parentAlbum' => $parent ? ['id' => $parent->id, 'uuid' => $parent->uuid, 'title' => $parent->title] : null,
         ]);
     }
@@ -71,7 +74,7 @@ class AlbumController extends Controller
         $this->fillMissingCovers($albums);
 
         return Inertia::render('Albums/Index', [
-            'albums'      => $albums,
+            'albums' => $albums,
             'gallerySpace' => $space,
             'albumSuggestions' => $suggestions->suggestions($space, $request->user()),
             'albumSuggestionsAvailable' => $suggestions->available(),
@@ -91,14 +94,16 @@ class AlbumController extends Controller
      * One query for all of them rather than one each, because this runs on a page that
      * lists every album a space has.
      *
-     * @param \Illuminate\Support\Collection<int, Album> $albums
+     * @param  Collection<int, Album>  $albums
      */
     private function fillMissingCovers($albums): void
     {
         $ploche = $albums->concat($albums->flatMap->children ?? collect());
         $chybi = $ploche->filter(fn (Album $album) => ! $album->cover && $album->media_count > 0);
 
-        if ($chybi->isEmpty()) return;
+        if ($chybi->isEmpty()) {
+            return;
+        }
 
         // The best picture in each album rather than merely the newest, ordered the same
         // way the album assistant already ranks its own recommendation: something the
@@ -106,7 +111,7 @@ class AlbumController extends Controller
         // a still from a film, and only then the sharpest of what is left.
         //
         // A hand-picked cover still beats all of it — these albums have none.
-        $nejlepsi = \Illuminate\Support\Facades\DB::table('album_media')
+        $nejlepsi = DB::table('album_media')
             ->join('media_items', 'media_items.id', '=', 'album_media.media_item_id')
             ->whereIn('album_media.album_id', $chybi->pluck('id'))
             ->whereNull('media_items.trashed_at')
@@ -160,14 +165,18 @@ class AlbumController extends Controller
             default => 'taken_at',
         };
 
-        $sortBy  = $request->input('sort', $albumSort);
+        $sortBy = $request->input('sort', $albumSort);
         $sortDir = $request->input('dir', $album->sort_direction ?: 'desc');
-        $type    = $request->input('type');   // photo|video
-        $search  = $request->input('search');
+        $type = $request->input('type');   // photo|video
+        $search = $request->input('search');
 
         $allowedSort = ['taken_at', 'uploaded_at', 'size_bytes', 'original_filename'];
-        if (!in_array($sortBy, $allowedSort)) $sortBy = 'taken_at';
-        if (!in_array($sortDir, ['asc', 'desc'])) $sortDir = 'desc';
+        if (! in_array($sortBy, $allowedSort)) {
+            $sortBy = 'taken_at';
+        }
+        if (! in_array($sortDir, ['asc', 'desc'])) {
+            $sortDir = 'desc';
+        }
 
         // Smart albums: compute media from rules instead of album_media
         $space = $request->user()->gallerySpaces()->first();
@@ -178,29 +187,37 @@ class AlbumController extends Controller
         }
 
         if ($isSmartAlbum) {
-            $smartService = new \App\Services\Media\SmartAlbumService();
-            $mediaQuery   = $smartService->buildQuery($album, $space->id)
+            $smartService = new SmartAlbumService;
+            $mediaQuery = $smartService->buildQuery($album, $space->id)
                 ->with(['variants' => fn ($query) => $query->whereIn('type', ['thumbnail', 'video_poster', 'placeholder'])])
                 ->where('is_hidden', false)
                 ->whereIn('status', ['ready', 'received']);
 
-            if ($type)   $mediaQuery->where('media_type', $type);
-            if ($search) $mediaQuery->where('original_filename', 'like', "%{$search}%");
+            if ($type) {
+                $mediaQuery->where('media_type', $type);
+            }
+            if ($search) {
+                $mediaQuery->where('original_filename', 'like', "%{$search}%");
+            }
 
             $media = $mediaQuery->orderBy($sortBy, $sortDir)->paginate(48)->withQueryString();
         } else {
             $mediaQuery = MediaItem::query()
                 ->where(function ($q) use ($album) {
                     $q->where('primary_album_id', $album->id)
-                        ->orWhereHas('albums', fn($q2) => $q2->where('albums.id', $album->id));
+                        ->orWhereHas('albums', fn ($q2) => $q2->where('albums.id', $album->id));
                 })
                 ->with(['variants' => fn ($query) => $query->whereIn('type', ['thumbnail', 'video_poster', 'placeholder'])])
                 ->whereNull('trashed_at')
                 ->where('is_hidden', false)
                 ->whereIn('status', ['ready', 'received']);
 
-            if ($type)   $mediaQuery->where('media_type', $type);
-            if ($search) $mediaQuery->where('original_filename', 'like', "%{$search}%");
+            if ($type) {
+                $mediaQuery->where('media_type', $type);
+            }
+            if ($search) {
+                $mediaQuery->where('original_filename', 'like', "%{$search}%");
+            }
 
             // Ruční pořadí drží `album_media.sort_order`, ne sloupec na médiu — proto se
             // musí přisadit spojením. Volba „Ručně" v nastavení alba do téhle chvíle
@@ -224,22 +241,22 @@ class AlbumController extends Controller
         }
 
         // Serialize smart_rules for frontend
-        $albumData                = $album->toArray();
-        $albumData['album_type']  = $album->album_type ?? 'physical';
+        $albumData = $album->toArray();
+        $albumData['album_type'] = $album->album_type ?? 'physical';
         $albumData['smart_rules'] = is_string($album->smart_rules)
             ? json_decode($album->smart_rules, true)
             : $album->smart_rules;
 
         return Inertia::render('Albums/Show', [
-            'album'      => $albumData,
+            'album' => $albumData,
             'breadcrumb' => $album->breadcrumb,
-            'children'   => $children,
-            'media'      => $media,
-            'filters'    => ['sort' => $sortBy, 'dir' => $sortDir, 'type' => $type, 'search' => $search],
+            'children' => $children,
+            'media' => $media,
+            'filters' => ['sort' => $sortBy, 'dir' => $sortDir, 'type' => $type, 'search' => $search],
         ]);
     }
 
-    public function store(CreateAlbumRequest $request): \Illuminate\Http\RedirectResponse
+    public function store(CreateAlbumRequest $request): RedirectResponse
     {
         $space = $request->user()->gallerySpaces()->first();
 
@@ -256,7 +273,7 @@ class AlbumController extends Controller
             ->with('success', 'Album bylo vytvořeno.');
     }
 
-    public function update(UpdateAlbumRequest $request, string $uuid): \Illuminate\Http\RedirectResponse|\Illuminate\Http\JsonResponse
+    public function update(UpdateAlbumRequest $request, string $uuid): RedirectResponse|JsonResponse
     {
         $album = Album::where('uuid', $uuid)->firstOrFail();
         Gate::authorize('update', $album);
@@ -287,7 +304,7 @@ class AlbumController extends Controller
      * Pořadí se čísluje po desítkách, aby šlo mezi dvě sousední vložit další bez
      * přepisování zbytku.
      */
-    public function reorder(Request $request, string $uuid): \Illuminate\Http\JsonResponse
+    public function reorder(Request $request, string $uuid): JsonResponse
     {
         $album = Album::where('uuid', $uuid)->firstOrFail();
         Gate::authorize('update', $album);
@@ -306,11 +323,13 @@ class AlbumController extends Controller
         $poradi = (int) ($data['offset'] ?? 0) * 10;
 
         foreach ($data['uuids'] as $mediaUuid) {
-            if (! isset($media[$mediaUuid])) continue;
+            if (! isset($media[$mediaUuid])) {
+                continue;
+            }
 
             // updateOrInsert, protože fotka může být v albu jen přes primary_album_id a
             // řádek v album_media pak vůbec nemá — a bez něj by pořadí nebylo kam uložit.
-            \Illuminate\Support\Facades\DB::table('album_media')->updateOrInsert(
+            DB::table('album_media')->updateOrInsert(
                 ['album_id' => $album->id, 'media_item_id' => $media[$mediaUuid]],
                 ['sort_order' => $poradi, 'added_at' => now(), 'added_by' => $request->user()->id],
             );
@@ -337,7 +356,7 @@ class AlbumController extends Controller
      * tady"), zatímco zapsaná GPS je měření — přepsat druhé prvním je ztráta, kterou
      * nikdo nevrátí, takže si to musí člověk vyžádat výslovně.
      */
-    public function applyLocation(Request $request, string $uuid): \Illuminate\Http\JsonResponse
+    public function applyLocation(Request $request, string $uuid): JsonResponse
     {
         $album = Album::where('uuid', $uuid)->firstOrFail();
         Gate::authorize('update', $album);
@@ -373,15 +392,17 @@ class AlbumController extends Controller
         ]);
     }
 
-    public function move(MoveAlbumRequest $request, string $uuid): \Illuminate\Http\JsonResponse
+    public function move(MoveAlbumRequest $request, string $uuid): JsonResponse
     {
-        $album     = Album::where('uuid', $uuid)->firstOrFail();
+        $album = Album::where('uuid', $uuid)->firstOrFail();
         $newParent = $request->input('parent_id')
             ? Album::findOrFail($request->input('parent_id'))
             : null;
 
         Gate::authorize('update', $album);
-        if ($newParent) Gate::authorize('update', $newParent);
+        if ($newParent) {
+            Gate::authorize('update', $newParent);
+        }
 
         $album->moveTo($newParent?->id);
 
@@ -391,7 +412,7 @@ class AlbumController extends Controller
         return response()->json(['status' => 'moved', 'album' => $album->fresh()]);
     }
 
-    public function destroy(string $uuid): \Illuminate\Http\JsonResponse|\Illuminate\Http\RedirectResponse
+    public function destroy(string $uuid): JsonResponse|RedirectResponse
     {
         $album = Album::where('uuid', $uuid)->firstOrFail();
         Gate::authorize('delete', $album);
@@ -401,10 +422,11 @@ class AlbumController extends Controller
         if (request()->wantsJson()) {
             return response()->json(['status' => 'deleted']);
         }
+
         return redirect()->route('albums.index')->with('success', 'Album bylo smazáno.');
     }
 
-    public function tree(Request $request): \Illuminate\Http\JsonResponse
+    public function tree(Request $request): JsonResponse
     {
         $space = $request->user()->gallerySpaces()->first();
 

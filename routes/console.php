@@ -1,9 +1,7 @@
 <?php
 
-use App\Console\Commands\GalleryDoctorCommand;
-use App\Console\Commands\GalleryImportCommand;
-use App\Console\Commands\GalleryStatusCommand;
-use App\Console\Commands\RebuildAlbumsCommand;
+use App\Models\SystemSetting;
+use App\Services\Provoz\PlanovaneUlohy;
 use Illuminate\Support\Facades\Schedule;
 
 Schedule::command('gallery:deliver-reminders --no-interaction')
@@ -158,7 +156,7 @@ Schedule::command('gallery:process-drive-changes --no-interaction')
 
 // Scheduler heartbeat (for doctor check)
 Schedule::call(function () {
-    \App\Models\SystemSetting::set('scheduler_last_heartbeat', now()->toIso8601String());
+    SystemSetting::set('scheduler_last_heartbeat', now()->toIso8601String());
 })->everyMinute()->name('scheduler-heartbeat');
 
 /*
@@ -169,12 +167,12 @@ Schedule::call(function () {
  * které nic nedělá. Tep plánovače se nepozastavuje — bez něj by doktor hlásil,
  * že plánovač neběží, i když jen stojí jedna úloha.
  */
-foreach (app(\Illuminate\Console\Scheduling\Schedule::class)->events() as $uloha) {
-    $nazev = app(\App\Services\Provoz\PlanovaneUlohy::class)->nazev($uloha);
+foreach (app(Illuminate\Console\Scheduling\Schedule::class)->events() as $uloha) {
+    $nazev = app(PlanovaneUlohy::class)->nazev($uloha);
 
     if ($nazev === 'scheduler-heartbeat') {
         continue;
     }
 
-    $uloha->skip(fn () => app(\App\Services\Provoz\PlanovaneUlohy::class)->pozastavena($nazev));
+    $uloha->skip(fn () => app(PlanovaneUlohy::class)->pozastavena($nazev));
 }

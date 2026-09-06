@@ -119,7 +119,9 @@ class StatementParser
         // Prázdný escape, stejně jako u exportu: banky vydávají RFC CSV, kde zpětné
         // lomítko není řídicí znak, a ve variabilním symbolu se občas objeví.
         while (($radek = fgetcsv($handle, 0, $oddelovac, '"', '')) !== false) {
-            if ($radek === [null] || $radek === false) continue;
+            if ($radek === [null] || $radek === false) {
+                continue;
+            }
             $radky[] = array_map(fn ($b) => is_string($b) ? trim($b) : '', $radek);
         }
 
@@ -184,7 +186,9 @@ class StatementParser
     {
         $hodnota = trim((string) $hodnota);
 
-        if ($hodnota === '') return null;
+        if ($hodnota === '') {
+            return null;
+        }
 
         // Čas za datem zahodíme — pro rozpočet je jednotkou den.
         $hodnota = preg_replace('/[T ]\d{1,2}:\d{2}(:\d{2})?.*$/', '', $hodnota);
@@ -211,12 +215,16 @@ class StatementParser
     {
         $hodnota = trim((string) $hodnota);
 
-        if ($hodnota === '') return null;
+        if ($hodnota === '') {
+            return null;
+        }
 
         $zaporne = str_starts_with($hodnota, '(') && str_ends_with($hodnota, ')');
         $hodnota = preg_replace('/[^0-9,.\-]/u', '', $hodnota);
 
-        if ($hodnota === '' || $hodnota === '-') return null;
+        if ($hodnota === '' || $hodnota === '-') {
+            return null;
+        }
 
         // Když jsou v čísle obě oddělovací značky, ta poslední je desetinná.
         $carka = strrpos($hodnota, ',');
@@ -230,7 +238,9 @@ class StatementParser
             $hodnota = str_replace(',', '.', $hodnota);
         }
 
-        if (! is_numeric($hodnota)) return null;
+        if (! is_numeric($hodnota)) {
+            return null;
+        }
 
         return $zaporne ? -abs((float) $hodnota) : (float) $hodnota;
     }
@@ -250,8 +260,12 @@ class StatementParser
         $kandidati = [];
 
         foreach ($radek as $i => $bunka) {
-            if (in_array($i, [$mapa['date'], $mapa['amount'], $mapa['currency']], true)) continue;
-            if (trim($bunka) === '' || is_numeric(str_replace([' ', ','], ['', '.'], $bunka))) continue;
+            if (in_array($i, [$mapa['date'], $mapa['amount'], $mapa['currency']], true)) {
+                continue;
+            }
+            if (trim($bunka) === '' || is_numeric(str_replace([' ', ','], ['', '.'], $bunka))) {
+                continue;
+            }
 
             $kandidati[] = trim($bunka);
         }

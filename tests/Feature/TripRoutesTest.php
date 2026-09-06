@@ -13,6 +13,7 @@ class TripRoutesTest extends TestCase
     use RefreshDatabase;
 
     private User $user;
+
     private int $tripId;
 
     protected function setUp(): void

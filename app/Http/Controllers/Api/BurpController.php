@@ -2,12 +2,12 @@
 
 namespace App\Http\Controllers\Api;
 
-use App\Support\AudioUploads;
 use App\Http\Controllers\Controller;
 use App\Models\Burp;
 use App\Models\BurpRating;
 use App\Models\GallerySpace;
 use App\Models\VoiceNote;
+use App\Support\AudioUploads;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -22,6 +22,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 class BurpController extends Controller
 {
     private const DISK = 'local';
+
     private const CRITERIA = ['loudness', 'length', 'artistry', 'surprise'];
 
     public function index(Request $request): JsonResponse
@@ -53,7 +54,7 @@ class BurpController extends Controller
             'occasion' => 'nullable|string|max:120',
             'happened_at' => 'nullable|date',
             'duration_ms' => 'nullable|integer|between:100,120000',
-            'audio' => 'nullable|file|max:10240|' . AudioUploads::rule(),
+            'audio' => 'nullable|file|max:10240|'.AudioUploads::rule(),
             // Attach an existing recording rather than making a new one.
             'voice_note_uuid' => 'nullable|uuid',
         ]);
@@ -97,7 +98,9 @@ class BurpController extends Controller
         abort_if($burp->created_by === $request->user()->id, 422, 'Vlastní krkanec si ohodnotit nemůžete.');
 
         $rules = ['comment' => 'nullable|string|max:400'];
-        foreach (self::CRITERIA as $criterion) $rules[$criterion] = 'required|integer|between:1,5';
+        foreach (self::CRITERIA as $criterion) {
+            $rules[$criterion] = 'required|integer|between:1,5';
+        }
         $data = $request->validate($rules);
 
         $score = round(array_sum(array_map(fn ($key) => (int) $data[$key], self::CRITERIA)) / count(self::CRITERIA), 2);
@@ -131,7 +134,9 @@ class BurpController extends Controller
         abort_unless($burp->created_by === $request->user()->id, 403, 'Smazat záznam může jen jeho autor.');
 
         // Only its own file is removed; an attached voice note belongs to its library.
-        if ($burp->path) Storage::disk(self::DISK)->delete($burp->path);
+        if ($burp->path) {
+            Storage::disk(self::DISK)->delete($burp->path);
+        }
         $burp->delete();   // ratings cascade
 
         return response()->json(['deleted' => true]);
@@ -185,7 +190,9 @@ class BurpController extends Controller
     private function championOfMonth($burps): ?array
     {
         $month = $burps->filter(fn (Burp $burp) => $burp->happened_at?->isSameMonth(now()) && $burp->ratings->count() > 0);
-        if ($month->isEmpty()) return null;
+        if ($month->isEmpty()) {
+            return null;
+        }
 
         $best = $month->sortByDesc(fn (Burp $burp) => $burp->ratings->avg('score'))->first();
 

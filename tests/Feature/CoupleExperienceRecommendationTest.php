@@ -18,8 +18,11 @@ class CoupleExperienceRecommendationTest extends TestCase
     use RefreshDatabase;
 
     private User $owner;
+
     private User $partner;
+
     private GallerySpace $space;
+
     private Place $favorite;
 
     protected function setUp(): void
@@ -51,7 +54,7 @@ class CoupleExperienceRecommendationTest extends TestCase
             'price_level' => 4, 'personal_rating' => 5, 'created_by' => $this->owner->id,
         ]);
 
-        $idea = $this->getJson('/api/v1/calendar/date-ideas?' . http_build_query([
+        $idea = $this->getJson('/api/v1/calendar/date-ideas?'.http_build_query([
             'gallery_space_id' => $this->space->id, 'theme' => 'budget', 'date' => now()->addWeek()->toDateString(),
         ]))->assertOk()
             ->assertJsonPath('ideas.0.id', $this->favorite->id)
@@ -102,7 +105,7 @@ class CoupleExperienceRecommendationTest extends TestCase
             ->assertOk()->assertJsonPath('created', false)->assertJsonPath('id', $plan['id']);
         $this->assertSame(1, DB::table('place_plans')->where('place_id', $this->favorite->id)->count());
 
-        $this->getJson('/api/v1/calendar/date-ideas?' . http_build_query(['gallery_space_id' => $this->space->id]))
+        $this->getJson('/api/v1/calendar/date-ideas?'.http_build_query(['gallery_space_id' => $this->space->id]))
             ->assertOk()->assertJsonMissing(['id' => $this->favorite->id]);
     }
 

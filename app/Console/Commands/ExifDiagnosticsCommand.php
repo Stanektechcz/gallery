@@ -3,11 +3,13 @@
 namespace App\Console\Commands;
 
 use App\Services\ExifExtractorService;
+use Carbon\Carbon;
 use Illuminate\Console\Command;
 
 class ExifDiagnosticsCommand extends Command
 {
-    protected $signature   = 'gallery:exif-diagnostics {file? : Path to a test HEIC/JPEG file}';
+    protected $signature = 'gallery:exif-diagnostics {file? : Path to a test HEIC/JPEG file}';
+
     protected $description = 'Diagnose EXIF/GPS extraction capabilities and show required PHP.ini settings';
 
     public function handle(): int
@@ -18,19 +20,21 @@ class ExifDiagnosticsCommand extends Command
         // 1. PHP functions
         $this->line('<fg=cyan>PHP Functions:</>');
         $functions = [
-            'proc_open'      => 'Run exiftool via process (bypasses disable_functions)',
-            'shell_exec'     => 'Run exiftool via shell (less critical if proc_open works)',
-            'exec'           => 'Alternative process execution',
+            'proc_open' => 'Run exiftool via process (bypasses disable_functions)',
+            'shell_exec' => 'Run exiftool via shell (less critical if proc_open works)',
+            'exec' => 'Alternative process execution',
             'exif_read_data' => 'PHP EXIF extension (JPEG/TIFF only)',
-            'getimagesize'   => 'Image dimensions',
+            'getimagesize' => 'Image dimensions',
         ];
 
         $procOpenWorks = false;
         foreach ($functions as $fn => $desc) {
             $available = function_exists($fn);
-            $status    = $available ? '<fg=green>✓ available</>' : '<fg=red>✗ DISABLED</>';
+            $status = $available ? '<fg=green>✓ available</>' : '<fg=red>✗ DISABLED</>';
             $this->line("  {$status}  {$fn} — {$desc}");
-            if ($fn === 'proc_open') $procOpenWorks = $available;
+            if ($fn === 'proc_open') {
+                $procOpenWorks = $available;
+            }
         }
 
         $this->newLine();
@@ -39,8 +43,8 @@ class ExifDiagnosticsCommand extends Command
         $this->line('<fg=cyan>PHP Extensions:</>');
         $extensions = [
             'imagick' => 'ImageMagick — reads HEIC EXIF IFD segment',
-            'exif'    => 'PHP EXIF — exif_read_data() for JPEG/TIFF',
-            'gd'      => 'GD — thumbnail generation',
+            'exif' => 'PHP EXIF — exif_read_data() for JPEG/TIFF',
+            'gd' => 'GD — thumbnail generation',
         ];
         foreach ($extensions as $ext => $desc) {
             $loaded = extension_loaded($ext);
@@ -54,7 +58,7 @@ class ExifDiagnosticsCommand extends Command
         $this->line('<fg=cyan>exiftool binary:</>');
         $exiftoolPath = config('gallery.exiftool_path', '/usr/bin/exiftool');
         $exists = file_exists($exiftoolPath);
-        $this->line('  Path: ' . $exiftoolPath . ($exists ? ' <fg=green>✓ exists</>' : ' <fg=red>✗ NOT FOUND</>'));
+        $this->line('  Path: '.$exiftoolPath.($exists ? ' <fg=green>✓ exists</>' : ' <fg=red>✗ NOT FOUND</>'));
 
         if ($exists && $procOpenWorks) {
             try {
@@ -67,25 +71,25 @@ class ExifDiagnosticsCommand extends Command
                     $this->line("  Version: <fg=green>{$ver}</>");
                 }
             } catch (\Throwable $e) {
-                $this->line('  proc_open test: <fg=red>' . $e->getMessage() . '</>');
+                $this->line('  proc_open test: <fg=red>'.$e->getMessage().'</>');
             }
-        } elseif ($exists && !$procOpenWorks) {
+        } elseif ($exists && ! $procOpenWorks) {
             $this->line('  <fg=yellow>exiftool exists but proc_open is disabled — cannot run it</>');
         }
 
         // 4. Test on real file
         if ($file = $this->argument('file')) {
             $this->newLine();
-            $this->line('<fg=cyan>Test extraction from: ' . $file . '</>');
-            if (!file_exists($file)) {
-                $this->error('File not found: ' . $file);
+            $this->line('<fg=cyan>Test extraction from: '.$file.'</>');
+            if (! file_exists($file)) {
+                $this->error('File not found: '.$file);
             } else {
-                $result = (new ExifExtractorService())->extract($file);
+                $result = (new ExifExtractorService)->extract($file);
                 if (empty($result)) {
                     $this->error('No EXIF data extracted!');
                 } else {
                     foreach ($result as $key => $value) {
-                        $val = $value instanceof \Carbon\Carbon ? $value->toDateTimeString() : (string) $value;
+                        $val = $value instanceof Carbon ? $value->toDateTimeString() : (string) $value;
                         $icon = in_array($key, ['latitude', 'longitude', 'altitude']) ? '<fg=green>GPS</> ' : '';
                         $this->line("  {$icon}<fg=yellow>{$key}</>: {$val}");
                     }
@@ -112,8 +116,8 @@ class ExifDiagnosticsCommand extends Command
             $blockedFunctions = array_intersect($list, $needed);
         }
 
-        if (!empty($blockedFunctions)) {
-            $this->warn('Currently blocked functions: ' . implode(', ', $blockedFunctions));
+        if (! empty($blockedFunctions)) {
+            $this->warn('Currently blocked functions: '.implode(', ', $blockedFunctions));
             $this->newLine();
             $this->line('  In ISPConfig → Web → PHP Settings → Custom php.ini, ADD:');
             $this->line('');
@@ -121,10 +125,10 @@ class ExifDiagnosticsCommand extends Command
             // Show what to remove from disable_functions
             $newDisabled = array_filter(
                 array_map('trim', explode(',', $disabled)),
-                fn($f) => !in_array($f, ['proc_open', 'proc_close', 'proc_get_status', 'shell_exec', 'exec'])
+                fn ($f) => ! in_array($f, ['proc_open', 'proc_close', 'proc_get_status', 'shell_exec', 'exec'])
             );
-            $this->line('  <fg=yellow>disable_functions = ' . implode(', ', $newDisabled) . '</>');
-        } elseif (!$procOpenWorks) {
+            $this->line('  <fg=yellow>disable_functions = '.implode(', ', $newDisabled).'</>');
+        } elseif (! $procOpenWorks) {
             $this->warn('proc_open is not available. Add to php.ini:');
             $this->line('  <comment>Ensure proc_open is NOT in disable_functions</comment>');
         } else {
@@ -137,13 +141,13 @@ class ExifDiagnosticsCommand extends Command
         $this->line('  <fg=yellow>; Required for EXIF extraction via exiftool</>');
         $this->line('  <fg=yellow>; Remove proc_open, proc_close, exec from disable_functions</>');
 
-        if (!extension_loaded('imagick')) {
+        if (! extension_loaded('imagick')) {
             $this->line('');
             $this->line('  <fg=yellow>; Install ImageMagick PHP extension for HEIC support:</>');
             $this->line('  <fg=yellow>; apt install php-imagick  (then restart PHP-FPM)</>');
         }
 
-        if (!extension_loaded('exif')) {
+        if (! extension_loaded('exif')) {
             $this->line('');
             $this->line('  <fg=yellow>; Enable EXIF extension:</>');
             $this->line('  <fg=yellow>; extension=exif</>');
@@ -151,7 +155,7 @@ class ExifDiagnosticsCommand extends Command
 
         $this->newLine();
         $this->line('<fg=cyan>Current disable_functions value:</>');
-        $this->line('  ' . (ini_get('disable_functions') ?: '(none — all functions available)'));
+        $this->line('  '.(ini_get('disable_functions') ?: '(none — all functions available)'));
 
         return 0;
     }

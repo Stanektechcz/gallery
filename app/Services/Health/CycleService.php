@@ -6,9 +6,11 @@ use App\Models\CycleDay;
 use App\Models\CycleSetting;
 use App\Models\GallerySpace;
 use App\Models\User;
+use App\Notifications\GalleryNotification;
 use App\Support\Cestina;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 
 /**
  * Menstruační kalendář — odvození cyklů a předpovědi.
@@ -27,6 +29,7 @@ class CycleService
 
     /** Cyklus kratší nebo delší než tohle je zápis omylem, ne cyklus. */
     private const MIN_CYCLE_DAYS = 15;
+
     private const MAX_CYCLE_DAYS = 60;
 
     public function settings(GallerySpace $space, User $user): CycleSetting
@@ -104,7 +107,9 @@ class CycleService
         // z nich spočítala průměr pět, tím potvrdila sama sebe — a že tenhle cyklus trval
         // tři dny, by se nikdy nedozvěděla.
         $krvaceni = $days->filter(fn (CycleDay $d) => $d->isBleeding() && $d->isRecorded())->values();
-        if ($krvaceni->isEmpty()) return collect();
+        if ($krvaceni->isEmpty()) {
+            return collect();
+        }
 
         $zacatky = collect();
         $predchozi = null;
@@ -114,7 +119,9 @@ class CycleService
                 || $predchozi === null
                 || $predchozi->day->diffInDays($den->day) > 2;
 
-            if ($novy) $zacatky->push($den->day->copy());
+            if ($novy) {
+                $zacatky->push($den->day->copy());
+            }
 
             $predchozi = $den;
         }
@@ -190,7 +197,9 @@ class CycleService
     private function predict(Collection $cycles, array $averages, Carbon $today): ?array
     {
         $posledni = $cycles->last();
-        if (! $posledni) return null;
+        if (! $posledni) {
+            return null;
+        }
 
         $dalsi = $posledni['start']->copy()->addDays($averages['cycle']);
 
@@ -229,7 +238,7 @@ class CycleService
      * „plodné dny", zatímco kalendář pod tím týž den značil jako ovulaci, a pár dní před
      * menstruací hlásila stránka luteální fázi proti jantarovému PMS v kalendáři.
      *
-     * @param int $vCyklu Pořadí dne v cyklu od nuly. První den krvácení je 0.
+     * @param  int  $vCyklu  Pořadí dne v cyklu od nuly. První den krvácení je 0.
      */
     private function phaseFor(int $vCyklu, array $averages): string
     {
@@ -254,10 +263,14 @@ class CycleService
     private function describeToday(Collection $cycles, array $averages, Carbon $today): ?array
     {
         $posledni = $cycles->last();
-        if (! $posledni) return null;
+        if (! $posledni) {
+            return null;
+        }
 
         $den = (int) $posledni['start']->diffInDays($today) + 1;
-        if ($den < 1) return null;
+        if ($den < 1) {
+            return null;
+        }
 
         return [
             'cycle_day' => $den,
@@ -274,7 +287,9 @@ class CycleService
     public function partnerView(GallerySpace $space, User $owner, ?Carbon $today = null): ?array
     {
         $settings = $this->settings($space, $owner);
-        if (! $settings->allowsPartner()) return null;
+        if (! $settings->allowsPartner()) {
+            return null;
+        }
 
         $plny = $this->overview($space, $owner, $today);
 
@@ -307,7 +322,9 @@ class CycleService
     private function announceStart(GallerySpace $space, User $owner, CycleDay $den): void
     {
         $settings = $this->settings($space, $owner);
-        if (! $settings->allowsPartner()) return;
+        if (! $settings->allowsPartner()) {
+            return;
+        }
 
         // Jen skutečný začátek: předchozí dva dny bez krvácení. Bez téhle podmínky by
         // zpráva odešla i za den, který se doplňoval zpětně uprostřed menstruace.
@@ -316,15 +333,19 @@ class CycleService
             ->get()
             ->contains(fn (CycleDay $d) => $d->isBleeding());
 
-        if ($predchozi) return;
+        if ($predchozi) {
+            return;
+        }
 
-        $klic = "cycle:announced:{$owner->id}:" . $den->day->toDateString();
-        if (! \Illuminate\Support\Facades\Cache::add($klic, true, now()->addDays(3))) return;
+        $klic = "cycle:announced:{$owner->id}:".$den->day->toDateString();
+        if (! Cache::add($klic, true, now()->addDays(3))) {
+            return;
+        }
 
         foreach ($space->members()->where('users.id', '!=', $owner->id)->get() as $partner) {
-            $partner->notify(new \App\Notifications\GalleryNotification(
+            $partner->notify(new GalleryNotification(
                 'health.cycle',
-                $owner->name . ' má první den cyklu.',
+                $owner->name.' má první den cyklu.',
                 '/cyklus',
                 '🩸',
                 ['owner_id' => $owner->id],
@@ -360,7 +381,9 @@ class CycleService
 
             // Do budoucnosti se nepředvyplňuje přes konec očekávaného krvácení a už vůbec
             // ne přes dny, které si člověk zapsal sám.
-            if (CycleDay::where('user_id', $user->id)->whereDate('day', $datum)->exists()) continue;
+            if (CycleDay::where('user_id', $user->id)->whereDate('day', $datum)->exists()) {
+                continue;
+            }
 
             CycleDay::create([
                 'user_id' => $user->id,
@@ -403,12 +426,16 @@ class CycleService
 
         $days = CycleDay::where('user_id', $owner->id)->orderBy('day')->get();
         $cycles = $this->cycles($days);
-        if ($cycles->isEmpty()) return [];
+        if ($cycles->isEmpty()) {
+            return [];
+        }
 
         $settings = $this->settings($space, $owner);
         $averages = $this->averages($cycles, $settings);
         $predpoved = $this->predict($cycles, $averages, $today);
-        if (! $predpoved) return [];
+        if (! $predpoved) {
+            return [];
+        }
 
         $zapsane = $days->filter(fn (CycleDay $d) => $d->isRecorded())->keyBy(fn (CycleDay $d) => $d->day->toDateString());
 
@@ -543,7 +570,7 @@ class CycleService
                 'level' => 'info',
                 'title' => 'Historie je doplněná zpětně',
                 'detail' => 'Rozestupy si podle zadané délky nabídla aplikace, takže z nich nejde poznat, '
-                    . 'jak pravidelný cyklus doopravdy je. Zpřesní se to samo, jak budete zapisovat dál.',
+                    .'jak pravidelný cyklus doopravdy je. Zpřesní se to samo, jak budete zapisovat dál.',
             ];
 
             return array_slice($zjisteni, 0, 4);
@@ -553,11 +580,11 @@ class CycleService
             $rozptyl <= 3 => ['code' => 'regular', 'level' => 'good', 'title' => 'Pravidelný cyklus',
                 'detail' => $rozptyl === 0
                     ? 'Všechny zaznamenané cykly mají stejnou délku, takže předpovědi jsou spolehlivé.'
-                    : 'Délka kolísá jen o ' . $this->dny($rozptyl) . ', takže předpovědi jsou spolehlivé.'],
+                    : 'Délka kolísá jen o '.$this->dny($rozptyl).', takže předpovědi jsou spolehlivé.'],
             $rozptyl <= 8 => ['code' => 'slightly_irregular', 'level' => 'info', 'title' => 'Mírně kolísavý cyklus',
-                'detail' => 'Délka se pohybuje v rozmezí ' . $this->dny($rozptyl) . '. Předpověď berte s rezervou pár dní.'],
+                'detail' => 'Délka se pohybuje v rozmezí '.$this->dny($rozptyl).'. Předpověď berte s rezervou pár dní.'],
             default => ['code' => 'irregular', 'level' => 'warn', 'title' => 'Nepravidelný cyklus',
-                'detail' => 'Mezi nejkratším a nejdelším cyklem je ' . $this->dny($rozptyl) . ', takže datum příští menstruace je opravdu jen odhad.'],
+                'detail' => 'Mezi nejkratším a nejdelším cyklem je '.$this->dny($rozptyl).', takže datum příští menstruace je opravdu jen odhad.'],
         };
 
         // Trend: poslední tři proti předchozím. Postupné prodlužování nebo zkracování je
@@ -572,8 +599,8 @@ class CycleService
                     'code' => $rozdil > 0 ? 'lengthening' : 'shortening',
                     'level' => 'info',
                     'title' => $rozdil > 0 ? 'Cyklus se prodlužuje' : 'Cyklus se zkracuje',
-                    'detail' => 'Poslední tři cykly jsou v průměru o ' . abs($rozdil) . ' dní '
-                        . ($rozdil > 0 ? 'delší' : 'kratší') . ' než ty předtím.',
+                    'detail' => 'Poslední tři cykly jsou v průměru o '.abs($rozdil).' dní '
+                        .($rozdil > 0 ? 'delší' : 'kratší').' než ty předtím.',
                 ];
             }
         }
@@ -607,7 +634,7 @@ class CycleService
                 'title' => 'Delší krvácení',
                 'detail' => $dlouhe->count() === 1
                     ? 'Jeden cyklus měl krvácení delší než týden.'
-                    : $dlouhe->count() . ' cyklů mělo krvácení delší než týden.',
+                    : $dlouhe->count().' cyklů mělo krvácení delší než týden.',
             ];
         }
 
@@ -747,7 +774,9 @@ class CycleService
             $konec = $cyklus['end'] ?? Carbon::today();
 
             foreach ($days as $den) {
-                if ($den->day->lessThan($cyklus['start']) || $den->day->greaterThan($konec)) continue;
+                if ($den->day->lessThan($cyklus['start']) || $den->day->greaterThan($konec)) {
+                    continue;
+                }
 
                 $poradi = (int) $cyklus['start']->diffInDays($den->day) + 1;
                 $faze = $this->phaseFor($poradi - 1, $averages);

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Place;
 use App\Services\Geo\PlaceSearchService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -55,7 +56,7 @@ class GeoController extends Controller
 
         // Stejné jméno na stejném místě se nezakládá podruhé — jinak by se seznam
         // vlastních míst za pár měsíců zaplnil kopiemi téhož rohu ulice.
-        $place = \App\Models\Place::firstOrCreate(
+        $place = Place::firstOrCreate(
             [
                 'gallery_space_id' => $space->id,
                 'name' => $data['name'],

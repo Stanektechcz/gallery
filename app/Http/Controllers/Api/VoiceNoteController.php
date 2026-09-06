@@ -2,16 +2,15 @@
 
 namespace App\Http\Controllers\Api;
 
-use App\Support\AudioUploads;
 use App\Http\Controllers\Controller;
 use App\Models\ChatMessage;
 use App\Models\Conversation;
 use App\Models\GallerySpace;
 use App\Models\VoiceNote;
 use App\Models\VoiceNoteListen;
+use App\Support\AudioUploads;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -47,7 +46,7 @@ class VoiceNoteController extends Controller
         $this->write($request);
         $data = $request->validate([
             'gallery_space_id' => 'nullable|integer',
-            'audio' => 'required|file|max:25600|' . AudioUploads::rule(),
+            'audio' => 'required|file|max:25600|'.AudioUploads::rule(),
             'title' => 'nullable|string|max:180',
             'duration_ms' => 'nullable|integer|between:200,1800000',
             'transcript' => 'nullable|string|max:5000',
@@ -103,14 +102,16 @@ class VoiceNoteController extends Controller
         );
 
         $existing = VoiceNote::where('source_message_uuid', $messageUuid)->first();
-        if ($existing) return response()->json($this->payload($existing->fresh('author'), true));
+        if ($existing) {
+            return response()->json($this->payload($existing->fresh('author'), true));
+        }
 
         $space = $this->space($request, $message->gallery_space_id);
 
         $source = Storage::disk(self::DISK)->exists($message->media_path) ? self::DISK : 'local';
         abort_unless(Storage::disk($source)->exists($message->media_path), 404, 'Zvuk zprávy se nepodařilo najít.');
 
-        $path = "voice-notes/{$space->id}/" . Str::uuid() . '.' . (pathinfo($message->media_path, PATHINFO_EXTENSION) ?: 'webm');
+        $path = "voice-notes/{$space->id}/".Str::uuid().'.'.(pathinfo($message->media_path, PATHINFO_EXTENSION) ?: 'webm');
         Storage::disk(self::DISK)->put($path, Storage::disk($source)->get($message->media_path));
 
         $note = VoiceNote::create([

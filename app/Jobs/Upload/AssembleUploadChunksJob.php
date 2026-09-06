@@ -3,7 +3,6 @@
 namespace App\Jobs\Upload;
 
 use App\Jobs\Media\CalculateMediaHashesJob;
-use App\Jobs\Media\ExtractMediaMetadataJob;
 use App\Models\AuditLog;
 use App\Models\MediaItem;
 use App\Models\UploadSession;
@@ -19,7 +18,8 @@ class AssembleUploadChunksJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    public int $tries   = 3;
+    public int $tries = 3;
+
     public int $timeout = 600;
 
     public function __construct(private readonly int $uploadSessionId) {}
@@ -27,10 +27,13 @@ class AssembleUploadChunksJob implements ShouldQueue
     public function handle(): void
     {
         $session = UploadSession::with('chunks')->find($this->uploadSessionId);
-        if (!$session) return;
+        if (! $session) {
+            return;
+        }
 
-        if (!in_array($session->status, ['pending', 'assembling'])) {
+        if (! in_array($session->status, ['pending', 'assembling'])) {
             Log::info("Upload session {$session->uuid} already processed, skipping.");
+
             return;
         }
 
@@ -38,16 +41,18 @@ class AssembleUploadChunksJob implements ShouldQueue
             $session->update(['status' => 'assembling']);
 
             // Sort chunks and assemble
-            $chunks   = $session->chunks()->orderBy('chunk_index')->get();
+            $chunks = $session->chunks()->orderBy('chunk_index')->get();
             $destPath = storage_path("app/uploads/{$session->uuid}/{$session->original_filename}");
             @mkdir(dirname($destPath), 0755, true);
 
             $destHandle = fopen($destPath, 'wb');
-            if (!$destHandle) throw new \RuntimeException("Cannot open output file: {$destPath}");
+            if (! $destHandle) {
+                throw new \RuntimeException("Cannot open output file: {$destPath}");
+            }
 
             foreach ($chunks as $chunk) {
                 $chunkPath = Storage::disk('local')->path($chunk->path);
-                if (!file_exists($chunkPath)) {
+                if (! file_exists($chunkPath)) {
                     throw new \RuntimeException("Missing chunk #{$chunk->chunk_index}: {$chunkPath}");
                 }
 
@@ -72,30 +77,30 @@ class AssembleUploadChunksJob implements ShouldQueue
             }
 
             $session->update([
-                'status'         => 'received',
+                'status' => 'received',
                 'assembled_path' => $destPath,
             ]);
 
             // Create the MediaItem record
             $media = MediaItem::create([
-                'gallery_space_id'  => $session->gallery_space_id,
-                'owner_user_id'     => $session->user_id,
-                'uploaded_by'       => $session->user_id,
-                'primary_album_id'  => $session->target_album_id,
+                'gallery_space_id' => $session->gallery_space_id,
+                'owner_user_id' => $session->user_id,
+                'uploaded_by' => $session->user_id,
+                'primary_album_id' => $session->target_album_id,
                 'original_filename' => $session->original_filename,
-                'safe_filename'     => preg_replace('/[^a-zA-Z0-9._-]/', '_', $session->original_filename),
-                'extension'         => strtolower(pathinfo($session->original_filename, PATHINFO_EXTENSION)),
-                'mime_type'         => $session->mime_type,
-                'media_type'        => str_starts_with($session->mime_type, 'video/') ? 'video' : 'photo',
-                'size_bytes'        => $assembledSize,
-                'sha256'            => $session->sha256,
-                'status'            => 'received',
-                'uploaded_at'       => now(),
+                'safe_filename' => preg_replace('/[^a-zA-Z0-9._-]/', '_', $session->original_filename),
+                'extension' => strtolower(pathinfo($session->original_filename, PATHINFO_EXTENSION)),
+                'mime_type' => $session->mime_type,
+                'media_type' => str_starts_with($session->mime_type, 'video/') ? 'video' : 'photo',
+                'size_bytes' => $assembledSize,
+                'sha256' => $session->sha256,
+                'status' => 'received',
+                'uploaded_at' => now(),
             ]);
 
             $session->update([
-                'status'             => 'completed',
-                'completed_at'       => now(),
+                'status' => 'completed',
+                'completed_at' => now(),
                 'resulting_media_id' => $media->id,
             ]);
 
@@ -118,6 +123,6 @@ class AssembleUploadChunksJob implements ShouldQueue
     {
         $session = UploadSession::find($this->uploadSessionId);
         $session?->update(['status' => 'failed']);
-        Log::error("AssembleUploadChunksJob failed", ['session_id' => $this->uploadSessionId, 'error' => $e->getMessage()]);
+        Log::error('AssembleUploadChunksJob failed', ['session_id' => $this->uploadSessionId, 'error' => $e->getMessage()]);
     }
 }

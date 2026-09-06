@@ -16,7 +16,9 @@ class ExperienceWorkspaceTest extends TestCase
     use RefreshDatabase;
 
     private User $owner;
+
     private User $partner;
+
     private GallerySpace $space;
 
     protected function setUp(): void
@@ -458,7 +460,7 @@ class ExperienceWorkspaceTest extends TestCase
         return DB::table('media_items')->insertGetId(array_merge([
             'uuid' => (string) Str::uuid(), 'gallery_space_id' => $this->space->id,
             'owner_user_id' => $this->owner->id, 'uploaded_by' => $this->owner->id,
-            'original_filename' => Str::random(10) . '.jpg', 'safe_filename' => Str::random(10) . '.jpg',
+            'original_filename' => Str::random(10).'.jpg', 'safe_filename' => Str::random(10).'.jpg',
             'extension' => 'jpg', 'mime_type' => 'image/jpeg', 'media_type' => 'photo', 'size_bytes' => 1000,
             'status' => 'ready', 'storage_status' => 'ready', 'taken_at' => now()->subYear(),
             'is_favorite' => false, 'is_archived' => false, 'is_hidden' => false,

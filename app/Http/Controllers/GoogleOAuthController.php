@@ -2,11 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\Media\EnqueueDriveMediaSyncJob;
 use App\Models\AuditLog;
 use App\Models\StorageConnection;
-use App\Jobs\Media\EnqueueDriveMediaSyncJob;
 use App\Services\Storage\DriveStructureService;
 use App\Services\Storage\GoogleOAuthService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -23,23 +24,23 @@ class GoogleOAuthController extends Controller
      */
     public function showConnect(Request $request): Response
     {
-        $user       = $request->user();
+        $user = $request->user();
         $connection = StorageConnection::where('owner_user_id', $user->id)
             ->where('provider', 'google_drive')
             ->first();
 
         return Inertia::render('Settings/Storage/Google', [
             'connection' => $connection ? [
-                'status'       => $connection->connection_status,
+                'status' => $connection->connection_status,
                 'account_email' => $connection->account_email,
-                'root_folder'  => $connection->root_folder_name,
-                'quota_total'  => $connection->quota_total,
-                'quota_used'   => $connection->quota_used,
+                'root_folder' => $connection->root_folder_name,
+                'quota_total' => $connection->quota_total,
+                'quota_used' => $connection->quota_used,
                 'connected_at' => $connection->connected_at,
-                'last_ok'      => $connection->last_successful_request_at,
-                'last_error'   => $connection->last_error_message,
+                'last_ok' => $connection->last_successful_request_at,
+                'last_error' => $connection->last_error_message,
             ] : null,
-            'client_configured' => !empty(config('services.google.client_id')),
+            'client_configured' => ! empty(config('services.google.client_id')),
         ]);
     }
 
@@ -49,11 +50,11 @@ class GoogleOAuthController extends Controller
      */
     public function redirect(Request $request): RedirectResponse
     {
-        $user       = $request->user();
+        $user = $request->user();
         $connection = StorageConnection::where('owner_user_id', $user->id)->first();
 
         // Force consent only if no refresh token or explicitly requested
-        $forceConsent = $request->boolean('force') || !$connection?->getRefreshToken();
+        $forceConsent = $request->boolean('force') || ! $connection?->getRefreshToken();
 
         $url = $this->oauthService->getAuthorizationUrl($forceConsent);
 
@@ -68,12 +69,13 @@ class GoogleOAuthController extends Controller
     {
         if ($request->has('error')) {
             Log::warning('Google OAuth error', ['error' => $request->input('error')]);
+
             return redirect()->route('settings.storage.google')
-                ->with('error', 'Autorizace Google byla zrušena: ' . $request->input('error_description', 'neznámá chyba'));
+                ->with('error', 'Autorizace Google byla zrušena: '.$request->input('error_description', 'neznámá chyba'));
         }
 
         $code = $request->input('code');
-        if (!$code) {
+        if (! $code) {
             return redirect()->route('settings.storage.google')
                 ->with('error', 'Chybí autorizační kód od Google.');
         }
@@ -83,7 +85,7 @@ class GoogleOAuthController extends Controller
 
             // Initialize Drive root structure
             $driveService = new DriveStructureService($connection);
-            $structure    = $driveService->initializeRootStructure();
+            $structure = $driveService->initializeRootStructure();
 
             // A connection may be added after years of local uploads. Queue
             // those originals immediately instead of synchronising only files
@@ -93,16 +95,17 @@ class GoogleOAuthController extends Controller
             }
 
             AuditLog::record('storage.google.connect', $connection, [
-                'account'   => $connection->account_email,
-                'root_id'   => $structure['root_id'],
+                'account' => $connection->account_email,
+                'root_id' => $structure['root_id'],
             ]);
 
             return redirect()->route('settings.storage.google')
                 ->with('success', "Google Drive připojen. Účet: {$connection->account_email}. Existující média byla zařazena k synchronizaci.");
         } catch (\Throwable $e) {
             Log::error('Google OAuth callback failed', ['error' => $e->getMessage()]);
+
             return redirect()->route('settings.storage.google')
-                ->with('error', 'Připojení Google Drive selhalo: ' . $e->getMessage());
+                ->with('error', 'Připojení Google Drive selhalo: '.$e->getMessage());
         }
     }
 
@@ -111,7 +114,7 @@ class GoogleOAuthController extends Controller
      */
     public function disconnect(Request $request): RedirectResponse
     {
-        if (!$request->user()->isAdmin()) {
+        if (! $request->user()->isAdmin()) {
             abort(403);
         }
 
@@ -128,13 +131,16 @@ class GoogleOAuthController extends Controller
      */
     public function reconnect(Request $request): RedirectResponse
     {
-        if (!$request->user()->isAdmin()) abort(403);
+        if (! $request->user()->isAdmin()) {
+            abort(403);
+        }
 
         $connection = StorageConnection::where('owner_user_id', $request->user()->id)->firstOrFail();
-        $refreshed  = $this->oauthService->refreshToken($connection);
+        $refreshed = $this->oauthService->refreshToken($connection);
 
         if ($refreshed) {
             AuditLog::record('storage.google.reconnect', $connection);
+
             return back()->with('success', 'Token byl obnoven.');
         }
 
@@ -146,13 +152,15 @@ class GoogleOAuthController extends Controller
      * POST /settings/storage/google/test
      * Run connectivity test.
      */
-    public function test(Request $request): \Illuminate\Http\JsonResponse
+    public function test(Request $request): JsonResponse
     {
-        if (!$request->user()->isAdmin()) abort(403);
+        if (! $request->user()->isAdmin()) {
+            abort(403);
+        }
 
         $connection = StorageConnection::where('owner_user_id', $request->user()->id)->firstOrFail();
-        $service    = new DriveStructureService($connection);
-        $results    = $service->runDiagnosticTest();
+        $service = new DriveStructureService($connection);
+        $results = $service->runDiagnosticTest();
 
         return response()->json(['tests' => $results]);
     }
@@ -160,7 +168,9 @@ class GoogleOAuthController extends Controller
     /** Requeue existing local originals after a repaired/reconnected Drive. */
     public function syncExisting(Request $request): RedirectResponse
     {
-        if (!$request->user()->isAdmin()) abort(403);
+        if (! $request->user()->isAdmin()) {
+            abort(403);
+        }
 
         $connection = StorageConnection::where('owner_user_id', $request->user()->id)
             ->where('provider', 'google_drive')
@@ -183,22 +193,25 @@ class GoogleOAuthController extends Controller
      */
     public function initStructure(Request $request): RedirectResponse
     {
-        if (!$request->user()->isAdmin()) abort(403);
+        if (! $request->user()->isAdmin()) {
+            abort(403);
+        }
 
         $connection = StorageConnection::where('owner_user_id', $request->user()->id)->firstOrFail();
 
         try {
             $driveService = new DriveStructureService($connection);
-            $structure    = $driveService->initializeRootStructure();
+            $structure = $driveService->initializeRootStructure();
 
             AuditLog::record('storage.google.init_structure', $connection, [
                 'root_id' => $structure['root_id'],
             ]);
 
-            return back()->with('success', 'Struktura Google Drive byla inicializována. Root ID: ' . $structure['root_id']);
+            return back()->with('success', 'Struktura Google Drive byla inicializována. Root ID: '.$structure['root_id']);
         } catch (\Throwable $e) {
             Log::error('Drive initStructure failed', ['error' => $e->getMessage()]);
-            return back()->with('error', 'Inicializace selhala: ' . $e->getMessage());
+
+            return back()->with('error', 'Inicializace selhala: '.$e->getMessage());
         }
     }
 }

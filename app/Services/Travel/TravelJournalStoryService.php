@@ -10,12 +10,17 @@ class TravelJournalStoryService
     /** Keep one generated journal block in the existing recap album privacy-safe and idempotent. */
     public function syncEntry(int $tripId, int $entryId): void
     {
-        if (! Schema::hasColumn('albums', 'trip_id') || ! Schema::hasTable('album_story_blocks')) return;
+        if (! Schema::hasColumn('albums', 'trip_id') || ! Schema::hasTable('album_story_blocks')) {
+            return;
+        }
         $albumId = DB::table('albums')->where('trip_id', $tripId)->whereNull('deleted_at')->value('id');
-        if (! $albumId) return;
+        if (! $albumId) {
+            return;
+        }
 
         $existing = DB::table('album_story_blocks')->where('album_id', $albumId)->get(['id', 'content'])->first(function ($block) use ($entryId) {
             $content = json_decode($block->content ?: '{}', true) ?: [];
+
             return ($content['source'] ?? null) === 'travel_journal' && (int) ($content['source_journal_entry_id'] ?? 0) === $entryId;
         });
         $query = DB::table('travel_journal_entries as entry')->join('users', 'users.id', '=', 'entry.user_id')
@@ -28,13 +33,17 @@ class TravelJournalStoryService
         }
         $eligible = $entry && $entry->visibility === 'shared' && (bool) $entry->is_story_worthy && in_array($entry->type, ['note', 'voice', 'location'], true);
         if (! $eligible) {
-            if ($existing) DB::table('album_story_blocks')->where('id', $existing->id)->delete();
+            if ($existing) {
+                DB::table('album_story_blocks')->where('id', $existing->id)->delete();
+            }
+
             return;
         }
 
         [$type, $content] = $this->block($tripId, $entry);
         if ($existing) {
             DB::table('album_story_blocks')->where('id', $existing->id)->update(['type' => $type, 'content' => json_encode($content, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), 'updated_at' => now()]);
+
             return;
         }
         DB::table('album_story_blocks')->insert([
@@ -56,6 +65,7 @@ class TravelJournalStoryService
         if ($entry->type === 'voice' && ! empty($entry->recording_uuid)) {
             $content += ['audio_url' => "/api/v1/trips/{$tripId}/journal/{$entry->id}/recording", 'audio_duration_ms' => (int) ($entry->recording_duration_ms ?? 0), 'audio_mime_type' => $entry->recording_mime_type ?? null];
         }
+
         return ['quote', $content];
     }
 }

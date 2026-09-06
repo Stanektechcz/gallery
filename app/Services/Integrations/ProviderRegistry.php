@@ -3,6 +3,7 @@
 namespace App\Services\Integrations;
 
 use App\Models\IntegrationSetting;
+use App\Services\Storage\StorageResolver;
 use Illuminate\Support\Facades\Schema;
 
 /**
@@ -128,7 +129,7 @@ class ProviderRegistry
             'brand' => '#d9272e',
             'summary' => 'Napojit nelze.',
             'help' => 'MEGA nemá OAuth. Přihlášení vyžaduje e-mail a heslo k účtu, '
-                . 'a heslo k cizí službě od vás nikdy chtít nebudeme.',
+                .'a heslo k cizí službě od vás nikdy chtít nebudeme.',
             'scopes' => [],
             'available' => false,
         ],
@@ -140,7 +141,7 @@ class ProviderRegistry
             'brand' => '#6d4aff',
             'summary' => 'Napojit nelze.',
             'help' => 'Proton Drive nemá veřejné API. Existující nástroje obcházejí '
-                . 'protokol zpětným inženýrstvím, což není základ, na kterém chceme mít vaše fotky.',
+                .'protokol zpětným inženýrstvím, což není základ, na kterém chceme mít vaše fotky.',
             'scopes' => [],
             'available' => false,
         ],
@@ -152,7 +153,7 @@ class ProviderRegistry
             'brand' => '#8e8e93',
             'summary' => 'Napojit nelze.',
             'help' => 'Apple nedává aplikacím třetích stran přístup k iCloud Drive. '
-                . 'CloudKit umí jen vlastní úložiště aplikace, ne vaše soubory.',
+                .'CloudKit umí jen vlastní úložiště aplikace, ne vaše soubory.',
             'scopes' => [],
             'available' => false,
         ],
@@ -166,7 +167,7 @@ class ProviderRegistry
             'brand' => '#e8e8e8',
             'summary' => 'Čtení a zápis stránek.',
             'help' => 'Vytvořte si integraci na notion.so/my-integrations, vložte její token '
-                . 'a nasdílejte jí stránky — bez nasdílení nevidí nic.',
+                .'a nasdílejte jí stránky — bez nasdílení nevidí nic.',
             'steps' => [
                 'Otevřete notion.so/my-integrations — Notion vás přesměruje na stránku Connections.',
                 'Vytvořte novou integraci, vyberte workspace a zkopírujte její interní token.',
@@ -261,19 +262,27 @@ class ProviderRegistry
      */
     private function ready(string $code, array $provider): bool
     {
-        if (($provider['available'] ?? true) === false) return false;
-        if (($provider['auth'] ?? '') === 'builtin') return true;
+        if (($provider['available'] ?? true) === false) {
+            return false;
+        }
+        if (($provider['auth'] ?? '') === 'builtin') {
+            return true;
+        }
         // Anything not using a redirect needs nothing from the operator — the person
         // supplies their own credential. WebDAV is a cloud but is in this half.
-        if (($provider['auth'] ?? '') !== 'oauth') return true;
+        if (($provider['auth'] ?? '') !== 'oauth') {
+            return true;
+        }
 
         // Clouds ask the resolver, which reads the administration first and the
         // environment second — so a key entered in the interface takes effect there.
-        if (in_array($code, \App\Services\Storage\StorageResolver::CLOUDS, true)) {
-            return app(\App\Services\Storage\StorageResolver::class)->configured($code);
+        if (in_array($code, StorageResolver::CLOUDS, true)) {
+            return app(StorageResolver::class)->configured($code);
         }
 
-        if (! Schema::hasTable('integration_settings')) return false;
+        if (! Schema::hasTable('integration_settings')) {
+            return false;
+        }
 
         return IntegrationSetting::where('provider', $code)->where('is_enabled', true)->exists();
     }

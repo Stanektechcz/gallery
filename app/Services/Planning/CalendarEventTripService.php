@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Schema;
 class CalendarEventTripService
 {
     public function __construct(private readonly LifeEventService $lifeEvents) {}
+
     /** @return array{0: object, 1: bool} */
     public function createFromEvent(CalendarEvent $event, int $actorId): array
     {
@@ -37,8 +38,12 @@ class CalendarEventTripService
                 'created_at' => now(),
                 'updated_at' => now(),
             ];
-            if (Schema::hasColumn('trips', 'created_from')) $tripRow['created_from'] = $source;
-            if (Schema::hasColumn('trips', 'source_reference')) $tripRow['source_reference'] = $event->uuid;
+            if (Schema::hasColumn('trips', 'created_from')) {
+                $tripRow['created_from'] = $source;
+            }
+            if (Schema::hasColumn('trips', 'source_reference')) {
+                $tripRow['source_reference'] = $event->uuid;
+            }
             $tripId = DB::table('trips')->insertGetId($tripRow);
 
             $event->update(['trip_id' => $tripId, 'type' => 'trip']);
@@ -77,7 +82,7 @@ class CalendarEventTripService
             $rows[] = [
                 'trip_id' => $tripId,
                 'date' => $cursor->toDateString(),
-                'title' => 'Den ' . ($order + 1),
+                'title' => 'Den '.($order + 1),
                 'sort_order' => $order,
                 'created_at' => now(),
                 'updated_at' => now(),

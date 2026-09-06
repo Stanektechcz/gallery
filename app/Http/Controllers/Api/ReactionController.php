@@ -15,7 +15,7 @@ class ReactionController extends Controller
     public function index(Request $request, string $uuid): JsonResponse
     {
         $media = MediaItem::where('uuid', $uuid)->firstOrFail();
-        $user  = $request->user();
+        $user = $request->user();
 
         $counts = DB::table('media_reactions')
             ->where('media_item_id', $media->id)
@@ -31,17 +31,17 @@ class ReactionController extends Controller
 
         // Who reacted with what (for pair gallery display)
         $memberIds = $user->gallerySpaces()->first()->members()->pluck('users.id');
-        $details   = DB::table('media_reactions')
+        $details = DB::table('media_reactions')
             ->join('users', 'users.id', '=', 'media_reactions.user_id')
             ->where('media_reactions.media_item_id', $media->id)
             ->whereIn('media_reactions.user_id', $memberIds)
             ->get(['users.id as user_id', 'users.name', 'media_reactions.reaction'])
-            ->map(fn($r) => [
-                'user_id'  => $r->user_id,
-                'name'     => $r->name,
-                'initial'  => mb_strtoupper(mb_substr($r->name, 0, 1)),
+            ->map(fn ($r) => [
+                'user_id' => $r->user_id,
+                'name' => $r->name,
+                'initial' => mb_strtoupper(mb_substr($r->name, 0, 1)),
                 'reaction' => $r->reaction,
-                'is_me'    => $r->user_id === $user->id,
+                'is_me' => $r->user_id === $user->id,
             ]);
 
         return response()->json(['counts' => $counts, 'mine' => $mine, 'details' => $details]);
@@ -49,11 +49,11 @@ class ReactionController extends Controller
 
     public function react(Request $request, string $uuid): JsonResponse
     {
-        $media    = MediaItem::where('uuid', $uuid)->firstOrFail();
-        $user     = $request->user();
+        $media = MediaItem::where('uuid', $uuid)->firstOrFail();
+        $user = $request->user();
         $reaction = $request->input('reaction');
 
-        if ($reaction && !in_array($reaction, self::ALLOWED)) {
+        if ($reaction && ! in_array($reaction, self::ALLOWED)) {
             return response()->json(['error' => 'Invalid reaction'], 422);
         }
 
@@ -67,10 +67,10 @@ class ReactionController extends Controller
         if ($reaction) {
             DB::table('media_reactions')->insert([
                 'media_item_id' => $media->id,
-                'user_id'       => $user->id,
-                'reaction'      => $reaction,
-                'created_at'    => now(),
-                'updated_at'    => now(),
+                'user_id' => $user->id,
+                'reaction' => $reaction,
+                'created_at' => now(),
+                'updated_at' => now(),
             ]);
         }
 

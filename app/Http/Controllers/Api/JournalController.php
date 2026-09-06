@@ -35,7 +35,7 @@ class JournalController extends Controller
             ->when($scope === 'mine', fn ($query) => $query->where('created_by', $user->id))
             ->when($scope === 'shared', fn ($query) => $query->where('visibility', JournalEntry::VISIBILITY_SHARED))
             ->when($request->filled('q'), function ($query) use ($request) {
-                $needle = '%' . $request->string('q')->toString() . '%';
+                $needle = '%'.$request->string('q')->toString().'%';
                 $query->where(fn ($inner) => $inner->where('title', 'like', $needle)->orWhere('body', 'like', $needle));
             })
             ->orderByDesc('entry_date')->orderByDesc('id')
@@ -143,7 +143,7 @@ class JournalController extends Controller
         return $request->validate([
             'title' => 'nullable|string|max:180',
             'body' => 'required|string|max:50000',
-            'mood' => 'nullable|string|in:' . implode(',', self::MOODS),
+            'mood' => 'nullable|string|in:'.implode(',', self::MOODS),
             'entry_date' => 'nullable|date|before_or_equal:today',
         ]);
     }

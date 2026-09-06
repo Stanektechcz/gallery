@@ -44,9 +44,21 @@ class PlaceReview extends Model
         static::creating(fn (PlaceReview $review) => $review->uuid ??= (string) Str::uuid());
     }
 
-    public function place() { return $this->belongsTo(Place::class); }
-    public function author() { return $this->belongsTo(User::class, 'author_user_id'); }
-    public function items() { return $this->hasMany(PlaceReviewItem::class)->orderBy('sort_order'); }
+    public function place()
+    {
+        return $this->belongsTo(Place::class);
+    }
+
+    public function author()
+    {
+        return $this->belongsTo(User::class, 'author_user_id');
+    }
+
+    public function items()
+    {
+        return $this->hasMany(PlaceReviewItem::class)->orderBy('sort_order');
+    }
+
     public function media()
     {
         return $this->belongsToMany(MediaItem::class, 'place_review_media')

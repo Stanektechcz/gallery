@@ -5,7 +5,6 @@ namespace Tests\Feature;
 use App\Models\FinanceCategory;
 use App\Models\FinanceProject;
 use App\Models\GallerySpace;
-use App\Models\Partner;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Models\Wallet;
@@ -24,6 +23,7 @@ class FinanceSetupTest extends TestCase
     use RefreshDatabase;
 
     private User $uzivatel;
+
     private GallerySpace $space;
 
     protected function setUp(): void

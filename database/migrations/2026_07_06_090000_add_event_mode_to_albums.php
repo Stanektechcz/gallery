@@ -33,7 +33,7 @@ return new class extends Migration
                 'event_place_name',
                 'event_latitude',
                 'event_longitude',
-                'event_gps_radius'
+                'event_gps_radius',
             ]);
         });
     }

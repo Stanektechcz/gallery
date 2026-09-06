@@ -50,7 +50,7 @@ class PlaceReviewController extends Controller
             ->when($filters['author_user_id'] ?? null, fn ($query, $author) => $query->where('author_user_id', $author))
             ->when($filters['min_rating'] ?? null, fn ($query, $rating) => $query->where('overall_rating', '>=', $rating))
             ->when(trim((string) ($filters['q'] ?? '')), function ($query, $term) {
-                $like = '%' . trim($term) . '%';
+                $like = '%'.trim($term).'%';
                 $query->where(fn ($search) => $search
                     ->where('positives', 'like', $like)
                     ->orWhere('improvements', 'like', $like)
@@ -127,7 +127,7 @@ class PlaceReviewController extends Controller
                 'criteria' => collect(self::CRITERIA)->map(fn ($label, $key) => [
                     'key' => $key,
                     'label' => $label,
-                    'average' => $this->number($summary?->{$key . '_average'}),
+                    'average' => $this->number($summary?->{$key.'_average'}),
                 ])->values(),
                 'return_percent' => $this->number($summary?->return_percent, 0),
                 'recommend_percent' => $this->number($summary?->recommend_percent, 0),
@@ -151,13 +151,13 @@ class PlaceReviewController extends Controller
 
         $existing = $plan ? PlaceReview::where('place_plan_id', $plan->id)->where('author_user_id', $request->user()->id)->first() : null;
         $review = DB::transaction(function () use ($request, $place, $space, $data, $plan, $existing) {
-            $review = $existing ?? new PlaceReview();
+            $review = $existing ?? new PlaceReview;
             $review->fill($this->reviewData($data) + [
                 'gallery_space_id' => $space->id,
                 'place_id' => $place->id,
                 'place_plan_id' => $plan?->id,
                 'author_user_id' => $request->user()->id,
-                'visited_at' => $data['visited_at'] ?? ($plan?->visited_on ? $plan->visited_on . ' 12:00:00' : ($plan?->planned_for ? $plan->planned_for . ' 12:00:00' : now())),
+                'visited_at' => $data['visited_at'] ?? ($plan?->visited_on ? $plan->visited_on.' 12:00:00' : ($plan?->planned_for ? $plan->planned_for.' 12:00:00' : now())),
             ]);
             $review->save();
             $this->syncItems($review, $data['items'] ?? []);
@@ -166,6 +166,7 @@ class PlaceReviewController extends Controller
                 $this->markPlanVisited($plan, $data['visited_at'] ?? null);
             }
             $this->refreshPlaceRating($place);
+
             return $review->fresh(['author:id,name', 'items', 'media.variants']);
         });
         AuditLog::record($existing ? 'place.review.update' : 'place.review.create', $review, ['place_id' => $place->id, 'status' => $review->status]);
@@ -187,7 +188,9 @@ class PlaceReviewController extends Controller
             $review->update($this->reviewData($data) + ['place_plan_id' => $plan?->id, 'visited_at' => $data['visited_at'] ?? $review->visited_at]);
             $this->syncItems($review, $data['items'] ?? []);
             $this->syncMedia($review, $place, $space->id, $data['media_uuids'] ?? []);
-            if ($plan && ($data['status'] ?? $review->status) === 'published') $this->markPlanVisited($plan, $data['visited_at'] ?? null);
+            if ($plan && ($data['status'] ?? $review->status) === 'published') {
+                $this->markPlanVisited($plan, $data['visited_at'] ?? null);
+            }
             $this->refreshPlaceRating($place);
         });
         AuditLog::record('place.review.update', $review, ['place_id' => $place->id, 'status' => $review->status]);
@@ -204,6 +207,7 @@ class PlaceReviewController extends Controller
         AuditLog::record('place.review.delete', $review, ['place_id' => $place->id]);
         $review->delete();
         $this->refreshPlaceRating($place);
+
         return response()->json(['status' => 'deleted']);
     }
 
@@ -216,13 +220,15 @@ class PlaceReviewController extends Controller
         if (! $album) {
             $album = DB::transaction(function () use ($request, $place, $space, &$created) {
                 $locked = Place::whereKey($place->id)->lockForUpdate()->firstOrFail();
-                if ($locked->review_album_id && ($existing = Album::find($locked->review_album_id))) return $existing;
+                if ($locked->review_album_id && ($existing = Album::find($locked->review_album_id))) {
+                    return $existing;
+                }
                 $created = true;
                 $album = Album::create([
                     'gallery_space_id' => $space->id,
-                    'title' => 'Ochutnávky · ' . $place->name,
-                    'slug' => Str::slug('ochutnavky-' . $place->name . '-' . $place->id),
-                    'description' => 'Fotografie jídel, nápojů, nabídky a společných návštěv podniku ' . $place->name . '.',
+                    'title' => 'Ochutnávky · '.$place->name,
+                    'slug' => Str::slug('ochutnavky-'.$place->name.'-'.$place->id),
+                    'description' => 'Fotografie jídel, nápojů, nabídky a společných návštěv podniku '.$place->name.'.',
                     'visibility' => 'shared',
                     'icon' => '🍽️',
                     'color' => '#f97316',
@@ -236,10 +242,15 @@ class PlaceReviewController extends Controller
                 $permissions = DB::table('gallery_space_user')->where('gallery_space_id', $space->id)->pluck('user_id')->map(fn ($userId) => [
                     'album_id' => $album->id, 'user_id' => $userId, 'role' => 'editor', 'inherited' => false, 'created_at' => now(), 'updated_at' => now(),
                 ])->all();
-                if ($permissions) DB::table('album_user_permissions')->upsert($permissions, ['album_id', 'user_id'], ['role', 'updated_at']);
+                if ($permissions) {
+                    DB::table('album_user_permissions')->upsert($permissions, ['album_id', 'user_id'], ['role', 'updated_at']);
+                }
+
                 return $album;
             });
-            if ($created) CreateDriveFolderJob::dispatch($album);
+            if ($created) {
+                CreateDriveFolderJob::dispatch($album);
+            }
         }
 
         return response()->json(['album' => $album->only(['id', 'uuid', 'title']), 'created' => $created], $created ? 201 : 200);
@@ -248,6 +259,7 @@ class PlaceReviewController extends Controller
     private function validated(Request $request): array
     {
         $ratings = 'nullable|numeric|between:1,5';
+
         return $request->validate([
             'status' => 'required|in:draft,published',
             'place_plan_uuid' => 'nullable|uuid',
@@ -317,10 +329,14 @@ class PlaceReviewController extends Controller
     {
         $uuids = array_values(array_unique($uuids));
         $media = MediaItem::where('gallery_space_id', $spaceId)->whereNull('trashed_at')->whereIn('uuid', $uuids)->get(['id', 'uuid']);
-        if ($media->count() !== count($uuids)) throw ValidationException::withMessages(['media_uuids' => 'Některá fotografie není dostupná v této společné galerii.']);
+        if ($media->count() !== count($uuids)) {
+            throw ValidationException::withMessages(['media_uuids' => 'Některá fotografie není dostupná v této společné galerii.']);
+        }
         $sync = $media->values()->mapWithKeys(fn ($item, $index) => [$item->id => ['subject' => 'overall', 'sort_order' => $index, 'created_at' => now()]])->all();
         $review->media()->sync($sync);
-        foreach ($media as $item) DB::table('media_place')->insertOrIgnore(['media_item_id' => $item->id, 'place_id' => $place->id, 'is_primary' => false, 'created_at' => now()]);
+        foreach ($media as $item) {
+            DB::table('media_place')->insertOrIgnore(['media_item_id' => $item->id, 'place_id' => $place->id, 'is_primary' => false, 'created_at' => now()]);
+        }
     }
 
     private function refreshPlaceRating(Place $place): void
@@ -340,7 +356,7 @@ class PlaceReviewController extends Controller
             'visited_at' => $review->visited_at?->toIso8601String(),
             'visit_context' => $review->visit_context,
             'party_size' => $review->party_size,
-            'ratings' => collect(array_keys(self::CRITERIA))->mapWithKeys(fn ($key) => [$key => $review->{$key . '_rating'}])->all(),
+            'ratings' => collect(array_keys(self::CRITERIA))->mapWithKeys(fn ($key) => [$key => $review->{$key.'_rating'}])->all(),
             'wait_minutes' => $review->wait_minutes,
             'total_amount' => $review->total_amount,
             'currency' => $review->currency,
@@ -359,7 +375,10 @@ class PlaceReviewController extends Controller
 
     private function plan(Place $place, ?string $uuid, int $spaceId): ?object
     {
-        if (! $uuid) return null;
+        if (! $uuid) {
+            return null;
+        }
+
         return DB::table('place_plans')->where('uuid', $uuid)->where('place_id', $place->id)->where('gallery_space_id', $spaceId)->firstOrFail();
     }
 
@@ -384,6 +403,7 @@ class PlaceReviewController extends Controller
         abort_unless(Schema::hasTable('place_reviews'), 503, 'Pro hodnocení podniků dokončete migrace aplikace.');
         $space = $request->user()->gallerySpaces()->firstOrFail();
         abort_unless((int) $place->gallery_space_id === (int) $space->id, 404);
+
         return $space;
     }
 

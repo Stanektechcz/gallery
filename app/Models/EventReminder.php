@@ -21,7 +21,18 @@ class EventReminder extends Model
         ];
     }
 
-    public function event() { return $this->belongsTo(CalendarEvent::class, 'event_id'); }
-    public function user() { return $this->belongsTo(User::class); }
-    public function deliveryLogs() { return $this->hasMany(ReminderDeliveryLog::class, 'event_reminder_id')->latest('created_at'); }
+    public function event()
+    {
+        return $this->belongsTo(CalendarEvent::class, 'event_id');
+    }
+
+    public function user()
+    {
+        return $this->belongsTo(User::class);
+    }
+
+    public function deliveryLogs()
+    {
+        return $this->hasMany(ReminderDeliveryLog::class, 'event_reminder_id')->latest('created_at');
+    }
 }

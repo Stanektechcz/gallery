@@ -68,28 +68,38 @@ class AutomationEngine
     public const OPERATORS = ['contains', 'equals', 'not_contains', 'greater_than', 'less_than'];
 
     /**
-     * @param array<string, mixed> $payload the trigger's fields, per TRIGGERS
+     * @param  array<string, mixed>  $payload  the trigger's fields, per TRIGGERS
      */
     public function fire(string $trigger, GallerySpace $space, array $payload): int
     {
-        if ($this->running) return 0;
-        if (! isset(self::TRIGGERS[$trigger])) return 0;
+        if ($this->running) {
+            return 0;
+        }
+        if (! isset(self::TRIGGERS[$trigger])) {
+            return 0;
+        }
         $this->tableExists ??= Schema::hasTable('automation_rules');
-        if (! $this->tableExists) return 0;
+        if (! $this->tableExists) {
+            return 0;
+        }
 
         $rules = AutomationRule::where('gallery_space_id', $space->id)
             ->where('trigger', $trigger)
             ->where('is_enabled', true)
             ->get();
 
-        if ($rules->isEmpty()) return 0;
+        if ($rules->isEmpty()) {
+            return 0;
+        }
 
         $this->running = true;
         $ran = 0;
 
         try {
             foreach ($rules as $rule) {
-                if (! $this->matches($rule, $payload)) continue;
+                if (! $this->matches($rule, $payload)) {
+                    continue;
+                }
 
                 try {
                     $this->perform($rule, $space, $payload);
@@ -165,7 +175,9 @@ class AutomationEngine
     private function record(AutomationRule $rule, GallerySpace $space, bool $succeeded, string $message): void
     {
         try {
-            if (! Schema::hasTable('automation_runs')) return;
+            if (! Schema::hasTable('automation_runs')) {
+                return;
+            }
 
             DB::table('automation_runs')->insert([
                 'automation_rule_id' => $rule->id,
@@ -202,8 +214,12 @@ class AutomationEngine
             $expected = $condition['value'] ?? '';
             $actual = $payload[$field] ?? null;
 
-            if ($field === null) continue;
-            if (! $this->compare($operator, $actual, $expected)) return false;
+            if ($field === null) {
+                continue;
+            }
+            if (! $this->compare($operator, $actual, $expected)) {
+                return false;
+            }
         }
 
         return true;
@@ -213,7 +229,9 @@ class AutomationEngine
     {
         // Absent is not empty: a rule asking whether a title contains something must not
         // match an event that has no title at all.
-        if ($actual === null) return false;
+        if ($actual === null) {
+            return false;
+        }
 
         return match ($operator) {
             'equals' => mb_strtolower((string) $actual) === mb_strtolower((string) $expected),
@@ -232,7 +250,7 @@ class AutomationEngine
         match ($rule->action) {
             'todo.create' => $this->createTodo($rule, $space, $config, $payload),
             'journal.entry' => $this->createJournalEntry($rule, $space, $config, $payload),
-            default => throw new \RuntimeException('Neznámá akce ' . $rule->action),
+            default => throw new \RuntimeException('Neznámá akce '.$rule->action),
         };
     }
 
@@ -277,7 +295,7 @@ class AutomationEngine
     {
         foreach ($payload as $key => $value) {
             if (is_scalar($value)) {
-                $template = str_replace('{' . $key . '}', (string) $value, $template);
+                $template = str_replace('{'.$key.'}', (string) $value, $template);
             }
         }
 

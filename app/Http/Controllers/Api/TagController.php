@@ -12,7 +12,6 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
-use Illuminate\Validation\Rule;
 
 class TagController extends Controller
 {
@@ -37,7 +36,9 @@ class TagController extends Controller
         $data = $request->validate(['name' => 'required|string|max:100', 'parent_id' => 'nullable|integer', 'color' => 'nullable|string|max:20']);
         $space = $this->space($request->user());
         $parentId = $data['parent_id'] ?? null;
-        if ($parentId) Tag::where('gallery_space_id', $space->id)->whereKey($parentId)->firstOrFail();
+        if ($parentId) {
+            Tag::where('gallery_space_id', $space->id)->whereKey($parentId)->firstOrFail();
+        }
         $slug = Str::slug($data['name']);
         abort_if(Tag::where('gallery_space_id', $space->id)->where('slug', $slug)->exists(), 422, 'Tento štítek už v prostoru existuje.');
         $tag = Tag::create([
@@ -77,12 +78,14 @@ class TagController extends Controller
     public function destroy(Request $request, int $id): JsonResponse
     {
         $this->tag($request->user(), $id)->delete();
+
         return response()->json(['status' => 'deleted']);
     }
 
     public function connections(Request $request, int $id): JsonResponse
     {
         $tag = $this->tag($request->user(), $id);
+
         return response()->json(['tag' => $tag, 'connections' => $this->universalTags->connections($tag, $request->user())]);
     }
 
@@ -100,6 +103,7 @@ class TagController extends Controller
     {
         $user = $request->user();
         $this->universalTags->detach($this->tag($user, $id), $this->space($user), $user, $entityType, $entityId);
+
         return response()->json(['status' => 'detached']);
     }
 

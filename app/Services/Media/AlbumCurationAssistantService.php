@@ -44,6 +44,7 @@ class AlbumCurationAssistantService
         $shortlist = $this->diverseShortlist($candidates, 12);
         $cover = $candidates->where('media_type', 'photo')->first()
             ?? $candidates->first();
+
         return [
             'album' => [
                 'id' => $album->id,
@@ -160,6 +161,7 @@ class AlbumCurationAssistantService
             'items' => $items->map(function (object $item) use ($media, $votes, $viewerId): array {
                 $voteRows = $votes->get($item->id, collect());
                 $model = $media->get($item->media_id);
+
                 return [
                     'id' => $item->id,
                     'media_uuid' => $item->media_uuid,
@@ -198,14 +200,14 @@ class AlbumCurationAssistantService
             $average = (float) $partnerRatings->avg();
             $score += (int) round(($average / 5) * 10);
             $reasons[] = $partnerRatings->count() > 1
-                ? 'shoda partnerů ' . number_format($average, 1, ',', '') . '/5'
-                : 'partnerské hodnocení ' . number_format($average, 1, ',', '') . '/5';
+                ? 'shoda partnerů '.number_format($average, 1, ',', '').'/5'
+                : 'partnerské hodnocení '.number_format($average, 1, ',', '').'/5';
         }
 
         $megapixels = ((int) $media->width * (int) $media->height) / 1_000_000;
         if ($megapixels > 0) {
             $score += (int) min(20, round($megapixels));
-            $reasons[] = number_format($megapixels, 1, ',', '') . ' Mpx';
+            $reasons[] = number_format($megapixels, 1, ',', '').' Mpx';
             if ($megapixels < 2) {
                 $score -= 12;
                 $risks[] = 'nižší rozlišení';
@@ -271,7 +273,7 @@ class AlbumCurationAssistantService
             'score' => max(0, $score),
             'reasons' => array_values(array_unique($reasons)),
             'risks' => array_values(array_unique($risks)),
-            'stack_key' => $stack ? 'stack:' . $stack->id : 'media:' . $media->id,
+            'stack_key' => $stack ? 'stack:'.$stack->id : 'media:'.$media->id,
         ];
     }
 
@@ -290,6 +292,7 @@ class AlbumCurationAssistantService
                 break;
             }
         }
+
         return $selected;
     }
 
@@ -298,6 +301,7 @@ class AlbumCurationAssistantService
         $variant = $media->variants->firstWhere('type', 'thumbnail')
             ?? $media->variants->firstWhere('type', 'video_poster')
             ?? $media->variants->firstWhere('type', 'small');
+
         return $variant?->url;
     }
 }

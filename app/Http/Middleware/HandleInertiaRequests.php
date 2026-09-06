@@ -5,10 +5,13 @@ namespace App\Http\Middleware;
 use App\Models\ChatMessage;
 use App\Models\Conversation;
 use App\Models\UserNavigationItem;
+use App\Services\Billing\EntitlementService;
+use App\Support\ThemePalette;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Schema;
 use Inertia\Middleware;
 use Throwable;
+use Tighten\Ziggy\Ziggy;
 
 class HandleInertiaRequests extends Middleware
 {
@@ -44,20 +47,20 @@ class HandleInertiaRequests extends Middleware
             ...parent::share($request),
             'auth' => [
                 'user' => $request->user() ? [
-                    'id'         => $request->user()->id,
-                    'uuid'       => $request->user()->uuid,
-                    'name'       => $request->user()->name,
-                    'email'      => $request->user()->email,
-                    'role'       => $request->user()->role,
-                    'is_active'  => $request->user()->is_active,
+                    'id' => $request->user()->id,
+                    'uuid' => $request->user()->uuid,
+                    'name' => $request->user()->name,
+                    'email' => $request->user()->email,
+                    'role' => $request->user()->role,
+                    'is_active' => $request->user()->is_active,
                     'interface_density' => (is_array($request->user()->preferences) ? ($request->user()->preferences['interface_density'] ?? null) : null),
                     'theme' => (is_array($request->user()->preferences) ? ($request->user()->preferences['theme'] ?? null) : null),
-                    'theme_palette' => \App\Support\ThemePalette::forUser($request->user()),
+                    'theme_palette' => ThemePalette::forUser($request->user()),
                 ] : null,
             ],
             'flash' => [
                 'success' => $request->session()->get('success'),
-                'error'   => $request->session()->get('error'),
+                'error' => $request->session()->get('error'),
                 'warning' => $request->session()->get('warning'),
             ],
             // The space this person works in.
@@ -78,8 +81,8 @@ class HandleInertiaRequests extends Middleware
             // Public half of the VAPID pair; null until the deployment configures it, and
             // the toggle then says so instead of failing on a click.
             'push_public_key' => config('push.public_key'),
-            'ziggy' => fn() => [
-                ...(new \Tighten\Ziggy\Ziggy)->toArray(),
+            'ziggy' => fn () => [
+                ...(new Ziggy)->toArray(),
                 'location' => $request->url(),
             ],
         ];
@@ -89,7 +92,9 @@ class HandleInertiaRequests extends Middleware
     private function currentSpace(Request $request): ?array
     {
         $user = $request->user();
-        if (! $user) return null;
+        if (! $user) {
+            return null;
+        }
 
         $space = $user->gallerySpaces()->orderByDesc('is_default')->first();
 
@@ -127,17 +132,21 @@ class HandleInertiaRequests extends Middleware
      */
     private function navigation(Request $request): ?array
     {
-        if (! $request->user() || ! Schema::hasTable('user_navigation_items')) return null;
+        if (! $request->user() || ! Schema::hasTable('user_navigation_items')) {
+            return null;
+        }
 
         $rows = UserNavigationItem::where('user_id', $request->user()->id)
             ->orderBy('position')->get();
 
-        if ($rows->isEmpty()) return null;
+        if ($rows->isEmpty()) {
+            return null;
+        }
 
         // Every row gets a stable key, because a custom heading has no href and parentage
         // used to be matched by label — which broke the moment two headings shared a name
         // and made nesting under one of them unrepresentable.
-        $key = fn ($row) => $row->href ?: '#' . $row->uuid;
+        $key = fn ($row) => $row->href ?: '#'.$row->uuid;
 
         return $rows->map(fn ($row) => [
             'key' => $key($row),
@@ -155,12 +164,18 @@ class HandleInertiaRequests extends Middleware
 
     private function chatBootstrap(Request $request): ?array
     {
-        if (! $request->user()) return null;
-        if (! Schema::hasTable('conversations') || ! Schema::hasTable('chat_messages')) return null;
+        if (! $request->user()) {
+            return null;
+        }
+        if (! Schema::hasTable('conversations') || ! Schema::hasTable('chat_messages')) {
+            return null;
+        }
 
         try {
             $space = $request->user()->gallerySpaces()->orderByDesc('is_default')->first();
-            if (! $space) return null;
+            if (! $space) {
+                return null;
+            }
 
             $conversation = Conversation::with('members')
                 ->where('gallery_space_id', $space->id)
@@ -168,7 +183,9 @@ class HandleInertiaRequests extends Middleware
                 ->orderByDesc('last_message_at')->orderByDesc('id')
                 ->first();
 
-            if (! $conversation) return null;
+            if (! $conversation) {
+                return null;
+            }
 
             $messages = ChatMessage::with('author:id,name,uuid,avatar_path,avatar_preset,avatar_colour')
                 ->where('conversation_id', $conversation->id)
@@ -220,12 +237,16 @@ class HandleInertiaRequests extends Middleware
     private function activeFeatures(Request $request): ?array
     {
         $user = $request->user();
-        if (! $user || ! \Illuminate\Support\Facades\Schema::hasTable('features')) return null;
+        if (! $user || ! Schema::hasTable('features')) {
+            return null;
+        }
 
         $space = $user->gallerySpaces()->orderByDesc('is_default')->first();
-        if (! $space) return null;
+        if (! $space) {
+            return null;
+        }
 
-        $entitlements = app(\App\Services\Billing\EntitlementService::class);
+        $entitlements = app(EntitlementService::class);
         $entitled = $entitlements->entitledFeatures($space);
 
         return collect($entitled)

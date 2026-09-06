@@ -29,7 +29,9 @@ class ReminderActionService
     public function findForUser(User $user, int $id, bool $lock = false): EventReminder
     {
         $query = $this->queryForUser($user)->whereKey($id)->with(['event', 'user:id,name']);
-        if ($lock) $query->lockForUpdate();
+        if ($lock) {
+            $query->lockForUpdate();
+        }
 
         return $query->firstOrFail();
     }

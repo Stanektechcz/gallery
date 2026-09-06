@@ -15,8 +15,12 @@ return new class extends Migration
 {
     public function up(): void
     {
-        if (! Schema::hasTable('voice_notes')) return;
-        if (Schema::hasColumn('voice_notes', 'source_message_uuid')) return;
+        if (! Schema::hasTable('voice_notes')) {
+            return;
+        }
+        if (Schema::hasColumn('voice_notes', 'source_message_uuid')) {
+            return;
+        }
 
         Schema::table('voice_notes', function (Blueprint $table) {
             $table->uuid('source_message_uuid')->nullable()->unique()->after('created_by');
@@ -25,7 +29,9 @@ return new class extends Migration
 
     public function down(): void
     {
-        if (! Schema::hasColumn('voice_notes', 'source_message_uuid')) return;
+        if (! Schema::hasColumn('voice_notes', 'source_message_uuid')) {
+            return;
+        }
 
         Schema::table('voice_notes', function (Blueprint $table) {
             $table->dropUnique(['source_message_uuid']);

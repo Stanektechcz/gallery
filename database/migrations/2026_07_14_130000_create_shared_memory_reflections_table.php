@@ -8,7 +8,9 @@ return new class extends Migration
 {
     public function up(): void
     {
-        if (Schema::hasTable('shared_memory_reflections')) return;
+        if (Schema::hasTable('shared_memory_reflections')) {
+            return;
+        }
 
         Schema::create('shared_memory_reflections', function (Blueprint $table) {
             $table->id();

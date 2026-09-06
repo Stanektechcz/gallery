@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Album;
-use App\Models\GallerySpace;
 use App\Models\MediaItem;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
@@ -22,7 +21,9 @@ class OnboardingController extends Controller
     {
         $user = $request->user();
         $space = $user->gallerySpaces()->orderByDesc('is_default')->first();
-        if (! $space) return response()->json(['visible' => false, 'steps' => []]);
+        if (! $space) {
+            return response()->json(['visible' => false, 'steps' => []]);
+        }
 
         $steps = [
             [

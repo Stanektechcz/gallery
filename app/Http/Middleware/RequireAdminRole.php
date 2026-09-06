@@ -9,7 +9,7 @@ class RequireAdminRole
 {
     public function handle(Request $request, Closure $next): mixed
     {
-        if (!$request->user() || !$request->user()->isAdmin()) {
+        if (! $request->user() || ! $request->user()->isAdmin()) {
             abort(403, 'Přístup zamítnut.');
         }
 

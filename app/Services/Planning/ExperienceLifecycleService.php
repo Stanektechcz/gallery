@@ -37,16 +37,18 @@ class ExperienceLifecycleService
             ['key' => 'memory', 'label' => 'Společná vzpomínka', 'complete' => (bool) $memory],
             ['key' => 'reflection', 'label' => 'Společné ohlédnutí', 'complete' => $reflectionExists],
         ];
-        if ($plan) $steps[] = ['key' => 'review', 'label' => 'Moje hodnocení podniku', 'complete' => $myReview];
+        if ($plan) {
+            $steps[] = ['key' => 'review', 'label' => 'Moje hodnocení podniku', 'complete' => $myReview];
+        }
         $completed = collect($steps)->where('complete', true)->count();
 
         $isFuture = $event->starts_at->isFuture();
         $nextAction = match (true) {
             $isFuture => 'prepare',
-            !$memory && $attachedMediaCount === 0 => 'add_media',
-            !$memory => 'save_memory',
-            $plan && !$myReview => 'review_place',
-            !$reflectionExists => 'reflect',
+            ! $memory && $attachedMediaCount === 0 => 'add_media',
+            ! $memory => 'save_memory',
+            $plan && ! $myReview => 'review_place',
+            ! $reflectionExists => 'reflect',
             $attachedMediaCount === 0 => 'add_media',
             default => 'complete',
         };
@@ -85,7 +87,9 @@ class ExperienceLifecycleService
             $plan = $this->placePlan($event, true);
             $event->update(['status' => 'completed']);
 
-            if (!$plan) return $this->status($event->fresh(), $actor);
+            if (! $plan) {
+                return $this->status($event->fresh(), $actor);
+            }
 
             DB::table('place_plans')->where('id', $plan->id)->update([
                 'state' => 'visited',
@@ -114,11 +118,15 @@ class ExperienceLifecycleService
                     'created_at' => now(),
                 ]);
             }
-            if (!$album->default_place_id) $album->update(['default_place_id' => $plan->place_id, 'updated_by' => $actor->id]);
+            if (! $album->default_place_id) {
+                $album->update(['default_place_id' => $plan->place_id, 'updated_by' => $actor->id]);
+            }
 
             if (Schema::hasTable('calendar_event_reflections')) {
                 $nextTime = DB::table('calendar_event_reflections')->where('calendar_event_id', $event->id)->value('next_time');
-                if ($nextTime) DB::table('places')->where('id', $plan->place_id)->whereNull('next_time_note')->update(['next_time_note' => $nextTime, 'updated_at' => now()]);
+                if ($nextTime) {
+                    DB::table('places')->where('id', $plan->place_id)->whereNull('next_time_note')->update(['next_time_note' => $nextTime, 'updated_at' => now()]);
+                }
             }
 
             return $this->status($event->fresh(), $actor);
@@ -138,7 +146,10 @@ class ExperienceLifecycleService
 
         foreach ($events as $event) {
             $status = $this->status($event, $viewer);
-            if ($status['next_action'] === 'complete') continue;
+            if ($status['next_action'] === 'complete') {
+                continue;
+            }
+
             return [
                 'uuid' => $event->uuid,
                 'title' => $event->title,
@@ -154,7 +165,9 @@ class ExperienceLifecycleService
 
     private function placePlan(CalendarEvent $event, bool $lock = false): ?object
     {
-        if (!Schema::hasTable('place_plans') || !Schema::hasTable('places')) return null;
+        if (! Schema::hasTable('place_plans') || ! Schema::hasTable('places')) {
+            return null;
+        }
         $query = DB::table('place_plans as plan')
             ->join('places as place', 'place.id', '=', 'plan.place_id')
             ->where('plan.calendar_event_id', $event->id)
@@ -163,7 +176,10 @@ class ExperienceLifecycleService
                 'plan.id', 'plan.uuid', 'plan.state', 'plan.planned_for', 'plan.visited_on', 'plan.place_id',
                 'place.name as place_name', 'place.type as place_type',
             ]);
-        if ($lock) $query->lockForUpdate();
+        if ($lock) {
+            $query->lockForUpdate();
+        }
+
         return $query->first();
     }
 }

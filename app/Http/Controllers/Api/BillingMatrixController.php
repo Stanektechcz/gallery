@@ -126,7 +126,7 @@ class BillingMatrixController extends Controller
             ->pluck('members')->max();
 
         abort_if($data['member_limit'] !== null && $largest > $data['member_limit'], 422,
-            'Některý prostor s tímto tarifem má ' . $largest . ' členů. Limit nelze snížit pod tento počet.');
+            'Některý prostor s tímto tarifem má '.$largest.' členů. Limit nelze snížit pod tento počet.');
 
         $before = $plan->only(['name', 'price_monthly', 'price_yearly', 'member_limit', 'is_public']);
         $plan->update($data);
@@ -161,9 +161,15 @@ class BillingMatrixController extends Controller
 
         foreach ($subscriptions as $subscription) {
             $plan = $subscription->plan;
-            if (! $plan || $plan->price_monthly <= 0) continue;
+            if (! $plan || $plan->price_monthly <= 0) {
+                continue;
+            }
 
-            if ($subscription->status === 'trialing') { $trials++; continue; }
+            if ($subscription->status === 'trialing') {
+                $trials++;
+
+                continue;
+            }
 
             $monthly += $subscription->billing_period === 'yearly'
                 ? (int) round(($plan->price_yearly ?: $plan->price_monthly * 10) / 12)

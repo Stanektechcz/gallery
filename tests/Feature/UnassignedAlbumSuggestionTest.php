@@ -43,7 +43,7 @@ class UnassignedAlbumSuggestionTest extends TestCase
         $this->media($space, $owner, 'soukrome.jpg', '2026-07-12 14:00:00', 'photo', false, true);
         $this->media($space, $owner, 'jiny-den.jpg', '2026-07-14 14:00:00');
 
-        $payload = $this->actingAs($owner)->getJson('/api/v1/album-suggestions?gallery_space_id=' . $space->id)
+        $payload = $this->actingAs($owner)->getJson('/api/v1/album-suggestions?gallery_space_id='.$space->id)
             ->assertOk()->assertJsonPath('available', true)->assertJsonCount(1, 'suggestions')
             ->assertJsonPath('suggestions.0.title', 'Výlet k přehradě')
             ->assertJsonPath('suggestions.0.media_count', 3)
@@ -57,7 +57,7 @@ class UnassignedAlbumSuggestionTest extends TestCase
         $this->get('/prehled')->assertOk()->assertInertia(fn (Assert $page) => $page
             ->where('data.partner_hub.album_suggestion.fingerprint', $payload['fingerprint']));
 
-        $created = $this->postJson('/api/v1/album-suggestions/' . $payload['fingerprint'] . '/accept', [
+        $created = $this->postJson('/api/v1/album-suggestions/'.$payload['fingerprint'].'/accept', [
             'gallery_space_id' => $space->id, 'title' => 'Náš den u přehrady',
             'description' => 'Slunce, voda a společný oběd.', 'media_uuids' => $media->pluck('uuid')->all(),
             'cover_media_uuid' => $media[0]->uuid, 'create_memory' => true,
@@ -79,11 +79,11 @@ class UnassignedAlbumSuggestionTest extends TestCase
         $this->assertDatabaseHas('album_suggestion_decisions', ['gallery_space_id' => $space->id, 'fingerprint' => $payload['fingerprint'], 'action' => 'accepted', 'album_id' => $albumId]);
         Queue::assertPushed(CreateDriveFolderJob::class);
 
-        $this->getJson('/api/v1/album-suggestions?gallery_space_id=' . $space->id)->assertOk()->assertJsonCount(0, 'suggestions');
-        $this->postJson('/api/v1/album-suggestions/' . $payload['fingerprint'] . '/accept', [
+        $this->getJson('/api/v1/album-suggestions?gallery_space_id='.$space->id)->assertOk()->assertJsonCount(0, 'suggestions');
+        $this->postJson('/api/v1/album-suggestions/'.$payload['fingerprint'].'/accept', [
             'gallery_space_id' => $space->id, 'media_uuids' => $media->pluck('uuid')->all(),
         ])->assertOk()->assertJsonPath('already_decided', true)->assertJsonPath('album.uuid', $created['album']['uuid']);
-        $this->actingAs($partner)->get('/albums/' . $created['album']['uuid'])->assertOk();
+        $this->actingAs($partner)->get('/albums/'.$created['album']['uuid'])->assertOk();
     }
 
     public function test_suggestion_can_be_dismissed_and_foreign_media_cannot_be_injected(): void
@@ -96,17 +96,17 @@ class UnassignedAlbumSuggestionTest extends TestCase
             $this->media($space, $owner, 'c.jpg', '2026-07-10 12:00:00'),
         ]);
         $other = $this->media($space, $owner, 'mimo.jpg', '2026-07-13 10:00:00');
-        $suggestion = $this->actingAs($owner)->getJson('/api/v1/album-suggestions?gallery_space_id=' . $space->id)->json('suggestions.0');
+        $suggestion = $this->actingAs($owner)->getJson('/api/v1/album-suggestions?gallery_space_id='.$space->id)->json('suggestions.0');
 
-        $this->postJson('/api/v1/album-suggestions/' . $suggestion['fingerprint'] . '/accept', [
+        $this->postJson('/api/v1/album-suggestions/'.$suggestion['fingerprint'].'/accept', [
             'gallery_space_id' => $space->id, 'media_uuids' => $cluster->pluck('uuid')->push($other->uuid)->all(),
         ])->assertStatus(422);
         $this->assertDatabaseCount('albums', 0);
 
-        $this->postJson('/api/v1/album-suggestions/' . $suggestion['fingerprint'] . '/dismiss', ['gallery_space_id' => $space->id])
+        $this->postJson('/api/v1/album-suggestions/'.$suggestion['fingerprint'].'/dismiss', ['gallery_space_id' => $space->id])
             ->assertOk()->assertJsonPath('dismissed', true);
         $this->assertDatabaseHas('album_suggestion_decisions', ['fingerprint' => $suggestion['fingerprint'], 'action' => 'dismissed']);
-        $this->getJson('/api/v1/album-suggestions?gallery_space_id=' . $space->id)->assertOk()->assertJsonCount(0, 'suggestions');
+        $this->getJson('/api/v1/album-suggestions?gallery_space_id='.$space->id)->assertOk()->assertJsonCount(0, 'suggestions');
     }
 
     private function couple(): array
@@ -116,12 +116,14 @@ class UnassignedAlbumSuggestionTest extends TestCase
         $space = GallerySpace::create(['name' => 'My dva', 'slug' => 'my-dva', 'owner_id' => $owner->id]);
         $space->members()->attach($owner->id, ['role' => 'owner', 'can_share' => true]);
         $space->members()->attach($partner->id, ['role' => 'editor', 'can_share' => true]);
+
         return [$owner, $partner, $space];
     }
 
     private function media(GallerySpace $space, User $owner, string $filename, string $takenAt, string $type = 'photo', bool $favorite = false, bool $hidden = false): MediaItem
     {
         $extension = $type === 'video' ? 'mp4' : 'jpg';
+
         return MediaItem::create([
             'uuid' => (string) Str::uuid(), 'gallery_space_id' => $space->id,
             'owner_user_id' => $owner->id, 'uploaded_by' => $owner->id,

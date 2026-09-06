@@ -8,6 +8,7 @@ use App\Models\BankTransaction;
 use App\Models\GallerySpace;
 use App\Models\IntegrationSetting;
 use App\Models\User;
+use App\Services\Banking\TripBankReconciliationService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request as ClientRequest;
 use Illuminate\Http\UploadedFile;
@@ -15,8 +16,8 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
-use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Shared\Date as SpreadsheetDate;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xls;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use Tests\TestCase;
@@ -260,9 +261,9 @@ CSV;
 
     public function test_valid_statement_is_kept_when_optional_trip_reconciliation_fails(): void
     {
-        $reconciliation = \Mockery::mock(\App\Services\Banking\TripBankReconciliationService::class);
+        $reconciliation = \Mockery::mock(TripBankReconciliationService::class);
         $reconciliation->shouldReceive('reconcileSpace')->once()->andThrow(new \RuntimeException('older trip schema'));
-        $this->app->instance(\App\Services\Banking\TripBankReconciliationService::class, $reconciliation);
+        $this->app->instance(TripBankReconciliationService::class, $reconciliation);
 
         $statement = <<<'CSV'
 Type,Product,Completed Date,Description,Amount,Currency,State,Balance

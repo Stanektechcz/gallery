@@ -3,15 +3,16 @@
 namespace App\Console\Commands;
 
 use App\Models\StorageConnection;
+use App\Models\SystemSetting;
 use Illuminate\Console\Command;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
-use Illuminate\Support\Facades\Storage;
-use Symfony\Component\Console\Output\OutputInterface;
 
 class GalleryDoctorCommand extends Command
 {
-    protected $signature   = 'gallery:doctor {--fix : Attempt automatic fixes}';
+    protected $signature = 'gallery:doctor {--fix : Attempt automatic fixes}';
+
     protected $description = 'Run a comprehensive system health check';
 
     private array $results = [];
@@ -34,9 +35,9 @@ class GalleryDoctorCommand extends Command
         $this->checkGoogleDrive();
 
         // Summary
-        $passed  = count(array_filter($this->results, fn($r) => $r['status'] === 'PASS'));
-        $warned  = count(array_filter($this->results, fn($r) => $r['status'] === 'WARN'));
-        $failed  = count(array_filter($this->results, fn($r) => $r['status'] === 'FAIL'));
+        $passed = count(array_filter($this->results, fn ($r) => $r['status'] === 'PASS'));
+        $warned = count(array_filter($this->results, fn ($r) => $r['status'] === 'WARN'));
+        $failed = count(array_filter($this->results, fn ($r) => $r['status'] === 'FAIL'));
 
         $this->info('');
         $this->info("Results: {$passed} PASS  {$warned} WARN  {$failed} FAIL");
@@ -47,9 +48,9 @@ class GalleryDoctorCommand extends Command
     private function checkLaravel(): void
     {
         $this->section('Laravel');
-        $this->check('APP_KEY set',    !empty(config('app.key')));
+        $this->check('APP_KEY set', ! empty(config('app.key')));
         $this->check('APP_DEBUG=false (prod)', config('app.debug') === false, 'WARN');
-        $this->check('APP_URL set',    !empty(config('app.url')));
+        $this->check('APP_URL set', ! empty(config('app.url')));
         $this->check('APP_ENV=production', config('app.env') === 'production', 'WARN');
     }
 
@@ -61,6 +62,7 @@ class GalleryDoctorCommand extends Command
             $this->check('DB connection', true);
         } catch (\Throwable $e) {
             $this->check('DB connection', false);
+
             return;
         }
 
@@ -81,21 +83,21 @@ class GalleryDoctorCommand extends Command
             $this->check(
                 $cekaji->isEmpty()
                     ? 'No pending migrations'
-                    : "Pending migrations: {$cekaji->count()} ({$cekaji->take(3)->implode(', ')}" . ($cekaji->count() > 3 ? ', …' : '') . ')',
+                    : "Pending migrations: {$cekaji->count()} ({$cekaji->take(3)->implode(', ')}".($cekaji->count() > 3 ? ', …' : '').')',
                 $cekaji->isEmpty(),
             );
         } catch (\Throwable $e) {
-            $this->check('Pending migrations: could not be read (' . $e->getMessage() . ')', false);
+            $this->check('Pending migrations: could not be read ('.$e->getMessage().')', false);
         }
 
         // Charset check (MySQL only)
         $driver = DB::connection()->getDriverName();
         if ($driver === 'mysql') {
             try {
-                $charset = DB::select("SELECT DEFAULT_CHARACTER_SET_NAME FROM information_schema.SCHEMATA WHERE SCHEMA_NAME = DATABASE()")[0]->DEFAULT_CHARACTER_SET_NAME ?? '';
-                $this->check("DB charset is utf8mb4", $charset === 'utf8mb4', 'WARN');
+                $charset = DB::select('SELECT DEFAULT_CHARACTER_SET_NAME FROM information_schema.SCHEMATA WHERE SCHEMA_NAME = DATABASE()')[0]->DEFAULT_CHARACTER_SET_NAME ?? '';
+                $this->check('DB charset is utf8mb4', $charset === 'utf8mb4', 'WARN');
             } catch (\Throwable) {
-                $this->check("DB charset is utf8mb4", false, 'WARN');
+                $this->check('DB charset is utf8mb4', false, 'WARN');
             }
         } else {
             $this->check("DB driver: {$driver}", true);
@@ -107,9 +109,9 @@ class GalleryDoctorCommand extends Command
         $this->section('Local Storage');
 
         $disks = [
-            'temp writes'    => storage_path('app'),
-            'cache writes'   => storage_path('framework/cache'),
-            'thumbnail dir'  => storage_path('app/public/variants'),
+            'temp writes' => storage_path('app'),
+            'cache writes' => storage_path('framework/cache'),
+            'thumbnail dir' => storage_path('app/public/variants'),
         ];
 
         foreach ($disks as $label => $dir) {
@@ -119,7 +121,7 @@ class GalleryDoctorCommand extends Command
         }
 
         $freeMb = disk_free_space(storage_path()) / 1024 / 1024;
-        $this->check("Free space >= 1 GB", $freeMb >= 1024, $freeMb >= 512 ? 'WARN' : 'FAIL');
+        $this->check('Free space >= 1 GB', $freeMb >= 1024, $freeMb >= 512 ? 'WARN' : 'FAIL');
     }
 
     private function checkPhp(): void
@@ -142,8 +144,8 @@ class GalleryDoctorCommand extends Command
         $this->section('External Binaries');
 
         $binaries = [
-            'ffmpeg'   => config('gallery.ffmpeg_path', '/usr/bin/ffmpeg'),
-            'ffprobe'  => config('gallery.ffprobe_path', '/usr/bin/ffprobe'),
+            'ffmpeg' => config('gallery.ffmpeg_path', '/usr/bin/ffmpeg'),
+            'ffprobe' => config('gallery.ffprobe_path', '/usr/bin/ffprobe'),
             'exiftool' => config('gallery.exiftool_path', '/usr/bin/exiftool'),
         ];
 
@@ -208,7 +210,7 @@ class GalleryDoctorCommand extends Command
         if ($driver === 'database') {
             try {
                 $pending = DB::table('jobs')->count();
-                $failed  = DB::table('failed_jobs')->count();
+                $failed = DB::table('failed_jobs')->count();
 
                 $this->checkQueueMoving($pending);
                 $this->check("Failed jobs: {$failed}", $failed === 0, $failed < 10 ? 'WARN' : 'FAIL');
@@ -221,7 +223,7 @@ class GalleryDoctorCommand extends Command
     private function checkScheduler(): void
     {
         $this->section('Scheduler');
-        $heartbeat = \App\Models\SystemSetting::get('scheduler_last_heartbeat');
+        $heartbeat = SystemSetting::get('scheduler_last_heartbeat');
 
         if (! $heartbeat) {
             // Never written once. Cron is not calling schedule:run at all, which means
@@ -234,7 +236,7 @@ class GalleryDoctorCommand extends Command
         // abs(), because Carbon returns a signed difference and a heartbeat in the past
         // gives a negative one: a scheduler dead for three hours read as -180 and passed
         // the "< 5" test, so this only ever complained when the value was missing entirely.
-        $stari = (int) abs(now()->diffInMinutes(\Illuminate\Support\Carbon::parse($heartbeat)));
+        $stari = (int) abs(now()->diffInMinutes(Carbon::parse($heartbeat)));
 
         $this->check(
             $stari < 5
@@ -247,21 +249,22 @@ class GalleryDoctorCommand extends Command
     private function checkGoogleDrive(): void
     {
         $this->section('Google Drive');
-        $this->check('CLIENT_ID configured',     !empty(config('services.google.client_id')));
-        $this->check('CLIENT_SECRET configured', !empty(config('services.google.client_secret')));
+        $this->check('CLIENT_ID configured', ! empty(config('services.google.client_id')));
+        $this->check('CLIENT_SECRET configured', ! empty(config('services.google.client_secret')));
 
         $connection = StorageConnection::where('provider', 'google_drive')
             ->where('connection_status', 'healthy')
             ->first();
 
-        if (!$connection) {
+        if (! $connection) {
             $this->check('OAuth connection active', false);
+
             return;
         }
 
         $this->check('OAuth connection active', true);
-        $this->check('Account: ' . ($connection->account_email ?? 'unknown'), true);
-        $this->check('Root folder configured', !empty($connection->root_folder_id));
+        $this->check('Account: '.($connection->account_email ?? 'unknown'), true);
+        $this->check('Root folder configured', ! empty($connection->root_folder_id));
         $maRefresh = ! empty($connection->getRefreshToken());
         $this->check('Refresh token present', $maRefresh);
 
@@ -422,7 +425,7 @@ class GalleryDoctorCommand extends Command
                 );
             }
         } catch (\Throwable $e) {
-            $this->check('Drive backup coverage could not be read (' . $e->getMessage() . ')', false, 'WARN');
+            $this->check('Drive backup coverage could not be read ('.$e->getMessage().')', false, 'WARN');
         }
     }
 
@@ -435,7 +438,7 @@ class GalleryDoctorCommand extends Command
     private function check(string $label, bool $pass, string $failLevel = 'FAIL'): void
     {
         $status = $pass ? 'PASS' : $failLevel;
-        $color  = match ($status) {
+        $color = match ($status) {
             'PASS' => 'green',
             'WARN' => 'yellow',
             'FAIL' => 'red',

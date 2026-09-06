@@ -27,13 +27,18 @@ class DateIdeaPlanningService
                 $event->refresh();
                 $idea->update(['trip_id' => $trip->id, 'status' => 'planned']);
             }
-            if ($event->trip_id) $this->tripSync->sync($idea->fresh(), $event, (int) $event->trip_id, $actor);
+            if ($event->trip_id) {
+                $this->tripSync->sync($idea->fresh(), $event, (int) $event->trip_id, $actor);
+            }
+
             return $event->fresh();
         }
 
         $event = DB::transaction(function () use ($idea, $actor, $options) {
             $locked = CoupleDateIdea::query()->lockForUpdate()->findOrFail($idea->id);
-            if ($locked->calendar_event_id) return CalendarEvent::findOrFail($locked->calendar_event_id);
+            if ($locked->calendar_event_id) {
+                return CalendarEvent::findOrFail($locked->calendar_event_id);
+            }
 
             $start = Carbon::parse($options['starts_at'] ?? $locked->suggested_starts_at ?? now()->addDay()->setTime(18, 0));
             $end = $start->copy()->addMinutes($locked->estimated_minutes);
@@ -69,7 +74,9 @@ class DateIdeaPlanningService
             ]);
 
             $members = $locked->space()->firstOrFail()->members()->get(['users.id']);
-            if (! $members->contains('id', $actor->id)) $members->push($actor);
+            if (! $members->contains('id', $actor->id)) {
+                $members->push($actor);
+            }
             $reminderMinutes = (int) ($options['reminder_minutes'] ?? ($createTrip ? 1440 : 180));
 
             foreach ($members->unique('id') as $member) {
@@ -96,6 +103,7 @@ class DateIdeaPlanningService
             }
 
             $locked->update(['calendar_event_id' => $event->id, 'status' => 'planned']);
+
             return $event;
         });
 
@@ -105,7 +113,9 @@ class DateIdeaPlanningService
             $event->refresh();
             $idea->update(['calendar_event_id' => $event->id, 'trip_id' => $trip->id, 'status' => 'planned']);
         }
-        if ($event->trip_id) $this->tripSync->sync($idea->fresh(), $event, (int) $event->trip_id, $actor);
+        if ($event->trip_id) {
+            $this->tripSync->sync($idea->fresh(), $event, (int) $event->trip_id, $actor);
+        }
 
         $event->participants()->whereKeyNot($actor->id)->get()->each(function (User $participant) use ($actor, $event) {
             $participant->notify(new GalleryNotification('date_idea.planned', $actor->name.' naplánoval/a nové randíčko: '.$event->title, '/calendar/events/'.$event->uuid));

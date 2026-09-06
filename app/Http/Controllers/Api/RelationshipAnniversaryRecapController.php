@@ -15,6 +15,7 @@ class RelationshipAnniversaryRecapController extends Controller
     public function show(Request $request): JsonResponse
     {
         $space = $this->space($request, $request->integer('gallery_space_id'));
+
         return response()->json($this->recaps->overview($space));
     }
 
@@ -31,12 +32,14 @@ class RelationshipAnniversaryRecapController extends Controller
         ]);
         $space = $this->space($request, (int) $data['gallery_space_id']);
         $result = $this->recaps->save($space, $request->user(), $data);
+
         return response()->json($result, $result['created'] ? 201 : 200);
     }
 
     private function space(Request $request, ?int $id): GallerySpace
     {
         $query = $request->user()->gallerySpaces();
+
         return $id ? $query->whereKey($id)->firstOrFail() : $query->firstOrFail();
     }
 }

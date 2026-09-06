@@ -6,6 +6,7 @@ use App\Models\GallerySpace;
 use App\Models\Person;
 use App\Models\Place;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
 
 /**
  * Kdo a kde — z toho, co v dotazu zbylo po rozpoznání času a druhu média.
@@ -44,6 +45,7 @@ class EntityMatcher
      * zůstává na čtyřech a změna kořene se řeší jinde, v `mekkeVarianty`.
      */
     private const NEJKRATSI_ZACATEK = 4;
+
     private const NEJDELSI_KONCOVKA = 3;
 
     /**
@@ -235,7 +237,7 @@ class EntityMatcher
      */
     private function normalizuj(string $slovo): string
     {
-        $bez = \Illuminate\Support\Str::ascii($slovo);
+        $bez = Str::ascii($slovo);
 
         return mb_strtolower(preg_replace('/[^\p{L}\p{N}]/u', '', $bez) ?? '');
     }

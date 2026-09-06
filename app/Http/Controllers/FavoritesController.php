@@ -3,6 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Models\MediaItem;
+use App\Models\User;
+use App\Notifications\GalleryNotification;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
@@ -12,13 +15,13 @@ class FavoritesController extends Controller
 {
     public function index(Request $request): Response
     {
-        $user    = $request->user();
-        $space   = $user->gallerySpaces()->first();
+        $user = $request->user();
+        $space = $user->gallerySpaces()->first();
         $members = $space->members()->get(['users.id', 'users.name']);
 
-        $myId       = $user->id;
+        $myId = $user->id;
         $partnerIds = $members->where('id', '!=', $myId)->pluck('id');
-        $allIds     = $members->pluck('id');
+        $allIds = $members->pluck('id');
 
         // IDs favorited by me
         $myFavIds = DB::table('user_favorites')->where('user_id', $myId)->pluck('media_item_id');
@@ -37,33 +40,33 @@ class FavoritesController extends Controller
             ->whereNotIn('media_item_id', $myFavIds)
             ->pluck('media_item_id');
 
-        $baseQuery = fn($ids) => MediaItem::query()
+        $baseQuery = fn ($ids) => MediaItem::query()
             ->where('gallery_space_id', $space->id)
             ->whereNull('trashed_at')
             ->where('is_hidden', false)
             ->where('status', 'ready')
             ->whereIn('id', $ids)
-            ->with(['variants' => fn($q) => $q->whereIn('type', ['thumbnail', 'placeholder'])])
+            ->with(['variants' => fn ($q) => $q->whereIn('type', ['thumbnail', 'placeholder'])])
             ->orderByDesc('taken_at')
             ->limit(200)
             ->get()
-            ->map(fn($m) => $this->formatItem($m));
+            ->map(fn ($m) => $this->formatItem($m));
 
         return Inertia::render('Favorites/Index', [
-            'my_items'      => $baseQuery($myFavIds),
-            'shared_items'  => $baseQuery($sharedIds),
+            'my_items' => $baseQuery($myFavIds),
+            'shared_items' => $baseQuery($sharedIds),
             'partner_items' => $partnerIds->isEmpty() ? [] : $baseQuery($partnerOnlyIds),
-            'members'       => $members->map(fn($m) => [
-                'id'    => $m->id,
-                'name'  => $m->name,
+            'members' => $members->map(fn ($m) => [
+                'id' => $m->id,
+                'name' => $m->name,
                 'is_me' => $m->id === $myId,
             ])->values(),
         ]);
     }
 
-    public function toggle(Request $request, string $uuid): \Illuminate\Http\JsonResponse
+    public function toggle(Request $request, string $uuid): JsonResponse
     {
-        $user  = $request->user();
+        $user = $request->user();
         $space = $user->gallerySpaces()->first();
 
         $media = MediaItem::where('uuid', $uuid)
@@ -83,9 +86,9 @@ class FavoritesController extends Controller
             $isMine = false;
         } else {
             DB::table('user_favorites')->insert([
-                'user_id'       => $user->id,
+                'user_id' => $user->id,
                 'media_item_id' => $media->id,
-                'created_at'    => now(),
+                'created_at' => now(),
             ]);
             $isMine = true;
         }
@@ -99,7 +102,7 @@ class FavoritesController extends Controller
 
         // Is shared (all space members favorited)?
         $memberIds = $space->members()->pluck('users.id');
-        $favCount  = DB::table('user_favorites')
+        $favCount = DB::table('user_favorites')
             ->where('media_item_id', $media->id)
             ->whereIn('user_id', $memberIds)
             ->count();
@@ -112,8 +115,8 @@ class FavoritesController extends Controller
 
         // Notify the media owner if it's not the same user
         if ($isMine && $media->owner_user_id && $media->owner_user_id !== $user->id) {
-            $owner = \App\Models\User::find($media->owner_user_id);
-            $owner?->notify(new \App\Notifications\GalleryNotification(
+            $owner = User::find($media->owner_user_id);
+            $owner?->notify(new GalleryNotification(
                 'media.favorited',
                 "{$user->name} označil/a vaši fotku jako oblíbenou",
                 "/media/{$media->uuid}",
@@ -123,30 +126,30 @@ class FavoritesController extends Controller
         }
 
         return response()->json([
-            'is_my_favorite'     => $isMine,
+            'is_my_favorite' => $isMine,
             'is_shared_favorite' => $isShared,
-            'is_favorite'        => $anyFav,   // backward-compat
-            'partner_name'       => $partner?->name,
+            'is_favorite' => $anyFav,   // backward-compat
+            'partner_name' => $partner?->name,
         ]);
     }
 
     private function formatItem(MediaItem $m): array
     {
         return [
-            'id'            => $m->id,
-            'uuid'          => $m->uuid,
-            'media_type'    => $m->media_type,
-            'taken_at'      => $m->taken_at?->toIso8601String(),
-            'width'         => $m->width,
-            'height'        => $m->height,
-            'is_favorite'   => $m->is_favorite,
-            'rating'        => $m->rating,
+            'id' => $m->id,
+            'uuid' => $m->uuid,
+            'media_type' => $m->media_type,
+            'taken_at' => $m->taken_at?->toIso8601String(),
+            'width' => $m->width,
+            'height' => $m->height,
+            'is_favorite' => $m->is_favorite,
+            'rating' => $m->rating,
             'display_title' => $m->display_title ?? $m->original_filename,
-            'variants'      => $m->variants->map(fn($v) => [
-                'type'           => $v->type,
-                'url'            => asset('storage/' . $v->path),
+            'variants' => $m->variants->map(fn ($v) => [
+                'type' => $v->type,
+                'url' => asset('storage/'.$v->path),
                 'dominant_color' => $v->dominant_color,
-                'aspect_ratio'   => $v->aspect_ratio,
+                'aspect_ratio' => $v->aspect_ratio,
             ]),
         ];
     }

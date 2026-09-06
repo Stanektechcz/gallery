@@ -2,18 +2,20 @@
 
 namespace App\Http\Controllers\Api;
 
-use App\Models\Album;
 use App\Http\Controllers\Controller;
+use App\Models\Album;
 use App\Models\Budget;
 use App\Models\BudgetEntry;
+use App\Models\EntertainmentTitle;
 use App\Models\MediaItem;
 use App\Models\Person;
 use App\Models\Place;
 use App\Models\Recipe;
-use App\Models\EntertainmentTitle;
-use App\Models\SharedTodo;
 use App\Models\SavedSearch;
+use App\Models\SharedTodo;
 use App\Models\Tag;
+use App\Services\Search\EntityMatcher;
+use App\Services\Search\QueryInterpreter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -46,7 +48,7 @@ class SearchController extends Controller
             'sort_direction' => 'nullable|in:asc,desc',
             'per_page' => 'nullable|integer|min:1|max:100',
         ]);
-        $user  = $request->user();
+        $user = $request->user();
         $space = $user->gallerySpaces()->first();
 
         $dotaz = trim((string) ($validated['q'] ?? ''));
@@ -64,14 +66,14 @@ class SearchController extends Controller
 
         $interpreted = $doslova
             ? ['filters' => [], 'labels' => [], 'text' => $dotaz]
-            : app(\App\Services\Search\QueryInterpreter::class)->interpret($dotaz);
+            : app(QueryInterpreter::class)->interpret($dotaz);
 
         // Kdo a kde. Z toho, co po vyříznutí času a druhu zbylo, se ještě zkusí poznat
         // jméno člověka nebo místa — česky skloňované, takže „z Prahy" najde Prahu.
         // Co se pozná, přestává být hledaným textem a stává se filtrem podle vazby.
         $entity = $doslova
             ? ['place_ids' => [], 'person_ids' => [], 'labels' => [], 'text' => $dotaz]
-            : app(\App\Services\Search\EntityMatcher::class)->match($space, $interpreted['text']);
+            : app(EntityMatcher::class)->match($space, $interpreted['text']);
 
         $interpreted['text'] = $entity['text'];
         $interpreted['labels'] = array_merge($interpreted['labels'], $entity['labels']);
@@ -141,7 +143,7 @@ class SearchController extends Controller
         if ($camera = ($filters['camera'] ?? null)) {
             $query->where(function ($q) use ($camera) {
                 $q->where('camera_make', 'like', "%{$camera}%")
-                  ->orWhere('camera_model', 'like', "%{$camera}%");
+                    ->orWhere('camera_model', 'like', "%{$camera}%");
             });
         }
         if ($albumId = $request->input('album_id')) {
@@ -149,15 +151,15 @@ class SearchController extends Controller
             $albumIds = \DB::table('album_closure')
                 ->where('ancestor_id', $albumId)
                 ->pluck('descendant_id');
-            $query->whereHas('albums', fn($q) => $q->whereIn('albums.id', $albumIds));
+            $query->whereHas('albums', fn ($q) => $q->whereIn('albums.id', $albumIds));
         }
         if ($tagIds = $request->input('tag_ids')) {
             $tagIdArray = is_array($tagIds) ? $tagIds : explode(',', $tagIds);
-            $query->whereHas('tags', fn($q) => $q->whereIn('tags.id', $tagIdArray));
+            $query->whereHas('tags', fn ($q) => $q->whereIn('tags.id', $tagIdArray));
         }
         if ($personIds = $request->input('person_ids')) {
             $personIdArray = is_array($personIds) ? $personIds : explode(',', $personIds);
-            $query->whereHas('people', fn($q) => $q->whereIn('people.id', $personIdArray));
+            $query->whereHas('people', fn ($q) => $q->whereIn('people.id', $personIdArray));
         }
         if ($minSize = $request->input('min_size')) {
             $query->where('size_bytes', '>=', (int) $minSize);
@@ -185,10 +187,10 @@ class SearchController extends Controller
             'with_gps' => (clone $query)->whereNotNull('latitude')->whereNotNull('longitude')->count(),
         ];
 
-        $perPage   = min((int) ($filters['per_page'] ?? 40), 100);
+        $perPage = min((int) ($filters['per_page'] ?? 40), 100);
         $sortBy = $filters['sort_by'] ?? 'taken_at';
         $sortDirection = $filters['sort_direction'] ?? 'desc';
-        $paginated = $query->with(['variants' => fn($q) => $q->where('type', 'thumbnail')])
+        $paginated = $query->with(['variants' => fn ($q) => $q->where('type', 'thumbnail')])
             ->orderBy($sortBy, $sortDirection)
             ->paginate($perPage);
 
@@ -260,8 +262,8 @@ class SearchController extends Controller
                     'type' => 'budget', 'id' => $item->id, 'label' => $item->name, 'url' => '/rozpocty', 'icon' => '💰',
                 ]) : [])
             ->concat(Schema::hasTable('budget_entries') ? BudgetEntry::whereHas('budget', fn ($budget) => $budget
-                    ->where('gallery_space_id', $space->id)
-                    ->where(fn ($visible) => $visible->whereNull('owner_user_id')->orWhere('is_shared', true)->orWhere('owner_user_id', $request->user()->id)))
+                ->where('gallery_space_id', $space->id)
+                ->where(fn ($visible) => $visible->whereNull('owner_user_id')->orWhere('is_shared', true)->orWhere('owner_user_id', $request->user()->id)))
                 ->where('note', 'like', $like)
                 ->with('budget:id,name,currency')
                 ->latest('spent_on')->limit($limit)->get()->map(fn ($item) => [
@@ -279,5 +281,4 @@ class SearchController extends Controller
 
         return response()->json($results);
     }
-
 }

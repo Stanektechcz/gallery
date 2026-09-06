@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\GallerySpace;
 use App\Models\MediaItem;
 use App\Models\User;
+use Carbon\CarbonInterface;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
@@ -93,7 +94,7 @@ class TrashPurgeTest extends TestCase
         Storage::disk('public')->assertExists($media->variants()->sole()->path);
     }
 
-    private function vKosi(\Carbon\CarbonInterface $uklidPo): MediaItem
+    private function vKosi(CarbonInterface $uklidPo): MediaItem
     {
         return $this->media(['trashed_at' => now()->subDays(31), 'purge_after' => $uklidPo]);
     }

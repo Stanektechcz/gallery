@@ -16,7 +16,9 @@ return new class extends Migration
 {
     public function up(): void
     {
-        if (Schema::hasTable('automation_rules')) return;
+        if (Schema::hasTable('automation_rules')) {
+            return;
+        }
 
         Schema::create('automation_rules', function (Blueprint $table) {
             $table->id();

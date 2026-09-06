@@ -62,7 +62,9 @@ class MemoryGeneratorService
      */
     private function anniversaries(GallerySpace $space, Carbon $day): array
     {
-        if (! Schema::hasTable('media_items')) return [];
+        if (! Schema::hasTable('media_items')) {
+            return [];
+        }
 
         $cards = [];
 
@@ -76,19 +78,21 @@ class MemoryGeneratorService
                 ->orderByDesc('is_favorite')->orderBy('id')
                 ->limit(12)->get();
 
-            if ($media->count() < 2) continue;
+            if ($media->count() < 2) {
+                continue;
+            }
 
             $cards[] = $this->write($space, [
                 'kind' => 'anniversary',
                 'title' => $years === 1 ? 'Před rokem' : "Před {$years} lety",
-                'subtitle' => $this->czechDate($then) . ' · ' . $this->photoCount($media->count()),
+                'subtitle' => $this->czechDate($then).' · '.$this->photoCount($media->count()),
                 'icon' => '📸',
                 'source_type' => 'anniversary',
                 'source_id' => $then->toDateString(),
                 'occurs_on' => $day->toDateString(),
                 'years_ago' => $years,
                 'media_ids' => $media->pluck('uuid')->all(),
-                'link' => '/timeline?date=' . $then->toDateString(),
+                'link' => '/timeline?date='.$then->toDateString(),
                 // Recent years matter more, and photographs matter more than age.
                 'score' => 200 - ($years * 5) + min($media->count(), 20),
             ]);
@@ -107,7 +111,9 @@ class MemoryGeneratorService
      */
     private function fromEvents(GallerySpace $space, Carbon $day): array
     {
-        if (! Schema::hasTable('calendar_events')) return [];
+        if (! Schema::hasTable('calendar_events')) {
+            return [];
+        }
 
         $cards = [];
 
@@ -120,7 +126,9 @@ class MemoryGeneratorService
 
         foreach ($events as $event) {
             $years = $event->starts_at ? $day->year - $event->starts_at->year : null;
-            if (! $years || $years < 1) continue;
+            if (! $years || $years < 1) {
+                continue;
+            }
 
             // Whatever was photographed that day, so the card has something to show.
             $media = MediaItem::withoutGlobalScopes()
@@ -132,14 +140,14 @@ class MemoryGeneratorService
             $cards[] = $this->write($space, [
                 'kind' => 'event',
                 'title' => $event->title,
-                'subtitle' => ($years === 1 ? 'před rokem' : "před {$years} lety") . ' · ' . $this->czechDate($event->starts_at),
+                'subtitle' => ($years === 1 ? 'před rokem' : "před {$years} lety").' · '.$this->czechDate($event->starts_at),
                 'icon' => '🗓️',
                 'source_type' => 'event',
                 'source_id' => (string) ($event->uuid ?? $event->id),
                 'occurs_on' => $day->toDateString(),
                 'years_ago' => $years,
                 'media_ids' => $media->pluck('uuid')->all(),
-                'link' => '/calendar/events/' . ($event->uuid ?? $event->id),
+                'link' => '/calendar/events/'.($event->uuid ?? $event->id),
                 // Named beats unnamed; photographs still add to it.
                 'score' => 260 - ($years * 5) + min($media->count(), 20),
             ]);
@@ -158,7 +166,9 @@ class MemoryGeneratorService
      */
     private function fromAlbums(GallerySpace $space, Carbon $day): array
     {
-        if (! Schema::hasTable('albums')) return [];
+        if (! Schema::hasTable('albums')) {
+            return [];
+        }
 
         $cards = [];
 
@@ -173,19 +183,21 @@ class MemoryGeneratorService
 
             foreach ($albums as $album) {
                 $media = $album->media()->whereDate('taken_at', $then->toDateString())->limit(8)->get();
-                if ($media->isEmpty()) continue;
+                if ($media->isEmpty()) {
+                    continue;
+                }
 
                 $cards[] = $this->write($space, [
                     'kind' => 'album',
                     'title' => $album->title ?? $album->name ?? 'Album',
-                    'subtitle' => ($years === 1 ? 'před rokem' : "před {$years} lety") . ' · ' . $this->photoCount($media->count()),
+                    'subtitle' => ($years === 1 ? 'před rokem' : "před {$years} lety").' · '.$this->photoCount($media->count()),
                     'icon' => '🗂️',
                     'source_type' => 'album',
                     'source_id' => (string) ($album->uuid ?? $album->id),
                     'occurs_on' => $day->toDateString(),
                     'years_ago' => $years,
                     'media_ids' => $media->pluck('uuid')->all(),
-                    'link' => '/albums/' . ($album->uuid ?? $album->id),
+                    'link' => '/albums/'.($album->uuid ?? $album->id),
                     'score' => 230 - ($years * 5) + min($media->count(), 20),
                 ]);
             }
@@ -210,7 +222,7 @@ class MemoryGeneratorService
 
     private function photoCount(int $count): string
     {
-        return $count . ' ' . ($count === 1 ? 'fotka' : ($count < 5 ? 'fotky' : 'fotek'));
+        return $count.' '.($count === 1 ? 'fotka' : ($count < 5 ? 'fotky' : 'fotek'));
     }
 
     /** Czech months, for the same reason as in the mention search: the locale is English. */
@@ -219,6 +231,6 @@ class MemoryGeneratorService
         $months = ['ledna', 'února', 'března', 'dubna', 'května', 'června',
             'července', 'srpna', 'září', 'října', 'listopadu', 'prosince'];
 
-        return $date->day . '. ' . $months[$date->month - 1] . ' ' . $date->year;
+        return $date->day.'. '.$months[$date->month - 1].' '.$date->year;
     }
 }

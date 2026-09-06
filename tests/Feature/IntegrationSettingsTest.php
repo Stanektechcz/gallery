@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\IntegrationSetting;
 use App\Models\User;
+use App\Services\Integrations\FreeTravelDataService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -20,7 +21,7 @@ class IntegrationSettingsTest extends TestCase
             ->component('Admin/Integrations')
             // Counted from the registry rather than written out, so adding a provider
             // does not fail a test that was never about how many there are.
-            ->has('providers', count(\App\Services\Integrations\FreeTravelDataService::PROVIDERS))
+            ->has('providers', count(FreeTravelDataService::PROVIDERS))
         );
 
         // Looked up rather than indexed. The previous version asserted which provider sat

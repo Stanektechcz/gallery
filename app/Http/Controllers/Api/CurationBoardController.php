@@ -143,15 +143,18 @@ class CurationBoardController extends Controller
         if ($withItems) {
             $result['items'] = $items->map(function ($item) use ($userId) {
                 $item->votes = $this->voteSummary($item->id, $userId);
+
                 return $item;
             })->values();
         }
+
         return $result;
     }
 
     private function voteSummary(int $itemId, int $userId): array
     {
         $votes = DB::table('curation_board_votes')->where('curation_board_item_id', $itemId);
+
         return ['selected' => (clone $votes)->where('is_selected', true)->count(), 'not_selected' => (clone $votes)->where('is_selected', false)->count(), 'my_vote' => (clone $votes)->where('user_id', $userId)->value('is_selected')];
     }
 

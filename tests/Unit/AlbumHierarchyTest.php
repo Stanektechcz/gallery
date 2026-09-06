@@ -13,6 +13,7 @@ class AlbumHierarchyTest extends TestCase
     use RefreshDatabase;
 
     private User $owner;
+
     private GallerySpace $space;
 
     protected function setUp(): void
@@ -21,9 +22,9 @@ class AlbumHierarchyTest extends TestCase
 
         $this->owner = User::factory()->create(['role' => 'owner']);
         $this->space = GallerySpace::create([
-            'uuid'     => \Str::uuid(),
-            'name'     => 'Test Space',
-            'slug'     => 'test-space',
+            'uuid' => \Str::uuid(),
+            'name' => 'Test Space',
+            'slug' => 'test-space',
             'owner_id' => $this->owner->id,
         ]);
         $this->space->members()->attach($this->owner->id, ['role' => 'owner', 'can_delete' => true, 'can_share' => true]);
@@ -32,20 +33,21 @@ class AlbumHierarchyTest extends TestCase
     private function makeAlbum(string $title, ?int $parentId = null): Album
     {
         $album = Album::create([
-            'uuid'             => \Str::uuid(),
+            'uuid' => \Str::uuid(),
             'gallery_space_id' => $this->space->id,
-            'parent_id'        => $parentId,
-            'title'            => $title,
-            'slug'             => \Str::slug($title),
-            'visibility'       => 'private',
-            'sort_mode'        => 'date_taken',
-            'sort_direction'   => 'asc',
-            'created_by'       => $this->owner->id,
-            'updated_by'       => $this->owner->id,
-            'sync_status'      => 'pending',
+            'parent_id' => $parentId,
+            'title' => $title,
+            'slug' => \Str::slug($title),
+            'visibility' => 'private',
+            'sort_mode' => 'date_taken',
+            'sort_direction' => 'asc',
+            'created_by' => $this->owner->id,
+            'updated_by' => $this->owner->id,
+            'sync_status' => 'pending',
             'inherit_permissions' => true,
         ]);
         $album->rebuildPaths();
+
         return $album;
     }
 
@@ -66,7 +68,7 @@ class AlbumHierarchyTest extends TestCase
     /** @test */
     public function test_child_album_creates_correct_closure(): void
     {
-        $root  = $this->makeAlbum('Root');
+        $root = $this->makeAlbum('Root');
         $child = $this->makeAlbum('Child', $root->id);
 
         // Self closure for child
@@ -108,7 +110,7 @@ class AlbumHierarchyTest extends TestCase
     public function test_prevents_cycle_on_move(): void
     {
         $parent = $this->makeAlbum('Parent');
-        $child  = $this->makeAlbum('Child', $parent->id);
+        $child = $this->makeAlbum('Child', $parent->id);
 
         $this->expectException(\InvalidArgumentException::class);
 
@@ -152,9 +154,9 @@ class AlbumHierarchyTest extends TestCase
     /** @test */
     public function test_get_ancestors(): void
     {
-        $root   = $this->makeAlbum('Root');
-        $child  = $this->makeAlbum('Child', $root->id);
-        $grand  = $this->makeAlbum('Grand', $child->id);
+        $root = $this->makeAlbum('Root');
+        $child = $this->makeAlbum('Child', $root->id);
+        $grand = $this->makeAlbum('Grand', $child->id);
 
         $ancestors = $grand->ancestors()->get();
 
@@ -166,10 +168,10 @@ class AlbumHierarchyTest extends TestCase
     /** @test */
     public function test_get_descendants(): void
     {
-        $root   = $this->makeAlbum('Root');
+        $root = $this->makeAlbum('Root');
         $child1 = $this->makeAlbum('Child1', $root->id);
         $child2 = $this->makeAlbum('Child2', $root->id);
-        $grand  = $this->makeAlbum('Grand', $child1->id);
+        $grand = $this->makeAlbum('Grand', $child1->id);
 
         $descendants = $root->descendants()->get();
 
@@ -197,7 +199,7 @@ class AlbumHierarchyTest extends TestCase
     /** @test */
     public function test_breadcrumb_returns_correct_path(): void
     {
-        $root  = $this->makeAlbum('Root');
+        $root = $this->makeAlbum('Root');
         $child = $this->makeAlbum('Child', $root->id);
 
         $breadcrumb = $child->breadcrumb;

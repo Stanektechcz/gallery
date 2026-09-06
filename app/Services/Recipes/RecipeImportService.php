@@ -81,7 +81,10 @@ class RecipeImportService
     private function assertPublicHost(string $host): void
     {
         if (filter_var($host, FILTER_VALIDATE_IP)) {
-            if (! $this->isPublicIp($host)) throw ValidationException::withMessages(['url' => 'Odkazy do lokální nebo neveřejné sítě nelze importovat.']);
+            if (! $this->isPublicIp($host)) {
+                throw ValidationException::withMessages(['url' => 'Odkazy do lokální nebo neveřejné sítě nelze importovat.']);
+            }
+
             return;
         }
         $records = dns_get_record($host, DNS_A | DNS_AAAA) ?: [];
@@ -101,17 +104,29 @@ class RecipeImportService
         preg_match_all('/<script\b[^>]*type\s*=\s*(["\'])application\/ld\+json\1[^>]*>(.*?)<\/script>/is', $html, $matches);
         foreach ($matches[2] ?? [] as $json) {
             $decoded = json_decode(trim(preg_replace('/^<!--|-->$/', '', $json)), true);
-            foreach ($this->recipesIn($decoded) as $recipe) return $recipe;
+            foreach ($this->recipesIn($decoded) as $recipe) {
+                return $recipe;
+            }
         }
+
         return null;
     }
 
     private function recipesIn(mixed $value): array
     {
-        if (! is_array($value)) return [];
-        if (array_is_list($value)) return array_merge(...array_map(fn ($item) => $this->recipesIn($item), $value));
+        if (! is_array($value)) {
+            return [];
+        }
+        if (array_is_list($value)) {
+            return array_merge(...array_map(fn ($item) => $this->recipesIn($item), $value));
+        }
         $recipes = $this->hasRecipeType($value['@type'] ?? null) ? [$value] : [];
-        foreach ($value as $key => $item) if ($key !== '@type') $recipes = array_merge($recipes, $this->recipesIn($item));
+        foreach ($value as $key => $item) {
+            if ($key !== '@type') {
+                $recipes = array_merge($recipes, $this->recipesIn($item));
+            }
+        }
+
         return $recipes;
     }
 
@@ -122,27 +137,41 @@ class RecipeImportService
 
     private function instructions(mixed $value): array
     {
-        if (is_string($value)) return [$value];
-        if (! is_array($value)) return [];
-        if (array_is_list($value)) return array_merge(...array_map(fn ($item) => $this->instructions($item), $value));
+        if (is_string($value)) {
+            return [$value];
+        }
+        if (! is_array($value)) {
+            return [];
+        }
+        if (array_is_list($value)) {
+            return array_merge(...array_map(fn ($item) => $this->instructions($item), $value));
+        }
+
         return $this->instructions($value['text'] ?? $value['name'] ?? $value['itemListElement'] ?? []);
     }
 
     private function duration(string $value): ?int
     {
-        if (! preg_match('/^P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?)?$/i', $value, $matches)) return null;
+        if (! preg_match('/^P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?)?$/i', $value, $matches)) {
+            return null;
+        }
+
         return ((int) ($matches[1] ?? 0) * 1440) + ((int) ($matches[2] ?? 0) * 60) + (int) ($matches[3] ?? 0);
     }
 
     private function servings(mixed $value): float
     {
-        if (preg_match('/\d+(?:[.,]\d+)?/', is_array($value) ? implode(' ', $value) : (string) $value, $matches)) return max(0.25, min(1000, (float) str_replace(',', '.', $matches[0])));
+        if (preg_match('/\d+(?:[.,]\d+)?/', is_array($value) ? implode(' ', $value) : (string) $value, $matches)) {
+            return max(0.25, min(1000, (float) str_replace(',', '.', $matches[0])));
+        }
+
         return 2;
     }
 
     private function category(string $value): string
     {
         $value = strtolower($value);
+
         return match (true) {
             str_contains($value, 'soup') || str_contains($value, 'pol') => 'soup', str_contains($value, 'dessert') || str_contains($value, 'cake') || str_contains($value, 'mou') => 'dessert',
             str_contains($value, 'breakfast') || str_contains($value, 'sníd') => 'breakfast', str_contains($value, 'drink') || str_contains($value, 'nápoj') => 'drink',

@@ -4,58 +4,67 @@ namespace App\Jobs\Media;
 
 use App\Models\MediaItem;
 use App\Models\UploadSession;
-use App\Services\Storage\GoogleDriveStorageProvider;
 use App\Services\Storage\DriveConnectionResolver;
+use App\Services\Storage\GoogleDriveStorageProvider;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
+use Illuminate\Foundation\Bus\PendingDispatch;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 
 class UploadDriveChunkJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    public int $tries   = 10;
+    public int $tries = 10;
+
     public int $timeout = 600;
 
     private const MIN_CHUNK_MB = 8;
+
     private const MAX_CHUNK_MB = 256;
+
     private const CHUNK_ALIGNMENT = 256 * 1024;
 
     public function __construct(
-        private readonly int    $mediaItemId,
-        private readonly ?int   $uploadSessionId,
+        private readonly int $mediaItemId,
+        private readonly ?int $uploadSessionId,
         private readonly string $driveSessionUri,
-        private readonly int    $startByte,
-        private readonly int    $totalSize,
+        private readonly int $startByte,
+        private readonly int $totalSize,
     ) {}
 
     public function handle(): void
     {
         $media = MediaItem::find($this->mediaItemId);
-        if (!$media) return;
+        if (! $media) {
+            return;
+        }
 
         $session = $this->uploadSessionId ? UploadSession::find($this->uploadSessionId) : null;
-        $path    = $session?->assembled_path;
+        $path = $session?->assembled_path;
 
-        if (!$path || !is_file($path)) {
+        if (! $path || ! is_file($path)) {
             $original = $media->variants()->where('type', 'original')->first();
-            $candidate = $original ? \Illuminate\Support\Facades\Storage::disk($original->disk)->path($original->path) : null;
+            $candidate = $original ? Storage::disk($original->disk)->path($original->path) : null;
             $path = $candidate && is_file($candidate) ? $candidate : null;
         }
 
-        if (!$path || !is_file($path)) {
+        if (! $path || ! is_file($path)) {
             $media->update(['processing_error' => 'Zdroj pro synchronizaci do Google Drive nebyl nalezen.']);
+
             return;
         }
 
         $connection = app(DriveConnectionResolver::class)->forMedia($media);
 
-        if (!$connection) {
+        if (! $connection) {
             Log::warning("No storage connection for Drive chunk upload, media #{$media->id}");
             $this->release(300);
+
             return;
         }
 
@@ -67,6 +76,7 @@ class UploadDriveChunkJob implements ShouldQueue
 
             if ($status['status'] === 'complete') {
                 $this->finalizeMedia($media, $session, $status['file'] ?? []);
+
                 return;
             }
 
@@ -75,16 +85,17 @@ class UploadDriveChunkJob implements ShouldQueue
             // Read and upload next chunk
             $handle = fopen($path, 'rb');
             fseek($handle, $startByte);
-            $chunk    = fread($handle, $this->chunkSize());
+            $chunk = fread($handle, $this->chunkSize());
             fclose($handle);
 
             if ($chunk === false || strlen($chunk) === 0) {
                 Log::warning("No data to upload at position {$startByte} for media #{$media->id}");
+
                 return;
             }
 
             $chunkLen = strlen($chunk);
-            $endByte  = $startByte + $chunkLen - 1;
+            $endByte = $startByte + $chunkLen - 1;
 
             $result = $provider->uploadChunk($this->driveSessionUri, $chunk, $startByte, $endByte, $this->totalSize);
 
@@ -100,7 +111,7 @@ class UploadDriveChunkJob implements ShouldQueue
 
         } catch (\Throwable $e) {
             Log::error("Drive chunk upload failed for media #{$media->id}", [
-                'error'      => $e->getMessage(),
+                'error' => $e->getMessage(),
                 'start_byte' => $this->startByte,
             ]);
 
@@ -113,12 +124,12 @@ class UploadDriveChunkJob implements ShouldQueue
     private function finalizeMedia(MediaItem $media, ?UploadSession $session, array $driveFile): void
     {
         $media->update([
-            'drive_file_id'     => $driveFile['id'] ?? null,
-            'storage_status'    => 'synced',
-            'status'            => 'ready',
-            'processing_stage'  => null,
+            'drive_file_id' => $driveFile['id'] ?? null,
+            'storage_status' => 'synced',
+            'status' => 'ready',
+            'processing_stage' => null,
             'processing_progress' => 100,
-            'last_verified_at'  => now(),
+            'last_verified_at' => now(),
         ]);
 
         // Clean up temporary assembled file
@@ -145,7 +156,7 @@ class UploadDriveChunkJob implements ShouldQueue
         return intdiv($bytes, self::CHUNK_ALIGNMENT) * self::CHUNK_ALIGNMENT;
     }
 
-    public static function dispatch(MediaItem $media, ?UploadSession $session, string $uri, int $start, int $total): \Illuminate\Foundation\Bus\PendingDispatch
+    public static function dispatch(MediaItem $media, ?UploadSession $session, string $uri, int $start, int $total): PendingDispatch
     {
         return new static($media->id, $session?->id, $uri, $start, $total);
     }

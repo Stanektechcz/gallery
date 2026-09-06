@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToGallerySpace;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
 
@@ -11,7 +12,7 @@ use Illuminate\Support\Str;
  */
 class ConversationCategory extends Model
 {
-    use \App\Models\Concerns\BelongsToGallerySpace;
+    use BelongsToGallerySpace;
 
     protected $fillable = ['uuid', 'gallery_space_id', 'created_by', 'name', 'icon', 'position'];
 

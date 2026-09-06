@@ -2,6 +2,7 @@
 
 namespace App\Services\Media;
 
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -91,18 +92,18 @@ class MediaFormatService
     public static function rawMime(string $ext): string
     {
         return match (strtolower($ext)) {
-            'cr2'  => 'image/x-canon-cr2',
-            'cr3'  => 'image/x-canon-cr3',
-            'nef'  => 'image/x-nikon-nef',
-            'nrw'  => 'image/x-nikon-nrw',
-            'arw'  => 'image/x-sony-arw',
-            'dng'  => 'image/x-adobe-dng',
-            'orf'  => 'image/x-olympus-orf',
-            'rw2'  => 'image/x-panasonic-rw2',
-            'raf'  => 'image/x-fuji-raf',
-            'pef'  => 'image/x-pentax-pef',
-            'srw'  => 'image/x-samsung-srw',
-            '3fr'  => 'image/x-hasselblad-3fr',
+            'cr2' => 'image/x-canon-cr2',
+            'cr3' => 'image/x-canon-cr3',
+            'nef' => 'image/x-nikon-nef',
+            'nrw' => 'image/x-nikon-nrw',
+            'arw' => 'image/x-sony-arw',
+            'dng' => 'image/x-adobe-dng',
+            'orf' => 'image/x-olympus-orf',
+            'rw2' => 'image/x-panasonic-rw2',
+            'raf' => 'image/x-fuji-raf',
+            'pef' => 'image/x-pentax-pef',
+            'srw' => 'image/x-samsung-srw',
+            '3fr' => 'image/x-hasselblad-3fr',
             default => 'image/x-raw',
         };
     }
@@ -119,7 +120,7 @@ class MediaFormatService
             return null;
         }
 
-        $tmpJpeg = tempnam(sys_get_temp_dir(), 'raw_preview_') . '.jpg';
+        $tmpJpeg = tempnam(sys_get_temp_dir(), 'raw_preview_').'.jpg';
 
         // Try JpgFromRaw first (embedded full-size JPEG), then PreviewImage
         foreach (['-JpgFromRaw', '-PreviewImage'] as $tag) {
@@ -130,9 +131,11 @@ class MediaFormatService
             $desc = [['pipe', 'r'], ['pipe', 'w'], ['pipe', 'w']];
             $proc = proc_open($cmd2, $desc, $pipes);
 
-            if ($proc === false) continue;
+            if ($proc === false) {
+                continue;
+            }
 
-            $data  = stream_get_contents($pipes[1]);
+            $data = stream_get_contents($pipes[1]);
             $error = stream_get_contents($pipes[2]);
             fclose($pipes[1]);
             fclose($pipes[2]);
@@ -141,11 +144,13 @@ class MediaFormatService
             if ($data && strlen($data) > 1000) {
                 file_put_contents($tmpJpeg, $data);
                 Log::info("RAW preview extracted via {$tag}", ['path' => $rawPath, 'size' => strlen($data)]);
+
                 return $tmpJpeg;
             }
         }
 
         @unlink($tmpJpeg);
+
         return null;
     }
 
@@ -158,8 +163,8 @@ class MediaFormatService
     public function detectPanorama(array $exifData, ?int $width = null, ?int $height = null): array
     {
         $result = [
-            'is_panorama'         => false,
-            'is_360'              => false,
+            'is_panorama' => false,
+            'is_360' => false,
             'panorama_projection' => null,
         ];
 
@@ -173,13 +178,13 @@ class MediaFormatService
             FILTER_VALIDATE_BOOLEAN
         );
 
-        $fullW    = (int) ($exifData['FullPanoWidthPixels']          ?? $exifData['GPano:FullPanoWidthPixels']          ?? 0);
-        $croppedW = (int) ($exifData['CroppedAreaImageWidthPixels']  ?? $exifData['GPano:CroppedAreaImageWidthPixels']  ?? 0);
+        $fullW = (int) ($exifData['FullPanoWidthPixels'] ?? $exifData['GPano:FullPanoWidthPixels'] ?? 0);
+        $croppedW = (int) ($exifData['CroppedAreaImageWidthPixels'] ?? $exifData['GPano:CroppedAreaImageWidthPixels'] ?? 0);
 
-        $isEquirect = $projection && strtolower((string)$projection) === 'equirectangular';
+        $isEquirect = $projection && strtolower((string) $projection) === 'equirectangular';
 
         if ($isEquirect || $usePano) {
-            $result['is_panorama']         = true;
+            $result['is_panorama'] = true;
             $result['panorama_projection'] = $isEquirect ? 'equirectangular' : 'cylindrical';
 
             // Full 360° sphere: cropped area == full pano
@@ -189,11 +194,11 @@ class MediaFormatService
         }
 
         // Heuristic: very wide aspect ratio → cylindrical panorama
-        $imgW = $width  ?? (int) ($exifData['ImageWidth']  ?? $exifData['ExifImageWidth']  ?? 0);
+        $imgW = $width ?? (int) ($exifData['ImageWidth'] ?? $exifData['ExifImageWidth'] ?? 0);
         $imgH = $height ?? (int) ($exifData['ImageHeight'] ?? $exifData['ExifImageHeight'] ?? 0);
 
         if ($imgH > 0 && ($imgW / $imgH) >= 2.5 && ! $result['is_panorama']) {
-            $result['is_panorama']         = true;
+            $result['is_panorama'] = true;
             $result['panorama_projection'] = 'cylindrical';
         }
 
@@ -218,8 +223,8 @@ class MediaFormatService
     public function detectLivePhoto(array $exifData, string $ext): array
     {
         $result = [
-            'content_id'      => null,
-            'role'            => null,   // 'main' | 'video'
+            'content_id' => null,
+            'role' => null,   // 'main' | 'video'
             'is_motion_photo' => false,
         ];
 
@@ -230,8 +235,9 @@ class MediaFormatService
 
         if ($contentId) {
             $result['content_id'] = (string) $contentId;
-            $result['role']       = in_array(strtolower($ext), ['mov', 'mp4']) ? 'video' : 'main';
+            $result['role'] = in_array(strtolower($ext), ['mov', 'mp4']) ? 'video' : 'main';
             $result['is_motion_photo'] = true;
+
             return $result;
         }
 
@@ -239,7 +245,7 @@ class MediaFormatService
         $motionPhoto = $exifData['MotionPhoto'] ?? $exifData['Samsung:MotionPhoto'] ?? null;
         if ($motionPhoto == '1' || $motionPhoto === 'On') {
             $result['is_motion_photo'] = true;
-            $result['role']            = 'main';
+            $result['role'] = 'main';
             // No content_id from Samsung; we'll match by filename convention
         }
 
@@ -247,7 +253,7 @@ class MediaFormatService
         $microVideo = $exifData['MicroVideo'] ?? $exifData['XMP:MicroVideo'] ?? null;
         if ($microVideo == '1') {
             $result['is_motion_photo'] = true;
-            $result['role']            = 'main';
+            $result['role'] = 'main';
         }
 
         return $result;
@@ -258,10 +264,12 @@ class MediaFormatService
      */
     public function linkLivePhotoPair(int $mediaId, string $contentId, string $role, int $gallerySpaceId): void
     {
-        if (! $contentId) return;
+        if (! $contentId) {
+            return;
+        }
 
-        $pairRole    = $role === 'main' ? 'video' : 'main';
-        $pairMediaId = \Illuminate\Support\Facades\DB::table('media_items')
+        $pairRole = $role === 'main' ? 'video' : 'main';
+        $pairMediaId = DB::table('media_items')
             ->where('gallery_space_id', $gallerySpaceId)
             ->where('live_photo_content_id', $contentId)
             ->where('live_photo_role', $pairRole)
@@ -269,8 +277,8 @@ class MediaFormatService
 
         if ($pairMediaId) {
             // Link both items to each other
-            \Illuminate\Support\Facades\DB::table('media_items')->where('id', $mediaId)->update(['live_photo_pair_id' => $pairMediaId]);
-            \Illuminate\Support\Facades\DB::table('media_items')->where('id', $pairMediaId)->update(['live_photo_pair_id' => $mediaId]);
+            DB::table('media_items')->where('id', $mediaId)->update(['live_photo_pair_id' => $pairMediaId]);
+            DB::table('media_items')->where('id', $pairMediaId)->update(['live_photo_pair_id' => $mediaId]);
         }
     }
 }

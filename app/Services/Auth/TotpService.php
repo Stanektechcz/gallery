@@ -19,6 +19,7 @@ use Illuminate\Support\Str;
 class TotpService
 {
     private const PERIOD = 30;
+
     private const DIGITS = 6;
 
     /**
@@ -41,23 +42,27 @@ class TotpService
     /** What the QR code contains. The issuer appears twice because authenticators disagree on which they read. */
     public function provisioningUri(string $secret, string $account, string $issuer = 'MAKI Gallery'): string
     {
-        return 'otpauth://totp/' . rawurlencode($issuer) . ':' . rawurlencode($account)
-            . '?secret=' . $secret
-            . '&issuer=' . rawurlencode($issuer)
-            . '&algorithm=SHA1&digits=' . self::DIGITS . '&period=' . self::PERIOD;
+        return 'otpauth://totp/'.rawurlencode($issuer).':'.rawurlencode($account)
+            .'?secret='.$secret
+            .'&issuer='.rawurlencode($issuer)
+            .'&algorithm=SHA1&digits='.self::DIGITS.'&period='.self::PERIOD;
     }
 
     public function verify(string $secret, string $code, ?int $at = null): bool
     {
         $code = preg_replace('/\D/', '', $code) ?? '';
-        if (strlen($code) !== self::DIGITS) return false;
+        if (strlen($code) !== self::DIGITS) {
+            return false;
+        }
 
         $counter = intdiv($at ?? time(), self::PERIOD);
 
         for ($offset = -self::DRIFT; $offset <= self::DRIFT; $offset++) {
             // hash_equals, not ===: comparing codes character by character leaks how much
             // of a guess was right, and this runs on an unauthenticated-ish path.
-            if (hash_equals($this->at($secret, $counter + $offset), $code)) return true;
+            if (hash_equals($this->at($secret, $counter + $offset), $code)) {
+                return true;
+            }
         }
 
         return false;
@@ -92,7 +97,7 @@ class TotpService
     public function recoveryCodes(int $count = 8): array
     {
         return array_map(
-            fn () => strtoupper(Str::random(5) . '-' . Str::random(5)),
+            fn () => strtoupper(Str::random(5).'-'.Str::random(5)),
             range(1, $count),
         );
     }
@@ -119,13 +124,17 @@ class TotpService
         $bits = '';
         foreach (str_split($secret) as $character) {
             $position = strpos(self::ALPHABET, $character);
-            if ($position === false) continue;
+            if ($position === false) {
+                continue;
+            }
             $bits .= str_pad(decbin($position), 5, '0', STR_PAD_LEFT);
         }
 
         $out = '';
         foreach (str_split($bits, 8) as $chunk) {
-            if (strlen($chunk) === 8) $out .= chr(bindec($chunk));
+            if (strlen($chunk) === 8) {
+                $out .= chr(bindec($chunk));
+            }
         }
 
         return $out;

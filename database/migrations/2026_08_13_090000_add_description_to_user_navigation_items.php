@@ -15,8 +15,12 @@ return new class extends Migration
 {
     public function up(): void
     {
-        if (! Schema::hasTable('user_navigation_items')) return;
-        if (Schema::hasColumn('user_navigation_items', 'description')) return;
+        if (! Schema::hasTable('user_navigation_items')) {
+            return;
+        }
+        if (Schema::hasColumn('user_navigation_items', 'description')) {
+            return;
+        }
 
         Schema::table('user_navigation_items', function (Blueprint $table) {
             $table->string('description', 160)->nullable()->after('label');
@@ -25,7 +29,9 @@ return new class extends Migration
 
     public function down(): void
     {
-        if (! Schema::hasColumn('user_navigation_items', 'description')) return;
+        if (! Schema::hasColumn('user_navigation_items', 'description')) {
+            return;
+        }
 
         Schema::table('user_navigation_items', function (Blueprint $table) {
             $table->dropColumn('description');

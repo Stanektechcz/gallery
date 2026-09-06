@@ -68,7 +68,9 @@ class PersonalSummaryService
             ->where('scope', 'ledger')->where('budget_kind', 'monthly')
             ->orderByDesc('id')->first();
 
-        if (! $cesta && ! $rozpocet) return null;
+        if (! $cesta && ! $rozpocet) {
+            return null;
+        }
 
         $mena = $cesta?->base_currency ?? $rozpocet->currency;
         $limit = (float) ($cesta?->budget_amount ?? $rozpocet->starting_funds ?? 0);
@@ -137,7 +139,9 @@ class PersonalSummaryService
      */
     private function zeStavu(?array $predpoved, ?array $dnes, ?string $cizi): ?array
     {
-        if (! $predpoved) return null;
+        if (! $predpoved) {
+            return null;
+        }
 
         return [
             // Čí to je. Null znamená „moje" — a na obrazovce se pak nepíše žádné jméno.
@@ -167,11 +171,15 @@ class PersonalSummaryService
      */
     private function nabidnoutZapis(User $user, ?array $cyklus, Carbon $dnes): bool
     {
-        if ($cyklus === null || $cyklus['owner'] !== null) return false;
+        if ($cyklus === null || $cyklus['owner'] !== null) {
+            return false;
+        }
 
         // Od tří dnů před očekávaným termínem po pět dní po něm. Dřív je to plané,
         // později už si toho člověk všiml sám.
-        if ($cyklus['days_until'] > 3 || $cyklus['days_until'] < -5) return false;
+        if ($cyklus['days_until'] > 3 || $cyklus['days_until'] < -5) {
+            return false;
+        }
 
         return ! CycleDay::where('user_id', $user->id)
             ->whereDate('day', $dnes->toDateString())

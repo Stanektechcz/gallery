@@ -2,6 +2,7 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
@@ -82,8 +83,8 @@ return new class extends Migration
         });
 
         // Add FULLTEXT index only for MySQL/MariaDB
-        if (\Illuminate\Support\Facades\DB::connection()->getDriverName() === 'mysql') {
-            \Illuminate\Support\Facades\DB::statement('ALTER TABLE media_items ADD FULLTEXT INDEX media_items_search_text_fulltext (search_text)');
+        if (DB::connection()->getDriverName() === 'mysql') {
+            DB::statement('ALTER TABLE media_items ADD FULLTEXT INDEX media_items_search_text_fulltext (search_text)');
         }
 
         Schema::create('album_media', function (Blueprint $table) {

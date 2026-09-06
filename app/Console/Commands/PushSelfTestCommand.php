@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use Composer\InstalledVersions;
 use Illuminate\Console\Command;
 use Minishlink\WebPush\VAPID;
 
@@ -34,8 +35,8 @@ class PushSelfTestCommand extends Command
         $this->line('  Balíčky');
 
         foreach (['minishlink/web-push', 'web-token/jwt-signature', 'web-token/jwt-core', 'thecodingmachine/safe'] as $balicek) {
-            $verze = \Composer\InstalledVersions::isInstalled($balicek)
-                ? \Composer\InstalledVersions::getPrettyVersion($balicek)
+            $verze = InstalledVersions::isInstalled($balicek)
+                ? InstalledVersions::getPrettyVersion($balicek)
                 : 'není nainstalován';
 
             $this->line(sprintf('    %-28s %s', $balicek, $verze));
@@ -64,7 +65,7 @@ class PushSelfTestCommand extends Command
                 'aes128gcm',
             );
         } catch (\Throwable $problem) {
-            $this->error('    Podepsání selhalo: ' . $problem->getMessage());
+            $this->error('    Podepsání selhalo: '.$problem->getMessage());
             $this->line('');
             $this->line('    Upozornění by v tomhle stavu nikomu nedorazila.');
 
@@ -81,9 +82,9 @@ class PushSelfTestCommand extends Command
             return self::FAILURE;
         }
 
-        $this->line('    hlavička:  ' . substr($token, 0, 48) . '…');
-        $this->line('    částí:     ' . count($casti) . ' (hlavička, obsah, podpis)');
-        $this->line('    délka podpisu: ' . strlen(end($casti)) . ' znaků');
+        $this->line('    hlavička:  '.substr($token, 0, 48).'…');
+        $this->line('    částí:     '.count($casti).' (hlavička, obsah, podpis)');
+        $this->line('    délka podpisu: '.strlen(end($casti)).' znaků');
         $this->line('');
         $this->info('  Podepisování funguje — upozornění se odesílat dají.');
         $this->line('');

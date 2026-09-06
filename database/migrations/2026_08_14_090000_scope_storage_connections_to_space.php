@@ -20,7 +20,9 @@ return new class extends Migration
 {
     public function up(): void
     {
-        if (! Schema::hasTable('storage_connections')) return;
+        if (! Schema::hasTable('storage_connections')) {
+            return;
+        }
 
         if (! Schema::hasColumn('storage_connections', 'gallery_space_id')) {
             Schema::table('storage_connections', function (Blueprint $table) {
@@ -45,7 +47,9 @@ return new class extends Migration
 
     public function down(): void
     {
-        if (! Schema::hasColumn('storage_connections', 'gallery_space_id')) return;
+        if (! Schema::hasColumn('storage_connections', 'gallery_space_id')) {
+            return;
+        }
 
         Schema::table('storage_connections', function (Blueprint $table) {
             $table->dropConstrainedForeignId('gallery_space_id');

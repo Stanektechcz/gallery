@@ -10,6 +10,7 @@ use App\Models\Transaction;
 use App\Models\TransactionShare;
 use App\Models\User;
 use App\Models\Wallet;
+use App\Services\Finance\FinanceService;
 use App\Services\Finance\RecurringService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
@@ -27,7 +28,9 @@ class FinanceRecurringTest extends TestCase
     use RefreshDatabase;
 
     private User $uzivatel;
+
     private GallerySpace $space;
+
     private Wallet $ucet;
 
     protected function setUp(): void
@@ -73,7 +76,7 @@ class FinanceRecurringTest extends TestCase
         $this->assertSame(3, $vzniklo);
         $this->assertSame(3, Transaction::count());
 
-        $zustatek = collect(app(\App\Services\Finance\FinanceService::class)
+        $zustatek = collect(app(FinanceService::class)
             ->balances($this->space)['wallets'])->firstWhere('name', 'EUR karta')['balance'];
 
         $this->assertEqualsWithDelta(3000 - 840, $zustatek, 0.001, 'Tři nájmy, ne šest.');

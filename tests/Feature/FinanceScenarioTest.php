@@ -6,7 +6,6 @@ use App\Models\FinanceCategory;
 use App\Models\GallerySpace;
 use App\Models\Partner;
 use App\Models\Transaction;
-use App\Models\TransactionShare;
 use App\Models\User;
 use App\Models\Wallet;
 use App\Services\Finance\FinanceService;
@@ -27,7 +26,9 @@ class FinanceScenarioTest extends TestCase
     use RefreshDatabase;
 
     private User $uzivatel;
+
     private GallerySpace $space;
+
     private FinanceService $sluzba;
 
     protected function setUp(): void

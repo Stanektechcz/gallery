@@ -2,13 +2,14 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToGallerySpace;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 
 class EntertainmentTitle extends Model
 {
-    use \App\Models\Concerns\BelongsToGallerySpace;
+    use BelongsToGallerySpace;
 
     protected $fillable = [
         'uuid', 'gallery_space_id', 'added_by', 'album_id', 'media_type', 'title', 'original_title', 'external_source',
@@ -16,12 +17,24 @@ class EntertainmentTitle extends Model
         'backdrop_url', 'trailer_url', 'original_language', 'genres', 'status', 'priority', 'watch_provider', 'notes',
         'started_at', 'watched_at', 'created_from', 'source_reference',
     ];
-    protected function casts(): array { return ['release_date' => 'date', 'genres' => 'array', 'started_at' => 'datetime', 'watched_at' => 'datetime']; }
-    protected static function booted(): void {
+
+    protected function casts(): array
+    {
+        return ['release_date' => 'date', 'genres' => 'array', 'started_at' => 'datetime', 'watched_at' => 'datetime'];
+    }
+
+    protected static function booted(): void
+    {
         static::creating(function (EntertainmentTitle $title): void {
             $title->uuid ??= (string) Str::uuid();
-            if (Schema::hasColumn('entertainment_titles', 'created_from')) $title->created_from ??= $title->external_source === 'manual' ? 'manual' : 'import';
+            if (Schema::hasColumn('entertainment_titles', 'created_from')) {
+                $title->created_from ??= $title->external_source === 'manual' ? 'manual' : 'import';
+            }
         });
     }
-    public function votes() { return $this->hasMany(EntertainmentVote::class); }
+
+    public function votes()
+    {
+        return $this->hasMany(EntertainmentVote::class);
+    }
 }

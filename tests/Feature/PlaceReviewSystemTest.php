@@ -18,8 +18,11 @@ class PlaceReviewSystemTest extends TestCase
     use RefreshDatabase;
 
     private User $owner;
+
     private User $partner;
+
     private GallerySpace $space;
+
     private Place $place;
 
     protected function setUp(): void
@@ -140,6 +143,7 @@ class PlaceReviewSystemTest extends TestCase
             'path' => "media/{$media->uuid}/thumbnail.jpg", 'format' => 'jpg',
             'created_at' => now(), 'updated_at' => now(),
         ]);
+
         return $media->fresh();
     }
 }

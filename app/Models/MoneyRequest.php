@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToGallerySpace;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
 
@@ -13,11 +14,14 @@ use Illuminate\Support\Str;
  */
 class MoneyRequest extends Model
 {
-    use \App\Models\Concerns\BelongsToGallerySpace;
+    use BelongsToGallerySpace;
 
     public const STATUS_PENDING = 'pending';
+
     public const STATUS_SENT = 'sent';
+
     public const STATUS_DECLINED = 'declined';
+
     public const STATUS_CANCELLED = 'cancelled';
 
     protected $fillable = [

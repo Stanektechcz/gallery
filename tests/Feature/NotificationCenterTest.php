@@ -14,7 +14,9 @@ class NotificationCenterTest extends TestCase
     use RefreshDatabase;
 
     private User $owner;
+
     private User $partner;
+
     private GallerySpace $space;
 
     protected function setUp(): void

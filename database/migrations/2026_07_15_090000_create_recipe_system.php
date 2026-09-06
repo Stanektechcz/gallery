@@ -105,7 +105,7 @@ return new class extends Migration
                 $table->decimal('servings', 8, 2)->default(2);
                 $table->unsignedSmallInteger('actual_duration_minutes')->nullable();
                 foreach (['overall', 'taste', 'process', 'appearance'] as $rating) {
-                    $table->decimal($rating . '_rating', 2, 1)->nullable();
+                    $table->decimal($rating.'_rating', 2, 1)->nullable();
                 }
                 $table->decimal('actual_cost', 12, 2)->nullable();
                 $table->string('currency', 3)->default('CZK');

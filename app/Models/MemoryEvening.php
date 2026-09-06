@@ -23,6 +23,13 @@ class MemoryEvening extends Model
         static::creating(fn (self $evening) => $evening->uuid ??= (string) Str::uuid());
     }
 
-    public function event() { return $this->belongsTo(CalendarEvent::class, 'calendar_event_id'); }
-    public function album() { return $this->belongsTo(Album::class); }
+    public function event()
+    {
+        return $this->belongsTo(CalendarEvent::class, 'calendar_event_id');
+    }
+
+    public function album()
+    {
+        return $this->belongsTo(Album::class);
+    }
 }

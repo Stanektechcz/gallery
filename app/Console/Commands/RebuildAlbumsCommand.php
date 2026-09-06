@@ -2,14 +2,14 @@
 
 namespace App\Console\Commands;
 
-use App\Jobs\Drive\CreateDriveFolderJob;
 use App\Models\Album;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 
 class RebuildAlbumsCommand extends Command
 {
-    protected $signature   = 'gallery:rebuild-albums {--dry-run}';
+    protected $signature = 'gallery:rebuild-albums {--dry-run}';
+
     protected $description = 'Rebuild album closure table and materialized paths';
 
     public function handle(): int
@@ -17,7 +17,7 @@ class RebuildAlbumsCommand extends Command
         $dryRun = $this->option('dry-run');
         $this->info('Rebuilding album hierarchy...');
 
-        if (!$dryRun) {
+        if (! $dryRun) {
             // Truncate closure table and rebuild
             DB::table('album_closure')->truncate();
         }
@@ -33,8 +33,8 @@ class RebuildAlbumsCommand extends Command
             }
         }
 
-        if (!$dryRun) {
-            $this->info('Closure table rebuilt for ' . $albums->count() . ' albums.');
+        if (! $dryRun) {
+            $this->info('Closure table rebuilt for '.$albums->count().' albums.');
         }
 
         return Command::SUCCESS;

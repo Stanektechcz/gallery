@@ -95,7 +95,9 @@ class MobileAppController extends Controller
         try {
             $disk = Storage::disk((string) config('mobile.android.disk', 'local'));
             $path = (string) config('mobile.android.path', 'mobile/maki-gallery.apk');
-            if ($path === '' || ! $disk->exists($path)) return [false, null];
+            if ($path === '' || ! $disk->exists($path)) {
+                return [false, null];
+            }
 
             return [true, $disk->size($path)];
         } catch (Throwable) {
@@ -106,11 +108,17 @@ class MobileAppController extends Controller
     private function externalDownloadUrl(): ?string
     {
         $url = trim((string) config('mobile.android.download_url', ''));
-        if ($url === '' || filter_var($url, FILTER_VALIDATE_URL) === false) return null;
+        if ($url === '' || filter_var($url, FILTER_VALIDATE_URL) === false) {
+            return null;
+        }
 
         $scheme = strtolower((string) parse_url($url, PHP_URL_SCHEME));
-        if ($scheme === 'https') return $url;
-        if ($scheme === 'http' && app()->environment(['local', 'testing'])) return $url;
+        if ($scheme === 'https') {
+            return $url;
+        }
+        if ($scheme === 'http' && app()->environment(['local', 'testing'])) {
+            return $url;
+        }
 
         return null;
     }
@@ -121,7 +129,9 @@ class MobileAppController extends Controller
         try {
             $configuredPath = trim((string) config('mobile.android.bundled_path', ''));
             $releaseRoot = realpath(base_path('release-assets/android'));
-            if ($configuredPath === '' || $releaseRoot === false) return [null, null, null];
+            if ($configuredPath === '' || $releaseRoot === false) {
+                return [null, null, null];
+            }
 
             $candidate = realpath(base_path(str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $configuredPath)));
             $allowedPrefix = rtrim($releaseRoot, DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR;
@@ -144,9 +154,12 @@ class MobileAppController extends Controller
         try {
             $disk = Storage::disk((string) config('mobile.android.disk', 'local'));
             $path = (string) config('mobile.android.metadata_path', 'mobile/maki-gallery.json');
-            if ($path === '' || ! $disk->exists($path)) return [];
+            if ($path === '' || ! $disk->exists($path)) {
+                return [];
+            }
 
             $metadata = json_decode((string) $disk->get($path), true, flags: JSON_THROW_ON_ERROR);
+
             return is_array($metadata) ? $metadata : [];
         } catch (Throwable) {
             return [];

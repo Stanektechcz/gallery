@@ -2,8 +2,6 @@
 
 namespace App\Services\Media;
 
-use App\Models\MediaItem;
-
 /**
  * Perceptual hash calculation service.
  * NOT AI - uses classical image hashing algorithms (pHash, dHash, aHash).
@@ -17,7 +15,9 @@ class PerceptualHashService
     {
         try {
             $image = imagecreatefromstring(file_get_contents($imagePath));
-            if (!$image) return null;
+            if (! $image) {
+                return null;
+            }
 
             // Resize to 9x8 for dHash
             $resized = imagecreatetruecolor(9, 8);
@@ -28,13 +28,14 @@ class PerceptualHashService
             $hash = '';
             for ($y = 0; $y < 8; $y++) {
                 for ($x = 0; $x < 8; $x++) {
-                    $left  = $this->grayValue($resized, $x, $y);
+                    $left = $this->grayValue($resized, $x, $y);
                     $right = $this->grayValue($resized, $x + 1, $y);
                     $hash .= ($left > $right) ? '1' : '0';
                 }
             }
 
             imagedestroy($resized);
+
             return $this->binaryToHex($hash);
         } catch (\Throwable) {
             return null;
@@ -48,7 +49,9 @@ class PerceptualHashService
     {
         try {
             $image = imagecreatefromstring(file_get_contents($imagePath));
-            if (!$image) return null;
+            if (! $image) {
+                return null;
+            }
 
             // Resize to 8x8
             $resized = imagecreatetruecolor(8, 8);
@@ -60,9 +63,9 @@ class PerceptualHashService
             $pixels = [];
             for ($y = 0; $y < 8; $y++) {
                 for ($x = 0; $x < 8; $x++) {
-                    $gray    = $this->grayValue($resized, $x, $y);
+                    $gray = $this->grayValue($resized, $x, $y);
                     $pixels[] = $gray;
-                    $total   += $gray;
+                    $total += $gray;
                 }
             }
             $avg = $total / 64;
@@ -73,6 +76,7 @@ class PerceptualHashService
             }
 
             imagedestroy($resized);
+
             return $this->binaryToHex($hash);
         } catch (\Throwable) {
             return null;
@@ -90,8 +94,11 @@ class PerceptualHashService
         $distance = 0;
         $len = min(strlen($b1), strlen($b2));
         for ($i = 0; $i < $len; $i++) {
-            if ($b1[$i] !== $b2[$i]) $distance++;
+            if ($b1[$i] !== $b2[$i]) {
+                $distance++;
+            }
         }
+
         return $distance;
     }
 
@@ -109,6 +116,7 @@ class PerceptualHashService
         $r = ($rgb >> 16) & 0xFF;
         $g = ($rgb >> 8) & 0xFF;
         $b = $rgb & 0xFF;
+
         return (int) (0.299 * $r + 0.587 * $g + 0.114 * $b);
     }
 
@@ -118,6 +126,7 @@ class PerceptualHashService
         foreach (str_split($binary, 4) as $nibble) {
             $hex .= base_convert($nibble, 2, 16);
         }
+
         return $hex;
     }
 
@@ -127,6 +136,7 @@ class PerceptualHashService
         foreach (str_split($hex) as $char) {
             $binary .= str_pad(base_convert($char, 16, 2), 4, '0', STR_PAD_LEFT);
         }
+
         return $binary;
     }
 }

@@ -61,7 +61,7 @@ class MediaFileControllerTest extends TestCase
             'size_bytes' => 100,
         ]);
 
-        $this->get('/files/media/' . $media->uuid . '/thumbnail.jpg')
+        $this->get('/files/media/'.$media->uuid.'/thumbnail.jpg')
             ->assertOk()
             ->assertHeader('Content-Type', 'image/svg+xml')
             ->assertHeader('X-Gallery-Preview-Repair', 'queued');

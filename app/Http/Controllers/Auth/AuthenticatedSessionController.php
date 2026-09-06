@@ -21,25 +21,27 @@ class AuthenticatedSessionController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $credentials = $request->validate([
-            'email'    => 'required|email',
+            'email' => 'required|email',
             'password' => 'required|string',
         ]);
 
-        if (!Auth::attempt($credentials, $request->boolean('remember'))) {
+        if (! Auth::attempt($credentials, $request->boolean('remember'))) {
             // Attached to the account when the address matches one, so the owner can see
             // that somebody tried — which is the single most useful line in a security
             // log, and was previously recorded against nobody. A miss stays anonymous:
             // an unknown address belongs to no account by definition.
-            $target = \App\Models\User::where('email', $credentials['email'])->first();
+            $target = User::where('email', $credentials['email'])->first();
 
             AuditLog::record('auth.login.failed', $target, ['email' => $credentials['email']]);
+
             return back()->withErrors(['email' => 'Nesprávné přihlašovací údaje.']);
         }
 
         $user = Auth::user();
 
-        if (!$user->is_active) {
+        if (! $user->is_active) {
             Auth::logout();
+
             return back()->withErrors(['email' => 'Váš účet není aktivní.']);
         }
 

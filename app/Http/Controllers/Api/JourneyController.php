@@ -13,7 +13,7 @@ class JourneyController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $user  = $request->user();
+        $user = $request->user();
         $space = $user->gallerySpaces()->first();
 
         $events = DB::table('journey_events')
@@ -37,7 +37,8 @@ class JourneyController extends Controller
 
             $photos = $q->orderBy('taken_at')->limit(5)->get();
             $event->photo_count = $photos->count();
-            $event->thumbs      = $photos->map(fn($p) => $p->thumbnail_url)->filter()->values();
+            $event->thumbs = $photos->map(fn ($p) => $p->thumbnail_url)->filter()->values();
+
             return $event;
         });
 
@@ -46,39 +47,39 @@ class JourneyController extends Controller
 
     public function store(Request $request): JsonResponse
     {
-        $user  = $request->user();
+        $user = $request->user();
         $space = $user->gallerySpaces()->first();
 
         $v = $request->validate([
-            'title'               => 'required|string|max:255',
-            'story'               => 'nullable|string|max:5000',
-            'event_date'          => 'required|date',
-            'place_name'          => 'nullable|string|max:255',
-            'place_display_name'  => 'nullable|string|max:512',
-            'emotion'             => 'nullable|string|max:10',
-            'song_link'           => 'nullable|url|max:512',
-            'latitude'            => 'nullable|numeric|between:-90,90',
-            'longitude'           => 'nullable|numeric|between:-180,180',
+            'title' => 'required|string|max:255',
+            'story' => 'nullable|string|max:5000',
+            'event_date' => 'required|date',
+            'place_name' => 'nullable|string|max:255',
+            'place_display_name' => 'nullable|string|max:512',
+            'emotion' => 'nullable|string|max:10',
+            'song_link' => 'nullable|url|max:512',
+            'latitude' => 'nullable|numeric|between:-90,90',
+            'longitude' => 'nullable|numeric|between:-180,180',
             'linked_itinerary_id' => 'nullable|integer',
-            'source'              => 'nullable|in:manual,auto',
+            'source' => 'nullable|in:manual,auto',
         ]);
 
         $id = DB::table('journey_events')->insertGetId([
-            'gallery_space_id'    => $space->id,
-            'created_by'          => $user->id,
-            'title'               => $v['title'],
-            'story'               => $v['story'] ?? null,
-            'event_date'          => $v['event_date'],
-            'place_name'          => $v['place_name'] ?? null,
-            'place_display_name'  => $v['place_display_name'] ?? null,
-            'emotion'             => $v['emotion'] ?? '❤️',
-            'song_link'           => $v['song_link'] ?? null,
-            'latitude'            => $v['latitude'] ?? null,
-            'longitude'           => $v['longitude'] ?? null,
+            'gallery_space_id' => $space->id,
+            'created_by' => $user->id,
+            'title' => $v['title'],
+            'story' => $v['story'] ?? null,
+            'event_date' => $v['event_date'],
+            'place_name' => $v['place_name'] ?? null,
+            'place_display_name' => $v['place_display_name'] ?? null,
+            'emotion' => $v['emotion'] ?? '❤️',
+            'song_link' => $v['song_link'] ?? null,
+            'latitude' => $v['latitude'] ?? null,
+            'longitude' => $v['longitude'] ?? null,
             'linked_itinerary_id' => $v['linked_itinerary_id'] ?? null,
-            'source'              => $v['source'] ?? 'manual',
-            'created_at'          => now(),
-            'updated_at'          => now(),
+            'source' => $v['source'] ?? 'manual',
+            'created_at' => now(),
+            'updated_at' => now(),
         ]);
 
         return response()->json(DB::table('journey_events')->find($id), 201);
@@ -86,19 +87,19 @@ class JourneyController extends Controller
 
     public function update(Request $request, int $id): JsonResponse
     {
-        $user  = $request->user();
+        $user = $request->user();
         $space = $user->gallerySpaces()->first();
 
         $v = $request->validate([
-            'title'              => 'nullable|string|max:255',
-            'story'              => 'nullable|string|max:5000',
-            'event_date'         => 'nullable|date',
-            'place_name'         => 'nullable|string|max:255',
+            'title' => 'nullable|string|max:255',
+            'story' => 'nullable|string|max:5000',
+            'event_date' => 'nullable|date',
+            'place_name' => 'nullable|string|max:255',
             'place_display_name' => 'nullable|string|max:512',
-            'emotion'            => 'nullable|string|max:10',
-            'song_link'          => 'nullable|url|max:512',
-            'latitude'           => 'nullable|numeric|between:-90,90',
-            'longitude'          => 'nullable|numeric|between:-180,180',
+            'emotion' => 'nullable|string|max:10',
+            'song_link' => 'nullable|url|max:512',
+            'latitude' => 'nullable|numeric|between:-90,90',
+            'longitude' => 'nullable|numeric|between:-180,180',
         ]);
 
         // Only the fields the caller sent -- which is what the validated array already
@@ -117,7 +118,7 @@ class JourneyController extends Controller
 
     public function destroy(Request $request, int $id): JsonResponse
     {
-        $user  = $request->user();
+        $user = $request->user();
         $space = $user->gallerySpaces()->first();
 
         DB::table('journey_events')
@@ -135,7 +136,7 @@ class JourneyController extends Controller
      */
     public function autoSuggest(Request $request): JsonResponse
     {
-        $user  = $request->user();
+        $user = $request->user();
         $space = $user->gallerySpaces()->first();
 
         // Cluster by date + 1° grid cell
@@ -144,7 +145,7 @@ class JourneyController extends Controller
             ->whereNotNull('latitude')
             ->whereNotNull('longitude')
             ->whereNotNull('taken_at')
-            ->selectRaw("
+            ->selectRaw('
                 DATE(taken_at)      AS visit_date,
                 ROUND(latitude, 1)  AS lat_grid,
                 ROUND(longitude, 1) AS lng_grid,
@@ -153,8 +154,8 @@ class JourneyController extends Controller
                 COUNT(*)            AS photo_count,
                 MIN(taken_at)       AS first_photo,
                 MAX(taken_at)       AS last_photo
-            ")
-            ->groupByRaw("DATE(taken_at), ROUND(latitude, 1), ROUND(longitude, 1)")
+            ')
+            ->groupByRaw('DATE(taken_at), ROUND(latitude, 1), ROUND(longitude, 1)')
             ->orderByDesc('photo_count')
             ->limit(150)
             ->get();
@@ -178,6 +179,7 @@ class JourneyController extends Controller
                     return true;
                 }
                 $dist = abs($ev->latitude - $cluster->latitude) + abs($ev->longitude - $cluster->longitude);
+
                 return $dist < 0.5;
             });
 
@@ -205,22 +207,22 @@ class JourneyController extends Controller
                 ->limit(4)
                 ->get();
 
-            $thumbUrls = $samplePhotos->map(fn($p) => $p->thumbnail_url)->filter()->values()->toArray();
+            $thumbUrls = $samplePhotos->map(fn ($p) => $p->thumbnail_url)->filter()->values()->toArray();
 
             $suggestions[] = [
-                'key'         => $cluster->visit_date . '_' . round($lat, 1) . '_' . round($lng, 1),
-                'visit_date'  => $cluster->visit_date,
-                'latitude'    => $lat,
-                'longitude'   => $lng,
+                'key' => $cluster->visit_date.'_'.round($lat, 1).'_'.round($lng, 1),
+                'visit_date' => $cluster->visit_date,
+                'latitude' => $lat,
+                'longitude' => $lng,
                 'photo_count' => (int) $cluster->photo_count,
                 'first_photo' => $cluster->first_photo,
-                'last_photo'  => $cluster->last_photo,
-                'place_hint'  => $placeHint,
-                'thumb_urls'  => $thumbUrls,
+                'last_photo' => $cluster->last_photo,
+                'place_hint' => $placeHint,
+                'thumb_urls' => $thumbUrls,
             ];
         }
 
-        usort($suggestions, fn($a, $b) => strcmp($b['visit_date'], $a['visit_date']));
+        usort($suggestions, fn ($a, $b) => strcmp($b['visit_date'], $a['visit_date']));
 
         return response()->json($suggestions);
     }
@@ -231,18 +233,18 @@ class JourneyController extends Controller
      */
     public function autoImport(Request $request): JsonResponse
     {
-        $user  = $request->user();
+        $user = $request->user();
         $space = $user->gallerySpaces()->first();
 
         $v = $request->validate([
-            'events'                      => 'required|array|max:50',
-            'events.*.title'              => 'required|string|max:255',
-            'events.*.event_date'         => 'required|date',
-            'events.*.latitude'           => 'nullable|numeric',
-            'events.*.longitude'          => 'nullable|numeric',
-            'events.*.place_name'         => 'nullable|string|max:255',
+            'events' => 'required|array|max:50',
+            'events.*.title' => 'required|string|max:255',
+            'events.*.event_date' => 'required|date',
+            'events.*.latitude' => 'nullable|numeric',
+            'events.*.longitude' => 'nullable|numeric',
+            'events.*.place_name' => 'nullable|string|max:255',
             'events.*.place_display_name' => 'nullable|string|max:512',
-            'events.*.emotion'            => 'nullable|string|max:10',
+            'events.*.emotion' => 'nullable|string|max:10',
         ]);
 
         $inserted = 0;
@@ -262,20 +264,20 @@ class JourneyController extends Controller
             }
 
             DB::table('journey_events')->insert([
-                'gallery_space_id'    => $space->id,
-                'created_by'          => $user->id,
-                'title'               => $ev['title'],
-                'story'               => null,
-                'event_date'          => $ev['event_date'],
-                'place_name'          => $ev['place_name'] ?? null,
-                'place_display_name'  => $ev['place_display_name'] ?? null,
-                'emotion'             => $ev['emotion'] ?? '📸',
-                'latitude'            => $ev['latitude'] ?? null,
-                'longitude'           => $ev['longitude'] ?? null,
+                'gallery_space_id' => $space->id,
+                'created_by' => $user->id,
+                'title' => $ev['title'],
+                'story' => null,
+                'event_date' => $ev['event_date'],
+                'place_name' => $ev['place_name'] ?? null,
+                'place_display_name' => $ev['place_display_name'] ?? null,
+                'emotion' => $ev['emotion'] ?? '📸',
+                'latitude' => $ev['latitude'] ?? null,
+                'longitude' => $ev['longitude'] ?? null,
                 'linked_itinerary_id' => $linkedId,
-                'source'              => 'auto',
-                'created_at'          => now(),
-                'updated_at'          => now(),
+                'source' => 'auto',
+                'created_at' => now(),
+                'updated_at' => now(),
             ]);
             $inserted++;
         }
@@ -289,7 +291,7 @@ class JourneyController extends Controller
      */
     public function photos(Request $request, int $id): JsonResponse
     {
-        $user  = $request->user();
+        $user = $request->user();
         $space = $user->gallerySpaces()->first();
 
         $event = DB::table('journey_events')
@@ -315,13 +317,13 @@ class JourneyController extends Controller
 
         $photos = $q->orderBy('taken_at')->limit(60)->get();
 
-        return response()->json($photos->map(fn($p) => [
-            'uuid'          => $p->uuid,
-            'file_name'     => $p->file_name,
+        return response()->json($photos->map(fn ($p) => [
+            'uuid' => $p->uuid,
+            'file_name' => $p->file_name,
             'thumbnail_url' => $p->thumbnail_url,
-            'taken_at'      => $p->taken_at,
-            'latitude'      => $p->latitude,
-            'longitude'     => $p->longitude,
+            'taken_at' => $p->taken_at,
+            'latitude' => $p->latitude,
+            'longitude' => $p->longitude,
         ]));
     }
 
@@ -329,7 +331,7 @@ class JourneyController extends Controller
 
     private function reverseGeocode(float $lat, float $lng): ?string
     {
-        $cacheKey = 'rgc_' . round($lat, 1) . '_' . round($lng, 1);
+        $cacheKey = 'rgc_'.round($lat, 1).'_'.round($lng, 1);
 
         return Cache::remember($cacheKey, 86400 * 30, function () use ($lat, $lng) {
             $url = sprintf(
@@ -344,6 +346,7 @@ class JourneyController extends Controller
             }
 
             $addr = $data['address'] ?? [];
+
             return $addr['city']
                 ?? $addr['town']
                 ?? $addr['village']
@@ -363,13 +366,13 @@ class JourneyController extends Controller
         $ch = curl_init($url);
         curl_setopt_array($ch, [
             CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_TIMEOUT        => 3,
-            CURLOPT_USERAGENT      => 'MakiGallery/1.0 (gallery.stanektech.cz)',
+            CURLOPT_TIMEOUT => 3,
+            CURLOPT_USERAGENT => 'MakiGallery/1.0 (gallery.stanektech.cz)',
             CURLOPT_SSL_VERIFYPEER => true,
             CURLOPT_FOLLOWLOCATION => true,
         ]);
         $resp = curl_exec($ch);
-        $err  = curl_errno($ch);
+        $err = curl_errno($ch);
         curl_close($ch);
 
         if ($err || ! $resp) {

@@ -19,9 +19,9 @@ final class Cestina
      * Jen tvar bez čísla. Hodí se tam, kde se s počtem mění i sloveso:
      * `tvar($n, 'položka byla', 'položky byly', 'položek bylo')`.
      *
-     * @param string $jeden tvar k jedničce — „den", „položka"
-     * @param string $dva   tvar ke dvěma až čtyřem — „dny", „položky"
-     * @param string $pet   tvar k pěti a výš a k nule — „dní", „položek"
+     * @param  string  $jeden  tvar k jedničce — „den", „položka"
+     * @param  string  $dva  tvar ke dvěma až čtyřem — „dny", „položky"
+     * @param  string  $pet  tvar k pěti a výš a k nule — „dní", „položek"
      */
     public static function tvar(int|float $pocet, string $jeden, string $dva, string $pet): string
     {
@@ -33,8 +33,12 @@ final class Cestina
 
         $n = abs((int) $pocet);
 
-        if ($n === 1) return $jeden;
-        if ($n >= 2 && $n <= 4) return $dva;
+        if ($n === 1) {
+            return $jeden;
+        }
+        if ($n >= 2 && $n <= 4) {
+            return $dva;
+        }
 
         return $pet;
     }

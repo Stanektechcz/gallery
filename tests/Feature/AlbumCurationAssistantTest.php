@@ -20,8 +20,11 @@ class AlbumCurationAssistantTest extends TestCase
     use RefreshDatabase;
 
     private User $owner;
+
     private User $partner;
+
     private GallerySpace $space;
+
     private Album $album;
 
     protected function setUp(): void

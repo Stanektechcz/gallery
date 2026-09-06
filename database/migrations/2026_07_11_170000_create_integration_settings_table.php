@@ -21,5 +21,8 @@ return new class extends Migration
         });
     }
 
-    public function down(): void { Schema::dropIfExists('integration_settings'); }
+    public function down(): void
+    {
+        Schema::dropIfExists('integration_settings');
+    }
 };

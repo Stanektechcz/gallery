@@ -2,8 +2,8 @@
 
 namespace Tests\Feature;
 
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 

@@ -18,7 +18,8 @@ class GenerateImageVariantsJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    public int $tries   = 3;
+    public int $tries = 3;
+
     public int $timeout = 600;
 
     public function __construct(private readonly int $mediaItemId) {}
@@ -26,21 +27,24 @@ class GenerateImageVariantsJob implements ShouldQueue
     public function handle(): void
     {
         $media = MediaItem::find($this->mediaItemId);
-        if (!$media) return;
+        if (! $media) {
+            return;
+        }
 
         $session = UploadSession::where('resulting_media_id', $media->id)->first();
-        $path    = $session?->assembled_path;
+        $path = $session?->assembled_path;
 
         // Older uploads do not retain their temporary assembled upload. Their
         // local original is still enough to regenerate a missing preview.
-        if (!$path || !file_exists($path)) {
+        if (! $path || ! file_exists($path)) {
             $original = $media->variants()->where('type', 'original')->first();
             $candidate = $original ? Storage::disk($original->disk)->path($original->path) : null;
             $path = $candidate && file_exists($candidate) ? $candidate : null;
         }
 
-        if (!$path || !file_exists($path)) {
+        if (! $path || ! file_exists($path)) {
             $media->update(['processing_error' => 'Zdroj pro vytvoření variant nebyl nalezen.']);
+
             return;
         }
 
@@ -54,9 +58,11 @@ class GenerateImageVariantsJob implements ShouldQueue
             $variantService->generateAll($media, $path);
 
             // Get dimensions from image if not set
-            if (!$media->width) {
+            if (! $media->width) {
                 [$w, $h] = @getimagesize($path) ?: [null, null];
-                if ($w) $media->update(['width' => $w, 'height' => $h]);
+                if ($w) {
+                    $media->update(['width' => $w, 'height' => $h]);
+                }
             }
 
             $media->update(['processing_progress' => 60]);
@@ -74,7 +80,7 @@ class GenerateImageVariantsJob implements ShouldQueue
             $media->rebuildSearchText();
 
             $media->update([
-                'processing_stage'    => 'uploading_to_drive',
+                'processing_stage' => 'uploading_to_drive',
                 'processing_progress' => 90,
             ]);
 

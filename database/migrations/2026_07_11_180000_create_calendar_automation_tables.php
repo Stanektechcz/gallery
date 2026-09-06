@@ -46,6 +46,8 @@ return new class extends Migration
     {
         Schema::dropIfExists('shared_day_notes');
         Schema::dropIfExists('gift_ideas');
-        Schema::table('event_tasks', function (Blueprint $table) { $table->dropColumn('last_escalated_at'); });
+        Schema::table('event_tasks', function (Blueprint $table) {
+            $table->dropColumn('last_escalated_at');
+        });
     }
 };

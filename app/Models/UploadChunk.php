@@ -18,5 +18,8 @@ class UploadChunk extends Model
         return ['received_at' => 'datetime'];
     }
 
-    public function uploadSession() { return $this->belongsTo(UploadSession::class); }
+    public function uploadSession()
+    {
+        return $this->belongsTo(UploadSession::class);
+    }
 }

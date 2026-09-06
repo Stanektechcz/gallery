@@ -31,7 +31,7 @@ class ChatGameController extends Controller
         $this->available();
         $data = $request->validate([
             'conversation' => 'required|string',
-            'kind' => 'required|string|in:' . implode(',', array_keys(GameEngine::KINDS)),
+            'kind' => 'required|string|in:'.implode(',', array_keys(GameEngine::KINDS)),
         ]);
 
         $conversation = $this->conversation($request, $data['conversation']);

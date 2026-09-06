@@ -53,7 +53,9 @@ return new class extends Migration
 
         Schema::table('chat_messages', function (Blueprint $table) {
             foreach (['media_path', 'media_mime', 'media_size', 'media_remote_url', 'media_width', 'media_height'] as $column) {
-                if (Schema::hasColumn('chat_messages', $column)) $table->dropColumn($column);
+                if (Schema::hasColumn('chat_messages', $column)) {
+                    $table->dropColumn($column);
+                }
             }
         });
     }

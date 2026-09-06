@@ -27,6 +27,7 @@ class DailyMomentService
 {
     /** Never before breakfast, never after bed. */
     private const EARLIEST_HOUR = 9;
+
     private const LATEST_HOUR = 21;
 
     /** How long an answer still counts as on time. */
@@ -47,7 +48,9 @@ class DailyMomentService
             ->whereDate('moment_date', $date)
             ->first();
 
-        if ($existing) return $existing;
+        if ($existing) {
+            return $existing;
+        }
 
         return DailyMoment::create([
             'gallery_space_id' => $space->id,
@@ -153,7 +156,9 @@ class DailyMomentService
             ->unique()
             ->values();
 
-        if ($dny->isEmpty()) return 0;
+        if ($dny->isEmpty()) {
+            return 0;
+        }
 
         $kurzor = $dny->first() === $now->toDateString()
             ? $now->copy()
@@ -162,7 +167,9 @@ class DailyMomentService
         $delka = 0;
 
         foreach ($dny as $den) {
-            if ($den !== $kurzor->toDateString()) break;
+            if ($den !== $kurzor->toDateString()) {
+                break;
+            }
 
             $delka++;
             $kurzor->subDay();
@@ -247,7 +254,9 @@ class DailyMomentService
      */
     private function mediaFor(GallerySpace $space, ?string $uuid): ?MediaItem
     {
-        if (! $uuid) return null;
+        if (! $uuid) {
+            return null;
+        }
 
         return MediaItem::where('uuid', $uuid)
             ->where('gallery_space_id', $space->id)
@@ -272,7 +281,9 @@ class DailyMomentService
 
     private function mediaPayload(?MediaItem $item): ?array
     {
-        if (! $item) return null;
+        if (! $item) {
+            return null;
+        }
 
         $variant = collect(['medium', 'small', 'thumbnail', 'video_poster'])
             ->map(fn ($type) => $item->variants->firstWhere('type', $type))

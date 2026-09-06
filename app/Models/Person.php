@@ -16,15 +16,26 @@ class Person extends Model
     protected function casts(): array
     {
         return [
-            'birth_date'  => 'date',
+            'birth_date' => 'date',
             'is_favorite' => 'boolean',
-            'is_hidden'   => 'boolean',
+            'is_hidden' => 'boolean',
         ];
     }
 
-    public function gallerySpace() { return $this->belongsTo(GallerySpace::class); }
-    public function cover()        { return $this->belongsTo(MediaItem::class, 'cover_media_id'); }
-    public function creator()      { return $this->belongsTo(User::class, 'created_by'); }
+    public function gallerySpace()
+    {
+        return $this->belongsTo(GallerySpace::class);
+    }
+
+    public function cover()
+    {
+        return $this->belongsTo(MediaItem::class, 'cover_media_id');
+    }
+
+    public function creator()
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
 
     public function media()
     {

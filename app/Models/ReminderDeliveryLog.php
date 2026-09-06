@@ -15,5 +15,8 @@ class ReminderDeliveryLog extends Model
         return ['created_at' => 'datetime'];
     }
 
-    public function reminder() { return $this->belongsTo(EventReminder::class, 'event_reminder_id'); }
+    public function reminder()
+    {
+        return $this->belongsTo(EventReminder::class, 'event_reminder_id');
+    }
 }

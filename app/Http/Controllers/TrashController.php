@@ -7,7 +7,6 @@ use App\Models\MediaItem;
 use App\Services\Media\MediaPurger;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -15,23 +14,23 @@ class TrashController extends Controller
 {
     public function index(Request $request): Response
     {
-        $user  = $request->user();
+        $user = $request->user();
         $space = $user->gallerySpaces()->first();
 
         $media = MediaItem::query()
             ->where('gallery_space_id', $space->id)
             ->whereNotNull('trashed_at')
-            ->with(['variants' => fn($q) => $q->whereIn('type', ['thumbnail', 'placeholder'])])
+            ->with(['variants' => fn ($q) => $q->whereIn('type', ['thumbnail', 'placeholder'])])
             ->orderByDesc('trashed_at')
             ->paginate(60)
-            ->through(fn($m) => $this->formatItem($m));
+            ->through(fn ($m) => $this->formatItem($m));
 
         $retentionDays = config('gallery.trash_retention_days', 30);
 
         return Inertia::render('Trash/Index', [
-            'media'          => $media,
+            'media' => $media,
             'retention_days' => $retentionDays,
-            'can_purge'      => $user->isAdmin(),
+            'can_purge' => $user->isAdmin(),
         ]);
     }
 
@@ -64,7 +63,7 @@ class TrashController extends Controller
 
     public function purge(Request $request, string $uuid): JsonResponse
     {
-        if (!$request->user()->isAdmin()) {
+        if (! $request->user()->isAdmin()) {
             abort(403, 'Trvalé smazání vyžaduje admin oprávnění.');
         }
 
@@ -83,7 +82,7 @@ class TrashController extends Controller
 
     public function emptyTrash(Request $request): JsonResponse
     {
-        if (!$request->user()->isAdmin()) {
+        if (! $request->user()->isAdmin()) {
             abort(403);
         }
 
@@ -104,21 +103,21 @@ class TrashController extends Controller
     private function formatItem(MediaItem $m): array
     {
         return [
-            'id'           => $m->id,
-            'uuid'         => $m->uuid,
-            'media_type'   => $m->media_type,
-            'taken_at'     => $m->taken_at?->toIso8601String(),
-            'trashed_at'   => $m->trashed_at?->toIso8601String(),
-            'purge_after'  => $m->purge_after?->toIso8601String(),
-            'width'        => $m->width,
-            'height'       => $m->height,
+            'id' => $m->id,
+            'uuid' => $m->uuid,
+            'media_type' => $m->media_type,
+            'taken_at' => $m->taken_at?->toIso8601String(),
+            'trashed_at' => $m->trashed_at?->toIso8601String(),
+            'purge_after' => $m->purge_after?->toIso8601String(),
+            'width' => $m->width,
+            'height' => $m->height,
             'display_title' => $m->display_title ?? $m->original_filename,
-            'size_bytes'   => $m->size_bytes,
-            'variants'     => $m->variants->map(fn($v) => [
-                'type'           => $v->type,
-                'url'            => $v->url,
+            'size_bytes' => $m->size_bytes,
+            'variants' => $m->variants->map(fn ($v) => [
+                'type' => $v->type,
+                'url' => $v->url,
                 'dominant_color' => $v->dominant_color,
-                'aspect_ratio'   => $v->aspect_ratio,
+                'aspect_ratio' => $v->aspect_ratio,
             ]),
         ];
     }

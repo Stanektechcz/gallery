@@ -11,7 +11,8 @@ use Illuminate\Support\Facades\DB;
 
 class GalleryStatusCommand extends Command
 {
-    protected $signature   = 'gallery:status';
+    protected $signature = 'gallery:status';
+
     protected $description = 'Show current gallery system status';
 
     public function handle(): int
@@ -57,7 +58,7 @@ class GalleryStatusCommand extends Command
         // Queue
         $this->info('Queue:');
         $pending = DB::table('jobs')->count();
-        $failed  = DB::table('failed_jobs')->count();
+        $failed = DB::table('failed_jobs')->count();
         $uploading = UploadSession::where('status', 'pending')->count();
         $this->table(['Metric', 'Count'], [
             ['Pending Jobs',    $pending],
@@ -76,6 +77,7 @@ class GalleryStatusCommand extends Command
             $bytes /= 1024;
             $i++;
         }
-        return round($bytes, 2) . ' ' . $units[$i];
+
+        return round($bytes, 2).' '.$units[$i];
     }
 }

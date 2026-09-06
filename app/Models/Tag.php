@@ -3,7 +3,6 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Facades\DB;
 
 class Tag extends Model
 {
@@ -12,10 +11,25 @@ class Tag extends Model
         'materialized_path', 'color', 'created_by',
     ];
 
-    public function gallerySpace() { return $this->belongsTo(GallerySpace::class); }
-    public function parent()       { return $this->belongsTo(Tag::class, 'parent_id'); }
-    public function children()     { return $this->hasMany(Tag::class, 'parent_id'); }
-    public function creator()      { return $this->belongsTo(User::class, 'created_by'); }
+    public function gallerySpace()
+    {
+        return $this->belongsTo(GallerySpace::class);
+    }
+
+    public function parent()
+    {
+        return $this->belongsTo(Tag::class, 'parent_id');
+    }
+
+    public function children()
+    {
+        return $this->hasMany(Tag::class, 'parent_id');
+    }
+
+    public function creator()
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
 
     public function media()
     {

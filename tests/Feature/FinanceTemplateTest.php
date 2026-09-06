@@ -20,9 +20,13 @@ class FinanceTemplateTest extends TestCase
     use RefreshDatabase;
 
     private User $uzivatel;
+
     private GallerySpace $space;
+
     private Wallet $ucet;
+
     private Partner $adri;
+
     private Partner $maki;
 
     protected function setUp(): void

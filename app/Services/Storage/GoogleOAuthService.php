@@ -13,11 +13,11 @@ class GoogleOAuthService
 
     public function __construct()
     {
-        $this->client = new GoogleClient();
+        $this->client = new GoogleClient;
         $this->client->setClientId(config('services.google.client_id'));
         $this->client->setClientSecret(config('services.google.client_secret'));
         $this->client->setRedirectUri(config('services.google.redirect'));
-        $this->client->setScopes([\Google\Service\Drive::DRIVE_FILE]);
+        $this->client->setScopes([Drive::DRIVE_FILE]);
         $this->client->setAccessType('offline');
         $this->client->setIncludeGrantedScopes(true);
     }
@@ -49,29 +49,29 @@ class GoogleOAuthService
         // Get user email via Drive About (works with drive.file scope — no extra scope needed)
         $this->client->setAccessToken($tokenData);
         $driveService = new Drive($this->client);
-        $about        = $driveService->about->get(['fields' => 'user']);
-        $userEmail    = $about->getUser()->getEmailAddress();
-        $userId       = $about->getUser()->getPermissionId();
+        $about = $driveService->about->get(['fields' => 'user']);
+        $userEmail = $about->getUser()->getEmailAddress();
+        $userId = $about->getUser()->getPermissionId();
 
         // Find or create storage connection
         $connection = StorageConnection::firstOrNew([
-            'owner_user_id'    => $user->id,
-            'provider'         => 'google_drive',
+            'owner_user_id' => $user->id,
+            'provider' => 'google_drive',
         ]);
 
         $connection->google_subject_id = $userId;
-        $connection->account_email     = $userEmail;
+        $connection->account_email = $userEmail;
         $connection->setAccessToken(json_encode($tokenData));
-        $connection->token_expires_at  = now()->addSeconds($tokenData['expires_in'] ?? 3600);
+        $connection->token_expires_at = now()->addSeconds($tokenData['expires_in'] ?? 3600);
 
         if (isset($tokenData['refresh_token'])) {
             $connection->setRefreshToken($tokenData['refresh_token']);
         }
 
         $connection->granted_scopes_json = $tokenData['scope'] ?? null;
-        $connection->connection_status   = 'healthy';
-        $connection->connected_at        = now();
-        $connection->revoked_at          = null;
+        $connection->connection_status = 'healthy';
+        $connection->connected_at = now();
+        $connection->revoked_at = null;
         $connection->save();
 
         return $connection;
@@ -83,8 +83,9 @@ class GoogleOAuthService
     public function refreshToken(StorageConnection $connection): bool
     {
         $refreshToken = $connection->getRefreshToken();
-        if (!$refreshToken) {
+        if (! $refreshToken) {
             $connection->markStatus('refresh_required');
+
             return false;
         }
 
@@ -96,6 +97,7 @@ class GoogleOAuthService
                 $connection->markStatus('refresh_required');
                 $connection->markError('invalid_grant', $newToken['error_description'] ?? '');
             }
+
             return false;
         }
 
@@ -120,6 +122,7 @@ class GoogleOAuthService
             }
             $connection->markStatus('revoked');
             $connection->update(['revoked_at' => now()]);
+
             return true;
         } catch (\Throwable $e) {
             return false;

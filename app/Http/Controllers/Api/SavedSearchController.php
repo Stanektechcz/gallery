@@ -13,21 +13,23 @@ class SavedSearchController extends Controller
     {
         $space = $request->user()->gallerySpaces()->first();
         $searches = SavedSearch::where('gallery_space_id', $space->id)
-            ->where(fn($query) => $query
+            ->where(fn ($query) => $query
                 ->where('user_id', $request->user()->id)
                 ->orWhere('is_shared', true))
             ->orderByDesc('is_pinned')
             ->orderByDesc('last_used_at')
             ->orderBy('name')
             ->get();
+
         return response()->json($searches);
     }
 
     public function store(Request $request): JsonResponse
     {
-        $data  = $request->validate($this->rules());
+        $data = $request->validate($this->rules());
         $space = $request->user()->gallerySpaces()->first();
         $search = SavedSearch::create(array_merge($data, ['user_id' => $request->user()->id, 'gallery_space_id' => $space->id]));
+
         return response()->json($search, 201);
     }
 
@@ -37,18 +39,23 @@ class SavedSearchController extends Controller
         if ($savedSearch->user_id === $request->user()->id) {
             $savedSearch->update(['last_used_at' => now()]);
         }
+
         return response()->json($savedSearch);
     }
+
     public function update(Request $request, SavedSearch $savedSearch): JsonResponse
     {
         $this->authorizeOwner($request, $savedSearch);
         $savedSearch->update($request->validate($this->rules(true)));
+
         return response()->json($savedSearch);
     }
+
     public function destroy(Request $request, SavedSearch $savedSearch): JsonResponse
     {
         $this->authorizeOwner($request, $savedSearch);
         $savedSearch->delete();
+
         return response()->json(['status' => 'deleted']);
     }
 

@@ -67,7 +67,7 @@ class PartnerDecisionIntegrationTest extends TestCase
             'poll_option_id' => $firstOption, 'user_id' => $owner->id, 'created_at' => now(), 'updated_at' => now(),
         ]);
 
-        $inbox = $this->actingAs($partner)->getJson('/api/v1/coordination/decisions?gallery_space_id=' . $space->id . '&limit=20')
+        $inbox = $this->actingAs($partner)->getJson('/api/v1/coordination/decisions?gallery_space_id='.$space->id.'&limit=20')
             ->assertOk()->assertJsonPath('summary.total', 4)->assertJsonPath('summary.date_ideas', 1)
             ->assertJsonPath('summary.watchlist', 2)->assertJsonPath('summary.polls', 1);
         $this->assertSame(['viewing_date', 'poll', 'date_idea', 'entertainment_title'], collect($inbox->json('items'))->pluck('type')->all());
@@ -75,32 +75,32 @@ class PartnerDecisionIntegrationTest extends TestCase
             ->where('data.partner_hub.decisions.summary.total', 4)
             ->where('data.partner_hub.decisions.items.0.type', 'viewing_date'));
 
-        $this->putJson('/api/v1/coordination/decisions/date_idea/' . $idea->uuid, [
+        $this->putJson('/api/v1/coordination/decisions/date_idea/'.$idea->uuid, [
             'gallery_space_id' => $space->id, 'response' => 'love',
         ])->assertOk()->assertJsonPath('summary.total', 3);
         $this->assertDatabaseHas('couple_date_idea_reactions', ['date_idea_id' => $idea->id, 'user_id' => $partner->id, 'reaction' => 'love']);
         $this->assertDatabaseHas('couple_date_ideas', ['id' => $idea->id, 'status' => 'saved']);
 
-        $this->putJson('/api/v1/coordination/decisions/entertainment_title/' . $title->uuid, [
+        $this->putJson('/api/v1/coordination/decisions/entertainment_title/'.$title->uuid, [
             'gallery_space_id' => $space->id, 'response' => 'love',
         ])->assertOk()->assertJsonPath('summary.total', 2);
         $this->assertDatabaseHas('entertainment_votes', ['entertainment_title_id' => $title->id, 'user_id' => $partner->id, 'interest' => 5]);
 
-        $this->putJson('/api/v1/coordination/decisions/viewing_date/' . $proposalUuid, [
+        $this->putJson('/api/v1/coordination/decisions/viewing_date/'.$proposalUuid, [
             'gallery_space_id' => $space->id, 'response' => 'yes',
         ])->assertOk()->assertJsonPath('summary.total', 1);
         $this->assertDatabaseHas('viewing_proposal_votes', ['viewing_date_proposal_id' => $proposalId, 'user_id' => $partner->id, 'response' => 'yes']);
 
-        $this->putJson('/api/v1/coordination/decisions/poll/' . $pollUuid, [
+        $this->putJson('/api/v1/coordination/decisions/poll/'.$pollUuid, [
             'gallery_space_id' => $space->id, 'response' => (string) $firstOption,
         ])->assertOk()->assertJsonPath('summary.total', 0);
         $this->assertDatabaseHas('decision_poll_votes', ['poll_option_id' => $firstOption, 'user_id' => $partner->id]);
 
-        $plannedDate = $this->postJson('/api/v1/date-ideas/' . $idea->uuid . '/plan', [
+        $plannedDate = $this->postJson('/api/v1/date-ideas/'.$idea->uuid.'/plan', [
             'starts_at' => now()->addWeek()->setTime(15, 0)->toIso8601String(), 'create_trip' => false,
         ])->assertSuccessful();
-        $this->postJson('/api/v1/entertainment/date-proposals/' . $proposalUuid . '/select')->assertCreated();
-        $this->postJson('/api/v1/calendar/polls/' . $pollUuid . '/options/' . $firstOption . '/plan')->assertCreated();
+        $this->postJson('/api/v1/entertainment/date-proposals/'.$proposalUuid.'/select')->assertCreated();
+        $this->postJson('/api/v1/calendar/polls/'.$pollUuid.'/options/'.$firstOption.'/plan')->assertCreated();
 
         $this->assertDatabaseHas('calendar_events', ['uuid' => $plannedDate->json('event_uuid'), 'type' => 'outing']);
         $this->assertSame(3, CalendarEvent::where('gallery_space_id', $space->id)->count());
@@ -117,10 +117,10 @@ class PartnerDecisionIntegrationTest extends TestCase
             'estimated_minutes' => 60, 'novelty_percent' => 100, 'parameters' => [], 'plan' => ['blocks' => []],
         ]);
         $outsider = User::factory()->create();
-        $this->actingAs($outsider)->getJson('/api/v1/coordination/decisions?gallery_space_id=' . $space->id)->assertNotFound();
+        $this->actingAs($outsider)->getJson('/api/v1/coordination/decisions?gallery_space_id='.$space->id)->assertNotFound();
 
         $partner->update(['read_only_mode' => true]);
-        $this->actingAs($partner)->putJson('/api/v1/coordination/decisions/date_idea/' . $idea->uuid, [
+        $this->actingAs($partner)->putJson('/api/v1/coordination/decisions/date_idea/'.$idea->uuid, [
             'gallery_space_id' => $space->id, 'response' => 'love',
         ])->assertForbidden();
         $this->assertDatabaseMissing('couple_date_idea_reactions', ['date_idea_id' => $idea->id, 'user_id' => $partner->id]);
@@ -133,6 +133,7 @@ class PartnerDecisionIntegrationTest extends TestCase
         $space = GallerySpace::create(['name' => 'My dva', 'slug' => 'partner-decisions', 'owner_id' => $owner->id, 'is_default' => true]);
         $space->members()->attach($owner->id, ['role' => 'owner', 'can_delete' => true, 'can_share' => true, 'joined_at' => now()]);
         $space->members()->attach($partner->id, ['role' => 'editor', 'can_delete' => true, 'can_share' => true, 'joined_at' => now()]);
+
         return [$owner, $partner, $space];
     }
 }

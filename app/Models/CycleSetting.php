@@ -10,7 +10,9 @@ use Illuminate\Database\Eloquent\Model;
 class CycleSetting extends Model
 {
     public const SHARE_NONE = 'none';
+
     public const SHARE_DATES = 'dates';
+
     public const SHARE_FULL = 'full';
 
     protected $fillable = [

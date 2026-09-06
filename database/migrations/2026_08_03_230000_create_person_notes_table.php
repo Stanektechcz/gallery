@@ -24,5 +24,8 @@ return new class extends Migration
         });
     }
 
-    public function down(): void { Schema::dropIfExists('person_notes'); }
+    public function down(): void
+    {
+        Schema::dropIfExists('person_notes');
+    }
 };

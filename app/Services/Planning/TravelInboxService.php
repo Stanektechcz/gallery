@@ -14,7 +14,9 @@ class TravelInboxService
     public function create(int $spaceId, int $actorId, array $attributes, string $source = 'manual'): object
     {
         $metadata = $attributes['metadata'] ?? [];
-        if (is_string($metadata)) $metadata = json_decode($metadata, true) ?: [];
+        if (is_string($metadata)) {
+            $metadata = json_decode($metadata, true) ?: [];
+        }
         $metadata['source'] ??= $source;
         $state = $attributes['state'] ?? ((! empty($attributes['trip_id']) || ! empty($attributes['event_id'])) ? 'assigned' : 'inbox');
         $row = [
@@ -34,8 +36,12 @@ class TravelInboxService
             'created_at' => now(),
             'updated_at' => now(),
         ];
-        if (Schema::hasColumn('travel_inbox_items', 'created_from')) $row['created_from'] = $source;
-        if (Schema::hasColumn('travel_inbox_items', 'source_reference')) $row['source_reference'] = $attributes['source_reference'] ?? null;
+        if (Schema::hasColumn('travel_inbox_items', 'created_from')) {
+            $row['created_from'] = $source;
+        }
+        if (Schema::hasColumn('travel_inbox_items', 'source_reference')) {
+            $row['source_reference'] = $attributes['source_reference'] ?? null;
+        }
         $id = DB::table('travel_inbox_items')->insertGetId($row);
         $item = DB::table('travel_inbox_items')->find($id);
         $kind = $item->kind === 'itinerary' ? 'trip.itinerary.drafted' : 'travel.inbox.created';

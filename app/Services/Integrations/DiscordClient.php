@@ -4,6 +4,7 @@ namespace App\Services\Integrations;
 
 use App\Models\IntegrationSetting;
 use App\Models\UserIntegration;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 
@@ -23,6 +24,7 @@ use Illuminate\Support\Str;
 class DiscordClient
 {
     private const API = 'https://discord.com/api/v10';
+
     private const AUTHORIZE = 'https://discord.com/oauth2/authorize';
 
     /**
@@ -48,7 +50,7 @@ class DiscordClient
     /** Where to send the browser to start linking. `state` is the caller's CSRF guard. */
     public function authorizeUrl(string $state, string $redirectUri): string
     {
-        return self::AUTHORIZE . '?' . http_build_query([
+        return self::AUTHORIZE.'?'.http_build_query([
             'client_id' => $this->config()['client_id'] ?? '',
             'redirect_uri' => $redirectUri,
             'response_type' => 'code',
@@ -63,13 +65,13 @@ class DiscordClient
     /**
      * Trades the one-time code for tokens.
      *
-     * @return array{ok: bool, credentials?: array<string, mixed>, expires_at?: \Illuminate\Support\Carbon, error?: string}
+     * @return array{ok: bool, credentials?: array<string, mixed>, expires_at?: Carbon, error?: string}
      */
     public function exchange(string $code, string $redirectUri): array
     {
         $config = $this->config();
 
-        $response = Http::asForm()->timeout(12)->post(self::API . '/oauth2/token', [
+        $response = Http::asForm()->timeout(12)->post(self::API.'/oauth2/token', [
             'client_id' => $config['client_id'] ?? '',
             'client_secret' => $config['client_secret'] ?? '',
             'grant_type' => 'authorization_code',
@@ -98,11 +100,13 @@ class DiscordClient
     public function refresh(UserIntegration $integration): bool
     {
         $refreshToken = $integration->credentials()['refresh_token'] ?? null;
-        if (! $refreshToken) return false;
+        if (! $refreshToken) {
+            return false;
+        }
 
         $config = $this->config();
 
-        $response = Http::asForm()->timeout(12)->post(self::API . '/oauth2/token', [
+        $response = Http::asForm()->timeout(12)->post(self::API.'/oauth2/token', [
             'client_id' => $config['client_id'] ?? '',
             'client_secret' => $config['client_secret'] ?? '',
             'grant_type' => 'refresh_token',
@@ -132,7 +136,9 @@ class DiscordClient
     public function me(UserIntegration $integration): ?array
     {
         $response = $this->authorised($integration, '/users/@me');
-        if (! $response) return null;
+        if (! $response) {
+            return null;
+        }
 
         return [
             'id' => (string) ($response['id'] ?? ''),
@@ -154,7 +160,9 @@ class DiscordClient
     public function guilds(UserIntegration $integration): array
     {
         $response = $this->authorised($integration, '/users/@me/guilds');
-        if (! is_array($response)) return [];
+        if (! is_array($response)) {
+            return [];
+        }
 
         return collect($response)->map(fn (array $guild) => [
             'id' => (string) ($guild['id'] ?? ''),
@@ -177,7 +185,9 @@ class DiscordClient
     public function connections(UserIntegration $integration): array
     {
         $response = $this->authorised($integration, '/users/@me/connections');
-        if (! is_array($response)) return [];
+        if (! is_array($response)) {
+            return [];
+        }
 
         return collect($response)
             // Only what they chose to show on their profile; the rest is not ours to list.
@@ -198,7 +208,9 @@ class DiscordClient
      */
     public function notify(string $webhookUrl, string $content, ?array $embed = null): bool
     {
-        if (! $this->isWebhookUrl($webhookUrl)) return false;
+        if (! $this->isWebhookUrl($webhookUrl)) {
+            return false;
+        }
 
         $response = Http::timeout(8)->post($webhookUrl, array_filter([
             'content' => Str::limit($content, 1900),
@@ -224,13 +236,15 @@ class DiscordClient
     private function authorised(UserIntegration $integration, string $path): mixed
     {
         $token = $integration->credentials()['access_token'] ?? null;
-        if (! $token) return null;
+        if (! $token) {
+            return null;
+        }
 
-        $response = Http::withToken($token)->timeout(10)->get(self::API . $path);
+        $response = Http::withToken($token)->timeout(10)->get(self::API.$path);
 
         if ($response->status() === 401 && $this->refresh($integration)) {
             $token = $integration->fresh()->credentials()['access_token'] ?? null;
-            $response = Http::withToken($token)->timeout(10)->get(self::API . $path);
+            $response = Http::withToken($token)->timeout(10)->get(self::API.$path);
         }
 
         if (! $response->successful()) {

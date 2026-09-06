@@ -28,7 +28,7 @@ return new class extends Migration
                 $table->string('visit_context', 32)->nullable();
                 $table->unsignedTinyInteger('party_size')->nullable();
                 foreach (['overall', 'service', 'staff_friendliness', 'food', 'food_quality', 'drink', 'speed', 'menu', 'atmosphere', 'cleanliness', 'value'] as $criterion) {
-                    $table->decimal($criterion . '_rating', 2, 1)->nullable();
+                    $table->decimal($criterion.'_rating', 2, 1)->nullable();
                 }
                 $table->unsignedSmallInteger('wait_minutes')->nullable();
                 $table->decimal('total_amount', 12, 2)->nullable();
@@ -55,7 +55,7 @@ return new class extends Migration
                 $table->string('name', 160);
                 $table->decimal('quantity', 8, 2)->default(1);
                 foreach (['overall', 'quality', 'presentation', 'portion', 'value'] as $criterion) {
-                    $table->decimal($criterion . '_rating', 2, 1)->nullable();
+                    $table->decimal($criterion.'_rating', 2, 1)->nullable();
                 }
                 $table->decimal('price', 12, 2)->nullable();
                 $table->string('currency', 3)->default('CZK');

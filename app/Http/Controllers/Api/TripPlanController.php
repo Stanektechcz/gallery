@@ -91,8 +91,12 @@ class TripPlanController extends Controller
                 $splitIds = $share === 'personal' ? [$request->user()->id] : $memberIds;
                 $parts = [];
                 $base = round($amount / max(1, count($splitIds)), 2);
-                foreach ($splitIds as $userId) $parts[] = ['user_id' => $userId, 'amount' => $base];
-                if ($parts) $parts[array_key_last($parts)]['amount'] += round($amount - array_sum(array_column($parts, 'amount')), 2);
+                foreach ($splitIds as $userId) {
+                    $parts[] = ['user_id' => $userId, 'amount' => $base];
+                }
+                if ($parts) {
+                    $parts[array_key_last($parts)]['amount'] += round($amount - array_sum(array_column($parts, 'amount')), 2);
+                }
 
                 $expenseId = DB::table('trip_expenses')->insertGetId([
                     'trip_id' => $id, 'created_by' => $request->user()->id, 'title' => $data['content'],
@@ -113,6 +117,7 @@ class TripPlanController extends Controller
             $journal['trip_day_id'] = DB::table('trip_days')->where('trip_id', $id)->where('date', now()->toDateString())->value('id');
             $journal['visibility'] = $visibility;
             $journal['is_story_worthy'] = $visibility === 'shared' && in_array($data['type'], ['note', 'voice', 'location'], true) && ($data['is_story_worthy'] ?? true);
+
             return DB::table('travel_journal_entries')->insertGetId($journal + [
                 'trip_id' => $id, 'user_id' => $request->user()->id, 'recorded_at' => now(), 'created_at' => now(), 'updated_at' => now(),
             ]);
@@ -134,8 +139,12 @@ class TripPlanController extends Controller
             'is_story_worthy' => 'nullable|boolean',
         ]);
         $visibility = $data['visibility'] ?? $entry->visibility;
-        if ($entry->type === 'expense') $data['is_story_worthy'] = false;
-        if ($visibility === 'private') $data['is_story_worthy'] = false;
+        if ($entry->type === 'expense') {
+            $data['is_story_worthy'] = false;
+        }
+        if ($visibility === 'private') {
+            $data['is_story_worthy'] = false;
+        }
         DB::table('travel_journal_entries')->where('id', $entry->id)->update($data + ['updated_at' => now()]);
         $stories->syncEntry($id, $entry->id);
 
@@ -156,7 +165,10 @@ class TripPlanController extends Controller
             DB::table('travel_journal_entries')->where('id', $entry->id)->delete();
         });
         $stories->syncEntry($id, $entry->id);
-        if ($recording) Storage::disk($recording->disk)->delete($recording->path);
+        if ($recording) {
+            Storage::disk($recording->disk)->delete($recording->path);
+        }
+
         return response()->json(null, 204);
     }
 
@@ -174,9 +186,13 @@ class TripPlanController extends Controller
                 $activity->latitude = $activity->latitude !== null ? (float) $activity->latitude : null;
                 $activity->longitude = $activity->longitude !== null ? (float) $activity->longitude : null;
                 $activity->cost = $activity->cost !== null ? (float) $activity->cost : null;
+
                 return $activity;
             });
-            foreach ($day->activities as $activity) $activity->inbox_items = $inbox->where('trip_activity_id', $activity->id)->values();
+            foreach ($day->activities as $activity) {
+                $activity->inbox_items = $inbox->where('trip_activity_id', $activity->id)->values();
+            }
+
             return $day;
         });
 
@@ -199,6 +215,7 @@ class TripPlanController extends Controller
         $data = $request->validate(['title' => 'nullable|string|max:255', 'notes' => 'nullable|string|max:5000']);
         $updated = DB::table('trip_days')->where('id', $dayId)->where('trip_id', $id)->update(array_merge($data, ['updated_at' => now()]));
         abort_unless($updated || DB::table('trip_days')->where('id', $dayId)->where('trip_id', $id)->exists(), 404);
+
         return response()->json(DB::table('trip_days')->find($dayId));
     }
 
@@ -216,6 +233,7 @@ class TripPlanController extends Controller
             'created_at' => now(),
             'updated_at' => now(),
         ]));
+
         return response()->json(DB::table('trip_activities')->find($activityId), 201);
     }
 
@@ -245,7 +263,9 @@ class TripPlanController extends Controller
                     ->join('trip_days as day', 'day.id', '=', 'activity.trip_day_id')
                     ->where('activity.id', $item->trip_activity_id)->where('day.trip_id', $id)
                     ->select('activity.*')->first();
-                if ($existing) return [$existing, $item, false];
+                if ($existing) {
+                    return [$existing, $item, false];
+                }
             }
 
             $type = $data['type'] ?? match ($item->kind) {
@@ -292,8 +312,11 @@ class TripPlanController extends Controller
         $this->trip($request, $id);
         $activity = $this->activity($id, $activityId);
         $data = $request->validate($this->activityRules(true));
-        if (array_key_exists('metadata', $data)) $data['metadata'] = json_encode($data['metadata']);
+        if (array_key_exists('metadata', $data)) {
+            $data['metadata'] = json_encode($data['metadata']);
+        }
         DB::table('trip_activities')->where('id', $activityId)->update(array_merge($data, ['updated_at' => now()]));
+
         return response()->json(DB::table('trip_activities')->find($activity->id));
     }
 
@@ -302,6 +325,7 @@ class TripPlanController extends Controller
         $this->trip($request, $id);
         $activity = $this->activity($id, $activityId);
         DB::table('trip_activities')->where('id', $activity->id)->delete();
+
         return response()->json(['status' => 'deleted']);
     }
 
@@ -311,13 +335,15 @@ class TripPlanController extends Controller
         $data = $request->validate(['order' => 'required|array', 'order.*' => 'integer|distinct']);
         $current = DB::table('trip_activities')->where('trip_day_id', $dayId)->pluck('id')->map(fn ($value) => (int) $value)->sort()->values()->all();
         $requested = array_map('intval', $data['order']);
-        $sorted = $requested; sort($sorted);
+        $sorted = $requested;
+        sort($sorted);
         abort_unless($current === $sorted, 422, 'Pořadí musí obsahovat všechny bloky právě jednou.');
         DB::transaction(function () use ($requested, $dayId) {
             foreach ($requested as $order => $activityId) {
                 DB::table('trip_activities')->where('id', $activityId)->where('trip_day_id', $dayId)->update(['sort_order' => $order, 'updated_at' => now()]);
             }
         });
+
         return response()->json(['reordered' => count($requested)]);
     }
 
@@ -326,6 +352,7 @@ class TripPlanController extends Controller
         $spaceIds = $request->user()->gallerySpaces()->pluck('gallery_spaces.id');
         $trip = DB::table('trips')->where('id', $id)->whereIn('gallery_space_id', $spaceIds)->first();
         abort_unless($trip, 404);
+
         return $trip;
     }
 
@@ -336,18 +363,21 @@ class TripPlanController extends Controller
             ->where('trip_activities.id', $activityId)->where('trip_days.trip_id', $tripId)
             ->select('trip_activities.*')->first();
         abort_unless($activity, 404);
+
         return $activity;
     }
 
     private function ensureDays(object $trip): void
     {
-        if (DB::table('trip_days')->where('trip_id', $trip->id)->exists()) return;
+        if (DB::table('trip_days')->where('trip_id', $trip->id)->exists()) {
+            return;
+        }
         $start = Carbon::parse($trip->start_date);
         $end = Carbon::parse($trip->end_date);
         $rows = [];
         $order = 0;
         for ($date = $start->copy(); $date->lte($end); $date->addDay()) {
-            $rows[] = ['trip_id' => $trip->id, 'date' => $date->toDateString(), 'title' => 'Den ' . ($order + 1), 'sort_order' => $order++, 'created_at' => now(), 'updated_at' => now()];
+            $rows[] = ['trip_id' => $trip->id, 'date' => $date->toDateString(), 'title' => 'Den '.($order + 1), 'sort_order' => $order++, 'created_at' => now(), 'updated_at' => now()];
         }
         DB::table('trip_days')->insert($rows);
     }
@@ -355,6 +385,7 @@ class TripPlanController extends Controller
     private function activityRules(bool $partial = false): array
     {
         $required = $partial ? 'sometimes' : 'required';
+
         return [
             'type' => 'sometimes|in:activity,transport,stay,reservation,note,checklist,expense',
             'title' => "{$required}|string|max:255",
@@ -370,5 +401,4 @@ class TripPlanController extends Controller
             'metadata' => 'nullable|array',
         ];
     }
-
 }

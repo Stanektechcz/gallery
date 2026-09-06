@@ -16,6 +16,7 @@ class SharedMemoryMomentController extends Controller
     {
         $spaceIds = $request->user()->gallerySpaces()->pluck('gallery_spaces.id');
         $items = DB::table('shared_memory_moments')->whereIn('gallery_space_id', $spaceIds)->orderByDesc('happened_on')->latest()->get();
+
         return response()->json($items->map(fn ($item) => $this->payload($item, $request->user()->id)));
     }
 
@@ -26,6 +27,7 @@ class SharedMemoryMomentController extends Controller
         $mediaIds = $data['media_item_ids'] ?? [];
         abort_unless(count($mediaIds) === MediaItem::whereIn('id', $mediaIds)->where('gallery_space_id', $data['gallery_space_id'])->whereNull('trashed_at')->count(), 422, 'Do společné vzpomínky lze přidat jen média z daného prostoru.');
         $id = DB::table('shared_memory_moments')->insertGetId(['uuid' => (string) Str::uuid(), 'gallery_space_id' => $data['gallery_space_id'], 'created_by' => $request->user()->id, 'title' => $data['title'], 'note' => $data['note'] ?? null, 'happened_on' => $data['happened_on'] ?? null, 'media_item_ids' => json_encode($mediaIds), 'is_favorite' => $data['is_favorite'] ?? false, 'created_at' => now(), 'updated_at' => now()]);
+
         return response()->json($this->payload(DB::table('shared_memory_moments')->find($id), $request->user()->id), 201);
     }
 
@@ -38,8 +40,11 @@ class SharedMemoryMomentController extends Controller
 
         $existing = DB::table('shared_memory_reflections')->where('shared_memory_moment_id', $item->id)->where('user_id', $request->user()->id)->first();
         $row = ['mood' => $data['mood'] ?? null, 'note' => trim((string) ($data['note'] ?? '')) ?: null, 'updated_at' => now()];
-        if ($existing) DB::table('shared_memory_reflections')->where('id', $existing->id)->update($row);
-        else DB::table('shared_memory_reflections')->insert($row + ['shared_memory_moment_id' => $item->id, 'user_id' => $request->user()->id, 'created_at' => now()]);
+        if ($existing) {
+            DB::table('shared_memory_reflections')->where('id', $existing->id)->update($row);
+        } else {
+            DB::table('shared_memory_reflections')->insert($row + ['shared_memory_moment_id' => $item->id, 'user_id' => $request->user()->id, 'created_at' => now()]);
+        }
 
         return response()->json($this->payload($item, $request->user()->id), $existing ? 200 : 201);
     }
@@ -49,6 +54,7 @@ class SharedMemoryMomentController extends Controller
         abort_unless(Schema::hasTable('shared_memory_reflections'), 503, 'Pro partnerské pohledy dokončete migrace aplikace.');
         $item = $this->visibleMoment($request, $uuid);
         DB::table('shared_memory_reflections')->where('shared_memory_moment_id', $item->id)->where('user_id', $request->user()->id)->delete();
+
         return response()->json($this->payload($item, $request->user()->id));
     }
 
@@ -57,6 +63,7 @@ class SharedMemoryMomentController extends Controller
         $item = $this->visibleMoment($request, $uuid);
         abort_unless($item->created_by === $request->user()->id, 403);
         DB::table('shared_memory_moments')->where('id', $item->id)->delete();
+
         return response()->json(['status' => 'deleted']);
     }
 
@@ -72,7 +79,7 @@ class SharedMemoryMomentController extends Controller
         $directAlbum = ! empty($item->album_id)
             ? DB::table('albums')->where('id', $item->album_id)->where('gallery_space_id', $item->gallery_space_id)->whereNull('deleted_at')->first(['uuid', 'title'])
             : null;
-        $source = !empty($item->calendar_event_id)
+        $source = ! empty($item->calendar_event_id)
             ? DB::table('calendar_events')
                 ->leftJoin('albums', 'albums.id', '=', 'calendar_events.album_id')
                 ->where('calendar_events.id', $item->calendar_event_id)

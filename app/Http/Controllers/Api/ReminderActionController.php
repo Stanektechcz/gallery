@@ -34,7 +34,9 @@ class ReminderActionController extends Controller
 
         $minutes = (int) $data['minutes_before'];
         $remindAt = $event->starts_at->copy()->subMinutes($minutes);
-        if ($remindAt->isPast()) $remindAt = now()->addMinute();
+        if ($remindAt->isPast()) {
+            $remindAt = now()->addMinute();
+        }
         abort_if($event->starts_at->lte(now()), 422, 'K proběhlé akci už nelze přidat novou připomínku.');
 
         $reminder = DB::transaction(function () use ($event, $user, $data, $minutes, $remindAt): EventReminder {
@@ -118,7 +120,9 @@ class ReminderActionController extends Controller
         $user = $request->user();
         $reminder = DB::transaction(function () use ($user, $reminderId, $status): EventReminder {
             $reminder = $this->reminders->findForUser($user, $reminderId, true);
-            if ($reminder->status === $status) return $reminder;
+            if ($reminder->status === $status) {
+                return $reminder;
+            }
             abort_if(in_array($reminder->status, ['acknowledged', 'dismissed'], true), 409, 'Tato připomínka už byla uzavřena.');
             $now = now();
             $reminder->update([

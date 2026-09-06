@@ -14,13 +14,16 @@ class DriveChangeChannel extends Model
     protected function casts(): array
     {
         return [
-            'expires_at'  => 'datetime',
-            'renewed_at'  => 'datetime',
-            'is_active'   => 'boolean',
+            'expires_at' => 'datetime',
+            'renewed_at' => 'datetime',
+            'is_active' => 'boolean',
         ];
     }
 
-    public function storageConnection() { return $this->belongsTo(StorageConnection::class); }
+    public function storageConnection()
+    {
+        return $this->belongsTo(StorageConnection::class);
+    }
 
     public function isExpired(): bool
     {

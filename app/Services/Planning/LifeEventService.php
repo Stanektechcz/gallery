@@ -23,7 +23,9 @@ class LifeEventService
         CarbonInterface|string|null $occurredAt = null,
         array $metadata = [],
     ): ?LifeEvent {
-        if (! Schema::hasTable('life_events')) return null;
+        if (! Schema::hasTable('life_events')) {
+            return null;
+        }
 
         return LifeEvent::create([
             'gallery_space_id' => $spaceId,

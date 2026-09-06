@@ -140,7 +140,7 @@ class QueryInterpreter
             return [
                 'from' => $od->toDateString(),
                 'to' => $do->endOfDay()->toDateTimeString(),
-                'label' => $odMesice > $doMesice ? "{$nazev} {$rok}/" . ($rok + 1) : "{$nazev} {$rok}",
+                'label' => $odMesice > $doMesice ? "{$nazev} {$rok}/".($rok + 1) : "{$nazev} {$rok}",
                 'match' => $shoda[0],
             ];
         }

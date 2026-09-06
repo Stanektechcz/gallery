@@ -36,7 +36,9 @@ class InboxController extends Controller
 
     private function recentLifeEvents(int $spaceId): array
     {
-        if (! Schema::hasTable('life_events')) return [];
+        if (! Schema::hasTable('life_events')) {
+            return [];
+        }
 
         return DB::table('life_events')
             ->where('gallery_space_id', $spaceId)
@@ -50,7 +52,7 @@ class InboxController extends Controller
                     'App\\Models\\EntertainmentTitle' => '/watchlist',
                     'App\\Models\\Recipe' => '/recipes',
                     'App\\Models\\SharedTodo' => '/planning',
-                    'App\\Models\\Trip', 'trip' => '/trips/' . $event->subject_id . '/plan',
+                    'App\\Models\\Trip', 'trip' => '/trips/'.$event->subject_id.'/plan',
                     'shared_expense' => '/finances',
                     'gift_idea', 'relationship_milestone' => '/gifts-anniversaries',
                     'travel_inbox_item' => '/trips',
@@ -82,11 +84,11 @@ class InboxController extends Controller
                 ->limit(8)
                 ->get(['task.id', 'task.title', 'task.due_at', 'event.uuid as event_uuid'])
                 ->map(fn ($task) => [
-                    'key' => 'event-task-' . $task->id,
+                    'key' => 'event-task-'.$task->id,
                     'type' => 'Úkol k události',
                     'title' => $task->title,
                     'due_at' => $task->due_at,
-                    'href' => '/calendar/events/' . $task->event_uuid,
+                    'href' => '/calendar/events/'.$task->event_uuid,
                     'tone' => 'violet',
                 ]));
         }
@@ -107,11 +109,11 @@ class InboxController extends Controller
                 ->limit(8)
                 ->get(['item.uuid', 'item.title', 'item.trip_id', 'item.event_id', 'item.updated_at'])
                 ->map(fn ($item) => [
-                    'key' => 'travel-' . $item->uuid,
+                    'key' => 'travel-'.$item->uuid,
                     'type' => 'Cestovní podklad',
                     'title' => $item->title,
                     'due_at' => $item->updated_at,
-                    'href' => $item->trip_id ? '/trips/' . $item->trip_id . '/plan' : ($item->event_id ? '/calendar' : '/trips'),
+                    'href' => $item->trip_id ? '/trips/'.$item->trip_id.'/plan' : ($item->event_id ? '/calendar' : '/trips'),
                     'tone' => 'sky',
                 ]));
         }
@@ -125,7 +127,7 @@ class InboxController extends Controller
                 ->when(Schema::hasColumn('gift_ideas', 'visibility') && Schema::hasColumn('gift_ideas', 'private_to_user_id'), fn ($query) => $query->where(fn ($visible) => $visible->where('visibility', 'shared')->orWhere('private_to_user_id', $userId)))
                 ->get(['uuid', 'title', 'due_date'])
                 ->map(fn ($item) => [
-                    'key' => 'gift-' . $item->uuid,
+                    'key' => 'gift-'.$item->uuid,
                     'type' => 'Dárek',
                     'title' => $item->title,
                     'due_at' => $item->due_date,
@@ -142,11 +144,11 @@ class InboxController extends Controller
                 ->limit(8)
                 ->get(['uuid', 'title', 'due_at', 'trip_id'])
                 ->map(fn ($item) => [
-                    'key' => 'todo-' . $item->uuid,
+                    'key' => 'todo-'.$item->uuid,
                     'type' => 'Společný úkol',
                     'title' => $item->title,
                     'due_at' => $item->due_at,
-                    'href' => $item->trip_id ? '/trips/' . $item->trip_id . '/plan' : '/planning',
+                    'href' => $item->trip_id ? '/trips/'.$item->trip_id.'/plan' : '/planning',
                     'tone' => 'emerald',
                 ]));
         }

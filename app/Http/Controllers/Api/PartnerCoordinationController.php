@@ -104,11 +104,18 @@ class PartnerCoordinationController extends Controller
     private function updateSource(Request $request, GallerySpace $space, string $type, string $key, array $data): void
     {
         $updates = ['updated_at' => now()];
-        if (array_key_exists('assigned_to', $data)) $updates['assigned_to'] = $data['assigned_to'];
+        if (array_key_exists('assigned_to', $data)) {
+            $updates['assigned_to'] = $data['assigned_to'];
+        }
         if ($type === 'shared_todo') {
             $todo = SharedTodo::where('uuid', $key)->where('gallery_space_id', $space->id)->firstOrFail();
-            if (array_key_exists('completed', $data)) $this->todos->complete($todo, $request->user(), (bool) $data['completed']);
-            if (array_key_exists('assigned_to', $data)) $todo->update(['assigned_to' => $data['assigned_to']]);
+            if (array_key_exists('completed', $data)) {
+                $this->todos->complete($todo, $request->user(), (bool) $data['completed']);
+            }
+            if (array_key_exists('assigned_to', $data)) {
+                $todo->update(['assigned_to' => $data['assigned_to']]);
+            }
+
             return;
         }
         if ($type === 'event_task') {
@@ -120,8 +127,11 @@ class PartnerCoordinationController extends Controller
                             ->whereColumn('participant.event_id', 'event.id')->where('participant.user_id', $request->user()->id));
                 })->select('task.id')->first();
             abort_unless($task, 404);
-            if (array_key_exists('completed', $data)) $updates['completed_at'] = $data['completed'] ? now() : null;
+            if (array_key_exists('completed', $data)) {
+                $updates['completed_at'] = $data['completed'] ? now() : null;
+            }
             DB::table('event_tasks')->where('id', $task->id)->update($updates);
+
             return;
         }
         if ($type === 'packing_item') {
@@ -131,24 +141,33 @@ class PartnerCoordinationController extends Controller
             if (array_key_exists('completed', $data)) {
                 $updates['is_packed'] = $data['completed'];
                 $updates['packed_at'] = $data['completed'] ? now() : null;
-                if (Schema::hasColumn('trip_packing_items', 'packed_by')) $updates['packed_by'] = $data['completed'] ? $request->user()->id : null;
+                if (Schema::hasColumn('trip_packing_items', 'packed_by')) {
+                    $updates['packed_by'] = $data['completed'] ? $request->user()->id : null;
+                }
             }
             DB::table('trip_packing_items')->where('id', $item->id)->update($updates);
+
             return;
         }
         if ($type === 'planning_item') {
             $item = DB::table('travel_inbox_items')->where('uuid', $key)->where('gallery_space_id', $space->id)->first();
             abort_unless($item, 404);
-            if (array_key_exists('completed', $data)) $updates['state'] = $data['completed'] ? 'archived' : 'inbox';
+            if (array_key_exists('completed', $data)) {
+                $updates['state'] = $data['completed'] ? 'archived' : 'inbox';
+            }
             DB::table('travel_inbox_items')->where('id', $item->id)->update($updates);
+
             return;
         }
         if ($type === 'trip_document') {
             $document = DB::table('trip_document_checks as document')->join('trips as trip', 'trip.id', '=', 'document.trip_id')
                 ->where('document.id', $key)->where('trip.gallery_space_id', $space->id)->select('document.id')->first();
             abort_unless($document, 404);
-            if (array_key_exists('completed', $data)) $updates['status'] = $data['completed'] ? 'ready' : 'required';
+            if (array_key_exists('completed', $data)) {
+                $updates['status'] = $data['completed'] ? 'ready' : 'required';
+            }
             DB::table('trip_document_checks')->where('id', $document->id)->update($updates);
+
             return;
         }
         if ($type === 'settlement') {
@@ -167,19 +186,27 @@ class PartnerCoordinationController extends Controller
                     'updated_at' => now(),
                 ]);
             }
+
             return;
         }
         $gift = DB::table('gift_ideas')->where('uuid', $key)->where('gallery_space_id', $space->id)->first();
         abort_unless($gift, 404);
-        if (Schema::hasColumn('gift_ideas', 'visibility') && Schema::hasColumn('gift_ideas', 'private_to_user_id') && ($gift->visibility ?? 'shared') === 'private' && (int) $gift->private_to_user_id !== (int) $request->user()->id) abort(404);
-        if (array_key_exists('completed', $data)) $updates['status'] = $data['completed'] ? 'purchased' : 'idea';
+        if (Schema::hasColumn('gift_ideas', 'visibility') && Schema::hasColumn('gift_ideas', 'private_to_user_id') && ($gift->visibility ?? 'shared') === 'private' && (int) $gift->private_to_user_id !== (int) $request->user()->id) {
+            abort(404);
+        }
+        if (array_key_exists('completed', $data)) {
+            $updates['status'] = $data['completed'] ? 'purchased' : 'idea';
+        }
         DB::table('gift_ideas')->where('id', $gift->id)->update($updates);
     }
 
     private function space(Request $request, ?int $id): GallerySpace
     {
         $query = GallerySpace::query()->whereHas('members', fn ($members) => $members->whereKey($request->user()->id));
-        if ($id) return $query->findOrFail($id);
+        if ($id) {
+            return $query->findOrFail($id);
+        }
+
         return $query->orderByDesc('is_default')->orderBy('id')->firstOrFail();
     }
 

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\MediaItem;
 use App\Models\StorageConnection;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
@@ -13,7 +14,7 @@ class RecoveryController extends Controller
 {
     public function index(Request $request): Response
     {
-        $user  = $request->user();
+        $user = $request->user();
         $space = $user->gallerySpaces()->first();
 
         // Database
@@ -26,15 +27,15 @@ class RecoveryController extends Controller
 
         // Drive connection
         $driveConn = $space
-            ? StorageConnection::whereHas('owner', fn($q) => $q->whereHas('gallerySpaces', fn($q2) => $q2->where('gallery_spaces.id', $space->id)))
-            ->where('provider', 'google_drive')->first()
+            ? StorageConnection::whereHas('owner', fn ($q) => $q->whereHas('gallerySpaces', fn ($q2) => $q2->where('gallery_spaces.id', $space->id)))
+                ->where('provider', 'google_drive')->first()
             : null;
 
         // Media stats
-        $totalMedia  = $space ? MediaItem::where('gallery_space_id', $space->id)->whereNull('trashed_at')->count() : 0;
+        $totalMedia = $space ? MediaItem::where('gallery_space_id', $space->id)->whereNull('trashed_at')->count() : 0;
         $missingLocal = $space ? MediaItem::where('gallery_space_id', $space->id)
             ->whereNull('trashed_at')
-            ->whereDoesntHave('variants', fn($q) => $q->where('type', 'original'))
+            ->whereDoesntHave('variants', fn ($q) => $q->where('type', 'original'))
             ->count() : 0;
 
         $withDrive = $space ? MediaItem::where('gallery_space_id', $space->id)
@@ -44,17 +45,17 @@ class RecoveryController extends Controller
 
         $noThumb = $space ? MediaItem::where('gallery_space_id', $space->id)
             ->whereNull('trashed_at')
-            ->whereDoesntHave('variants', fn($q) => $q->where('type', 'thumbnail'))
+            ->whereDoesntHave('variants', fn ($q) => $q->where('type', 'thumbnail'))
             ->count() : 0;
 
         // Binary tools
         $exiftoolPath = config('gallery.exiftool_path', '/usr/bin/exiftool');
-        $ffmpegPath   = config('gallery.ffmpeg_path', '/usr/bin/ffmpeg');
+        $ffmpegPath = config('gallery.ffmpeg_path', '/usr/bin/ffmpeg');
 
         $exiftoolOk = function_exists('proc_open') && @file_exists($exiftoolPath);
-        $ffmpegOk   = function_exists('proc_open') && @file_exists($ffmpegPath);
-        $imagickOk  = extension_loaded('imagick');
-        $gdOk       = extension_loaded('gd');
+        $ffmpegOk = function_exists('proc_open') && @file_exists($ffmpegPath);
+        $imagickOk = extension_loaded('imagick');
+        $gdOk = extension_loaded('gd');
 
         return Inertia::render('Recovery/Index', [
             'checks' => [
@@ -66,17 +67,17 @@ class RecoveryController extends Controller
                 ['label' => 'GD extension',        'ok' => $gdOk,              'detail' => $gdOk ? 'Načteno' : 'Chybí'],
             ],
             'media_stats' => [
-                'total'         => $totalMedia,
-                'with_drive'    => $withDrive,
+                'total' => $totalMedia,
+                'with_drive' => $withDrive,
                 'missing_local' => $missingLocal,
-                'no_thumb'      => $noThumb,
+                'no_thumb' => $noThumb,
             ],
             'drive_info' => $driveConn ? [
-                'email'       => $driveConn->account_email,
-                'status'      => $driveConn->connection_status,
+                'email' => $driveConn->account_email,
+                'status' => $driveConn->connection_status,
                 'quota_total' => $driveConn->quota_total,
-                'quota_used'  => $driveConn->quota_used,
-                'last_ok'     => $driveConn->last_successful_request_at?->toIso8601String(),
+                'quota_used' => $driveConn->quota_used,
+                'last_ok' => $driveConn->last_successful_request_at?->toIso8601String(),
             ] : null,
         ]);
     }
@@ -85,7 +86,7 @@ class RecoveryController extends Controller
      * GET /api/v1/recovery/duplicates
      * Find exact duplicates (same sha256) in the gallery space.
      */
-    public function findDuplicates(Request $request): \Illuminate\Http\JsonResponse
+    public function findDuplicates(Request $request): JsonResponse
     {
         $space = $request->user()->gallerySpaces()->first();
 
@@ -112,16 +113,16 @@ class RecoveryController extends Controller
 
             $groups[] = [
                 'sha256' => $hash,
-                'count'  => $count,
-                'items'  => $items->map(fn($m) => [
-                    'id'            => $m->id,
-                    'uuid'          => $m->uuid,
-                    'filename'      => $m->original_filename,
-                    'taken_at'      => $m->taken_at,
-                    'size_bytes'    => $m->size_bytes,
+                'count' => $count,
+                'items' => $items->map(fn ($m) => [
+                    'id' => $m->id,
+                    'uuid' => $m->uuid,
+                    'filename' => $m->original_filename,
+                    'taken_at' => $m->taken_at,
+                    'size_bytes' => $m->size_bytes,
                     'thumbnail_url' => $m->thumbnail_url,
-                    'in_albums'     => $m->albums()->count() + ($m->primary_album_id ? 1 : 0),
-                    'is_favorite'   => $m->is_favorite,
+                    'in_albums' => $m->albums()->count() + ($m->primary_album_id ? 1 : 0),
+                    'is_favorite' => $m->is_favorite,
                 ])->toArray(),
             ];
         }
@@ -137,10 +138,10 @@ class RecoveryController extends Controller
             ->count();
 
         return response()->json([
-            'group_count'  => count($groups),
-            'total_extras' => array_sum(array_map(fn($g) => $g['count'] - 1, $groups)),
-            'unchecked'    => $bezOtisku,
-            'groups'       => $groups,
+            'group_count' => count($groups),
+            'total_extras' => array_sum(array_map(fn ($g) => $g['count'] - 1, $groups)),
+            'unchecked' => $bezOtisku,
+            'groups' => $groups,
         ]);
     }
 
@@ -148,7 +149,7 @@ class RecoveryController extends Controller
      * GET /api/v1/recovery/cleanup
      * Safe, explainable cleanup suggestions. No item is changed automatically.
      */
-    public function cleanupSuggestions(Request $request): \Illuminate\Http\JsonResponse
+    public function cleanupSuggestions(Request $request): JsonResponse
     {
         $space = $request->user()->gallerySpaces()->first();
         $base = MediaItem::where('gallery_space_id', $space->id)->whereNull('trashed_at');
@@ -211,11 +212,11 @@ class RecoveryController extends Controller
      * DELETE /api/v1/recovery/duplicates/trash
      * Move duplicate items (all but oldest per group) to trash.
      */
-    public function trashDuplicates(Request $request): \Illuminate\Http\JsonResponse
+    public function trashDuplicates(Request $request): JsonResponse
     {
         $space = $request->user()->gallerySpaces()->first();
         $v = $request->validate([
-            'media_ids'   => 'required|array|max:500',
+            'media_ids' => 'required|array|max:500',
             'media_ids.*' => 'integer',
         ]);
 

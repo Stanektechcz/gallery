@@ -17,10 +17,10 @@ class TripPreparationTimelineService
         $timezone = $trip->timezone ?: ($event->timezone ?? 'Europe/Prague');
         $tripStart = $event?->starts_at
             ? Carbon::parse($event->starts_at, $timezone)
-            : Carbon::parse($trip->start_date . ' 09:00:00', $timezone);
+            : Carbon::parse($trip->start_date.' 09:00:00', $timezone);
         $tripEnd = $event?->ends_at
             ? Carbon::parse($event->ends_at, $timezone)
-            : Carbon::parse($trip->end_date . ' 20:00:00', $timezone);
+            : Carbon::parse($trip->end_date.' 20:00:00', $timezone);
         $timeline = collect([
             $this->timelineItem('trip_start', 'trip', 'Začátek cesty', $tripStart, $trip->name),
             $this->timelineItem('trip_end', 'trip', 'Návrat z cesty', $tripEnd, $trip->name),
@@ -57,7 +57,7 @@ class TripPreparationTimelineService
             $departure = $this->parseMoment($details['departure'] ?? null, $trip->start_date, $timezone);
             $arrival = $this->parseMoment($details['arrival'] ?? null, $trip->start_date, $timezone);
             if ($departure) {
-                $timeline->push($this->timelineItem("transport_departure_{$choice->id}", 'transport', 'Odjezd: ' . $choice->title, $departure, $choice->provider, $choice->source_url));
+                $timeline->push($this->timelineItem("transport_departure_{$choice->id}", 'transport', 'Odjezd: '.$choice->title, $departure, $choice->provider, $choice->source_url));
                 if ($departure->isFuture()) {
                     $actions->push($this->action("verify_transport_{$choice->id}", 'Ověřit spoj, nástupiště a případné změny', $choice->title, $departure->copy()->subHours(6), 'high'));
                 }
@@ -65,13 +65,15 @@ class TripPreparationTimelineService
                 $actions->push($this->action("transport_time_missing_{$choice->id}", 'Doplnit čas odjezdu', "U varianty „{$choice->title}“ chybí čas, takže nelze připravit odjezdovou připomínku.", $tripStart->copy()->subWeek(), 'high'));
             }
             if ($arrival) {
-                $timeline->push($this->timelineItem("transport_arrival_{$choice->id}", 'transport', 'Příjezd: ' . $choice->title, $arrival, $choice->provider, $choice->source_url));
+                $timeline->push($this->timelineItem("transport_arrival_{$choice->id}", 'transport', 'Příjezd: '.$choice->title, $arrival, $choice->provider, $choice->source_url));
             }
             $legs = collect($details['legs'] ?? [])->filter(fn ($leg) => is_array($leg))->values();
             for ($index = 0; $index < $legs->count() - 1; $index++) {
                 $arrivalAt = $this->parseMoment($legs[$index]['arrival'] ?? null, $trip->start_date, $timezone);
                 $nextDeparture = $this->parseMoment($legs[$index + 1]['departure'] ?? null, $trip->start_date, $timezone);
-                if (! $arrivalAt || ! $nextDeparture) continue;
+                if (! $arrivalAt || ! $nextDeparture) {
+                    continue;
+                }
                 $minutes = (int) floor(($nextDeparture->timestamp - $arrivalAt->timestamp) / 60);
                 $risk = $minutes < 0 ? 'invalid' : ($minutes < 12 ? 'critical' : ($minutes < 20 ? 'tight' : 'ok'));
                 $check = [
@@ -98,13 +100,13 @@ class TripPreparationTimelineService
             $checkin = $this->parseMoment($details['checkin'] ?? null, $trip->start_date, $timezone, '15:00:00');
             $checkout = $this->parseMoment($details['checkout'] ?? null, $trip->end_date, $timezone, '10:00:00');
             if ($checkin) {
-                $timeline->push($this->timelineItem("checkin_{$choice->id}", 'accommodation', 'Check-in: ' . $choice->title, $checkin, $choice->provider, $choice->source_url));
+                $timeline->push($this->timelineItem("checkin_{$choice->id}", 'accommodation', 'Check-in: '.$choice->title, $checkin, $choice->provider, $choice->source_url));
                 if ($checkin->isFuture()) {
                     $actions->push($this->action("confirm_checkin_{$choice->id}", 'Potvrdit check-in a adresu ubytování', $choice->title, $checkin->copy()->subDay(), 'normal'));
                 }
             }
             if ($checkout) {
-                $timeline->push($this->timelineItem("checkout_{$choice->id}", 'accommodation', 'Check-out: ' . $choice->title, $checkout, $choice->provider, $choice->source_url));
+                $timeline->push($this->timelineItem("checkout_{$choice->id}", 'accommodation', 'Check-out: '.$choice->title, $checkout, $choice->provider, $choice->source_url));
             }
             if (empty($details['reference']) && $tripStart->isFuture()) {
                 $actions->push($this->action("booking_reference_missing_{$choice->id}", 'Doplnit kód rezervace ubytování', $choice->title, $tripStart->copy()->subDays(3), 'normal'));
@@ -114,23 +116,25 @@ class TripPreparationTimelineService
         if (Schema::hasTable('trip_document_checks')) {
             foreach (DB::table('trip_document_checks')->where('trip_id', $trip->id)->get() as $document) {
                 if (in_array($document->status, ['required', 'missing'], true)) {
-                    $actions->push($this->action("document_missing_{$document->id}", 'Doplnit doklad: ' . $document->title, 'Doklad nebo rezervace ještě není označena jako připravená.', $tripStart->copy()->subWeek(), 'high'));
+                    $actions->push($this->action("document_missing_{$document->id}", 'Doplnit doklad: '.$document->title, 'Doklad nebo rezervace ještě není označena jako připravená.', $tripStart->copy()->subWeek(), 'high'));
                 }
-                if (! $document->expires_on) continue;
-                $expiry = Carbon::parse($document->expires_on . ' 23:59:59', $timezone);
-                $timeline->push($this->timelineItem("document_expiry_{$document->id}", 'document', 'Konec platnosti: ' . $document->title, $expiry, $document->type));
+                if (! $document->expires_on) {
+                    continue;
+                }
+                $expiry = Carbon::parse($document->expires_on.' 23:59:59', $timezone);
+                $timeline->push($this->timelineItem("document_expiry_{$document->id}", 'document', 'Konec platnosti: '.$document->title, $expiry, $document->type));
                 if ($expiry->lt($tripEnd)) {
-                    $actions->push($this->action("document_expiry_{$document->id}", 'Obnovit doklad před cestou: ' . $document->title, 'Platnost končí před návratem z cesty.', $expiry->copy()->subDays(30), 'high'));
+                    $actions->push($this->action("document_expiry_{$document->id}", 'Obnovit doklad před cestou: '.$document->title, 'Platnost končí před návratem z cesty.', $expiry->copy()->subDays(30), 'high'));
                 }
             }
         }
 
         if (Schema::hasTable('trip_vehicle_costs')) {
             foreach (DB::table('trip_vehicle_costs')->where('trip_id', $trip->id)->where('type', 'vignette')->whereNotNull('valid_until')->get() as $vignette) {
-                $expiry = Carbon::parse($vignette->valid_until . ' 23:59:59', $timezone);
-                $timeline->push($this->timelineItem("vignette_expiry_{$vignette->id}", 'vehicle', 'Konec známky: ' . $vignette->title, $expiry, 'Dálniční známka'));
+                $expiry = Carbon::parse($vignette->valid_until.' 23:59:59', $timezone);
+                $timeline->push($this->timelineItem("vignette_expiry_{$vignette->id}", 'vehicle', 'Konec známky: '.$vignette->title, $expiry, 'Dálniční známka'));
                 if ($expiry->lt($tripEnd)) {
-                    $actions->push($this->action("vignette_expiry_{$vignette->id}", 'Vyřešit dálniční známku: ' . $vignette->title, 'Známka nebude platná po celou cestu.', $expiry->copy()->subDays(7), 'high'));
+                    $actions->push($this->action("vignette_expiry_{$vignette->id}", 'Vyřešit dálniční známku: '.$vignette->title, 'Známka nebude platná po celou cestu.', $expiry->copy()->subDays(7), 'high'));
                 }
             }
         }
@@ -185,7 +189,7 @@ class TripPreparationTimelineService
             $existing = DB::table('event_tasks')->where('event_id', $event->id)->where('automation_key', $action['key'])->first();
             $values = [
                 'title' => $action['title'],
-                'notes' => $action['message'] . ' Automaticky propojeno s přípravou cesty.',
+                'notes' => $action['message'].' Automaticky propojeno s přípravou cesty.',
                 'due_at' => $action['due_at'],
                 'priority' => $action['priority'],
                 'automation_source' => self::SOURCE,
@@ -201,7 +205,9 @@ class TripPreparationTimelineService
             }
         }
         $obsolete = DB::table('event_tasks')->where('event_id', $event->id)->where('automation_source', self::SOURCE)->whereNull('completed_at');
-        if ($taskKeys !== []) $obsolete->whereNotIn('automation_key', $taskKeys);
+        if ($taskKeys !== []) {
+            $obsolete->whereNotIn('automation_key', $taskKeys);
+        }
         $completed = $obsolete->update(['completed_at' => now(), 'updated_at' => now()]);
 
         $reminderSpecs = $this->reminderSpecs($snapshot);
@@ -210,26 +216,34 @@ class TripPreparationTimelineService
         $remindersCreated = 0;
         $remindersUpdated = 0;
         $remindersSkipped = 0;
-        foreach ($members as $memberId) foreach ($reminderSpecs as $spec) {
-            $reminderKeys[] = $spec['key'];
-            $remindAt = Carbon::parse($spec['remind_at']);
-            if ($remindAt->lte(now())) continue;
-            $existing = DB::table('event_reminders')->where('event_id', $event->id)->where('user_id', $memberId)->where('automation_key', $spec['key'])->first();
-            if ($existing) {
-                DB::table('event_reminders')->where('id', $existing->id)->update(['remind_at' => $remindAt, 'status' => 'pending', 'delivered_at' => null, 'last_error' => null, 'updated_at' => now()]);
-                $remindersUpdated++;
-                continue;
+        foreach ($members as $memberId) {
+            foreach ($reminderSpecs as $spec) {
+                $reminderKeys[] = $spec['key'];
+                $remindAt = Carbon::parse($spec['remind_at']);
+                if ($remindAt->lte(now())) {
+                    continue;
+                }
+                $existing = DB::table('event_reminders')->where('event_id', $event->id)->where('user_id', $memberId)->where('automation_key', $spec['key'])->first();
+                if ($existing) {
+                    DB::table('event_reminders')->where('id', $existing->id)->update(['remind_at' => $remindAt, 'status' => 'pending', 'delivered_at' => null, 'last_error' => null, 'updated_at' => now()]);
+                    $remindersUpdated++;
+
+                    continue;
+                }
+                $manualAtSameTime = DB::table('event_reminders')->where('event_id', $event->id)->where('user_id', $memberId)->whereNull('automation_key')->whereBetween('remind_at', [$remindAt->copy()->subMinute(), $remindAt->copy()->addMinute()])->exists();
+                if ($manualAtSameTime) {
+                    $remindersSkipped++;
+
+                    continue;
+                }
+                DB::table('event_reminders')->insert(['event_id' => $event->id, 'user_id' => $memberId, 'channel' => 'database', 'remind_at' => $remindAt, 'status' => 'pending', 'automation_source' => self::SOURCE, 'automation_key' => $spec['key'], 'created_at' => now(), 'updated_at' => now()]);
+                $remindersCreated++;
             }
-            $manualAtSameTime = DB::table('event_reminders')->where('event_id', $event->id)->where('user_id', $memberId)->whereNull('automation_key')->whereBetween('remind_at', [$remindAt->copy()->subMinute(), $remindAt->copy()->addMinute()])->exists();
-            if ($manualAtSameTime) {
-                $remindersSkipped++;
-                continue;
-            }
-            DB::table('event_reminders')->insert(['event_id' => $event->id, 'user_id' => $memberId, 'channel' => 'database', 'remind_at' => $remindAt, 'status' => 'pending', 'automation_source' => self::SOURCE, 'automation_key' => $spec['key'], 'created_at' => now(), 'updated_at' => now()]);
-            $remindersCreated++;
         }
         $obsoleteReminders = DB::table('event_reminders')->where('event_id', $event->id)->where('automation_source', self::SOURCE)->where('status', 'pending');
-        if ($reminderKeys !== []) $obsoleteReminders->whereNotIn('automation_key', array_unique($reminderKeys));
+        if ($reminderKeys !== []) {
+            $obsoleteReminders->whereNotIn('automation_key', array_unique($reminderKeys));
+        }
         $obsoleteReminders->delete();
 
         return ['event_uuid' => $event->uuid, 'tasks_created' => $created, 'tasks_updated' => $updated, 'tasks_completed' => $completed, 'reminders_created' => $remindersCreated, 'reminders_updated' => $remindersUpdated, 'reminders_skipped' => $remindersSkipped];
@@ -249,7 +263,7 @@ class TripPreparationTimelineService
                 default => [],
             };
             foreach ($offsets as $minutes) {
-                $specs[] = ['key' => $item['key'] . '_' . $minutes, 'remind_at' => $at->copy()->subMinutes($minutes)->toIso8601String()];
+                $specs[] = ['key' => $item['key'].'_'.$minutes, 'remind_at' => $at->copy()->subMinutes($minutes)->toIso8601String()];
             }
         }
 
@@ -258,10 +272,15 @@ class TripPreparationTimelineService
 
     private function linkedEvent(object $trip): ?object
     {
-        if (! Schema::hasTable('calendar_events')) return null;
+        if (! Schema::hasTable('calendar_events')) {
+            return null;
+        }
+
         return DB::table('calendar_events')->where('gallery_space_id', $trip->gallery_space_id)->where(function ($query) use ($trip) {
             $query->where('trip_id', $trip->id);
-            if (Schema::hasColumn('calendar_events', 'source_trip_id')) $query->orWhere('source_trip_id', $trip->id);
+            if (Schema::hasColumn('calendar_events', 'source_trip_id')) {
+                $query->orWhere('source_trip_id', $trip->id);
+            }
         })->where('status', '!=', 'cancelled')
             // A trip can also own reservation events. General preparation tasks
             // and reminders belong to its main calendar card, not to the last
@@ -273,22 +292,33 @@ class TripPreparationTimelineService
     private function timelineItem(string $key, string $kind, string $title, Carbon $at, ?string $detail = null, ?string $sourceUrl = null): array
     {
         $status = $at->isPast() ? 'past' : ($at->isToday() ? 'today' : ($at->lte(now()->addDays(7)) ? 'soon' : 'future'));
+
         return array_filter(['key' => $key, 'kind' => $kind, 'title' => $title, 'at' => $at->toIso8601String(), 'status' => $status, 'detail' => $detail, 'source_url' => $sourceUrl], fn ($value) => $value !== null);
     }
 
     private function action(string $key, string $title, string $message, Carbon $dueAt, string $priority): array
     {
-        if ($dueAt->isPast()) $dueAt = now()->addHours(2);
+        if ($dueAt->isPast()) {
+            $dueAt = now()->addHours(2);
+        }
+
         return ['key' => $key, 'title' => $title, 'message' => $message, 'due_at' => $dueAt->toIso8601String(), 'priority' => $priority];
     }
 
     private function parseMoment(mixed $value, string $fallbackDate, string $timezone, string $fallbackTime = '09:00:00'): ?Carbon
     {
-        if (! is_string($value) || trim($value) === '') return null;
+        if (! is_string($value) || trim($value) === '') {
+            return null;
+        }
         $value = trim($value);
         try {
-            if (preg_match('/^\d{2}:\d{2}(:\d{2})?$/', $value)) return Carbon::parse($fallbackDate . ' ' . $value, $timezone);
-            if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $value)) return Carbon::parse($value . ' ' . $fallbackTime, $timezone);
+            if (preg_match('/^\d{2}:\d{2}(:\d{2})?$/', $value)) {
+                return Carbon::parse($fallbackDate.' '.$value, $timezone);
+            }
+            if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $value)) {
+                return Carbon::parse($value.' '.$fallbackTime, $timezone);
+            }
+
             return Carbon::parse($value, $timezone);
         } catch (\Throwable) {
             return null;
@@ -297,9 +327,14 @@ class TripPreparationTimelineService
 
     private function details(mixed $details): array
     {
-        if (is_array($details)) return $details;
-        if (! is_string($details) || $details === '') return [];
+        if (is_array($details)) {
+            return $details;
+        }
+        if (! is_string($details) || $details === '') {
+            return [];
+        }
         $decoded = json_decode($details, true);
+
         return is_array($decoded) ? $decoded : [];
     }
 

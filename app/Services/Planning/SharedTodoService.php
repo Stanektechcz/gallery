@@ -9,6 +9,7 @@ use App\Models\SharedTodoList;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class SharedTodoService
 {
@@ -21,7 +22,6 @@ class SharedTodoService
             ['created_by' => $user->id, 'description' => 'Věci, které chceme zařídit spolu.', 'color' => '#14b8a6', 'icon' => '✅']
         );
     }
-
 
     public function create(GallerySpace $space, User $user, array $attributes, ?SharedTodoList $list = null, ?SharedTodo $parent = null, string $source = 'manual', ?string $sourceReference = null): SharedTodo
     {
@@ -36,13 +36,14 @@ class SharedTodoService
             'sort_order' => ((int) SharedTodo::where('list_id', $list->id)->where('parent_id', $parent?->id)->max('sort_order')) + 1,
         ];
         $attributes['metadata'] = $metadata;
-        if (\Illuminate\Support\Facades\Schema::hasColumn('shared_todos', 'created_from')) {
+        if (Schema::hasColumn('shared_todos', 'created_from')) {
             $attributes['created_from'] = $source;
             $attributes['source_reference'] = $sourceReference;
         }
 
         return SharedTodo::create($attributes);
     }
+
     public function complete(SharedTodo $todo, User $user, bool $completed): ?SharedTodo
     {
         $todo->update([
@@ -50,29 +51,43 @@ class SharedTodoService
             'completed_at' => $completed ? now() : null,
             'completed_by' => $completed ? $user->id : null,
         ]);
-        if (! $completed || empty($todo->recurrence)) return null;
-        if (SharedTodo::where('series_uuid', $todo->series_uuid)->where('id', '!=', $todo->id)->where('status', 'open')->exists()) return null;
+        if (! $completed || empty($todo->recurrence)) {
+            return null;
+        }
+        if (SharedTodo::where('series_uuid', $todo->series_uuid)->where('id', '!=', $todo->id)->where('status', 'open')->exists()) {
+            return null;
+        }
         $nextDue = $this->nextOccurrence($todo->due_at ?: $todo->starts_at ?: now(), $todo->recurrence);
-        if (! $nextDue) return null;
+        if (! $nextDue) {
+            return null;
+        }
         $duration = $todo->starts_at && $todo->due_at ? $todo->starts_at->diffInMinutes($todo->due_at, false) : null;
         $attributes = $todo->only(['series_uuid', 'gallery_space_id', 'list_id', 'created_by', 'assigned_to', 'trip_id', 'title', 'description', 'priority', 'estimate_minutes', 'location', 'recurrence', 'tags', 'metadata', 'sort_order']);
         $attributes['parent_id'] = $todo->parent_id;
         $attributes['status'] = 'open';
         $attributes['due_at'] = $nextDue;
-        if ($todo->starts_at) $attributes['starts_at'] = $duration !== null ? $nextDue->copy()->subMinutes($duration) : $nextDue;
-        if ($todo->remind_at && $todo->due_at) $attributes['remind_at'] = $nextDue->copy()->subSeconds($todo->due_at->diffInSeconds($todo->remind_at));
+        if ($todo->starts_at) {
+            $attributes['starts_at'] = $duration !== null ? $nextDue->copy()->subMinutes($duration) : $nextDue;
+        }
+        if ($todo->remind_at && $todo->due_at) {
+            $attributes['remind_at'] = $nextDue->copy()->subSeconds($todo->due_at->diffInSeconds($todo->remind_at));
+        }
+
         return SharedTodo::create($attributes);
     }
 
     public function schedule(SharedTodo $todo, User $actor, ?Carbon $startsAt = null): CalendarEvent
     {
-        if ($todo->calendar_event_id) return CalendarEvent::findOrFail($todo->calendar_event_id);
+        if ($todo->calendar_event_id) {
+            return CalendarEvent::findOrFail($todo->calendar_event_id);
+        }
         $startsAt ??= $todo->starts_at ?: $todo->due_at ?: now()->addDay()->setTime(18, 0);
         $duration = max(15, (int) ($todo->estimate_minutes ?: 60));
+
         return DB::transaction(function () use ($todo, $actor, $startsAt, $duration) {
             $space = GallerySpace::findOrFail($todo->gallery_space_id);
             $event = $this->calendarEvents->create($space, $actor, [
-                'trip_id' => $todo->trip_id, 'title' => 'Úkol · ' . $todo->title, 'description' => $todo->description,
+                'trip_id' => $todo->trip_id, 'title' => 'Úkol · '.$todo->title, 'description' => $todo->description,
                 'type' => 'todo', 'status' => 'planned', 'starts_at' => $startsAt, 'ends_at' => $startsAt->copy()->addMinutes($duration),
                 'timezone' => 'Europe/Prague', 'place_name' => $todo->location, 'color' => '#14b8a6', 'is_private' => false,
                 'metadata' => ['kind' => 'shared_todo', 'todo_uuid' => $todo->uuid, 'href' => '/planning#todos'],
@@ -81,6 +96,7 @@ class SharedTodoService
                 DB::table('event_reminders')->insertOrIgnore(['event_id' => $event->id, 'user_id' => $todo->assigned_to ?: $actor->id, 'channel' => 'database', 'remind_at' => $todo->remind_at, 'status' => 'pending', 'created_at' => now(), 'updated_at' => now()]);
             }
             $todo->update(['calendar_event_id' => $event->id, 'starts_at' => $startsAt]);
+
             return $event;
         });
     }
@@ -96,8 +112,13 @@ class SharedTodoService
             'yearly' => $date->copy()->addYearsNoOverflow($interval),
             default => null,
         };
-        if (! $next) return null;
-        if (! empty($recurrence['until']) && $next->gt(Carbon::parse($recurrence['until'])->endOfDay())) return null;
+        if (! $next) {
+            return null;
+        }
+        if (! empty($recurrence['until']) && $next->gt(Carbon::parse($recurrence['until'])->endOfDay())) {
+            return null;
+        }
+
         return $next;
     }
 }

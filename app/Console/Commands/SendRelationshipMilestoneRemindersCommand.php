@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\DB;
 class SendRelationshipMilestoneRemindersCommand extends Command
 {
     protected $signature = 'gallery:relationship-milestones {--limit=100}';
+
     protected $description = 'Send annual milestone and birthday reminders to the appropriate partner(s).';
 
     public function handle(AutomationRegistryService $automations): int
@@ -21,7 +22,11 @@ class SendRelationshipMilestoneRemindersCommand extends Command
         $sent = 0;
         $spaces = GallerySpace::query()->get()->keyBy('id');
         $spaceIds = $spaces->filter(fn (GallerySpace $space) => $automations->enabled($space, AutomationRegistryService::RELATIONSHIP_MILESTONES))->keys()->all();
-        if (! $spaceIds) { $this->info('Připomínky výročí jsou vypnuté ve všech prostorech.'); return self::SUCCESS; }
+        if (! $spaceIds) {
+            $this->info('Připomínky výročí jsou vypnuté ve všech prostorech.');
+
+            return self::SUCCESS;
+        }
         $spaces->whereIn('id', $spaceIds)->each(fn (GallerySpace $space) => $automations->markRan($space, AutomationRegistryService::RELATIONSHIP_MILESTONES));
 
         $milestones = DB::table('relationship_milestones')->whereIn('gallery_space_id', $spaceIds)
@@ -31,14 +36,18 @@ class SendRelationshipMilestoneRemindersCommand extends Command
 
         foreach ($milestones as $milestone) {
             $next = Carbon::parse($milestone->occurred_on)->year($today->year)->startOfDay();
-            if ($next->lt($today)) $next->addYear();
+            if ($next->lt($today)) {
+                $next->addYear();
+            }
             $days = (int) $today->diffInDays($next);
             $settings = (array) ($spaces->get($milestone->gallery_space_id)?->settings ?? []);
             $relationship = (array) ($settings['relationship_anniversary'] ?? []);
             $reminderDays = (int) ($relationship['milestone_id'] ?? 0) === (int) $milestone->id
                 ? array_map('intval', (array) ($relationship['reminder_days'] ?? [30, 7, 1]))
                 : [7, 1, 0];
-            if (!in_array($days, $reminderDays, true)) continue;
+            if (! in_array($days, $reminderDays, true)) {
+                continue;
+            }
 
             $recipientIds = $milestone->visibility === 'private'
                 ? [$milestone->created_by]
@@ -58,6 +67,7 @@ class SendRelationshipMilestoneRemindersCommand extends Command
         }
 
         $this->info("Odesláno připomínek osobních dnů: {$sent}.");
+
         return self::SUCCESS;
     }
 }

@@ -43,7 +43,7 @@ class GifSearchService
         $limit = max(1, min($limit, 50));
 
         return Cache::remember(
-            'gifs:' . md5(mb_strtolower($query) . ':' . $limit),
+            'gifs:'.md5(mb_strtolower($query).':'.$limit),
             now()->addMinutes(self::CACHE_MINUTES),
             function () use ($query, $limit) {
                 $results = $this->key('tenor') ? $this->tenor($query, $limit) : [];
@@ -57,7 +57,7 @@ class GifSearchService
     private function tenor(string $query, int $limit): array
     {
         $response = Http::timeout(6)->retry(1, 200)->get(
-            'https://tenor.googleapis.com/v2/' . ($query === '' ? 'featured' : 'search'),
+            'https://tenor.googleapis.com/v2/'.($query === '' ? 'featured' : 'search'),
             array_filter([
                 'key' => $this->key('tenor'),
                 'q' => $query ?: null,
@@ -70,15 +70,19 @@ class GifSearchService
             ]),
         );
 
-        if (! $response->successful()) return [];
+        if (! $response->successful()) {
+            return [];
+        }
 
         return collect($response->json('results') ?? [])->map(function (array $result) {
             $full = $result['media_formats']['gif'] ?? null;
             $preview = $result['media_formats']['tinygif'] ?? $full;
-            if (! $full || ! $preview) return null;
+            if (! $full || ! $preview) {
+                return null;
+            }
 
             return [
-                'id' => 'tenor:' . ($result['id'] ?? ''),
+                'id' => 'tenor:'.($result['id'] ?? ''),
                 'description' => (string) ($result['content_description'] ?? 'GIF'),
                 'preview' => $preview['url'],
                 'url' => $full['url'],
@@ -92,7 +96,7 @@ class GifSearchService
     private function giphy(string $query, int $limit): array
     {
         $response = Http::timeout(6)->retry(1, 200)->get(
-            'https://api.giphy.com/v1/gifs/' . ($query === '' ? 'trending' : 'search'),
+            'https://api.giphy.com/v1/gifs/'.($query === '' ? 'trending' : 'search'),
             array_filter([
                 'api_key' => $this->key('giphy'),
                 'q' => $query ?: null,
@@ -103,15 +107,19 @@ class GifSearchService
             ]),
         );
 
-        if (! $response->successful()) return [];
+        if (! $response->successful()) {
+            return [];
+        }
 
         return collect($response->json('data') ?? [])->map(function (array $result) {
             $full = $result['images']['downsized'] ?? $result['images']['original'] ?? null;
             $preview = $result['images']['fixed_width_small'] ?? $full;
-            if (! $full || ! $preview) return null;
+            if (! $full || ! $preview) {
+                return null;
+            }
 
             return [
-                'id' => 'giphy:' . ($result['id'] ?? ''),
+                'id' => 'giphy:'.($result['id'] ?? ''),
                 'description' => (string) ($result['title'] ?: 'GIF'),
                 'preview' => $preview['url'],
                 'url' => $full['url'],

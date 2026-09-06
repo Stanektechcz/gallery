@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Models\AuditLog;
 use App\Models\MediaItem;
+use App\Support\SpaceContext;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -32,7 +33,7 @@ class PurgeTrashCommand extends Command
 
         // Řádek bez `purge_after` (starší mazání) se posuzuje podle `trashed_at`,
         // jinak by v koši zůstal navždy.
-        $fronta = MediaItem::withoutGlobalScope(\App\Support\SpaceContext::SCOPE)
+        $fronta = MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
             ->whereNotNull('trashed_at')
             ->where(function ($dotaz) use ($hranice) {
                 $dotaz->where('purge_after', '<=', now())

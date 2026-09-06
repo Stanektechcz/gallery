@@ -6,6 +6,7 @@ use App\Models\GallerySpace;
 use App\Models\Place;
 use App\Models\PlaceReview;
 use App\Models\Recipe;
+use App\Models\SharedLink;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
@@ -17,6 +18,7 @@ class SharedLinkTest extends TestCase
     use RefreshDatabase;
 
     private User $adrian;
+
     private GallerySpace $space;
 
     protected function setUp(): void
@@ -24,10 +26,10 @@ class SharedLinkTest extends TestCase
         parent::setUp();
 
         $this->adrian = User::factory()->create(['role' => 'owner', 'is_active' => true]);
-        $this->space  = GallerySpace::create([
-            'uuid'     => \Str::uuid(),
-            'name'     => 'Test',
-            'slug'     => 'test',
+        $this->space = GallerySpace::create([
+            'uuid' => \Str::uuid(),
+            'name' => 'Test',
+            'slug' => 'test',
             'owner_id' => $this->adrian->id,
         ]);
         $this->space->members()->attach($this->adrian->id, ['role' => 'owner', 'can_delete' => true, 'can_share' => true]);
@@ -38,7 +40,7 @@ class SharedLinkTest extends TestCase
     {
         $response = $this->actingAs($this->adrian)
             ->postJson('/shares', [
-                'target_type'    => 'selection',
+                'target_type' => 'selection',
                 'allow_download' => true,
             ]);
 
@@ -53,13 +55,13 @@ class SharedLinkTest extends TestCase
         $response = $this->actingAs($this->adrian)
             ->postJson('/shares', [
                 'target_type' => 'selection',
-                'password'    => 'secret1234',
+                'password' => 'secret1234',
             ]);
 
         $token = $response->json('token');
         $this->assertDatabaseHas('shared_links', ['token' => $token]);
 
-        $link = \App\Models\SharedLink::where('token', $token)->first();
+        $link = SharedLink::where('token', $token)->first();
         $this->assertNotNull($link->password_hash);
         $this->assertTrue(\Hash::check('secret1234', $link->password_hash));
     }
@@ -72,11 +74,11 @@ class SharedLinkTest extends TestCase
         $response = $this->actingAs($this->adrian)
             ->postJson('/shares', [
                 'target_type' => 'selection',
-                'expires_at'  => $expiry,
+                'expires_at' => $expiry,
             ]);
 
         $token = $response->json('token');
-        $link  = \App\Models\SharedLink::where('token', $token)->first();
+        $link = SharedLink::where('token', $token)->first();
         $this->assertNotNull($link->expires_at);
     }
 
@@ -87,7 +89,7 @@ class SharedLinkTest extends TestCase
             ->postJson('/shares', ['target_type' => 'selection']);
 
         $token = $response->json('token');
-        $link  = \App\Models\SharedLink::where('token', $token)->first();
+        $link = SharedLink::where('token', $token)->first();
 
         $this->actingAs($this->adrian)
             ->deleteJson("/shares/{$link->id}")
@@ -121,7 +123,7 @@ class SharedLinkTest extends TestCase
             'target_type' => 'recipe', 'target_id' => $recipe->id, 'gallery_space_id' => $this->space->id,
             'allow_download' => false, 'allow_guest_upload' => false, 'hide_gps' => true, 'show_metadata' => false,
         ]);
-        $this->get('/s/' . $response->json('token'))->assertOk()->assertInertia(fn (Assert $page) => $page
+        $this->get('/s/'.$response->json('token'))->assertOk()->assertInertia(fn (Assert $page) => $page
             ->component('Shares/Content')
             ->where('content.type', 'recipe')
             ->where('content.title', 'Naše lasagne')
@@ -151,7 +153,7 @@ class SharedLinkTest extends TestCase
             'target_type' => 'place_review', 'target_uuid' => $review->uuid,
         ])->assertOk();
 
-        $this->get('/s/' . $response->json('token'))->assertOk()->assertInertia(fn (Assert $page) => $page
+        $this->get('/s/'.$response->json('token'))->assertOk()->assertInertia(fn (Assert $page) => $page
             ->component('Shares/Content')
             ->where('content.type', 'place_review')
             ->where('content.data.place.name', 'Bistro U parku')

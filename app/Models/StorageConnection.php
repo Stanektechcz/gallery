@@ -3,7 +3,6 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Support\Facades\Crypt;
 
 class StorageConnection extends Model
@@ -25,13 +24,13 @@ class StorageConnection extends Model
     protected function casts(): array
     {
         return [
-            'token_expires_at'            => 'datetime',
-            'last_successful_request_at'  => 'datetime',
-            'last_error_at'               => 'datetime',
-            'quota_refreshed_at'          => 'datetime',
-            'connected_at'                => 'datetime',
-            'revoked_at'                  => 'datetime',
-            'granted_scopes_json'         => 'array',
+            'token_expires_at' => 'datetime',
+            'last_successful_request_at' => 'datetime',
+            'last_error_at' => 'datetime',
+            'quota_refreshed_at' => 'datetime',
+            'connected_at' => 'datetime',
+            'revoked_at' => 'datetime',
+            'granted_scopes_json' => 'array',
         ];
     }
 
@@ -69,19 +68,35 @@ class StorageConnection extends Model
      * mistake a fatal error rather than a quiet one.
      */
     public const STATUS_HEALTHY = 'healthy';
+
     public const STATUS_ERROR = 'error';
+
     public const STATUS_DISCONNECTED = 'disconnected';
 
-    public function isHealthy(): bool       { return $this->connection_status === self::STATUS_HEALTHY; }
-    public function isDisconnected(): bool  { return $this->connection_status === 'disconnected'; }
-    public function needsRefresh(): bool    { return $this->connection_status === 'refresh_required'; }
+    public function isHealthy(): bool
+    {
+        return $this->connection_status === self::STATUS_HEALTHY;
+    }
+
+    public function isDisconnected(): bool
+    {
+        return $this->connection_status === 'disconnected';
+    }
+
+    public function needsRefresh(): bool
+    {
+        return $this->connection_status === 'refresh_required';
+    }
 
     public function isTokenExpired(): bool
     {
         return $this->token_expires_at && $this->token_expires_at->isPast();
     }
 
-    public function owner() { return $this->belongsTo(User::class, 'owner_user_id'); }
+    public function owner()
+    {
+        return $this->belongsTo(User::class, 'owner_user_id');
+    }
 
     public function operations()
     {
@@ -96,19 +111,19 @@ class StorageConnection extends Model
     public function markHealthy(): void
     {
         $this->update([
-            'connection_status'           => 'healthy',
-            'last_successful_request_at'  => now(),
-            'last_error_at'               => null,
-            'last_error_code'             => null,
-            'last_error_message'          => null,
+            'connection_status' => 'healthy',
+            'last_successful_request_at' => now(),
+            'last_error_at' => null,
+            'last_error_code' => null,
+            'last_error_message' => null,
         ]);
     }
 
     public function markError(string $code, string $message): void
     {
         $this->update([
-            'last_error_at'      => now(),
-            'last_error_code'    => $code,
+            'last_error_at' => now(),
+            'last_error_code' => $code,
             'last_error_message' => $message,
         ]);
     }

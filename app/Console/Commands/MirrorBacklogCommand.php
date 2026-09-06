@@ -39,6 +39,7 @@ class MirrorBacklogCommand extends Command
 
             if (! $connection) {
                 $this->line("Prostor {$space->id}: bez cloudu, přeskočeno.");
+
                 continue;
             }
 
@@ -56,7 +57,9 @@ class MirrorBacklogCommand extends Command
 
             $this->line("Prostor {$space->id} ({$connection->provider}): ke kopírování {$pending->count()}");
 
-            if ($this->option('dry-run')) continue;
+            if ($this->option('dry-run')) {
+                continue;
+            }
 
             foreach ($pending as $id) {
                 MirrorMediaToCloud::dispatch($id);

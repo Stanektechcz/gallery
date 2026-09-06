@@ -13,7 +13,6 @@ use App\Models\Wallet;
 use App\Services\Finance\FinanceService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Carbon;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -241,8 +240,12 @@ class FinanceEntryController extends Controller
         $potrebaZ = in_array($data['type'], ['expense', 'transfer', 'exchange', 'withdrawal', 'deposit'], true);
         $potrebaDo = in_array($data['type'], ['income', 'transfer', 'exchange', 'withdrawal', 'deposit'], true);
 
-        if ($potrebaZ && ! $z) $chyby['wallet_from'] = 'Vyberte účet, ze kterého peníze odešly.';
-        if ($potrebaDo && ! $do) $chyby['wallet_to'] = 'Vyberte účet, na který peníze přišly.';
+        if ($potrebaZ && ! $z) {
+            $chyby['wallet_from'] = 'Vyberte účet, ze kterého peníze odešly.';
+        }
+        if ($potrebaDo && ! $do) {
+            $chyby['wallet_to'] = 'Vyberte účet, na který peníze přišly.';
+        }
 
         $castka = (float) ($data['amount_from'] ?? $data['amount_to'] ?? 0);
 

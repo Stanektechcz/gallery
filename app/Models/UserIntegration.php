@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToGallerySpace;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Crypt;
@@ -16,9 +17,10 @@ use Illuminate\Support\Str;
  */
 class UserIntegration extends Model
 {
-    use \App\Models\Concerns\BelongsToGallerySpace;
+    use BelongsToGallerySpace;
 
     public const VISIBILITY_PERSONAL = 'personal';
+
     public const VISIBILITY_SHARED = 'shared';
 
     protected $fillable = [
@@ -53,7 +55,9 @@ class UserIntegration extends Model
     /** @return array<string, mixed> */
     public function credentials(): array
     {
-        if (! $this->encrypted_credentials) return [];
+        if (! $this->encrypted_credentials) {
+            return [];
+        }
 
         try {
             return json_decode(Crypt::decryptString($this->encrypted_credentials), true, 512, JSON_THROW_ON_ERROR);

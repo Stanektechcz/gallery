@@ -2,7 +2,9 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 
 /**
  * Conversations with explicit participants.
@@ -75,12 +77,12 @@ return new class extends Migration
      */
     private function adoptExistingMessages(): void
     {
-        $spaces = \Illuminate\Support\Facades\DB::table('chat_messages')
+        $spaces = DB::table('chat_messages')
             ->whereNull('conversation_id')->distinct()->pluck('gallery_space_id');
 
         foreach ($spaces as $spaceId) {
-            $conversationId = \Illuminate\Support\Facades\DB::table('conversations')->insertGetId([
-                'uuid' => (string) \Illuminate\Support\Str::uuid(),
+            $conversationId = DB::table('conversations')->insertGetId([
+                'uuid' => (string) Str::uuid(),
                 'gallery_space_id' => $spaceId,
                 'kind' => 'group',
                 'title' => 'Společná konverzace',
@@ -90,11 +92,11 @@ return new class extends Migration
                 'updated_at' => now(),
             ]);
 
-            $members = \Illuminate\Support\Facades\DB::table('gallery_space_user')
+            $members = DB::table('gallery_space_user')
                 ->where('gallery_space_id', $spaceId)->pluck('user_id');
 
             foreach ($members as $userId) {
-                \Illuminate\Support\Facades\DB::table('conversation_participants')->insert([
+                DB::table('conversation_participants')->insert([
                     'conversation_id' => $conversationId,
                     'user_id' => $userId,
                     'role' => 'member',
@@ -103,7 +105,7 @@ return new class extends Migration
                 ]);
             }
 
-            \Illuminate\Support\Facades\DB::table('chat_messages')
+            DB::table('chat_messages')
                 ->where('gallery_space_id', $spaceId)->whereNull('conversation_id')
                 ->update(['conversation_id' => $conversationId]);
         }

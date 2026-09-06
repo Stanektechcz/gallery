@@ -101,8 +101,12 @@ class NavigationController extends Controller
             $parents = [];
             foreach ($data['items'] as $position => $item) {
                 $parent = $item['parent'] ?? null;
-                if ($parent === null || $parent === $position || ! isset($created[$parent])) continue;
-                if ($this->wouldLoop($parents, $position, $parent)) continue;
+                if ($parent === null || $parent === $position || ! isset($created[$parent])) {
+                    continue;
+                }
+                if ($this->wouldLoop($parents, $position, $parent)) {
+                    continue;
+                }
 
                 $parents[$position] = $parent;
             }
@@ -122,7 +126,7 @@ class NavigationController extends Controller
      * belt: $parents is acyclic by construction here, but this runs on submitted data and
      * an infinite walk in a web request is a worse outcome than a rejected nesting.
      *
-     * @param array<int, int> $parents
+     * @param  array<int, int>  $parents
      */
     private function wouldLoop(array $parents, int $position, int $parent): bool
     {
@@ -130,7 +134,9 @@ class NavigationController extends Controller
         $cursor = $parent;
 
         while ($cursor !== null && $steps++ < 200) {
-            if ($cursor === $position) return true;
+            if ($cursor === $position) {
+                return true;
+            }
             $cursor = $parents[$cursor] ?? null;
         }
 

@@ -15,8 +15,8 @@ use Illuminate\Support\Str;
  */
 class Partner extends Model
 {
-    use SoftDeletes;
     use Concerns\BelongsToGallerySpace;
+    use SoftDeletes;
 
     public const KINDS = ['person', 'company', 'organization'];
 

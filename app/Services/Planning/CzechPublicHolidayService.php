@@ -34,7 +34,9 @@ class CzechPublicHolidayService
 
         foreach ($holidayByDate->values() as $holiday) {
             $holidayDate = Carbon::parse($holiday['date'], 'Europe/Prague');
-            if ($holiday['date'] < $from->toDateString() || $holiday['date'] > $to->toDateString() || $holidayDate->isWeekend()) continue;
+            if ($holiday['date'] < $from->toDateString() || $holiday['date'] > $to->toDateString() || $holidayDate->isWeekend()) {
+                continue;
+            }
 
             $windows = match ($holidayDate->dayOfWeekIso) {
                 1 => [[-2, 0]],
@@ -60,12 +62,14 @@ class CzechPublicHolidayService
                     }
                 }
 
-                if (count($leaveDays) > 2) continue;
+                if (count($leaveDays) > 2) {
+                    continue;
+                }
                 $duration = (int) $start->diffInDays($end->copy()->startOfDay()) + 1;
-                $key = $start->toDateString() . '|' . $end->toDateString();
+                $key = $start->toDateString().'|'.$end->toDateString();
                 $candidate = [
-                    'id' => substr(hash('sha256', 'cz|' . $key), 0, 20),
-                    'title' => 'Společné volno: ' . reset($windowHolidays),
+                    'id' => substr(hash('sha256', 'cz|'.$key), 0, 20),
+                    'title' => 'Společné volno: '.reset($windowHolidays),
                     'start_date' => $start->toDateString(),
                     'end_date' => $end->toDateString(),
                     'duration_days' => $duration,
@@ -89,13 +93,16 @@ class CzechPublicHolidayService
             $duplicatesHolidayWindow = collect($selected)->contains(function (array $existing) use ($candidate) {
                 return count(array_intersect($existing['holiday_dates'], $candidate['holiday_dates'])) > 0;
             });
-            if (! $duplicatesHolidayWindow) $selected[] = $candidate;
+            if (! $duplicatesHolidayWindow) {
+                $selected[] = $candidate;
+            }
         }
 
         return collect($selected)
             ->sortBy('start_date')
             ->map(function (array $candidate) {
                 unset($candidate['_score']);
+
                 return $candidate;
             })
             ->values()
@@ -126,6 +133,7 @@ class CzechPublicHolidayService
         foreach ($fixed as [$date, $title, $type]) {
             $rows[] = $this->holiday(Carbon::parse("{$year}-{$date}", 'Europe/Prague'), $title, $type);
         }
+
         return $rows;
     }
 
@@ -133,6 +141,7 @@ class CzechPublicHolidayService
     private function holiday(Carbon $date, string $title, string $type): array
     {
         $weekdayLabels = [1 => 'pondělí', 2 => 'úterý', 3 => 'středa', 4 => 'čtvrtek', 5 => 'pátek', 6 => 'sobota', 7 => 'neděle'];
+
         return [
             'date' => $date->toDateString(),
             'title' => $title,
@@ -162,6 +171,7 @@ class CzechPublicHolidayService
         $m = intdiv($a + 11 * $h + 22 * $l, 451);
         $month = intdiv($h + $l - 7 * $m + 114, 31);
         $day = (($h + $l - 7 * $m + 114) % 31) + 1;
+
         return Carbon::create($year, $month, $day, 0, 0, 0, 'Europe/Prague');
     }
 }

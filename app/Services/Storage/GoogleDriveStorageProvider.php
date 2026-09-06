@@ -6,26 +6,30 @@ use App\Contracts\StorageProviderInterface;
 use App\Models\StorageConnection;
 use Google\Client as GoogleClient;
 use Google\Service\Drive;
+use Google\Service\Drive\Channel;
 use Google\Service\Drive\DriveFile;
+use Google\Service\Exception;
 use GuzzleHttp\Psr7\Stream;
 use Illuminate\Support\Facades\Log;
 
 class GoogleDriveStorageProvider implements StorageProviderInterface
 {
     private GoogleClient $client;
+
     private Drive $service;
+
     private StorageConnection $connection;
 
     public function __construct(StorageConnection $connection)
     {
         $this->connection = $connection;
-        $this->client     = $this->buildClient();
-        $this->service    = new Drive($this->client);
+        $this->client = $this->buildClient();
+        $this->service = new Drive($this->client);
     }
 
     private function buildClient(): GoogleClient
     {
-        $client = new GoogleClient();
+        $client = new GoogleClient;
         $client->setClientId(config('services.google.client_id'));
         $client->setClientSecret(config('services.google.client_secret'));
         $client->setRedirectUri(config('services.google.redirect'));
@@ -45,6 +49,7 @@ class GoogleDriveStorageProvider implements StorageProviderInterface
         if ($this->client->isAccessTokenExpired()) {
             $this->refreshCredentials();
         }
+
         return $this->client;
     }
 
@@ -60,9 +65,11 @@ class GoogleDriveStorageProvider implements StorageProviderInterface
                 $this->client->revokeToken($token);
             }
             $this->connection->markStatus('disconnected');
+
             return true;
         } catch (\Throwable $e) {
             Log::error('GoogleDrive disconnect failed', ['error' => $e->getMessage()]);
+
             return false;
         }
     }
@@ -71,8 +78,9 @@ class GoogleDriveStorageProvider implements StorageProviderInterface
     {
         try {
             $refreshToken = $this->connection->getRefreshToken();
-            if (!$refreshToken) {
+            if (! $refreshToken) {
                 $this->connection->markStatus('refresh_required');
+
                 return false;
             }
 
@@ -83,6 +91,7 @@ class GoogleDriveStorageProvider implements StorageProviderInterface
                 if ($newToken['error'] === 'invalid_grant') {
                     $this->connection->markStatus('refresh_required');
                 }
+
                 return false;
             }
 
@@ -96,6 +105,7 @@ class GoogleDriveStorageProvider implements StorageProviderInterface
         } catch (\Throwable $e) {
             Log::error('GoogleDrive token refresh failed', ['error' => $e->getMessage()]);
             $this->connection->markError('refresh_failed', $e->getMessage());
+
             return false;
         }
     }
@@ -103,27 +113,28 @@ class GoogleDriveStorageProvider implements StorageProviderInterface
     public function healthCheck(): array
     {
         try {
-            $client  = $this->getAuthenticatedClient();
+            $client = $this->getAuthenticatedClient();
             $service = new Drive($client);
-            $about   = $service->about->get(['fields' => 'user,storageQuota']);
-            $quota   = $about->getStorageQuota();
+            $about = $service->about->get(['fields' => 'user,storageQuota']);
+            $quota = $about->getStorageQuota();
 
             $this->connection->update([
-                'account_email'  => $about->getUser()->getEmailAddress(),
-                'quota_total'    => $quota->getLimit(),
-                'quota_used'     => $quota->getUsage(),
+                'account_email' => $about->getUser()->getEmailAddress(),
+                'quota_total' => $quota->getLimit(),
+                'quota_used' => $quota->getUsage(),
                 'quota_refreshed_at' => now(),
             ]);
             $this->connection->markHealthy();
 
             return [
-                'status'       => 'healthy',
-                'email'        => $about->getUser()->getEmailAddress(),
-                'quota_total'  => $quota->getLimit(),
-                'quota_used'   => $quota->getUsage(),
+                'status' => 'healthy',
+                'email' => $about->getUser()->getEmailAddress(),
+                'quota_total' => $quota->getLimit(),
+                'quota_used' => $quota->getUsage(),
             ];
-        } catch (\Google\Service\Exception $e) {
+        } catch (Exception $e) {
             $this->handleGoogleError($e);
+
             return ['status' => 'error', 'message' => $e->getMessage()];
         }
     }
@@ -131,10 +142,11 @@ class GoogleDriveStorageProvider implements StorageProviderInterface
     public function getAbout(): array
     {
         $about = $this->service->about->get(['fields' => 'user,storageQuota']);
+
         return [
-            'email'       => $about->getUser()->getEmailAddress(),
+            'email' => $about->getUser()->getEmailAddress(),
             'quota_total' => $about->getStorageQuota()->getLimit(),
-            'quota_used'  => $about->getStorageQuota()->getUsage(),
+            'quota_used' => $about->getStorageQuota()->getUsage(),
         ];
     }
 
@@ -146,9 +158,9 @@ class GoogleDriveStorageProvider implements StorageProviderInterface
     public function createFolder(string $name, ?string $parentId = null): array
     {
         $meta = new DriveFile([
-            'name'     => $name,
+            'name' => $name,
             'mimeType' => 'application/vnd.google-apps.folder',
-            'parents'  => $parentId ? [$parentId] : [],
+            'parents' => $parentId ? [$parentId] : [],
         ]);
 
         $file = $this->service->files->create($meta, ['fields' => 'id,name,parents,createdTime']);
@@ -156,9 +168,9 @@ class GoogleDriveStorageProvider implements StorageProviderInterface
         $this->connection->markHealthy();
 
         return [
-            'id'          => $file->getId(),
-            'name'        => $file->getName(),
-            'parents'     => $file->getParents() ?? [],
+            'id' => $file->getId(),
+            'name' => $file->getName(),
+            'parents' => $file->getParents() ?? [],
             'created_time' => $file->getCreatedTime(),
         ];
     }
@@ -168,6 +180,7 @@ class GoogleDriveStorageProvider implements StorageProviderInterface
         $meta = new DriveFile(['name' => $newName]);
         $file = $this->service->files->update($folderId, $meta, ['fields' => 'id,name']);
         $this->connection->markHealthy();
+
         return ['id' => $file->getId(), 'name' => $file->getName()];
     }
 
@@ -176,13 +189,14 @@ class GoogleDriveStorageProvider implements StorageProviderInterface
         $file = $this->service->files->get($folderId, ['fields' => 'parents']);
         $oldParents = implode(',', $file->getParents() ?? []);
 
-        $updated = $this->service->files->update($folderId, new DriveFile(), [
-            'addParents'    => $newParentId,
+        $updated = $this->service->files->update($folderId, new DriveFile, [
+            'addParents' => $newParentId,
             'removeParents' => $oldParents,
-            'fields'        => 'id,parents',
+            'fields' => 'id,parents',
         ]);
 
         $this->connection->markHealthy();
+
         return ['id' => $updated->getId(), 'parents' => $updated->getParents()];
     }
 
@@ -199,23 +213,26 @@ class GoogleDriveStorageProvider implements StorageProviderInterface
             $this->service->files->update($folderId, new DriveFile(['trashed' => true]));
         }
         $this->connection->markHealthy();
+
         return true;
     }
 
     public function listFolder(string $folderId, int $pageSize = 100, ?string $pageToken = null): array
     {
         $params = [
-            'q'         => "'{$folderId}' in parents and trashed = false",
-            'pageSize'  => $pageSize,
-            'fields'    => 'nextPageToken,files(id,name,mimeType,size,createdTime,modifiedTime,md5Checksum,parents)',
+            'q' => "'{$folderId}' in parents and trashed = false",
+            'pageSize' => $pageSize,
+            'fields' => 'nextPageToken,files(id,name,mimeType,size,createdTime,modifiedTime,md5Checksum,parents)',
         ];
-        if ($pageToken) $params['pageToken'] = $pageToken;
+        if ($pageToken) {
+            $params['pageToken'] = $pageToken;
+        }
 
         $result = $this->service->files->listFiles($params);
         $this->connection->markHealthy();
 
         return [
-            'files'      => array_map(fn($f) => $this->fileToArray($f), $result->getFiles()),
+            'files' => array_map(fn ($f) => $this->fileToArray($f), $result->getFiles()),
             'next_token' => $result->getNextPageToken(),
         ];
     }
@@ -226,6 +243,7 @@ class GoogleDriveStorageProvider implements StorageProviderInterface
             'fields' => 'id,name,mimeType,size,createdTime,modifiedTime,md5Checksum,parents,trashed',
         ]);
         $this->connection->markHealthy();
+
         return $this->fileToArray($file);
     }
 
@@ -238,28 +256,30 @@ class GoogleDriveStorageProvider implements StorageProviderInterface
     {
         $safeName = addslashes($name);
         $result = $this->service->files->listFiles([
-            'q'        => "'{$parentId}' in parents and name = '{$safeName}' and trashed = false",
+            'q' => "'{$parentId}' in parents and name = '{$safeName}' and trashed = false",
             'pageSize' => 1,
-            'fields'   => 'files(id,name,mimeType,size)',
+            'fields' => 'files(id,name,mimeType,size)',
         ]);
 
         $files = $result->getFiles();
+
         return count($files) > 0 ? $this->fileToArray($files[0]) : null;
     }
 
     public function upload(string $localPath, string $remoteName, string $parentId, string $mimeType): array
     {
-        $meta   = new DriveFile(['name' => $remoteName, 'parents' => [$parentId]]);
+        $meta = new DriveFile(['name' => $remoteName, 'parents' => [$parentId]]);
         $content = file_get_contents($localPath);
 
         $file = $this->service->files->create($meta, [
-            'data'        => $content,
-            'mimeType'    => $mimeType,
-            'uploadType'  => 'multipart',
-            'fields'      => 'id,name,size,md5Checksum,parents',
+            'data' => $content,
+            'mimeType' => $mimeType,
+            'uploadType' => 'multipart',
+            'fields' => 'id,name,size,md5Checksum,parents',
         ]);
 
         $this->connection->markHealthy();
+
         return $this->fileToArray($file);
     }
 
@@ -274,21 +294,21 @@ class GoogleDriveStorageProvider implements StorageProviderInterface
         // chunk. Calling files->create first made an empty duplicate for every
         // video and could leave the real upload without the expected session.
         $httpClient = $this->getAuthenticatedClient()->authorize();
-        $response   = $httpClient->request(
+        $response = $httpClient->request(
             'POST',
             'https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable',
             [
                 'headers' => [
-                    'Content-Type'            => 'application/json',
-                    'X-Upload-Content-Type'   => $mimeType,
+                    'Content-Type' => 'application/json',
+                    'X-Upload-Content-Type' => $mimeType,
                     'X-Upload-Content-Length' => $totalSize,
                 ],
-                'body'    => json_encode(['name' => $remoteName, 'parents' => [$parentId]]),
+                'body' => json_encode(['name' => $remoteName, 'parents' => [$parentId]]),
             ]
         );
 
         $sessionUri = $response->getHeaderLine('Location');
-        if (!$sessionUri) {
+        if (! $sessionUri) {
             throw new \RuntimeException('Failed to create resumable upload session: no Location header');
         }
 
@@ -297,14 +317,14 @@ class GoogleDriveStorageProvider implements StorageProviderInterface
 
     public function uploadChunk(string $sessionUri, string $data, int $rangeStart, int $rangeEnd, int $totalSize): array
     {
-        $httpClient  = $this->getAuthenticatedClient()->authorize();
-        $contentLen  = strlen($data);
-        $response    = $httpClient->request('PUT', $sessionUri, [
+        $httpClient = $this->getAuthenticatedClient()->authorize();
+        $contentLen = strlen($data);
+        $response = $httpClient->request('PUT', $sessionUri, [
             'headers' => [
                 'Content-Length' => $contentLen,
-                'Content-Range'  => "bytes {$rangeStart}-{$rangeEnd}/{$totalSize}",
+                'Content-Range' => "bytes {$rangeStart}-{$rangeEnd}/{$totalSize}",
             ],
-            'body'    => $data,
+            'body' => $data,
         ]);
 
         $statusCode = $response->getStatusCode();
@@ -316,6 +336,7 @@ class GoogleDriveStorageProvider implements StorageProviderInterface
         if (in_array($statusCode, [200, 201])) {
             $body = json_decode($response->getBody()->getContents(), true);
             $this->connection->markHealthy();
+
             return ['status' => 'complete', 'file' => $body];
         }
 
@@ -325,10 +346,10 @@ class GoogleDriveStorageProvider implements StorageProviderInterface
     public function queryResumableStatus(string $sessionUri, int $totalSize): array
     {
         $httpClient = $this->getAuthenticatedClient()->authorize();
-        $response   = $httpClient->request('PUT', $sessionUri, [
+        $response = $httpClient->request('PUT', $sessionUri, [
             'headers' => [
                 'Content-Length' => 0,
-                'Content-Range'  => "bytes */{$totalSize}",
+                'Content-Range' => "bytes */{$totalSize}",
             ],
         ]);
 
@@ -337,11 +358,13 @@ class GoogleDriveStorageProvider implements StorageProviderInterface
         if ($statusCode === 308) {
             $range = $response->getHeaderLine('Range');
             $uploaded = $range ? (int) explode('-', $range)[1] + 1 : 0;
+
             return ['status' => 'incomplete', 'uploaded_bytes' => $uploaded];
         }
 
         if (in_array($statusCode, [200, 201])) {
             $body = json_decode($response->getBody()->getContents(), true);
+
             return ['status' => 'complete', 'file' => $body];
         }
 
@@ -351,25 +374,30 @@ class GoogleDriveStorageProvider implements StorageProviderInterface
     public function resumeUpload(string $sessionUri, string $localPath, int $alreadyUploaded, int $totalSize): array
     {
         $chunkSize = 8 * 1024 * 1024; // 8 MB
-        $handle    = fopen($localPath, 'rb');
-        if (!$handle) throw new \RuntimeException("Cannot open file: {$localPath}");
+        $handle = fopen($localPath, 'rb');
+        if (! $handle) {
+            throw new \RuntimeException("Cannot open file: {$localPath}");
+        }
 
         fseek($handle, $alreadyUploaded);
         $result = [];
 
-        while (!feof($handle)) {
-            $chunk      = fread($handle, $chunkSize);
-            $chunkLen   = strlen($chunk);
+        while (! feof($handle)) {
+            $chunk = fread($handle, $chunkSize);
+            $chunkLen = strlen($chunk);
             $rangeStart = $alreadyUploaded;
-            $rangeEnd   = $alreadyUploaded + $chunkLen - 1;
+            $rangeEnd = $alreadyUploaded + $chunkLen - 1;
 
             $result = $this->uploadChunk($sessionUri, $chunk, $rangeStart, $rangeEnd, $totalSize);
             $alreadyUploaded += $chunkLen;
 
-            if ($result['status'] === 'complete') break;
+            if ($result['status'] === 'complete') {
+                break;
+            }
         }
 
         fclose($handle);
+
         return $result;
     }
 
@@ -377,6 +405,7 @@ class GoogleDriveStorageProvider implements StorageProviderInterface
     {
         $response = $this->service->files->get($fileId, ['alt' => 'media']);
         $this->connection->markHealthy();
+
         return $response->getBody();
     }
 
@@ -389,6 +418,7 @@ class GoogleDriveStorageProvider implements StorageProviderInterface
     {
         $this->service->files->update($fileId, new DriveFile(['trashed' => true]));
         $this->connection->markHealthy();
+
         return true;
     }
 
@@ -396,6 +426,7 @@ class GoogleDriveStorageProvider implements StorageProviderInterface
     {
         $this->service->files->update($fileId, new DriveFile(['trashed' => false]));
         $this->connection->markHealthy();
+
         return true;
     }
 
@@ -403,6 +434,7 @@ class GoogleDriveStorageProvider implements StorageProviderInterface
     {
         return $this->trash($fileId);
     }
+
     public function restoreFile(string $fileId): bool
     {
         return $this->restore($fileId);
@@ -412,6 +444,7 @@ class GoogleDriveStorageProvider implements StorageProviderInterface
     {
         $this->service->files->delete($fileId);
         $this->connection->markHealthy();
+
         return true;
     }
 
@@ -427,20 +460,20 @@ class GoogleDriveStorageProvider implements StorageProviderInterface
 
     public function createWatchChannel(string $webhookUrl, string $channelId, string $token): array
     {
-        $channel = new \Google\Service\Drive\Channel([
-            'id'      => $channelId,
-            'type'    => 'web_hook',
+        $channel = new Channel([
+            'id' => $channelId,
+            'type' => 'web_hook',
             'address' => $webhookUrl,
-            'token'   => $token,
+            'token' => $token,
         ]);
 
         $result = $this->service->files->watch('root', $channel);
         $this->connection->markHealthy();
 
         return [
-            'channel_id'  => $result->getId(),
+            'channel_id' => $result->getId(),
             'resource_id' => $result->getResourceId(),
-            'expiration'  => $result->getExpiration(),
+            'expiration' => $result->getExpiration(),
         ];
     }
 
@@ -451,11 +484,12 @@ class GoogleDriveStorageProvider implements StorageProviderInterface
 
     public function stopWatchChannel(string $channelId, string $resourceId): bool
     {
-        $channel = new \Google\Service\Drive\Channel([
-            'id'         => $channelId,
+        $channel = new Channel([
+            'id' => $channelId,
             'resourceId' => $resourceId,
         ]);
         $this->service->channels->stop($channel);
+
         return true;
     }
 
@@ -467,6 +501,7 @@ class GoogleDriveStorageProvider implements StorageProviderInterface
     public function getStartPageToken(): string
     {
         $result = $this->service->changes->getStartPageToken();
+
         return $result->getStartPageToken();
     }
 
@@ -474,19 +509,19 @@ class GoogleDriveStorageProvider implements StorageProviderInterface
     {
         $params = [
             'pageToken' => $pageToken ?? $this->getStartPageToken(),
-            'spaces'    => 'drive',
-            'fields'    => 'kind,nextPageToken,newStartPageToken,changes(fileId,removed,time,file(id,name,mimeType,parents,trashed,size,md5Checksum))',
+            'spaces' => 'drive',
+            'fields' => 'kind,nextPageToken,newStartPageToken,changes(fileId,removed,time,file(id,name,mimeType,parents,trashed,size,md5Checksum))',
         ];
 
         $result = $this->service->changes->listChanges($params['pageToken'], $params);
         $this->connection->markHealthy();
 
         return [
-            'changes'         => array_map(fn($c) => [
-                'file_id'  => $c->getFileId(),
-                'removed'  => $c->getRemoved(),
-                'time'     => $c->getTime(),
-                'file'     => $c->getFile() ? $this->fileToArray($c->getFile()) : null,
+            'changes' => array_map(fn ($c) => [
+                'file_id' => $c->getFileId(),
+                'removed' => $c->getRemoved(),
+                'time' => $c->getTime(),
+                'file' => $c->getFile() ? $this->fileToArray($c->getFile()) : null,
             ], $result->getChanges()),
             'next_page_token' => $result->getNextPageToken(),
             'new_start_token' => $result->getNewStartPageToken(),
@@ -498,22 +533,22 @@ class GoogleDriveStorageProvider implements StorageProviderInterface
         return $this->listChanges($pageToken);
     }
 
-    private function fileToArray(\Google\Service\Drive\DriveFile $file): array
+    private function fileToArray(DriveFile $file): array
     {
         return [
-            'id'           => $file->getId(),
-            'name'         => $file->getName(),
-            'mime_type'    => $file->getMimeType(),
-            'size'         => $file->getSize(),
+            'id' => $file->getId(),
+            'name' => $file->getName(),
+            'mime_type' => $file->getMimeType(),
+            'size' => $file->getSize(),
             'md5_checksum' => $file->getMd5Checksum(),
-            'parents'      => $file->getParents() ?? [],
+            'parents' => $file->getParents() ?? [],
             'created_time' => $file->getCreatedTime(),
             'modified_time' => $file->getModifiedTime(),
-            'trashed'      => $file->getTrashed(),
+            'trashed' => $file->getTrashed(),
         ];
     }
 
-    private function handleGoogleError(\Google\Service\Exception $e): void
+    private function handleGoogleError(Exception $e): void
     {
         $code = $e->getCode();
         $message = $e->getMessage();
@@ -521,18 +556,18 @@ class GoogleDriveStorageProvider implements StorageProviderInterface
         $this->connection->markError((string) $code, $message);
 
         match (true) {
-            $code === 401                                          => $this->connection->markStatus('refresh_required'),
+            $code === 401 => $this->connection->markStatus('refresh_required'),
             $code === 403 && str_contains($message, 'admin_policy') => $this->connection->markStatus('admin_blocked'),
-            $code === 403 && str_contains($message, 'rate')      => $this->connection->markStatus('rate_limited'),
-            $code === 429                                          => $this->connection->markStatus('rate_limited'),
-            $code >= 500                                          => $this->connection->markStatus('error'),
-            default                                               => null,
+            $code === 403 && str_contains($message, 'rate') => $this->connection->markStatus('rate_limited'),
+            $code === 429 => $this->connection->markStatus('rate_limited'),
+            $code >= 500 => $this->connection->markStatus('error'),
+            default => null,
         };
 
         Log::warning('GoogleDrive API error', [
-            'code'    => $code,
+            'code' => $code,
             'message' => $message,
-            'status'  => $this->connection->connection_status,
+            'status' => $this->connection->connection_status,
         ]);
     }
 }

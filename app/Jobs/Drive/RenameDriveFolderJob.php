@@ -16,11 +16,12 @@ class RenameDriveFolderJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    public int $tries   = 5;
+    public int $tries = 5;
+
     public int $timeout = 60;
 
     public function __construct(
-        private readonly int    $albumId,
+        private readonly int $albumId,
         private readonly string $newName,
     ) {}
 
@@ -32,14 +33,17 @@ class RenameDriveFolderJob implements ShouldQueue
     public function handle(): void
     {
         $album = Album::with('gallerySpace.owner')->find($this->albumId);
-        if (!$album || !$album->drive_folder_id) return;
+        if (! $album || ! $album->drive_folder_id) {
+            return;
+        }
 
         $connection = StorageConnection::where('owner_user_id', $album->gallerySpace->owner->id)
             ->where('connection_status', 'healthy')
             ->first();
 
-        if (!$connection) {
+        if (! $connection) {
             $this->release(300);
+
             return;
         }
 

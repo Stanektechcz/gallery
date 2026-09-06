@@ -59,6 +59,7 @@ class CheckoutController extends Controller
         $payment = Payment::where('reference', $reference)->first();
         if (! $payment) {
             Log::warning('Comgate notification for an unknown reference', ['refId' => $reference]);
+
             // Acknowledged anyway: retrying will not make the payment appear.
             return response('code=0&message=OK', 200)->header('Content-Type', 'text/plain');
         }

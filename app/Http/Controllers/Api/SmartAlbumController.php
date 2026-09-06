@@ -20,8 +20,9 @@ class SmartAlbumController extends Controller
     public function getRules(Request $request, string $uuid): JsonResponse
     {
         $album = $this->resolve($uuid, $request);
+
         return response()->json([
-            'album_type'  => $album->album_type ?? 'physical',
+            'album_type' => $album->album_type ?? 'physical',
             'smart_rules' => is_string($album->smart_rules)
                 ? json_decode($album->smart_rules, true)
                 : ($album->smart_rules ?? ['match' => 'all', 'conditions' => []]),
@@ -37,19 +38,19 @@ class SmartAlbumController extends Controller
         $album = $this->resolve($uuid, $request);
 
         $v = $request->validate([
-            'album_type'              => 'required|in:physical,smart',
-            'smart_rules'             => 'nullable|array',
-            'smart_rules.match'       => 'nullable|in:all,any',
-            'smart_rules.conditions'  => 'nullable|array',
+            'album_type' => 'required|in:physical,smart',
+            'smart_rules' => 'nullable|array',
+            'smart_rules.match' => 'nullable|in:all,any',
+            'smart_rules.conditions' => 'nullable|array',
             'smart_rules.conditions.*.field' => 'required|string',
-            'smart_rules.conditions.*.op'    => 'required|string',
+            'smart_rules.conditions.*.op' => 'required|string',
             'smart_rules.conditions.*.value' => 'nullable',
         ]);
 
         DB::table('albums')->where('id', $album->id)->update([
-            'album_type'  => $v['album_type'],
+            'album_type' => $v['album_type'],
             'smart_rules' => isset($v['smart_rules']) ? json_encode($v['smart_rules']) : null,
-            'updated_at'  => now(),
+            'updated_at' => now(),
         ]);
 
         return response()->json(['status' => 'saved', 'album_type' => $v['album_type']]);
@@ -68,12 +69,12 @@ class SmartAlbumController extends Controller
             return response()->json(['count' => 0, 'samples' => []]);
         }
 
-        $q       = $this->svc->buildQuery($album, $space->id);
-        $count   = $q->count();
+        $q = $this->svc->buildQuery($album, $space->id);
+        $count = $q->count();
         $samples = MediaItem::with('variants')
             ->whereIn('id', (clone $q)->orderByDesc('taken_at')->select('id')->limit(6)->pluck('id'))
             ->get()
-            ->map(fn($m) => ['uuid' => $m->uuid, 'thumbnail_url' => $m->thumbnail_url]);
+            ->map(fn ($m) => ['uuid' => $m->uuid, 'thumbnail_url' => $m->thumbnail_url]);
 
         return response()->json(['count' => $count, 'samples' => $samples]);
     }
@@ -81,6 +82,7 @@ class SmartAlbumController extends Controller
     private function resolve(string $uuid, Request $request): Album
     {
         $space = $request->user()->gallerySpaces()->first();
+
         return Album::where('uuid', $uuid)
             ->where('gallery_space_id', $space->id)
             ->firstOrFail();

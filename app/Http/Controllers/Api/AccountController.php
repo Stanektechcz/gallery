@@ -3,12 +3,14 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\AuditLog;
 use App\Models\ChatMessage;
 use App\Models\JournalEntry;
 use App\Models\MediaItem;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
@@ -55,7 +57,7 @@ class AccountController extends Controller
             'messages' => $this->messages($user),
             'media' => $this->media($user),
         ], 200, [
-            'Content-Disposition' => 'attachment; filename="maki-export-' . now()->format('Y-m-d') . '.json"',
+            'Content-Disposition' => 'attachment; filename="maki-export-'.now()->format('Y-m-d').'.json"',
         ]);
     }
 
@@ -110,9 +112,11 @@ class AccountController extends Controller
     {
         $user = $request->user();
 
-        if (! Schema::hasTable('audit_logs')) return response()->json(['events' => []]);
+        if (! Schema::hasTable('audit_logs')) {
+            return response()->json(['events' => []]);
+        }
 
-        $events = \App\Models\AuditLog::query()
+        $events = AuditLog::query()
             ->where('subject_type', 'User')
             ->where('subject_id', $user->id)
             ->whereIn('action', [
@@ -145,7 +149,7 @@ class AccountController extends Controller
      * Kept in preferences rather than a column, so this needs no migration and no new
      * table for a flag that at most one row in a thousand ever carries.
      */
-    private function rememberDeletion(User $user, ?\Illuminate\Support\Carbon $at): void
+    private function rememberDeletion(User $user, ?Carbon $at): void
     {
         $preferences = is_array($user->preferences) ? $user->preferences : [];
 
@@ -166,7 +170,9 @@ class AccountController extends Controller
     {
         foreach ($user->gallerySpaces()->get() as $space) {
             $owners = $space->members()->where('users.role', 'owner')->count();
-            if ($owners <= 1) return true;
+            if ($owners <= 1) {
+                return true;
+            }
         }
 
         return false;
@@ -175,7 +181,9 @@ class AccountController extends Controller
     /** @return list<array<string, mixed>> */
     private function journal(User $user): array
     {
-        if (! Schema::hasTable('journal_entries')) return [];
+        if (! Schema::hasTable('journal_entries')) {
+            return [];
+        }
 
         return JournalEntry::withoutGlobalScopes()->where('created_by', $user->id)->get()
             ->map(fn (JournalEntry $entry) => [
@@ -190,7 +198,9 @@ class AccountController extends Controller
     /** @return list<array<string, mixed>> */
     private function messages(User $user): array
     {
-        if (! Schema::hasTable('chat_messages')) return [];
+        if (! Schema::hasTable('chat_messages')) {
+            return [];
+        }
 
         return ChatMessage::withoutGlobalScopes()->where('created_by', $user->id)
             ->orderBy('id')->limit(20000)->get()
@@ -204,7 +214,9 @@ class AccountController extends Controller
     /** Filenames and dates, not the files: a JSON export is a record, not a backup. */
     private function media(User $user): array
     {
-        if (! Schema::hasTable('media_items')) return [];
+        if (! Schema::hasTable('media_items')) {
+            return [];
+        }
 
         return MediaItem::withoutGlobalScopes()->where('owner_user_id', $user->id)
             ->orderBy('id')->limit(50000)->get()

@@ -8,7 +8,9 @@ return new class extends Migration
 {
     public function up(): void
     {
-        if (Schema::hasTable('album_suggestion_decisions')) return;
+        if (Schema::hasTable('album_suggestion_decisions')) {
+            return;
+        }
 
         Schema::create('album_suggestion_decisions', function (Blueprint $table) {
             $table->id();

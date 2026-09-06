@@ -7,10 +7,10 @@ use App\Models\SharedLink;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
@@ -19,6 +19,7 @@ class InnovationWorkflowTest extends TestCase
     use RefreshDatabase;
 
     private User $user;
+
     private GallerySpace $space;
 
     protected function setUp(): void
@@ -70,7 +71,8 @@ class InnovationWorkflowTest extends TestCase
 
     public function test_guest_upload_waits_for_owner_approval(): void
     {
-        Storage::fake('local'); Storage::fake('public');
+        Storage::fake('local');
+        Storage::fake('public');
         $link = SharedLink::create(['created_by' => $this->user->id, 'gallery_space_id' => $this->space->id, 'target_type' => 'selection', 'allow_guest_upload' => true, 'is_active' => true]);
         auth()->logout();
         $response = $this->post("/s/{$link->token}/upload", ['contributor_name' => 'Eva', 'files' => [UploadedFile::fake()->create('vylet.jpg', 10, 'image/jpeg')]], ['Accept' => 'application/json']);
@@ -94,8 +96,8 @@ class InnovationWorkflowTest extends TestCase
         $this->get('/jizdenky')->assertOk()->assertInertia(fn ($page) => $page->component('Tickets/Index'));
 
         Cache::put('rj_cities_v2', [], 60);
-        Cache::put('fb_city:' . md5('praha'), [], 60);
-        Cache::put('fb_city:' . md5('brno'), [], 60);
+        Cache::put('fb_city:'.md5('praha'), [], 60);
+        Cache::put('fb_city:'.md5('brno'), [], 60);
         $response = $this->getJson('/api/v1/tickets/search?from=Praha&to=Brno&date=2026-08-01&adults=1')->assertOk();
         $carriers = collect($response->json())->pluck('carrier');
         $this->assertTrue($carriers->contains('RegioJet'));
@@ -120,7 +122,7 @@ class InnovationWorkflowTest extends TestCase
             ], 200),
         ]);
 
-        $response = $this->getJson('/api/v1/tickets/search?' . http_build_query([
+        $response = $this->getJson('/api/v1/tickets/search?'.http_build_query([
             'from' => 'Praha', 'to' => 'Brno', 'date' => '2026-08-01', 'time' => '08:00', 'adults' => 2,
             'from_lat' => 50.083, 'from_lng' => 14.435, 'to_lat' => 49.19, 'to_lng' => 16.612,
             'mode' => 'train', 'max_transfers' => 1, 'min_transfer_minutes' => 8,

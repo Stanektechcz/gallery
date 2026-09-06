@@ -3,6 +3,8 @@
 namespace App\Jobs\Media;
 
 use App\Models\MediaItem;
+use App\Models\StorageConnection;
+use App\Services\Storage\GoogleDriveStorageProvider;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -24,18 +26,21 @@ class PurgeMediaFromDriveJob implements ShouldQueue
 
     public function handle(): void
     {
-        if (!$this->driveFileId) return;
-
-        $connection = \App\Models\StorageConnection::where('provider', 'google_drive')
-            ->where('connection_status', 'healthy')
-            ->first();
-
-        if (!$connection) {
-            $this->release(300);
+        if (! $this->driveFileId) {
             return;
         }
 
-        $provider = new \App\Services\Storage\GoogleDriveStorageProvider($connection);
+        $connection = StorageConnection::where('provider', 'google_drive')
+            ->where('connection_status', 'healthy')
+            ->first();
+
+        if (! $connection) {
+            $this->release(300);
+
+            return;
+        }
+
+        $provider = new GoogleDriveStorageProvider($connection);
         $provider->trash($this->driveFileId);
     }
 }

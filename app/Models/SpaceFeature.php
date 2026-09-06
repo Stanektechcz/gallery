@@ -8,7 +8,14 @@ use Illuminate\Database\Eloquent\Model;
 class SpaceFeature extends Model
 {
     protected $fillable = ['gallery_space_id', 'feature_id', 'enabled'];
-    protected function casts(): array { return ['enabled' => 'boolean']; }
 
-    public function feature() { return $this->belongsTo(Feature::class); }
+    protected function casts(): array
+    {
+        return ['enabled' => 'boolean'];
+    }
+
+    public function feature()
+    {
+        return $this->belongsTo(Feature::class);
+    }
 }

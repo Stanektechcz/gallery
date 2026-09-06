@@ -5,22 +5,30 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Jobs\Media\CalculateMediaHashesJob;
 use App\Jobs\Media\InitiateDriveResumableUploadJob;
-use App\Models\AuditLog;
+use App\Jobs\MirrorMediaToCloud;
 use App\Models\Album;
+use App\Models\AuditLog;
+use App\Models\GallerySpace;
 use App\Models\MediaItem;
 use App\Models\UploadChunk;
 use App\Models\UploadSession;
+use App\Notifications\GalleryNotification;
+use App\Services\Billing\EntitlementService;
 use App\Services\ExifExtractorService;
+use App\Services\Media\FilenameMetadataService;
+use App\Services\Media\MediaFormatService;
+use App\Services\Media\VideoProcessingService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Facades\DB;
 
 class UploadController extends Controller
 {
     private const CHUNK_DISK = 'local';
-    private const CHUNK_DIR  = 'upload_chunks';
+
+    private const CHUNK_DIR = 'upload_chunks';
 
     /**
      * POST /api/v1/uploads/check-duplicate
@@ -33,7 +41,7 @@ class UploadController extends Controller
             'target_album_id' => 'nullable|integer|exists:albums,id',
         ]);
 
-        $user  = $request->user();
+        $user = $request->user();
         $space = $user->gallerySpaces()->firstOrFail();
 
         $existing = MediaItem::where('gallery_space_id', $space->id)
@@ -43,14 +51,14 @@ class UploadController extends Controller
 
         if ($existing) {
             $addedToAlbum = false;
-            if (!empty($v['target_album_id'])) {
+            if (! empty($v['target_album_id'])) {
                 $album = $this->albumForSpace((int) $v['target_album_id'], $space->id);
 
                 // Duplicitní soubor přeskočíme pouze tehdy, když jej uživatel
                 // v daném albu opravdu uvidí. Samotné primary_album_id nebo
                 // starý pivot nestačí: skrytý/selhaný soubor by jinak blokoval
                 // nový upload a v albu by stále nic nebylo.
-                if (!$this->isVisibleInAlbum($existing, $album)) {
+                if (! $this->isVisibleInAlbum($existing, $album)) {
                     if ($this->isReusableInAlbum($existing)) {
                         $addedToAlbum = $this->attachToAlbum($existing, $album, $user->id);
                     } else {
@@ -64,9 +72,9 @@ class UploadController extends Controller
             }
 
             return response()->json([
-                'exists'     => true,
+                'exists' => true,
                 'media_uuid' => $existing->uuid,
-                'filename'   => $existing->original_filename,
+                'filename' => $existing->original_filename,
                 'added_to_album' => $addedToAlbum,
             ]);
         }
@@ -81,22 +89,22 @@ class UploadController extends Controller
     public function initiate(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'filename'        => 'required|string|max:512',
-            'mime_type'       => 'required|string|max:100',
-            'total_size'      => 'required|integer|min:1',
-            'total_chunks'    => 'required|integer|min:1',
-            'sha256'          => 'nullable|string|size:64',
+            'filename' => 'required|string|max:512',
+            'mime_type' => 'required|string|max:100',
+            'total_size' => 'required|integer|min:1',
+            'total_chunks' => 'required|integer|min:1',
+            'sha256' => 'nullable|string|size:64',
             'target_album_id' => 'nullable|integer|exists:albums,id',
             // The browser knows when the file was last written; we never will. Optional,
             // because an older client or a share-target upload may not send it.
             'client_modified_at' => 'nullable|date',
         ]);
 
-        $user  = $request->user();
+        $user = $request->user();
         $space = $user->gallerySpaces()->firstOrFail();
 
         // Refuse before a single chunk is accepted, rather than half way through.
-        $entitlements = app(\App\Services\Billing\EntitlementService::class);
+        $entitlements = app(EntitlementService::class);
         if (! $entitlements->canStore($space, (int) $validated['total_size'])) {
             $usage = $entitlements->storageUsage($space);
             abort(402, sprintf(
@@ -105,7 +113,7 @@ class UploadController extends Controller
             ));
         }
 
-        if (!empty($validated['target_album_id'])) {
+        if (! empty($validated['target_album_id'])) {
             $album = Album::whereKey($validated['target_album_id'])
                 ->where('gallery_space_id', $space->id)
                 ->whereNull('deleted_at')
@@ -115,24 +123,24 @@ class UploadController extends Controller
         }
 
         $session = UploadSession::create([
-            'user_id'          => $user->id,
+            'user_id' => $user->id,
             'gallery_space_id' => $space->id,
-            'target_album_id'  => $validated['target_album_id'] ?? null,
+            'target_album_id' => $validated['target_album_id'] ?? null,
             'original_filename' => $validated['filename'],
-            'mime_type'        => $validated['mime_type'],
-            'total_size'       => $validated['total_size'],
-            'total_chunks'     => $validated['total_chunks'],
-            'sha256'           => $validated['sha256'] ?? null,
+            'mime_type' => $validated['mime_type'],
+            'total_size' => $validated['total_size'],
+            'total_chunks' => $validated['total_chunks'],
+            'sha256' => $validated['sha256'] ?? null,
             'client_modified_at' => $validated['client_modified_at'] ?? null,
-            'status'           => 'pending',
-            'expires_at'       => now()->addDays(7),
+            'status' => 'pending',
+            'expires_at' => now()->addDays(7),
         ]);
 
         return response()->json([
-            'uuid'            => $session->uuid,
-            'total_chunks'    => $session->total_chunks,
+            'uuid' => $session->uuid,
+            'total_chunks' => $session->total_chunks,
             'received_chunks' => 0,
-            'status'          => 'pending',
+            'status' => 'pending',
         ], 201);
     }
 
@@ -151,7 +159,7 @@ class UploadController extends Controller
             return response()->json(['error' => 'Invalid chunk index'], 422);
         }
 
-        if (!$request->hasFile('chunk')) {
+        if (! $request->hasFile('chunk')) {
             return response()->json([
                 'error' => 'Blok souboru se nepodařilo přijmout.',
                 'detail' => 'Blok překročil limit serveru nebo se přenos přerušil. Nahrávání používá bezpečné 1MiB bloky; zkuste soubor nahrát znovu.',
@@ -159,29 +167,30 @@ class UploadController extends Controller
         }
 
         $file = $request->file('chunk');
-        if (!$file || !$file->isValid()) {
+        if (! $file || ! $file->isValid()) {
             return response()->json([
                 'error' => 'Blok souboru se nepodařilo přijmout.',
                 'detail' => 'Zkontrolujte limit upload_max_filesize/post_max_size na serveru a zkuste nahrání znovu.',
             ], 422);
         }
-        $chunkDir = self::CHUNK_DIR . '/' . $session->uuid;
-        $path     = $file->storeAs($chunkDir, "chunk_{$index}", self::CHUNK_DISK);
+        $chunkDir = self::CHUNK_DIR.'/'.$session->uuid;
+        $path = $file->storeAs($chunkDir, "chunk_{$index}", self::CHUNK_DISK);
 
         // Checksum validation if provided
         $checksum = $request->input('checksum');
         if ($checksum && md5_file(Storage::disk(self::CHUNK_DISK)->path($path)) !== $checksum) {
             Storage::disk(self::CHUNK_DISK)->delete($path);
+
             return response()->json(['error' => 'Chunk checksum mismatch'], 422);
         }
 
         UploadChunk::updateOrCreate(
             ['upload_session_id' => $session->id, 'chunk_index' => $index],
             [
-                'path'        => $path,
-                'size_bytes'  => $file->getSize(),
-                'checksum'    => $checksum,
-                'status'      => 'received',
+                'path' => $path,
+                'size_bytes' => $file->getSize(),
+                'checksum' => $checksum,
+                'status' => 'received',
                 'received_at' => now(),
             ]
         );
@@ -189,14 +198,14 @@ class UploadController extends Controller
         $receivedCount = $session->chunks()->count();
         $session->update([
             'received_chunks' => $receivedCount,
-            'uploaded_bytes'  => $session->chunks()->sum('size_bytes'),
+            'uploaded_bytes' => $session->chunks()->sum('size_bytes'),
         ]);
 
         return response()->json([
-            'chunk_index'     => $index,
+            'chunk_index' => $index,
             'received_chunks' => $receivedCount,
-            'total_chunks'    => $session->total_chunks,
-            'complete'        => $receivedCount >= $session->total_chunks,
+            'total_chunks' => $session->total_chunks,
+            'complete' => $receivedCount >= $session->total_chunks,
         ]);
     }
 
@@ -214,15 +223,15 @@ class UploadController extends Controller
         $receivedIndexes = $session->chunks()->pluck('chunk_index')->toArray();
 
         return response()->json([
-            'uuid'             => $session->uuid,
-            'status'           => $session->status,
-            'total_chunks'     => $session->total_chunks,
-            'received_chunks'  => $session->received_chunks,
-            'uploaded_bytes'   => $session->uploaded_bytes,
-            'total_size'       => $session->total_size,
+            'uuid' => $session->uuid,
+            'status' => $session->status,
+            'total_chunks' => $session->total_chunks,
+            'received_chunks' => $session->received_chunks,
+            'uploaded_bytes' => $session->uploaded_bytes,
+            'total_size' => $session->total_size,
             'received_indexes' => $receivedIndexes,
-            'media_id'         => $session->resulting_media_id,
-            'expires_at'       => $session->expires_at,
+            'media_id' => $session->resulting_media_id,
+            'expires_at' => $session->expires_at,
         ]);
     }
 
@@ -237,11 +246,11 @@ class UploadController extends Controller
             ->where('status', 'pending')
             ->firstOrFail();
 
-        if (!$session->isComplete()) {
+        if (! $session->isComplete()) {
             return response()->json([
-                'error'           => 'Upload not complete',
+                'error' => 'Upload not complete',
                 'received_chunks' => $session->received_chunks,
-                'total_chunks'    => $session->total_chunks,
+                'total_chunks' => $session->total_chunks,
             ], 422);
         }
 
@@ -252,20 +261,22 @@ class UploadController extends Controller
         try {
             $session->update(['status' => 'assembling']);
 
-            $chunks   = $session->chunks()->orderBy('chunk_index')->get();
-            $destDir  = storage_path("app/uploads/{$session->uuid}");
+            $chunks = $session->chunks()->orderBy('chunk_index')->get();
+            $destDir = storage_path("app/uploads/{$session->uuid}");
             @mkdir($destDir, 0755, true);
             // Název od uživatele patří do metadat, nikdy ale nesmí určovat
             // cestu na disku (ochrana před ../ i neplatnými znaky Windows).
             $sourceExtension = preg_replace('/[^a-zA-Z0-9]/', '', strtolower(pathinfo($session->original_filename, PATHINFO_EXTENSION)));
-            $destPath = $destDir . '/source' . ($sourceExtension ? ".{$sourceExtension}" : '');
+            $destPath = $destDir.'/source'.($sourceExtension ? ".{$sourceExtension}" : '');
 
             $destHandle = fopen($destPath, 'wb');
-            if (!$destHandle) throw new \RuntimeException("Cannot open output file: {$destPath}");
+            if (! $destHandle) {
+                throw new \RuntimeException("Cannot open output file: {$destPath}");
+            }
 
             foreach ($chunks as $chunk) {
                 $chunkPath = Storage::disk('local')->path($chunk->path);
-                if (!file_exists($chunkPath)) {
+                if (! file_exists($chunkPath)) {
                     throw new \RuntimeException("Missing chunk #{$chunk->chunk_index}");
                 }
                 $src = fopen($chunkPath, 'rb');
@@ -279,12 +290,12 @@ class UploadController extends Controller
                 throw new \RuntimeException("Size mismatch: expected {$session->total_size}, got {$assembledSize}");
             }
 
-            $ext         = strtolower(pathinfo($session->original_filename, PATHINFO_EXTENSION));
-            $formatSvc   = new \App\Services\Media\MediaFormatService();
-            $isRaw       = \App\Services\Media\MediaFormatService::isRaw($ext);
-            $isVideo     = \App\Services\Media\MediaFormatService::isVideo($ext);
-            $mediaType   = ($isVideo || str_starts_with($session->mime_type, 'video/')) ? 'video' : 'photo';
-            $filenameMetadata = (new \App\Services\Media\FilenameMetadataService())
+            $ext = strtolower(pathinfo($session->original_filename, PATHINFO_EXTENSION));
+            $formatSvc = new MediaFormatService;
+            $isRaw = MediaFormatService::isRaw($ext);
+            $isVideo = MediaFormatService::isVideo($ext);
+            $mediaType = ($isVideo || str_starts_with($session->mime_type, 'video/')) ? 'video' : 'photo';
+            $filenameMetadata = (new FilenameMetadataService)
                 ->infer($session->original_filename, $mediaType);
 
             // The archive is ordered by when a picture was taken, so a photograph with no
@@ -303,62 +314,62 @@ class UploadController extends Controller
             }
 
             $media = MediaItem::create([
-                'gallery_space_id'    => $session->gallery_space_id,
-                'owner_user_id'       => $session->user_id,
-                'uploaded_by'         => $session->user_id,
-                'primary_album_id'    => $session->target_album_id,
-                'drive_file_id'       => null,
+                'gallery_space_id' => $session->gallery_space_id,
+                'owner_user_id' => $session->user_id,
+                'uploaded_by' => $session->user_id,
+                'primary_album_id' => $session->target_album_id,
+                'drive_file_id' => null,
                 'drive_parent_folder_id' => null,
-                'original_filename'   => $session->original_filename,
-                'safe_filename'       => preg_replace('/[^a-zA-Z0-9._-]/', '_', $session->original_filename),
-                'extension'           => $ext,
-                'mime_type'           => $session->mime_type ?: ($isRaw ? \App\Services\Media\MediaFormatService::rawMime($ext) : 'application/octet-stream'),
-                'media_type'          => $mediaType,
-                'is_raw'              => $isRaw,
-                'raw_format'          => $isRaw ? $ext : null,
-                'size_bytes'          => $assembledSize,
-                'sha256'              => $session->sha256,
-                'status'              => 'ready',
-                'storage_status'      => 'local_only',
-                'uploaded_at'         => now(),
-                'last_verified_at'    => now(),
+                'original_filename' => $session->original_filename,
+                'safe_filename' => preg_replace('/[^a-zA-Z0-9._-]/', '_', $session->original_filename),
+                'extension' => $ext,
+                'mime_type' => $session->mime_type ?: ($isRaw ? MediaFormatService::rawMime($ext) : 'application/octet-stream'),
+                'media_type' => $mediaType,
+                'is_raw' => $isRaw,
+                'raw_format' => $isRaw ? $ext : null,
+                'size_bytes' => $assembledSize,
+                'sha256' => $session->sha256,
+                'status' => 'ready',
+                'storage_status' => 'local_only',
+                'uploaded_at' => now(),
+                'last_verified_at' => now(),
                 ...$filenameMetadata,
             ]);
 
             // Store original file under public storage so it can be served
-            $relPath = "media/{$media->uuid}/original." . $media->extension;
+            $relPath = "media/{$media->uuid}/original.".$media->extension;
             $stored = Storage::disk('public')->put(
                 $relPath,
                 fopen($destPath, 'rb'),
                 'public'
             );
-            if (!$stored) {
+            if (! $stored) {
                 throw new \RuntimeException("Failed to store file to public disk: {$relPath}");
             }
 
             // Register original variant
             $media->variants()->create([
-                'type'       => 'original',
-                'disk'       => 'public',
-                'path'       => $relPath,
-                'mime_type'  => $media->mime_type,
+                'type' => 'original',
+                'disk' => 'public',
+                'path' => $relPath,
+                'mime_type' => $media->mime_type,
                 'size_bytes' => $assembledSize,
-                'width'      => null,
-                'height'     => null,
+                'width' => null,
+                'height' => null,
             ]);
 
             // A copy to the space's own cloud, if it has one. Queued after the commit
             // rather than inside the transaction: a worker picking the job up first would
             // look for a media row that does not exist yet.
             $mediaId = $media->id;
-            \Illuminate\Support\Facades\DB::afterCommit(function () use ($mediaId) {
+            DB::afterCommit(function () use ($mediaId) {
                 // Wrapped like every other dispatch in this method, and for a sharper
                 // reason. This one sat inside the try whose catch deletes the media row
                 // and wipes its directory — so a failure in the *backup copy* destroyed
                 // the *original*. On a sync queue the job runs right here, in the
                 // request, which turns any cloud hiccup into a lost photograph.
                 try {
-                    \App\Jobs\MirrorMediaToCloud::dispatch($mediaId);
+                    MirrorMediaToCloud::dispatch($mediaId);
                 } catch (\Throwable $mirrorException) {
                     Log::warning('Kopii do cloudu se nepodařilo zařadit', [
                         'media_id' => $mediaId,
@@ -381,21 +392,27 @@ class UploadController extends Controller
                 $this->generateThumbnail($media, $thumbSource);
             } else {
                 try {
-                    $videoService = new \App\Services\Media\VideoProcessingService();
+                    $videoService = new VideoProcessingService;
                     $videoMetadata = $videoService->extractMetadata($destPath);
-                    if ($videoMetadata) $media->update($videoMetadata);
+                    if ($videoMetadata) {
+                        $media->update($videoMetadata);
+                    }
                     $poster = $videoService->generatePoster($media, $destPath);
-                    if (!$poster) $videoService->generateFallbackPoster($media);
+                    if (! $poster) {
+                        $videoService->generateFallbackPoster($media);
+                    }
                 } catch (\Throwable $videoException) {
                     Log::warning('Immediate video preview failed; creating fallback', ['media_id' => $media->id, 'error' => $videoException->getMessage()]);
                     try {
-                        (new \App\Services\Media\VideoProcessingService())->generateFallbackPoster($media);
+                        (new VideoProcessingService)->generateFallbackPoster($media);
                     } catch (\Throwable $fallbackException) {
                         Log::error('Video fallback preview failed', ['media_id' => $media->id, 'error' => $fallbackException->getMessage()]);
                     }
                 }
             }
-            if ($previewPath) @unlink($previewPath);
+            if ($previewPath) {
+                @unlink($previewPath);
+            }
 
             // Extract basic EXIF data synchronously (GPS + date + dimensions + panorama/live photo)
             if ($media->media_type === 'photo') {
@@ -403,10 +420,10 @@ class UploadController extends Controller
             }
 
             $session->update([
-                'status'             => 'completed',
-                'completed_at'       => now(),
+                'status' => 'completed',
+                'completed_at' => now(),
                 'resulting_media_id' => $media->id,
-                'assembled_path'     => $destPath,
+                'assembled_path' => $destPath,
             ]);
 
             // Drive receives large originals in resumable chunks after the
@@ -428,7 +445,7 @@ class UploadController extends Controller
                     'media_id' => $media->id,
                     'error' => $processingException->getMessage(),
                 ]);
-                $media->update(['processing_error' => 'Doplňkové zpracování bude možné spustit znovu: ' . $processingException->getMessage()]);
+                $media->update(['processing_error' => 'Doplňkové zpracování bude možné spustit znovu: '.$processingException->getMessage()]);
             }
 
             // Cleanup chunk files
@@ -438,13 +455,13 @@ class UploadController extends Controller
 
             // Notify other space members about new upload
             try {
-                $space = \App\Models\GallerySpace::find($session->gallery_space_id);
+                $space = GallerySpace::find($session->gallery_space_id);
                 if ($space) {
-                    \App\Notifications\GalleryNotification::notifySpace(
+                    GalleryNotification::notifySpace(
                         $space,
                         $session->user_id,
                         'media.added',
-                        request()->user()?->name . ' přidal/a nové médium: ' . $session->original_filename,
+                        request()->user()?->name.' přidal/a nové médium: '.$session->original_filename,
                         "/media/{$media->uuid}",
                         ['media_uuid' => $media->uuid],
                     );
@@ -453,8 +470,8 @@ class UploadController extends Controller
             }
 
             return response()->json([
-                'uuid'     => $session->uuid,
-                'status'   => 'completed',
+                'uuid' => $session->uuid,
+                'status' => 'completed',
                 'media_id' => $media->id,
                 'media_uuid' => $media->uuid,
                 // Told plainly, so the browser only bothers drawing a thumbnail for the
@@ -475,7 +492,8 @@ class UploadController extends Controller
             }
             $session->update(['status' => 'failed']);
             Log::error('Upload assembly failed', ['uuid' => $uuid, 'error' => $e->getMessage()]);
-            return response()->json(['error' => 'Assembly failed: ' . $e->getMessage()], 500);
+
+            return response()->json(['error' => 'Assembly failed: '.$e->getMessage()], 500);
         }
     }
 
@@ -486,7 +504,7 @@ class UploadController extends Controller
     private function generateThumbnail(MediaItem $media, string $sourcePath): void
     {
         $thumbRel = "media/{$media->uuid}/thumbnail.jpg";
-        $size     = 400;
+        $size = 400;
 
         // --- Try Imagick ---
         if (extension_loaded('imagick')) {
@@ -499,12 +517,12 @@ class UploadController extends Controller
                 $w = $im->getImageWidth();
                 $h = $im->getImageHeight();
                 $min = min($w, $h);
-                $im->cropImage($min, $min, (int)(($w - $min) / 2), (int)(($h - $min) / 2));
+                $im->cropImage($min, $min, (int) (($w - $min) / 2), (int) (($h - $min) / 2));
                 $im->thumbnailImage($size, $size);
                 $im->setImageFormat('jpeg');
                 $im->setImageCompressionQuality(85);
 
-                $tmpPath = tempnam(sys_get_temp_dir(), 'gallery_thumb_') . '.jpg';
+                $tmpPath = tempnam(sys_get_temp_dir(), 'gallery_thumb_').'.jpg';
                 $im->writeImage($tmpPath);
                 $im->destroy();
 
@@ -513,14 +531,15 @@ class UploadController extends Controller
 
                 if ($stored) {
                     $media->variants()->create([
-                        'type'       => 'thumbnail',
-                        'disk'       => 'public',
-                        'path'       => $thumbRel,
-                        'mime_type'  => 'image/jpeg',
+                        'type' => 'thumbnail',
+                        'disk' => 'public',
+                        'path' => $thumbRel,
+                        'mime_type' => 'image/jpeg',
                         'size_bytes' => Storage::disk('public')->size($thumbRel),
-                        'width'      => $size,
-                        'height'     => $size,
+                        'width' => $size,
+                        'height' => $size,
                     ]);
+
                     return;
                 }
             } catch (\Throwable $e) {
@@ -534,15 +553,15 @@ class UploadController extends Controller
                 $ext = strtolower($media->extension);
                 $src = match ($ext) {
                     'jpg', 'jpeg' => @imagecreatefromjpeg($sourcePath),
-                    'png'         => @imagecreatefrompng($sourcePath),
-                    'webp'        => @imagecreatefromwebp($sourcePath),
-                    'gif'         => @imagecreatefromgif($sourcePath),
-                    default       => null,
+                    'png' => @imagecreatefrompng($sourcePath),
+                    'webp' => @imagecreatefromwebp($sourcePath),
+                    'gif' => @imagecreatefromgif($sourcePath),
+                    default => null,
                 };
 
                 if ($src) {
                     if (function_exists('exif_read_data') && in_array($ext, ['jpg', 'jpeg'])) {
-                        $exif        = @exif_read_data($sourcePath);
+                        $exif = @exif_read_data($sourcePath);
                         $orientation = $exif['Orientation'] ?? 1;
                         if ($orientation === 6) {
                             $src = imagerotate($src, -90, 0);
@@ -555,15 +574,15 @@ class UploadController extends Controller
 
                     $origW = imagesx($src);
                     $origH = imagesy($src);
-                    $min   = min($origW, $origH);
-                    $cropX = (int)(($origW - $min) / 2);
-                    $cropY = (int)(($origH - $min) / 2);
+                    $min = min($origW, $origH);
+                    $cropX = (int) (($origW - $min) / 2);
+                    $cropY = (int) (($origH - $min) / 2);
 
                     $thumb = imagecreatetruecolor($size, $size);
                     imagecopyresampled($thumb, $src, 0, 0, $cropX, $cropY, $size, $size, $min, $min);
                     imagedestroy($src);
 
-                    $tmpPath = tempnam(sys_get_temp_dir(), 'gallery_thumb_') . '.jpg';
+                    $tmpPath = tempnam(sys_get_temp_dir(), 'gallery_thumb_').'.jpg';
                     imagejpeg($thumb, $tmpPath, 85);
                     imagedestroy($thumb);
 
@@ -572,14 +591,15 @@ class UploadController extends Controller
 
                     if ($stored) {
                         $media->variants()->create([
-                            'type'       => 'thumbnail',
-                            'disk'       => 'public',
-                            'path'       => $thumbRel,
-                            'mime_type'  => 'image/jpeg',
+                            'type' => 'thumbnail',
+                            'disk' => 'public',
+                            'path' => $thumbRel,
+                            'mime_type' => 'image/jpeg',
                             'size_bytes' => Storage::disk('public')->size($thumbRel),
-                            'width'      => $size,
-                            'height'     => $size,
+                            'width' => $size,
+                            'height' => $size,
                         ]);
+
                         return;
                     }
                 }
@@ -615,13 +635,13 @@ class UploadController extends Controller
         $originalVar = $media->variants()->where('type', 'original')->first();
         if ($originalVar) {
             $media->variants()->create([
-                'type'       => 'thumbnail',
-                'disk'       => $originalVar->disk,
-                'path'       => $originalVar->path,
-                'mime_type'  => $originalVar->mime_type,
+                'type' => 'thumbnail',
+                'disk' => $originalVar->disk,
+                'path' => $originalVar->path,
+                'mime_type' => $originalVar->mime_type,
                 'size_bytes' => $originalVar->size_bytes,
-                'width'      => null,
-                'height'     => null,
+                'width' => null,
+                'height' => null,
             ]);
             Log::info('Thumbnail aliased to original (no GD/Imagick)', ['media_id' => $media->id]);
         }
@@ -634,17 +654,17 @@ class UploadController extends Controller
     private function extractBasicExif(
         MediaItem $media,
         string $sourcePath,
-        ?\App\Services\Media\MediaFormatService $formatSvc = null
+        ?MediaFormatService $formatSvc = null
     ): void {
-        $formatSvc ??= new \App\Services\Media\MediaFormatService();
+        $formatSvc ??= new MediaFormatService;
 
         try {
-            $exifSvc  = new \App\Services\ExifExtractorService();
-            $data     = $exifSvc->extract($sourcePath);
-            $rawExif  = $exifSvc->getRawExif($sourcePath);   // get the full raw EXIF for extended detection
+            $exifSvc = new ExifExtractorService;
+            $data = $exifSvc->extract($sourcePath);
+            $rawExif = $exifSvc->getRawExif($sourcePath);   // get the full raw EXIF for extended detection
 
             if ($data) {
-                $media->update(array_filter($data, fn($v) => $v !== null));
+                $media->update(array_filter($data, fn ($v) => $v !== null));
             }
 
             // Panorama / 360° detection
@@ -655,8 +675,8 @@ class UploadController extends Controller
             );
             if ($panData['is_panorama'] || $panData['is_360']) {
                 $media->update([
-                    'is_panorama'         => $panData['is_panorama'],
-                    'is_360'              => $panData['is_360'],
+                    'is_panorama' => $panData['is_panorama'],
+                    'is_360' => $panData['is_360'],
                     'panorama_projection' => $panData['panorama_projection'],
                 ]);
             }
@@ -666,7 +686,7 @@ class UploadController extends Controller
             if ($liveData['is_motion_photo']) {
                 $media->update([
                     'live_photo_content_id' => $liveData['content_id'],
-                    'live_photo_role'       => $liveData['role'],
+                    'live_photo_role' => $liveData['role'],
                 ]);
 
                 // Try to link with already-uploaded pair
@@ -695,7 +715,7 @@ class UploadController extends Controller
             ->firstOrFail();
 
         // Clean up chunks
-        Storage::disk(self::CHUNK_DISK)->deleteDirectory(self::CHUNK_DIR . '/' . $session->uuid);
+        Storage::disk(self::CHUNK_DISK)->deleteDirectory(self::CHUNK_DIR.'/'.$session->uuid);
         $session->delete();
 
         return response()->json(['status' => 'cancelled']);
@@ -718,7 +738,7 @@ class UploadController extends Controller
                 ->where('media_item_id', $media->id)
                 ->exists();
 
-            if (!$alreadyAttached) {
+            if (! $alreadyAttached) {
                 $sortOrder = (int) (DB::table('album_media')->where('album_id', $album->id)->max('sort_order') ?? -1) + 1;
                 DB::table('album_media')->insert([
                     'album_id' => $album->id, 'media_item_id' => $media->id,
@@ -732,20 +752,22 @@ class UploadController extends Controller
                 'total_size_bytes' => MediaItem::where('primary_album_id', $album->id)->sum('size_bytes'),
             ]);
 
-            return !$alreadyAttached;
+            return ! $alreadyAttached;
         });
     }
 
     private function isReusableInAlbum(MediaItem $media): bool
     {
         return in_array($media->status, ['ready', 'received'], true)
-            && !$media->is_hidden
-            && !$media->trashed_at;
+            && ! $media->is_hidden
+            && ! $media->trashed_at;
     }
 
     private function isVisibleInAlbum(MediaItem $media, Album $album): bool
     {
-        if (!$this->isReusableInAlbum($media)) return false;
+        if (! $this->isReusableInAlbum($media)) {
+            return false;
+        }
 
         return $media->primary_album_id === $album->id
             || DB::table('album_media')

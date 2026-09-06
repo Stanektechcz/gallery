@@ -6,6 +6,7 @@ use App\Models\CalendarEvent;
 use App\Models\CoupleDateIdea;
 use App\Models\User;
 use Carbon\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
@@ -24,7 +25,9 @@ class DateIdeaTripSyncService
             ->where('gallery_space_id', $event->gallery_space_id)
             ->where(function ($query) use ($event, $metadata) {
                 $query->where('calendar_event_id', $event->id);
-                if (! empty($metadata['date_idea_uuid'])) $query->orWhere('uuid', $metadata['date_idea_uuid']);
+                if (! empty($metadata['date_idea_uuid'])) {
+                    $query->orWhere('uuid', $metadata['date_idea_uuid']);
+                }
             })->first();
 
         return $idea ? $this->sync($idea, $event, $tripId, $actor) : null;
@@ -65,7 +68,9 @@ class DateIdeaTripSyncService
                 $minutes = max(10, min(720, (int) ($block['minutes'] ?? 60)));
                 $startsAt = $dayCursors[$day->id];
                 $endsAt = $startsAt->copy()->addMinutes($minutes);
-                if (! $endsAt->isSameDay($startsAt)) $endsAt = $startsAt->copy()->endOfDay();
+                if (! $endsAt->isSameDay($startsAt)) {
+                    $endsAt = $startsAt->copy()->endOfDay();
+                }
                 $automationKey = $this->key($idea, 'activity', ($block['key'] ?? 'block').':'.$index);
 
                 $existingActivity = DB::table('trip_activities as activity')
@@ -109,7 +114,9 @@ class DateIdeaTripSyncService
             if ($transportCost > 0 && $this->insertTransportExpense($trip, $event, $idea, $actor, $transportCost)) {
                 $created['expenses']++;
             }
-            if ($this->insertRoute($trip, $event, $idea, $actor)) $created['routes']++;
+            if ($this->insertRoute($trip, $event, $idea, $actor)) {
+                $created['routes']++;
+            }
             $created['packing_items'] = $this->insertPacking($trip, $idea, $actor);
 
             if ($trip->budget === null) {
@@ -145,10 +152,12 @@ class DateIdeaTripSyncService
         return $this->storeResult($idea, $result);
     }
 
-    private function ensureDays(object $trip): \Illuminate\Support\Collection
+    private function ensureDays(object $trip): Collection
     {
         $days = DB::table('trip_days')->where('trip_id', $trip->id)->orderBy('sort_order')->get();
-        if ($days->isNotEmpty()) return $days;
+        if ($days->isNotEmpty()) {
+            return $days;
+        }
 
         $start = Carbon::parse($trip->start_date);
         $end = Carbon::parse($trip->end_date);
@@ -158,13 +167,16 @@ class DateIdeaTripSyncService
                 'sort_order' => $order, 'created_at' => now(), 'updated_at' => now(),
             ]);
         }
+
         return DB::table('trip_days')->where('trip_id', $trip->id)->orderBy('sort_order')->get();
     }
 
     private function insertExpense(object $trip, CalendarEvent $event, CoupleDateIdea $idea, User $actor, array $block, int $index, Carbon $at, float $cost): bool
     {
         $key = $this->key($idea, 'expense', ($block['key'] ?? 'block').':'.$index);
-        if (DB::table('trip_expenses')->where('trip_id', $trip->id)->where('automation_source', self::SOURCE)->where('automation_key', $key)->exists()) return false;
+        if (DB::table('trip_expenses')->where('trip_id', $trip->id)->where('automation_source', self::SOURCE)->where('automation_key', $key)->exists()) {
+            return false;
+        }
 
         $category = $this->expenseCategory($block);
         DB::table('trip_expenses')->insert([
@@ -174,13 +186,16 @@ class DateIdeaTripSyncService
             'automation_source' => self::SOURCE, 'automation_key' => $key,
             'created_at' => now(), 'updated_at' => now(),
         ]);
+
         return true;
     }
 
     private function insertTransportExpense(object $trip, CalendarEvent $event, CoupleDateIdea $idea, User $actor, float $cost): bool
     {
         $key = $this->key($idea, 'expense', 'transport');
-        if (DB::table('trip_expenses')->where('trip_id', $trip->id)->where('automation_source', self::SOURCE)->where('automation_key', $key)->exists()) return false;
+        if (DB::table('trip_expenses')->where('trip_id', $trip->id)->where('automation_source', self::SOURCE)->where('automation_key', $key)->exists()) {
+            return false;
+        }
         DB::table('trip_expenses')->insert([
             'trip_id' => $trip->id, 'event_id' => $event->id, 'created_by' => $actor->id,
             'title' => 'Odhad dopravy · '.$this->transportLabel($idea->transport_mode), 'category' => 'transport',
@@ -188,13 +203,16 @@ class DateIdeaTripSyncService
             'automation_source' => self::SOURCE, 'automation_key' => $key,
             'created_at' => now(), 'updated_at' => now(),
         ]);
+
         return true;
     }
 
     private function insertRoute(object $trip, CalendarEvent $event, CoupleDateIdea $idea, User $actor): bool
     {
         $key = $this->key($idea, 'route', 'primary');
-        if (DB::table('trip_route_variants')->where('trip_id', $trip->id)->where('automation_source', self::SOURCE)->where('automation_key', $key)->exists()) return false;
+        if (DB::table('trip_route_variants')->where('trip_id', $trip->id)->where('automation_source', self::SOURCE)->where('automation_key', $key)->exists()) {
+            return false;
+        }
         $hasSelected = DB::table('trip_route_variants')->where('trip_id', $trip->id)->where('is_selected', true)->exists();
         $destination = $idea->destination ?? [];
         $travelMinutes = (int) data_get($idea->plan, 'route.estimated_travel_minutes', 0);
@@ -216,18 +234,23 @@ class DateIdeaTripSyncService
             'automation_source' => self::SOURCE, 'automation_key' => $key,
             'created_at' => now(), 'updated_at' => now(),
         ]);
+
         return true;
     }
 
     private function insertWaypoint(object $trip, CoupleDateIdea $idea, array $block, object $day, int $index): bool
     {
         $key = $this->key($idea, 'waypoint', ($block['key'] ?? 'place').':'.$index);
-        if (DB::table('trip_waypoints')->where('trip_id', $trip->id)->where('automation_source', self::SOURCE)->where('automation_key', $key)->exists()) return false;
+        if (DB::table('trip_waypoints')->where('trip_id', $trip->id)->where('automation_source', self::SOURCE)->where('automation_key', $key)->exists()) {
+            return false;
+        }
 
         $duplicate = DB::table('trip_waypoints')->where('trip_id', $trip->id)->where('place_name', $block['title'])
             ->when(isset($block['latitude']), fn ($query) => $query->where('latitude', $block['latitude']))
             ->when(isset($block['longitude']), fn ($query) => $query->where('longitude', $block['longitude']))->exists();
-        if ($duplicate) return false;
+        if ($duplicate) {
+            return false;
+        }
 
         DB::table('trip_waypoints')->insert([
             'trip_id' => $trip->id, 'place_name' => $block['title'],
@@ -238,6 +261,7 @@ class DateIdeaTripSyncService
             'automation_source' => self::SOURCE, 'automation_key' => $key,
             'created_at' => now(), 'updated_at' => now(),
         ]);
+
         return true;
     }
 
@@ -245,17 +269,31 @@ class DateIdeaTripSyncService
     {
         $blockKeys = collect($idea->plan['blocks'] ?? [])->pluck('key')->filter()->all();
         $items = [];
-        if (in_array($idea->travel_scope, ['day_trip', 'weekend'], true)) $items['water'] = ['Láhev s vodou', 'food', true];
-        if (in_array($idea->transport_mode, ['transit', 'train'], true)) $items['tickets'] = ['Jízdenky a potvrzení rezervací', 'documents', true];
-        if (collect($blockKeys)->intersect(['photo_mission', 'memory_pick'])->isNotEmpty()) $items['camera'] = ['Nabitý telefon nebo fotoaparát', 'electronics', true];
-        if (collect($blockKeys)->intersect(['picnic_story', 'indoor_picnic'])->isNotEmpty()) $items['picnic'] = ['Deka a připravené občerstvení', 'food', true];
-        if ((bool) data_get($idea->plan, 'weather.rain_expected', false)) $items['rain'] = ['Deštník nebo nepromokavá vrstva', 'clothing', true];
-        if ($idea->travel_scope === 'weekend') $items['overnight'] = ['Věci na přespání a nabíječky', 'clothing', true];
+        if (in_array($idea->travel_scope, ['day_trip', 'weekend'], true)) {
+            $items['water'] = ['Láhev s vodou', 'food', true];
+        }
+        if (in_array($idea->transport_mode, ['transit', 'train'], true)) {
+            $items['tickets'] = ['Jízdenky a potvrzení rezervací', 'documents', true];
+        }
+        if (collect($blockKeys)->intersect(['photo_mission', 'memory_pick'])->isNotEmpty()) {
+            $items['camera'] = ['Nabitý telefon nebo fotoaparát', 'electronics', true];
+        }
+        if (collect($blockKeys)->intersect(['picnic_story', 'indoor_picnic'])->isNotEmpty()) {
+            $items['picnic'] = ['Deka a připravené občerstvení', 'food', true];
+        }
+        if ((bool) data_get($idea->plan, 'weather.rain_expected', false)) {
+            $items['rain'] = ['Deštník nebo nepromokavá vrstva', 'clothing', true];
+        }
+        if ($idea->travel_scope === 'weekend') {
+            $items['overnight'] = ['Věci na přespání a nabíječky', 'clothing', true];
+        }
 
         $created = 0;
         foreach ($items as $slug => [$title, $category, $essential]) {
             $key = $this->key($idea, 'packing', $slug);
-            if (DB::table('trip_packing_items')->where('trip_id', $trip->id)->where('automation_source', self::SOURCE)->where('automation_key', $key)->exists()) continue;
+            if (DB::table('trip_packing_items')->where('trip_id', $trip->id)->where('automation_source', self::SOURCE)->where('automation_key', $key)->exists()) {
+                continue;
+            }
             DB::table('trip_packing_items')->insert([
                 'uuid' => (string) Str::uuid(), 'trip_id' => $trip->id, 'created_by' => $actor->id,
                 'title' => $title, 'category' => $category, 'quantity' => 1, 'is_essential' => $essential,
@@ -266,6 +304,7 @@ class DateIdeaTripSyncService
             ]);
             $created++;
         }
+
         return $created;
     }
 
@@ -275,14 +314,20 @@ class DateIdeaTripSyncService
         $plan = $idea->fresh()->plan ?? [];
         $plan['trip_sync'] = $result;
         $idea->update(['plan' => $plan, 'trip_id' => $result['trip_id']]);
+
         return $result;
     }
 
     private function expenseCategory(array $block): string
     {
         $key = Str::lower((string) ($block['key'] ?? '').' '.(string) ($block['title'] ?? ''));
-        if (Str::contains($key, ['food', 'taste', 'dessert', 'picnic', 'recept', 'ochut'])) return 'food';
-        if (Str::contains($key, ['culture', 'galer', 'muze', 'výstav'])) return 'tickets';
+        if (Str::contains($key, ['food', 'taste', 'dessert', 'picnic', 'recept', 'ochut'])) {
+            return 'food';
+        }
+        if (Str::contains($key, ['culture', 'galer', 'muze', 'výstav'])) {
+            return 'tickets';
+        }
+
         return 'activities';
     }
 
@@ -302,8 +347,11 @@ class DateIdeaTripSyncService
     private function schemaReady(): bool
     {
         foreach (['trip_activities', 'trip_expenses', 'trip_route_variants', 'trip_waypoints', 'trip_packing_items'] as $table) {
-            if (! Schema::hasTable($table) || ! Schema::hasColumn($table, 'automation_key')) return false;
+            if (! Schema::hasTable($table) || ! Schema::hasColumn($table, 'automation_key')) {
+                return false;
+            }
         }
+
         return Schema::hasTable('trip_days');
     }
 }

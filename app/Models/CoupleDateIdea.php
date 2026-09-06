@@ -32,8 +32,23 @@ class CoupleDateIdea extends Model
         static::creating(fn (self $idea) => $idea->uuid ??= (string) Str::uuid());
     }
 
-    public function space() { return $this->belongsTo(GallerySpace::class, 'gallery_space_id'); }
-    public function creator() { return $this->belongsTo(User::class, 'created_by'); }
-    public function event() { return $this->belongsTo(CalendarEvent::class, 'calendar_event_id'); }
-    public function reactions() { return $this->hasMany(CoupleDateIdeaReaction::class, 'date_idea_id'); }
+    public function space()
+    {
+        return $this->belongsTo(GallerySpace::class, 'gallery_space_id');
+    }
+
+    public function creator()
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function event()
+    {
+        return $this->belongsTo(CalendarEvent::class, 'calendar_event_id');
+    }
+
+    public function reactions()
+    {
+        return $this->hasMany(CoupleDateIdeaReaction::class, 'date_idea_id');
+    }
 }

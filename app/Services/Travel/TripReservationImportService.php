@@ -104,9 +104,11 @@ class TripReservationImportService
         $process->run();
         if (! $process->isSuccessful()) {
             $message = trim($process->getErrorOutput()) ?: 'Nástroj skončil bez čitelného výstupu.';
+
             return ['', 'manual', Str::limit($message, 400)];
         }
         $text = $this->cleanText($process->getOutput());
+
         return [$text, $text !== '' ? $method : 'manual', $text === '' ? 'V souboru nebyl rozpoznán žádný text.' : null];
     }
 
@@ -115,6 +117,7 @@ class TripReservationImportService
         $text = str_replace("\0", '', $text);
         $text = preg_replace('/[\t ]+/u', ' ', $text) ?? $text;
         $text = preg_replace('/\R{3,}/u', "\n\n", $text) ?? $text;
+
         return Str::limit(trim($text), 100000, '');
     }
 
@@ -124,14 +127,24 @@ class TripReservationImportService
             'booking.com' => 'Booking.com', 'regiojet' => 'RegioJet', 'flixbus' => 'FlixBus',
             'české dráhy' => 'České dráhy', 'cd.cz' => 'České dráhy', 'ryanair' => 'Ryanair',
             'wizz air' => 'Wizz Air', 'easyjet' => 'easyJet', 'airbnb' => 'Airbnb',
-        ] as $needle => $label) if (Str::contains($haystack, $needle)) return $label;
+        ] as $needle => $label) {
+            if (Str::contains($haystack, $needle)) {
+                return $label;
+            }
+        }
+
         return null;
     }
 
     /** @param array<int,string> $patterns */
     private function firstMatch(string $text, array $patterns): ?string
     {
-        foreach ($patterns as $pattern) if (preg_match($pattern, $text, $match)) return trim($match[1]);
+        foreach ($patterns as $pattern) {
+            if (preg_match($pattern, $text, $match)) {
+                return trim($match[1]);
+            }
+        }
+
         return null;
     }
 
@@ -142,14 +155,20 @@ class TripReservationImportService
         $dates = [];
         foreach ($matches as $match) {
             try {
-                if ($match[1] !== '') [$year, $month, $day, $hour, $minute] = [(int) $match[1], (int) $match[2], (int) $match[3], (int) ($match[4] ?: 12), (int) ($match[5] ?: 0)];
-                else [$year, $month, $day, $hour, $minute] = [(int) $match[8], (int) $match[7], (int) $match[6], (int) ($match[9] ?: 12), (int) ($match[10] ?: 0)];
+                if ($match[1] !== '') {
+                    [$year, $month, $day, $hour, $minute] = [(int) $match[1], (int) $match[2], (int) $match[3], (int) ($match[4] ?: 12), (int) ($match[5] ?: 0)];
+                } else {
+                    [$year, $month, $day, $hour, $minute] = [(int) $match[8], (int) $match[7], (int) $match[6], (int) ($match[9] ?: 12), (int) ($match[10] ?: 0)];
+                }
                 $date = Carbon::create($year, $month, $day, $hour, $minute, 0, $timezone);
-                if ($date && $date->year >= 2000 && $date->year <= 2100) $dates[] = $date->format('Y-m-d H:i:s');
+                if ($date && $date->year >= 2000 && $date->year <= 2100) {
+                    $dates[] = $date->format('Y-m-d H:i:s');
+                }
             } catch (Throwable) {
                 // Invalid calendar dates are ignored and remain editable by the user.
             }
         }
+
         return array_values(array_unique($dates));
     }
 
@@ -159,19 +178,26 @@ class TripReservationImportService
         $origin = $this->firstMatch($text, ['/(?:odjezd|departure|from|z)\s*[:\-]\s*([^\r\n]{2,100})/iu']);
         $destination = $this->firstMatch($text, ['/(?:příjezd|arrival|destination|to|do)\s*[:\-]\s*([^\r\n]{2,100})/iu']);
         if ((! $origin || ! $destination) && preg_match('/([^\r\n]{2,80})\s+(?:→|->|–>)\s+([^\r\n]{2,80})/u', $text, $route)) {
-            $origin ??= trim($route[1]); $destination ??= trim($route[2]);
+            $origin ??= trim($route[1]);
+            $destination ??= trim($route[2]);
         }
+
         return ['origin' => $origin, 'destination' => $destination];
     }
 
     /** @return array{?float,string} */
     private function amount(string $text, string $fallbackCurrency): array
     {
-        if (! preg_match('/(?:(CZK|EUR|USD|GBP|Kč|€|\$)\s*(\d{1,7}(?:[ .]\d{3})*(?:[,.]\d{1,2})?)|(\d{1,7}(?:[ .]\d{3})*(?:[,.]\d{1,2})?)\s*(CZK|EUR|USD|GBP|Kč|€|\$))/u', $text, $match)) return [null, $fallbackCurrency];
+        if (! preg_match('/(?:(CZK|EUR|USD|GBP|Kč|€|\$)\s*(\d{1,7}(?:[ .]\d{3})*(?:[,.]\d{1,2})?)|(\d{1,7}(?:[ .]\d{3})*(?:[,.]\d{1,2})?)\s*(CZK|EUR|USD|GBP|Kč|€|\$))/u', $text, $match)) {
+            return [null, $fallbackCurrency];
+        }
         $symbol = strtoupper((string) (($match[1] ?? '') ?: ($match[4] ?? '') ?: $fallbackCurrency));
-        $currency = match ($symbol) { 'KČ' => 'CZK', '€' => 'EUR', '$' => 'USD', default => $symbol };
+        $currency = match ($symbol) {
+            'KČ' => 'CZK', '€' => 'EUR', '$' => 'USD', default => $symbol
+        };
         $normalized = str_replace([' ', '.'], ['', ''], (string) (($match[2] ?? '') ?: ($match[3] ?? '')));
         $normalized = str_replace(',', '.', $normalized);
+
         return [round((float) $normalized, 2), in_array($currency, ['CZK', 'EUR', 'USD', 'GBP'], true) ? $currency : $fallbackCurrency];
     }
 }

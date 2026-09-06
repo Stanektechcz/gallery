@@ -7,8 +7,8 @@ use App\Models\Album;
 use App\Models\CalendarEvent;
 use App\Models\MediaItem;
 use App\Models\Place;
-use App\Services\Planning\PlaceVisitPlanningService;
 use App\Services\Planning\CalendarEventCreationService;
+use App\Services\Planning\PlaceVisitPlanningService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -33,7 +33,7 @@ class PlaceController extends Controller
             ->orderBy('name')
             ->get();
 
-        return response()->json($places->map(fn($p) => $this->withStats($p, $space->id)));
+        return response()->json($places->map(fn ($p) => $this->withStats($p, $space->id)));
     }
 
     /**
@@ -44,30 +44,30 @@ class PlaceController extends Controller
         $space = $request->user()->gallerySpaces()->first();
 
         $v = $request->validate([
-            'name'          => 'required|string|max:200',
-            'type'          => 'nullable|in:country,city,business,restaurant,museum,hotel,home,custom',
+            'name' => 'required|string|max:200',
+            'type' => 'nullable|in:country,city,business,restaurant,museum,hotel,home,custom',
             'lifecycle_status' => 'nullable|in:idea,planned,visited,favorite,avoid',
-            'country'       => 'nullable|string|max:100',
-            'country_code'  => 'nullable|string|max:3',
-            'city'          => 'nullable|string|max:100',
-            'address'       => 'nullable|string|max:255',
-            'latitude'      => 'nullable|numeric|between:-90,90',
-            'longitude'     => 'nullable|numeric|between:-180,180',
+            'country' => 'nullable|string|max:100',
+            'country_code' => 'nullable|string|max:3',
+            'city' => 'nullable|string|max:100',
+            'address' => 'nullable|string|max:255',
+            'latitude' => 'nullable|numeric|between:-90,90',
+            'longitude' => 'nullable|numeric|between:-180,180',
             'radius_meters' => 'nullable|integer|min:10|max:50000',
-            'description'   => 'nullable|string|max:5000',
-            'website_url'   => 'nullable|url|max:512',
-            'osm_id'        => 'nullable|string|max:50',
-            'osm_type'      => 'nullable|string|max:20',
+            'description' => 'nullable|string|max:5000',
+            'website_url' => 'nullable|url|max:512',
+            'osm_id' => 'nullable|string|max:50',
+            'osm_type' => 'nullable|string|max:20',
             'is_rain_friendly' => 'nullable|boolean', 'is_accessible' => 'nullable|boolean', 'is_photogenic' => 'nullable|boolean', 'opens_early' => 'nullable|boolean',
             'price_level' => 'nullable|integer|between:1,4', 'estimated_visit_minutes' => 'nullable|integer|between:5,1440', 'personal_rating' => 'nullable|integer|between:1,5', 'next_time_note' => 'nullable|string|max:5000',
         ]);
 
         $place = Place::create(array_merge($v, [
             'gallery_space_id' => $space->id,
-            'source'           => 'manual',
-            'created_by'       => $request->user()->id,
-            'radius_meters'    => $v['radius_meters'] ?? 500,
-            'type'             => $v['type'] ?? 'custom',
+            'source' => 'manual',
+            'created_by' => $request->user()->id,
+            'radius_meters' => $v['radius_meters'] ?? 500,
+            'type' => $v['type'] ?? 'custom',
             'lifecycle_status' => $v['lifecycle_status'] ?? 'idea',
         ]));
 
@@ -94,17 +94,17 @@ class PlaceController extends Controller
         $this->authorizePlace($place, $space->id);
 
         $v = $request->validate([
-            'name'          => 'nullable|string|max:200',
-            'type'          => 'nullable|in:country,city,business,restaurant,museum,hotel,home,custom',
+            'name' => 'nullable|string|max:200',
+            'type' => 'nullable|in:country,city,business,restaurant,museum,hotel,home,custom',
             'lifecycle_status' => 'nullable|in:idea,planned,visited,favorite,avoid',
-            'country'       => 'nullable|string|max:100',
-            'city'          => 'nullable|string|max:100',
-            'address'       => 'nullable|string|max:255',
-            'latitude'      => 'nullable|numeric|between:-90,90',
-            'longitude'     => 'nullable|numeric|between:-180,180',
+            'country' => 'nullable|string|max:100',
+            'city' => 'nullable|string|max:100',
+            'address' => 'nullable|string|max:255',
+            'latitude' => 'nullable|numeric|between:-90,90',
+            'longitude' => 'nullable|numeric|between:-180,180',
             'radius_meters' => 'nullable|integer|min:10|max:50000',
-            'description'   => 'nullable|string|max:5000',
-            'website_url'   => 'nullable|url|max:512',
+            'description' => 'nullable|string|max:5000',
+            'website_url' => 'nullable|url|max:512',
             'is_rain_friendly' => 'nullable|boolean', 'is_accessible' => 'nullable|boolean', 'is_photogenic' => 'nullable|boolean', 'opens_early' => 'nullable|boolean',
             'price_level' => 'nullable|integer|between:1,4', 'estimated_visit_minutes' => 'nullable|integer|between:5,1440', 'personal_rating' => 'nullable|integer|between:1,5', 'next_time_note' => 'nullable|string|max:5000',
         ]);
@@ -144,14 +144,14 @@ class PlaceController extends Controller
             ->orderByDesc('taken_at')
             ->limit(500)
             ->get()
-            ->map(fn($m) => [
-                'id'            => $m->id,
-                'uuid'          => $m->uuid,
-                'file_name'     => $m->file_name,
+            ->map(fn ($m) => [
+                'id' => $m->id,
+                'uuid' => $m->uuid,
+                'file_name' => $m->file_name,
                 'thumbnail_url' => $m->thumbnail_url,
-                'taken_at'      => $m->taken_at,
-                'latitude'      => $m->latitude,
-                'longitude'     => $m->longitude,
+                'taken_at' => $m->taken_at,
+                'latitude' => $m->latitude,
+                'longitude' => $m->longitude,
             ]);
 
         return response()->json($items);
@@ -167,16 +167,16 @@ class PlaceController extends Controller
         $this->authorizePlace($place, $space->id);
 
         $albums = Album::where('gallery_space_id', $space->id)
-            ->whereHas('places', fn($q) => $q->where('places.id', $place->id))
+            ->whereHas('places', fn ($q) => $q->where('places.id', $place->id))
             // Album má vztah `media`, ne `mediaItems` — to jméno nese DuplicateGroup,
             // SharedLink a GallerySpace. Volání neexistujícího vztahu shodilo celý
             // požadavek na 500 a stránka místa pak tvrdila, že místo neexistuje.
             ->withCount('media')
             ->get(['id', 'uuid', 'title', 'cover_path', 'created_at'])
-            ->map(fn($a) => [
-                'id'          => $a->id,
-                'uuid'        => $a->uuid,
-                'title'       => $a->title,
+            ->map(fn ($a) => [
+                'id' => $a->id,
+                'uuid' => $a->uuid,
+                'title' => $a->title,
                 'cover_thumb' => $a->cover_path,
                 'media_count' => $a->media_count,
             ]);
@@ -206,8 +206,8 @@ class PlaceController extends Controller
         foreach ($toLink as $mediaId) {
             DB::table('media_place')->insertOrIgnore([
                 'media_item_id' => $mediaId,
-                'place_id'      => $place->id,
-                'is_primary'    => false,
+                'place_id' => $place->id,
+                'is_primary' => false,
             ]);
         }
 
@@ -259,7 +259,7 @@ class PlaceController extends Controller
             return response()->json($this->placeSelectionPayload($existing, $places, $durationMinutes));
         }
 
-        $title = trim((string) ($data['title'] ?? '')) ?: ($places->count() === 1 ? $places->first()->name : 'Společný výlet: ' . $places->take(2)->pluck('name')->implode(' · '));
+        $title = trim((string) ($data['title'] ?? '')) ?: ($places->count() === 1 ? $places->first()->name : 'Společný výlet: '.$places->take(2)->pluck('name')->implode(' · '));
         $endsAt = $startsAt->copy()->addMinutes($durationMinutes);
         $placeNames = $places->pluck('name')->implode(' → ');
         $now = now();
@@ -269,7 +269,7 @@ class PlaceController extends Controller
                 'gallery_space_id' => $space->id,
                 'created_by' => $request->user()->id,
                 'name' => $title,
-                'description' => 'Společný výlet sestavený z uložených míst: ' . $placeNames,
+                'description' => 'Společný výlet sestavený z uložených míst: '.$placeNames,
                 'status' => 'planned',
                 'start_date' => $startsAt->toDateString(),
                 'end_date' => $startsAt->toDateString(),
@@ -282,7 +282,7 @@ class PlaceController extends Controller
             ]);
 
             $event = $this->calendarEvents->create($space, $request->user(), [
-                'trip_id' => $tripId, 'title' => $title, 'description' => 'Itinerář: ' . $placeNames,
+                'trip_id' => $tripId, 'title' => $title, 'description' => 'Itinerář: '.$placeNames,
                 'type' => 'outing', 'status' => 'planned', 'starts_at' => $startsAt, 'ends_at' => $endsAt,
                 'timezone' => 'Europe/Prague', 'place_name' => $placeNames,
                 'latitude' => $places->first()->latitude, 'longitude' => $places->first()->longitude,
@@ -346,7 +346,9 @@ class PlaceController extends Controller
             ]])->all();
             $event->participants()->syncWithoutDetaching($participants);
             $remindAt = $startsAt->copy()->subMinutes((int) ($request->input('reminder_minutes', 1440)));
-            if ($remindAt->isPast()) $remindAt = now();
+            if ($remindAt->isPast()) {
+                $remindAt = now();
+            }
             foreach ($memberIds as $memberId) {
                 $event->reminders()->create(['user_id' => $memberId, 'channel' => 'database', 'remind_at' => $remindAt, 'status' => 'pending']);
             }
@@ -407,7 +409,9 @@ class PlaceController extends Controller
         $data = $request->validate(['wishlist_uuid' => 'required|uuid', 'priority' => 'nullable|integer|between:1,5']);
         $wishlist = DB::table('travel_wishlists')->where('uuid', $data['wishlist_uuid'])->where('gallery_space_id', $space->id)->firstOrFail();
         $existing = DB::table('travel_wishlist_items')->where('wishlist_id', $wishlist->id)->where('place_id', $place->id)->where('status', 'open')->first();
-        if ($existing) return response()->json($existing);
+        if ($existing) {
+            return response()->json($existing);
+        }
         $id = DB::table('travel_wishlist_items')->insertGetId([
             'wishlist_id' => $wishlist->id,
             'place_id' => $place->id,
@@ -425,13 +429,16 @@ class PlaceController extends Controller
             'created_at' => now(),
             'updated_at' => now(),
         ]);
+
         return response()->json(DB::table('travel_wishlist_items')->find($id), 201);
     }
 
     /** Planned visits live on a place, while their date and reservation are mirrored into the shared calendar. */
     public function plans(Request $request, Place $place): JsonResponse
     {
-        $space = $request->user()->gallerySpaces()->firstOrFail(); $this->authorizePlace($place, $space->id);
+        $space = $request->user()->gallerySpaces()->firstOrFail();
+        $this->authorizePlace($place, $space->id);
+
         return response()->json(DB::table('place_plans as plan')
             ->leftJoin('calendar_events as event', 'event.id', '=', 'plan.calendar_event_id')
             ->where('plan.place_id', $place->id)->where('plan.gallery_space_id', $space->id)
@@ -441,7 +448,8 @@ class PlaceController extends Controller
 
     public function storePlan(Request $request, Place $place, PlaceVisitPlanningService $planning): JsonResponse
     {
-        $space = $request->user()->gallerySpaces()->firstOrFail(); $this->authorizePlace($place, $space->id);
+        $space = $request->user()->gallerySpaces()->firstOrFail();
+        $this->authorizePlace($place, $space->id);
         $data = $request->validate([
             'planned_for' => 'nullable|required_without:starts_at|date',
             'starts_at' => 'nullable|required_without:planned_for|date|after:now',
@@ -454,39 +462,56 @@ class PlaceController extends Controller
             'recommendation_reason' => 'nullable|string|max:1000',
             'recommended_item' => 'nullable|string|max:255',
         ]);
-        if (!empty($data['reservation_url']) && !Str::startsWith($data['reservation_url'], 'https://')) abort(422, 'Odkaz na rezervaci musí používat HTTPS.');
+        if (! empty($data['reservation_url']) && ! Str::startsWith($data['reservation_url'], 'https://')) {
+            abort(422, 'Odkaz na rezervaci musí používat HTTPS.');
+        }
         $result = $planning->schedule($space, $request->user(), $place, $data);
         $payload = (array) $result['plan'];
         $payload['event_uuid'] = $result['event']->uuid;
         $payload['event_starts_at'] = $result['event']->starts_at?->toIso8601String();
         $payload['created'] = $result['created'];
+
         return response()->json($payload, $result['created'] ? 201 : 200);
     }
 
     public function updatePlan(Request $request, Place $place, string $uuid): JsonResponse
     {
-        $space = $request->user()->gallerySpaces()->firstOrFail(); $this->authorizePlace($place, $space->id);
+        $space = $request->user()->gallerySpaces()->firstOrFail();
+        $this->authorizePlace($place, $space->id);
         $plan = DB::table('place_plans')->where('place_id', $place->id)->where('uuid', $uuid)->where('gallery_space_id', $space->id)->firstOrFail();
         $data = $request->validate(['state' => 'nullable|in:planned,visited,cancelled', 'visited_on' => 'nullable|date', 'notes' => 'nullable|string|max:5000']);
-        if (($data['state'] ?? null) === 'visited' && empty($data['visited_on'])) $data['visited_on'] = now()->toDateString();
+        if (($data['state'] ?? null) === 'visited' && empty($data['visited_on'])) {
+            $data['visited_on'] = now()->toDateString();
+        }
         DB::table('place_plans')->where('id', $plan->id)->update($data + ['updated_at' => now()]);
-        if ($plan->calendar_event_id && isset($data['state'])) CalendarEvent::where('id', $plan->calendar_event_id)->update(['status' => $data['state'] === 'visited' ? 'completed' : ($data['state'] === 'cancelled' ? 'cancelled' : 'planned'), 'updated_at' => now()]);
+        if ($plan->calendar_event_id && isset($data['state'])) {
+            CalendarEvent::where('id', $plan->calendar_event_id)->update(['status' => $data['state'] === 'visited' ? 'completed' : ($data['state'] === 'cancelled' ? 'cancelled' : 'planned'), 'updated_at' => now()]);
+        }
+
         return response()->json(DB::table('place_plans')->find($plan->id));
     }
 
     /** A completed place visit can become one shared gallery moment using its own linked photos. */
     public function createPlanMemory(Request $request, Place $place, string $uuid): JsonResponse
     {
-        $space = $request->user()->gallerySpaces()->firstOrFail(); $this->authorizePlace($place, $space->id);
+        $space = $request->user()->gallerySpaces()->firstOrFail();
+        $this->authorizePlace($place, $space->id);
         $plan = DB::table('place_plans')->where('place_id', $place->id)->where('uuid', $uuid)->where('gallery_space_id', $space->id)->firstOrFail();
         abort_unless($plan->state === 'visited', 422, 'Vzpomínku lze vytvořit až po označení návštěvy.');
         $mediaIds = $this->mediaQuery($place, $space->id)->orderBy('taken_at')->limit(30)->pluck('id')->all();
-        abort_if(!$mediaIds, 422, 'K místu zatím nejsou propojené fotografie. Nejdříve je propojte přes GPS nebo přidejte fotografie.');
+        abort_if(! $mediaIds, 422, 'K místu zatím nejsou propojené fotografie. Nejdříve je propojte přes GPS nebo přidejte fotografie.');
         $existing = DB::table('shared_memory_moments')->where('place_plan_id', $plan->id)->first();
-        if (! $existing && $plan->calendar_event_id) $existing = DB::table('shared_memory_moments')->where('calendar_event_id', $plan->calendar_event_id)->first();
+        if (! $existing && $plan->calendar_event_id) {
+            $existing = DB::table('shared_memory_moments')->where('calendar_event_id', $plan->calendar_event_id)->first();
+        }
         $row = ['place_plan_id' => $plan->id, 'calendar_event_id' => $plan->calendar_event_id, 'gallery_space_id' => $space->id, 'created_by' => $existing?->created_by ?? $request->user()->id, 'title' => $place->name, 'note' => $plan->notes ?? $place->next_time_note ?? $place->description, 'happened_on' => $plan->visited_on ?? now()->toDateString(), 'media_item_ids' => json_encode($mediaIds), 'is_favorite' => true, 'updated_at' => now()];
-        if ($existing) { DB::table('shared_memory_moments')->where('id', $existing->id)->update($row); $id = $existing->id; }
-        else $id = DB::table('shared_memory_moments')->insertGetId($row + ['uuid' => (string) Str::uuid(), 'created_at' => now()]);
+        if ($existing) {
+            DB::table('shared_memory_moments')->where('id', $existing->id)->update($row);
+            $id = $existing->id;
+        } else {
+            $id = DB::table('shared_memory_moments')->insertGetId($row + ['uuid' => (string) Str::uuid(), 'created_at' => now()]);
+        }
+
         return response()->json(DB::table('shared_memory_moments')->find($id), $existing ? 200 : 201);
     }
 
@@ -516,6 +541,7 @@ class PlaceController extends Controller
         $query = DB::table('place_notes')->where('place_id', $place->id)->where('scope_key', $scopeKey);
         if ($content === '') {
             $query->delete();
+
             return response()->json(['note' => null]);
         }
 
@@ -603,7 +629,7 @@ class PlaceController extends Controller
             ->first();
 
         $albumCount = Album::where('gallery_space_id', $spaceId)
-            ->whereHas('places', fn($q) => $q->where('places.id', $place->id))
+            ->whereHas('places', fn ($q) => $q->where('places.id', $place->id))
             ->count();
 
         // Cover: first photo thumbnail
@@ -619,20 +645,20 @@ class PlaceController extends Controller
             : null;
 
         return [
-            'id'            => $place->id,
-            'name'          => $place->name,
-            'type'          => $place->type ?? 'custom',
+            'id' => $place->id,
+            'name' => $place->name,
+            'type' => $place->type ?? 'custom',
             'lifecycle_status' => $place->lifecycle_status ?? 'idea',
-            'country'       => $place->country,
-            'country_code'  => $place->country_code,
-            'city'          => $place->city,
-            'address'       => $place->address,
-            'latitude'      => $place->latitude,
-            'longitude'     => $place->longitude,
+            'country' => $place->country,
+            'country_code' => $place->country_code,
+            'city' => $place->city,
+            'address' => $place->address,
+            'latitude' => $place->latitude,
+            'longitude' => $place->longitude,
             'radius_meters' => $place->radius_meters ?? 500,
-            'description'   => $place->description,
-            'website_url'   => $place->website_url,
-            'osm_id'        => $place->osm_id,
+            'description' => $place->description,
+            'website_url' => $place->website_url,
+            'osm_id' => $place->osm_id,
             'is_rain_friendly' => (bool) $place->is_rain_friendly,
             'is_accessible' => (bool) $place->is_accessible,
             'is_photogenic' => (bool) $place->is_photogenic,
@@ -649,12 +675,12 @@ class PlaceController extends Controller
                 'speed' => $reviewStats?->speed_average !== null ? round((float) $reviewStats->speed_average, 1) : null,
                 'value' => $reviewStats?->value_average !== null ? round((float) $reviewStats->value_average, 1) : null,
             ],
-            'photo_count'   => (int) ($stats->photo_count ?? 0),
-            'visit_count'   => (int) ($stats->visit_count ?? 0),
-            'first_visit'   => $stats->first_visit ?? null,
-            'last_visit'    => $stats->last_visit ?? null,
-            'album_count'   => $albumCount,
-            'cover_thumb'   => $coverThumb,
+            'photo_count' => (int) ($stats->photo_count ?? 0),
+            'visit_count' => (int) ($stats->visit_count ?? 0),
+            'first_visit' => $stats->first_visit ?? null,
+            'last_visit' => $stats->last_visit ?? null,
+            'album_count' => $albumCount,
+            'cover_thumb' => $coverThumb,
         ];
     }
 }

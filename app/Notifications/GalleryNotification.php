@@ -2,6 +2,8 @@
 
 namespace App\Notifications;
 
+use App\Models\GallerySpace;
+use App\Models\User;
 use App\Services\Notifications\NotificationPreferenceService;
 use Illuminate\Notifications\Notification;
 
@@ -14,14 +16,14 @@ class GalleryNotification extends Notification
     public function __construct(
         public readonly string $type,    // upload.complete | media.favorited | media.added | drive.reconnect | export.ready
         public readonly string $message,
-        public readonly ?string $link  = null,
-        public readonly ?string $icon  = null,  // emoji
-        public readonly array  $extra  = [],
+        public readonly ?string $link = null,
+        public readonly ?string $icon = null,  // emoji
+        public readonly array $extra = [],
     ) {}
 
     public function via(object $notifiable): array
     {
-        if ($notifiable instanceof \App\Models\User
+        if ($notifiable instanceof User
             && ! app(NotificationPreferenceService::class)->allows($notifiable, $this->type, ['extra' => $this->extra, 'link' => $this->link])) {
             return [];
         }
@@ -34,11 +36,11 @@ class GalleryNotification extends Notification
         $metadata = app(NotificationPreferenceService::class)->metadata($this->type, ['extra' => $this->extra, 'link' => $this->link]);
 
         return [
-            'type'    => $this->type,
+            'type' => $this->type,
             'message' => $this->message,
-            'link'    => $this->link,
-            'icon'    => $this->icon ?? $this->defaultIcon(),
-            'extra'   => $this->extra,
+            'link' => $this->link,
+            'icon' => $this->icon ?? $this->defaultIcon(),
+            'extra' => $this->extra,
             'category' => $metadata['category'],
             'priority' => $metadata['priority'],
             'context_key' => $metadata['context_key'],
@@ -48,12 +50,12 @@ class GalleryNotification extends Notification
     private function defaultIcon(): string
     {
         return match ($this->type) {
-            'upload.complete'  => '✅',
-            'media.favorited'  => '❤️',
-            'media.added'      => '📸',
-            'drive.reconnect'  => '⚠️',
-            'export.ready'     => '📦',
-            'album.created'    => '📁',
+            'upload.complete' => '✅',
+            'media.favorited' => '❤️',
+            'media.added' => '📸',
+            'drive.reconnect' => '⚠️',
+            'export.ready' => '📦',
+            'album.created' => '📁',
             'calendar.task.assigned', 'todo.assigned' => '✅',
             'calendar.task.overdue' => '⚠️',
             'memory.capsule' => '💌',
@@ -61,7 +63,7 @@ class GalleryNotification extends Notification
             'relationship.milestone' => '❤️',
             'gift.reminder' => '🎁',
             'finance.imported', 'bank.synced' => '💳',
-            default            => '🔔',
+            default => '🔔',
         };
     }
 
@@ -69,7 +71,7 @@ class GalleryNotification extends Notification
      * Convenience: notify all members of a gallery space except the given user.
      */
     public static function notifySpace(
-        \App\Models\GallerySpace $space,
+        GallerySpace $space,
         int $exceptUserId,
         string $type,
         string $message,

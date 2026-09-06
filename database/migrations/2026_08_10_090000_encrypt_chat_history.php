@@ -63,13 +63,16 @@ return new class extends Migration
     {
         DB::table('chat_messages')->orderBy('id')->chunkById(200, function ($rows) {
             foreach ($rows as $row) {
-                if ($row->body === null || $row->body === '') continue;
+                if ($row->body === null || $row->body === '') {
+                    continue;
+                }
 
                 // Already ciphertext? Decrypting succeeds only if it is.
                 try {
                     Crypt::decryptString($row->body);
+
                     continue;
-                } catch (\Throwable) {
+                } catch (Throwable) {
                     // Plain text, as expected for anything written before now.
                 }
 

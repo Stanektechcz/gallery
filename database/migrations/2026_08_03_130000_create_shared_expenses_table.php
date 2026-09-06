@@ -8,7 +8,9 @@ return new class extends Migration
 {
     public function up(): void
     {
-        if (Schema::hasTable('shared_expenses')) return;
+        if (Schema::hasTable('shared_expenses')) {
+            return;
+        }
 
         Schema::create('shared_expenses', function (Blueprint $table) {
             $table->id();

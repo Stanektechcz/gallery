@@ -12,7 +12,7 @@ class PerceptualHashTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->service = new PerceptualHashService();
+        $this->service = new PerceptualHashService;
     }
 
     /** @test */

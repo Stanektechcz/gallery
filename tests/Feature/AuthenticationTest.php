@@ -2,9 +2,6 @@
 
 namespace Tests\Feature;
 
-use App\Models\GallerySpace;
-use App\Models\MediaItem;
-use App\Models\SharedLink;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -23,13 +20,13 @@ class AuthenticationTest extends TestCase
     public function test_user_can_login(): void
     {
         $user = User::factory()->create([
-            'email'     => 'test@gallery.local',
-            'password'  => \Hash::make('securepassword123'),
+            'email' => 'test@gallery.local',
+            'password' => \Hash::make('securepassword123'),
             'is_active' => true,
         ]);
 
         $response = $this->post('/login', [
-            'email'    => 'test@gallery.local',
+            'email' => 'test@gallery.local',
             'password' => 'securepassword123',
         ]);
 
@@ -50,8 +47,8 @@ class AuthenticationTest extends TestCase
     public function test_inactive_user_cannot_login(): void
     {
         User::factory()->create([
-            'email'     => 'inactive@gallery.local',
-            'password'  => \Hash::make('password'),
+            'email' => 'inactive@gallery.local',
+            'password' => \Hash::make('password'),
             'is_active' => false,
         ]);
 

@@ -12,13 +12,13 @@ class CommentController extends Controller
 {
     public function index(Request $request, string $uuid): JsonResponse
     {
-        $media    = MediaItem::where('uuid', $uuid)->firstOrFail();
-        $user     = $request->user();
+        $media = MediaItem::where('uuid', $uuid)->firstOrFail();
+        $user = $request->user();
 
         $comments = DB::table('media_comments as c')
             ->join('users as u', 'u.id', '=', 'c.user_id')
             ->where('c.media_item_id', $media->id)
-            ->where(fn($q) => $q->where('c.is_private', false)->orWhere('c.user_id', $user->id))
+            ->where(fn ($q) => $q->where('c.is_private', false)->orWhere('c.user_id', $user->id))
             ->select(['c.id', 'c.body', 'c.is_private', 'c.created_at', 'u.name as user_name', 'u.id as user_id'])
             ->orderBy('c.created_at')
             ->get()
@@ -30,20 +30,20 @@ class CommentController extends Controller
     public function store(Request $request, string $uuid): JsonResponse
     {
         $media = MediaItem::where('uuid', $uuid)->firstOrFail();
-        $user  = $request->user();
+        $user = $request->user();
 
         $validated = $request->validate([
-            'body'       => 'required|string|max:2000',
+            'body' => 'required|string|max:2000',
             'is_private' => 'boolean',
         ]);
 
         $id = DB::table('media_comments')->insertGetId([
             'media_item_id' => $media->id,
-            'user_id'       => $user->id,
-            'body'          => $validated['body'],
-            'is_private'    => $validated['is_private'] ?? false,
-            'created_at'    => now(),
-            'updated_at'    => now(),
+            'user_id' => $user->id,
+            'body' => $validated['body'],
+            'is_private' => $validated['is_private'] ?? false,
+            'created_at' => now(),
+            'updated_at' => now(),
         ]);
 
         $comment = DB::table('media_comments as c')

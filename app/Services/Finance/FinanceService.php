@@ -430,8 +430,12 @@ class FinanceService
             $od = $t->walletFrom?->partner_id ?? $t->payer_partner_id;
             $komu = $t->walletTo?->partner_id ?? $t->beneficiary_partner_id;
 
-            if ($od !== null) $zaplatil[$mena][$od] = ($zaplatil[$mena][$od] ?? 0) + (float) $t->amount_from;
-            if ($komu !== null) $zaplatil[$mena][$komu] = ($zaplatil[$mena][$komu] ?? 0) - (float) $t->amount_from;
+            if ($od !== null) {
+                $zaplatil[$mena][$od] = ($zaplatil[$mena][$od] ?? 0) + (float) $t->amount_from;
+            }
+            if ($komu !== null) {
+                $zaplatil[$mena][$komu] = ($zaplatil[$mena][$komu] ?? 0) - (float) $t->amount_from;
+            }
         }
 
         $vysledek = [];
@@ -495,8 +499,12 @@ class FinanceService
             $dluznici[$i]['balance'] += $castka;
             $veritele[$j]['balance'] -= $castka;
 
-            if (abs($dluznici[$i]['balance']) < 0.005) $i++;
-            if ($veritele[$j]['balance'] < 0.005) $j++;
+            if (abs($dluznici[$i]['balance']) < 0.005) {
+                $i++;
+            }
+            if ($veritele[$j]['balance'] < 0.005) {
+                $j++;
+            }
         }
 
         return $prevody;

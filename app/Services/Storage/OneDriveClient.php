@@ -16,15 +16,15 @@ use Illuminate\Support\Facades\Http;
 class OneDriveClient
 {
     private const ME = 'https://graph.microsoft.com/v1.0/me';
+
     private const DRIVE = 'https://graph.microsoft.com/v1.0/me/drive';
+
     private const ROOT = 'https://graph.microsoft.com/v1.0/me/drive/root:';
 
     /** Graph wants an upload session above 4 MB; this refuses rather than sending a truncated file. */
     private const SIMPLE_UPLOAD_LIMIT = 4 * 1024 * 1024;
 
-    public function __construct(private readonly TokenRefresher $refresher)
-    {
-    }
+    public function __construct(private readonly TokenRefresher $refresher) {}
 
     /** @return array{ok: bool, account?: ?string, used_bytes?: ?int, allocated_bytes?: ?int, error?: string} */
     public function probe(StorageConnection $connection): array
@@ -81,7 +81,7 @@ class OneDriveClient
 
         $response = Http::withToken($token)
             ->withBody($contents, 'application/octet-stream')
-            ->put(self::ROOT . '/' . $encoded . ':/content?@microsoft.graph.conflictBehavior=rename');
+            ->put(self::ROOT.'/'.$encoded.':/content?@microsoft.graph.conflictBehavior=rename');
 
         if ($response->failed()) {
             $reason = (string) $response->json('error.message', 'Nahrání do OneDrive selhalo.');
@@ -101,6 +101,6 @@ class OneDriveClient
 
     public function folderFor(StorageConnection $connection): string
     {
-        return '/MAKI Gallery/prostor-' . $connection->gallery_space_id;
+        return '/MAKI Gallery/prostor-'.$connection->gallery_space_id;
     }
 }

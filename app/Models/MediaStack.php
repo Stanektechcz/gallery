@@ -19,8 +19,15 @@ class MediaStack extends Model
         static::creating(fn (MediaStack $s) => $s->uuid ??= (string) Str::uuid());
     }
 
-    public function gallerySpace() { return $this->belongsTo(GallerySpace::class); }
-    public function cover()        { return $this->belongsTo(MediaItem::class, 'cover_media_id'); }
+    public function gallerySpace()
+    {
+        return $this->belongsTo(GallerySpace::class);
+    }
+
+    public function cover()
+    {
+        return $this->belongsTo(MediaItem::class, 'cover_media_id');
+    }
 
     public function items()
     {

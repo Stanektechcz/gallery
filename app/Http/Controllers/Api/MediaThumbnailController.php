@@ -31,7 +31,7 @@ class MediaThumbnailController extends Controller
         abort_if($request->user()->read_only_mode, 403, 'V režimu pouze pro čtení nelze náhledy ukládat.');
 
         $request->validate([
-            'thumbnail' => 'required|file|mimes:jpg,jpeg|max:' . (self::MAX_BYTES / 1024),
+            'thumbnail' => 'required|file|mimes:jpg,jpeg|max:'.(self::MAX_BYTES / 1024),
         ]);
 
         // Scoped to spaces this person belongs to, so nobody can staple a picture of

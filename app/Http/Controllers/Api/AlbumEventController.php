@@ -31,12 +31,12 @@ class AlbumEventController extends Controller
         $album = $this->resolve($uuid, $request);
 
         $v = $request->validate([
-            'event_mode'       => 'nullable|boolean',
-            'event_start_at'   => 'nullable|date',
-            'event_end_at'     => 'nullable|date|after_or_equal:event_start_at',
+            'event_mode' => 'nullable|boolean',
+            'event_start_at' => 'nullable|date',
+            'event_end_at' => 'nullable|date|after_or_equal:event_start_at',
             'event_place_name' => 'nullable|string|max:255',
-            'event_latitude'   => 'nullable|numeric|between:-90,90',
-            'event_longitude'  => 'nullable|numeric|between:-180,180',
+            'event_latitude' => 'nullable|numeric|between:-90,90',
+            'event_longitude' => 'nullable|numeric|between:-180,180',
             'event_gps_radius' => 'nullable|integer|min:50|max:50000',
         ]);
 
@@ -63,20 +63,20 @@ class AlbumEventController extends Controller
         }
 
         $q = $this->buildDetectionQuery($album, $space->id);
-        $total      = $q->count();
+        $total = $q->count();
         $photoCount = (clone $q)->where('media_type', 'photo')->count();
         $videoCount = (clone $q)->where('media_type', 'video')->count();
 
         $samples = MediaItem::with('variants')
             ->whereIn('id', (clone $q)->select('id')->limit(6)->pluck('id'))
             ->get()
-            ->map(fn($m) => ['uuid' => $m->uuid, 'thumbnail_url' => $m->thumbnail_url]);
+            ->map(fn ($m) => ['uuid' => $m->uuid, 'thumbnail_url' => $m->thumbnail_url]);
 
         return response()->json([
-            'count'       => $total,
+            'count' => $total,
             'photo_count' => $photoCount,
             'video_count' => $videoCount,
-            'samples'     => $samples,
+            'samples' => $samples,
         ]);
     }
 
@@ -88,7 +88,7 @@ class AlbumEventController extends Controller
     {
         $album = $this->resolve($uuid, $request);
         $space = $request->user()->gallerySpaces()->first();
-        $user  = $request->user();
+        $user = $request->user();
 
         if (! $album->event_mode || ! $album->event_start_at || ! $album->event_end_at) {
             return response()->json(['added' => 0]);
@@ -96,14 +96,14 @@ class AlbumEventController extends Controller
 
         $mediaIds = $this->buildDetectionQuery($album, $space->id)->pluck('id');
 
-        $now     = now();
-        $added   = 0;
+        $now = now();
+        $added = 0;
         foreach ($mediaIds as $mediaId) {
             $inserted = DB::table('album_media')->insertOrIgnore([
-                'album_id'      => $album->id,
+                'album_id' => $album->id,
                 'media_item_id' => $mediaId,
-                'added_at'      => $now,
-                'added_by'      => $user->id,
+                'added_at' => $now,
+                'added_by' => $user->id,
             ]);
             if ($inserted) {
                 $added++;
@@ -123,6 +123,7 @@ class AlbumEventController extends Controller
     private function resolve(string $uuid, Request $request): Album
     {
         $space = $request->user()->gallerySpaces()->first();
+
         return Album::where('uuid', $uuid)
             ->where('gallery_space_id', $space->id)
             ->firstOrFail();
@@ -131,12 +132,12 @@ class AlbumEventController extends Controller
     private function eventData(Album $album): array
     {
         return [
-            'event_mode'       => (bool) $album->event_mode,
-            'event_start_at'   => $album->event_start_at,
-            'event_end_at'     => $album->event_end_at,
+            'event_mode' => (bool) $album->event_mode,
+            'event_start_at' => $album->event_start_at,
+            'event_end_at' => $album->event_end_at,
             'event_place_name' => $album->event_place_name,
-            'event_latitude'   => $album->event_latitude,
-            'event_longitude'  => $album->event_longitude,
+            'event_latitude' => $album->event_latitude,
+            'event_longitude' => $album->event_longitude,
             'event_gps_radius' => $album->event_gps_radius ?? 500,
         ];
     }

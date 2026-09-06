@@ -23,7 +23,7 @@ class TripPartnerFinanceService
         $currencies = $expenses->pluck('currency')->merge($settlements->pluck('currency'))
             ->push(strtoupper((string) ($trip->currency ?: 'CZK')))->filter()->map(fn ($currency) => strtoupper((string) $currency))->unique()->values();
 
-        $snapshots = $currencies->map(function (string $currency) use ($expenses, $settlements, $members, $memberIds, $memberNames, $hasPaymentSource) {
+        $snapshots = $currencies->map(function (string $currency) use ($expenses, $settlements, $members, $memberIds, $hasPaymentSource) {
             $balances = $members->mapWithKeys(fn ($member) => [(int) $member->id => [
                 'user_id' => (int) $member->id, 'name' => $member->name, 'paid' => 0.0, 'owed' => 0.0, 'balance' => 0.0,
             ]])->all();
@@ -34,11 +34,13 @@ class TripPartnerFinanceService
                 $source = $hasPaymentSource ? ($expense->payment_source ?: 'personal') : 'personal';
                 if ($source === 'joint') {
                     $jointPaid += (float) $expense->amount;
+
                     continue;
                 }
                 $payerId = (int) ($expense->paid_by_user_id ?? 0);
                 if (! $payerId || ! array_key_exists($payerId, $balances)) {
                     $unassigned[] = (int) $expense->id;
+
                     continue;
                 }
                 $balances[$payerId]['paid'] += (float) $expense->amount;
@@ -72,6 +74,7 @@ class TripPartnerFinanceService
                 $saved = $pending->first(fn ($settlement) => (int) $settlement->from_user_id === $proposal['from_user_id']
                     && (int) $settlement->to_user_id === $proposal['to_user_id']
                     && abs((float) $settlement->amount - $proposal['amount']) < 0.01);
+
                 return $proposal + ['settlement_id' => $saved?->id, 'status' => $saved ? 'suggested' : 'calculated'];
             }, $proposals);
 

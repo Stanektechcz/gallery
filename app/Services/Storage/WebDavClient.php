@@ -30,7 +30,9 @@ class WebDavClient
     public function probe(StorageConnection $connection): array
     {
         $credentials = $this->credentials($connection);
-        if (! $credentials) return ['ok' => false, 'error' => 'Přihlašovací údaje se nepodařilo přečíst.'];
+        if (! $credentials) {
+            return ['ok' => false, 'error' => 'Přihlašovací údaje se nepodařilo přečíst.'];
+        }
 
         // PROPFIND with depth 0 asks "does this exist and may I see it", which is the
         // cheapest question that proves both the address and the password.
@@ -45,9 +47,9 @@ class WebDavClient
         }
 
         if ($response->failed()) {
-            $this->fail($connection, 'unreachable', 'Server neodpověděl (HTTP ' . $response->status() . ').');
+            $this->fail($connection, 'unreachable', 'Server neodpověděl (HTTP '.$response->status().').');
 
-            return ['ok' => false, 'error' => 'Server neodpověděl (HTTP ' . $response->status() . ').'];
+            return ['ok' => false, 'error' => 'Server neodpověděl (HTTP '.$response->status().').'];
         }
 
         $connection->forceFill([
@@ -67,10 +69,12 @@ class WebDavClient
         }
 
         $credentials = $this->credentials($connection);
-        if (! $credentials) return ['ok' => false, 'error' => 'Přihlašovací údaje se nepodařilo přečíst.'];
+        if (! $credentials) {
+            return ['ok' => false, 'error' => 'Přihlašovací údaje se nepodařilo přečíst.'];
+        }
 
         $base = rtrim($credentials['url'], '/');
-        $target = $base . '/' . implode('/', array_map('rawurlencode', explode('/', ltrim($remotePath, '/'))));
+        $target = $base.'/'.implode('/', array_map('rawurlencode', explode('/', ltrim($remotePath, '/'))));
 
         // The folder has to exist first; WebDAV will not make one on the way. MKCOL on a
         // folder that is already there answers 405, which is a success for our purposes.
@@ -81,7 +85,7 @@ class WebDavClient
             ->put($target);
 
         if ($response->failed()) {
-            $reason = 'Nahrání selhalo (HTTP ' . $response->status() . ').';
+            $reason = 'Nahrání selhalo (HTTP '.$response->status().').';
             $this->fail($connection, 'upload_failed', $reason);
 
             return ['ok' => false, 'error' => $reason];
@@ -92,7 +96,7 @@ class WebDavClient
 
     public function folderFor(StorageConnection $connection): string
     {
-        return 'MAKI Gallery/prostor-' . $connection->gallery_space_id;
+        return 'MAKI Gallery/prostor-'.$connection->gallery_space_id;
     }
 
     /** Creates each level in turn; a level that exists answers 405 and is stepped over. */
@@ -101,10 +105,10 @@ class WebDavClient
         $walked = '';
 
         foreach (array_filter(explode('/', $folder)) as $segment) {
-            $walked .= ($walked ? '/' : '') . rawurlencode($segment);
+            $walked .= ($walked ? '/' : '').rawurlencode($segment);
 
             Http::withBasicAuth($credentials['user'], $credentials['pass'])
-                ->send('MKCOL', $base . '/' . $walked);
+                ->send('MKCOL', $base.'/'.$walked);
         }
     }
 
@@ -117,7 +121,9 @@ class WebDavClient
             return null;
         }
 
-        if (! is_array($raw) || ! filled($raw['url'] ?? null)) return null;
+        if (! is_array($raw) || ! filled($raw['url'] ?? null)) {
+            return null;
+        }
 
         return ['url' => $raw['url'], 'user' => $raw['user'] ?? '', 'pass' => $raw['pass'] ?? ''];
     }

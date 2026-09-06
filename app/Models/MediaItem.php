@@ -9,7 +9,7 @@ use Illuminate\Support\Str;
 
 class MediaItem extends Model
 {
-    use HasFactory, SoftDeletes, \App\Models\Concerns\BelongsToGallerySpace;
+    use \App\Models\Concerns\BelongsToGallerySpace, HasFactory, SoftDeletes;
 
     protected $fillable = [
         'uuid',
@@ -87,28 +87,28 @@ class MediaItem extends Model
     protected function casts(): array
     {
         return [
-            'taken_at'       => 'datetime',
-            'uploaded_at'    => 'datetime',
-            'imported_at'    => 'datetime',
-            'trashed_at'     => 'datetime',
-            'purge_after'    => 'datetime',
+            'taken_at' => 'datetime',
+            'uploaded_at' => 'datetime',
+            'imported_at' => 'datetime',
+            'trashed_at' => 'datetime',
+            'purge_after' => 'datetime',
             'last_verified_at' => 'datetime',
             'taken_at_estimated' => 'boolean',
-            'is_favorite'    => 'boolean',
-            'is_archived'    => 'boolean',
-            'is_hidden'      => 'boolean',
-            'is_panorama'    => 'boolean',
-            'is_360'         => 'boolean',
-            'is_raw'         => 'boolean',
-            'latitude'       => 'float',
-            'longitude'      => 'float',
-            'altitude'       => 'float',
+            'is_favorite' => 'boolean',
+            'is_archived' => 'boolean',
+            'is_hidden' => 'boolean',
+            'is_panorama' => 'boolean',
+            'is_360' => 'boolean',
+            'is_raw' => 'boolean',
+            'latitude' => 'float',
+            'longitude' => 'float',
+            'altitude' => 'float',
         ];
     }
 
     protected static function booted(): void
     {
-        static::creating(fn(MediaItem $m) => $m->uuid ??= (string) Str::uuid());
+        static::creating(fn (MediaItem $m) => $m->uuid ??= (string) Str::uuid());
     }
 
     // Scopes
@@ -116,30 +116,37 @@ class MediaItem extends Model
     {
         return $query->whereNull('trashed_at')->where('is_hidden', false);
     }
+
     public function scopePhotos($query)
     {
         return $query->where('media_type', 'photo');
     }
+
     public function scopeVideos($query)
     {
         return $query->where('media_type', 'video');
     }
+
     public function scopeFavorites($query)
     {
         return $query->where('is_favorite', true);
     }
+
     public function scopeArchived($query)
     {
         return $query->where('is_archived', true);
     }
+
     public function scopeTrashed($query)
     {
         return $query->whereNotNull('trashed_at');
     }
+
     public function scopeNotTrashed($query)
     {
         return $query->whereNull('trashed_at');
     }
+
     public function scopeReady($query)
     {
         return $query->where('status', 'ready');
@@ -150,14 +157,17 @@ class MediaItem extends Model
     {
         return $this->belongsTo(GallerySpace::class);
     }
+
     public function owner()
     {
         return $this->belongsTo(User::class, 'owner_user_id');
     }
+
     public function uploader()
     {
         return $this->belongsTo(User::class, 'uploaded_by');
     }
+
     public function primaryAlbum()
     {
         return $this->belongsTo(Album::class, 'primary_album_id');
@@ -182,6 +192,7 @@ class MediaItem extends Model
     public function getThumbnailUrlAttribute(): ?string
     {
         $variant = $this->getVariant('thumbnail') ?? $this->getVariant('small');
+
         return $variant ? $variant->url : null;
     }
 

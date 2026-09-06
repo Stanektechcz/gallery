@@ -27,7 +27,7 @@ class DiscordOAuthController extends Controller
         // anyone could hand the user a callback URL and link an account of their choosing.
         $state = Str::random(40);
         $request->session()->put(self::STATE_KEY, $state);
-        $request->session()->put(self::STATE_KEY . '.visibility', $request->query('visibility') === 'shared' ? 'shared' : 'personal');
+        $request->session()->put(self::STATE_KEY.'.visibility', $request->query('visibility') === 'shared' ? 'shared' : 'personal');
 
         return redirect()->away($discord->authorizeUrl($state, route('discord.callback')));
     }
@@ -35,7 +35,7 @@ class DiscordOAuthController extends Controller
     public function callback(Request $request, DiscordClient $discord): RedirectResponse
     {
         $expected = $request->session()->pull(self::STATE_KEY);
-        $visibility = $request->session()->pull(self::STATE_KEY . '.visibility', 'personal');
+        $visibility = $request->session()->pull(self::STATE_KEY.'.visibility', 'personal');
 
         if ($request->query('error')) {
             return redirect('/settings/propojeni')->with('warning', 'Propojení s Discordem bylo zrušeno.');

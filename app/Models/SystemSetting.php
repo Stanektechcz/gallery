@@ -6,16 +6,20 @@ use Illuminate\Database\Eloquent\Model;
 
 class SystemSetting extends Model
 {
-    protected $table      = 'system_settings';
+    protected $table = 'system_settings';
+
     protected $primaryKey = 'key';
-    public    $incrementing = false;
-    protected $keyType    = 'string';
+
+    public $incrementing = false;
+
+    protected $keyType = 'string';
 
     protected $fillable = ['key', 'value', 'type', 'group'];
 
     public static function get(string $key, mixed $default = null): mixed
     {
         $setting = static::find($key);
+
         return $setting?->value ?? $default;
     }
 
@@ -23,7 +27,7 @@ class SystemSetting extends Model
     {
         static::updateOrCreate(['key' => $key], [
             'value' => (string) $value,
-            'type'  => $type,
+            'type' => $type,
             'group' => $group,
         ]);
     }

@@ -18,7 +18,9 @@ class DateIdeaLifecycleService
     public function forEvent(CalendarEvent $event, ?User $viewer = null): ?array
     {
         $idea = $this->findForEvent($event);
-        if (! $idea) return null;
+        if (! $idea) {
+            return null;
+        }
 
         $idea->loadMissing(['reactions.user:id,name', 'event:id,uuid,status,starts_at']);
         $participantCount = max(1, $event->participants()->count());
@@ -67,13 +69,16 @@ class DateIdeaLifecycleService
             $data,
         );
         $this->refreshStatus($idea->fresh(), array_key_exists('rating', $data) && $data['rating'] !== null);
+
         return $reaction;
     }
 
     public function recordEventReflection(CalendarEvent $event, User $user, array $reflection): void
     {
         $idea = $this->findForEvent($event);
-        if (! $idea) return;
+        if (! $idea) {
+            return;
+        }
 
         $rating = isset($reflection['rating']) ? (int) $reflection['rating'] : null;
         $existing = $idea->reactions()->where('user_id', $user->id)->first();
@@ -92,7 +97,9 @@ class DateIdeaLifecycleService
     public function completeEvent(CalendarEvent $event): void
     {
         $idea = $this->findForEvent($event);
-        if ($idea && $idea->status !== 'completed') $idea->update(['status' => 'completed']);
+        if ($idea && $idea->status !== 'completed') {
+            $idea->update(['status' => 'completed']);
+        }
     }
 
     public function refreshStatus(CoupleDateIdea $idea, bool $hasNewRating = false): void
@@ -100,11 +107,17 @@ class DateIdeaLifecycleService
         $idea->loadMissing('event');
         $eventIsPast = $idea->event && $idea->event->starts_at->lte(now());
         if ($idea->status === 'completed' || ($eventIsPast && ($hasNewRating || $idea->event->status === 'completed'))) {
-            if ($idea->status !== 'completed') $idea->update(['status' => 'completed']);
+            if ($idea->status !== 'completed') {
+                $idea->update(['status' => 'completed']);
+            }
+
             return;
         }
         if ($idea->calendar_event_id) {
-            if ($idea->status !== 'planned') $idea->update(['status' => 'planned']);
+            if ($idea->status !== 'planned') {
+                $idea->update(['status' => 'planned']);
+            }
+
             return;
         }
 
@@ -112,17 +125,22 @@ class DateIdeaLifecycleService
         $memberCount = $idea->space()->firstOrFail()->members()->count();
         $status = $reactions->contains('love') ? 'saved'
             : ($memberCount > 0 && $reactions->count() >= $memberCount && $reactions->every(fn ($value) => $value === 'pass') ? 'dismissed' : 'generated');
-        if ($idea->status !== $status) $idea->update(['status' => $status]);
+        if ($idea->status !== $status) {
+            $idea->update(['status' => $status]);
+        }
     }
 
     private function findForEvent(CalendarEvent $event): ?CoupleDateIdea
     {
         $metadata = $event->metadata ?? [];
+
         return CoupleDateIdea::query()
             ->where('gallery_space_id', $event->gallery_space_id)
             ->where(function ($query) use ($event, $metadata) {
                 $query->where('calendar_event_id', $event->id);
-                if (! empty($metadata['date_idea_uuid'])) $query->orWhere('uuid', $metadata['date_idea_uuid']);
+                if (! empty($metadata['date_idea_uuid'])) {
+                    $query->orWhere('uuid', $metadata['date_idea_uuid']);
+                }
             })->first();
     }
 }

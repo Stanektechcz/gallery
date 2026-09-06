@@ -53,11 +53,16 @@ class NotificationCenterController extends Controller
         } elseif (($data['focus'] ?? 'all') === 'unread') {
             $filtered = $filtered->whereNull('read_at');
         }
-        if (! empty($data['category'])) $filtered = $filtered->where('category', $data['category']);
+        if (! empty($data['category'])) {
+            $filtered = $filtered->where('category', $data['category']);
+        }
 
         $filtered = $filtered->sort(function (array $left, array $right): int {
-            if (($left['read_at'] === null) !== ($right['read_at'] === null)) return $left['read_at'] === null ? -1 : 1;
+            if (($left['read_at'] === null) !== ($right['read_at'] === null)) {
+                return $left['read_at'] === null ? -1 : 1;
+            }
             $priority = $this->preferences->rank($right['priority']) <=> $this->preferences->rank($left['priority']);
+
             return $priority !== 0 ? $priority : strcmp($right['created_at'], $left['created_at']);
         })->values();
         $limit = (int) ($data['limit'] ?? 30);
@@ -91,10 +96,13 @@ class NotificationCenterController extends Controller
         $data = $request->validate(['category' => ['nullable', Rule::in(array_keys(NotificationPreferenceService::CATEGORIES))]]);
         $user = $request->user();
         $query = $user->unreadNotifications();
-        if ($this->hasStateColumns()) $query->whereNull('archived_at');
+        if ($this->hasStateColumns()) {
+            $query->whereNull('archived_at');
+        }
         $notifications = $query->get()
             ->filter(function (DatabaseNotification $notification) use ($data, $user): bool {
                 $payload = $this->payload($notification);
+
                 return $this->preferences->allows($user, $payload['data']['type'], $payload['data'])
                     && (empty($data['category']) || $payload['category'] === $data['category']);
             });

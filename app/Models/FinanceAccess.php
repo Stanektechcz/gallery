@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Kdo se smí podívat na cizí rozpočet nebo cestu.
@@ -76,10 +77,10 @@ class FinanceAccess extends Model
     {
         $tabulka = $druh === 'trip' ? 'finance_projects' : 'budgets';
 
-        $spaceId = \Illuminate\Support\Facades\DB::table($tabulka)
+        $spaceId = DB::table($tabulka)
             ->where('id', $subjectId)->value('gallery_space_id');
 
-        return $spaceId !== null && \Illuminate\Support\Facades\DB::table('gallery_spaces')
+        return $spaceId !== null && DB::table('gallery_spaces')
             ->where('id', $spaceId)->where('owner_id', $userId)->exists();
     }
 

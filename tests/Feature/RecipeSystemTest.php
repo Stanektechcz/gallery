@@ -6,6 +6,7 @@ use App\Models\GallerySpace;
 use App\Models\MediaItem;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -49,34 +50,34 @@ class RecipeSystemTest extends TestCase
         $this->assertNotEmpty($recipe['album']['uuid']);
         $this->assertDatabaseHas('recipes', ['uuid' => $recipe['uuid']]);
         $this->getJson('/api/v1/recipes?q=risotto')->assertOk()->assertJsonPath('items.0.uuid', $recipe['uuid']);
-        $this->patchJson('/api/v1/recipes/' . $recipe['uuid'] . '/favorite')->assertOk()->assertJsonPath('is_favorite', true);
-        $scaled = $this->getJson('/api/v1/recipes/' . $recipe['uuid'] . '?servings=5')->assertOk()
+        $this->patchJson('/api/v1/recipes/'.$recipe['uuid'].'/favorite')->assertOk()->assertJsonPath('is_favorite', true);
+        $scaled = $this->getJson('/api/v1/recipes/'.$recipe['uuid'].'?servings=5')->assertOk()
             ->assertJsonPath('selected_servings', 5)->assertJsonPath('scale_factor', 2.5)
             ->assertJsonPath('ingredients.0.scaled_quantity', 500)->assertJsonPath('scaled_cost', 450)->json();
         $this->assertSame('500', $scaled['ingredients'][0]['display_quantity']);
-        $this->getJson('/api/v1/recipes/' . $recipe['uuid'] . '/shopping-list?servings=4')->assertOk()
+        $this->getJson('/api/v1/recipes/'.$recipe['uuid'].'/shopping-list?servings=4')->assertOk()
             ->assertJsonPath('sections.0.items.0.scaled_quantity', 400);
         $this->getJson('/api/v1/search/suggestions?q=risotto')->assertOk()
-            ->assertJsonFragment(['type' => 'recipe', 'label' => 'Houbové risotto', 'url' => '/recipes/' . $recipe['uuid']]);
+            ->assertJsonFragment(['type' => 'recipe', 'label' => 'Houbové risotto', 'url' => '/recipes/'.$recipe['uuid']]);
 
-        $this->postJson('/api/v1/recipes/' . $recipe['uuid'] . '/media', ['media_uuids' => [$media->uuid], 'role' => 'cover'])
+        $this->postJson('/api/v1/recipes/'.$recipe['uuid'].'/media', ['media_uuids' => [$media->uuid], 'role' => 'cover'])
             ->assertOk()->assertJsonPath('cover.uuid', $media->uuid);
 
         $plannedFor = now()->addDay()->setTime(18, 0);
-        $session = $this->postJson('/api/v1/recipes/' . $recipe['uuid'] . '/cooking-sessions/schedule', [
+        $session = $this->postJson('/api/v1/recipes/'.$recipe['uuid'].'/cooking-sessions/schedule', [
             'planned_for' => $plannedFor->toIso8601String(), 'servings' => 3, 'notes' => 'Společná večeře', 'add_to_calendar' => true,
         ])->assertCreated()->assertJsonPath('status', 'planned')->assertJsonPath('servings', 3)->json();
         $this->assertDatabaseHas('calendar_events', ['uuid' => $session['calendar_event']['uuid'], 'type' => 'meal', 'color' => '#f59e0b']);
         $this->assertDatabaseCount('event_participants', 2);
         $this->assertDatabaseCount('event_reminders', 2);
-        $this->getJson('/api/v1/calendar/events/' . $session['calendar_event']['uuid'])->assertOk()
+        $this->getJson('/api/v1/calendar/events/'.$session['calendar_event']['uuid'])->assertOk()
             ->assertJsonPath('origin.kind', 'recipe_cooking')->assertJsonPath('origin.recipe.uuid', $recipe['uuid']);
         $this->get('/prehled')->assertOk()->assertInertia(fn (Assert $page) => $page
             ->where('data.partner_hub.recipe.kind', 'planned')->where('data.partner_hub.recipe.uuid', $recipe['uuid']));
 
-        $this->postJson('/api/v1/recipes/' . $recipe['uuid'] . '/cooking-sessions/start', ['session_uuid' => $session['uuid'], 'servings' => 3])
+        $this->postJson('/api/v1/recipes/'.$recipe['uuid'].'/cooking-sessions/start', ['session_uuid' => $session['uuid'], 'servings' => 3])
             ->assertOk()->assertJsonPath('status', 'cooking');
-        $completed = $this->putJson('/api/v1/recipes/' . $recipe['uuid'] . '/cooking-sessions/' . $session['uuid'] . '/complete', [
+        $completed = $this->putJson('/api/v1/recipes/'.$recipe['uuid'].'/cooking-sessions/'.$session['uuid'].'/complete', [
             'overall_rating' => 4.5, 'taste_rating' => 5, 'process_rating' => 4, 'appearance_rating' => 4,
             'successes' => 'Výborná konzistence.', 'failures' => 'Málo hub.', 'improvements' => 'Příště více hub.',
             'changes_made' => 'Přidali jsme tymián.', 'partner_feedback' => 'Zopakovat.', 'would_cook_again' => true,
@@ -88,12 +89,12 @@ class RecipeSystemTest extends TestCase
         $this->assertDatabaseHas('recipe_media', ['recipe_id' => $this->recipeId($recipe['uuid']), 'media_item_id' => $media->id]);
         $this->assertDatabaseHas('album_media', ['media_item_id' => $media->id]);
 
-        $this->actingAs($partner)->getJson('/api/v1/recipes/' . $recipe['uuid'])->assertOk()
+        $this->actingAs($partner)->getJson('/api/v1/recipes/'.$recipe['uuid'])->assertOk()
             ->assertJsonPath('stats.times_cooked', 1)->assertJsonPath('cooking_sessions.0.improvements', 'Příště více hub.');
     }
 
     private function recipeId(string $uuid): int
     {
-        return (int) \Illuminate\Support\Facades\DB::table('recipes')->where('uuid', $uuid)->value('id');
+        return (int) DB::table('recipes')->where('uuid', $uuid)->value('id');
     }
 }

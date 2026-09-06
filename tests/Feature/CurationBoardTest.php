@@ -14,7 +14,9 @@ class CurationBoardTest extends TestCase
     use RefreshDatabase;
 
     private User $owner;
+
     private User $partner;
+
     private GallerySpace $space;
 
     protected function setUp(): void
@@ -53,6 +55,7 @@ class CurationBoardTest extends TestCase
     {
         $uuid = (string) Str::uuid();
         DB::table('media_items')->insert(['uuid' => $uuid, 'gallery_space_id' => $spaceId, 'owner_user_id' => $this->owner->id, 'uploaded_by' => $this->owner->id, 'original_filename' => 'vylet.jpg', 'safe_filename' => 'vylet.jpg', 'extension' => 'jpg', 'mime_type' => 'image/jpeg', 'media_type' => 'photo', 'size_bytes' => 100, 'status' => 'ready', 'storage_status' => 'ready', 'is_hidden' => false, 'created_at' => now(), 'updated_at' => now()]);
+
         return $uuid;
     }
 }

@@ -26,7 +26,9 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('users', function (Blueprint $table) {
-            if (Schema::hasColumn('users', 'last_seen_at')) $table->dropColumn('last_seen_at');
+            if (Schema::hasColumn('users', 'last_seen_at')) {
+                $table->dropColumn('last_seen_at');
+            }
         });
     }
 };

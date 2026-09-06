@@ -74,8 +74,12 @@ class SharedExpenseController extends Controller
             'occurred_at' => 'sometimes|date',
         ]);
 
-        if (array_key_exists('currency', $data)) $data['currency'] = strtoupper($data['currency']);
-        if (array_key_exists('title', $data)) $data['title'] = trim($data['title']);
+        if (array_key_exists('currency', $data)) {
+            $data['currency'] = strtoupper($data['currency']);
+        }
+        if (array_key_exists('title', $data)) {
+            $data['title'] = trim($data['title']);
+        }
         DB::table('shared_expenses')->where('id', $expense->id)->update($data + ['updated_at' => now()]);
         $updated = DB::table('shared_expenses')->where('id', $expense->id)->firstOrFail();
         AuditLog::record('finance.shared_expense.update', null, ['gallery_space_id' => $expense->gallery_space_id, 'expense_uuid' => $uuid, 'changed' => array_keys($data)]);
@@ -107,6 +111,7 @@ class SharedExpenseController extends Controller
             ->get(['uuid', 'title', 'amount', 'currency', 'occurred_at', 'category'])
             ->filter(function ($expense) use ($needle) {
                 $title = Str::lower(preg_replace('/\s+/u', ' ', trim($expense->title)));
+
                 return $title === $needle || Str::contains($title, $needle) || Str::contains($needle, $title);
             })->map(fn ($expense) => ['uuid' => $expense->uuid, 'title' => $expense->title, 'amount' => (float) $expense->amount, 'currency' => $expense->currency, 'occurred_at' => $expense->occurred_at, 'category' => $expense->category]);
     }

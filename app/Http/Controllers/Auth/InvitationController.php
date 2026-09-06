@@ -9,7 +9,6 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -21,7 +20,7 @@ class InvitationController extends Controller
             ->whereNull('invitation_accepted_at')
             ->first();
 
-        if (!$user) {
+        if (! $user) {
             return redirect('/login')->with('error', 'Pozvánka je neplatná nebo již byla použita.');
         }
 
@@ -34,20 +33,20 @@ class InvitationController extends Controller
             ->whereNull('invitation_accepted_at')
             ->first();
 
-        if (!$user) {
+        if (! $user) {
             return redirect('/login')->with('error', 'Pozvánka je neplatná.');
         }
 
         $validated = $request->validate([
-            'password'              => 'required|string|min:8|confirmed',
+            'password' => 'required|string|min:8|confirmed',
             'password_confirmation' => 'required|string',
         ]);
 
         $user->update([
-            'password'               => Hash::make($validated['password']),
+            'password' => Hash::make($validated['password']),
             'invitation_accepted_at' => now(),
-            'invitation_token'       => null,
-            'email_verified_at'      => now(),
+            'invitation_token' => null,
+            'email_verified_at' => now(),
         ]);
 
         Auth::login($user);

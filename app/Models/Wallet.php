@@ -15,8 +15,8 @@ use Illuminate\Support\Str;
  */
 class Wallet extends Model
 {
-    use SoftDeletes;
     use Concerns\BelongsToGallerySpace;
+    use SoftDeletes;
 
     public const KINDS = ['bank', 'cash', 'card', 'other'];
 

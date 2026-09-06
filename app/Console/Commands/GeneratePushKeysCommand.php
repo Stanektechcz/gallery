@@ -30,9 +30,9 @@ class GeneratePushKeysCommand extends Command
 
         $this->info('Vygenerováno. Doplňte do .env na serveru:');
         $this->newLine();
-        $this->line('VAPID_SUBJECT=mailto:' . (config('mail.from.address') ?: 'vas@email.cz'));
-        $this->line('VAPID_PUBLIC_KEY=' . $keys['publicKey']);
-        $this->line('VAPID_PRIVATE_KEY=' . $keys['privateKey']);
+        $this->line('VAPID_SUBJECT=mailto:'.(config('mail.from.address') ?: 'vas@email.cz'));
+        $this->line('VAPID_PUBLIC_KEY='.$keys['publicKey']);
+        $this->line('VAPID_PRIVATE_KEY='.$keys['privateKey']);
         $this->newLine();
         $this->comment('Soukromý klíč nikam necommitujte. Po doplnění spusťte php artisan config:cache.');
 

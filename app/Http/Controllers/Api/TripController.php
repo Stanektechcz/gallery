@@ -7,15 +7,16 @@ use App\Models\Album;
 use App\Models\AuditLog;
 use App\Models\CalendarEvent;
 use App\Models\MediaItem;
-use App\Services\Planning\TripPreparationTimelineService;
-use App\Services\Planning\CalendarEventCreationService;
 use App\Services\Media\AlbumCurationAssistantService;
+use App\Services\Planning\CalendarEventCreationService;
+use App\Services\Planning\TripPreparationTimelineService;
 use App\Services\Travel\TransportSearchService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
@@ -35,7 +36,7 @@ class TripController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $user  = $request->user();
+        $user = $request->user();
         $space = $user->gallerySpaces()->first();
 
         $trips = DB::table('trips')
@@ -43,7 +44,7 @@ class TripController extends Controller
             ->orderByDesc('start_date')
             ->get();
 
-        return response()->json($trips->map(fn($t) => $this->enrichTrip($t)));
+        return response()->json($trips->map(fn ($t) => $this->enrichTrip($t)));
     }
 
     /**
@@ -51,35 +52,35 @@ class TripController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
-        $user  = $request->user();
+        $user = $request->user();
         $space = $user->gallerySpaces()->first();
 
         $v = $request->validate([
-            'name'        => 'required|string|max:255',
+            'name' => 'required|string|max:255',
             'description' => 'nullable|string|max:5000',
-            'start_date'  => 'required|date',
-            'end_date'    => 'required|date|after_or_equal:start_date',
-            'notes'       => 'nullable|string|max:10000',
-            'status'      => 'nullable|in:draft,planned,active,completed,archived',
-            'timezone'    => 'nullable|timezone',
-            'budget'      => 'nullable|numeric|min:0',
-            'currency'    => 'nullable|string|size:3',
+            'start_date' => 'required|date',
+            'end_date' => 'required|date|after_or_equal:start_date',
+            'notes' => 'nullable|string|max:10000',
+            'status' => 'nullable|in:draft,planned,active,completed,archived',
+            'timezone' => 'nullable|timezone',
+            'budget' => 'nullable|numeric|min:0',
+            'currency' => 'nullable|string|size:3',
         ]);
 
         $id = DB::table('trips')->insertGetId([
             'gallery_space_id' => $space->id,
-            'created_by'       => $user->id,
-            'name'             => $v['name'],
-            'description'      => $v['description'] ?? null,
-            'start_date'       => $v['start_date'],
-            'end_date'         => $v['end_date'],
-            'notes'            => $v['notes'] ?? null,
-            'status'           => $v['status'] ?? 'draft',
-            'timezone'         => $v['timezone'] ?? null,
-            'budget'           => $v['budget'] ?? null,
-            'currency'         => strtoupper($v['currency'] ?? 'CZK'),
-            'created_at'       => now(),
-            'updated_at'       => now(),
+            'created_by' => $user->id,
+            'name' => $v['name'],
+            'description' => $v['description'] ?? null,
+            'start_date' => $v['start_date'],
+            'end_date' => $v['end_date'],
+            'notes' => $v['notes'] ?? null,
+            'status' => $v['status'] ?? 'draft',
+            'timezone' => $v['timezone'] ?? null,
+            'budget' => $v['budget'] ?? null,
+            'currency' => strtoupper($v['currency'] ?? 'CZK'),
+            'created_at' => now(),
+            'updated_at' => now(),
         ]);
 
         return response()->json($this->enrichTrip(DB::table('trips')->find($id)), 201);
@@ -90,7 +91,7 @@ class TripController extends Controller
      */
     public function show(Request $request, int $id): JsonResponse
     {
-        $user  = $request->user();
+        $user = $request->user();
         $space = $user->gallerySpaces()->first();
 
         $trip = DB::table('trips')->where('id', $id)->where('gallery_space_id', $space->id)->first();
@@ -106,19 +107,19 @@ class TripController extends Controller
      */
     public function update(Request $request, int $id): JsonResponse
     {
-        $user  = $request->user();
+        $user = $request->user();
         $space = $user->gallerySpaces()->first();
 
         $v = $request->validate([
-            'name'        => 'nullable|string|max:255',
+            'name' => 'nullable|string|max:255',
             'description' => 'nullable|string|max:5000',
-            'start_date'  => 'nullable|date',
-            'end_date'    => 'nullable|date',
-            'notes'       => 'nullable|string|max:10000',
-            'status'      => 'nullable|in:draft,planned,active,completed,archived',
-            'timezone'    => 'nullable|timezone',
-            'budget'      => 'nullable|numeric|min:0',
-            'currency'    => 'nullable|string|size:3',
+            'start_date' => 'nullable|date',
+            'end_date' => 'nullable|date',
+            'notes' => 'nullable|string|max:10000',
+            'status' => 'nullable|in:draft,planned,active,completed,archived',
+            'timezone' => 'nullable|timezone',
+            'budget' => 'nullable|numeric|min:0',
+            'currency' => 'nullable|string|size:3',
             'is_offline_available' => 'nullable|boolean',
         ]);
 
@@ -142,11 +143,15 @@ class TripController extends Controller
             foreach (DB::table('calendar_events')->where('trip_id', $trip->id)->get() as $event) {
                 $startsAt = Carbon::parse($event->starts_at)->setDateFrom(Carbon::parse($trip->start_date));
                 $updateEvent = ['starts_at' => $startsAt, 'updated_at' => now()];
-                if ($event->ends_at) $updateEvent['ends_at'] = Carbon::parse($event->ends_at)->setDateFrom(Carbon::parse($trip->end_date));
+                if ($event->ends_at) {
+                    $updateEvent['ends_at'] = Carbon::parse($event->ends_at)->setDateFrom(Carbon::parse($trip->end_date));
+                }
                 DB::table('calendar_events')->where('id', $event->id)->update($updateEvent);
             }
         }
-        if ($this->tripPreparation->canSync()) $this->tripPreparation->sync($trip);
+        if ($this->tripPreparation->canSync()) {
+            $this->tripPreparation->sync($trip);
+        }
 
         return response()->json($this->enrichTrip($trip));
     }
@@ -156,7 +161,7 @@ class TripController extends Controller
      */
     public function destroy(Request $request, int $id): JsonResponse
     {
-        $user  = $request->user();
+        $user = $request->user();
         $space = $user->gallerySpaces()->first();
 
         DB::table('trips')
@@ -175,7 +180,7 @@ class TripController extends Controller
     public function media(Request $request, int $id): JsonResponse
     {
         try {
-            $user  = $request->user();
+            $user = $request->user();
             $space = $user->gallerySpaces()->first();
 
             if (! $this->tripBelongsToSpace($id, $space->id)) {
@@ -189,20 +194,21 @@ class TripController extends Controller
                 ->whereNull('trashed_at')
                 ->orderBy('taken_at')
                 ->get()
-                ->map(fn($p) => [
-                    'id'            => $p->id,
-                    'uuid'          => $p->uuid,
-                    'file_name'     => $p->file_name,
-                    'media_type'    => $p->media_type,
+                ->map(fn ($p) => [
+                    'id' => $p->id,
+                    'uuid' => $p->uuid,
+                    'file_name' => $p->file_name,
+                    'media_type' => $p->media_type,
                     'thumbnail_url' => $p->thumbnail_url,
-                    'taken_at'      => $p->taken_at,
-                    'latitude'      => $p->latitude,
-                    'longitude'     => $p->longitude,
+                    'taken_at' => $p->taken_at,
+                    'latitude' => $p->latitude,
+                    'longitude' => $p->longitude,
                 ]);
 
             return response()->json($items);
         } catch (\Exception $e) {
-            \Illuminate\Support\Facades\Log::warning('TripController::media failed: ' . $e->getMessage());
+            Log::warning('TripController::media failed: '.$e->getMessage());
+
             return response()->json([]);
         }
     }
@@ -214,7 +220,7 @@ class TripController extends Controller
     public function suggestMedia(Request $request, int $id): JsonResponse
     {
         try {
-            $user  = $request->user();
+            $user = $request->user();
             $space = $user->gallerySpaces()->first();
 
             $trip = DB::table('trips')->where('id', $id)->where('gallery_space_id', $space->id)->first();
@@ -236,17 +242,18 @@ class TripController extends Controller
             $count = $suggested->count();
 
             return response()->json([
-                'count'   => $count,
-                'samples' => $suggested->take(6)->map(fn($p) => [
-                    'id'            => $p->id,
-                    'uuid'          => $p->uuid,
+                'count' => $count,
+                'samples' => $suggested->take(6)->map(fn ($p) => [
+                    'id' => $p->id,
+                    'uuid' => $p->uuid,
                     'thumbnail_url' => $p->thumbnail_url,
-                    'taken_at'      => $p->taken_at,
+                    'taken_at' => $p->taken_at,
                 ])->values(),
                 'all_ids' => $suggested->pluck('id')->values(),
             ]);
         } catch (\Exception $e) {
-            \Illuminate\Support\Facades\Log::warning('TripController::suggestMedia failed: ' . $e->getMessage());
+            Log::warning('TripController::suggestMedia failed: '.$e->getMessage());
+
             return response()->json(['count' => 0, 'samples' => [], 'all_ids' => []]);
         }
     }
@@ -256,14 +263,14 @@ class TripController extends Controller
      */
     public function addMedia(Request $request, int $id): JsonResponse
     {
-        $user  = $request->user();
+        $user = $request->user();
         $space = $user->gallerySpaces()->first();
 
         if (! $this->tripBelongsToSpace($id, $space->id)) {
             return response()->json(['error' => 'not found'], 404);
         }
         $v = $request->validate([
-            'media_ids'   => 'required|array|max:5000',
+            'media_ids' => 'required|array|max:5000',
             'media_ids.*' => 'integer',
         ]);
 
@@ -274,9 +281,9 @@ class TripController extends Controller
         $now = now();
         foreach ($validIds as $mediaId) {
             DB::table('trip_media')->insertOrIgnore([
-                'trip_id'       => $id,
+                'trip_id' => $id,
                 'media_item_id' => $mediaId,
-                'added_at'      => $now,
+                'added_at' => $now,
             ]);
         }
 
@@ -288,7 +295,7 @@ class TripController extends Controller
      */
     public function removeMedia(Request $request, int $id, int $mediaId): JsonResponse
     {
-        $user  = $request->user();
+        $user = $request->user();
         $space = $user->gallerySpaces()->first();
 
         if (! $this->tripBelongsToSpace($id, $space->id)) {
@@ -341,6 +348,7 @@ class TripController extends Controller
         }
 
         $album = Album::query()->where('trip_id', $trip->id)->where('gallery_space_id', $space->id)->first();
+
         return response()->json(['album' => $album ? $this->recapAlbumPayload($album) : null]);
     }
 
@@ -400,8 +408,8 @@ class TripController extends Controller
                 'event_date_end' => $trip->end_date,
                 'story_mode' => true,
                 'event_mode' => true,
-                'event_start_at' => $trip->start_date . ' 00:00:00',
-                'event_end_at' => $trip->end_date . ' 23:59:59',
+                'event_start_at' => $trip->start_date.' 00:00:00',
+                'event_end_at' => $trip->end_date.' 23:59:59',
                 'visibility' => 'shared',
                 'sort_mode' => 'date_taken',
                 'sort_direction' => 'asc',
@@ -409,7 +417,9 @@ class TripController extends Controller
                 'sync_status' => 'pending',
             ];
             if ($album) {
-                if ($album->trashed()) $album->restore();
+                if ($album->trashed()) {
+                    $album->restore();
+                }
                 $album->update($albumData);
             } else {
                 $album = Album::create($albumData + [
@@ -431,7 +441,9 @@ class TripController extends Controller
             $permissionRows = DB::table('gallery_space_user')->where('gallery_space_id', $space->id)->pluck('user_id')->map(fn ($userId) => [
                 'album_id' => $album->id, 'user_id' => $userId, 'role' => 'editor', 'inherited' => false, 'created_at' => now(), 'updated_at' => now(),
             ])->all();
-            if ($permissionRows) DB::table('album_user_permissions')->upsert($permissionRows, ['album_id', 'user_id'], ['role', 'inherited', 'updated_at']);
+            if ($permissionRows) {
+                DB::table('album_user_permissions')->upsert($permissionRows, ['album_id', 'user_id'], ['role', 'inherited', 'updated_at']);
+            }
             CalendarEvent::where('gallery_space_id', $space->id)->where('trip_id', $trip->id)->update(['album_id' => $album->id, 'updated_at' => now()]);
 
             $storyCreated = DB::table('album_story_blocks')->where('album_id', $album->id)->doesntExist();
@@ -445,6 +457,7 @@ class TripController extends Controller
         });
 
         $payload = $this->recapAlbumPayload($album) + ['story_created' => $storyCreated, 'journal_blocks_added' => $journalBlocksAdded, 'memory_uuid' => $memory->uuid];
+
         return response()->json($payload, $created ? 201 : 200);
     }
 
@@ -572,12 +585,12 @@ class TripController extends Controller
         // Guard: if table doesn't exist yet (migration pending), return clear error
         if (! Schema::hasTable('trip_waypoints')) {
             return response()->json([
-                'error'   => 'trips_not_ready',
+                'error' => 'trips_not_ready',
                 'message' => 'Spusťte php artisan migrate na serveru.',
             ], 503);
         }
 
-        $user  = $request->user();
+        $user = $request->user();
         $space = $user->gallerySpaces()->first();
 
         if (! $this->tripBelongsToSpace($id, $space->id)) {
@@ -585,13 +598,13 @@ class TripController extends Controller
         }
 
         $rules = [
-            'place_name'        => 'required|string|max:255',
-            'latitude'          => 'nullable|numeric|between:-90,90',
-            'longitude'         => 'nullable|numeric|between:-180,180',
-            'notes'             => 'nullable|string|max:2000',
-            'arrived_at'        => 'nullable|date',
-            'departed_at'       => 'nullable|date',
-            'transport_mode'    => 'nullable|in:car,train,bus,plane,walk,bike,boat',
+            'place_name' => 'required|string|max:255',
+            'latitude' => 'nullable|numeric|between:-90,90',
+            'longitude' => 'nullable|numeric|between:-180,180',
+            'notes' => 'nullable|string|max:2000',
+            'arrived_at' => 'nullable|date',
+            'departed_at' => 'nullable|date',
+            'transport_mode' => 'nullable|in:car,train,bus,plane,walk,bike,boat',
             'duration_override' => 'nullable|integer|min:0|max:10000',
         ];
 
@@ -615,19 +628,19 @@ class TripController extends Controller
 
             foreach ($items as $offset => $item) {
                 $insertData = [
-                    'trip_id'     => $id,
-                    'place_name'  => $item['place_name'],
-                    'latitude'    => $item['latitude'] ?? null,
-                    'longitude'   => $item['longitude'] ?? null,
-                    'notes'       => $item['notes'] ?? null,
-                    'arrived_at'  => $item['arrived_at'] ?? null,
+                    'trip_id' => $id,
+                    'place_name' => $item['place_name'],
+                    'latitude' => $item['latitude'] ?? null,
+                    'longitude' => $item['longitude'] ?? null,
+                    'notes' => $item['notes'] ?? null,
+                    'arrived_at' => $item['arrived_at'] ?? null,
                     'departed_at' => $item['departed_at'] ?? null,
-                    'sort_order'  => $maxOrder + $offset + 1,
-                    'created_at'  => now(),
-                    'updated_at'  => now(),
+                    'sort_order' => $maxOrder + $offset + 1,
+                    'created_at' => now(),
+                    'updated_at' => now(),
                 ];
                 if ($hasTransportColumns) {
-                    $insertData['transport_mode']    = $item['transport_mode'] ?? null;
+                    $insertData['transport_mode'] = $item['transport_mode'] ?? null;
                     $insertData['duration_override'] = $item['duration_override'] ?? null;
                 }
 
@@ -647,7 +660,7 @@ class TripController extends Controller
      */
     public function updateWaypoint(Request $request, int $id, int $wpId): JsonResponse
     {
-        $user  = $request->user();
+        $user = $request->user();
         $space = $user->gallerySpaces()->first();
 
         if (! $this->tripBelongsToSpace($id, $space->id)) {
@@ -658,15 +671,15 @@ class TripController extends Controller
         }
 
         $v = $request->validate([
-            'transport_mode'   => 'nullable|in:car,train,bus,plane,walk,bike,boat',
+            'transport_mode' => 'nullable|in:car,train,bus,plane,walk,bike,boat',
             'duration_override' => 'nullable|integer|min:0|max:10000',
-            'notes'            => 'nullable|string|max:2000',
-            'arrived_at'       => 'nullable|date',
-            'departed_at'      => 'nullable|date',
+            'notes' => 'nullable|string|max:2000',
+            'arrived_at' => 'nullable|date',
+            'departed_at' => 'nullable|date',
         ]);
 
         // Only update new columns if migration has run
-        if (! \Illuminate\Support\Facades\Schema::hasColumn('trip_waypoints', 'transport_mode')) {
+        if (! Schema::hasColumn('trip_waypoints', 'transport_mode')) {
             unset($v['transport_mode'], $v['duration_override']);
         }
 
@@ -675,12 +688,12 @@ class TripController extends Controller
             ->where('trip_id', $id)
             ->update(array_merge($v, ['updated_at' => now()]));
 
-
         $wp = DB::table('trip_waypoints')->where('id', $wpId)->where('trip_id', $id)->first();
         if ($wp) {
-            $wp->latitude  = $wp->latitude  !== null ? (float) $wp->latitude  : null;
+            $wp->latitude = $wp->latitude !== null ? (float) $wp->latitude : null;
             $wp->longitude = $wp->longitude !== null ? (float) $wp->longitude : null;
         }
+
         return response()->json($wp);
     }
 
@@ -689,7 +702,7 @@ class TripController extends Controller
      */
     public function reorderWaypoints(Request $request, int $id): JsonResponse
     {
-        $user  = $request->user();
+        $user = $request->user();
         $space = $user->gallerySpaces()->first();
 
         if (! $this->tripBelongsToSpace($id, $space->id)) {
@@ -697,7 +710,7 @@ class TripController extends Controller
         }
 
         $v = $request->validate([
-            'order'   => 'required|array',
+            'order' => 'required|array',
             'order.*' => 'integer',
         ]);
 
@@ -732,9 +745,9 @@ class TripController extends Controller
         $v = $request->validate([
             'from_lat' => 'required|numeric|between:-90,90',
             'from_lng' => 'required|numeric|between:-180,180',
-            'to_lat'   => 'required|numeric|between:-90,90',
-            'to_lng'   => 'required|numeric|between:-180,180',
-            'mode'     => 'nullable|in:driving,walking,cycling',
+            'to_lat' => 'required|numeric|between:-90,90',
+            'to_lng' => 'required|numeric|between:-180,180',
+            'mode' => 'nullable|in:driving,walking,cycling',
         ]);
 
         $mode = $v['mode'] ?? 'driving';
@@ -764,8 +777,8 @@ class TripController extends Controller
             $ch = curl_init($url);
             curl_setopt_array($ch, [
                 CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_TIMEOUT        => 6,
-                CURLOPT_USERAGENT      => 'MakiGallery/1.0 (gallery.stanektech.cz)',
+                CURLOPT_TIMEOUT => 6,
+                CURLOPT_USERAGENT => 'MakiGallery/1.0 (gallery.stanektech.cz)',
                 CURLOPT_SSL_VERIFYPEER => true,
             ]);
             $resp = curl_exec($ch);
@@ -782,9 +795,9 @@ class TripController extends Controller
             }
 
             return [
-                'distance_km'  => round($data['routes'][0]['distance'] / 1000, 1),
+                'distance_km' => round($data['routes'][0]['distance'] / 1000, 1),
                 'duration_min' => (int) round($data['routes'][0]['duration'] / 60),
-                'source'       => 'osrm',
+                'source' => 'osrm',
             ];
         });
 
@@ -804,7 +817,7 @@ class TripController extends Controller
     {
         $v = $request->validate([
             'from' => 'required|string|max:120',
-            'to'   => 'required|string|max:120',
+            'to' => 'required|string|max:120',
             'date' => 'required|date_format:Y-m-d',
             'from_lat' => 'nullable|numeric|between:-90,90', 'from_lng' => 'nullable|numeric|between:-180,180',
             'to_lat' => 'nullable|numeric|between:-90,90', 'to_lng' => 'nullable|numeric|between:-180,180',
@@ -836,24 +849,25 @@ class TripController extends Controller
                     $list[] = ['id' => (int) $c['id'], 'name' => (string) $c['name']];
                 }
             }
+
             return $list;
         });
 
         $fromId = $this->fuzzyFindCityId($cities, $from);
-        $toId   = $this->fuzzyFindCityId($cities, $to);
+        $toId = $this->fuzzyFindCityId($cities, $to);
 
         if (! $fromId || ! $toId || $fromId === $toId) {
             return [];
         }
 
-        $url  = 'https://brn-ybus-pubapi.sa.cz/restapi/routes/search/simple?' . http_build_query([
-            'tariffs'          => 'REGULAR',
-            'toLocationType'   => 'CITY',
-            'toLocationId'     => $toId,
+        $url = 'https://brn-ybus-pubapi.sa.cz/restapi/routes/search/simple?'.http_build_query([
+            'tariffs' => 'REGULAR',
+            'toLocationType' => 'CITY',
+            'toLocationId' => $toId,
             'fromLocationType' => 'CITY',
-            'fromLocationId'   => $fromId,
-            'departureDate'    => $date,
-            'locale'           => 'cs',
+            'fromLocationId' => $fromId,
+            'departureDate' => $date,
+            'locale' => 'cs',
         ]);
         $resp = $this->curlFetch($url, ['X-Currency: CZK', 'Accept: application/json']);
         $data = json_decode($resp, true);
@@ -872,38 +886,38 @@ class TripController extends Controller
             $type = in_array('TRAIN', $route['vehicleTypes'] ?? []) ? 'train' : 'bus';
             if (! isset($best[$type]) || $price < $best[$type]['price']) {
                 $best[$type] = [
-                    'price'    => (float) $price,
+                    'price' => (float) $price,
                     'currency' => 'CZK',
-                    'dep'      => $route['departureTime'] ?? null,
-                    'arr'      => $route['arrivalTime']   ?? null,
+                    'dep' => $route['departureTime'] ?? null,
+                    'arr' => $route['arrivalTime'] ?? null,
                 ];
             }
         }
 
-        $f  = urlencode($from);
-        $t  = urlencode($to);
+        $f = urlencode($from);
+        $t = urlencode($to);
         $result = [];
 
         if (isset($best['bus'])) {
             $result[] = [
-                'carrier'   => 'RegioJet Bus',
-                'icon'      => '🟡',
+                'carrier' => 'RegioJet Bus',
+                'icon' => '🟡',
                 'min_price' => (int) ceil($best['bus']['price']),
-                'currency'  => 'CZK',
-                'source'    => 'live',
-                'note'      => 'základní tarif',
-                'book_url'  => 'https://regiojet.cz/',
+                'currency' => 'CZK',
+                'source' => 'live',
+                'note' => 'základní tarif',
+                'book_url' => 'https://regiojet.cz/',
             ];
         }
         if (isset($best['train'])) {
             $result[] = [
-                'carrier'   => 'RegioJet vlak',
-                'icon'      => '🟡',
+                'carrier' => 'RegioJet vlak',
+                'icon' => '🟡',
                 'min_price' => (int) ceil($best['train']['price']),
-                'currency'  => 'CZK',
-                'source'    => 'live',
-                'note'      => 'základní tarif',
-                'book_url'  => 'https://regiojet.cz/',
+                'currency' => 'CZK',
+                'source' => 'live',
+                'note' => 'základní tarif',
+                'book_url' => 'https://regiojet.cz/',
             ];
         }
 
@@ -915,19 +929,19 @@ class TripController extends Controller
     private function flixbusPrices(string $from, string $to, string $date): array
     {
         $fromCity = $this->flixbusCity($from);
-        $toCity   = $this->flixbusCity($to);
+        $toCity = $this->flixbusCity($to);
 
         if (! $fromCity || ! $toCity) {
             return [];
         }
 
-        $url  = 'https://global.api.flixbus.com/search/service/v4/search?' . http_build_query([
-            'from_city_id'   => $fromCity['id'],
-            'to_city_id'     => $toCity['id'],
+        $url = 'https://global.api.flixbus.com/search/service/v4/search?'.http_build_query([
+            'from_city_id' => $fromCity['id'],
+            'to_city_id' => $toCity['id'],
             'departure_date' => $date,
-            'number_adult'   => 1,
-            'currency'       => 'CZK',
-            'locale'         => 'cs',
+            'number_adult' => 1,
+            'currency' => 'CZK',
+            'locale' => 'cs',
         ]);
         $resp = $this->curlFetch($url, ['Accept: application/json']);
         $data = json_decode($resp, true);
@@ -950,22 +964,23 @@ class TripController extends Controller
         }
 
         return [[
-            'carrier'   => 'FlixBus',
-            'icon'      => '🟢',
+            'carrier' => 'FlixBus',
+            'icon' => '🟢',
             'min_price' => (int) ceil($minPrice),
-            'currency'  => 'CZK',
-            'source'    => 'live',
-            'note'      => 'od nejnižší ceny',
-            'book_url'  => 'https://www.flixbus.cz/',
+            'currency' => 'CZK',
+            'source' => 'live',
+            'note' => 'od nejnižší ceny',
+            'book_url' => 'https://www.flixbus.cz/',
         ]];
     }
 
     private function flixbusCity(string $name): ?array
     {
-        $key = 'fb_city:' . md5(mb_strtolower($name));
+        $key = 'fb_city:'.md5(mb_strtolower($name));
+
         return Cache::remember($key, 86400 * 7, function () use ($name) {
-            $url  = 'https://global.api.flixbus.com/search/service/v4/cities/autocomplete?' . http_build_query([
-                'q'    => $name,
+            $url = 'https://global.api.flixbus.com/search/service/v4/cities/autocomplete?'.http_build_query([
+                'q' => $name,
                 'lang' => 'cs',
             ]);
             $resp = $this->curlFetch($url, ['Accept: application/json']);
@@ -973,6 +988,7 @@ class TripController extends Controller
             if (empty($data) || ! isset($data[0]['id'])) {
                 return null;
             }
+
             return ['id' => $data[0]['id'], 'name' => $data[0]['name'] ?? $name];
         });
     }
@@ -984,7 +1000,7 @@ class TripController extends Controller
      */
     private function fuzzyFindCityId(array $cities, string $name): ?int
     {
-        $clean = fn(string $s) => mb_strtolower(
+        $clean = fn (string $s) => mb_strtolower(
             preg_replace('/\s+(hlavní|hl\.|nádraží|bus|vlak|letiště|airport|centrum|město)\b.*/iu', '', trim($s)) ?? '',
             'UTF-8'
         );
@@ -1017,19 +1033,20 @@ class TripController extends Controller
         $ch = curl_init($url);
         curl_setopt_array($ch, [
             CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_TIMEOUT        => 8,
-            CURLOPT_USERAGENT      => 'MakiGallery/1.0 (gallery.stanektech.cz)',
+            CURLOPT_TIMEOUT => 8,
+            CURLOPT_USERAGENT => 'MakiGallery/1.0 (gallery.stanektech.cz)',
             CURLOPT_SSL_VERIFYPEER => true,
             CURLOPT_FOLLOWLOCATION => true,
-            CURLOPT_HTTPHEADER     => $headers,
+            CURLOPT_HTTPHEADER => $headers,
         ]);
-        $resp  = curl_exec($ch);
+        $resp = curl_exec($ch);
         $errno = curl_errno($ch);
         $status = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
         curl_close($ch);
         if ($errno || ! $resp || $status >= 400) {
             throw new \RuntimeException("Dopravní portál vrátil HTTP {$status}");
         }
+
         return $resp;
     }
 
@@ -1038,7 +1055,7 @@ class TripController extends Controller
      */
     public function removeWaypoint(Request $request, int $id, int $wpId): JsonResponse
     {
-        $user  = $request->user();
+        $user = $request->user();
         $space = $user->gallerySpaces()->first();
 
         if (! $this->tripBelongsToSpace($id, $space->id)) {
@@ -1104,19 +1121,25 @@ class TripController extends Controller
         };
 
         $add('heading', ['text' => $album->title, 'level' => 1]);
-        $dateLabel = Carbon::parse($trip->start_date)->format('d. m. Y') . ' – ' . Carbon::parse($trip->end_date)->format('d. m. Y');
-        $add('text', ['body' => $dateLabel . ($trip->description ? "\n\n" . $trip->description : '')]);
+        $dateLabel = Carbon::parse($trip->start_date)->format('d. m. Y').' – '.Carbon::parse($trip->end_date)->format('d. m. Y');
+        $add('text', ['body' => $dateLabel.($trip->description ? "\n\n".$trip->description : '')]);
 
         $reflection = Schema::hasTable('trip_reflections') ? DB::table('trip_reflections')->where('trip_id', $trip->id)->first() : null;
-        if ($reflection?->highlight) $add('quote', ['quote' => $reflection->highlight, 'author' => 'Náš nejhezčí moment']);
+        if ($reflection?->highlight) {
+            $add('quote', ['quote' => $reflection->highlight, 'author' => 'Náš nejhezčí moment']);
+        }
         $reflectionNotes = array_values(array_filter([
-            $reflection?->gratitude ? 'Za co jsme rádi: ' . $reflection->gratitude : null,
-            $reflection?->next_time ? 'Příště: ' . $reflection->next_time : null,
+            $reflection?->gratitude ? 'Za co jsme rádi: '.$reflection->gratitude : null,
+            $reflection?->next_time ? 'Příště: '.$reflection->next_time : null,
         ]));
-        if ($reflectionNotes) $add('text', ['body' => implode("\n\n", $reflectionNotes)]);
+        if ($reflectionNotes) {
+            $add('text', ['body' => implode("\n\n", $reflectionNotes)]);
+        }
 
         $firstWaypoint = DB::table('trip_waypoints')->where('trip_id', $trip->id)->whereNotNull('latitude')->whereNotNull('longitude')->orderBy('sort_order')->first();
-        if ($firstWaypoint) $add('map', ['latitude' => (float) $firstWaypoint->latitude, 'longitude' => (float) $firstWaypoint->longitude, 'zoom' => 11, 'label' => $firstWaypoint->place_name]);
+        if ($firstWaypoint) {
+            $add('map', ['latitude' => (float) $firstWaypoint->latitude, 'longitude' => (float) $firstWaypoint->longitude, 'zoom' => 11, 'label' => $firstWaypoint->place_name]);
+        }
 
         $days = DB::table('trip_days')->where('trip_id', $trip->id)->orderBy('sort_order')->orderBy('date')->get();
         $journal = $this->storyJournalEntries((int) $trip->id);
@@ -1125,11 +1148,15 @@ class TripController extends Controller
         foreach ($days as $index => $day) {
             $activities = DB::table('trip_activities')->where('trip_day_id', $day->id)->orderBy('sort_order')->get();
             $dayMedia = $media->filter(fn (MediaItem $item) => $item->taken_at?->toDateString() === $day->date);
-            if ($activities->isEmpty() && $dayMedia->isEmpty() && ! $day->notes) continue;
-            $add('heading', ['text' => ($day->title ?: 'Den ' . ($index + 1)) . ' · ' . Carbon::parse($day->date)->format('d. m. Y'), 'level' => 2]);
-            $activityLines = $activities->map(fn ($activity) => '• ' . ($activity->starts_at ? substr((string) $activity->starts_at, 0, 5) . ' ' : '') . $activity->title)->all();
+            if ($activities->isEmpty() && $dayMedia->isEmpty() && ! $day->notes) {
+                continue;
+            }
+            $add('heading', ['text' => ($day->title ?: 'Den '.($index + 1)).' · '.Carbon::parse($day->date)->format('d. m. Y'), 'level' => 2]);
+            $activityLines = $activities->map(fn ($activity) => '• '.($activity->starts_at ? substr((string) $activity->starts_at, 0, 5).' ' : '').$activity->title)->all();
             $dayText = array_values(array_filter([$day->notes, $activityLines ? implode("\n", $activityLines) : null]));
-            if ($dayText) $add('text', ['body' => implode("\n\n", $dayText)]);
+            if ($dayText) {
+                $add('text', ['body' => implode("\n\n", $dayText)]);
+            }
             foreach ($journal->where('trip_day_id', $day->id) as $entry) {
                 $this->addJournalStoryBlock($add, $entry);
                 $journalBlocks++;
@@ -1143,9 +1170,13 @@ class TripController extends Controller
         }
 
         $remainingPhotos = $media->where('media_type', 'photo')->reject(fn (MediaItem $item) => $usedMediaIds->contains($item->id))->take(9);
-        if ($remainingPhotos->isNotEmpty()) $add('photo', ['media_uuids' => $remainingPhotos->pluck('uuid')->all(), 'layout' => $remainingPhotos->count() === 1 ? 'single' : 'grid3', 'caption' => 'Další společné momenty']);
+        if ($remainingPhotos->isNotEmpty()) {
+            $add('photo', ['media_uuids' => $remainingPhotos->pluck('uuid')->all(), 'layout' => $remainingPhotos->count() === 1 ? 'single' : 'grid3', 'caption' => 'Další společné momenty']);
+        }
         $video = $media->firstWhere('media_type', 'video');
-        if ($video) $add('video', ['media_uuid' => $video->uuid, 'caption' => 'Video z cesty']);
+        if ($video) {
+            $add('video', ['media_uuid' => $video->uuid, 'caption' => 'Video z cesty']);
+        }
 
         $remainingJournal = $journal->reject(fn ($entry) => $usedJournalIds->contains($entry->id));
         if ($remainingJournal->isNotEmpty()) {
@@ -1156,7 +1187,10 @@ class TripController extends Controller
             }
         }
 
-        if ($blocks) DB::table('album_story_blocks')->insert($blocks);
+        if ($blocks) {
+            DB::table('album_story_blocks')->insert($blocks);
+        }
+
         return $journalBlocks;
     }
 
@@ -1166,7 +1200,9 @@ class TripController extends Controller
             ->map(fn ($content) => json_decode($content ?: '{}', true) ?: [])
             ->pluck('source_journal_entry_id')->filter(fn ($id) => is_numeric($id))->map(fn ($id) => (int) $id);
         $missing = $this->storyJournalEntries((int) $trip->id)->reject(fn ($entry) => $existingIds->contains((int) $entry->id));
-        if ($missing->isEmpty()) return 0;
+        if ($missing->isEmpty()) {
+            return 0;
+        }
 
         $sortOrder = ((int) DB::table('album_story_blocks')->where('album_id', $album->id)->max('sort_order')) + 1;
         $rows = [];
@@ -1174,14 +1210,19 @@ class TripController extends Controller
             $rows[] = ['album_id' => $album->id, 'created_by' => $userId, 'type' => $type, 'content' => json_encode($content, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), 'sort_order' => $sortOrder++, 'created_at' => now(), 'updated_at' => now()];
         };
         $add('heading', ['text' => 'Nové zápisky z cesty', 'level' => 2, 'source' => 'travel_journal']);
-        foreach ($missing as $entry) $this->addJournalStoryBlock($add, $entry);
+        foreach ($missing as $entry) {
+            $this->addJournalStoryBlock($add, $entry);
+        }
         DB::table('album_story_blocks')->insert($rows);
+
         return $missing->count();
     }
 
     private function storyJournalEntries(int $tripId)
     {
-        if (! Schema::hasColumn('travel_journal_entries', 'visibility')) return collect();
+        if (! Schema::hasColumn('travel_journal_entries', 'visibility')) {
+            return collect();
+        }
         $query = DB::table('travel_journal_entries as entry')
             ->join('users', 'users.id', '=', 'entry.user_id')
             ->where('entry.trip_id', $tripId)
@@ -1193,6 +1234,7 @@ class TripController extends Controller
             return $query->leftJoin('travel_journal_recordings as recording', 'recording.journal_entry_id', '=', 'entry.id')
                 ->get(['entry.*', 'users.name as user_name', 'recording.uuid as recording_uuid', 'recording.duration_ms as recording_duration_ms', 'recording.mime_type as recording_mime_type']);
         }
+
         return $query->get(['entry.*', 'users.name as user_name']);
     }
 
@@ -1201,6 +1243,7 @@ class TripController extends Controller
         $source = ['source' => 'travel_journal', 'source_journal_entry_id' => (int) $entry->id, 'recorded_at' => $entry->recorded_at, 'mood' => $entry->mood];
         if ($entry->type === 'location' && $entry->latitude !== null && $entry->longitude !== null) {
             $add('map', $source + ['latitude' => (float) $entry->latitude, 'longitude' => (float) $entry->longitude, 'zoom' => 14, 'label' => $entry->content ?: 'Místo z cestovního deníku']);
+
             return;
         }
         $content = $source + ['quote' => $entry->content, 'author' => $entry->user_name];
@@ -1213,6 +1256,7 @@ class TripController extends Controller
     private function recapAlbumPayload(Album $album): array
     {
         $memory = DB::table('shared_memory_moments')->where('trip_id', $album->trip_id)->first(['uuid', 'title']);
+
         return [
             'id' => $album->id,
             'uuid' => $album->uuid,
@@ -1264,18 +1308,19 @@ class TripController extends Controller
                 }
             }
 
-            $trip->waypoints     = $waypoints;
-            $trip->media_count   = $mediaCount;
-            $trip->cover_thumb   = $coverThumb;
+            $trip->waypoints = $waypoints;
+            $trip->media_count = $mediaCount;
+            $trip->cover_thumb = $coverThumb;
             $trip->duration_days = (int) Carbon::parse($trip->start_date)->diffInDays($trip->end_date) + 1;
 
             return $trip;
         } catch (\Exception $e) {
-            \Illuminate\Support\Facades\Log::warning('TripController::enrichTrip failed: ' . $e->getMessage());
-            $trip->waypoints     = collect();
-            $trip->media_count   = 0;
-            $trip->cover_thumb   = null;
+            Log::warning('TripController::enrichTrip failed: '.$e->getMessage());
+            $trip->waypoints = collect();
+            $trip->media_count = 0;
+            $trip->cover_thumb = null;
             $trip->duration_days = 1;
+
             return $trip;
         }
     }
@@ -1283,7 +1328,7 @@ class TripController extends Controller
     private function castWaypoint(?object $waypoint): ?object
     {
         if ($waypoint) {
-            $waypoint->latitude  = $waypoint->latitude !== null ? (float) $waypoint->latitude : null;
+            $waypoint->latitude = $waypoint->latitude !== null ? (float) $waypoint->latitude : null;
             $waypoint->longitude = $waypoint->longitude !== null ? (float) $waypoint->longitude : null;
         }
 

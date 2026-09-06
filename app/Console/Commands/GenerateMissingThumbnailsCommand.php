@@ -4,16 +4,18 @@ namespace App\Console\Commands;
 
 use App\Models\MediaItem;
 use App\Models\StorageConnection;
-use App\Services\Storage\GoogleDriveStorageProvider;
-use App\Services\Media\VideoProcessingService;
 use App\Services\Media\ImageVariantService;
+use App\Services\Media\VideoProcessingService;
+use App\Services\Storage\GoogleDriveStorageProvider;
+use Carbon\Carbon;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 
 class GenerateMissingThumbnailsCommand extends Command
 {
-    protected $signature   = 'gallery:thumbnails {--force : Regenerate even existing thumbnails} {--recover : Download from Drive if local file missing}';
+    protected $signature = 'gallery:thumbnails {--force : Regenerate even existing thumbnails} {--recover : Download from Drive if local file missing}';
+
     protected $description = 'Generate thumbnails for media items missing them. Use --recover to pull originals from Google Drive.';
 
     public function handle(VideoProcessingService $videos, ImageVariantService $images): int
@@ -27,17 +29,19 @@ class GenerateMissingThumbnailsCommand extends Command
         $this->info("Checking {$total} media items for usable previews.");
         if ($total === 0) {
             $this->info('Nothing to do.');
+
             return 0;
         }
 
-        $bar       = $this->output->createProgressBar($total);
-        $done      = 0;
-        $fail      = 0;
+        $bar = $this->output->createProgressBar($total);
+        $done = 0;
+        $fail = 0;
         $recovered = 0;
 
         $query->with('variants')->orderBy('id')->each(function (MediaItem $media) use ($bar, &$done, &$fail, &$recovered, $videos, $images) {
-            if (!$this->option('force') && $this->hasUsablePreview($media)) {
+            if (! $this->option('force') && $this->hasUsablePreview($media)) {
                 $bar->advance();
+
                 return;
             }
 
@@ -45,9 +49,9 @@ class GenerateMissingThumbnailsCommand extends Command
             $media->variants()->whereIn('type', $previewTypes)->delete();
 
             $originalVar = $media->variants()->where('type', 'original')->first();
-            $sourcePath  = $originalVar ? Storage::disk($originalVar->disk)->path($originalVar->path) : null;
+            $sourcePath = $originalVar ? Storage::disk($originalVar->disk)->path($originalVar->path) : null;
 
-            if ((!$sourcePath || !file_exists($sourcePath)) && $this->option('recover') && $media->drive_file_id) {
+            if ((! $sourcePath || ! file_exists($sourcePath)) && $this->option('recover') && $media->drive_file_id) {
                 $sourcePath = $this->downloadFromDrive($media);
                 if ($sourcePath) {
                     $recovered++;
@@ -63,37 +67,41 @@ class GenerateMissingThumbnailsCommand extends Command
                 }
             }
 
-            if ((!$sourcePath || !file_exists($sourcePath)) && $media->media_type === 'video') {
+            if ((! $sourcePath || ! file_exists($sourcePath)) && $media->media_type === 'video') {
                 // A visible fallback is still preferable to a broken image and
                 // allows the grid to remain fast while the original is restored.
                 $videos->generateFallbackPoster($media);
                 $done++;
                 $bar->advance();
+
                 return;
             }
 
-            if (!$sourcePath || !file_exists($sourcePath)) {
+            if (! $sourcePath || ! file_exists($sourcePath)) {
                 $this->newLine();
-                $this->warn("  No source for #{$media->id} {$media->original_filename}" . ($media->drive_file_id ? ' (has Drive ID, use --recover)' : ' (no Drive ID)'));
+                $this->warn("  No source for #{$media->id} {$media->original_filename}".($media->drive_file_id ? ' (has Drive ID, use --recover)' : ' (no Drive ID)'));
                 $bar->advance();
                 $fail++;
+
                 return;
             }
 
             try {
                 if ($media->media_type === 'video') {
                     $poster = $videos->generatePoster($media, $sourcePath);
-                    if (!$poster) $videos->generateFallbackPoster($media);
+                    if (! $poster) {
+                        $videos->generateFallbackPoster($media);
+                    }
                 } else {
                     // Generate the complete compatible set, not just a tiny
                     // thumbnail. HEIC/HEIF originals need a high-quality
                     // WebP/JPEG variant for browser viewing and zooming.
                     $images->generateAll($media, $sourcePath);
-                    if (!$media->fresh()->variants()->where('type', 'thumbnail')->exists()) {
+                    if (! $media->fresh()->variants()->where('type', 'thumbnail')->exists()) {
                         $this->makeThumbnail($media, $sourcePath);
                     }
                 }
-                if (!$media->taken_at && $media->media_type === 'photo') {
+                if (! $media->taken_at && $media->media_type === 'photo') {
                     $this->extractExif($media, $sourcePath);
                 }
                 $done++;
@@ -109,6 +117,7 @@ class GenerateMissingThumbnailsCommand extends Command
         $bar->finish();
         $this->newLine(2);
         $this->info("Done. Generated: {$done}, Recovered from Drive: {$recovered}, Failed/skipped: {$fail}");
+
         return 0;
     }
 
@@ -127,20 +136,26 @@ class GenerateMissingThumbnailsCommand extends Command
         try {
             $conn = StorageConnection::whereHas(
                 'owner',
-                fn($q) => $q->whereHas('gallerySpaces', fn($q2) => $q2->where('gallery_spaces.id', $media->gallery_space_id))
+                fn ($q) => $q->whereHas('gallerySpaces', fn ($q2) => $q2->where('gallery_spaces.id', $media->gallery_space_id))
             )->where('provider', 'google_drive')->where('connection_status', 'healthy')->first();
 
-            if (!$conn) return null;
+            if (! $conn) {
+                return null;
+            }
 
             $provider = new GoogleDriveStorageProvider($conn);
-            $stream   = $provider->download($media->drive_file_id);
-            $tmpPath  = tempnam(sys_get_temp_dir(), 'gallery_recover_') . '.' . $media->extension;
+            $stream = $provider->download($media->drive_file_id);
+            $tmpPath = tempnam(sys_get_temp_dir(), 'gallery_recover_').'.'.$media->extension;
             $fh = fopen($tmpPath, 'wb');
-            while (!$stream->eof()) fwrite($fh, $stream->read(65536));
+            while (! $stream->eof()) {
+                fwrite($fh, $stream->read(65536));
+            }
             fclose($fh);
+
             return $tmpPath;
         } catch (\Throwable $e) {
             Log::warning('Drive download failed', ['id' => $media->id, 'error' => $e->getMessage()]);
+
             return null;
         }
     }
@@ -150,24 +165,32 @@ class GenerateMissingThumbnailsCommand extends Command
         try {
             [$w, $h] = @getimagesize($path) ?: [null, null];
             $updates = [];
-            if ($w) $updates['width']  = $w;
-            if ($h) $updates['height'] = $h;
+            if ($w) {
+                $updates['width'] = $w;
+            }
+            if ($h) {
+                $updates['height'] = $h;
+            }
 
             // Try Imagick (supports HEIC/HEIF)
             if (extension_loaded('imagick')) {
                 try {
-                    $im    = new \Imagick($path . '[0]');
+                    $im = new \Imagick($path.'[0]');
                     $props = $im->getImageProperties('exif:*');
                     $im->destroy();
 
-                    if (!empty($props['exif:DateTimeOriginal'])) {
+                    if (! empty($props['exif:DateTimeOriginal'])) {
                         try {
-                            $updates['taken_at'] = \Carbon\Carbon::createFromFormat('Y:m:d H:i:s', $props['exif:DateTimeOriginal']);
+                            $updates['taken_at'] = Carbon::createFromFormat('Y:m:d H:i:s', $props['exif:DateTimeOriginal']);
                         } catch (\Throwable) {
                         }
                     }
-                    if (!empty($props['exif:Make']))  $updates['camera_make']  = substr($props['exif:Make'],  0, 100);
-                    if (!empty($props['exif:Model'])) $updates['camera_model'] = substr($props['exif:Model'], 0, 100);
+                    if (! empty($props['exif:Make'])) {
+                        $updates['camera_make'] = substr($props['exif:Make'], 0, 100);
+                    }
+                    if (! empty($props['exif:Model'])) {
+                        $updates['camera_model'] = substr($props['exif:Model'], 0, 100);
+                    }
 
                     $lat = $this->parseGps($props['exif:GPSLatitude'] ?? null, $props['exif:GPSLatitudeRef'] ?? 'N');
                     $lng = $this->parseGps($props['exif:GPSLongitude'] ?? null, $props['exif:GPSLongitudeRef'] ?? 'E');
@@ -176,7 +199,10 @@ class GenerateMissingThumbnailsCommand extends Command
                         $updates['longitude'] = $lng;
                     }
 
-                    if ($updates) $media->update($updates);
+                    if ($updates) {
+                        $media->update($updates);
+                    }
+
                     return;
                 } catch (\Throwable) {
                 }
@@ -185,21 +211,34 @@ class GenerateMissingThumbnailsCommand extends Command
             // Try exiftool
             $exiftoolPath = config('gallery.exiftool_path', '/usr/bin/exiftool');
             if (file_exists($exiftoolPath)) {
-                $json = shell_exec(escapeshellcmd($exiftoolPath) . ' -json -n ' . escapeshellarg($path) . ' 2>/dev/null');
+                $json = shell_exec(escapeshellcmd($exiftoolPath).' -json -n '.escapeshellarg($path).' 2>/dev/null');
                 if ($json) {
                     $data = json_decode($json, true)[0] ?? [];
-                    if (!empty($data['DateTimeOriginal'])) {
+                    if (! empty($data['DateTimeOriginal'])) {
                         try {
-                            $updates['taken_at'] = \Carbon\Carbon::parse($data['DateTimeOriginal']);
+                            $updates['taken_at'] = Carbon::parse($data['DateTimeOriginal']);
                         } catch (\Throwable) {
                         }
                     }
-                    if (!empty($data['Make']))  $updates['camera_make']  = substr($data['Make'],  0, 100);
-                    if (!empty($data['Model'])) $updates['camera_model'] = substr($data['Model'], 0, 100);
-                    if (!empty($data['GPSLatitude']))  $updates['latitude']  = (float) $data['GPSLatitude'];
-                    if (!empty($data['GPSLongitude'])) $updates['longitude'] = (float) $data['GPSLongitude'];
-                    if (!empty($data['GPSAltitude']))  $updates['altitude']  = round((float) $data['GPSAltitude'], 1);
-                    if ($updates) $media->update($updates);
+                    if (! empty($data['Make'])) {
+                        $updates['camera_make'] = substr($data['Make'], 0, 100);
+                    }
+                    if (! empty($data['Model'])) {
+                        $updates['camera_model'] = substr($data['Model'], 0, 100);
+                    }
+                    if (! empty($data['GPSLatitude'])) {
+                        $updates['latitude'] = (float) $data['GPSLatitude'];
+                    }
+                    if (! empty($data['GPSLongitude'])) {
+                        $updates['longitude'] = (float) $data['GPSLongitude'];
+                    }
+                    if (! empty($data['GPSAltitude'])) {
+                        $updates['altitude'] = round((float) $data['GPSAltitude'], 1);
+                    }
+                    if ($updates) {
+                        $media->update($updates);
+                    }
+
                     return;
                 }
             }
@@ -208,13 +247,13 @@ class GenerateMissingThumbnailsCommand extends Command
             if (function_exists('exif_read_data')) {
                 $exif = @exif_read_data($path);
                 if ($exif) {
-                    if (!empty($exif['DateTimeOriginal'])) {
+                    if (! empty($exif['DateTimeOriginal'])) {
                         try {
-                            $updates['taken_at'] = \Carbon\Carbon::createFromFormat('Y:m:d H:i:s', $exif['DateTimeOriginal']);
+                            $updates['taken_at'] = Carbon::createFromFormat('Y:m:d H:i:s', $exif['DateTimeOriginal']);
                         } catch (\Throwable) {
                         }
                     }
-                    if (!empty($exif['GPSLatitude']) && !empty($exif['GPSLongitude'])) {
+                    if (! empty($exif['GPSLatitude']) && ! empty($exif['GPSLongitude'])) {
                         $lat = $this->gps($exif['GPSLatitude'], $exif['GPSLatitudeRef'] ?? 'N');
                         $lng = $this->gps($exif['GPSLongitude'], $exif['GPSLongitudeRef'] ?? 'E');
                         if ($lat && $lng) {
@@ -222,51 +261,65 @@ class GenerateMissingThumbnailsCommand extends Command
                             $updates['longitude'] = $lng;
                         }
                     }
-                    if (!empty($exif['Make']))  $updates['camera_make']  = substr($exif['Make'],  0, 100);
-                    if (!empty($exif['Model'])) $updates['camera_model'] = substr($exif['Model'], 0, 100);
+                    if (! empty($exif['Make'])) {
+                        $updates['camera_make'] = substr($exif['Make'], 0, 100);
+                    }
+                    if (! empty($exif['Model'])) {
+                        $updates['camera_model'] = substr($exif['Model'], 0, 100);
+                    }
                 }
             }
-            if ($updates) $media->update($updates);
+            if ($updates) {
+                $media->update($updates);
+            }
         } catch (\Throwable) {
         }
     }
 
     private function parseGps(?string $raw, string $ref): ?float
     {
-        if (!$raw) return null;
+        if (! $raw) {
+            return null;
+        }
         $parts = array_map('trim', explode(',', $raw));
-        if (count($parts) < 3) return null;
-        $f = fn($v) => str_contains($v, '/') ? (float)explode('/', $v)[0] / max(1, (float)explode('/', $v)[1]) : (float)$v;
+        if (count($parts) < 3) {
+            return null;
+        }
+        $f = fn ($v) => str_contains($v, '/') ? (float) explode('/', $v)[0] / max(1, (float) explode('/', $v)[1]) : (float) $v;
         $d = $f($parts[0]) + $f($parts[1]) / 60 + $f($parts[2]) / 3600;
+
         return in_array(strtoupper($ref), ['S', 'W']) ? -$d : $d;
     }
 
     private function gps(array $c, string $ref): ?float
     {
-        if (count($c) < 3) return null;
-        $f = fn($v) => is_string($v) && str_contains($v, '/') ? (float)explode('/', $v)[0] / max(1, (float)explode('/', $v)[1]) : (float)$v;
+        if (count($c) < 3) {
+            return null;
+        }
+        $f = fn ($v) => is_string($v) && str_contains($v, '/') ? (float) explode('/', $v)[0] / max(1, (float) explode('/', $v)[1]) : (float) $v;
         $d = $f($c[0]) + $f($c[1]) / 60 + $f($c[2]) / 3600;
+
         return in_array(strtoupper($ref), ['S', 'W']) ? -$d : $d;
     }
 
     private function makeThumbnail(MediaItem $media, string $sourcePath): void
     {
         $thumbRel = "media/{$media->uuid}/thumbnail.jpg";
-        $size     = 400;
+        $size = 400;
 
         if (extension_loaded('imagick')) {
             try {
-                $im = new \Imagick($sourcePath . '[0]');
+                $im = new \Imagick($sourcePath.'[0]');
                 $im->setImageColorspace(\Imagick::COLORSPACE_SRGB);
                 $im->autoOrient();
                 $w = $im->getImageWidth();
                 $h = $im->getImageHeight();
                 $min = min($w, $h);
-                $im->cropImage($min, $min, (int)(($w - $min) / 2), (int)(($h - $min) / 2));
+                $im->cropImage($min, $min, (int) (($w - $min) / 2), (int) (($h - $min) / 2));
                 $im->thumbnailImage($size, $size);
                 $im->setImageFormat('jpeg');
                 $im->setImageCompressionQuality(85);
-                $tmp = tempnam(sys_get_temp_dir(), 'gt_') . '.jpg';
+                $tmp = tempnam(sys_get_temp_dir(), 'gt_').'.jpg';
                 $im->writeImage($tmp);
                 $im->destroy();
                 if (Storage::disk('public')->put($thumbRel, fopen($tmp, 'rb'), 'public')) {
@@ -279,9 +332,10 @@ class GenerateMissingThumbnailsCommand extends Command
                             'mime_type' => 'image/jpeg',
                             'size_bytes' => Storage::disk('public')->size($thumbRel),
                             'width' => $size,
-                            'height' => $size
+                            'height' => $size,
                         ]
                     );
+
                     return;
                 }
                 @unlink($tmp);
@@ -294,19 +348,19 @@ class GenerateMissingThumbnailsCommand extends Command
             $ext = strtolower($media->extension);
             $src = match ($ext) {
                 'jpg', 'jpeg' => @imagecreatefromjpeg($sourcePath),
-                'png'         => @imagecreatefrompng($sourcePath),
-                'webp'        => @imagecreatefromwebp($sourcePath),
-                'gif'         => @imagecreatefromgif($sourcePath),
-                default       => null,
+                'png' => @imagecreatefrompng($sourcePath),
+                'webp' => @imagecreatefromwebp($sourcePath),
+                'gif' => @imagecreatefromgif($sourcePath),
+                default => null,
             };
             if ($src) {
                 $w = imagesx($src);
                 $h = imagesy($src);
                 $min = min($w, $h);
                 $thumb = imagecreatetruecolor($size, $size);
-                imagecopyresampled($thumb, $src, 0, 0, (int)(($w - $min) / 2), (int)(($h - $min) / 2), $size, $size, $min, $min);
+                imagecopyresampled($thumb, $src, 0, 0, (int) (($w - $min) / 2), (int) (($h - $min) / 2), $size, $size, $min, $min);
                 imagedestroy($src);
-                $tmp = tempnam(sys_get_temp_dir(), 'gt_') . '.jpg';
+                $tmp = tempnam(sys_get_temp_dir(), 'gt_').'.jpg';
                 imagejpeg($thumb, $tmp, 85);
                 imagedestroy($thumb);
                 if (Storage::disk('public')->put($thumbRel, fopen($tmp, 'rb'), 'public')) {
@@ -319,9 +373,10 @@ class GenerateMissingThumbnailsCommand extends Command
                             'mime_type' => 'image/jpeg',
                             'size_bytes' => Storage::disk('public')->size($thumbRel),
                             'width' => $size,
-                            'height' => $size
+                            'height' => $size,
                         ]
                     );
+
                     return;
                 }
                 @unlink($tmp);
@@ -338,7 +393,7 @@ class GenerateMissingThumbnailsCommand extends Command
                     'mime_type' => $orig->mime_type,
                     'size_bytes' => $orig->size_bytes,
                     'width' => null,
-                    'height' => null
+                    'height' => null,
                 ]
             );
         }

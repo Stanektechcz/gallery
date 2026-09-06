@@ -14,6 +14,7 @@ class SpaceContext
     public const SCOPE = 'gallery_space';
 
     private static ?array $cache = null;
+
     private static ?int $cachedForUserId = null;
 
     /**
@@ -25,7 +26,9 @@ class SpaceContext
     public static function currentSpaceIds(): ?array
     {
         $user = Auth::user();
-        if (! $user instanceof User) return null;
+        if (! $user instanceof User) {
+            return null;
+        }
 
         if (self::$cache !== null && self::$cachedForUserId === $user->id) {
             return self::$cache;

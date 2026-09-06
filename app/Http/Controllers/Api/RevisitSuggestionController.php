@@ -6,9 +6,9 @@ use App\Http\Controllers\Controller;
 use App\Models\CalendarEvent;
 use App\Models\EventAttachment;
 use App\Models\EventReminder;
-use Carbon\Carbon;
 use App\Models\MediaItem;
 use App\Services\Planning\CalendarEventCreationService;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -20,11 +20,14 @@ class RevisitSuggestionController extends Controller
     {
         $spaceIds = $request->user()->gallerySpaces()->pluck('gallery_spaces.id');
         $source = MediaItem::where('uuid', $uuid)->whereIn('gallery_space_id', $spaceIds)->whereNull('trashed_at')->firstOrFail();
-        if ($source->latitude === null || $source->longitude === null) return response()->json(['source' => $source->uuid, 'candidates' => [], 'message' => 'Zdrojová fotografie nemá GPS souřadnice.']);
+        if ($source->latitude === null || $source->longitude === null) {
+            return response()->json(['source' => $source->uuid, 'candidates' => [], 'message' => 'Zdrojová fotografie nemá GPS souřadnice.']);
+        }
         $candidates = MediaItem::where('gallery_space_id', $source->gallery_space_id)->whereNull('trashed_at')->where('id', '!=', $source->id)
             ->whereNotNull('latitude')->whereNotNull('longitude')
             ->whereRaw('ABS(latitude - ?) < 0.015 AND ABS(longitude - ?) < 0.015', [$source->latitude, $source->longitude])
             ->orderByDesc('taken_at')->limit(24)->get(['uuid', 'display_title', 'original_filename', 'taken_at', 'latitude', 'longitude']);
+
         return response()->json(['source' => $source->uuid, 'candidates' => $candidates, 'prompt' => $source->taken_at ? 'Zopakujte snímek ve stejném místě a porovnejte jej v Porovnání.' : null]);
     }
 
@@ -55,10 +58,12 @@ class RevisitSuggestionController extends Controller
             ->where('starts_at', $startsAt)
             ->where('metadata->source_media_uuid', $source->uuid)
             ->first();
-        if ($existing) return response()->json($this->payload($existing));
+        if ($existing) {
+            return response()->json($this->payload($existing));
+        }
 
         $nearestPlace = $source->places()->orderByDesc('media_place.is_primary')->first();
-        $title = $data['title'] ?: 'Znovu spolu: ' . ($nearestPlace?->name ?: ($source->display_title ?: 'náš oblíbený okamžik'));
+        $title = $data['title'] ?: 'Znovu spolu: '.($nearestPlace?->name ?: ($source->display_title ?: 'náš oblíbený okamžik'));
         $space = $user->gallerySpaces()->whereKey($source->gallery_space_id)->firstOrFail();
         $event = $this->calendarEvents->create($space, $user, [
             'title' => $title,

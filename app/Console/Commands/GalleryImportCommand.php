@@ -2,13 +2,14 @@
 
 namespace App\Console\Commands;
 
+use App\Jobs\Drive\CreateDriveFolderJob;
 use App\Jobs\Media\CalculateMediaHashesJob;
 use App\Models\Album;
 use App\Models\MediaItem;
 use App\Models\UploadSession;
+use App\Models\User;
+use App\Services\AlbumService;
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
 
 class GalleryImportCommand extends Command
 {
@@ -29,8 +30,9 @@ class GalleryImportCommand extends Command
     {
         $path = $this->argument('path');
 
-        if (!is_dir($path) && !is_file($path)) {
+        if (! is_dir($path) && ! is_file($path)) {
             $this->error("Path not found: {$path}");
+
             return Command::FAILURE;
         }
 
@@ -39,25 +41,28 @@ class GalleryImportCommand extends Command
             $this->warn('DRY RUN — no files will actually be imported');
         }
 
-        $user = \App\Models\User::find($this->option('user'))
-            ?? \App\Models\User::where('role', 'owner')->first();
+        $user = User::find($this->option('user'))
+            ?? User::where('role', 'owner')->first();
 
-        if (!$user) {
+        if (! $user) {
             $this->error('No owner user found. Create users first.');
+
             return Command::FAILURE;
         }
 
         $space = $user->gallerySpaces()->first();
-        if (!$space) {
+        if (! $space) {
             $this->error('No gallery space found for user.');
+
             return Command::FAILURE;
         }
 
         $targetAlbum = null;
         if ($albumUuid = $this->option('album')) {
             $targetAlbum = Album::where('uuid', $albumUuid)->first();
-            if (!$targetAlbum) {
+            if (! $targetAlbum) {
                 $this->error("Album not found: {$albumUuid}");
+
                 return Command::FAILURE;
             }
         }
@@ -80,20 +85,22 @@ class GalleryImportCommand extends Command
             if ($dryRun) {
                 $this->line("  [DIR] Would create album: {$folderName}");
             } else {
-                $albumService = new \App\Services\AlbumService();
+                $albumService = new AlbumService;
                 $album = $albumService->create($space, [
-                    'title'     => $folderName,
+                    'title' => $folderName,
                     'parent_id' => $parentAlbum?->id,
                 ], $user);
-                \App\Jobs\Drive\CreateDriveFolderJob::dispatch($album);
+                CreateDriveFolderJob::dispatch($album);
                 $this->line("  [ALBUM] Created: {$folderName}");
             }
         }
 
         $items = scandir($dir);
         foreach ($items as $item) {
-            if ($item === '.' || $item === '..') continue;
-            $fullPath = $dir . DIRECTORY_SEPARATOR . $item;
+            if ($item === '.' || $item === '..') {
+                continue;
+            }
+            $fullPath = $dir.DIRECTORY_SEPARATOR.$item;
 
             if (is_dir($fullPath) && $this->option('recursive')) {
                 $this->importDirectory($fullPath, $user, $space, $album, $dryRun, $album);
@@ -105,12 +112,13 @@ class GalleryImportCommand extends Command
 
     private function importFile(string $path, $user, $space, ?Album $album, bool $dryRun): void
     {
-        $ext       = strtolower(pathinfo($path, PATHINFO_EXTENSION));
-        $allowed   = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif', 'heic', 'heif', 'tiff', 'tif', 'mp4', 'mov', 'webm', 'm4v', 'mkv'];
+        $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+        $allowed = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif', 'heic', 'heif', 'tiff', 'tif', 'mp4', 'mov', 'webm', 'm4v', 'mkv'];
 
-        if (!in_array($ext, $allowed)) {
+        if (! in_array($ext, $allowed)) {
             $this->line("  [SKIP] Unsupported: {$path}");
             $this->stats['skipped']++;
+
             return;
         }
 
@@ -121,55 +129,57 @@ class GalleryImportCommand extends Command
         if ($duplicate && $this->option('duplicate-policy') === 'skip') {
             $this->line("  [SKIP] Duplicate: {$path}");
             $this->stats['skipped']++;
+
             return;
         }
 
         if ($dryRun) {
             $this->line("  [IMPORT] Would import: {$path}");
             $this->stats['imported']++;
+
             return;
         }
 
         try {
-            $mime      = mime_content_type($path) ?: 'application/octet-stream';
-            $filename  = basename($path);
+            $mime = mime_content_type($path) ?: 'application/octet-stream';
+            $filename = basename($path);
             $mediaType = str_starts_with($mime, 'video/') ? 'video' : 'photo';
-            $destPath  = storage_path("app/imports/{$sha256}/" . $filename);
+            $destPath = storage_path("app/imports/{$sha256}/".$filename);
             @mkdir(dirname($destPath), 0755, true);
             copy($path, $destPath);
 
             $media = MediaItem::create([
-                'gallery_space_id'  => $space->id,
-                'owner_user_id'     => $user->id,
-                'uploaded_by'       => $user->id,
-                'primary_album_id'  => $album?->id,
+                'gallery_space_id' => $space->id,
+                'owner_user_id' => $user->id,
+                'uploaded_by' => $user->id,
+                'primary_album_id' => $album?->id,
                 'original_filename' => $filename,
-                'safe_filename'     => preg_replace('/[^a-zA-Z0-9._-]/', '_', $filename),
-                'extension'         => $ext,
-                'mime_type'         => $mime,
-                'media_type'        => $mediaType,
-                'size_bytes'        => filesize($path),
-                'sha256'            => $sha256,
-                'status'            => 'received',
-                'imported_at'       => now(),
-                'uploaded_at'       => now(),
+                'safe_filename' => preg_replace('/[^a-zA-Z0-9._-]/', '_', $filename),
+                'extension' => $ext,
+                'mime_type' => $mime,
+                'media_type' => $mediaType,
+                'size_bytes' => filesize($path),
+                'sha256' => $sha256,
+                'status' => 'received',
+                'imported_at' => now(),
+                'uploaded_at' => now(),
             ]);
 
             // Create a fake upload session for the pipeline
             $uploadSession = UploadSession::create([
-                'user_id'           => $user->id,
-                'gallery_space_id'  => $space->id,
-                'target_album_id'   => $album?->id,
+                'user_id' => $user->id,
+                'gallery_space_id' => $space->id,
+                'target_album_id' => $album?->id,
                 'original_filename' => $filename,
-                'mime_type'         => $mime,
-                'total_size'        => filesize($path),
-                'total_chunks'      => 1,
-                'received_chunks'   => 1,
-                'sha256'            => $sha256,
-                'status'            => 'completed',
-                'assembled_path'    => $destPath,
-                'expires_at'        => now()->addDays(7),
-                'completed_at'      => now(),
+                'mime_type' => $mime,
+                'total_size' => filesize($path),
+                'total_chunks' => 1,
+                'received_chunks' => 1,
+                'sha256' => $sha256,
+                'status' => 'completed',
+                'assembled_path' => $destPath,
+                'expires_at' => now()->addDays(7),
+                'completed_at' => now(),
                 'resulting_media_id' => $media->id,
             ]);
 

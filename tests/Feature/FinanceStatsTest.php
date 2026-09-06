@@ -25,7 +25,9 @@ class FinanceStatsTest extends TestCase
     use RefreshDatabase;
 
     private User $uzivatel;
+
     private GallerySpace $space;
+
     private Wallet $eur;
 
     protected function setUp(): void

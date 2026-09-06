@@ -35,7 +35,9 @@ return new class extends Migration
     public function up(): void
     {
         foreach ($this->columns as $name => $define) {
-            if (Schema::hasColumn('users', $name)) continue;
+            if (Schema::hasColumn('users', $name)) {
+                continue;
+            }
 
             Schema::table('users', fn (Blueprint $table) => $define($table));
         }

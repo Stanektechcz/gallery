@@ -45,7 +45,11 @@ class ReconcileDatesCommand extends Command
             $odvozene = $filenames->infer($media->original_filename ?? '', $media->media_type ?? 'photo');
             $datum = $odvozene['taken_at'] ?? null;
 
-            if (! $datum) { $preskoceno++; continue; }
+            if (! $datum) {
+                $preskoceno++;
+
+                continue;
+            }
 
             // Při přepisu jen tehdy, když se to liší o víc než hodinu. Drobné rozdíly jsou
             // zaokrouhlení nebo vteřiny navíc, ne chyba, kterou by stálo za to opravovat.
@@ -58,7 +62,7 @@ class ReconcileDatesCommand extends Command
             $puvodni = $media->taken_at?->format('Y-m-d H:i') ?? '—';
             $this->line(sprintf(
                 '  %-34s %s  →  %s',
-                mb_strimwidth($media->original_filename ?? ('#' . $media->id), 0, 34, '…'),
+                mb_strimwidth($media->original_filename ?? ('#'.$media->id), 0, 34, '…'),
                 str_pad($puvodni, 16),
                 $datum->format('Y-m-d H:i'),
             ));
@@ -73,14 +77,14 @@ class ReconcileDatesCommand extends Command
         $this->newLine();
 
         if ($zmeneno === 0) {
-            $this->info('Nic k doplnění.' . ($preskoceno ? " Přeskočeno {$preskoceno} bez data v názvu." : ''));
+            $this->info('Nic k doplnění.'.($preskoceno ? " Přeskočeno {$preskoceno} bez data v názvu." : ''));
 
             return self::SUCCESS;
         }
 
         $this->info($zapsat
             // „u {n} položek" se neskloňuje — po předložce „u" je druhý pád vždycky.
-            ? "Doplněno datum u {$zmeneno} položek." . ($preskoceno ? " Přeskočeno {$preskoceno}." : '')
+            ? "Doplněno datum u {$zmeneno} položek.".($preskoceno ? " Přeskočeno {$preskoceno}." : '')
             : "Doplnilo by se {$zmeneno} položek. Spusťte znovu s --apply.");
 
         return self::SUCCESS;

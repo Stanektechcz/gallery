@@ -2,7 +2,9 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToGallerySpace;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 
 /**
@@ -10,7 +12,7 @@ use Illuminate\Support\Str;
  */
 class DailyMoment extends Model
 {
-    use \App\Models\Concerns\BelongsToGallerySpace;
+    use BelongsToGallerySpace;
 
     protected $fillable = [
         'uuid', 'gallery_space_id', 'moment_date', 'notify_at', 'notified_at',
@@ -43,7 +45,7 @@ class DailyMoment extends Model
     }
 
     /** The end of being on time. Past it a post still counts, it is just marked late. */
-    public function closesAt(): \Illuminate\Support\Carbon
+    public function closesAt(): Carbon
     {
         return $this->notify_at->copy()->addMinutes($this->window_minutes);
     }

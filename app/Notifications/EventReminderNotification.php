@@ -24,11 +24,11 @@ class EventReminderNotification extends Notification
         return [
             'type' => 'calendar.reminder',
             'message' => "Připomínka: {$this->event->title}",
-            'link' => '/calendar/events/' . $this->event->uuid,
+            'link' => '/calendar/events/'.$this->event->uuid,
             'icon' => '⏰',
             'category' => 'planning',
             'priority' => 'high',
-            'context_key' => 'event:' . $this->event->uuid,
+            'context_key' => 'event:'.$this->event->uuid,
             'extra' => [
                 'event_uuid' => $this->event->uuid,
                 'starts_at' => $this->event->starts_at?->toIso8601String(),
@@ -44,8 +44,8 @@ class EventReminderNotification extends Notification
         return (new MailMessage)
             ->subject("Připomínka: {$this->event->title}")
             ->greeting("Ahoj {$notifiable->name},")
-            ->line('Blíží se společná akce ' . $this->event->title . '.')
-            ->line('Začátek: ' . $this->event->starts_at?->locale('cs')->translatedFormat('j. F Y, H:i'))
-            ->action('Otevřít akci', url('/calendar/events/' . $this->event->uuid));
+            ->line('Blíží se společná akce '.$this->event->title.'.')
+            ->line('Začátek: '.$this->event->starts_at?->locale('cs')->translatedFormat('j. F Y, H:i'))
+            ->action('Otevřít akci', url('/calendar/events/'.$this->event->uuid));
     }
 }

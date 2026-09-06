@@ -13,6 +13,7 @@ use App\Models\SpaceModule;
 use App\Models\SpaceSubscription;
 use App\Models\User;
 use App\Support\SpaceContext;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Schema;
 
 /**
@@ -31,10 +32,12 @@ class EntitlementService
 {
     /** Codes referenced by route middleware and the UI. */
     public const FEATURE_BURPS = 'burps';
+
     public const FEATURE_VOICE_NOTES = 'voice_notes';
 
     /** @deprecated Kept so older call sites keep working; prefer the FEATURE_ constants. */
     public const MODULE_BURPS = self::FEATURE_BURPS;
+
     public const MODULE_VOICE_NOTES = self::FEATURE_VOICE_NOTES;
 
     /*
@@ -47,7 +50,7 @@ class EntitlementService
     /** @var array<int, list<string>> */
     private array $entitledCache = [];
 
-    /** @var \Illuminate\Support\Collection<string, Feature>|null */
+    /** @var Collection<string, Feature>|null */
     private $featureCache = null;
 
     /** @var array<int, array<int, bool>> */
@@ -100,8 +103,12 @@ class EntitlementService
      */
     public function entitledFeatures(GallerySpace $space): array
     {
-        if (isset($this->entitledCache[$space->id])) return $this->entitledCache[$space->id];
-        if (! $this->available()) return [];
+        if (isset($this->entitledCache[$space->id])) {
+            return $this->entitledCache[$space->id];
+        }
+        if (! $this->available()) {
+            return [];
+        }
 
         return $this->entitledCache[$space->id] = (function () use ($space): array {
             $codes = $this->features()->where('is_core', true)->keys()->all();
@@ -131,10 +138,14 @@ class EntitlementService
      */
     public function hasFeature(GallerySpace $space, string $featureCode): bool
     {
-        if (! $this->isEntitled($space, $featureCode)) return false;
+        if (! $this->isEntitled($space, $featureCode)) {
+            return false;
+        }
 
         $feature = $this->features()->get($featureCode);
-        if (! $feature || $feature->is_core || ! $feature->is_optional) return true;
+        if (! $feature || $feature->is_core || ! $feature->is_optional) {
+            return true;
+        }
 
         // No row means the customer has not opted out: a granted feature starts on.
         return $this->preferences($space)[$feature->id] ?? true;
@@ -173,8 +184,12 @@ class EntitlementService
 
     public function plan(GallerySpace $space): ?BillingPlan
     {
-        if (! $this->hasTable('space_subscriptions')) return null;
-        if (array_key_exists($space->id, $this->planCache)) return $this->planCache[$space->id];
+        if (! $this->hasTable('space_subscriptions')) {
+            return null;
+        }
+        if (array_key_exists($space->id, $this->planCache)) {
+            return $this->planCache[$space->id];
+        }
 
         $subscription = SpaceSubscription::with('plan')
             ->where('gallery_space_id', $space->id)
@@ -187,15 +202,19 @@ class EntitlementService
 
     public function subscription(GallerySpace $space): ?SpaceSubscription
     {
-        if (! $this->hasTable('space_subscriptions')) return null;
+        if (! $this->hasTable('space_subscriptions')) {
+            return null;
+        }
 
         return SpaceSubscription::with('plan')->where('gallery_space_id', $space->id)->first();
     }
 
-    /** @return \Illuminate\Support\Collection<int, BillingModule> */
+    /** @return Collection<int, BillingModule> */
     public function activeModules(GallerySpace $space)
     {
-        if (! $this->hasTable('space_modules')) return collect();
+        if (! $this->hasTable('space_modules')) {
+            return collect();
+        }
 
         $ids = SpaceModule::where('gallery_space_id', $space->id)
             ->whereIn('status', ['active', 'trialing'])
@@ -284,7 +303,9 @@ class EntitlementService
 
     public function trialUsed(GallerySpace $space): bool
     {
-        if (! $this->hasTable('audit_logs')) return false;
+        if (! $this->hasTable('audit_logs')) {
+            return false;
+        }
 
         return AuditLog::where('action', 'billing.trial.started')
             ->where('subject_type', class_basename($space))
@@ -343,8 +364,12 @@ class EntitlementService
      */
     private function storageBonusMb(GallerySpace $space): int
     {
-        if (! $this->hasTable('billing_modules')) return 0;
-        if (! Schema::hasColumn('billing_modules', 'storage_bonus_mb')) return 0;
+        if (! $this->hasTable('billing_modules')) {
+            return 0;
+        }
+        if (! Schema::hasColumn('billing_modules', 'storage_bonus_mb')) {
+            return 0;
+        }
 
         return (int) $this->activeModules($space)->sum('storage_bonus_mb');
     }
@@ -353,7 +378,7 @@ class EntitlementService
     {
         $usage = $this->storageUsage($space);
 
-        return $usage['limit_bytes'] === null || $usage['used_bytes'] + $bytes <= $usage['limit_bytes'];
+        return $usage['limit_bytes'] === null || $usage['limit_bytes'] >= $usage['used_bytes'] + $bytes;
     }
 
     /**
@@ -367,7 +392,9 @@ class EntitlementService
     public function planFeatures(GallerySpace $space): array
     {
         $plan = $this->plan($space);
-        if (! $plan || ! $this->hasTable('billing_plan_feature')) return [];
+        if (! $plan || ! $this->hasTable('billing_plan_feature')) {
+            return [];
+        }
 
         return $plan->grantedFeatures()->pluck('code')->all();
     }
@@ -417,8 +444,12 @@ class EntitlementService
             ])
             ->filter(function (array $module) use ($planFeatures) {
                 // Kept once bought, so somebody can see what they are paying for.
-                if ($module['is_active']) return true;
-                if ($module['features'] === []) return true;
+                if ($module['is_active']) {
+                    return true;
+                }
+                if ($module['features'] === []) {
+                    return true;
+                }
 
                 return (bool) array_diff($module['features'], $planFeatures);
             })

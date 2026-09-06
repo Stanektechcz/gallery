@@ -13,6 +13,13 @@ class CoupleDateIdeaReaction extends Model
         return ['rating' => 'integer'];
     }
 
-    public function idea() { return $this->belongsTo(CoupleDateIdea::class, 'date_idea_id'); }
-    public function user() { return $this->belongsTo(User::class); }
+    public function idea()
+    {
+        return $this->belongsTo(CoupleDateIdea::class, 'date_idea_id');
+    }
+
+    public function user()
+    {
+        return $this->belongsTo(User::class);
+    }
 }

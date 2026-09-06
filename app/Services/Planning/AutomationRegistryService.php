@@ -7,7 +7,9 @@ use App\Models\GallerySpace;
 class AutomationRegistryService
 {
     public const AUTO_COMPLETE_ELAPSED = 'auto_complete_elapsed_events';
+
     public const PLANNING_FOLLOWUPS = 'planning_followups';
+
     public const RELATIONSHIP_MILESTONES = 'relationship_milestones';
 
     public function definition(string $key): array
@@ -19,6 +21,7 @@ class AutomationRegistryService
         ];
 
         abort_unless(isset($definitions[$key]), 404);
+
         return $definitions[$key];
     }
 
@@ -31,6 +34,7 @@ class AutomationRegistryService
     {
         $definition = $this->definition($key);
         $state = (array) (($space->settings ?? [])['automation_registry'][$key] ?? []);
+
         return $definition + ['enabled' => array_key_exists('enabled', $state) ? (bool) $state['enabled'] : true, 'last_run_at' => $state['last_run_at'] ?? null];
     }
 
@@ -38,7 +42,8 @@ class AutomationRegistryService
     {
         $this->definition($key);
         $state = (array) (($space->settings ?? [])['automation_registry'][$key] ?? []);
-        return !array_key_exists('enabled', $state) || (bool) $state['enabled'];
+
+        return ! array_key_exists('enabled', $state) || (bool) $state['enabled'];
     }
 
     public function setEnabled(GallerySpace $space, string $key, bool $enabled): void

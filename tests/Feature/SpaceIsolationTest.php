@@ -6,7 +6,6 @@ use App\Models\GallerySpace;
 use App\Models\MediaItem;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 

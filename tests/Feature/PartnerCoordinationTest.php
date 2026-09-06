@@ -14,7 +14,9 @@ class PartnerCoordinationTest extends TestCase
     use RefreshDatabase;
 
     private User $owner;
+
     private User $partner;
+
     private GallerySpace $space;
 
     protected function setUp(): void
@@ -33,7 +35,7 @@ class PartnerCoordinationTest extends TestCase
         $privateEventId = DB::table('calendar_events')->insertGetId($this->eventRow('Soukromý plán', true));
         DB::table('event_tasks')->insert(['event_id' => $privateEventId, 'title' => 'Tajný úkol', 'priority' => 'high', 'sort_order' => 1, 'created_at' => now(), 'updated_at' => now()]);
 
-        $response = $this->actingAs($this->partner)->getJson('/api/v1/coordination/pulse?gallery_space_id=' . $this->space->id . '&limit=20')
+        $response = $this->actingAs($this->partner)->getJson('/api/v1/coordination/pulse?gallery_space_id='.$this->space->id.'&limit=20')
             ->assertOk()
             ->assertJsonPath('summary.total', 5)
             ->assertJsonPath('summary.unassigned', 2)
@@ -48,37 +50,37 @@ class PartnerCoordinationTest extends TestCase
     public function test_assignment_completion_and_personal_snooze_update_the_real_sources(): void
     {
         $sources = $this->sources();
-        $this->actingAs($this->partner)->patchJson('/api/v1/calendar/gifts/' . $sources['gift_uuid'], [
+        $this->actingAs($this->partner)->patchJson('/api/v1/calendar/gifts/'.$sources['gift_uuid'], [
             'assigned_to' => $this->partner->id,
         ])->assertOk()->assertJsonPath('assigned_to', $this->partner->id);
         $this->getJson('/api/v1/calendar/gifts')->assertOk()->assertJsonFragment([
             'uuid' => $sources['gift_uuid'], 'assigned_to' => $this->partner->id, 'assignee_name' => $this->partner->name,
         ]);
-        $this->postJson('/api/v1/trips/' . $sources['trip'] . '/documents', [
+        $this->postJson('/api/v1/trips/'.$sources['trip'].'/documents', [
             'type' => 'insurance', 'title' => 'Cestovní pojištění', 'status' => 'ready', 'assigned_to' => $this->partner->id,
         ])->assertCreated()->assertJsonPath('assigned_to', $this->partner->id);
-        $this->getJson('/api/v1/trips/' . $sources['trip'] . '/readiness')->assertOk()->assertJsonFragment([
+        $this->getJson('/api/v1/trips/'.$sources['trip'].'/readiness')->assertOk()->assertJsonFragment([
             'title' => 'Cestovní pojištění', 'assigned_to' => $this->partner->id, 'assignee_name' => $this->partner->name,
         ]);
 
-        $completion = $this->actingAs($this->partner)->patchJson('/api/v1/coordination/actions/trip_document/' . $sources['document'], [
+        $completion = $this->actingAs($this->partner)->patchJson('/api/v1/coordination/actions/trip_document/'.$sources['document'], [
             'gallery_space_id' => $this->space->id, 'assigned_to' => $this->partner->id, 'completed' => true,
         ])->assertOk();
         $this->assertFalse(collect($completion->json('actions'))->contains(fn ($action) => $action['type'] === 'trip_document' && $action['source_key'] === (string) $sources['document']));
         $this->assertDatabaseHas('trip_document_checks', ['id' => $sources['document'], 'assigned_to' => $this->partner->id, 'status' => 'ready']);
 
-        $snoozed = $this->patchJson('/api/v1/coordination/actions/event_task/' . $sources['task'], [
+        $snoozed = $this->patchJson('/api/v1/coordination/actions/event_task/'.$sources['task'], [
             'gallery_space_id' => $this->space->id, 'snoozed_until' => now()->addDay()->toIso8601String(),
         ])->assertOk();
         $this->assertFalse(collect($snoozed->json('actions'))->contains(fn ($action) => $action['type'] === 'event_task' && $action['source_key'] === (string) $sources['task']));
         $this->assertDatabaseHas('event_tasks', ['id' => $sources['task'], 'completed_at' => null]);
         $this->assertDatabaseHas('coordination_action_states', ['user_id' => $this->partner->id, 'source_type' => 'event_task', 'source_key' => (string) $sources['task']]);
 
-        $this->actingAs($this->owner)->getJson('/api/v1/coordination/pulse?gallery_space_id=' . $this->space->id)
+        $this->actingAs($this->owner)->getJson('/api/v1/coordination/pulse?gallery_space_id='.$this->space->id)
             ->assertOk()->assertJsonFragment(['source_key' => (string) $sources['task'], 'title' => 'Koupit vstupenky']);
 
         $outsider = User::factory()->create();
-        $this->actingAs($this->partner)->patchJson('/api/v1/coordination/actions/gift/' . $sources['gift_uuid'], [
+        $this->actingAs($this->partner)->patchJson('/api/v1/coordination/actions/gift/'.$sources['gift_uuid'], [
             'gallery_space_id' => $this->space->id, 'assigned_to' => $outsider->id,
         ])->assertUnprocessable();
     }
@@ -90,7 +92,7 @@ class PartnerCoordinationTest extends TestCase
             'capacity' => 'light', 'focus' => 'Odpočinout si', 'is_shared' => true,
         ])->assertOk()->assertJsonPath('my_check_in.energy', 2);
 
-        $this->actingAs($this->partner)->getJson('/api/v1/coordination/pulse?gallery_space_id=' . $this->space->id)
+        $this->actingAs($this->partner)->getJson('/api/v1/coordination/pulse?gallery_space_id='.$this->space->id)
             ->assertOk()->assertJsonFragment(['user_id' => $this->owner->id, 'energy' => 2, 'capacity' => 'light']);
 
         $this->actingAs($this->owner)->putJson('/api/v1/coordination/check-in', [
@@ -98,7 +100,7 @@ class PartnerCoordinationTest extends TestCase
             'capacity' => 'normal', 'is_shared' => false,
         ])->assertOk()->assertJsonPath('my_check_in.is_shared', false);
 
-        $partnerView = $this->actingAs($this->partner)->getJson('/api/v1/coordination/pulse?gallery_space_id=' . $this->space->id)->assertOk();
+        $partnerView = $this->actingAs($this->partner)->getJson('/api/v1/coordination/pulse?gallery_space_id='.$this->space->id)->assertOk();
         $this->assertFalse(collect($partnerView->json('check_ins'))->contains('user_id', $this->owner->id));
     }
 
@@ -106,7 +108,7 @@ class PartnerCoordinationTest extends TestCase
     {
         $sources = $this->sources();
         $this->partner->update(['read_only_mode' => true]);
-        $this->actingAs($this->partner)->patchJson('/api/v1/coordination/actions/event_task/' . $sources['task'], [
+        $this->actingAs($this->partner)->patchJson('/api/v1/coordination/actions/event_task/'.$sources['task'], [
             'gallery_space_id' => $this->space->id, 'completed' => true,
         ])->assertForbidden();
         $this->putJson('/api/v1/coordination/check-in', [
@@ -124,20 +126,20 @@ class PartnerCoordinationTest extends TestCase
             'created_at' => now(), 'updated_at' => now(),
         ]);
 
-        $pulse = $this->actingAs($this->partner)->getJson('/api/v1/coordination/pulse?gallery_space_id=' . $this->space->id . '&limit=20')
+        $pulse = $this->actingAs($this->partner)->getJson('/api/v1/coordination/pulse?gallery_space_id='.$this->space->id.'&limit=20')
             ->assertOk()->assertJsonFragment([
                 'type' => 'settlement', 'source_key' => (string) $settlementId,
                 'settlement_id' => $settlementId, 'assignment_locked' => true,
-                'href' => '/trips/' . $sources['trip'] . '/plan#partner-finance',
+                'href' => '/trips/'.$sources['trip'].'/plan#partner-finance',
             ]);
         $action = collect($pulse->json('actions'))->firstWhere('type', 'settlement');
         $this->assertSame($this->partner->id, $action['assigned_to']['id']);
 
-        $this->patchJson('/api/v1/coordination/actions/settlement/' . $settlementId, [
+        $this->patchJson('/api/v1/coordination/actions/settlement/'.$settlementId, [
             'gallery_space_id' => $this->space->id, 'assigned_to' => $this->owner->id,
         ])->assertUnprocessable();
 
-        $completed = $this->patchJson('/api/v1/coordination/actions/settlement/' . $settlementId, [
+        $completed = $this->patchJson('/api/v1/coordination/actions/settlement/'.$settlementId, [
             'gallery_space_id' => $this->space->id, 'completed' => true,
         ])->assertOk();
         $this->assertFalse(collect($completed->json('actions'))->contains(fn ($item) => $item['type'] === 'settlement' && $item['source_key'] === (string) $settlementId));
@@ -177,6 +179,7 @@ class PartnerCoordinationTest extends TestCase
             'title' => 'Dárek k výročí', 'due_date' => now()->addMonth()->toDateString(), 'currency' => 'CZK', 'status' => 'idea',
             'created_at' => now(), 'updated_at' => now(),
         ]);
+
         return ['event' => $eventId, 'task' => $taskId, 'trip' => $tripId, 'packing' => $packingId, 'document' => $documentId, 'inbox_uuid' => $inboxUuid, 'gift_uuid' => $giftUuid];
     }
 

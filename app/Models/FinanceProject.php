@@ -3,7 +3,9 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 
 /**
@@ -15,8 +17,8 @@ use Illuminate\Support\Str;
  */
 class FinanceProject extends Model
 {
-    use SoftDeletes;
     use Concerns\BelongsToGallerySpace;
+    use SoftDeletes;
 
     public const KINDS = ['project', 'household', 'event', 'trip'];
 
@@ -59,16 +61,18 @@ class FinanceProject extends Model
     }
 
     /** Kolik dní z cesty ještě zbývá. Null u cesty bez konce. */
-    public function dniDoKonce(?\Illuminate\Support\Carbon $dnes = null): ?int
+    public function dniDoKonce(?Carbon $dnes = null): ?int
     {
-        if ($this->ends_on === null) return null;
+        if ($this->ends_on === null) {
+            return null;
+        }
 
-        $dnes ??= \Illuminate\Support\Carbon::today();
+        $dnes ??= Carbon::today();
 
         return max(0, (int) $dnes->diffInDays($this->ends_on, false));
     }
 
-    public function defaultWallet(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    public function defaultWallet(): BelongsTo
     {
         return $this->belongsTo(Wallet::class, 'default_wallet_id');
     }

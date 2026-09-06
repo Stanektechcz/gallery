@@ -7,6 +7,7 @@ use App\Notifications\GalleryNotification;
 use App\Services\Notifications\NotificationPreferenceService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -36,7 +37,9 @@ class NotificationDigestCommand extends Command
         $posláno = 0;
 
         foreach (User::all() as $user) {
-            if (! $preferences->wantsDigest($user)) continue;
+            if (! $preferences->wantsDigest($user)) {
+                continue;
+            }
 
             // Nepřečtená upozornění z dneška, po kategoriích. Přečtené se nepřipomínají —
             // člověk je viděl a souhrn není výpis historie.
@@ -48,16 +51,20 @@ class NotificationDigestCommand extends Command
                 ->map(fn ($json) => json_decode($json, true)['category_label'] ?? 'Ostatní')
                 ->countBy();
 
-            if ($souhrn->isEmpty()) continue;
+            if ($souhrn->isEmpty()) {
+                continue;
+            }
 
-            $klic = "digest:sent:{$user->id}:" . $od->toDateString();
-            if (! \Illuminate\Support\Facades\Cache::add($klic, true, now()->addHours(20))) continue;
+            $klic = "digest:sent:{$user->id}:".$od->toDateString();
+            if (! Cache::add($klic, true, now()->addHours(20))) {
+                continue;
+            }
 
             $text = $souhrn->map(fn (int $pocet, string $kategorie) => "{$kategorie} ({$pocet})")->implode(', ');
 
             $user->notify(new GalleryNotification(
                 'system.digest',
-                'Dnešní souhrn: ' . $text . '.',
+                'Dnešní souhrn: '.$text.'.',
                 '/inbox',
                 '📬',
                 ['digest' => true],

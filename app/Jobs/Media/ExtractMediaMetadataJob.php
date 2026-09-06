@@ -16,7 +16,8 @@ class ExtractMediaMetadataJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    public int $tries   = 3;
+    public int $tries = 3;
+
     public int $timeout = 120;
 
     public function __construct(private readonly int $mediaItemId) {}
@@ -24,18 +25,21 @@ class ExtractMediaMetadataJob implements ShouldQueue
     public function handle(ExifExtractionService $exifService): void
     {
         $media = MediaItem::find($this->mediaItemId);
-        if (!$media) return;
+        if (! $media) {
+            return;
+        }
 
         $session = UploadSession::where('resulting_media_id', $media->id)->first();
-        $path    = $session?->assembled_path;
+        $path = $session?->assembled_path;
 
-        if (!$path || !file_exists($path)) {
+        if (! $path || ! file_exists($path)) {
             Log::warning("File not found for EXIF extraction, media #{$media->id}");
             if ($media->media_type === 'video') {
                 GenerateVideoPosterJob::dispatch($media->id)->onQueue('media');
             } else {
                 GenerateImageVariantsJob::dispatch($media->id)->onQueue('media');
             }
+
             return;
         }
 
@@ -47,9 +51,9 @@ class ExtractMediaMetadataJob implements ShouldQueue
             $updateData = [];
 
             foreach (['taken_at', 'taken_at_timezone', 'latitude', 'longitude', 'altitude',
-                      'camera_make', 'camera_model', 'lens_model', 'iso', 'aperture',
-                      'shutter_speed', 'focal_length', 'orientation', 'rating',
-                      'description', 'caption', 'display_title'] as $field) {
+                'camera_make', 'camera_model', 'lens_model', 'iso', 'aperture',
+                'shutter_speed', 'focal_length', 'orientation', 'rating',
+                'description', 'caption', 'display_title'] as $field) {
                 if (isset($exifData[$field])) {
                     $updateData[$field] = $exifData[$field];
                 }
@@ -57,14 +61,14 @@ class ExtractMediaMetadataJob implements ShouldQueue
 
             // Fill in dimensions if missing
             if (empty($updateData['width']) && isset($exifData['width'])) {
-                $updateData['width']  = $exifData['width'];
+                $updateData['width'] = $exifData['width'];
                 $updateData['height'] = $exifData['height'] ?? null;
             }
 
             $media->update($updateData);
 
             // Handle XMP keywords → tags (queued separately)
-            if (!empty($exifData['xmp_keywords'])) {
+            if (! empty($exifData['xmp_keywords'])) {
                 ExtractXmpMetadataJob::dispatch($media->id, $exifData['xmp_keywords'])->onQueue('media');
             }
 

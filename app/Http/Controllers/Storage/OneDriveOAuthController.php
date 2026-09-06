@@ -27,14 +27,14 @@ use Illuminate\Support\Str;
 class OneDriveOAuthController extends Controller
 {
     private const AUTHORISE = 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize';
+
     private const TOKEN = 'https://login.microsoftonline.com/common/oauth2/v2.0/token';
+
     private const ME = 'https://graph.microsoft.com/v1.0/me';
 
     private const SCOPES = 'offline_access Files.ReadWrite User.Read';
 
-    public function __construct(private readonly StorageResolver $resolver)
-    {
-    }
+    public function __construct(private readonly StorageResolver $resolver) {}
 
     public function start(Request $request): RedirectResponse
     {
@@ -47,7 +47,7 @@ class OneDriveOAuthController extends Controller
         $state = Str::random(40);
         $request->session()->put('onedrive.state', $state);
 
-        return redirect()->away(self::AUTHORISE . '?' . http_build_query([
+        return redirect()->away(self::AUTHORISE.'?'.http_build_query([
             'client_id' => $this->resolver->credentials('onedrive')['client_id'],
             'redirect_uri' => $this->resolver->credentials('onedrive')['redirect'],
             'response_type' => 'code',
@@ -70,7 +70,7 @@ class OneDriveOAuthController extends Controller
 
         if ($request->filled('error')) {
             return redirect()->route('connections')
-                ->with('error', 'OneDrive přístup nepovolil: ' . $request->string('error_description')->toString());
+                ->with('error', 'OneDrive přístup nepovolil: '.$request->string('error_description')->toString());
         }
 
         abort_unless($request->filled('code'), 400);
@@ -88,7 +88,7 @@ class OneDriveOAuthController extends Controller
 
         if ($exchange->failed()) {
             return redirect()->route('connections')
-                ->with('error', 'OneDrive odmítl výměnu kódu: ' . $exchange->json('error_description', 'neznámá chyba'));
+                ->with('error', 'OneDrive odmítl výměnu kódu: '.$exchange->json('error_description', 'neznámá chyba'));
         }
 
         $tokens = $exchange->json();

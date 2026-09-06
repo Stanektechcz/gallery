@@ -20,6 +20,7 @@ class PasswordResetController extends Controller
     {
         $request->validate(['email' => 'required|email']);
         Password::sendResetLink($request->only('email'));
+
         return back()->with('success', 'Odkaz pro obnovení hesla byl odeslán.');
     }
 
@@ -31,15 +32,15 @@ class PasswordResetController extends Controller
     public function update(Request $request): RedirectResponse
     {
         $request->validate([
-            'token'                 => 'required',
-            'email'                 => 'required|email',
-            'password'              => 'required|min:8|confirmed',
+            'token' => 'required',
+            'email' => 'required|email',
+            'password' => 'required|min:8|confirmed',
             'password_confirmation' => 'required',
         ]);
 
         $status = Password::reset(
             $request->only('email', 'password', 'password_confirmation', 'token'),
-            fn($user, $password) => $user->update(['password' => \Hash::make($password)])
+            fn ($user, $password) => $user->update(['password' => \Hash::make($password)])
         );
 
         return $status === Password::PASSWORD_RESET

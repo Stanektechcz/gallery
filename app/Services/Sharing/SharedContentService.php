@@ -50,7 +50,7 @@ class SharedContentService
             return [
                 'id' => $review->id,
                 'gallery_space_id' => $review->gallery_space_id,
-                'name' => 'Hodnocení · ' . ($review->place?->name ?: 'podnik'),
+                'name' => 'Hodnocení · '.($review->place?->name ?: 'podnik'),
             ];
         }
 
@@ -99,12 +99,14 @@ class SharedContentService
     private function recipeSummary(SharedLink $link): array
     {
         $recipe = Recipe::withTrashed()->whereKey($link->target_id)->first(['uuid', 'title']);
+
         return ['type' => 'recipe', 'label' => 'Recept', 'title' => $recipe?->title ?: ($link->name ?: 'Nedostupný recept'), 'uuid' => $recipe?->uuid];
     }
 
     private function reviewSummary(SharedLink $link): array
     {
         $review = PlaceReview::with('place:id,name')->whereKey($link->target_id)->first();
+
         return ['type' => 'place_review', 'label' => 'Hodnocení podniku', 'title' => $review?->place?->name ?: ($link->name ?: 'Nedostupné hodnocení'), 'uuid' => $review?->uuid];
     }
 
@@ -195,7 +197,7 @@ class SharedContentService
                 'visited_at' => $review->visited_at?->toIso8601String(),
                 'visit_context' => $review->visit_context,
                 'party_size' => $review->party_size,
-                'ratings' => collect($ratingKeys)->mapWithKeys(fn ($key) => [$key => $review->{$key . '_rating'} !== null ? (float) $review->{$key . '_rating'} : null])->all(),
+                'ratings' => collect($ratingKeys)->mapWithKeys(fn ($key) => [$key => $review->{$key.'_rating'} !== null ? (float) $review->{$key.'_rating'} : null])->all(),
                 'wait_minutes' => $review->wait_minutes,
                 'total_amount' => $review->total_amount !== null ? (float) $review->total_amount : null,
                 'currency' => $review->currency,

@@ -64,6 +64,7 @@ class TripBudgetAdvisorService
             $amount = $this->convert((float) $expense->amount, $expense->currency, $currency, $expense->occurred_at, $rateCache);
             if ($amount === null) {
                 $unconverted[] = ['source' => 'expense', 'id' => $expense->id, 'title' => $expense->title, 'currency' => $expense->currency];
+
                 continue;
             }
             $category = array_key_exists($expense->category, $categories) ? $expense->category : 'other';
@@ -80,12 +81,15 @@ class TripBudgetAdvisorService
                 $amount = $this->convert((float) $expense->amount, $expense->currency, $currency, $expense->occurred_at, $rateCache);
                 if ($amount === null) {
                     $unconverted[] = ['source' => 'shared_expense', 'id' => $expense->id, 'title' => $expense->title, 'currency' => $expense->currency];
+
                     continue;
                 }
                 $category = array_key_exists($expense->category, $categories) ? $expense->category : 'other';
                 $categories[$category]['actual'] += $amount;
                 $date = $expense->occurred_at ? Carbon::parse($expense->occurred_at)->toDateString() : null;
-                if ($date && isset($daily[$date])) $daily[$date]['actual'] += $amount;
+                if ($date && isset($daily[$date])) {
+                    $daily[$date]['actual'] += $amount;
+                }
             }
         }
 
@@ -94,6 +98,7 @@ class TripBudgetAdvisorService
                 $amount = $this->convert((float) $cost->amount, $cost->currency, $currency, $cost->occurred_on, $rateCache);
                 if ($amount === null) {
                     $unconverted[] = ['source' => 'vehicle', 'id' => $cost->id, 'title' => $cost->title, 'currency' => $cost->currency];
+
                     continue;
                 }
                 $categories['transport']['actual'] += $amount;
@@ -111,6 +116,7 @@ class TripBudgetAdvisorService
             $amount = $this->convert((float) $activity->cost, $activity->currency, $currency, $activity->date, $rateCache);
             if ($amount === null) {
                 $unconverted[] = ['source' => 'activity', 'id' => $activity->id, 'title' => $activity->title, 'currency' => $activity->currency];
+
                 continue;
             }
             $category = match ($activity->type) {
@@ -137,11 +143,14 @@ class TripBudgetAdvisorService
                 $amount = $this->convert((float) $meal->estimated_cost, $meal->currency, $currency, $meal->planned_for, $rateCache);
                 if ($amount === null) {
                     $unconverted[] = ['source' => 'meal', 'id' => $meal->id, 'title' => $meal->title, 'currency' => $meal->currency];
+
                     continue;
                 }
                 $categories['food']['planned'] += $amount;
                 $date = Carbon::parse($meal->planned_for)->toDateString();
-                if (isset($daily[$date])) $daily[$date]['planned'] += $amount;
+                if (isset($daily[$date])) {
+                    $daily[$date]['planned'] += $amount;
+                }
             }
         }
 
@@ -162,8 +171,8 @@ class TripBudgetAdvisorService
                         $warnings[] = $this->warning(
                             "category_{$row['status']}_{$category}",
                             $row['status'] === 'over' ? 'danger' : 'warning',
-                            "{$row['label']}: " . ($row['status'] === 'over' ? 'limit je překročený' : 'blíží se limitu'),
-                            "Naplánováno a utraceno " . number_format($row['total'], 0, ',', ' ') . " z " . number_format($row['limit'], 0, ',', ' ') . " {$currency}.",
+                            "{$row['label']}: ".($row['status'] === 'over' ? 'limit je překročený' : 'blíží se limitu'),
+                            'Naplánováno a utraceno '.number_format($row['total'], 0, ',', ' ').' z '.number_format($row['limit'], 0, ',', ' ')." {$currency}.",
                             $category,
                         );
                     }
@@ -180,7 +189,7 @@ class TripBudgetAdvisorService
                 $row['usage_percent'] = round($row['total'] / $dailyLimit * 100, 1);
                 $row['status'] = $row['usage_percent'] >= 100 ? 'over' : ($row['usage_percent'] >= 80 ? 'warning' : 'ok');
                 if ($row['status'] === 'over') {
-                    $warnings[] = $this->warning('day_over_' . $row['date'], 'danger', 'Denní limit je překročený', "Pro {$row['date']} je naplánováno nebo utraceno " . number_format($row['total'], 0, ',', ' ') . " {$currency}.");
+                    $warnings[] = $this->warning('day_over_'.$row['date'], 'danger', 'Denní limit je překročený', "Pro {$row['date']} je naplánováno nebo utraceno ".number_format($row['total'], 0, ',', ' ')." {$currency}.");
                 }
             }
         }
@@ -191,7 +200,7 @@ class TripBudgetAdvisorService
         $projected = round($planned + $actual, 2);
         $usage = $budget !== null && $budget > 0 ? round($projected / $budget * 100, 1) : null;
         if ($usage !== null && $usage >= 100) {
-            array_unshift($warnings, $this->warning('total_over', 'danger', 'Celkový rozpočet je překročený', 'Aktuální odhad překračuje rozpočet o ' . number_format($projected - $budget, 0, ',', ' ') . " {$currency}."));
+            array_unshift($warnings, $this->warning('total_over', 'danger', 'Celkový rozpočet je překročený', 'Aktuální odhad překračuje rozpočet o '.number_format($projected - $budget, 0, ',', ' ')." {$currency}."));
         } elseif ($usage !== null && $usage >= 80) {
             array_unshift($warnings, $this->warning('total_warning', 'warning', 'Rozpočet se blíží limitu', "Je využito {$usage} % společného rozpočtu."));
         }
@@ -304,14 +313,14 @@ class TripBudgetAdvisorService
         $activeKeys = [];
         foreach ($items as $item) {
             $title = $this->taskTitle($item);
-            $automationKey = 'budget_' . $item['code'];
+            $automationKey = 'budget_'.$item['code'];
             $activeKeys[] = $automationKey;
             $existingQuery = DB::table('event_tasks')->where('event_id', $event->id);
             $existing = $hasAutomationIdentity
                 ? $existingQuery->where('automation_key', $automationKey)->first()
                 : $existingQuery->where('title', $title)->first();
             $values = [
-                'notes' => ($item['message'] ?? '') . ' Automaticky propojeno s low-cost plánem cesty.',
+                'notes' => ($item['message'] ?? '').' Automaticky propojeno s low-cost plánem cesty.',
                 'due_at' => $dueAt,
                 'priority' => ($item['severity'] ?? null) === 'danger' ? 'high' : 'normal',
                 'updated_at' => now(),
@@ -336,7 +345,9 @@ class TripBudgetAdvisorService
 
         if ($hasAutomationIdentity) {
             $obsolete = DB::table('event_tasks')->where('event_id', $event->id)->where('automation_source', 'trip_budget')->whereNull('completed_at');
-            if ($activeKeys !== []) $obsolete->whereNotIn('automation_key', $activeKeys);
+            if ($activeKeys !== []) {
+                $obsolete->whereNotIn('automation_key', $activeKeys);
+            }
             $obsolete->update(['completed_at' => now(), 'updated_at' => now()]);
         }
 
@@ -399,7 +410,7 @@ class TripBudgetAdvisorService
     private function taskTitle(array $item): string
     {
         if (isset($item['category'])) {
-            return 'Zkontrolovat rozpočet: ' . self::LABELS[$item['category']];
+            return 'Zkontrolovat rozpočet: '.self::LABELS[$item['category']];
         }
 
         return match ($item['code']) {

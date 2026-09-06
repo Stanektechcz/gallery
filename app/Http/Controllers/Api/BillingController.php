@@ -108,7 +108,7 @@ class BillingController extends Controller
             $this->entitlements->disableModule($space, $module);
         }
 
-        AuditLog::record('billing.module.' . ($data['enabled'] ? 'enabled' : 'disabled'), $module, [
+        AuditLog::record('billing.module.'.($data['enabled'] ? 'enabled' : 'disabled'), $module, [
             'gallery_space_id' => $space->id, 'module' => $module->code,
         ]);
 

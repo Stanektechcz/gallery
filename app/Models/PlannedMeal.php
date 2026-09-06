@@ -23,8 +23,23 @@ class PlannedMeal extends Model
         static::creating(fn (self $meal) => $meal->uuid ??= (string) Str::uuid());
     }
 
-    public function recipe() { return $this->belongsTo(Recipe::class); }
-    public function event() { return $this->belongsTo(CalendarEvent::class, 'calendar_event_id'); }
-    public function cookingSession() { return $this->belongsTo(RecipeCookingSession::class, 'cooking_session_id'); }
-    public function creator() { return $this->belongsTo(User::class, 'created_by'); }
+    public function recipe()
+    {
+        return $this->belongsTo(Recipe::class);
+    }
+
+    public function event()
+    {
+        return $this->belongsTo(CalendarEvent::class, 'calendar_event_id');
+    }
+
+    public function cookingSession()
+    {
+        return $this->belongsTo(RecipeCookingSession::class, 'cooking_session_id');
+    }
+
+    public function creator()
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
 }

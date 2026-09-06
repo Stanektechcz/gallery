@@ -102,7 +102,10 @@ class PartnerDecisionController extends Controller
     private function space(Request $request, ?int $id): GallerySpace
     {
         $query = GallerySpace::query()->whereHas('members', fn ($members) => $members->whereKey($request->user()->id));
-        if ($id) return $query->findOrFail($id);
+        if ($id) {
+            return $query->findOrFail($id);
+        }
+
         return $query->orderByDesc('is_default')->orderBy('id')->firstOrFail();
     }
 }

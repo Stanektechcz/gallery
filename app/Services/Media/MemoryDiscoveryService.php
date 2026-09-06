@@ -62,7 +62,7 @@ class MemoryDiscoveryService
             }
             $cards[] = $this->card(
                 'on_this_day',
-                "Před {$offset} " . ($offset === 1 ? 'rokem' : ($offset < 5 ? 'lety' : 'lety')),
+                "Před {$offset} ".($offset === 1 ? 'rokem' : ($offset < 5 ? 'lety' : 'lety')),
                 $date->translatedFormat('j. F Y'),
                 'Stejný den v minulosti',
                 '🕰️',
@@ -72,6 +72,7 @@ class MemoryDiscoveryService
                 100 - $offset
             );
         }
+
         return $cards;
     }
 
@@ -95,6 +96,7 @@ class MemoryDiscoveryService
             $years = max(1, $start->diffInYears($today));
             $cards[] = $this->card('trip_anniversary', $trip->name, "Před {$years} lety", 'Výročí vaší cesty', '🗺️', '#14b8a6', $items, "trip:{$trip->id}:{$today->year}", 95);
         }
+
         return $cards;
     }
 
@@ -110,7 +112,8 @@ class MemoryDiscoveryService
         if ($items->isEmpty()) {
             return [];
         }
-        return [$this->card('favorite_flashback', 'Oblíbené znovu', 'Výběr, který stojí za návrat', 'Vybráno z vašich oblíbených', '💜', '#ec4899', $items, 'favorites:' . now()->format('o-W'), 80)];
+
+        return [$this->card('favorite_flashback', 'Oblíbené znovu', 'Výběr, který stojí za návrat', 'Vybráno z vašich oblíbených', '💜', '#ec4899', $items, 'favorites:'.now()->format('o-W'), 80)];
     }
 
     private function placeFlashback(int $spaceId, MemoryPreference $preferences): array
@@ -135,7 +138,8 @@ class MemoryDiscoveryService
         if ($items->isEmpty()) {
             return [];
         }
-        return [$this->card('place_flashback', "Zpátky na místě {$place->name}", "{$place->media_count} zachycených okamžiků", 'Místo, kam se vracíte ve vzpomínkách', '📍', '#f59e0b', $items, "place:{$place->id}:" . now()->format('Y-m'), 70)];
+
+        return [$this->card('place_flashback', "Zpátky na místě {$place->name}", "{$place->media_count} zachycených okamžiků", 'Místo, kam se vracíte ve vzpomínkách', '📍', '#f59e0b', $items, "place:{$place->id}:".now()->format('Y-m'), 70)];
     }
 
     private function monthlyHighlight(int $spaceId, MemoryPreference $preferences): array
@@ -151,6 +155,7 @@ class MemoryDiscoveryService
         if ($items->isEmpty()) {
             return [];
         }
+
         return [$this->card('monthly_highlight', $date->translatedFormat('F Y'), 'Měsíční výběr', 'Nejlepší momenty stejného měsíce', '✨', '#3b82f6', $items, "month:{$date->format('Y-m')}", 60)];
     }
 
@@ -169,7 +174,7 @@ class MemoryDiscoveryService
     private function card(string $type, string $title, string $subtitle, string $reason, string $icon, string $accent, Collection $items, string $key, int $score): array
     {
         return [
-            'fingerprint' => hash('sha256', $type . '|' . $key),
+            'fingerprint' => hash('sha256', $type.'|'.$key),
             'type' => $type,
             'title' => $title,
             'subtitle' => $subtitle,
@@ -201,4 +206,3 @@ class MemoryDiscoveryService
         ];
     }
 }
-

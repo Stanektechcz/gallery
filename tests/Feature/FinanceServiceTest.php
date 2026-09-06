@@ -26,7 +26,9 @@ class FinanceServiceTest extends TestCase
     use RefreshDatabase;
 
     private GallerySpace $space;
+
     private FinanceService $sluzba;
+
     private User $uzivatel;
 
     protected function setUp(): void

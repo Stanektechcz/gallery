@@ -21,8 +21,8 @@ use Illuminate\Support\Str;
  */
 class Transaction extends Model
 {
-    use SoftDeletes;
     use Concerns\BelongsToGallerySpace;
+    use SoftDeletes;
 
     /** Typy, které mění hospodářský výsledek. */
     public const VYSLEDKOVE = ['income', 'expense'];

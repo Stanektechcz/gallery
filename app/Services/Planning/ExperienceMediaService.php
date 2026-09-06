@@ -63,7 +63,9 @@ class ExperienceMediaService
                     ->first();
             }
 
-            if ($album?->trashed()) $album->restore();
+            if ($album?->trashed()) {
+                $album->restore();
+            }
 
             if ($album && $locked->trip_id && ! $album->trip_id) {
                 $album->update(['trip_id' => $locked->trip_id, 'updated_by' => $actorId]);
@@ -94,7 +96,9 @@ class ExperienceMediaService
                     'updated_by' => $actorId,
                     'sync_status' => 'pending',
                 ];
-                if (Schema::hasColumn('albums', 'trip_id')) $albumData['trip_id'] = $locked->trip_id;
+                if (Schema::hasColumn('albums', 'trip_id')) {
+                    $albumData['trip_id'] = $locked->trip_id;
+                }
                 $album = Album::create($albumData);
                 $album->rebuildPaths();
             }
@@ -139,7 +143,9 @@ class ExperienceMediaService
                     'added_at' => now(),
                     'added_by' => $actorId,
                 ]);
-                if ($inserted) $nextOrder++;
+                if ($inserted) {
+                    $nextOrder++;
+                }
 
                 if ($event->trip_id && Schema::hasTable('trip_media')) {
                     DB::table('trip_media')->insertOrIgnore([
@@ -228,7 +234,9 @@ class ExperienceMediaService
                 (float) $media->latitude,
                 (float) $media->longitude,
             );
-            if ($distance > 75) return null;
+            if ($distance > 75) {
+                return null;
+            }
             if ($distance <= 2) {
                 $score += 25;
                 $reasons[] = 'stejné místo';

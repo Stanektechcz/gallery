@@ -19,7 +19,10 @@ class DuplicateGroup extends Model
         ];
     }
 
-    public function gallerySpace() { return $this->belongsTo(GallerySpace::class); }
+    public function gallerySpace()
+    {
+        return $this->belongsTo(GallerySpace::class);
+    }
 
     public function items()
     {

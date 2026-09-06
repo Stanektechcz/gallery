@@ -29,6 +29,13 @@ class AutomationRule extends Model
         });
     }
 
-    public function space() { return $this->belongsTo(GallerySpace::class, 'gallery_space_id'); }
-    public function author() { return $this->belongsTo(User::class, 'created_by'); }
+    public function space()
+    {
+        return $this->belongsTo(GallerySpace::class, 'gallery_space_id');
+    }
+
+    public function author()
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
 }

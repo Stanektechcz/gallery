@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 class DriveChange extends Model
 {
     protected $table = 'drive_changes';
+
     protected $fillable = [
         'storage_connection_id',
         'change_type',
@@ -22,10 +23,10 @@ class DriveChange extends Model
     protected function casts(): array
     {
         return [
-            'removed'        => 'boolean',
-            'trashed'        => 'boolean',
+            'removed' => 'boolean',
+            'trashed' => 'boolean',
             'change_payload' => 'array',
-            'change_time'    => 'datetime',
+            'change_time' => 'datetime',
         ];
     }
 

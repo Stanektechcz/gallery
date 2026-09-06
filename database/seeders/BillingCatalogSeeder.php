@@ -73,7 +73,7 @@ class BillingCatalogSeeder extends Seeder
         // app, not an upsell. Larger plans get it by inheriting this set.
         $couple = ['gallery', 'search', 'sharing', 'calendar', 'recipes', 'memories', 'people', 'places', 'voice_notes', 'date_ideas', 'journal', 'chat', 'together_now'];
         $family = [...$couple, 'trips', 'finance', 'gifts', 'watchlist', 'stats'];
-        $group  = [...$family, 'photobook', 'vault', 'tv_mode', 'automations'];
+        $group = [...$family, 'photobook', 'vault', 'tv_mode', 'automations'];
 
         $plans = [
             [

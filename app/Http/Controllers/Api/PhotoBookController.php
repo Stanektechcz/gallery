@@ -24,7 +24,7 @@ class PhotoBookController extends Controller
             ->orderByDesc('created_at')
             ->get();
 
-        return response()->json($books->map(fn($b) => $this->enrichBook($b)));
+        return response()->json($books->map(fn ($b) => $this->enrichBook($b)));
     }
 
     public function store(Request $request): JsonResponse
@@ -32,23 +32,23 @@ class PhotoBookController extends Controller
         $space = $request->user()->gallerySpaces()->first();
 
         $v = $request->validate([
-            'name'         => 'required|string|max:255',
-            'description'  => 'nullable|string|max:2000',
-            'purpose'      => 'nullable|in:photobook,print,web,gift,other',
+            'name' => 'required|string|max:255',
+            'description' => 'nullable|string|max:2000',
+            'purpose' => 'nullable|in:photobook,print,web,gift,other',
             'target_count' => 'nullable|integer|min:1|max:500',
         ]);
 
         $id = DB::table('photo_books')->insertGetId([
-            'uuid'             => (string) Str::uuid(),
+            'uuid' => (string) Str::uuid(),
             'gallery_space_id' => $space->id,
-            'created_by'       => $request->user()->id,
-            'name'             => $v['name'],
-            'description'      => $v['description'] ?? null,
-            'purpose'          => $v['purpose'] ?? 'photobook',
-            'target_count'     => $v['target_count'] ?? null,
-            'item_count'       => 0,
-            'created_at'       => now(),
-            'updated_at'       => now(),
+            'created_by' => $request->user()->id,
+            'name' => $v['name'],
+            'description' => $v['description'] ?? null,
+            'purpose' => $v['purpose'] ?? 'photobook',
+            'target_count' => $v['target_count'] ?? null,
+            'item_count' => 0,
+            'created_at' => now(),
+            'updated_at' => now(),
         ]);
 
         return response()->json($this->enrichBook(DB::table('photo_books')->find($id)), 201);
@@ -56,8 +56,9 @@ class PhotoBookController extends Controller
 
     public function show(Request $request, string $uuid): JsonResponse
     {
-        $book  = $this->resolve($uuid, $request);
+        $book = $this->resolve($uuid, $request);
         $items = $this->getItems($book->id);
+
         return response()->json([...(array) $this->enrichBook($book), 'items' => $items]);
     }
 
@@ -66,9 +67,9 @@ class PhotoBookController extends Controller
         $book = $this->resolve($uuid, $request);
 
         $v = $request->validate([
-            'name'         => 'nullable|string|max:255',
-            'description'  => 'nullable|string|max:2000',
-            'purpose'      => 'nullable|in:photobook,print,web,gift,other',
+            'name' => 'nullable|string|max:255',
+            'description' => 'nullable|string|max:2000',
+            'purpose' => 'nullable|in:photobook,print,web,gift,other',
             'target_count' => 'nullable|integer|min:1|max:500',
         ]);
 
@@ -85,6 +86,7 @@ class PhotoBookController extends Controller
     {
         $book = $this->resolve($uuid, $request);
         DB::table('photo_books')->where('id', $book->id)->delete();
+
         return response()->json(['status' => 'deleted']);
     }
 
@@ -92,11 +94,11 @@ class PhotoBookController extends Controller
 
     public function addItems(Request $request, string $uuid): JsonResponse
     {
-        $book  = $this->resolve($uuid, $request);
+        $book = $this->resolve($uuid, $request);
         $space = $request->user()->gallerySpaces()->first();
 
         $v = $request->validate([
-            'media_uuids'   => 'required|array|max:500',
+            'media_uuids' => 'required|array|max:500',
             'media_uuids.*' => 'string',
         ]);
 
@@ -105,18 +107,20 @@ class PhotoBookController extends Controller
             ->get(['id', 'uuid']);
 
         $maxOrder = DB::table('photo_book_items')->where('photo_book_id', $book->id)->max('sort_order') ?? -1;
-        $now      = now();
-        $added    = 0;
+        $now = now();
+        $added = 0;
 
         foreach ($mediaItems as $m) {
             $inserted = DB::table('photo_book_items')->insertOrIgnore([
-                'photo_book_id'  => $book->id,
-                'media_item_id'  => $m->id,
-                'sort_order'     => ++$maxOrder,
-                'created_at'     => $now,
-                'updated_at'     => $now,
+                'photo_book_id' => $book->id,
+                'media_item_id' => $m->id,
+                'sort_order' => ++$maxOrder,
+                'created_at' => $now,
+                'updated_at' => $now,
             ]);
-            if ($inserted) $added++;
+            if ($inserted) {
+                $added++;
+            }
         }
 
         DB::table('photo_books')->where('id', $book->id)->update([
@@ -135,6 +139,7 @@ class PhotoBookController extends Controller
             'item_count' => DB::table('photo_book_items')->where('photo_book_id', $book->id)->count(),
             'updated_at' => now(),
         ]);
+
         return response()->json(['status' => 'removed']);
     }
 
@@ -143,7 +148,7 @@ class PhotoBookController extends Controller
         $book = $this->resolve($uuid, $request);
 
         $v = $request->validate([
-            'order'   => 'required|array',
+            'order' => 'required|array',
             'order.*' => 'integer',
         ]);
 
@@ -165,7 +170,7 @@ class PhotoBookController extends Controller
      */
     public function exportZip(Request $request, string $uuid): mixed
     {
-        $book  = $this->resolve($uuid, $request);
+        $book = $this->resolve($uuid, $request);
         $space = $request->user()->gallerySpaces()->first();
 
         $rows = DB::table('photo_book_items')
@@ -175,22 +180,24 @@ class PhotoBookController extends Controller
             ->orderBy('photo_book_items.sort_order')
             ->get(['media_items.id', 'media_items.original_filename']);
 
-        $tmpFile = tempnam(sys_get_temp_dir(), 'pb_') . '.zip';
-        $zip     = new ZipArchive();
+        $tmpFile = tempnam(sys_get_temp_dir(), 'pb_').'.zip';
+        $zip = new ZipArchive;
         $zip->open($tmpFile, ZipArchive::CREATE);
 
         $index = 1;
         foreach ($rows as $row) {
-            $media   = MediaItem::with('variants')->find($row->id);
+            $media = MediaItem::with('variants')->find($row->id);
             $variant = $media?->getVariant('original')
                 ?? $media?->getVariant('large')
                 ?? $media?->getVariant('medium');
 
-            if (! $variant) continue;
+            if (! $variant) {
+                continue;
+            }
 
             $path = Storage::disk($variant->disk)->path($variant->path);
             if (file_exists($path)) {
-                $ext      = pathinfo($row->original_filename, PATHINFO_EXTENSION);
+                $ext = pathinfo($row->original_filename, PATHINFO_EXTENSION);
                 $safeName = sprintf('%03d_%s', $index, $row->original_filename);
                 $zip->addFile($path, $safeName);
                 $index++;
@@ -199,7 +206,7 @@ class PhotoBookController extends Controller
 
         $zip->close();
 
-        $safeName = Str::slug($book->name) . '.zip';
+        $safeName = Str::slug($book->name).'.zip';
 
         return response()->download($tmpFile, $safeName)->deleteFileAfterSend(true);
     }
@@ -210,7 +217,7 @@ class PhotoBookController extends Controller
      */
     public function exportFileList(Request $request, string $uuid): mixed
     {
-        $book  = $this->resolve($uuid, $request);
+        $book = $this->resolve($uuid, $request);
         $space = $request->user()->gallerySpaces()->first();
 
         $rows = DB::table('photo_book_items')
@@ -226,24 +233,24 @@ class PhotoBookController extends Controller
                 'media_items.height',
                 'media_items.size_bytes',
                 'media_items.camera_make',
-                'media_items.camera_model'
+                'media_items.camera_model',
             ]);
 
-        $lines   = ["# Fotokniha: {$book->name}", "# Datum exportu: " . now()->toDateTimeString(), "# Počet: {$rows->count()}", ""];
+        $lines = ["# Fotokniha: {$book->name}", '# Datum exportu: '.now()->toDateTimeString(), "# Počet: {$rows->count()}", ''];
         $lines[] = "Pořadí\tUUID\tSoubor\tDatum\tRozměry\tVelikost\tFotoaparát";
 
         foreach ($rows as $i => $row) {
-            $size = $row->size_bytes ? round($row->size_bytes / 1024 / 1024, 1) . ' MB' : '';
-            $dim  = ($row->width && $row->height) ? "{$row->width}×{$row->height}" : '';
-            $cam  = trim("{$row->camera_make} {$row->camera_model}");
+            $size = $row->size_bytes ? round($row->size_bytes / 1024 / 1024, 1).' MB' : '';
+            $dim = ($row->width && $row->height) ? "{$row->width}×{$row->height}" : '';
+            $cam = trim("{$row->camera_make} {$row->camera_model}");
             $date = $row->taken_at ? date('Y-m-d H:i', strtotime($row->taken_at)) : '';
             $lines[] = implode("\t", [$i + 1, $row->uuid, $row->original_filename, $date, $dim, $size, $cam]);
         }
 
-        $safeName = Str::slug($book->name) . '-filelist.txt';
+        $safeName = Str::slug($book->name).'-filelist.txt';
 
         return response(implode("\n", $lines), 200, [
-            'Content-Type'        => 'text/plain; charset=utf-8',
+            'Content-Type' => 'text/plain; charset=utf-8',
             'Content-Disposition' => "attachment; filename=\"{$safeName}\"",
         ]);
     }
@@ -255,13 +262,13 @@ class PhotoBookController extends Controller
      */
     public function contactSheetData(Request $request, string $uuid): JsonResponse
     {
-        $book  = $this->resolve($uuid, $request);
+        $book = $this->resolve($uuid, $request);
         $space = $request->user()->gallerySpaces()->first();
 
         $items = $this->getItems($book->id);
 
         return response()->json([
-            'book'  => $this->enrichBook($book),
+            'book' => $this->enrichBook($book),
             'items' => $items,
         ]);
     }
@@ -271,11 +278,12 @@ class PhotoBookController extends Controller
     private function resolve(string $uuid, Request $request): object
     {
         $space = $request->user()->gallerySpaces()->first();
-        $book  = DB::table('photo_books')
+        $book = DB::table('photo_books')
             ->where('uuid', $uuid)
             ->where('gallery_space_id', $space->id)
             ->first();
         abort_if(! $book, 404);
+
         return $book;
     }
 
@@ -295,7 +303,7 @@ class PhotoBookController extends Controller
                 ->orderBy('sort_order')
                 ->value('media_item_id');
             if ($firstId) {
-                $m     = MediaItem::with('variants')->find($firstId);
+                $m = MediaItem::with('variants')->find($firstId);
                 $cover = $m?->thumbnail_url;
             }
         }
@@ -327,21 +335,22 @@ class PhotoBookController extends Controller
             $m = MediaItem::with('variants')->where('uuid', $r->uuid)->first();
             $shortSide = min((int) ($r->width ?? 0), (int) ($r->height ?? 0));
             $quality = $r->media_type === 'video' ? 'unsupported' : ($shortSide >= 3000 ? 'excellent' : ($shortSide >= 1800 ? 'good' : 'low'));
+
             return [
-                'id'         => $r->id,
+                'id' => $r->id,
                 'sort_order' => $r->sort_order,
-                'notes'      => $r->notes,
-                'uuid'       => $r->uuid,
-                'filename'   => $r->original_filename,
-                'taken_at'   => $r->taken_at,
-                'width'      => $r->width,
-                'height'     => $r->height,
+                'notes' => $r->notes,
+                'uuid' => $r->uuid,
+                'filename' => $r->original_filename,
+                'taken_at' => $r->taken_at,
+                'width' => $r->width,
+                'height' => $r->height,
                 'size_bytes' => $r->size_bytes,
                 'media_type' => $r->media_type,
                 'print_quality' => $quality,
                 'recommended_max_cm' => $shortSide > 0 ? round(($shortSide / 300) * 2.54, 1) : null,
-                'thumb_url'  => $m?->thumbnail_url,
-                'full_url'   => "/media/{$r->uuid}/full",
+                'thumb_url' => $m?->thumbnail_url,
+                'full_url' => "/media/{$r->uuid}/full",
             ];
         })->toArray();
     }

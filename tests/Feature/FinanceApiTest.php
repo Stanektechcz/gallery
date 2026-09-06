@@ -25,6 +25,7 @@ class FinanceApiTest extends TestCase
     use RefreshDatabase;
 
     private User $uzivatel;
+
     private GallerySpace $space;
 
     protected function setUp(): void

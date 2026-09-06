@@ -267,7 +267,9 @@ class SpaceFinancialOverviewService
 
     private function manualExpenses(GallerySpace $space, Carbon $from, Carbon $to): Collection
     {
-        if (! Schema::hasTable('shared_expenses')) return collect();
+        if (! Schema::hasTable('shared_expenses')) {
+            return collect();
+        }
 
         return DB::table('shared_expenses as expense')
             ->leftJoin('calendar_events as event', 'event.id', '=', 'expense.calendar_event_id')

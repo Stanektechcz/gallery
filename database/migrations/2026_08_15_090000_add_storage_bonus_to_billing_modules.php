@@ -15,8 +15,12 @@ return new class extends Migration
 {
     public function up(): void
     {
-        if (! Schema::hasTable('billing_modules')) return;
-        if (Schema::hasColumn('billing_modules', 'storage_bonus_mb')) return;
+        if (! Schema::hasTable('billing_modules')) {
+            return;
+        }
+        if (Schema::hasColumn('billing_modules', 'storage_bonus_mb')) {
+            return;
+        }
 
         Schema::table('billing_modules', function (Blueprint $table) {
             $table->unsignedInteger('storage_bonus_mb')->default(0)->after('price_monthly');
@@ -25,7 +29,9 @@ return new class extends Migration
 
     public function down(): void
     {
-        if (! Schema::hasColumn('billing_modules', 'storage_bonus_mb')) return;
+        if (! Schema::hasColumn('billing_modules', 'storage_bonus_mb')) {
+            return;
+        }
 
         Schema::table('billing_modules', function (Blueprint $table) {
             $table->dropColumn('storage_bonus_mb');

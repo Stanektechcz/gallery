@@ -28,9 +28,7 @@ class TwoFactorController extends Controller
     /** Six digits is 10^6; without a limit it is an afternoon's work. */
     private const MAX_ATTEMPTS = 5;
 
-    public function __construct(private readonly TotpService $totp)
-    {
-    }
+    public function __construct(private readonly TotpService $totp) {}
 
     // ─── Setup, while signed in ─────────────────────────────────────
 
@@ -131,16 +129,18 @@ class TwoFactorController extends Controller
     public function verify(Request $request): RedirectResponse
     {
         $id = $request->session()->get('two_factor.user_id');
-        if (! $id) return redirect()->route('login');
+        if (! $id) {
+            return redirect()->route('login');
+        }
 
         $request->validate(['code' => 'required|string|max:20']);
 
-        $key = 'two-factor:' . $id;
+        $key = 'two-factor:'.$id;
 
         if (RateLimiter::tooManyAttempts($key, self::MAX_ATTEMPTS)) {
             $seconds = RateLimiter::availableIn($key);
 
-            return back()->withErrors(['code' => 'Příliš mnoho pokusů. Zkuste to za ' . $seconds . ' s.']);
+            return back()->withErrors(['code' => 'Příliš mnoho pokusů. Zkuste to za '.$seconds.' s.']);
         }
 
         $user = User::find($id);
@@ -178,7 +178,9 @@ class TwoFactorController extends Controller
         $hashes = (array) $user->two_factor_recovery_codes;
 
         foreach ($hashes as $index => $hash) {
-            if (! Hash::check($code, $hash)) continue;
+            if (! Hash::check($code, $hash)) {
+                continue;
+            }
 
             unset($hashes[$index]);
             $user->forceFill(['two_factor_recovery_codes' => array_values($hashes)])->save();

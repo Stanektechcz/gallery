@@ -3,25 +3,25 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\AuditLog;
 use App\Models\Album;
+use App\Models\AuditLog;
 use App\Models\CalendarEvent;
 use App\Models\EntertainmentTitle;
 use App\Models\MediaItem;
 use App\Models\Recipe;
 use App\Models\RecipeIngredient;
 use App\Models\RecipeStep;
-use App\Models\SharedTodo;
+use App\Services\AlbumService;
 use App\Services\Banking\SharedExpenseWriteService;
 use App\Services\Entertainment\EntertainmentMetadataService;
 use App\Services\Planning\CalendarEventCreationService;
 use App\Services\Planning\CalendarEventTripService;
 use App\Services\Planning\GiftIdeaService;
 use App\Services\Planning\LifeEventService;
-use App\Services\Taxonomy\UniversalTagService;
 use App\Services\Planning\RelationshipMilestoneService;
-use App\Services\Planning\TravelInboxService;
 use App\Services\Planning\SharedTodoService;
+use App\Services\Planning\TravelInboxService;
+use App\Services\Taxonomy\UniversalTagService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -39,9 +39,13 @@ class WorkspaceAssistantController extends Controller
      * is what keeps a long title or section from breaking the whole save.
      */
     private const RECIPE_TITLE_MAX = 180;        // recipes.title
+
     private const INGREDIENT_NAME_MAX = 180;     // recipe_ingredients.name
+
     private const INGREDIENT_SECTION_MAX = 100;  // recipe_ingredients.section
+
     private const INGREDIENT_UNIT_MAX = 32;      // recipe_ingredients.unit
+
     private const STEP_TITLE_MAX = 180;          // recipe_steps.title
 
     public function __construct(
@@ -78,7 +82,9 @@ class WorkspaceAssistantController extends Controller
     {
         $empty = ['title' => '', 'ingredients' => [], 'steps' => [], 'ingredient_rows' => [], 'step_rows' => []];
         $lines = preg_split('/\R/u', $message) ?: [];
-        if (count($lines) < 3) return $empty;
+        if (count($lines) < 3) {
+            return $empty;
+        }
 
         // Recipes are usually pasted from somewhere that formats them, so headings arrive
         // as "**Suroviny**", "## Postup" or "__Suroviny__". Strip that before matching,
@@ -91,10 +97,16 @@ class WorkspaceAssistantController extends Controller
         $ingredientsAt = null;
         $stepsAt = null;
         foreach ($lines as $index => $line) {
-            if ($ingredientsAt === null && $isIngredientsHeading($line)) $ingredientsAt = $index;
-            if ($stepsAt === null && $isStepsHeading($line)) $stepsAt = $index;
+            if ($ingredientsAt === null && $isIngredientsHeading($line)) {
+                $ingredientsAt = $index;
+            }
+            if ($stepsAt === null && $isStepsHeading($line)) {
+                $stepsAt = $index;
+            }
         }
-        if ($ingredientsAt === null && $stepsAt === null) return $empty;
+        if ($ingredientsAt === null && $stepsAt === null) {
+            return $empty;
+        }
 
         $title = '';
         foreach ($lines as $line) {
@@ -116,7 +128,7 @@ class WorkspaceAssistantController extends Controller
         return [
             'title' => $title,
             'ingredients' => array_map(static fn (array $row) => $row['label'], $ingredientRows),
-            'steps' => array_map(static fn (array $row) => trim($row['title'] . ($row['instruction'] !== '' ? ' — ' . $row['instruction'] : '')), $stepRows),
+            'steps' => array_map(static fn (array $row) => trim($row['title'].($row['instruction'] !== '' ? ' — '.$row['instruction'] : '')), $stepRows),
             'ingredient_rows' => $ingredientRows,
             'step_rows' => $stepRows,
         ];
@@ -129,14 +141,19 @@ class WorkspaceAssistantController extends Controller
         $section = null;
         foreach ($lines as $line) {
             $line = trim($line);
-            if ($line === '') continue;
+            if ($line === '') {
+                continue;
+            }
             // A line without a bullet inside the ingredients block is a group heading.
             if (! preg_match('/^\s*(?:[*\-–•·]|\d+[.)])\s+(.*)$/u', $line, $bullet)) {
-                $section = mb_substr(rtrim($line, ":"), 0, self::INGREDIENT_SECTION_MAX);
+                $section = mb_substr(rtrim($line, ':'), 0, self::INGREDIENT_SECTION_MAX);
+
                 continue;
             }
             $label = trim($bullet[1]);
-            if ($label === '') continue;
+            if ($label === '') {
+                continue;
+            }
             $optional = (bool) preg_match('/voliteln|nepovinn/ui', $label);
             $quantity = null;
             $unit = null;
@@ -148,7 +165,9 @@ class WorkspaceAssistantController extends Controller
                 $name = trim($parts[3]);
             }
             $rows[] = ['label' => mb_substr($label, 0, self::INGREDIENT_NAME_MAX), 'section' => $section, 'name' => mb_substr($name !== '' ? $name : $label, 0, self::INGREDIENT_NAME_MAX), 'quantity' => $quantity, 'unit' => $unit, 'optional' => $optional];
-            if (count($rows) >= 120) break;
+            if (count($rows) >= 120) {
+                break;
+            }
         }
 
         return $rows;
@@ -160,17 +179,24 @@ class WorkspaceAssistantController extends Controller
         $rows = [];
         foreach ($lines as $line) {
             $trimmed = trim($line);
-            if ($trimmed === '') continue;
-            if (preg_match('/^(\d{1,2})[.)]\s*(.*)$/u', $trimmed, $numbered)) {
-                $rows[] = ['title' => mb_substr(trim($numbered[2]), 0, self::STEP_TITLE_MAX), 'instruction' => ''];
+            if ($trimmed === '') {
                 continue;
             }
-            if ($rows === []) continue;   // prose before the first numbered step is a lead-in
+            if (preg_match('/^(\d{1,2})[.)]\s*(.*)$/u', $trimmed, $numbered)) {
+                $rows[] = ['title' => mb_substr(trim($numbered[2]), 0, self::STEP_TITLE_MAX), 'instruction' => ''];
+
+                continue;
+            }
+            if ($rows === []) {
+                continue;
+            }   // prose before the first numbered step is a lead-in
             $last = count($rows) - 1;
             // Bullets inside a step are part of its instruction.
             $text = preg_replace('/^\s*[*\-–•·]\s+/u', '• ', $trimmed);
-            $rows[$last]['instruction'] = trim($rows[$last]['instruction'] === '' ? $text : $rows[$last]['instruction'] . "\n" . $text);
-            if (count($rows) >= 60) break;
+            $rows[$last]['instruction'] = trim($rows[$last]['instruction'] === '' ? $text : $rows[$last]['instruction']."\n".$text);
+            if (count($rows) >= 60) {
+                break;
+            }
         }
 
         // A step whose title is empty but which has body text still needs a usable name.
@@ -280,13 +306,15 @@ class WorkspaceAssistantController extends Controller
         ]);
         $user = $request->user();
         $space = $user->gallerySpaces()->orderByDesc('is_default')->firstOrFail();
-        if (!empty($data['request_id']) && Schema::hasTable('assistant_action_receipts')) {
+        if (! empty($data['request_id']) && Schema::hasTable('assistant_action_receipts')) {
             $receipt = DB::table('assistant_action_receipts')
                 ->where('request_id', $data['request_id'])
                 ->where('gallery_space_id', $space->id)
                 ->where('user_id', $user->id)
                 ->first(['response']);
-            if ($receipt) return response()->json(json_decode($receipt->response, true));
+            if ($receipt) {
+                return response()->json(json_decode($receipt->response, true));
+            }
         }
         $plan = $this->plan($data['message']);
         $selectedActions = $data['selected_actions'] ?? self::ACTION_KEYS;
@@ -332,7 +360,7 @@ class WorkspaceAssistantController extends Controller
                     $lifeEvents->record($space->id, $user->id, 'watchlist.proposed', $title['title'], 'assistant', EntertainmentTitle::class, $entertainmentTitle->id, now('Europe/Prague'), ['media_type' => $title['type']]);
                 }
                 $universalTags->assignNames($space, $user, 'entertainment', (int) $entertainmentTitle->id, $plan['tags']);
-                $created[] = ($title['type'] === 'series' ? 'Seriál: ' : 'Film: ') . $title['title'];
+                $created[] = ($title['type'] === 'series' ? 'Seriál: ' : 'Film: ').$title['title'];
             }
 
             if ($plan['recipe']) {
@@ -357,7 +385,7 @@ class WorkspaceAssistantController extends Controller
                         RecipeIngredient::firstOrCreate(
                             ['recipe_id' => $recipe->id, 'name' => $row['name']],
                             ['section' => $row['section'], 'quantity' => $row['quantity'], 'unit' => $row['unit'],
-                             'is_optional' => $row['optional'], 'sort_order' => $index, 'is_scalable' => $row['quantity'] !== null]
+                                'is_optional' => $row['optional'], 'sort_order' => $index, 'is_scalable' => $row['quantity'] !== null]
                         );
                     }
                 } else {
@@ -386,7 +414,7 @@ class WorkspaceAssistantController extends Controller
                     }
                 }
                 $universalTags->assignNames($space, $user, 'recipe', (int) $recipe->id, $plan['tags']);
-                $created[] = 'Recept: ' . $plan['recipe'] . (($plan['recipe_details']['ingredients'] || $plan['recipe_details']['steps']) ? ' včetně surovin a postupu' : '');
+                $created[] = 'Recept: '.$plan['recipe'].(($plan['recipe_details']['ingredients'] || $plan['recipe_details']['steps']) ? ' včetně surovin a postupu' : '');
             }
 
             if ($plan['activities']) {
@@ -405,7 +433,7 @@ class WorkspaceAssistantController extends Controller
                 ]);
                 $activityEventId = $event->id;
                 $universalTags->assignNames($space, $user, 'calendar_event', (int) $event->id, $plan['tags']);
-                $created[] = 'Hotová aktivita: ' . $event->title;
+                $created[] = 'Hotová aktivita: '.$event->title;
             }
 
             $tripId = null;
@@ -431,7 +459,6 @@ class WorkspaceAssistantController extends Controller
                 $universalTags->assignNames($space, $user, 'calendar_event', (int) $event->id, $plan['tags']);
                 $universalTags->assignNames($space, $user, 'trip', (int) $tripId, $plan['tags']);
 
-
                 foreach ($plan['trip']['waypoints'] as $index => $waypoint) {
                     DB::table('trip_waypoints')->insert([
                         'trip_id' => $tripId,
@@ -441,7 +468,7 @@ class WorkspaceAssistantController extends Controller
                         'updated_at' => now(),
                     ]);
                 }
-                $created[] = 'Cesta, kalendář a přípravy: ' . $plan['trip']['name'];
+                $created[] = 'Cesta, kalendář a přípravy: '.$plan['trip']['name'];
             }
             if ($plan['expense']) {
                 $expense = $expenses->create($space, $user, [
@@ -459,20 +486,19 @@ class WorkspaceAssistantController extends Controller
                 $expenseId = (int) $expense->id;
                 $lifeEvents->record($space->id, $user->id, 'finance.expense.recorded', $plan['activities'] ? implode(' · ', $plan['activities']) : 'Výdaj z chatu', 'assistant', 'shared_expense', $expenseId, Carbon::parse($plan['activity_date'], 'Europe/Prague'), ['amount' => $plan['expense']['amount'], 'currency' => $plan['expense']['currency'], 'trip_id' => $tripId]);
                 $universalTags->assignNames($space, $user, 'expense', $expenseId, $plan['tags']);
-                $created[] = 'Výdaj do společného rozpočtu: ' . number_format((float) $plan['expense']['amount'], 2, ',', ' ') . ' ' . $plan['expense']['currency'];
+                $created[] = 'Výdaj do společného rozpočtu: '.number_format((float) $plan['expense']['amount'], 2, ',', ' ').' '.$plan['expense']['currency'];
             }
-
 
             if ($plan['gift']) {
                 $gift = $gifts->create($space->id, $user->id, $plan['gift'] + ['currency' => 'CZK', 'reminder_days' => [30, 14, 7], 'source_reference' => $data['request_id'] ?? null], 'assistant');
                 $universalTags->assignNames($space, $user, 'gift', (int) $gift->id, $plan['tags']);
-                $created[] = 'Dárek: ' . $plan['gift']['title'];
+                $created[] = 'Dárek: '.$plan['gift']['title'];
             }
 
             if ($plan['milestone']) {
                 $milestone = $milestones->create($space->id, $user->id, $plan['milestone'] + ['icon' => '❤️', 'visibility' => 'shared', 'remind_annually' => true, 'source_reference' => $data['request_id'] ?? null], 'assistant');
                 $universalTags->assignNames($space, $user, 'milestone', (int) $milestone->id, $plan['tags']);
-                $created[] = 'Výročí: ' . $plan['milestone']['title'];
+                $created[] = 'Výročí: '.$plan['milestone']['title'];
             }
             if ($plan['todo']) {
                 $titles = $plan['todo']['items'] ?? [$plan['todo']['title']];
@@ -484,7 +510,7 @@ class WorkspaceAssistantController extends Controller
                         'metadata' => ['kind' => $plan['todo']['kind']],
                     ], source: 'assistant', sourceReference: $data['request_id'] ?? null);
                     $universalTags->assignNames($space, $user, 'todo', (int) $todo->id, $plan['tags']);
-                    $created[] = ($plan['todo']['kind'] === 'shopping' ? 'Nákup: ' : 'Společný úkol: ') . $title;
+                    $created[] = ($plan['todo']['kind'] === 'shopping' ? 'Nákup: ' : 'Společný úkol: ').$title;
                 }
             }
 
@@ -494,9 +520,9 @@ class WorkspaceAssistantController extends Controller
                 $orderedMedia = collect($mediaUuids)->map(fn ($uuid) => $media->get($uuid));
                 $event = $activityEventId ? CalendarEvent::find($activityEventId) : ($tripId ? CalendarEvent::where('gallery_space_id', $space->id)->where('trip_id', $tripId)->latest('id')->first() : null);
                 $date = $event?->starts_at ? Carbon::parse($event->starts_at) : Carbon::parse($plan['activity_date'], 'Europe/Prague');
-                $title = $event ? 'Fotky · ' . $event->title : 'Fotky z chatu · ' . $date->format('d. m. Y');
-                $album = app(\App\Services\AlbumService::class)->createEventAlbum($space, [
-                    'trip_id' => $tripId, 'title' => $title, 'slug' => Str::slug($title . '-' . Str::random(6)),
+                $title = $event ? 'Fotky · '.$event->title : 'Fotky z chatu · '.$date->format('d. m. Y');
+                $album = app(AlbumService::class)->createEventAlbum($space, [
+                    'trip_id' => $tripId, 'title' => $title, 'slug' => Str::slug($title.'-'.Str::random(6)),
                     'description' => 'Fotografie přiložené k zápisu z Maki pomocníka.', 'cover_media_id' => $orderedMedia->first()->id,
                     'event_date_start' => $date->toDateString(), 'event_date_end' => $date->toDateString(),
                     'story_mode' => true, 'event_mode' => true, 'event_start_at' => $event?->starts_at ?: $date,
@@ -505,10 +531,12 @@ class WorkspaceAssistantController extends Controller
                 ], $user, $orderedMedia);
                 MediaItem::whereIn('id', $orderedMedia->pluck('id'))->whereNull('primary_album_id')->update(['primary_album_id' => $album->id]);
                 $album->update(['media_count' => $orderedMedia->count(), 'total_size_bytes' => (int) $orderedMedia->sum('size_bytes')]);
-                if ($event && Schema::hasColumn('calendar_events', 'album_id')) $event->update(['album_id' => $album->id]);
+                if ($event && Schema::hasColumn('calendar_events', 'album_id')) {
+                    $event->update(['album_id' => $album->id]);
+                }
                 $lifeEvents->record($space->id, $user->id, 'album.chat.created', $album->title, 'assistant', Album::class, $album->id, $date, ['media_count' => $orderedMedia->count(), 'calendar_event_id' => $event?->id, 'trip_id' => $tripId]);
                 $universalTags->assignNames($space, $user, 'album', (int) $album->id, $plan['tags']);
-                $created[] = 'Album z přiložených fotek: ' . $album->title;
+                $created[] = 'Album z přiložených fotek: '.$album->title;
             }
 
             if ($plan['itinerary']) {
@@ -520,19 +548,19 @@ class WorkspaceAssistantController extends Controller
 
                 $travelInbox->create($space->id, $user->id, [
                     'trip_id' => $resolvedTripId,
-                    'title' => 'Itinerář: ' . $plan['itinerary']['trip_name'],
+                    'title' => 'Itinerář: '.$plan['itinerary']['trip_name'],
                     'notes' => implode("\n", $plan['itinerary']['items']),
                     'kind' => 'itinerary',
                     'state' => 'inbox',
                     'metadata' => ['items' => $plan['itinerary']['items']],
                     'source_reference' => $data['request_id'] ?? null,
                 ], 'assistant');
-                $created[] = 'Itinerář: ' . $plan['itinerary']['trip_name'];
+                $created[] = 'Itinerář: '.$plan['itinerary']['trip_name'];
             }
         });
 
         $response = ['created' => $created, 'plan' => $plan];
-        if (!empty($data['request_id']) && Schema::hasTable('assistant_action_receipts')) {
+        if (! empty($data['request_id']) && Schema::hasTable('assistant_action_receipts')) {
             DB::table('assistant_action_receipts')->insertOrIgnore([
                 'request_id' => $data['request_id'],
                 'gallery_space_id' => $space->id,
@@ -558,14 +586,19 @@ class WorkspaceAssistantController extends Controller
     {
         $selected = array_fill_keys($selectedActions, true);
         foreach (['activities', 'titles'] as $key) {
-            if (! isset($selected[$key])) $plan[$key] = [];
+            if (! isset($selected[$key])) {
+                $plan[$key] = [];
+            }
         }
         foreach (['recipe', 'expense', 'trip', 'gift', 'milestone', 'todo', 'itinerary'] as $key) {
-            if (! isset($selected[$key])) $plan[$key] = null;
+            if (! isset($selected[$key])) {
+                $plan[$key] = null;
+            }
         }
 
         return $plan;
     }
+
     private function hasActions(array $plan): bool
     {
         return (bool) ($plan['activities'] || $plan['titles'] || $plan['recipe'] || $plan['expense'] || $plan['trip'] || $plan['gift'] || $plan['milestone'] || $plan['todo'] || $plan['itinerary']);
@@ -583,7 +616,9 @@ class WorkspaceAssistantController extends Controller
         $activities = [];
 
         foreach (['káva' => 'Káva', 'bazén' => 'Bazén', 'nakoup' => 'Nákup', 'kino' => 'Kino', 'procház' => 'Procházka', 'večeř' => 'Večeře'] as $needle => $label) {
-            if (str_contains($lower, $needle)) $activities[] = $label;
+            if (str_contains($lower, $needle)) {
+                $activities[] = $label;
+            }
         }
 
         preg_match('/(?:utratili|zaplatili|za)\s*([0-9 .]+(?:,[0-9]{1,2})?)\s*(?:kč|czk)/ui', $message, $amount);
@@ -594,7 +629,9 @@ class WorkspaceAssistantController extends Controller
             $type = str_starts_with(mb_strtolower($list[0]), 'seri') ? 'series' : 'movie';
             foreach (preg_split('/[,;]| a /u', $list[1]) as $title) {
                 $title = trim($title);
-                if ($title) $titles[] = ['title' => $title, 'type' => $type];
+                if ($title) {
+                    $titles[] = ['title' => $title, 'type' => $type];
+                }
             }
         }
         if (in_array($command['name'], ['/film', '/filmy', '/seriál', '/serial', '/seriály', '/serialy'], true) && $command['body']) {
@@ -605,11 +642,17 @@ class WorkspaceAssistantController extends Controller
         $recipe = in_array($command['name'], ['/recept', '/recepty'], true) ? trim($command['body']) : trim($recipeMatch[1] ?? '');
         $blocks = $this->recipeBlocks($message);
         // A pasted recipe carries its own headings, so the first line is the title.
-        if ($recipe === '' && $blocks['ingredients'] && $blocks['steps']) $recipe = $blocks['title'];
+        if ($recipe === '' && $blocks['ingredients'] && $blocks['steps']) {
+            $recipe = $blocks['title'];
+        }
         // A '/recept' command with the whole text pasted after it: keep only the first line as the name.
-        if ($recipe !== '' && str_contains($recipe, "\n")) $recipe = trim(strtok($recipe, "\n"));
+        if ($recipe !== '' && str_contains($recipe, "\n")) {
+            $recipe = trim(strtok($recipe, "\n"));
+        }
         // recipes.title is varchar(180); an over-long name would be a 500 on MySQL.
-        if ($recipe !== '') $recipe = mb_substr($recipe, 0, self::RECIPE_TITLE_MAX);
+        if ($recipe !== '') {
+            $recipe = mb_substr($recipe, 0, self::RECIPE_TITLE_MAX);
+        }
 
         preg_match('/(?:ingredience|suroviny)\s*:\s*([^\n]+)/ui', $message, $ingredientsMatch);
         preg_match('/(?:postup|kroky)\s*:\s*([^\n]+)/ui', $message, $stepsMatch);
@@ -624,11 +667,21 @@ class WorkspaceAssistantController extends Controller
             'source_url' => null,
             'notes' => null,
         ];
-        if (preg_match('/(?:porce|porcí|osoby)\s*:?\s*(\d+(?:[.,]\d+)?)/ui', $message, $servingsMatch)) $recipeDetails['servings'] = $this->numberFrom($servingsMatch[1]);
-        if (preg_match('/(?:příprava|priprava|prep)\s*:?\s*(\d+)\s*(?:min|minut)?/ui', $message, $prepMatch)) $recipeDetails['prep_minutes'] = (int) $prepMatch[1];
-        if (preg_match('/(?:vaření|vareni|pečení|peceni|cook)\s*:?\s*(\d+)\s*(?:min|minut)?/ui', $message, $cookMatch)) $recipeDetails['cook_minutes'] = (int) $cookMatch[1];
-        if (preg_match('/https?:\/\/[^\s]+/ui', $message, $urlMatch)) $recipeDetails['source_url'] = rtrim($urlMatch[0], '.,;');
-        if (preg_match('/(?:poznámka|poznamka|tip)\s*:\s*([^\n]+)/ui', $message, $notesMatch)) $recipeDetails['notes'] = trim($notesMatch[1]);
+        if (preg_match('/(?:porce|porcí|osoby)\s*:?\s*(\d+(?:[.,]\d+)?)/ui', $message, $servingsMatch)) {
+            $recipeDetails['servings'] = $this->numberFrom($servingsMatch[1]);
+        }
+        if (preg_match('/(?:příprava|priprava|prep)\s*:?\s*(\d+)\s*(?:min|minut)?/ui', $message, $prepMatch)) {
+            $recipeDetails['prep_minutes'] = (int) $prepMatch[1];
+        }
+        if (preg_match('/(?:vaření|vareni|pečení|peceni|cook)\s*:?\s*(\d+)\s*(?:min|minut)?/ui', $message, $cookMatch)) {
+            $recipeDetails['cook_minutes'] = (int) $cookMatch[1];
+        }
+        if (preg_match('/https?:\/\/[^\s]+/ui', $message, $urlMatch)) {
+            $recipeDetails['source_url'] = rtrim($urlMatch[0], '.,;');
+        }
+        if (preg_match('/(?:poznámka|poznamka|tip)\s*:\s*([^\n]+)/ui', $message, $notesMatch)) {
+            $recipeDetails['notes'] = trim($notesMatch[1]);
+        }
 
         $trip = null;
         if (in_array($command['name'], ['/cesta', '/cesty'], true)) {
@@ -671,25 +724,29 @@ class WorkspaceAssistantController extends Controller
             $parts = $this->parts($command['body']);
             $kind = in_array($command['name'], ['/nákup', '/nakup'], true) ? 'shopping' : 'todo';
             $items = $this->todoItems($parts[0] ?? '', $kind);
-            if ($items) $todo = [
-                'title' => $items[0],
-                'items' => $items,
-                'due_at' => $this->dateFrom($parts[1] ?? null),
-                'priority' => in_array($parts[2] ?? null, ['low', 'normal', 'high'], true) ? $parts[2] : 'normal',
-                'kind' => $kind,
-            ];
+            if ($items) {
+                $todo = [
+                    'title' => $items[0],
+                    'items' => $items,
+                    'due_at' => $this->dateFrom($parts[1] ?? null),
+                    'priority' => in_array($parts[2] ?? null, ['low', 'normal', 'high'], true) ? $parts[2] : 'normal',
+                    'kind' => $kind,
+                ];
+            }
         } elseif (preg_match('/(?:úkol|ukol|nákup|nakup)\s*:\s*([^\n]+)/ui', $message, $todoMatch)) {
             $parts = $this->parts($todoMatch[1]);
             if ($parts[0] ?? null) {
                 $kind = str_contains(mb_strtolower($message), 'nákup') || str_contains(mb_strtolower($message), 'nakup') ? 'shopping' : 'todo';
                 $items = $this->todoItems($parts[0], $kind);
-                if ($items) $todo = [
-                    'title' => $items[0],
-                    'items' => $items,
-                    'due_at' => $this->dateFrom($parts[1] ?? null) ?: ($dates[0] ?? null),
-                    'priority' => in_array($parts[2] ?? null, ['low', 'normal', 'high'], true) ? $parts[2] : 'normal',
-                    'kind' => $kind,
-                ];
+                if ($items) {
+                    $todo = [
+                        'title' => $items[0],
+                        'items' => $items,
+                        'due_at' => $this->dateFrom($parts[1] ?? null) ?: ($dates[0] ?? null),
+                        'priority' => in_array($parts[2] ?? null, ['low', 'normal', 'high'], true) ? $parts[2] : 'normal',
+                        'kind' => $kind,
+                    ];
+                }
             }
         }
 
@@ -697,10 +754,14 @@ class WorkspaceAssistantController extends Controller
         if (in_array($command['name'], ['/itinerář', '/itinerar'], true)) {
             $parts = $this->parts($command['body']);
             $items = isset($parts[1]) ? array_values(array_filter(array_map('trim', preg_split('/[,;]|→|->/u', $parts[1])))) : [];
-            if (($parts[0] ?? null) && $items) $itinerary = ['trip_name' => $parts[0], 'items' => $items];
+            if (($parts[0] ?? null) && $items) {
+                $itinerary = ['trip_name' => $parts[0], 'items' => $items];
+            }
         } elseif (preg_match('/(?:itinerář|itinerar)\s*(?:pro)?\s*([^:]+):\s*(.+)/ui', $message, $itineraryMatch)) {
             $items = array_values(array_filter(array_map('trim', preg_split('/[,;]|→|->/u', $itineraryMatch[2]))));
-            if ($items) $itinerary = ['trip_name' => trim($itineraryMatch[1]), 'items' => $items];
+            if ($items) {
+                $itinerary = ['trip_name' => trim($itineraryMatch[1]), 'items' => $items];
+            }
         }
 
         $clarification = null;
@@ -734,8 +795,12 @@ class WorkspaceAssistantController extends Controller
         }
 
         $warnings = [];
-        if (in_array($command['name'], ['/cesta', '/cesty'], true) && ! $trip) $warnings[] = 'Pro cestu doplňte dva termíny: /cesta Název | 2026-08-10 | 2026-08-14 | místo 1, místo 2';
-        if (in_array($command['name'], ['/itinerář', '/itinerar'], true) && ! $itinerary) $warnings[] = 'Pro itinerář napište: /itinerář Název cesty | bod 1, bod 2, bod 3';
+        if (in_array($command['name'], ['/cesta', '/cesty'], true) && ! $trip) {
+            $warnings[] = 'Pro cestu doplňte dva termíny: /cesta Název | 2026-08-10 | 2026-08-14 | místo 1, místo 2';
+        }
+        if (in_array($command['name'], ['/itinerář', '/itinerar'], true) && ! $itinerary) {
+            $warnings[] = 'Pro itinerář napište: /itinerář Název cesty | bod 1, bod 2, bod 3';
+        }
 
         return [
             'date' => $activityDate ?: now('Europe/Prague')->toDateString(),
@@ -765,6 +830,7 @@ class WorkspaceAssistantController extends Controller
 
         return array_values(array_slice(array_unique(array_filter(array_map('trim', $items))), 0, 30));
     }
+
     /**
      * The `s` modifier matters: without it `.` stops at the first newline and `$` cannot
      * match, so a command followed by pasted multi-line text was not recognised as a
@@ -776,6 +842,7 @@ class WorkspaceAssistantController extends Controller
         if (preg_match('/^\s*(\/[\p{L}]+)\s*(.*)$/su', $message, $match)) {
             return ['name' => mb_strtolower($match[1]), 'body' => trim($match[2])];
         }
+
         return ['name' => null, 'body' => null];
     }
 
@@ -794,9 +861,14 @@ class WorkspaceAssistantController extends Controller
     {
         $start = $this->dateFrom($parts[1] ?? null) ?: ($dates[0] ?? null);
         $end = $this->dateFrom($parts[2] ?? null) ?: ($dates[1] ?? null);
-        if (! ($parts[0] ?? null) || ! $start || ! $end) return null;
-        if (Carbon::parse($end, 'Europe/Prague')->lt(Carbon::parse($start, 'Europe/Prague'))) return null;
+        if (! ($parts[0] ?? null) || ! $start || ! $end) {
+            return null;
+        }
+        if (Carbon::parse($end, 'Europe/Prague')->lt(Carbon::parse($start, 'Europe/Prague'))) {
+            return null;
+        }
         $waypoints = isset($parts[3]) ? array_values(array_filter(array_map('trim', preg_split('/[,;]|→|->/u', $parts[3])))) : [];
+
         return ['name' => $parts[0], 'start_date' => $start, 'end_date' => $end, 'notes' => $parts[4] ?? null, 'waypoints' => $waypoints];
     }
 
@@ -804,9 +876,15 @@ class WorkspaceAssistantController extends Controller
     {
         $lower = mb_strtolower($value);
         $today = now('Europe/Prague')->startOfDay();
-        if (str_contains($lower, 'předevčírem') || str_contains($lower, 'predevcirem')) return $today->copy()->subDays(2)->toDateString();
-        if (str_contains($lower, 'včera') || str_contains($lower, 'vcera')) return $today->copy()->subDay()->toDateString();
-        if (str_contains($lower, 'dnes')) return $today->toDateString();
+        if (str_contains($lower, 'předevčírem') || str_contains($lower, 'predevcirem')) {
+            return $today->copy()->subDays(2)->toDateString();
+        }
+        if (str_contains($lower, 'včera') || str_contains($lower, 'vcera')) {
+            return $today->copy()->subDay()->toDateString();
+        }
+        if (str_contains($lower, 'dnes')) {
+            return $today->toDateString();
+        }
 
         if (preg_match('/\b(\d{1,2})\.(\d{1,2})\.(\d{4})?\b/u', $value, $match)) {
             try {
@@ -822,30 +900,42 @@ class WorkspaceAssistantController extends Controller
     private function datesFrom(string $value): array
     {
         preg_match_all('/\b(?:\d{4}-\d{2}-\d{2}|\d{1,2}\.\d{1,2}\.(?:\d{4})?)\b/u', $value, $matches);
+
         return array_values(array_filter(array_map(fn ($date) => $this->dateFrom($date), $matches[0])));
     }
 
     private function dateFrom(?string $value): ?string
     {
-        if (! $value) return null;
+        if (! $value) {
+            return null;
+        }
         try {
-            if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $value)) return Carbon::createFromFormat('Y-m-d', $value)->toDateString();
+            if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $value)) {
+                return Carbon::createFromFormat('Y-m-d', $value)->toDateString();
+            }
             if (preg_match('/^(\d{1,2})\.(\d{1,2})\.(\d{4})?$/', trim($value), $match)) {
                 $year = $match[3] ?: now('Europe/Prague')->year;
                 $date = Carbon::create($year, (int) $match[2], (int) $match[1], 0, 0, 0, 'Europe/Prague');
-                if (! $match[3] && $date->lt(now('Europe/Prague')->startOfDay())) $date->addYear();
+                if (! $match[3] && $date->lt(now('Europe/Prague')->startOfDay())) {
+                    $date->addYear();
+                }
+
                 return $date->toDateString();
             }
         } catch (\Throwable) {
             return null;
         }
+
         return null;
     }
 
     private function numberFrom(?string $value): ?float
     {
-        if (! $value) return null;
+        if (! $value) {
+            return null;
+        }
         $number = (float) str_replace([' ', '. ', ','], ['', '', '.'], trim($value));
+
         return $number > 0 ? $number : null;
     }
 }

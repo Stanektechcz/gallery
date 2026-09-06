@@ -2,12 +2,46 @@
 
 namespace App\Providers;
 
+use App\Http\Controllers\Api\Galerie\DataController;
+use App\Listeners\ZaznamenejBehUlohy;
 use App\Models\Album;
+use App\Models\CalendarEvent;
+use App\Models\GallerySpace;
 use App\Models\MediaItem;
+use App\Models\PersonalAccessToken;
+use App\Models\SharedTodo;
 use App\Policies\AlbumPolicy;
 use App\Policies\MediaPolicy;
+use App\Services\Automation\AutomationEngine;
+use App\Services\Billing\EntitlementService;
+use App\Services\Obsah\Cesty;
+use App\Services\Obsah\Darky;
+use App\Services\Obsah\Denik;
+use App\Services\Obsah\Domacnost;
+use App\Services\Obsah\Finance;
+use App\Services\Obsah\FinanceRozbory;
+use App\Services\Obsah\Klid;
+use App\Services\Obsah\Knihovna;
+use App\Services\Obsah\Kucharka;
+use App\Services\Obsah\Mechanismy;
+use App\Services\Obsah\Planovani;
+use App\Services\Obsah\Pravidla;
+use App\Services\Obsah\Pribeh;
+use App\Services\Obsah\Rozhodovani;
+use App\Services\Obsah\Sdileni;
+use App\Services\Obsah\System;
+use App\Services\Obsah\Uklid;
+use App\Services\Obsah\Vztah;
+use App\Services\Obsah\Zdravi;
+use App\Services\Obsah\Zpravy;
+use Illuminate\Console\Events\ScheduledTaskFailed;
+use Illuminate\Console\Events\ScheduledTaskFinished;
+use Illuminate\Console\Events\ScheduledTaskSkipped;
+use Illuminate\Console\Events\ScheduledTaskStarting;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
+use Laravel\Sanctum\Sanctum;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -15,11 +49,11 @@ class AppServiceProvider extends ServiceProvider
     {
         // One instance per request, so its caches are shared by every caller rather than
         // each resolution starting cold and re-reading the plan and add-ons.
-        $this->app->singleton(\App\Services\Billing\EntitlementService::class);
+        $this->app->singleton(EntitlementService::class);
 
         // Also a singleton, and for a sharper reason: its re-entry guard is per instance,
         // and a fresh instance per resolution would let a rule trigger itself.
-        $this->app->singleton(\App\Services\Automation\AutomationEngine::class);
+        $this->app->singleton(AutomationEngine::class);
 
         /*
          * Skupiny obsahu, které prototyp kreslí.
@@ -27,29 +61,29 @@ class AppServiceProvider extends ServiceProvider
          * Přidat další znamená napsat poskytovatele a dopsat ho sem — kontroler
          * ani routa se nemění, takže se nedá zapomenout na půlku.
          */
-        $this->app->when(\App\Http\Controllers\Api\Galerie\DataController::class)
+        $this->app->when(DataController::class)
             ->needs('$poskytovatele')
             ->give(fn ($app) => [
-                $app->make(\App\Services\Obsah\Finance::class),
-                $app->make(\App\Services\Obsah\Knihovna::class),
-                $app->make(\App\Services\Obsah\Planovani::class),
-                $app->make(\App\Services\Obsah\Domacnost::class),
-                $app->make(\App\Services\Obsah\Cesty::class),
-                $app->make(\App\Services\Obsah\Vztah::class),
-                $app->make(\App\Services\Obsah\Zdravi::class),
-                $app->make(\App\Services\Obsah\Sdileni::class),
-                $app->make(\App\Services\Obsah\Zpravy::class),
-                $app->make(\App\Services\Obsah\Kucharka::class),
-                $app->make(\App\Services\Obsah\Darky::class),
-                $app->make(\App\Services\Obsah\Denik::class),
-                $app->make(\App\Services\Obsah\Pravidla::class),
-                $app->make(\App\Services\Obsah\FinanceRozbory::class),
-                $app->make(\App\Services\Obsah\Uklid::class),
-                $app->make(\App\Services\Obsah\System::class),
-                $app->make(\App\Services\Obsah\Klid::class),
-                $app->make(\App\Services\Obsah\Pribeh::class),
-                $app->make(\App\Services\Obsah\Mechanismy::class),
-                $app->make(\App\Services\Obsah\Rozhodovani::class),
+                $app->make(Finance::class),
+                $app->make(Knihovna::class),
+                $app->make(Planovani::class),
+                $app->make(Domacnost::class),
+                $app->make(Cesty::class),
+                $app->make(Vztah::class),
+                $app->make(Zdravi::class),
+                $app->make(Sdileni::class),
+                $app->make(Zpravy::class),
+                $app->make(Kucharka::class),
+                $app->make(Darky::class),
+                $app->make(Denik::class),
+                $app->make(Pravidla::class),
+                $app->make(FinanceRozbory::class),
+                $app->make(Uklid::class),
+                $app->make(System::class),
+                $app->make(Klid::class),
+                $app->make(Pribeh::class),
+                $app->make(Mechanismy::class),
+                $app->make(Rozhodovani::class),
             ]);
     }
 
@@ -69,11 +103,13 @@ class AppServiceProvider extends ServiceProvider
         // No table check here. This runs on every request, Schema::hasTable is a query,
         // and the engine already checks before it reads anything — registering a closure
         // costs nothing until something actually fires it.
-        $engine = fn () => app(\App\Services\Automation\AutomationEngine::class);
+        $engine = fn () => app(AutomationEngine::class);
 
-        \App\Models\CalendarEvent::created(function ($event) use ($engine): void {
-            $space = \App\Models\GallerySpace::find($event->gallery_space_id);
-            if (! $space) return;
+        CalendarEvent::created(function ($event) use ($engine): void {
+            $space = GallerySpace::find($event->gallery_space_id);
+            if (! $space) {
+                return;
+            }
 
             $engine()->fire('event.created', $space, [
                 'title' => $event->title,
@@ -82,9 +118,11 @@ class AppServiceProvider extends ServiceProvider
             ]);
         });
 
-        \App\Models\MediaItem::created(function ($item) use ($engine): void {
-            $space = \App\Models\GallerySpace::find($item->gallery_space_id);
-            if (! $space) return;
+        MediaItem::created(function ($item) use ($engine): void {
+            $space = GallerySpace::find($item->gallery_space_id);
+            if (! $space) {
+                return;
+            }
 
             $engine()->fire('media.uploaded', $space, [
                 'filename' => $item->original_filename,
@@ -92,7 +130,7 @@ class AppServiceProvider extends ServiceProvider
             ]);
         });
 
-        \App\Models\SharedTodo::updated(function ($todo) use ($engine): void {
+        SharedTodo::updated(function ($todo) use ($engine): void {
             /*
              * Only the moment it becomes done — every other save of a finished task
              * would otherwise fire the rule again.
@@ -102,10 +140,14 @@ class AppServiceProvider extends ServiceProvider
              * validator in the module. The rule therefore never fired — an
              * automation the couple had switched on quietly did nothing.
              */
-            if (! $todo->wasChanged('status') || $todo->status !== 'completed') return;
+            if (! $todo->wasChanged('status') || $todo->status !== 'completed') {
+                return;
+            }
 
-            $space = \App\Models\GallerySpace::find($todo->gallery_space_id);
-            if (! $space) return;
+            $space = GallerySpace::find($todo->gallery_space_id);
+            if (! $space) {
+                return;
+            }
 
             $engine()->fire('todo.completed', $space, ['title' => $todo->title]);
         });
@@ -121,12 +163,12 @@ class AppServiceProvider extends ServiceProvider
      */
     private function registerScheduleLogging(): void
     {
-        $listener = \App\Listeners\ZaznamenejBehUlohy::class;
+        $listener = ZaznamenejBehUlohy::class;
 
-        \Illuminate\Support\Facades\Event::listen(\Illuminate\Console\Events\ScheduledTaskStarting::class, [$listener, 'zacal']);
-        \Illuminate\Support\Facades\Event::listen(\Illuminate\Console\Events\ScheduledTaskFinished::class, [$listener, 'skoncil']);
-        \Illuminate\Support\Facades\Event::listen(\Illuminate\Console\Events\ScheduledTaskFailed::class, [$listener, 'selhal']);
-        \Illuminate\Support\Facades\Event::listen(\Illuminate\Console\Events\ScheduledTaskSkipped::class, [$listener, 'preskocen']);
+        Event::listen(ScheduledTaskStarting::class, [$listener, 'zacal']);
+        Event::listen(ScheduledTaskFinished::class, [$listener, 'skoncil']);
+        Event::listen(ScheduledTaskFailed::class, [$listener, 'selhal']);
+        Event::listen(ScheduledTaskSkipped::class, [$listener, 'preskocen']);
     }
 
     public function boot(): void
@@ -135,14 +177,14 @@ class AppServiceProvider extends ServiceProvider
         $this->registerScheduleLogging();
 
         // Register policies
-        Gate::policy(Album::class,     AlbumPolicy::class);
+        Gate::policy(Album::class, AlbumPolicy::class);
         Gate::policy(MediaItem::class, MediaPolicy::class);
 
         // Admin gate
-        Gate::define('admin', fn($user) => $user->isAdmin());
-        Gate::define('owner', fn($user) => $user->isOwner());
+        Gate::define('admin', fn ($user) => $user->isAdmin());
+        Gate::define('owner', fn ($user) => $user->isOwner());
 
         // Sanctum token abilities
-        \Laravel\Sanctum\Sanctum::usePersonalAccessTokenModel(\App\Models\PersonalAccessToken::class);
+        Sanctum::usePersonalAccessTokenModel(PersonalAccessToken::class);
     }
 }

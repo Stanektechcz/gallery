@@ -2,13 +2,14 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToGallerySpace;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
 
 /** A label that can sit on any conversation, cutting across categories. */
 class ConversationTag extends Model
 {
-    use \App\Models\Concerns\BelongsToGallerySpace;
+    use BelongsToGallerySpace;
 
     protected $fillable = ['uuid', 'gallery_space_id', 'name', 'colour'];
 

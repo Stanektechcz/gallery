@@ -25,9 +25,13 @@ class RelationshipAnniversaryRecapService
 
     public function overview(GallerySpace $space): array
     {
-        if (! $this->available()) return ['available' => false, 'reason' => 'migration_required', 'candidates' => []];
+        if (! $this->available()) {
+            return ['available' => false, 'reason' => 'migration_required', 'candidates' => []];
+        }
         $period = $this->period($space);
-        if (! $period) return ['available' => false, 'reason' => 'relationship_start_required', 'candidates' => []];
+        if (! $period) {
+            return ['available' => false, 'reason' => 'relationship_start_required', 'candidates' => []];
+        }
 
         $album = Album::query()->where('gallery_space_id', $space->id)
             ->where('anniversary_year', $period['year'])->with('cover.variants')->first();
@@ -55,10 +59,17 @@ class RelationshipAnniversaryRecapService
 
     public function prompt(GallerySpace $space): ?array
     {
-        if (! $this->available() || ! ($period = $this->period($space))) return null;
-        if (Album::where('gallery_space_id', $space->id)->where('anniversary_year', $period['year'])->exists()) return null;
+        if (! $this->available() || ! ($period = $this->period($space))) {
+            return null;
+        }
+        if (Album::where('gallery_space_id', $space->id)->where('anniversary_year', $period['year'])->exists()) {
+            return null;
+        }
         $candidateCount = $this->mediaQuery($space, $period)->count();
-        if ($candidateCount === 0) return null;
+        if ($candidateCount === 0) {
+            return null;
+        }
+
         return [
             'year' => $period['year'], 'title' => $this->defaultTitle($period['year']),
             'candidate_count' => $candidateCount, 'anniversary_on' => $period['anniversary']->toDateString(),
@@ -94,7 +105,7 @@ class RelationshipAnniversaryRecapService
             $note = trim((string) ($data['note'] ?? '')) ?: "Výběr společných okamžiků z {$period['year']}. roku našeho vztahu.";
             $albumData = [
                 'anniversary_year' => $period['year'], 'title' => $title,
-                'slug' => Str::slug($title . '-' . $period['year']), 'description' => $note,
+                'slug' => Str::slug($title.'-'.$period['year']), 'description' => $note,
                 'cover_media_id' => $cover->id, 'event_date_start' => $period['start']->toDateString(),
                 'event_date_end' => $period['end']->toDateString(), 'story_mode' => true,
                 'event_mode' => true, 'event_start_at' => $period['start'], 'event_end_at' => $period['end']->copy()->endOfDay(),
@@ -102,7 +113,9 @@ class RelationshipAnniversaryRecapService
                 'updated_by' => $user->id, 'sync_status' => 'pending', 'album_type' => 'physical',
             ];
             if ($album) {
-                if ($album->trashed()) $album->restore();
+                if ($album->trashed()) {
+                    $album->restore();
+                }
                 $album->update($albumData);
             } else {
                 $album = Album::create($albumData + [
@@ -122,10 +135,14 @@ class RelationshipAnniversaryRecapService
                 'album_id' => $album->id, 'user_id' => $userId, 'role' => 'editor', 'inherited' => false,
                 'created_at' => now(), 'updated_at' => now(),
             ])->all();
-            if ($permissions) DB::table('album_user_permissions')->upsert($permissions, ['album_id', 'user_id'], ['role', 'inherited', 'updated_at']);
+            if ($permissions) {
+                DB::table('album_user_permissions')->upsert($permissions, ['album_id', 'user_id'], ['role', 'inherited', 'updated_at']);
+            }
 
             $storyCreated = DB::table('album_story_blocks')->where('album_id', $album->id)->doesntExist();
-            if ($storyCreated) $this->createStory($album, $ordered, $user->id, $period, $note);
+            if ($storyCreated) {
+                $this->createStory($album, $ordered, $user->id, $period, $note);
+            }
 
             $memoryRow = [
                 'gallery_space_id' => $space->id, 'created_by' => $user->id, 'album_id' => $album->id,
@@ -153,10 +170,13 @@ class RelationshipAnniversaryRecapService
             AuditLog::record($created ? 'anniversary.recap.create' : 'anniversary.recap.sync', $album, [
                 'anniversary_year' => $period['year'], 'media_count' => count($sync), 'story_created' => $storyCreated,
             ]);
+
             return [$album->fresh('cover.variants'), $memory];
         });
 
-        if ($created) CreateDriveFolderJob::dispatch($album);
+        if ($created) {
+            CreateDriveFolderJob::dispatch($album);
+        }
 
         return [
             'album' => $this->albumPayload($album),
@@ -170,17 +190,24 @@ class RelationshipAnniversaryRecapService
     private function period(GallerySpace $space): ?array
     {
         $startedOn = data_get($space->settings, 'relationship_anniversary.started_on');
-        if (! $startedOn) return null;
+        if (! $startedOn) {
+            return null;
+        }
         $started = Carbon::parse($startedOn)->startOfDay();
-        if ($started->isFuture()) return null;
+        if ($started->isFuture()) {
+            return null;
+        }
         $now = now();
         $completedYears = $now->year - $started->year;
-        if ($started->copy()->addYearsNoOverflow($completedYears)->gt($now)) $completedYears--;
+        if ($started->copy()->addYearsNoOverflow($completedYears)->gt($now)) {
+            $completedYears--;
+        }
         $year = max(1, $completedYears);
         $anniversary = $started->copy()->addYearsNoOverflow($year);
         $start = $started->copy()->addYearsNoOverflow($year - 1);
         $complete = $anniversary->lte($now);
         $end = ($complete ? $anniversary : $now->copy())->endOfDay();
+
         return compact('year', 'start', 'end', 'anniversary', 'complete');
     }
 
@@ -201,6 +228,7 @@ class RelationshipAnniversaryRecapService
         $ranked = $all->sortByDesc(fn (MediaItem $media) => $this->score($media));
         $monthly = $all->groupBy(fn (MediaItem $media) => ($media->taken_at ?? $media->uploaded_at)?->format('Y-m'))
             ->map(fn (Collection $month) => $month->sortByDesc(fn (MediaItem $media) => $this->score($media))->first());
+
         return $ranked->take(110)->concat($monthly)->unique('id')
             ->sortBy(fn (MediaItem $media) => ($media->taken_at ?? $media->uploaded_at)?->timestamp ?? 0)->values();
     }
@@ -209,6 +237,7 @@ class RelationshipAnniversaryRecapService
     {
         $monthly = $candidates->groupBy(fn (MediaItem $media) => ($media->taken_at ?? $media->uploaded_at)?->format('Y-m'))
             ->map(fn (Collection $month) => $month->sortByDesc(fn (MediaItem $media) => $this->score($media))->first()?->id)->filter();
+
         return $candidates->sortByDesc(fn (MediaItem $media) => $this->score($media))->take(30)->pluck('id')
             ->concat($monthly)->unique()->take(40)->values();
     }
@@ -223,9 +252,16 @@ class RelationshipAnniversaryRecapService
     private function mediaPayload(MediaItem $media, bool $suggested, bool $selected): array
     {
         $reasons = [];
-        if ($media->is_favorite) $reasons[] = 'oblíbená';
-        if ($media->rating) $reasons[] = 'hodnocení ' . $media->rating . '/5';
-        if (! $reasons) $reasons[] = 'zastupuje ' . ($media->taken_at ?? $media->uploaded_at)?->translatedFormat('F Y');
+        if ($media->is_favorite) {
+            $reasons[] = 'oblíbená';
+        }
+        if ($media->rating) {
+            $reasons[] = 'hodnocení '.$media->rating.'/5';
+        }
+        if (! $reasons) {
+            $reasons[] = 'zastupuje '.($media->taken_at ?? $media->uploaded_at)?->translatedFormat('F Y');
+        }
+
         return [
             'uuid' => $media->uuid, 'title' => $media->display_title ?: $media->original_filename,
             'media_type' => $media->media_type, 'thumbnail_url' => $media->thumbnail_url,
@@ -244,21 +280,28 @@ class RelationshipAnniversaryRecapService
                 'sort_order' => count($blocks), 'created_at' => now(), 'updated_at' => now()];
         };
         $add('heading', ['text' => $album->title, 'level' => 1]);
-        $add('text', ['body' => $period['start']->translatedFormat('j. F Y') . ' – ' . $period['end']->translatedFormat('j. F Y') . "\n\n" . $note]);
+        $add('text', ['body' => $period['start']->translatedFormat('j. F Y').' – '.$period['end']->translatedFormat('j. F Y')."\n\n".$note]);
         foreach ($media->groupBy(fn (MediaItem $item) => ($item->taken_at ?? $item->uploaded_at)?->format('Y-m')) as $month => $items) {
             $date = Carbon::createFromFormat('Y-m', $month)->startOfMonth();
             $add('heading', ['text' => ucfirst($date->translatedFormat('F Y')), 'level' => 2]);
             $photos = $items->where('media_type', 'photo')->pluck('uuid')->values()->all();
-            if ($photos) $add('photo', ['media_uuids' => $photos, 'layout' => count($photos) > 1 ? 'grid' : 'full']);
-            foreach ($items->where('media_type', 'video') as $video) $add('video', ['media_uuid' => $video->uuid]);
+            if ($photos) {
+                $add('photo', ['media_uuids' => $photos, 'layout' => count($photos) > 1 ? 'grid' : 'full']);
+            }
+            foreach ($items->where('media_type', 'video') as $video) {
+                $add('video', ['media_uuid' => $video->uuid]);
+            }
         }
-        if ($blocks) DB::table('album_story_blocks')->insert($blocks);
+        if ($blocks) {
+            DB::table('album_story_blocks')->insert($blocks);
+        }
     }
 
     private function albumPayload(Album $album): array
     {
         $album->loadMissing('cover.variants');
         $memory = DB::table('shared_memory_moments')->where('album_id', $album->id)->first(['uuid', 'title']);
+
         return [
             'uuid' => $album->uuid, 'title' => $album->title, 'description' => $album->description,
             'anniversary_year' => (int) $album->anniversary_year,

@@ -40,7 +40,9 @@ return new class extends Migration
                 Schema::table('event_reminders', fn (Blueprint $table) => $table->dropUnique('event_reminder_automation_unique'));
             }
             $columns = array_values(array_filter(['automation_source', 'automation_key'], fn (string $column) => Schema::hasColumn('event_reminders', $column)));
-            if ($columns !== []) Schema::table('event_reminders', fn (Blueprint $table) => $table->dropColumn($columns));
+            if ($columns !== []) {
+                Schema::table('event_reminders', fn (Blueprint $table) => $table->dropColumn($columns));
+            }
         }
 
         if (Schema::hasTable('event_tasks')) {
@@ -48,7 +50,9 @@ return new class extends Migration
                 Schema::table('event_tasks', fn (Blueprint $table) => $table->dropUnique('event_task_automation_unique'));
             }
             $columns = array_values(array_filter(['automation_source', 'automation_key'], fn (string $column) => Schema::hasColumn('event_tasks', $column)));
-            if ($columns !== []) Schema::table('event_tasks', fn (Blueprint $table) => $table->dropColumn($columns));
+            if ($columns !== []) {
+                Schema::table('event_tasks', fn (Blueprint $table) => $table->dropColumn($columns));
+            }
         }
     }
 };

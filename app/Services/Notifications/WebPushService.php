@@ -31,15 +31,19 @@ class WebPushService
      */
     public function sendToUser(User $user, array $payload): int
     {
-        if (! $this->configured() || ! Schema::hasTable('push_subscriptions')) return 0;
+        if (! $this->configured() || ! Schema::hasTable('push_subscriptions')) {
+            return 0;
+        }
 
         $rows = DB::table('push_subscriptions')->where('user_id', $user->id)->get();
-        if ($rows->isEmpty()) return 0;
+        if ($rows->isEmpty()) {
+            return 0;
+        }
 
         try {
             $push = new WebPush(['VAPID' => [
-                'subject'    => config('push.subject'),
-                'publicKey'  => config('push.public_key'),
+                'subject' => config('push.subject'),
+                'publicKey' => config('push.public_key'),
                 'privateKey' => config('push.private_key'),
             ]], ['TTL' => config('push.ttl')]);
         } catch (\Throwable $exception) {
@@ -50,19 +54,21 @@ class WebPushService
 
         $body = json_encode([
             'title' => $payload['title'],
-            'body'  => $payload['body'],
-            'url'   => $payload['url'] ?? '/',
+            'body' => $payload['body'],
+            'url' => $payload['url'] ?? '/',
             // The prototype's worker opens a screen by name rather than by URL;
             // sending both means one payload works whichever worker is installed.
             'route' => $payload['route'] ?? null,
             // Devices collapse notifications sharing a tag, so a re-sent reminder
             // replaces the earlier one instead of stacking up.
-            'tag'   => $payload['tag'] ?? 'maki',
+            'tag' => $payload['tag'] ?? 'maki',
         ], JSON_UNESCAPED_UNICODE);
 
         foreach ($rows as $row) {
             $keys = json_decode($row->keys ?? '{}', true);
-            if (! is_array($keys) || empty($keys['p256dh']) || empty($keys['auth'])) continue;
+            if (! is_array($keys) || empty($keys['p256dh']) || empty($keys['auth'])) {
+                continue;
+            }
 
             try {
                 $push->queueNotification(
@@ -80,12 +86,17 @@ class WebPushService
         $delivered = 0;
         try {
             foreach ($push->flush() as $report) {
-                if ($report->isSuccess()) { $delivered++; continue; }
+                if ($report->isSuccess()) {
+                    $delivered++;
+
+                    continue;
+                }
 
                 // 404 or 410 means the browser dropped the subscription for good;
                 // keeping it would mean retrying a dead endpoint forever.
                 if ($report->isSubscriptionExpired()) {
                     DB::table('push_subscriptions')->where('endpoint', $report->getEndpoint())->delete();
+
                     continue;
                 }
 

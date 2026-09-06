@@ -7,8 +7,8 @@ use App\Models\AuditLog;
 use App\Models\MediaItem;
 use App\Models\Recipe;
 use App\Models\User;
-use App\Services\Recipes\RecipeService;
 use App\Services\Recipes\RecipeImportService;
+use App\Services\Recipes\RecipeService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -21,8 +21,10 @@ class RecipeController extends Controller
 
     public function import(Request $request): JsonResponse
     {
-        $this->available(); $this->write($request);
+        $this->available();
+        $this->write($request);
         $data = $request->validate(['url' => 'required|string|url|max:2048']);
+
         return response()->json(['draft' => $this->imports->import($data['url'])]);
     }
 
@@ -38,7 +40,7 @@ class RecipeController extends Controller
             ->whereIn('gallery_space_id', $this->spaceIds($request->user()))
             ->where(fn ($q) => $q->where('status', 'published')->orWhere('created_by', $request->user()->id))
             ->when(trim((string) ($filters['q'] ?? '')), function ($q, $term) {
-                $like = '%' . trim($term) . '%';
+                $like = '%'.trim($term).'%';
                 $q->where(fn ($search) => $search->where('title', 'like', $like)->orWhere('summary', 'like', $like)->orWhere('cuisine', 'like', $like)->orWhereHas('ingredients', fn ($ingredients) => $ingredients->where('name', 'like', $like)));
             })
             ->when($filters['category'] ?? null, fn ($q, $category) => $q->where('category', $category))
@@ -84,24 +86,28 @@ class RecipeController extends Controller
 
     public function store(Request $request): JsonResponse
     {
-        $this->available(); $this->write($request);
+        $this->available();
+        $this->write($request);
         $data = $this->validated($request);
         $spaceId = (int) ($data['gallery_space_id'] ?? $request->user()->gallerySpaces()->value('gallery_spaces.id'));
         abort_unless(in_array($spaceId, $this->spaceIds($request->user()), true), 403);
         $recipe = DB::transaction(function () use ($request, $data, $spaceId) {
             $recipe = Recipe::create($this->recipeData($data) + ['gallery_space_id' => $spaceId, 'created_by' => $request->user()->id, 'updated_by' => $request->user()->id]);
             $this->syncParts($recipe, $data);
+
             return $recipe;
         });
         $this->recipes->ensureAlbum($recipe, $request->user());
         $this->syncCover($recipe, $request->user(), $data['cover_media_uuid'] ?? null);
         AuditLog::record('recipe.create', $recipe, ['title' => $recipe->title]);
+
         return response()->json($this->recipes->payload($recipe->fresh()), 201);
     }
 
     public function update(Request $request, string $uuid): JsonResponse
     {
-        $this->write($request); $recipe = $this->recipe($request, $uuid);
+        $this->write($request);
+        $recipe = $this->recipe($request, $uuid);
         $data = $this->validated($request);
         DB::transaction(function () use ($request, $recipe, $data) {
             $recipe->update($this->recipeData($data) + ['updated_by' => $request->user()->id]);
@@ -109,38 +115,49 @@ class RecipeController extends Controller
         });
         $this->syncCover($recipe, $request->user(), $data['cover_media_uuid'] ?? null);
         AuditLog::record('recipe.update', $recipe, ['title' => $recipe->title]);
+
         return response()->json($this->recipes->payload($recipe->fresh()));
     }
 
     public function destroy(Request $request, string $uuid): JsonResponse
     {
-        $this->write($request); $recipe = $this->recipe($request, $uuid);
+        $this->write($request);
+        $recipe = $this->recipe($request, $uuid);
         AuditLog::record('recipe.delete', $recipe, ['title' => $recipe->title]);
         $recipe->delete();
+
         return response()->json(['status' => 'deleted']);
     }
 
     public function toggleFavorite(Request $request, string $uuid): JsonResponse
     {
-        $this->write($request); $recipe = $this->recipe($request, $uuid);
+        $this->write($request);
+        $recipe = $this->recipe($request, $uuid);
         $recipe->update(['is_favorite' => ! $recipe->is_favorite, 'updated_by' => $request->user()->id]);
+
         return response()->json(['is_favorite' => $recipe->is_favorite]);
     }
 
     public function ensureAlbum(Request $request, string $uuid): JsonResponse
     {
-        $this->write($request); $recipe = $this->recipe($request, $uuid);
+        $this->write($request);
+        $recipe = $this->recipe($request, $uuid);
         $album = $this->recipes->ensureAlbum($recipe, $request->user());
+
         return response()->json(['album' => $album->only(['uuid', 'title'])]);
     }
 
     public function attachMedia(Request $request, string $uuid): JsonResponse
     {
-        $this->write($request); $recipe = $this->recipe($request, $uuid);
+        $this->write($request);
+        $recipe = $this->recipe($request, $uuid);
         $data = $request->validate(['media_uuids' => 'required|array|min:1|max:50', 'media_uuids.*' => 'uuid|distinct', 'role' => 'nullable|in:gallery,cover,preparation,result']);
         $media = MediaItem::where('gallery_space_id', $recipe->gallery_space_id)->whereNull('trashed_at')->whereIn('uuid', $data['media_uuids'])->get();
-        if ($media->count() !== count($data['media_uuids'])) throw ValidationException::withMessages(['media_uuids' => 'Některé médium není dostupné v této společné galerii.']);
+        if ($media->count() !== count($data['media_uuids'])) {
+            throw ValidationException::withMessages(['media_uuids' => 'Některé médium není dostupné v této společné galerii.']);
+        }
         $this->recipes->attachMedia($recipe, $request->user(), $media, null, $data['role'] ?? 'gallery');
+
         return response()->json($this->recipes->payload($recipe->fresh()));
     }
 
@@ -149,6 +166,7 @@ class RecipeController extends Controller
         $recipe = $this->recipe($request, $uuid);
         $servings = (float) ($request->validate(['servings' => 'nullable|numeric|between:0.25,1000'])['servings'] ?? $recipe->base_servings);
         $payload = $this->recipes->payload($recipe, $servings);
+
         return response()->json([
             'recipe' => ['uuid' => $recipe->uuid, 'title' => $recipe->title], 'servings' => $servings,
             'sections' => collect($payload['ingredients'])->groupBy(fn ($item) => $item['section'] ?: 'Suroviny')->map(fn ($items, $section) => ['section' => $section, 'items' => $items->values()])->values(),
@@ -188,14 +206,20 @@ class RecipeController extends Controller
     private function syncParts(Recipe $recipe, array $data): void
     {
         $recipe->ingredients()->delete();
-        foreach ($data['ingredients'] as $index => $ingredient) $recipe->ingredients()->create(collect($ingredient)->only(['section', 'name', 'quantity', 'unit', 'quantity_note', 'is_scalable', 'is_optional', 'is_pantry', 'preparation', 'substitutes'])->all() + ['sort_order' => $index]);
+        foreach ($data['ingredients'] as $index => $ingredient) {
+            $recipe->ingredients()->create(collect($ingredient)->only(['section', 'name', 'quantity', 'unit', 'quantity_note', 'is_scalable', 'is_optional', 'is_pantry', 'preparation', 'substitutes'])->all() + ['sort_order' => $index]);
+        }
         $recipe->steps()->delete();
-        foreach ($data['steps'] as $index => $step) $recipe->steps()->create(collect($step)->only(['title', 'instruction', 'timer_seconds', 'temperature', 'temperature_unit', 'equipment', 'tip'])->all() + ['sort_order' => $index]);
+        foreach ($data['steps'] as $index => $step) {
+            $recipe->steps()->create(collect($step)->only(['title', 'instruction', 'timer_seconds', 'temperature', 'temperature_unit', 'equipment', 'tip'])->all() + ['sort_order' => $index]);
+        }
     }
 
     private function syncCover(Recipe $recipe, User $user, ?string $uuid): void
     {
-        if (! $uuid) return;
+        if (! $uuid) {
+            return;
+        }
         $media = MediaItem::where('uuid', $uuid)->where('gallery_space_id', $recipe->gallery_space_id)->whereNull('trashed_at')->firstOrFail();
         $this->recipes->attachMedia($recipe, $user, collect([$media]), null, 'cover');
     }
@@ -203,10 +227,23 @@ class RecipeController extends Controller
     private function recipe(Request $request, string $uuid): Recipe
     {
         $this->available();
+
         return Recipe::where('uuid', $uuid)->whereIn('gallery_space_id', $this->spaceIds($request->user()))
             ->where(fn ($query) => $query->where('status', 'published')->orWhere('created_by', $request->user()->id))->firstOrFail();
     }
-    private function available(): void { abort_unless(Schema::hasTable('recipes'), 503, 'Pro recepty dokončete databázové migrace aplikace.'); }
-    private function write(Request $request): void { abort_if($request->user()->read_only_mode, 403, 'V režimu pouze pro čtení nelze recepty měnit.'); }
-    private function spaceIds(User $user): array { return $user->gallerySpaces()->pluck('gallery_spaces.id')->map(fn ($id) => (int) $id)->all(); }
+
+    private function available(): void
+    {
+        abort_unless(Schema::hasTable('recipes'), 503, 'Pro recepty dokončete databázové migrace aplikace.');
+    }
+
+    private function write(Request $request): void
+    {
+        abort_if($request->user()->read_only_mode, 403, 'V režimu pouze pro čtení nelze recepty měnit.');
+    }
+
+    private function spaceIds(User $user): array
+    {
+        return $user->gallerySpaces()->pluck('gallery_spaces.id')->map(fn ($id) => (int) $id)->all();
+    }
 }

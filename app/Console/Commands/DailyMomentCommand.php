@@ -41,8 +41,12 @@ class DailyMomentCommand extends Command
         foreach ($spaces as $space) {
             $moment = $moments->todayFor($space, $now);
 
-            if ($moment->notified_at) continue;
-            if (! $this->option('force') && $moment->notify_at->isFuture()) continue;
+            if ($moment->notified_at) {
+                continue;
+            }
+            if (! $this->option('force') && $moment->notify_at->isFuture()) {
+                continue;
+            }
 
             // Claimed before anything is sent. A notification that takes a while must not
             // let the next minute's run send the same prompt again.
@@ -50,14 +54,16 @@ class DailyMomentCommand extends Command
                 ->whereNull('notified_at')
                 ->update(['notified_at' => $now]);
 
-            if (! $claimed) continue;
+            if (! $claimed) {
+                continue;
+            }
 
             foreach ($space->members as $member) {
                 $member->notify(new GalleryNotification(
                     // Named to the "area.action" convention the rest of the app uses, which
                     // is also what files it under Galerie a vzpomínky rather than Ostatní.
                     'moment.today',
-                    'Zároveň! Vyfoťte, co právě děláte — máte ' . $moment->window_minutes . ' minut.',
+                    'Zároveň! Vyfoťte, co právě děláte — máte '.$moment->window_minutes.' minut.',
                     '/zaroven',
                     '📸',
                     ['moment_uuid' => $moment->uuid],

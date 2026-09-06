@@ -8,7 +8,9 @@ return new class extends Migration
 {
     public function up(): void
     {
-        if (Schema::hasTable('calendar_event_revisions')) return;
+        if (Schema::hasTable('calendar_event_revisions')) {
+            return;
+        }
         Schema::create('calendar_event_revisions', function (Blueprint $table): void {
             $table->id();
             $table->uuid('uuid')->unique();

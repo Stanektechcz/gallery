@@ -10,11 +10,11 @@ return [
 
     'drive_root_folder_name' => env('GOOGLE_DRIVE_ROOT_FOLDER_NAME', 'Stanektech Gallery'),
 
-    'ffmpeg_path'   => env('FFMPEG_PATH', '/usr/bin/ffmpeg'),
-    'ffprobe_path'  => env('FFPROBE_PATH', '/usr/bin/ffprobe'),
+    'ffmpeg_path' => env('FFMPEG_PATH', '/usr/bin/ffmpeg'),
+    'ffprobe_path' => env('FFPROBE_PATH', '/usr/bin/ffprobe'),
     'exiftool_path' => env('EXIFTOOL_PATH', '/usr/bin/exiftool'),
 
-    'media_temp_disk'    => env('MEDIA_TEMP_DISK', 'local'),
+    'media_temp_disk' => env('MEDIA_TEMP_DISK', 'local'),
     'media_variants_disk' => env('MEDIA_VARIANTS_DISK', 'public'),
 
     // Trash retention (days)
@@ -25,7 +25,7 @@ return [
     'variant_cache_max_age_days' => env('GALLERY_VARIANT_CACHE_DAYS', 90),
 
     // Upload limits
-    'max_chunk_size_mb'  => env('GALLERY_MAX_CHUNK_MB', 64),
+    'max_chunk_size_mb' => env('GALLERY_MAX_CHUNK_MB', 64),
     'max_upload_size_gb' => env('GALLERY_MAX_UPLOAD_GB', 32),
     // Server-to-Drive resumable upload chunk. Keep this below PHP/proxy
     // request limits; the job clamps it to 8–256 MB and 256 KB alignment.
@@ -38,9 +38,9 @@ return [
     'video_extensions' => ['mp4', 'mov', 'webm', 'm4v', 'mkv', 'avi'],
 
     // Geocoding
-    'geocoding_enabled'  => env('GEOCODING_ENABLED', false),
+    'geocoding_enabled' => env('GEOCODING_ENABLED', false),
     'geocoding_provider' => env('GEOCODING_PROVIDER', 'nominatim'),
-    'geocoding_api_key'  => env('GEOCODING_API_KEY', null),
+    'geocoding_api_key' => env('GEOCODING_API_KEY', null),
     'geocoding_rate_limit_per_second' => env('GEOCODING_RATE_LIMIT', 1),
 
     // Unified transport search. Transitous is a volunteer, best-effort source;
@@ -62,10 +62,10 @@ return [
     'invite_only' => env('GALLERY_INVITE_ONLY', true),
 
     // Admin user seeder config
-    'owner_name'  => env('GALLERY_OWNER_NAME', 'Adrian'),
+    'owner_name' => env('GALLERY_OWNER_NAME', 'Adrian'),
     'owner_email' => env('GALLERY_OWNER_EMAIL', ''),
 
-    'partner_name'  => env('GALLERY_PARTNER_NAME', 'Makinka'),
+    'partner_name' => env('GALLERY_PARTNER_NAME', 'Makinka'),
     'partner_email' => env('GALLERY_PARTNER_EMAIL', ''),
 
     'default_space_name' => env('GALLERY_DEFAULT_SPACE', 'Naše galerie'),

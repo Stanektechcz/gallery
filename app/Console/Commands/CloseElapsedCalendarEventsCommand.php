@@ -10,6 +10,7 @@ use Illuminate\Console\Command;
 class CloseElapsedCalendarEventsCommand extends Command
 {
     protected $signature = 'gallery:close-elapsed-events';
+
     protected $description = 'Automatically complete elapsed calendar plans and their unfinished preparation tasks.';
 
     public function handle(CalendarEventLifecycleService $lifecycle, AutomationRegistryService $automations): int

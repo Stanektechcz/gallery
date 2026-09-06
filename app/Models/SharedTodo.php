@@ -2,10 +2,10 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Str;
-use Illuminate\Support\Facades\Schema;
 use App\Services\Planning\LifeEventService;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 
 class SharedTodo extends Model
 {
@@ -29,7 +29,9 @@ class SharedTodo extends Model
             $todo->uuid ??= (string) Str::uuid();
             $todo->series_uuid ??= $todo->uuid;
             $metadata = is_array($todo->metadata) ? $todo->metadata : [];
-            if (Schema::hasColumn('shared_todos', 'created_from')) $todo->created_from ??= $metadata['source'] ?? 'manual';
+            if (Schema::hasColumn('shared_todos', 'created_from')) {
+                $todo->created_from ??= $metadata['source'] ?? 'manual';
+            }
         });
         static::created(function (SharedTodo $todo): void {
             $metadata = is_array($todo->metadata) ? $todo->metadata : [];
@@ -38,10 +40,33 @@ class SharedTodo extends Model
         });
     }
 
-    public function assignee() { return $this->belongsTo(User::class, 'assigned_to'); }
-    public function creator() { return $this->belongsTo(User::class, 'created_by'); }
-    public function list() { return $this->belongsTo(SharedTodoList::class, 'list_id'); }
-    public function parent() { return $this->belongsTo(self::class, 'parent_id'); }
-    public function children() { return $this->hasMany(self::class, 'parent_id')->orderBy('sort_order'); }
-    public function comments() { return $this->hasMany(SharedTodoComment::class, 'todo_id')->latest(); }
+    public function assignee()
+    {
+        return $this->belongsTo(User::class, 'assigned_to');
+    }
+
+    public function creator()
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function list()
+    {
+        return $this->belongsTo(SharedTodoList::class, 'list_id');
+    }
+
+    public function parent()
+    {
+        return $this->belongsTo(self::class, 'parent_id');
+    }
+
+    public function children()
+    {
+        return $this->hasMany(self::class, 'parent_id')->orderBy('sort_order');
+    }
+
+    public function comments()
+    {
+        return $this->hasMany(SharedTodoComment::class, 'todo_id')->latest();
+    }
 }

@@ -5,8 +5,8 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\CalendarEvent;
 use App\Notifications\GalleryNotification;
-use App\Services\Planning\CalendarEventTripService;
 use App\Services\Planning\CalendarEventCreationService;
+use App\Services\Planning\CalendarEventTripService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -46,6 +46,7 @@ class IcsCalendarImportController extends Controller
             foreach (array_slice($rows, 0, 100) as $row) {
                 if (CalendarEvent::where('gallery_space_id', $space->id)->where('metadata->ics_uid', $row['uid'])->exists()) {
                     $skipped++;
+
                     continue;
                 }
 
@@ -123,18 +124,33 @@ class IcsCalendarImportController extends Controller
         preg_match_all('/BEGIN:VEVENT\s*(.*?)\s*END:VEVENT/is', $ics, $matches);
         $events = [];
         foreach ($matches[1] ?? [] as $block) {
-            $fields = []; $parameters = [];
+            $fields = [];
+            $parameters = [];
             foreach (preg_split('/\r?\n/', trim($block)) ?: [] as $line) {
-                if (!str_contains($line, ':')) continue;
-                [$name, $value] = explode(':', $line, 2); $parts = explode(';', $name); $key = strtoupper(array_shift($parts));
-                $fields[$key] = $value; $parameters[$key] = implode(';', $parts);
+                if (! str_contains($line, ':')) {
+                    continue;
+                }
+                [$name, $value] = explode(':', $line, 2);
+                $parts = explode(';', $name);
+                $key = strtoupper(array_shift($parts));
+                $fields[$key] = $value;
+                $parameters[$key] = implode(';', $parts);
             }
-            if (empty($fields['DTSTART'])) continue;
+            if (empty($fields['DTSTART'])) {
+                continue;
+            }
             $timezone = 'Europe/Prague';
-            if (!empty($parameters['DTSTART']) && preg_match('/TZID=([^;:]+)/i', $parameters['DTSTART'], $match)) {
-                try { new \DateTimeZone($match[1]); $timezone = $match[1]; } catch (\Throwable) { /* use Czech default */ }
+            if (! empty($parameters['DTSTART']) && preg_match('/TZID=([^;:]+)/i', $parameters['DTSTART'], $match)) {
+                try {
+                    new \DateTimeZone($match[1]);
+                    $timezone = $match[1];
+                } catch (\Throwable) { /* use Czech default */
+                }
             }
-            $start = $this->date($fields['DTSTART'], $timezone); if (!$start) continue;
+            $start = $this->date($fields['DTSTART'], $timezone);
+            if (! $start) {
+                continue;
+            }
             $allDay = (bool) preg_match('/^\d{8}$/', trim($fields['DTSTART']));
             $end = isset($fields['DTEND']) ? $this->date($fields['DTEND'], $timezone) : null;
             // RFC 5545 stores an all-day DTEND as an exclusive date. Internally we use an inclusive end.
@@ -157,6 +173,7 @@ class IcsCalendarImportController extends Controller
                 'source_url' => $this->safeUrl($fields['URL'] ?? null),
             ];
         }
+
         return $events;
     }
 
@@ -164,22 +181,40 @@ class IcsCalendarImportController extends Controller
     {
         $value = trim($value);
         try {
-            if (preg_match('/^\d{8}$/', $value)) return Carbon::createFromFormat('!Ymd', $value, $timezone);
-            if (preg_match('/^\d{8}T\d{6}Z$/', $value)) return Carbon::createFromFormat('!Ymd\\THis\\Z', $value, 'UTC')->setTimezone($timezone);
-            if (preg_match('/^\d{8}T\d{6}$/', $value)) return Carbon::createFromFormat('!Ymd\\THis', $value, $timezone);
-            if (preg_match('/^\d{8}T\d{4}$/', $value)) return Carbon::createFromFormat('!Ymd\\THi', $value, $timezone);
-        } catch (\Throwable) { return null; }
+            if (preg_match('/^\d{8}$/', $value)) {
+                return Carbon::createFromFormat('!Ymd', $value, $timezone);
+            }
+            if (preg_match('/^\d{8}T\d{6}Z$/', $value)) {
+                return Carbon::createFromFormat('!Ymd\\THis\\Z', $value, 'UTC')->setTimezone($timezone);
+            }
+            if (preg_match('/^\d{8}T\d{6}$/', $value)) {
+                return Carbon::createFromFormat('!Ymd\\THis', $value, $timezone);
+            }
+            if (preg_match('/^\d{8}T\d{4}$/', $value)) {
+                return Carbon::createFromFormat('!Ymd\\THi', $value, $timezone);
+            }
+        } catch (\Throwable) {
+            return null;
+        }
+
         return null;
     }
 
     private function recurrence(?string $rule, string $timezone): ?array
     {
-        if (!$rule || str_contains(strtoupper($rule), 'COUNT=')) return null; // count needs per-occurrence state; do not misrepresent it
+        if (! $rule || str_contains(strtoupper($rule), 'COUNT=')) {
+            return null;
+        } // count needs per-occurrence state; do not misrepresent it
         parse_str(str_replace(';', '&', strtoupper($rule)), $parts);
         $frequency = ['DAILY' => 'daily', 'WEEKLY' => 'weekly', 'MONTHLY' => 'monthly', 'YEARLY' => 'yearly'][$parts['FREQ'] ?? ''] ?? null;
-        if (!$frequency) return null;
+        if (! $frequency) {
+            return null;
+        }
         $result = ['frequency' => $frequency, 'interval' => min(52, max(1, (int) ($parts['INTERVAL'] ?? 1)))];
-        if (!empty($parts['UNTIL']) && ($until = $this->date($parts['UNTIL'], $timezone))) $result['until'] = $until->toDateString();
+        if (! empty($parts['UNTIL']) && ($until = $this->date($parts['UNTIL'], $timezone))) {
+            $result['until'] = $until->toDateString();
+        }
+
         return $result;
     }
 
@@ -192,26 +227,43 @@ class IcsCalendarImportController extends Controller
     private function eventType(array $categories, string $title): string
     {
         $haystack = Str::lower(implode(' ', [...$categories, $title]));
-        if (Str::contains($haystack, ['reservation', 'booking', 'rezervace', 'letenka', 'jízdenka'])) return 'reservation';
-        if (Str::contains($haystack, ['travel', 'trip', 'journey', 'holiday', 'vacation', 'cesta', 'výlet', 'dovolená'])) return 'trip';
-        if (Str::contains($haystack, ['anniversary', 'výročí'])) return 'anniversary';
-        if (Str::contains($haystack, ['birthday', 'narozeniny'])) return 'birthday';
+        if (Str::contains($haystack, ['reservation', 'booking', 'rezervace', 'letenka', 'jízdenka'])) {
+            return 'reservation';
+        }
+        if (Str::contains($haystack, ['travel', 'trip', 'journey', 'holiday', 'vacation', 'cesta', 'výlet', 'dovolená'])) {
+            return 'trip';
+        }
+        if (Str::contains($haystack, ['anniversary', 'výročí'])) {
+            return 'anniversary';
+        }
+        if (Str::contains($haystack, ['birthday', 'narozeniny'])) {
+            return 'birthday';
+        }
+
         return 'event';
     }
 
     private function safeUrl(?string $url): ?string
     {
-        if (! $url) return null;
+        if (! $url) {
+            return null;
+        }
         $url = Str::limit(trim($url), 2048, '');
-        if (! filter_var($url, FILTER_VALIDATE_URL) || ! Str::startsWith(Str::lower($url), ['https://', 'http://'])) return null;
+        if (! filter_var($url, FILTER_VALIDATE_URL) || ! Str::startsWith(Str::lower($url), ['https://', 'http://'])) {
+            return null;
+        }
+
         return $url;
     }
 
     /** @param array{starts_at:Carbon,ends_at:?Carbon,rrule:?string} $row */
     private function isTripCandidate(array $row, ?array $recurrence): bool
     {
-        if ($recurrence || ! empty($row['rrule']) || ! $row['ends_at']) return false;
+        if ($recurrence || ! empty($row['rrule']) || ! $row['ends_at']) {
+            return false;
+        }
         $days = $row['starts_at']->copy()->startOfDay()->diffInDays($row['ends_at']->copy()->startOfDay());
+
         return $days >= 1 && $days <= 90;
     }
 }

@@ -107,7 +107,7 @@ class AssistantRecipeParsingTest extends TestCase
         $this->actingAs($user);
 
         $padding = str_repeat('Poznámka k postupu, kterou si chceme uchovat. ', 130);
-        $long = $this->recipe() . "\n" . $padding;
+        $long = $this->recipe()."\n".$padding;
         $this->assertGreaterThan(4000, mb_strlen($long));
 
         $this->postJson('/api/v1/assistant/preview', ['message' => $long])

@@ -19,6 +19,7 @@ use Throwable;
 class AvatarController extends Controller
 {
     private const DISK = 'local';
+
     private const MAX_KB = 4096;
 
     /** Reported when the upload is refused, so the screen can say which rule bit. */
@@ -52,9 +53,9 @@ class AvatarController extends Controller
         abort_if($user->read_only_mode, 403, 'V režimu pouze pro čtení nelze měnit avatar.');
 
         $data = $request->validate([
-            'preset' => 'nullable|string|in:' . implode(',', self::PRESETS),
+            'preset' => 'nullable|string|in:'.implode(',', self::PRESETS),
             'colour' => 'nullable|string|regex:/^#[0-9a-fA-F]{6}$/',
-            'image' => 'nullable|file|max:' . self::MAX_KB . '|mimetypes:' . implode(',', self::MIME),
+            'image' => 'nullable|file|max:'.self::MAX_KB.'|mimetypes:'.implode(',', self::MIME),
             'clear' => 'nullable|boolean',
         ], self::MESSAGES);
 
@@ -93,7 +94,9 @@ class AvatarController extends Controller
             $user->avatar_path = null;
         }
 
-        if (! empty($data['colour'])) $user->avatar_colour = strtolower($data['colour']);
+        if (! empty($data['colour'])) {
+            $user->avatar_colour = strtolower($data['colour']);
+        }
 
         $user->save();
 
@@ -128,7 +131,9 @@ class AvatarController extends Controller
 
     private function removeUpload(User $user): void
     {
-        if ($user->avatar_path) Storage::disk(self::DISK)->delete($user->avatar_path);
+        if ($user->avatar_path) {
+            Storage::disk(self::DISK)->delete($user->avatar_path);
+        }
     }
 
     /** @return array<string, mixed> */

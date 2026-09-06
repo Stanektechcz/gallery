@@ -18,8 +18,8 @@ class UploadSession extends Model
     protected function casts(): array
     {
         return [
-            'expires_at'    => 'datetime',
-            'completed_at'  => 'datetime',
+            'expires_at' => 'datetime',
+            'completed_at' => 'datetime',
             'client_modified_at' => 'datetime',
         ];
     }
@@ -29,10 +29,25 @@ class UploadSession extends Model
         static::creating(fn (UploadSession $s) => $s->uuid ??= (string) Str::uuid());
     }
 
-    public function user()          { return $this->belongsTo(User::class); }
-    public function gallerySpace()  { return $this->belongsTo(GallerySpace::class); }
-    public function targetAlbum()   { return $this->belongsTo(Album::class, 'target_album_id'); }
-    public function resultingMedia(){ return $this->belongsTo(MediaItem::class, 'resulting_media_id'); }
+    public function user()
+    {
+        return $this->belongsTo(User::class);
+    }
+
+    public function gallerySpace()
+    {
+        return $this->belongsTo(GallerySpace::class);
+    }
+
+    public function targetAlbum()
+    {
+        return $this->belongsTo(Album::class, 'target_album_id');
+    }
+
+    public function resultingMedia()
+    {
+        return $this->belongsTo(MediaItem::class, 'resulting_media_id');
+    }
 
     public function chunks()
     {
@@ -46,7 +61,10 @@ class UploadSession extends Model
 
     public function completionPercent(): int
     {
-        if ($this->total_chunks === 0) return 0;
+        if ($this->total_chunks === 0) {
+            return 0;
+        }
+
         return (int) round(($this->received_chunks / $this->total_chunks) * 100);
     }
 }

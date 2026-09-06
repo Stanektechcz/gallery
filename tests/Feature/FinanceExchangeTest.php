@@ -21,8 +21,11 @@ class FinanceExchangeTest extends TestCase
     use RefreshDatabase;
 
     private User $uzivatel;
+
     private GallerySpace $space;
+
     private Wallet $czk;
+
     private Wallet $eur;
 
     protected function setUp(): void

@@ -4,13 +4,13 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Budget;
+use App\Models\FinanceAccess;
 use App\Models\FinanceCategory;
 use App\Models\FinanceProject;
+use App\Models\FinanceSettings;
 use App\Models\GallerySpace;
 use App\Models\Partner;
 use App\Models\Transaction;
-use App\Models\TransactionShare;
-use App\Models\Wallet;
 use App\Services\Finance\FinanceFilter;
 use App\Services\Finance\FinanceService;
 use App\Services\Finance\RecurringService;
@@ -60,7 +60,7 @@ class FinanceController extends Controller
                 ->orderBy('name')->get(['id', 'uuid', 'name', 'kind']),
             // Jen cesty, do kterých uživatel vidí — nabízet mu v formuláři cizí cestu
             // by znamenalo nabídnout zápis do rozpočtu, na který se nedostane.
-            'trips' => \App\Models\FinanceAccess::viditelne(
+            'trips' => FinanceAccess::viditelne(
                 FinanceProject::where('gallery_space_id', $space->id)->where('kind', 'trip'),
                 'trip', $request->user()->id,
             )->orderByDesc('starts_on')->get()
@@ -75,7 +75,7 @@ class FinanceController extends Controller
             // Předvolby jdou s číselníky, ne dalším požadavkem. Formuláře je potřebují
             // hned při otevření a druhé kolečko by znamenalo prázdné pole, které se za
             // okamžik samo vyplní — přesně ve chvíli, kdy do něj člověk začal psát.
-            'settings' => \App\Models\FinanceSettings::proProstor($space->id)->proObrazovku(),
+            'settings' => FinanceSettings::proProstor($space->id)->proObrazovku(),
         ]);
     }
 
@@ -462,7 +462,9 @@ class FinanceController extends Controller
             ->map(function (Collection $s, string $jmeno) {
                 $kurzy = $s->map(fn (Transaction $t) => $this->finance->exchangeRate($t))->filter();
 
-                if ($kurzy->isEmpty()) return null;
+                if ($kurzy->isEmpty()) {
+                    return null;
+                }
 
                 // Vážený průměr, ne prostý: jedna stokorunová směna nemá vážit stejně
                 // jako padesátitisícová.
@@ -799,7 +801,7 @@ class FinanceController extends Controller
                     ? 'Rozpočet je vyčerpaný'
                     : "Z rozpočtu zbývá {$rozpocet['percent']} % vyčerpáno",
                 'body' => $rozpocet['state'] === 'over'
-                    ? "Přesáhli jsme o ".number_format($rozpocet['safe_daily']['over_by'] ?? 0, 2, ',', ' ')." {$rozpocet['currency']}."
+                    ? 'Přesáhli jsme o '.number_format($rozpocet['safe_daily']['over_by'] ?? 0, 2, ',', ' ')." {$rozpocet['currency']}."
                     : "Utraceno {$rozpocet['percent']} % z limitu.",
                 'action' => ['label' => 'Zobrazit rozpočet', 'tab' => 'rozpocty'],
             ];
@@ -928,8 +930,12 @@ class FinanceController extends Controller
 
     private function nazevTypu(Transaction $t): string
     {
-        if ($t->is_settlement) return 'Vyrovnání';
-        if ($t->refund_of_id !== null) return 'Vrácené peníze';
+        if ($t->is_settlement) {
+            return 'Vyrovnání';
+        }
+        if ($t->refund_of_id !== null) {
+            return 'Vrácené peníze';
+        }
 
         return match ($t->type) {
             'income' => 'Příjem',

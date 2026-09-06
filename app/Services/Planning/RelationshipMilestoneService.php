@@ -31,8 +31,12 @@ class RelationshipMilestoneService
             'created_at' => now(),
             'updated_at' => now(),
         ];
-        if (Schema::hasColumn('relationship_milestones', 'created_from')) $row['created_from'] = $source;
-        if (Schema::hasColumn('relationship_milestones', 'source_reference')) $row['source_reference'] = $attributes['source_reference'] ?? null;
+        if (Schema::hasColumn('relationship_milestones', 'created_from')) {
+            $row['created_from'] = $source;
+        }
+        if (Schema::hasColumn('relationship_milestones', 'source_reference')) {
+            $row['source_reference'] = $attributes['source_reference'] ?? null;
+        }
         $id = DB::table('relationship_milestones')->insertGetId($row);
         $milestone = DB::table('relationship_milestones')->find($id);
         $this->lifeEvents->record($spaceId, $actorId, 'milestone.created', $milestone->title, $source, 'relationship_milestone', $id, $milestone->occurred_on, ['remind_annually' => (bool) $milestone->remind_annually, 'visibility' => $milestone->visibility]);

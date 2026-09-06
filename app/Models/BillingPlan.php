@@ -17,8 +17,14 @@ class BillingPlan extends Model
         return ['features' => 'array', 'is_public' => 'boolean', 'is_default' => 'boolean', 'highlight' => 'boolean'];
     }
 
-    public function subscriptions() { return $this->hasMany(SpaceSubscription::class); }
+    public function subscriptions()
+    {
+        return $this->hasMany(SpaceSubscription::class);
+    }
 
     /** Features this plan unlocks, editable by the operator. */
-    public function grantedFeatures() { return $this->belongsToMany(Feature::class, 'billing_plan_feature'); }
+    public function grantedFeatures()
+    {
+        return $this->belongsToMany(Feature::class, 'billing_plan_feature');
+    }
 }

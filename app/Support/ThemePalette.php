@@ -15,14 +15,14 @@ class ThemePalette
 {
     /** Token => label shown in the editor. Order is the order of the editor. */
     public const TOKENS = [
-        'bg-primary'     => 'Pozadí aplikace',
-        'bg-secondary'   => 'Pozadí panelů',
-        'bg-card'        => 'Pozadí karet',
-        'border'         => 'Linky a okraje',
-        'text-primary'   => 'Hlavní text',
+        'bg-primary' => 'Pozadí aplikace',
+        'bg-secondary' => 'Pozadí panelů',
+        'bg-card' => 'Pozadí karet',
+        'border' => 'Linky a okraje',
+        'text-primary' => 'Hlavní text',
         'text-secondary' => 'Vedlejší text',
-        'accent'         => 'Zvýrazňující barva',
-        'accent-hover'   => 'Zvýraznění při najetí',
+        'accent' => 'Zvýrazňující barva',
+        'accent-hover' => 'Zvýraznění při najetí',
     ];
 
     public const DEFAULTS = [
@@ -42,7 +42,9 @@ class ThemePalette
     public static function forUser(?User $user): array
     {
         $stored = is_array($user?->preferences) ? ($user->preferences['theme_palette'] ?? null) : null;
-        if (! is_array($stored)) return ['dark' => [], 'light' => []];
+        if (! is_array($stored)) {
+            return ['dark' => [], 'light' => []];
+        }
 
         return [
             'dark' => self::clean($stored['dark'] ?? []),
@@ -58,7 +60,9 @@ class ThemePalette
      */
     public static function clean(mixed $values): array
     {
-        if (! is_array($values)) return [];
+        if (! is_array($values)) {
+            return [];
+        }
 
         $clean = [];
         foreach (self::TOKENS as $token => $label) {
@@ -86,7 +90,9 @@ class ThemePalette
 
         foreach (['dark', 'light'] as $mode) {
             $palette = $palettes[$mode];
-            if ($palette === []) continue;
+            if ($palette === []) {
+                continue;
+            }
 
             $lines = [];
             foreach ($palette as $token => $value) {
@@ -100,8 +106,8 @@ class ThemePalette
             [$tr, $tg, $tb] = self::rgb($text);
             [$cr, $cg, $cb] = self::rgb($card);
 
-            $lines[] = "--color-surface-muted:rgb({$ar} {$ag} {$ab} / " . ($mode === 'light' ? '0.05' : '0.14') . ')';
-            $lines[] = "--color-surface-hover:rgb({$ar} {$ag} {$ab} / " . ($mode === 'light' ? '0.08' : '0.18') . ')';
+            $lines[] = "--color-surface-muted:rgb({$ar} {$ag} {$ab} / ".($mode === 'light' ? '0.05' : '0.14').')';
+            $lines[] = "--color-surface-hover:rgb({$ar} {$ag} {$ab} / ".($mode === 'light' ? '0.08' : '0.18').')';
             $lines[] = "--color-glass-bg:rgb({$cr} {$cg} {$cb} / 0.88)";
             $lines[] = "--color-glass-border:rgb({$tr} {$tg} {$tb} / 0.1)";
             $lines[] = "--color-scrollbar:rgb({$tr} {$tg} {$tb} / 0.22)";

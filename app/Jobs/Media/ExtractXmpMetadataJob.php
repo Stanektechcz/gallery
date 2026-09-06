@@ -16,26 +16,28 @@ class ExtractXmpMetadataJob implements ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public function __construct(
-        private readonly int   $mediaItemId,
+        private readonly int $mediaItemId,
         private readonly array $keywords,
     ) {}
 
     public function handle(): void
     {
         $media = MediaItem::find($this->mediaItemId);
-        if (!$media) return;
+        if (! $media) {
+            return;
+        }
 
         $space = $media->gallerySpace;
 
         foreach ($this->keywords as $keyword) {
             $slug = Str::slug($keyword);
-            $tag  = Tag::firstOrCreate(
+            $tag = Tag::firstOrCreate(
                 ['gallery_space_id' => $space->id, 'slug' => $slug],
                 [
                     'gallery_space_id' => $space->id,
-                    'name'             => $keyword,
-                    'slug'             => $slug,
-                    'depth'            => 0,
+                    'name' => $keyword,
+                    'slug' => $slug,
+                    'depth' => 0,
                     'materialized_path' => '',
                 ]
             );

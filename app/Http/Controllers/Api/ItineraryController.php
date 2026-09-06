@@ -16,7 +16,7 @@ class ItineraryController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $user  = $request->user();
+        $user = $request->user();
         $space = $user->gallerySpaces()->first();
 
         // Wishlist places — cast lat/lng to float (MySQL DECIMAL comes back as string via PDO)
@@ -26,9 +26,10 @@ class ItineraryController extends Controller
             ->orderBy('name')
             ->get()
             ->map(function ($place) {
-                $place->latitude  = $place->latitude  !== null ? (float) $place->latitude  : null;
+                $place->latitude = $place->latitude !== null ? (float) $place->latitude : null;
                 $place->longitude = $place->longitude !== null ? (float) $place->longitude : null;
-                $place->visited   = (bool) $place->visited;
+                $place->visited = (bool) $place->visited;
+
                 return $place;
             });
 
@@ -37,7 +38,7 @@ class ItineraryController extends Controller
             ->whereNull('trashed_at')
             ->whereNotNull('latitude')
             ->whereNotNull('longitude')
-            ->selectRaw("
+            ->selectRaw('
                 ROUND(latitude, 1) as lat_grid,
                 ROUND(longitude, 1) as lng_grid,
                 AVG(latitude)  as latitude,
@@ -45,14 +46,15 @@ class ItineraryController extends Controller
                 COUNT(*) as photo_count,
                 MIN(taken_at) as first_visit,
                 MAX(taken_at) as last_visit
-            ")
-            ->groupByRaw("ROUND(latitude, 1), ROUND(longitude, 1)")
+            ')
+            ->groupByRaw('ROUND(latitude, 1), ROUND(longitude, 1)')
             ->orderByDesc('photo_count')
             ->limit(500)
             ->get()
             ->map(function ($area) {
-                $area->latitude  = (float) $area->latitude;
+                $area->latitude = (float) $area->latitude;
                 $area->longitude = (float) $area->longitude;
+
                 return $area;
             });
 
@@ -68,13 +70,13 @@ class ItineraryController extends Controller
             ->count();
 
         return response()->json([
-            'wishlist'      => $wishlist,
+            'wishlist' => $wishlist,
             'visited_areas' => $visitedFromPhotos,
-            'stats'         => [
-                'wishlist_count'  => $wishlist->count(),
-                'visited_count'   => $visitedFromPhotos->count(),
-                'dream_count'     => $wishlist->where('priority', 'dream')->count(),
-                'done_count'      => $wishlist->where('visited', true)->count(),
+            'stats' => [
+                'wishlist_count' => $wishlist->count(),
+                'visited_count' => $visitedFromPhotos->count(),
+                'dream_count' => $wishlist->where('priority', 'dream')->count(),
+                'done_count' => $wishlist->where('visited', true)->count(),
             ],
         ]);
     }
@@ -85,30 +87,30 @@ class ItineraryController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
-        $user  = $request->user();
+        $user = $request->user();
         $space = $user->gallerySpaces()->first();
 
         $validated = $request->validate([
-            'name'         => 'required|string|max:255',
-            'country'      => 'nullable|string|max:100',
+            'name' => 'required|string|max:255',
+            'country' => 'nullable|string|max:100',
             'country_code' => 'nullable|string|max:3',
-            'latitude'     => 'nullable|numeric|between:-90,90',
-            'longitude'    => 'nullable|numeric|between:-180,180',
-            'category'     => 'nullable|in:country,city,landmark,restaurant,museum,nature,other',
-            'notes'        => 'nullable|string|max:2000',
-            'description'  => 'nullable|string|max:5000',
-            'website_url'  => 'nullable|url|max:512',
-            'osm_id'       => 'nullable|string|max:50',
-            'osm_type'     => 'nullable|string|max:20',
-            'priority'     => 'nullable|in:dream,soon,someday',
+            'latitude' => 'nullable|numeric|between:-90,90',
+            'longitude' => 'nullable|numeric|between:-180,180',
+            'category' => 'nullable|in:country,city,landmark,restaurant,museum,nature,other',
+            'notes' => 'nullable|string|max:2000',
+            'description' => 'nullable|string|max:5000',
+            'website_url' => 'nullable|url|max:512',
+            'osm_id' => 'nullable|string|max:50',
+            'osm_type' => 'nullable|string|max:20',
+            'priority' => 'nullable|in:dream,soon,someday',
         ]);
 
         $id = DB::table('itinerary_places')->insertGetId(array_merge([
             'gallery_space_id' => $space->id,
-            'created_by'       => $user->id,
-            'visited'          => false,
-            'created_at'       => now(),
-            'updated_at'       => now(),
+            'created_by' => $user->id,
+            'visited' => false,
+            'created_at' => now(),
+            'updated_at' => now(),
         ], $validated));
 
         return response()->json(DB::table('itinerary_places')->find($id), 201);
@@ -120,22 +122,22 @@ class ItineraryController extends Controller
      */
     public function update(Request $request, int $id): JsonResponse
     {
-        $user  = $request->user();
+        $user = $request->user();
         $space = $user->gallerySpaces()->first();
 
         $validated = $request->validate([
-            'visited'      => 'nullable|boolean',
-            'visited_at'   => 'nullable|date',
-            'priority'     => 'nullable|in:dream,soon,someday',
-            'notes'        => 'nullable|string|max:2000',
-            'description'  => 'nullable|string|max:5000',
-            'website_url'  => 'nullable|url|max:512',
+            'visited' => 'nullable|boolean',
+            'visited_at' => 'nullable|date',
+            'priority' => 'nullable|in:dream,soon,someday',
+            'notes' => 'nullable|string|max:2000',
+            'description' => 'nullable|string|max:5000',
+            'website_url' => 'nullable|url|max:512',
             'planned_date' => 'nullable|date',
-            'name'         => 'nullable|string|max:255',
-            'country'      => 'nullable|string|max:100',
+            'name' => 'nullable|string|max:255',
+            'country' => 'nullable|string|max:100',
         ]);
 
-        if (isset($validated['visited']) && $validated['visited'] && !isset($validated['visited_at'])) {
+        if (isset($validated['visited']) && $validated['visited'] && ! isset($validated['visited_at'])) {
             $validated['visited_at'] = now()->toDateString();
         }
 
@@ -152,7 +154,7 @@ class ItineraryController extends Controller
      */
     public function destroy(Request $request, int $id): JsonResponse
     {
-        $user  = $request->user();
+        $user = $request->user();
         $space = $user->gallerySpaces()->first();
 
         DB::table('itinerary_places')
@@ -169,7 +171,7 @@ class ItineraryController extends Controller
      */
     public function checkVisited(Request $request): JsonResponse
     {
-        $user  = $request->user();
+        $user = $request->user();
         $space = $user->gallerySpaces()->first();
 
         $wishlist = DB::table('itinerary_places')
@@ -188,14 +190,14 @@ class ItineraryController extends Controller
             $nearby = MediaItem::where('gallery_space_id', $space->id)
                 ->whereNull('trashed_at')
                 ->whereNotNull('latitude')
-                ->whereRaw("ABS(latitude - ?) < 0.45 AND ABS(longitude - ?) < 0.45", [$place->latitude, $place->longitude])
+                ->whereRaw('ABS(latitude - ?) < 0.45 AND ABS(longitude - ?) < 0.45', [$place->latitude, $place->longitude])
                 ->first(['taken_at']);
 
             if ($nearby) {
                 DB::table('itinerary_places')
                     ->where('id', $place->id)
                     ->update([
-                        'visited'    => true,
+                        'visited' => true,
                         'visited_at' => $nearby->taken_at ? substr($nearby->taken_at, 0, 10) : now()->toDateString(),
                         'updated_at' => now(),
                     ]);
@@ -214,25 +216,25 @@ class ItineraryController extends Controller
     {
         $q = $request->validate(['q' => 'required|string|min:2|max:200'])['q'];
 
-        $url = 'https://nominatim.openstreetmap.org/search?' . http_build_query([
-            'format'          => 'json',
-            'addressdetails'  => '1',
-            'namedetails'     => '1',
+        $url = 'https://nominatim.openstreetmap.org/search?'.http_build_query([
+            'format' => 'json',
+            'addressdetails' => '1',
+            'namedetails' => '1',
             'accept-language' => 'cs,en;q=0.8',
-            'limit'           => '8',
-            'q'               => $q,
+            'limit' => '8',
+            'q' => $q,
         ]);
 
         $results = $this->nominatimCurl($url);
 
         $mapped = array_map(function ($item) {
             $addr = $item['address'] ?? [];
-            $cc   = strtoupper($addr['country_code'] ?? '');
+            $cc = strtoupper($addr['country_code'] ?? '');
             $type = $item['type'] ?? $item['class'] ?? 'other';
 
             $category = match (true) {
-                in_array($type, ['city', 'town', 'village', 'municipality', 'borough'])          => 'city',
-                in_array($type, ['country'])                                                       => 'country',
+                in_array($type, ['city', 'town', 'village', 'municipality', 'borough']) => 'city',
+                in_array($type, ['country']) => 'country',
                 in_array($type, [
                     'attraction',
                     'castle',
@@ -240,10 +242,10 @@ class ItineraryController extends Controller
                     'memorial',
                     'ruins',
                     'archaeological_site',
-                    'landmark'
-                ])                             => 'landmark',
+                    'landmark',
+                ]) => 'landmark',
                 in_array($type, ['restaurant', 'cafe', 'bar', 'fast_food', 'pub', 'biergarten', 'food_court', 'ice_cream', 'bakery', 'nightclub']) => 'restaurant',
-                in_array($type, ['museum', 'gallery', 'theatre', 'cinema'])                       => 'museum',
+                in_array($type, ['museum', 'gallery', 'theatre', 'cinema']) => 'museum',
                 in_array($type, [
                     'nature_reserve',
                     'park',
@@ -253,9 +255,9 @@ class ItineraryController extends Controller
                     'beach',
                     'bay',
                     'island',
-                    'lake'
-                ])                             => 'nature',
-                default                                                                            => 'other',
+                    'lake',
+                ]) => 'nature',
+                default => 'other',
             };
 
             $names = $item['namedetails'] ?? [];
@@ -272,18 +274,18 @@ class ItineraryController extends Controller
             $name = $this->latinPlaceName((string) $name);
 
             return [
-                'osm_id'       => (string) ($item['osm_id'] ?? ''),
-                'osm_type'     => $item['osm_type'] ?? '',
+                'osm_id' => (string) ($item['osm_id'] ?? ''),
+                'osm_type' => $item['osm_type'] ?? '',
                 'display_name' => $displayName,
-                'name'         => trim($name) ?: $displayName,
-                'country'      => $this->czechCountryName($cc, $addr['country'] ?? ''),
+                'name' => trim($name) ?: $displayName,
+                'country' => $this->czechCountryName($cc, $addr['country'] ?? ''),
                 'country_code' => $cc,
-                'city'         => $this->latinPlaceName((string) ($addr['city'] ?? $addr['town'] ?? $addr['village'] ?? '')),
-                'address'      => trim(implode(', ', array_filter([$addr['road'] ?? null, $addr['house_number'] ?? null, $addr['suburb'] ?? null]))),
-                'latitude'     => (float) ($item['lat'] ?? 0),
-                'longitude'    => (float) ($item['lon'] ?? 0),
-                'category'     => $category,
-                'type'         => $type,
+                'city' => $this->latinPlaceName((string) ($addr['city'] ?? $addr['town'] ?? $addr['village'] ?? '')),
+                'address' => trim(implode(', ', array_filter([$addr['road'] ?? null, $addr['house_number'] ?? null, $addr['suburb'] ?? null]))),
+                'latitude' => (float) ($item['lat'] ?? 0),
+                'longitude' => (float) ($item['lon'] ?? 0),
+                'category' => $category,
+                'type' => $type,
             ];
         }, $results);
 
@@ -293,8 +295,10 @@ class ItineraryController extends Controller
     private function czechCountryName(string $countryCode, string $fallback): string
     {
         if ($countryCode !== '' && class_exists(\Locale::class)) {
-            $localized = \Locale::getDisplayRegion('-' . $countryCode, 'cs');
-            if (is_string($localized) && $localized !== '') return $localized;
+            $localized = \Locale::getDisplayRegion('-'.$countryCode, 'cs');
+            if (is_string($localized) && $localized !== '') {
+                return $localized;
+            }
         }
 
         return $fallback;
@@ -302,10 +306,14 @@ class ItineraryController extends Controller
 
     private function latinPlaceName(string $name): string
     {
-        if ($name === '' || preg_match('/\p{Latin}/u', $name)) return $name;
+        if ($name === '' || preg_match('/\p{Latin}/u', $name)) {
+            return $name;
+        }
         if (class_exists(\Transliterator::class)) {
             $latin = \Transliterator::create('Any-Latin')?->transliterate($name);
-            if (is_string($latin) && $latin !== '') return $latin;
+            if (is_string($latin) && $latin !== '') {
+                return $latin;
+            }
         }
 
         return $name;
@@ -317,7 +325,7 @@ class ItineraryController extends Controller
      */
     public function placePhotos(Request $request, int $id): JsonResponse
     {
-        $user  = $request->user();
+        $user = $request->user();
         $space = $user->gallerySpaces()->first();
 
         $place = DB::table('itinerary_places')
@@ -331,7 +339,7 @@ class ItineraryController extends Controller
 
         $deg = 0.45; // ~50km
 
-        $photos = \App\Models\MediaItem::with('variants')
+        $photos = MediaItem::with('variants')
             ->where('gallery_space_id', $space->id)
             ->whereNull('trashed_at')
             ->whereNotNull('latitude')
@@ -339,15 +347,15 @@ class ItineraryController extends Controller
                 $place->latitude,
                 $deg,
                 $place->longitude,
-                $deg
+                $deg,
             ])
             ->orderByDesc('taken_at')
             ->limit(20)
             ->get();
 
-        return response()->json($photos->map(fn($m) => [
-            'uuid'          => $m->uuid,
-            'taken_at'      => $m->taken_at,
+        return response()->json($photos->map(fn ($m) => [
+            'uuid' => $m->uuid,
+            'taken_at' => $m->taken_at,
             'thumbnail_url' => $m->thumbnail_url,
         ]));
     }
@@ -361,13 +369,13 @@ class ItineraryController extends Controller
         $ch = curl_init($url);
         curl_setopt_array($ch, [
             CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_TIMEOUT        => 5,
-            CURLOPT_USERAGENT      => 'MakiGallery/1.0 (gallery.stanektech.cz)',
+            CURLOPT_TIMEOUT => 5,
+            CURLOPT_USERAGENT => 'MakiGallery/1.0 (gallery.stanektech.cz)',
             CURLOPT_SSL_VERIFYPEER => true,
             CURLOPT_FOLLOWLOCATION => true,
         ]);
         $resp = curl_exec($ch);
-        $err  = curl_errno($ch);
+        $err = curl_errno($ch);
         curl_close($ch);
 
         if ($err || ! $resp) {

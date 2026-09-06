@@ -35,7 +35,7 @@ class HealthController extends Controller
             $checks['queue'] = 'fail';
         }
 
-        $healthy  = !in_array('fail', $checks);
+        $healthy = ! in_array('fail', $checks);
         $httpCode = $healthy ? 200 : 503;
 
         return response()->json([

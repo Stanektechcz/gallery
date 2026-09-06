@@ -147,17 +147,23 @@ return new class extends Migration
 
         Schema::table('billing_plans', function (Blueprint $table) {
             foreach (['group_type', 'price_yearly', 'highlight'] as $column) {
-                if (Schema::hasColumn('billing_plans', $column)) $table->dropColumn($column);
+                if (Schema::hasColumn('billing_plans', $column)) {
+                    $table->dropColumn($column);
+                }
             }
         });
         Schema::table('space_subscriptions', function (Blueprint $table) {
             foreach (['billing_period', 'current_period_ends_at', 'last_payment_id'] as $column) {
-                if (Schema::hasColumn('space_subscriptions', $column)) $table->dropColumn($column);
+                if (Schema::hasColumn('space_subscriptions', $column)) {
+                    $table->dropColumn($column);
+                }
             }
         });
         Schema::table('space_modules', function (Blueprint $table) {
             foreach (['billing_period', 'current_period_ends_at'] as $column) {
-                if (Schema::hasColumn('space_modules', $column)) $table->dropColumn($column);
+                if (Schema::hasColumn('space_modules', $column)) {
+                    $table->dropColumn($column);
+                }
             }
         });
     }

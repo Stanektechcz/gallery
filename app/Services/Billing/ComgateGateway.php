@@ -44,23 +44,23 @@ class ComgateGateway
 
         $response = Http::asForm()
             ->timeout(20)
-            ->post(rtrim(config('comgate.base_url'), '/') . '/create', [
-                'merchant'  => config('comgate.merchant'),
-                'secret'    => config('comgate.secret'),
-                'test'      => config('comgate.test') ? 'true' : 'false',
-                'price'     => $payment->amount,          // minor units
-                'curr'      => $payment->currency,
-                'label'     => mb_substr($label, 0, 16),  // Comgate keeps this short
-                'refId'     => $payment->reference,
-                'method'    => config('comgate.method'),
-                'email'     => $email ?? '',
-                'country'   => config('comgate.country'),
-                'lang'      => 'cs',
+            ->post(rtrim(config('comgate.base_url'), '/').'/create', [
+                'merchant' => config('comgate.merchant'),
+                'secret' => config('comgate.secret'),
+                'test' => config('comgate.test') ? 'true' : 'false',
+                'price' => $payment->amount,          // minor units
+                'curr' => $payment->currency,
+                'label' => mb_substr($label, 0, 16),  // Comgate keeps this short
+                'refId' => $payment->reference,
+                'method' => config('comgate.method'),
+                'email' => $email ?? '',
+                'country' => config('comgate.country'),
+                'lang' => 'cs',
                 'prepareOnly' => 'true',
-                'url_paid'   => route('billing.comgate.return', ['status' => 'paid']),
+                'url_paid' => route('billing.comgate.return', ['status' => 'paid']),
                 'url_cancelled' => route('billing.comgate.return', ['status' => 'cancelled']),
-                'url_pending'   => route('billing.comgate.return', ['status' => 'pending']),
-                'url_notify'    => route('billing.comgate.notify'),
+                'url_pending' => route('billing.comgate.return', ['status' => 'pending']),
+                'url_notify' => route('billing.comgate.notify'),
             ]);
 
         $body = $this->parse($response->body());
@@ -71,7 +71,7 @@ class ComgateGateway
         }
 
         $payment->update([
-            'transaction_id'  => $body['transId'] ?? null,
+            'transaction_id' => $body['transId'] ?? null,
             'gateway_payload' => $body,
         ]);
 
@@ -93,10 +93,10 @@ class ComgateGateway
 
         $response = Http::asForm()
             ->timeout(20)
-            ->post(rtrim(config('comgate.base_url'), '/') . '/status', [
+            ->post(rtrim(config('comgate.base_url'), '/').'/status', [
                 'merchant' => config('comgate.merchant'),
-                'secret'   => config('comgate.secret'),
-                'transId'  => $transactionId,
+                'secret' => config('comgate.secret'),
+                'transId' => $transactionId,
             ]);
 
         return $this->parse($response->body());

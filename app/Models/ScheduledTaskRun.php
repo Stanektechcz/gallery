@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Collection;
 
 /**
  * Jeden běh plánované úlohy. Zapisuje ho [\App\Listeners\ZaznamenejBehUlohy]
@@ -40,7 +41,7 @@ class ScheduledTaskRun extends Model
     }
 
     /** Poslední běh každé úlohy — jeden dotaz, ne jeden na úlohu. */
-    public static function posledni(): \Illuminate\Support\Collection
+    public static function posledni(): Collection
     {
         return static::query()
             ->whereIn('id', function ($poddotaz) {

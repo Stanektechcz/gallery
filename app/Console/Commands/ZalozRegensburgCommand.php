@@ -192,7 +192,9 @@ class ZalozRegensburgCommand extends Command
             collect(self::PLAN)->map(fn (array $r, string $n) => [
                 $n,
                 number_format($r[0], 0, ',', ' ').' €',
-                match (true) { $r[1] <= 10 => 'nutné', $r[1] <= 50 => 'důležité', default => 'když zbyde' },
+                match (true) {
+                    $r[1] <= 10 => 'nutné', $r[1] <= 50 => 'důležité', default => 'když zbyde'
+                },
             ])->values()->all(),
         );
 
@@ -257,7 +259,7 @@ class ZalozRegensburgCommand extends Command
      *
      * Pořadí: nižší číslo je dřív. 10 je nutné, 50 důležité, 90 „když zbyde".
      *
-     * @var array<string, array{0: float, 1: int}>  název kategorie => [částka, pořadí]
+     * @var array<string, array{0: float, 1: int}> název kategorie => [částka, pořadí]
      */
     private const PLAN = [
         // Kategorie musí být ta, kterou aplikace nabízí sama. Vlastní „Bydlení" vedle

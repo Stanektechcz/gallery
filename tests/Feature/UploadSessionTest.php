@@ -2,10 +2,9 @@
 
 namespace Tests\Feature;
 
-use App\Models\GallerySpace;
 use App\Models\Album;
+use App\Models\GallerySpace;
 use App\Models\MediaItem;
-use App\Models\UploadSession;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
@@ -17,6 +16,7 @@ class UploadSessionTest extends TestCase
     use RefreshDatabase;
 
     private User $user;
+
     private GallerySpace $space;
 
     protected function setUp(): void
@@ -28,9 +28,9 @@ class UploadSessionTest extends TestCase
 
         $this->user = User::factory()->create(['role' => 'owner', 'is_active' => true]);
         $this->space = GallerySpace::create([
-            'uuid'     => \Str::uuid(),
-            'name'     => 'Test',
-            'slug'     => 'test',
+            'uuid' => \Str::uuid(),
+            'name' => 'Test',
+            'slug' => 'test',
             'owner_id' => $this->user->id,
         ]);
         $this->space->members()->attach($this->user->id, ['role' => 'owner', 'can_delete' => true, 'can_share' => true]);
@@ -41,9 +41,9 @@ class UploadSessionTest extends TestCase
     {
         $response = $this->actingAs($this->user)
             ->postJson('/api/v1/uploads', [
-                'filename'     => 'test.jpg',
-                'mime_type'    => 'image/jpeg',
-                'total_size'   => 1024 * 1024,
+                'filename' => 'test.jpg',
+                'mime_type' => 'image/jpeg',
+                'total_size' => 1024 * 1024,
                 'total_chunks' => 4,
             ]);
 
@@ -52,8 +52,8 @@ class UploadSessionTest extends TestCase
 
         $this->assertDatabaseHas('upload_sessions', [
             'original_filename' => 'test.jpg',
-            'user_id'           => $this->user->id,
-            'status'            => 'pending',
+            'user_id' => $this->user->id,
+            'status' => 'pending',
         ]);
     }
 
@@ -63,9 +63,9 @@ class UploadSessionTest extends TestCase
         // Initiate
         $init = $this->actingAs($this->user)
             ->postJson('/api/v1/uploads', [
-                'filename'     => 'photo.jpg',
-                'mime_type'    => 'image/jpeg',
-                'total_size'   => 2048,
+                'filename' => 'photo.jpg',
+                'mime_type' => 'image/jpeg',
+                'total_size' => 2048,
                 'total_chunks' => 2,
             ]);
 
@@ -87,9 +87,9 @@ class UploadSessionTest extends TestCase
     {
         $init = $this->actingAs($this->user)
             ->postJson('/api/v1/uploads', [
-                'filename'     => 'test.jpg',
-                'mime_type'    => 'image/jpeg',
-                'total_size'   => 1024,
+                'filename' => 'test.jpg',
+                'mime_type' => 'image/jpeg',
+                'total_size' => 1024,
                 'total_chunks' => 1,
             ]);
 
@@ -107,9 +107,9 @@ class UploadSessionTest extends TestCase
     {
         $init = $this->actingAs($this->user)
             ->postJson('/api/v1/uploads', [
-                'filename'     => 'test.jpg',
-                'mime_type'    => 'image/jpeg',
-                'total_size'   => 2048,
+                'filename' => 'test.jpg',
+                'mime_type' => 'image/jpeg',
+                'total_size' => 2048,
                 'total_chunks' => 2,
             ]);
 
@@ -127,9 +127,9 @@ class UploadSessionTest extends TestCase
     {
         $init = $this->actingAs($this->user)
             ->postJson('/api/v1/uploads', [
-                'filename'     => 'test.jpg',
-                'mime_type'    => 'image/jpeg',
-                'total_size'   => 1024,
+                'filename' => 'test.jpg',
+                'mime_type' => 'image/jpeg',
+                'total_size' => 1024,
                 'total_chunks' => 1,
             ]);
 
@@ -146,9 +146,9 @@ class UploadSessionTest extends TestCase
     public function test_unauthenticated_cannot_upload(): void
     {
         $response = $this->postJson('/api/v1/uploads', [
-            'filename'     => 'test.jpg',
-            'mime_type'    => 'image/jpeg',
-            'total_size'   => 1024,
+            'filename' => 'test.jpg',
+            'mime_type' => 'image/jpeg',
+            'total_size' => 1024,
             'total_chunks' => 1,
         ]);
 

@@ -10,7 +10,7 @@ use Illuminate\Support\Str;
 
 class Album extends Model
 {
-    use HasFactory, SoftDeletes, \App\Models\Concerns\BelongsToGallerySpace;
+    use \App\Models\Concerns\BelongsToGallerySpace, HasFactory, SoftDeletes;
 
     protected $fillable = [
         'uuid',
@@ -64,17 +64,17 @@ class Album extends Model
     protected function casts(): array
     {
         return [
-            'event_date_start'    => 'date',
-            'event_date_end'      => 'date',
-            'event_start_at'      => 'datetime',
-            'event_end_at'        => 'datetime',
-            'last_drive_sync_at'  => 'datetime',
+            'event_date_start' => 'date',
+            'event_date_end' => 'date',
+            'event_start_at' => 'datetime',
+            'event_end_at' => 'datetime',
+            'last_drive_sync_at' => 'datetime',
             'inherit_permissions' => 'boolean',
-            'story_mode'          => 'boolean',
-            'event_mode'          => 'boolean',
-            'event_latitude'      => 'float',
-            'event_longitude'     => 'float',
-            'anniversary_year'    => 'integer',
+            'story_mode' => 'boolean',
+            'event_mode' => 'boolean',
+            'event_latitude' => 'float',
+            'event_longitude' => 'float',
+            'anniversary_year' => 'integer',
         ];
     }
 
@@ -104,18 +104,22 @@ class Album extends Model
     {
         return $this->belongsTo(GallerySpace::class);
     }
+
     public function parent()
     {
         return $this->belongsTo(Album::class, 'parent_id');
     }
+
     public function children()
     {
         return $this->hasMany(Album::class, 'parent_id');
     }
+
     public function creator()
     {
         return $this->belongsTo(User::class, 'created_by');
     }
+
     public function cover()
     {
         return $this->belongsTo(MediaItem::class, 'cover_media_id');
@@ -175,9 +179,9 @@ class Album extends Model
     {
         // Self-reference
         \DB::table('album_closure')->insertOrIgnore([
-            'ancestor_id'   => $this->id,
+            'ancestor_id' => $this->id,
             'descendant_id' => $this->id,
-            'depth'         => 0,
+            'depth' => 0,
         ]);
 
         // Inherit from parent's closure
@@ -185,14 +189,14 @@ class Album extends Model
             $rows = \DB::table('album_closure')
                 ->where('descendant_id', $this->parent_id)
                 ->get()
-                ->map(fn($row) => [
-                    'ancestor_id'   => $row->ancestor_id,
+                ->map(fn ($row) => [
+                    'ancestor_id' => $row->ancestor_id,
                     'descendant_id' => $this->id,
-                    'depth'         => $row->depth + 1,
+                    'depth' => $row->depth + 1,
                 ])
                 ->toArray();
 
-            if (!empty($rows)) {
+            if (! empty($rows)) {
                 \DB::table('album_closure')->insertOrIgnore($rows);
             }
         }
@@ -246,13 +250,13 @@ class Album extends Model
     public function rebuildPaths(): void
     {
         $ancestors = $this->ancestors()->orderByPivot('depth', 'desc')->get();
-        $pathIds   = $ancestors->pluck('id')->concat([$this->id])->implode('/');
+        $pathIds = $ancestors->pluck('id')->concat([$this->id])->implode('/');
         $pathNames = $ancestors->pluck('title')->concat([$this->title])->implode(' / ');
 
         $this->update([
-            'depth'              => $ancestors->count(),
-            'materialized_path'  => $pathIds,
-            'full_display_path'  => $pathNames,
+            'depth' => $ancestors->count(),
+            'materialized_path' => $pathIds,
+            'full_display_path' => $pathNames,
         ]);
 
         // Rebuild paths for children

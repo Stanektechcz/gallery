@@ -2,12 +2,12 @@
 
 namespace App\Http\Controllers\Api;
 
-use App\Support\AudioUploads;
 use App\Http\Controllers\Controller;
 use App\Models\Fart;
 use App\Models\FartRating;
 use App\Models\GallerySpace;
 use App\Models\VoiceNote;
+use App\Support\AudioUploads;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -25,6 +25,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 class FartController extends Controller
 {
     private const DISK = 'local';
+
     private const CRITERIA = ['loudness', 'aroma', 'stealth', 'timing'];
 
     public function index(Request $request): JsonResponse
@@ -65,13 +66,16 @@ class FartController extends Controller
             'occasion' => 'nullable|string|max:120',
             'happened_at' => 'nullable|date',
             'duration_ms' => 'nullable|integer|between:100,120000',
-            'audio' => 'nullable|file|max:10240|' . AudioUploads::rule(),
+            'audio' => 'nullable|file|max:10240|'.AudioUploads::rule(),
             // Attach an existing recording rather than making a new one.
             'voice_note_uuid' => 'nullable|uuid',
         ]);
 
         $space = $this->space($request, $data['gallery_space_id'] ?? null);
-        $path = null; $mime = null; $size = null; $voiceNoteId = null;
+        $path = null;
+        $mime = null;
+        $size = null;
+        $voiceNoteId = null;
 
         if ($request->hasFile('audio')) {
             $file = $request->file('audio');
@@ -107,7 +111,9 @@ class FartController extends Controller
         abort_if($fart->created_by === $request->user()->id, 422, 'Vlastní úlovek si ohodnotit nemůžete.');
 
         $rules = ['comment' => 'nullable|string|max:400'];
-        foreach (self::CRITERIA as $criterion) $rules[$criterion] = 'required|integer|between:1,5';
+        foreach (self::CRITERIA as $criterion) {
+            $rules[$criterion] = 'required|integer|between:1,5';
+        }
         $data = $request->validate($rules);
 
         $score = round(array_sum(array_map(fn ($key) => (int) $data[$key], self::CRITERIA)) / count(self::CRITERIA), 2);
@@ -144,7 +150,9 @@ class FartController extends Controller
         abort_unless($fart->created_by === $request->user()->id, 403, 'Smazat záznam může jen jeho autor.');
 
         // Only its own file is removed; an attached voice note belongs to its library.
-        if ($fart->path) Storage::disk(self::DISK)->delete($fart->path);
+        if ($fart->path) {
+            Storage::disk(self::DISK)->delete($fart->path);
+        }
         $fart->delete();
 
         return response()->json(['deleted' => true]);
@@ -198,7 +206,9 @@ class FartController extends Controller
     private function championOfMonth($farts): ?array
     {
         $month = $farts->filter(fn (Fart $fart) => $fart->happened_at?->isSameMonth(now()) && $fart->ratings->count() > 0);
-        if ($month->isEmpty()) return null;
+        if ($month->isEmpty()) {
+            return null;
+        }
 
         $best = $month->sortByDesc(fn (Fart $fart) => $fart->ratings->avg('score'))->first();
 

@@ -22,7 +22,9 @@ class FinanceSuggestTest extends TestCase
     use RefreshDatabase;
 
     private User $uzivatel;
+
     private GallerySpace $space;
+
     private Wallet $ucet;
 
     protected function setUp(): void

@@ -16,11 +16,12 @@ class MoveDriveFolderJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    public int $tries   = 5;
+    public int $tries = 5;
+
     public int $timeout = 60;
 
     public function __construct(
-        private readonly int     $albumId,
+        private readonly int $albumId,
         private readonly ?string $newParentDriveFolderId,
     ) {}
 
@@ -32,14 +33,17 @@ class MoveDriveFolderJob implements ShouldQueue
     public function handle(): void
     {
         $album = Album::with('gallerySpace.owner')->find($this->albumId);
-        if (!$album || !$album->drive_folder_id || !$this->newParentDriveFolderId) return;
+        if (! $album || ! $album->drive_folder_id || ! $this->newParentDriveFolderId) {
+            return;
+        }
 
         $connection = StorageConnection::where('owner_user_id', $album->gallerySpace->owner->id)
             ->where('connection_status', 'healthy')
             ->first();
 
-        if (!$connection) {
+        if (! $connection) {
             $this->release(300);
+
             return;
         }
 
@@ -48,8 +52,8 @@ class MoveDriveFolderJob implements ShouldQueue
             $provider->moveFolder($album->drive_folder_id, $this->newParentDriveFolderId);
             $album->update([
                 'drive_parent_folder_id' => $this->newParentDriveFolderId,
-                'sync_status'            => 'synced',
-                'last_drive_sync_at'     => now(),
+                'sync_status' => 'synced',
+                'last_drive_sync_at' => now(),
             ]);
         } catch (\Throwable $e) {
             Log::error("Drive folder move failed for album #{$album->id}", ['error' => $e->getMessage()]);

@@ -63,17 +63,17 @@ class User extends Authenticatable
     protected function casts(): array
     {
         return [
-            'email_verified_at'      => 'datetime',
+            'email_verified_at' => 'datetime',
             'invitation_accepted_at' => 'datetime',
-            'last_login_at'          => 'datetime',
-            'last_seen_at'           => 'datetime',
-            'preferences'            => 'array',
-            'is_active'              => 'boolean',
-            'read_only_mode'         => 'boolean',
-            'password'               => 'hashed',
-            'two_factor_secret'         => 'encrypted',
+            'last_login_at' => 'datetime',
+            'last_seen_at' => 'datetime',
+            'preferences' => 'array',
+            'is_active' => 'boolean',
+            'read_only_mode' => 'boolean',
+            'password' => 'hashed',
+            'two_factor_secret' => 'encrypted',
             'two_factor_recovery_codes' => 'encrypted:array',
-            'two_factor_confirmed_at'   => 'datetime',
+            'two_factor_confirmed_at' => 'datetime',
         ];
     }
 
@@ -82,9 +82,20 @@ class User extends Authenticatable
         static::creating(fn (User $u) => $u->uuid ??= (string) Str::uuid());
     }
 
-    public function isOwner(): bool   { return $this->role === 'owner'; }
-    public function isAdmin(): bool   { return in_array($this->role, ['owner', 'admin']); }
-    public function isPartner(): bool { return $this->role === 'partner'; }
+    public function isOwner(): bool
+    {
+        return $this->role === 'owner';
+    }
+
+    public function isAdmin(): bool
+    {
+        return in_array($this->role, ['owner', 'admin']);
+    }
+
+    public function isPartner(): bool
+    {
+        return $this->role === 'partner';
+    }
 
     public function gallerySpaces()
     {
@@ -93,17 +104,56 @@ class User extends Authenticatable
             ->withTimestamps();
     }
 
-    public function ownedSpaces()       { return $this->hasMany(GallerySpace::class, 'owner_id'); }
+    public function ownedSpaces()
+    {
+        return $this->hasMany(GallerySpace::class, 'owner_id');
+    }
+
     /** `user_favorites` má jen `created_at` — `withTimestamps()` by si žádalo i `updated_at`. */
-    public function favorites()         { return $this->belongsToMany(MediaItem::class, 'user_favorites')->withPivot('created_at'); }
-    public function ratings()           { return $this->belongsToMany(MediaItem::class, 'user_ratings')->withPivot('rating')->withTimestamps(); }
-    public function storageConnections(){ return $this->hasMany(StorageConnection::class, 'owner_user_id'); }
-    public function savedSearches()     { return $this->hasMany(SavedSearch::class); }
-    public function auditLogs()         { return $this->hasMany(AuditLog::class); }
-    public function uploadSessions()    { return $this->hasMany(UploadSession::class); }
-    public function createdRecipes()    { return $this->hasMany(Recipe::class, 'created_by'); }
-    public function cookingSessions()   { return $this->hasMany(RecipeCookingSession::class, 'created_by'); }
-    public function inviter()            { return $this->belongsTo(User::class, 'invited_by_user_id'); }
+    public function favorites()
+    {
+        return $this->belongsToMany(MediaItem::class, 'user_favorites')->withPivot('created_at');
+    }
+
+    public function ratings()
+    {
+        return $this->belongsToMany(MediaItem::class, 'user_ratings')->withPivot('rating')->withTimestamps();
+    }
+
+    public function storageConnections()
+    {
+        return $this->hasMany(StorageConnection::class, 'owner_user_id');
+    }
+
+    public function savedSearches()
+    {
+        return $this->hasMany(SavedSearch::class);
+    }
+
+    public function auditLogs()
+    {
+        return $this->hasMany(AuditLog::class);
+    }
+
+    public function uploadSessions()
+    {
+        return $this->hasMany(UploadSession::class);
+    }
+
+    public function createdRecipes()
+    {
+        return $this->hasMany(Recipe::class, 'created_by');
+    }
+
+    public function cookingSessions()
+    {
+        return $this->hasMany(RecipeCookingSession::class, 'created_by');
+    }
+
+    public function inviter()
+    {
+        return $this->belongsTo(User::class, 'invited_by_user_id');
+    }
 
     public function activeStorageConnection(): ?StorageConnection
     {

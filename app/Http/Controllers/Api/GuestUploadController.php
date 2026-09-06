@@ -15,6 +15,7 @@ class GuestUploadController extends Controller
     public function index(Request $request): JsonResponse
     {
         $uploads = GuestUpload::whereHas('sharedLink', fn ($query) => $query->where('created_by', $request->user()->id))->with('sharedLink:id,name,token,target_type,target_id')->latest()->paginate(50);
+
         return response()->json($uploads);
     }
 
@@ -29,12 +30,16 @@ class GuestUploadController extends Controller
             $destination = "media/{$media->uuid}/original.{$extension}";
             $source = Storage::disk('local')->readStream($upload->storage_path);
             abort_unless($source && Storage::disk('public')->put($destination, $source, 'public'), 500, 'Soubor se nepodařilo přesunout.');
-            if (is_resource($source)) fclose($source);
+            if (is_resource($source)) {
+                fclose($source);
+            }
             $media->variants()->create(['type' => 'original', 'disk' => 'public', 'path' => $destination, 'mime_type' => $upload->mime_type, 'size_bytes' => $upload->size_bytes]);
             $upload->update(['status' => 'approved', 'reviewed_by' => $request->user()->id, 'media_item_id' => $media->id, 'reviewed_at' => now()]);
             Storage::disk('local')->delete($upload->storage_path);
+
             return $media;
         });
+
         return response()->json(['status' => 'approved', 'media' => $media], 201);
     }
 
@@ -44,6 +49,7 @@ class GuestUploadController extends Controller
         abort_unless($upload->status === 'pending', 422, 'Upload už byl zpracován.');
         Storage::disk('local')->delete($upload->storage_path);
         $upload->update(['status' => 'rejected', 'reviewed_by' => $request->user()->id, 'reviewed_at' => now()]);
+
         return response()->json(['status' => 'rejected']);
     }
 

@@ -9,9 +9,10 @@ use App\Models\ChatReaction;
 use App\Models\Conversation;
 use App\Models\ConversationParticipant;
 use App\Models\GallerySpace;
-use App\Support\AudioUploads;
+use App\Models\VoiceNote;
 use App\Services\Chat\MentionSearchService;
 use App\Services\Integrations\GifSearchService;
+use App\Support\AudioUploads;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -112,7 +113,9 @@ class ChatController extends Controller
             while (microtime(true) < $deadline) {
                 $arrived = ChatMessage::where('conversation_id', $conversation->id)
                     ->where('id', '>', $after)->exists();
-                if ($arrived) break;
+                if ($arrived) {
+                    break;
+                }
 
                 // Somebody starting to type is also worth returning for: the dots should
                 // appear while they write, not after they send.
@@ -121,7 +124,9 @@ class ChatController extends Controller
                     ->where('user_id', '!=', $user->id)
                     ->where('typing_until', '>', now())
                     ->exists();
-                if ($typing) break;
+                if ($typing) {
+                    break;
+                }
 
                 usleep(self::HOLD_INTERVAL_MS * 1000);
             }
@@ -162,13 +167,15 @@ class ChatController extends Controller
         $peeking = $request->boolean('peek');
 
         if ($messages->isNotEmpty() && ! $peeking) {
-                $this->markRead($conversation->id, $user->id, (int) $messages->last()->id);
+            $this->markRead($conversation->id, $user->id, (int) $messages->last()->id);
         }
 
         // One query for the whole batch, not one per message.
         $reactions = $this->reactionsFor($messages->pluck('id')->all(), $user->id);
 
-        if (! $peeking) $this->touchPresence($space->id, $user->id);
+        if (! $peeking) {
+            $this->touchPresence($space->id, $user->id);
+        }
 
         return response()->json([
             'space_id' => $space->id,
@@ -195,11 +202,11 @@ class ChatController extends Controller
         $data = $request->validate([
             // Optional, because a picture, a GIF or a recording is a message on its own.
             'body' => 'nullable|string|max:4000',
-            'audio' => 'nullable|file|max:25600|' . AudioUploads::rule(),
+            'audio' => 'nullable|file|max:25600|'.AudioUploads::rule(),
             'duration_ms' => 'nullable|integer|between:200,1800000',
             'attachment_type' => 'nullable|string|in:recipe,media,event,place,trip',
             'attachment_ref' => 'nullable|string|max:190',
-            'image' => 'nullable|file|max:' . self::IMAGE_MAX_KB . '|mimetypes:' . implode(',', self::IMAGE_MIME),
+            'image' => 'nullable|file|max:'.self::IMAGE_MAX_KB.'|mimetypes:'.implode(',', self::IMAGE_MIME),
             // A GIF picked from the provider: we keep the link, not a copy.
             'gif_url' => 'nullable|url|max:600',
             'gif_width' => 'nullable|integer|max:4000',
@@ -401,7 +408,9 @@ class ChatController extends Controller
             ->chunk(200, function ($messages) use (&$hits, &$scanned, $needle) {
                 foreach ($messages as $message) {
                     $scanned++;
-                    if ($message->body === '' || ! str_contains(mb_strtolower($message->body), $needle)) continue;
+                    if ($message->body === '' || ! str_contains(mb_strtolower($message->body), $needle)) {
+                        continue;
+                    }
 
                     $hits[] = [
                         'id' => (int) $message->id,
@@ -411,7 +420,9 @@ class ChatController extends Controller
                         'sent_at' => $message->created_at?->toIso8601String(),
                     ];
 
-                    if (count($hits) >= 40) return false;
+                    if (count($hits) >= 40) {
+                        return false;
+                    }
                 }
 
                 // Far enough back that anything older is better found by scrolling.
@@ -425,12 +436,14 @@ class ChatController extends Controller
     private function excerptAround(string $body, string $needle): string
     {
         $at = mb_stripos($body, $needle);
-        if ($at === false) return Str::limit($body, 120);
+        if ($at === false) {
+            return Str::limit($body, 120);
+        }
 
         $from = max(0, $at - 40);
         $piece = mb_substr($body, $from, 140);
 
-        return ($from > 0 ? '…' : '') . trim($piece) . (mb_strlen($body) > $from + 140 ? '…' : '');
+        return ($from > 0 ? '…' : '').trim($piece).(mb_strlen($body) > $from + 140 ? '…' : '');
     }
 
     /** Suggestions for what someone typed after "@". */
@@ -479,12 +492,15 @@ class ChatController extends Controller
             ->where('emoji', $data['emoji'])
             ->first();
 
-        if ($existing) $existing->delete();
-        else ChatReaction::create([
-            'chat_message_id' => $message->id,
-            'user_id' => $request->user()->id,
-            'emoji' => $data['emoji'],
-        ]);
+        if ($existing) {
+            $existing->delete();
+        } else {
+            ChatReaction::create([
+                'chat_message_id' => $message->id,
+                'user_id' => $request->user()->id,
+                'emoji' => $data['emoji'],
+            ]);
+        }
 
         return response()->json([
             'uuid' => $message->uuid,
@@ -510,7 +526,7 @@ class ChatController extends Controller
 
         if (! array_key_exists($space, $this->pinnedVoice)) {
             $this->pinnedVoice[$space] = Schema::hasColumn('voice_notes', 'source_message_uuid')
-                ? \App\Models\VoiceNote::where('gallery_space_id', $space)
+                ? VoiceNote::where('gallery_space_id', $space)
                     ->whereNotNull('source_message_uuid')
                     ->pluck('source_message_uuid')->all()
                 : null;
@@ -579,7 +595,9 @@ class ChatController extends Controller
      */
     private function reactionsFor(array $messageIds, int $viewerId): array
     {
-        if (! $messageIds || ! $this->hasTable('chat_reactions')) return [];
+        if (! $messageIds || ! $this->hasTable('chat_reactions')) {
+            return [];
+        }
 
         return ChatReaction::whereIn('chat_message_id', $messageIds)->get()
             ->groupBy('chat_message_id')
@@ -595,7 +613,9 @@ class ChatController extends Controller
     /** Accepts a GIF link only from the picker's own hosts; see GIF_HOSTS. */
     private function safeGifUrl(?string $url): ?string
     {
-        if (! $url) return null;
+        if (! $url) {
+            return null;
+        }
 
         $host = strtolower((string) parse_url($url, PHP_URL_HOST));
         $scheme = strtolower((string) parse_url($url, PHP_URL_SCHEME));
@@ -621,7 +641,9 @@ class ChatController extends Controller
     private function others(Conversation $conversation, int $viewerId): array
     {
         $members = $conversation->members->where('id', '!=', $viewerId);
-        if ($members->isEmpty()) return [];
+        if ($members->isEmpty()) {
+            return [];
+        }
 
         $presence = $this->hasTable('chat_presence')
             ? DB::table('chat_presence')->where('gallery_space_id', $conversation->gallery_space_id)->get()->keyBy('user_id')
@@ -681,7 +703,9 @@ class ChatController extends Controller
             ->where('gallery_space_id', $space->id)->forUser($user)
             ->orderByDesc('last_message_at')->orderByDesc('id')->first();
 
-        if ($recent) return $recent;
+        if ($recent) {
+            return $recent;
+        }
 
         $created = Conversation::create([
             'gallery_space_id' => $space->id,

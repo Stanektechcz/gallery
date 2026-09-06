@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToGallerySpace;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -16,14 +17,17 @@ use Illuminate\Support\Str;
  */
 class Conversation extends Model
 {
-    use \App\Models\Concerns\BelongsToGallerySpace;
+    use BelongsToGallerySpace;
     use SoftDeletes;
 
     public const KIND_DIRECT = 'direct';
+
     public const KIND_GROUP = 'group';
+
     public const KIND_CHANNEL = 'channel';
 
     public const VISIBILITY_OPEN = 'open';
+
     public const VISIBILITY_INVITE = 'invite';
 
     protected $fillable = [
@@ -121,8 +125,12 @@ class Conversation extends Model
      */
     public function titleFor(User $viewer): string
     {
-        if ($this->isChannel()) return $this->title ?: 'kanál';
-        if ($this->isGroup()) return $this->title ?: 'Skupina';
+        if ($this->isChannel()) {
+            return $this->title ?: 'kanál';
+        }
+        if ($this->isGroup()) {
+            return $this->title ?: 'Skupina';
+        }
 
         $other = $this->members->firstWhere('id', '!=', $viewer->id);
 

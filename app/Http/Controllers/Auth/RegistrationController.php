@@ -44,35 +44,37 @@ class RegistrationController extends Controller
         abort_unless(config('gallery.registration_open'), 403, 'Registrace je zavřená.');
 
         $data = $request->validate([
-            'name'       => 'required|string|max:100',
-            'email'      => 'required|email|max:190|unique:users,email',
+            'name' => 'required|string|max:100',
+            'email' => 'required|email|max:190|unique:users,email',
             'space_name' => 'required|string|max:120',
-            'password'   => ['required', 'confirmed', Password::min(8)],
+            'password' => ['required', 'confirmed', Password::min(8)],
         ]);
 
         $user = DB::transaction(function () use ($data) {
             $user = User::create([
-                'uuid'                   => (string) Str::uuid(),
-                'name'                   => $data['name'],
-                'email'                  => $data['email'],
-                'password'               => Hash::make($data['password']),
+                'uuid' => (string) Str::uuid(),
+                'name' => $data['name'],
+                'email' => $data['email'],
+                'password' => Hash::make($data['password']),
                 // Owner of their own space. Instance administration stays separate.
-                'role'                   => 'owner',
-                'is_active'              => true,
+                'role' => 'owner',
+                'is_active' => true,
                 'invitation_accepted_at' => now(),
             ]);
 
             $space = GallerySpace::create([
-                'uuid'      => (string) Str::uuid(),
-                'name'      => $data['space_name'],
-                'slug'      => $this->uniqueSlug($data['space_name']),
-                'owner_id'  => $user->id,
+                'uuid' => (string) Str::uuid(),
+                'name' => $data['space_name'],
+                'slug' => $this->uniqueSlug($data['space_name']),
+                'owner_id' => $user->id,
                 'is_default' => true,
             ]);
             $space->members()->attach($user->id, ['role' => 'owner', 'can_delete' => true, 'can_share' => true, 'joined_at' => now()]);
 
             $plan = BillingPlan::where('is_default', true)->first();
-            if ($plan) $this->entitlements->assignPlan($space, $plan, $user);
+            if ($plan) {
+                $this->entitlements->assignPlan($space, $plan, $user);
+            }
 
             return $user;
         });
@@ -93,7 +95,7 @@ class RegistrationController extends Controller
         $slug = $base;
         $suffix = 2;
         while (GallerySpace::where('slug', $slug)->exists()) {
-            $slug = $base . '-' . $suffix++;
+            $slug = $base.'-'.$suffix++;
         }
 
         return $slug;

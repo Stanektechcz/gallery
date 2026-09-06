@@ -12,6 +12,7 @@ use App\Models\GallerySpace;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
@@ -332,7 +333,9 @@ class ConversationController extends Controller
         abort_unless($conversation->isGroup(), 422, 'Z přímé konverzace odejít nelze, můžete ji jen smazat.');
 
         $conversation->participants()->where('user_id', $request->user()->id)->delete();
-        if ($conversation->participants()->count() === 0) $conversation->delete();
+        if ($conversation->participants()->count() === 0) {
+            $conversation->delete();
+        }
 
         return response()->json(['left' => true]);
     }
@@ -368,12 +371,14 @@ class ConversationController extends Controller
     }
 
     /**
-     * @param  \Illuminate\Support\Collection<int, Conversation>  $conversations
+     * @param  Collection<int, Conversation>  $conversations
      * @return array<int, int>
      */
     private function unreadCounts($conversations, int $userId): array
     {
-        if ($conversations->isEmpty()) return [];
+        if ($conversations->isEmpty()) {
+            return [];
+        }
 
         $marks = $conversations->mapWithKeys(fn (Conversation $row) => [
             $row->id => $row->participants->firstWhere('user_id', $userId)?->last_read_message_id ?? 0,

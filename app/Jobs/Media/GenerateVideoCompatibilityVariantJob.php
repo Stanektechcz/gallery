@@ -15,7 +15,8 @@ class GenerateVideoCompatibilityVariantJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    public int $tries   = 3;
+    public int $tries = 3;
+
     public int $timeout = 1800; // 30 minutes for large videos
 
     public function __construct(private readonly int $mediaItemId) {}
@@ -23,12 +24,16 @@ class GenerateVideoCompatibilityVariantJob implements ShouldQueue
     public function handle(VideoProcessingService $videoService): void
     {
         $media = MediaItem::find($this->mediaItemId);
-        if (!$media) return;
+        if (! $media) {
+            return;
+        }
 
         $session = UploadSession::where('resulting_media_id', $media->id)->first();
-        $path    = $session?->assembled_path;
+        $path = $session?->assembled_path;
 
-        if (!$path || !file_exists($path)) return;
+        if (! $path || ! file_exists($path)) {
+            return;
+        }
 
         $videoService->generateCompatibilityVariant($media, $path);
     }

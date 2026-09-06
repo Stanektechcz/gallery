@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Storage;
 
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
+use App\Models\GallerySpace;
 use App\Models\StorageConnection;
+use App\Services\Storage\DropboxClient;
 use App\Services\Storage\StorageResolver;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -26,12 +28,12 @@ use Illuminate\Support\Str;
 class DropboxOAuthController extends Controller
 {
     private const AUTHORISE = 'https://www.dropbox.com/oauth2/authorize';
+
     private const TOKEN = 'https://api.dropboxapi.com/oauth2/token';
+
     private const ACCOUNT = 'https://api.dropboxapi.com/2/users/get_current_account';
 
-    public function __construct(private readonly StorageResolver $resolver)
-    {
-    }
+    public function __construct(private readonly StorageResolver $resolver) {}
 
     public function start(Request $request): RedirectResponse
     {
@@ -46,7 +48,7 @@ class DropboxOAuthController extends Controller
         $state = Str::random(40);
         $request->session()->put('dropbox.state', $state);
 
-        return redirect()->away(self::AUTHORISE . '?' . http_build_query([
+        return redirect()->away(self::AUTHORISE.'?'.http_build_query([
             'client_id' => $this->resolver->credentials('dropbox')['client_id'],
             'redirect_uri' => $this->resolver->credentials('dropbox')['redirect'],
             'response_type' => 'code',
@@ -69,7 +71,7 @@ class DropboxOAuthController extends Controller
 
         if ($request->filled('error')) {
             return redirect()->route('connections')
-                ->with('error', 'Dropbox přístup nepovolil: ' . $request->string('error_description')->toString());
+                ->with('error', 'Dropbox přístup nepovolil: '.$request->string('error_description')->toString());
         }
 
         abort_unless($request->filled('code'), 400);
@@ -84,7 +86,7 @@ class DropboxOAuthController extends Controller
 
         if ($exchange->failed()) {
             return redirect()->route('connections')
-                ->with('error', 'Dropbox odmítl výměnu kódu: ' . $exchange->json('error_description', 'neznámá chyba'));
+                ->with('error', 'Dropbox odmítl výměnu kódu: '.$exchange->json('error_description', 'neznámá chyba'));
         }
 
         $tokens = $exchange->json();
@@ -129,7 +131,7 @@ class DropboxOAuthController extends Controller
      * pressing this button is asking. A token that expired overnight is renewed as part of
      * the check, so the commonest failure fixes itself here.
      */
-    public function test(Request $request, \App\Services\Storage\DropboxClient $client): RedirectResponse
+    public function test(Request $request, DropboxClient $client): RedirectResponse
     {
         $space = $this->space($request);
         $connection = StorageConnection::where('provider', 'dropbox')
@@ -142,15 +144,15 @@ class DropboxOAuthController extends Controller
         $result = $client->probe($connection);
 
         if (! $result['ok']) {
-            return redirect()->route('connections')->with('error', 'Dropbox: ' . $result['error']);
+            return redirect()->route('connections')->with('error', 'Dropbox: '.$result['error']);
         }
 
         $free = $result['allocated_bytes'] && $result['used_bytes'] !== null
-            ? ' Volné místo: ' . round(($result['allocated_bytes'] - $result['used_bytes']) / 1024 ** 3, 1) . ' GB.'
+            ? ' Volné místo: '.round(($result['allocated_bytes'] - $result['used_bytes']) / 1024 ** 3, 1).' GB.'
             : '';
 
         return redirect()->route('connections')
-            ->with('success', 'Dropbox odpovídá — ' . ($result['account'] ?? 'účet ověřen') . '.' . $free);
+            ->with('success', 'Dropbox odpovídá — '.($result['account'] ?? 'účet ověřen').'.'.$free);
     }
 
     public function disconnect(Request $request): RedirectResponse
@@ -173,7 +175,7 @@ class DropboxOAuthController extends Controller
         return $this->resolver->configured('dropbox');
     }
 
-    private function space(Request $request): \App\Models\GallerySpace
+    private function space(Request $request): GallerySpace
     {
         $space = $request->user()->gallerySpaces()->orderByDesc('is_default')->first();
         abort_unless($space, 404, 'Prostor nebyl nalezen.');

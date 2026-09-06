@@ -8,7 +8,9 @@ return new class extends Migration
 {
     public function up(): void
     {
-        if (! Schema::hasTable('albums') || Schema::hasColumn('albums', 'trip_id')) return;
+        if (! Schema::hasTable('albums') || Schema::hasColumn('albums', 'trip_id')) {
+            return;
+        }
 
         Schema::table('albums', function (Blueprint $table) {
             $table->foreignId('trip_id')->nullable()->after('gallery_space_id')->constrained('trips')->nullOnDelete();
@@ -18,7 +20,9 @@ return new class extends Migration
 
     public function down(): void
     {
-        if (! Schema::hasTable('albums') || ! Schema::hasColumn('albums', 'trip_id')) return;
+        if (! Schema::hasTable('albums') || ! Schema::hasColumn('albums', 'trip_id')) {
+            return;
+        }
 
         Schema::table('albums', function (Blueprint $table) {
             $table->dropUnique('albums_trip_unique');

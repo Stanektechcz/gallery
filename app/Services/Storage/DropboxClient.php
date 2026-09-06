@@ -19,15 +19,15 @@ use Illuminate\Support\Facades\Http;
 class DropboxClient
 {
     private const ACCOUNT = 'https://api.dropboxapi.com/2/users/get_current_account';
+
     private const SPACE = 'https://api.dropboxapi.com/2/users/get_space_usage';
+
     private const UPLOAD = 'https://content.dropboxapi.com/2/files/upload';
 
     /** Dropbox switches to a chunked protocol above 150 MB; this refuses rather than truncates. */
     private const SIMPLE_UPLOAD_LIMIT = 140 * 1024 * 1024;
 
-    public function __construct(private readonly TokenRefresher $refresher)
-    {
-    }
+    public function __construct(private readonly TokenRefresher $refresher) {}
 
     /**
      * Is this connection actually usable right now?
@@ -120,6 +120,6 @@ class DropboxClient
      */
     public function folderFor(StorageConnection $connection): string
     {
-        return '/MAKI Gallery/prostor-' . $connection->gallery_space_id;
+        return '/MAKI Gallery/prostor-'.$connection->gallery_space_id;
     }
 }

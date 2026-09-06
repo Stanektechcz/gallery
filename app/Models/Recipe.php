@@ -2,16 +2,16 @@
 
 namespace App\Models;
 
+use App\Services\Planning\LifeEventService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Schema;
-use App\Services\Planning\LifeEventService;
+use Illuminate\Support\Str;
 
 class Recipe extends Model
 {
-    use HasFactory, SoftDeletes, \App\Models\Concerns\BelongsToGallerySpace;
+    use \App\Models\Concerns\BelongsToGallerySpace, HasFactory, SoftDeletes;
 
     protected $fillable = [
         'uuid', 'gallery_space_id', 'created_by', 'updated_by', 'cover_media_id', 'album_id',
@@ -36,19 +36,58 @@ class Recipe extends Model
         static::creating(function (self $recipe): void {
             $recipe->uuid ??= (string) Str::uuid();
             $origin = $recipe->source_name === 'Chat' ? 'assistant' : ($recipe->source_url ? 'import' : 'manual');
-            if (Schema::hasColumn('recipes', 'created_from')) $recipe->created_from ??= $origin;
-            if (Schema::hasColumn('recipes', 'source_reference') && ! $recipe->source_reference && $recipe->source_url) $recipe->source_reference = $recipe->source_url;
+            if (Schema::hasColumn('recipes', 'created_from')) {
+                $recipe->created_from ??= $origin;
+            }
+            if (Schema::hasColumn('recipes', 'source_reference') && ! $recipe->source_reference && $recipe->source_url) {
+                $recipe->source_reference = $recipe->source_url;
+            }
         });
         static::created(fn (self $recipe) => app(LifeEventService::class)->record($recipe->gallery_space_id, $recipe->created_by, 'recipe.created', $recipe->title, $recipe->created_from ?: ($recipe->source_name === 'Chat' ? 'assistant' : ($recipe->source_url ? 'import' : 'manual')), self::class, $recipe->id, now('Europe/Prague')));
     }
 
-    public function space() { return $this->belongsTo(GallerySpace::class, 'gallery_space_id'); }
-    public function creator() { return $this->belongsTo(User::class, 'created_by'); }
-    public function cover() { return $this->belongsTo(MediaItem::class, 'cover_media_id'); }
-    public function album() { return $this->belongsTo(Album::class); }
-    public function ingredients() { return $this->hasMany(RecipeIngredient::class)->orderBy('sort_order'); }
-    public function steps() { return $this->hasMany(RecipeStep::class)->orderBy('sort_order'); }
-    public function cookingSessions() { return $this->hasMany(RecipeCookingSession::class)->orderByDesc('cooked_at')->orderByDesc('planned_for'); }
-    public function completedSessions() { return $this->hasMany(RecipeCookingSession::class)->where('status', 'completed'); }
-    public function media() { return $this->belongsToMany(MediaItem::class, 'recipe_media')->withPivot(['cooking_session_id', 'recipe_step_id', 'role', 'caption', 'sort_order', 'created_at']); }
+    public function space()
+    {
+        return $this->belongsTo(GallerySpace::class, 'gallery_space_id');
+    }
+
+    public function creator()
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function cover()
+    {
+        return $this->belongsTo(MediaItem::class, 'cover_media_id');
+    }
+
+    public function album()
+    {
+        return $this->belongsTo(Album::class);
+    }
+
+    public function ingredients()
+    {
+        return $this->hasMany(RecipeIngredient::class)->orderBy('sort_order');
+    }
+
+    public function steps()
+    {
+        return $this->hasMany(RecipeStep::class)->orderBy('sort_order');
+    }
+
+    public function cookingSessions()
+    {
+        return $this->hasMany(RecipeCookingSession::class)->orderByDesc('cooked_at')->orderByDesc('planned_for');
+    }
+
+    public function completedSessions()
+    {
+        return $this->hasMany(RecipeCookingSession::class)->where('status', 'completed');
+    }
+
+    public function media()
+    {
+        return $this->belongsToMany(MediaItem::class, 'recipe_media')->withPivot(['cooking_session_id', 'recipe_step_id', 'role', 'caption', 'sort_order', 'created_at']);
+    }
 }

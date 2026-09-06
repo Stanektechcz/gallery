@@ -9,7 +9,9 @@ use App\Models\FinanceCategory;
 use App\Models\FinanceProject;
 use App\Models\GallerySpace;
 use App\Models\Transaction;
+use App\Models\User;
 use App\Services\Finance\FinanceService;
+use App\Services\Finance\RecurringService;
 use App\Services\Finance\RozdeleniService;
 use App\Services\Finance\StrategieService;
 use Illuminate\Http\JsonResponse;
@@ -523,7 +525,7 @@ class FinanceBudgetController extends Controller
          * Odečítá se jako rezerva: z rozdělení peníze vypadnou, ze zbývající částky ne.
          * Ta pořád ukazuje, co je na účtu.
          */
-        $zavazky = app(\App\Services\Finance\RecurringService::class)->zavazky($space, $mena, $do);
+        $zavazky = app(RecurringService::class)->zavazky($space, $mena, $do);
 
         $bezpecne = $this->finance->safeDaily(
             $limit + $prijem, $ciste, $rezerva + $zavazky['total'], $od, $do,
@@ -594,7 +596,7 @@ class FinanceBudgetController extends Controller
             'advice' => $this->strategie->proRozpocet($vysledek),
             'history' => $this->historiePlanu($b),
             'owner_user_id' => $b->owner_user_id,
-            'owner_name' => $b->owner_user_id ? optional(\App\Models\User::find($b->owner_user_id))->name : null,
+            'owner_name' => $b->owner_user_id ? optional(User::find($b->owner_user_id))->name : null,
             'access' => FinanceAccess::sdileniPro('budget', $b->id),
             'can_edit' => $ja === null || FinanceAccess::smiUpravit('budget', $b->id, $b->owner_user_id, $ja),
         ];
@@ -706,7 +708,9 @@ class FinanceBudgetController extends Controller
         rsort($hranice);
 
         foreach ($hranice as $h) {
-            if ($procenta >= $h) return $h;
+            if ($procenta >= $h) {
+                return $h;
+            }
         }
 
         return null;

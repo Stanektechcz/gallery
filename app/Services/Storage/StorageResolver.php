@@ -38,7 +38,9 @@ class StorageResolver
 
         if (Schema::hasTable('integration_settings')) {
             $row = IntegrationSetting::where('provider', $provider)->first();
-            if ($row && $row->is_enabled) $stored = $row->config();
+            if ($row && $row->is_enabled) {
+                $stored = $row->config();
+            }
         }
 
         // config/services keys the Drive under "google" for historical reasons.
@@ -72,12 +74,16 @@ class StorageResolver
      */
     public function activeConnection(GallerySpace $space): ?StorageConnection
     {
-        if (! Schema::hasTable('storage_connections')) return null;
-        if (! Schema::hasColumn('storage_connections', 'gallery_space_id')) return null;
+        if (! Schema::hasTable('storage_connections')) {
+            return null;
+        }
+        if (! Schema::hasColumn('storage_connections', 'gallery_space_id')) {
+            return null;
+        }
 
         return StorageConnection::where('gallery_space_id', $space->id)
             ->whereIn('provider', self::CLOUDS)
-            ->orderByRaw("CASE WHEN connection_status = ? THEN 0 ELSE 1 END", [StorageConnection::STATUS_HEALTHY])
+            ->orderByRaw('CASE WHEN connection_status = ? THEN 0 ELSE 1 END', [StorageConnection::STATUS_HEALTHY])
             ->first();
     }
 
@@ -96,7 +102,9 @@ class StorageResolver
      */
     public function mayManage(GallerySpace $space, ?int $userId): bool
     {
-        if (! $userId) return false;
+        if (! $userId) {
+            return false;
+        }
 
         $owner = $space->members()->wherePivot('role', 'owner')->first()
             ?? $space->members()->where('users.role', 'owner')->first();

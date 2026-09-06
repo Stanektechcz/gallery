@@ -35,6 +35,6 @@ final class AudioUploads
     /** The `mimetypes:` half of a validation rule. */
     public static function rule(): string
     {
-        return 'mimetypes:' . implode(',', self::MIME_TYPES);
+        return 'mimetypes:'.implode(',', self::MIME_TYPES);
     }
 }

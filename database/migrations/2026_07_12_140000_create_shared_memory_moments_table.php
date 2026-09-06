@@ -8,7 +8,9 @@ return new class extends Migration
 {
     public function up(): void
     {
-        if (Schema::hasTable('shared_memory_moments')) return;
+        if (Schema::hasTable('shared_memory_moments')) {
+            return;
+        }
         Schema::create('shared_memory_moments', function (Blueprint $table) {
             $table->id();
             $table->uuid('uuid')->unique();

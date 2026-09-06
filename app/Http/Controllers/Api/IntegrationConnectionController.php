@@ -5,16 +5,18 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\GallerySpace;
 use App\Models\IntegrationDocument;
-use App\Models\UserIntegration;
-use App\Services\Integrations\DiscordClient;
 use App\Models\StorageConnection;
+use App\Models\UserIntegration;
+use App\Services\Billing\EntitlementService;
+use App\Services\Integrations\DiscordClient;
 use App\Services\Integrations\NotionClient;
 use App\Services\Integrations\ProviderRegistry;
 use App\Services\Storage\StorageResolver;
 use App\Services\Storage\WebDavClient;
-use Illuminate\Support\Facades\Crypt;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Crypt;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 /**
@@ -53,7 +55,7 @@ class IntegrationConnectionController extends Controller
             'backup' => $this->backupCoverage($space->id),
             // How full the server disk is. The limit was enforced on upload but shown
             // nowhere, so the first anybody heard of it was a refused photograph.
-            'quota' => app(\App\Services\Billing\EntitlementService::class)->storageUsage($space),
+            'quota' => app(EntitlementService::class)->storageUsage($space),
         ]);
     }
 
@@ -80,7 +82,9 @@ class IntegrationConnectionController extends Controller
         // WebDAV is storage rather than an integration: it belongs to the space and is
         // checked against the server before anything is stored, so a typo fails here
         // rather than silently at the first photograph.
-        if ($provider === 'webdav') return $this->connectWebDav($request);
+        if ($provider === 'webdav') {
+            return $this->connectWebDav($request);
+        }
         abort_unless((ProviderRegistry::PROVIDERS[$provider]['auth'] ?? '') === 'token', 422,
             'Tuhle službu nelze připojit tokenem.');
 
@@ -153,7 +157,7 @@ class IntegrationConnectionController extends Controller
 
         if (! $probe['ok']) {
             $connection->delete();
-            abort(422, 'Připojení se nepodařilo ověřit: ' . $probe['error']);
+            abort(422, 'Připojení se nepodařilo ověřit: '.$probe['error']);
         }
 
         return response()->json(['provider' => 'webdav', 'account' => $user], 201);
@@ -177,10 +181,10 @@ class IntegrationConnectionController extends Controller
      */
     private function backupCoverage(int $spaceId): array
     {
-        $base = \Illuminate\Support\Facades\DB::table('media_items')
+        $base = DB::table('media_items')
             ->where('gallery_space_id', $spaceId)
             ->whereNull('trashed_at')
-            ->whereExists(fn ($q) => $q->select(\Illuminate\Support\Facades\DB::raw(1))
+            ->whereExists(fn ($q) => $q->select(DB::raw(1))
                 ->from('media_variants')
                 ->whereColumn('media_variants.media_item_id', 'media_items.id')
                 ->where('media_variants.type', 'original'));
@@ -194,30 +198,32 @@ class IntegrationConnectionController extends Controller
             'backed_up' => $zalohovano,
             'percent' => $celkem > 0 ? (int) round($zalohovano / $celkem * 100) : 100,
             'failed' => $chyby,
-            'provider' => app(\App\Services\Storage\StorageResolver::class)
-                ->activeProvider(\App\Models\GallerySpace::find($spaceId) ?? new \App\Models\GallerySpace()),
+            'provider' => app(StorageResolver::class)
+                ->activeProvider(GallerySpace::find($spaceId) ?? new GallerySpace),
         ];
     }
 
     private function storage(int $spaceId): array
     {
-        if (! Schema::hasTable('storage_connections')) return [];
+        if (! Schema::hasTable('storage_connections')) {
+            return [];
+        }
 
         // This space's own, not the installation's. Rows predating the space column are
         // left out rather than shown to everybody — an unattributed connection belongs to
         // nobody, and guessing wrong here would show one customer another's account.
         return StorageConnection::when(
-                Schema::hasColumn('storage_connections', 'gallery_space_id'),
-                fn ($query) => $query->where('gallery_space_id', $spaceId),
-            )
+            Schema::hasColumn('storage_connections', 'gallery_space_id'),
+            fn ($query) => $query->where('gallery_space_id', $spaceId),
+        )
             ->get()
             ->mapWithKeys(fn (StorageConnection $row) => [$row->provider => [
-                'account' => $row->account_email,
-                'status' => $row->connection_status,
-                'last_ok' => $row->last_successful_request_at?->toIso8601String(),
-                'last_error' => $row->last_error_message,
-                'last_error_at' => $row->last_error_at?->toIso8601String(),
-            ]])->all();
+            'account' => $row->account_email,
+            'status' => $row->connection_status,
+            'last_ok' => $row->last_successful_request_at?->toIso8601String(),
+            'last_error' => $row->last_error_message,
+            'last_error_at' => $row->last_error_at?->toIso8601String(),
+        ]])->all();
     }
 
     /**
@@ -412,7 +418,9 @@ class IntegrationConnectionController extends Controller
      */
     private function documents(int $spaceId, array $connectionIds): array
     {
-        if (! $connectionIds) return [];
+        if (! $connectionIds) {
+            return [];
+        }
 
         return IntegrationDocument::where('gallery_space_id', $spaceId)
             ->whereIn('user_integration_id', $connectionIds)

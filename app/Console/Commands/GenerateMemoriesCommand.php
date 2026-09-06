@@ -70,10 +70,14 @@ class GenerateMemoriesCommand extends Command
             ->orderByDesc('score')
             ->first();
 
-        if (! $best) return 0;
+        if (! $best) {
+            return 0;
+        }
 
         $members = $space->members()->get();
-        if ($members->isEmpty()) return 0;
+        if ($members->isEmpty()) {
+            return 0;
+        }
 
         foreach ($members as $member) {
             $member->notify(new GalleryNotification(

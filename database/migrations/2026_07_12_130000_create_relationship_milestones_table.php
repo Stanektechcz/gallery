@@ -8,7 +8,9 @@ return new class extends Migration
 {
     public function up(): void
     {
-        if (Schema::hasTable('relationship_milestones')) return;
+        if (Schema::hasTable('relationship_milestones')) {
+            return;
+        }
         Schema::create('relationship_milestones', function (Blueprint $table) {
             $table->id();
             $table->uuid('uuid')->unique();

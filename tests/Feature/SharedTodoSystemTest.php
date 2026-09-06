@@ -25,18 +25,18 @@ class SharedTodoSystemTest extends TestCase
 
         $this->assertDatabaseHas('calendar_events', ['type' => 'todo', 'gallery_space_id' => $space->id]);
         $this->assertDatabaseCount('event_participants', 2);
-        $this->actingAs($partner)->postJson('/api/v1/todos/' . $todo['uuid'] . '/comments', ['body' => 'Zařídím dopravu.'])
+        $this->actingAs($partner)->postJson('/api/v1/todos/'.$todo['uuid'].'/comments', ['body' => 'Zařídím dopravu.'])
             ->assertCreated()->assertJsonPath('body', 'Zařídím dopravu.');
         $this->postJson('/api/v1/todos', [
             'gallery_space_id' => $space->id, 'parent_uuid' => $todo['uuid'], 'list_uuid' => $todo['list']['uuid'], 'title' => 'Porovnat vlak a autobus',
         ])->assertCreated();
 
-        $index = $this->getJson('/api/v1/todos?gallery_space_id=' . $space->id)->assertOk()
+        $index = $this->getJson('/api/v1/todos?gallery_space_id='.$space->id)->assertOk()
             ->assertJsonPath('summary.active', 2)->assertJsonPath('tasks.0.children.0.title', 'Porovnat vlak a autobus');
-        $pulse = $this->getJson('/api/v1/coordination/pulse?gallery_space_id=' . $space->id)->assertOk();
+        $pulse = $this->getJson('/api/v1/coordination/pulse?gallery_space_id='.$space->id)->assertOk();
         $this->assertTrue(collect($pulse->json('actions'))->contains(fn ($action) => $action['type'] === 'shared_todo' && $action['source_key'] === $todo['uuid']));
 
-        $this->patchJson('/api/v1/coordination/actions/shared_todo/' . $todo['uuid'], [
+        $this->patchJson('/api/v1/coordination/actions/shared_todo/'.$todo['uuid'], [
             'gallery_space_id' => $space->id, 'completed' => true,
         ])->assertOk();
         $this->assertDatabaseHas('shared_todos', ['uuid' => $todo['uuid'], 'status' => 'completed']);
@@ -47,7 +47,8 @@ class SharedTodoSystemTest extends TestCase
 
     public function test_outsiders_and_read_only_members_cannot_change_todos(): void
     {
-        [$owner, $partner, $space] = $this->couple(); $outsider = User::factory()->create();
+        [$owner, $partner, $space] = $this->couple();
+        $outsider = User::factory()->create();
         $this->actingAs($outsider)->postJson('/api/v1/todos', ['gallery_space_id' => $space->id, 'title' => 'Cizí'])->assertNotFound();
         $partner->update(['read_only_mode' => true]);
         $this->actingAs($partner)->postJson('/api/v1/todos', ['gallery_space_id' => $space->id, 'title' => 'Zakázaný'])->assertForbidden();
@@ -55,10 +56,12 @@ class SharedTodoSystemTest extends TestCase
 
     private function couple(): array
     {
-        $owner = User::factory()->create(['role' => 'owner', 'is_active' => true]); $partner = User::factory()->create(['role' => 'partner', 'is_active' => true]);
+        $owner = User::factory()->create(['role' => 'owner', 'is_active' => true]);
+        $partner = User::factory()->create(['role' => 'partner', 'is_active' => true]);
         $space = GallerySpace::create(['name' => 'Náš prostor', 'slug' => 'todo-couple', 'owner_id' => $owner->id, 'is_default' => true]);
         $space->members()->attach($owner->id, ['role' => 'owner', 'can_delete' => true, 'can_share' => true, 'joined_at' => now()]);
         $space->members()->attach($partner->id, ['role' => 'editor', 'can_delete' => true, 'can_share' => true, 'joined_at' => now()]);
+
         return [$owner, $partner, $space];
     }
 }

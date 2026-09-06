@@ -18,7 +18,9 @@ class CalendarPlanningTest extends TestCase
     use RefreshDatabase;
 
     private User $owner;
+
     private User $partner;
+
     private GallerySpace $space;
 
     protected function setUp(): void
@@ -490,14 +492,14 @@ class CalendarPlanningTest extends TestCase
     {
         $date = now()->addMonth()->toDateString();
         $this->postJson('/api/v1/relationship-milestones', ['gallery_space_id' => $this->space->id, 'title' => 'Naše seznámení', 'occurred_on' => now()->subYears(3)->setMonth((int) substr($date, 5, 2))->setDay((int) substr($date, 8, 2))->toDateString(), 'visibility' => 'shared'])->assertCreated();
-        $this->getJson('/api/v1/calendar/events?from=' . now()->addMonth()->startOfMonth()->toDateString() . '&to=' . now()->addMonth()->endOfMonth()->toDateString())
+        $this->getJson('/api/v1/calendar/events?from='.now()->addMonth()->startOfMonth()->toDateString().'&to='.now()->addMonth()->endOfMonth()->toDateString())
             ->assertOk()->assertJsonPath('milestones.0.title', 'Naše seznámení');
     }
 
     public function test_calendar_suggests_a_shared_outing_from_saved_place_preferences(): void
     {
         $this->postJson('/api/v1/places', ['name' => 'Galerie na deštivé rande', 'type' => 'museum', 'is_rain_friendly' => true, 'is_photogenic' => true, 'personal_rating' => 5])->assertCreated();
-        $this->getJson('/api/v1/calendar/date-ideas?gallery_space_id=' . $this->space->id . '&theme=rain')
+        $this->getJson('/api/v1/calendar/date-ideas?gallery_space_id='.$this->space->id.'&theme=rain')
             ->assertOk()->assertJsonPath('ideas.0.title', 'Galerie na deštivé rande')->assertJsonPath('ideas.0.reason', 'hodnocení 5/5 · vhodné na déšť · fotogenické');
     }
 
@@ -508,7 +510,7 @@ class CalendarPlanningTest extends TestCase
         $this->owner->update(['preferences' => ['planning_availability' => $availability]]);
         $this->partner->update(['preferences' => ['planning_availability' => $availability]]);
 
-        $response = $this->getJson('/api/v1/calendar/shared-slots?gallery_space_id=' . $this->space->id . '&from=' . $date->toDateString() . '&days=1&duration_minutes=120')
+        $response = $this->getJson('/api/v1/calendar/shared-slots?gallery_space_id='.$this->space->id.'&from='.$date->toDateString().'&days=1&duration_minutes=120')
             ->assertOk()->assertJsonPath('member_count', 2)->assertJsonCount(2, 'member_ids');
         $this->assertNotEmpty($response->json('slots'));
         $this->assertArrayNotHasKey('events', $response->json());
@@ -800,7 +802,7 @@ class CalendarPlanningTest extends TestCase
             'question' => 'Kam půjdeme na večeři?', 'options' => [['title' => 'Bistro'], ['title' => 'Pizzerie']],
         ])->assertCreated()->json();
 
-        $options = $this->getJson('/api/v1/calendar/polls?event_uuid=' . $event['uuid'])
+        $options = $this->getJson('/api/v1/calendar/polls?event_uuid='.$event['uuid'])
             ->assertOk()->assertJsonCount(1)->assertJsonPath('0.uuid', $poll['uuid'])->json('0.options');
         $this->actingAs($this->partner)->postJson("/api/v1/calendar/polls/{$poll['uuid']}/vote", ['option_id' => $options[0]['id']])->assertOk();
         $this->actingAs($this->owner)->postJson("/api/v1/calendar/polls/{$poll['uuid']}/options/{$options[0]['id']}/plan")
@@ -823,12 +825,12 @@ class CalendarPlanningTest extends TestCase
             'message' => 'Byl to krásný den.', 'deliver_at' => now()->addMonth()->toDateTimeString(),
         ])->assertCreated()->json();
 
-        $this->actingAs($this->partner)->getJson('/api/v1/calendar/time-capsules?event_uuid=' . $event['uuid'])
+        $this->actingAs($this->partner)->getJson('/api/v1/calendar/time-capsules?event_uuid='.$event['uuid'])
             ->assertOk()->assertJsonCount(0);
         DB::table('time_capsules')->where('id', $capsule['id'])->update(['status' => 'delivered', 'delivered_at' => now()]);
-        $this->actingAs($this->partner)->getJson('/api/v1/calendar/time-capsules?event_uuid=' . $event['uuid'])
+        $this->actingAs($this->partner)->getJson('/api/v1/calendar/time-capsules?event_uuid='.$event['uuid'])
             ->assertOk()->assertJsonCount(1)->assertJsonPath('0.title', 'Otevři za rok')->assertJsonPath('0.message', 'Byl to krásný den.');
-        $this->actingAs($this->owner)->getJson('/api/v1/calendar/time-capsules?event_uuid=' . $event['uuid'])
+        $this->actingAs($this->owner)->getJson('/api/v1/calendar/time-capsules?event_uuid='.$event['uuid'])
             ->assertOk()->assertJsonCount(1)->assertJsonPath('0.message', 'Byl to krásný den.');
     }
 

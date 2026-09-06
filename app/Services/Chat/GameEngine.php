@@ -48,7 +48,9 @@ class GameEngine
      */
     public function move(ChatGame $game, User $player, array $move): array
     {
-        if ($game->status !== 'playing') return ['ok' => false, 'error' => 'Hra už skončila.'];
+        if ($game->status !== 'playing') {
+            return ['ok' => false, 'error' => 'Hra už skončila.'];
+        }
 
         $state = $game->state;
         if (! in_array($player->id, $state['players'] ?? [], true)) {
@@ -64,11 +66,17 @@ class GameEngine
 
     private function playNoughts(ChatGame $game, User $player, array $state, array $move): array
     {
-        if ($game->turn_user_id !== $player->id) return ['ok' => false, 'error' => 'Nejste na tahu.'];
+        if ($game->turn_user_id !== $player->id) {
+            return ['ok' => false, 'error' => 'Nejste na tahu.'];
+        }
 
         $square = (int) ($move['square'] ?? -1);
-        if ($square < 0 || $square > 8) return ['ok' => false, 'error' => 'Takové pole neexistuje.'];
-        if ($state['board'][$square] !== null) return ['ok' => false, 'error' => 'Tohle pole už je obsazené.'];
+        if ($square < 0 || $square > 8) {
+            return ['ok' => false, 'error' => 'Takové pole neexistuje.'];
+        }
+        if ($state['board'][$square] !== null) {
+            return ['ok' => false, 'error' => 'Tohle pole už je obsazené.'];
+        }
 
         $state['board'][$square] = $player->id;
 
@@ -89,10 +97,12 @@ class GameEngine
     /** @param  list<int|null>  $board */
     private function threeInARow(array $board): ?int
     {
-        $lines = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+        $lines = [[0, 1, 2], [3, 4, 5], [6, 7, 8], [0, 3, 6], [1, 4, 7], [2, 5, 8], [0, 4, 8], [2, 4, 6]];
 
         foreach ($lines as [$a, $b, $c]) {
-            if ($board[$a] !== null && $board[$a] === $board[$b] && $board[$b] === $board[$c]) return $board[$a];
+            if ($board[$a] !== null && $board[$a] === $board[$b] && $board[$b] === $board[$c]) {
+                return $board[$a];
+            }
         }
 
         return null;
@@ -104,7 +114,9 @@ class GameEngine
         if (! in_array($choice, ['kamen', 'nuzky', 'papir'], true)) {
             return ['ok' => false, 'error' => 'Vyberte kámen, nůžky nebo papír.'];
         }
-        if (isset($state['choices'][$player->id])) return ['ok' => false, 'error' => 'V tomhle kole už jste volili.'];
+        if (isset($state['choices'][$player->id])) {
+            return ['ok' => false, 'error' => 'V tomhle kole už jste volili.'];
+        }
 
         $state['choices'][$player->id] = $choice;
 
@@ -117,7 +129,9 @@ class GameEngine
         $roundWinner = $this->rpsWinner($state['choices'][$first], $state['choices'][$second], $first, $second);
 
         $state['reveal'] = $state['choices'];
-        if ($roundWinner) $state['score'][$roundWinner]++;
+        if ($roundWinner) {
+            $state['score'][$roundWinner]++;
+        }
         $state['choices'] = [];
         $state['round']++;
 
@@ -138,7 +152,9 @@ class GameEngine
 
     private function rpsWinner(string $a, string $b, int $first, int $second): ?int
     {
-        if ($a === $b) return null;
+        if ($a === $b) {
+            return null;
+        }
         $beats = ['kamen' => 'nuzky', 'nuzky' => 'papir', 'papir' => 'kamen'];
 
         return $beats[$a] === $b ? $first : $second;

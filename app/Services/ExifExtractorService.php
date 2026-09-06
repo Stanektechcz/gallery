@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -32,7 +33,7 @@ class ExifExtractorService
      */
     public function extract(string $sourcePath): array
     {
-        if (!file_exists($sourcePath)) {
+        if (! file_exists($sourcePath)) {
             return [];
         }
 
@@ -40,38 +41,43 @@ class ExifExtractorService
 
         // 1. exiftool via proc_open (most reliable, reads all metadata formats)
         $data = $this->extractViaExiftool($sourcePath);
-        if (!empty($data)) {
+        if (! empty($data)) {
             Log::debug('EXIF extracted via exiftool', [
                 'file' => basename($sourcePath),
                 'has_gps' => isset($data['latitude']),
             ]);
+
             return $data;
         }
 
         // 2. Imagick (EXIF IFD segment — may miss XMP GPS on HEIC)
         $data = $this->extractViaImagick($sourcePath);
-        if (!empty($data)) {
+        if (! empty($data)) {
             Log::debug('EXIF extracted via Imagick', ['file' => basename($sourcePath)]);
+
             return $data;
         }
 
         // 3. PHP exif_read_data (JPEG/TIFF only)
         if (in_array($ext, ['jpg', 'jpeg', 'tiff', 'tif'])) {
             $data = $this->extractViaPhpExif($sourcePath);
-            if (!empty($data)) {
+            if (! empty($data)) {
                 Log::debug('EXIF extracted via PHP exif_read_data', ['file' => basename($sourcePath)]);
+
                 return $data;
             }
         }
 
         // 4. Native binary parser — reads EXIF IFD from raw bytes, no extensions needed
         $data = $this->extractViaBinaryParser($sourcePath, $ext);
-        if (!empty($data)) {
+        if (! empty($data)) {
             Log::debug('EXIF extracted via binary parser', ['file' => basename($sourcePath)]);
+
             return $data;
         }
 
         Log::info('No EXIF/GPS data found in file', ['file' => basename($sourcePath), 'ext' => $ext]);
+
         return [];
     }
 
@@ -97,7 +103,9 @@ class ExifExtractorService
             ];
             $desc = [[0 => 'pipe', 'r'], [1 => 'pipe', 'w'], [2 => 'pipe', 'w']];
             $proc = proc_open($cmd, $desc, $pipes);
-            if (! is_resource($proc)) return [];
+            if (! is_resource($proc)) {
+                return [];
+            }
 
             fclose($pipes[0]);
             $stdout = stream_get_contents($pipes[1]);
@@ -106,6 +114,7 @@ class ExifExtractorService
             proc_close($proc);
 
             $raw = json_decode($stdout, true);
+
             return $raw[0] ?? [];
         } catch (\Throwable) {
             return [];
@@ -142,7 +151,7 @@ class ExifExtractorService
             ];
 
             $proc = proc_open($cmd, $descriptors, $pipes);
-            if (!is_resource($proc)) {
+            if (! is_resource($proc)) {
                 return [];
             }
 
@@ -153,20 +162,21 @@ class ExifExtractorService
             fclose($pipes[2]);
             $exitCode = proc_close($proc);
 
-            if ($exitCode !== 0 || !$stdout) {
+            if ($exitCode !== 0 || ! $stdout) {
                 if ($stderr) {
                     Log::debug('exiftool stderr', ['err' => substr($stderr, 0, 200)]);
                 }
+
                 return [];
             }
 
             $raw = json_decode($stdout, true);
-            if (!$raw || !isset($raw[0])) {
+            if (! $raw || ! isset($raw[0])) {
                 return [];
             }
 
             // Log GPS keys found for debugging
-            $gpsKeys = array_filter(array_keys($raw[0]), fn($k) => stripos($k, 'gps') !== false || stripos($k, 'latitude') !== false || stripos($k, 'longitude') !== false);
+            $gpsKeys = array_filter(array_keys($raw[0]), fn ($k) => stripos($k, 'gps') !== false || stripos($k, 'latitude') !== false || stripos($k, 'longitude') !== false);
             if ($gpsKeys) {
                 Log::info('exiftool GPS keys found', array_intersect_key($raw[0], array_flip($gpsKeys)));
             } else {
@@ -176,6 +186,7 @@ class ExifExtractorService
             return $this->normalizeExiftoolData($raw[0]);
         } catch (\Throwable $e) {
             Log::warning('exiftool extraction failed', ['error' => $e->getMessage()]);
+
             return [];
         }
     }
@@ -200,6 +211,7 @@ class ExifExtractorService
                     }
                 }
             }
+
             return null;
         };
 
@@ -207,7 +219,7 @@ class ExifExtractorService
         $lat = $get('GPSLatitude', 'Latitude');
         $lng = $get('GPSLongitude', 'Longitude');
         if ($lat !== null && $lng !== null && is_numeric($lat) && is_numeric($lng)) {
-            $result['latitude']  = (float) $lat;
+            $result['latitude'] = (float) $lat;
             $result['longitude'] = (float) $lng;
         }
 
@@ -220,38 +232,56 @@ class ExifExtractorService
         $dt = $get('DateTimeOriginal', 'CreateDate', 'DateTime', 'MediaCreateDate', 'TrackCreateDate');
         if ($dt) {
             try {
-                $result['taken_at'] = \Carbon\Carbon::parse((string) $dt);
+                $result['taken_at'] = Carbon::parse((string) $dt);
             } catch (\Throwable) {
             }
         }
 
         // Camera
         $make = $get('Make', 'CameraManufacturer');
-        if ($make) $result['camera_make'] = substr((string)$make, 0, 100);
+        if ($make) {
+            $result['camera_make'] = substr((string) $make, 0, 100);
+        }
 
         $model = $get('Model', 'CameraModelName');
-        if ($model) $result['camera_model'] = substr((string)$model, 0, 100);
+        if ($model) {
+            $result['camera_model'] = substr((string) $model, 0, 100);
+        }
 
         $lens = $get('LensModel', 'Lens', 'LensID');
-        if ($lens) $result['lens_model'] = substr((string)$lens, 0, 255);
+        if ($lens) {
+            $result['lens_model'] = substr((string) $lens, 0, 255);
+        }
 
         // Technical
         $iso = $get('ISO', 'ISOSpeedRatings', 'PhotographicSensitivity');
-        if ($iso) $result['iso'] = (int) $iso;
+        if ($iso) {
+            $result['iso'] = (int) $iso;
+        }
 
         $aperture = $get('Aperture', 'FNumber', 'ApertureValue');
-        if ($aperture) $result['aperture'] = (string) $aperture;
+        if ($aperture) {
+            $result['aperture'] = (string) $aperture;
+        }
 
         $shutter = $get('ExposureTime', 'ShutterSpeed', 'ShutterSpeedValue');
-        if ($shutter) $result['shutter_speed'] = (string) $shutter;
+        if ($shutter) {
+            $result['shutter_speed'] = (string) $shutter;
+        }
 
         $focal = $get('FocalLength', 'FocalLength35efl');
-        if ($focal) $result['focal_length'] = (string) $focal;
+        if ($focal) {
+            $result['focal_length'] = (string) $focal;
+        }
 
         $w = $get('ImageWidth', 'ExifImageWidth', 'PixelXDimension', 'ImageSize');
         $h = $get('ImageHeight', 'ExifImageHeight', 'PixelYDimension');
-        if ($w && is_numeric($w)) $result['width']  = (int) $w;
-        if ($h && is_numeric($h)) $result['height'] = (int) $h;
+        if ($w && is_numeric($w)) {
+            $result['width'] = (int) $w;
+        }
+        if ($h && is_numeric($h)) {
+            $result['height'] = (int) $h;
+        }
 
         return $result;
     }
@@ -260,13 +290,15 @@ class ExifExtractorService
 
     private function extractViaImagick(string $sourcePath): array
     {
-        if (!extension_loaded('imagick')) return [];
+        if (! extension_loaded('imagick')) {
+            return [];
+        }
 
         try {
-            $im    = new \Imagick($sourcePath . '[0]');
+            $im = new \Imagick($sourcePath.'[0]');
             $props = $im->getImageProperties('exif:*');
-            $w     = $im->getImageWidth();
-            $h     = $im->getImageHeight();
+            $w = $im->getImageWidth();
+            $h = $im->getImageHeight();
             $im->destroy();
 
             $result = [];
@@ -275,19 +307,23 @@ class ExifExtractorService
                 $result['height'] = $h;
             }
 
-            if (!empty($props['exif:DateTimeOriginal'])) {
+            if (! empty($props['exif:DateTimeOriginal'])) {
                 try {
-                    $result['taken_at'] = \Carbon\Carbon::createFromFormat('Y:m:d H:i:s', $props['exif:DateTimeOriginal']);
+                    $result['taken_at'] = Carbon::createFromFormat('Y:m:d H:i:s', $props['exif:DateTimeOriginal']);
                 } catch (\Throwable) {
                 }
             }
-            if (!empty($props['exif:Make']))  $result['camera_make']  = substr($props['exif:Make'],  0, 100);
-            if (!empty($props['exif:Model'])) $result['camera_model'] = substr($props['exif:Model'], 0, 100);
+            if (! empty($props['exif:Make'])) {
+                $result['camera_make'] = substr($props['exif:Make'], 0, 100);
+            }
+            if (! empty($props['exif:Model'])) {
+                $result['camera_model'] = substr($props['exif:Model'], 0, 100);
+            }
 
             $lat = $this->parseImagickGps($props['exif:GPSLatitude'] ?? null, $props['exif:GPSLatitudeRef'] ?? 'N');
             $lng = $this->parseImagickGps($props['exif:GPSLongitude'] ?? null, $props['exif:GPSLongitudeRef'] ?? 'E');
             if ($lat && $lng) {
-                $result['latitude']  = $lat;
+                $result['latitude'] = $lat;
                 $result['longitude'] = $lng;
             }
 
@@ -301,31 +337,39 @@ class ExifExtractorService
 
     private function extractViaPhpExif(string $sourcePath): array
     {
-        if (!function_exists('exif_read_data')) return [];
+        if (! function_exists('exif_read_data')) {
+            return [];
+        }
 
         try {
             $exif = @exif_read_data($sourcePath, 'EXIF,GPS,IFD0', false);
-            if (!$exif) return [];
+            if (! $exif) {
+                return [];
+            }
 
             $result = [];
 
-            if (!empty($exif['DateTimeOriginal'])) {
+            if (! empty($exif['DateTimeOriginal'])) {
                 try {
-                    $result['taken_at'] = \Carbon\Carbon::createFromFormat('Y:m:d H:i:s', $exif['DateTimeOriginal']);
+                    $result['taken_at'] = Carbon::createFromFormat('Y:m:d H:i:s', $exif['DateTimeOriginal']);
                 } catch (\Throwable) {
                 }
             }
-            if (!empty($exif['Make']))  $result['camera_make']  = substr($exif['Make'],  0, 100);
-            if (!empty($exif['Model'])) $result['camera_model'] = substr($exif['Model'], 0, 100);
+            if (! empty($exif['Make'])) {
+                $result['camera_make'] = substr($exif['Make'], 0, 100);
+            }
+            if (! empty($exif['Model'])) {
+                $result['camera_model'] = substr($exif['Model'], 0, 100);
+            }
 
-            if (!empty($exif['GPSLatitude']) && !empty($exif['GPSLongitude'])) {
+            if (! empty($exif['GPSLatitude']) && ! empty($exif['GPSLongitude'])) {
                 $lat = $this->rationalGps($exif['GPSLatitude'], $exif['GPSLatitudeRef'] ?? 'N');
                 $lng = $this->rationalGps($exif['GPSLongitude'], $exif['GPSLongitudeRef'] ?? 'E');
                 if ($lat && $lng) {
-                    $result['latitude']  = $lat;
+                    $result['latitude'] = $lat;
                     $result['longitude'] = $lng;
                 }
-                if (!empty($exif['GPSAltitude'])) {
+                if (! empty($exif['GPSAltitude'])) {
                     $parts = explode('/', $exif['GPSAltitude']);
                     if (count($parts) === 2 && $parts[1]) {
                         $result['altitude'] = round($parts[0] / $parts[1], 1);
@@ -349,7 +393,9 @@ class ExifExtractorService
     {
         try {
             $bytes = file_get_contents($sourcePath, false, null, 0, 65536); // Read first 64 KB
-            if (!$bytes) return [];
+            if (! $bytes) {
+                return [];
+            }
 
             // Find EXIF marker in JPEG (FF E1 + "Exif\0\0")
             if (in_array($ext, ['jpg', 'jpeg'])) {
@@ -378,39 +424,43 @@ class ExifExtractorService
 
     private function parseExifIfd(string $bytes, int $tiffStart): array
     {
-        if (strlen($bytes) < $tiffStart + 8) return [];
+        if (strlen($bytes) < $tiffStart + 8) {
+            return [];
+        }
 
         // Determine byte order
         $bom = substr($bytes, $tiffStart, 2);
         if ($bom === 'II') {
-            $unpack = fn($fmt, $offset) => unpack($fmt, substr($bytes, $tiffStart + $offset, 8))[1] ?? null;
+            $unpack = fn ($fmt, $offset) => unpack($fmt, substr($bytes, $tiffStart + $offset, 8))[1] ?? null;
         } elseif ($bom === 'MM') {
-            $unpack = fn($fmt, $offset) => unpack(strtoupper($fmt), substr($bytes, $tiffStart + $offset, 8))[1] ?? null;
+            $unpack = fn ($fmt, $offset) => unpack(strtoupper($fmt), substr($bytes, $tiffStart + $offset, 8))[1] ?? null;
         } else {
             return [];
         }
 
         $littleEndian = ($bom === 'II');
-        $readShort    = fn($pos) => $littleEndian ? unpack('v', substr($bytes, $pos, 2))[1] : unpack('n', substr($bytes, $pos, 2))[1];
-        $readLong     = fn($pos) => $littleEndian ? unpack('V', substr($bytes, $pos, 4))[1] : unpack('N', substr($bytes, $pos, 4))[1];
+        $readShort = fn ($pos) => $littleEndian ? unpack('v', substr($bytes, $pos, 2))[1] : unpack('n', substr($bytes, $pos, 2))[1];
+        $readLong = fn ($pos) => $littleEndian ? unpack('V', substr($bytes, $pos, 4))[1] : unpack('N', substr($bytes, $pos, 4))[1];
 
         // IFD0 offset
         $ifd0Offset = $readLong($tiffStart + 4);
-        if (!$ifd0Offset) return [];
+        if (! $ifd0Offset) {
+            return [];
+        }
 
-        $result   = [];
-        $gpsIfd   = null;
-        $exifIfd  = null;
+        $result = [];
+        $gpsIfd = null;
+        $exifIfd = null;
 
         // Parse IFD0
-        $pos  = $tiffStart + $ifd0Offset;
+        $pos = $tiffStart + $ifd0Offset;
         $count = $readShort($pos);
         $pos += 2;
 
         for ($i = 0; $i < $count && $pos + 12 <= strlen($bytes); $i++, $pos += 12) {
-            $tag  = $readShort($pos);
+            $tag = $readShort($pos);
             $type = $readShort($pos + 2);
-            $num  = $readLong($pos + 4);
+            $num = $readLong($pos + 4);
             $valOff = $pos + 8;
 
             if ($tag === 0x8825) { // GPSInfo IFD pointer
@@ -427,7 +477,9 @@ class ExifExtractorService
         // Parse GPS IFD
         if ($gpsIfd) {
             $gps = $this->parseGpsIfd($bytes, $gpsIfd, $tiffStart, $readShort, $readLong, $littleEndian);
-            if ($gps) $result = array_merge($result, $gps);
+            if ($gps) {
+                $result = array_merge($result, $gps);
+            }
         }
 
         return $result;
@@ -435,23 +487,26 @@ class ExifExtractorService
 
     private function parseGpsIfd(string $bytes, int $offset, int $tiffStart, callable $readShort, callable $readLong, bool $le): array
     {
-        if ($offset <= 0 || $offset >= strlen($bytes)) return [];
+        if ($offset <= 0 || $offset >= strlen($bytes)) {
+            return [];
+        }
 
         $count = $readShort($offset);
-        $pos   = $offset + 2;
-        $tags  = [];
+        $pos = $offset + 2;
+        $tags = [];
 
         for ($i = 0; $i < $count && $pos + 12 <= strlen($bytes); $i++, $pos += 12) {
-            $tag     = $readShort($pos);
-            $type    = $readShort($pos + 2);
-            $num     = $readLong($pos + 4);
-            $valOff  = $pos + 8;
+            $tag = $readShort($pos);
+            $type = $readShort($pos + 2);
+            $num = $readLong($pos + 4);
+            $valOff = $pos + 8;
             $tags[$tag] = ['type' => $type, 'num' => $num, 'valOff' => $valOff];
         }
 
-        $readRational = function (int $dataOff, int $n) use ($bytes, $readLong, $le): ?float {
+        $readRational = function (int $dataOff, int $n) use ($readLong): ?float {
             $num = $readLong($dataOff);
             $den = $readLong($dataOff + 4);
+
             return $den != 0 ? $num / $den : null;
         };
 
@@ -491,7 +546,9 @@ class ExifExtractorService
         if (isset($tags[6])) {
             $off = $getOffset($tags[6]);
             $alt = $readRational($off, 0);
-            if ($alt !== null) $result['altitude'] = round($alt, 1);
+            if ($alt !== null) {
+                $result['altitude'] = round($alt, 1);
+            }
         }
 
         return $result;
@@ -500,6 +557,7 @@ class ExifExtractorService
     private function readExifString(string $bytes, int $tiffStart, int $num, int $valOff, callable $readLong, bool $le): string
     {
         $dataOff = ($num > 4) ? $tiffStart + $readLong($valOff) : $valOff;
+
         return rtrim(substr($bytes, $dataOff, $num), "\x00");
     }
 
@@ -507,19 +565,27 @@ class ExifExtractorService
 
     private function parseImagickGps(?string $raw, string $ref): ?float
     {
-        if (!$raw) return null;
+        if (! $raw) {
+            return null;
+        }
         $parts = array_map('trim', explode(',', $raw));
-        if (count($parts) < 3) return null;
-        $f = fn($v) => str_contains($v, '/') ? (float)explode('/', $v)[0] / max(1, (float)explode('/', $v)[1]) : (float)$v;
+        if (count($parts) < 3) {
+            return null;
+        }
+        $f = fn ($v) => str_contains($v, '/') ? (float) explode('/', $v)[0] / max(1, (float) explode('/', $v)[1]) : (float) $v;
         $d = $f($parts[0]) + $f($parts[1]) / 60 + $f($parts[2]) / 3600;
+
         return in_array(strtoupper($ref), ['S', 'W']) ? -$d : $d;
     }
 
     private function rationalGps(array $c, string $ref): ?float
     {
-        if (count($c) < 3) return null;
-        $f = fn($v) => is_string($v) && str_contains($v, '/') ? (float)explode('/', $v)[0] / max(1, (float)explode('/', $v)[1]) : (float)$v;
+        if (count($c) < 3) {
+            return null;
+        }
+        $f = fn ($v) => is_string($v) && str_contains($v, '/') ? (float) explode('/', $v)[0] / max(1, (float) explode('/', $v)[1]) : (float) $v;
         $d = $f($c[0]) + $f($c[1]) / 60 + $f($c[2]) / 3600;
+
         return in_array(strtoupper($ref), ['S', 'W']) ? -$d : $d;
     }
 

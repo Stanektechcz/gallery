@@ -17,11 +17,11 @@ class StorageOperation extends Model
     protected function casts(): array
     {
         return [
-            'next_retry_at'        => 'datetime',
-            'started_at'           => 'datetime',
-            'completed_at'         => 'datetime',
+            'next_retry_at' => 'datetime',
+            'started_at' => 'datetime',
+            'completed_at' => 'datetime',
             'request_summary_json' => 'array',
-            'response_summary_json'=> 'array',
+            'response_summary_json' => 'array',
         ];
     }
 
@@ -30,5 +30,8 @@ class StorageOperation extends Model
         static::creating(fn (StorageOperation $op) => $op->uuid ??= (string) Str::uuid());
     }
 
-    public function storageConnection() { return $this->belongsTo(StorageConnection::class); }
+    public function storageConnection()
+    {
+        return $this->belongsTo(StorageConnection::class);
+    }
 }

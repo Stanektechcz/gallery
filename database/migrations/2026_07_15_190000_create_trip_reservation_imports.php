@@ -8,7 +8,9 @@ return new class extends Migration
 {
     public function up(): void
     {
-        if (Schema::hasTable('trip_reservation_imports')) return;
+        if (Schema::hasTable('trip_reservation_imports')) {
+            return;
+        }
 
         Schema::create('trip_reservation_imports', function (Blueprint $table) {
             $table->id();

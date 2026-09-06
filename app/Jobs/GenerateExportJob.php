@@ -2,6 +2,8 @@
 
 namespace App\Jobs;
 
+use App\Models\MediaItem;
+use App\Models\User;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -14,12 +16,13 @@ class GenerateExportJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    public int $tries   = 3;
+    public int $tries = 3;
+
     public int $timeout = 3600;
 
     public function __construct(
-        private readonly int    $userId,
-        private readonly array  $options,
+        private readonly int $userId,
+        private readonly array $options,
         private readonly string $jobId,
     ) {}
 
@@ -28,19 +31,21 @@ class GenerateExportJob implements ShouldQueue
         Cache::put("export_status_{$this->jobId}", 'processing', 3600);
 
         try {
-            $user = \App\Models\User::find($this->userId);
-            if (!$user) return;
+            $user = User::find($this->userId);
+            if (! $user) {
+                return;
+            }
 
             $media = match ($this->options['type']) {
-                'album' => \App\Models\MediaItem::where('primary_album_id', $this->options['target_id'])->get(),
-                'selection' => \App\Models\MediaItem::whereIn('id', $this->options['media_ids'] ?? [])->get(),
-                default     => collect(),
+                'album' => MediaItem::where('primary_album_id', $this->options['target_id'])->get(),
+                'selection' => MediaItem::whereIn('id', $this->options['media_ids'] ?? [])->get(),
+                default => collect(),
             };
 
             $zipPath = storage_path("app/exports/{$this->jobId}.zip");
             @mkdir(dirname($zipPath), 0755, true);
 
-            $zip = new \ZipArchive();
+            $zip = new \ZipArchive;
             $zip->open($zipPath, \ZipArchive::CREATE | \ZipArchive::OVERWRITE);
 
             foreach ($media as $item) {

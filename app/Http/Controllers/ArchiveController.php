@@ -13,7 +13,7 @@ class ArchiveController extends Controller
 {
     public function index(Request $request): Response
     {
-        $user  = $request->user();
+        $user = $request->user();
         $space = $user->gallerySpaces()->first();
 
         $media = MediaItem::query()
@@ -21,10 +21,10 @@ class ArchiveController extends Controller
             ->whereNull('trashed_at')
             ->where('is_archived', true)
             ->where('status', 'ready')
-            ->with(['variants' => fn($q) => $q->whereIn('type', ['thumbnail', 'placeholder'])])
+            ->with(['variants' => fn ($q) => $q->whereIn('type', ['thumbnail', 'placeholder'])])
             ->orderByDesc('taken_at')
             ->paginate(60)
-            ->through(fn($m) => $this->formatItem($m));
+            ->through(fn ($m) => $this->formatItem($m));
 
         return Inertia::render('Archive/Index', [
             'media' => $media,
@@ -59,19 +59,19 @@ class ArchiveController extends Controller
     private function formatItem(MediaItem $m): array
     {
         return [
-            'id'           => $m->id,
-            'uuid'         => $m->uuid,
-            'media_type'   => $m->media_type,
-            'taken_at'     => $m->taken_at?->toIso8601String(),
-            'width'        => $m->width,
-            'height'       => $m->height,
-            'is_favorite'  => $m->is_favorite,
+            'id' => $m->id,
+            'uuid' => $m->uuid,
+            'media_type' => $m->media_type,
+            'taken_at' => $m->taken_at?->toIso8601String(),
+            'width' => $m->width,
+            'height' => $m->height,
+            'is_favorite' => $m->is_favorite,
             'display_title' => $m->display_title ?? $m->original_filename,
-            'variants'     => $m->variants->map(fn($v) => [
-                'type'           => $v->type,
-                'url'            => asset('storage/' . $v->path),
+            'variants' => $m->variants->map(fn ($v) => [
+                'type' => $v->type,
+                'url' => asset('storage/'.$v->path),
                 'dominant_color' => $v->dominant_color,
-                'aspect_ratio'   => $v->aspect_ratio,
+                'aspect_ratio' => $v->aspect_ratio,
             ]),
         ];
     }

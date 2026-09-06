@@ -75,7 +75,7 @@ class BankTransactionClassifier
         // koncovou mezeru, ale ta tam je právě proto, aby „mol" nechytlo „molekula" —
         // proto se zachová ručně.
         return $this->needleCache[$candidate] ??= array_map(
-            fn (string $needle) => $this->normalize($needle) . (str_ends_with($needle, ' ') ? ' ' : ''),
+            fn (string $needle) => $this->normalize($needle).(str_ends_with($needle, ' ') ? ' ' : ''),
             $needles,
         );
     }

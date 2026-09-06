@@ -2,6 +2,7 @@
 
 namespace App\Services\Finance;
 
+use App\Models\Budget;
 use App\Models\FinanceProject;
 use App\Models\GallerySpace;
 use App\Models\Transaction;
@@ -84,7 +85,7 @@ class FinanceFilter
              * rozpočtu stály útraty za pár dnů a zbývalo by pořád skoro všechno.
              */
             'obdobi-rozpoctu' => (function () use ($space, $dnes) {
-                $dotaz = fn () => \App\Models\Budget::where('gallery_space_id', $space->id)
+                $dotaz = fn () => Budget::where('gallery_space_id', $space->id)
                     ->where('scope', 'ledger')->whereNotNull('ends_on');
 
                 // Přednost má běžící rozpočet. Když žádný neběží, vezme se nejbližší
@@ -112,7 +113,9 @@ class FinanceFilter
      */
     public function predchozi(): ?self
     {
-        if ($this->do === null) return null;
+        if ($this->do === null) {
+            return null;
+        }
 
         $dni = (int) $this->od->diffInDays($this->do) + 1;
 

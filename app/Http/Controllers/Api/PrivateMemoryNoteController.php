@@ -15,14 +15,21 @@ class PrivateMemoryNoteController extends Controller
     {
         $media = $this->media($request, $uuid);
         $note = DB::table('media_private_notes')->where('media_item_id', $media->id)->where('user_id', $request->user()->id)->first();
+
         return response()->json(['content' => $note ? Crypt::decryptString($note->encrypted_content) : '']);
     }
 
     public function update(Request $request, string $uuid): JsonResponse
     {
-        $media = $this->media($request, $uuid); $data = $request->validate(['content' => 'nullable|string|max:10000']);
-        if (blank($data['content'] ?? null)) { DB::table('media_private_notes')->where('media_item_id', $media->id)->where('user_id', $request->user()->id)->delete(); return response()->json(['content' => '']); }
+        $media = $this->media($request, $uuid);
+        $data = $request->validate(['content' => 'nullable|string|max:10000']);
+        if (blank($data['content'] ?? null)) {
+            DB::table('media_private_notes')->where('media_item_id', $media->id)->where('user_id', $request->user()->id)->delete();
+
+            return response()->json(['content' => '']);
+        }
         DB::table('media_private_notes')->updateOrInsert(['media_item_id' => $media->id, 'user_id' => $request->user()->id], ['encrypted_content' => Crypt::encryptString($data['content']), 'created_at' => now(), 'updated_at' => now()]);
+
         return response()->json(['content' => $data['content']]);
     }
 

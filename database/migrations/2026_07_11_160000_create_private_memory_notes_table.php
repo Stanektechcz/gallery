@@ -18,5 +18,8 @@ return new class extends Migration
         });
     }
 
-    public function down(): void { Schema::dropIfExists('media_private_notes'); }
+    public function down(): void
+    {
+        Schema::dropIfExists('media_private_notes');
+    }
 };

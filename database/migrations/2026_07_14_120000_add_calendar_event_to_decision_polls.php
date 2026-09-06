@@ -8,7 +8,9 @@ return new class extends Migration
 {
     public function up(): void
     {
-        if (! Schema::hasTable('decision_polls') || Schema::hasColumn('decision_polls', 'calendar_event_id')) return;
+        if (! Schema::hasTable('decision_polls') || Schema::hasColumn('decision_polls', 'calendar_event_id')) {
+            return;
+        }
 
         Schema::table('decision_polls', function (Blueprint $table) {
             $table->foreignId('calendar_event_id')->nullable()->after('gallery_space_id')->constrained('calendar_events')->nullOnDelete();
@@ -18,7 +20,9 @@ return new class extends Migration
 
     public function down(): void
     {
-        if (! Schema::hasTable('decision_polls') || ! Schema::hasColumn('decision_polls', 'calendar_event_id')) return;
+        if (! Schema::hasTable('decision_polls') || ! Schema::hasColumn('decision_polls', 'calendar_event_id')) {
+            return;
+        }
 
         Schema::table('decision_polls', function (Blueprint $table) {
             $table->dropForeign(['calendar_event_id']);

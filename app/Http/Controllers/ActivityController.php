@@ -11,7 +11,7 @@ class ActivityController extends Controller
 {
     public function index(Request $request): Response
     {
-        $user  = $request->user();
+        $user = $request->user();
         $space = $user->gallerySpaces()->first();
 
         // AuditLog stores user_id — filter logs by this gallery's users
@@ -24,12 +24,12 @@ class ActivityController extends Controller
             ->orderByDesc('created_at')
             ->paginate(40);
 
-        $formatted = $logs->through(fn($log) => [
-            'id'          => $log->id,
-            'event'       => $log->action,
-            'user_name'   => $log->user?->name ?? 'Systém',
+        $formatted = $logs->through(fn ($log) => [
+            'id' => $log->id,
+            'event' => $log->action,
+            'user_name' => $log->user?->name ?? 'Systém',
             'description' => $this->describe($log),
-            'created_at'  => $log->created_at->toIso8601String(),
+            'created_at' => $log->created_at->toIso8601String(),
         ]);
 
         return Inertia::render('Activity/Index', ['logs' => $formatted]);
@@ -38,10 +38,19 @@ class ActivityController extends Controller
     private function describe(AuditLog $log): string
     {
         $data = $log->payload ?? [];
-        if ($log->action === 'assistant.apply' && !empty($data['created']) && is_array($data['created'])) return implode(' · ', $data['created']);
-        if (isset($data['filename'])) return $data['filename'];
-        if (isset($data['title']))    return $data['title'];
-        if (isset($data['via']))      return $data['via'];
+        if ($log->action === 'assistant.apply' && ! empty($data['created']) && is_array($data['created'])) {
+            return implode(' · ', $data['created']);
+        }
+        if (isset($data['filename'])) {
+            return $data['filename'];
+        }
+        if (isset($data['title'])) {
+            return $data['title'];
+        }
+        if (isset($data['via'])) {
+            return $data['via'];
+        }
+
         return '';
     }
 }

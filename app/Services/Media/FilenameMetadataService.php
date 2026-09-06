@@ -19,12 +19,14 @@ class FilenameMetadataService
         // druhá půlka je stejně spolehlivá jako první: je to čas, který ukazovaly hodiny
         // ve fotoaparátu. Zahodit ho znamenalo poslat celý den fotek na půlnoc, kde se
         // pak v archivu seřadily náhodně.
-        if (!preg_match('/(?<!\d)(20\d{2})[._-]?(0[1-9]|1[0-2])[._-]?([0-3]\d)(?!\d)(?:[._\-T ]?([0-2]\d)[._:-]?([0-5]\d)(?:[._:-]?([0-5]\d))?)?/', $base, $match)) {
+        if (! preg_match('/(?<!\d)(20\d{2})[._-]?(0[1-9]|1[0-2])[._-]?([0-3]\d)(?!\d)(?:[._\-T ]?([0-2]\d)[._:-]?([0-5]\d)(?:[._:-]?([0-5]\d))?)?/', $base, $match)) {
             return [];
         }
 
         $hodina = isset($match[4]) && $match[4] !== '' ? (int) $match[4] : null;
-        if ($hodina !== null && $hodina > 23) $hodina = null;
+        if ($hodina !== null && $hodina > 23) {
+            $hodina = null;
+        }
 
         try {
             $date = Carbon::create((int) $match[1], (int) $match[2], (int) $match[3])->startOfDay();
@@ -38,7 +40,7 @@ class FilenameMetadataService
 
         // Carbon normalizes invalid dates (e.g. 20260231), which must not be
         // silently accepted as a different real date.
-        if ($date->format('Ymd') !== $match[1] . $match[2] . $match[3]) {
+        if ($date->format('Ymd') !== $match[1].$match[2].$match[3]) {
             return [];
         }
 
@@ -46,7 +48,7 @@ class FilenameMetadataService
 
         return [
             'taken_at' => $date,
-            'display_title' => $label . ' z ' . $date->locale('cs')->isoFormat('D. M. YYYY'),
+            'display_title' => $label.' z '.$date->locale('cs')->isoFormat('D. M. YYYY'),
         ];
     }
 }

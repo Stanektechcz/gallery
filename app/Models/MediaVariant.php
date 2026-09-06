@@ -38,7 +38,8 @@ class MediaVariant extends Model
         if ($this->disk === 'public') {
             return self::proxyUrl($this->path);
         }
-        return url('variants/' . $this->path);
+
+        return url('variants/'.$this->path);
     }
 
     /**
@@ -60,8 +61,10 @@ class MediaVariant extends Model
         $path = ltrim($path, '/');
         $extension = pathinfo($path, PATHINFO_EXTENSION);
 
-        if ($extension === '') return url('/files/' . $path);
+        if ($extension === '') {
+            return url('/files/'.$path);
+        }
 
-        return url('/files/' . substr($path, 0, -(strlen($extension) + 1))) . '?ext=' . $extension;
+        return url('/files/'.substr($path, 0, -(strlen($extension) + 1))).'?ext='.$extension;
     }
 }

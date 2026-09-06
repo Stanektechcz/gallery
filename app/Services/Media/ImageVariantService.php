@@ -6,9 +6,9 @@ use App\Models\MediaItem;
 use App\Models\MediaVariant;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
-use Intervention\Image\ImageManager;
 use Intervention\Image\Drivers\Gd\Driver as GdDriver;
 use Intervention\Image\Drivers\Imagick\Driver as ImagickDriver;
+use Intervention\Image\ImageManager;
 
 class ImageVariantService
 {
@@ -16,10 +16,10 @@ class ImageVariantService
 
     private const VARIANTS = [
         'placeholder' => ['width' => 64,   'quality' => 40],
-        'thumbnail'   => ['width' => 320,  'quality' => 80],
-        'small'       => ['width' => 800,  'quality' => 82],
-        'medium'      => ['width' => 1600, 'quality' => 85],
-        'large'       => ['width' => 2560, 'quality' => 88],
+        'thumbnail' => ['width' => 320,  'quality' => 80],
+        'small' => ['width' => 800,  'quality' => 82],
+        'medium' => ['width' => 1600, 'quality' => 85],
+        'large' => ['width' => 2560, 'quality' => 88],
     ];
 
     public function __construct()
@@ -28,8 +28,8 @@ class ImageVariantService
         // on a server with libheif support this also creates the same WebP
         // previews for iPhone photographs as for JPEGs.
         $this->manager = extension_loaded('imagick')
-            ? new ImageManager(new ImagickDriver())
-            : new ImageManager(new GdDriver());
+            ? new ImageManager(new ImagickDriver)
+            : new ImageManager(new GdDriver);
     }
 
     /**
@@ -50,36 +50,37 @@ class ImageVariantService
             $image = $this->manager->read($sourcePath);
             $image->scaleDown(width: $config['width']);
 
-            $ext  = 'webp'; // prefer WebP
+            $ext = 'webp'; // prefer WebP
             // Keep every locally served file in the same directory as its
             // original. The public file proxy and upload pipeline both use
             // media/{uuid}; using a second directory here caused variants to
             // exist in the database while their URLs pointed at missing files.
-            $dir  = "media/{$mediaItem->uuid}";
+            $dir = "media/{$mediaItem->uuid}";
             $filename = "{$type}.{$ext}";
             $path = "{$dir}/{$filename}";
 
             $encoded = $image->toWebp($config['quality']);
             $contents = $encoded->toString();
-            if (!Storage::disk('public')->put($path, $contents, 'public')) {
+            if (! Storage::disk('public')->put($path, $contents, 'public')) {
                 throw new \RuntimeException("Variantu se nepodařilo uložit: {$path}");
             }
 
             return MediaVariant::updateOrCreate(
                 ['media_item_id' => $mediaItem->id, 'type' => $type],
                 [
-                    'disk'         => 'public',
-                    'path'         => $path,
-                    'width'        => $image->width(),
-                    'height'       => $image->height(),
-                    'size_bytes'   => strlen($contents),
-                    'format'       => 'webp',
-                    'mime_type'    => 'image/webp',
+                    'disk' => 'public',
+                    'path' => $path,
+                    'width' => $image->width(),
+                    'height' => $image->height(),
+                    'size_bytes' => strlen($contents),
+                    'format' => 'webp',
+                    'mime_type' => 'image/webp',
                     'aspect_ratio' => $image->height() > 0 ? round($image->width() / $image->height(), 4) : null,
                 ]
             );
         } catch (\Throwable $e) {
             Log::error("Failed to generate {$type} variant for media #{$mediaItem->id}", ['error' => $e->getMessage()]);
+
             return null;
         }
     }
@@ -103,8 +104,8 @@ class ImageVariantService
                 }
             }
 
-            if (!empty($colors)) {
-                $avg = array_map(fn($chan) => (int) (array_sum(array_column($colors, $chan)) / count($colors)), [0, 1, 2]);
+            if (! empty($colors)) {
+                $avg = array_map(fn ($chan) => (int) (array_sum(array_column($colors, $chan)) / count($colors)), [0, 1, 2]);
                 $hex = sprintf('#%02x%02x%02x', $avg[0], $avg[1], $avg[2]);
             } else {
                 $hex = '#888888';

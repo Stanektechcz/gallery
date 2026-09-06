@@ -19,24 +19,24 @@ return [
     */
 
     'merchant' => env('COMGATE_MERCHANT'),
-    'secret'   => env('COMGATE_SECRET'),
-    'test'     => (bool) env('COMGATE_TEST', true),
+    'secret' => env('COMGATE_SECRET'),
+    'test' => (bool) env('COMGATE_TEST', true),
 
     'base_url' => env('COMGATE_BASE_URL', 'https://payments.comgate.cz/v1.0'),
 
-    'country'  => env('COMGATE_COUNTRY', 'CZ'),
+    'country' => env('COMGATE_COUNTRY', 'CZ'),
     'currency' => env('COMGATE_CURRENCY', 'CZK'),
 
     // 'ALL' lets the payer choose on Comgate's own page, which is the least
     // brittle option and keeps card/bank/wallet support up to them.
-    'method'   => env('COMGATE_METHOD', 'ALL'),
+    'method' => env('COMGATE_METHOD', 'ALL'),
 
     /*
     | The gateway calls `notify_url` server-to-server; that callback is what
     | actually marks a payment paid. The browser return URLs are cosmetic and
     | must never be trusted as proof of payment.
     */
-    'notify_path'  => 'platby/comgate/notifikace',
-    'return_path'  => 'platby/comgate/navrat',
+    'notify_path' => 'platby/comgate/notifikace',
+    'return_path' => 'platby/comgate/navrat',
 
 ];

@@ -12,6 +12,7 @@ use App\Models\FinanceTemplate;
 use App\Models\GallerySpace;
 use App\Models\Partner;
 use App\Models\Transaction;
+use App\Models\User;
 use App\Models\Wallet;
 use App\Services\Finance\FinanceFilter;
 use App\Services\Finance\FinanceService;
@@ -20,6 +21,7 @@ use App\Services\Finance\SlucovaniService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 
 /**
  * Správa účtů, cest, kategorií a partnerů.
@@ -227,7 +229,7 @@ class FinanceSetupController extends Controller
     /**
      * Zůstatek den po dni za posledních devadesát dnů.
      *
-     * @param  \Illuminate\Support\Collection<int, Transaction>  $pohyby
+     * @param  Collection<int, Transaction>  $pohyby
      */
     private function vyvojZustatku(Wallet $ucet, $pohyby, float $konecny): array
     {
@@ -287,7 +289,7 @@ class FinanceSetupController extends Controller
         ];
     }
 
-    /** @param  \Illuminate\Support\Collection<int, Transaction>  $pohyby */
+    /** @param  Collection<int, Transaction>  $pohyby */
     private function pohybyUctu(Wallet $ucet, $pohyby): array
     {
         return $pohyby->map(function (Transaction $t) use ($ucet) {
@@ -1160,7 +1162,7 @@ class FinanceSetupController extends Controller
             'note' => $c->note,
             'transactions' => $pohyby->count(),
             'owner_user_id' => $c->owner_user_id,
-            'owner_name' => $c->owner_user_id ? optional(\App\Models\User::find($c->owner_user_id))->name : null,
+            'owner_name' => $c->owner_user_id ? optional(User::find($c->owner_user_id))->name : null,
             'access' => FinanceAccess::sdileniPro('trip', $c->id),
         ];
     }

@@ -219,7 +219,9 @@ class RozdeleniService
         $zbyva = $vzit;
 
         foreach ($potrebuji as $p) {
-            if ($zbyva <= 0) break;
+            if ($zbyva <= 0) {
+                break;
+            }
 
             $castka = round(min((float) $p['shortfall'], $zbyva), 2);
             $zbyva = round($zbyva - $castka, 2);
@@ -237,7 +239,9 @@ class RozdeleniService
         $odebrani = [];
 
         foreach ($davaji as $d) {
-            if ($zbyvaVzit <= 0) break;
+            if ($zbyvaVzit <= 0) {
+                break;
+            }
 
             $castka = round(min((float) $d['surplus'], $zbyvaVzit), 2);
             $zbyvaVzit = round($zbyvaVzit - $castka, 2);

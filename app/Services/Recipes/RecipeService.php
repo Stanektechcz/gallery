@@ -73,7 +73,9 @@ class RecipeService
             'updated_at' => $recipe->updated_at?->toIso8601String(),
         ];
 
-        if (! $full) return $result;
+        if (! $full) {
+            return $result;
+        }
 
         $recipe->loadMissing([
             'ingredients', 'steps.media.variants', 'cookingSessions.author:id,name',
@@ -81,6 +83,7 @@ class RecipeService
         ]);
         $result['ingredients'] = $recipe->ingredients->map(function ($ingredient) use ($factor) {
             $scaled = $ingredient->quantity === null ? null : (float) $ingredient->quantity * ($ingredient->is_scalable ? $factor : 1);
+
             return [
                 'id' => $ingredient->id, 'section' => $ingredient->section, 'name' => $ingredient->name,
                 'quantity' => $ingredient->quantity, 'scaled_quantity' => $scaled,
@@ -108,6 +111,7 @@ class RecipeService
     public function sessionPayload(RecipeCookingSession $session): array
     {
         $session->loadMissing(['author:id,name', 'event:id,uuid,title,starts_at,status', 'media.variants']);
+
         return [
             'uuid' => $session->uuid, 'status' => $session->status,
             'author' => $session->author?->only(['id', 'name']),
@@ -126,17 +130,21 @@ class RecipeService
 
     public function ensureAlbum(Recipe $recipe, User $user): Album
     {
-        if ($recipe->album_id && ($album = Album::whereKey($recipe->album_id)->where('gallery_space_id', $recipe->gallery_space_id)->first())) return $album;
+        if ($recipe->album_id && ($album = Album::whereKey($recipe->album_id)->where('gallery_space_id', $recipe->gallery_space_id)->first())) {
+            return $album;
+        }
         $created = false;
         $album = DB::transaction(function () use ($recipe, $user, &$created) {
             $locked = Recipe::whereKey($recipe->id)->lockForUpdate()->firstOrFail();
-            if ($locked->album_id && ($existing = Album::find($locked->album_id))) return $existing;
+            if ($locked->album_id && ($existing = Album::find($locked->album_id))) {
+                return $existing;
+            }
             $created = true;
             $album = Album::create([
                 'gallery_space_id' => $recipe->gallery_space_id,
-                'title' => 'Vaříme · ' . $recipe->title,
-                'slug' => Str::slug('varime-' . $recipe->title . '-' . $recipe->id),
-                'description' => 'Fotografie přípravy, výsledků a společných vaření receptu ' . $recipe->title . '.',
+                'title' => 'Vaříme · '.$recipe->title,
+                'slug' => Str::slug('varime-'.$recipe->title.'-'.$recipe->id),
+                'description' => 'Fotografie přípravy, výsledků a společných vaření receptu '.$recipe->title.'.',
                 'visibility' => 'shared', 'icon' => '🍳', 'color' => '#f59e0b',
                 'created_by' => $user->id, 'updated_by' => $user->id, 'sync_status' => 'pending',
             ]);
@@ -145,10 +153,16 @@ class RecipeService
             $permissions = DB::table('gallery_space_user')->where('gallery_space_id', $recipe->gallery_space_id)->pluck('user_id')->map(fn ($userId) => [
                 'album_id' => $album->id, 'user_id' => $userId, 'role' => 'editor', 'inherited' => false, 'created_at' => now(), 'updated_at' => now(),
             ])->all();
-            if ($permissions) DB::table('album_user_permissions')->upsert($permissions, ['album_id', 'user_id'], ['role', 'updated_at']);
+            if ($permissions) {
+                DB::table('album_user_permissions')->upsert($permissions, ['album_id', 'user_id'], ['role', 'updated_at']);
+            }
+
             return $album;
         });
-        if ($created) CreateDriveFolderJob::dispatch($album);
+        if ($created) {
+            CreateDriveFolderJob::dispatch($album);
+        }
+
         return $album;
     }
 
@@ -175,14 +189,17 @@ class RecipeService
         return [
             'uuid' => $media->uuid, 'title' => $media->display_title ?: $media->original_filename,
             'thumbnail_url' => $media->thumbnail_url, 'media_type' => $media->media_type,
-            'taken_at' => $media->taken_at?->toIso8601String(), 'detail_url' => '/media/' . $media->uuid,
+            'taken_at' => $media->taken_at?->toIso8601String(), 'detail_url' => '/media/'.$media->uuid,
         ];
     }
 
     private function formatQuantity(?float $value): ?string
     {
-        if ($value === null) return null;
+        if ($value === null) {
+            return null;
+        }
         $rounded = round($value, abs($value) >= 10 ? 1 : 2);
+
         return rtrim(rtrim(number_format($rounded, 2, ',', ' '), '0'), ',');
     }
 

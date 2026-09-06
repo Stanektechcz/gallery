@@ -8,7 +8,9 @@ return new class extends Migration
 {
     public function up(): void
     {
-        if (Schema::hasTable('calendar_event_reflections')) return;
+        if (Schema::hasTable('calendar_event_reflections')) {
+            return;
+        }
 
         Schema::create('calendar_event_reflections', function (Blueprint $table) {
             $table->id();

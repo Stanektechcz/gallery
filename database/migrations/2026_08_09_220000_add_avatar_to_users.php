@@ -28,7 +28,9 @@ return new class extends Migration
             'avatar_preset' => fn (Blueprint $table) => $table->string('avatar_preset', 40)->nullable(),
             'avatar_colour' => fn (Blueprint $table) => $table->string('avatar_colour', 7)->nullable(),
         ] as $name => $define) {
-            if (Schema::hasColumn('users', $name)) continue;
+            if (Schema::hasColumn('users', $name)) {
+                continue;
+            }
 
             Schema::table('users', fn (Blueprint $table) => $define($table));
         }
@@ -38,7 +40,9 @@ return new class extends Migration
     {
         Schema::table('users', function (Blueprint $table) {
             foreach (['avatar_path', 'avatar_preset', 'avatar_colour'] as $column) {
-                if (Schema::hasColumn('users', $column)) $table->dropColumn($column);
+                if (Schema::hasColumn('users', $column)) {
+                    $table->dropColumn($column);
+                }
             }
         });
     }

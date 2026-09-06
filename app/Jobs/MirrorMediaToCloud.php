@@ -2,10 +2,12 @@
 
 namespace App\Jobs;
 
+use App\Jobs\Media\InitiateDriveResumableUploadJob;
 use App\Models\MediaItem;
 use App\Services\Storage\DropboxClient;
 use App\Services\Storage\OneDriveClient;
 use App\Services\Storage\StorageResolver;
+use App\Services\Storage\WebDavClient;
 use App\Support\SpaceContext;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -34,6 +36,7 @@ class MirrorMediaToCloud implements ShouldQueue
 
     /** Three attempts, spread out: the usual failure is a service having a bad minute. */
     public int $tries = 3;
+
     public array $backoff = [60, 300];
 
     /**
@@ -45,17 +48,19 @@ class MirrorMediaToCloud implements ShouldQueue
      */
     private const MAX_MIRROR_BYTES = 256 * 1024 * 1024;
 
-    public function __construct(public readonly int $mediaId)
-    {
-    }
+    public function __construct(public readonly int $mediaId) {}
 
     public function handle(StorageResolver $resolver, DropboxClient $dropbox, OneDriveClient $oneDrive): void
     {
         $media = MediaItem::withoutGlobalScope(SpaceContext::SCOPE)->find($this->mediaId);
-        if (! $media || ! $media->gallerySpace) return;
+        if (! $media || ! $media->gallerySpace) {
+            return;
+        }
 
         $connection = $resolver->activeConnection($media->gallerySpace);
-        if (! $connection) return;
+        if (! $connection) {
+            return;
+        }
 
         // The two clients answer the same three calls, so the job picks one and stops
         // caring which. A provider with no client is simply not mirrored rather than
@@ -67,7 +72,7 @@ class MirrorMediaToCloud implements ShouldQueue
         // nikde se to nedozvěděl.
         if ($connection->provider === 'google_drive') {
             if (! $media->drive_file_id) {
-                \App\Jobs\Media\InitiateDriveResumableUploadJob::dispatch($media->id)->onQueue('drive');
+                InitiateDriveResumableUploadJob::dispatch($media->id)->onQueue('drive');
             }
 
             return;
@@ -76,20 +81,28 @@ class MirrorMediaToCloud implements ShouldQueue
         $client = match ($connection->provider) {
             'dropbox' => $dropbox,
             'onedrive' => $oneDrive,
-            'webdav' => app(\App\Services\Storage\WebDavClient::class),
+            'webdav' => app(WebDavClient::class),
             default => null,
         };
-        if (! $client) return;
+        if (! $client) {
+            return;
+        }
 
         // Already mirrored: a retried job must not produce a second copy, and both
         // providers are asked to rename on conflict, so they would happily make one.
-        if ($media->variants()->where('disk', $connection->provider)->exists()) return;
+        if ($media->variants()->where('disk', $connection->provider)->exists()) {
+            return;
+        }
 
         $original = $media->variants()->where('type', 'original')->first();
-        if (! $original) return;
+        if (! $original) {
+            return;
+        }
 
         $disk = Storage::disk($original->disk);
-        if (! $disk->exists($original->path)) return;
+        if (! $disk->exists($original->path)) {
+            return;
+        }
 
         // Asked before reading, because reading is what costs.
         //
@@ -112,7 +125,7 @@ class MirrorMediaToCloud implements ShouldQueue
         }
 
         $remote = $client->folderFor($connection)
-            . '/' . $media->uuid . '.' . ($media->extension ?: 'bin');
+            .'/'.$media->uuid.'.'.($media->extension ?: 'bin');
 
         $result = $client->upload($connection, $remote, $disk->get($original->path));
 

@@ -2,15 +2,15 @@
 
 namespace App\Models;
 
+use App\Services\Planning\LifeEventService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Schema;
-use App\Services\Planning\LifeEventService;
+use Illuminate\Support\Str;
 
 class CalendarEvent extends Model
 {
-    use HasFactory, \App\Models\Concerns\BelongsToGallerySpace;
+    use \App\Models\Concerns\BelongsToGallerySpace, HasFactory;
 
     protected $fillable = [
         'uuid', 'gallery_space_id', 'created_by', 'trip_id', 'source_trip_id', 'album_id', 'title',
@@ -33,7 +33,9 @@ class CalendarEvent extends Model
         static::creating(function (self $event): void {
             $event->uuid ??= (string) Str::uuid();
             $source = is_array($event->metadata) ? ($event->metadata['source'] ?? null) : null;
-            if (Schema::hasColumn('calendar_events', 'created_from')) $event->created_from ??= $source ?? 'manual';
+            if (Schema::hasColumn('calendar_events', 'created_from')) {
+                $event->created_from ??= $source ?? 'manual';
+            }
         });
         static::created(function (self $event): void {
             $source = is_array($event->metadata) ? ($event->metadata['source'] ?? 'calendar') : 'calendar';
@@ -41,11 +43,38 @@ class CalendarEvent extends Model
         });
     }
 
-    public function space() { return $this->belongsTo(GallerySpace::class, 'gallery_space_id'); }
-    public function creator() { return $this->belongsTo(User::class, 'created_by'); }
-    public function participants() { return $this->belongsToMany(User::class, 'event_participants', 'event_id', 'user_id')->withPivot(['role', 'response'])->withTimestamps(); }
-    public function tasks() { return $this->hasMany(EventTask::class, 'event_id')->orderBy('sort_order'); }
-    public function attachments() { return $this->hasMany(EventAttachment::class, 'event_id'); }
-    public function reminders() { return $this->hasMany(EventReminder::class, 'event_id'); }
-    public function recipeCookingSessions() { return $this->hasMany(RecipeCookingSession::class, 'calendar_event_id'); }
+    public function space()
+    {
+        return $this->belongsTo(GallerySpace::class, 'gallery_space_id');
+    }
+
+    public function creator()
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function participants()
+    {
+        return $this->belongsToMany(User::class, 'event_participants', 'event_id', 'user_id')->withPivot(['role', 'response'])->withTimestamps();
+    }
+
+    public function tasks()
+    {
+        return $this->hasMany(EventTask::class, 'event_id')->orderBy('sort_order');
+    }
+
+    public function attachments()
+    {
+        return $this->hasMany(EventAttachment::class, 'event_id');
+    }
+
+    public function reminders()
+    {
+        return $this->hasMany(EventReminder::class, 'event_id');
+    }
+
+    public function recipeCookingSessions()
+    {
+        return $this->hasMany(RecipeCookingSession::class, 'calendar_event_id');
+    }
 }

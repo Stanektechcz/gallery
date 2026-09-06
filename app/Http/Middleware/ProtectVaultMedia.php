@@ -26,10 +26,10 @@ class ProtectVaultMedia
             if ($request->expectsJson()) {
                 return response()->json(['message' => 'Trezor je uzamčený.'], 423);
             }
+
             return redirect()->route('vault.index');
         }
 
         return $next($request);
     }
 }
-

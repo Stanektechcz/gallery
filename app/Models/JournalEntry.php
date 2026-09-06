@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToGallerySpace;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -16,10 +17,11 @@ use Illuminate\Support\Str;
  */
 class JournalEntry extends Model
 {
-    use \App\Models\Concerns\BelongsToGallerySpace;
+    use BelongsToGallerySpace;
     use SoftDeletes;
 
     public const VISIBILITY_PRIVATE = 'private';
+
     public const VISIBILITY_SHARED = 'shared';
 
     protected $fillable = [

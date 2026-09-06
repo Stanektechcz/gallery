@@ -103,9 +103,13 @@ class NotificationPreferenceService
     {
         $extra = (array) ($data['extra'] ?? $data);
         $category = (string) ($data['category'] ?? $extra['category'] ?? $this->categoryForType($type));
-        if (! isset(self::CATEGORIES[$category])) $category = 'general';
+        if (! isset(self::CATEGORIES[$category])) {
+            $category = 'general';
+        }
         $priority = (string) ($data['priority'] ?? $extra['priority'] ?? $this->priorityForType($type));
-        if (! in_array($priority, self::PRIORITIES, true)) $priority = 'normal';
+        if (! in_array($priority, self::PRIORITIES, true)) {
+            $priority = 'normal';
+        }
 
         return [
             'category' => $category,
@@ -118,14 +122,20 @@ class NotificationPreferenceService
     public function allows(User $user, string $type, array $data = []): bool
     {
         $meta = $this->metadata($type, $data);
-        if ($type === 'calendar.reminder' && data_get($data, 'extra.reminder_id')) return true;
-        if ($meta['priority'] === 'critical') return true;
+        if ($type === 'calendar.reminder' && data_get($data, 'extra.reminder_id')) {
+            return true;
+        }
+        if ($meta['priority'] === 'critical') {
+            return true;
+        }
         $preferences = $this->preferences($user);
 
         // Se zapnutým souhrnem drobnosti nechodí jednotlivě — sejdou se do jedné večerní
         // zprávy. Smysl souhrnu je ubrat upozornění, ne přidat šesté k pěti stávajícím,
         // takže se to, co do něj patří, tady zastaví.
-        if (($preferences['digest'] ?? false) && $meta['priority'] === 'low') return false;
+        if (($preferences['digest'] ?? false) && $meta['priority'] === 'low') {
+            return false;
+        }
 
         return ($preferences['categories'][$meta['category']] ?? true)
             && $this->rank($meta['priority']) >= $this->rank($preferences['priority_floor']);
@@ -146,9 +156,13 @@ class NotificationPreferenceService
     public function isQuiet(User $user, ?CarbonInterface $at = null): bool
     {
         $quiet = $this->preferences($user)['quiet'];
-        if (! $quiet['enabled']) return false;
+        if (! $quiet['enabled']) {
+            return false;
+        }
         $time = ($at ?? now())->timezone(config('app.timezone'))->format('H:i');
-        if ($quiet['from'] === $quiet['to']) return true;
+        if ($quiet['from'] === $quiet['to']) {
+            return true;
+        }
 
         return $quiet['from'] < $quiet['to']
             ? $time >= $quiet['from'] && $time < $quiet['to']
@@ -158,6 +172,7 @@ class NotificationPreferenceService
     public function rank(string $priority): int
     {
         $rank = array_search($priority, self::PRIORITIES, true);
+
         return $rank === false ? 1 : $rank;
     }
 
@@ -165,8 +180,11 @@ class NotificationPreferenceService
     private function contextKey(array $extra, ?string $link): ?string
     {
         foreach (['event_uuid' => 'event', 'todo_uuid' => 'todo', 'trip_uuid' => 'trip', 'memory_evening_uuid' => 'memory-evening', 'capsule_uuid' => 'capsule', 'media_uuid' => 'media', 'import_uuid' => 'finance-import'] as $key => $prefix) {
-            if (! empty($extra[$key])) return $prefix.':'.$extra[$key];
+            if (! empty($extra[$key])) {
+                return $prefix.':'.$extra[$key];
+            }
         }
+
         return $link ? 'link:'.mb_substr($link, 0, 150) : null;
     }
 

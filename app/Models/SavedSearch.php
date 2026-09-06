@@ -17,12 +17,19 @@ class SavedSearch extends Model
         return [
             'filters_json' => 'array',
             'layout_config' => 'array',
-            'is_shared'    => 'boolean',
-            'is_pinned'    => 'boolean',
+            'is_shared' => 'boolean',
+            'is_pinned' => 'boolean',
             'last_used_at' => 'datetime',
         ];
     }
 
-    public function user()         { return $this->belongsTo(User::class); }
-    public function gallerySpace() { return $this->belongsTo(GallerySpace::class); }
+    public function user()
+    {
+        return $this->belongsTo(User::class);
+    }
+
+    public function gallerySpace()
+    {
+        return $this->belongsTo(GallerySpace::class);
+    }
 }
