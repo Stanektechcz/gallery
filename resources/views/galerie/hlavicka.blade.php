@@ -191,6 +191,45 @@
     return false;
   }
 
+  /*
+   * Nádoby kolekcí zůstávají tytéž napříč načteními `galerie-data.js`.
+   *
+   * Runtime prototypu ten soubor spouští opakovaně a pokaždé přiřadí **nový**
+   * objekt s **novými** poli. Dokument si přitom všech sto devadesát kolekcí
+   * rozebral do konstant jedním jediným `const { BUS, TX, … } = GalerieData`.
+   * Když po tom rozebrání přišlo další načtení, ukazovaly konstanty na pole
+   * předchozí generace a `navlec` doplňoval data do té nové — tedy do polí,
+   * na která se už nikdo nedíval.
+   *
+   * Bylo to vidět jen na datech, která dorazí pozdě: po obnovení stránky
+   * obrazovka ukazovala skutečné řádky, ale zápis udělaný za běhu se objevil
+   * až po dalším obnovení. Vypadalo to jako pomalý server.
+   *
+   * Obsah nového načtení se proto přelije do **staré** nádoby a ta se vrátí
+   * do nového objektu. Všechny generace pak sdílejí táž pole a konstanta
+   * z kterékoli z nich vidí každou pozdější změnu.
+   */
+  function sjednotNadoby(stara, nova) {
+    if (! stara || ! nova || stara === nova) return;
+
+    Object.keys(nova).forEach(function (klic) {
+      // `ADMIN` a `STORAGE` jsou přístupové vlastnosti, které `obal` zakládá
+      // pro každý objekt zvlášť; přepsat je hodnotou by getter zahodilo.
+      if (klic === 'ADMIN' || klic === 'STORAGE') return;
+
+      var puvodni = stara[klic];
+      var nove = nova[klic];
+
+      if (! puvodni || typeof puvodni !== 'object') return;
+      if (! nove || typeof nove !== 'object') return;
+      if (Array.isArray(puvodni) !== Array.isArray(nove)) return;
+
+      if (! navlec(stara, klic, nove, true)) return;
+
+      try { nova[klic] = puvodni; } catch (e) {}
+    });
+  }
+
   // `galerie-data.js` přiřazuje celé `window.GalerieData`, takže se hlídá i ono —
   // jinak by nový objekt obal ztratil.
   var data = window.GalerieData;
@@ -199,7 +238,13 @@
     Object.defineProperty(window, 'GalerieData', {
       configurable: true,
       get: function () { return data; },
-      set: function (v) { data = v; obal(v); }
+      set: function (v) {
+        // Nejdřív nádoby, pak obal: `obal` znovu navlékne, co už dorazilo ze
+        // serveru, takže ukázková data z nového načtení nic nepřebijí.
+        sjednotNadoby(data, v);
+        data = v;
+        obal(v);
+      }
     });
   } catch (e) {}
 
@@ -281,7 +326,8 @@
    * kuchařka. Každá skupina se navlékne, jakmile dorazí — na pořadí nezáleží.
    */
   var SKUPINY = ['finance', 'knihovna', 'planovani', 'domacnost', 'cesty', 'vztah', 'zdravi', 'sdileni',
-    'zpravy', 'kucharka', 'darky', 'denik', 'pravidla', 'rozbory', 'uklid', 'system', 'klid', 'pribeh', 'mechanismy'];
+    'zpravy', 'kucharka', 'darky', 'denik', 'pravidla', 'rozbory', 'uklid', 'system', 'klid', 'pribeh',
+    'mechanismy', 'rozhodovani'];
 
   function skupiny() {
     return SKUPINY.map(function (jmeno) {
@@ -317,15 +363,54 @@
   window.GalerieAdminObnov = nacti;
 
   /*
+   * Kolekce z odpovědi na zápis, rovnou do obrazovky.
+   *
+   * Formuláře rozhodování posílají záznam vlastní cestou (`/api/zaznamy/...`)
+   * a v odpovědi dostanou celou skupinu znovu. Kdyby se čekalo na další
+   * `/api/data/rozhodovani`, nová obava by se objevila až za půl minuty —
+   * odpověď má `Cache-Control: max-age=30` a prohlížeč by ji vzal z paměti.
+   *
+   * Klíč se zároveň ukládá do `obsah`, aby přežil další načtení
+   * `galerie-data.js`; bez toho by se vrátila ukázková data.
+   */
+  window.GalerieObsahNavlec = function (mapa) {
+    if (! mapa || typeof mapa !== 'object') return false;
+
+    Object.keys(mapa).forEach(function (klic) {
+      obsah[klic] = mapa[klic];
+      navlec(window.GalerieData, klic, mapa[klic], !!uplne[klic]);
+    });
+
+    if (window.GalerieObnovObrazovku) window.GalerieObnovObrazovku();
+
+    return true;
+  };
+
+  /*
    * Šťouchnutí k překreslení.
    *
    * Vyměněná kolekce se sama neprojeví — aplikace překresluje na změnu stavu.
-   * Šířku okna si drží ve stavu, takže událost `resize` je nejlevnější způsob,
-   * jak ji požádat o překreslení, aniž bych sahal na její komponentu. Bez toho
-   * by obrazovka financí ukazovala ukázková data, dokud na ni někdo neklikne.
+   *
+   * Událost `resize` na to nestačí, i když to tak dlouho vypadalo. Obsluha
+   * v prototypu je `if (w !== this.state.vw) this.setState(...)`, takže když
+   * se šířka nezměnila — a ta se při dotažení dat nemění nikdy —, neudělá se
+   * nic. Data pak na obrazovce byla až po prvním kliknutí, které překreslilo
+   * aplikaci kvůli něčemu jinému. Vypadalo to, že to funguje, protože se
+   * na obrazovku obvykle přišlo kliknutím.
+   *
+   * Spolehlivá cesta vede přes společnou datovou vrstvu: prototyp je na ni
+   * přihlášený a v obsluze volá `setState` bez podmínky. Synthetická událost
+   * `storage` ji požádá o rozeslání téhož obsahu — hodnoty se nemění, jen se
+   * překreslí.
    */
   window.GalerieObnovObrazovku = function () {
     try { window.dispatchEvent(new Event('resize')); } catch (e) {}
+
+    try {
+      window.dispatchEvent(new StorageEvent('storage', { key: 'galerie.shared.v2' }));
+    } catch (e) {
+      // Starší prohlížeč `StorageEvent` konstruktor nemá; zůstane `resize`.
+    }
   };
 
   /*

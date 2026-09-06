@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\Galerie\StateController;
 use App\Http\Controllers\Api\Galerie\StorageController;
 use App\Http\Controllers\Api\Galerie\TokenController;
 use App\Http\Controllers\Api\Galerie\WebauthnController;
+use App\Http\Controllers\Api\Galerie\ZaznamController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -68,6 +69,18 @@ Route::middleware(['auth:sanctum', 'throttle:120,1'])->prefix('api')->group(func
     Route::post('pravidla/{pravidlo}/spustit', PravidloController::class)
         ->whereUuid('pravidlo')
         ->name('galerie.pravidlo.spustit');
+
+    /*
+     * Zápis toho, co aplikace vědět nemůže.
+     *
+     * Kdo umí přepnout bojler, čeho se kdo u rozhodnutí bojí, jak dopadl
+     * podobný případ a na jakém čísle rozhodnutí stálo. Vlastní cesta, ne
+     * změna stavu: prototyp tyhle kolekce čte jako konstanty z `GalerieData`,
+     * takže odpověď musí nést celou skupinu znovu.
+     */
+    Route::post('zaznamy/{druh}', ZaznamController::class)
+        ->whereIn('druh', ZaznamController::DRUHY)
+        ->name('galerie.zaznam');
 
     /*
      * Odběr upozornění.

@@ -32,7 +32,7 @@ class PrototypController extends Controller
         abort_unless(File::exists($soubor), 503,
             'Prototyp není nasazený — chybí dokumenty v resources/galerie.');
 
-        $telo = $this->sHlavickou(File::get($soubor));
+        $telo = $this->sHlavickou(File::get($soubor), $request);
 
         $odpoved = response('')
             ->header('Content-Type', 'text/html; charset=utf-8')
@@ -167,9 +167,25 @@ class PrototypController extends Controller
      * dokumentu) našel `GALERIE_API_BASE` už nastavené — ten si podle něj hned
      * při načtení volí mezi režimem „http" a „local".
      */
-    private function sHlavickou(string $dokument): string
+    private function sHlavickou(string $dokument, Request $request): string
     {
-        $hlavicka = view('galerie.hlavicka')->render();
+        /*
+         * Kdo se dívá.
+         *
+         * Hlavička s tím počítala od začátku, jenže jí to nikdo nepředal —
+         * `window.GALERIE_USER` bylo vždycky `null`. Bez toho nemá prototyp
+         * jak poznat, které z těch dvou jmen je to jeho, a u pre-mortemu
+         * ukazoval vlastní obavy ve sloupci toho druhého.
+         */
+        $uzivatel = $request->user();
+
+        $hlavicka = view('galerie.hlavicka', [
+            'ucet' => $uzivatel === null ? null : [
+                'id' => $uzivatel->id,
+                'name' => $uzivatel->name,
+                'email' => $uzivatel->email,
+            ],
+        ])->render();
 
         $misto = stripos($dokument, '</head>');
 

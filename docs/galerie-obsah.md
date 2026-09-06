@@ -32,6 +32,28 @@ ukázkovou Kláru znamená ukazovat dvojici někoho, kdo neexistuje.
 Skalární kolekce (číslo, řetězec) takhle vyměnit nejdou — u nich zůstává hodnota
 z načtení stránky. Zatím se to týká jen `INCOMES`, které se posílá i v `BUD.income`.
 
+### Dvě věci, bez kterých to platilo jen napůl
+
+Výměna na místě funguje jen tehdy, když se konstanta v dokumentu a nádoba,
+do které server zapisuje, **opravdu potkají**. Dlouho se nepotkávaly.
+
+*Runtime prototypu spouští `galerie-data.js` opakovaně* a pokaždé přiřadí nový
+objekt s novými poli. Konstanty ale vznikly jediným rozebráním v okamžiku, kdy
+se dokument překládal. Když po tom rozebrání přišlo další načtení, ukazovaly
+konstanty na pole předchozí generace a server doplňoval data do nové — do polí,
+na která se už nikdo nedíval. Poznat to šlo jen na datech, která dorazí pozdě:
+po obnovení stránky obrazovka ukazovala skutečné řádky, ale zápis udělaný za
+běhu se objevil až po dalším obnovení. Vypadalo to jako pomalý server. Hlavička
+proto obsah nového načtení **přelévá do staré nádoby** a tu vrací do nového
+objektu; všechny generace pak sdílejí táž pole.
+
+*Šťouchnutí k překreslení bylo prázdné.* Volalo se `dispatchEvent(new Event('resize'))`,
+jenže obsluha v prototypu zní `if (w !== this.state.vw) this.setState(...)` —
+a šířka se při dotažení dat nemění nikdy. Data se tedy objevila teprve při
+prvním kliknutí, které aplikaci překreslilo kvůli něčemu jinému. Vypadalo to,
+že to funguje, protože se na obrazovku obvykle přišlo kliknutím. Spolehlivá
+cesta vede přes společnou datovou vrstvu (`galerie-store.js`), na kterou je
+prototyp přihlášený a v jejíž obsluze volá `setState` bez podmínky.
 
 Prototyp čte `GalerieData` **synchronně při vykreslení** — nemůže na server čekat.
 Ze serveru se proto data **přimíchávají do už existujícího objektu**, stejně jako
@@ -58,13 +80,13 @@ Změřeno v prohlížeči proti běžícímu serveru, ne odhadem:
 | --- | --- |
 | Klíčů v `window.GalerieData` | **190** — z toho 9 jsou pomocné funkce, ne data |
 | Kolekcí celkem | **181** |
-| Obsluhuje server | **121** (119 přes `/api/data`, `ADMIN` a `STORAGE` přes přístupovou vrstvu) |
-| Z toho kolekcí, které prototyp má | **102** |
-| Katalogy rozhraní — zůstávají statické záměrně | ~51 |
+| Obsluhuje server | **129** (127 přes `/api/data`, `ADMIN` a `STORAGE` přes přístupovou vrstvu) |
+| Z toho kolekcí, které prototyp má | **110** |
+| Katalogy rozhraní — zůstávají statické záměrně | ~53 (`SCEN` a `RITUALS` se ukázaly být číselníky) |
 | Přihlašovací záslepky prototypu — **daty se stát nesmí** | 6 |
-| **Obsah dvojice, který ještě není napojený** | **~22** |
+| **Obsah dvojice, který ještě není napojený** | **10** |
 
-Sedmnáct ze sto devatenácti kolekcí prototyp v `GalerieData` vůbec nemá — mřížku fotek
+Sedmnáct ze sto dvaceti sedmi kolekcí prototyp v `GalerieData` vůbec nemá — mřížku fotek
 (`PHOTOS`, `DAYS`, `ALBUMS`, `ATREE`), čísla u nabídky (`NAVCNT`, `TOTAL`),
 měnu, spíž a odkazy si dokument vyráběl sám ve funkcích. Server je dodává
 navíc a přepínače v dokumentu je berou přednostně.
@@ -110,6 +132,7 @@ Podle toho, kde už skutečný obsah je a kde na něm záleží:
 | 25 | **Příběh a výstupy** | `STORY`, `STORYMS`, `PORDERS`, `EM_ITEMS`, `EM_LOG`, `PAPER_ROWS`, `GV_C`, `ABARS.tier` | `couple_story_*`, `print_orders`, `emergency_access_*`, `paper_backup_rows`, `guest_comments`, `watch_titles` | hotovo, **píše i zpátky** |
 | 26 | **Mechanismy pro dva** | `FAV`, `FORGIVEN`, `ANTI`, `ML_LOAD`, `FAMILY`, `TRUTHS`, `PAUSE_LOG`, `PAUSE_PLAN`, `TICHO` | `couple_favours`, `couple_forgiven`, `couple_anti_budget`, `couple_mental_load`, `couple_family_contacts`, `couple_truths`, `couple_pause` | hotovo, **píše i zpátky**; `TICHO` se počítá |
 | 27 | **Odvozené — bez vlastní tabulky** | `HOURS`, `RECON`, `CAS_ROWS`, `COSTMEAN`, `DELAY`, `EST`, `SURPRISE`, `CONFLICTS`, `DISP`, `SOLO` | `media_items`, `house_chore_log`, `house_dues`, `budget_category_limits`, `transactions`, `drive_conflicts`, `couple_disagreement_points`, `event_participants` | hotovo — počítá se, neukládá |
+| 28 | **Rozhodování** | `BUS`, `PM_DEC`, `PM_MINE`, `PM_THEIRS`, `PM_HIST`, `PAST_DEC`, `PAST_CASES`, `REVISIT` | `couple_bus_items`, `couple_premortems`, `couple_premortem_risks`, `couple_past_cases`, `couple_decision_inputs` | hotovo, **zapisuje se formulářem** (`/api/zaznamy/…`) |
 
 ## Knihovna: co se muselo změnit v dokumentu
 
@@ -363,28 +386,97 @@ dle chuti" a číslo u ní vůbec nekreslí.
 `MSGREPLIES` (nabídnuté rychlé odpovědi) zůstává katalogem — nejsou to zprávy
 dvojice, ale texty tlačítek.
 
+## Rozhodování: čtyři formuláře na to, co aplikace vědět nemůže
+
+Sekce rozhodování je skoro celá odvozená — mlčky platná pravidla, kdo mluví,
+co se rozhodlo samo. Čtyři věci se ale odvodit nedají a nikdy nepůjdou:
+
+| Kolekce | Co to je | Tabulka |
+| --- | --- | --- |
+| `BUS` | co umí jen jeden z nich | `couple_bus_items` |
+| `PM_DEC`, `PM_MINE`, `PM_THEIRS`, `PM_HIST` | pre-mortem: čeho se kdo bojí | `couple_premortems`, `couple_premortem_risks` |
+| `PAST_DEC`, `PAST_CASES` | druhý názor od vlastní minulosti | `couple_past_cases` |
+| `REVISIT` | na jakých vstupech rozhodnutí stálo | `couple_decision_inputs` |
+
+Zápis jde **vlastní cestou, ne stavem**: prototyp tyhle kolekce čte jako
+konstanty z `GalerieData`, takže by je patch stavu neměl kam vrátit.
+
+```
+POST /api/zaznamy/{bus|bus-zapsano|premortem|riziko|pripad|vstup}
+  →  { ok: true, zprava: "…", data: { BUS: [...], PM_DEC: [...] } }
+```
+
+Odpověď nese **celou skupinu znovu** a hlavička ji navleče do kolekcí
+(`GalerieObsahNavlec`). Čekat na další `GET /api/data/rozhodovani` nejde —
+ta odpověď má půlminutovou paměť a nový zápis by se objevil se zpožděním.
+
+Tři věci, které se u toho ukázaly:
+
+*Jedna tabulka na otázku i na případ.* `PAST_DEC` a `PAST_CASES` je jedna
+tabulka; případ s hodnocením je zkušenost, případ bez něj otázka, která se
+teprve rozhoduje. Dvě tabulky by znamenaly přepisovat řádek při zavření
+a ztratit, že to byla táž věc.
+
+*Směr se nepočítá do sloupce.* U `REVISIT` se „nahoru/dolů" spočítá z obou
+hodnot při čtení. Uložený sloupec by se při opravě čísla rozešel se svými
+hodnotami a šipka by ukazovala opačně než text vedle ní.
+
+*`PM_MINE` je sloupec toho, kdo se dívá.* Nejdřív se řadilo podle vlastníka
+prostoru — jenže v prostoru, který založil ten druhý, pak člověk viděl vlastní
+obavu ve sloupci partnera, tedy přesně tam, kam se u pre-mortemu dívat nemá.
+Server řadí podle přihlášeného člověka a prototyp stejně, podle
+`window.GALERIE_USER`. To bylo do té doby vždycky `null` — hlavička s tím
+počítala, ale nikdo jí to nepředával.
+
 ## Co ještě není napojené
 
 Tohle **není** katalog rozhraní — je to obsah dvojice, který se pořád kreslí
 z `galerie-data.js`. Seřazeno podle toho, co je hotové nejdřív: první skupina
 má tabulky i data, poslední je potřeba teprve vymyslet.
 
-Zbývá dvaadvacet kolekcí a dělí se na dvě skupiny podle toho, **proč** ještě
-nejsou napojené. To je ten rozdíl, na kterém záleží: první je rozhodnutí,
-druhá slepá ulička.
+Zbývá deset kolekcí a dělí se na dvě skupiny podle toho, **proč** ještě nejsou
+napojené. To je ten rozdíl, na kterém záleží: první je rozhodnutí, druhá slepá
+ulička.
 
-### Nemá to kdo zapsat
+### Nemá to kdo zapsat — a nemá to ani kdo počítat
 
-Obrazovka ta čísla ukazuje, ale nikde je nezadává — tabulka by zůstala prázdná
-a obrazovka by místo ukázky ukazovala nulu. Napojit je znamená **nejdřív
-domyslet, kdo a kde je zapíše**.
+Obrazovka ta čísla ukazuje, ale nikde je nezadává. Napojit je znamená **nejdřív
+domyslet, odkud se vezmou**.
 
-`JOY` (účet radosti), `P60` (plán na šedesát dní), `SCEN` (scénáře),
-`HORIZON` (co nás čeká), `VIS_ROWS` (neviditelná práce), `AUTO_DEC`
-(rozhodnuto tím, že se nerozhodlo), `TACIT` (tiché dohody), `SPEAK` (kdo mluví
-za koho), `REVISIT` (k čemu se vrátit), `RITUALS` (roční rituály),
-`PAST_DEC`/`PAST_CASES` (jak jsme rozhodovali dřív), `PM_*` (rozvaha rizik),
-`BUS` (co kdo ví o provozu), `GV_VOICE_POOL` (hlasovky hostů).
+`JOY` (účet radosti), `HORIZON` (co nás čeká), `VIS_ROWS` (neviditelná práce),
+`AUTO_DEC` (rozhodnuto tím, že se nerozhodlo), `TACIT` (tiché dohody),
+`SPEAK` (kdo mluví za koho).
+
+Pozor na to, **jak** se napojí: každá z těchhle obrazovek si na sebe říká, že
+počítá, ne že se vyplňuje. „Tohle nejsou pravidla, na kterých jste se dohodli.
+Jsou to vzorce, které aplikace našla" (`TACIT`). „Zdvih nálady se bere
+z korelací, útrata z transakcí, hodiny z kalendáře. Nic se nehodnotí dojmem"
+(`JOY`). Formulář by u nich šel proti smyslu obrazovky — patří k nim výpočet
+z transakcí, kalendáře a deníku, ne pole k vyplnění.
+
+`P60` je zvláštní případ: text obrazovky říká „nic se nemodeluje ručně", ale
+předpověď se dá **spočítat z pevných plateb, obou mezd a průměrné denní
+útraty** — všechno jsou to data, která už v databázi jsou.
+
+### Zapsané formulářem
+
+Čtyři věci se počítat nedají a nikdy nedaly: kdo umí přepnout bojler, čeho se
+kdo u rozhodnutí bojí, jak dopadl podobný případ před dvěma lety a na jakém
+čísle rozhodnutí stálo. Ty mají skupinu `rozhodovani`, vlastní tabulky
+a formuláře — viz níž.
+
+### Číselníky, které vypadají jako obsah
+
+`SCEN` a `RITUALS` se dlouho počítaly mezi nenapojené kolekce. Nejsou to data
+dvojice, jsou to **číselníky zabudovaných funkcí**: přepínač scénáře se váže na
+konkrétní větev ve výpočtu `p60Calc` (`income`, `loan`, `save`, `parent`),
+rituál na obrazovku aplikace (`x-uklid`, `x-milniky`, `x-cesty`). Nový řádek by
+byl přepínač, který nic nepřepne. Co je u nich obsah dvojice, je jen zapnutí,
+a to se ukládá do stavu (`finScen`, `rtOn`) už dneska.
+
+`GV_VOICE_POOL` je nenapojený, ale formulář pro dvojici k němu nevede: hlasovky
+u sdíleného odkazu nahrávají **hosté**. Patří ke `guest_comments` (`kind='voice'`),
+tedy k cestě, kudy chodí hostovské komentáře.
 
 ### Data nikde nejsou
 
@@ -457,3 +549,20 @@ ukázkové řádky se neimportují a maže se jen to, co server sám poslal.
 3. **Strop na každou kolekci.** Řádků tolik, kolik obrazovka ukáže.
 4. **Bez dat se nic nerozpadne.** Prázdná tabulka znamená prázdný seznam
    s hláškou, ne chybu.
+5. **Formulář jen tam, kam patří.** Tabulka bez zápisu je horší než žádná
+   tabulka — ale zápis na místě, kde obrazovka slibuje výpočet, je horší než
+   obojí. Než se přidá pole k vyplnění, přečíst, co ta obrazovka o sobě říká.
+
+## Co zbývá: jména napevno
+
+Prototyp na zhruba sedmdesáti místech porovnává se jmény `'Adrian'`
+a `'Makinka'` — barvy štítků, sloupce, filtry. U dvojice, která se jmenuje
+jinak, z toho vyjde šedý štítek nebo prázdný sloupec. Na obrazovkách krytí
+domácnosti a pre-mortemu je to opravené (`this.dva()`, jména ze skutečných
+členů), zbytek čeká.
+
+Část z toho **nejsou jen jména**: `whoAcc`, `whoDat`, `whoGen` skloňují a věty
+jako „převzala Makinka" mají rod napevno. Z cizího jména se druhý pád ani rod
+odvodit nedá, takže tam nepůjde o záměnu řetězce, ale o přepis vět — jméno za
+pomlčku v prvním pádě, sloveso do neutrální podoby. Stejný postup, jaký už je
+použitý u „vyplnila se obava — Adrian" a „část obav se vyplnila".

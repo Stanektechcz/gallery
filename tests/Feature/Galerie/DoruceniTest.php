@@ -36,6 +36,25 @@ class DoruceniTest extends TestCase
     }
 
     /**
+     * Dokument říká, kdo se dívá.
+     *
+     * Hlavička s tím počítala od začátku, ale nikdo jí to nepředával, takže
+     * `window.GALERIE_USER` bylo vždycky `null`. Prototyp pak neměl jak poznat,
+     * které z těch dvou jmen je to jeho — a u pre-mortemu ukazoval vlastní
+     * obavy ve sloupci toho druhého.
+     */
+    public function test_dokument_rekne_kdo_je_prihlaseny(): void
+    {
+        $telo = $this->get('/')->assertOk()->getContent();
+        $this->assertStringContainsString('window.GALERIE_USER = null', $telo);
+
+        $clovek = \App\Models\User::factory()->create(['name' => 'Makinka']);
+        $telo = $this->actingAs($clovek)->get('/')->assertOk()->getContent();
+
+        $this->assertStringContainsString('"name":"Makinka"', $telo);
+    }
+
+    /**
      * Druhý musí vidět, co první napsal.
      *
      * Klient stav načte jednou při startu a pak už jen posílá vlastní změny —

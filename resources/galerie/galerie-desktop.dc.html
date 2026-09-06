@@ -10405,6 +10405,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                   </sc-for>
                 </div>
                 <button class="btn btn-ghost" onClick="{{ busToVault }}" style="gap:6px"><i class="ph-duotone ph-lock-key" style="font-size:16px"></i>Do trezoru</button>
+                <button class="btn btn-secondary" onClick="{{ busAdd }}" style="gap:6px"><i class="ph-duotone ph-plus" style="font-size:16px"></i>Přidat věc</button>
               </div>
 
               <table class="table">
@@ -10701,6 +10702,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                       <div style="margin-left:auto; display:flex; gap:6px; flex-wrap:wrap">
                         <button class="btn btn-secondary" onClick="{{ d.review }}" style="font-size:12.5px; padding:6px 11px">{{ d.reviewLabel }}</button>
                         <button class="btn btn-ghost" onClick="{{ d.change }}" style="font-size:12.5px; padding:6px 11px">Změnili jsme to</button>
+                        <button class="btn btn-ghost" onClick="{{ d.addInput }}" style="font-size:12.5px; padding:6px 11px">Sledovat vstup</button>
                       </div>
                     </div>
                   </div>
@@ -11469,6 +11471,8 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                 <sc-if value="{{ pmRevealed }}" hint-placeholder-val="{{ false }}">
                   <button class="btn btn-secondary" onClick="{{ pmToDec }}" style="gap:6px"><i class="ph-duotone ph-scales" style="font-size:16px"></i>Zapsat opatření</button>
                 </sc-if>
+                <button class="btn btn-secondary" onClick="{{ pmAddRisk }}" style="gap:6px"><i class="ph-duotone ph-plus" style="font-size:16px"></i>Napsat obavu</button>
+                <button class="btn btn-ghost" onClick="{{ pmAddDec }}" style="gap:6px"><i class="ph-duotone ph-scales" style="font-size:16px"></i>Nové rozhodnutí</button>
               </div>
 
               <table class="table">
@@ -11558,6 +11562,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                   <div style="display:flex; gap:9px; flex-wrap:wrap; margin-top:14px">
                     <button class="btn btn-ghost" onClick="{{ psToggle }}" style="font-size:12.5px; padding:6px 12px">{{ psStrictLabel }}</button>
                     <button class="btn btn-secondary" onClick="{{ psToCool }}" style="font-size:12.5px; padding:6px 12px">Dát to na rozvahu</button>
+                    <button class="btn btn-secondary" onClick="{{ psAdd }}" style="font-size:12.5px; padding:6px 12px">Zapsat zkušenost</button>
                   </div>
                 </div>
               </div>
@@ -12406,6 +12411,20 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
         <div class="field"><label>{{ xaLabelB }}</label>
           <input class="input" value="{{ xaB }}" onInput="{{ xaSetB }}" onKeyDown="{{ xaKey }}" aria-label="{{ xaLabelB }}" />
         </div>
+        <!-- Třetí a čtvrté pole se ukážou jen tam, kde je záznam potřebuje. -->
+        <sc-if value="{{ xaHasC }}">
+          <div class="field"><label>{{ xaLabelC }}</label>
+            <input class="input" value="{{ xaC }}" onInput="{{ xaSetC }}" onKeyDown="{{ xaKey }}" aria-label="{{ xaLabelC }}" />
+          </div>
+        </sc-if>
+        <sc-if value="{{ xaHasD }}">
+          <div class="field"><label>{{ xaLabelD }}</label>
+            <input class="input" value="{{ xaD }}" onInput="{{ xaSetD }}" onKeyDown="{{ xaKey }}" aria-label="{{ xaLabelD }}" />
+          </div>
+        </sc-if>
+        <sc-if value="{{ xaHint }}">
+          <div style="font-size:12.5px; color:var(--g-ink3); text-wrap:pretty">{{ xaHint }}</div>
+        </sc-if>
         <div class="dialog-actions">
           <button class="btn btn-secondary" onClick="{{ xaClose }}">Zrušit</button>
           <button class="btn btn-primary" onClick="{{ xaCommit }}">Přidat</button>
@@ -16974,12 +16993,156 @@ class Component extends DCLogic {
     };
   }
 
+  /*
+   * Ti dva podle jmen, ne napevno — a ten, kdo se dívá, první.
+   *
+   * Nálada dvou je jediná kolekce, kterou vyplňují oba a nikdo třetí, takže
+   * její klíče jsou právě ta dvě jména. Když ještě nikdo nic nevyplnil,
+   * zůstávají ukázková — a k ukázkovým datům se ukázková jména hodí.
+   *
+   * Na pořadí záleží: `PM_MINE` znamená „moje obavy" a server je řadí podle
+   * přihlášeného člověka. Kdyby si klient řadil jinak, ukazoval by vlastní
+   * obavu ve sloupci toho druhého.
+   */
+  dva() {
+    const jmena = Object.keys(KL_MOOD || {});
+    const par = jmena.length >= 2 ? jmena : ['Adrian', 'Makinka'];
+    const ja = (window.GALERIE_USER || {}).name;
+    const kde = par.indexOf(ja);
+
+    return kde > 0 ? [par[kde]].concat(par.filter((x, i) => i !== kde)) : par;
+  }
+
+  /*
+   * Formuláře na to, co aplikace vědět nemůže.
+   *
+   * Zbytek téhle sekce se počítá z toho, co se opravdu děje — mlčky platná
+   * pravidla, kdo mluví, co se rozhodlo samo. Tyhle čtyři ne: čeho se kdo
+   * bojí ani kdo umí přepnout bojler se z transakcí odvodit nedá.
+   *
+   * `telo` skládá požadavek na server, `mistni` dopíše řádek do kolekce, když
+   * se běží bez backendu — tam ale vydrží jen do zavření okna a říká se to.
+   */
+  zapForm(mode) {
+    const [prvni, druhy] = this.dva();
+
+    return {
+      bus: {
+        druh: 'bus',
+        t: 'Co umí jen jeden',
+        a: 'Co to je',
+        b: 'Kdo to umí — ' + prvni + ', ' + druhy + ', nebo oba',
+        c: 'Typ — heslo, kontakt, nebo postup',
+        d: 'Váha 1–3',
+        h: 'Zásadní (3) je to, co se musí vyřešit do týdne, i kdyby ten druhý byl mimo dosah.',
+        telo: (a, b, c, d) => ({ name: a, who: b, kind: c, crit: parseInt(d, 10) || 2 }),
+        mistni: (a, b, c, d) => BUS.push({
+          name: a, kind: c || 'postup', who: b || 'oba', crit: parseInt(d, 10) || 2, doc: false
+        })
+      },
+      premortem: {
+        druh: 'premortem',
+        t: 'Nové rozhodnutí',
+        a: 'O čem rozhodujete',
+        b: 'Kdy to bude — třeba „březen 2027“',
+        h: 'Napíše se, o co jde. Obavy k němu pak píše každý zvlášť a odemknou se naráz.',
+        telo: (a, b) => ({ title: a, when: b }),
+        mistni: (a, b) => PM_DEC.push({ q: a, when: b || '' })
+      },
+      riziko: {
+        druh: 'riziko',
+        t: 'Co se může pokazit',
+        a: 'Čeho se bojíte',
+        b: 'Opatření, které to srazí',
+        c: 'Šance 1–3',
+        d: 'Dopad 1–3',
+        h: 'Píše se k rozhodnutí, které je nahoře vybrané. Váha je šance krát dopad — devítka je to, co se řeší první.',
+        telo: (a, b, c, d) => ({ risk: a, fix: b, l: parseInt(c, 10) || 2, s: parseInt(d, 10) || 2 }),
+        mistni: (a, b, c, d) => PM_MINE.push({
+          risk: a, fix: b || '', l: parseInt(c, 10) || 2, s: parseInt(d, 10) || 2
+        })
+      },
+      pripad: {
+        druh: 'pripad',
+        t: 'Vlastní zkušenost',
+        a: 'Co to bylo',
+        b: 'Štítky oddělené čárkou — nákup, odklad, rodina',
+        c: 'Spokojenost 1–5',
+        d: 'Co z toho vyšlo',
+        h: 'Spokojenost nechte prázdnou, pokud se to teprve rozhoduje — pak z toho bude otázka, ke které aplikace dohledá vaše starší případy.',
+        telo: (a, b, c, d) => ({ title: a, tags: b, out: parseInt(c, 10) || null, note: d }),
+        mistni: (a, b, c, d) => {
+          const stitky = b.split(/[,;]+/).map(x => x.trim()).filter(Boolean);
+          const out = parseInt(c, 10) || 0;
+          if (out) PAST_CASES.push({ name: a, tags: stitky, out: out, note: d || '' });
+          else PAST_DEC.push({ q: a, tags: stitky });
+        }
+      },
+      vstup: {
+        druh: 'vstup',
+        t: 'Na čem to stálo',
+        a: 'Co sledovat — třeba nájem',
+        b: 'Tehdy',
+        c: 'Teď',
+        d: 'Poznámka',
+        h: 'Revize se pak nenabídne podle data, ale podle toho, že se tohle číslo pohnulo.',
+        telo: (a, b, c, d, ctx) => ({ decision: ctx, label: a, then: b, now: c, note: d }),
+        mistni: (a, b, c, d, ctx) => {
+          const cil = REVISIT[ctx] || (REVISIT[ctx] = []);
+          cil.push({ what: a, then: b, now: c, dir: 'up', note: d || '' });
+        }
+      }
+    }[mode] || null;
+  }
+
+  /*
+   * Odeslání formuláře.
+   *
+   * Server vrátí celou skupinu znovu a ta se navleče do kolekcí — čekat na
+   * další `/api/data/rozhodovani` nejde, ta odpověď má půlminutovou paměť
+   * a nový zápis by se objevil se zpožděním.
+   */
+  zapisZaznam(mode) {
+    const s = this.state;
+    const f = this.zapForm(mode);
+    if (!f) return;
+
+    const a = (s.xaA || '').trim(), b = (s.xaB || '').trim();
+    const c = (s.xaC || '').trim(), d = (s.xaD || '').trim();
+    const ctx = s.xaCtx || null;
+
+    if (!a) { this.toast('Zadejte, o co jde', { icon: 'ph-warning', color: 'var(--g-mag)' }); return; }
+
+    const api = window.GalerieApi;
+    this.setState({ xaOpen: false, xaMode: null, xaCtx: null, xaA: '', xaB: '', xaC: '', xaD: '' });
+
+    // Bez backendu se dopíše do kolekce, ať je vidět, jak to vypadá — ale
+    // nesmí se u toho tvrdit, že se to uložilo.
+    if (!api || !api.post || api.mode !== 'http') {
+      f.mistni(a, b, c, d, ctx);
+      if (window.GalerieObnovObrazovku) window.GalerieObnovObrazovku();
+      this.toast('Zapsáno jen v tomhle okně — bez přihlášení se to nikam neuloží', { icon: 'ph-warning-circle' });
+      return;
+    }
+
+    api.post('zaznamy/' + f.druh, f.telo(a, b, c, d, ctx)).then(res => {
+      if (!res) return;
+      if (window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data);
+      this.toast(res.zprava || 'Zapsáno', { icon: 'ph-check-circle' });
+    }).catch(e => {
+      const telo = (e && e.body) || {};
+      const prvni = telo.errors ? (Object.values(telo.errors)[0] || [])[0] : null;
+      this.toast(prvni || telo.message || 'Zápis se nepodařil', { icon: 'ph-warning', color: 'var(--g-mag)' });
+    });
+  }
+
   busVals() {
     const s = this.state;
     const doc = s.busDoc || {};
     const rows = BUS.map(b => ({ ...b, doc: doc[b.name] !== undefined ? doc[b.name] : b.doc }));
     const solo = w => rows.filter(r => r.who === w && !r.doc);
-    const soloA = solo('Adrian'), soloK = solo('Makinka');
+    const [prvni, druhy] = this.dva();
+    const soloA = solo(prvni), soloK = solo(druhy);
     const crit = rows.filter(r => r.crit === 3 && r.who !== 'oba' && !r.doc);
     const covered = rows.filter(r => r.doc || r.who === 'oba').length;
     const score = Math.round((covered / rows.length) * 100);
@@ -16992,18 +17155,37 @@ class Component extends DCLogic {
         : 'Všechno zásadní umí oba, nebo je to zapsané.',
       busNote: 'Není to o nemoci ani o neštěstí. Stačí služebka, telefon vybitý na horách nebo tři dny v nemocnici s dítětem. Zdravá domácnost má každou zásadní věc na dvou místech.',
       busPeople: [
-        { name: 'Jen Adrian', n: String(soloA.length), color: 'var(--g-acc)', note: soloA.length ? soloA[0].name.toLowerCase() + ' a další' : 'nic navíc' },
-        { name: 'Jen Makinka', n: String(soloK.length), color: 'var(--g-mag)', note: soloK.length ? soloK[0].name.toLowerCase() + ' a další' : 'nic navíc' }
+        { name: 'Jen ' + prvni, n: String(soloA.length), color: 'var(--g-acc)', note: soloA.length ? soloA[0].name.toLowerCase() + ' a další' : 'nic navíc' },
+        { name: 'Jen ' + druhy, n: String(soloK.length), color: 'var(--g-mag)', note: soloK.length ? soloK[0].name.toLowerCase() + ' a další' : 'nic navíc' }
       ],
+      busAdd: () => this.setState({ xaOpen: true, xaMode: 'bus', xaA: '', xaB: '', xaC: '', xaD: '' }),
       busRows: rows.map(r => ({
         name: r.name, kind: r.kind, kindTag: kindTag(r.kind), who: r.who,
-        whoTag: r.who === 'Adrian' ? 'tag-accent' : r.who === 'Makinka' ? 'tag-accent-2' : 'tag-neutral',
+        whoTag: r.who === prvni ? 'tag-accent' : r.who === druhy ? 'tag-accent-2' : 'tag-neutral',
         crit: r.crit === 3 ? 'zásadní' : r.crit === 2 ? 'důležité' : 'drobnost',
         critColor: r.crit === 3 ? 'var(--g-mag)' : r.crit === 2 ? 'var(--g-ink)' : 'var(--g-ink3)',
         state: r.doc ? 'zapsáno' : r.who === 'oba' ? 'umí oba' : 'v jedné hlavě',
         stateColor: r.doc ? 'var(--g-acc)' : r.who === 'oba' ? 'var(--g-ink2)' : 'var(--g-mag)',
         canDoc: !r.doc,
         docIt: () => {
+          const api = window.GalerieApi;
+
+          /*
+           * Se serverem se příznak píše do tabulky, ne do stavu.
+           *
+           * Dvě pravdy o téže věci by se rozešly: `busDoc` ve stavu by
+           * přebilo to, co je v databázi, a po odhlášení by věc byla znovu
+           * „v jedné hlavě“, i když ji ten druhý mezitím zapsal.
+           */
+          if (api && api.post && api.mode === 'http') {
+            api.post('zaznamy/bus-zapsano', { name: r.name }).then(res => {
+              if (!res) return;
+              if (window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data);
+              this.toast('„' + r.name + '“ zapsáno — teď je to na dvou místech', { icon: 'ph-note-pencil' });
+            }).catch(() => this.toast('Zápis se nepodařil — zkuste to znovu', { icon: 'ph-warning', color: 'var(--g-mag)' }));
+            return;
+          }
+
           this.setState({ busDoc: Object.assign({}, doc, { [r.name]: true }) });
           this.toast('„' + r.name + '“ zapsáno — teď je to na dvou místech', { icon: 'ph-note-pencil', undo: () => this.setState({ busDoc: doc }) });
         }
@@ -17393,11 +17575,12 @@ class Component extends DCLogic {
     const reveal = !!s.pmReveal;
     const mine = s.pmMine || PM_MINE;
     const theirs = PM_THEIRS;
+    const [prvni, druhy] = this.dva();
     const score = r => r.l * r.s;
-    const all = mine.map(r => ({ ...r, who: 'Adrian' })).concat(theirs.map(r => ({ ...r, who: 'Makinka' })));
+    const all = mine.map(r => ({ ...r, who: prvni })).concat(theirs.map(r => ({ ...r, who: druhy })));
     const shared = mine.filter(m => theirs.some(t => t.risk === m.risk));
     const top = all.slice().sort((a, b) => score(b) - score(a))[0];
-    const hits = { Adrian: PM_HIST.filter(h => h.hit === 'mine' || h.hit === 'both').length, Makinka: PM_HIST.filter(h => h.hit === 'theirs' || h.hit === 'both').length };
+    const hits = { [prvni]: PM_HIST.filter(h => h.hit === 'mine' || h.hit === 'both').length, [druhy]: PM_HIST.filter(h => h.hit === 'theirs' || h.hit === 'both').length };
     const lab = v => v === 3 ? 'vysoká' : v === 2 ? 'střední' : 'nízká';
     return {
       pmDecs: PM_DEC.map((d, i) => ({
@@ -17412,8 +17595,8 @@ class Component extends DCLogic {
         : 'Každý napíše, co se může pokazit, jak je to pravděpodobné a jak zlé. Odemkne se to naráz, aby nikdo neopisoval strach druhého.',
       pmBlind: !reveal, pmRevealed: reveal,
       pmReveal: () => { this.setState({ pmReveal: true }); this.toast('Obě strany odemčené', { icon: 'ph-lock-open' }); },
-      pmRows: (reveal ? all : mine.map(r => ({ ...r, who: 'Adrian' }))).sort((a, b) => score(b) - score(a)).map(r => ({
-        risk: r.risk, who: r.who, whoTag: r.who === 'Adrian' ? 'tag-accent' : 'tag-accent-2',
+      pmRows: (reveal ? all : mine.map(r => ({ ...r, who: prvni }))).sort((a, b) => score(b) - score(a)).map(r => ({
+        risk: r.risk, who: r.who, whoTag: r.who === prvni ? 'tag-accent' : 'tag-accent-2',
         l: lab(r.l), sv: lab(r.s), score: String(score(r)),
         color: score(r) >= 9 ? 'var(--g-mag)' : score(r) >= 6 ? 'var(--g-ink)' : 'var(--g-ink2)',
         w: Math.round((score(r) / 9) * 100) + '%',
@@ -17426,14 +17609,20 @@ class Component extends DCLogic {
         : '',
       pmTop: reveal ? 'Řešte první: ' + top.risk.toLowerCase() + '. Jediné opatření, které to sráží: ' + top.fix.toLowerCase() + '.' : '',
       pmToDec: () => { this.setState({ dcTab: 'mem' }); this.toast('Opatření zapište do paměti rozhodnutí — jinak se na ně zapomene', { icon: 'ph-scales' }); },
-      pmCal: ['Adrian', 'Makinka'].map(w => ({
+      pmAddDec: () => this.setState({ xaOpen: true, xaMode: 'premortem', xaA: '', xaB: '', xaC: '', xaD: '' }),
+      pmAddRisk: () => this.setState({ xaOpen: true, xaMode: 'riziko', xaA: '', xaB: '', xaC: '', xaD: '' }),
+      // Jméno se nepřechyluje ani neskloňuje — u cizího by z toho vyšlo
+      // „trefila část" u člověka, o kterém aplikace nic takového neví.
+      pmCal: [prvni, druhy].map(w => ({
         name: w, value: hits[w] + ' z ' + PM_HIST.length,
-        note: hits[w] >= 3 ? 'obavy se většinou vyplní' : hits[w] === 0 ? 'obavy se nevyplnily ani raz' : (w === 'Makinka' ? 'trefila část' : 'trefil část'),
+        note: hits[w] >= 3 ? 'obavy se většinou vyplní' : hits[w] === 0 ? 'obavy se nevyplnily ani raz' : 'část obav se vyplnila',
         color: hits[w] >= 3 ? 'var(--g-mag)' : 'var(--g-ink)'
       })),
       pmHist: PM_HIST.map(h => ({
         name: h.name, mine: h.mine, theirs: h.theirs, note: h.note,
-        hit: h.hit === 'both' ? 'vyplnilo se obojí' : h.hit === 'mine' ? 'vyplnila se obava Adriana' : h.hit === 'theirs' ? 'vyplnila se obava Makinky' : 'nevyplnilo se nic',
+        // Jméno stojí za pomlčkou v prvním pádě: druhý pád („obava Kláry")
+        // se z cizího jména odvodit nedá.
+        hit: h.hit === 'both' ? 'vyplnilo se obojí' : h.hit === 'mine' ? 'vyplnila se obava — ' + prvni : h.hit === 'theirs' ? 'vyplnila se obava — ' + druhy : 'nevyplnilo se nic',
         color: h.hit === 'none' ? 'var(--g-acc)' : 'var(--g-mag)'
       })),
       pmHistNote: 'Kalibrace rizik: tři ze čtyř pre-mortemů se aspoň částečně vyplnily. Ten čtvrtý je důvod, proč se strachem nedá rozhodovat samo.'
@@ -17919,8 +18108,10 @@ class Component extends DCLogic {
 
   pastVals() {
     const s = this.state;
-    const pick = (s.pastPick || 0) % PAST_DEC.length;
-    const dec = PAST_DEC[pick];
+    const pick = (s.pastPick || 0) % (PAST_DEC.length || 1);
+    // Bez jediné otevřené otázky není co porovnávat. Prázdný zástupce je
+    // lacinější než `undefined.tags`, které by shodilo celou obrazovku.
+    const dec = PAST_DEC[pick] || { q: '', tags: [] };
     const strict = !!s.pastStrict;
     const matched = PAST_CASES.filter(p => strict ? dec.tags.every(t => p.tags.indexOf(t) >= 0) : dec.tags.some(t => p.tags.indexOf(t) >= 0));
     const avg = matched.length ? matched.reduce((a, p) => a + p.out, 0) / matched.length : 0;
@@ -17932,6 +18123,7 @@ class Component extends DCLogic {
         line: i === pick ? 'var(--g-acc)' : 'transparent',
         go: () => this.setState({ pastPick: i })
       })),
+      psAdd: () => this.setState({ xaOpen: true, xaMode: 'pripad', xaA: '', xaB: '', xaC: '', xaD: '' }),
       psCount: matched.length ? this.pl(matched.length, 'vlastní případ', 'vlastní případy', 'vlastních případů') : 'Bez precedentu',
       psEmpty: matched.length === 0,
       psCases: matched.map(p => ({
@@ -25251,6 +25443,9 @@ class Component extends DCLogic {
           icon: t.dir === 'up' ? 'ph-trend-up' : 'ph-trend-down',
           color: t.dir === 'up' ? 'var(--g-mag)' : 'var(--g-ok)'
         })),
+        // Vstup se váže k tomuhle rozhodnutí, proto se jeho id nese v `xaCtx`
+        // až do odeslání formuláře.
+        addInput: () => this.setState({ xaOpen: true, xaMode: 'vstup', xaCtx: d.id, xaA: '', xaB: '', xaC: '', xaD: '' }),
         hasTriggers: (REVISIT[d.id] || []).length > 0,
         triggerLine: (REVISIT[d.id] || []).length
           ? 'Od zápisu se změnilo ' + this.pl((REVISIT[d.id] || []).length, 'vstup', 'vstupy', 'vstupů') + ' — revize se nabízí sama, ne podle data.'
@@ -27054,7 +27249,11 @@ class Component extends DCLogic {
       };
       return list.sort((a, b) => { const x = kf(a), y = kf(b); return (x > y ? 1 : x < y ? -1 : 0) * tSort.d; });
     })();
+    // Formuláře rozhodování mají vlastní pole i vlastní cestu na server;
+    // zbytek dialogu zůstává, jak byl.
+    const zapF = this.zapForm(s.xaMode);
     const xCommit = () => {
+      if (zapF) { this.zapisZaznam(s.xaMode); return; }
       const a = (s.xaA || '').trim();
       if (!a) { this.toast('Zadejte název', { icon: 'ph-warning', color: 'var(--g-mag)' }); return; }
       const b = (s.xaB || '').trim();
@@ -27575,15 +27774,23 @@ class Component extends DCLogic {
         ? this.pl(xLive.length, 'položka', 'položky', 'položek')
         : xVisible.length + ' z ' + xLive.length + ' · filtrováno',
       xaOpen: !!s.xaOpen,
-      xaTitle: s.xaMode === 'tx' ? 'Nová transakce' : xf[2],
-      xaLabelA: s.xaMode === 'tx' ? 'Popis platby' : xf[0],
-      xaLabelB: s.xaMode === 'tx' ? 'Částka v Kč — např. 480 nebo +1200' : xf[1],
+      xaTitle: zapF ? zapF.t : s.xaMode === 'tx' ? 'Nová transakce' : xf[2],
+      xaLabelA: zapF ? zapF.a : s.xaMode === 'tx' ? 'Popis platby' : xf[0],
+      xaLabelB: zapF ? zapF.b : s.xaMode === 'tx' ? 'Částka v Kč — např. 480 nebo +1200' : xf[1],
       xaA: s.xaA || '', xaB: s.xaB || '',
       xaSetA: e => this.setState({ xaA: e.target.value }),
       xaSetB: e => this.setState({ xaB: e.target.value }),
-      xaClose: () => this.setState({ xaOpen: false, xaMode: null }),
+      // Třetí a čtvrté pole má jen ten formulář, který je potřebuje. Prázdné
+      // políčko navíc je otázka, na kterou se nikdo neptal.
+      xaHasC: !!(zapF && zapF.c), xaLabelC: zapF ? zapF.c : '',
+      xaHasD: !!(zapF && zapF.d), xaLabelD: zapF ? zapF.d : '',
+      xaC: s.xaC || '', xaD: s.xaD || '',
+      xaSetC: e => this.setState({ xaC: e.target.value }),
+      xaSetD: e => this.setState({ xaD: e.target.value }),
+      xaHint: zapF ? zapF.h : '',
+      xaClose: () => this.setState({ xaOpen: false, xaMode: null, xaCtx: null }),
       xaCommit: xCommit,
-      xaKey: e => { if (e.key === 'Enter') xCommit(); if (e.key === 'Escape') this.setState({ xaOpen: false, xaMode: null }); },
+      xaKey: e => { if (e.key === 'Enter') xCommit(); if (e.key === 'Escape') this.setState({ xaOpen: false, xaMode: null, xaCtx: null }); },
       appTabs: pageTabs.map((t, i) => ({
         label: t[0], rule: i === appTab ? 'var(--g-acc)' : 'transparent',
         color: i === appTab ? 'var(--g-ink)' : 'var(--g-ink2)',
