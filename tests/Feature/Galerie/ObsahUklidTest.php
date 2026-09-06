@@ -167,6 +167,76 @@ class ObsahUklidTest extends TestCase
         $this->assertSame('ke korektuře', $z['Rámeček do ložnice'][3]);
     }
 
+    /**
+     * Odhad roku stojí jen na tom, co aplikace opravdu vidí.
+     *
+     * Ukázka odůvodňovala rok tím, že „auto na snímku je Škoda 100, vyráběná
+     * 1969–1977". Tohle aplikace nepozná — zná sousední soubor, tentýž import,
+     * totéž album a tentýž přístroj.
+     */
+    public function test_odhad_roku_stoji_na_sousednim_souboru(): void
+    {
+        $this->fotka(['original_filename' => 'sken_0142.jpg', 'taken_at' => '1988-07-07 12:00:00'], 1);
+        $this->fotka(['original_filename' => 'sken_0143.jpg', 'taken_at' => null], 2);
+
+        $d = $this->getJson('/api/data/uklid')->assertOk()->json('data.DATING.0');
+
+        $this->assertSame('sken_0143.jpg', $d['name']);
+        $this->assertSame('1988', $d['guess']);
+        $this->assertSame(0, $d['span']);
+        $this->assertSame('Sousední soubor sken_0142.jpg má datum 7. 7. 1988.', $d['reasons'][0]);
+    }
+
+    /** Bez jediné stopy se snímek nabídne — jen bez odhadu. */
+    public function test_snimek_bez_stop_nema_odhad(): void
+    {
+        $this->fotka(['original_filename' => 'sken_0900.jpg', 'taken_at' => null, 'uploaded_at' => null]);
+
+        $d = $this->getJson('/api/data/uklid')->assertOk()->json('data.DATING.0');
+
+        $this->assertSame('', $d['guess']);
+        $this->assertSame(0, $d['conf']);
+        $this->assertSame(
+            'Aplikace nemá z čeho vyjít — kolem téhle fotky není nic s datem.',
+            $d['reasons'][0],
+        );
+    }
+
+    /** Víc stop napříč lety znamená menší jistotu, ne větší. */
+    public function test_siroke_rozpeti_snizuje_jistotu(): void
+    {
+        $album = DB::table('albums')->insertGetId([
+            'uuid' => (string) Str::uuid(),
+            'gallery_space_id' => $this->prostor->id,
+            'created_by' => $this->adri->id,
+            'title' => 'Rodinné',
+            'slug' => 'rodinne',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        // Názvy schválně nesousední, ať zbude jediná stopa: album.
+        $this->fotka(['original_filename' => 'chata.jpg', 'taken_at' => '1974-01-01 12:00:00', 'primary_album_id' => $album], 1);
+        $this->fotka(['original_filename' => 'svatba.jpg', 'taken_at' => '1982-01-01 12:00:00', 'primary_album_id' => $album], 2);
+        $this->fotka(['original_filename' => 'zahrada.jpg', 'taken_at' => null, 'primary_album_id' => $album, 'uploaded_at' => null], 3);
+
+        $d = $this->getJson('/api/data/uklid')->assertOk()->json('data.DATING.0');
+
+        $this->assertSame('1974', $d['guess']);
+        $this->assertSame(4, $d['span']);
+        // 60 + jedna stopa − osm let rozpětí: z toho zbude „jen tušení".
+        $this->assertSame(24, $d['conf']);
+        $this->assertSame(['Ve stejném albu jsou fotky z 1974–1982.'], $d['reasons']);
+    }
+
+    /** Datování je úplná kolekce — ukázkové skeny vedle skutečných nezůstanou. */
+    public function test_datovani_je_uplna_kolekce(): void
+    {
+        $this->fotka(['taken_at' => null]);
+
+        $this->assertContains('DATING', $this->getJson('/api/data/uklid')->assertOk()->json('uplne'));
+    }
+
     /** Karanténa jiného páru se do odpovědi nedostane. */
     public function test_karantena_jineho_paru_se_neposila(): void
     {

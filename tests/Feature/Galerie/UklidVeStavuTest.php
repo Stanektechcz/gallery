@@ -143,6 +143,81 @@ class UklidVeStavuTest extends TestCase
         $this->assertNull(DB::table('duplicate_groups')->where('id', $skupina)->value('resolved_at'));
     }
 
+    /**
+     * Přijatý odhad se opravdu zapíše — a rok si server dohledá sám.
+     *
+     * „Datováno na 1988" dosud jen zmizelo ze seznamu: `taken_at` zůstalo
+     * prázdné, fotka se příště nabídla znovu a v časové ose dál nikde nebyla.
+     */
+    public function test_prijaty_odhad_zapise_datum(): void
+    {
+        $this->fotka(['original_filename' => 'sken_0142.jpg', 'taken_at' => '1988-07-07 12:00:00'], 1);
+        $bezData = $this->fotka(['original_filename' => 'sken_0143.jpg', 'taken_at' => null], 2);
+
+        $this->stav(['datDone' => [$bezData->uuid => 'accept']])->assertOk();
+
+        $bezData->refresh();
+
+        $this->assertSame('1988-01-01 12:00:00', (string) $bezData->taken_at);
+        // Odhad se pozná od změřeného data — obrazovka to slibuje dvakrát.
+        $this->assertTrue((bool) $bezData->taken_at_estimated);
+    }
+
+    /** Ručně zapsaný rok platí přesně tak, jak ho člověk napsal. */
+    public function test_rucni_rok_se_zapise(): void
+    {
+        $f = $this->fotka(['taken_at' => null]);
+
+        $this->stav([
+            'datDone' => [$f->uuid => 'manual'],
+            'datDrafts' => [$f->uuid => '1974'],
+        ])->assertOk();
+
+        $f->refresh();
+
+        $this->assertSame('1974-01-01 12:00:00', (string) $f->taken_at);
+        // Ručně zapsaný rok není odhad — ten člověk ví.
+        $this->assertFalse((bool) $f->taken_at_estimated);
+    }
+
+    /** „Zůstává bez data" je taky odpověď — a nic se při ní nemění. */
+    public function test_preskoceny_snimek_zustava_bez_data(): void
+    {
+        $f = $this->fotka(['taken_at' => null]);
+
+        $this->stav(['datDone' => [$f->uuid => 'skip']])->assertOk();
+
+        $this->assertNull($f->refresh()->taken_at);
+    }
+
+    /** Nesmyslný rok se nezapíše. */
+    public function test_nesmyslny_rok_se_nezapise(): void
+    {
+        $f = $this->fotka(['taken_at' => null]);
+
+        foreach (['88', '3021', 'letos', ''] as $rok) {
+            $this->stav([
+                'datDone' => [$f->uuid => 'manual'],
+                'datDrafts' => [$f->uuid => $rok],
+            ])->assertOk();
+        }
+
+        $this->assertNull($f->refresh()->taken_at);
+    }
+
+    /** Fotka, která už datum má, se odsud nepřepíše. */
+    public function test_datovana_fotka_se_neprepise(): void
+    {
+        $f = $this->fotka(['taken_at' => '2019-05-12 08:00:00']);
+
+        $this->stav([
+            'datDone' => [$f->uuid => 'manual'],
+            'datDrafts' => [$f->uuid => '1974'],
+        ])->assertOk();
+
+        $this->assertSame('2019-05-12 08:00:00', (string) $f->refresh()->taken_at);
+    }
+
     /** Uvolněné místo se po načtení stránky nepočítá znovu od nuly. */
     public function test_uvolnene_misto_prezije_nacteni(): void
     {

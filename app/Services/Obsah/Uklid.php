@@ -28,9 +28,16 @@ class Uklid implements PoskytovatelObsahu
         return 'uklid';
     }
 
+    /**
+     * Datování přichází celé.
+     *
+     * Ukázka hlásí osm skenů k dataci a u každého odhad s odůvodněním („auto
+     * na snímku je Škoda 100"). Nechat je vedle skutečných fotek bez data
+     * znamená poslat dvojici datovat snímky, které nemá.
+     */
     public function uplne(): array
     {
-        return [];
+        return ['DATING'];
     }
 
     public function kolekce(GallerySpace $prostor): array
@@ -39,6 +46,7 @@ class Uklid implements PoskytovatelObsahu
             'QUAR' => $this->karantena($prostor),
             'AGRID' => $this->vybery($prostor),
             'PJOBS' => $this->zakazky($prostor),
+            'DATING' => $this->kDatovani($prostor),
         ], fn ($v) => $v !== null && $v !== []);
     }
 
@@ -85,6 +93,179 @@ class Uklid implements PoskytovatelObsahu
             })
             ->values()
             ->all();
+    }
+
+    /**
+     * Snímky bez data a odhad roku: `{ id, name, meta, guess, span, conf, n, reasons, bg }`.
+     *
+     * Odhad stojí **jen na tom, co aplikace opravdu vidí** — na fotkách kolem
+     * téhle. Ukázka odůvodňovala rok tím, že „auto na snímku je Škoda 100,
+     * vyráběná 1969–1977"; tohle aplikace nepozná a předstírat to znamená dát
+     * dvojici jistotu, kterou nemá.
+     *
+     * Každý důvod jde ověřit: sousední soubor, tentýž import, totéž album,
+     * tentýž fotoaparát. Když neplatí ani jeden, snímek se **pořád nabídne** —
+     * jen bez odhadu. Datovat ho může jen člověk, a to je taky odpověď.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function kDatovani(GallerySpace $prostor): array
+    {
+        $bezData = MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
+            ->where('gallery_space_id', $prostor->id)
+            ->whereNull('trashed_at')
+            ->where('is_archived', false)
+            ->whereNull('taken_at')
+            ->orderBy('original_filename')
+            ->limit(40)
+            ->get();
+
+        if ($bezData->isEmpty()) {
+            return [];
+        }
+
+        $sDatem = MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
+            ->where('gallery_space_id', $prostor->id)
+            ->whereNull('trashed_at')
+            ->whereNotNull('taken_at')
+            ->get(['id', 'original_filename', 'taken_at', 'primary_album_id', 'camera_make', 'camera_model', 'uploaded_at']);
+
+        return $bezData
+            ->map(function (MediaItem $m) use ($sDatem) {
+                [$roky, $duvody] = $this->odhadRoku($m, $sDatem);
+
+                return [
+                    'id' => $m->uuid,
+                    'name' => $m->original_filename,
+                    'meta' => $this->popisSnimku($m),
+                    'guess' => $roky ? (string) $this->stred($roky) : '',
+                    'span' => $roky ? (int) ceil((max($roky) - min($roky)) / 2) : 0,
+                    'conf' => $this->jistota($roky, count($duvody)),
+                    'n' => (int) $m->id,
+                    'reasons' => $duvody ?: ['Aplikace nemá z čeho vyjít — kolem téhle fotky není nic s datem.'],
+                ];
+            })
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Roky, ke kterým ukazují stopy kolem snímku, a proč.
+     *
+     * @param  Collection<int, MediaItem>  $sDatem
+     * @return array{0: list<int>, 1: list<string>}
+     */
+    private function odhadRoku(MediaItem $m, Collection $sDatem): array
+    {
+        $roky = [];
+        $duvody = [];
+
+        $rok = fn (object $f) => (int) CarbonImmutable::parse($f->taken_at)->year;
+
+        // Sousední soubor: `sken_0142` a `sken_0143` jsou z jedné role filmu.
+        $sousedi = $sDatem->filter(fn (object $f) => $this->sousedni($m->original_filename, $f->original_filename));
+
+        if ($sousedi->isNotEmpty()) {
+            $roky = array_merge($roky, $sousedi->map($rok)->all());
+            $duvody[] = 'Sousední soubor '.$sousedi->first()->original_filename.' má datum '
+                .CarbonImmutable::parse($sousedi->first()->taken_at)->format('j. n. Y').'.';
+        }
+
+        // Tentýž import: co přišlo v jedné dávce, bývá z jedné doby.
+        if ($m->uploaded_at) {
+            $davka = $sDatem->filter(fn (object $f) => $f->uploaded_at
+                && abs(CarbonImmutable::parse($f->uploaded_at)->diffInMinutes(CarbonImmutable::parse($m->uploaded_at))) < 5);
+
+            if ($davka->isNotEmpty()) {
+                $roky = array_merge($roky, $davka->map($rok)->all());
+                $duvody[] = 'Přišel v jednom importu s '
+                    .($davka->count() === 1 ? 'fotkou' : 'fotkami').' z '
+                    .$this->rozsah($davka->map($rok)->all()).'.';
+            }
+        }
+
+        // Totéž album.
+        if ($m->primary_album_id) {
+            $album = $sDatem->where('primary_album_id', $m->primary_album_id);
+
+            if ($album->isNotEmpty()) {
+                $roky = array_merge($roky, $album->map($rok)->all());
+                $duvody[] = 'Ve stejném albu jsou fotky z '.$this->rozsah($album->map($rok)->all()).'.';
+            }
+        }
+
+        // Tentýž fotoaparát: přístroj se používá pár let, ne pořád.
+        if ($m->camera_model) {
+            $pristroj = $sDatem->where('camera_model', $m->camera_model);
+
+            if ($pristroj->isNotEmpty()) {
+                $roky = array_merge($roky, $pristroj->map($rok)->all());
+                $duvody[] = 'Týmž přístrojem ('.trim($m->camera_make.' '.$m->camera_model)
+                    .') jste fotili v '.$this->rozsah($pristroj->map($rok)->all()).'.';
+            }
+        }
+
+        return [array_values(array_unique($roky)), $duvody];
+    }
+
+    /** `sken_0142` a `sken_0143` — stejný název, číslo o jedničku vedle. */
+    private function sousedni(string $a, string $b): bool
+    {
+        if (! preg_match('/^(.*?)(\d+)(\.[^.]+)$/', $a, $prvni)
+            || ! preg_match('/^(.*?)(\d+)(\.[^.]+)$/', $b, $druhy)) {
+            return false;
+        }
+
+        return $prvni[1] === $druhy[1]
+            && $prvni[3] === $druhy[3]
+            && abs((int) $prvni[2] - (int) $druhy[2]) === 1;
+    }
+
+    /**
+     * Jistota odhadu.
+     *
+     * Roste s počtem stop a klesá s tím, jak daleko od sebe ty stopy leží.
+     * Jedna stopa napříč dvaceti lety není odhad, je to tušení — a tak se to
+     * i napíše.
+     *
+     * @param  list<int>  $roky
+     */
+    private function jistota(array $roky, int $duvodu): int
+    {
+        if (! $roky) {
+            return 0;
+        }
+
+        $rozpeti = max($roky) - min($roky);
+
+        return max(20, min(93, 60 + $duvodu * 12 - $rozpeti * 6));
+    }
+
+    /** @param  list<int>  $roky */
+    private function stred(array $roky): int
+    {
+        sort($roky);
+
+        return $roky[(int) floor((count($roky) - 1) / 2)];
+    }
+
+    /** @param  list<int>  $roky */
+    private function rozsah(array $roky): string
+    {
+        $od = min($roky);
+        $do = max($roky);
+
+        return $od === $do ? (string) $od : $od.'–'.$do;
+    }
+
+    private function popisSnimku(MediaItem $m): string
+    {
+        return implode(' · ', array_filter([
+            $m->media_type === 'video' ? 'video bez data' : 'bez data',
+            $m->width && $m->height ? $m->width.' × '.$m->height : null,
+            $m->location_name,
+            $this->velikost((int) $m->size_bytes),
+        ]));
     }
 
     /**

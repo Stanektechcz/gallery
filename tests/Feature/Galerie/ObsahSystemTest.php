@@ -161,6 +161,34 @@ class ObsahSystemTest extends TestCase
         $this->assertSame('28,5 dne', $r['value']);
     }
 
+    /**
+     * Odhadnutý rok se ve Zdraví dat pozná od změřeného.
+     *
+     * Obrazovka Datování to slibuje dvakrát — tohle je místo, kde se to plní.
+     */
+    public function test_odhadnuta_data_maji_vlastni_radek(): void
+    {
+        $this->fotka(['taken_at' => '1988-01-01 12:00:00', 'taken_at_estimated' => true]);
+        $this->fotka(['taken_at' => '2019-05-12 08:00:00'], 2);
+
+        $r = collect($this->getJson('/api/data/system')->assertOk()->json('data.DATA_HEALTH'))
+            ->firstWhere('label', 'Odhadnutá data fotek');
+
+        $this->assertSame('1 fotka', $r['value']);
+        $this->assertSame('guess', $r['kind']);
+        $this->assertStringContainsString('první leden', $r['note']);
+    }
+
+    /** Bez jediného odhadu se ten řádek neposílá. */
+    public function test_bez_odhadu_zadny_radek(): void
+    {
+        $this->fotka(['taken_at' => '2019-05-12 08:00:00']);
+
+        $stitky = collect($this->getJson('/api/data/system')->assertOk()->json('data.DATA_HEALTH'))->pluck('label');
+
+        $this->assertNotContains('Odhadnutá data fotek', $stitky);
+    }
+
     /** Sekce ví, kdo do ní zapisuje — a jménem, ne napevno. */
     public function test_sekce_vi_kdo_ji_zivi(): void
     {

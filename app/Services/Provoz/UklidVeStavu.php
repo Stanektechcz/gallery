@@ -4,6 +4,7 @@ namespace App\Services\Provoz;
 
 use App\Models\GallerySpace;
 use App\Models\MediaItem;
+use App\Services\Obsah\Uklid;
 use App\Support\SpaceContext;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -23,9 +24,13 @@ use Illuminate\Support\Facades\Schema;
  */
 class UklidVeStavu
 {
+    public function __construct(private readonly Uklid $obsah) {}
+
     public function tykaSe(array $patch): bool
     {
-        return array_key_exists('quarGone', $patch) || array_key_exists('dupDone', $patch);
+        return array_key_exists('quarGone', $patch)
+            || array_key_exists('dupDone', $patch)
+            || array_key_exists('datDone', $patch);
     }
 
     /**
@@ -40,12 +45,90 @@ class UklidVeStavu
     public function zpracuj(array $patch, GallerySpace $prostor): array
     {
         $this->karantena($patch, $prostor);
+        $this->datovani($patch, $prostor);
 
         if (array_key_exists('dupDone', $patch)) {
             $patch['clnFreed'] = $this->duplicity($patch, $prostor);
         }
 
         return $patch;
+    }
+
+    /**
+     * Datování skenů: `datDone` je rozhodnutí, `datDrafts` ručně zapsaný rok.
+     *
+     * „Datováno na 1988" dosud jen zmizelo ze seznamu — `taken_at` zůstalo
+     * prázdné, takže se fotka příště nabídla znovu a v časové ose dál nikde
+     * nebyla.
+     *
+     * Přijatý odhad se zapisuje jako **první leden toho roku**: přesnější
+     * datum aplikace nezná a předstírat den by znamenalo tvrdit víc, než ví.
+     */
+    private function datovani(array $patch, GallerySpace $prostor): void
+    {
+        $rozhodnuti = (array) ($patch['datDone'] ?? []);
+
+        if (! $rozhodnuti) {
+            return;
+        }
+
+        $vlastni = (array) ($patch['datDrafts'] ?? []);
+        $odhady = null;
+
+        foreach ($rozhodnuti as $uuid => $jak) {
+            // „Zůstává bez data" je taky odpověď — a nic se při ní nemění.
+            if (! is_string($uuid) || $jak === 'skip') {
+                continue;
+            }
+
+            /*
+             * Přijatý odhad si server dohledá sám.
+             *
+             * Prototyp do stavu ukládá jen „accept", ne rok. Brát ho z toho,
+             * co poslal prohlížeč, by znamenalo věřit číslu, které si mezitím
+             * mohl kdokoli přepsat — a odhad je tak jako tak serverův.
+             */
+            if ($jak === 'manual') {
+                $rok = $this->rok($vlastni[$uuid] ?? '');
+            } else {
+                $odhady ??= collect($this->obsah->kolekce($prostor)['DATING'] ?? [])->keyBy('id');
+                $rok = $this->rok($odhady[$uuid]['guess'] ?? '');
+            }
+
+            if ($rok === null) {
+                continue;
+            }
+
+            // První leden toho roku: přesnější datum aplikace nezná a
+            // předstírat den by znamenalo tvrdit víc, než ví.
+            MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
+                ->where('gallery_space_id', $prostor->id)
+                ->where('uuid', $uuid)
+                ->whereNull('taken_at')
+                ->update([
+                    'taken_at' => $rok.'-01-01 12:00:00',
+                    /*
+                     * Odhad se pozná od změřeného data.
+                     *
+                     * Obrazovka slibuje, že přijatý návrh „není ve Zdraví dat
+                     * vidět jako tvrdý údaj" — bez tohohle příznaku by rok
+                     * odvozený ze sousedního souboru vypadal stejně jako
+                     * datum z EXIFu. Ručně zapsaný rok příznak nedostává:
+                     * ten člověk ví, ne odhaduje.
+                     */
+                    'taken_at_estimated' => $jak !== 'manual',
+                ]);
+        }
+    }
+
+    /** Rok jako čtyři číslice, nebo nic. */
+    private function rok(mixed $hodnota): ?string
+    {
+        $rok = trim((string) $hodnota);
+
+        return preg_match('/^\d{4}$/', $rok) && (int) $rok >= 1826 && (int) $rok <= (int) now()->year
+            ? $rok
+            : null;
     }
 
     /**

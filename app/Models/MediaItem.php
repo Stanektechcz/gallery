@@ -39,6 +39,8 @@ class MediaItem extends Model
         'audio_codec',
         'taken_at',
         'taken_at_timezone',
+        // Rok odvozený při datování, ne změřený přístrojem.
+        'taken_at_estimated',
         'uploaded_at',
         'imported_at',
         'latitude',
@@ -91,6 +93,7 @@ class MediaItem extends Model
             'trashed_at'     => 'datetime',
             'purge_after'    => 'datetime',
             'last_verified_at' => 'datetime',
+            'taken_at_estimated' => 'boolean',
             'is_favorite'    => 'boolean',
             'is_archived'    => 'boolean',
             'is_hidden'      => 'boolean',

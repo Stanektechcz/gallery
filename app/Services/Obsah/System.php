@@ -127,6 +127,7 @@ class System implements PoskytovatelObsahu
         return array_values(array_filter([
             $this->radekZustatek($prostor),
             $this->radekKnihovna($prostor),
+            $this->radekOdhadnutaData($prostor),
             $this->radekRozpocet($prostor),
             $this->radekCyklus($prostor),
             $this->radekCesta($prostor),
@@ -206,6 +207,46 @@ class System implements PoskytovatelObsahu
             'fixLabel' => 'Úklid knihovny',
             'route' => 'x-uklid',
             'fixToast' => 'Úklid knihovny',
+        ];
+    }
+
+    /**
+     * Fotky, jejichž rok nikdo nezměřil.
+     *
+     * Obrazovka Datování slibuje, že přijatý odhad „ve Zdraví dat není vidět
+     * jako tvrdý údaj" — tohle je to místo, kde se to plní.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function radekOdhadnutaData(GallerySpace $prostor): ?array
+    {
+        if (! Schema::hasColumn('media_items', 'taken_at_estimated')) {
+            return null;
+        }
+
+        $pocet = MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
+            ->where('gallery_space_id', $prostor->id)
+            ->whereNull('trashed_at')
+            ->where('taken_at_estimated', true)
+            ->count();
+
+        if ($pocet === 0) {
+            return null;
+        }
+
+        return [
+            'label' => 'Odhadnutá data fotek',
+            'value' => $this->pocet($pocet, 'fotka', 'fotky', 'fotek'),
+            'kind' => 'guess',
+            'where' => 'Odvozeno z okolních fotek při datování',
+            'age' => 'mění se, jen když se datuje',
+            // Rok odvozený od sousedů sedí obvykle, den v něm ale nesedí nikdy.
+            'conf' => 55,
+            'stale' => false,
+            'note' => 'Rok bývá správně, den v něm ne — je to první leden. V časové ose proto sedí pořadí, ne přesné datum.',
+            'fixLabel' => 'Otevřít datování',
+            'route' => 'x-uklid',
+            'fixToast' => 'Úklid knihovny → Datování',
         ];
     }
 

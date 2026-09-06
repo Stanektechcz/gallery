@@ -103,6 +103,7 @@ Podle toho, kde už skutečný obsah je a kde na něm záleží:
 | 18 | **Systém** | `DATA_HEALTH`, `SECLIFE`, `ABARS.health/risk` | `wallets`, `media_items`, `cycle_days`, `storage_connections`, `jobs`, `failed_jobs` | hotovo |
 | 19 | **Sloupce úzkého rozvržení** | `ABARS.cap`, `ABARS.cycle` | `house_week(_capacity)`, `cycle_days` | hotovo |
 | 20 | **Přepínače nastavení** | `AFORMS` | `bank_connections`, `finance_settings`, `user_settings`, `legacy_plans` | hotovo, **píše i zpátky** |
+| 21 | **Datování skenů** | `DATING` | `media_items` — sousední soubor, tentýž import, album, přístroj | hotovo, **píše i zpátky** |
 
 ## Knihovna: co se muselo změnit v dokumentu
 
@@ -367,7 +368,6 @@ má tabulky i data, poslední je potřeba teprve vymyslet.
 | **Tisk — objednávky** | `PORDERS`, `POSTEPS` | **chybí** — `photo_books` je návrh, ne zakázka; objednání podle prototypu řeší tiskárna, aplikace ho nezakládá |
 | **Sloupce bez zdroje** | `ABARS.tier`, `ABARS.zprCisla` | tierlisty nemají tabulku vůbec; roční čísla čekají na poskytovatele |
 | **Klid a pohoda** | `KL_EV`, `KL_EN`, `KL_TASKS`, `KL_ATTN`, `KL_ASK_LOG` | částečně odvoditelné, část chybí — mapa energie a rozpočet pozornosti nemají, kdo by je zapsal |
-| **Datování skenů** | `DATING` | fotky bez data jsou v `media_items`; **chybí odhadovač roku** |
 | **Příběh dvojice** | `STORY`, `STORYMS` | **chybí** — `album_story_blocks` je vyprávění uvnitř alba, ne kapitoly dvojice |
 | **Nouzový přístup** | `EM_ITEMS`, `EM_LOG` | **chybí** — `travel_emergency_cards` je karta k cestě, ne přístup k datům |
 | **Mechanismy vztahu bez obrazovky pro úpravu** | `TACIT`, `SPEAK`, `FORGIVEN`, `PM_*`, `PAST_*`, `TICHO`, `SCEN`, `P60`, `HORIZON`, `JOY`, `HOURS`, `PAUSE_*`, `AUTO_DEC`, `SURPRISE`, `CONFLICTS`, `RITUALS`, `ML_LOAD`, `VIS_ROWS`, `FAMILY`, `REVISIT`, `TRUTHS` | **chybí** |
@@ -402,7 +402,7 @@ Kde prototyp obsah drží ve svém stavu, vzniká i cesta zpátky:
 | `VztahVeStavu` | rozhodnutí, rozvahy, protokol, veto, sliby, žádosti, připomínky | totéž |
 | `ZdraviVeStavu` | zapsané dny cyklu, nálada | cyklus vlastní modul |
 | `TrezorVeStavu` | co je schované z knihovny | jinak fotku schová jen jeden prohlížeč |
-| `UklidVeStavu` | karanténa a slučování duplicit | „Pustit" jinak zmizí jen tomu, kdo klikl, a originál leží dál na disku |
+| `UklidVeStavu` | karanténa, slučování duplicit, datování skenů | „Pustit" jinak zmizí jen tomu, kdo klikl, a originál leží dál na disku; „datováno na 1988" zmizelo ze seznamu a `taken_at` zůstalo prázdné |
 | `PravidlaVeStavu` | automatizace a její historie | `state.rules \|\| RULEDEF` — jedno přepnutí vypínače navždy zastínilo skutečná pravidla |
 | `RozboryVeStavu` | sezónní fondy | totéž u `state.season \|\| SEASON`; fond měl v Rozpočtech jiný stav než ve své vlastní obrazovce |
 | `ZpravyVeStavu` | odeslané zprávy | „Zpráva odeslána" — a nikam se neodeslala; druhý o ní nevěděl a po zavření záložky zmizela |
