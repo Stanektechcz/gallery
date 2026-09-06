@@ -44,11 +44,16 @@ class Zdravi implements PoskytovatelObsahu
     {
         $dny = Schema::hasTable('cycle_days') ? $this->dny($prostor) : collect();
 
+        $zacatky = $this->zacatky($dny);
+
         return array_filter([
             'CYC_BASE' => $this->zapsane($dny),
-            'CYC_STARTS' => $this->zacatky($dny),
+            'CYC_STARTS' => $zacatky,
             'KL_DAYS' => $this->popiskyDnu(),
             'KL_MOOD' => $this->nalady($prostor),
+            // Přehled cyklu ve sloupcích — úzké rozvržení kreslí záložku
+            // „Přehled" z `ABARS`, ne z vlastní obrazovky.
+            'ABARS' => ($c = $this->sloupceCyklu($zacatky)) ? ['cycle' => $c] : null,
         ], fn ($v) => $v !== null && $v !== []);
     }
 
@@ -139,6 +144,67 @@ class Zdravi implements PoskytovatelObsahu
      * @param  Collection<int, CycleDay>  $dny
      * @return list<array<int, mixed>>
      */
+    /**
+     * Přehled cyklu ve sloupcích: `[popisek, údaj, %, barva]`.
+     *
+     * Průměrná délka i předpověď stojí na zaznamenaných začátcích. Ze dvou
+     * začátků je jedna délka a z jedné délky se průměr nedělá — pod tři se
+     * proto neposílá nic. Odhad z jednoho čísla vypadá stejně jistě jako
+     * odhad z roku záznamů, a to je na tomhle nejhorší.
+     *
+     * @param  list<array{0: string, 1: int}>  $zacatky
+     * @return list<array{0: string, 1: string, 2: int, 3: int}>
+     */
+    private function sloupceCyklu(array $zacatky): array
+    {
+        if (count($zacatky) < 3) {
+            return [];
+        }
+
+        $delky = [];
+
+        for ($i = 1; $i < count($zacatky); $i++) {
+            $delky[] = (int) CarbonImmutable::parse($zacatky[$i - 1][0])
+                ->diffInDays(CarbonImmutable::parse($zacatky[$i][0]));
+        }
+
+        $prumer = array_sum($delky) / count($delky);
+        $posledni = CarbonImmutable::parse($zacatky[count($zacatky) - 1][0]);
+        $den = (int) $posledni->startOfDay()->diffInDays(CarbonImmutable::now()->startOfDay()) + 1;
+        $pristi = $posledni->addDays((int) round($prumer));
+
+        return [
+            [
+                'Aktuální den cyklu',
+                'den '.$den.' z '.round($prumer),
+                (int) round(min(100, $den / max(1, $prumer) * 100)),
+                1,
+            ],
+            [
+                'Průměrná délka',
+                str_replace('.', ',', (string) round($prumer, 1)).' dne · '
+                    .$this->pocet(count($delky), 'zaznamenaný cyklus', 'zaznamenané cykly', 'zaznamenaných cyklů'),
+                100,
+                0,
+            ],
+            [
+                'Předpověď příště',
+                $pristi->format('j. n.'),
+                (int) round(min(100, max(0, 100 - $posledni->diffInDays(CarbonImmutable::now()) / max(1, $prumer) * 100))),
+                2,
+            ],
+        ];
+    }
+
+    private function pocet(int $kolik, string $jeden, string $dva, string $pet): string
+    {
+        return $kolik.' '.match (true) {
+            $kolik === 1 => $jeden,
+            $kolik >= 2 && $kolik <= 4 => $dva,
+            default => $pet,
+        };
+    }
+
     private function zacatky(Collection $dny): array
     {
         $krvaceni = $dny

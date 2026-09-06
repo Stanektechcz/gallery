@@ -101,6 +101,7 @@ Podle toho, kde už skutečný obsah je a kde na něm záleží:
 | 16 | **Štítky a lidé v záložkách** | `ATAGS`, `APEOPLE` | `tags`, `media_tag`, `people` | hotovo |
 | 17 | **Záložky a sloupce financí** | `ATX`, `ABARS.bud/year/res/fc` | `transactions`, `finance_recurring`, `bank_connections`, `budget_category_limits` | hotovo |
 | 18 | **Systém** | `DATA_HEALTH`, `SECLIFE`, `ABARS.health/risk` | `wallets`, `media_items`, `cycle_days`, `storage_connections`, `jobs`, `failed_jobs` | hotovo |
+| 19 | **Sloupce úzkého rozvržení** | `ABARS.cap`, `ABARS.cycle` | `house_week(_capacity)`, `cycle_days` | hotovo |
 
 ## Knihovna: co se muselo změnit v dokumentu
 
@@ -364,7 +365,7 @@ má tabulky i data, poslední je potřeba teprve vymyslet.
 | --- | --- | --- |
 | **Tisk — objednávky** | `PORDERS`, `POSTEPS` | **chybí** — `photo_books` je návrh, ne zakázka; objednání podle prototypu řeší tiskárna, aplikace ho nezakládá |
 | **Asistent — formuláře** | `AFORMS` | přepínače nastavení; část má tabulku (`bank_connections`), část je předvolba prohlížeče |
-| **Sloupce bez zdroje** | `ABARS.tier`, `ABARS.cap`, `ABARS.zprCisla` | tierlisty nemají tabulku vůbec; kapacita týdne a roční čísla čekají na poskytovatele |
+| **Sloupce bez zdroje** | `ABARS.tier`, `ABARS.zprCisla` | tierlisty nemají tabulku vůbec; roční čísla čekají na poskytovatele |
 | **Klid a pohoda** | `KL_EV`, `KL_EN`, `KL_TASKS`, `KL_ATTN`, `KL_ASK_LOG` | částečně odvoditelné, část chybí — mapa energie a rozpočet pozornosti nemají, kdo by je zapsal |
 | **Datování skenů** | `DATING` | fotky bez data jsou v `media_items`; **chybí odhadovač roku** |
 | **Příběh dvojice** | `STORY`, `STORYMS` | **chybí** — `album_story_blocks` je vyprávění uvnitř alba, ne kapitoly dvojice |

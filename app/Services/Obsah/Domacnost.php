@@ -69,6 +69,17 @@ class Domacnost implements PoskytovatelObsahu
             'PANTRY' => $this->spiz($prostor),
         ], fn ($v) => $v !== null && $v !== []);
 
+        /*
+         * Kapacita týdne ve sloupcích.
+         *
+         * Široké rozvržení pro ni má vlastní obrazovku, úzké kreslí sloupce
+         * z `ABARS`. Klíč `cap` v ukázce vůbec není, takže na telefonu byla
+         * ta záložka prázdná — přestože čísla dvojice má.
+         */
+        if ($sloupce = $this->sloupceTydne($kolekce['HOUSE_WEEK'] ?? [], $jmena, $prostor)) {
+            $kolekce['ABARS'] = ['cap' => $sloupce];
+        }
+
         if (! $kolekce) {
             return [];
         }
@@ -229,6 +240,47 @@ class Domacnost implements PoskytovatelObsahu
         }
 
         return $radky;
+    }
+
+    /**
+     * Týden ve sloupcích: `[den, „Adrian 2,5 h · Makinka 1,5 h", %, barva]`.
+     *
+     * Sto procent má nejvolnější den v týdnu — porovnává se tedy s vlastním
+     * týdnem, ne s vymyšleným ideálem. Den, kde ani jeden nemá hodinu volna,
+     * je varovný: prototyp na něj u úkolů dává upozornění.
+     *
+     * @param  list<array<string, mixed>>  $tyden
+     * @param  array<int, string>  $jmena
+     * @return list<array{0: string, 1: string, 2: int, 3: int}>
+     */
+    private function sloupceTydne(array $tyden, array $jmena, GallerySpace $prostor): array
+    {
+        if (! $tyden) {
+            return [];
+        }
+
+        $dvojice = $this->dvojice($prostor);
+        $prvni = $jmena[$dvojice[0]] ?? 'Adrian';
+        $druhy = $jmena[$dvojice[1]] ?? 'Makinka';
+
+        $nejvic = max(array_map(fn (array $d) => (float) $d['a'] + (float) $d['m'], $tyden)) ?: 1.0;
+
+        return array_map(function (array $d) use ($prvni, $druhy, $nejvic) {
+            $spolu = (float) $d['a'] + (float) $d['m'];
+            $tesno = (float) $d['a'] < 1 && (float) $d['m'] < 1;
+
+            return [
+                $d['name'].' '.$d['date'],
+                $prvni.' '.$this->hodiny((float) $d['a']).' · '.$druhy.' '.$this->hodiny((float) $d['m']),
+                (int) round($spolu / $nejvic * 100),
+                $tesno ? 1 : ($spolu >= $nejvic ? 0 : 2),
+            ];
+        }, $tyden);
+    }
+
+    private function hodiny(float $hodin): string
+    {
+        return str_replace('.', ',', (string) round($hodin, 1)).' h';
     }
 
     /**
