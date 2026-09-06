@@ -80,13 +80,13 @@ Změřeno v prohlížeči proti běžícímu serveru, ne odhadem:
 | --- | --- |
 | Klíčů v `window.GalerieData` | **190** — z toho 9 jsou pomocné funkce, ne data |
 | Kolekcí celkem | **181** |
-| Obsluhuje server | **129** (127 přes `/api/data`, `ADMIN` a `STORAGE` přes přístupovou vrstvu) |
-| Z toho kolekcí, které prototyp má | **110** |
+| Obsluhuje server | **135** (133 přes `/api/data`, `ADMIN` a `STORAGE` přes přístupovou vrstvu) |
+| Z toho kolekcí, které prototyp má | **113** |
 | Katalogy rozhraní — zůstávají statické záměrně | ~53 (`SCEN` a `RITUALS` se ukázaly být číselníky) |
 | Přihlašovací záslepky prototypu — **daty se stát nesmí** | 6 |
-| **Obsah dvojice, který ještě není napojený** | **10** |
+| **Obsah dvojice, který ještě není napojený** | **7** |
 
-Sedmnáct ze sto dvaceti sedmi kolekcí prototyp v `GalerieData` vůbec nemá — mřížku fotek
+Dvacet ze sto třiceti tří kolekcí prototyp v `GalerieData` vůbec nemá — mřížku fotek
 (`PHOTOS`, `DAYS`, `ALBUMS`, `ATREE`), čísla u nabídky (`NAVCNT`, `TOTAL`),
 měnu, spíž a odkazy si dokument vyráběl sám ve funkcích. Server je dodává
 navíc a přepínače v dokumentu je berou přednostně.
@@ -133,6 +133,9 @@ Podle toho, kde už skutečný obsah je a kde na něm záleží:
 | 26 | **Mechanismy pro dva** | `FAV`, `FORGIVEN`, `ANTI`, `ML_LOAD`, `FAMILY`, `TRUTHS`, `PAUSE_LOG`, `PAUSE_PLAN`, `TICHO` | `couple_favours`, `couple_forgiven`, `couple_anti_budget`, `couple_mental_load`, `couple_family_contacts`, `couple_truths`, `couple_pause` | hotovo, **píše i zpátky**; `TICHO` se počítá |
 | 27 | **Odvozené — bez vlastní tabulky** | `HOURS`, `RECON`, `CAS_ROWS`, `COSTMEAN`, `DELAY`, `EST`, `SURPRISE`, `CONFLICTS`, `DISP`, `SOLO` | `media_items`, `house_chore_log`, `house_dues`, `budget_category_limits`, `transactions`, `drive_conflicts`, `couple_disagreement_points`, `event_participants` | hotovo — počítá se, neukládá |
 | 28 | **Rozhodování** | `BUS`, `PM_DEC`, `PM_MINE`, `PM_THEIRS`, `PM_HIST`, `PAST_DEC`, `PAST_CASES`, `REVISIT` | `couple_bus_items`, `couple_premortems`, `couple_premortem_risks`, `couple_past_cases`, `couple_decision_inputs` | hotovo, **zapisuje se formulářem** (`/api/zaznamy/…`) |
+| 29 | **Úložiště a koš** | `DISK`, `TRASH`, `DVOJICE` | `storage_connections`, `media_items`, `media_variants`, `gallery_space_user` | hotovo, **maže i na Disku** (`/api/kos/…`, `/api/uloziste/prenest`) |
+| 30 | **Předpověď a horizont** | `P60`, `HORIZON` | `finance_recurring`, `wallets`, `transactions` | hotovo — počítá se, neukládá |
+| 31 | **Rozhodl čas** | `AUTO_DEC` | `couple_cooling_purchases`, `shared_todos` | hotovo — tři vzorce, žádná nová tabulka |
 
 ## Knihovna: co se muselo změnit v dokumentu
 
@@ -410,6 +413,13 @@ Odpověď nese **celou skupinu znovu** a hlavička ji navleče do kolekcí
 (`GalerieObsahNavlec`). Čekat na další `GET /api/data/rozhodovani` nejde —
 ta odpověď má půlminutovou paměť a nový zápis by se objevil se zpožděním.
 
+Vedle `data` nese odpověď na akci ještě `prazdne` — seznam kolekcí, které po ní
+**zbyly prázdné**. Poskytovatel prázdné kolekce neposílá, což je při načtení
+stránky správně (prázdná obrazovka a rozbitá aplikace vypadají stejně), ale
+u odpovědi na akci to znamená „nezměnilo se nic": po vrácení poslední položky
+z koše by na obrazovce zůstal řádek, který už neexistuje. Skládá to `VraciObsah`
+z rozdílu mezi `uplne()` a klíči, které opravdu přišly.
+
 Tři věci, které se u toho ukázaly:
 
 *Jedna tabulka na otázku i na případ.* `PAST_DEC` a `PAST_CASES` je jedna
@@ -428,13 +438,39 @@ Server řadí podle přihlášeného člověka a prototyp stejně, podle
 `window.GALERIE_USER`. To bylo do té doby vždycky `null` — hlavička s tím
 počítala, ale nikdo jí to nepředával.
 
+## Úložiště: obrazovka, která tvrdila, že je záloha hotová
+
+„Připojeno — adrian.stanek@gmail.com. Poslední úspěšná synchronizace dnes
+v 8:12 · 24 316 originálů bezpečně uloženo." Celá obrazovka úložiště byla
+napsaná v designovém souboru — e-mail, čas, počty, rozdělení kapacity
+i varování o třech nepřenesených souborech. Dvojici, která Google Disk
+připojený nemá, tvrdila, že jsou její fotky ve dvou kopiích. To není zastaralé
+číslo, to je nepravda o záloze.
+
+Stav připojení se hledá **toutéž cestou jako ve zbytku aplikace**
+(`DriveConnectionResolver`): podle členů prostoru, ne podle `gallery_space_id`,
+který je v té tabulce z větší části prázdný. Rozbité připojení se přiznává —
+vypršelý token je pro dvojici horší stav než žádný účet, protože si myslí,
+že zálohu má.
+
+Čtyři dlaždice se stavem originálů **rozdělují celou knihovnu**. Podle sloupce
+se stavem to nešlo: položky se stavem mimo výčet se mezi dlaždicemi ztratily
+a součet neseděl s počtem fotek. Rozhoduje proto `drive_file_id` — stav sám
+o sobě je jen tvrzení, a záznam, který o sobě říká „synced", ale nemá k čemu
+se vrátit, je přesně ten případ na čtvrté dlaždici.
+
+Koš byl na tom stejně: čtyři vymyšlené řádky a dialog slibující, že se odstraní
+i originály z Disku, načež se nesmazalo nic. Maže se přes `MediaPurger`, tutéž
+službu jako druhé rozhraní — dvě implementace by znamenaly dvě místa, kde se dá
+zapomenout na kopii v cloudu.
+
 ## Co ještě není napojené
 
 Tohle **není** katalog rozhraní — je to obsah dvojice, který se pořád kreslí
 z `galerie-data.js`. Seřazeno podle toho, co je hotové nejdřív: první skupina
 má tabulky i data, poslední je potřeba teprve vymyslet.
 
-Zbývá deset kolekcí a dělí se na dvě skupiny podle toho, **proč** ještě nejsou
+Zbývá sedm kolekcí a dělí se na dvě skupiny podle toho, **proč** ještě nejsou
 napojené. To je ten rozdíl, na kterém záleží: první je rozhodnutí, druhá slepá
 ulička.
 
@@ -443,9 +479,20 @@ ulička.
 Obrazovka ta čísla ukazuje, ale nikde je nezadává. Napojit je znamená **nejdřív
 domyslet, odkud se vezmou**.
 
-`JOY` (účet radosti), `HORIZON` (co nás čeká), `VIS_ROWS` (neviditelná práce),
-`AUTO_DEC` (rozhodnuto tím, že se nerozhodlo), `TACIT` (tiché dohody),
+`JOY` (účet radosti), `VIS_ROWS` (neviditelná práce), `TACIT` (tiché dohody),
 `SPEAK` (kdo mluví za koho).
+
+U každé z nich chybí **jeden konkrétní sloupec**, ne nápad, jak to spočítat:
+
+| Kolekce | Co chybí |
+| --- | --- |
+| `JOY` | vazba mezi činností, útratou a náladou toho dne — kalendář nemá druh činnosti |
+| `VIS_ROWS` | hodiny strávené kontaktem s rodinou; tabulka zná jen jak často a kdo naposled |
+| `TACIT` | dvojice pravidlo–událost, na které by šlo měřit, kolikrát platilo |
+| `SPEAK` | oblast u zprávy nebo kontaktu; bez ní se nedá říct, kdo za koho mluví v čem |
+
+Doplnit sloupec a nechat ho vyplňovat je řešení. Dopočítat ho z toho, co je,
+řešení není — vyšlo by číslo, kterým se pak měří chování dvojice.
 
 Pozor na to, **jak** se napojí: každá z těchhle obrazovek si na sebe říká, že
 počítá, ne že se vyplňuje. „Tohle nejsou pravidla, na kterých jste se dohodli.
@@ -454,9 +501,7 @@ z korelací, útrata z transakcí, hodiny z kalendáře. Nic se nehodnotí dojme
 (`JOY`). Formulář by u nich šel proti smyslu obrazovky — patří k nim výpočet
 z transakcí, kalendáře a deníku, ne pole k vyplnění.
 
-`P60` je zvláštní případ: text obrazovky říká „nic se nemodeluje ručně", ale
-předpověď se dá **spočítat z pevných plateb, obou mezd a průměrné denní
-útraty** — všechno jsou to data, která už v databázi jsou.
+`P60`, `HORIZON` a `AUTO_DEC` už spočítané jsou — viz pořadí výš.
 
 ### Zapsané formulářem
 
@@ -553,16 +598,31 @@ ukázkové řádky se neimportují a maže se jen to, co server sám poslal.
    tabulka — ale zápis na místě, kde obrazovka slibuje výpočet, je horší než
    obojí. Než se přidá pole k vyplnění, přečíst, co ta obrazovka o sobě říká.
 
-## Co zbývá: jména napevno
+## Jména dvojice
 
-Prototyp na zhruba sedmdesáti místech porovnává se jmény `'Adrian'`
-a `'Makinka'` — barvy štítků, sloupce, filtry. U dvojice, která se jmenuje
-jinak, z toho vyjde šedý štítek nebo prázdný sloupec. Na obrazovkách krytí
-domácnosti a pre-mortemu je to opravené (`this.dva()`, jména ze skutečných
-členů), zbytek čeká.
+Prototyp na zhruba sedmdesáti místech porovnával se jmény `'Adrian'`
+a `'Makinka'` — barvy štítků, sloupce, filtry, počty, přepínače. U dvojice,
+která se jmenuje jinak, z toho vycházel šedý štítek, prázdný sloupec a věty
+typu „Požádat Klára".
 
-Část z toho **nejsou jen jména**: `whoAcc`, `whoDat`, `whoGen` skloňují a věty
-jako „převzala Makinka" mají rod napevno. Z cizího jména se druhý pád ani rod
-odvodit nedá, takže tam nepůjde o záměnu řetězce, ale o přepis vět — jméno za
-pomlčku v prvním pádě, sloveso do neutrální podoby. Stejný postup, jaký už je
-použitý u „vyplnila se obava — Adrian" a „část obav se vyplnila".
+Kdo ti dva jsou, říká server v kolekci `DVOJICE` (skupina `system`) ze členů
+prostoru; **první je ten, kdo se dívá**, protože polovina vět je psaná z jeho
+pohledu. Odvození z nálady dvou zůstalo jako záloha, ale spoléhat se na ně
+nešlo: dokud si ji nikdo nezapsal, padalo se zpátky na ukázková jména. Dva
+stejně pojmenovaní členové dostanou pořadové číslo — bez něj by se slili do
+jednoho a půlka obrazovek by počítala práci jednoho z nich dvakrát.
+
+V dokumentu na to jsou čtyři pomocníci: `dva()`, `druhy()`, `tagKdo()`
+a `barvaKdo()`.
+
+**Pády se odvozují z pravidel**, ne z výčtu (`sklon(jmeno, pad)`). Česká jména
+se skloňují pravidelně: Kláru/Kláře/Kláry, Adriana/Adrianovi, Marka/Markovi,
+Jiřího/Jiřímu. Jméno, které do žádného vzoru nepadne, zůstane v prvním pádě —
+horší čeština než správný pád, ale lepší než pád špatný, a věty kolem jsou
+psané tak, aby to unesly.
+
+**Minulý čas s rodem je nahrazený přítomným.** „Práci převzala Makinka" se
+u cizího jména napsat nedá, protože rod se z něj odvodit nedá; „práci přebírá
+Klára" říká totéž a nepotřebuje ho. `rodPripona()` vrací `null` právě pro
+jména, u kterých se rod určit nedá — věta se pak musí přeformulovat, ne
+uhodnout.
