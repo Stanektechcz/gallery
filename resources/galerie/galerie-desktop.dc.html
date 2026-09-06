@@ -4748,26 +4748,30 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                         </div>
                         <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px; margin-top:12px">
                           <div style="padding:12px 14px; background:var(--g-panel); border-radius:2px">
-                            <div style="font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--g-ink3)">Moje verze</div>
+                            <div style="font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--g-ink3)">{{ c.mineLabel }}</div>
                             <div style="font-size:15px; margin-top:4px; text-wrap:pretty">{{ c.mine }}</div>
                             <div style="font-size:11.5px; color:var(--g-ink3); margin-top:3px">{{ c.mineWhen }}</div>
                           </div>
                           <div style="padding:12px 14px; background:var(--g-panel); border-radius:2px">
-                            <div style="font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--g-ink3)">Jeho verze</div>
+                            <div style="font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--g-ink3)">{{ c.theirsLabel }}</div>
                             <div style="font-size:15px; margin-top:4px; text-wrap:pretty">{{ c.theirs }}</div>
                             <div style="font-size:11.5px; color:var(--g-ink3); margin-top:3px">{{ c.theirsWhen }}</div>
                           </div>
-                          <div style="padding:12px 14px; border:1px solid var(--g-acc); border-radius:2px">
-                            <div style="font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--g-acc-deep)">Návrh na spojení</div>
-                            <div style="font-size:15px; margin-top:4px; text-wrap:pretty">{{ c.merged }}</div>
-                            <div style="font-size:11.5px; color:var(--g-ink3); margin-top:3px">sestaveno z obou úprav</div>
-                          </div>
+                          <sc-if value="{{ c.hasMerged }}" hint-placeholder-val="{{ true }}">
+                            <div style="padding:12px 14px; border:1px solid var(--g-acc); border-radius:2px">
+                              <div style="font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--g-acc-deep)">Návrh na spojení</div>
+                              <div style="font-size:15px; margin-top:4px; text-wrap:pretty">{{ c.merged }}</div>
+                              <div style="font-size:11.5px; color:var(--g-ink3); margin-top:3px">sestaveno z obou úprav</div>
+                            </div>
+                          </sc-if>
                         </div>
                         <sc-if value="{{ c.open }}">
                           <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:12px">
-                            <button class="btn btn-primary" onClick="{{ c.takeMerge }}" style="gap:6px"><i class="ph-duotone ph-git-merge" style="font-size:16px"></i>Spojit</button>
-                            <button class="btn btn-secondary" onClick="{{ c.takeMine }}" style="gap:6px"><i class="ph-duotone ph-user" style="font-size:16px"></i>Nechat moji</button>
-                            <button class="btn btn-secondary" onClick="{{ c.takeTheirs }}" style="gap:6px"><i class="ph-duotone ph-user-circle" style="font-size:16px"></i>Nechat jeho</button>
+                            <sc-if value="{{ c.hasMerged }}" hint-placeholder-val="{{ true }}">
+                              <button class="btn btn-primary" onClick="{{ c.takeMerge }}" style="gap:6px"><i class="ph-duotone ph-git-merge" style="font-size:16px"></i>Spojit</button>
+                            </sc-if>
+                            <button class="btn btn-secondary" onClick="{{ c.takeMine }}" style="gap:6px"><i class="ph-duotone ph-user" style="font-size:16px"></i>{{ c.mineBtn }}</button>
+                            <button class="btn btn-secondary" onClick="{{ c.takeTheirs }}" style="gap:6px"><i class="ph-duotone ph-user-circle" style="font-size:16px"></i>{{ c.theirsBtn }}</button>
                             <button class="btn btn-ghost" onClick="{{ c.why }}" style="gap:6px"><i class="ph-duotone ph-question" style="font-size:16px"></i>Proč to nevyřešila aplikace</button>
                           </div>
                         </sc-if>
@@ -7330,6 +7334,10 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
             <sc-if value="{{ appIsFilms }}">
               <div style="display:flex; flex-direction:column; gap:16px">
                 <span style="font-size:13px; color:var(--g-ink2)">{{ fmHead }}</span>
+                <div style="display:flex; gap:8px; flex-wrap:wrap; max-width:640px">
+                  <input class="input" value="{{ fmDraft }}" onInput="{{ fmSetDraft }}" placeholder="Název filmu nebo seriálu" aria-label="Název titulu" style="flex:1 1 260px" />
+                  <button class="btn btn-primary" onClick="{{ fmAdd }}" disabled="{{ fmCant }}" style="flex:none">{{ fmAddLabel }}</button>
+                </div>
                 <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(max(232px, calc(25% - 11px)),1fr)); gap:14px">
                   <sc-for list="{{ fmRows }}" as="f" hint-placeholder-count="8">
                     <div style="display:flex; flex-direction:column; border-radius:2px; overflow:hidden; background:var(--g-raise); outline:1px solid var(--g-line2)">
@@ -8720,12 +8728,27 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                       <td style="color:var(--g-ink2)">{{ t.need }}</td>
                       <td style="color:{{ t.color }}">{{ t.fit }}</td>
                       <td style="text-align:right">
-                        <sc-if value="{{ t.hasGo }}" hint-placeholder-val="{{ true }}">
-                          <button class="btn btn-ghost" onClick="{{ t.go }}" style="font-size:12.5px; padding:6px 11px">{{ t.label }}</button>
-                        </sc-if>
+                        <div style="display:flex; gap:6px; justify-content:flex-end; flex-wrap:wrap">
+                          <sc-if value="{{ t.hasGo }}" hint-placeholder-val="{{ true }}">
+                            <button class="btn btn-ghost" onClick="{{ t.go }}" style="font-size:12.5px; padding:6px 11px">{{ t.label }}</button>
+                          </sc-if>
+                          <button class="btn btn-ghost" onClick="{{ t.done }}" style="font-size:12.5px; padding:6px 11px">Hotovo</button>
+                        </div>
                       </td>
                     </tr>
                   </sc-for>
+                  <tr>
+                    <td><input class="input" value="{{ klTaskDraft }}" onInput="{{ klTaskSetNew }}" placeholder="Co čeká na společné okno" aria-label="Nová věc, která čeká na okno" /></td>
+                    <td>
+                      <select class="input" value="{{ klTaskNeed }}" onChange="{{ klTaskSetNeed }}" aria-label="Kolik lidí to potřebuje">
+                        <sc-for list="{{ klTaskNeedOpts }}" as="o" hint-placeholder-count="3">
+                          <option value="{{ o.value }}">{{ o.label }}</option>
+                        </sc-for>
+                      </select>
+                    </td>
+                    <td></td>
+                    <td style="text-align:right"><button class="btn btn-primary" onClick="{{ klTaskAdd }}" disabled="{{ klTaskCant }}" style="font-size:12.5px; padding:6px 11px">Přidat</button></td>
+                  </tr>
                 </tbody>
               </table>
             </div>
@@ -9942,12 +9965,20 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                     <div style="display:flex; flex-direction:column; gap:7px; margin-top:11px">
                       <sc-for list="{{ d.people }}" as="p" hint-placeholder-count="2">
                         <div>
-                          <div style="display:flex; align-items:baseline; gap:6px; font-size:12.5px; color:var(--g-ink2); font-variant-numeric:tabular-nums">{{ p.name }}<span style="margin-left:auto; color:{{ p.color }}">{{ p.free }}</span></div>
+                          <div style="display:flex; align-items:baseline; gap:6px; font-size:12.5px; color:var(--g-ink2); font-variant-numeric:tabular-nums">
+                            {{ p.name }}
+                            <button class="btn btn-icon" onClick="{{ p.less }}" aria-label="O půl hodiny méně" style="margin-left:auto; width:20px; height:20px"><i class="ph-duotone ph-minus" style="font-size:11px"></i></button>
+                            <span style="min-width:44px; text-align:right; color:{{ p.color }}">{{ p.free }}</span>
+                            <button class="btn btn-icon" onClick="{{ p.more }}" aria-label="O půl hodiny víc" style="width:20px; height:20px"><i class="ph-duotone ph-plus" style="font-size:11px"></i></button>
+                          </div>
                           <div style="height:5px; border-radius:2px; background:var(--g-line2); overflow:hidden; margin-top:4px"><div style="height:100%; width:{{ p.width }}; background:{{ p.fill }}"></div></div>
                         </div>
                       </sc-for>
                     </div>
-                    <div style="font-size:11.5px; color:var(--g-ink3); margin-top:9px; line-height:1.45">{{ d.note }}</div>
+                    <input class="input" value="{{ d.note }}" onInput="{{ d.setNote }}" placeholder="Co ten den zabírá čas" aria-label="Poznámka ke dni" style="margin-top:9px; font-size:11.5px; padding:5px 8px" />
+                    <sc-if value="{{ d.fixed }}">
+                      <button class="btn btn-ghost" onClick="{{ d.auto }}" style="margin-top:7px; font-size:11px; padding:4px 9px">Podle kalendáře</button>
+                    </sc-if>
                   </div>
                 </sc-for>
               </div>
@@ -14297,7 +14328,19 @@ class Component extends DCLogic {
   rowsOf(key) {
     const o = this.state.xRows[key];
     if (o) return o;
-    return (AL[key] || []).map((r, i) => ({ t: r[0], m: r[1], g: r[2] || null, id: key + '-' + i }));
+    /*
+     * Pole za štítkem posílá server u filmů a seriálů: pásmo v žebříčku,
+     * hvězdičky obou a postup v dílech. Ukázka je nemá, takže tam zůstanou
+     * prázdná a obrazovka se chová přesně jako dosud.
+     *
+     * Bez nich by hodnocení a rozkoukaný díl žily jen ve stavu prohlížeče —
+     * a ten si serverové klíče nedrží, takže by je každé načtení zapomnělo.
+     */
+    return (AL[key] || []).map((r, i) => ({
+      t: r[0], m: r[1], g: r[2] || null, id: key + '-' + i,
+      tier: r[3] || null, rate: r[4] || null,
+      ep: r[5] === undefined ? null : r[5], epN: r[6] === undefined ? null : r[6]
+    }));
   }
   boardOf(key) {
     const o = this.state.xBoard[key];
@@ -14622,6 +14665,21 @@ class Component extends DCLogic {
     return (ATAGS[key] || ATAGS.all).map(t => ({ t: t[0], c: t[1] }));
   }
   setRows(key, list) { this.setState({ xRows: { ...this.state.xRows, [key]: list } }); }
+  /*
+   * Hvězdička u titulu, který server ještě nezná, nemá kam sednout.
+   *
+   * Filmy, seriály a watchlist mají v databázi tabulku; dokud si do ní dvojice
+   * nic nepřidala, kreslí obrazovka ukázku. Zařazení do pásma nebo hodnocení
+   * takového řádku by se uložilo jen v prohlížeči a hláška „→ tier S" by
+   * lhala. Seznam se proto pošle s tou změnou — server si z něj tituly založí
+   * a identifikátory pak míří na skutečné řádky.
+   */
+  xRowsProTitul(id, patch) {
+    const key = String(id || '').split('-')[0];
+    if (['films', 'series', 'watchlist'].indexOf(key) < 0) return patch;
+    if (this.state.xRows[key]) return patch;
+    return Object.assign({}, patch, { xRows: { ...this.state.xRows, [key]: this.rowsOf(key) } });
+  }
 
   openRow = (title, meta) => {
     const bare = title.indexOf(' · ') > 0 ? title.slice(title.indexOf(' · ') + 3) : title;
@@ -18581,6 +18639,9 @@ class Component extends DCLogic {
     const s = this.state;
     const tab = s.klTab || 'klMood';
     const mood = s.klMood || KL_MOOD;
+    // Co čeká na společné okno. Server to má v tabulce; dokud odtud nic
+    // nepřišlo, kreslí se ukázka — prázdná tabulka vypadá jako rozbitá.
+    const klTasks = s.klTasks === null || s.klTasks === undefined ? KL_TASKS : s.klTasks;
     /*
      * Jména dvojice, ne „Adrian" a „Makinka" napevno.
      *
@@ -18761,7 +18822,7 @@ class Component extends DCLogic {
           pick: () => cycleEn(w.di, w.si)
         }))
       })),
-      klEnTasks: KL_TASKS.map(t => {
+      klEnTasks: klTasks.map(t => {
         const n = wins.filter(w => w.shared >= t.need).length;
         return {
           name: t.name,
@@ -18769,9 +18830,30 @@ class Component extends DCLogic {
           fit: n === 0 ? 'tento týden se to nestane' : this.pl(n, 'okno', 'okna', 'oken'),
           color: n === 0 ? 'var(--g-mag)' : n <= 2 ? 'var(--g-ink)' : 'var(--g-ink2)',
           hasGo: !!t.route, label: t.label,
-          go: () => { this.setState(t.tab ? { route: t.route, hsTab: t.tab, dcTab: t.tab } : { route: t.route }); this.toast('Otevřeno z mapy energie', { icon: 'ph-arrow-right' }); }
+          go: () => { this.setState(t.tab ? { route: t.route, hsTab: t.tab, dcTab: t.tab } : { route: t.route }); this.toast('Otevřeno z mapy energie', { icon: 'ph-arrow-right' }); },
+          done: () => {
+            const prev = klTasks;
+            this.setState({ klTasks: klTasks.filter(x => x !== t) });
+            this.toast('„' + t.name + '“ hotovo · z čekání to mizí', { icon: 'ph-check-circle', undo: () => this.setState({ klTasks: prev }) });
+          }
         };
       }),
+      klTaskDraft: s.klTaskDraft || '',
+      klTaskSetNew: e => this.setState({ klTaskDraft: e.target.value }),
+      klTaskNeed: String(s.klTaskNeed === undefined ? 2 : s.klTaskNeed),
+      klTaskSetNeed: e => this.setState({ klTaskNeed: +e.target.value }),
+      klTaskNeedOpts: [{ value: '2', label: 'oba na plno' }, { value: '1', label: 'aspoň něco z obou' }, { value: '0', label: 'jen být spolu' }],
+      klTaskCant: !String(s.klTaskDraft || '').trim(),
+      klTaskAdd: () => {
+        const jmeno = String(s.klTaskDraft || '').trim();
+        if (!jmeno) return;
+        const prev = klTasks;
+        this.setState({
+          klTasks: klTasks.concat([{ id: 0, name: jmeno, need: s.klTaskNeed === undefined ? 2 : s.klTaskNeed, route: null, tab: null, label: '' }]),
+          klTaskDraft: ''
+        });
+        this.toast('„' + jmeno + '“ čeká na okno', { icon: 'ph-hourglass-medium', undo: () => this.setState({ klTasks: prev }) });
+      },
       klEnToCap: () => { this.setState({ route: 'x-domacnost', hsTab: 'cap' }); this.toast('Kapacita týdne počítá volný čas — mapa energie sílu', { icon: 'ph-hourglass-medium' }); },
 
       klAttnTotal: String(attnTotal),
@@ -21290,7 +21372,34 @@ class Component extends DCLogic {
   msOf() {
     const s = this.state;
     if (s.msList) return s.msList;
-    return STORYMS.map(m => ({ id: m[0], y: m[1], date: m[2], title: m[3], note: m[4], icon: m[5], ch: m[6] }));
+    return STORYMS.map(m => ({ id: m[0], y: m[1], date: m[2], title: m[3], note: m[4], icon: m[5], ch: m[6], iso: m[7] || null }));
+  }
+  /*
+   * „4. dubna 2026" na den, který jde zapsat do tabulky.
+   *
+   * Na ose stojí datum tak, jak ho člověk napsal; v databázi je to den, podle
+   * kterého se osa řadí. Převod dělá prohlížeč, protože jen on ví, co se do
+   * pole psalo — server dostane text i den a nemusí hádat.
+   *
+   * Rok z vedlejšího pole platí jen tehdy, když ho v textu není: dvě různá
+   * čísla by jinak tiše přepsala to, co je napsané.
+   */
+  msIso(d) {
+    const M = ['ledna', 'února', 'března', 'dubna', 'května', 'června', 'července', 'srpna', 'září', 'října', 'listopadu', 'prosince'];
+    const txt = String((d && d.date) || '').trim();
+    let den, mes, rok, m;
+    if ((m = txt.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/))) { rok = +m[1]; mes = +m[2]; den = +m[3]; }
+    else if ((m = txt.match(/^(\d{1,2})\.\s*(\d{1,2})\.\s*(\d{4})?$/))) { den = +m[1]; mes = +m[2]; rok = +(m[3] || 0); }
+    else if ((m = txt.match(/^(\d{1,2})\.\s*(\p{L}+)\s*(\d{4})?$/u))) {
+      const i = M.indexOf(m[2].toLowerCase());
+      if (i < 0) return null;
+      den = +m[1]; mes = i + 1; rok = +(m[3] || 0);
+    } else return null;
+    rok = rok || +String((d && d.y) || '').trim();
+    if (!(rok >= 1900 && rok <= 2200)) return null;
+    const dt = new Date(Date.UTC(rok, mes - 1, den));
+    if (dt.getUTCFullYear() !== rok || dt.getUTCMonth() !== mes - 1 || dt.getUTCDate() !== den) return null;
+    return rok + '-' + String(mes).padStart(2, '0') + '-' + String(den).padStart(2, '0');
   }
   storyWords(t) { return (t || '').split(/\s+/).filter(Boolean).length; }
   storyVals(key) {
@@ -21556,13 +21665,16 @@ class Component extends DCLogic {
       msNote: d.note, msSetNote: e => set({ note: e.target.value }),
       msCh: d.ch, msSetCh: e => set({ ch: e.target.value }),
       msChOpts: [{ value: '', label: 'Nezařazeno' }].concat(this.storyOf().map(c => ({ value: c.id, label: c.title }))),
-      msCant: !(d.title || '').trim() || !(d.date || '').trim(),
+      // Datum musí jít přečíst — milník s nečitelným datem by na ose stál
+      // na špatném místě, nebo by ho server odmítl a tlačítko by lhalo.
+      msCant: !(d.title || '').trim() || !this.msIso(d),
       msClose: () => this.setState({ msDlg: null }),
       msSave: () => {
         const t = (d.title || '').trim();
-        if (!t) return;
+        const iso = this.msIso(d);
+        if (!t || !iso) return;
         const prev = this.msOf();
-        const row = { id: 'm-n' + (s.xSeq || 1), y: d.y, date: d.date, title: t, note: d.note, icon: 'ph-sparkle', ch: d.ch };
+        const row = { id: 'm-n' + (s.xSeq || 1), y: iso.slice(0, 4), date: d.date, title: t, note: d.note, icon: 'ph-sparkle', ch: d.ch, iso: iso };
         this.setState({ msList: prev.concat([row]).sort((a, b) => a.y.localeCompare(b.y)), msDlg: null, xSeq: (s.xSeq || 1) + 1 });
         this.toast('Milník „' + t + '“ přidán na osu', { icon: 'ph-flag-banner', undo: () => this.setState({ msList: prev }) });
       }
@@ -21630,13 +21742,51 @@ class Component extends DCLogic {
     return CONFLICTS.map(c => ({
       id: c[0], what: c[1], where: c[2], icon: c[3],
       mine: c[4], mineWhen: c[5], theirs: c[6], theirsWhen: c[7],
-      merged: c[8], state: 'open'
+      // Popisky stran posílá server u rozporů, které nemají lidského
+      // původce — třeba mezi knihovnou a Diskem. Ukázka je nemá.
+      merged: c[8], sides: c[9] || null, state: 'open'
     }));
   }
+  // „Moje verze" na začátku věty, „moji verzi" uvnitř — malé písmeno a bez
+  // slova „verze", když ho popisek už nese.
+  male(popis) {
+    const t = String(popis || '');
+    return t.charAt(0).toLowerCase() + t.slice(1);
+  }
+  /*
+   * Rozhodnutí o rozporu jde na server.
+   *
+   * Přepsat jen stav v prohlížeči znamenalo, že rozpor zůstal v databázi
+   * otevřený: při dalším načtení se vrátil a druhý z dvojice ho viděl celou
+   * dobu. Rozpor navíc nevzniká zápisem člověka, ale synchronizací — vyřešit
+   * ho musí jít tam, kde vznikl.
+   */
   cfResolve(id, pick, label) {
     const prev = this.cfAll();
     this.setState({ conflicts: prev.map(c => c.id === id ? Object.assign({}, c, { state: pick }) : c) });
-    this.toast('Vyřešeno — ' + label, { icon: 'ph-check-circle', undo: () => this.setState({ conflicts: prev }) });
+
+    const api = window.GalerieApi;
+    // Ukázkový rozpor server nezná — jeho identifikátory jsou z `galerie-data.js`.
+    if (!api || !api.post || !this.cfNaServeru(id)) {
+      this.toast('Vyřešeno — ' + label, { icon: 'ph-check-circle', undo: () => this.setState({ conflicts: prev }) });
+      return;
+    }
+
+    api.post('rozpory/vyresit', { id: id, volba: pick }).then(res => {
+      if (!res) return;
+      if (window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data, res.prazdne);
+      this.setState({ conflicts: null });
+      this.toast('Vyřešeno — ' + label, { icon: 'ph-check-circle' });
+    }).catch(e => {
+      const t = (e && e.body) || {};
+      this.setState({ conflicts: prev });
+      this.toast(t.message || 'Rozpor se nepodařilo uložit — zkuste to znovu', { icon: 'ph-warning', color: 'var(--g-mag)' });
+    });
+  }
+  // Řádek ze serveru má `r` a číslo; ukázkové rozpory v `galerie-data.js`
+  // mají `c1` až `c3` a v žádné tabulce nejsou.
+  cfNaServeru(id) {
+    return /^r\d+$/.test(String(id || ''));
   }
   // ——— Proč tohle číslo: rozpad výpočtu na vstupy ———
   whyShow(def) {
@@ -21940,28 +22090,47 @@ class Component extends DCLogic {
           ? this.pl(open.length, 'konflikt čeká', 'konflikty čekají', 'konfliktů čeká') + ' na rozhodnutí — obě verze zůstávají, dokud nevyberete'
           : 'Žádné konflikty. Když oba změníte totéž, ukáže se to tady.',
         chgRows: [],
-        chgConf: cf.map(c => ({
-          what: c.what, where: c.where, icon: c.icon,
-          mine: c.mine, mineWhen: c.mineWhen + ' · ' + this.meWho(),
-          theirs: c.theirs, theirsWhen: c.theirsWhen + ' · ' + this.otherWho(),
-          merged: c.merged,
-          open: c.state === 'open',
-          state: c.state === 'open' ? '' : c.state === 'mine' ? 'zůstala moje verze' : c.state === 'theirs' ? 'zůstala verze ' + this.whoGen(this.otherWho()) : 'spojeno',
-          takeMine: () => this.cfResolve(c.id, 'mine', c.what + ' → moje verze'),
-          takeTheirs: () => this.cfResolve(c.id, 'theirs', c.what + ' → verze ' + this.whoGen(this.otherWho())),
-          takeMerge: () => this.cfResolve(c.id, 'merged', c.what + ' → spojeno'),
-          why: () => this.whyShow({
-            heading: 'Proč to rozhodujete vy',
-            title: c.what, value: 'dvě verze',
-            lead: 'Proč to aplikace nevyřešila sama.',
-            parts: [
-              { label: 'Moje úprava', value: 1, text: c.mine, note: c.mineWhen },
-              { label: 'Úprava ' + this.whoGen(this.otherWho()), value: 1, text: c.theirs, note: c.theirsWhen },
-              { label: 'Rozdíl v čase', value: 1, text: 'minuty', note: 'jedna z úprav vznikla offline, takže přišla později' }
-            ],
-            formula: 'stejné pole + dvě různé hodnoty = rozhodne člověk, ne poslední zápis'
-          })
-        }))
+        /*
+         * Strany rozporu se jmenují podle toho, čí jsou.
+         *
+         * Většina konfliktů je „oba jsme změnili totéž" — tam sedí „moje"
+         * a „jeho". Rozpor mezi aplikací a Diskem ale žádného člověka nemá:
+         * napsat u smazaného souboru „verze Makinky" znamená označit za jeho
+         * původce někoho, kdo s tím nemá nic společného. Server proto u těch
+         * svých posílá vlastní popisky stran.
+         */
+        chgConf: cf.map(c => {
+          const strany = c.sides || null;
+          const moje = strany ? strany[0] : 'Moje verze';
+          const jeho = strany ? strany[1] : 'Jeho verze';
+          return {
+            what: c.what, where: c.where, icon: c.icon,
+            mineLabel: moje, theirsLabel: jeho,
+            mine: c.mine, mineWhen: c.mineWhen + (strany ? '' : ' · ' + this.meWho()),
+            theirs: c.theirs, theirsWhen: c.theirsWhen + (strany ? '' : ' · ' + this.otherWho()),
+            // Bez návrhu se karta „spojení" nekreslí: prázdný rámeček
+            // s popiskem „sestaveno z obou úprav" tvrdí, že návrh je.
+            merged: c.merged, hasMerged: !!c.merged,
+            mineBtn: strany ? 'Nechat ' + this.male(moje) : 'Nechat moji',
+            theirsBtn: strany ? 'Nechat ' + this.male(jeho) : 'Nechat jeho',
+            open: c.state === 'open',
+            state: c.state === 'open' ? '' : c.state === 'mine' ? 'zůstala ' + this.male(moje) : c.state === 'theirs' ? (strany ? 'zůstala ' + this.male(jeho) : 'zůstala verze ' + this.whoGen(this.otherWho())) : 'spojeno',
+            takeMine: () => this.cfResolve(c.id, 'mine', c.what + ' → ' + this.male(moje)),
+            takeTheirs: () => this.cfResolve(c.id, 'theirs', c.what + ' → ' + (strany ? this.male(jeho) : 'verze ' + this.whoGen(this.otherWho()))),
+            takeMerge: () => this.cfResolve(c.id, 'merged', c.what + ' → spojeno'),
+            why: () => this.whyShow({
+              heading: 'Proč to rozhodujete vy',
+              title: c.what, value: 'dvě verze',
+              lead: 'Proč to aplikace nevyřešila sama.',
+              parts: [
+                { label: moje, value: 1, text: c.mine, note: c.mineWhen },
+                { label: jeho, value: 1, text: c.theirs, note: c.theirsWhen },
+                { label: 'Rozdíl v čase', value: 1, text: 'minuty', note: 'jedna z úprav vznikla offline, takže přišla později' }
+              ],
+              formula: 'stejné pole + dvě různé hodnoty = rozhodne člověk, ne poslední zápis'
+            })
+          };
+        })
       });
     }
     if (key === 'evLearn') {
@@ -24639,11 +24808,11 @@ class Component extends DCLogic {
       const cur = (nextOrd[tier] || (nextOrd[tier] = [])).slice();
       cur.splice(idx === undefined || idx < 0 ? cur.length : idx, 0, id);
       nextOrd[tier] = cur;
-      this.setState({ tierMap: { ...prevMap, [id]: tier }, tierOrder: nextOrd, tierDrag: null });
+      this.setState(this.xRowsProTitul(id, { tierMap: { ...prevMap, [id]: tier }, tierOrder: nextOrd, tierDrag: null }));
       return () => this.setState({ tierMap: prevMap, tierOrder: prevOrd });
     };
     const scoreOf = r => {
-      const rt = (s.fmRate || {})[r.id] || {};
+      const rt = (s.fmRate || {})[r.id] || r.rate || {};
       if (rt.a || rt.m) {
         const vals = [rt.a, rt.m].filter(Boolean);
         return vals.reduce((a, v) => a + v, 0) / vals.length * 2;
@@ -24654,6 +24823,9 @@ class Component extends DCLogic {
     const tierOf = r => {
       const manual = (s.tierMap || {})[r.id];
       if (manual) return manual;
+      // Zařazení ze serveru. Ruční přesun ho přebíjí jen do chvíle, než se
+      // uloží — pak se vrátí touhle cestou.
+      if (r.tier) return r.tier;
       const sc = scoreOf(r);
       if (sc === null) return null;
       return sc >= 9.5 ? 'S' : sc >= 8.5 ? 'A' : sc >= 7 ? 'B' : sc >= 5.5 ? 'C' : sc >= 4 ? 'D' : 'F';
@@ -24725,14 +24897,14 @@ class Component extends DCLogic {
               const idx = TIERS.findIndex(x => x[0] === t[0]);
               if (idx <= 0) return;
               const prev = s.tierMap || {};
-              this.setState({ tierMap: { ...prev, [r.id]: TIERS[idx - 1][0] } });
+              this.setState(this.xRowsProTitul(r.id, { tierMap: { ...prev, [r.id]: TIERS[idx - 1][0] } }));
               this.toast(r.t + ' → tier ' + TIERS[idx - 1][0], { icon: 'ph-arrow-up', undo: () => this.setState({ tierMap: prev }) });
             },
             down: () => {
               const idx = TIERS.findIndex(x => x[0] === t[0]);
               if (idx >= TIERS.length - 1) return;
               const prev = s.tierMap || {};
-              this.setState({ tierMap: { ...prev, [r.id]: TIERS[idx + 1][0] } });
+              this.setState(this.xRowsProTitul(r.id, { tierMap: { ...prev, [r.id]: TIERS[idx + 1][0] } }));
               this.toast(r.t + ' → tier ' + TIERS[idx + 1][0], { icon: 'ph-arrow-down', undo: () => this.setState({ tierMap: prev }) });
             }
           }))
@@ -24768,7 +24940,7 @@ class Component extends DCLogic {
         dragEnd: () => this.setState({ tierDrag: null }),
         place: () => {
           const prev = s.tierMap || {};
-          this.setState({ tierMap: { ...prev, [r.id]: 'B' } });
+          this.setState(this.xRowsProTitul(r.id, { tierMap: { ...prev, [r.id]: 'B' } }));
           this.toast(r.t + ' zařazeno do tieru B — posuňte šipkami nebo přetáhněte', { icon: 'ph-list-plus', undo: () => this.setState({ tierMap: prev }) });
         }
       })),
@@ -24784,12 +24956,14 @@ class Component extends DCLogic {
   filmVals(key) {
     const s = this.state;
     const rows = this.rowsOf(key);
-    const rate = (id, who) => ((s.fmRate || {})[id] || {})[who] || 0;
-    const setRate = (id, who, v) => {
+    // Hvězdičky ze serveru, dokud do nich nikdo neklikl. Bez toho by se
+    // hodnocení po každém načtení vrátilo na „nehodnoceno".
+    const rate = (r, who) => (((s.fmRate || {})[r.id] || r.rate || {})[who]) || 0;
+    const setRate = (r, who, v) => {
       const prev = s.fmRate || {};
-      const cur = prev[id] || {};
-      this.setState({ fmRate: { ...prev, [id]: { ...cur, [who]: v } } });
-      this.toast((who === 'a' ? 'Adrian' : 'Makinka') + ' dává ' + v + '/5', { icon: 'ph-star', undo: () => this.setState({ fmRate: prev }) });
+      const cur = prev[r.id] || r.rate || {};
+      this.setState(this.xRowsProTitul(r.id, { fmRate: { ...prev, [r.id]: { ...cur, [who]: v } } }));
+      this.toast(this.dva()[who === 'a' ? 0 : 1] + ' dává ' + v + '/5', { icon: 'ph-star', undo: () => this.setState({ fmRate: prev }) });
     };
     const epKey = id => (s.fmEp || {})[id] || 0;
     return {
@@ -24803,7 +24977,8 @@ class Component extends DCLogic {
         const finished = /dokoukán|dokoukan/i.test(r.m);
         const onList = /na watchlistu/i.test(r.m);
         const totalTxt = parseInt((r.m.match(/(\d+)\s*díl/) || [])[1], 10);
-        const total = totalTxt || (se ? Math.max(+se[2] + 3, 8) : 8);
+        // Počet dílů ze serveru, když ho zná. Zbytek je odhad z popisku.
+        const total = r.epN || totalTxt || (se ? Math.max(+se[2] + 3, 8) : 8);
         const started = se ? +se[2] : finished ? total : 0;
         const stored = (s.fmEp || {})[r.id];
         const done = Math.min(stored === undefined ? started : stored, total);
@@ -24821,24 +24996,24 @@ class Component extends DCLogic {
           nextEp: () => {
             const prev = s.fmEp || {};
             const n = Math.min(done + 1, total);
-            this.setState({ fmEp: { ...prev, [r.id]: n } });
+            this.setState(this.xRowsProTitul(r.id, { fmEp: { ...prev, [r.id]: n } }));
             this.toast(n >= total ? r.t + ' dokoukáno — přesuňte do hodnocení' : r.t + ' · díl ' + n + ' z ' + total, {
               icon: n >= total ? 'ph-check-circle' : 'ph-play', undo: () => this.setState({ fmEp: prev })
             });
           },
           stars: ['a', 'm'].map(who => ({
-            who: who === 'a' ? 'Adrian' : 'Makinka',
+            who: this.dva()[who === 'a' ? 0 : 1],
             items: [1, 2, 3, 4, 5].map(v => ({
-              on: rate(r.id, who) >= v,
-              color: rate(r.id, who) >= v ? 'var(--g-mag)' : 'var(--g-line)',
-              go: () => setRate(r.id, who, v)
+              on: rate(r, who) >= v,
+              color: rate(r, who) >= v ? 'var(--g-mag)' : 'var(--g-line)',
+              go: () => setRate(r, who, v)
             })),
-            value: rate(r.id, who) ? rate(r.id, who) + '/5' : 'nehodnoceno'
+            value: rate(r, who) ? rate(r, who) + '/5' : 'nehodnoceno'
           })),
           seen, seenLabel: seen ? 'Vrátit mezi nekoukané' : 'Viděli jsme',
           toggle: () => {
             const prev = s.rowDone;
-            this.setState({ rowDone: { ...prev, [r.id]: !seen } });
+            this.setState(this.xRowsProTitul(r.id, { rowDone: { ...prev, [r.id]: !seen } }));
             this.toast(seen ? 'Vráceno — ' + r.t : 'Viděli jsme — ' + r.t, { icon: seen ? 'ph-arrow-counter-clockwise' : 'ph-eye', undo: () => this.setState({ rowDone: prev }) });
           },
           tonight: () => {
@@ -24855,6 +25030,29 @@ class Component extends DCLogic {
           }
         };
       }),
+      /*
+       * Přidat titul.
+       *
+       * Obrazovka do téhle chvíle uměla jen mazat: nový film se do seznamu
+       * nedal dostat odnikud, takže `watch_titles` zůstávala prázdná a
+       * žebříček kreslil ukázku cizí dvojice.
+       */
+      fmDraft: s.fmDraft || '',
+      fmSetDraft: e => this.setState({ fmDraft: e.target.value }),
+      fmCant: !String(s.fmDraft || '').trim(),
+      fmAddLabel: key === 'watchlist' ? 'Přidat na watchlist' : key === 'series' ? 'Přidat seriál' : 'Přidat film',
+      fmAdd: () => {
+        const t = String(s.fmDraft || '').trim();
+        if (!t) return;
+        const prev = rows;
+        const stitek = key === 'watchlist' ? 'chceme' : key === 'series' ? 'probíhá' : 'hotovo';
+        this.setRows(key, [{
+          t: t, m: key === 'watchlist' ? 'na watchlistu' : 'sledujeme', g: stitek,
+          id: key + '-n' + (s.xSeq || 1), tier: null, rate: null, ep: null, epN: null
+        }].concat(prev));
+        this.setState({ fmDraft: '', xSeq: (s.xSeq || 1) + 1 });
+        this.toast('„' + t + '“ přidáno', { icon: 'ph-film-slate', undo: () => this.setRows(key, prev) });
+      },
       fmEmpty: rows.length === 0
     };
   }
@@ -25586,6 +25784,19 @@ class Component extends DCLogic {
     const lead = minsA > minsM ? 'Adrian' : 'Makinka';
     const setChores = next => this.setState({ chores: next });
     const setDues = next => this.setState({ dues: next });
+    /*
+     * Kapacita týdne: volný čas počítá server z kalendáře, tohle drží opravy.
+     *
+     * Aplikace neví o dojíždění, o směně, která se nikam nezapsala, ani o tom,
+     * že je někdo nemocný. Přepsané číslo se proto ukládá — a `autoA`/`autoM`
+     * si pamatují, co říkal kalendář, aby se k němu dalo vrátit.
+     */
+    const capWeek = s.capWeek === null || s.capWeek === undefined ? HOUSE_WEEK : s.capWeek;
+    const setCap = (key, patch) => this.setState({ capWeek: capWeek.map(d => d.key === key ? { ...d, ...patch } : d) });
+    const capOprav = (d, kdo, o) => {
+      const hodnota = Math.max(0, Math.min(16, Math.round((d[kdo] + o) * 2) / 2));
+      return kdo === 'a' ? { a: hodnota, fixA: true } : { m: hodnota, fixM: true };
+    };
     const other = w => this.druhy(w);
     const acc = n => this.sklon(n, 'acc');
     const dat = n => this.sklon(n, 'dat');
@@ -25593,11 +25804,11 @@ class Component extends DCLogic {
     const capTasks = chores.filter(c => c.day).map(c => ({ chore: c, day: c.day }));
     const clashes = capTasks
       .map(t => {
-        const d = HOUSE_WEEK.find(x => x.key === t.day);
+        const d = capWeek.find(x => x.key === t.day);
         if (!d) return null;
         const free = t.chore.who === this.dva()[0] ? d.a : d.m;
         if (free * 60 >= t.chore.mins + 30) return null;
-        const better = HOUSE_WEEK.filter(x => (t.chore.who === this.dva()[0] ? x.a : x.m) * 60 >= t.chore.mins + 60)[0];
+        const better = capWeek.filter(x => (t.chore.who === this.dva()[0] ? x.a : x.m) * 60 >= t.chore.mins + 60)[0];
         return {
           title: t.chore.name + ' · ' + t.chore.who + ' · ' + d.name,
           note: t.chore.who + ' má ' + d.name.toLowerCase() + ' jen ' + String(free).replace('.', ',') + ' h volna a práce zabere ' + t.chore.mins + ' minut. ' + d.note,
@@ -25677,14 +25888,25 @@ class Component extends DCLogic {
       })),
 
       capTitle: clashes.length ? this.pl(clashes.length, 'kolize v tomto týdnu', 'kolize v tomto týdnu', 'kolizí v tomto týdnu') : 'Tento týden bez kolizí',
-      capDays: HOUSE_WEEK.map(d => ({
-        name: d.name, date: d.date, note: d.note,
+      capDays: capWeek.map(d => ({
+        name: d.name, date: d.date, note: d.note || '',
         border: Math.min(d.a, d.m) < 1 ? 'var(--g-mag)' : 'var(--g-line2)',
-        people: [[this.dva()[0], d.a], [this.dva()[1], d.m]].map(p => ({
+        setNote: e => setCap(d.key, { note: e.target.value }),
+        // Zpátky ke kalendáři jde jen den, který je od něj odchýlený.
+        fixed: !!(d.fixA || d.fixM),
+        auto: () => {
+          const prev = capWeek;
+          setCap(d.key, { a: d.autoA, m: d.autoM, fixA: false, fixM: false });
+          this.toast(d.name + ' se zase počítá z kalendáře', { icon: 'ph-calendar-blank', undo: () => this.setState({ capWeek: prev }) });
+        },
+        people: [[this.dva()[0], d.a, 'a'], [this.dva()[1], d.m, 'm']].map(p => ({
           name: p[0], free: String(p[1]).replace('.', ',') + ' h',
           width: Math.min(100, Math.round((p[1] / 8) * 100)) + '%',
           color: p[1] < 1 ? 'var(--g-mag)' : 'var(--g-ink2)',
-          fill: p[1] < 1 ? 'var(--g-mag)' : p[0] === this.dva()[0] ? 'var(--g-acc)' : 'var(--g-acc-deep)'
+          fill: p[1] < 1 ? 'var(--g-mag)' : p[0] === this.dva()[0] ? 'var(--g-acc)' : 'var(--g-acc-deep)',
+          fixed: !!d[p[2] === 'a' ? 'fixA' : 'fixM'],
+          less: () => setCap(d.key, capOprav(d, p[2], -0.5)),
+          more: () => setCap(d.key, capOprav(d, p[2], 0.5))
         }))
       })),
       capClashes: clashes, capNoClash: clashes.length === 0,
@@ -26878,12 +27100,34 @@ class Component extends DCLogic {
   persistLoad() {
     const api = window.GalerieApi;
     this._pPrev = Object.assign({}, this.state);
-    if (!api) return;
+    /*
+     * Datová vrstva se načítá vlastním skriptem a nemusí tu být první.
+     *
+     * Dřív se tady mlčky skončilo — a odběr se pak už nikdy nezaložil. Zápisy
+     * ven chodily dál (`persistSave` si `window.GalerieApi` bere pokaždé
+     * znovu), ale odpověď serveru se do obrazovky nikdy nedostala: aplikace
+     * kreslila napořád to, co si sama tipla.
+     */
+    if (!api) {
+      this._pWait = (this._pWait || 0) + 1;
+      if (this._pWait <= 25) setTimeout(() => this.persistLoad(), 200);
+      return;
+    }
+    if (this._unApi) return;
     const take = src => {
       const p = {};
       Object.keys(src || {}).forEach(k => {
         if (!this.persistKey(k)) return;
-        if (JSON.stringify(this.state[k]) === JSON.stringify(src[k])) return;
+        /*
+         * Neporovnatelný klíč přeskočíme, ne celý stav.
+         *
+         * `JSON.stringify` umí spadnout (cyklický odkaz, `BigInt`) a výjimku
+         * v odběrateli datová vrstva spolkne. Jeden takový klíč by tak zabil
+         * doručení všech ostatních — a nikde by po tom nezůstala stopa.
+         */
+        try {
+          if (JSON.stringify(this.state[k]) === JSON.stringify(src[k])) return;
+        } catch (e) { return; }
         p[k] = src[k];
       });
       return p;

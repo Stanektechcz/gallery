@@ -50,8 +50,46 @@ class PribehVeStavuTest extends TestCase
         $this->assertSame('Třicet čtyři metrů.', $radek->body);
 
         $this->assertArrayNotHasKey('storyList', (array) $this->getJson('/api/state')->assertOk()->json('data'));
-        $this->assertSame('První byt', $odpoved->json('data.storyList.0.1'));
+        $this->assertSame('První byt', $odpoved->json('data.storyList.0.title'));
         $this->assertContains('storyList', $odpoved->json('docasne'));
+    }
+
+    /**
+     * Obrazovka posílá objekty, ne pole — a musí je i dostat.
+     *
+     * `storyOf()` v prototypu vrací `state.storyList` rovnou a kreslí z něj
+     * `c.title`. Když se četla jen pozice v poli, přišla kapitola bez názvu —
+     * a řádek bez názvu se přeskakuje, takže po první úpravě zmizely
+     * z tabulky **všechny** kapitoly.
+     */
+    public function test_kapitola_v_tvaru_obrazovky_se_ulozi(): void
+    {
+        $odpoved = $this->stav(['storyList' => [
+            ['id' => 'c-nova', 'title' => 'První byt', 'year' => '2018',
+                'status' => 'hotovo', 'photoN' => 0, 'n' => 0, 'text' => 'Třicet čtyři metrů.'],
+        ]])->assertOk();
+
+        $this->assertSame('První byt', DB::table('couple_story_chapters')->value('title'));
+        $this->assertSame('done', DB::table('couple_story_chapters')->value('status'));
+        $this->assertSame('První byt', $odpoved->json('data.storyList.0.title'));
+    }
+
+    /** A úprava jedné kapitoly nesmí smazat ostatní. */
+    public function test_uprava_z_obrazovky_nesmaze_ostatni(): void
+    {
+        $this->stav(['storyList' => [
+            ['id' => 'a', 'title' => 'První', 'year' => '2016', 'status' => 'hotovo', 'text' => ''],
+            ['id' => 'b', 'title' => 'Druhá', 'year' => '2018', 'status' => 'návrh', 'text' => ''],
+        ]])->assertOk();
+
+        $seznam = DB::table('couple_story_chapters')->orderBy('sort_order')->get(['uuid', 'title'])
+            ->map(fn ($k) => ['id' => $k->uuid, 'title' => $k->title, 'year' => '2016', 'status' => 'hotovo', 'text' => ''])
+            ->all();
+        $seznam[0]['title'] = 'Přejmenovaná';
+
+        $this->stav(['storyList' => $seznam])->assertOk();
+
+        $this->assertSame(['Přejmenovaná', 'Druhá'], DB::table('couple_story_chapters')->orderBy('sort_order')->pluck('title')->all());
     }
 
     /**
@@ -65,8 +103,100 @@ class PribehVeStavuTest extends TestCase
             ['c-nova', 'Kapitola', '2018', 'píše se', 999, 999, 'Text.'],
         ]])->assertOk();
 
-        $this->assertSame(0, $odpoved->json('data.storyList.0.4'));
-        $this->assertSame(0, $odpoved->json('data.storyList.0.5'));
+        $this->assertSame(0, $odpoved->json('data.storyList.0.photoN'));
+        $this->assertSame(0, $odpoved->json('data.storyList.0.n'));
+    }
+
+    /**
+     * Milník na ose se uloží do tabulky, ne do prohlížeče.
+     *
+     * „Milník přidán na osu" platilo do zavření záložky: `couple_story_milestones`
+     * se četla a nikdo do ní nepsal.
+     */
+    public function test_milnik_vznikne_v_tabulce(): void
+    {
+        $this->stav(['storyList' => [
+            ['id' => 'c1', 'title' => 'Začátek', 'year' => '2016', 'status' => 'hotovo', 'text' => ''],
+        ]])->assertOk();
+
+        $kapitola = DB::table('couple_story_chapters')->value('uuid');
+
+        $odpoved = $this->stav(['msList' => [
+            ['id' => 'm-n1', 'y' => '2016', 'date' => '14. května 2016', 'title' => 'Poprvé jsme se potkali',
+                'note' => 'Svatba u Kláry.', 'icon' => 'ph-sparkle', 'ch' => $kapitola, 'iso' => '2016-05-14'],
+        ]])->assertOk();
+
+        $radek = DB::table('couple_story_milestones')->sole();
+
+        $this->assertSame('Poprvé jsme se potkali', $radek->title);
+        $this->assertStringStartsWith('2016-05-14', (string) $radek->happened_on);
+        $this->assertNotNull($radek->chapter_id, 'Milník patří do kapitoly, kterou obrazovka vybrala.');
+
+        $this->assertSame('14. května 2016', $odpoved->json('data.msList.0.date'));
+        $this->assertSame('2016-05-14', $odpoved->json('data.msList.0.iso'));
+    }
+
+    /**
+     * Bez `iso` se datum přečte z toho, co je napsané.
+     *
+     * Starší klient a ruční požadavek posílají jen text.
+     */
+    public function test_datum_se_precte_i_z_napsaneho_textu(): void
+    {
+        $this->stav(['msList' => [
+            ['id' => 'm1', 'y' => '2018', 'date' => '11. listopadu 2018', 'title' => 'Nastěhovali jsme se', 'note' => '', 'icon' => '', 'ch' => ''],
+            ['id' => 'm2', 'y' => '2019', 'date' => '3. 6. 2019', 'title' => 'Itálie vlakem', 'note' => '', 'icon' => '', 'ch' => ''],
+            ['id' => 'm3', 'y' => '2021', 'date' => '17. dubna', 'title' => 'Rok cestování', 'note' => '', 'icon' => '', 'ch' => ''],
+        ]])->assertOk();
+
+        $dny = DB::table('couple_story_milestones')->orderBy('happened_on')->pluck('happened_on')
+            ->map(fn ($d) => substr((string) $d, 0, 10))->all();
+
+        // Rok z vedlejšího pole platí, jen když ho v textu není.
+        $this->assertSame(['2018-11-11', '2019-06-03', '2021-04-17'], $dny);
+        $this->assertSame('ph-sparkle', DB::table('couple_story_milestones')->value('icon'));
+    }
+
+    /**
+     * Milník s nečitelným datem se nezaloží.
+     *
+     * Dosadit za něj první leden by znamenalo postavit ho na ose jinam,
+     * než se stal — a nikdo by se to nedozvěděl.
+     */
+    public function test_milnik_bez_citelneho_data_nevznikne(): void
+    {
+        $this->stav(['msList' => [
+            ['id' => 'm1', 'y' => '2020', 'date' => 'někdy na jaře', 'title' => 'Nečitelné', 'note' => '', 'icon' => '', 'ch' => ''],
+        ]])->assertOk();
+
+        $this->assertSame(0, DB::table('couple_story_milestones')->count());
+    }
+
+    /** Smazaný milník zmizí i z tabulky. */
+    public function test_smazany_milnik_zmizi(): void
+    {
+        $this->stav(['msList' => [
+            ['id' => 'm1', 'y' => '2018', 'date' => '11. listopadu 2018', 'title' => 'Zůstává', 'note' => '', 'icon' => '', 'ch' => ''],
+            ['id' => 'm2', 'y' => '2019', 'date' => '3. června 2019', 'title' => 'Mizí', 'note' => '', 'icon' => '', 'ch' => ''],
+        ]])->assertOk();
+
+        $uuid = DB::table('couple_story_milestones')->where('title', 'Zůstává')->value('uuid');
+
+        $this->stav(['msList' => [
+            ['id' => $uuid, 'y' => '2018', 'date' => '11. listopadu 2018', 'title' => 'Zůstává', 'note' => '', 'icon' => '', 'ch' => ''],
+        ]])->assertOk();
+
+        $this->assertSame(['Zůstává'], DB::table('couple_story_milestones')->pluck('title')->all());
+    }
+
+    /** Milníky se do stavu neukládají — mají tabulku. */
+    public function test_milniky_nezustanou_ve_stavu(): void
+    {
+        $this->stav(['msList' => [
+            ['id' => 'm1', 'y' => '2018', 'date' => '11. listopadu 2018', 'title' => 'Nastěhovali jsme se', 'note' => '', 'icon' => '', 'ch' => ''],
+        ]])->assertOk();
+
+        $this->assertArrayNotHasKey('msList', (array) $this->getJson('/api/state')->assertOk()->json('data'));
     }
 
     /** Co v seznamu není, dvojice smazala. */

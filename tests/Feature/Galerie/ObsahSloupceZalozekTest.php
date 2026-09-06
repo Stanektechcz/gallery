@@ -42,12 +42,17 @@ class ObsahSloupceZalozekTest extends TestCase
         Sanctum::actingAs($this->adri);
     }
 
-    /** Den se jménem a volnem obou — a nejvolnější den je sto procent. */
+    /**
+     * Den se jménem a volnem obou — a nejvolnější den je sto procent.
+     *
+     * Týden má sedm dní, i když dvojice přepsala jen dva; zbylých pět počítá
+     * kalendář. Fixture je proto celá, aby se sto procent porovnávalo
+     * s napsanými čísly, ne s dopočítanými.
+     */
     public function test_kapacita_tydne_ma_vlastni_sloupce(): void
     {
         $this->prace();
-        $this->den('po', 'Oba v práci do 17.', 2.5, 1.5);
-        $this->den('út', 'Makinka má dvanáctku.', 3.0, 0.5);
+        $this->tyden(['po' => [2.5, 1.5], 'út' => [3.0, 0.5]], 'Oba v práci do 17.');
 
         $s = collect($this->getJson('/api/data/domacnost')->assertOk()->json('data.ABARS.cap'))->keyBy(0);
 
@@ -63,12 +68,12 @@ class ObsahSloupceZalozekTest extends TestCase
     public function test_nabity_den_varuje(): void
     {
         $this->prace();
-        $this->den('po', '', 4.0, 3.0);
-        $this->den('út', 'Oba do večera.', 0.5, 0.5);
+        $this->tyden(['po' => [4.0, 3.0], 'út' => [0.5, 0.5]], 'Oba do večera.');
 
         $s = collect($this->getJson('/api/data/domacnost')->assertOk()->json('data.ABARS.cap'));
 
-        $this->assertSame(1, $s->last()[3]);
+        $this->assertSame(1, $s->get(1)[3], 'Úterý — ani jeden nemá hodinu volna.');
+        $this->assertSame(0, $s->get(0)[3]);
     }
 
     /** Bez zapsaného týdne se sloupce neposílají. */
@@ -123,6 +128,22 @@ class ObsahSloupceZalozekTest extends TestCase
             'created_at' => now(),
             'updated_at' => now(),
         ]);
+    }
+
+    /**
+     * Celý týden ručně: napsané dny podle zadání, zbytek na nulu.
+     *
+     * Bez zbylých pěti by o sto procentech rozhodl den, který nikdo nevyplnil
+     * a kterému kalendář dopočítal celé bdělé okno.
+     *
+     * @param  array<string, array{0: float, 1: float}>  $dny
+     */
+    private function tyden(array $dny, string $poznamka): void
+    {
+        foreach (['po', 'út', 'st', 'čt', 'pá', 'so', 'ne'] as $klic) {
+            [$a, $m] = $dny[$klic] ?? [0.0, 0.0];
+            $this->den($klic, isset($dny[$klic]) ? $poznamka : '', $a, $m);
+        }
     }
 
     private function den(string $klic, string $poznamka, float $a, float $m): void

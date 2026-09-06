@@ -75,6 +75,62 @@ class CoupleState extends Model
         return true;
     }
 
+    /**
+     * Zapomene jen řádky filmů — klíče, ve kterých leží i cizí obrazovky.
+     *
+     * `xRows` drží nákupní seznam i nápady na dárky, `rowDone` odškrtnuté
+     * řádky napříč aplikací. Vyhodit je celé kvůli jednomu žebříčku by
+     * znamenalo smazat věci, které tabulku nemají a jinde než tady nejsou.
+     *
+     * @param  list<string>  $seznamy  klíče `xRows` a předpony identifikátorů
+     */
+    public function zapomenFilmy(array $seznamy): bool
+    {
+        $data = $this->data ?? [];
+        $puvodni = json_encode($data);
+
+        if (is_array($data['xRows'] ?? null)) {
+            $data['xRows'] = array_diff_key($data['xRows'], array_flip($seznamy));
+
+            if ($data['xRows'] === []) {
+                unset($data['xRows']);
+            }
+        }
+
+        $patri = function (string $id) use ($seznamy): bool {
+            foreach ($seznamy as $seznam) {
+                if (str_starts_with($id, $seznam.'-')) {
+                    return true;
+                }
+            }
+
+            return false;
+        };
+
+        foreach (['tierMap', 'fmRate', 'fmEp', 'rowDone'] as $klic) {
+            if (! is_array($data[$klic] ?? null)) {
+                continue;
+            }
+
+            $data[$klic] = array_filter($data[$klic], fn (string $id) => ! $patri($id), ARRAY_FILTER_USE_KEY);
+
+            if ($data[$klic] === []) {
+                unset($data[$klic]);
+            }
+        }
+
+        unset($data['tierOrder']);
+
+        if (json_encode($data) === $puvodni) {
+            return false;
+        }
+
+        $this->data = $data;
+        $this->save();
+
+        return true;
+    }
+
     /** Sloučení částečného patche po klíčích. Hodnoty se nahrazují celé. */
     public function applyPatch(array $patch): void
     {

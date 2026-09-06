@@ -9,6 +9,7 @@ use App\Models\GallerySpace;
 use App\Services\Provoz\AdminVeStavu;
 use App\Services\Provoz\DarkyVeStavu;
 use App\Services\Provoz\DomacnostVeStavu;
+use App\Services\Provoz\FilmyVeStavu;
 use App\Services\Provoz\KapsleVeStavu;
 use App\Services\Provoz\KlidVeStavu;
 use App\Services\Provoz\MechanismyVeStavu;
@@ -47,6 +48,7 @@ class StateController extends Controller
         private readonly KlidVeStavu $klid,
         private readonly PribehVeStavu $pribeh,
         private readonly MechanismyVeStavu $mechanismy,
+        private readonly FilmyVeStavu $filmy,
     ) {}
 
     public function show(Request $request): JsonResponse
@@ -308,6 +310,20 @@ class StateController extends Controller
                 $skutecnost += $this->mechanismy->zpracuj($patch, GallerySpace::findOrFail($coupleId), $uzivatel);
                 $patch = $this->mechanismy->bezMechanismu($patch);
                 $state->zapomen(MechanismyVeStavu::SERVEROVE);
+            }
+
+            /*
+             * Filmy, seriály a žebříček.
+             *
+             * Hvězdičky, rozkoukaný díl a pásmo S až F končily ve stavu, takže
+             * po zavření záložky byl žebříček zase ukázkový. Klíče jsou tu
+             * ale společné s deseti dalšími obrazovkami — vyhazují se proto
+             * jen identifikátory titulů, ne celé mapy.
+             */
+            if ($this->filmy->tykaSe($patch)) {
+                $skutecnost += $this->filmy->zpracuj($patch, GallerySpace::findOrFail($coupleId), $uzivatel);
+                $patch = $this->filmy->bezFilmu($patch);
+                $state->zapomenFilmy(FilmyVeStavu::SEZNAMY);
             }
 
             $state->applyPatch($patch);

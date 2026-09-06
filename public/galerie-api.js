@@ -16,6 +16,17 @@
 // po klíčích. Díky tomu je jedno, kolik obrazovek zapisuje současně, a přírůstek
 // jde po drátě malý.
 (function () {
+  /*
+   * Podruhé se tenhle soubor nespouští.
+   *
+   * Runtime prototypu své skripty načítá znovu — a každý průchod zakládal
+   * **druhou datovou vrstvu**: vlastní frontu, vlastní číslo revize, vlastní
+   * odběratele. Obojí pak psalo do `/api/state` na střídačku a to pozadu
+   * dostávalo od serveru 409: jeho zápis se zahodil a nikde po tom nezůstala
+   * stopa. Zapsaná věc prostě zmizela.
+   */
+  if (window.GalerieApi && window.GalerieApi.__vrstva) return;
+
   var LS = 'galerie.state.v1';
   var CH = 'galerie.state';
 
@@ -28,7 +39,17 @@
 
   var data = {};
   var rev = 0;
-  var subs = [];
+  /*
+   * Odběratelé žijí na `window`, ne v tomhle uzávěru.
+   *
+   * Runtime prototypu své skripty načítá znovu, takže tenhle soubor může
+   * proběhnout dvakrát — a podruhé vznikne nový objekt s prázdným seznamem.
+   * Aplikace se přitom přihlásila k tomu prvnímu: zápisy ven chodily dál
+   * (`window.GalerieApi` se čte pokaždé znovu), ale **odpověď serveru se
+   * do obrazovky nikdy nevrátila**. U věcí, kde identifikátor přiděluje
+   * databáze, si ho klient nikdy nepřevzal a poslal řádek podruhé jako nový.
+   */
+  var subs = (window.__galerieSubs = window.__galerieSubs || []);
   var pending = {};      // patch, který čeká na odeslání
   var timer = null;
   var inflight = false;
@@ -135,7 +156,34 @@
         return r.json();
       })
       .then(function (b) {
-        if (b) { rev = b.rev || rev + 1; oznacDocasne(b); if (b.data) data = b.data; writeLocal(); }
+        if (b) {
+          rev = b.rev || rev + 1;
+          oznacDocasne(b);
+
+          if (b.data) {
+            data = b.data;
+            /*
+             * Co čeká na odeslání, serveru ještě nedorazilo.
+             *
+             * Jeho odpověď o tom neví a přepsala by rozepsanou změnu zpátky
+             * na stav před ní.
+             */
+            Object.keys(pending).forEach(function (k) { data[k] = pending[k]; });
+          }
+
+          writeLocal();
+          /*
+           * A obrazovka se to musí dozvědět.
+           *
+           * Bez tohohle řádku odpověď skončila v lokální kopii a nikdo ji
+           * nepřečetl: aplikace dál kreslila to, co si sama tipla. U věcí,
+           * kde server přiděluje identifikátor — nová položka v tabulce —
+           * to znamenalo, že si ho klient nikdy nepřevzal a při další změně
+           * poslal řádek znovu jako nový. Jedno kliknutí pak založilo
+           * druhou kopii celého seznamu.
+           */
+          notify();
+        }
         lastSync = new Date(); lastError = null;
       })
       .catch(function (e) {
@@ -178,6 +226,8 @@
   });
 
   window.GalerieApi = {
+    // Značka pro druhý průchod téhož souboru — viz začátek.
+    __vrstva: true,
     mode: mode,
     base: base,
 

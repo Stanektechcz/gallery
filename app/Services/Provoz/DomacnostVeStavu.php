@@ -9,6 +9,7 @@ use App\Models\HouseDue;
 use App\Models\HouseInventoryItem;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 /**
@@ -30,7 +31,10 @@ use Illuminate\Support\Facades\Schema;
 class DomacnostVeStavu
 {
     /** Klíče, které patří databázi. Do stavu se neukládají. */
-    public const SERVEROVE = ['chores', 'choreLog', 'dues', 'inv'];
+    public const SERVEROVE = ['chores', 'choreLog', 'dues', 'inv', 'capWeek'];
+
+    /** Dny tak, jak je kolekce `HOUSE_WEEK` klíčuje. */
+    private const DNY = ['po', 'út', 'st', 'čt', 'pá', 'so', 'ne'];
 
     public function tykaSe(array $patch): bool
     {
@@ -45,6 +49,10 @@ class DomacnostVeStavu
 
     public function zpracuj(array $patch, GallerySpace $prostor): void
     {
+        if (is_array($patch['capWeek'] ?? null)) {
+            $this->zapisTyden($patch['capWeek'], $prostor);
+        }
+
         if (! Schema::hasTable('house_chores')) {
             return;
         }
@@ -66,6 +74,90 @@ class DomacnostVeStavu
 
         if (is_array($patch['inv'] ?? null)) {
             $this->zapisByt($patch['inv'], $prostor);
+        }
+    }
+
+    /**
+     * Oprava kapacity týdne: `[{ key, a, m, note, fixA, fixM }]`.
+     *
+     * Volný čas se počítá z kalendáře — aplikace ale neví o dojíždění, směně,
+     * která se nikam nezapsala, ani o tom, že je někdo nemocný. Tabulka drží
+     * jen to, co dvojice opravila ručně; den bez opravy v ní řádek nemá
+     * a počítá se pokaždé znovu. Uložit i dopočítaná čísla by znamenalo, že
+     * kalendář se změní a kapacita zůstane, jaká byla.
+     *
+     * @param  array<int, mixed>  $dny
+     */
+    private function zapisTyden(array $dny, GallerySpace $prostor): void
+    {
+        if (! Schema::hasTable('house_week') || ! Schema::hasTable('house_week_capacity')) {
+            return;
+        }
+
+        $lide = $prostor->members()->orderByRaw('users.id = ? desc', [$prostor->owner_id])->pluck('users.id')->all();
+        [$prvni, $druhy] = [$lide[0] ?? null, $lide[1] ?? null];
+
+        if ($prvni === null || $druhy === null) {
+            return;
+        }
+
+        foreach ($dny as $den) {
+            $den = (array) $den;
+            $klic = (string) ($den['key'] ?? '');
+
+            if (! in_array($klic, self::DNY, true)) {
+                continue;
+            }
+
+            $poznamka = trim((string) ($den['note'] ?? ''));
+            $opravy = [
+                $prvni => ($den['fixA'] ?? false) ? (float) ($den['a'] ?? 0) : null,
+                $druhy => ($den['fixM'] ?? false) ? (float) ($den['m'] ?? 0) : null,
+            ];
+
+            // Den, na kterém není co držet, se nezakládá — prázdný řádek by
+            // jen tvrdil, že o něm dvojice něco řekla.
+            if ($poznamka === '' && $opravy[$prvni] === null && $opravy[$druhy] === null) {
+                $this->smazDen($prostor, $klic);
+
+                continue;
+            }
+
+            $id = DB::table('house_week')
+                ->where('gallery_space_id', $prostor->id)->where('weekday', $klic)->value('id');
+
+            if ($id === null) {
+                $id = DB::table('house_week')->insertGetId([
+                    'gallery_space_id' => $prostor->id, 'weekday' => $klic,
+                    'note' => $poznamka ?: null, 'created_at' => now(), 'updated_at' => now(),
+                ]);
+            } else {
+                DB::table('house_week')->where('id', $id)->update(['note' => $poznamka ?: null, 'updated_at' => now()]);
+            }
+
+            foreach ($opravy as $kdo => $hodin) {
+                if ($hodin === null) {
+                    DB::table('house_week_capacity')->where('house_week_id', $id)->where('user_id', $kdo)->delete();
+
+                    continue;
+                }
+
+                DB::table('house_week_capacity')->updateOrInsert(
+                    ['house_week_id' => $id, 'user_id' => $kdo],
+                    ['free_hours' => max(0.0, min(24.0, $hodin)), 'updated_at' => now(), 'created_at' => now()],
+                );
+            }
+        }
+    }
+
+    private function smazDen(GallerySpace $prostor, string $klic): void
+    {
+        $id = DB::table('house_week')
+            ->where('gallery_space_id', $prostor->id)->where('weekday', $klic)->value('id');
+
+        if ($id !== null) {
+            DB::table('house_week_capacity')->where('house_week_id', $id)->delete();
+            DB::table('house_week')->where('id', $id)->delete();
         }
     }
 

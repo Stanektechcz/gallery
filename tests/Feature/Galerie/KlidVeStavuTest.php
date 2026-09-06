@@ -165,6 +165,71 @@ class KlidVeStavuTest extends TestCase
         $this->assertSame(0, DB::table('wellbeing_answers')->count());
     }
 
+    /**
+     * Co čeká na okno, se dá zapsat — a přežije to zavření záložky.
+     *
+     * `wellbeing_tasks` se jen četla. Seznam pod mapou energie tak zůstával
+     * cizí a doplnit se do něj nedalo nic.
+     */
+    public function test_ceka_na_okno_se_da_zapsat(): void
+    {
+        $odpoved = $this->stav(['klTasks' => [
+            ['id' => 0, 'name' => 'Probrat, co nás poslední měsíc štve', 'need' => 2, 'route' => null, 'tab' => null, 'label' => ''],
+            ['id' => 0, 'name' => 'Zavolat na úřad', 'need' => 1, 'route' => 'x-plan', 'tab' => null, 'label' => 'Do úkolů'],
+        ]])->assertOk();
+
+        $ukoly = DB::table('wellbeing_tasks')->orderBy('sort_order')->get();
+
+        $this->assertCount(2, $ukoly);
+        $this->assertSame('Probrat, co nás poslední měsíc štve', $ukoly[0]->name);
+        $this->assertSame(2, (int) $ukoly[0]->needs_people);
+        $this->assertSame('x-plan', $ukoly[1]->route);
+
+        $this->assertSame('Zavolat na úřad', $odpoved->json('data.klTasks.1.name'));
+        $this->assertContains('klTasks', $odpoved->json('docasne'));
+        $this->assertArrayNotHasKey('klTasks', (array) $this->getJson('/api/state')->assertOk()->json('data'));
+    }
+
+    /**
+     * Co ze seznamu zmizí, je hotové — ne smazané.
+     *
+     * Odstranit řádek by znamenalo, že po tom nezbude stopa, a příště se to
+     * samé zapíše znovu jako nová věc.
+     */
+    public function test_vec_ze_seznamu_se_oznaci_za_hotovou(): void
+    {
+        $this->stav(['klTasks' => [
+            ['id' => 0, 'name' => 'Zůstává', 'need' => 2],
+            ['id' => 0, 'name' => 'Uděláme to', 'need' => 1],
+        ]])->assertOk();
+
+        $zustava = DB::table('wellbeing_tasks')->where('name', 'Zůstává')->value('id');
+
+        $this->stav(['klTasks' => [
+            ['id' => $zustava, 'name' => 'Zůstává', 'need' => 2],
+        ]])->assertOk();
+
+        $this->assertSame(2, DB::table('wellbeing_tasks')->count());
+        $this->assertNotNull(DB::table('wellbeing_tasks')->where('name', 'Uděláme to')->value('done_at'));
+        $this->assertNull(DB::table('wellbeing_tasks')->where('name', 'Zůstává')->value('done_at'));
+
+        // A hotová věc už se v čekání neukazuje.
+        $this->assertSame(['Zůstává'], collect($this->getJson('/api/data/klid')->assertOk()->json('data.KL_TASKS'))->pluck('name')->all());
+    }
+
+    /** Přejmenování nezaloží druhý řádek. */
+    public function test_uprava_meni_stejny_radek(): void
+    {
+        $this->stav(['klTasks' => [['id' => 0, 'name' => 'Vyklidit sklep', 'need' => 1]]])->assertOk();
+        $id = DB::table('wellbeing_tasks')->value('id');
+
+        $this->stav(['klTasks' => [['id' => $id, 'name' => 'Vyklidit sklep a půdu', 'need' => 2]]])->assertOk();
+
+        $this->assertSame(1, DB::table('wellbeing_tasks')->count());
+        $this->assertSame('Vyklidit sklep a půdu', DB::table('wellbeing_tasks')->value('name'));
+        $this->assertSame(2, (int) DB::table('wellbeing_tasks')->value('needs_people'));
+    }
+
     // ——— pomůcky ———
 
     private function stav(array $patch)

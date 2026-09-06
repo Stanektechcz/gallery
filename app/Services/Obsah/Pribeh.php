@@ -64,8 +64,128 @@ class Pribeh implements PoskytovatelObsahu
             'PAPER_ROWS' => $this->papir($prostor),
             'GV_C' => $this->komentareHostu($prostor),
             'ABARS' => ($t = $this->tierlisty($prostor)) ? ['tier' => $t] : null,
+            'AL' => $this->filmy($prostor),
             'RECON' => $this->rekonstrukce($prostor),
         ], fn ($v) => $v !== null && $v !== []);
+    }
+
+    /**
+     * Filmy, seriály a watchlist: `AL` po klíčích, jak je čte `rowsOf`.
+     *
+     * Řádek je `[název, popis, štítek, pásmo, {a, m}, dílů hotovo, dílů celkem]`.
+     * První tři pole má i ukázka; zbytek prototyp bez nich nekreslí, takže
+     * `galerie-data.js` se kvůli tomu nemění.
+     *
+     * Bez těch polí by obrazovka po každém načtení zapomněla, kdo co dal za
+     * hvězdičky a kde se přestalo dívat — hodnocení totiž žije ve stavu
+     * prohlížeče a stav se serverové klíče nedrží.
+     *
+     * @return array<string, list<array<int, mixed>>>
+     */
+    private function filmy(GallerySpace $prostor): array
+    {
+        if (! Schema::hasTable('watch_titles')) {
+            return [];
+        }
+
+        $tituly = DB::table('watch_titles')
+            ->where('gallery_space_id', $prostor->id)
+            ->orderBy('sort_order')
+            ->orderBy('id')
+            ->get();
+
+        if ($tituly->isEmpty()) {
+            return [];
+        }
+
+        $hodnoceni = Schema::hasTable('watch_title_ratings')
+            ? DB::table('watch_title_ratings')->whereIn('watch_title_id', $tituly->pluck('id'))->get()->groupBy('watch_title_id')
+            : collect();
+
+        [$prvni, $druhy] = $this->dvojiceId($prostor);
+
+        $seznamy = ['films' => [], 'series' => [], 'watchlist' => []];
+
+        foreach ($tituly as $t) {
+            $moje = ($hodnoceni[$t->id] ?? collect())->keyBy('user_id');
+            $znamky = [
+                'a' => (int) ($moje[$prvni]->rating ?? 0),
+                'm' => (int) ($moje[$druhy]->rating ?? 0),
+            ];
+
+            $klic = $t->status === 'chceme' ? 'watchlist' : ($t->kind === 'seriál' ? 'series' : 'films');
+
+            $seznamy[$klic][] = [
+                $t->title,
+                $this->popisTitulu($t, $znamky),
+                (string) ($t->status ?? 'chceme'),
+                (string) ($t->tier ?? '') ?: null,
+                array_filter($znamky) ? $znamky : null,
+                $t->episodes_done === null ? null : (int) $t->episodes_done,
+                $t->episodes_total === null ? null : (int) $t->episodes_total,
+            ];
+        }
+
+        return array_filter($seznamy);
+    }
+
+    /**
+     * Dvojice jako čísla, ve stejném pořadí jako `DVOJICE`.
+     *
+     * Přihlášený první — obrazovka svoje hvězdičky kreslí vlevo a je to
+     * `a`. Kdyby se pořadí lišilo, viděl by každý svoje hodnocení pod jménem
+     * toho druhého.
+     *
+     * @return list<int|null>
+     */
+    private function dvojiceId(GallerySpace $prostor): array
+    {
+        $lide = $prostor->members()->pluck('users.id')->all();
+        $ja = auth()->id();
+
+        if ($ja !== null && in_array($ja, $lide, false)) {
+            $lide = array_merge([$ja], array_values(array_filter($lide, fn ($id) => (int) $id !== (int) $ja)));
+        }
+
+        return [$lide[0] ?? null, $lide[1] ?? null];
+    }
+
+    /**
+     * Popisek řádku: kde se přestalo dívat, nebo jak to dopadlo.
+     *
+     * Prototyp z něj čte postup i známku — `S1E7`, `9/10`, „na watchlistu".
+     * Píše se proto tak, jak je zvyklý ho číst, ne jak by se to řeklo.
+     *
+     * @param  array{a: int, m: int}  $znamky
+     */
+    private function popisTitulu(object $t, array $znamky): string
+    {
+        if ($t->status === 'chceme') {
+            return 'na watchlistu';
+        }
+
+        $casti = [];
+
+        if ($t->episodes_done !== null && $t->episodes_total) {
+            $casti[] = (int) $t->episodes_done >= (int) $t->episodes_total
+                ? 'dokoukáno · '.$t->episodes_total.' dílů'
+                : 'S1E'.$t->episodes_done.' · sledujeme';
+        } elseif ($t->status === 'probíhá') {
+            $casti[] = 'sledujeme';
+        } else {
+            $casti[] = 'viděli jsme';
+        }
+
+        // Společná známka z desítky — průměr hvězdiček obou, ne jednoho.
+        $dane = array_values(array_filter($znamky));
+
+        if ($dane !== []) {
+            $casti[] = round(array_sum($dane) / count($dane) * 2, 1).'/10';
+        } elseif ($t->rating !== null) {
+            $casti[] = ((int) $t->rating).'/10';
+        }
+
+        return implode(' · ', $casti);
     }
 
     /**
@@ -383,7 +503,12 @@ class Pribeh implements PoskytovatelObsahu
     }
 
     /**
-     * Milníky: `[id, rok, datum, název, poznámka, ikona, kapitola]`.
+     * Milníky: `[id, rok, datum, název, poznámka, ikona, kapitola, den]`.
+     *
+     * Poslední pole je den jako datum. Obrazovka kreslí `4. dubna 2026`,
+     * ale zpátky posílá to, co dostala — a z textu se den v tabulce dá
+     * přečíst jen hádáním. `galerie-data.js` ho nemá; prototyp na něj
+     * nesahá, takže ukázce nevadí, že chybí.
      *
      * @return list<array<int, mixed>>
      */
@@ -409,6 +534,7 @@ class Pribeh implements PoskytovatelObsahu
                     (string) ($m->note ?? ''),
                     (string) ($m->icon ?? 'ph-sparkle'),
                     (string) ($m->kapitola ?? ''),
+                    $kdy->format('Y-m-d'),
                 ];
             })
             ->values()

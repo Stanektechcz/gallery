@@ -20,13 +20,13 @@ use Illuminate\Support\Facades\Schema;
 class KlidVeStavu
 {
     /** Klíče, které patří databázi. Do stavu se neukládají. */
-    public const SERVEROVE = ['klEn', 'klAttn', 'klAskLog'];
+    public const SERVEROVE = ['klEn', 'klAttn', 'klAskLog', 'klTasks'];
 
     public function __construct(private readonly Klid $obsah) {}
 
     public function tykaSe(array $patch): bool
     {
-        foreach (['klEn', 'klAttn', 'klAskMine', 'klAskDone'] as $klic) {
+        foreach (['klEn', 'klAttn', 'klAskMine', 'klAskDone', 'klTasks'] as $klic) {
             if (array_key_exists($klic, $patch)) {
                 return true;
             }
@@ -61,6 +61,10 @@ class KlidVeStavu
             $this->pozornost((array) $patch['klAttn'], $prostor);
         }
 
+        if (array_key_exists('klTasks', $patch)) {
+            $this->cekaNaOkno((array) $patch['klTasks'], $prostor);
+        }
+
         // Napsaná odpověď dorazila dřív než potvrzení, takže tenhle patch už
         // ji nenese — dohledá se v tom, co ve stavu leží.
         $this->odpoved($patch + $stav, $prostor, $uzivatel);
@@ -71,7 +75,81 @@ class KlidVeStavu
             'klEn' => $obsah['KL_EN'] ?? [],
             'klAttn' => $this->prani($obsah['KL_ATTN'] ?? []),
             'klAskLog' => $obsah['KL_ASK_LOG'] ?? [],
+            'klTasks' => $obsah['KL_TASKS'] ?? [],
         ], fn ($v) => $v !== []);
+    }
+
+    /**
+     * Co čeká na společné okno: `[{ id, name, need, route, tab, label }]`.
+     *
+     * „Probrat, co nás poslední měsíc štve" je věta, kterou si člověk nese
+     * týdny — a mapa energie je jediné místo, kde se dá říct, kolik oken na ni
+     * tenhle týden vůbec je. Tabulka se přitom jen četla, takže se do ní nedalo
+     * nic napsat a seznam zůstával cizí.
+     *
+     * `route`, `tab` a `label` posílá obrazovka zpátky tak, jak je dostala —
+     * jsou to odkazy na jiné obrazovky, ne text od člověka.
+     *
+     * @param  list<mixed>  $ukoly
+     */
+    private function cekaNaOkno(array $ukoly, GallerySpace $prostor): void
+    {
+        if (! Schema::hasTable('wellbeing_tasks')) {
+            return;
+        }
+
+        $znamé = DB::table('wellbeing_tasks')
+            ->where('gallery_space_id', $prostor->id)
+            ->whereNull('done_at')
+            ->pluck('id');
+
+        $zustavaji = [];
+
+        foreach (array_values($ukoly) as $poradi => $u) {
+            $u = (array) $u;
+            $nazev = trim((string) ($u['name'] ?? ''));
+
+            if ($nazev === '') {
+                continue;
+            }
+
+            $radek = [
+                'name' => mb_substr($nazev, 0, 180),
+                'needs_people' => max(0, min(2, (int) ($u['need'] ?? 1))),
+                'route' => ((string) ($u['route'] ?? '')) ?: null,
+                'tab' => ((string) ($u['tab'] ?? '')) ?: null,
+                'label' => ((string) ($u['label'] ?? '')) ?: null,
+                'sort_order' => $poradi,
+                'updated_at' => now(),
+            ];
+
+            $id = (int) ($u['id'] ?? 0);
+
+            if ($id > 0 && $znamé->contains($id)) {
+                DB::table('wellbeing_tasks')->where('id', $id)->update($radek);
+                $zustavaji[] = $id;
+
+                continue;
+            }
+
+            $zustavaji[] = DB::table('wellbeing_tasks')->insertGetId($radek + [
+                'gallery_space_id' => $prostor->id,
+                'created_at' => now(),
+            ]);
+        }
+
+        /*
+         * Co ze seznamu zmizelo, je hotové — ne smazané.
+         *
+         * „Zavolat na úřad" se z čekání dostane jedinou cestou: udělá se.
+         * Odstranit řádek by znamenalo, že po tom nezbude stopa, a příště
+         * se to samé zapíše znovu jako nová věc.
+         */
+        DB::table('wellbeing_tasks')
+            ->where('gallery_space_id', $prostor->id)
+            ->whereNull('done_at')
+            ->when($zustavaji !== [], fn ($q) => $q->whereNotIn('id', $zustavaji))
+            ->update(['done_at' => CarbonImmutable::now(), 'updated_at' => now()]);
     }
 
     /**

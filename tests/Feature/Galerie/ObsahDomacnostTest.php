@@ -9,8 +9,10 @@ use App\Models\HouseDue;
 use App\Models\HouseInventoryItem;
 use App\Models\HousePantryItem;
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -184,12 +186,97 @@ class ObsahDomacnostTest extends TestCase
 
         $tyden = $this->getJson('/api/data/domacnost')->assertOk()->json('data.HOUSE_WEEK');
 
-        $this->assertCount(1, $tyden);
+        // Týden má sedm dní. Dřív se posílaly jen ty, které někdo vyplnil
+        // ručně — a obrazovka pak kreslila týden o jednom dni.
+        $this->assertCount(7, $tyden);
         $this->assertSame('po', $tyden[0]['key']);
         $this->assertSame('Pondělí', $tyden[0]['name']);
-        $this->assertSame(2.5, $tyden[0]['a']);
-        $this->assertSame(1.5, $tyden[0]['m']);
+        $this->assertEquals(2.5, $tyden[0]['a']);
+        $this->assertEquals(1.5, $tyden[0]['m']);
         $this->assertSame('Oba v práci do 17.', $tyden[0]['note']);
+        $this->assertTrue($tyden[0]['fixA'], 'Přepsané číslo se pozná, jinak se k němu nedá vrátit.');
+        $this->assertFalse($tyden[1]['fixA']);
+    }
+
+    /**
+     * Volný čas se počítá z kalendáře — tak, jak to obrazovka slibuje.
+     *
+     * „Volný čas se počítá z kalendáře, směn a cest," stojí na ní. Ve
+     * skutečnosti se četla tabulka, do které nikdo nepsal, takže obrazovka
+     * ukazovala sedm dní cizí dvojice z ukázkových dat.
+     */
+    public function test_volny_cas_ubyva_podle_kalendare(): void
+    {
+        $pondeli = CarbonImmutable::now()->startOfWeek();
+
+        $this->udalost($pondeli->setTime(9, 0), $pondeli->setTime(17, 0), [$this->adri->id]);
+
+        $tyden = collect($this->getJson('/api/data/domacnost')->assertOk()->json('data.HOUSE_WEEK'))->keyBy('key');
+
+        // Bdělé okno je sedm ráno až jedenáct večer; osmihodinová práce z něj
+        // ubere osm hodin. Makinky se to netýká.
+        $this->assertEquals(8.0, $tyden['po']['a']);
+        $this->assertEquals(16.0, $tyden['po']['m']);
+        $this->assertEquals(16.0, $tyden['út']['a']);
+    }
+
+    /** Celodenní věc — třeba cesta — zabere den celý. */
+    public function test_celodenni_udalost_zabere_cely_den(): void
+    {
+        $streda = CarbonImmutable::now()->startOfWeek()->addDays(2);
+
+        $this->udalost($streda->startOfDay(), $streda->endOfDay(), [$this->adri->id, $this->maki->id], true);
+
+        $tyden = collect($this->getJson('/api/data/domacnost')->assertOk()->json('data.HOUSE_WEEK'))->keyBy('key');
+
+        $this->assertEquals(0.0, $tyden['st']['a']);
+        $this->assertEquals(0.0, $tyden['st']['m']);
+    }
+
+    /**
+     * Přepsané číslo přebíjí kalendář a uloží se.
+     *
+     * Aplikace neví o dojíždění ani o směně, která se nikam nezapsala.
+     * Oprava proto musí přežít zavření záložky.
+     */
+    public function test_oprava_kapacity_se_ulozi_a_prebije_kalendar(): void
+    {
+        $pondeli = CarbonImmutable::now()->startOfWeek();
+        $this->udalost($pondeli->setTime(9, 0), $pondeli->setTime(17, 0), [$this->adri->id]);
+
+        $tyden = $this->getJson('/api/data/domacnost')->assertOk()->json('data.HOUSE_WEEK');
+        $tyden[0] = ['a' => 2.5, 'fixA' => true, 'note' => 'Ještě dojíždění.'] + $tyden[0];
+
+        $this->patchJson('/api/state', ['data' => ['capWeek' => $tyden]])->assertOk();
+
+        $radek = DB::table('house_week')->where('weekday', 'po')->sole();
+        $this->assertSame('Ještě dojíždění.', $radek->note);
+        $this->assertEquals(2.5, DB::table('house_week_capacity')
+            ->where('house_week_id', $radek->id)->where('user_id', $this->adri->id)->value('free_hours'));
+
+        // Makinka opravu nemá — její číslo dál počítá kalendář.
+        $this->assertSame(0, DB::table('house_week_capacity')
+            ->where('house_week_id', $radek->id)->where('user_id', $this->maki->id)->count());
+
+        $znovu = collect($this->getJson('/api/data/domacnost')->assertOk()->json('data.HOUSE_WEEK'))->keyBy('key');
+        $this->assertEquals(2.5, $znovu['po']['a']);
+        $this->assertEquals(8.0, $znovu['po']['autoA'], 'Kalendář musí zůstat po ruce, jinak není kam se vrátit.');
+
+        $this->assertArrayNotHasKey('capWeek', (array) $this->getJson('/api/state')->assertOk()->json('data'));
+    }
+
+    /** Návrat ke kalendáři opravu smaže, ne přepíše. */
+    public function test_navrat_ke_kalendari_opravu_smaze(): void
+    {
+        $tyden = [['key' => 'po', 'a' => 2.5, 'm' => 0, 'note' => '', 'fixA' => true, 'fixM' => false]];
+        $this->patchJson('/api/state', ['data' => ['capWeek' => $tyden]])->assertOk();
+        $this->assertSame(1, DB::table('house_week_capacity')->count());
+
+        $tyden[0]['fixA'] = false;
+        $this->patchJson('/api/state', ['data' => ['capWeek' => $tyden]])->assertOk();
+
+        $this->assertSame(0, DB::table('house_week_capacity')->count());
+        $this->assertSame(0, DB::table('house_week')->count(), 'Den, na kterém není co držet, v tabulce nezůstává.');
     }
 
     /** Telefon kreslí domácnost z vlastních kolekcí, ne z `GalerieData`. */
@@ -404,6 +491,30 @@ class ObsahDomacnostTest extends TestCase
     }
 
     // ——— pomůcky ———
+
+    /** Událost v kalendáři s účastníky — z těch se počítá obsazený čas. */
+    private function udalost(CarbonImmutable $od, CarbonImmutable $do, array $kdo, bool $celyDen = false): void
+    {
+        $id = DB::table('calendar_events')->insertGetId([
+            'uuid' => (string) Str::uuid(),
+            'gallery_space_id' => $this->prostor->id,
+            'created_by' => $this->adri->id,
+            'title' => 'Práce',
+            'type' => 'other',
+            'status' => 'planned',
+            'starts_at' => $od,
+            'ends_at' => $do,
+            'all_day' => $celyDen,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        foreach ($kdo as $ucastnik) {
+            DB::table('event_participants')->insert([
+                'event_id' => $id, 'user_id' => $ucastnik, 'role' => 'organizer',
+                'response' => 'accepted', 'created_at' => now(), 'updated_at' => now(),
+            ]);
+        }
+    }
 
     private function prace(array $navic = []): HouseChore
     {

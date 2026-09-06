@@ -70,7 +70,10 @@ class System implements PoskytovatelObsahu
      */
     public function uplne(): array
     {
-        return ['DATA_HEALTH', 'SECLIFE', 'TRASH'];
+        // `CONFLICTS` taky: vyřešený rozpor musí z obrazovky zmizet hned.
+        // Bez toho by tam po kliknutí zůstal viset řádek, který v databázi
+        // už otevřený není — a při dalším načtení by se „vrátil".
+        return ['DATA_HEALTH', 'SECLIFE', 'TRASH', 'CONFLICTS'];
     }
 
     public function kolekce(GallerySpace $prostor): array
@@ -369,7 +372,10 @@ class System implements PoskytovatelObsahu
                 $kdy = CarbonImmutable::parse($r->detected_at);
 
                 return [
-                    'c'.$r->id,
+                    // `r`, ne `c`: ukázkové rozpory v `galerie-data.js` mají
+                    // `c1` až `c3` a obrazovka by je posílala serveru k
+                    // vyřešení, kde by na ně narazila na 404.
+                    'r'.$r->id,
                     $this->popisRozporu((string) $r->entity_type, (int) $r->entity_id),
                     $this->kdeRozpor((string) $r->entity_type),
                     $this->ikonaRozporu((string) $r->entity_type),
@@ -379,6 +385,14 @@ class System implements PoskytovatelObsahu
                     $this->pred($kdy),
                     // Sloučenou verzi si dvojice vybere sama.
                     '',
+                    /*
+                     * Jak se ty dvě strany jmenují.
+                     *
+                     * Obrazovka je jinak popisuje „moje" a „jeho" — u rozporu
+                     * mezi knihovnou a Diskem by to znamenalo označit za
+                     * původce smazaného souboru někoho z dvojice.
+                     */
+                    ['V knihovně', 'Na Disku'],
                 ];
             })
             ->values()

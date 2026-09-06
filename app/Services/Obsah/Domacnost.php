@@ -32,6 +32,20 @@ class Domacnost implements PoskytovatelObsahu
         'pá' => 'Pátek', 'so' => 'Sobota', 'ne' => 'Neděle',
     ];
 
+    /*
+     * Bdělé okno dne: od sedmi do jedenácti večer.
+     *
+     * Volný čas na obrazovce znamená **hodiny, na které v kalendáři nic
+     * není** — ne hodiny, kdy má člověk sílu. Aplikace neví o dojíždění,
+     * vaření ani únavě, takže o nich nic netvrdí; od toho je vedle mapa
+     * energie a od toho jde každé číslo přepsat.
+     */
+    private const OD = 7;
+
+    private const DO = 23;
+
+    private const OKNO = 16.0;
+
     /** Pádová podoba pro „naposledy v pondělí". */
     private const V_DEN = [
         'po' => 'v pondělí', 'út' => 'v úterý', 'st' => 've středu', 'čt' => 've čtvrtek',
@@ -201,45 +215,124 @@ class Domacnost implements PoskytovatelObsahu
      */
     private function tyden(GallerySpace $prostor): array
     {
-        $dny = DB::table('house_week')
-            ->where('gallery_space_id', $prostor->id)
-            ->get()
-            ->keyBy('weekday');
+        $dvojice = $this->dvojice($prostor);
 
-        if ($dny->isEmpty()) {
+        if ($dvojice[0] === null || $dvojice[1] === null) {
             return [];
         }
 
-        $volno = DB::table('house_week_capacity')
-            ->whereIn('house_week_id', $dny->pluck('id'))
-            ->get()
-            ->groupBy('house_week_id');
-
-        $dvojice = $this->dvojice($prostor);
         $pondeli = CarbonImmutable::now()->startOfWeek();
+        $obsazeno = $this->obsazenost($prostor, $pondeli);
+
+        $dny = Schema::hasTable('house_week')
+            ? DB::table('house_week')->where('gallery_space_id', $prostor->id)->get()->keyBy('weekday')
+            : collect();
+
+        $opravy = $dny->isNotEmpty() && Schema::hasTable('house_week_capacity')
+            ? DB::table('house_week_capacity')->whereIn('house_week_id', $dny->pluck('id'))->get()->groupBy('house_week_id')
+            : collect();
+
+        // Prázdný kalendář a žádná oprava znamená, že aplikace o týdnu nic
+        // neví. Nakreslit sedm dní plných volna by bylo tvrzení, ne údaj.
+        if ($obsazeno === [] && $dny->isEmpty()) {
+            return [];
+        }
 
         $radky = [];
 
         foreach (self::DNY as $poradi => $klic) {
             $den = $dny[$klic] ?? null;
+            $kapacita = $den ? ($opravy[$den->id] ?? collect())->keyBy('user_id') : collect();
+            $obsazenoDen = $obsazeno[$poradi] ?? [];
 
-            if (! $den) {
-                continue;
-            }
-
-            $kapacita = ($volno[$den->id] ?? collect())->keyBy('user_id');
+            $zKalendare = [
+                $this->volno($obsazenoDen[$dvojice[0]] ?? 0.0),
+                $this->volno($obsazenoDen[$dvojice[1]] ?? 0.0),
+            ];
 
             $radky[] = [
                 'key' => $klic,
                 'name' => self::DNY_CESKY[$klic],
                 'date' => $pondeli->addDays($poradi)->format('j. n.'),
-                'a' => (float) ($kapacita[$dvojice[0]]->free_hours ?? 0),
-                'm' => (float) ($kapacita[$dvojice[1]]->free_hours ?? 0),
+                'a' => isset($kapacita[$dvojice[0]]) ? (float) $kapacita[$dvojice[0]]->free_hours : $zKalendare[0],
+                'm' => isset($kapacita[$dvojice[1]]) ? (float) $kapacita[$dvojice[1]]->free_hours : $zKalendare[1],
                 'note' => (string) ($den->note ?? ''),
+                /*
+                 * Co říká kalendář, i když to dvojice přepsala.
+                 *
+                 * Bez toho by se k původnímu číslu nedalo vrátit: obrazovka by
+                 * po přepsání znala jen tu opravu a „podle kalendáře" by nemělo
+                 * co dosadit.
+                 */
+                'autoA' => $zKalendare[0],
+                'autoM' => $zKalendare[1],
+                'fixA' => isset($kapacita[$dvojice[0]]),
+                'fixM' => isset($kapacita[$dvojice[1]]),
             ];
         }
 
         return $radky;
+    }
+
+    /**
+     * Kolik hodin z bdělého okna má ten den kdo obsazených.
+     *
+     * `[pořadí dne v týdnu][id člověka] => hodiny`. Počítá se z kalendáře:
+     * událost, u které je člověk účastníkem, zabírá ten čas jemu. Celodenní
+     * událost — třeba cesta — zabere okno celé.
+     *
+     * @return array<int, array<int, float>>
+     */
+    private function obsazenost(GallerySpace $prostor, CarbonImmutable $pondeli): array
+    {
+        if (! Schema::hasTable('calendar_events') || ! Schema::hasTable('event_participants')) {
+            return [];
+        }
+
+        $konec = $pondeli->addDays(7);
+
+        $udalosti = DB::table('calendar_events as u')
+            ->join('event_participants as ucast', 'ucast.event_id', '=', 'u.id')
+            ->where('u.gallery_space_id', $prostor->id)
+            ->where('u.starts_at', '<', $konec)
+            ->where(fn ($q) => $q->where('u.ends_at', '>', $pondeli)->orWhereNull('u.ends_at'))
+            ->whereNotIn('u.status', ['cancelled', 'declined'])
+            ->get(['u.starts_at', 'u.ends_at', 'u.all_day', 'ucast.user_id']);
+
+        $obsazeno = [];
+
+        foreach ($udalosti as $u) {
+            $od = CarbonImmutable::parse($u->starts_at);
+            $do = $u->ends_at ? CarbonImmutable::parse($u->ends_at) : $od->addHour();
+
+            for ($poradi = 0; $poradi < 7; $poradi++) {
+                $den = $pondeli->addDays($poradi);
+                $hodin = $u->all_day
+                    ? ($od->lt($den->addDay()) && $do->gt($den) ? self::OKNO : 0.0)
+                    : $this->prekryv($od, $do, $den->setTime(self::OD, 0), $den->setTime(self::DO, 0));
+
+                if ($hodin > 0) {
+                    $obsazeno[$poradi][(int) $u->user_id] = ($obsazeno[$poradi][(int) $u->user_id] ?? 0.0) + $hodin;
+                }
+            }
+        }
+
+        return $obsazeno;
+    }
+
+    /** Průnik dvou intervalů v hodinách. */
+    private function prekryv(CarbonImmutable $od, CarbonImmutable $do, CarbonImmutable $oknoOd, CarbonImmutable $oknoDo): float
+    {
+        $zacatek = $od->gt($oknoOd) ? $od : $oknoOd;
+        $konec = $do->lt($oknoDo) ? $do : $oknoDo;
+
+        return $konec->gt($zacatek) ? round($zacatek->diffInMinutes($konec) / 60, 2) : 0.0;
+    }
+
+    /** Z obsazených hodin volné. Na půlhodiny, jak je obrazovka kreslí. */
+    private function volno(float $obsazeno): float
+    {
+        return round(max(0.0, self::OKNO - $obsazeno) * 2) / 2;
     }
 
     /**

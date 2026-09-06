@@ -143,6 +143,19 @@ Schedule::command('galerie:notify --no-interaction')
     ->dailyAt('18:00')
     ->name('galerie-notify');
 
+/*
+ * Změny z Disku na rozpory.
+ *
+ * Webhook je jen ukládal se stavem `pending` a nikdo je nezpracoval: fotka
+ * smazaná na Disku zůstala v aplikaci jako platná a obrazovka „Rozpory mezi
+ * zařízeními" kreslila ukázku. Každých pět minut — rozpor, o kterém se dvojice
+ * dozví za den, už většinou stihla někde přepsat.
+ */
+Schedule::command('gallery:process-drive-changes --no-interaction')
+    ->everyFiveMinutes()
+    ->withoutOverlapping()
+    ->name('drive-changes');
+
 // Scheduler heartbeat (for doctor check)
 Schedule::call(function () {
     \App\Models\SystemSetting::set('scheduler_last_heartbeat', now()->toIso8601String());

@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\Galerie\KosController;
 use App\Http\Controllers\Api\Galerie\MechanismController;
 use App\Http\Controllers\Api\Galerie\MediaController;
 use App\Http\Controllers\Api\Galerie\PravidloController;
+use App\Http\Controllers\Api\Galerie\RozporController;
 use App\Http\Controllers\Api\Galerie\StateController;
 use App\Http\Controllers\Api\Galerie\StorageController;
 use App\Http\Controllers\Api\Galerie\TiskController;
@@ -115,6 +116,15 @@ Route::middleware(['auth:sanctum', 'throttle:120,1'])->prefix('api')->group(func
      */
     Route::post('tisk/objednavka', [TiskController::class, 'store'])->name('galerie.tisk.store');
     Route::post('tisk/stav', [TiskController::class, 'step'])->name('galerie.tisk.step');
+
+    /*
+     * Vyřešení rozporu mezi aplikací a Diskem.
+     *
+     * „Vyřešeno" přepsalo jediné pole ve stavu prohlížeče. Rozpor zůstal
+     * otevřený, takže se při dalším načtení vrátil — a druhý z dvojice ho
+     * viděl celou dobu.
+     */
+    Route::post('rozpory/vyresit', RozporController::class)->name('galerie.rozpor.vyresit');
 
     /*
      * Koš.
