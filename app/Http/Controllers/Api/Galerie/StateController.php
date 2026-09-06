@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\CoupleState;
 use App\Models\GallerySpace;
 use App\Services\Provoz\AdminVeStavu;
+use App\Services\Provoz\DomacnostVeStavu;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -15,7 +16,10 @@ class StateController extends Controller
 {
     use UrcujePar;
 
-    public function __construct(private readonly AdminVeStavu $sprava) {}
+    public function __construct(
+        private readonly AdminVeStavu $sprava,
+        private readonly DomacnostVeStavu $domacnost,
+    ) {}
 
     public function show(Request $request): JsonResponse
     {
@@ -73,6 +77,20 @@ class StateController extends Controller
             if ($this->sprava->tykaSe($patch)) {
                 $skutecnost = $this->sprava->zpracuj($patch, GallerySpace::findOrFail($coupleId), $uzivatel);
                 $patch = $this->sprava->bezSpravy($patch);
+            }
+
+            /*
+             * Domácnost totéž, jen z druhé strany.
+             *
+             * Dělba práce, lhůty a byt mají vlastní tabulky; kdyby se druhá
+             * kopie držela i ve stavu, po prvním kliknutí by se rozešly. Zápis
+             * se provede a klíče se ze stavu vyhodí — při dalším načtení si je
+             * prototyp vezme z `/api/data/domacnost`.
+             */
+            if ($this->domacnost->tykaSe($patch)) {
+                $this->domacnost->zpracuj($patch, GallerySpace::findOrFail($coupleId));
+                $patch = $this->domacnost->bezDomacnosti($patch);
+                $state->zapomen(DomacnostVeStavu::SERVEROVE);
             }
 
             $state->applyPatch($patch);

@@ -248,7 +248,7 @@
    * Po skupinách, ne jednou odpovědí: obrazovka financí nemá čekat, až se spočítá
    * kuchařka. Každá skupina se navlékne, jakmile dorazí — na pořadí nezáleží.
    */
-  var SKUPINY = ['finance', 'knihovna', 'planovani'];
+  var SKUPINY = ['finance', 'knihovna', 'planovani', 'domacnost'];
 
   function skupiny() {
     return SKUPINY.map(function (jmeno) {

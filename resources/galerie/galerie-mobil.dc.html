@@ -5161,7 +5161,7 @@ const MRECIPES = [
     ing: ['ramen nudle', 'miso pasta', 'vejce', 'sójová omáčka', 'zázvor', 'jarní cibulka'] }
 ];
 // [id, název, kategorie, množství, jednotka, dní do spotřeby (null = trvanlivé), klíč pro shodu]
-const MPANTRY = [
+const MPANTRY = MOB.MPANTRY || (MOB.MPANTRY = [
   ['m1', 'Loupaná rajčata', 'Špajz', 3, 'konzervy', null, 'rajčata'],
   ['m2', 'Žlutá cibule', 'Špajz', 1.2, 'kg', 40, 'cibule'],
   ['m3', 'Česnek', 'Špajz', 1, 'palice', 30, 'česnek'],
@@ -5186,7 +5186,7 @@ const MPANTRY = [
   ['m22', 'Sůl a pepř', 'Koření', 1, 'sada', null, 'sůl'],
   ['m23', 'Vývar', 'Mrazák', 1.5, 'l', 60, 'vývar'],
   ['m24', 'Pražma', 'Mrazák', 0, 'ks', 0, 'pražma']
-];
+]);
 // [den, ikona, max °C, min °C, režim, poznámka]
 const MWEATHER = [
   ['Dnes', 'ph-cloud-rain', 19, 12, 'déšť', 'přeháňky celý den'],
@@ -5400,7 +5400,10 @@ const FAMILY = [
 ];
 
 // Domácnost: práce s rotací, kapacita týdne, lhůty, inventář.
-const HOUSE_CHORES = [
+// Domácnost drží telefon ve `window.GalerieMobil` ze stejného důvodu jako
+// knihovnu: konstanta si pamatuje pole z okamžiku překladu, takže se obsah
+// vyměňuje uvnitř téhož pole. Bez odpovědi ze serveru zůstávají řádky napsané.
+const HOUSE_CHORES = MOB.HOUSE_CHORES || (MOB.HOUSE_CHORES = [
   { id: 'c1', name: 'Vysát celý byt', every: 'týdně', who: 'Adrian', rotate: true, mins: 45, last: 'v pátek', day: 'so', icon: 'ph-wind' },
   { id: 'c2', name: 'Nádobí a kuchyň', every: 'denně', who: 'Makinka', rotate: true, mins: 15, last: 'dnes', day: null, icon: 'ph-cooking-pot' },
   { id: 'c3', name: 'Prádlo', every: '2× týdně', who: 'Makinka', rotate: true, mins: 30, last: 'v pondělí', day: 'st', icon: 'ph-t-shirt' },
@@ -5409,8 +5412,8 @@ const HOUSE_CHORES = [
   { id: 'c6', name: 'Odpadky a tříděný', every: '2× týdně', who: 'Adrian', rotate: false, mins: 10, last: 'včera', day: null, icon: 'ph-trash' },
   { id: 'c7', name: 'Rostliny', every: 'týdně', who: 'Makinka', rotate: false, mins: 10, last: 'v neděli', day: null, icon: 'ph-plant' },
   { id: 'c8', name: 'Účty a papíry', every: 'měsíčně', who: 'Adrian', rotate: true, mins: 40, last: '2. srpna', day: null, icon: 'ph-folder-open' }
-];
-const HOUSE_LOG = [
+]);
+const HOUSE_LOG = MOB.HOUSE_LOG || (MOB.HOUSE_LOG = [
   { id: 'l1', chore: 'Nádobí a kuchyň', who: 'Makinka', mins: 15, when: 'dnes 8:10' },
   { id: 'l2', chore: 'Odpadky a tříděný', who: 'Adrian', mins: 10, when: 'včera 19:40' },
   { id: 'l3', chore: 'Prádlo', who: 'Makinka', mins: 30, when: 'pondělí' },
@@ -5431,8 +5434,8 @@ const HOUSE_LOG = [
   { id: 'l18', chore: 'Prádlo', who: 'Makinka', mins: 30, when: '9. srpna' },
   { id: 'l19', chore: 'Nádobí a kuchyň', who: 'Adrian', mins: 15, when: '8. srpna' },
   { id: 'l20', chore: 'Rostliny', who: 'Makinka', mins: 10, when: '6. srpna' }
-];
-const HOUSE_WEEK = [
+]);
+const HOUSE_WEEK = MOB.HOUSE_WEEK || (MOB.HOUSE_WEEK = [
   { key: 'po', name: 'Pondělí', date: '31. 8.', a: 2.5, m: 1.5, note: 'Oba v práci do 17.' },
   { key: 'út', name: 'Úterý', date: '1. 9.', a: 3, m: 0.5, note: 'Makinka má dvanáctku.' },
   { key: 'st', name: 'Středa', date: '2. 9.', a: 1, m: 3, note: 'Adrian večer trénink.' },
@@ -5440,8 +5443,8 @@ const HOUSE_WEEK = [
   { key: 'pá', name: 'Pátek', date: '4. 9.', a: 0.5, m: 0.5, note: 'Výročí — večeře venku.' },
   { key: 'so', name: 'Sobota', date: '5. 9.', a: 6, m: 5, note: 'Volno.' },
   { key: 'ne', name: 'Neděle', date: '6. 9.', a: 4, m: 4.5, note: 'Odpoledne u babičky.' }
-];
-const HOUSE_DUES = [
+]);
+const HOUSE_DUES = MOB.HOUSE_DUES || (MOB.HOUSE_DUES = [
   { id: 'q1', what: 'STK a emise — Octavia', kind: 'lhůta', date: '14. 10. 2026', days: 41, amount: 1900, who: 'Adrian' },
   { id: 'q2', what: 'Povinné ručení', kind: 'platba', date: '1. 11. 2026', days: 59, amount: 3240, who: 'Adrian' },
   { id: 'q3', what: 'Zubní prohlídka — Makinka', kind: 'lhůta', date: '22. 9. 2026', days: 19, amount: 0, who: 'Makinka' },
@@ -5449,15 +5452,15 @@ const HOUSE_DUES = [
   { id: 'q5', what: 'Nájem — Zbrojnická', kind: 'platba', date: '1. 9. 2026', days: 1, amount: 14500, who: 'Adrian' },
   { id: 'q6', what: 'Pojištění bytu', kind: 'platba', date: '18. 12. 2026', days: 106, amount: 1850, who: 'Makinka' },
   { id: 'q7', what: 'Pas — Makinka', kind: 'lhůta', date: '3. 3. 2027', days: 181, amount: 0, who: 'Makinka' }
-];
-const HOUSE_INV = [
+]);
+const HOUSE_INV = MOB.HOUSE_INV || (MOB.HOUSE_INV = [
   { id: 'v1', name: 'Myčka Bosch SMS4H', room: 'kuchyň', bought: '3. 3. 2024', warrantyTo: '3/2026', warrantyDays: -150, doc: true, service: false, price: 12990, life: 10, energy: 1450, upkeep: 400 },
   { id: 'v2', name: 'Pračka LG F4WV', room: 'koupelna', bought: '12. 6. 2025', warrantyTo: '6/2027', warrantyDays: 280, doc: true, service: false, price: 14500, life: 12, energy: 1980, upkeep: 300 },
   { id: 'v3', name: 'Kotel Vaillant', room: 'technická', bought: '9. 9. 2022', warrantyTo: '9/2027', warrantyDays: 370, doc: false, service: true, serviceNext: '9. 9. 2026', serviceDays: 6, servicePrice: 1600, price: 68000, life: 18, energy: 18400, upkeep: 1600 },
   { id: 'v4', name: 'Kolo Kellys Soot', room: 'sklep', bought: '4. 5. 2023', warrantyTo: '5/2025', warrantyDays: -480, doc: false, service: true, serviceNext: '20. 3. 2027', serviceDays: 198, servicePrice: 900, price: 32000, life: 8, energy: 0, upkeep: 900 },
   { id: 'v5', name: 'Sedačka Ikea Vimle', room: 'obývák', bought: '18. 11. 2024', warrantyTo: '11/2034', warrantyDays: 3000, doc: true, service: false, price: 24900, life: 12, energy: 0, upkeep: 200 },
   { id: 'v6', name: 'Nábytek na míru', room: 'ložnice', bought: '2. 2. 2026', warrantyTo: '2/2029', warrantyDays: 900, doc: false, service: false, price: 86000, life: 25, energy: 0, upkeep: 0 }
-];
+]);
 const DEC_LIST = [
   { id: 'r1', title: 'Zůstat v nájmu na Zbrojnické do konce 2027', date: '14. 1. 2026', status: 'platí',
     why: ['Hypotéka by nám sebrala rezervu na cesty.', 'Byt je 12 minut od obou prací.'], rejected: ['Koupit 2+kk v Porubě', 'Přestěhovat se k rodičům'], review: 'v lednu 2027' },
