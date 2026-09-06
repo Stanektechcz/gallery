@@ -123,15 +123,22 @@ class Predpoved
      */
     private function rezim(int $max, float $srazky, int $kod): string
     {
+        /*
+         * Horko přebíjí déšť.
+         *
+         * Živá data to ukázala hned: třicet dva stupňů s odpolední přeháňkou
+         * vycházelo jako „déšť" a obrazovka nabízela polévku. Teplota je to,
+         * co rozhoduje, na co má člověk chuť; přeháňka na tom nic nemění.
+         */
+        if ($max >= 27) {
+            return 'horko';
+        }
+
         if ($srazky >= 50 || ($kod >= 51 && $kod <= 99)) {
             return 'déšť';
         }
 
-        return match (true) {
-            $max >= 27 => 'horko',
-            $max >= 18 => 'teplo',
-            default => 'chladno',
-        };
+        return $max >= 18 ? 'teplo' : 'chladno';
     }
 
     /** Kódy Open-Meteo (WMO) na ikony, které prototyp kreslí. */

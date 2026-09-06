@@ -20,22 +20,39 @@ use Inertia\Inertia;
 
 // ── Public ─────────────────────────────────────────────
 Route::get('/login', [AuthenticatedSessionController::class, 'create'])->name('login');
-Route::post('/login', [AuthenticatedSessionController::class, 'store'])->name('login.store');
+/*
+ * Limit na zkoušení hesla.
+ *
+ * Nebyl žádný: dvanáct pokusů za sebou prošlo bez zdržení a bez zámku.
+ * Ochrana proti CSRF útočníka nezastaví — token si vezme z přihlašovací
+ * stránky stejně jako prohlížeč. Deset za minutu je dvojnásobek toho,
+ * co udělá člověk s překlepem, a zlomek toho, co potřebuje slovník.
+ */
+Route::post('/login', [AuthenticatedSessionController::class, 'store'])
+    ->middleware('throttle:10,1')->name('login.store');
 
 // Reached signed out, holding nothing but an id in the session.
 Route::get('/login/overeni', [App\Http\Controllers\Auth\TwoFactorController::class, 'challenge'])->name('two-factor.challenge');
-Route::post('/login/overeni', [App\Http\Controllers\Auth\TwoFactorController::class, 'verify'])->name('two-factor.verify');
+// Druhý faktor má vlastní limit v kontroleru (pět pokusů na účet);
+// tenhle je proti tomu, aby se zkoušelo z jedné adresy na víc účtů.
+Route::post('/login/overeni', [App\Http\Controllers\Auth\TwoFactorController::class, 'verify'])
+    ->middleware('throttle:15,1')->name('two-factor.verify');
 Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])->name('logout');
 
 // Invitation-only registration
 Route::get('/invite/{token}', [InvitationController::class, 'show'])->name('invitation.show');
-Route::post('/invite/{token}', [InvitationController::class, 'accept'])->name('invitation.accept');
+Route::post('/invite/{token}', [InvitationController::class, 'accept'])
+    ->middleware('throttle:10,1')->name('invitation.accept');
 
 // Password reset
 Route::get('/forgot-password', [PasswordResetController::class, 'request'])->name('password.request');
-Route::post('/forgot-password', [PasswordResetController::class, 'email'])->name('password.email');
+// Limit i na odeslání: bez něj jde cizí schránku zaplavit a zároveň
+// zjišťovat, které adresy u nás účet mají.
+Route::post('/forgot-password', [PasswordResetController::class, 'email'])
+    ->middleware('throttle:5,1')->name('password.email');
 Route::get('/reset-password/{token}', [PasswordResetController::class, 'reset'])->name('password.reset');
-Route::post('/reset-password', [PasswordResetController::class, 'update'])->name('password.update');
+Route::post('/reset-password', [PasswordResetController::class, 'update'])
+    ->middleware('throttle:10,1')->name('password.update');
 
 // Public marketing site. Both pages read the same catalogue the app bills from.
 Route::get('/sluzba', fn() => Inertia::render('Landing/Index'))->name('landing');
@@ -48,7 +65,8 @@ Route::get('/platby/comgate/navrat', [App\Http\Controllers\Billing\CheckoutContr
 
 // Public sign-up, gated by config('gallery.registration_open').
 Route::get('/registrace', [App\Http\Controllers\Auth\RegistrationController::class, 'show'])->name('register');
-Route::post('/registrace', [App\Http\Controllers\Auth\RegistrationController::class, 'store'])->name('register.store');
+Route::post('/registrace', [App\Http\Controllers\Auth\RegistrationController::class, 'store'])
+    ->middleware('throttle:5,1')->name('register.store');
 
 // Public mobile application centre and stable direct Android download link.
 Route::get('/app', [MobileAppController::class, 'index'])->name('mobile-app.index');
@@ -58,8 +76,18 @@ Route::get('/.well-known/assetlinks.json', [MobileAppController::class, 'assetLi
 
 // Public shared links
 Route::get('/s/{token}', [ShareController::class, 'show'])->name('share.show');
-Route::post('/s/{token}/verify', [ShareController::class, 'verify'])->name('share.verify');
-Route::post('/s/{token}/upload', [ShareController::class, 'guestUpload'])->name('share.guest-upload');
+/*
+ * Heslo ke sdílenému odkazu se taky zkoušelo bez omezení.
+ *
+ * Je kratší než heslo k účtu a chrání fotky, které dvojice někomu
+ * poslala — tedy přesně to, co má cizí člověk chuť otevřít.
+ */
+Route::post('/s/{token}/verify', [ShareController::class, 'verify'])
+    ->middleware('throttle:10,1')->name('share.verify');
+// Host nahrává po jednom souboru; třicet za minutu je víc, než stihne
+// vybrat, a málo na zaplnění disku.
+Route::post('/s/{token}/upload', [ShareController::class, 'guestUpload'])
+    ->middleware('throttle:30,1')->name('share.guest-upload');
 Route::get('/s/{token}/media/{uuid}/download', [ShareController::class, 'download'])->name('share.download');
 
 /*

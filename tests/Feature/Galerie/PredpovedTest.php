@@ -112,6 +112,30 @@ class PredpovedTest extends TestCase
         $this->assertSame('teplo', $w[1][4]);
     }
 
+    /**
+     * Horko přebíjí déšť.
+     *
+     * Živá data to ukázala hned: 32 °C s odpolední přeháňkou vycházelo jako
+     * „déšť" a obrazovka nabízela teplou polévku.
+     */
+    public function test_horky_den_s_prehankou_zustava_horky(): void
+    {
+        $this->recept();
+        $this->fotkySPolohou();
+
+        $this->fakePocasi([
+            'time' => [now()->toDateString()],
+            'weather_code' => [80],
+            'temperature_2m_max' => [32.0],
+            'temperature_2m_min' => [18.0],
+            'precipitation_probability_max' => [65],
+        ]);
+
+        $w = $this->getJson('/api/data/kucharka')->assertOk()->json('data.WEATHER');
+
+        $this->assertSame('horko', $w[0][4]);
+    }
+
     /** Nedostupná předpověď není chyba aplikace. */
     public function test_nedostupna_sluzba_obrazovku_neshodi(): void
     {

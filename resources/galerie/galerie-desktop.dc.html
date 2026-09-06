@@ -1866,7 +1866,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
         <div style="display:flex; animation:fadeIn .2s ease">
           <div style="flex:1; min-width:0; padding:8px var(--pad-x) 90px; max-width:1100px">
             <h2 style="margin:0; font-size:30px">Časová osa</h2>
-            <div style="font-size:13px; color:var(--g-ink2); margin-top:3px; margin-bottom:18px">Sedm let, 24 316 vzpomínek — svisle, jak se to stalo.</div>
+            <div style="font-size:13px; color:var(--g-ink2); margin-top:3px; margin-bottom:18px">{{ tlPodnadpis }}</div>
 
             <div style="padding:16px 18px; border-radius:2px; background:var(--g-raise); border:1px solid var(--g-line2); margin-bottom:10px">
               <div style="display:flex; align-items:flex-end; gap:14px; flex-wrap:wrap">
@@ -27892,6 +27892,21 @@ class Component extends DCLogic {
       openAlbumBeskydy: () => this.setState({ route: 'album', albumId: 'beskydy' }),
 
       isHome: R === 'home', isLibrary: R === 'all' || R === 'favorites', isAlbums: R === 'albums',
+      /*
+       * Podnadpis časové osy.
+       *
+       * Stálo tam „Sedm let, 24 316 vzpomínek" napevno — u dvojice se dvěma
+       * sty fotkami z jednoho roku to bylo tvrzení o cizí knihovně.
+       */
+      tlPodnadpis: (() => {
+        const fotky = this.photos();
+        if (! fotky.length) return 'Zatím tu není žádná vzpomínka.';
+        const roky = new Set(fotky.map(p => (p.day || '').slice(0, 4)).filter(Boolean));
+        const let_ = roky.size || 1;
+        return this.pl(let_, 'rok', 'roky', 'let') + ', '
+          + this.pl(fotky.length, 'vzpomínka', 'vzpomínky', 'vzpomínek')
+          + ' — svisle, jak se to stalo.';
+      })(),
       isAlbum: R === 'album', isTimeline: R === 'timeline', isCalendar: R === 'calendar', isMap: R === 'map',
       isShared: R === 'shared', isTrash: R === 'trash', isStorage: R === 'storage',
       isActivity: R === 'activity', isSettings: R === 'settings',

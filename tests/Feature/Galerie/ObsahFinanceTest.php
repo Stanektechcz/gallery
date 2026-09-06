@@ -46,6 +46,38 @@ class ObsahFinanceTest extends TestCase
     }
 
     /**
+     * Kategorie k zařazení jsou ty, které dvojice opravdu má.
+     *
+     * Prototyp je měl napsané v souboru s ukázkovými daty, takže nabízel cizí
+     * jména — a zapsané zařazení pak mířilo na kategorii, kterou dvojice
+     * v účetnictví nemá.
+     */
+    public function test_kategorie_k_zarazeni_jsou_skutecne(): void
+    {
+        $this->regensburg();
+
+        FinanceCategory::create([
+            'gallery_space_id' => $this->prostor->id, 'name' => 'Kavárny',
+            'kind' => 'expense', 'is_active' => true, 'sort_order' => 90,
+        ]);
+        FinanceCategory::create([
+            'gallery_space_id' => $this->prostor->id, 'name' => 'Mzda',
+            'kind' => 'income', 'is_active' => true, 'sort_order' => 91,
+        ]);
+        FinanceCategory::create([
+            'gallery_space_id' => $this->prostor->id, 'name' => 'Schovaná',
+            'kind' => 'expense', 'is_active' => false, 'sort_order' => 92,
+        ]);
+
+        $kategorie = $this->getJson('/api/data/finance')->assertOk()->json('data.TXCATS');
+
+        $this->assertContains('Kavárny', $kategorie);
+        // Příjem ani schovaná kategorie k zařazení nákupu nepatří.
+        $this->assertNotContains('Mzda', $kategorie);
+        $this->assertNotContains('Schovaná', $kategorie);
+    }
+
+    /**
      * Limity jsou za období, obrazovka je měsíční.
      *
      * Rozpočet na Německo má u ubytování 1 680 € — šest měsíců po 280. Ukázat to

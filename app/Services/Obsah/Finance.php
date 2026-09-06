@@ -95,6 +95,15 @@ class Finance implements PoskytovatelObsahu
             // ukázal na dvou záložkách dvě různá čísla o téže kategorii.
             'ABARS' => ($bud ? $this->sloupceRozpoctu($bud, $mena) : []) ?: null,
             'BUD' => $bud,
+            /*
+             * Názvy kategorií pro výběry u transakcí.
+             *
+             * Prototyp je měl napsané v souboru s ukázkovými daty, takže dvojici,
+             * která si kategorie přejmenovala nebo přidala, nabízel k zařazení
+             * cizí jména — a zapsané zařazení pak mířilo na kategorii, kterou
+             * v účetnictví nemá.
+             */
+            'TXCATS' => $this->nazvyKategorii($prostor),
             'FIN' => ['accounts' => $this->ucty($prostor, $penezenky)],
             // Totéž číslo jako v hlavičce rozpočtu — dvě různá by si na dvou
             // obrazovkách protiřečila.
@@ -778,6 +787,33 @@ class Finance implements PoskytovatelObsahu
     // ——— pevné náklady ———
 
     /** @return list<array<string, mixed>> */
+    /**
+     * Názvy kategorií, ze kterých si dvojice u transakce vybírá.
+     *
+     * Jen výdajové a jen aktivní: v seznamu k zařazení nákupu nemá co dělat
+     * příjem ani kategorie, kterou si dvojice schovala.
+     *
+     * @return list<string>
+     */
+    private function nazvyKategorii(GallerySpace $prostor): array
+    {
+        if (! Schema::hasTable('finance_categories')) {
+            return [];
+        }
+
+        return DB::table('finance_categories')
+            ->where('gallery_space_id', $prostor->id)
+            ->where('is_active', true)
+            ->whereNot('kind', 'income')
+            ->orderBy('sort_order')
+            ->orderBy('name')
+            ->limit(60)
+            ->pluck('name')
+            ->unique()
+            ->values()
+            ->all();
+    }
+
     private function pevneNaklady(?Budget $rozpocet): array
     {
         if ($rozpocet === null) {
