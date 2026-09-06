@@ -8,8 +8,11 @@ use App\Models\GallerySpace;
 use App\Models\MediaItem;
 use App\Models\PersonalAccessToken;
 use App\Models\StorageConnection;
+use App\Models\SystemSetting;
 use App\Models\User;
 use App\Services\Billing\EntitlementService;
+use App\Support\SpaceContext;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 /**
@@ -50,7 +53,10 @@ class AdministraceGalerie
     public function prehled(GallerySpace $prostor): array
     {
         $vyuziti = $this->tarify->storageUsage($prostor);
+        // `storageUsage` počítá jen to, co není v koši — koš se proto sčítá zvlášť
+        // a od obsazenosti se už neodečítá.
         $obsazeno = round(($vyuziti['used_bytes'] ?? 0) / 1_073_741_824, 1);
+        $mira = $this->mira($prostor);
 
         return [
             'roles' => ['vlastník', 'správce', 'host'],
@@ -66,8 +72,83 @@ class AdministraceGalerie
             'plans' => $this->tarifySeznam(),
             'plan' => (string) ($this->tarify->plan($prostor)?->id ?? ''),
             'usedGb' => $obsazeno,
+            // Čísla pro pruhy rizika. Prototyp je měl napsaná napevno (8,1 / 1,2 / 2,4),
+            // takže obrazovka ukazovala cizí gigabajty bez ohledu na skutečnost.
+            'trashGb' => $mira['kos'],
+            'singleGb' => $mira['jednaKopie'],
+            'growthGb' => $mira['rust'],
             'risks' => $this->rizika($prostor, $obsazeno),
+            'health' => $this->zdravi($prostor, $obsazeno, $mira),
             'log' => $this->protokol($prostor),
+        ];
+    }
+
+    /**
+     * Gigabajty, na kterých stojí pruhy rizika.
+     *
+     * @return array{kos: float, jednaKopie: float, rust: float, kosPocet: int, jednaKopiePocet: int}
+     */
+    private function mira(GallerySpace $prostor): array
+    {
+        $media = fn () => MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
+            ->where('gallery_space_id', $prostor->id);
+
+        $kos = (clone $media())->whereNotNull('trashed_at');
+        $jednaKopie = (clone $media())->whereNull('trashed_at')->where('storage_status', 'local_only');
+
+        // Růst za posledního půl roku. Prototyp počítá s 2,4 GB měsíčně napevno;
+        // předpověď zaplnění z cizího čísla nikomu nic neřekne.
+        $mesicu = 6;
+        $prirustek = (int) (clone $media())
+            ->where('uploaded_at', '>=', now()->subMonths($mesicu))
+            ->sum('size_bytes');
+
+        return [
+            'kos' => $this->gb((int) (clone $kos)->sum('size_bytes')),
+            'kosPocet' => (clone $kos)->count(),
+            'jednaKopie' => $this->gb((int) (clone $jednaKopie)->sum('size_bytes')),
+            'jednaKopiePocet' => (clone $jednaKopie)->count(),
+            'rust' => $this->gb((int) round($prirustek / $mesicu)),
+        ];
+    }
+
+    /**
+     * Zdraví systému.
+     *
+     * Prototyp tu měl „dostupnost 99,98 %, disk 57 %" jako text v kódu. Skutečná
+     * čísla jsou nudnější a užitečnější: kolik místa zbývá na disku, jestli tepe
+     * plánovač a kolik úloh čeká nebo selhalo ve frontě.
+     *
+     * @param  array{kos: float, jednaKopie: float, rust: float, kosPocet: int, jednaKopiePocet: int}  $mira
+     * @return array<string, mixed>
+     */
+    private function zdravi(GallerySpace $prostor, float $obsazeno, array $mira): array
+    {
+        $tep = SystemSetting::get('scheduler_last_heartbeat');
+        $tepKdy = $tep ? \Illuminate\Support\Carbon::parse($tep) : null;
+        $planovacZije = $tepKdy !== null && $tepKdy->gt(now()->subMinutes(5));
+
+        $volno = @disk_free_space(storage_path()) ?: 0;
+        $celkem = @disk_total_space(storage_path()) ?: 0;
+        $diskPct = $celkem > 0 ? (int) round(($celkem - $volno) / $celkem * 100) : 0;
+
+        $ceka = Schema::hasTable('jobs') ? (int) DB::table('jobs')->count() : 0;
+        $selhalo = Schema::hasTable('failed_jobs') ? (int) DB::table('failed_jobs')->count() : 0;
+
+        $limit = $this->tarify->storageUsage($prostor)['limit_bytes'] ?? null;
+        $tarifPct = $limit ? (int) round($obsazeno * 1_073_741_824 / $limit * 100) : 0;
+
+        return [
+            'checkedAt' => $tepKdy ? $this->kdy($tepKdy) : 'zatím nikdy',
+            'summary' => 'disk '.$diskPct.' %, tarif '.$tarifPct.' %, '
+                .($planovacZije ? 'plánovač běží' : 'plánovač neběží'),
+            // [popisek, poznámka, procenta, tón: 0 dobré · 1 zlé · 2 nevýrazné]
+            'bars' => [
+                ['Místo na disku serveru', $this->cislo($volno / 1_073_741_824).' GB volných', $diskPct, $diskPct > 85 ? 1 : 0],
+                ['Zaplněnost tarifu', $this->cislo($obsazeno).' GB uloženo', $tarifPct, $tarifPct > 85 ? 1 : 0],
+                ['Plánovač', $planovacZije ? 'tep '.$this->kdy($tepKdy) : 'bez tepu — úlohy neběží', $planovacZije ? 100 : 0, $planovacZije ? 0 : 1],
+                ['Fronta úloh', $ceka.' čeká · '.$selhalo.' selhalo', $selhalo > 0 ? 100 : min(100, $ceka * 5), $selhalo > 0 ? 1 : 2],
+            ],
         ];
     }
 
@@ -204,10 +285,10 @@ class AdministraceGalerie
                 'id' => 'r1',
                 'label' => 'Originály jen v jedné kopii',
                 'note' => $jednaKopiePocet
-                    ? $this->gb($jednaKopieGb).' · '.$jednaKopiePocet.' souborů jen na tomhle serveru'
+                    ? $this->popisGb($jednaKopieGb).' · '.$jednaKopiePocet.' souborů jen na tomhle serveru'
                     : 'nic — vše je ve dvou kopiích',
                 'fix' => 'Založit druhou kopii',
-                'done' => 'Druhá kopie běží — '.$this->gb($jednaKopieGb).' se kopíruje do cloudu',
+                'done' => 'Druhá kopie běží — '.$this->popisGb($jednaKopieGb).' se kopíruje do cloudu',
                 'hotovo' => $jednaKopiePocet === 0,
             ],
             [
@@ -216,10 +297,10 @@ class AdministraceGalerie
                     ? 'Koš drží '.$kosPocet.' položek'
                     : 'Koš je prázdný',
                 'note' => $kosPocet
-                    ? 'zabírají '.$this->gb($kosGb).', smažou se po lhůtě'
+                    ? 'zabírají '.$this->popisGb($kosGb).', smažou se po lhůtě'
                     : 'nic nečeká na smazání',
                 'fix' => 'Vysypat koš teď',
-                'done' => 'Koš vysypán — '.$this->gb($kosGb).' uvolněno',
+                'done' => 'Koš vysypán — '.$this->popisGb($kosGb).' uvolněno',
                 'hotovo' => $kosPocet === 0,
             ],
             [
@@ -259,8 +340,28 @@ class AdministraceGalerie
             ->all();
     }
 
-    private function gb(float $hodnota): string
+    private function gb(int $bajtu): float
     {
-        return str_replace('.', ',', (string) round($hodnota, 1)).' GB';
+        return round($bajtu / 1_073_741_824, 1);
+    }
+
+    /** Číslo česky — desetinná čárka, ne tečka. */
+    private function cislo(float $hodnota): string
+    {
+        return str_replace('.', ',', (string) round($hodnota, 1));
+    }
+
+    private function popisGb(float $hodnota): string
+    {
+        return $this->cislo($hodnota).' GB';
+    }
+
+    private function kdy(\Illuminate\Support\Carbon $kdy): string
+    {
+        return match (true) {
+            $kdy->isToday() => 'dnes '.$kdy->format('G:i'),
+            $kdy->isYesterday() => 'včera '.$kdy->format('G:i'),
+            default => $kdy->format('j. n. G:i'),
+        };
     }
 }

@@ -129,6 +129,14 @@
   window.GalerieAdminObnov = nacti;
 
   /*
+   * Administrace si po každém zásahu bere odpověď serveru sama (galerie-admin.js).
+   * Musí ji podat sem, ne psát rovnou do `GalerieData.ADMIN` — getter výš totiž
+   * míchá `zeServeru` až nakonec, takže by čerstvá data hned přebila ta z načtení
+   * stránky a obrazovka by po pozastavení úlohy ukazovala, že běží dál.
+   */
+  window.GalerieAdminZeServeru = function (data) { if (data) zeServeru = data; };
+
+  /*
    * Po zásahu v administraci si vyžádat skutečnost.
    *
    * Prototyp posílá administraci jako změnu stavu; server ji provede a v odpovědi

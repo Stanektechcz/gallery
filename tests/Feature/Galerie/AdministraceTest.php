@@ -239,6 +239,34 @@ class AdministraceTest extends TestCase
         $this->assertNull($this->getJson('/api/admin')->json('token'));
     }
 
+    /**
+     * Klíč vytvořený z obrazovky je použitelný.
+     *
+     * Prototyp si celý klíč skládal na klientovi (`gal_ + id + suffix`), takže
+     * tlačítko „Kopírovat" podávalo řetězec, který nikde neplatil. Teď ho vydává
+     * server a musí jím jít otevřít API — jinak je to pořád jen ozdoba.
+     */
+    public function test_klic_z_obrazovky_opravdu_otevre_api(): void
+    {
+        $token = $this->postJson('/api/admin/keys', ['name' => 'Mobilní aplikace'])
+            ->assertOk()
+            ->json('token');
+
+        $this->assertNotEmpty($token);
+
+        $this->app['auth']->forgetGuards();
+        $this->withHeader('Authorization', 'Bearer '.$token)->getJson('/api/state')->assertOk();
+    }
+
+    /** Klíč jen pro čtení nesmí umět zapisovat. */
+    public function test_klic_jen_pro_cteni_ma_omezeny_rozsah(): void
+    {
+        $odpoved = $this->postJson('/api/admin/keys', ['name' => 'Odečty', 'scope' => 'jen čtení'])->assertOk();
+
+        $this->assertSame('jen čtení', collect($odpoved->json('data.keys'))->firstWhere('name', 'Odečty')['scope']);
+        $this->assertSame(['read'], PersonalAccessToken::sole()->abilities);
+    }
+
     public function test_zruseny_klic_zustane_v_seznamu_a_prestane_platit(): void
     {
         $token = $this->postJson('/api/admin/keys', ['name' => 'Mobilní aplikace'])->json('token');
@@ -299,6 +327,42 @@ class AdministraceTest extends TestCase
     public function test_tep_planovace_nejde_pozastavit(): void
     {
         $this->postJson('/api/admin/jobs/scheduler-heartbeat/pause')->assertStatus(422);
+    }
+
+    // ——— zdraví systému ———
+
+    /**
+     * Pruhy zdraví jsou ze serveru, ne z ukázkových dat.
+     *
+     * Prototyp tu měl „dostupnost 99,98 %, disk 57 %" napsané v kódu, takže
+     * obrazovka hlásila zdravý systém i tehdy, když zrovna nic neběželo.
+     */
+    public function test_zdravi_ukazuje_skutecna_cisla(): void
+    {
+        $zdravi = $this->getJson('/api/admin')->assertOk()->json('data.health');
+
+        $this->assertNotEmpty($zdravi['bars']);
+        $this->assertSame('Místo na disku serveru', $zdravi['bars'][0][0]);
+        $this->assertStringContainsString('plánovač', $zdravi['summary']);
+        $this->assertStringNotContainsString('99,98', json_encode($zdravi));
+    }
+
+    public function test_kontrola_systemu_zaradi_doktora(): void
+    {
+        $this->postJson('/api/admin/health/check')->assertOk();
+
+        Queue::assertPushed(SpustPlanovanouUlohu::class);
+    }
+
+    /** Gigabajty pro pruhy rizika počítá server — prototyp je měl napevno. */
+    public function test_prehled_nese_gigabajty_pro_rizika(): void
+    {
+        $data = $this->getJson('/api/admin')->assertOk()->json('data');
+
+        foreach (['trashGb', 'singleGb', 'growthGb'] as $klic) {
+            $this->assertArrayHasKey($klic, $data);
+            $this->assertIsNumeric($data[$klic]);
+        }
     }
 
     // ——— tarif ———

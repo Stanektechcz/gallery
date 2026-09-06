@@ -42,13 +42,11 @@ class AdminController extends Controller
         private readonly PlanovaneUlohy $ulohy,
         private readonly EntitlementService $tarify,
         private readonly \App\Services\Provoz\AdministraceZasahy $zasahy,
-        private readonly \App\Services\Provoz\AdminVeStavu $veStavu,
     ) {}
 
     public function index(Request $request): JsonResponse
     {
-        // Čtení stav nepřepisuje — viz `prehled()`.
-        return response()->json(['data' => $this->administrace->prehled($this->prostor($request))]);
+        return $this->prehled($this->prostor($request));
     }
 
     // ——— účty ———
@@ -245,6 +243,25 @@ class AdminController extends Controller
         return $this->prehled($prostor);
     }
 
+    /**
+     * Kontrola systému.
+     *
+     * Prototyp tu měl `setTimeout` na 1,1 vteřiny a hlášku s pevnými čísly.
+     * Skutečná kontrola pustí `gallery:doctor` — ten prochází disk, databázi,
+     * frontu i připojený cloud — a přehled se pak načte z toho, co doktor zapsal.
+     */
+    public function healthCheck(Request $request): JsonResponse
+    {
+        $prostor = $this->prostor($request);
+        $this->jenSpravce($request, $prostor);
+
+        SpustPlanovanouUlohu::dispatch('storage-health');
+
+        $this->zapis($request, 'admin.health', null, 'Kontrola systému spuštěna');
+
+        return $this->prehled($prostor);
+    }
+
     // ——— tarif ———
 
     public function plan(Request $request, CheckoutService $pokladna): JsonResponse
@@ -336,20 +353,16 @@ class AdminController extends Controller
     }
 
     /**
-     * Odpověď na **zásah**.
+     * Odpověď na zásah — vždycky celý přehled znovu.
      *
-     * Kopie ve stavu se srovná se skutečností — jinak by otevřená aplikace
-     * ukazovala seznam z posledního kliknutí v obrazovce, dokud by na něj někdo
-     * znovu neklikl. Čtení (`index`) tudy nechodí: zápis do stavu zvedá `rev`
-     * a pouhé otevření administrace by otevřené aplikaci shodilo příští uložení
-     * na konflikt.
+     * Obrazovka se překresluje z databáze, ne z toho, co si klient myslí, že se
+     * stalo. U odebrání přístupu je omyl v opačném směru mnohem dražší než
+     * vteřina čekání na odpověď.
      *
      * @param  array<string, mixed>  $navic
      */
     private function prehled(GallerySpace $prostor, array $navic = []): JsonResponse
     {
-        $this->veStavu->uloz($prostor);
-
         return response()->json($navic + ['data' => $this->administrace->prehled($prostor)]);
     }
 

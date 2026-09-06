@@ -64,24 +64,20 @@ class StateController extends Controller
              * obrazovka by od prvního kliknutí ukazovala něco, co v databázi
              * neplatí. Záměr se proto provede a odpověď nese skutečnost.
              */
+            $skutecnost = [];
+
             if ($this->sprava->tykaSe($patch)) {
                 $skutecnost = $this->sprava->zpracuj($patch, GallerySpace::findOrFail($coupleId), $uzivatel);
-
-                /*
-                 * Skutečnost se **uloží**, ne jen vrátí.
-                 *
-                 * Klient si odpověď na `PATCH` jen odloží a nikomu o ní neřekne —
-                 * překreslí se až z toho, co přijde příště z `GET /api/state`.
-                 * Kdyby tam skutečnost nebyla, zůstalo by na obrazovce viset to,
-                 * co si uživatel přál, i když server jeho zásah odmítl.
-                 */
-                $patch = array_merge($this->sprava->bezSpravy($patch), $skutecnost);
+                $patch = $this->sprava->bezSpravy($patch);
             }
 
             $state->applyPatch($patch);
 
             return response()->json([
-                'data' => $state->toClientObject(),
+                // Skutečnost se vrací, ale **neukládá**: administrace má jediný
+                // zdroj pravdy, a to `/api/admin`. Druhá kopie ve stavu by se
+                // dřív nebo později rozešla s tou první.
+                'data' => (object) array_merge((array) $state->toClientObject(), $skutecnost),
                 'updated_at' => $state->updated_at?->toIso8601String(),
                 'rev' => $state->rev,
             ]);

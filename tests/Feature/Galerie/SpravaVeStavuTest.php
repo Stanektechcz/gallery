@@ -66,15 +66,15 @@ class SpravaVeStavuTest extends TestCase
     }
 
     /**
-     * Do stavu se uloží skutečnost, ne to, co klient poslal.
+     * Klientova kopie administrace se neukládá.
      *
-     * Klíče `adm*` ve stavu zůstávají — klient se z nich překresluje — ale píše
-     * je vždycky server. Kdyby se uložilo klientovo přání, obrazovka by od prvního
-     * kliknutí ukazovala něco, co v databázi neplatí.
+     * Administrace má jediný zdroj pravdy (`/api/admin`); druhá kopie ve stavu
+     * by se s tou první dřív nebo později rozešla. Odpověď skutečnost nese, aby
+     * se starší klient měl z čeho srovnat, do databáze ale nejde.
      */
-    public function test_stav_ulozi_skutecnost_ne_prani_klienta(): void
+    public function test_stav_kopii_administrace_neuklada(): void
     {
-        $this->patchStav([
+        $odpoved = $this->patchStav([
             'admUsers' => [['id' => (string) $this->makinka->id, 'name' => 'Makinka', 'role' => 'host', 'state' => 'aktivní']],
             'admLog' => [['when' => 'dnes', 'who' => 'Adrian', 'what' => 'vymyšlený zápis']],
             'joy' => ['tohle uložit ano'],
@@ -83,10 +83,12 @@ class SpravaVeStavuTest extends TestCase
         $ulozeno = CoupleState::first()->data;
 
         $this->assertSame(['tohle uložit ano'], $ulozeno['joy']);
-        $this->assertSame('makinka', mb_strtolower(collect($ulozeno['admUsers'])->firstWhere('id', (string) $this->makinka->id)['name']));
+        $this->assertArrayNotHasKey('admUsers', $ulozeno);
+        $this->assertArrayNotHasKey('admLog', $ulozeno);
 
-        // Vymyšlený zápis v protokolu neprojde — protokol vede server.
-        $this->assertNotContains('vymyšlený zápis', array_column($ulozeno['admLog'], 'what'));
+        // V odpovědi skutečnost je — a vymyšlený zápis v protokolu neprojde.
+        $this->assertSame('host', collect($odpoved->json('data.admUsers'))->firstWhere('name', 'Makinka')['role']);
+        $this->assertNotContains('vymyšlený zápis', array_column($odpoved->json('data.admLog'), 'what'));
     }
 
     /** Odpověď nese skutečnost, i když si klient přál něco jiného. */

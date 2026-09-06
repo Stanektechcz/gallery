@@ -189,22 +189,50 @@ Pět neshod, dvě z nich tiché:
 5. **Čtení `/api/admin` zvedalo `rev`,** takže otevřená aplikace dostala při svém
    dalším uložení konflikt.
 
-## Co nejde bez zásahu do prototypu
+## Administrace: přepsaná akční vrstva
 
-Čtyři místa ukazují pevná čísla zapsaná v souborech prototypu, ne data ze serveru:
+`public/galerie-admin.js` je jediný soubor prototypu, do kterého se sáhlo — se
+souhlasem a jen v akční vrstvě. Tvar obrazovky ani texty se nemění; mění se, odkud
+data přicházejí a co tlačítka dělají.
 
-| Kde | Co | Kde je to napsané |
+**Bylo:** administrace byla místní model. Tlačítka zapisovala do stavu komponenty,
+čísla u rizik a zdraví byla napsaná v kódu (8,1 GB / 1,2 GB / 2,4 GB měsíčně,
+„dostupnost 99,98 %, disk 57 %") a celý klíč k API se skládal na klientovi
+(`'gal_' + id + suffix`), takže tlačítko „Kopírovat" podávalo řetězec, který nikde
+neplatil.
+
+**Je:** každé tlačítko volá `/api/admin/*`, server zásah provede a v odpovědi vrátí
+celý přehled; ten se uloží do `GalerieData.ADMIN` a obrazovka se překreslí z něj.
+Ve stavu komponenty nezůstává z administrace nic — jedna pravda, jedno místo.
+
+| Akce | Kam jde | Ověřeno v prohlížeči |
 | --- | --- | --- |
-| Postranní panel | „57 %", „114,5 GB ze 200 GB", „3 originály čekají" | `.dc.html` (design) |
-| Riziko úložiště | 8,1 GB v jedné kopii, 1,2 GB v koši, růst 2,4 GB/měsíc | `galerie-admin.js` |
-| Zdraví systému | „dostupnost 99,98 %, disk 57 %", „poslední kontrola 4:40" | `galerie-admin.js` |
-| Klíče k API | celý klíč se skládá na klientovi (`gal_ + id + suffix`) | `galerie-admin.js` |
+| Pozvat účet | `POST /api/admin/users` | ano — limit tarifu odmítl a hláška se ukázala |
+| Změnit roli | `PATCH …/users/{id}/role` | ano — role v databázi se změnila |
+| Předat vlastnictví | `POST …/users/{id}/transfer` | ano (test) |
+| Odebrat/obnovit přístup | `POST …/users/{id}/access` | ano — účet zneaktivněn, tokeny zrušeny |
+| Poslat pozvánku znovu | `POST …/users/{id}/resend` | ano (test) |
+| Vytvořit klíč | `POST …/keys` | ano — **klíč z obrazovky otevřel API (200)** |
+| Vygenerovat znovu / zrušit | `POST …/keys/{id}/regenerate`, `DELETE …/keys/{id}` | ano |
+| Spustit úlohu | `POST …/jobs/{id}/run` | ano (test) |
+| Pozastavit / obnovit úlohu | `POST …/jobs/{id}/pause` | ano — `schedule.paused` se změnil |
+| Kontrola systému | `POST …/health/check` | ano — zařadil `gallery:doctor` |
+| Vyřešit riziko | `POST …/risks/{id}/fix` | ano |
+| Změnit tarif | `POST …/plan` | ano — placený založil platbu, ne předplatné |
 
-První tři jsou kosmetika: zaplněnost i rizika se ze serveru počítají a jdou do
-`ADMIN.usedGb` a `ADMIN.risks`, jen tyhle konkrétní popisky je obcházejí.
-Čtvrté je funkční: **vytvořit použitelný klíč k API jde jen přes `/api/admin/keys`**,
-protože prototyp tajemství nikdy nedostane od serveru. Zrušení klíče z obrazovky
-funguje.
+Klíč se ukáže **jednou**: server ho drží jen jako otisk, takže podruhé ho nemá odkud
+vzít. Čerstvý klíč se drží v paměti do odchodu z obrazovky a rovnou se kopíruje do
+schránky; u starších řádků „Kopírovat" přizná, že celý klíč k dispozici není, místo
+aby podalo neplatný.
+
+Bez backendu (`GalerieApi.mode !== 'http'`) tlačítka řeknou, že administrace
+potřebuje server. Předstírat úspěch je horší než přiznat, že server není.
+
+## Co zůstává napsané v designu
+
+Postranní panel ukazuje „57 %", „114,5 GB ze 200 GB" a „3 originály čekají" jako
+text v `.dc.html`. To je designový soubor, do kterého se nesahá — a jsou to jediná
+zbylá pevná čísla. Skutečná zaplněnost je vidět v Riziku úložiště i v Tarifech.
 
 ## Co zůstává na prototypu
 

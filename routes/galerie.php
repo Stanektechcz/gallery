@@ -78,6 +78,7 @@ Route::middleware(['auth:sanctum', 'throttle:120,1'])->prefix('api')->group(func
         Route::post('jobs/{uloha}/run', [AdminController::class, 'runJob'])->name('jobs.run');
         Route::post('jobs/{uloha}/pause', [AdminController::class, 'pauseJob'])->name('jobs.pause');
 
+        Route::post('health/check', [AdminController::class, 'healthCheck'])->name('health.check');
         Route::post('plan', [AdminController::class, 'plan'])->name('plan');
         Route::post('risks/{riziko}/fix', [AdminController::class, 'fixRisk'])->name('risks.fix');
     });

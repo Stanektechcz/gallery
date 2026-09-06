@@ -13,34 +13,24 @@ use App\Jobs\SpustPlanovanouUlohu;
 /**
  * Administrace, která přišla jako změna stavu.
  *
- * Prototyp administraci celou drží v komponentě: tlačítka volají `setState`
- * a ten stav se ukládá do `/api/state` jako všechno ostatní. Na `/api/admin`
- * nesáhne. Bez téhle třídy se proto po prvním kliknutí obrazovka a databáze
- * rozejdou — a to tiše: **stav tvrdil, že Makinka je host, databáze že správce.**
- * Obrazovka pak ukazuje něco, co nikde neplatí, a nikdo se to nedozví.
+ * **Záchranná síť pro starší klienta.** Administrace dnes volá `/api/admin/*`
+ * přímo (viz `public/galerie-admin.js`) a do stavu nic z ní neposílá. Původní
+ * verze prototypu ale administraci celou držela v komponentě a ta se ukládala
+ * do `/api/state` jako všechno ostatní — a po prvním kliknutí se obrazovka
+ * a databáze tiše rozešly: **stav tvrdil, že Makinka je host, databáze že správce.**
  *
- * Řeší se to dvěma pravidly:
+ * Prohlížeč s odloženou kopií staršího `galerie-admin.js` proto nesmí dopadnout
+ * tak, že si zásah jen uloží do stavu a bude si myslet, že se stal. Když sem
+ * takový patch dorazí, přečte se jako **záměr** a provede se doopravdy; klíče
+ * `adm*` se do stavu neuloží, protože administrace má jediný zdroj pravdy.
  *
- * 1. Klíče `adm*` se **neukládají**. Jsou to pohled na serverová data, ne data
- *    sama; uložená kopie může jen zestárnout.
- * 2. Co klient poslal, se přečte jako **záměr** („tenhle účet má mít roli host")
- *    a provede se doopravdy. Odpověď pak nese skutečnost, klient si ji vezme
- *    a obrazovka se sama srovná.
- *
- * Co takhle nejde: **vytvoření klíče k API** (prototyp si tajemství vymýšlí na
- * klientovi, server ho nemá kam vrátit) a **přechod na placený tarif** (ten se
- * kupuje, nepřiděluje). Obojí zůstává na `/api/admin`.
+ * Co takhle nejde: **vytvoření klíče k API** (starší klient si tajemství vymýšlel
+ * sám, server ho nemá kam vrátit) a **přechod na placený tarif** (ten se kupuje,
+ * nepřiděluje). Obojí zůstává na `/api/admin`.
  */
 class AdminVeStavu
 {
-    /**
-     * Klíče, které patří serveru.
-     *
-     * Klientova kopie se zahazuje a nahrazuje skutečností. Ve stavu tedy zůstávají,
-     * ale píše je vždycky server — klient je jen čte. Bez toho by se obrazovka
-     * neměla z čeho srovnat: odpověď na `PATCH` si klient jen odloží a překresluje
-     * se až z `GET /api/state`.
-     */
+    /** Klíče, které patří serveru. Do stavu se neukládají. */
     public const SERVEROVE = ['admUsers', 'admKeys', 'admJobs', 'admLog', 'admRisk', 'admJobPause', 'admPlan'];
 
     public function __construct(
@@ -96,41 +86,6 @@ class AdminVeStavu
         }
 
         return $this->skutecnost($prostor);
-    }
-
-    /**
-     * Srovná uloženou kopii se skutečností.
-     *
-     * Volá se po zásahu přes `/api/admin`: bez toho by ve stavu zůstala kopie
-     * z posledního kliknutí v obrazovce a otevřená aplikace by ukazovala starý
-     * seznam, dokud by na něj někdo znovu neklikl.
-     */
-    public function uloz(GallerySpace $prostor): void
-    {
-        $stav = \App\Models\CoupleState::forCouple($prostor->id);
-        $skutecnost = $this->skutecnost($prostor);
-
-        /*
-         * Zapisuje se jen skutečná změna.
-         *
-         * `applyPatch` zvedá `rev` a klient podle něj pozná konflikt. Zápis pro
-         * nic by tedy znamenal, že otevřená aplikace při svém dalším uložení
-         * dostane 409 a přijde o rozepsanou změnu — a to pokaždé, když si kdokoli
-         * otevře administraci.
-         */
-        $ulozene = $stav->data ?? [];
-        $zmeneno = false;
-
-        foreach ($skutecnost as $klic => $hodnota) {
-            if (($ulozene[$klic] ?? null) !== $hodnota) {
-                $zmeneno = true;
-                break;
-            }
-        }
-
-        if ($zmeneno) {
-            $stav->applyPatch($skutecnost);
-        }
     }
 
     /** @return array<string, mixed> */
