@@ -9,7 +9,7 @@ class SharedLink extends Model
 {
     protected $fillable = [
         'uuid', 'token', 'created_by', 'gallery_space_id', 'target_type', 'target_id',
-        'name', 'description', 'password_hash', 'allow_download', 'allow_guest_upload',
+        'name', 'description', 'password_hash', 'allow_download', 'allow_guest_upload', 'allow_comments',
         'show_metadata', 'hide_gps', 'upload_limit_bytes', 'max_uses', 'use_count',
         'expires_at', 'is_active',
     ];
@@ -22,6 +22,7 @@ class SharedLink extends Model
             'expires_at'        => 'datetime',
             'allow_download'    => 'boolean',
             'allow_guest_upload'=> 'boolean',
+            'allow_comments'    => 'boolean',
             'show_metadata'     => 'boolean',
             'hide_gps'          => 'boolean',
             'is_active'         => 'boolean',

@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\Galerie\MediaController;
 use App\Http\Controllers\Api\Galerie\PravidloController;
 use App\Http\Controllers\Api\Galerie\StateController;
 use App\Http\Controllers\Api\Galerie\StorageController;
+use App\Http\Controllers\Api\Galerie\TiskController;
 use App\Http\Controllers\Api\Galerie\TokenController;
 use App\Http\Controllers\Api\Galerie\UlozisteController;
 use App\Http\Controllers\Api\Galerie\WebauthnController;
@@ -95,13 +96,6 @@ Route::middleware(['auth:sanctum', 'throttle:120,1'])->prefix('api')->group(func
     Route::post('uloziste/prenest', UlozisteController::class)->name('galerie.uloziste.prenest');
 
     /*
-     * Koš.
-     *
-     * Obrazovka měla čtyři vymyšlené řádky a tlačítka, která jen přepsala stav
-     * v prohlížeči — přitom potvrzovací dialog sliboval smazání originálů
-     * z Google Disku.
-     */
-    /*
      * Album jako jeden archiv.
      *
      * Tlačítko „Stáhnout" v panelu alba nemělo obsluhu. Stahovat po jednom
@@ -112,6 +106,23 @@ Route::middleware(['auth:sanctum', 'throttle:120,1'])->prefix('api')->group(func
         ->whereUuid('album')
         ->name('galerie.album.archiv');
 
+    /*
+     * Objednávka tisku.
+     *
+     * „Kniha odeslána do tisku" hlásilo tlačítko a nikde nevznikl záznam.
+     * Aplikace s tiskárnou nemluví — zapíše objednávku a stav posouvá ten,
+     * komu přijde potvrzení.
+     */
+    Route::post('tisk/objednavka', [TiskController::class, 'store'])->name('galerie.tisk.store');
+    Route::post('tisk/stav', [TiskController::class, 'step'])->name('galerie.tisk.step');
+
+    /*
+     * Koš.
+     *
+     * Obrazovka měla čtyři vymyšlené řádky a tlačítka, která jen přepsala stav
+     * v prohlížeči — přitom potvrzovací dialog sliboval smazání originálů
+     * z Google Disku.
+     */
     Route::prefix('kos')->name('galerie.kos.')->group(function () {
         Route::post('vratit', [KosController::class, 'restore'])->name('restore');
         Route::post('odstranit', [KosController::class, 'purge'])->name('purge');

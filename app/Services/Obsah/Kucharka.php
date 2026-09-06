@@ -21,6 +21,8 @@ use Illuminate\Support\Facades\Schema;
  */
 class Kucharka implements PoskytovatelObsahu
 {
+    public function __construct(private readonly Predpoved $pocasi) {}
+
     public function skupina(): string
     {
         return 'kucharka';
@@ -49,6 +51,8 @@ class Kucharka implements PoskytovatelObsahu
         return array_filter([
             'RECIPES' => $recepty,
             'RECIPE_BY_TITLE' => $this->rejstrik($recepty),
+            // Předpověď na pět dní — podle ní obrazovka řadí návrhy.
+            'WEATHER' => $this->pocasi->naPetDni($prostor),
         ], fn ($v) => $v !== null && $v !== []);
     }
 

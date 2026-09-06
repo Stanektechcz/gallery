@@ -86,7 +86,10 @@ class Sdileni implements PoskytovatelObsahu
                     'protection' => $o->password_hash ? 'Heslo' : 'Bez hesla',
                     'views' => (string) $o->use_count,
                     'n' => (int) $o->id,
-                    'comments' => null,
+                    // Přepínač vzkazů. Dosud se ukládal jen do stavu
+                    // v prohlížeči, takže po odhlášení platilo něco jiného,
+                    // než co dvojice nastavila.
+                    'comments' => (bool) $o->allow_comments,
                     'guest' => (bool) $o->allow_guest_upload,
                     'download' => (bool) $o->allow_download,
                     'meta' => (bool) $o->show_metadata,

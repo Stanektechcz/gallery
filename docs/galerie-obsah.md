@@ -80,13 +80,13 @@ Změřeno v prohlížeči proti běžícímu serveru, ne odhadem:
 | --- | --- |
 | Klíčů v `window.GalerieData` | **190** — z toho 9 jsou pomocné funkce, ne data |
 | Kolekcí celkem | **181** |
-| Obsluhuje server | **139** (137 přes `/api/data`, `ADMIN` a `STORAGE` přes přístupovou vrstvu) |
-| Z toho kolekcí, které prototyp má | **117** |
+| Obsluhuje server | **142** (140 přes `/api/data`, `ADMIN` a `STORAGE` přes přístupovou vrstvu) |
+| Z toho kolekcí, které prototyp má | **119** |
 | Katalogy rozhraní — zůstávají statické záměrně | ~53 (`SCEN` a `RITUALS` se ukázaly být číselníky) |
 | Přihlašovací záslepky prototypu — **daty se stát nesmí** | 6 |
-| **Obsah dvojice, který ještě není napojený** | **3** |
+| **Obsah dvojice, který ještě není napojený** | **0** |
 
-Dvacet ze sto třiceti sedmi kolekcí prototyp v `GalerieData` vůbec nemá — mřížku fotek
+Dvacet jedna ze sto čtyřiceti kolekcí prototyp v `GalerieData` vůbec nemá — mřížku fotek
 (`PHOTOS`, `DAYS`, `ALBUMS`, `ATREE`), čísla u nabídky (`NAVCNT`, `TOTAL`),
 měnu, spíž a odkazy si dokument vyráběl sám ve funkcích. Server je dodává
 navíc a přepínače v dokumentu je berou přednostně.
@@ -139,6 +139,9 @@ Podle toho, kde už skutečný obsah je a kde na něm záleží:
 | 32 | **Účet radosti** | `JOY` | `calendar_events.activity_kind`, `wellbeing_moods`, `transactions` | hotovo — počítá se, **zařazení události zapisuje dvojice** |
 | 33 | **Kdo to vyřídil** | `VIS_ROWS`, `SPEAK` | `couple_outreach_log`, `couple_family_contacts` | hotovo, **zapisuje se formulářem** (`/api/zaznamy/vyrizeno`) |
 | 34 | **Mlčky platná pravidla** | `TACIT` | `house_chore_log`, `transactions`, `calendar_events`, `couple_cooling_purchases` | hotovo — čtyři hledače, žádná nová tabulka |
+| 35 | **Předpověď** | `WEATHER` | Open-Meteo přes `FreeTravelDataService`, poloha z `media_items` | hotovo — počítá se, tři hodiny v cache |
+| 36 | **Tisk** | `PORDERS`, `POSTEPS` | `print_orders` | hotovo, **objednávka se zapisuje** (`/api/tisk/…`) |
+| 37 | **Vzkazy hostů** | `GV_C` | `guest_comments`, `shared_links.allow_comments` | hotovo, **píše host** (`POST /s/{token}/vzkaz`) |
 
 ## Knihovna: co se muselo změnit v dokumentu
 
@@ -473,9 +476,8 @@ Tohle **není** katalog rozhraní — je to obsah dvojice, který se pořád kre
 z `galerie-data.js`. Seřazeno podle toho, co je hotové nejdřív: první skupina
 má tabulky i data, poslední je potřeba teprve vymyslet.
 
-Zbývají tři kolekce a ani jedna z nich není obsah dvojice: dvě nemají odkud
-brát data (`WEATHER`, `POSTEPS`) a jednu vyplňují hosté, ne dvojice
-(`GV_VOICE_POOL` — hlasovky u sdíleného odkazu patří ke `guest_comments`).
+Nezbývá nic. Poslední tři se ukázaly být tři různé věci a každá potřebovala
+jiné řešení — viz níž.
 
 ## Poslední čtyři: dva chybějící sloupce
 
@@ -518,6 +520,52 @@ tichá dohoda, to je náhoda — a půlka testů hlídá právě tohle. Vyhýbá
 jen v jednom směru; „kdo vaří, neuklízí kuchyň" a „kdo uklízí kuchyň, nevaří"
 je totéž dvakrát.
 
+## Poslední tři: tři různé věci
+
+`WEATHER`, `POSTEPS` a `GV_VOICE_POOL` vypadaly jako jedna skupina
+„nenapojitelných". Nebyly.
+
+**`WEATHER`** potřebovala zdroj, který aplikace už měla. `FreeTravelDataService`
+volá Open-Meteo u cest; chybělo jen **místo**. Kde dvojice bydlí, se nikde
+nezadává, tak se bere **medián polohy jejich fotek** za posledního půl roku:
+kde se nejčastěji fotí, tam se nejčastěji vaří. Medián, ne průměr — dva týdny
+u moře by průměr odtáhly do Jaderského moře a aplikace by radila podle počasí,
+které nikdo nemá za oknem. Souřadnice se zaokrouhlují na dvě desetiny stupně;
+ven neodchází přesnější poloha, než je k odpovědi potřeba. Věta pod teplotou
+se skládá **jen z čísel, která přišla** — ukázka měla „první opravdu letní den
+týdne" o dni, který ještě nebyl.
+
+Režim dne je jedna ze **čtyř** hodnot (`déšť`, `chladno`, `teplo`, `horko`),
+protože jen ty čtyři umí obrazovka vážit proti `fits` v katalogu receptů.
+Pátá by znamenala den, ke kterému se nenajde nic.
+
+**`POSTEPS`** je katalog — čtyři názvy kroků zásilky. Skutečný problém byl
+jinde: `print_orders` se v celé aplikaci **jen četla**. Tlačítko u fotoknihy
+hlásilo „Kniha odeslána do tisku" a nikde nevznikl záznam. Aplikace s tiskárnou
+nemluví a nepředstírá to — zapíše objednávku ve stavu „Přijato" s **odhadem**
+termínu (`due_estimated`, aby datum nevypadalo jako slib) a stav posouvá ten,
+komu přijde potvrzení. Popisky teď chodí ze serveru, aby se nerozešly s indexem
+`step` v databázi, a bez objednávek se neposílají vůbec.
+
+**`GV_VOICE_POOL`** byl pool osmi napsaných přepisů, ze kterého si náhled hosta
+bral jeden a vkládal ho do seznamu vzkazů, jako by ho babička opravdu řekla —
+s hláškou „Hlas nahrán a přepsán". Aplikace řeč na text nepřevádí vůbec.
+
+Skutečná díra: `guest_comments` se **taky jen četla**. Host, který otevře
+sdílený odkaz, neměl jak nechat vzkaz. Chyběly dva sloupce —
+`shared_links.allow_comments` (přepínač, který prototyp má, ale ukládal se jen
+do prohlížeče) a `guest_comments.audio_path` (hlasovka bez souboru je řádek
+tvrdící, že babička něco řekla, a nejde si to poslechnout). `body` je nově
+nullable: prázdný řetězec by znamenal „host nic neřekl", což je něco jiného
+než „řekl to hlasem a přepis nemáme".
+
+`POST /s/{token}/vzkaz` je **jediná cesta v galerii, která přijímá zápis bez
+přihlášení**. Píše se jen tam, kde to dvojice povolila; vypršelý odkaz ani
+odkaz chráněný heslem bez ověření nepustí; limit je desetkrát za minutu.
+
+Náhled hosta přestal vyrábět obsah. Ukazuje, co host uvidí, a řekne to —
+nahrát vzkaz může host na svém odkazu, ne dvojice v náhledu.
+
 ## Zapsané formulářem
 
 Čtyři věci se počítat nedají a nikdy nedaly: kdo umí přepnout bojler, čeho se
@@ -534,16 +582,10 @@ rituál na obrazovku aplikace (`x-uklid`, `x-milniky`, `x-cesty`). Nový řádek
 byl přepínač, který nic nepřepne. Co je u nich obsah dvojice, je jen zapnutí,
 a to se ukládá do stavu (`finScen`, `rtOn`) už dneska.
 
-`GV_VOICE_POOL` je nenapojený, ale formulář pro dvojici k němu nevede: hlasovky
-u sdíleného odkazu nahrávají **hosté**. Patří ke `guest_comments` (`kind='voice'`),
-tedy k cestě, kudy chodí hostovské komentáře.
-
-### Data nikde nejsou
-
-| Kolekce | Proč |
-| --- | --- |
-| `WEATHER` | předpověď se nemá odkud vzít; tabulka, kterou nikdo neplní, je horší než ukázka |
-| `POSTEPS` | názvy kroků zásilky — katalog tiskárny, ne data dvojice |
+`GV_VOICE_POOL` a `POSTEPS` k číselníkům přibyly nakonec — první byl pool
+napsaných přepisů pro náhled hosta (a přepis aplikace nedělá), druhý jsou
+čtyři názvy kroků zásilky, které teď chodí ze serveru, aby se nerozešly
+s `step` v databázi. Obojí je popsané v „Poslední tři" nahoře.
 
 ## Co zůstalo v katalogu — a proč
 
@@ -554,7 +596,6 @@ Co v katalogu zůstalo, tam zůstalo z jednoho z těchhle tří důvodů:
 | **Není to obsah dvojice** — katalog rozhraní | `FLOWS`, `PHASES`, `CYC_SYMPTOMS`, `CYC_MOODS`, `CYC_SHARE`, `KL_HELP`, `KL_QUESTIONS`, `RWEATHER`, `PLACE_KEY`, `EVKIND`, `PKIND`, `SETROWS`, … (~51 katalogů) |
 | **Přihlašovací záslepky prototypu** | `LOCKMAIL`, `LOCKPIN`, `LOCKPWD`, `LOCKREC`, `LOCKWHO`, `VAULT_PWD` |
 | **Odvozené v dokumentu** | `AMISS`, `CYC_TODAY`, `GRAF` |
-| **Data nikde nejsou** — aplikace je odnikud nebere | `WEATHER` (předpověď) |
 
 Přihlašovací záslepky jsou zvláštní případ: **daty se stát nesmí.** Jsou to
 heslo a PIN napsané v souboru, aby se dal prototyp ukázat. S nasazeným

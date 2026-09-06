@@ -2,6 +2,7 @@
 
 namespace App\Services\Obsah;
 
+use App\Http\Controllers\Api\Galerie\TiskController;
 use App\Models\GallerySpace;
 use App\Models\MediaItem;
 use App\Support\SpaceContext;
@@ -9,6 +10,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 
 /**
  * Náš příběh, tisk, nouzový přístup, tierlisty, papírová záloha a hosté.
@@ -47,7 +49,16 @@ class Pribeh implements PoskytovatelObsahu
         return array_filter([
             'STORY' => $this->kapitoly($prostor),
             'STORYMS' => $this->milniky($prostor),
-            'PORDERS' => $this->objednavky($prostor),
+            'PORDERS' => $objednavky = $this->objednavky($prostor),
+            /*
+             * Kroky zásilky. Katalog, ale patří k `step` v databázi — dvě
+             * místa s jinými názvy by znamenala pruh, který ukazuje jinam,
+             * než co server zapsal.
+             *
+             * Bez objednávek se neposílá: samotné popisky nikam nepatří
+             * a skupina, která nemá co říct, má mlčet celá.
+             */
+            'POSTEPS' => $objednavky ? TiskController::KROKY : [],
             'EM_ITEMS' => $this->nouzovePolozky($prostor),
             'EM_LOG' => $this->nouzovyProtokol($prostor),
             'PAPER_ROWS' => $this->papir($prostor),
@@ -537,7 +548,7 @@ class Pribeh implements PoskytovatelObsahu
             ->orderByDesc('k.created_at')
             ->limit(60)
             ->get([
-                'k.uuid', 'k.guest_name', 'k.body', 'k.kind', 'k.duration',
+                'k.uuid', 'k.guest_name', 'k.body', 'k.kind', 'k.duration', 'k.audio_path',
                 'k.is_hidden', 'k.is_pinned', 'k.created_at',
                 'o.name as odkaz', 'm.original_filename as fotka',
             ])
@@ -551,6 +562,9 @@ class Pribeh implements PoskytovatelObsahu
                 'kind' => $k->kind === 'voice' ? 'voice' : null,
                 'photo' => $k->fotka,
                 'len' => $k->duration,
+                // Bez adresy je hlasovka řádek, který tvrdí, že babička něco
+                // řekla, a nejde si to poslechnout.
+                'audio' => $k->audio_path ? Storage::disk('public')->url($k->audio_path) : null,
                 'pinned' => (bool) $k->is_pinned,
             ], fn ($v) => $v !== null))
             ->values()

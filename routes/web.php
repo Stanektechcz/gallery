@@ -62,6 +62,19 @@ Route::post('/s/{token}/verify', [ShareController::class, 'verify'])->name('shar
 Route::post('/s/{token}/upload', [ShareController::class, 'guestUpload'])->name('share.guest-upload');
 Route::get('/s/{token}/media/{uuid}/download', [ShareController::class, 'download'])->name('share.download');
 
+/*
+ * Vzkaz od hosta.
+ *
+ * Tabulka komentářů v aplikaci byla, obrazovka z ní četla — a nikdo do ní
+ * nezapisoval. Babička, které dvojice pošle odkaz, neměla jak nechat vzkaz.
+ *
+ * Tvrdší limit než u zbytku: je to jediná cesta, která přijímá zápis bez
+ * přihlášení.
+ */
+Route::middleware('throttle:10,1')
+    ->post('/s/{token}/vzkaz', App\Http\Controllers\Galerie\HostKomentarController::class)
+    ->name('share.guest-comment');
+
 // Share Target (PWA Web Share Target)
 Route::post('/share-target',              [MediaController::class, 'shareTarget'])->name('share-target')
     ->middleware(['auth']);

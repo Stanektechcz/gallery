@@ -21463,9 +21463,31 @@ class Component extends DCLogic {
       bookPages: pages + ' stran',
       bookPrice: this.kc(price),
       bookNote: 'Cena zahrnuje tvrdou vazbu a dopravu. Kapitoly ve stavu „návrh“ se do knihy netisknou, dokud je nepřepnete.',
+      /*
+       * Objednávka se zapíše, ne odešle.
+       *
+       * Tlačítko hlásilo „Kniha odeslána do tisku" a nikde nevznikl záznam —
+       * tabulka objednávek se v celé aplikaci jen četla. Aplikace s tiskárnou
+       * nemluví a nepředstírá to: zapíše, že si dvojice knihu objednala,
+       * a stav posouvá ten, komu přijde potvrzení.
+       */
       bookOrder: () => {
+        const api = window.GalerieApi;
         this.setState({ route: 'x-tisk', appTab: 0 });
-        this.toast('Kniha odeslána do tisku · ' + pages + ' stran · ' + this.kc(price), { icon: 'ph-printer' });
+
+        if (!api || !api.post || api.mode !== 'http') {
+          this.toast('Bez serveru se objednávka nemá kam zapsat', { icon: 'ph-warning' });
+          return;
+        }
+
+        api.post('tisk/objednavka', { title: (s.bookTitle === undefined ? 'Naše galerie' : s.bookTitle), kind: 'kniha', price: price, note: pages + ' stran' }).then(res => {
+          if (!res) return;
+          if (window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data, res.prazdne);
+          this.toast(res.zprava, { icon: 'ph-printer' });
+        }).catch(e => {
+          const t = (e && e.body) || {};
+          this.toast(t.zprava || 'Objednávku se nepodařilo zapsat', { icon: 'ph-warning', color: 'var(--g-mag)' });
+        });
       },
       bookShare: () => this.setState({ shareOpen: true }),
       bookDownload: () => {
@@ -22524,7 +22546,18 @@ class Component extends DCLogic {
     const s = this.state;
     const i = Math.min(WEATHER.length - 1, Math.max(0, s.ckDay || 0));
     const w = WEATHER[i];
-    return { i, label: w[0], icon: w[1], max: w[2], min: w[3], mode: w[4], note: w[5], weekend: i === 0 };
+    /*
+     * Víkend se počítá z data, ne z pořadí v seznamu.
+     *
+     * Bylo to `i === 0`, tedy „dnešek je vždycky víkend" — skóre přidávalo
+     * deset bodů receptům na líné odpoledne i v úterý ráno. Předpověď začíná
+     * dneškem, takže i-tý den je dnešek plus i.
+     */
+    const den = new Date();
+    den.setDate(den.getDate() + i);
+    const vikend = den.getDay() === 0 || den.getDay() === 6;
+
+    return { i, label: w[0], icon: w[1], max: w[2], min: w[3], mode: w[4], note: w[5], weekend: vikend };
   }
   // Skóre návrhu: co máme doma (0–58) + jak sedí počasí (0–36) + jestli se to vejde do času (0–16) − jak často to vaříme.
   ckScore(rk) {
@@ -25377,18 +25410,26 @@ class Component extends DCLogic {
       gvDownload: () => this.toast('Host by teď dostal ZIP s originály · zapsali jsme stažení do aktivity', { icon: 'ph-download-simple' }),
       gvCanUpload: !!(row && row.guest) && !(s.gvSent || {})[row && row.name],
       gvSent: !!(row && (s.gvSent || {})[row.name]),
-      gvUpload: () => {
-        const prev = s.guestQueue;
-        const add = { id: 'gq' + Date.now(), who: who, whom: 'babičky', what: '2 fotky z návštěvy', when: 'právě teď', share: row.name, n: 8 };
-        this.setState({ guestQueue: [add].concat(guestQ), gvSent: { ...(s.gvSent || {}), [row.name]: true } });
-        this.toast('Host odeslal 2 fotky · čekají na zařazení ve Sdílených', { icon: 'ph-tray-arrow-down', undo: () => this.setState({ guestQueue: prev, gvSent: { ...(s.gvSent || {}), [row.name]: false } }) });
-      },
-      gvRecord: () => {
-        const pool = GV_VOICE_POOL[(this.gvList().filter(c => c.kind === 'voice').length) % GV_VOICE_POOL.length];
-        const prev = this.gvList();
-        this.setState({ gvC: prev.concat({ id: 'gv' + Date.now(), who: who, kind: 'voice', photo: 'sken_' + (140 + prev.length) + '.jpg', len: pool.len, text: pool.text, when: 'právě teď', share: row.name, hidden: false, pinned: false }) });
-        this.toast('Hlas nahrán a přepsán · Adrian ho může přilepit k fotce jako popisek', { icon: 'ph-microphone', undo: () => this.setState({ gvC: prev }) });
-      },
+      /*
+       * Totéž jako u hlasovky: náhled nevyrábí obsah.
+       *
+       * Do fronty čekajících položek se vkládaly „2 fotky z návštěvy" od
+       * babičky — dvojice pak ve Sdílených viděla zásilku, kterou nikdo
+       * neposlal.
+       */
+      gvUpload: () => this.toast('Tady host vybere fotky ze svého telefonu. V náhledu se nic neodesílá.', { icon: 'ph-tray-arrow-down' }),
+      /*
+       * Náhled hosta ukazuje, co host uvidí — nevyrábí obsah.
+       *
+       * Dřív se tady vzal jeden z osmi napsaných přepisů („to je teta Věra
+       * před chalupou v Rusavě") a vložil se do seznamu vzkazů, jako by ho
+       * někdo opravdu řekl. K tomu hláška „Hlas nahrán a přepsán" —
+       * aplikace přitom řeč na text nepřevádí vůbec.
+       *
+       * Nahrát vzkaz může host na svém odkazu; tady se jen řekne, jak to
+       * u něj vypadá.
+       */
+      gvRecord: () => this.toast('Tady host nahraje vzkaz. V náhledu se nic neukládá — otevřete odkaz, jak ho dostane on.', { icon: 'ph-microphone' }),
       gvTiles: tiles.map(p => ({ bg: p.bg, open: () => this.toast('Host by fotku otevřel na celou obrazovku' + (row.download ? ' a mohl ji stáhnout' : ' — bez možnosti stahovat'), { icon: 'ph-arrows-out' }) })),
       gvCanComment: !!(row && row.comments),
       gvNoComment: !!row && !row.comments,
