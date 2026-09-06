@@ -9,6 +9,7 @@ use App\Models\GallerySpace;
 use App\Services\Provoz\AdminVeStavu;
 use App\Services\Provoz\DomacnostVeStavu;
 use App\Services\Provoz\VztahVeStavu;
+use App\Services\Provoz\TrezorVeStavu;
 use App\Services\Provoz\ZdraviVeStavu;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -23,6 +24,7 @@ class StateController extends Controller
         private readonly DomacnostVeStavu $domacnost,
         private readonly VztahVeStavu $vztah,
         private readonly ZdraviVeStavu $zdravi,
+        private readonly TrezorVeStavu $trezor,
     ) {}
 
     public function show(Request $request): JsonResponse
@@ -122,6 +124,17 @@ class StateController extends Controller
                 $this->zdravi->zpracuj($patch, GallerySpace::findOrFail($coupleId), $uzivatel);
                 $patch = $this->zdravi->bezZdravi($patch);
                 $state->zapomen(ZdraviVeStavu::SERVEROVE);
+            }
+
+            /*
+             * Trezor.
+             *
+             * „Dát do trezoru" má fotku schovat doopravdy, ne jen v prohlížeči
+             * toho, kdo klikl — druhý z dvojice by ji jinak dál viděl v mřížce.
+             */
+            if ($this->trezor->tykaSe($patch)) {
+                $this->trezor->zpracuj($patch, GallerySpace::findOrFail($coupleId));
+                $patch = $this->trezor->bezTrezoru($patch);
             }
 
             $state->applyPatch($patch);

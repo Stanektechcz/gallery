@@ -63,7 +63,7 @@ Podle toho, kde už skutečný obsah je a kde na něm záleží:
 | 5 | **Cesty a místa** | `TRIPS`, `TRIP_BY_TITLE`, `NOWTRIP`, `PLACES`, `PLACE_BY_TITLE` | `trips`, `trip_days`, `trip_activities`, `trip_expenses`, `trip_budget_limits`, `trip_packing_items`, `trip_document_checks`, `travel_journal_entries`, `places`, `place_plans`, `place_notes` | hotovo |
 | 6 | **Vztah** | `DEC_LIST`, `ARB`, `VERSIONS`, `DEC_COOL`, `SPOR_MINE`, `SPOR_THEIRS`, `VETO_USED`, `VETO_PROP` | `couple_decisions`, `couple_decision_revisions`, `couple_cooling_purchases`, `couple_disagreement_points`, `couple_veto_proposals`, `couple_vetoes` | hotovo |
 | 7 | **Zdraví a cyklus** | `CYC_BASE`, `CYC_STARTS`, `KL_DAYS`, `KL_MOOD` | `cycle_days`, `cycle_settings`, `wellbeing_moods` | hotovo |
-| 8 | Sdílení a systém | `GV_*`, `GUEST_Q`, `VAULT_ITEMS`, `OFFPACKS`, `KAPS` | `shared_links`, `guest_uploads`, **trezor chybí** | zbývá |
+| 8 | **Sdílení a systém** | `SHARES`, `GUEST_Q`, `KAPS`, `VAULT_ITEMS`, `OFFPACKS` | `shared_links`, `guest_uploads`, `time_capsules`, `media_items.is_hidden` | hotovo |
 
 ## Knihovna: co se muselo změnit v dokumentu
 
@@ -217,16 +217,56 @@ Chybějící den je `null`, ne nula: „nezapsáno" a „bylo mi mizerně" nejso
 `INCOMES`. Zbytek (`FLOWS`, `PHASES`, `CYC_SYMPTOMS`, `CYC_MOODS`, `CYC_SHARE`,
 `KL_HELP`, `KL_QUESTIONS`) jsou katalogy rozhraní, ne obsah dvojice.
 
-## Co bude potřebovat nové tabulky
+## Trezor: tabulka nakonec nebyla potřeba
 
-Domácnost už tabulky má (krok 4). Zbývají mechanismy vztahu (rozhodnutí, arbitr,
-tiché dohody, protokol nesouhlasu, veto), trezor a část klidu a pohody. Vzniknou
-ve svých krocích — dřív ne, aby se nezaložily tabulky podle dohadu o tvaru.
+Plán počítal s tím, že trezor dostane vlastní tabulku. Při psaní se ukázalo, že
+by byla druhou pravdou: „dát do trezoru" znamená schovat položku z mřížky, mapy
+i hledání, a na to má aplikace sloupec `is_hidden`, který knihovna už
+respektuje. Trezor se proto **počítá z toho, co v něm doopravdy je** — ze
+skrytých položek po albech. Vlastní seznam by tvrdil „48 fotek v trezoru"
+i poté, co je někdo vrátil zpátky.
 
-Platí u nich totéž pravidlo jako u domácnosti: **tabulka bez zápisu je horší než
-žádná tabulka.** Kde prototyp obsah jen drží ve svém stavu a nikdo jiný v aplikaci
-ho nevlastní, musí spolu s tabulkou vzniknout i cesta zpátky — jinak se stav
-a databáze po prvním kliknutí rozejdou.
+Zápis vede přes `TrezorVeStavu`: klíč `vaultAdded` se ze stavu vyzvedne
+a promítne do `is_hidden`. Bez toho by fotku schoval jen prohlížeč toho, kdo
+klikl — a druhý z dvojice by ji dál viděl v mřížce, což je u trezoru dost
+podstatný rozdíl.
+
+Dvě věci téhle skupiny zůstávají v katalogu:
+
+- **`GV_C` a `GV_VOICE_POOL`** (komentáře a hlasovky od hostů). `media_comments`
+  má cizí klíč na uživatele, takže babiččin komentář nemá kam. Vlastní tabulku
+  dostane, až bude mít kdo psát — prototyp je jen ukazuje.
+- **Odkaz na jednu položku a výběr** se popisuje obecně („Jedna položka",
+  „Výběr položek"). `shared_links` drží jen `target_type` a `target_id`, takže
+  víc než to by byl dohad.
+
+Zapečetěná kapsle jde ven **bez textu**. Celý smysl je, že se otevře v den, na
+který se čeká, a obsah v prohlížeči by se dal přečíst kdykoli.
+
+## Co zůstalo v katalogu — a proč
+
+Všech osm skupin je hotových. Co v katalogu zůstalo, tam zůstalo z jednoho
+z těchhle tří důvodů:
+
+| Důvod | Kolekce |
+| --- | --- |
+| **Není to obsah dvojice** — katalog rozhraní | `FLOWS`, `PHASES`, `CYC_SYMPTOMS`, `CYC_MOODS`, `CYC_SHARE`, `KL_HELP`, `KL_QUESTIONS`, `RWEATHER`, `PLACE_KEY`, `EVKIND`, … (53 katalogů) |
+| **Nemá to kdo napsat** — prototyp obsah jen ukazuje, obrazovka, kde by se dal změnit, neexistuje | `TACIT`, `SPEAK`, `PAST_DEC`, `PM_*`, `REVISIT`, `GV_C`, `GV_VOICE_POOL` |
+| **Data nikde nejsou** — aplikace je odnikud nebere | `WEATHER` (předpověď) |
+
+A dvě, které patří do stavu páru, ne do tabulky: `PROMISES` a `PATIENCE`.
+Prototyp je umí zakládat i rušit, stav je sdílený mezi oběma partnery a přežije
+zavření prohlížeče — tabulka, do které by nikdo jiný nepsal, by přidala druhý
+zdroj pravdy a žádnou funkci.
+
+Pravidlo, které to celé řídí: **tabulka bez zápisu je horší než žádná tabulka.**
+Kde prototyp obsah drží ve svém stavu a nikdo jiný v aplikaci ho nevlastní,
+vzniká spolu s tabulkou i cesta zpátky (`DomacnostVeStavu`, `VztahVeStavu`,
+`ZdraviVeStavu`, `TrezorVeStavu`) — jinak se stav a databáze po prvním kliknutí
+rozejdou.
+
+`CYC_TODAY` a `INCOMES` jsou **skaláry**, které se na místě vyměnit nedají;
+`INCOMES` se posílá i v `BUD.income`, `CYC_TODAY` je fixní „dnešek" prototypu.
 
 ## Zásady
 

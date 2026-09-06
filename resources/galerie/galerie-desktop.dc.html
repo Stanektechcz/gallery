@@ -26941,7 +26941,8 @@ class Component extends DCLogic {
         return a.indexOf(album.name.split(' → ')[0]) === 0 || a === album.name;
       });
     const guestQ = s.guestQueue === undefined ? GUEST_Q : s.guestQueue;
-    const shareRows = s.shareRows || [
+    // Skutečné odkazy ze serveru (`SHARES`); bez odpovědi zůstávají napsané.
+    const shareRows = s.shareRows || (window.GalerieData || {}).SHARES || [
       { name: 'Vánoce pro mamku', url: 'gallery.stanektech.cz/s/8fk2…', content: 'Album Vánoce 2025', created: '24. 12. 2025', expires: 'Bez expirace', expTag: 'tag-accent', protection: 'Heslo', views: '38', n: 17, span: 'prosinec 2025 · doma v Ostravě', comments: true, guest: true, download: true, msg: 'Mami, tady jsou celé Vánoce — co se ti bude líbit, si klidně stáhni a přidej své fotky ze Štědrého dne.' },
       { name: 'Beskydy s Makinkou', url: 'gallery.stanektech.cz/s/p1zx…', content: '34 fotek', created: '17. 8. 2026', expires: 'Za 6 dní', expTag: 'tag-accent', protection: 'Bez hesla', views: '4', n: 7, span: 'srpen 2026 · Pustevny', comments: true, guest: true },
       { name: 'Zadar — výběr', url: 'gallery.stanektech.cz/s/qq7d…', content: '18 fotek', created: '2. 8. 2026', expires: 'Expirovalo', expTag: 'tag-neutral', protection: 'Heslo', views: '112', n: 4, span: 'červenec 2026 · Zadar' },
