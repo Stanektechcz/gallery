@@ -68,15 +68,16 @@ Devět z osmdesáti jedna kolekcí prototyp v `GalerieData` vůbec nemá — mř
 měnu, spíž a odkazy si dokument vyráběl sám ve funkcích. Server je dodává
 navíc a přepínače v dokumentu je berou přednostně.
 
-Ze stavu páru se pořád ukládá **15 obsahových klíčů** (`quar`, `paper`,
+Ze stavu páru se pořád ukládá **17 obsahových klíčů** (`quar`, `paper`,
 `emItems`, `emLog`, `favList`, `forgList`, `antiList`, `mlLoad`, `hsVisits`,
 `tichoData`, `pauseLog`, `pausePlan`, `klAttn`, `klEn`, `klAskLog`, `pmMine`,
 `cycSel`). Žádný z nich už nezastiňuje kolekci, kterou zároveň dodává server —
-čekají na tabulku, ne na vrstvu.
+čekají na tabulku, ne na vrstvu. `quar` je mezi nimi jen formálně: prototyp do
+něj nikdy nezapisuje.
 
-Zachycených je **třicet jedna**. Všechny případy, kdy stav přebíjel skutečná
-data (`rules`, `ruleLog`, `season`, `chat`, `msgList`, `wishes`, `ideas`,
-`buys`, `kapsules`), jsou vyřešené.
+Zachycených je **třicet dva**. Všechny případy, kdy stav přebíjel skutečná data
+(`rules`, `ruleLog`, `season`, `chat`, `msgList`, `wishes`, `ideas`, `buys`,
+`kapsules`, `sw`), jsou vyřešené.
 
 ## Pořadí
 
