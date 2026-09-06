@@ -247,6 +247,31 @@ class SpravaVeStavuTest extends TestCase
         $this->assertStringContainsString('roli host', $protokol[0]['what']);
     }
 
+    /**
+     * Uložená kopie administrace z dřívějška se zahodí.
+     *
+     * Administrace se do stavu chvíli ukládala, než dostala vlastní adresu.
+     * Kdyby tam zůstala, zastarávala by a starší klient by z ní kreslil.
+     */
+    public function test_pozustatek_administrace_ve_stavu_zmizi(): void
+    {
+        $stav = CoupleState::forCouple($this->prostor->id);
+        $stav->applyPatch([
+            'admUsers' => [['id' => '1', 'name' => 'Kdosi', 'role' => 'vlastník']],
+            'admLog' => [['what' => 'starý zápis']],
+            'joy' => ['tohle zůstane'],
+        ]);
+
+        $this->patchStav(['events' => ['nová akce']])->assertOk();
+
+        $ulozeno = CoupleState::first()->data;
+
+        $this->assertArrayNotHasKey('admUsers', $ulozeno);
+        $this->assertArrayNotHasKey('admLog', $ulozeno);
+        $this->assertSame(['tohle zůstane'], $ulozeno['joy']);
+        $this->assertSame(['nová akce'], $ulozeno['events']);
+    }
+
     /** Běžný patch bez administrace se nesmí zdržovat ničím navíc. */
     public function test_bezny_patch_administraci_nevraci(): void
     {

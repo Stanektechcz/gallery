@@ -64,6 +64,10 @@ class StateController extends Controller
              * obrazovka by od prvního kliknutí ukazovala něco, co v databázi
              * neplatí. Záměr se proto provede a odpověď nese skutečnost.
              */
+            // Pozůstatek po době, kdy se administrace do stavu ukládala. Zahodí se
+            // při prvním zápisu, ať tam nezastarává a starší klient z ní nekreslí.
+            $state->zapomen(AdminVeStavu::SERVEROVE);
+
             $skutecnost = [];
 
             if ($this->sprava->tykaSe($patch)) {

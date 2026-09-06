@@ -30,6 +30,9 @@ class CoupleState extends Model
     public const NEUKLADAT = [
         'vaultPwd', 'lockPwd', 'lockPin', 'lockRec', 'lockRecCode',
         'gatePin', 'gvPwd', 'admNewMail', 'admNewKeyName',
+        // Příznak „právě kontroluji" patří k jednomu kliknutí, ne do sdíleného
+        // stavu: uložený by po obnovení stránky nechal viset „Kontroluji…".
+        'admChecking',
     ];
 
     /** Klíče, které patří do šifrovaného sloupce, ne do otevřeného JSONu. */
@@ -46,6 +49,30 @@ class CoupleState extends Model
             ['couple_id' => $coupleId],
             ['data' => [], 'private' => [], 'rev' => 0]
         );
+    }
+
+    /**
+     * Zahodí klíče, které do stavu nepatří.
+     *
+     * Používá se na pozůstatky: administrace se do stavu chvíli ukládala, než
+     * dostala vlastní adresu, a uložená kopie by tam jinak ležela navždy —
+     * zastarávala by a starší klient by z ní kreslil.
+     *
+     * @param  list<string>  $klice
+     */
+    public function zapomen(array $klice): bool
+    {
+        $otevrene = $this->data ?? [];
+        $zbyle = array_diff_key($otevrene, array_flip($klice));
+
+        if (count($zbyle) === count($otevrene)) {
+            return false;
+        }
+
+        $this->data = $zbyle;
+        $this->save();
+
+        return true;
     }
 
     /** Sloučení částečného patche po klíčích. Hodnoty se nahrazují celé. */
