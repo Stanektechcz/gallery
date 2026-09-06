@@ -185,6 +185,16 @@ class Knihovna implements PoskytovatelObsahu
                 'error' => $m->status === 'failed',
                 'shared' => (bool) $m->is_archived === false && $m->storage_status === 'mirrored',
                 'author' => $m->uploader?->name ?? '—',
+                /*
+                 * Přístroj z EXIFu, ne z autora.
+                 *
+                 * Statistika „čím fotíme" si zařízení odvozovala ze jména toho,
+                 * kdo snímek nahrál: `author === 'Makinka' ? 'iPhone 13' : 'iPhone 15 Pro'`.
+                 * Byla to dvě vymyšlená zařízení a u třetího člověka nebo cizí
+                 * značky z toho vyšlo číslo o telefonu, který nikdo nemá.
+                 */
+                'dev' => $this->pristroj($m),
+                'lens' => trim((string) ($m->lens_model ?? '')) ?: null,
                 'name' => $m->original_filename,
                 'size' => $this->velikost((int) $m->size_bytes),
                 'caption' => (string) ($m->caption ?? ''),
@@ -927,6 +937,28 @@ class Knihovna implements PoskytovatelObsahu
         $vteriny = (int) round($ms / 1000);
 
         return intdiv($vteriny, 60).':'.str_pad((string) ($vteriny % 60), 2, '0', STR_PAD_LEFT);
+    }
+
+    /**
+     * Čím to bylo vyfocené — z EXIFu snímku.
+     *
+     * Značka se do názvu nepřidává, když už v modelu je: „Apple iPhone 15 Pro"
+     * čte hůř než „iPhone 15 Pro" a v grafu zabírá dvakrát tolik místa.
+     * Snímek bez EXIFu vrací `null` a statistika ho zařadí zvlášť — vymyslet
+     * mu přístroj by znamenalo tvrdit, čím dvojice fotí.
+     */
+    private function pristroj(MediaItem $m): ?string
+    {
+        $model = trim((string) ($m->camera_model ?? ''));
+        $znacka = trim((string) ($m->camera_make ?? ''));
+
+        if ($model === '') {
+            return $znacka === '' ? null : $znacka;
+        }
+
+        return $znacka === '' || stripos($model, $znacka) !== false
+            ? $model
+            : $znacka.' '.$model;
     }
 
     private function velikost(int $bajtu): string

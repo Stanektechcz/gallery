@@ -83,7 +83,44 @@ class System implements PoskytovatelObsahu
             'CONFLICTS' => $this->rozpory($prostor),
             'DISK' => $this->diskAStav($prostor),
             'TRASH' => $this->kos($prostor),
+            'DVOJICE' => $this->jmenaDvojice($prostor),
         ], fn ($v) => $v !== null && $v !== []);
+    }
+
+    /**
+     * Kdo ti dva jsou — jménem, ten kdo se dívá první.
+     *
+     * Aplikace to na desítkách míst porovnávala s „Adrian" a „Makinka"
+     * napsanými v kódu. U dvojice, která se jmenuje jinak, z toho vycházely
+     * prázdné sloupce a štítky bez barvy.
+     *
+     * Prototyp si jména dokázal odvodit z nálady dvou, jenže ta bývá prázdná —
+     * a dokud si ji nikdo nezapíše, spadl zpátky na ukázková jména. Tady se
+     * berou ze členů prostoru, které má každá dvojice od prvního dne.
+     *
+     * Stejné jméno dvakrát dostane pořadové číslo: bez něj by se dva Adriani
+     * slili do jednoho a půlka obrazovek by počítala jeho práci dvakrát.
+     *
+     * @return list<string>
+     */
+    private function jmenaDvojice(GallerySpace $prostor): array
+    {
+        $lide = $prostor->members()->pluck('users.name', 'users.id')->all();
+        $ja = auth()->id();
+
+        if ($ja !== null && array_key_exists($ja, $lide)) {
+            $lide = [$ja => $lide[$ja]] + $lide;
+        }
+
+        $videno = [];
+        $jmena = [];
+
+        foreach ($lide as $jmeno) {
+            $videno[$jmeno] = ($videno[$jmeno] ?? 0) + 1;
+            $jmena[] = $videno[$jmeno] > 1 ? $jmeno.' ('.$videno[$jmeno].')' : $jmeno;
+        }
+
+        return array_slice($jmena, 0, 2);
     }
 
     /**

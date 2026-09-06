@@ -381,6 +381,42 @@ class ObsahSystemTest extends TestCase
     }
 
     /**
+     * Aplikace ví, jak se ti dva jmenují.
+     *
+     * Na desítkách míst se jména porovnávala s „Adrian" a „Makinka" napsanými
+     * v kódu; u dvojice, která se jmenuje jinak, z toho vycházely prázdné
+     * sloupce a štítky bez barvy. První je ten, kdo se dívá — polovina vět
+     * je psaná z jeho pohledu.
+     */
+    public function test_dvojice_zna_skutecna_jmena(): void
+    {
+        $this->assertSame(['Adrian', 'Makinka'],
+            $this->getJson('/api/data/system')->assertOk()->json('data.DVOJICE'));
+
+        Sanctum::actingAs($this->maki);
+
+        $this->assertSame(['Makinka', 'Adrian'],
+            $this->getJson('/api/data/system')->assertOk()->json('data.DVOJICE'));
+    }
+
+    /**
+     * Dva stejně pojmenovaní lidé se neslijí do jednoho.
+     *
+     * Bez pořadového čísla by mapa energie i dělba práce počítaly práci
+     * jednoho z nich dvakrát a druhý by z obrazovky zmizel.
+     */
+    public function test_stejna_jmena_se_rozlisi(): void
+    {
+        $dvojnik = User::factory()->create(['name' => 'Adrian']);
+        $this->prostor->members()->syncWithoutDetaching([$dvojnik->id => ['role' => 'editor']]);
+
+        Sanctum::actingAs($dvojnik);
+
+        $this->assertSame(['Adrian', 'Adrian (2)'],
+            $this->getJson('/api/data/system')->assertOk()->json('data.DVOJICE'));
+    }
+
+    /**
      * Bez připojeného Disku obrazovka neříká, že je záloha hotová.
      *
      * Celá obrazovka úložiště byla napsaná v designovém souboru — „Připojeno —
