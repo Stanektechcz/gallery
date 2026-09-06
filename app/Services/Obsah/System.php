@@ -450,6 +450,65 @@ class System implements PoskytovatelObsahu
     // ——— sloupce administrace ———
 
     /**
+     * Rok v číslech: kolik čeho dvojice letos přibylo — a jak proti loňsku.
+     *
+     * Počítá se z týchž tabulek jako „kdo sekci živí", jen po letech. Podíl
+     * v pruhu je poměr k loňsku, ne k vymyšlenému cíli: „o třetinu víc zápisů
+     * než loni" je věta, která něco znamená.
+     *
+     * @return list<array{0: string, 1: string, 2: int, 3: int}>
+     */
+    private function rokVCislech(GallerySpace $prostor): array
+    {
+        $letos = CarbonImmutable::now()->startOfYear();
+        $loni = $letos->subYear();
+
+        $radky = [];
+
+        foreach (self::SEKCE as [, $nazev, $tabulka, , $cas]) {
+            if (! Schema::hasTable($tabulka)) {
+                continue;
+            }
+
+            $pocet = DB::table($tabulka)
+                ->where('gallery_space_id', $prostor->id)
+                ->selectRaw('SUM(CASE WHEN '.$cas.' >= ? THEN 1 ELSE 0 END) AS letos', [$letos])
+                ->selectRaw('SUM(CASE WHEN '.$cas.' >= ? AND '.$cas.' < ? THEN 1 ELSE 0 END) AS loni', [$loni, $letos])
+                ->first();
+
+            // Sekce, do které letos nikdo nic nedal, do ročního přehledu
+            // nepatří — „nula" je odpověď pro Zdraví sekcí, ne pro tuhle.
+            if ((int) $pocet->letos === 0) {
+                continue;
+            }
+
+            $radky[] = [$nazev, (int) $pocet->letos, (int) $pocet->loni];
+        }
+
+        if (! $radky) {
+            return [];
+        }
+
+        $nejvic = max(array_map(fn (array $r) => $r[1], $radky)) ?: 1;
+
+        return array_map(function (array $r) use ($nejvic) {
+            [$nazev, $letos, $loni] = $r;
+
+            return [
+                $nazev,
+                $this->cislo($letos).($loni ? ' · loni '.$this->cislo($loni) : ' · loni nic'),
+                (int) round($letos / $nejvic * 100),
+                match (true) {
+                    $loni === 0 => 0,
+                    $letos > $loni => 0,
+                    $letos < $loni => 1,
+                    default => 2,
+                },
+            ];
+        }, $radky);
+    }
+
+    /**
      * `health` a `risk` — dvě záložky administrace.
      *
      * Ostatní klíče `ABARS` patří jiným obrazovkám a nechávají se být; kolekce
@@ -496,7 +555,7 @@ class System implements PoskytovatelObsahu
                 $this->radekPosledniKopie($prostor),
                 $this->radekPredpoved($prostor, $zabrano, $limit),
             ], fn ($v) => $v !== null)),
-        ];
+        ] + array_filter(['zprCisla' => $this->rokVCislech($prostor)], fn ($v) => $v !== []);
     }
 
     /** @return array{0: string, 1: string, 2: int, 3: int}|null */

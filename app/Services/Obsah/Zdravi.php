@@ -8,6 +8,7 @@ use App\Models\GallerySpace;
 use App\Models\WellbeingMood;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 /**
@@ -45,12 +46,15 @@ class Zdravi implements PoskytovatelObsahu
         $dny = Schema::hasTable('cycle_days') ? $this->dny($prostor) : collect();
 
         $zacatky = $this->zacatky($dny);
+        $nalady = $this->nalady($prostor);
 
         return array_filter([
             'CYC_BASE' => $this->zapsane($dny),
             'CYC_STARTS' => $zacatky,
             'KL_DAYS' => $this->popiskyDnu(),
-            'KL_MOOD' => $this->nalady($prostor),
+            'KL_MOOD' => $nalady,
+            // Co se ty dny dělo — jen když je s čím to porovnat.
+            'KL_EV' => $nalady ? $this->udalostiDnu($prostor) : [],
             // Přehled cyklu ve sloupcích — úzké rozvržení kreslí záložku
             // „Přehled" z `ABARS`, ne z vlastní obrazovky.
             'ABARS' => ($c = $this->sloupceCyklu($zacatky)) ? ['cycle' => $c] : null,
@@ -240,6 +244,135 @@ class Zdravi implements PoskytovatelObsahu
         return collect(range(0, self::DNU_NALADY - 1))
             ->map(fn (int $i) => $od->addDays($i)->format('j. n.'))
             ->all();
+    }
+
+    /**
+     * Co se ty dny dělo: `[{ d, kind, good }]`, kde `d` je pořadí v `KL_DAYS`.
+     *
+     * Obrazovka z toho počítá, se kterým druhem dne chodí horší nálada. Ukázka
+     * měla dny napsané dopředu („Přesčas po 20:00" třikrát), takže ta korelace
+     * vycházela vždycky stejně a o dvojici neříkala nic.
+     *
+     * Posílá se jen to, co aplikace opravdu ví — večer strávený mimo domov,
+     * den na cestě, výročí a výdaj přes limit. Nic se nedopočítává: den, o
+     * kterém aplikace nic neví, prostě žádnou značku nemá.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function udalostiDnu(GallerySpace $prostor): array
+    {
+        $od = CarbonImmutable::now()->startOfDay()->subDays(self::DNU_NALADY - 1);
+        $poradi = fn ($kdy) => (int) $od->diffInDays(CarbonImmutable::parse($kdy)->startOfDay());
+        $udalosti = [];
+
+        if (Schema::hasTable('calendar_events')) {
+            $kalendar = DB::table('calendar_events')
+                ->where('gallery_space_id', $prostor->id)
+                ->where('starts_at', '>=', $od)
+                ->get(['starts_at', 'ends_at', 'type']);
+
+            foreach ($kalendar as $u) {
+                $den = $poradi($u->starts_at);
+
+                if ($den < 0 || $den >= self::DNU_NALADY) {
+                    continue;
+                }
+
+                if ($u->type === 'birthday') {
+                    $udalosti[] = ['d' => $den, 'kind' => 'Narozeniny nebo výročí', 'good' => true];
+
+                    continue;
+                }
+
+                $konec = CarbonImmutable::parse($u->ends_at ?? $u->starts_at);
+
+                if ($konec->hour >= 20) {
+                    $udalosti[] = ['d' => $den, 'kind' => 'Večer mimo domov', 'good' => false];
+                }
+            }
+        }
+
+        if (Schema::hasTable('trips')) {
+            $cesty = DB::table('trips')
+                ->where('gallery_space_id', $prostor->id)
+                ->where('end_date', '>=', $od)
+                ->get(['start_date', 'end_date']);
+
+            foreach ($cesty as $c) {
+                $zacatek = max(0, $poradi($c->start_date));
+                $konec = min(self::DNU_NALADY - 1, $poradi($c->end_date));
+
+                for ($den = $zacatek; $den <= $konec; $den++) {
+                    $udalosti[] = ['d' => $den, 'kind' => 'Na cestě', 'good' => true];
+                }
+            }
+        }
+
+        foreach ($this->dnyPresLimit($prostor, $od) as $den) {
+            $udalosti[] = ['d' => $den, 'kind' => 'Výdaj přes limit', 'good' => false];
+        }
+
+        return $udalosti;
+    }
+
+    /**
+     * Dny, kdy útrata v jedné kategorii přesáhla její měsíční limit.
+     *
+     * Bez rozpočtu se nic nehlásí: „přes limit" beze zbytku předpokládá limit,
+     * a odhadnout ho podle průměru by znamenalo vytýkat dvojici útratu, na
+     * kterou si žádnou hranici nedala.
+     *
+     * @return list<int>
+     */
+    private function dnyPresLimit(GallerySpace $prostor, CarbonImmutable $od): array
+    {
+        if (! Schema::hasTable('budget_category_limits') || ! Schema::hasTable('transactions')) {
+            return [];
+        }
+
+        $limity = DB::table('budget_category_limits as l')
+            ->join('budgets as r', 'r.id', '=', 'l.budget_id')
+            ->where('r.gallery_space_id', $prostor->id)
+            ->pluck('l.amount', 'l.finance_category_id');
+
+        if ($limity->isEmpty()) {
+            return [];
+        }
+
+        $pohyby = DB::table('transactions')
+            ->where('gallery_space_id', $prostor->id)
+            ->where('type', '!=', 'income')
+            ->whereNull('deleted_at')
+            ->whereNotNull('category_id')
+            ->where('occurred_at', '>=', $od->startOfMonth())
+            ->orderBy('occurred_at')
+            ->get(['occurred_at', 'amount_from', 'category_id']);
+
+        $nasbirano = [];
+        $dny = [];
+
+        foreach ($pohyby as $t) {
+            $limit = (float) ($limity[$t->category_id] ?? 0);
+
+            if ($limit <= 0) {
+                continue;
+            }
+
+            $pred = $nasbirano[$t->category_id] ?? 0.0;
+            $po = $pred + abs((float) $t->amount_from);
+            $nasbirano[$t->category_id] = $po;
+
+            // Zajímá jen ten pohyb, který hranici překročil — ne každý další.
+            if ($pred < $limit && $po >= $limit) {
+                $den = (int) $od->diffInDays(CarbonImmutable::parse($t->occurred_at)->startOfDay());
+
+                if ($den >= 0 && $den < self::DNU_NALADY) {
+                    $dny[] = $den;
+                }
+            }
+        }
+
+        return array_values(array_unique($dny));
     }
 
     /**

@@ -238,6 +238,35 @@ class ObsahSystemTest extends TestCase
         $this->assertSame('Druhá kopie není nastavená', $zdravi['Druhá kopie'][1]);
     }
 
+    /**
+     * Rok v číslech se poměřuje s loňskem, ne s vymyšleným cílem.
+     *
+     * „O třetinu víc zápisů než loni" je věta, která něco znamená.
+     */
+    public function test_rok_v_cislech_porovnava_s_lonskem(): void
+    {
+        $this->fotka(['uploaded_at' => now()->startOfYear()->addMonth()], 1);
+        $this->fotka(['uploaded_at' => now()->startOfYear()->addMonths(2)], 2);
+        $this->fotka(['uploaded_at' => now()->startOfYear()->subMonths(3)], 3);
+
+        $r = collect($this->getJson('/api/data/system')->assertOk()->json('data.ABARS.zprCisla'))->keyBy(0);
+
+        $this->assertSame('2 · loni 1', $r['Knihovna'][1]);
+        $this->assertSame(100, $r['Knihovna'][2]);
+        // Víc než loni — základní barva, ne varovná.
+        $this->assertSame(0, $r['Knihovna'][3]);
+    }
+
+    /** Sekce, do které letos nic nepřibylo, do ročního přehledu nepatří. */
+    public function test_letos_prazdna_sekce_v_prehledu_neni(): void
+    {
+        $this->fotka(['uploaded_at' => now()->startOfYear()->addMonth()]);
+
+        $r = collect($this->getJson('/api/data/system')->assertOk()->json('data.ABARS.zprCisla'))->pluck(0);
+
+        $this->assertSame(['Knihovna'], $r->all());
+    }
+
     /** Obě kolekce server dodává celé. */
     public function test_zdravi_i_sekce_prichazeji_cele(): void
     {

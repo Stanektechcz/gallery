@@ -104,6 +104,8 @@ Podle toho, kde už skutečný obsah je a kde na něm záleží:
 | 19 | **Sloupce úzkého rozvržení** | `ABARS.cap`, `ABARS.cycle` | `house_week(_capacity)`, `cycle_days` | hotovo |
 | 20 | **Přepínače nastavení** | `AFORMS` | `bank_connections`, `finance_settings`, `user_settings`, `legacy_plans` | hotovo, **píše i zpátky** |
 | 21 | **Datování skenů** | `DATING` | `media_items` — sousední soubor, tentýž import, album, přístroj | hotovo, **píše i zpátky** |
+| 22 | **Rok v číslech** | `ABARS.zprCisla` | tytéž tabulky jako „kdo sekci živí", jen po letech | hotovo |
+| 23 | **Co se ty dny dělo** | `KL_EV` | `calendar_events`, `trips`, `budget_category_limits` | hotovo — posílá se jen se zapsanou náladou |
 
 ## Knihovna: co se muselo změnit v dokumentu
 
@@ -366,8 +368,8 @@ má tabulky i data, poslední je potřeba teprve vymyslet.
 | Oblast | Kolekce | Tabulka |
 | --- | --- | --- |
 | **Tisk — objednávky** | `PORDERS`, `POSTEPS` | **chybí** — `photo_books` je návrh, ne zakázka; objednání podle prototypu řeší tiskárna, aplikace ho nezakládá |
-| **Sloupce bez zdroje** | `ABARS.tier`, `ABARS.zprCisla` | tierlisty nemají tabulku vůbec; roční čísla čekají na poskytovatele |
-| **Klid a pohoda** | `KL_EV`, `KL_EN`, `KL_TASKS`, `KL_ATTN`, `KL_ASK_LOG` | částečně odvoditelné, část chybí — mapa energie a rozpočet pozornosti nemají, kdo by je zapsal |
+| **Sloupce bez zdroje** | `ABARS.tier` | tierlisty nemají tabulku vůbec |
+| **Klid a pohoda** | `KL_EN`, `KL_TASKS`, `KL_ATTN`, `KL_ASK_LOG` | mapa energie po částech dne, rozpočet pozornosti ani „kolik lidí je na to potřeba" nemají, kdo by je zapsal |
 | **Příběh dvojice** | `STORY`, `STORYMS` | **chybí** — `album_story_blocks` je vyprávění uvnitř alba, ne kapitoly dvojice |
 | **Nouzový přístup** | `EM_ITEMS`, `EM_LOG` | **chybí** — `travel_emergency_cards` je karta k cestě, ne přístup k datům |
 | **Mechanismy vztahu bez obrazovky pro úpravu** | `TACIT`, `SPEAK`, `FORGIVEN`, `PM_*`, `PAST_*`, `TICHO`, `SCEN`, `P60`, `HORIZON`, `JOY`, `HOURS`, `PAUSE_*`, `AUTO_DEC`, `SURPRISE`, `CONFLICTS`, `RITUALS`, `ML_LOAD`, `VIS_ROWS`, `FAMILY`, `REVISIT`, `TRUTHS` | **chybí** |
