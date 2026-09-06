@@ -25,9 +25,9 @@ class PrototypController extends Controller
 
     private const TELEFON = 'galerie-mobil.dc.html';
 
-    public function __invoke(Request $request): Response
+    public function __invoke(Request $request, ?string $rozvrzeni = null): Response
     {
-        $soubor = $this->cesta($this->rozvrzeni($request));
+        $soubor = $this->cesta($this->rozvrzeni($request, $rozvrzeni));
 
         abort_unless(File::exists($soubor), 503,
             'Prototyp není nasazený — chybí dokumenty v resources/galerie.');
@@ -125,12 +125,17 @@ class PrototypController extends Controller
             .DIRECTORY_SEPARATOR.$soubor;
     }
 
-    private function rozvrzeni(Request $request): string
+    /**
+     * Které rozvržení poslat.
+     *
+     * Vynucená volba je **vlastní cesta**, ne parametr v dotazu. Service worker
+     * prototypu si dokument ukládá pod adresu bez dotazu a čte ji s `ignoreSearch`,
+     * takže jedno otevření `/?rozvrzeni=telefon` přepsalo uloženou kopii `/` —
+     * a prohlížeč pak i na počítači nabízel telefonní verzi, dokud se paměť
+     * nevymazala. Různé cesty se v paměti nepotkají.
+     */
+    private function rozvrzeni(Request $request, ?string $volba): string
     {
-        // Explicitní volba vyhrává — jinak by se telefonní rozvržení nedalo
-        // vyzkoušet na počítači a naopak.
-        $volba = $request->query('rozvrzeni');
-
         if ($volba === 'telefon') {
             return self::TELEFON;
         }

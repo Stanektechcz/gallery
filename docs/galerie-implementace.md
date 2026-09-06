@@ -228,6 +228,11 @@ aby podalo neplatný.
 Bez backendu (`GalerieApi.mode !== 'http'`) tlačítka řeknou, že administrace
 potřebuje server. Předstírat úspěch je horší než přiznat, že server není.
 
+Vynucené rozvržení má **vlastní cestu** (`/rozvrzeni/telefon`, `/rozvrzeni/siroke`),
+ne parametr v dotazu: service worker prototypu ukládá dokument pod adresu bez dotazu
+a čte ji s `ignoreSearch`, takže jedno otevření `/?rozvrzeni=telefon` přepsalo
+uloženou kopii `/` a prohlížeč pak i na počítači nabízel telefonní verzi.
+
 ## Co zůstává napsané v designu
 
 Postranní panel ukazuje „57 %", „114,5 GB ze 200 GB" a „3 originály čekají" jako

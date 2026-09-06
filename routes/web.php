@@ -88,6 +88,17 @@ Route::delete('/share-target',            [MediaController::class, 'clearShareTa
  */
 Route::middleware([])->withoutMiddleware([App\Http\Middleware\HandleInertiaRequests::class])->group(function () {
     Route::get('/', App\Http\Controllers\Galerie\PrototypController::class)->name('galerie.prototyp');
+
+    /*
+     * Vynucené rozvržení — vlastní cesta, ne parametr v dotazu.
+     *
+     * Service worker prototypu si dokument ukládá pod adresu bez dotazu a čte ji
+     * s `ignoreSearch`; jedno otevření `/?rozvrzeni=telefon` tak přepsalo uloženou
+     * kopii `/` a prohlížeč pak i na počítači nabízel telefonní verzi.
+     */
+    Route::get('/rozvrzeni/{rozvrzeni}', App\Http\Controllers\Galerie\PrototypController::class)
+        ->whereIn('rozvrzeni', ['telefon', 'siroke'])
+        ->name('galerie.rozvrzeni');
     Route::get('/sw.js', [App\Http\Controllers\Galerie\PrototypController::class, 'serviceWorker'])
         ->name('galerie.sw');
 

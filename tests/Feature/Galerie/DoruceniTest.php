@@ -157,16 +157,36 @@ class DoruceniTest extends TestCase
         $this->assertSame(strlen($tablet), strlen($pocitac));
     }
 
-    /** Jinak by se telefonní rozvržení nedalo vyzkoušet na počítači. */
-    public function test_rozvrzeni_jde_vynutit_parametrem(): void
+    /**
+     * Rozvržení jde vynutit vlastní cestou.
+     *
+     * Ne parametrem v dotazu: service worker prototypu ukládá dokument pod adresu
+     * **bez dotazu** a čte ji s `ignoreSearch`, takže jedno otevření
+     * `/?rozvrzeni=telefon` přepsalo uloženou kopii `/` — a prohlížeč pak i na
+     * počítači nabízel telefonní verzi, dokud se paměť nevymazala.
+     */
+    public function test_rozvrzeni_jde_vynutit_vlastni_cestou(): void
     {
-        $vynucene = $this->withHeader('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120')
-            ->get('/?rozvrzeni=telefon')->assertOk()->getContent();
+        $pocitac = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120';
 
-        $telefon = $this->withHeader('User-Agent', 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Mobile/15E148')
-            ->get('/')->assertOk()->getContent();
+        $telefonni = $this->withHeader('User-Agent', $pocitac)
+            ->get('/rozvrzeni/telefon')->assertOk()->getContent();
 
-        $this->assertSame(strlen($telefon), strlen($vynucene));
+        $siroke = $this->withHeader('User-Agent', 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Mobile/15E148')
+            ->get('/rozvrzeni/siroke')->assertOk()->getContent();
+
+        $this->assertNotSame(strlen($telefonni), strlen($siroke));
+        $this->assertSame(
+            strlen($telefonni),
+            strlen($this->withHeader('User-Agent', 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Mobile/15E148')->get('/')->getContent()),
+        );
+    }
+
+    /** Jiná hodnota než ta dvojice cestu nemá — ať se z ní nestane skládání souborů. */
+    public function test_nezname_rozvrzeni_neexistuje(): void
+    {
+        $this->get('/rozvrzeni/../../etc/passwd')->assertNotFound();
+        $this->get('/rozvrzeni/cokoliv')->assertNotFound();
     }
 
     /** Statické soubory prototypu musí být tam, kam si o ně dokument říká. */
