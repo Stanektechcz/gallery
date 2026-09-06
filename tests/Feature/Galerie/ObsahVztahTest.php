@@ -11,6 +11,8 @@ use App\Models\CoupleVetoProposal;
 use App\Models\GallerySpace;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -44,6 +46,67 @@ class ObsahVztahTest extends TestCase
         ]);
 
         Sanctum::actingAs($this->adri);
+    }
+
+    /**
+     * Co rozhodl čas: tři vzorce, každý ze svých dat.
+     *
+     * Obrazovka o sobě říká, že hledá propadlou rozvahu, uplynulou lhůtu a věc,
+     * o které se mluvilo a nikdy se nezavřela. Dosud to byl seznam napsaný
+     * v souboru s ukázkovými daty.
+     */
+    public function test_rozhodl_cas_najde_tri_vzorce(): void
+    {
+        CoupleCoolingPurchase::create([
+            'gallery_space_id' => $this->prostor->id,
+            'what' => 'Gauč z výprodeje',
+            'price' => 34000,
+            'requested_by' => $this->maki->id,
+            'opened_at' => now()->subDays(5),
+            'cools_until' => now()->subDays(2),
+        ]);
+
+        $this->ukol('Objednat servis kotle', ['due_at' => now()->subDays(40)]);
+        $this->ukol('Vyfotit a prodat kolo', ['created_at' => now()->subDays(200)]);
+        // Čerstvá věc bez termínu ještě nikdo neodkládá.
+        $this->ukol('Zalít kytky', ['created_at' => now()->subDays(3)]);
+
+        $rows = $this->getJson('/api/data/vztah')->assertOk()->json('data.AUTO_DEC');
+
+        $this->assertCount(3, $rows);
+
+        // Nejdřív to, co stálo nejvíc.
+        $this->assertSame('Gauč z výprodeje', $rows[0]['what']);
+        $this->assertSame('vyprodáno', $rows[0]['kind']);
+        $this->assertSame(34000, $rows[0]['cost']);
+
+        $druhy = collect($rows)->pluck('kind')->all();
+        $this->assertContains('lhůta', $druhy);
+        $this->assertContains('mlčení', $druhy);
+    }
+
+    /**
+     * Rozvaha, ke které se někdo vyjádřil, mezi nerozhodnutí nepatří.
+     *
+     * Nerozhodnout je rozhodnutí bez podpisu — jenže tady podpis je, jen se
+     * nestihl zavřít.
+     */
+    public function test_rozvaha_s_nazorem_neni_nerozhodnuti(): void
+    {
+        CoupleCoolingPurchase::create([
+            'gallery_space_id' => $this->prostor->id,
+            'what' => 'Sluchátka',
+            'price' => 4900,
+            'requested_by' => $this->maki->id,
+            'opened_at' => now()->subDays(5),
+            'cools_until' => now()->subDays(2),
+            'opinion' => 'Radši ne, počkejme na slevu.',
+            'opinion_by' => $this->adri->id,
+        ]);
+
+        $data = $this->getJson('/api/data/vztah')->assertOk()->json('data');
+
+        $this->assertArrayNotHasKey('AUTO_DEC', $data);
     }
 
     /** Bez rozhodnutí se nic neposílá — klient si nechá ukázková data. */
@@ -409,5 +472,18 @@ class ObsahVztahTest extends TestCase
         $r = collect($this->getJson('/api/data/vztah')->assertOk()->json('data.DEC_LIST'))->pluck('title');
 
         $this->assertSame(['Naše'], $r->all());
+    }
+
+    private function ukol(string $nazev, array $navic = []): void
+    {
+        DB::table('shared_todos')->insert(array_merge([
+            'uuid' => (string) Str::uuid(),
+            'gallery_space_id' => $this->prostor->id,
+            'created_by' => $this->adri->id,
+            'title' => $nazev,
+            'status' => 'open',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ], $navic));
     }
 }

@@ -16548,7 +16548,14 @@ class Component extends DCLogic {
     const owned = s.autoOwned || {};
     const rows = AUTO_DEC.map(a => ({ ...a, days: this.daysFrom(a.date) }));
     const cost = rows.filter(a => !owned[a.what]).reduce((a, x) => a + x.cost, 0);
-    const explicit = 9;
+    /*
+     * Kolik věcí dvojice rozhodla podpisem, ne mlčením.
+     *
+     * Bylo to napevno devět. Podíl „čas rozhodl v tolika z tolika případů" je
+     * přitom celý smysl obrazovky — s devítkou vycházel u každé dvojice stejně
+     * bez ohledu na to, kolik toho opravdu rozhodli.
+     */
+    const explicit = (s.decs === null || s.decs === undefined ? DEC_LIST : s.decs).length;
     const share = Math.round((rows.length / (rows.length + explicit)) * 100);
     const KIND = { 'vyprodáno': 'nabídka zmizela', 'lhůta': 'propadla lhůta', 'mlčení': 'nikdo nic neřekl' };
     return {
@@ -16573,7 +16580,12 @@ class Component extends DCLogic {
         },
         go: () => { this.setState(a.tab ? { route: a.route, dcTab: a.tab, hsTab: a.tab } : { route: a.route }); }
       })),
-      adVerdict: 'Nejdražší nerozhodnutí: ' + rows.slice().sort((x, y) => y.cost - x.cost)[0].what.toLowerCase() + '. Zvyk se dá zlomit jedním pravidlem: každá rozvaha, která propadne, se automaticky zapíše jako „rozhodli jsme se nechat to být“ — s podpisem obou.',
+      // Bez jediného nerozhodnutí není co jmenovat; `[0].what` by shodilo
+      // celou obrazovku.
+      adVerdict: (rows.length
+        ? 'Nejdražší nerozhodnutí: ' + rows.slice().sort((x, y) => y.cost - x.cost)[0].what.toLowerCase() + '. '
+        : 'Zatím nic nepropadlo ani nezůstalo bez odpovědi. ')
+        + 'Zvyk se dá zlomit jedním pravidlem: každá rozvaha, která propadne, se automaticky zapíše jako „rozhodli jsme se nechat to být“ — s podpisem obou.',
       adRule: () => { this.setState({ route: 'x-pravidla' }); this.toast('Pravidlo: propadlá rozvaha = zapsané rozhodnutí nechat to být', { icon: 'ph-flow-arrow' }); }
     };
   }

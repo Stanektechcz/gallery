@@ -69,6 +69,8 @@ class Vztah implements PoskytovatelObsahu
             'PATIENCE' => $this->trpelivost($prostor, $jmena),
             // Témata, ke kterým se dvojice vrací, aniž by je zavřela.
             'DISP' => $this->vracejiciSeTemata($body, $prostor),
+            // Co rozhodl čas místo nich.
+            'AUTO_DEC' => $this->rozhodlCas($prostor),
             // Telefon kreslí sliby z vlastní kolekce; tvar je tentýž.
             'MOBIL' => $sliby ? ['PROMISES' => $sliby] : [],
         ], fn ($v) => $v !== null && $v !== []);
@@ -197,6 +199,102 @@ class Vztah implements PoskytovatelObsahu
             ])
             ->values()
             ->all();
+    }
+
+    /**
+     * Co rozhodl čas: `[{ what, kind, date, cost, note }]`.
+     *
+     * Obrazovka o sobě říká, že hledá tři vzorce — a hledá je doopravdy:
+     *
+     *  - **propadlá rozvaha** (`vyprodáno`): lhůta na rozmyšlenou uplynula
+     *    a nikdo nic nenapsal. Cena je cena té věci; nekoupit ji taky něco
+     *    stálo, ale kolik, aplikace neví.
+     *  - **uplynulá lhůta** (`lhůta`): úkol s termínem, který prošel a nikdo
+     *    ho nezavřel ani neposunul.
+     *  - **mlčení** (`mlčení`): věc odložená do „až budeme mít čas", která
+     *    tam leží déle než čtvrt roku.
+     *
+     * `cost` je nula všude, kde se cena nedá vyčíst. Nula znamená „bez přímé
+     * ceny" — dopočítat, co stálo nerozhodnutí termínu u zubaře, by znamenalo
+     * vymyslet číslo, kterým se pak měří chování dvojice.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function rozhodlCas(GallerySpace $prostor): array
+    {
+        $ted = CarbonImmutable::now();
+        $radky = [];
+
+        // Rozvaha, které vypršela lhůta a nikdo se nevyjádřil.
+        foreach (CoupleCoolingPurchase::where('gallery_space_id', $prostor->id)
+            ->whereNull('closed_at')
+            ->whereNull('opinion')
+            ->where('cools_until', '<', $ted)
+            ->orderByDesc('price')
+            ->limit(20)
+            ->get() as $n) {
+            $hodin = (int) round(CarbonImmutable::parse($n->opened_at)->diffInHours(CarbonImmutable::parse($n->cools_until)));
+
+            $radky[] = [
+                'what' => $n->what,
+                'kind' => 'vyprodáno',
+                'date' => CarbonImmutable::parse($n->cools_until)->toDateString(),
+                'cost' => (int) $n->price,
+                'note' => 'Rozvaha běžela '.$hodin.' hodin, nikdo se nevyjádřil.',
+            ];
+        }
+
+        // Úkol s termínem, který prošel a nikdo ho nezavřel.
+        if (Schema::hasTable('shared_todos')) {
+            foreach (DB::table('shared_todos')
+                ->where('gallery_space_id', $prostor->id)
+                ->whereNotNull('due_at')
+                ->where('due_at', '<', $ted)
+                ->where('status', '!=', 'completed')
+                ->orderBy('due_at')
+                ->limit(20)
+                ->get(['title', 'due_at']) as $u) {
+                $radky[] = [
+                    'what' => $u->title,
+                    'kind' => 'lhůta',
+                    'date' => CarbonImmutable::parse($u->due_at)->toDateString(),
+                    'cost' => 0,
+                    'note' => 'Termín prošel a nikdo ho nezavřel ani neposunul.',
+                ];
+            }
+        }
+
+        /*
+         * Věc odložená do „až budeme mít čas" na víc než čtvrt roku.
+         *
+         * „Až budeme mít čas" není vlastní tabulka — je to úkol **bez termínu**
+         * (`LATER_ITEMS` se čte odtamtud). Úkol s termínem už je o řádek výš
+         * jako propadlá lhůta, takže se sem nedostane dvakrát.
+         */
+        if (Schema::hasTable('shared_todos')) {
+            foreach (DB::table('shared_todos')
+                ->where('gallery_space_id', $prostor->id)
+                ->whereNull('due_at')
+                ->whereNotIn('status', ['completed', 'cancelled'])
+                ->where('created_at', '<', $ted->subDays(90))
+                ->orderBy('created_at')
+                ->limit(20)
+                ->get(['title', 'created_at']) as $v) {
+                $dnu = (int) round(CarbonImmutable::parse($v->created_at)->diffInDays($ted));
+
+                $radky[] = [
+                    'what' => $v->title,
+                    'kind' => 'mlčení',
+                    'date' => CarbonImmutable::parse($v->created_at)->toDateString(),
+                    'cost' => 0,
+                    'note' => 'Leží v „až budeme mít čas“ '.$dnu.' dní. Nikdo neřekl ne, jen se nic nestalo.',
+                ];
+            }
+        }
+
+        usort($radky, fn (array $a, array $b) => $b['cost'] <=> $a['cost']);
+
+        return array_slice($radky, 0, 24);
     }
 
     /** @return Collection<int, CoupleDisagreementPoint> */
