@@ -57,9 +57,9 @@ Změřeno v prohlížeči proti běžícímu serveru, ne odhadem:
 | | Počet |
 | --- | --- |
 | Kolekcí v `window.GalerieData` celkem | **189** |
-| Z nich obsluhuje server | **57** (55 přes `/api/data`, `ADMIN` a `STORAGE` přes přístupovou vrstvu) |
+| Z nich obsluhuje server | **65** (63 přes `/api/data`, `ADMIN` a `STORAGE` přes přístupovou vrstvu) |
 | Katalogy rozhraní — zůstávají statické záměrně | ~50 |
-| **Obsah dvojice, který ještě není napojený** | **~82** |
+| **Obsah dvojice, který ještě není napojený** | **~74** |
 
 Osm skupin plánu je hotových. **Plán ale nepokrýval všechen obsah** — pojmenoval
 zhruba čtyřicet kolekcí ze sto dvaceti sedmi. Zbytek je vypsaný v části
@@ -88,6 +88,9 @@ Podle toho, kde už skutečný obsah je a kde na něm záleží:
 | 8 | **Sdílení a systém** | `SHARES`, `GUEST_Q`, `KAPS`, `VAULT_ITEMS`, `OFFPACKS` | `shared_links`, `guest_uploads`, `time_capsules`, `media_items.is_hidden` | hotovo |
 | 9 | **Zprávy a hlasovky** | `MSGS`, `MSGFILES`, `AMSG` | `chat_messages` | hotovo |
 | 10 | **Kuchařka** | `RECIPES`, `RECIPE_BY_TITLE` | `recipes`, `recipe_ingredients`, `recipe_steps`, `recipe_cooking_sessions` | hotovo |
+| 11 | **Dárky a přání** | `GIFT_WISHES`, `GIFT_BUYS`, `GIFT_IDEAS`, `GIFT_OCC` | `gift_ideas`, `gift_budgets` | hotovo |
+| 12 | **Deník a milníky** | `ADIARY.diary`, `ADIARY.ms`, `ADIARY.cycleLog` | `journal_entries`, `relationship_milestones`, `cycle_days` | hotovo |
+| 13 | **Pravidla a vzpomínky** | `RULEDEF`, `RULOG`, `MEMS` | `automation_rules`, `automation_runs`, `generated_memories` | hotovo |
 
 ## Knihovna: co se muselo změnit v dokumentu
 
@@ -349,18 +352,14 @@ má tabulky i data, poslední je potřeba teprve vymyslet.
 
 | Oblast | Kolekce | Tabulka |
 | --- | --- | --- |
-| **Dárky a přání** | `GIFT_WISHES`, `GIFT_BUYS`, `GIFT_IDEAS`, `GIFT_OCC` | `gift_ideas`, `gift_budgets` — **je** |
-| **Randíčka a filmy** | `DATING` | `couple_date_ideas`, `entertainment_titles` — **je** |
-| **Vzpomínky a příběh** | `MEMS`, `STORY`, `STORYMS` | `generated_memories`, `album_story_blocks` — **je** |
-| **Deník** | `ADIARY` | `journal_entries` — **je** |
-| **Cesty: nouzovka** | `EM_ITEMS`, `EM_LOG` | `travel_emergency_cards` — **je** |
 | **Tisk a fotoknihy** | `PJOBS`, `PORDERS`, `POSTEPS` | `photo_books`, `photo_book_items` — **je** |
-| **Milníky** | `KAP_TRIG`, část `SEASON` | `relationship_milestones` — **je** |
 | **Úklid knihovny** | `AGRID`, `QUAR` | odvoditelné z `media_items` |
 | **Asistent** | `ABARS`, `ATX`, `AFORMS`, `APEOPLE`, `ATAGS` | odvoditelné z existujících modulů |
 | **Finanční rozbory** | `ENV`, `DISP`, `EST`, `ANTI`, `INFL`, `SEASON`, `RECON`, `CAS_ROWS`, `PAPER_ROWS`, `TRIPCOST`, `DELAY`, `FAV`, `SOLO`, `BUS` | odvoditelné z `transactions` a `budgets` |
-| **Pravidla a automatizace** | `RULEDEF`, `RULOG` | `automation_rules` — **je** |
 | **Klid a pohoda** | `KL_EV`, `KL_EN`, `KL_TASKS`, `KL_ATTN`, `KL_ASK_LOG` | částečně odvoditelné, část chybí |
+| **Datování skenů** | `DATING` | fotky bez data jsou v `media_items`; **chybí odhadovač roku** |
+| **Příběh dvojice** | `STORY`, `STORYMS` | **chybí** — `album_story_blocks` je vyprávění uvnitř alba, ne kapitoly dvojice |
+| **Nouzový přístup** | `EM_ITEMS`, `EM_LOG` | **chybí** — `travel_emergency_cards` je karta k cestě, ne přístup k datům |
 | **Mechanismy vztahu bez obrazovky pro úpravu** | `TACIT`, `SPEAK`, `FORGIVEN`, `PM_*`, `PAST_*`, `TICHO`, `SCEN`, `P60`, `HORIZON`, `JOY`, `HOURS`, `PAUSE_*`, `AUTO_DEC`, `SURPRISE`, `CONFLICTS`, `RITUALS`, `ML_LOAD`, `VIS_ROWS`, `FAMILY`, `REVISIT`, `TRUTHS` | **chybí** |
 | **Systém** | `DATA_HEALTH`, `SECLIFE` | **chybí** |
 | **Hosté** | `GV_C`, `GV_VOICE_POOL` | **chybí** (komentář hosta nemá uživatele) |
