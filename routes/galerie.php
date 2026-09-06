@@ -3,12 +3,14 @@
 use App\Http\Controllers\Api\CalendarPlanningController;
 use App\Http\Controllers\Api\Galerie\AdminController;
 use App\Http\Controllers\Api\Galerie\DataController;
+use App\Http\Controllers\Api\Galerie\KosController;
 use App\Http\Controllers\Api\Galerie\MechanismController;
 use App\Http\Controllers\Api\Galerie\MediaController;
 use App\Http\Controllers\Api\Galerie\PravidloController;
 use App\Http\Controllers\Api\Galerie\StateController;
 use App\Http\Controllers\Api\Galerie\StorageController;
 use App\Http\Controllers\Api\Galerie\TokenController;
+use App\Http\Controllers\Api\Galerie\UlozisteController;
 use App\Http\Controllers\Api\Galerie\WebauthnController;
 use App\Http\Controllers\Api\Galerie\ZaznamController;
 use Illuminate\Support\Facades\Route;
@@ -81,6 +83,28 @@ Route::middleware(['auth:sanctum', 'throttle:120,1'])->prefix('api')->group(func
     Route::post('zaznamy/{druh}', ZaznamController::class)
         ->whereIn('druh', ZaznamController::DRUHY)
         ->name('galerie.zaznam');
+
+    /*
+     * „Zkusit znovu" u originálů, které se nepřenesly na Disk.
+     *
+     * Tlačítko na obrazovce úložiště dosud nemělo obsluhu vůbec. U zálohy je
+     * to nejhorší možné chování: kliknutí, nic se nestane, a dvojice si myslí,
+     * že přenos běží.
+     */
+    Route::post('uloziste/prenest', UlozisteController::class)->name('galerie.uloziste.prenest');
+
+    /*
+     * Koš.
+     *
+     * Obrazovka měla čtyři vymyšlené řádky a tlačítka, která jen přepsala stav
+     * v prohlížeči — přitom potvrzovací dialog sliboval smazání originálů
+     * z Google Disku.
+     */
+    Route::prefix('kos')->name('galerie.kos.')->group(function () {
+        Route::post('vratit', [KosController::class, 'restore'])->name('restore');
+        Route::post('odstranit', [KosController::class, 'purge'])->name('purge');
+        Route::post('vyprazdnit', [KosController::class, 'empty'])->name('empty');
+    });
 
     /*
      * Odběr upozornění.

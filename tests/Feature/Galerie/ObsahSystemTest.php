@@ -380,6 +380,74 @@ class ObsahSystemTest extends TestCase
         ]);
     }
 
+    /**
+     * Bez připojeného Disku obrazovka neříká, že je záloha hotová.
+     *
+     * Celá obrazovka úložiště byla napsaná v designovém souboru — „Připojeno —
+     * adrian.stanek@gmail.com" a „24 316 originálů bezpečně uloženo". Dvojici,
+     * která Disk připojený nemá, tvrdila, že jsou její fotky ve dvou kopiích.
+     */
+    public function test_bez_disku_se_netvrdi_ze_je_zaloha(): void
+    {
+        $this->fotka();
+
+        $disk = $this->getJson('/api/data/system')->assertOk()->json('data.DISK');
+
+        $this->assertFalse($disk['connected']);
+        $this->assertNull($disk['account']);
+        $this->assertSame('Účet není připojený', $disk['headline']);
+        $this->assertSame('Připojit Google Disk', $disk['cta']);
+        $this->assertStringContainsString('druhou kopii nemá kdo udělat', $disk['intro']);
+    }
+
+    /**
+     * Čtyři dlaždice rozdělí celou knihovnu.
+     *
+     * Kdyby se počítaly podle stavu, položky se stavem mimo výčet by se mezi
+     * dlaždicemi ztratily a součet by neseděl s počtem fotek. Rozhoduje proto
+     * id souboru na Disku, ne to, co o sobě záznam tvrdí.
+     */
+    public function test_dlazdice_rozdeli_celou_knihovnu(): void
+    {
+        $this->fotka(['drive_file_id' => 'drv-1'], 1);
+        $this->fotka(['storage_status' => 'uploading'], 2);
+        // Tvrdí o sobě, že je na Disku, ale nemá k čemu se vrátit.
+        $this->fotka(['storage_status' => 'synced'], 3);
+        $this->fotka(['storage_status' => 'local_only'], 4);
+        // Stav mimo známý výčet — takové řádky v datech jsou a nesmí se ztratit.
+        $this->fotka(['storage_status' => 'local'], 5);
+        $this->fotka(['trashed_at' => now()], 6);
+
+        $stavy = $this->getJson('/api/data/system')->assertOk()->json('data.DISK.states');
+
+        $this->assertSame(['1', '1', '2', '1'], array_column($stavy, 'value'));
+        $this->assertSame(5, array_sum(array_map('intval', array_column($stavy, 'value'))));
+    }
+
+    /** Rozdělení kapacity je ze skutečných bajtů, ne 52/19/5 %. */
+    public function test_kapacita_vychazi_ze_skutecnych_bajtu(): void
+    {
+        $this->fotka(['size_bytes' => 3_000_000], 1);
+        $this->fotka(['media_type' => 'video', 'size_bytes' => 1_000_000], 2);
+
+        $casti = $this->getJson('/api/data/system')->assertOk()->json('data.DISK.capacity');
+
+        $this->assertSame('Fotografie 3 MB', $casti[0]['label']);
+        $this->assertSame('75%', $casti[0]['w']);
+        $this->assertSame('Videa 1 MB', $casti[1]['label']);
+        $this->assertSame('25%', $casti[1]['w']);
+    }
+
+    /** Bez Disku se přenos nezařadí — slíbil by kopii, která nemá kam jít. */
+    public function test_prenos_bez_disku_se_nezaradi(): void
+    {
+        $this->fotka();
+
+        $this->postJson('/api/uloziste/prenest')
+            ->assertStatus(422)
+            ->assertJsonPath('ok', false);
+    }
+
     private function fotka(array $navic = [], int $poradi = 1): MediaItem
     {
         return MediaItem::create(array_merge([

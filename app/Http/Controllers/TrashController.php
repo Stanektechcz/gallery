@@ -4,13 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Models\AuditLog;
 use App\Models\MediaItem;
-use App\Models\StorageConnection;
-use App\Services\Storage\GoogleDriveStorageProvider;
+use App\Services\Media\MediaPurger;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -126,48 +123,14 @@ class TrashController extends Controller
         ];
     }
 
+    /**
+     * One implementation, shared with the prototype's own trash screen.
+     *
+     * Two would mean two places to forget the Drive copy, and a photo the app
+     * says is gone would still be sitting in someone's cloud.
+     */
     private function deleteMediaFiles(MediaItem $media): void
     {
-        // Delete all local variant files
-        foreach ($media->variants as $variant) {
-            if ($variant->disk === 'public' && $variant->path) {
-                try {
-                    Storage::disk('public')->delete($variant->path);
-                } catch (\Throwable $e) {
-                    Log::warning('Could not delete variant file', ['path' => $variant->path, 'error' => $e->getMessage()]);
-                }
-            }
-        }
-
-        // Delete the media directory (media/{uuid}/)
-        try {
-            Storage::disk('public')->deleteDirectory("media/{$media->uuid}");
-        } catch (\Throwable $e) {
-            Log::warning('Could not delete media directory', ['uuid' => $media->uuid]);
-        }
-
-        // Delete assembled source file
-        $assembledDir = storage_path("app/uploads/{$media->uuid}");
-        if (is_dir($assembledDir)) {
-            array_map('unlink', glob("$assembledDir/*") ?: []);
-            @rmdir($assembledDir);
-        }
-
-        // Delete from Google Drive (synchronous, best-effort)
-        if ($media->drive_file_id) {
-            try {
-                $connection = StorageConnection::whereHas(
-                    'owner',
-                    fn($q) => $q->whereHas('gallerySpaces', fn($q2) => $q2->where('gallery_spaces.id', $media->gallery_space_id))
-                )->where('provider', 'google_drive')->where('connection_status', 'healthy')->first();
-
-                if ($connection) {
-                    $provider = new GoogleDriveStorageProvider($connection);
-                    $provider->trash($media->drive_file_id);
-                }
-            } catch (\Throwable $e) {
-                Log::warning('Could not trash Drive file', ['drive_id' => $media->drive_file_id, 'error' => $e->getMessage()]);
-            }
-        }
+        app(MediaPurger::class)->purge($media);
     }
 }

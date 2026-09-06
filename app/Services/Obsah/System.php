@@ -4,8 +4,10 @@ namespace App\Services\Obsah;
 
 use App\Models\GallerySpace;
 use App\Models\MediaItem;
+use App\Models\StorageConnection;
 use App\Services\Finance\LedgerService;
 use App\Services\Provoz\UlozisteGalerie;
+use App\Services\Storage\DriveConnectionResolver;
 use App\Support\SpaceContext;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
@@ -50,6 +52,7 @@ class System implements PoskytovatelObsahu
         private readonly UlozisteGalerie $uloziste,
         private readonly LedgerService $kniha,
         private readonly Formulare $formulare,
+        private readonly DriveConnectionResolver $disky,
     ) {}
 
     public function skupina(): string
@@ -67,7 +70,7 @@ class System implements PoskytovatelObsahu
      */
     public function uplne(): array
     {
-        return ['DATA_HEALTH', 'SECLIFE'];
+        return ['DATA_HEALTH', 'SECLIFE', 'TRASH'];
     }
 
     public function kolekce(GallerySpace $prostor): array
@@ -78,7 +81,228 @@ class System implements PoskytovatelObsahu
             'ABARS' => $this->sloupce($prostor),
             'AFORMS' => $this->prepinace($prostor),
             'CONFLICTS' => $this->rozpory($prostor),
+            'DISK' => $this->diskAStav($prostor),
+            'TRASH' => $this->kos($prostor),
         ], fn ($v) => $v !== null && $v !== []);
+    }
+
+    /**
+     * Koš: `[{ id, name, from, by, when, left, n }]`.
+     *
+     * Obrazovka koše měla čtyři vymyšlené řádky a tlačítko „Vyprázdnit koš"
+     * hlásilo „Trvale se odstraní 4 položky včetně jednoho albumu" — bez
+     * ohledu na to, co v koši je. A pak nesmazalo nic.
+     *
+     * `left` je, kolik dní zbývá do trvalého odstranění. Počítá se z `purge_after`,
+     * a když ho položka nemá, z třiceti dnů od vyhození — to je lhůta, kterou
+     * slibuje text nad seznamem.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function kos(GallerySpace $prostor): array
+    {
+        $polozky = MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
+            ->where('gallery_space_id', $prostor->id)
+            ->whereNotNull('trashed_at')
+            ->orderByDesc('trashed_at')
+            ->limit(60)
+            ->get(['uuid', 'original_filename', 'trashed_at', 'purge_after', 'uploaded_by', 'media_type']);
+
+        if ($polozky->isEmpty()) {
+            return [];
+        }
+
+        $jmena = $prostor->members()->pluck('users.name', 'users.id')->all();
+
+        return $polozky->map(function (MediaItem $m) use ($jmena) {
+            $vyhozeno = CarbonImmutable::parse($m->trashed_at);
+            $konec = $m->purge_after ? CarbonImmutable::parse($m->purge_after) : $vyhozeno->addDays(30);
+            $dnu = max(0, (int) round(now()->diffInDays($konec, false)));
+
+            return [
+                'id' => $m->uuid,
+                'name' => $m->original_filename,
+                // Odkud to bylo se nedopočítává: album po vyhození nemusí
+                // existovat a vymyslet cestu by znamenalo tvrdit, kde to leželo.
+                'from' => $m->media_type === 'video' ? 'Video' : 'Fotka',
+                'by' => $jmena[$m->uploaded_by] ?? '—',
+                'when' => $this->kdy($vyhozeno->toDateTimeString()),
+                'left' => $this->pocet($dnu, 'den', 'dny', 'dní'),
+                'n' => 0,
+            ];
+        })->values()->all();
+    }
+
+    /**
+     * Úložiště a synchronizace — celá obrazovka ze skutečnosti.
+     *
+     * Byla to nejnebezpečnější obrazovka v aplikaci. Stálo v ní „Připojeno —
+     * adrian.stanek@gmail.com", „poslední úspěšná synchronizace dnes v 8:12"
+     * a „24 316 originálů bezpečně uloženo" — všechno napsané v designovém
+     * souboru. Dvojici, která Disk připojený nemá, tvrdila, že jsou její fotky
+     * ve dvou kopiích. To není zastaralé číslo, to je nepravda o záloze.
+     *
+     * @return array<string, mixed>
+     */
+    private function diskAStav(GallerySpace $prostor): array
+    {
+        /*
+         * Použitelný Disk se hledá stejnou cestou jako všude jinde v aplikaci
+         * (`DriveConnectionResolver`): podle **členů prostoru**, ne podle
+         * `gallery_space_id`. Účet obvykle patří jednomu z nich a druhý na něj
+         * nahrává taky; vazba na prostor v té tabulce je z větší části prázdná.
+         *
+         * Vedle toho se hledá i účet, který **nefunguje** — rozbité připojení
+         * musí obrazovka přiznat, ne ho ukázat jako nepřipojený.
+         */
+        $disk = $this->disky->forSpace($prostor->id);
+        $rozbity = $disk === null ? $this->rozbityDisk($prostor) : null;
+        $disk ??= $rozbity;
+
+        $polozky = MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
+            ->where('gallery_space_id', $prostor->id)
+            ->whereNull('trashed_at');
+
+        $pocet = fn (callable $kde) => (int) $kde((clone $polozky))->count();
+
+        /*
+         * Čtyři dlaždice musí **rozdělit celou knihovnu**, ne jen popsat čtyři
+         * stavy. Když se počítalo podle `storage_status`, položky se stavem,
+         * který do žádné škatulky nepatřil (a v datech takové jsou), se ztratily
+         * mezi dlaždicemi: součet neseděl s počtem fotek a nikdo by to nepoznal.
+         *
+         * Dělí se proto podle toho, co rozhoduje: **má to na Disku své id?**
+         * Stav sám o sobě je jen tvrzení. Záznam, který o sobě říká „synced",
+         * ale nemá k čemu se vrátit, je přesně ten případ na čtvrté dlaždici.
+         */
+        $naDisku = ['synced', 'mirrored'];
+
+        $ulozeno = $pocet(fn ($q) => $q->whereNotNull('drive_file_id'));
+        $ceka = $pocet(fn ($q) => $q->whereNull('drive_file_id')->where('storage_status', 'uploading'));
+        $ztracene = $pocet(fn ($q) => $q->whereNull('drive_file_id')->whereIn('storage_status', $naDisku));
+        // Prázdný stav se musí vypsat zvlášť: `NOT IN` v SQL řádek s `NULL`
+        // nevrátí, takže by z rozdělení vypadl.
+        $jenTady = $pocet(fn ($q) => $q->whereNull('drive_file_id')->where(
+            fn ($w) => $w->whereNull('storage_status')
+                ->orWhereNotIn('storage_status', array_merge($naDisku, ['uploading'])),
+        ));
+        $chybne = $pocet(fn ($q) => $q->whereNotNull('processing_error'));
+
+        $bajtu = fn (string $druh) => (int) (clone $polozky)->where('media_type', $druh)->sum('size_bytes');
+
+        $fotky = $bajtu('photo');
+        $videa = $bajtu('video');
+
+        $nahledy = Schema::hasTable('media_variants')
+            ? (int) DB::table('media_variants')
+                ->join('media_items', 'media_items.id', '=', 'media_variants.media_item_id')
+                ->where('media_items.gallery_space_id', $prostor->id)
+                ->sum('media_variants.size_bytes')
+            : 0;
+
+        $celkem = $fotky + $videa + $nahledy;
+        $dil = fn (int $b) => $celkem > 0 ? round($b / $celkem * 100, 1).'%' : '0%';
+
+        $pripojeno = $disk !== null && $rozbity === null;
+        $posledni = $disk?->last_successful_request_at?->toDateTimeString();
+
+        return [
+            'connected' => $pripojeno,
+            'account' => $disk->account_email ?? null,
+
+            'intro' => $pripojeno
+                ? 'Originály fotek a videí leží na Google účtu '.$disk->account_email.'. Galerie si u sebe drží jen náhledy.'
+                : 'Google Disk není připojený. Originály leží jen tady — druhou kopii nemá kdo udělat.',
+
+            'headline' => $pripojeno
+                ? 'Připojeno — '.$disk->account_email
+                : ($disk === null ? 'Účet není připojený' : 'Připojení nefunguje — '.$disk->account_email),
+
+            // Co se opravdu ví: kdy naposledy Disk odpověděl a kolik originálů
+            // má u sebe. Ne „dnes v 8:12".
+            'note' => $pripojeno
+                ? ($posledni === null
+                    ? 'Účet je připojený, ale ještě se nic nepřeneslo.'
+                    : 'Poslední úspěšná odpověď Disku '.$this->kdy($posledni).' · '
+                        .$this->pocet($ulozeno, 'originál bezpečně uložen', 'originály bezpečně uloženy', 'originálů bezpečně uloženo'))
+                : ($disk?->last_error_message ?: 'Bez připojeného účtu se originály nemají kam kopírovat.'),
+
+            'tone' => $pripojeno ? 'ok' : ($disk === null ? 'off' : 'err'),
+            'cta' => $disk === null ? 'Připojit Google Disk' : 'Znovu připojit účet',
+
+            'capacity' => [
+                ['label' => 'Fotografie '.$this->objem($fotky), 'w' => $dil($fotky), 'color' => 'var(--g-acc)'],
+                ['label' => 'Videa '.$this->objem($videa), 'w' => $dil($videa), 'color' => 'var(--g-acc-deep)'],
+                ['label' => 'Náhledy a cache '.$this->objem($nahledy), 'w' => $dil($nahledy), 'color' => 'var(--g-warn)'],
+            ],
+
+            'states' => [
+                ['icon' => 'ph-cloud-check', 'color' => 'var(--g-ok)', 'value' => $this->cislo($ulozeno),
+                    'label' => 'Originál bezpečně uložen', 'hint' => 'na Google Disku'],
+                ['icon' => 'ph-cloud-arrow-up', 'color' => 'var(--g-acc)', 'value' => $this->cislo($ceka),
+                    'label' => 'Čeká na přenos', 'hint' => 'nahraje se, až bude galerie otevřená'],
+                ['icon' => 'ph-image', 'color' => 'var(--g-ink2)', 'value' => $this->cislo($jenTady),
+                    'label' => 'Jen lokální náhled', 'hint' => $pripojeno ? 'originál se přenese později' : 'druhá kopie chybí'],
+                ['icon' => 'ph-warning-circle', 'color' => 'var(--g-mag)', 'value' => $this->cislo($ztracene),
+                    'label' => 'Originál nelze najít', 'hint' => 'nejspíš přesunut mimo galerii'],
+            ],
+
+            // Varovný pruh se ukáže jen tehdy, když je opravdu co hlásit.
+            'failed' => $chybne,
+            'failedTitle' => $chybne === 0 ? '' :
+                $this->pocet($chybne, 'originál se nepodařilo zpracovat', 'originály se nepodařilo zpracovat', 'originálů se nepodařilo zpracovat'),
+        ];
+    }
+
+    /**
+     * Účet, který je připojený, ale nefunguje.
+     *
+     * Vypršelý token, odebraný souhlas, smazaná kořenová složka. Pro dvojici
+     * je to horší stav než „nepřipojeno": myslí si, že zálohu má.
+     */
+    private function rozbityDisk(GallerySpace $prostor): ?StorageConnection
+    {
+        if (! Schema::hasTable('storage_connections')) {
+            return null;
+        }
+
+        return StorageConnection::query()
+            ->where('provider', 'google_drive')
+            ->whereNull('revoked_at')
+            ->whereIn('owner_user_id', $prostor->members()->pluck('users.id'))
+            ->orderByDesc('connected_at')
+            ->first();
+    }
+
+    /** „dnes v 8:12" nebo datum — bez přesnosti, kterou aplikace nemá. */
+    private function kdy(string $cas): string
+    {
+        $kdy = CarbonImmutable::parse($cas);
+
+        return match (true) {
+            $kdy->isToday() => 'dnes v '.$kdy->format('G:i'),
+            $kdy->isYesterday() => 'včera v '.$kdy->format('G:i'),
+            default => $kdy->format('j. n. Y').' v '.$kdy->format('G:i'),
+        };
+    }
+
+    /**
+     * Objem lidsky. Desítkové jednotky — tak je počítá i Google Disk.
+     *
+     * Pod megabajt se ukazují megabajty s desetinou, ne „0,0 GB": nová galerie
+     * má pár set kilobajtů náhledů a tři nuly vedle sebe vypadají jako chyba.
+     */
+    private function objem(int $bajtu): string
+    {
+        if ($bajtu >= 1_000_000_000) {
+            return str_replace('.', ',', (string) round($bajtu / 1_000_000_000, 1)).' GB';
+        }
+
+        if ($bajtu >= 1_000_000) {
+            return str_replace('.', ',', (string) round($bajtu / 1_000_000, 1)).' MB';
+        }
+
+        return max(0, (int) round($bajtu / 1000)).' kB';
     }
 
     /**

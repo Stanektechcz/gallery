@@ -160,7 +160,13 @@ class UlozisteGalerie
         return $disk->quota_total === null && $disk->quota_used === null ? null : $disk;
     }
 
-    /** Desítkové gigabajty — tak je počítá i Google Disk a záložka Tarify. */
+    /**
+     * Desítkové jednotky — tak je počítá i Google Disk a záložka Tarify.
+     *
+     * Pod gigabajt se přepíná na menší jednotku. Panel jinak u nové galerie
+     * hlásil „0 GB z 25 GB", i když v ní pár set megabajtů bylo — a nula
+     * u zabraného místa se čte jako „nic se neuložilo".
+     */
     private function gb(int $bajtu): string
     {
         $gb = $bajtu / 1_000_000_000;
@@ -169,7 +175,15 @@ class UlozisteGalerie
             return str_replace('.', ',', (string) round($gb / 1000, 2)).' TB';
         }
 
-        return str_replace('.', ',', (string) round($gb, 1)).' GB';
+        if ($gb >= 1) {
+            return str_replace('.', ',', (string) round($gb, 1)).' GB';
+        }
+
+        if ($bajtu >= 1_000_000) {
+            return str_replace('.', ',', (string) round($bajtu / 1_000_000, 1)).' MB';
+        }
+
+        return max(0, (int) round($bajtu / 1000)).' kB';
     }
 
     private function sklonuj(int $kolik, string $jeden, string $dva, string $pet): string

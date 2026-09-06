@@ -373,12 +373,25 @@
    * Klíč se zároveň ukládá do `obsah`, aby přežil další načtení
    * `galerie-data.js`; bez toho by se vrátila ukázková data.
    */
-  window.GalerieObsahNavlec = function (mapa) {
-    if (! mapa || typeof mapa !== 'object') return false;
+  window.GalerieObsahNavlec = function (mapa, prazdne) {
+    if (! mapa && ! prazdne) return false;
 
-    Object.keys(mapa).forEach(function (klic) {
+    Object.keys(mapa || {}).forEach(function (klic) {
       obsah[klic] = mapa[klic];
       navlec(window.GalerieData, klic, mapa[klic], !!uplne[klic]);
+    });
+
+    /*
+     * Kolekce, které po akci **zbyly prázdné**.
+     *
+     * Poskytovatel prázdné neposílá — při načtení stránky správně, protože
+     * prázdná obrazovka a rozbitá aplikace vypadají stejně. U odpovědi na akci
+     * je to ale naopak: když se vrátí poslední položka z koše, mlčení znamená
+     * „nezměnilo se nic" a na obrazovce zůstane řádek, který už neexistuje.
+     */
+    (prazdne || []).forEach(function (klic) {
+      obsah[klic] = [];
+      navlec(window.GalerieData, klic, [], true);
     });
 
     if (window.GalerieObnovObrazovku) window.GalerieObnovObrazovku();

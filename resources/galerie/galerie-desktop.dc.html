@@ -2525,8 +2525,10 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                   <td><span class="tag tag-neutral">{{ t.left }}</span></td>
                   <td style="text-align:right; white-space:nowrap">
                     <button class="btn btn-ghost" onClick="{{ t.restore }}">Obnovit</button>
-                    <button class="btn btn-ghost" onClick="{{ t.restore }}" style="color:var(--g-ink2)">Obnovit jinam</button>
-                    <button class="btn btn-ghost" onClick="{{ confirmPurge }}" style="color:var(--g-mag)">Trvale odstranit</button>
+                    <!-- „Obnovit jinam" tu bylo dvakrát totéž: obě tlačítka volala tentýž
+                         obnovovací krok a nabídka cíle nikdy neexistovala. Slibovat volbu,
+                         která není, je horší než ji nenabídnout. -->
+                    <button class="btn btn-ghost" onClick="{{ t.purge }}" style="color:var(--g-mag)">Trvale odstranit</button>
                   </td>
                 </tr>
               </sc-for>
@@ -2539,15 +2541,15 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
       <sc-if value="{{ isStorage }}">
         <div style="padding:8px var(--pad-x) 70px; max-width:1000px; animation:fadeIn .2s ease">
           <h2 style="margin:0; font-size:30px">Úložiště a synchronizace</h2>
-          <div style="font-size:13px; color:var(--g-ink2); margin:3px 0 26px">Originály fotek a videí leží na Adrianově Google účtu. Galerie si u sebe drží jen náhledy.</div>
+          <div style="font-size:13px; color:var(--g-ink2); margin:3px 0 26px">{{ diskIntro }}</div>
 
           <div style="display:flex; align-items:center; gap:14px; padding:16px 18px; border-radius:2px; background:var(--g-panel)">
-            <i class="ph-duotone ph-cloud-check" style="font-size:30px; color:var(--g-ok)"></i>
+            <i class="ph-duotone {{ diskIcon }}" style="font-size:30px; color:{{ diskColor }}"></i>
             <div style="flex:1">
-              <div style="font-size:17px">Připojeno — adrian.stanek@gmail.com</div>
-              <div style="font-size:13px; color:var(--g-ink2)">Poslední úspěšná synchronizace dnes v 8:12 · 24 316 originálů bezpečně uloženo</div>
+              <div style="font-size:17px">{{ diskHead }}</div>
+              <div style="font-size:13px; color:var(--g-ink2)">{{ diskNote }}</div>
             </div>
-            <button class="btn btn-secondary">Znovu připojit účet</button>
+            <button class="btn btn-secondary" onClick="{{ diskConnect }}">{{ diskCta }}</button>
           </div>
 
           <div style="margin-top:30px">
@@ -2556,14 +2558,14 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
               <span style="font-size:13px; color:var(--g-ink2)">{{ storageLabel }}</span>
             </div>
             <div style="height:10px; border-radius:2px; overflow:hidden; display:flex; background:var(--g-line2)">
-              <div style="width:52%; background:var(--g-acc)"></div>
-              <div style="width:19%; background:var(--g-acc-deep)"></div>
-              <div style="width:5%; background:var(--g-warn)"></div>
+              <sc-for list="{{ diskParts }}" as="p" hint-placeholder-count="3">
+                <div style="width:{{ p.w }}; background:{{ p.color }}"></div>
+              </sc-for>
             </div>
             <div style="display:flex; gap:20px; margin-top:9px; font-size:12.5px; color:var(--g-ink2); flex-wrap:wrap">
-              <span style="display:flex; align-items:center; gap:6px"><span style="width:9px; height:9px; border-radius:2px; background:var(--g-acc)"></span>Fotografie 78,4 GB</span>
-              <span style="display:flex; align-items:center; gap:6px"><span style="width:9px; height:9px; border-radius:2px; background:var(--g-acc-deep)"></span>Videa 28,6 GB</span>
-              <span style="display:flex; align-items:center; gap:6px"><span style="width:9px; height:9px; border-radius:2px; background:var(--g-warn)"></span>Náhledy a cache 7,5 GB</span>
+              <sc-for list="{{ diskParts }}" as="p" hint-placeholder-count="3">
+                <span style="display:flex; align-items:center; gap:6px"><span style="width:9px; height:9px; border-radius:2px; background:{{ p.color }}"></span>{{ p.label }}</span>
+              </sc-for>
             </div>
           </div>
 
@@ -2581,16 +2583,18 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
             </div>
           </div>
 
-          <div style="margin-top:34px; padding:16px 18px; border-radius:2px; background:var(--g-warn-soft)">
-            <div style="display:flex; align-items:flex-start; gap:12px">
-              <i class="ph-duotone ph-warning" style="font-size:22px; color:var(--g-warn)"></i>
-              <div style="flex:1">
-                <div style="font-size:16px">3 originály se nepodařilo přenést</div>
-                <div style="font-size:13.5px; color:var(--g-ink2); margin-top:2px">Přenos se přerušil při ztrátě připojení. Náhledy máte, originály zatím ne — soubory z telefonu nemažte.</div>
+          <sc-if value="{{ diskHasFailed }}">
+            <div style="margin-top:34px; padding:16px 18px; border-radius:2px; background:var(--g-warn-soft)">
+              <div style="display:flex; align-items:flex-start; gap:12px">
+                <i class="ph-duotone ph-warning" style="font-size:22px; color:var(--g-warn)"></i>
+                <div style="flex:1">
+                  <div style="font-size:16px">{{ diskFailedTitle }}</div>
+                  <div style="font-size:13.5px; color:var(--g-ink2); margin-top:2px">Přenos se přerušil při ztrátě připojení. Náhledy máte, originály zatím ne — soubory z telefonu nemažte.</div>
+                </div>
+                <button class="btn btn-primary" onClick="{{ diskRetry }}">Zkusit znovu</button>
               </div>
-              <button class="btn btn-primary">Zkusit znovu</button>
             </div>
-          </div>
+          </sc-if>
         </div>
       </sc-if>
 
@@ -17127,13 +17131,103 @@ class Component extends DCLogic {
 
     api.post('zaznamy/' + f.druh, f.telo(a, b, c, d, ctx)).then(res => {
       if (!res) return;
-      if (window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data);
+      if (window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data, res.prazdne);
       this.toast(res.zprava || 'Zapsáno', { icon: 'ph-check-circle' });
     }).catch(e => {
       const telo = (e && e.body) || {};
       const prvni = telo.errors ? (Object.values(telo.errors)[0] || [])[0] : null;
       this.toast(prvni || telo.message || 'Zápis se nepodařil', { icon: 'ph-warning', color: 'var(--g-mag)' });
     });
+  }
+
+  /*
+   * Koš: řádek ze serveru se pozná podle toho, že má `id`.
+   *
+   * Bez něj jde o ukázkovou položku prototypu nebo o něco, co do koše přidal
+   * sám prohlížeč (album, duplicita ze srovnávače) — takové věci server nezná
+   * a mazat je u něj nemá smysl.
+   */
+  kosNaServeru(t) {
+    return !!(t && t.id) && window.GalerieApi && window.GalerieApi.mode === 'http';
+  }
+
+  kosVolej(akce, telo) {
+    const api = window.GalerieApi;
+    if (!api || !api.post) return;
+
+    api.post('kos/' + akce, telo).then(res => {
+      if (!res) return;
+      if (window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data, res.prazdne);
+      // Seznam se překreslí z toho, co vrátil server; místní přepis stavu by
+      // se s ním rozešel při první chybě.
+      this.setState({ trashRows: null });
+      this.toast(res.zprava, { icon: akce === 'vratit' ? 'ph-arrow-counter-clockwise' : 'ph-trash' });
+    }).catch(e => {
+      const t = (e && e.body) || {};
+      this.toast(t.zprava || 'Nepodařilo se to provést', { icon: 'ph-warning', color: 'var(--g-mag)' });
+    });
+  }
+
+  /*
+   * Úložiště a synchronizace.
+   *
+   * Celá tahle obrazovka byla napsaná v designovém souboru: „Připojeno —
+   * adrian.stanek@gmail.com", „poslední synchronizace dnes v 8:12",
+   * „24 316 originálů bezpečně uloženo", kapacita 52/19/5 %. Dvojici, která
+   * Disk připojený nemá, to tvrdilo, že jsou její fotky ve dvou kopiích.
+   * To není zastaralé číslo — to je nepravda o záloze.
+   *
+   * Bez serveru zůstávají čísla prototypu, ale ta věta o připojení ne: bez
+   * backendu aplikace o žádném Disku neví a nemá co tvrdit.
+   */
+  diskVals() {
+    const d = (window.GalerieData || {}).DISK || null;
+    const api = window.GalerieApi;
+
+    if (!d) {
+      return {
+        diskIntro: 'Originály fotek a videí leží na Google účtu. Galerie si u sebe drží jen náhledy.',
+        diskHead: 'Stav připojení není známý', diskNote: 'Aplikace běží bez serveru — o Disku se nedá zjistit nic.',
+        diskIcon: 'ph-cloud-slash', diskColor: 'var(--g-ink3)', diskCta: 'Připojit Google Disk',
+        diskConnect: () => this.toast('Bez serveru se účet připojit nedá', { icon: 'ph-warning' }),
+        diskParts: [
+          { label: 'Fotografie', w: '52%', color: 'var(--g-acc)' },
+          { label: 'Videa', w: '19%', color: 'var(--g-acc-deep)' },
+          { label: 'Náhledy a cache', w: '5%', color: 'var(--g-warn)' }
+        ],
+        syncStates: [], diskHasFailed: false, diskFailedTitle: '', diskRetry: () => {}
+      };
+    }
+
+    return {
+      diskIntro: d.intro,
+      diskHead: d.headline,
+      diskNote: d.note,
+      diskIcon: d.tone === 'ok' ? 'ph-cloud-check' : d.tone === 'err' ? 'ph-cloud-warning' : 'ph-cloud-slash',
+      diskColor: d.tone === 'ok' ? 'var(--g-ok)' : d.tone === 'err' ? 'var(--g-mag)' : 'var(--g-ink3)',
+      diskCta: d.cta,
+      /*
+       * Připojení účtu je souhlas u Googlu, ne krok v aplikaci — proto odchod
+       * na jeho přihlašovací stránku, ne dialog. Cesta je chráněná sezením,
+       * takže po návratu je člověk přihlášený dál.
+       */
+      diskConnect: () => { window.location.href = '/oauth/google/redirect'; },
+      diskParts: d.capacity,
+      syncStates: d.states,
+      diskHasFailed: d.failed > 0,
+      diskFailedTitle: d.failedTitle,
+      diskRetry: () => {
+        if (!api || !api.post || api.mode !== 'http') return;
+        api.post('uloziste/prenest', {}).then(res => {
+          if (!res) return;
+          if (window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data, res.prazdne);
+          this.toast(res.zprava, { icon: 'ph-cloud-arrow-up' });
+        }).catch(e => {
+          const telo = (e && e.body) || {};
+          this.toast(telo.zprava || 'Přenos se nepodařilo spustit', { icon: 'ph-warning', color: 'var(--g-mag)' });
+        });
+      }
+    };
   }
 
   busVals() {
@@ -17180,7 +17274,7 @@ class Component extends DCLogic {
           if (api && api.post && api.mode === 'http') {
             api.post('zaznamy/bus-zapsano', { name: r.name }).then(res => {
               if (!res) return;
-              if (window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data);
+              if (window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data, res.prazdne);
               this.toast('„' + r.name + '“ zapsáno — teď je to na dvou místech', { icon: 'ph-note-pencil' });
             }).catch(() => this.toast('Zápis se nepodařil — zkuste to znovu', { icon: 'ph-warning', color: 'var(--g-mag)' }));
             return;
@@ -27315,12 +27409,24 @@ class Component extends DCLogic {
       { name: 'Muzeum 21. 6.', url: 'gallery.stanektech.cz/s/lm55…', content: 'Album 21. 6.', created: '22. 6. 2026', expires: 'Za 21 dní', expTag: 'tag-accent', protection: 'Heslo', views: '9', n: 15, meta: false },
       { name: 'Rekonstrukce pro tátu', url: 'gallery.stanektech.cz/s/w3ee…', content: 'Album Byt na Zbrojnické', created: '11. 11. 2025', expires: 'Expirovalo', expTag: 'tag-neutral', protection: 'Bez hesla', views: '61', n: 29, span: 'listopad 2025 · Byt na Zbrojnické', comments: true }
     ];
-    const trashRows = s.trashRows === null ? [
-      { name: 'IMG_2481.HEIC', from: 'Chorvatsko 2026 → Zadar', by: 'Adrian', when: 'dnes v 9:04', left: '30 dní', n: 4 },
-      { name: 'MOV_2502.MP4', from: 'Beskydy → Pustevny', by: 'Makinka', when: 'včera', left: '29 dní', n: 9 },
-      { name: 'Album „Testovací“', from: 'Kořen', by: 'Adrian', when: '3. 8. 2026', left: '17 dní', n: 21 },
-      { name: 'IMG_1044.HEIC', from: 'Naše první výlety', by: 'Makinka', when: '28. 7. 2026', left: '11 dní', n: 23 }
-    ] : s.trashRows;
+    /*
+     * Koš ze serveru, když je odkud.
+     *
+     * `TRASH` chodí **prázdné jako nepřítomné** (server prázdné kolekce
+     * neposílá), takže se prázdný koš od chybějícího serveru nepozná jinak než
+     * podle toho, jestli aplikace se serverem vůbec mluví.
+     */
+    const trashZeServeru = (window.GalerieData || {}).TRASH;
+    const trashJeServer = window.GalerieApi && window.GalerieApi.mode === 'http';
+    const trashRows = s.trashRows !== null ? s.trashRows
+      : trashZeServeru ? trashZeServeru
+      : trashJeServer ? []
+      : [
+        { name: 'IMG_2481.HEIC', from: 'Chorvatsko 2026 → Zadar', by: 'Adrian', when: 'dnes v 9:04', left: '30 dní', n: 4 },
+        { name: 'MOV_2502.MP4', from: 'Beskydy → Pustevny', by: 'Makinka', when: 'včera', left: '29 dní', n: 9 },
+        { name: 'Album „Testovací“', from: 'Kořen', by: 'Adrian', when: '3. 8. 2026', left: '17 dní', n: 21 },
+        { name: 'IMG_1044.HEIC', from: 'Naše první výlety', by: 'Makinka', when: '28. 7. 2026', left: '11 dní', n: 23 }
+      ];
 
     // Definice sekcí nastavení žije v galerie-data.js (čte ji i druhé rozhraní).
     const setRowsMap = JSON.parse(JSON.stringify(SETROWS));
@@ -28471,21 +28577,42 @@ class Component extends DCLogic {
       trash: (this._trashNow = trashRows).map(t => ({
         ...t, bg: this.bg(t.n),
         restore: () => {
+          if (this.kosNaServeru(t)) return this.kosVolej('vratit', { id: t.id });
           const prevDel = s.deleted || [];
           this.setState({ trashRows: trashRows.filter(x => x !== t), deleted: prevDel.filter(id => id !== t.id) });
           this.toast('Obnoveno do „' + t.from + '“', { icon: 'ph-arrow-counter-clockwise' });
-        }
+        },
+        purge: () => this.setState({ confirm: {
+          title: 'Trvale odstranit položku?',
+          body: '„' + t.name + '“ zmizí z galerie i z náhledů.',
+          warn: 'Odstraní se také originál z Google Disku. Tento krok už nelze vzít zpět.',
+          cta: 'Trvale odstranit', btnBg: 'var(--g-mag)',
+          go: () => {
+            this.setState({ confirm: null });
+            if (this.kosNaServeru(t)) return this.kosVolej('odstranit', { id: t.id });
+            this.toast('Trvale odstraněno', { icon: 'ph-trash' });
+          }
+        } })
       })),
       trashEmpty: trashRows.length === 0,
-      confirmEmptyTrash: () => this.setState({ confirm: { title: 'Vyprázdnit koš?', body: 'Trvale se odstraní 4 položky včetně jednoho albumu.', warn: 'Odstraní se i originály z Google Drivu. Tento krok už nelze vzít zpět.', cta: 'Trvale odstranit', btnBg: 'var(--g-mag)', go: () => { this.setState({ confirm: null, trashRows: [] }); this.toast('Koš vyprázdněn', { icon: 'ph-trash' }); } } }),
-      confirmPurge: () => this.setState({ confirm: { title: 'Trvale odstranit položku?', body: 'Fotka zmizí z galerie i z náhledů.', warn: 'Odstraní se také originál z Google Drivu.', cta: 'Trvale odstranit', btnBg: 'var(--g-mag)', go: () => { this.setState({ confirm: null }); this.toast('Trvale odstraněno', { icon: 'ph-trash' }); } } }),
+      // Počet v otázce je skutečný. „Trvale se odstraní 4 položky" stálo
+      // v dialogu napevno, i když v koši byla jedna nebo žádná.
+      confirmEmptyTrash: () => this.setState({ confirm: {
+        title: 'Vyprázdnit koš?',
+        body: trashRows.length
+          ? 'Trvale se odstraní ' + this.pl(trashRows.length, 'položka', 'položky', 'položek') + '.'
+          : 'V koši nic není.',
+        warn: 'Odstraní se i originály z Google Disku. Tento krok už nelze vzít zpět.',
+        cta: 'Trvale odstranit', btnBg: 'var(--g-mag)',
+        go: () => {
+          this.setState({ confirm: null });
+          if (trashJeServer) return this.kosVolej('vyprazdnit', {});
+          this.setState({ trashRows: [] });
+          this.toast('Koš vyprázdněn', { icon: 'ph-trash' });
+        }
+      } }),
 
-      syncStates: [
-        { icon: 'ph-cloud-check', color: 'var(--g-ok)', value: '24 313', label: 'Originál bezpečně uložen', hint: 'na Google Drivu' },
-        { icon: 'ph-cloud-arrow-up', color: 'var(--g-acc)', value: '3', label: 'Čeká na přenos', hint: 'nahraje se, až bude galerie otevřená' },
-        { icon: 'ph-image', color: 'var(--g-ink2)', value: '128', label: 'Jen lokální náhled', hint: 'originál se přenese později' },
-        { icon: 'ph-warning-circle', color: 'var(--g-mag)', value: '3', label: 'Originál nelze najít', hint: 'nejspíš přesunut mimo galerii' }
-      ],
+      ...this.diskVals(),
       activity: [
         ['M', 'Makinka přidala 34 fotek do Beskydy → Pustevny', 'dnes v 8:12', 7],
         ['A', 'Adrian vytvořil album Beskydy → Pustevny', 'dnes v 8:04', 7],

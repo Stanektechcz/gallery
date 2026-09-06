@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\Galerie;
 
 use App\Http\Controllers\Api\Galerie\Concerns\UrcujePar;
+use App\Http\Controllers\Api\Galerie\Concerns\VraciObsah;
 use App\Http\Controllers\Controller;
 use App\Models\GallerySpace;
 use App\Services\Obsah\Rozhodovani;
@@ -28,6 +29,7 @@ use Illuminate\Validation\ValidationException;
 class ZaznamController extends Controller
 {
     use UrcujePar;
+    use VraciObsah;
 
     /** Co se dá zapsat. Neznámý druh je 404, ne tiché nic. */
     public const DRUHY = ['bus', 'bus-zapsano', 'premortem', 'riziko', 'pripad', 'vstup'];
@@ -51,8 +53,7 @@ class ZaznamController extends Controller
         return response()->json([
             'zprava' => $zprava,
             'ok' => true,
-            'data' => $this->obsah->kolekce($prostor),
-        ]);
+        ] + $this->obsahPoAkci($this->obsah, $prostor));
     }
 
     /**
