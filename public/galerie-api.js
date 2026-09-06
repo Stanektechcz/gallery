@@ -132,6 +132,23 @@
     return changed;
   }
 
+  /*
+   * Střet o tutéž věc.
+   *
+   * Server zapíše všechno, o co se ti dva nepřetahují; klíč, který mezitím
+   * změnil ten druhý, se zahodí — a tohle je jediné místo, kde se to dá
+   * říct. Bez toho se obrazovka jen sama vrátila o krok zpět a mlčela.
+   *
+   * Aplikace si tu událost odchytí (`window.addEventListener('galerie-stret', …)`)
+   * a ukáže hlášku; datová vrstva o hláškách nic neví.
+   */
+  function ohlasStret(klice) {
+    if (! klice || ! klice.length) return;
+    try {
+      window.dispatchEvent(new CustomEvent('galerie-stret', { detail: { klice: klice.slice() } }));
+    } catch (e) {}
+  }
+
   function flush() {
     timer = null;
     if (inflight) { schedule(400); return; }
@@ -151,7 +168,15 @@
         // 202 = service worker patch přijal do fronty a doručí ho sám
         // (i když aplikaci zavřete). Lokální kopie je tím pádem platná.
         if (r.status === 202) { queuedBySw = true; return null; }
-        if (r.status === 409) return r.json().then(function (b) { data = b.data || data; rev = b.rev || rev; writeLocal(); notify(); return null; });
+        // 409 znamená, že se **všechny** poslané klíče mezitím změnily
+        // u toho druhého. Stav se převezme od serveru a člověku se to
+        // řekne — obrazovka, která se sama vrátí o krok zpět a mlčí,
+        // je horší než střet.
+        if (r.status === 409) return r.json().then(function (b) {
+          data = b.data || data; rev = b.rev || rev;
+          writeLocal(); notify(); ohlasStret(b.strety || Object.keys(patch));
+          return null;
+        });
         if (!r.ok) throw new Error('HTTP ' + r.status);
         return r.json();
       })
@@ -172,6 +197,7 @@
           }
 
           writeLocal();
+          if (b.strety && b.strety.length) ohlasStret(b.strety);
           /*
            * A obrazovka se to musí dozvědět.
            *

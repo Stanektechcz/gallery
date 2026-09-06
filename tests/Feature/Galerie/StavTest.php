@@ -27,15 +27,19 @@ class StavTest extends TestCase
 
     private User $adri;
 
+    private User $maki;
+
     private GallerySpace $prostor;
 
     protected function setUp(): void
     {
         parent::setUp();
 
-        $this->adri = User::factory()->create();
+        $this->adri = User::factory()->create(['name' => 'Adrian']);
+        $this->maki = User::factory()->create(['name' => 'Makinka']);
         $this->prostor = GallerySpace::create(['name' => 'Naše vzpomínky', 'owner_id' => $this->adri->id]);
         $this->adri->gallerySpaces()->syncWithoutDetaching([$this->prostor->id => ['role' => 'owner']]);
+        $this->maki->gallerySpaces()->syncWithoutDetaching([$this->prostor->id => ['role' => 'editor']]);
     }
 
     public function test_prazdny_stav_se_zalozi_sam(): void
@@ -66,7 +70,7 @@ class StavTest extends TestCase
     }
 
     /**
-     * Zápis postavený na starší verzi se neaplikuje.
+     * Zápis do téhož klíče postavený na starší verzi se neaplikuje.
      *
      * Bez signálu leží patch ve frontě klidně dny. Kdyby se pak přepsal aktuální
      * stav, zmizely by změny, které mezitím udělal ten druhý — a nikdo by nevěděl,
@@ -80,9 +84,64 @@ class StavTest extends TestCase
             ->patchJson('/api/state', ['data' => ['favs' => ['staré']], 'rev' => 0])
             ->assertStatus(409)
             ->assertJsonPath('conflict', true)
+            ->assertJsonPath('strety', ['favs'])
             ->assertJsonPath('data.favs', ['nové']);
 
         $this->assertSame(['nové'], CoupleState::first()->toClientArray()['favs']);
+    }
+
+    /**
+     * Změna něčeho jiného se ale zapíše.
+     *
+     * Dřív stačilo, aby druhý z dvojice mezitím změnil cokoliv: server vrátil
+     * 409 a **celý patch zahodil**. Obrazovka se překreslila podle serveru
+     * a to, co člověk mezitím napsal, zmizelo bez hlášky — jedno ze dvou
+     * otevřených zařízení psalo do prázdna.
+     */
+    public function test_zmena_jineho_klice_se_zapise_i_na_starsi_revizi(): void
+    {
+        $this->actingAs($this->adri)->patchJson('/api/state', ['data' => ['favs' => ['nové']]])->assertOk();
+
+        $this->actingAs($this->maki)
+            ->patchJson('/api/state', ['data' => ['pins' => ['moje']], 'rev' => 0])
+            ->assertOk()
+            ->assertJsonPath('data.pins', ['moje'])
+            ->assertJsonPath('data.favs', ['nové'])
+            ->assertJsonPath('strety', []);
+
+        $stav = CoupleState::first()->toClientArray();
+
+        $this->assertSame(['moje'], $stav['pins'], 'Zápis do jiného klíče nemá co ztratit.');
+        $this->assertSame(['nové'], $stav['favs']);
+    }
+
+    /**
+     * Z patche se zahodí jen to, oč se ti dva přetahují.
+     *
+     * Jedno kliknutí obvykle mění víc klíčů najednou. Zahodit kvůli jednomu
+     * střetu i zbytek by znamenalo, že se ztratí věci, o které nikdo nestál.
+     */
+    public function test_ze_smiseneho_patche_se_zahodi_jen_stret(): void
+    {
+        $this->actingAs($this->adri)->patchJson('/api/state', ['data' => ['favs' => ['nové']]])->assertOk();
+
+        $this->actingAs($this->maki)
+            ->patchJson('/api/state', ['data' => ['favs' => ['staré'], 'pins' => ['moje']], 'rev' => 0])
+            ->assertOk()
+            ->assertJsonPath('strety', ['favs'])
+            ->assertJsonPath('data.favs', ['nové'])
+            ->assertJsonPath('data.pins', ['moje']);
+    }
+
+    /** Bez čísla revize se nekontroluje nic — klient neřekl, na čem staví. */
+    public function test_bez_revize_se_zapise_vse(): void
+    {
+        $this->actingAs($this->adri)->patchJson('/api/state', ['data' => ['favs' => ['nové']]])->assertOk();
+
+        $this->actingAs($this->maki)
+            ->patchJson('/api/state', ['data' => ['favs' => ['přepsané']]])
+            ->assertOk()
+            ->assertJsonPath('data.favs', ['přepsané']);
     }
 
     /**

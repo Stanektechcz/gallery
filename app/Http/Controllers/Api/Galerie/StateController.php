@@ -76,19 +76,36 @@ class StateController extends Controller
             $state = CoupleState::where('couple_id', $coupleId)->lockForUpdate()->first()
                 ?? CoupleState::forCouple($coupleId);
 
-            // Konflikt: klient staví na starší verzi. Vrátíme aktuální stav,
-            // klient ho přijme a překreslí — patch se neaplikuje.
             $clientRev = $validated['rev'] ?? null;
-            if ($clientRev !== null && $clientRev < $state->rev) {
+            $patch = $validated['data'];
+
+            /*
+             * Střet se řeší po klíčích, ne po celém dokumentu.
+             *
+             * Dřív stačilo, aby druhý z dvojice mezitím změnil cokoliv:
+             * server vrátil 409 a **celý patch zahodil**. Obrazovka se
+             * překreslila podle serveru a to, co člověk mezitím napsal,
+             * zmizelo bez hlášky — jedno ze dvou otevřených zařízení psalo
+             * do prázdna.
+             *
+             * Zahazuje se proto jen to, oč se ti dva opravdu přetahují.
+             * Zbytek se zapíše, i když je dokument jako celek novější.
+             */
+            $strety = $state->strety($patch, $clientRev);
+
+            if ($strety !== []) {
+                $patch = array_diff_key($patch, array_flip($strety));
+            }
+
+            if ($patch === []) {
                 return response()->json([
                     'data' => $state->toClientObject(),
                     'updated_at' => $state->updated_at?->toIso8601String(),
                     'rev' => $state->rev,
                     'conflict' => true,
+                    'strety' => $strety,
                 ], 409);
             }
-
-            $patch = $validated['data'];
 
             /*
              * Administrace přichází touhle cestou, ne přes `/api/admin`.
@@ -341,6 +358,14 @@ class StateController extends Controller
                  * ze serveru — tedy přesně to, čemu se tahle vrstva vyhýbá.
                  */
                 'docasne' => array_keys($skutecnost),
+                /*
+                 * Co se nezapsalo, protože to mezitím změnil ten druhý.
+                 *
+                 * Klient o tom musí říct. Tiché zahození je horší než střet:
+                 * člověk vidí obrazovku, která se sama vrátila o krok zpět,
+                 * a nemá jak poznat proč.
+                 */
+                'strety' => $strety,
                 'updated_at' => $state->updated_at?->toIso8601String(),
                 'rev' => $state->rev,
             ]);

@@ -26960,6 +26960,27 @@ class Component extends DCLogic {
   }
   componentDidMount() {
     this.persistLoad();
+    /*
+     * Když druhý změnil totéž.
+     *
+     * Server zapíše všechno, o co se ti dva nepřetahují; klíč, který
+     * mezitím změnil ten druhý, se zahodí. Bez téhle hlášky se obrazovka
+     * jen sama vrátila o krok zpět a člověk neměl jak poznat proč.
+     */
+    this._stret = e => {
+      const klice = ((e.detail || {}).klice) || [];
+      if (! klice.length) return;
+      const co = this.mechKeyMap()[klice[0]] || null;
+      const kdo = this.otherWho();
+      const rod = this.rodPripona(kdo);
+      // Čeština nemá minulý čas bez rodu; u jména, které se zařadit
+      // nedá, se věta přeformuluje, místo aby oslovila člověka špatně.
+      const kdoVeta = rod === null ? 'ten druhý z vás' : kdo;
+      this.toast((co ? '„' + co + '“ mezitím změnil' : 'Tuhle změnu mezitím udělal')
+        + (rod === null ? ' ' : rod + ' ') + kdoVeta + ' — na obrazovce je novější verze',
+        { icon: 'ph-users-three', color: 'var(--g-mag)' });
+    };
+    window.addEventListener('galerie-stret', this._stret);
     // Responzivita: šířku měříme a odvozujeme z ní vše inline — žádné media queries.
     this._resize = () => {
       const root = this._rootRef && this._rootRef.current;
@@ -27274,7 +27295,7 @@ class Component extends DCLogic {
       lb: null, sel: [], selectMode: false, searchOpen: false
     });
   };
-  componentWillUnmount() { if (this._unApi) this._unApi(); clearInterval(this._idleI); clearTimeout(this._gateT); ['pointerdown', 'keydown', 'wheel'].forEach(t => window.removeEventListener(t, this._actH, true)); clearInterval(this._recI); clearTimeout(this._typT); clearTimeout(this._repT); clearInterval(this._si); window.removeEventListener('keydown', this._key); window.removeEventListener('message', this._mapMsg); window.removeEventListener('resize', this._resize); if (this._ro) this._ro.disconnect(); clearInterval(this._qi); clearInterval(this._vt); clearTimeout(this._tt); if (this._un) this._un(); }
+  componentWillUnmount() { if (this._unApi) this._unApi(); clearInterval(this._idleI); clearTimeout(this._gateT); ['pointerdown', 'keydown', 'wheel'].forEach(t => window.removeEventListener(t, this._actH, true)); clearInterval(this._recI); clearTimeout(this._typT); clearTimeout(this._repT); clearInterval(this._si); window.removeEventListener('keydown', this._key); window.removeEventListener('message', this._mapMsg); window.removeEventListener('resize', this._resize); window.removeEventListener('galerie-stret', this._stret); if (this._ro) this._ro.disconnect(); clearInterval(this._qi); clearInterval(this._vt); clearTimeout(this._tt); if (this._un) this._un(); }
   step(d) {
     const ph = this.photos(), i = ph.findIndex(p => p.id === this.state.lb);
     const n = ph[(i + d + ph.length) % ph.length];

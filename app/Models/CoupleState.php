@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class CoupleState extends Model
 {
-    protected $fillable = ['couple_id', 'data', 'rev'];
+    protected $fillable = ['couple_id', 'data', 'rev', 'rev_keys'];
 
     protected $casts = [
         'data' => 'array',
@@ -14,6 +14,8 @@ class CoupleState extends Model
         // a šifrovaně: 'private' => 'encrypted:array',
         'private' => 'encrypted:array',
         'rev' => 'integer',
+        // `klíč => revize, ve které se naposledy změnil`
+        'rev_keys' => 'array',
     ];
 
     /**
@@ -136,6 +138,8 @@ class CoupleState extends Model
     {
         $open = $this->data ?? [];
         $priv = $this->private ?? [];
+        $revize = $this->rev_keys ?? [];
+        $nova = ($this->rev ?? 0) + 1;
 
         foreach ($patch as $key => $value) {
             // Hesla a kódy se zahazují, ať přijdou odkudkoli — viz NEUKLADAT.
@@ -148,12 +152,46 @@ class CoupleState extends Model
             } else {
                 $open[$key] = $value;
             }
+
+            // U kterého klíče se to stalo. Bez toho se nedá poznat střet
+            // o tutéž věc od změny něčeho jiného.
+            $revize[$key] = $nova;
         }
 
         $this->data = $open;
         $this->private = $priv;
-        $this->rev = ($this->rev ?? 0) + 1;
+        $this->rev_keys = $revize;
+        $this->rev = $nova;
         $this->save();
+    }
+
+    /**
+     * Klíče, o které se dva klienti přetahují.
+     *
+     * Klient staví na revizi `$odRevize`. Klíč, který se od té doby změnil,
+     * měnil někdo jiný — a přepsat ho znamená zahodit jeho práci. Klíč, který
+     * se od té doby nezměnil, se zapsat může, i když je dokument jako celek
+     * novější: ten rozdíl je celý smysl téhle metody.
+     *
+     * @param  array<string, mixed>  $patch
+     * @return list<string>
+     */
+    public function strety(array $patch, ?int $odRevize): array
+    {
+        if ($odRevize === null) {
+            return [];
+        }
+
+        $revize = $this->rev_keys ?? [];
+        $strety = [];
+
+        foreach (array_keys($patch) as $klic) {
+            if (($revize[$klic] ?? 0) > $odRevize) {
+                $strety[] = (string) $klic;
+            }
+        }
+
+        return $strety;
     }
 
     /**
