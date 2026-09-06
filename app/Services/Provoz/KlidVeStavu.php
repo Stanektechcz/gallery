@@ -41,8 +41,11 @@ class KlidVeStavu
         return array_diff_key($patch, array_flip(self::SERVEROVE));
     }
 
-    /** @return array<string, mixed> */
-    public function zpracuj(array $patch, GallerySpace $prostor, ?User $uzivatel): array
+    /**
+     * @param  array<string, mixed>  $stav  co je ve stavu uložené z dřívějška
+     * @return array<string, mixed>
+     */
+    public function zpracuj(array $patch, GallerySpace $prostor, ?User $uzivatel, array $stav = []): array
     {
         if ($uzivatel === null) {
             return [];
@@ -58,7 +61,9 @@ class KlidVeStavu
             $this->pozornost((array) $patch['klAttn'], $prostor);
         }
 
-        $this->odpoved($patch, $prostor, $uzivatel);
+        // Napsaná odpověď dorazila dřív než potvrzení, takže tenhle patch už
+        // ji nenese — dohledá se v tom, co ve stavu leží.
+        $this->odpoved($patch + $stav, $prostor, $uzivatel);
 
         $obsah = $this->obsah->kolekce($prostor);
 

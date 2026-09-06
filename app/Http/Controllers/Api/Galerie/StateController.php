@@ -273,7 +273,12 @@ class StateController extends Controller
              * k ní nedostal, takže se to okno nedalo najít nikdy.
              */
             if ($this->klid->tykaSe($patch)) {
-                $skutecnost += $this->klid->zpracuj($patch, GallerySpace::findOrFail($coupleId), $uzivatel);
+                $skutecnost += $this->klid->zpracuj(
+                    $patch,
+                    GallerySpace::findOrFail($coupleId),
+                    $uzivatel,
+                    (array) $state->toClientObject(),
+                );
                 $patch = $this->klid->bezKlidu($patch);
                 $state->zapomen(KlidVeStavu::SERVEROVE);
             }

@@ -123,6 +123,29 @@ class KlidVeStavuTest extends TestCase
         $this->assertSame($this->adri->id, (int) $radek->user_id);
     }
 
+    /**
+     * Napsaná odpověď dorazí dřív než potvrzení.
+     *
+     * Prototyp ukládá rozepsaný text hned, takže patch s „odeslat" už ho
+     * nenese — dohledá se v tom, co ve stavu leží.
+     */
+    public function test_odpoved_z_drivejsiho_patche_se_najde(): void
+    {
+        $this->stav(['klAskMine' => 'Tři večery po deváté v práci.'])->assertOk();
+
+        $this->assertSame(0, DB::table('wellbeing_answers')->count());
+
+        $this->stav([
+            'klAskDone' => true,
+            'klAskQ' => 'Co z tohoto týdne bys nechtěl opakovat?',
+        ])->assertOk();
+
+        $radek = DB::table('wellbeing_answers')->first();
+
+        $this->assertSame('Tři večery po deváté v práci.', $radek->answer);
+        $this->assertSame('Co z tohoto týdne bys nechtěl opakovat?', $radek->question);
+    }
+
     /** Rozepsaná věta v poli není odpověď. */
     public function test_neodeslana_odpoved_se_neuklada(): void
     {
