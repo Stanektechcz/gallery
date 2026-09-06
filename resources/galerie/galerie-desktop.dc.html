@@ -15222,7 +15222,13 @@ class Component extends DCLogic {
       }),
       finAccHealth: FIN.accounts.filter(a => !(s.acOff || {})[a[0]]).length + ' z ' + FIN.accounts.length + ' účtů aktivních · importy běží ráno v 8:00, zařazování hned po nich',
       finAddAccount: () => this.toast('Napojit další banku — vyberte poskytovatele', { icon: 'ph-plus' }),
-      finSyncAll: () => this.toast('Synchronizuji 5 napojených účtů', { icon: 'ph-arrows-clockwise' }),
+      // Kolik účtů se synchronizuje, ví seznam účtů — ne napsaná pětka.
+      finSyncAll: () => {
+        const zive = FIN.accounts.filter(a => !(s.acOff || {})[a[0]]).length;
+        this.toast(zive
+          ? 'Synchronizuji ' + this.pl(zive, 'napojený účet', 'napojené účty', 'napojených účtů')
+          : 'Není co synchronizovat — žádný účet není napojený', { icon: 'ph-arrows-clockwise' });
+      },
       finUpcoming: FIN.upcoming.map(u => ({
         date: u[0], title: u[1], value: this.kc(u[2]), kind: u[3], cat: u[4],
         thisMonth: u[5], dot: u[5] ? 'var(--g-acc)' : 'var(--g-ink3)',
@@ -15584,7 +15590,8 @@ class Component extends DCLogic {
         nextWho: other(f.lastWho),
         done: () => { const prev = list; set(list.map(x => x.id === f.id ? { ...x, last: 'dnes', lastWho: other(x.lastWho), over: false } : x)); this.toast(f.name + ' — ozvali jste se · příště je na ' + (other(f.lastWho) === 'Makinka' ? 'Makince' : 'Adrianovi'), { icon: 'ph-phone-call', undo: () => set(prev) }); },
         remind: () => this.toast('Připomeneme v souhrnu, ne hláškou · ' + f.name, { icon: 'ph-bell-simple' }),
-        share: () => this.toast('Sdílené album pro ' + f.name + ' · odkaz zkopírován', { icon: 'ph-link-simple' })
+        // Odkaz pro rodinu se zakládá ve Sdílení; odsud vede jen cesta tam.
+        share: () => { this.setState({ route: 'shared' }); this.toast('Sdílené album pro ' + f.name + ' — vyberte fotky a odkaz vznikne tady', { icon: 'ph-link-simple' }); }
       }))
     };
   }
@@ -22496,8 +22503,33 @@ class Component extends DCLogic {
         this.setState({ pwaNotif: !notif });
         this.toast(notif ? 'Oznámení vypnuta — pravidla poběží dál, jen o nich nedáme vědět' : 'Oznámení zapnuta pro tohle zařízení', { icon: 'ph-bell', local: true });
       },
-      ofsUpdate: () => this.toast('Zkontrolováno — máte nejnovější verzi 2026.8.16', { icon: 'ph-arrows-clockwise', local: true }),
-      ofsClear: () => this.toast('Cache vyprázdněna · offline balíčky se stáhnou znovu na Wi-Fi', { icon: 'ph-broom', local: true }),
+      /*
+       * Kontrola verze se opravdu zeptá service workeru.
+       *
+       * Napsané „máte nejnovější verzi 2026.8.16" bylo tvrzení o čísle, které
+       * se od vydání prototypu nezměnilo — tlačítko hlásilo aktuálnost i pro
+       * verzi rok starou.
+       */
+      ofsUpdate: () => {
+        const sw = navigator.serviceWorker;
+        if (!sw || !sw.getRegistration) { this.toast('Tenhle prohlížeč offline režim nepodporuje', { icon: 'ph-warning', local: true }); return; }
+        sw.getRegistration().then(reg => {
+          if (!reg) { this.toast('Aplikace zatím není nainstalovaná pro offline', { icon: 'ph-info', local: true }); return; }
+          return reg.update().then(() => this.toast(reg.waiting
+            ? 'Nová verze je stažená — projeví se po zavření všech oken aplikace'
+            : 'Zkontrolováno — máte nejnovější verzi', { icon: 'ph-arrows-clockwise', local: true }));
+        }).catch(() => this.toast('Kontrolu se nepodařilo dokončit — zkuste to znovu', { icon: 'ph-warning', local: true }));
+      },
+      // A vyprázdnění cache cache doopravdy vyprázdní.
+      ofsClear: () => {
+        if (!window.caches || !caches.keys) { this.toast('Tenhle prohlížeč cache neřídí', { icon: 'ph-warning', local: true }); return; }
+        caches.keys()
+          .then(klice => Promise.all(klice.map(k => caches.delete(k))).then(() => klice.length))
+          .then(kolik => this.toast(kolik
+            ? 'Cache vyprázdněna · offline balíčky se stáhnou znovu na Wi-Fi'
+            : 'Cache byla prázdná — nebylo co mazat', { icon: 'ph-broom', local: true }))
+          .catch(() => this.toast('Cache se nepodařilo vyprázdnit', { icon: 'ph-warning', local: true }));
+      },
       ofsDevices: () => this.setState({ route: 'settings' })
     });
   }
@@ -26260,6 +26292,27 @@ class Component extends DCLogic {
   // Persistuje se všechno kromě průchodných věcí (dialogy, hledání, zámek).
   // Zápis jde přes galerie-api.js: dnes localStorage, po nasazení Laravelu
   // stejné klíče přes PATCH /api/state. Aplikace o rozdílu neví.
+  /*
+   * Zkopíruje text do schránky a řekne pravdu o tom, jestli to vyšlo.
+   *
+   * „Zkopírováno do schránky" byla jen hláška; dvojice pak vložila do zprávy
+   * to, co měla ve schránce předtím. Schránka je navíc zakázaná mimo HTTPS
+   * a v některých prohlížečích — pak se to napíše, místo aby se to zamlčelo.
+   */
+  kopiruj(text, hotovo, nahradni) {
+    const konec = ok => this.toast(ok ? hotovo : (nahradni || 'Schránka není povolená — odkaz zkopírujte ručně'),
+      { icon: ok ? 'ph-copy' : 'ph-warning' });
+
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(String(text || '')).then(() => konec(true), () => konec(false));
+        return;
+      }
+    } catch (e) {}
+
+    konec(false);
+  }
+
   persistSkip() {
     if (!this._pSkip) this._pSkip = {
       route: 1, lb: 1, lbZoom: 1, confirm: 1, toast: 1, sel: 1, selectMode: 1, show: 1,
@@ -26879,6 +26932,23 @@ class Component extends DCLogic {
     const personHiddenNow = (s.pHidden || {})[s.personId] !== undefined
       ? !!(s.pHidden || {})[s.personId] : person.tag === 'skryto';
     const pTile = i => { const p = this.photos()[i % this.photos().length]; return { ...this.tile(this.edited(p)), open: () => this.openLb(p.id) }; };
+    /*
+     * Album jen o jednom člověku: jeho fotky, ne prvních dvanáct z mřížky.
+     *
+     * `idx` jsou pořadová čísla v téže mřížce, kterou posílá knihovna. Pravidlo
+     * „jedna za měsíc" se počítá tady, aby popisek, dlaždice i počet stran
+     * mluvily o témže výběru.
+     */
+    const soloSiroky = !!s.soloWide;
+    const soloVse = (person.idx || []).map(i => this.photos()[i]).filter(Boolean);
+    const soloVyber = (() => {
+      const naMesic = {};
+      return soloVse.filter(p => {
+        const m = String(p.day || '').slice(0, 7);
+        naMesic[m] = (naMesic[m] || 0) + 1;
+        return naMesic[m] <= (soloSiroky ? 2 : 1);
+      });
+    })();
     const appPage = APP[R] || null;
     const pageTabs = appPage
       ? (R === 'x-plan'
@@ -27223,19 +27293,47 @@ class Component extends DCLogic {
         tagClass: personHiddenNow ? 'tag-neutral' : personConfirmedNow ? 'tag-accent' : 'tag-accent-2' },
       personUnconfirmed: !personConfirmedNow,
       personStats: person.stats.map(r => ({ label: r[0], value: r[1] })),
-      soloAlbumTitle: 'Album jen o ' + (s.personId === 'Makinka' ? 'Makince' : this.pName(s.personId)),
-      soloAlbumNote: 'Vybráno 48 z 312 fotek, na kterých je tato osoba. Jedna za měsíc, jen ostré, bez duplicit a bez snímků, kde je jen v pozadí — album se dá poslat, vytisknout i uložit jako dárek.',
+      /*
+       * Nadpis bez skloňování.
+       *
+       * Ukázka měla „o Makince" natvrdo pro jedno jméno; s cizím by z toho
+       * bylo „o Klára". Jméno tady stojí za pomlčkou v prvním pádě a věta pod
+       * ním ho použije po „je", kde první pád taky sedí.
+       */
+      soloAlbumTitle: 'Album — ' + this.pName(s.personId),
+      /*
+       * Čísla alba se počítají z fotek té osoby, ne z napsaných „48 z 312".
+       *
+       * Výběr drží pravidlo „jedna za měsíc" (nebo dvě, když si dvojice řekne
+       * o širší výběr) — a kolik z toho vyjde, se pozná až na jejích datech.
+       */
+      soloAlbumNote: soloVse.length
+        ? 'Vybráno ' + soloVyber.length + ' z ' + this.pl(soloVse.length, 'fotky', 'fotek', 'fotek')
+          + ', na kterých je ' + this.pName(s.personId) + '. ' + (soloSiroky ? 'Dvě za měsíc' : 'Jedna za měsíc')
+          + ' — album se dá poslat, vytisknout i uložit jako dárek.'
+        : 'Zatím tu není označená žádná fotka. Album vznikne, jakmile nějakou označíte.',
       soloAlbumRules: [
-        { text: 'Nejvýš jedna fotka za měsíc, aby album drželo tempo roku' },
-        { text: 'Rozmazané a série vyřazeny, z každé série jen nejlepší snímek' },
+        { text: soloSiroky ? 'Nejvýš dvě fotky za měsíc' : 'Nejvýš jedna fotka za měsíc, aby album drželo tempo roku' },
+        { text: 'Bere se z fotek, na kterých je tahle osoba označená' },
         { text: 'Vynechány fotky ze zamčených sekcí a soukromých zápisů' },
-        { text: 'Poslední čtyři roky, protože starší nemají spolehlivé datum' }
+        { text: 'Řazeno podle času pořízení' }
       ],
-      soloAlbumTiles: this.photos().slice(0, 12).map(p => ({ bg: p.bg, open: () => this.openLb(p.id) })),
-      soloAlbumMake: () => { this.setState({ route: 'albums' }); this.toast('Album vytvořeno · 48 fotek, řazeno podle času', { icon: 'ph-folder-plus' }); },
+      soloAlbumTiles: soloVyber.slice(0, 12).map(p => ({ bg: p.bg, open: () => this.openLb(p.id) })),
+      soloAlbumMake: () => {
+        if (!soloVyber.length) { this.toast('Není z čeho album složit', { icon: 'ph-warning' }); return; }
+        this.setState({ route: 'albums' });
+        this.toast('Album vytvořeno · ' + this.pl(soloVyber.length, 'fotka', 'fotky', 'fotek') + ', řazeno podle času', { icon: 'ph-folder-plus' });
+      },
       soloAlbumShare: () => { this.setState({ shareOpen: true, shrName: 'Album o ' + this.pName(s.personId), shrExp: '30', shrPwdOn: false, shrComments: true, shrGuest: false, shrMeta: true, shrDownload: true }); },
-      soloAlbumPrint: () => { this.setState({ route: 'x-tisk', appTab: 0 }); this.toast('Album posláno do tisku · fotokniha na 24 stran', { icon: 'ph-printer' }); },
-      soloAlbumWider: () => this.toast('Pravidlo uvolněno · album má teď 96 fotek, dvě za měsíc', { icon: 'ph-plus' }),
+      soloAlbumPrint: () => {
+        this.setState({ route: 'x-tisk', appTab: 0 });
+        // Dvě fotky na stranu — víc už se na formát fotoknihy nevejde.
+        this.toast('Album posláno do tisku · fotokniha na ' + this.pl(Math.max(1, Math.ceil(soloVyber.length / 2)), 'stranu', 'strany', 'stran'), { icon: 'ph-printer' });
+      },
+      soloAlbumWider: () => {
+        this.setState({ soloWide: !soloSiroky });
+        this.toast(soloSiroky ? 'Zpátky na jednu fotku za měsíc' : 'Pravidlo uvolněno · dvě fotky za měsíc', { icon: soloSiroky ? 'ph-minus' : 'ph-plus' });
+      },
       personYears: person.years.map(b => ({ label: b[0], meta: b[1], pct: b[2] + '%', color: b[3] === 1 ? 'var(--g-mag)' : b[3] === 2 ? 'var(--g-ink3)' : 'var(--g-acc)' })),
       personCo: person.co.map(c => ({ name: c[0], meta: c[1], bg: this.bg(c[2]), go: () => this.openPerson(c[0]) })),
       personAlbums: person.albums.map(a => ({
@@ -27502,7 +27600,9 @@ class Component extends DCLogic {
         return bucket === (appKey || 'ok');
       }).map(k => ({
         name: this.pName(k),
-        meta: (PERSONS[k].stats[0] || [])[1] + ' fotek' + (appKey === 'sug' ? ' · návrh z rozpoznávání' : appKey === 'hidden' ? ' · skryto z hledání' : ''),
+        // „1 fotek" bylo napevno slepené; se skutečnými počty to bije do očí.
+        meta: this.pl(parseInt(String((PERSONS[k].stats[0] || [])[1]).replace(/\s/g, ''), 10) || 0, 'fotka', 'fotky', 'fotek')
+          + (appKey === 'sug' ? ' · návrh z rozpoznávání' : appKey === 'hidden' ? ' · skryto z hledání' : ''),
         bg: this.bg(PERSONS[k].n), initial: this.pName(k)[0],
         go: () => this.openPerson(k)
       })),
@@ -28057,7 +28157,14 @@ class Component extends DCLogic {
           shrPwdOn: r.protection.indexOf('Heslo') === 0, shrPwd: r.protection.indexOf('Heslo') === 0 ? 'letnizadar' : '',
           shrMsg: '', shrDownload: !!r.download, shrMeta: true, shrComments: !!r.comments, shrGuest: !!r.guest
         }),
-        copy: () => this.toast('Odkaz zkopírován do schránky', { icon: 'ph-copy' }),
+        /*
+         * Odkaz se opravdu zkopíruje.
+         *
+         * „Zkopírováno do schránky" byla jen hláška — dvojice pak vložila do
+         * zprávy to, co měla ve schránce předtím. A když se kopírovat nedá
+         * (prohlížeč to bez HTTPS zakáže), řekne se to místo toho.
+         */
+        copy: () => this.kopiruj(r.url, 'Odkaz zkopírován do schránky'),
         revoke: () => this.setState({ confirm: { title: 'Zneplatnit odkaz?', body: '„' + r.name + '“ přestane fungovat okamžitě. Kdo si stránku právě prohlíží, uvidí informaci o ukončení sdílení.', cta: 'Zneplatnit', btnBg: 'var(--g-mag)', go: () => { this.setState({ confirm: null, shareRows: shareRows.filter(x => x !== r) }); this.toast('Odkaz zneplatněn', { icon: 'ph-link-break', undo: true }); } } })
       })),
       ...this.statVals(shareRows),
@@ -28115,9 +28222,13 @@ class Component extends DCLogic {
           ? rows.map(x => x.name === s.shrEditId ? Object.assign({}, x, row, { created: x.created, views: x.views, url: x.url }) : x)
           : [row].concat(rows);
         this.setState({ shareRows: next, shareOpen: false, route: 'shared', sel: [], selectMode: false });
-        this.toast(s.shrEditId ? 'Nastavení sdílení uloženo' : 'Odkaz vytvořen a zkopírován · ' + exp.toLowerCase(), {
-          icon: 'ph-link-simple', undo: () => this.setState({ shareRows: prev })
-        });
+        if (s.shrEditId) {
+          this.toast('Nastavení sdílení uloženo', { icon: 'ph-link-simple', undo: () => this.setState({ shareRows: prev }) });
+        } else {
+          // Nový odkaz rovnou do schránky — jinak ho dvojice musí opisovat.
+          this.kopiruj(row.url, 'Odkaz vytvořen a zkopírován · ' + exp.toLowerCase(),
+            'Odkaz vytvořen · ' + exp.toLowerCase());
+        }
       },
       guestQueue: guestQ.map(g => ({
         ...g, bg: this.bg(g.n), whom: g.whom || g.who,
