@@ -56,21 +56,27 @@ Změřeno v prohlížeči proti běžícímu serveru, ne odhadem:
 
 | | Počet |
 | --- | --- |
-| Kolekcí v `window.GalerieData` celkem | **189** |
-| Z nich obsluhuje server | **65** (63 přes `/api/data`, `ADMIN` a `STORAGE` přes přístupovou vrstvu) |
+| Klíčů v `window.GalerieData` | **190** — z toho 8 jsou pomocné funkce, ne data |
+| Kolekcí celkem | **182** |
+| Obsluhuje server | **80** (78 přes `/api/data`, `ADMIN` a `STORAGE` přes přístupovou vrstvu) |
 | Katalogy rozhraní — zůstávají statické záměrně | ~50 |
-| **Obsah dvojice, který ještě není napojený** | **~74** |
+| **Obsah dvojice, který ještě není napojený** | **~52** |
 
-Osm skupin plánu je hotových. **Plán ale nepokrýval všechen obsah** — pojmenoval
-zhruba čtyřicet kolekcí ze sto dvaceti sedmi. Zbytek je vypsaný v části
-„Co ještě není napojené“; většina z něj má tabulku připravenou a čeká jen na
-poskytovatele.
+Devět z osmdesáti kolekcí prototyp v `GalerieData` vůbec nemá — mřížku fotek
+(`PHOTOS`, `DAYS`, `ALBUMS`, `ATREE`), čísla u nabídky (`NAVCNT`, `TOTAL`),
+měnu, spíž a odkazy si dokument vyráběl sám ve funkcích. Server je dodává
+navíc a přepínače v dokumentu je berou přednostně.
 
-Ze stavu páru se navíc pořád ukládá **25 obsahových klíčů** (`wishes`, `ideas`,
+Ze stavu páru se pořád ukládá **25 obsahových klíčů** (`wishes`, `ideas`,
 `buys`, `quar`, `paper`, `season`, `emItems`, `emLog`, `kapsules`, `rules`,
 `ruleLog`, `chat`, `favList`, `forgList`, `antiList`, `mlLoad`, `hsVisits`,
 `tichoData`, `pauseLog`, `pausePlan`, `klAttn`, `klEn`, `klAskLog`, `pmMine`,
-`cycSel`). Zachycených je devatenáct; tyhle čekají na svoji vrstvu.
+`cycSel`). Zachycených je dvacet jedna; tyhle čekají na svoji vrstvu.
+
+Dva z nich jsou **naléhavější než ostatní**, protože se v nich píše do kolekce,
+kterou zároveň dodává server: `rules` (pravidla založená v prototypu nikdy
+nedoběhnou — `automation_rules` o nich neví) a `season` (sezónní fond upravený
+na obrazovce se nedostane do `budget_goals`).
 
 ## Pořadí
 
@@ -91,6 +97,11 @@ Podle toho, kde už skutečný obsah je a kde na něm záleží:
 | 11 | **Dárky a přání** | `GIFT_WISHES`, `GIFT_BUYS`, `GIFT_IDEAS`, `GIFT_OCC` | `gift_ideas`, `gift_budgets` | hotovo |
 | 12 | **Deník a milníky** | `ADIARY.diary`, `ADIARY.ms`, `ADIARY.cycleLog` | `journal_entries`, `relationship_milestones`, `cycle_days` | hotovo |
 | 13 | **Pravidla a vzpomínky** | `RULEDEF`, `RULOG`, `MEMS` | `automation_rules`, `automation_runs`, `generated_memories` | hotovo |
+| 14 | **Finanční rozbory** | `ENV`, `INFL`, `SEASON`, `TRIPCOST` | `transactions`, `budget_goals`, `trip_expenses` | hotovo |
+| 15 | **Úklid knihovny** | `QUAR`, `AGRID`, `PJOBS` | `media_items.is_archived`, `photo_books`, `duplicate_groups` | hotovo, **píše i zpátky** |
+| 16 | **Štítky a lidé v záložkách** | `ATAGS`, `APEOPLE` | `tags`, `media_tag`, `people` | hotovo |
+| 17 | **Záložky a sloupce financí** | `ATX`, `ABARS.bud/year/res/fc` | `transactions`, `finance_recurring`, `bank_connections`, `budget_category_limits` | hotovo |
+| 18 | **Systém** | `DATA_HEALTH`, `SECLIFE`, `ABARS.health/risk` | `wallets`, `media_items`, `cycle_days`, `storage_connections`, `jobs`, `failed_jobs` | hotovo |
 
 ## Knihovna: co se muselo změnit v dokumentu
 
@@ -352,16 +363,14 @@ má tabulky i data, poslední je potřeba teprve vymyslet.
 
 | Oblast | Kolekce | Tabulka |
 | --- | --- | --- |
-| **Tisk a fotoknihy** | `PJOBS`, `PORDERS`, `POSTEPS` | `photo_books`, `photo_book_items` — **je** |
-| **Úklid knihovny** | `AGRID`, `QUAR` | odvoditelné z `media_items` |
-| **Asistent** | `ABARS`, `ATX`, `AFORMS`, `APEOPLE`, `ATAGS` | odvoditelné z existujících modulů |
-| **Finanční rozbory** | `ENV`, `DISP`, `EST`, `ANTI`, `INFL`, `SEASON`, `RECON`, `CAS_ROWS`, `PAPER_ROWS`, `TRIPCOST`, `DELAY`, `FAV`, `SOLO`, `BUS` | odvoditelné z `transactions` a `budgets` |
-| **Klid a pohoda** | `KL_EV`, `KL_EN`, `KL_TASKS`, `KL_ATTN`, `KL_ASK_LOG` | částečně odvoditelné, část chybí |
+| **Tisk — objednávky** | `PORDERS`, `POSTEPS` | **chybí** — `photo_books` je návrh, ne zakázka; objednání podle prototypu řeší tiskárna, aplikace ho nezakládá |
+| **Asistent — formuláře** | `AFORMS` | přepínače nastavení; část má tabulku (`bank_connections`), část je předvolba prohlížeče |
+| **Sloupce bez zdroje** | `ABARS.tier`, `ABARS.cap`, `ABARS.zprCisla` | tierlisty nemají tabulku vůbec; kapacita týdne a roční čísla čekají na poskytovatele |
+| **Klid a pohoda** | `KL_EV`, `KL_EN`, `KL_TASKS`, `KL_ATTN`, `KL_ASK_LOG` | částečně odvoditelné, část chybí — mapa energie a rozpočet pozornosti nemají, kdo by je zapsal |
 | **Datování skenů** | `DATING` | fotky bez data jsou v `media_items`; **chybí odhadovač roku** |
 | **Příběh dvojice** | `STORY`, `STORYMS` | **chybí** — `album_story_blocks` je vyprávění uvnitř alba, ne kapitoly dvojice |
 | **Nouzový přístup** | `EM_ITEMS`, `EM_LOG` | **chybí** — `travel_emergency_cards` je karta k cestě, ne přístup k datům |
 | **Mechanismy vztahu bez obrazovky pro úpravu** | `TACIT`, `SPEAK`, `FORGIVEN`, `PM_*`, `PAST_*`, `TICHO`, `SCEN`, `P60`, `HORIZON`, `JOY`, `HOURS`, `PAUSE_*`, `AUTO_DEC`, `SURPRISE`, `CONFLICTS`, `RITUALS`, `ML_LOAD`, `VIS_ROWS`, `FAMILY`, `REVISIT`, `TRUTHS` | **chybí** |
-| **Systém** | `DATA_HEALTH`, `SECLIFE` | **chybí** |
 | **Hosté** | `GV_C`, `GV_VOICE_POOL` | **chybí** (komentář hosta nemá uživatele) |
 | **Počasí** | `WEATHER` | data nikde nejsou |
 
@@ -393,6 +402,7 @@ Kde prototyp obsah drží ve svém stavu, vzniká i cesta zpátky:
 | `VztahVeStavu` | rozhodnutí, rozvahy, protokol, veto, sliby, žádosti, připomínky | totéž |
 | `ZdraviVeStavu` | zapsané dny cyklu, nálada | cyklus vlastní modul |
 | `TrezorVeStavu` | co je schované z knihovny | jinak fotku schová jen jeden prohlížeč |
+| `UklidVeStavu` | karanténa a slučování duplicit | „Pustit" jinak zmizí jen tomu, kdo klikl, a originál leží dál na disku |
 | `AdminVeStavu` | administrace ze staršího klienta | záchranná síť |
 
 Kde tabulky vlastní jiný modul (kalendář, úkoly, cyklus), je zápis **opatrnější**:

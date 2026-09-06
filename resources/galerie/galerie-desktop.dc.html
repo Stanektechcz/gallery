@@ -15662,7 +15662,11 @@ class Component extends DCLogic {
         return {
           name: x.name,
           cold: x.cold, coldLabel: 'nikdo tři měsíce',
-          line: x.cold ? 'poslední zápis ' + x.last : x.a + ' zápisů Adrian · ' + x.m + ' Makinka · naposledy ' + x.last,
+          // Jména sekce nese s sebou — napsaná napevno by u kohokoli jiného lhala,
+          // a sekce, do které nikdo nikdy nezapsal, nemá „poslední zápis" žádný.
+          line: x.cold
+            ? (x.last ? 'poslední zápis ' + x.last : 'zatím žádný zápis')
+            : x.a + ' zápisů ' + (x.aName || 'Adrian') + ' · ' + x.m + ' ' + (x.mName || 'Makinka') + ' · naposledy ' + x.last,
           color: x.cold ? 'var(--g-mag)' : 'var(--g-ink3)',
           wA: Math.round((x.a / tot) * 100) + '%',
           wM: Math.round((x.m / tot) * 100) + '%',
