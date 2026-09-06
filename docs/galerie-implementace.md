@@ -311,3 +311,22 @@ záznam a prázdná struktura jako poslední pojistka.
 Kolekce telefonu (`DAYS`, `PHOTOS`, `TRIPS`, `HOUSE_*`, `MPANTRY`) navíc žily
 v modulových konstantách, kam se zvenčí nedalo dosáhnout; drží se teď ve
 `window.GalerieMobil`, aby se daly vyměnit na místě.
+
+## Mechanismy: endpoint mluvil do prázdna
+
+`/api/mechanisms` odpovídal, `galerie-api.js` ho volal a data přiřazoval —
+a přesto se na obrazovku nikdy nedostala. Dokument si všech dvaadvacet definic
+rozebere do konstant hned při načtení:
+
+```js
+const { DC_GRPS, KL_GRPS, HS_GRPS, … } = window.GalerieMech;
+```
+
+Klient je ale přiřazuje jako **nový objekt**
+(`window.GalerieMech = Object.assign({}, staré, nové)`), takže konstanty pořád
+ukazovaly na ten původní. Tatáž past jako u `GalerieData` — jen o patro vedle.
+
+Hlavička teď `window.GalerieMech` obaluje stejně: přiřazení zachytí a klíče
+přimíchá **na místo**. Vlastnost se zakládá dřív, než se `galerie-mechanismy.js`
+vůbec načte, protože ten se v dokumentu načítá až za hlavičkou — první přiřazení
+je proto jeho soubor a ten je základ.

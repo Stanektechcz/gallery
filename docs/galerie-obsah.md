@@ -50,13 +50,35 @@ tisíce, a stažení celé knihovny do prohlížeče by aplikaci zabilo.
 databáze), obrazovka se nerozpadne. Prázdný seznam a rozbitá aplikace vypadají
 z pohledu člověka stejně, a jedno z toho jde spravit obnovením stránky.
 
+## Kde to doopravdy stojí
+
+Změřeno v prohlížeči proti běžícímu serveru, ne odhadem:
+
+| | Počet |
+| --- | --- |
+| Kolekcí v `window.GalerieData` celkem | **189** |
+| Z nich obsluhuje server | **52** (50 přes `/api/data`, `ADMIN` a `STORAGE` přes přístupovou vrstvu) |
+| Katalogy rozhraní — zůstávají statické záměrně | ~50 |
+| **Obsah dvojice, který ještě není napojený** | **~87** |
+
+Osm skupin plánu je hotových. **Plán ale nepokrýval všechen obsah** — pojmenoval
+zhruba čtyřicet kolekcí ze sto dvaceti sedmi. Zbytek je vypsaný v části
+„Co ještě není napojené“; většina z něj má tabulku připravenou a čeká jen na
+poskytovatele.
+
+Ze stavu páru se navíc pořád ukládá **25 obsahových klíčů** (`wishes`, `ideas`,
+`buys`, `quar`, `paper`, `season`, `emItems`, `emLog`, `kapsules`, `rules`,
+`ruleLog`, `chat`, `favList`, `forgList`, `antiList`, `mlLoad`, `hsVisits`,
+`tichoData`, `pauseLog`, `pausePlan`, `klAttn`, `klEn`, `klAskLog`, `pmMine`,
+`cycSel`). Zachycených je devatenáct; tyhle čekají na svoji vrstvu.
+
 ## Pořadí
 
 Podle toho, kde už skutečný obsah je a kde na něm záleží:
 
 | # | Skupina | Kolekce | Zdroj | Stav |
 | --- | --- | --- | --- | --- |
-| 1 | **Finance** | `TX`, `BUD`, `FIN`, `INCOMES`, `SHARED`, `ENV`, `DISP`, `EST`, `ANTI`, `INFL`, `SEASON`, `RECON`, `CAS_ROWS`, `PAPER_ROWS`, `TRIPCOST` | `budgets`, `budget_category_limits`, `transactions`, `finance_categories`, `wallets`, `shared_expenses` | hotovo |
+| 1 | **Finance** | `TX`, `BUD`, `FIN.accounts`, `INCOMES`, `SHARED`, `MENA` | `budgets`, `budget_category_limits`, `transactions`, `finance_categories`, `wallets`, `shared_expenses` | hotovo — **rozbory zbývají**, viz níž |
 | 2 | **Knihovna** | `DAYS`, `PHOTOS`, `ALBUMS`, `ATREE`, `PERSONS`, `DUP_GROUPS`, `YBCH`, `NAVCNT`, `TOTAL`, `MOBIL` | `media_items`, `media_variants`, `people`, `media_person`, `tags`, `albums`, `album_media`, `duplicate_groups` | hotovo |
 | 3 | **Plánování** | `CALEV`, `ATASKS`, `LATER_ITEMS`, `AL.doneTasks`, `EVSEED` | `calendar_events`, `event_participants`, `event_reminders`, `shared_todos`, `shared_todo_lists`, `life_events` | hotovo, **píše i zpátky** |
 | 4 | **Domácnost** | `HOUSE_CHORES`, `HOUSE_LOG`, `HOUSE_WEEK`, `HOUSE_DUES`, `HOUSE_INV`, `PANTRY` | `house_chores`, `house_chore_log`, `house_dues`, `house_inventory`, `house_pantry`, `house_week(_capacity)` | hotovo |
@@ -296,10 +318,36 @@ Dvě věci téhle skupiny zůstávají v katalogu:
 Zapečetěná kapsle jde ven **bez textu**. Celý smysl je, že se otevře v den, na
 který se čeká, a obsah v prohlížeči by se dal přečíst kdykoli.
 
+## Co ještě není napojené
+
+Tohle **není** katalog rozhraní — je to obsah dvojice, který se pořád kreslí
+z `galerie-data.js`. Seřazeno podle toho, co je hotové nejdřív: první skupina
+má tabulky i data, poslední je potřeba teprve vymyslet.
+
+| Oblast | Kolekce | Tabulka |
+| --- | --- | --- |
+| **Zprávy a hlasovky** | `MSGS`, `MSGFILES`, `MSGREPLIES`, `AMSG` | `chat_messages`, `chat_reactions`, `chat_reads` — **je** |
+| **Kuchařka** | `RECIPES`, `RECIPE_BY_TITLE` | `recipes`, `recipe_ingredients`, `recipe_steps` — **je** |
+| **Dárky a přání** | `GIFT_WISHES`, `GIFT_BUYS`, `GIFT_IDEAS`, `GIFT_OCC` | `gift_ideas`, `gift_budgets` — **je** |
+| **Randíčka a filmy** | `DATING` | `couple_date_ideas`, `entertainment_titles` — **je** |
+| **Vzpomínky a příběh** | `MEMS`, `STORY`, `STORYMS` | `generated_memories`, `album_story_blocks` — **je** |
+| **Deník** | `ADIARY` | `journal_entries` — **je** |
+| **Cesty: nouzovka** | `EM_ITEMS`, `EM_LOG` | `travel_emergency_cards` — **je** |
+| **Tisk a fotoknihy** | `PJOBS`, `PORDERS`, `POSTEPS` | `photo_books`, `photo_book_items` — **je** |
+| **Milníky** | `KAP_TRIG`, část `SEASON` | `relationship_milestones` — **je** |
+| **Úklid knihovny** | `AGRID`, `QUAR` | odvoditelné z `media_items` |
+| **Asistent** | `ABARS`, `ATX`, `AFORMS`, `APEOPLE`, `ATAGS` | odvoditelné z existujících modulů |
+| **Finanční rozbory** | `ENV`, `DISP`, `EST`, `ANTI`, `INFL`, `SEASON`, `RECON`, `CAS_ROWS`, `PAPER_ROWS`, `TRIPCOST`, `DELAY`, `FAV`, `SOLO`, `BUS` | odvoditelné z `transactions` a `budgets` |
+| **Pravidla a automatizace** | `RULEDEF`, `RULOG` | `automation_rules` — **je** |
+| **Klid a pohoda** | `KL_EV`, `KL_EN`, `KL_TASKS`, `KL_ATTN`, `KL_ASK_LOG` | částečně odvoditelné, část chybí |
+| **Mechanismy vztahu bez obrazovky pro úpravu** | `TACIT`, `SPEAK`, `FORGIVEN`, `PM_*`, `PAST_*`, `TICHO`, `SCEN`, `P60`, `HORIZON`, `JOY`, `HOURS`, `PAUSE_*`, `AUTO_DEC`, `SURPRISE`, `CONFLICTS`, `RITUALS`, `ML_LOAD`, `VIS_ROWS`, `FAMILY`, `REVISIT`, `TRUTHS` | **chybí** |
+| **Systém** | `DATA_HEALTH`, `SECLIFE` | **chybí** |
+| **Hosté** | `GV_C`, `GV_VOICE_POOL` | **chybí** (komentář hosta nemá uživatele) |
+| **Počasí** | `WEATHER` | data nikde nejsou |
+
 ## Co zůstalo v katalogu — a proč
 
-Všech osm skupin je hotových. Co v katalogu zůstalo, tam zůstalo z jednoho
-z těchhle tří důvodů:
+Co v katalogu zůstalo, tam zůstalo z jednoho z těchhle tří důvodů:
 
 | Důvod | Kolekce |
 | --- | --- |
@@ -307,9 +355,13 @@ z těchhle tří důvodů:
 | **Nemá to kdo napsat** — prototyp obsah jen ukazuje, obrazovka, kde by se dal změnit, neexistuje | `TACIT`, `SPEAK`, `PAST_DEC`, `PM_*`, `REVISIT`, `GV_C`, `GV_VOICE_POOL` |
 | **Data nikde nejsou** — aplikace je odnikud nebere | `WEATHER` (předpověď) |
 
-Ve stavu páru nezůstává **nic z obsahu** — jen to, co je opravdu jen zobrazení:
-otevřená záložka, rozepsaný text, který se ještě neodeslal, zvolený měsíc
-v kalendáři.
+Ze stavu páru se zachytává **devatenáct obsahových klíčů** (`evList`,
+`evDoneMap`, `xBoard`, `hsLater`, `chores`, `choreLog`, `dues`, `inv`, `decs`,
+`cools`, `sporMine`, `sporTheirs`, `vetoLog`, `vetoProps`, `proms`, `nudges`,
+`patAuto`, `cycDays`, `klMood`) a `vaultAdded`. Zbylých **dvacet pět** se do
+stavu pořád ukládá — jsou vypsané výš v části „Kde to doopravdy stojí" a čekají
+na svou vrstvu. Co ve stavu zůstat má, je jen zobrazení: otevřená záložka,
+rozepsaný neodeslaný text, zvolený měsíc v kalendáři.
 
 Pravidlo, které to celé řídí: **tabulka bez zápisu je horší než žádná tabulka.**
 Kde prototyp obsah drží ve svém stavu, vzniká i cesta zpátky:

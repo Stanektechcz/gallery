@@ -203,6 +203,38 @@
     });
   } catch (e) {}
 
+  /*
+   * Totéž pro mechanismy — jinak `/api/mechanisms` mluví do prázdna.
+   *
+   * `galerie-api.js` si data ze serveru vezme a přiřadí je jako **nový objekt**
+   * (`window.GalerieMech = Object.assign({}, staré, nové)`). Dokument si ale
+   * všech dvaadvacet definic rozebral do konstant hned při načtení
+   * (`const { DC_GRPS, … } = window.GalerieMech`), takže ukazují pořád na ten
+   * původní objekt a serverová verze se tiše zahodí. Endpoint přitom odpovídá
+   * a klient ho volá — celé to jen nikam nedojde.
+   *
+   * Přístupová vlastnost proto přiřazení zachytí a klíče **přimíchá na místo**,
+   * stejně jako u obsahu.
+   */
+  try {
+    // Vlastnost se zakládá **napřed**: `galerie-mechanismy.js` se načítá až
+    // za touhle hlavičkou, takže první přiřazení je jeho soubor — a ten je
+    // základ, do kterého se všechno pozdější přimíchává.
+    var mech = window.GalerieMech || null;
+
+    Object.defineProperty(window, 'GalerieMech', {
+      configurable: true,
+      enumerable: true,
+      get: function () { return mech; },
+      set: function (v) {
+        if (! v || v === mech) return;
+        if (! mech) { mech = v; return; }
+
+        Object.keys(v).forEach(function (k) { navlec(mech, k, v[k], false); });
+      }
+    });
+  } catch (e) {}
+
   function hlavicky() {
     var h = { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' };
     if (window.GALERIE_API_TOKEN) h['Authorization'] = 'Bearer ' + window.GALERIE_API_TOKEN;
