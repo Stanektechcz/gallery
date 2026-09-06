@@ -102,6 +102,7 @@ Podle toho, kde už skutečný obsah je a kde na něm záleží:
 | 17 | **Záložky a sloupce financí** | `ATX`, `ABARS.bud/year/res/fc` | `transactions`, `finance_recurring`, `bank_connections`, `budget_category_limits` | hotovo |
 | 18 | **Systém** | `DATA_HEALTH`, `SECLIFE`, `ABARS.health/risk` | `wallets`, `media_items`, `cycle_days`, `storage_connections`, `jobs`, `failed_jobs` | hotovo |
 | 19 | **Sloupce úzkého rozvržení** | `ABARS.cap`, `ABARS.cycle` | `house_week(_capacity)`, `cycle_days` | hotovo |
+| 20 | **Přepínače nastavení** | `AFORMS` | `bank_connections`, `finance_settings`, `user_settings`, `legacy_plans` | hotovo, **píše i zpátky** |
 
 ## Knihovna: co se muselo změnit v dokumentu
 
@@ -364,7 +365,6 @@ má tabulky i data, poslední je potřeba teprve vymyslet.
 | Oblast | Kolekce | Tabulka |
 | --- | --- | --- |
 | **Tisk — objednávky** | `PORDERS`, `POSTEPS` | **chybí** — `photo_books` je návrh, ne zakázka; objednání podle prototypu řeší tiskárna, aplikace ho nezakládá |
-| **Asistent — formuláře** | `AFORMS` | přepínače nastavení; část má tabulku (`bank_connections`), část je předvolba prohlížeče |
 | **Sloupce bez zdroje** | `ABARS.tier`, `ABARS.zprCisla` | tierlisty nemají tabulku vůbec; roční čísla čekají na poskytovatele |
 | **Klid a pohoda** | `KL_EV`, `KL_EN`, `KL_TASKS`, `KL_ATTN`, `KL_ASK_LOG` | částečně odvoditelné, část chybí — mapa energie a rozpočet pozornosti nemají, kdo by je zapsal |
 | **Datování skenů** | `DATING` | fotky bez data jsou v `media_items`; **chybí odhadovač roku** |
@@ -408,6 +408,7 @@ Kde prototyp obsah drží ve svém stavu, vzniká i cesta zpátky:
 | `ZpravyVeStavu` | odeslané zprávy | „Zpráva odeslána" — a nikam se neodeslala; druhý o ní nevěděl a po zavření záložky zmizela |
 | `DarkyVeStavu` | přání, nápady, chystané dárky | totéž; nákup navíc musí zůstat soukromý toho, kdo ho pořizuje |
 | `KapsleVeStavu` | zapečetěné vzkazy | dopis na příští rok přežije výměnu telefonu jen v databázi |
+| `NastaveniVeStavu` | přepínače formulářů (`sw`) | „sync každé čtyři hodiny" jinak změní jen barvu; napojení se dál řídí databází |
 | `AdminVeStavu` | administrace ze staršího klienta | záchranná síť |
 
 Vrstvy, které skutečnost **vracejí, ale neukládají** (pravidla, historie běhů,

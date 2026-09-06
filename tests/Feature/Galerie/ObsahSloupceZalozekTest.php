@@ -46,8 +46,8 @@ class ObsahSloupceZalozekTest extends TestCase
     public function test_kapacita_tydne_ma_vlastni_sloupce(): void
     {
         $this->prace();
-        $this->den('po','Oba v práci do 17.', 2.5, 1.5);
-        $this->den('út','Makinka má dvanáctku.', 3.0, 0.5);
+        $this->den('po', 'Oba v práci do 17.', 2.5, 1.5);
+        $this->den('út', 'Makinka má dvanáctku.', 3.0, 0.5);
 
         $s = collect($this->getJson('/api/data/domacnost')->assertOk()->json('data.ABARS.cap'))->keyBy(0);
 
@@ -63,8 +63,8 @@ class ObsahSloupceZalozekTest extends TestCase
     public function test_nabity_den_varuje(): void
     {
         $this->prace();
-        $this->den('po','', 4.0, 3.0);
-        $this->den('út','Oba do večera.', 0.5, 0.5);
+        $this->den('po', '', 4.0, 3.0);
+        $this->den('út', 'Oba do večera.', 0.5, 0.5);
 
         $s = collect($this->getJson('/api/data/domacnost')->assertOk()->json('data.ABARS.cap'));
 

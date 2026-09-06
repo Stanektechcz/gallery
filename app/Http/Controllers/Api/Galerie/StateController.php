@@ -10,6 +10,7 @@ use App\Services\Provoz\AdminVeStavu;
 use App\Services\Provoz\DarkyVeStavu;
 use App\Services\Provoz\DomacnostVeStavu;
 use App\Services\Provoz\KapsleVeStavu;
+use App\Services\Provoz\NastaveniVeStavu;
 use App\Services\Provoz\PlanovaniVeStavu;
 use App\Services\Provoz\PravidlaVeStavu;
 use App\Services\Provoz\RozboryVeStavu;
@@ -39,6 +40,7 @@ class StateController extends Controller
         private readonly ZpravyVeStavu $zpravy,
         private readonly DarkyVeStavu $darky,
         private readonly KapsleVeStavu $kapsle,
+        private readonly NastaveniVeStavu $nastaveni,
     ) {}
 
     public function show(Request $request): JsonResponse
@@ -242,6 +244,19 @@ class StateController extends Controller
                 $skutecnost += $this->kapsle->zpracuj($patch, GallerySpace::findOrFail($coupleId), $uzivatel);
                 $patch = $this->kapsle->bezKapsli($patch);
                 $state->zapomen(KapsleVeStavu::SERVEROVE);
+            }
+
+            /*
+             * Přepínače nastavení.
+             *
+             * „Sync každé čtyři hodiny" i „upozornit na duplicitní transakci"
+             * měnily jen barvu v prohlížeči toho, kdo klikl — napojení se
+             * dál synchronizovalo podle toho, co bylo v databázi.
+             */
+            if ($this->nastaveni->tykaSe($patch)) {
+                $skutecnost += $this->nastaveni->zpracuj($patch, GallerySpace::findOrFail($coupleId), $uzivatel);
+                $patch = $this->nastaveni->bezNastaveni($patch);
+                $state->zapomen(NastaveniVeStavu::SERVEROVE);
             }
 
             $state->applyPatch($patch);

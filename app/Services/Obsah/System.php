@@ -49,6 +49,7 @@ class System implements PoskytovatelObsahu
     public function __construct(
         private readonly UlozisteGalerie $uloziste,
         private readonly LedgerService $kniha,
+        private readonly Formulare $formulare,
     ) {}
 
     public function skupina(): string
@@ -75,7 +76,38 @@ class System implements PoskytovatelObsahu
             'DATA_HEALTH' => $this->zdraviDat($prostor),
             'SECLIFE' => $this->zivotSekci($prostor),
             'ABARS' => $this->sloupce($prostor),
+            'AFORMS' => $this->prepinace($prostor),
         ], fn ($v) => $v !== null && $v !== []);
+    }
+
+    /**
+     * Přepínače nastavení: `{ klíč: [[sekce, [[popisek, poznámka, zapnuto]]]] }`.
+     *
+     * Obrazovka, pro kterou nemá aplikace ani jeden skutečný přepínač, se
+     * **neposílá** — prototyp na chybějící klíč sahá přes `AFORMS[key] ||
+     * AFORMS.revolut`, takže prázdný by na ni nakreslil cizí formulář.
+     *
+     * @return array<string, list<array{0: string, 1: list<array{0: string, 1: string, 2: int}>}>>
+     */
+    private function prepinace(GallerySpace $prostor): array
+    {
+        $uzivatel = auth()->user();
+        $formulare = [];
+
+        foreach ($this->formulare->klice() as $klic) {
+            $sekce = $this->formulare->sekce($klic, $prostor, $uzivatel);
+
+            if ($sekce === []) {
+                continue;
+            }
+
+            $formulare[$klic] = array_map(fn (array $s) => [
+                $s['label'],
+                array_map(fn (array $r) => [$r['label'], (string) $r['note'], $r['on'] ? 1 : 0], $s['rows']),
+            ], $sekce);
+        }
+
+        return $formulare;
     }
 
     // ——— zdraví dat ———
