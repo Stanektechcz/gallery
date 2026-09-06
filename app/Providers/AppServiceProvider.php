@@ -32,6 +32,7 @@ class AppServiceProvider extends ServiceProvider
             ->give(fn ($app) => [
                 $app->make(\App\Services\Obsah\Finance::class),
                 $app->make(\App\Services\Obsah\Knihovna::class),
+                $app->make(\App\Services\Obsah\Planovani::class),
             ]);
     }
 
@@ -75,9 +76,16 @@ class AppServiceProvider extends ServiceProvider
         });
 
         \App\Models\SharedTodo::updated(function ($todo) use ($engine): void {
-            // Only the moment it becomes done — every other save of a finished task
-            // would otherwise fire the rule again.
-            if (! $todo->wasChanged('status') || $todo->status !== 'done') return;
+            /*
+             * Only the moment it becomes done — every other save of a finished task
+             * would otherwise fire the rule again.
+             *
+             * The status this checked for was 'done', which nothing ever writes:
+             * SharedTodoService::complete() sets 'completed', and so does every
+             * validator in the module. The rule therefore never fired — an
+             * automation the couple had switched on quietly did nothing.
+             */
+            if (! $todo->wasChanged('status') || $todo->status !== 'completed') return;
 
             $space = \App\Models\GallerySpace::find($todo->gallery_space_id);
             if (! $space) return;

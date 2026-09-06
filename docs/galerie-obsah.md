@@ -58,7 +58,7 @@ Podle toho, kde už skutečný obsah je a kde na něm záleží:
 | --- | --- | --- | --- | --- |
 | 1 | **Finance** | `TX`, `BUD`, `FIN`, `INCOMES`, `SHARED`, `ENV`, `DISP`, `EST`, `ANTI`, `INFL`, `SEASON`, `RECON`, `CAS_ROWS`, `PAPER_ROWS`, `TRIPCOST` | `budgets`, `budget_category_limits`, `transactions`, `finance_categories`, `wallets`, `shared_expenses` | hotovo |
 | 2 | **Knihovna** | `DAYS`, `PHOTOS`, `ALBUMS`, `ATREE`, `PERSONS`, `DUP_GROUPS`, `YBCH`, `NAVCNT`, `TOTAL`, `MOBIL` | `media_items`, `media_variants`, `people`, `media_person`, `tags`, `albums`, `album_media`, `duplicate_groups` | hotovo |
-| 3 | Plánování | `CALEV`, `EVSEED`, `ATASKS`, `LATER_ITEMS`, `PROMISES`, `PATIENCE` | `calendar_events`, `shared_todos`, `event_tasks` | zbývá |
+| 3 | **Plánování** | `CALEV`, `ATASKS`, `LATER_ITEMS`, `AL.doneTasks`, `EVSEED` | `calendar_events`, `event_participants`, `event_reminders`, `shared_todos`, `life_events` | hotovo |
 | 4 | Domácnost | `HOUSE_CHORES`, `HOUSE_LOG`, `HOUSE_WEEK`, `HOUSE_DUES`, `HOUSE_INV`, `PANTRY` | **chybí tabulky** | zbývá |
 | 5 | Cesty a místa | `TRIPS`, `NOWTRIP`, `PLACES`, `REVISIT`, `WEATHER`, `RWEATHER` | `trips`, `places`, `trip_*` | zbývá |
 | 6 | Vztah | `DEC_LIST`, `DEC_COOL`, `PAST_DEC`, `ARB`, `VERSIONS`, `TACIT`, `SPEAK`, `PM_*`, `SPOR_*`, `VETO_*` | **chybí tabulky** | zbývá |
@@ -92,6 +92,21 @@ jako obrázek v CSS, kam hlavičku `Authorization` nepřidá, a token v adrese b
 zůstal v historii i v přístupovém logu. Podpis platí pro jediný soubor a končí
 na konci zítřejšího dne — tedy ve stejný okamžik pro všechny dlaždice, aby si
 je prohlížeč mohl nechat v paměti.
+
+## Plánování: co zůstává ve stavu páru
+
+`PROMISES` (sliby) a `PATIENCE` (kolikrát se to muselo připomínat) **zůstávají
+ve stavu páru** a do databáze se nepřenášejí. Není to opomenutí: prototyp je
+umí zakládat, uzavírat i rušit po dohodě a ukládá je do `/api/state`, který je
+sdílený mezi oběma partnery a přežije zavření prohlížeče. Tabulka, do které by
+nikdo jiný nepsal, by přidala druhý zdroj pravdy a žádnou funkci — a to je
+přesně to, co zásada „jedna pravda" zakazuje.
+
+Kolekce téhle skupiny jsou **výchozí hodnota**, ne živý pohled. Jakmile dvojice
+v prototypu upraví událost nebo přesune úkol, drží si vlastní seznam ve stavu
+(`evList`, `xBoard`, `hsLater`) a ten má přednost — tak je prototyp napsaný.
+Zápis zpátky do `calendar_events` a `shared_todos` je samostatná vrstva
+(obdoba `AdminVeStavu`) a čeká na svůj krok.
 
 ## Co bude potřebovat nové tabulky
 
