@@ -280,7 +280,8 @@
    * Po skupinách, ne jednou odpovědí: obrazovka financí nemá čekat, až se spočítá
    * kuchařka. Každá skupina se navlékne, jakmile dorazí — na pořadí nezáleží.
    */
-  var SKUPINY = ['finance', 'knihovna', 'planovani', 'domacnost', 'cesty', 'vztah', 'zdravi', 'sdileni'];
+  var SKUPINY = ['finance', 'knihovna', 'planovani', 'domacnost', 'cesty', 'vztah', 'zdravi', 'sdileni',
+    'zpravy', 'kucharka'];
 
   function skupiny() {
     return SKUPINY.map(function (jmeno) {

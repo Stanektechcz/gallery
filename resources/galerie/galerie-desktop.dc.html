@@ -14598,7 +14598,7 @@ class Component extends DCLogic {
     this.toast(title, { icon: 'ph-arrow-right' });
   };
   openPerson = name => this.setState({ route: 'person', personId: name, sel: [], selectMode: false });
-  openRecipe = key => this.setState({ route: 'recipe', recipeId: key, portions: RECIPES[key].base, ing: {}, sel: [], selectMode: false });
+  openRecipe = key => this.setState({ route: 'recipe', recipeId: key, portions: (RECIPES[key] || { base: 2 }).base, ing: {}, sel: [], selectMode: false });
   openPlace = key => this.setState({ route: 'place', placeId: key, sel: [], selectMode: false });
   relatedGo = target => {
     const [kind, arg] = target.split('-');
@@ -14621,7 +14621,11 @@ class Component extends DCLogic {
       .map(p => ({ bg: p.bg, fav: this.isFav(p), isVideo: p.isVideo, dur: p.dur, open: () => this.openLb(p.id) }));
   }
   recipeVals() {
-    const s = this.state, r = RECIPES[s.recipeId] || RECIPES.polevka;
+    // `RECIPES.polevka` je záložka z doby, kdy byly recepty napsané v dokumentu.
+    // Se skutečnou kuchařkou žádná taková být nemusí a `renderVals` se počítá
+    // při každém překreslení — spadla by celá aplikace, ne jen tahle obrazovka.
+    const s = this.state, r = RECIPES[s.recipeId] || RECIPES.polevka || RECIPES[Object.keys(RECIPES)[0]]
+      || { title: '', kind: '', time: '', base: 1, unitLabel: 'porce', tag: '', source: '', photoMatch: null, desc: '', ing: [], steps: [], stats: [], history: [], pairing: [] };
     const f = s.portions / r.base, step = r.base >= 12 ? 2 : 1;
     const checked = r.ing.filter((it, i) => this.haveIng(s.recipeId, i, it[2])).length;
     const ph = this.photoStrip(r.photoMatch, 8);
@@ -15134,7 +15138,7 @@ class Component extends DCLogic {
       txDetailLinks: open ? [
         open.f.trip && { icon: 'ph-airplane-tilt', label: 'Cesta', value: TRIPS[open.f.trip] ? TRIPS[open.f.trip].title : open.f.trip, go: () => this.setState({ route: 'trip', tripId: open.f.trip }) },
         open.f.place && { icon: 'ph-map-pin', label: 'Místo', value: (PLACES[open.f.place] || {}).title || open.f.place, go: () => this.openPlace(open.f.place) },
-        open.f.recipe && { icon: 'ph-cooking-pot', label: 'Recept', value: RECIPES[open.f.recipe].title, go: () => this.openRecipe(open.f.recipe) },
+        open.f.recipe && RECIPES[open.f.recipe] && { icon: 'ph-cooking-pot', label: 'Recept', value: RECIPES[open.f.recipe].title, go: () => this.openRecipe(open.f.recipe) },
         open.f.goal && { icon: 'ph-piggy-bank', label: 'Vyhrazená částka', value: open.f.goal, go: () => this.setState({ route: 'x-rozpocty', budTab: 2 }) },
         { icon: 'ph-chart-donut', label: 'Rozpočet', value: open.cat, go: () => this.setState({ route: 'x-rozpocty', budTab: 1 }) },
         open.f.receipt && { icon: 'ph-receipt', label: 'Doklad', value: 'účtenka vyfocena', go: () => this.toast('Doklad k ' + open.name, { icon: 'ph-receipt' }) }

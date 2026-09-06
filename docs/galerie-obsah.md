@@ -59,7 +59,7 @@ Změřeno v prohlížeči proti běžícímu serveru, ne odhadem:
 | Kolekcí v `window.GalerieData` celkem | **189** |
 | Z nich obsluhuje server | **52** (50 přes `/api/data`, `ADMIN` a `STORAGE` přes přístupovou vrstvu) |
 | Katalogy rozhraní — zůstávají statické záměrně | ~50 |
-| **Obsah dvojice, který ještě není napojený** | **~87** |
+| **Obsah dvojice, který ještě není napojený** | **~82** |
 
 Osm skupin plánu je hotových. **Plán ale nepokrýval všechen obsah** — pojmenoval
 zhruba čtyřicet kolekcí ze sto dvaceti sedmi. Zbytek je vypsaný v části
@@ -86,6 +86,8 @@ Podle toho, kde už skutečný obsah je a kde na něm záleží:
 | 6 | **Vztah** | `DEC_LIST`, `ARB`, `VERSIONS`, `DEC_COOL`, `SPOR_*`, `VETO_*`, `PROMISES`, `NUDGES`, `PATIENCE` | `couple_decisions`, `couple_decision_revisions`, `couple_cooling_purchases`, `couple_disagreement_points`, `couple_veto_proposals`, `couple_vetoes`, `couple_promises`, `couple_nudges`, `couple_nudge_reminders` | hotovo, **píše i zpátky** |
 | 7 | **Zdraví a cyklus** | `CYC_BASE`, `CYC_STARTS`, `KL_DAYS`, `KL_MOOD` | `cycle_days`, `cycle_settings`, `wellbeing_moods` | hotovo |
 | 8 | **Sdílení a systém** | `SHARES`, `GUEST_Q`, `KAPS`, `VAULT_ITEMS`, `OFFPACKS` | `shared_links`, `guest_uploads`, `time_capsules`, `media_items.is_hidden` | hotovo |
+| 9 | **Zprávy a hlasovky** | `MSGS`, `MSGFILES`, `AMSG` | `chat_messages` | hotovo |
+| 10 | **Kuchařka** | `RECIPES`, `RECIPE_BY_TITLE` | `recipes`, `recipe_ingredients`, `recipe_steps`, `recipe_cooking_sessions` | hotovo |
 
 ## Knihovna: co se muselo změnit v dokumentu
 
@@ -318,6 +320,27 @@ Dvě věci téhle skupiny zůstávají v katalogu:
 Zapečetěná kapsle jde ven **bez textu**. Celý smysl je, že se otevře v den, na
 který se čeká, a obsah v prohlížeči by se dal přečíst kdykoli.
 
+## Zprávy a kuchařka: dvě věci, které se ukázaly až u dat
+
+**Tělo zprávy je v databázi šifrované** (`'body' => 'encrypted'`). Přímý dotaz
+přes dotazovač vrátí base64 — do chatu by šel místo věty ciphertext. Čte se
+proto přes model. Prázdné bubliny (zbytky po hrách a zrušených přílohách) se
+neposílají; v chatu by vypadaly jako výpadek.
+
+**`who` není iniciála jména, ale strana.** Prototyp porovnává `m.who === 'A'`
+a myslí tím „moje". Posílá se proto `A` za přihlášeného a `M` za toho druhého —
+jinak by si každý z dvojice četl vlastní zprávy jako cizí.
+
+V kuchařce se **historie a čísla počítají z vaření**, ne ukládají: „naposledy
+12. 8." a „9/10 · 3 vaření" jsou pohled na `recipe_cooking_sessions`. Cena za
+porci jde ven jen tehdy, když ji někdo u vaření doopravdy zapsal — odhadnout ji
+ze surovin by znamenalo vymyslet číslo, podle kterého se dvojice rozhoduje, co
+uvaří. Surovina bez množství má `null`, ne nulu: prototyp podle toho pozná „sůl
+dle chuti" a číslo u ní vůbec nekreslí.
+
+`MSGREPLIES` (nabídnuté rychlé odpovědi) zůstává katalogem — nejsou to zprávy
+dvojice, ale texty tlačítek.
+
 ## Co ještě není napojené
 
 Tohle **není** katalog rozhraní — je to obsah dvojice, který se pořád kreslí
@@ -326,8 +349,6 @@ má tabulky i data, poslední je potřeba teprve vymyslet.
 
 | Oblast | Kolekce | Tabulka |
 | --- | --- | --- |
-| **Zprávy a hlasovky** | `MSGS`, `MSGFILES`, `MSGREPLIES`, `AMSG` | `chat_messages`, `chat_reactions`, `chat_reads` — **je** |
-| **Kuchařka** | `RECIPES`, `RECIPE_BY_TITLE` | `recipes`, `recipe_ingredients`, `recipe_steps` — **je** |
 | **Dárky a přání** | `GIFT_WISHES`, `GIFT_BUYS`, `GIFT_IDEAS`, `GIFT_OCC` | `gift_ideas`, `gift_budgets` — **je** |
 | **Randíčka a filmy** | `DATING` | `couple_date_ideas`, `entertainment_titles` — **je** |
 | **Vzpomínky a příběh** | `MEMS`, `STORY`, `STORYMS` | `generated_memories`, `album_story_blocks` — **je** |
