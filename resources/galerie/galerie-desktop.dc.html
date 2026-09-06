@@ -18085,14 +18085,23 @@ class Component extends DCLogic {
     const s = this.state;
     const tab = s.klTab || 'klMood';
     const mood = s.klMood || KL_MOOD;
-    const whoM = s.klMoodWho || 'Adrian';
-    const other = w => w === 'Adrian' ? 'Makinka' : 'Adrian';
+    /*
+     * Jména dvojice, ne „Adrian" a „Makinka" napevno.
+     *
+     * Celá tahle obrazovka sahala na `mood.Adrian` a `en.Adrian` přímo. Se
+     * skutečnými daty jiné dvojice tam ta jména nejsou a `undefined[i]` shodí
+     * nejen tuhle obrazovku, ale celý `renderVals` — tedy aplikaci.
+     */
+    const DVA = (a => a.length >= 2 ? a : ['Adrian', 'Makinka'])(Object.keys(mood));
+    const whoM = DVA.indexOf(s.klMoodWho) >= 0 ? s.klMoodWho : DVA[0];
+    const other = w => w === DVA[0] ? DVA[1] : DVA[0];
     const mean = a => { const v = a.filter(x => x !== null && x !== undefined); return v.length ? v.reduce((x, y) => x + y, 0) / v.length : null; };
     const one = n => n === null ? '—' : n.toFixed(1).replace('.', ',');
-    const dayAvg = KL_DAYS.map((d, i) => mean([mood.Adrian[i], mood.Makinka[i]]));
+    const radaN = w => (mood[w] || []);
+    const dayAvg = KL_DAYS.map((d, i) => mean([radaN(DVA[0])[i], radaN(DVA[1])[i]]));
     const last7 = mean(dayAvg.slice(7)), prev7 = mean(dayAvg.slice(0, 7));
     const trend = last7 !== null && prev7 !== null ? last7 - prev7 : 0;
-    const moodColor = (v, w) => v === null || v === undefined ? 'var(--g-line2)' : w === 'Adrian' ? 'var(--g-acc)' : 'var(--g-mag)';
+    const moodColor = (v, w) => v === null || v === undefined ? 'var(--g-line2)' : w === DVA[0] ? 'var(--g-acc)' : 'var(--g-mag)';
     const kinds = KL_EV.map(e => e.kind).filter((k, i, a) => a.indexOf(k) === i);
     const corr = kinds.map(k => {
       const days = KL_EV.filter(e => e.kind === k).map(e => e.d);
@@ -18104,17 +18113,23 @@ class Component extends DCLogic {
     const bestCorr = corr.filter(c => c.delta > 0)[0];
 
     const en = s.klEn || KL_EN;
-    const enWho = s.klEnWho || 'Adrian';
+    // Mapu energie píše každý za sebe, takže jména bere odtud — a když ji
+    // ještě nikdo nezaložil, drží se těch z nálady.
+    const DVA_EN = (a => a.length >= 2 ? a : DVA)(Object.keys(en));
+    const enWho = DVA_EN.indexOf(s.klEnWho) >= 0 ? s.klEnWho : DVA_EN[0];
+    const otherEn = w => w === DVA_EN[0] ? DVA_EN[1] : DVA_EN[0];
     const EN_D = ['Po', 'Út', 'St', 'Čt', 'Pá', 'So', 'Ne'], EN_S = ['ráno', 'odpoledne', 'večer'], EN_W = ['12%', '56%', '100%'];
+    const radaE = w => (en[w] || ['000', '000', '000', '000', '000', '000', '000']);
     const wins = [];
     for (let si = 0; si < 3; si++) for (let di = 0; di < 7; di++) {
-      const a = +en.Adrian[di][si], m = +en.Makinka[di][si];
+      const a = +(radaE(DVA_EN[0])[di] || '000')[si], m = +(radaE(DVA_EN[1])[di] || '000')[si];
       wins.push({ di, si, a, m, shared: Math.min(a, m), label: EN_D[di] + ' ' + EN_S[si] });
     }
     const best = wins.slice().sort((x, y) => y.shared - x.shared || (y.a + y.m) - (x.a + x.m))[0];
     const fullWins = wins.filter(w => w.shared >= 2).length;
     const cycleEn = (di, si) => {
-      const next = { Adrian: en.Adrian.slice(), Makinka: en.Makinka.slice() };
+      const next = {};
+      DVA_EN.forEach(w => { next[w] = radaE(w).slice(); });
       const d = next[enWho][di];
       next[enWho][di] = d.substring(0, si) + String((+d[si] + 1) % 3) + d.substring(si + 1);
       this.setState({ klEn: next });
@@ -18159,6 +18174,9 @@ class Component extends DCLogic {
     const askQ = KL_QUESTIONS[askIdx];
     const askDone = !!s.klAskDone;
     const askLog = s.klAskLog || KL_ASK_LOG;
+    // Co o dnešní otázce ví server: jestli druhý odpověděl a co napsal.
+    // Bez backendu je to null a platí ukázka.
+    const askNow = ((window.GalerieData || {}).KL_ASK_NOW) || null;
 
     return {
       isKlid: s.route === 'x-klid',
@@ -18186,11 +18204,11 @@ class Component extends DCLogic {
         ? 'Nejsilnější souvislost: ' + worstCorr.kind.toLowerCase() + '. Ve dnech, kdy se to stalo, je nálada o ' + Math.abs(worstCorr.delta).toFixed(1).replace('.', ',') + ' bodu nižší než jinak.'
         : 'Žádná událost nemá jasnou souvislost s náladou. Poslední dva týdny drží rovinu.',
       klMoodWhoName: whoM,
-      klMoodSwitch: () => { this.setState({ klMoodWho: other(whoM) }); this.toast('Zapisujete za ' + (other(whoM) === 'Makinka' ? 'Makinku' : 'Adriana'), { icon: 'ph-user-switch' }); },
+      klMoodSwitch: () => { this.setState({ klMoodWho: other(whoM) }); this.toast('Zapisujete za ' + other(whoM), { icon: 'ph-user-switch' }); },
       klMoodDays: KL_DAYS.map((d, i) => ({
         date: d,
-        aH: (mood.Adrian[i] || 0) * 20 + '%', mH: (mood.Makinka[i] || 0) * 20 + '%',
-        aC: moodColor(mood.Adrian[i], 'Adrian'), mC: moodColor(mood.Makinka[i], 'Makinka'),
+        aH: (radaN(DVA[0])[i] || 0) * 20 + '%', mH: (radaN(DVA[1])[i] || 0) * 20 + '%',
+        aC: moodColor(radaN(DVA[0])[i], DVA[0]), mC: moodColor(radaN(DVA[1])[i], DVA[1]),
         today: i === KL_DAYS.length - 1 ? 'var(--g-ink)' : 'transparent',
         avg: dayAvg[i] === null ? '—' : one(dayAvg[i]),
         ev: KL_EV.filter(e => e.d === i).map(e => e.kind).join(' · ')
@@ -18201,7 +18219,8 @@ class Component extends DCLogic {
         bg: mood[whoM][KL_DAYS.length - 1] === v ? 'var(--g-ink)' : 'transparent',
         fg: mood[whoM][KL_DAYS.length - 1] === v ? 'var(--g-bg)' : 'var(--g-ink2)',
         set: () => {
-          const next = { Adrian: mood.Adrian.slice(), Makinka: mood.Makinka.slice() };
+          const next = {};
+          DVA.forEach(w => { next[w] = radaN(w).slice(); });
           next[whoM][KL_DAYS.length - 1] = v;
           this.setState({ klMood: next });
           this.toast('Dnešní nálada zapsána · ' + v + ' z 5', { icon: 'ph-smiley', undo: () => this.setState({ klMood: mood }) });
@@ -18232,7 +18251,7 @@ class Component extends DCLogic {
         : best.shared === 1 ? 'Plné společné okno tento týden není. Nejblíž je ' + best.label + ' — a i to bude na půl plynu.'
           : 'Tento týden nemáte společně sílu na nic navíc. To je informace, ne selhání.',
       klEnWhoLabel: 'Zapisuje ' + enWho,
-      klEnSwitch: () => this.setState({ klEnWho: other(enWho) }),
+      klEnSwitch: () => this.setState({ klEnWho: otherEn(enWho) }),
       klEnDays: EN_D.map(d => ({ label: d })),
       klEnRows: EN_S.map((slot, si) => ({
         slot,
@@ -18240,8 +18259,8 @@ class Component extends DCLogic {
           bg: w.shared === 2 ? 'var(--g-panel)' : w.shared === 1 ? 'var(--g-raise)' : 'transparent',
           border: w === best && w.shared > 0 ? 'var(--g-acc)' : 'var(--g-line2)',
           aW: EN_W[w.a], mW: EN_W[w.m],
-          aC: enWho === 'Adrian' ? 'var(--g-acc)' : 'var(--g-line)',
-          mC: enWho === 'Makinka' ? 'var(--g-mag)' : 'var(--g-line)',
+          aC: enWho === DVA_EN[0] ? 'var(--g-acc)' : 'var(--g-line)',
+          mC: enWho === DVA_EN[1] ? 'var(--g-mag)' : 'var(--g-line)',
           note: w === best && w.shared > 0 ? 'okno' : '',
           pick: () => cycleEn(w.di, w.si)
         }))
@@ -18327,8 +18346,16 @@ class Component extends DCLogic {
       klAskCan: (s.klAskMine || '').trim().length > 1 && !askDone,
       klAskDone: askDone,
       klAskBlind: !askDone,
-      klAskOther: askQ.other,
-      klAskSubmit: () => { this.setState({ klAskDone: true }); this.toast('Odpovědi odemčené — obě naráz', { icon: 'ph-lock-open' }); },
+      /*
+       * Odpověď druhého, ne vymyšlená.
+       *
+       * Ukázka ji měla napsanou v katalogu otázek, takže „odemknout obě
+       * naráz" odemklo větu, kterou nikdo neřekl. Se serverem se ukáže to,
+       * co druhý opravdu napsal — a když ještě nenapsal nic, řekne se to.
+       */
+      klAskOther: askNow ? (askNow.other || 'Druhý zatím neodpověděl. Až odpoví, objeví se to tady.') : askQ.other,
+      // Otázka se posílá s odpovědí: server jinak neví, na co se odpovídalo.
+      klAskSubmit: () => { this.setState({ klAskDone: true, klAskQ: askQ.q }); this.toast('Odpověď zapsaná — druhého uvidíte, až odpoví taky', { icon: 'ph-lock-open' }); },
       klAskNext: () => {
         this.setState({
           klAskIdx: askIdx + 1, klAskMine: '', klAskDone: false,

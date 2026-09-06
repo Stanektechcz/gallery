@@ -10,6 +10,7 @@ use App\Services\Provoz\AdminVeStavu;
 use App\Services\Provoz\DarkyVeStavu;
 use App\Services\Provoz\DomacnostVeStavu;
 use App\Services\Provoz\KapsleVeStavu;
+use App\Services\Provoz\KlidVeStavu;
 use App\Services\Provoz\NastaveniVeStavu;
 use App\Services\Provoz\PlanovaniVeStavu;
 use App\Services\Provoz\PravidlaVeStavu;
@@ -41,6 +42,7 @@ class StateController extends Controller
         private readonly DarkyVeStavu $darky,
         private readonly KapsleVeStavu $kapsle,
         private readonly NastaveniVeStavu $nastaveni,
+        private readonly KlidVeStavu $klid,
     ) {}
 
     public function show(Request $request): JsonResponse
@@ -257,6 +259,19 @@ class StateController extends Controller
                 $skutecnost += $this->nastaveni->zpracuj($patch, GallerySpace::findOrFail($coupleId), $uzivatel);
                 $patch = $this->nastaveni->bezNastaveni($patch);
                 $state->zapomen(NastaveniVeStavu::SERVEROVE);
+            }
+
+            /*
+             * Klid a pohoda.
+             *
+             * Mapa energie je celá o tom najít okno, kdy mají sílu **oba** —
+             * a klepnutí do ní končilo v prohlížeči toho, kdo klikl. Druhý se
+             * k ní nedostal, takže se to okno nedalo najít nikdy.
+             */
+            if ($this->klid->tykaSe($patch)) {
+                $skutecnost += $this->klid->zpracuj($patch, GallerySpace::findOrFail($coupleId), $uzivatel);
+                $patch = $this->klid->bezKlidu($patch);
+                $state->zapomen(KlidVeStavu::SERVEROVE);
             }
 
             $state->applyPatch($patch);
