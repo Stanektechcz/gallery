@@ -9,6 +9,7 @@ use App\Models\GallerySpace;
 use App\Services\Provoz\AdminVeStavu;
 use App\Services\Provoz\DomacnostVeStavu;
 use App\Services\Provoz\VztahVeStavu;
+use App\Services\Provoz\ZdraviVeStavu;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -21,6 +22,7 @@ class StateController extends Controller
         private readonly AdminVeStavu $sprava,
         private readonly DomacnostVeStavu $domacnost,
         private readonly VztahVeStavu $vztah,
+        private readonly ZdraviVeStavu $zdravi,
     ) {}
 
     public function show(Request $request): JsonResponse
@@ -106,6 +108,20 @@ class StateController extends Controller
                 $this->vztah->zpracuj($patch, GallerySpace::findOrFail($coupleId), $uzivatel);
                 $patch = $this->vztah->bezVztahu($patch);
                 $state->zapomen(VztahVeStavu::SERVEROVE);
+            }
+
+            /*
+             * Cyklus a nálada.
+             *
+             * Kalendář cyklu má vlastní modul i tabulku; tohle jen zajišťuje,
+             * že zápis z prototypu skončí tam, kde se na něj ptá zbytek
+             * aplikace. Jinak by dvojice měla dva kalendáře — jeden
+             * v prohlížeči a druhý v databázi.
+             */
+            if ($this->zdravi->tykaSe($patch)) {
+                $this->zdravi->zpracuj($patch, GallerySpace::findOrFail($coupleId), $uzivatel);
+                $patch = $this->zdravi->bezZdravi($patch);
+                $state->zapomen(ZdraviVeStavu::SERVEROVE);
             }
 
             $state->applyPatch($patch);

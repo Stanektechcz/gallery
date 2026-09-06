@@ -62,7 +62,7 @@ Podle toho, kde už skutečný obsah je a kde na něm záleží:
 | 4 | **Domácnost** | `HOUSE_CHORES`, `HOUSE_LOG`, `HOUSE_WEEK`, `HOUSE_DUES`, `HOUSE_INV`, `PANTRY` | `house_chores`, `house_chore_log`, `house_dues`, `house_inventory`, `house_pantry`, `house_week(_capacity)` | hotovo |
 | 5 | **Cesty a místa** | `TRIPS`, `TRIP_BY_TITLE`, `NOWTRIP`, `PLACES`, `PLACE_BY_TITLE` | `trips`, `trip_days`, `trip_activities`, `trip_expenses`, `trip_budget_limits`, `trip_packing_items`, `trip_document_checks`, `travel_journal_entries`, `places`, `place_plans`, `place_notes` | hotovo |
 | 6 | **Vztah** | `DEC_LIST`, `ARB`, `VERSIONS`, `DEC_COOL`, `SPOR_MINE`, `SPOR_THEIRS`, `VETO_USED`, `VETO_PROP` | `couple_decisions`, `couple_decision_revisions`, `couple_cooling_purchases`, `couple_disagreement_points`, `couple_veto_proposals`, `couple_vetoes` | hotovo |
-| 7 | Zdraví a cyklus | `CYC_BASE`, `CYC_TODAY`, `CYC_STARTS`, `CYC_SHARE`, `KL_*` | `cycle_days`, `cycle_settings`, **část chybí** | zbývá |
+| 7 | **Zdraví a cyklus** | `CYC_BASE`, `CYC_STARTS`, `KL_DAYS`, `KL_MOOD` | `cycle_days`, `cycle_settings`, `wellbeing_moods` | hotovo |
 | 8 | Sdílení a systém | `GV_*`, `GUEST_Q`, `VAULT_ITEMS`, `OFFPACKS`, `KAPS` | `shared_links`, `guest_uploads`, **trezor chybí** | zbývá |
 
 ## Knihovna: co se muselo změnit v dokumentu
@@ -189,6 +189,33 @@ skutečná, ne napsaná ukázka.
 Nic z toho se **nemaže**: rozhodnutí, které zmizí ze seznamu, je změněné,
 rozvaha zavřená, lhůta vyřízená. Veto navíc nese datum, ne popisek — vrací se
 po dvanácti měsících a bez data by se nedalo spočítat, kolik jich komu zbývá.
+
+## Cyklus: soukromý zápis, ne společný obsah
+
+Kalendář cyklu je zápis **jednoho člověka**. Aplikace na to má nastavení sdílení
+(`cycle_settings.share_level`) a poskytovatel ho drží:
+
+| Úroveň | Co partner uvidí |
+| --- | --- |
+| `none` | nic — ani termíny |
+| `dates` | kdy čekat a kolikátý den je; **žádné příznaky, nálada, bolest ani poznámka** |
+| `full` | celý deník |
+
+Svůj vlastní zápis vidí člověk vždycky. Poslat partnerovi všechno „protože jsou
+pár" je přesně to, čemu se ta volba vyhýbá.
+
+Začátky cyklů se **odvozují ze zapsaných dnů**, ne z druhého seznamu: počítá se
+z nich délka cyklu i odhad toho příštího, takže dvě pravdy by znamenaly dva různé
+odhady na jedné obrazovce. Zápis se ukládá pod přihlášeného člověka — cizí den
+nejde přepsat ani omylem.
+
+Nálada dostala vlastní tabulku (`wellbeing_moods`), protože ji jde zapsat jedním
+klikem a celá obrazovka „Klid a pohoda" na její čtrnáctidenní křivce stojí.
+Chybějící den je `null`, ne nula: „nezapsáno" a „bylo mi mizerně" nejsou totéž.
+
+`CYC_TODAY` je **skalár** a vyměnit se nedá — patří k témuž seznamu jako
+`INCOMES`. Zbytek (`FLOWS`, `PHASES`, `CYC_SYMPTOMS`, `CYC_MOODS`, `CYC_SHARE`,
+`KL_HELP`, `KL_QUESTIONS`) jsou katalogy rozhraní, ne obsah dvojice.
 
 ## Co bude potřebovat nové tabulky
 
