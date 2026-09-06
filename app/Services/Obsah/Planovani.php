@@ -35,6 +35,16 @@ class Planovani implements PoskytovatelObsahu
 
     private const UDALOSTI = 40;
 
+    /** Sloupce nástěnky. Zápis zpátky je podle nich pozná. */
+    public const TENTO_TYDEN = 'Tento týden';
+
+    public const POZDEJI = 'Později';
+
+    public const NEKDY = 'Někdy';
+
+    /** Seznamy úkolů dvojice; drží se kvůli tomu, co patří do domácnosti. */
+    private array $seznamyUkolu = [];
+
     public function skupina(): string
     {
         return 'planovani';
@@ -53,6 +63,14 @@ class Planovani implements PoskytovatelObsahu
     public function kolekce(GallerySpace $prostor): array
     {
         $jmena = $this->jmena($prostor);
+
+        if (Schema::hasTable('shared_todo_lists')) {
+            $this->seznamyUkolu = DB::table('shared_todo_lists')
+                ->where('gallery_space_id', $prostor->id)
+                ->get(['id', 'title', 'kind'])
+                ->keyBy('id')
+                ->all();
+        }
 
         return array_filter([
             'CALEV' => $this->udalosti($prostor, $jmena),
@@ -222,24 +240,65 @@ class Planovani implements PoskytovatelObsahu
 
         $tyden = CarbonImmutable::now()->addWeek();
 
+        /*
+         * Čtyři pole kreslí prototyp, tři jsou navíc pro cestu zpátky:
+         * `[co, kdo, termín slovy, hotovo, identifikátor, termín datem, priorita]`.
+         *
+         * Bez identifikátoru by se úprava neměla kam zapsat, bez data by se
+         * termín musel hádat z popisku a bez priority by každý úkol po termínu
+         * skončil jako „spěchá“, protože si ji prototyp z popisku dopočítává sám.
+         */
         $radek = fn (SharedTodo $u) => [
             $u->title,
             $u->assigned_to ? ($jmena[$u->assigned_to] ?? 'spolu') : 'spolu',
             $this->termin($u),
             $u->status === 'completed' ? 1 : 0,
+            $u->uuid,
+            $u->due_at ? CarbonImmutable::parse($u->due_at)->format('Y-m-d') : null,
+            match ($u->priority) {
+                'urgent', 'high' => 2,
+                'low' => 1,
+                default => 0,
+            },
         ];
 
         $sloupec = fn (string $nazev, Collection $co) => $co->isEmpty()
             ? null
             : [$nazev, $co->map($radek)->values()->all()];
 
+        $podleCasu = fn (Collection $co) => array_values(array_filter([
+            $sloupec(self::TENTO_TYDEN, $co->filter(fn (SharedTodo $u) => $u->due_at && $u->due_at <= $tyden)),
+            $sloupec(self::POZDEJI, $co->filter(fn (SharedTodo $u) => $u->due_at && $u->due_at > $tyden)),
+            $sloupec(self::NEKDY, $co->filter(fn (SharedTodo $u) => ! $u->due_at)),
+        ]));
+
+        // Domácnost je vlastní nástěnka: úkoly ze seznamů, které si dvojice
+        // vede jako domácí. Bez nich se záložka neposílá a zůstane napsaná.
+        $domaci = $ukoly->filter(fn (SharedTodo $u) => $this->jeDomaci($u));
+
         return array_filter([
-            'all' => array_values(array_filter([
-                $sloupec('Tento týden', $ukoly->filter(fn (SharedTodo $u) => $u->due_at && $u->due_at <= $tyden)),
-                $sloupec('Později', $ukoly->filter(fn (SharedTodo $u) => $u->due_at && $u->due_at > $tyden)),
-                $sloupec('Někdy', $ukoly->filter(fn (SharedTodo $u) => ! $u->due_at)),
-            ])),
+            'all' => $podleCasu($ukoly),
+            'home' => $domaci->isEmpty() ? [] : $podleCasu($domaci),
         ], fn ($v) => $v !== []);
+    }
+
+    /**
+     * Patří úkol na nástěnku domácnosti?
+     *
+     * Pozná se to podle seznamu, do kterého ho dvojice dala — ne podle slov
+     * v názvu. „Zavolat instalatérovi" je domácnost, „Zavolat mámě" není,
+     * a rozeznat to z textu nejde.
+     */
+    private function jeDomaci(SharedTodo $u): bool
+    {
+        $seznam = $this->seznamyUkolu[$u->list_id ?? 0] ?? null;
+
+        if (! $seznam) {
+            return false;
+        }
+
+        return $seznam->kind === 'household'
+            || mb_strtolower((string) $seznam->title) === 'domácnost';
     }
 
     /**

@@ -58,7 +58,7 @@ Podle toho, kde už skutečný obsah je a kde na něm záleží:
 | --- | --- | --- | --- | --- |
 | 1 | **Finance** | `TX`, `BUD`, `FIN`, `INCOMES`, `SHARED`, `ENV`, `DISP`, `EST`, `ANTI`, `INFL`, `SEASON`, `RECON`, `CAS_ROWS`, `PAPER_ROWS`, `TRIPCOST` | `budgets`, `budget_category_limits`, `transactions`, `finance_categories`, `wallets`, `shared_expenses` | hotovo |
 | 2 | **Knihovna** | `DAYS`, `PHOTOS`, `ALBUMS`, `ATREE`, `PERSONS`, `DUP_GROUPS`, `YBCH`, `NAVCNT`, `TOTAL`, `MOBIL` | `media_items`, `media_variants`, `people`, `media_person`, `tags`, `albums`, `album_media`, `duplicate_groups` | hotovo |
-| 3 | **Plánování** | `CALEV`, `ATASKS`, `LATER_ITEMS`, `AL.doneTasks`, `EVSEED` | `calendar_events`, `event_participants`, `event_reminders`, `shared_todos`, `life_events` | hotovo |
+| 3 | **Plánování** | `CALEV`, `ATASKS`, `LATER_ITEMS`, `AL.doneTasks`, `EVSEED` | `calendar_events`, `event_participants`, `event_reminders`, `shared_todos`, `shared_todo_lists`, `life_events` | hotovo, **píše i zpátky** |
 | 4 | **Domácnost** | `HOUSE_CHORES`, `HOUSE_LOG`, `HOUSE_WEEK`, `HOUSE_DUES`, `HOUSE_INV`, `PANTRY` | `house_chores`, `house_chore_log`, `house_dues`, `house_inventory`, `house_pantry`, `house_week(_capacity)` | hotovo |
 | 5 | **Cesty a místa** | `TRIPS`, `TRIP_BY_TITLE`, `NOWTRIP`, `PLACES`, `PLACE_BY_TITLE` | `trips`, `trip_days`, `trip_activities`, `trip_expenses`, `trip_budget_limits`, `trip_packing_items`, `trip_document_checks`, `travel_journal_entries`, `places`, `place_plans`, `place_notes` | hotovo |
 | 6 | **Vztah** | `DEC_LIST`, `ARB`, `VERSIONS`, `DEC_COOL`, `SPOR_MINE`, `SPOR_THEIRS`, `VETO_USED`, `VETO_PROP` | `couple_decisions`, `couple_decision_revisions`, `couple_cooling_purchases`, `couple_disagreement_points`, `couple_veto_proposals`, `couple_vetoes` | hotovo |
@@ -93,7 +93,7 @@ zůstal v historii i v přístupovém logu. Podpis platí pro jediný soubor a k
 na konci zítřejšího dne — tedy ve stejný okamžik pro všechny dlaždice, aby si
 je prohlížeč mohl nechat v paměti.
 
-## Plánování: co zůstává ve stavu páru
+## Plánování: co píše zpátky a co zůstává ve stavu
 
 `PROMISES` (sliby) a `PATIENCE` (kolikrát se to muselo připomínat) **zůstávají
 ve stavu páru** a do databáze se nepřenášejí. Není to opomenutí: prototyp je
@@ -102,11 +102,43 @@ sdílený mezi oběma partnery a přežije zavření prohlížeče. Tabulka, do 
 nikdo jiný nepsal, by přidala druhý zdroj pravdy a žádnou funkci — a to je
 přesně to, co zásada „jedna pravda" zakazuje.
 
-Kolekce téhle skupiny jsou **výchozí hodnota**, ne živý pohled. Jakmile dvojice
-v prototypu upraví událost nebo přesune úkol, drží si vlastní seznam ve stavu
-(`evList`, `xBoard`, `hsLater`) a ten má přednost — tak je prototyp napsaný.
-Zápis zpátky do `calendar_events` a `shared_todos` je samostatná vrstva
-(obdoba `AdminVeStavu`) a čeká na svůj krok.
+### Cesta zpátky: `PlanovaniVeStavu`
+
+Kalendář a úkoly píšou i zpátky — a je to **opatrnější** zápis než u ostatních
+skupin, protože `calendar_events` a `shared_todos` **vlastní aplikace sama**.
+Ptají se na ně připomínky, automatizace, cesty i výroční přehled; naplnit je
+vymyšlenými řádky z ukázky by bylo horší než nezapsat nic.
+
+Z toho plynou tři pravidla:
+
+- **Ukázkové řádky se neimportují.** Nová událost i nový úkol mají v prototypu
+  vlastní předponu (`ev-n`, `-n`, `-r`); napsané řádky (`ev0`, `all0-0`, `w1`)
+  ji nemají a přejdou se. Do nástěnky, na které není jediný skutečný úkol, se
+  nezapisuje vůbec.
+- **Maže se jen to, co server sám poslal.** Události se odstraňují jen uvnitř
+  okna (−90 až +400 dní); klient může mít v paměti starší seznam z doby, kdy
+  okno leželo jinde. Úkol se navíc nemaže, jen ruší — „uklidit hotové" nemá
+  znamenat ztrátu historie.
+- **Nástěnka domácnosti je výřez, ne celý seznam.** Zásah v ní neruší úkoly,
+  které do domácnosti nepatří.
+
+Aby se zápis měl kam trefit, nesou řádky ze serveru tři pole navíc:
+`[co, kdo, termín slovy, hotovo, **identifikátor**, **termín datem**,
+**priorita**]`. Bez identifikátoru by se úprava neměla kam zapsat, bez data by
+se termín musel hádat z popisku a bez priority by každý úkol po termínu skončil
+jako „spěchá", protože si ji prototyp z popisku dopočítává sám. Prototyp čte
+první čtyři pole a napsaného řádku se to netýká.
+
+**Sloupec je termín.** Sloupce nástěnky jsou odvozené z data, takže přetažení
+karty do „Někdy" termín zruší a do „Tento týden" ho nastaví — jinak by karta po
+obnovení skočila zpátky. Popisek termínu je volný text; překládá se jen to, co
+prototyp sám nabízí („dnes", „zítra", „za týden", názvy dnů, `20. 9.`), a co
+přeložit nejde, nechá termín být. Když se popisek proti serveru nezměnil, drží
+se **uložený čas** — klientovi jde ven jen den a vracet ho zpátky by z „do
+dvanácti" udělalo půlnoc.
+
+Připomenutí se překládá oběma směry: čtyři možnosti dialogu ↔ okamžik
+v `event_reminders`. Zrušené se maže, jinak by chodilo dál.
 
 ## Domácnost: první skupina, která píše i zpátky
 
@@ -260,10 +292,19 @@ zavření prohlížeče — tabulka, do které by nikdo jiný nepsal, by přidal
 zdroj pravdy a žádnou funkci.
 
 Pravidlo, které to celé řídí: **tabulka bez zápisu je horší než žádná tabulka.**
-Kde prototyp obsah drží ve svém stavu a nikdo jiný v aplikaci ho nevlastní,
-vzniká spolu s tabulkou i cesta zpátky (`DomacnostVeStavu`, `VztahVeStavu`,
-`ZdraviVeStavu`, `TrezorVeStavu`) — jinak se stav a databáze po prvním kliknutí
-rozejdou.
+Kde prototyp obsah drží ve svém stavu, vzniká i cesta zpátky:
+
+| Vrstva | Co zapisuje | Proč |
+| --- | --- | --- |
+| `PlanovaniVeStavu` | události, nástěnka, „až budeme mít čas" | tabulky vlastní modul — bez zápisu má dvojice dva kalendáře |
+| `DomacnostVeStavu` | dělba práce, lhůty, byt | nevlastní je nikdo; bez zápisu se stav a databáze rozejdou |
+| `VztahVeStavu` | rozhodnutí, rozvahy, protokol, veto | totéž |
+| `ZdraviVeStavu` | zapsané dny cyklu, nálada | cyklus vlastní modul |
+| `TrezorVeStavu` | co je schované z knihovny | jinak fotku schová jen jeden prohlížeč |
+| `AdminVeStavu` | administrace ze staršího klienta | záchranná síť |
+
+Kde tabulky vlastní jiný modul (kalendář, úkoly, cyklus), je zápis **opatrnější**:
+ukázkové řádky se neimportují a maže se jen to, co server sám poslal.
 
 `CYC_TODAY` a `INCOMES` jsou **skaláry**, které se na místě vyměnit nedají;
 `INCOMES` se posílá i v `BUD.income`, `CYC_TODAY` je fixní „dnešek" prototypu.

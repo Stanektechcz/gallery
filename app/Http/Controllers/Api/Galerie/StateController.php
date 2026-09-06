@@ -9,6 +9,7 @@ use App\Models\GallerySpace;
 use App\Services\Provoz\AdminVeStavu;
 use App\Services\Provoz\DomacnostVeStavu;
 use App\Services\Provoz\VztahVeStavu;
+use App\Services\Provoz\PlanovaniVeStavu;
 use App\Services\Provoz\TrezorVeStavu;
 use App\Services\Provoz\ZdraviVeStavu;
 use Illuminate\Http\JsonResponse;
@@ -25,6 +26,7 @@ class StateController extends Controller
         private readonly VztahVeStavu $vztah,
         private readonly ZdraviVeStavu $zdravi,
         private readonly TrezorVeStavu $trezor,
+        private readonly PlanovaniVeStavu $planovani,
     ) {}
 
     public function show(Request $request): JsonResponse
@@ -135,6 +137,20 @@ class StateController extends Controller
             if ($this->trezor->tykaSe($patch)) {
                 $this->trezor->zpracuj($patch, GallerySpace::findOrFail($coupleId));
                 $patch = $this->trezor->bezTrezoru($patch);
+            }
+
+            /*
+             * Kalendář a úkoly.
+             *
+             * Tyhle tabulky **vlastní aplikace sama** — ptají se na ně
+             * připomínky, automatizace i cesty. Bez téhle vrstvy má dvojice
+             * dva kalendáře: jeden v prohlížeči a druhý v databázi, který
+             * o jejích změnách neví.
+             */
+            if ($this->planovani->tykaSe($patch)) {
+                $this->planovani->zpracuj($patch, GallerySpace::findOrFail($coupleId), $uzivatel);
+                $patch = $this->planovani->bezPlanovani($patch);
+                $state->zapomen(PlanovaniVeStavu::SERVEROVE);
             }
 
             $state->applyPatch($patch);

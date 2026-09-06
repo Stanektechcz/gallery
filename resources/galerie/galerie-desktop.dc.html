@@ -14258,16 +14258,23 @@ class Component extends DCLogic {
     if (o) return o;
     const src = ATASKS[key] || ATASKS.all;
     const done = [];
+    /*
+     * Řádek úkolu je `[co, kdo, termín, hotovo]`. Ze serveru přijdou ještě tři
+     * pole navíc — vlastní identifikátor, termín jako datum a priorita — aby se
+     * úprava měla kam zapsat a spěch se nemusel hádat z popisku. Napsaný řádek
+     * je nemá a chová se přesně jako dosud.
+     */
+    const radek = (t, ci, i, hotovo) => ({
+      t: t[0], w: t[1], d: t[2], on: hotovo,
+      pr: t[6] !== undefined && t[6] !== null ? t[6] : (hotovo ? 0 : (/po termínu|dnes/.test(t[2]) ? 2 : 0)),
+      note: '', id: t[4] || (key + ci + '-' + i), due: t[5] || null
+    });
     const cols = src.map((col, ci) => ({
       label: col[0],
       items: col[1].filter((t, i) => {
-        if (t[3] === 1) { done.push({ t: t[0], w: t[1], d: t[2], on: true, pr: 0, note: '', id: key + ci + '-' + i }); return false; }
+        if (t[3] === 1) { done.push(radek(t, ci, i, true)); return false; }
         return true;
-      }).map((t, i) => ({
-        t: t[0], w: t[1], d: t[2], on: false,
-        pr: /po termínu|dnes/.test(t[2]) ? 2 : 0, note: '',
-        id: key + ci + '-' + i
-      }))
+      }).map((t, i) => radek(t, ci, i, false))
     }));
     return cols.concat([{ label: 'Hotovo', done: true, items: done }]);
   }
@@ -24578,7 +24585,10 @@ class Component extends DCLogic {
   // ——— kalendář ———
   events() {
     const s = this.state;
-    const base = s.evList || CALEV.map((e, i) => ({ ...e, id: 'ev' + i, remind: e.remind || '' }));
+    // Skutečná událost si nese vlastní identifikátor; přepsat ho pořadím by
+    // znamenalo, že se úprava nemá kam zapsat. Napsaná ho nemá a dostane pořadí,
+    // jako dosud.
+    const base = s.evList || CALEV.map((e, i) => ({ ...e, id: e.id || ('ev' + i), remind: e.remind || '' }));
     return base;
   }
   evDone(id) { return !!(this.state.evDoneMap || {})[id]; }
