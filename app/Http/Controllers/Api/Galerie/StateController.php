@@ -7,7 +7,9 @@ use App\Http\Controllers\Controller;
 use App\Models\CoupleState;
 use App\Models\GallerySpace;
 use App\Services\Provoz\AdminVeStavu;
+use App\Services\Provoz\DarkyVeStavu;
 use App\Services\Provoz\DomacnostVeStavu;
+use App\Services\Provoz\KapsleVeStavu;
 use App\Services\Provoz\PlanovaniVeStavu;
 use App\Services\Provoz\PravidlaVeStavu;
 use App\Services\Provoz\RozboryVeStavu;
@@ -15,6 +17,7 @@ use App\Services\Provoz\TrezorVeStavu;
 use App\Services\Provoz\UklidVeStavu;
 use App\Services\Provoz\VztahVeStavu;
 use App\Services\Provoz\ZdraviVeStavu;
+use App\Services\Provoz\ZpravyVeStavu;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -33,6 +36,9 @@ class StateController extends Controller
         private readonly UklidVeStavu $uklid,
         private readonly PravidlaVeStavu $pravidla,
         private readonly RozboryVeStavu $rozbory,
+        private readonly ZpravyVeStavu $zpravy,
+        private readonly DarkyVeStavu $darky,
+        private readonly KapsleVeStavu $kapsle,
     ) {}
 
     public function show(Request $request): JsonResponse
@@ -197,6 +203,45 @@ class StateController extends Controller
                 $skutecnost += $this->rozbory->zpracuj($patch, GallerySpace::findOrFail($coupleId));
                 $patch = $this->rozbory->bezRozboru($patch);
                 $state->zapomen(RozboryVeStavu::SERVEROVE);
+            }
+
+            /*
+             * Zprávy.
+             *
+             * „Zpráva odeslána," řekl prototyp — a nikam ji neodeslal. Bublina
+             * se objevila v prohlížeči odesílatele, druhý z dvojice o ní
+             * nevěděl a po zavření záložky zmizela.
+             */
+            if ($this->zpravy->tykaSe($patch)) {
+                $skutecnost += $this->zpravy->zpracuj($patch, GallerySpace::findOrFail($coupleId), $uzivatel);
+                $patch = $this->zpravy->bezZprav($patch);
+                $state->zapomen(ZpravyVeStavu::SERVEROVE);
+            }
+
+            /*
+             * Dárky a přání.
+             *
+             * Táž věc: `state.wishes || GIFT_WISHES`. První napsané přání
+             * zastínilo celou sekci — druhý o něm nevěděl a po zavření
+             * záložky zmizelo.
+             */
+            if ($this->darky->tykaSe($patch)) {
+                $skutecnost += $this->darky->zpracuj($patch, GallerySpace::findOrFail($coupleId), $uzivatel);
+                $patch = $this->darky->bezDarku($patch);
+                $state->zapomen(DarkyVeStavu::SERVEROVE);
+            }
+
+            /*
+             * Časové kapsle.
+             *
+             * Dopis, který má přijít za rok, je přesně ta věc, u které na
+             * uložení záleží nejvíc: mezitím se vymění telefon, a s ním celá
+             * lokální kopie.
+             */
+            if ($this->kapsle->tykaSe($patch)) {
+                $skutecnost += $this->kapsle->zpracuj($patch, GallerySpace::findOrFail($coupleId), $uzivatel);
+                $patch = $this->kapsle->bezKapsli($patch);
+                $state->zapomen(KapsleVeStavu::SERVEROVE);
             }
 
             $state->applyPatch($patch);

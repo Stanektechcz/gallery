@@ -67,16 +67,15 @@ Devět z osmdesáti kolekcí prototyp v `GalerieData` vůbec nemá — mřížku
 měnu, spíž a odkazy si dokument vyráběl sám ve funkcích. Server je dodává
 navíc a přepínače v dokumentu je berou přednostně.
 
-Ze stavu páru se pořád ukládá **22 obsahových klíčů** (`wishes`, `ideas`,
-`buys`, `quar`, `paper`, `emItems`, `emLog`, `kapsules`, `chat`, `favList`,
-`forgList`, `antiList`, `mlLoad`, `hsVisits`, `tichoData`, `pauseLog`,
-`pausePlan`, `klAttn`, `klEn`, `klAskLog`, `pmMine`, `cycSel`). Zachycených je
-dvacet čtyři; tyhle čekají na svoji vrstvu.
+Ze stavu páru se pořád ukládá **15 obsahových klíčů** (`quar`, `paper`,
+`emItems`, `emLog`, `favList`, `forgList`, `antiList`, `mlLoad`, `hsVisits`,
+`tichoData`, `pauseLog`, `pausePlan`, `klAttn`, `klEn`, `klAskLog`, `pmMine`,
+`cycSel`). Žádný z nich už nezastiňuje kolekci, kterou zároveň dodává server —
+čekají na tabulku, ne na vrstvu.
 
-Nejnaléhavější tři už zachycené jsou: `rules` a `ruleLog` (pravidlo založené
-v prototypu se dřív nikde nespustilo a `state.rules` navíc navždy zastínil ta
-skutečná) a `season` (sezónní fond upravený na obrazovce se nedostal do
-`budget_goals`).
+Zachycených je **třicet jedna**. Všechny případy, kdy stav přebíjel skutečná
+data (`rules`, `ruleLog`, `season`, `chat`, `msgList`, `wishes`, `ideas`,
+`buys`, `kapsules`), jsou vyřešené.
 
 ## Pořadí
 
@@ -405,6 +404,9 @@ Kde prototyp obsah drží ve svém stavu, vzniká i cesta zpátky:
 | `UklidVeStavu` | karanténa a slučování duplicit | „Pustit" jinak zmizí jen tomu, kdo klikl, a originál leží dál na disku |
 | `PravidlaVeStavu` | automatizace a její historie | `state.rules \|\| RULEDEF` — jedno přepnutí vypínače navždy zastínilo skutečná pravidla |
 | `RozboryVeStavu` | sezónní fondy | totéž u `state.season \|\| SEASON`; fond měl v Rozpočtech jiný stav než ve své vlastní obrazovce |
+| `ZpravyVeStavu` | odeslané zprávy | „Zpráva odeslána" — a nikam se neodeslala; druhý o ní nevěděl a po zavření záložky zmizela |
+| `DarkyVeStavu` | přání, nápady, chystané dárky | totéž; nákup navíc musí zůstat soukromý toho, kdo ho pořizuje |
+| `KapsleVeStavu` | zapečetěné vzkazy | dopis na příští rok přežije výměnu telefonu jen v databázi |
 | `AdminVeStavu` | administrace ze staršího klienta | záchranná síť |
 
 Vrstvy, které skutečnost **vracejí, ale neukládají** (pravidla, historie běhů,

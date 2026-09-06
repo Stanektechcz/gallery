@@ -19132,6 +19132,16 @@ class Component extends DCLogic {
     this.msgsSet(list.concat([row]));
     this.setState({ xSeq: (this.state.xSeq || 1) + 1, msgDraft: '' });
     clearTimeout(this._typT); clearTimeout(this._repT);
+
+    /*
+     * Odpověď si aplikace nevymýšlí.
+     *
+     * Ukázka po 2,6 sekundy dopsala větu z `MSGREPLIES` a označila ji jako
+     * od druhého z dvojice. Se skutečným chatem je to nejhorší možná lež:
+     * dvojice si přečte zprávu, kterou nikdo nenapsal — a uloží se jí.
+     */
+    if (window.GalerieApi && window.GalerieApi.mode === 'http') return;
+
     this._typT = setTimeout(() => this.setState({ msgTyping: true }), 900);
     this._repT = setTimeout(() => {
       const rep = MSGREPLIES[Math.floor(Math.random() * MSGREPLIES.length)];
