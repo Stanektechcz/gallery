@@ -351,6 +351,49 @@
       });
     },
 
+    /*
+     * Stažení souboru ze serveru.
+     *
+     * Přes fetch s hlavičkami, ne přes obyčejný odkaz: `<a href>` posílá
+     * prohlížeč sám a hlavičku `Authorization` k němu nepřidá, takže by
+     * sezení přihlášené tokenem dostalo 401. Takhle to funguje i s cookie,
+     * i s tokenem.
+     */
+    download: function (path, filename) {
+      if (mode !== 'http') return Promise.resolve(null);
+      return fetch(base + '/' + path, { headers: headers(), credentials: 'same-origin' })
+        .then(function (r) {
+          if (!r.ok) throw Object.assign(new Error('HTTP ' + r.status), { status: r.status });
+          return r.blob();
+        })
+        .then(function (blob) {
+          var url = URL.createObjectURL(blob);
+          var a = document.createElement('a');
+          a.href = url;
+          a.download = filename || 'soubor';
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          // Uvolnit až po kliknutí, jinak Safari stáhne prázdný soubor.
+          setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+          return true;
+        });
+    },
+
+    // Smazání jedné položky (fotka do koše). Stejná cesta jako post: v lokálním
+    // režimu vrací null, aby volající poznal, že backend není.
+    del: function (path) {
+      if (mode !== 'http') return Promise.resolve(null);
+      return fetch(base + '/' + path, {
+        method: 'DELETE', headers: headers(), credentials: 'same-origin'
+      }).then(function (r) {
+        return r.json().then(function (b) {
+          if (!r.ok) throw Object.assign(new Error('HTTP ' + r.status), { body: b, status: r.status });
+          return b;
+        });
+      });
+    },
+
     // Definice mechanismů ze serveru. Když backend není nebo data ještě
     // nevygeneroval, zůstane v platnosti window.GalerieMech ze souboru.
     mechanisms: function () {

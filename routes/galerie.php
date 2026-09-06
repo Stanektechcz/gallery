@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\CalendarPlanningController;
 use App\Http\Controllers\Api\Galerie\AdminController;
+use App\Http\Controllers\Api\Galerie\AlbumArchivController;
 use App\Http\Controllers\Api\Galerie\DataController;
 use App\Http\Controllers\Api\Galerie\KosController;
 use App\Http\Controllers\Api\Galerie\MechanismController;
@@ -100,6 +101,17 @@ Route::middleware(['auth:sanctum', 'throttle:120,1'])->prefix('api')->group(func
      * v prohlížeči — přitom potvrzovací dialog sliboval smazání originálů
      * z Google Disku.
      */
+    /*
+     * Album jako jeden archiv.
+     *
+     * Tlačítko „Stáhnout" v panelu alba nemělo obsluhu. Stahovat po jednom
+     * nejde — u alba s dvěma sty fotkami by prohlížeč po pár souborech zbytek
+     * zablokoval.
+     */
+    Route::get('alba/{album}/archiv', AlbumArchivController::class)
+        ->whereUuid('album')
+        ->name('galerie.album.archiv');
+
     Route::prefix('kos')->name('galerie.kos.')->group(function () {
         Route::post('vratit', [KosController::class, 'restore'])->name('restore');
         Route::post('odstranit', [KosController::class, 'purge'])->name('purge');

@@ -1109,7 +1109,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
             <button class="btn btn-secondary" onClick="{{ newAlbum }}" style="gap:6px"><i class="ph-duotone ph-folder-plus" style="font-size:16px"></i>Podalbum</button>
             <button class="btn btn-secondary" onClick="{{ toggleFavAlbum }}" style="gap:6px; color:{{ albumFavColor }}"><i class="ph-duotone ph-heart-straight" style="font-size:16px"></i>{{ albumFavLabel }}</button>
             <button class="btn btn-secondary" onClick="{{ openMove }}" style="gap:6px"><i class="ph-duotone ph-arrows-out-cardinal" style="font-size:16px"></i>Přesunout</button>
-            <button class="btn btn-secondary" style="gap:6px"><i class="ph-duotone ph-download-simple" style="font-size:16px"></i>Stáhnout</button>
+            <button class="btn btn-secondary" onClick="{{ albumDownload }}" style="gap:6px"><i class="ph-duotone ph-download-simple" style="font-size:16px"></i>Stáhnout</button>
             <button class="btn btn-secondary" onClick="{{ toggleSelectMode }}" style="gap:6px"><i class="ph-duotone ph-check-square-offset" style="font-size:16px"></i>{{ selectModeLabel }}</button>
             <div style="position:relative">
               <button class="btn btn-secondary" onClick="{{ openAlbumMore }}" aria-label="Další možnosti" aria-expanded="{{ albMenuOpen }}" title="Upravit údaje, změnit titulní fotku, duplikovat, archivovat, koš"><i class="ph-duotone ph-dots-three" style="font-size:18px"></i></button>
@@ -13715,11 +13715,11 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
         <div style="border:1.5px dashed var(--g-line); border-radius:3px; padding:30px 20px; text-align:center; background:var(--g-panel)">
           <i class="ph-duotone ph-images-square" style="font-size:38px; color:var(--g-acc)"></i>
           <div style="font-size:17px; margin-top:9px">Přetáhni sem fotky, videa nebo celou složku</div>
-          <div style="font-size:13px; color:var(--g-ink2); margin-top:3px">Vybráno 218 souborů · 4,7 GB · zachová se datum i poloha z EXIF</div>
+          <div style="font-size:13px; color:var(--g-ink2); margin-top:3px">Originály se nahrají v původní kvalitě · zachová se datum i poloha z EXIF</div>
           <div style="display:flex; gap:8px; justify-content:center; margin-top:14px; flex-wrap:wrap">
-            <button class="btn btn-secondary" style="gap:6px"><i class="ph-duotone ph-file-plus" style="font-size:16px"></i>Vybrat soubory</button>
-            <button class="btn btn-secondary" style="gap:6px"><i class="ph-duotone ph-folder-open" style="font-size:16px"></i>Vybrat složku</button>
-            <button class="btn btn-secondary" style="gap:6px"><i class="ph-duotone ph-camera" style="font-size:16px"></i>Vyfotit</button>
+            <button class="btn btn-secondary" onClick="{{ pickFiles }}" style="gap:6px"><i class="ph-duotone ph-file-plus" style="font-size:16px"></i>Vybrat soubory</button>
+            <button class="btn btn-secondary" onClick="{{ pickFolder }}" style="gap:6px"><i class="ph-duotone ph-folder-open" style="font-size:16px"></i>Vybrat složku</button>
+            <button class="btn btn-secondary" onClick="{{ pickCamera }}" style="gap:6px"><i class="ph-duotone ph-camera" style="font-size:16px"></i>Vyfotit</button>
           </div>
         </div>
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px">
@@ -13737,7 +13737,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
         </div>
         <div class="dialog-actions">
           <button class="btn btn-secondary" onClick="{{ closeUpload }}">Zrušit</button>
-          <button class="btn btn-primary" onClick="{{ startUpload }}">Nahrát 218 souborů</button>
+          <button class="btn btn-primary" onClick="{{ startUpload }}">Vybrat a nahrát</button>
         </div>
       </div>
     </div>
@@ -13967,12 +13967,12 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
         </div>
         <div style="flex:1"></div>
         <button onClick="{{ toggleFav }}" title="Oblíbené" aria-label="Přidat do oblíbených" style="border:0; background:transparent; cursor:pointer; padding:7px; color:{{ favColor }}"><i class="ph-duotone ph-heart-straight" style="font-size:21px"></i></button>
-        <button title="Stáhnout originál" aria-label="Stáhnout originál" style="border:0; background:transparent; color:inherit; cursor:pointer; padding:7px"><i class="ph-duotone ph-download-simple" style="font-size:21px"></i></button>
+        <button onClick="{{ lbDownload }}" title="Stáhnout originál" aria-label="Stáhnout originál" style="border:0; background:transparent; color:inherit; cursor:pointer; padding:7px"><i class="ph-duotone ph-download-simple" style="font-size:21px"></i></button>
         <button onClick="{{ openShare }}" title="Sdílet" aria-label="Sdílet" style="border:0; background:transparent; color:inherit; cursor:pointer; padding:7px"><i class="ph-duotone ph-share-network" style="font-size:21px"></i></button>
         <button onClick="{{ lbToggleSplit }}" title="{{ lbSplitTitle }}" aria-label="{{ lbSplitTitle }}" style="border:0; background:transparent; cursor:pointer; padding:7px; color:{{ lbSplitColor }}"><i class="ph-duotone ph-columns" style="font-size:19px"></i></button>
         <button onClick="{{ lbToggleEdit }}" title="Upravit" aria-label="Upravit" style="border:0; background:transparent; cursor:pointer; padding:7px; color:{{ lbEditColor }}"><i class="ph-duotone ph-sliders" style="font-size:21px"></i></button>
         <button onClick="{{ startSlideshow }}" title="Prezentace" aria-label="Spustit prezentaci" style="border:0; background:transparent; color:inherit; cursor:pointer; padding:7px"><i class="ph-duotone ph-play" style="font-size:21px"></i></button>
-        <button title="Celá obrazovka" aria-label="Celá obrazovka" style="border:0; background:transparent; color:inherit; cursor:pointer; padding:7px"><i class="ph-duotone ph-corners-out" style="font-size:21px"></i></button>
+        <button onClick="{{ celaObrazovka }}" title="Celá obrazovka" aria-label="Celá obrazovka" style="border:0; background:transparent; color:inherit; cursor:pointer; padding:7px"><i class="ph-duotone ph-corners-out" style="font-size:21px"></i></button>
         <button onClick="{{ toggleInfo }}" title="Informace" aria-label="Informace o položce" style="border:0; background:transparent; cursor:pointer; padding:7px; color:{{ infoColor }}"><i class="ph-duotone ph-info" style="font-size:21px"></i></button>
         <button onClick="{{ trashCurrent }}" title="Přesunout do koše" aria-label="Přesunout do koše" style="border:0; background:transparent; color:inherit; cursor:pointer; padding:7px"><i class="ph-duotone ph-trash" style="font-size:21px"></i></button>
       </div>
@@ -26891,12 +26891,29 @@ class Component extends DCLogic {
   }
   // Skutečný výběr souborů. Se backendem jdou přes GalerieApi.upload (velké
   // po částech), bez něj se jen započítají — táž cesta jako v druhém rozvržení.
-  pickMedia = () => {
+  pickMedia = (rezim) => {
     const inp = document.createElement('input');
     inp.type = 'file';
     inp.multiple = true;
     inp.accept = 'image/*,video/*';
     inp.style.display = 'none';
+
+    /*
+     * Tři tlačítka nad plochou pro přetažení dosud nedělala nic — dalo se na
+     * ně klikat a okno se nikdy neotevřelo. Liší se jen tím, co prohlížeči
+     * řeknou: celá složka, nebo rovnou fotoaparát.
+     */
+    if (rezim === 'slozka') {
+      inp.webkitdirectory = true;
+      inp.setAttribute('webkitdirectory', '');
+      inp.setAttribute('directory', '');
+    }
+
+    if (rezim === 'foto') {
+      inp.accept = 'image/*';
+      inp.setAttribute('capture', 'environment');
+    }
+
     inp.onchange = async () => {
       const files = Array.from(inp.files || []);
       inp.remove();
@@ -26921,6 +26938,102 @@ class Component extends DCLogic {
     inp.click();
   };
   startUpload = () => this.pickMedia();
+
+  pickFiles = () => this.pickMedia('soubory');
+
+  pickFolder = () => this.pickMedia('slozka');
+
+  pickCamera = () => this.pickMedia('foto');
+
+  /*
+   * Stažení originálu.
+   *
+   * Tlačítko v prohlížeči fotky i v panelu alba nemělo obsluhu vůbec. Originál
+   * leží na serveru pod podepsanou adresou — stačí ji otevřít; prohlížeč si
+   * s uložením poradí sám a soubor nemusí procházet pamětí aplikace.
+   */
+  stahniOriginal = (id, jmeno) => {
+    const api = window.GalerieApi;
+
+    if (! id || ! api || ! api.download || api.mode !== 'http') {
+      this.toast('Originál se dá stáhnout jen s připojeným serverem', { icon: 'ph-warning' });
+      return;
+    }
+
+    api.download('media/' + id + '/raw', jmeno || 'original')
+      .then(() => this.toast('Originál stažen', { icon: 'ph-download-simple' }))
+      .catch(e => this.toast(e && e.status === 404
+        ? 'Originál tohohle souboru na serveru není'
+        : 'Stažení se nepodařilo', { icon: 'ph-warning', color: 'var(--g-mag)' }));
+  };
+
+  /*
+   * Stažení celého alba jako jednoho archivu.
+   *
+   * Tlačítko v panelu alba nemělo obsluhu vůbec. Archiv skládá server —
+   * stahovat po jednom by u alba s dvěma sty fotkami znamenalo dvě stě
+   * potvrzovacích oken prohlížeče.
+   */
+  stahniAlbum = (id, nazev) => {
+    const api = window.GalerieApi;
+
+    if (! id || ! api || ! api.download || api.mode !== 'http') {
+      this.toast('Album se dá stáhnout jen s připojeným serverem', { icon: 'ph-warning' });
+      return;
+    }
+
+    this.toast('Připravuji archiv — u velkého alba to chvíli trvá', { icon: 'ph-file-zip' });
+
+    api.download('alba/' + id + '/archiv', (nazev || 'album') + '.zip')
+      .then(() => this.toast('Album staženo', { icon: 'ph-download-simple' }))
+      .catch(e => this.toast(e && e.status === 404
+        ? 'V albu není ani jeden originál ke stažení'
+        : 'Archiv se nepodařilo sestavit', { icon: 'ph-warning', color: 'var(--g-mag)' }));
+  };
+
+  /*
+   * Vyjmout položku z knihovny na místě.
+   *
+   * Kolekce se mění **v poli**, ne přiřazením: dokument si je rozebral do
+   * konstant a nový objekt by nikam nedošel. Totéž dělá napojení, když
+   * přiváží data ze serveru.
+   */
+  odeberZKnihovny(id) {
+    const D = window.GalerieData || {};
+
+    ['PHOTOS', 'DAYS'].forEach(klic => {
+      const pole = D[klic];
+      if (! Array.isArray(pole)) return;
+
+      if (klic === 'PHOTOS') {
+        const zbytek = pole.filter(p => p.id !== id);
+        pole.length = 0;
+        Array.prototype.push.apply(pole, zbytek);
+        return;
+      }
+
+      // Dny drží fotky ve vlastních seznamech; prázdný den ať nezůstane.
+      pole.forEach(d => { if (Array.isArray(d.ph)) d.ph = d.ph.filter(p => p.id !== id); });
+      const plne = pole.filter(d => ! Array.isArray(d.ph) || d.ph.length);
+      pole.length = 0;
+      Array.prototype.push.apply(pole, plne);
+    });
+
+    if (window.GalerieObnovObrazovku) window.GalerieObnovObrazovku();
+  }
+
+  /* Celá obrazovka — prohlížeč to umí sám, jen se ho nikdo neptal. */
+  celaObrazovka = () => {
+    const el = document.documentElement;
+
+    try {
+      if (document.fullscreenElement) document.exitFullscreen();
+      else if (el.requestFullscreen) el.requestFullscreen();
+      else this.toast('Prohlížeč celou obrazovku nenabízí', { icon: 'ph-warning' });
+    } catch (e) {
+      this.toast('Celou obrazovku prohlížeč nepovolil', { icon: 'ph-warning' });
+    }
+  };
 
   // ——— zámek aplikace: dva profily, kód, dotyk, automatické zamčení, zamčené sekce ———
   lockedRoutes() {
@@ -28497,6 +28610,7 @@ class Component extends DCLogic {
       albumItems: albumPhotos.map(p => this.tile(this.edited(p))),
       related: albums.filter(a => a.id !== album.id).slice(0, 3).map(a => ({ name: a.name, meta: a.count, bg: a.bg || this.bg(a.n), go: () => this.setState({ route: 'album', albumId: a.id }) })),
       albumFavLabel: album.fav ? 'V oblíbených' : 'Do oblíbených', albumFavColor: album.fav ? 'var(--g-mag)' : 'var(--g-ink)',
+      albumDownload: () => this.stahniAlbum(album.id, album.name),
       toggleFavAlbum: () => this.toast(album.fav ? 'Odebráno z oblíbených' : 'Přidáno do oblíbených', { icon: 'ph-heart-straight', color: 'var(--g-mag)' }),
       openMove: () => this.setState({ confirm: { title: 'Přesunout album', body: 'Vyberte nové umístění pro „' + album.name + '“. Album nelze vložit do sebe ani do svého podalba — taková místa nejsou v seznamu nabízená.', cta: 'Přesunout sem', btnBg: 'var(--g-acc)', go: () => { this.setState({ confirm: null }); this.toast('Album přesunuto', { undo: true }); } } }),
       albMenuOpen: !!s.albMenu,
@@ -28939,6 +29053,8 @@ class Component extends DCLogic {
 
       uploadOpen: s.uploadOpen, openUpload: () => this.setState({ uploadOpen: true }), closeUpload: () => this.setState({ uploadOpen: false }),
       startUpload: this.startUpload,
+      pickFiles: this.pickFiles, pickFolder: this.pickFolder, pickCamera: this.pickCamera,
+      celaObrazovka: this.celaObrazovka,
       queueOpen: s.queueOpen, queueActive: s.queuePct > 0 && s.queuePct < 100,
       toggleQueue: () => this.setState({ queueOpen: !s.queueOpen }),
       queuePct: s.queuePct + '%', queueLabel: s.queuePaused ? 'Nahrávání pozastaveno' : 'Nahrávám ' + Math.round(s.queuePct * 2.18) + ' z 218',
@@ -28967,9 +29083,41 @@ class Component extends DCLogic {
       prev: () => this.step(-1), next: () => this.step(1),
       favColor: cur && this.isFav(cur) ? 'var(--g-mag)' : 'var(--g-lb-fg)',
       toggleFav: () => { if (!cur) return; const f = { ...s.favs }; f[cur.id] = !this.isFav(cur); this.setState({ favs: f }); },
-      trashCurrent: () => { this.setState({ lb: null }); this.toast('Fotka přesunuta do koše', { icon: 'ph-trash', undo: true }); },
+      /*
+       * Do koše doopravdy.
+       *
+       * Hláška „Fotka přesunuta do koše" se ukázala i bez serveru a fotka
+       * zůstala v knihovně; nabízené „Zpět" bylo `undo: true`, tedy tlačítko
+       * bez obsluhy. Teď se položka opravdu označí a vrácení jde toutéž cestou
+       * jako z obrazovky koše.
+       */
+      trashCurrent: () => {
+        const api = window.GalerieApi;
+        const id = cur && cur.id;
+        this.setState({ lb: null });
+
+        if (! id || ! api || ! api.del || api.mode !== 'http') {
+          this.toast('Bez serveru se do koše nic nepřesune', { icon: 'ph-warning' });
+          return;
+        }
+
+        api.del('media/' + id).then(() => {
+          this.odeberZKnihovny(id);
+          this.toast('Fotka přesunuta do koše · 30 dní na vrácení', {
+            icon: 'ph-trash',
+            undo: () => api.post('kos/vratit', { id: id }).then(res => {
+              if (res && window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data, res.prazdne);
+              if (window.GalerieAdminObnov) window.GalerieAdminObnov();
+              this.toast('Vráceno z koše', { icon: 'ph-arrow-counter-clockwise' });
+            }).catch(() => this.toast('Vrácení se nepodařilo', { icon: 'ph-warning', color: 'var(--g-mag)' }))
+          });
+        }).catch(() => this.toast('Přesun do koše se nepodařil', { icon: 'ph-warning', color: 'var(--g-mag)' }));
+      },
+      lbDownload: () => this.stahniOriginal(cur && cur.id),
       current: cur ? {
-        ...cur, isPhoto: !cur.isVideo, title: cur.name, index: (curIdx + 1) + ' z 24 316',
+        // Kolikátá z kolika: druhé číslo bylo napevno 24 316 bez ohledu na to,
+        // kolik fotek dvojice má.
+        ...cur, isPhoto: !cur.isVideo, title: cur.name, index: (curIdx + 1) + ' z ' + this.photos().length.toLocaleString('cs-CZ').replace(/ /g, ' '),
         subtitle: cur.dateShort + ' · ' + cur.place + ' · ' + cur.album,
         ratio: cur.orient === 'portrait' ? '3/4' : cur.orient === 'square' ? '1' : '3/2',
         frameW: cur.orient === 'portrait' ? 'min(100%, 620px)' : 'min(100%, 1180px)',
