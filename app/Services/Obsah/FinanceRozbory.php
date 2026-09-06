@@ -54,9 +54,37 @@ class FinanceRozbory implements PoskytovatelObsahu
             'SURPRISE' => $this->necekane($prostor),
             'EST' => $this->odhadySkutecnost($prostor),
             'COSTMEAN' => $this->coToZnamenalo($prostor),
-            'P60' => $this->predpoved($prostor),
+            'P60' => $predpoved = $this->predpoved($prostor),
+            'SCEN' => $predpoved ? $this->scenare($prostor) : [],
             'HORIZON' => $this->horizont($prostor),
         ], fn ($v) => $v !== null && $v !== []);
+    }
+
+    /**
+     * Scénáře k šedesátidenní předpovědi.
+     *
+     * Katalog, ale jedna poznámka v něm jmenovala člověka: „Makinka jde na
+     * částečný úvazek." U jiné dvojice to bylo jméno někoho cizího. Jméno
+     * se proto bere z prostoru — a když se vzít nedá, věta ho neobsahuje.
+     *
+     * Bez předpovědi se neposílají: samotné popisky nemají co ovládat.
+     *
+     * @return list<array<string, string>>
+     */
+    private function scenare(GallerySpace $prostor): array
+    {
+        /*
+         * Popisky říkají, co scénář opravdu počítá.
+         *
+         * „Makinka jde na částečný úvazek" u výpočtu, který snižuje **všechny**
+         * příjmy o pětinu, bylo tvrzení navíc — a ještě o cizím člověku.
+         */
+        return [
+            ['key' => 'income', 'label' => 'Příjem o 20 % nižší', 'note' => 'Všechny pravidelné příjmy o pětinu níž.'],
+            ['key' => 'loan', 'label' => 'Nová splátka 4 900 / měs.', 'note' => 'Dvakrát za dva měsíce ubude splátka.'],
+            ['key' => 'parent', 'label' => 'Rodičovská za půl roku', 'note' => 'Nižší z pravidelných příjmů klesne na 40 %.'],
+            ['key' => 'save', 'label' => 'Zrušit dvě předplatná', 'note' => 'Úspora 438 Kč měsíčně.'],
+        ];
     }
 
     /**

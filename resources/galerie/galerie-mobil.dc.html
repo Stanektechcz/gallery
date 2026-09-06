@@ -5815,23 +5815,23 @@ class Component extends DCLogic {
     const log = s.choreLog === null || s.choreLog === undefined ? HOUSE_LOG : s.choreLog;
     const dues = s.dues === null || s.dues === undefined ? HOUSE_DUES : s.dues;
     const inv = s.inv === null || s.inv === undefined ? HOUSE_INV : s.inv;
-    const minsA = log.filter(l => l.who === 'Adrian').reduce((a, l) => a + l.mins, 0);
-    const minsM = log.filter(l => l.who === 'Makinka').reduce((a, l) => a + l.mins, 0);
+    const minsA = log.filter(l => l.who === this.dva()[0]).reduce((a, l) => a + l.mins, 0);
+    const minsM = log.filter(l => l.who === this.dva()[1]).reduce((a, l) => a + l.mins, 0);
     const total = Math.max(1, minsA + minsM);
     const hrs = x => (x / 60).toFixed(1).replace('.', ',') + ' h';
     const diff = Math.abs(minsA - minsM);
-    const lead = minsA > minsM ? 'Adrian' : 'Makinka';
-    const other = w => w === 'Adrian' ? 'Makinka' : 'Adrian';
-    const acc = n => n === 'Makinka' ? 'Makinku' : 'Adriana';
-    const dat = n => n === 'Makinka' ? 'Makince' : 'Adrianovi';
+    const lead = minsA > minsM ? this.dva()[0] : this.dva()[1];
+    const other = w => this.druhy(w);
+    const acc = n => this.sklon(n, 'acc');
+    const dat = n => this.sklon(n, 'dat');
     const setChores = next => this.setState({ chores: next });
     const setDues = next => this.setState({ dues: next });
     const clashes = chores.filter(c => c.day).map(c => {
       const d = HOUSE_WEEK.find(x => x.key === c.day);
       if (!d) return null;
-      const free = c.who === 'Adrian' ? d.a : d.m;
+      const free = c.who === this.dva()[0] ? d.a : d.m;
       if (free * 60 >= c.mins + 30) return null;
-      const better = HOUSE_WEEK.filter(x => (c.who === 'Adrian' ? x.a : x.m) * 60 >= c.mins + 60)[0];
+      const better = HOUSE_WEEK.filter(x => (c.who === this.dva()[0] ? x.a : x.m) * 60 >= c.mins + 60)[0];
       return {
         title: c.name + ' · ' + c.who + ' · ' + d.name,
         note: c.who + ' má ' + d.name.toLowerCase() + ' jen ' + String(free).replace('.', ',') + ' h volna, práce zabere ' + c.mins + ' min.',
@@ -5854,19 +5854,22 @@ class Component extends DCLogic {
       hsOnChores: tab === 'chores', hsOnCap: tab === 'cap', hsOnDue: tab === 'due', hsOnFlat: tab === 'flat', hsOnFam: tab === 'fam',
       famHead: this.pl(FAMILY.filter(f => f.over).length, 'kontakt je po lhůtě', 'kontakty jsou po lhůtě', 'kontaktů je po lhůtě'),
       famRows: (this.state.fam === null || this.state.fam === undefined ? FAMILY : this.state.fam).map(f => ({
-        name: f.name, side: 'rodina ' + (f.side === 'Adrian' ? 'Adriana' : 'Makinky'),
+        name: f.name, side: 'rodina ' + this.sklon(f.side, 'gen'),
         last: 'naposledy ' + f.last + ' · ' + f.lastWho + ' · rytmus ' + this.pl(f.every, 'den', 'dny', 'dní'),
         lastColor: f.over ? 'var(--g-mag)' : 'var(--g-ink3)',
         tagLabel: f.over ? 'po lhůtě' : 'v pořádku',
         done: () => {
           const list = this.state.fam === null || this.state.fam === undefined ? FAMILY : this.state.fam;
-          const nx = f.lastWho === 'Adrian' ? 'Makinka' : 'Adrian';
+          const nx = this.druhy(f.lastWho);
           this.setState({ fam: list.map(x => x.id === f.id ? { ...x, last: 'dnes', lastWho: nx, over: false } : x) });
-          this.toast(f.name + ' — ozvali jste se · příště ' + (nx === 'Makinka' ? 'Makinka' : 'Adrian'), { icon: 'ph-phone-call', undo: () => this.setState({ fam: list }) });
+          this.toast(f.name + ' — ozvali jste se · příště ' + nx, { icon: 'ph-phone-call', undo: () => this.setState({ fam: list }) });
         },
         share: () => this.toast('Sdílené album pro ' + f.name + ' · odkaz zkopírován', { icon: 'ph-link-simple' })
       })),
-      chFairTitle: diff < 45 ? 'Rozdělené skoro na půl' : lead + ' odvedl' + (lead === 'Makinka' ? 'a' : '') + ' o ' + hrs(diff) + ' víc',
+      chFairTitle: diff < 45 ? 'Rozdělené skoro na půl'
+        : this.rodPripona(lead) === null
+          ? lead + ' má o ' + hrs(diff) + ' víc'
+          : lead + ' odvedl' + this.rodPripona(lead) + ' o ' + hrs(diff) + ' víc',
       chFairA: Math.round((minsA / total) * 100) + '%', chFairM: Math.round((minsM / total) * 100) + '%',
       chMinsA: hrs(minsA), chMinsM: hrs(minsM),
       chBalanceCan: diff >= 45,
@@ -5891,7 +5894,7 @@ class Component extends DCLogic {
           name: p[0], free: String(p[1]).replace('.', ',') + ' h',
           width: Math.min(100, Math.round((p[1] / 8) * 100)) + '%',
           color: p[1] < 1 ? 'var(--g-mag)' : 'var(--g-ink2)',
-          fill: p[1] < 1 ? 'var(--g-mag)' : p[0] === 'Adrian' ? 'var(--g-acc)' : 'var(--g-acc-deep)'
+          fill: p[1] < 1 ? 'var(--g-mag)' : p[0] === this.dva()[0] ? 'var(--g-acc)' : 'var(--g-acc-deep)'
         }))
       })),
       capClashes: clashes,
@@ -5986,7 +5989,7 @@ class Component extends DCLogic {
       coolRows: cools.map(c => ({
         what: c.what, price: this.kc(c.price),
         state: c.left > 0 ? 'zbývá ' + c.left + ' h' : 'lhůta prošla',
-        meta: 'navrhl' + (c.who === 'Makinka' ? 'a' : '') + ' ' + c.who + ' · ' + c.opened,
+        meta: (this.rodPripona(c.who) === null ? 'návrh od ' + this.whoGen(c.who) : 'navrhl' + this.rodPripona(c.who) + ' ' + c.who) + ' · ' + c.opened,
         width: Math.max(0, Math.min(100, Math.round(((72 - c.left) / 72) * 100))) + '%',
         fill: c.left > 0 ? 'var(--g-acc)' : 'var(--g-ok)',
         opinion: c.opinion, opinionBy: c.opinionBy,
@@ -6001,9 +6004,9 @@ class Component extends DCLogic {
   mGiftVals() {
     const s = this.state;
     const me = s.giftMe || 'Adrian';
-    const other = me === 'Adrian' ? 'Makinka' : 'Adrian';
-    const otherGen = other === 'Makinka' ? 'Makinky' : 'Adriana';
-    const acc = n => n === 'Makinka' ? 'Makinku' : 'Adriana';
+    const other = this.druhy(me);
+    const otherGen = this.sklon(other, 'gen');
+    const acc = n => this.sklon(n, 'acc');
     const tab = s.giftTab || 'wish';
     const wishes = s.wishes === null || s.wishes === undefined ? GIFT_WISHES : s.wishes;
     const buys = s.buys === null || s.buys === undefined ? GIFT_BUYS : s.buys;
@@ -6067,7 +6070,7 @@ class Component extends DCLogic {
           actions: acts
         };
       }),
-      gftBuysMeta: 'Nákupy ' + (me === 'Adrian' ? 'Adriana' : 'Makinky') + ' · jen pro jeho oči',
+      gftBuysMeta: 'Nákupy ' + this.whoGen(me) + ' · vidí je jen ten, kdo je zapsal',
       gftSpent: this.kc(spent),
       gftBuysEmpty: mineBuys.length === 0,
       gftBuys: mineBuys.map(b => {
@@ -6687,8 +6690,8 @@ class Component extends DCLogic {
     const NUDGES = D.NUDGES || [], NUDGEKIND = D.NUDGEKIND || {};
     const ndState = s.ndStateM || {};
     const ndST = { ceka: ['čeká', 'var(--g-warn)'], prijato: ['přijato', 'var(--g-ok)'], odmitnuto: ['odmítnuto', 'var(--g-mag)'], hotovo: ['hotovo', 'var(--g-ink3)'] };
-    const ndSrc = key === 'ndIn' ? NUDGES.filter(n => n[2] === 'Adrian')
-      : key === 'ndOut' ? NUDGES.filter(n => n[1] === 'Adrian')
+    const ndSrc = key === 'ndIn' ? NUDGES.filter(n => n[2] === this.ndMe())
+      : key === 'ndOut' ? NUDGES.filter(n => n[1] === this.ndMe())
       : key === 'ndLog' ? NUDGES : [];
     const ndRows = ndSrc.map(n => {
       const st = ndState[n[0]] || n[6];
@@ -6818,7 +6821,7 @@ class Component extends DCLogic {
       return {
         text: x[0], icon: gone ? 'ph-arrow-counter-clockwise' : x[1],
         who: x[2], time: gone ? 'vráceno · ' + x[3] : x[3] + ' · ' + x[4],
-        color: gone ? 'var(--g-ink3)' : x[2] === 'Makinka' ? 'var(--g-mag)' : 'var(--g-acc)',
+        color: gone ? 'var(--g-ink3)' : this.barvaKdo(x[2]),
         strike: gone ? 'line-through' : 'none',
         dim: gone ? .55 : 1,
         canUndo: key === 'evUndo' && i < 4 && !gone,
@@ -7027,17 +7030,19 @@ class Component extends DCLogic {
     // ——— Technika a Kdo víc ———
     // Autor a zařízení se odvozují ze stejného pravidla jako ve velkém rozhraní
     // (autor podle pořadí, zařízení podle typu položky), takže čísla souhlasí.
-    const authorOf = p => ((p.seed || 0) % 3 === 0 ? 'Makinka' : 'Adrian');
-    const deviceOf = p => p.video ? 'GoPro Hero 9'
-      : (p.seed || 0) % 5 === 0 ? 'Fujifilm X-T4'
-      : authorOf(p) === 'Makinka' ? 'iPhone 13 (Makinka)' : 'iPhone 15 Pro (Adrian)';
+    /*
+     * Kdo to nahrál a čím — ze snímku, ne ze zbytku po dělení.
+     *
+     * Autor se počítal jako `seed % 3` a zařízení se odvozovalo z toho
+     * vymyšleného jména. Statistika „kdo víc fotí" tak měřila pořadové
+     * číslo dlaždice a jmenovala u toho lidi, kteří v prostoru nemusí být.
+     */
+    const authorOf = p => p.author || this.dva()[(p.seed || 0) % 3 === 0 ? 1 : 0];
+    const deviceOf = p => p.dev || (p.video ? 'Videokamera' : 'Neznámý přístroj');
     const gearLib = (key === 'libGear' || key === 'libWho') ? (this.library ? this.library() : []) : [];
-    const DNOTE = {
-      'iPhone 15 Pro (Adrian)': 'každodenní fotky, videa na výšku',
-      'iPhone 13 (Makinka)': 'jídlo, zahrada, detaily',
-      'Fujifilm X-T4': 'cesty a výlety, kde stojí za to nést tělo',
-      'GoPro Hero 9': 'voda, kolo, všechno, co se hýbe'
-    };
+    // Co který přístroj fotí, aplikace neví — a psát to za ni znamenalo
+    // popisovat cizí fotoaparát.
+    const DNOTE = {};
     const gearCount = {};
     gearLib.forEach(p => { const k = deviceOf(p); gearCount[k] = (gearCount[k] || 0) + 1; });
     const gearKeys = Object.keys(gearCount).sort((a, b) => gearCount[b] - gearCount[a]);
@@ -7050,7 +7055,7 @@ class Component extends DCLogic {
       w: Math.round(gearCount[k] / gearMax * 100) + '%',
       color: k.indexOf('iPhone') === 0 ? 'var(--g-acc)' : 'var(--g-mag)'
     })) : [];
-    const gearHead = phoneShare + ' % knihovny vzniklo na telefonu. Zrcadlovka jde s vámi jen na cesty a výlety.';
+    const gearHead = phoneShare + ' % knihovny vzniklo na telefonu.';
     const isGear = gearRows.length > 0;
 
     const whoLib = key === 'libWho' ? gearLib : [];
@@ -7077,14 +7082,14 @@ class Component extends DCLogic {
     })) : [];
     const whoRows = key === 'libWho' ? [
       ['Nahráno položek', String(cntBy(whoLib, 'Adrian')), String(cntBy(whoLib, 'Makinka'))],
-      ['Podíl v knihovně', shareOf('Adrian') + ' %', shareOf('Makinka') + ' %'],
-      ['Podíl v oblíbených', favShareOf('Adrian') + ' %', favShareOf('Makinka') + ' %'],
-      ['Videí', String(whoLib.filter(p => p.video && authorOf(p) === 'Adrian').length), String(whoLib.filter(p => p.video && authorOf(p) === 'Makinka').length)],
-      ['Nejčastější místo', topPlaceOf('Adrian'), topPlaceOf('Makinka')],
-      ['Nejaktivnější hodina', hourOf('Adrian'), hourOf('Makinka')]
+      ['Podíl v knihovně', shareOf(this.dva()[0]) + ' %', shareOf(this.dva()[1]) + ' %'],
+      ['Podíl v oblíbených', favShareOf(this.dva()[0]) + ' %', favShareOf(this.dva()[1]) + ' %'],
+      ['Videí', String(whoLib.filter(p => p.video && authorOf(p) === this.dva()[0]).length), String(whoLib.filter(p => p.video && authorOf(p) === this.dva()[1]).length)],
+      ['Nejčastější místo', topPlaceOf(this.dva()[0]), topPlaceOf(this.dva()[1])],
+      ['Nejaktivnější hodina', hourOf(this.dva()[0]), hourOf(this.dva()[1])]
     ].map(x => ({ label: x[0], a: x[1], mk: x[2] })) : [];
     const whoHead = whoCards.length
-      ? (shareOf('Adrian') >= 50 ? 'Adrian' : 'Makinka') + ' nahrál větší část knihovny, ale v oblíbených je to vyrovnanější. Počítáno z aktuálního obsahu.'
+      ? (shareOf(this.dva()[0]) >= 50 ? this.dva()[0] : this.dva()[1]) + ' má v knihovně větší podíl. Počítáno z aktuálního obsahu.'
       : '';
     const isWho = whoCards.length > 0;
 
@@ -7697,7 +7702,7 @@ class Component extends DCLogic {
           v ? 'hotovo' : mid ? '' : 'chybí',
           (v || !mid) ? null : A('Rozhodnout', 'ph-scales', () => {
             const pick = mid === 'los' ? (Math.random() < 0.5 ? r.optA : r.optM)
-              : mid === 'last' ? (r.owner === 'Makinka' ? r.optM : r.optA)
+              : mid === 'last' ? (r.owner === this.dva()[1] ? r.optM : r.optA)
               : mid === 'minimax' ? (r.lossM > r.lossA ? r.optM : r.optA)
               : 'Odloženo o sedm dní';
             const prev = arbDone;
@@ -7811,7 +7816,7 @@ class Component extends DCLogic {
     // Kdo je dnes na tom hůř
     const bonus = s.dayBonus || {};
     const score = w => (M.DAY_LOAD.filter(d => d.who === w)[0] || { items: [] }).items.reduce((a, i) => a + i[1], 0) + (bonus[w] || 0);
-    const sA = score('Adrian'), sM = score('Makinka');
+    const sA = score(this.dva()[0]), sM = score(this.dva()[1]);
     const worse = sA === sM ? null : sA > sM ? 'Adrian' : 'Makinka';
     out.push({
       id: 'day', label: 'Kdo je dnes na tom hůř', icon: 'ph-battery-low', group: 'Klid', optKey: 'day',
@@ -7909,8 +7914,8 @@ class Component extends DCLogic {
       meta: this.pl(M.INDEP.filter(i => !iLearn[i.id]).length, 'věc drží jeden', 'věci drží jeden', 'věcí drží jeden'),
       note: 'Nezávislost není odchod. Je to schopnost přežít týden, kdy je druhý na kapačkách — a vědomí, co přesně by chybělo.',
       stat: [
-        { label: 'Drží Adrian', value: String(M.INDEP.filter(i => i.holder === 'Adrian').length) },
-        { label: 'Drží Makinka', value: String(M.INDEP.filter(i => i.holder === 'Makinka').length) },
+        { label: 'Drží ' + this.dva()[0], value: String(M.INDEP.filter(i => i.holder === this.dva()[0]).length) },
+        { label: 'Drží ' + this.dva()[1], value: String(M.INDEP.filter(i => i.holder === this.dva()[1]).length) },
         { label: 'Předáno', value: String(Object.keys(iLearn).length) }
       ],
       rows: M.INDEP.map(i => R(i.what,
@@ -7979,8 +7984,8 @@ class Component extends DCLogic {
       meta: this.pl(svRows.filter(g => g.w >= 3.5).length, 'věc pořád tíží', 'věci pořád tíží', 'věcí pořád tíží'),
       note: 'Kdo rozhodnutí protlačil, kdo ho odmítl a komu z toho zůstalo. Váha sama slábne o bod za čtrnáct měsíců.',
       stat: [
-        { label: 'Adrian', value: String(Math.round(svRows.filter(g => g.who === 'Adrian').reduce((a, g) => a + g.w, 0) * 10) / 10) },
-        { label: 'Makinka', value: String(Math.round(svRows.filter(g => g.who === 'Makinka').reduce((a, g) => a + g.w, 0) * 10) / 10) },
+        { label: this.dva()[0], value: String(Math.round(svRows.filter(g => g.who === this.dva()[0]).reduce((a, g) => a + g.w, 0) * 10) / 10) },
+        { label: this.dva()[1], value: String(Math.round(svRows.filter(g => g.who === this.dva()[1]).reduce((a, g) => a + g.w, 0) * 10) / 10) },
         { label: 'Oba', value: String(Math.round(svRows.filter(g => g.who === 'oba').reduce((a, g) => a + g.w, 0) * 10) / 10) }
       ],
       rows: svRows.map(g => R(g.what, g.kind + ' · ' + g.note, g.w.toFixed(1).replace('.', ',') + ' z 5',
@@ -8080,6 +8085,127 @@ class Component extends DCLogic {
     document.body.appendChild(inp);
     inp.click();
   }
+  /*
+   * Kdo ti dva jsou — a jak se jejich jména skloňují.
+   *
+   * Telefonní rozvržení mělo „Adrian" a „Makinka" napsané na čtyřiceti
+   * místech: hledalo podle nich řádky, počítalo z nich součty a skloňovalo
+   * je natvrdo. U dvojice, která se jmenuje jinak, z toho vycházely prázdné
+   * sloupce a věty o někom cizím. Tytéž pomůcky má široké rozvržení.
+   */
+  dva() {
+    /*
+     * Nejdřív seznam ze serveru: členy prostoru má dvojice od prvního dne,
+     * kdežto nálada dvou bývá dlouho prázdná — a dokud si ji nikdo nezapsal,
+     * padalo se zpátky na ukázková jména.
+     */
+    const zeServeru = (window.GalerieData || {}).DVOJICE;
+    if (zeServeru && zeServeru.length >= 2) return zeServeru;
+
+    const jmena = Object.keys((window.GalerieData || {}).KL_MOOD || {});
+    const par = jmena.length >= 2 ? jmena : ['Adrian', 'Makinka'];
+    const ja = (window.GALERIE_USER || {}).name;
+    const kde = par.indexOf(ja);
+
+    return kde > 0 ? [par[kde]].concat(par.filter((x, i) => i !== kde)) : par;
+  }
+
+  /* Ten druhý z dvojice. */
+  druhy(kdo) {
+    const [a, b] = this.dva();
+    return kdo === a ? b : a;
+  }
+
+  sklon(jmeno, pad) {
+    const s = String(jmeno || '').trim();
+    if (! s) return s;
+
+    const posledni = s.slice(-1);
+    const zaklad = s.slice(0, -1);
+    const meke = ['č', 'š', 'ž', 'j', 'ň', 'ř', 'c', 'ď', 'ť'];
+
+    // Ženská jména na -a: Klára, Makinka, Naďa.
+    if (posledni === 'a') {
+      if (s.slice(-2) === 'ia') {
+        const kmen = s.slice(0, -1);
+        return pad === 'gen' ? kmen + 'e' : kmen + 'i';
+      }
+
+      const konec = zaklad.slice(-1);
+
+      if (meke.indexOf(konec) >= 0) {
+        return pad === 'acc' ? zaklad + 'u' : zaklad + 'i';
+      }
+
+      if (pad === 'acc') return zaklad + 'u';
+      if (pad === 'gen') return zaklad + 'y';
+
+      // Třetí pád měkčí poslední souhlásku: -ka → -ce, -ra → -ře, -ha → -ze.
+      const mekceni = { k: 'ce', r: 'ře', h: 'ze', g: 'ze' };
+      if (mekceni[konec]) return zaklad.slice(0, -1) + mekceni[konec];
+
+      return zaklad + 'ě';
+    }
+
+    // Mužská jména na -í: Jiří, Dobrušský typ.
+    if (posledni === 'í' || posledni === 'ý') {
+      return pad === 'dat' ? s + 'mu' : s + 'ho';
+    }
+
+    // Mužská jména na -o: Ivo, Oto.
+    if (posledni === 'o') {
+      return pad === 'dat' ? zaklad + 'ovi' : zaklad + 'a';
+    }
+
+    // Mužská jména zakončená na souhlásku: Adrian, Petr, Marek.
+    if ('bcčdďfghjklmnňprřsštťvzž'.indexOf(posledni) >= 0) {
+      // Pohyblivé -e-: Marek → Marka, ne Mareka.
+      const kmen = s.slice(-2, -1) === 'e' && s.length > 3 ? s.slice(0, -2) + posledni : s;
+
+      return pad === 'dat' ? kmen + 'ovi' : kmen + 'a';
+    }
+
+    return s;
+  }
+
+  /*
+   * Barva štítku podle toho, kdo to je.
+   *
+   * Po celé aplikaci se to psalo jako `x === 'Adrian' ? 'tag-accent' : 'tag-accent-2'`.
+   * U dvojice, která se jmenuje jinak, z toho vyšlo, že všechno patří tomu
+   * druhému — a „oba" nebo „spolu" dostalo barvu jednoho z nich.
+   */
+  tagKdo(kdo) {
+    const [a, b] = this.dva();
+    return kdo === a ? 'tag-accent' : kdo === b ? 'tag-accent-2' : 'tag-neutral';
+  }
+
+  /* Totéž jako barva proměnné, ne jako třída. */
+  barvaKdo(kdo) {
+    const [a, b] = this.dva();
+    return kdo === a ? 'var(--g-acc)' : kdo === b ? 'var(--g-mag)' : 'var(--g-ink3)';
+  }
+
+  /*
+   * Rod jména kvůli minulému času.
+   *
+   * Vrací `'a'` pro příponu ženského rodu a prázdno pro mužský. U jména, které
+   * se zařadit nedá, vrací `null` — věta se pak musí přeformulovat, protože
+   * čeština nemá minulý čas bez rodu a hádat ho znamená oslovit člověka špatně.
+   */
+  rodPripona(jmeno) {
+    const s = String(jmeno || '').trim();
+    if (! s) return null;
+
+    const posledni = s.slice(-1);
+
+    if (posledni === 'a' || posledni === 'á') return 'a';
+    if (posledni === 'í' || posledni === 'ý' || posledni === 'o') return '';
+    if ('bcčdďfghjklmnňprřsštťvzž'.indexOf(posledni) >= 0) return '';
+
+    return null;
+  }
+
   kc(n) { return Math.round(n).toLocaleString('cs-CZ') + ' ' + ((window.GalerieData || {}).MENA || 'Kč'); }
   pl(n, one, few, many) { return n + ' ' + (n === 1 ? one : n >= 2 && n <= 4 ? few : many); }
   push(k, extra) { this.setState(Object.assign({ stack: this.state.stack.concat([k]), sheet: null, sel: [], selectMode: false }, extra || {})); }
@@ -9059,7 +9185,7 @@ class Component extends DCLogic {
     const row = e => ({
       text: e.text, icon: e.icon, who: e.who,
       when: e.seed ? e.day + ' · ' + e.clock : 'dnes ' + e.clock,
-      whoColor: e.who === 'Adrian' ? 'var(--g-acc)' : 'var(--g-mag)',
+      whoColor: this.barvaKdo(e.who),
       state: e.undone ? 'vráceno' : '',
       fg: e.undone ? 'var(--g-ink3)' : 'var(--g-ink)',
       strike: e.undone ? 'line-through' : 'none',
@@ -9094,8 +9220,8 @@ class Component extends DCLogic {
       chgRows: rows.map(row),
       chgStats: [
         { label: 'Celkem', value: String(all.length) },
-        { label: 'Adrian', value: String(all.filter(e => e.who === 'Adrian').length) },
-        { label: 'Makinka', value: String(all.filter(e => e.who === 'Makinka').length) }
+        { label: this.dva()[0], value: String(all.filter(e => e.who === this.dva()[0]).length) },
+        { label: this.dva()[1], value: String(all.filter(e => e.who === this.dva()[1]).length) }
       ]
     };
   }
@@ -9231,11 +9357,17 @@ class Component extends DCLogic {
     };
   }
   // ── žádosti mezi námi ──
-  ndMe() { return 'Adrian'; }
-  ndOther() { return 'Makinka'; }
-  whoAcc(n) { return n === 'Makinka' ? 'Makinku' : 'Adriana'; }
-  whoDat(n) { return n === 'Makinka' ? 'Makince' : 'Adrianovi'; }
-  whoGen(n) { return n === 'Makinka' ? 'Makinky' : 'Adriana'; }
+  /*
+   * Kdo se dívá. Vracelo to 'Adrian' napevno, takže u jiné dvojice
+   * ukazovala záložka „čeká na mě" cizí žádosti — nebo žádné.
+   */
+  meWho() { return this.dva()[(this.state.lockWho || 'A') === 'A' ? 0 : 1]; }
+  otherWho() { return this.druhy(this.meWho()); }
+  ndMe() { return this.meWho(); }
+  ndOther() { return this.otherWho(); }
+  whoAcc(n) { return this.sklon(n, 'acc'); }
+  whoDat(n) { return this.sklon(n, 'dat'); }
+  whoGen(n) { return this.sklon(n, 'gen'); }
   ndAll() {
     const s = this.state;
     if (s.nudges) return s.nudges;
@@ -9310,7 +9442,7 @@ class Component extends DCLogic {
       ndStats: [
         { label: 'Vyřízeno', value: String(all.filter(n => n.state === 'hotovo').length) },
         { label: 'Přijato', value: (answered ? Math.round((all.filter(n => n.state === 'hotovo' || n.state === 'prijato').length / answered) * 100) : 0) + ' %' },
-        { label: 'Od Adriana', value: String(all.filter(n => n.from === 'Adrian').length) }
+        { label: 'Od ' + this.whoGen(this.meWho()), value: String(all.filter(n => n.from === this.meWho()).length) }
       ],
       ndAskLabel: 'Požádat ' + this.whoAcc(other),
       ndDraft: s.ndDraft || '',

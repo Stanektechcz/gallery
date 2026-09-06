@@ -87,7 +87,36 @@ class System implements PoskytovatelObsahu
             'DISK' => $this->diskAStav($prostor),
             'TRASH' => $this->kos($prostor),
             'DVOJICE' => $this->jmenaDvojice($prostor),
+            'UCTY' => $this->uctyDvojice($prostor),
         ], fn ($v) => $v !== null && $v !== []);
+    }
+
+    /**
+     * Jméno a adresa obou, ve stejném pořadí jako `DVOJICE`.
+     *
+     * První spuštění nabízelo výběr ze dvou napsaných účtů včetně adres
+     * (`adrian.stanek@gmail.com`). U jiné dvojice to byla cizí adresa
+     * a člověk si podle ní vybíral, kdo je.
+     *
+     * Nic nového se tím neodhaluje: jsou to členové téhož prostoru a vidí
+     * se navzájem i v administraci.
+     *
+     * @return list<array{0: string, 1: string}>
+     */
+    private function uctyDvojice(GallerySpace $prostor): array
+    {
+        $lide = $prostor->members()->get(['users.id', 'users.name', 'users.email']);
+        $ja = auth()->id();
+
+        if ($ja !== null) {
+            $lide = $lide->sortByDesc(fn ($u) => (int) $u->id === (int) $ja)->values();
+        }
+
+        return $lide
+            ->map(fn ($u) => [(string) $u->name, (string) $u->email])
+            ->take(2)
+            ->values()
+            ->all();
     }
 
     /**

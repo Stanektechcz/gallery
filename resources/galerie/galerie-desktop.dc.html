@@ -15634,7 +15634,7 @@ class Component extends DCLogic {
       const kept = mine.filter(p => p.state === 'kept').length;
       return { kept: kept, all: mine.length, pct: mine.length ? Math.round((kept / mine.length) * 100) : 100 };
     };
-    const a = score('Adrian'), mk = score('Makinka');
+    const a = score(this.dva()[0]), mk = score(this.dva()[1]);
     return {
       promHead: this.pl(list.filter(p => p.state === 'open').length, 'slib platí', 'sliby platí', 'slibů platí')
         + (list.filter(p => p.state === 'late').length ? ' · ' + this.pl(list.filter(p => p.state === 'late').length, 'je po termínu', 'jsou po termínu', 'je po termínu') : ''),
@@ -15680,7 +15680,7 @@ class Component extends DCLogic {
     const other = w => this.druhy(w);
     return {
       famHead: this.pl(list.filter(f => f.over).length, 'kontakt je po lhůtě', 'kontakty jsou po lhůtě', 'kontaktů je po lhůtě')
-        + ' · naposledy se ozval Adrian ' + byWho('Adrian') + '×, Makinka ' + byWho('Makinka') + '×',
+        + ' · ' + this.dva().map(w => w + ' ' + byWho(w) + '×').join(', '),
       famNote: 'Lhůta není povinnost, jen rytmus, který si sami nastavíte. Kdo se ozval naposledy, se pamatuje kvůli rotaci — ne kvůli účtování.',
       famRows: list.map(f => ({
         name: f.name, note: f.note, side: 'rodina — ' + f.side,
@@ -15690,7 +15690,7 @@ class Component extends DCLogic {
         tagClass: f.over ? 'tag-accent-2' : 'tag-neutral',
         tagLabel: f.over ? 'po lhůtě' : 'v pořádku',
         nextWho: other(f.lastWho),
-        done: () => { const prev = list; set(list.map(x => x.id === f.id ? { ...x, last: 'dnes', lastWho: other(x.lastWho), over: false } : x)); this.toast(f.name + ' — ozvali jste se · příště je na ' + (other(f.lastWho) === 'Makinka' ? 'Makince' : 'Adrianovi'), { icon: 'ph-phone-call', undo: () => set(prev) }); },
+        done: () => { const prev = list; set(list.map(x => x.id === f.id ? { ...x, last: 'dnes', lastWho: other(x.lastWho), over: false } : x)); this.toast(f.name + ' — ozvali jste se · příště je na ' + this.whoDat(other(f.lastWho)), { icon: 'ph-phone-call', undo: () => set(prev) }); },
         remind: () => this.toast('Připomeneme v souhrnu, ne hláškou · ' + f.name, { icon: 'ph-bell-simple' }),
         // Odkaz pro rodinu se zakládá ve Sdílení; odsud vede jen cesta tam.
         share: () => { this.setState({ route: 'shared' }); this.toast('Sdílené album pro ' + f.name + ' — vyberte fotky a odkaz vznikne tady', { icon: 'ph-link-simple' }); }
@@ -16972,7 +16972,7 @@ class Component extends DCLogic {
     const rows = all.filter(p => !auto[p.task]);
     const budget = 12;
     const given = w => all.filter(p => p.who !== w).reduce((a, p) => a + p.rem, 0);
-    const remA = given('Adrian'), remK = given('Makinka');
+    const remA = given(this.dva()[0]), remK = given(this.dva()[1]);
     const total = all.reduce((a, p) => a + p.rem, 0);
     const worst = rows.slice().sort((a, b) => b.rem - a.rem)[0] || all.slice().sort((a, b) => b.rem - a.rem)[0];
     const openRem = all.filter(p => !p.done).reduce((a, p) => a + p.rem, 0);
@@ -16981,8 +16981,8 @@ class Component extends DCLogic {
       patHead: 'Za měsíc padlo ' + this.pl(total, 'připomínka', 'připomínky', 'připomínek') + '. Připomínat je práce jako každá jiná — jen se za ni nikdy neděkuje.',
       patNote: 'Rozpočet je ' + budget + ' připomínek na osobu za měsíc. Není to výhrůžka: je to hranice, za kterou už problém není v tom, kdo zapomíná, ale v tom, že si to nosí v hlavě člověk místo aplikace.',
       patBars: [
-        { name: 'Připomínala Makinka', v: String(remK), w: Math.round(Math.min(1, remK / budget) * 100) + '%', over: remK > budget ? 'přes rozpočet' : '', color: 'var(--g-mag)' },
-        { name: 'Připomínal Adrian', v: String(remA), w: Math.round(Math.min(1, remA / budget) * 100) + '%', over: remA > budget ? 'přes rozpočet' : '', color: 'var(--g-acc)' }
+        { name: 'Připomínky od ' + this.whoGen(this.dva()[1]), v: String(remK), w: Math.round(Math.min(1, remK / budget) * 100) + '%', over: remK > budget ? 'přes rozpočet' : '', color: 'var(--g-mag)' },
+        { name: 'Připomínky od ' + this.whoGen(this.dva()[0]), v: String(remA), w: Math.round(Math.min(1, remA / budget) * 100) + '%', over: remA > budget ? 'přes rozpočet' : '', color: 'var(--g-acc)' }
       ],
       patOpen: this.pl(openRem, 'připomínka bez výsledku', 'připomínky bez výsledku', 'připomínek bez výsledku'),
       patRows: rows.slice().sort((a, b) => b.rem - a.rem).map(p => ({
@@ -17563,8 +17563,8 @@ class Component extends DCLogic {
     const live = list.filter(f => !f.settled && age(f) <= 90);
     const expired = list.filter(f => !f.settled && age(f) > 90);
     const val = w => list.filter(f => !f.settled && age(f) <= 90 && f.from === w).reduce((a, f) => a + f.w, 0);
-    const vA = val('Adrian'), vK = val('Makinka');
-    const owed = vK > vA ? 'Adrian' : vA > vK ? 'Makinka' : null;
+    const vA = val(this.dva()[0]), vK = val(this.dva()[1]);
+    const owed = vK > vA ? this.dva()[0] : vA > vK ? this.dva()[1] : null;
     const diff = Math.abs(vA - vK);
     return {
       favHead: owed
@@ -18159,6 +18159,16 @@ class Component extends DCLogic {
     o = o || {};
     const inc = o.income ? 0.8 : 1, loan = o.loan ? 4900 : 0, save = o.save ? 438 : 0;
     const parentFrom = o.parent ? 30 : 9999;
+    /*
+     * Rodičovská snižuje **jeden** příjem, ne ten, který se jmenuje Makinka.
+     *
+     * Tohle hledalo v popisku napsané jméno, takže u jiné dvojice se scénář
+     * tvářil, že běží, a nezměnil ani korunu. Bere se nižší z pravidelných
+     * příjmů — ten na rodičovskou odchází častěji a hlavně to nezávisí na
+     * tom, jak se kdo jmenuje.
+     */
+    const prijmy = P60.events.filter(e => e.amt > 0).sort((x, y) => x.amt - y.amt);
+    const nizsi = prijmy.length ? prijmy[0].label : null;
     const daily = P60.daily - save / 30;
     const evs = P60.events.map(e => ({ label: e.label, amt: e.amt, move: e.move, day: o.shift === e.label ? e.d + 14 : e.d }));
     let bal = P60.start;
@@ -18167,7 +18177,7 @@ class Component extends DCLogic {
       let delta = -daily;
       evs.filter(e => e.day === d).forEach(e => {
         let a = e.amt;
-        if (a > 0) { a = a * inc; if (d >= parentFrom && e.label.indexOf('Makinka') >= 0) a = a * 0.4; }
+        if (a > 0) { a = a * inc; if (d >= parentFrom && nizsi !== null && e.label === nizsi) a = a * 0.4; }
         delta += a;
       });
       if (loan && (d === 20 || d === 50)) delta -= loan;
@@ -18384,18 +18394,18 @@ class Component extends DCLogic {
     const log = this.vetoList(), props = this.vetoPropList();
     const setLog = next => this.setState({ vetoLog: next });
     const setProps = next => this.setState({ vetoProps: next });
-    const leftA = this.vetoLeft('Adrian'), leftM = this.vetoLeft('Makinka');
+    const leftA = this.vetoLeft(this.meWho()), leftM = this.vetoLeft(this.otherWho());
     return {
       vtHead: 'Veto banka · ' + leftA + ' a ' + leftM + ' ze tří',
       vtNote: 'Tři veta na rok pro každého. Nemusíte vysvětlovat, proč — musíte ale napsat jednu větu do protokolu a spotřebovat jedno z nich. Veto se vrací po dvanácti měsících.',
       vtCounts: [
-        { name: 'Adrian', left: leftA + ' ze 3', color: leftA === 0 ? 'var(--g-mag)' : 'var(--g-acc)', dots: [1, 2, 3].map(i => ({ bg: i <= leftA ? 'var(--g-acc)' : 'var(--g-line2)' })) },
-        { name: 'Makinka', left: leftM + ' ze 3', color: leftM === 0 ? 'var(--g-mag)' : 'var(--g-mag)', dots: [1, 2, 3].map(i => ({ bg: i <= leftM ? 'var(--g-mag)' : 'var(--g-line2)' })) }
+        { name: this.meWho(), left: leftA + ' ze 3', color: leftA === 0 ? 'var(--g-mag)' : 'var(--g-acc)', dots: [1, 2, 3].map(i => ({ bg: i <= leftA ? 'var(--g-acc)' : 'var(--g-line2)' })) },
+        { name: this.otherWho(), left: leftM + ' ze 3', color: leftM === 0 ? 'var(--g-mag)' : 'var(--g-mag)', dots: [1, 2, 3].map(i => ({ bg: i <= leftM ? 'var(--g-mag)' : 'var(--g-line2)' })) }
       ],
       vtProps: props.map(p => {
         const mine = p.by === this.meWho();
         const left = mine ? leftA : leftM;
-        const blocker = mine ? 'Adrian' : 'Makinka';
+        const blocker = mine ? this.meWho() : this.otherWho();
         const armed = s.vetoTarget === p.id;
         return {
           text: p.text, by: p.by, byTag: this.tagKdo(p.by), date: p.date,
@@ -18497,11 +18507,11 @@ class Component extends DCLogic {
       mlHeadAW: Math.round(head.a * 100) + '%', mlHeadMW: Math.round(head.m * 100) + '%',
       mlTitle: Math.abs(gap) < 0.08
         ? 'Ruce i hlava jsou rozdělené podobně'
-        : (gap > 0 ? 'Makinka' : 'Adrian') + ' nese o ' + Math.round(Math.abs(gap) * 100) + ' bodů víc paměti než práce',
+        : (gap > 0 ? this.dva()[1] : this.dva()[0]) + ' nese o ' + Math.round(Math.abs(gap) * 100) + ' bodů víc paměti než práce',
       mlNote: Math.abs(gap) < 0.08
         ? 'Vzácný stav. Kdo věc dělá, ten na ni většinou taky myslí.'
         : 'Druhá práce je vzpomenout si, že se to má stát. Sloupec „kdo si pamatuje“ přepíšete klepnutím — čísla se přepočítají hned.',
-      mlMinsA: hrs(headMins('Adrian')), mlMinsM: hrs(headMins('Makinka')),
+      mlMinsA: hrs(headMins(this.dva()[0])), mlMinsM: hrs(headMins(this.dva()[1])),
       mlRows: rows.map((r, i) => ({
         task: r.task, freq: r.freq + '× rok', doer: r.doer, head: r.head,
         doerTag: tagOf(r.doer), headTag: tagOf(r.head),
@@ -18520,7 +18530,7 @@ class Component extends DCLogic {
 
   visList() { return this.state.hsVisits || VIS_ROWS; }
   visSide(who) { return this.visList().filter(v => v.side === who).reduce((a, v) => ({ y: a.y + v.y, hours: a.hours + v.hours }), { y: 0, hours: 0 }); }
-  visDiff() { return Math.abs(this.visSide('Adrian').y - this.visSide('Makinka').y); }
+  visDiff() { const [a, b] = this.dva(); return Math.abs(this.visSide(a).y - this.visSide(b).y); }
   /*
    * Věta pod počtem návštěv.
    *
@@ -20555,8 +20565,8 @@ class Component extends DCLogic {
     return {
       ...base,
       libWhoHead: (() => {
-        const a = shareOf('Adrian'), af = favShareOf('Adrian');
-        const lead = a >= 50 ? 'Adrian' : 'Makinka';
+        const a = shareOf(this.dva()[0]), af = favShareOf(this.dva()[0]);
+        const lead = a >= 50 ? this.dva()[0] : this.dva()[1];
         const diff = Math.abs(af - a);
         return lead + ' nahrává víc (' + Math.max(a, 100 - a) + ' % knihovny)'
           + (diff >= 3 ? ', ale v oblíbených se poměr posouvá o ' + diff + ' bodů' : ' a v oblíbených je poměr stejný')
@@ -20569,12 +20579,12 @@ class Component extends DCLogic {
         color: i === 0 ? 'var(--g-acc)' : 'var(--g-mag)'
       })),
       libWhoRows: [
-        ['Nahráno položek', L.num(L.authors.Adrian || 0), L.num(L.authors.Makinka || 0)],
-        ['Podíl v knihovně', shareOf('Adrian') + ' %', shareOf('Makinka') + ' %'],
-        ['Podíl v oblíbených', favShareOf('Adrian') + ' %', favShareOf('Makinka') + ' %'],
+        ['Nahráno položek', L.num(L.authors[this.dva()[0]] || 0), L.num(L.authors[this.dva()[1]] || 0)],
+        ['Podíl v knihovně', shareOf(this.dva()[0]) + ' %', shareOf(this.dva()[1]) + ' %'],
+        ['Podíl v oblíbených', favShareOf(this.dva()[0]) + ' %', favShareOf(this.dva()[1]) + ' %'],
         ['Videí', String(L.ph.filter(p => p.isVideo && p.author === this.dva()[0]).length), String(L.ph.filter(p => p.isVideo && p.author === this.dva()[1]).length)],
-        ['Nejčastější místo', topPlaceOf('Adrian'), topPlaceOf('Makinka')],
-        ['Nejaktivnější hodina', hourOf('Adrian'), hourOf('Makinka')]
+        ['Nejčastější místo', topPlaceOf(this.dva()[0]), topPlaceOf(this.dva()[1])],
+        ['Nejaktivnější hodina', hourOf(this.dva()[0]), hourOf(this.dva()[1])]
       ].map(x => ({ label: x[0], a: x[1], m: x[2] })),
       libWhoNote: 'Data slouží nám dvěma, nikam se neposílají. V Soukromí lze srovnání vypnout.',
       libWhoPrivacy: () => this.setState({ route: 'settings', setTab: 'soukromi' })
@@ -21045,7 +21055,7 @@ class Component extends DCLogic {
         bd: prefs.time === t ? 'var(--g-ink)' : 'var(--g-line)',
         go: () => setP({ time: t })
       })),
-      memPrefWho: ['oba', 'Adrian', 'Makinka'].map(w => ({
+      memPrefWho: ['oba'].concat(this.dva()).map(w => ({
         label: w === 'oba' ? 'Oběma' : w, on: prefs.who === w,
         bg: prefs.who === w ? 'var(--g-ink)' : 'transparent',
         fg: prefs.who === w ? 'var(--g-bg)' : 'var(--g-ink)',
@@ -22162,8 +22172,10 @@ class Component extends DCLogic {
         chgHead: this.pl(all.length, 'zaznamenaná změna', 'zaznamenané změny', 'zaznamenaných změn') + ' · historie se nemaže, jen stárne',
         chgStats: [
           { label: 'Celkem', value: String(all.length), note: 'včetně starších dnů' },
-          { label: 'Adrian', value: String(byWho.Adrian), note: byWho.Adrian + byWho.Makinka ? Math.round((byWho.Adrian / (byWho.Adrian + byWho.Makinka)) * 100) + ' %' : '—' },
-          { label: 'Makinka', value: String(byWho.Makinka), note: byWho.Adrian + byWho.Makinka ? Math.round((byWho.Makinka / (byWho.Adrian + byWho.Makinka)) * 100) + ' %' : '—' },
+          ...this.dva().map(w => {
+            const spolu = this.dva().reduce((n, x) => n + (byWho[x] || 0), 0);
+            return { label: w, value: String(byWho[w] || 0), note: spolu ? Math.round(((byWho[w] || 0) / spolu) * 100) + ' %' : '—' };
+          }),
           { label: 'Vráceno', value: String(all.filter(e => e.undone).length), note: 'omyly se počítají taky' }
         ],
         chgKinds: top.map(k => ({
@@ -22274,7 +22286,15 @@ class Component extends DCLogic {
 
       obName: name,
       obSetName: e => this.setState({ obName: e.target.value }),
-      obWhos: [['A', 'Adrian', 'adrian.stanek@gmail.com'], ['M', 'Makinka', 'makinka@gmail.com']].map(w => {
+      /*
+       * Kdo jsou ti dva — ze serveru, ne z napsaných adres.
+       *
+       * Stálo tu `adrian.stanek@gmail.com` a `makinka@gmail.com`. U jiné
+       * dvojice to byly cizí adresy a člověk si podle nich vybíral, kdo je.
+       */
+      obWhos: (((window.GalerieData || {}).UCTY || []).length >= 2
+        ? (window.GalerieData.UCTY.slice(0, 2).map((u, i) => [i === 0 ? 'A' : 'M', u[0], u[1]]))
+        : this.dva().map((n, i) => [i === 0 ? 'A' : 'M', n, ''])).map(w => {
         const on = (s.obWho || 'A') === w[0];
         return {
           label: w[1], mail: w[2], on: on,
@@ -25698,7 +25718,7 @@ class Component extends DCLogic {
     const hh = w => (log.filter(l => l.who === w).reduce((a, l) => a + l.mins, 0) / 60).toFixed(1).replace('.', ',');
     const rows = DATA_HEALTH.map(r => {
       const k = KIND[r.kind];
-      const value = r.value === null ? 'Adrian ' + hh('Adrian') + ' h : Makinka ' + hh('Makinka') + ' h' : r.value;
+      const value = r.value === null ? this.dva()[0] + ' ' + hh(this.dva()[0]) + ' h : ' + this.dva()[1] + ' ' + hh(this.dva()[1]) + ' h' : r.value;
       return {
         label: r.label, value: value, where: r.where, age: r.age,
         kindLabel: k[0], kindTag: k[1], kindIcon: k[2], kindNote: k[3],
@@ -26130,7 +26150,7 @@ class Component extends DCLogic {
       gftHead: this.pl(wishes.length, 'přání', 'přání', 'přání') + ' · ' + this.pl(mineBuys.length, 'váš nákup', 'vaše nákupy', 'vašich nákupů') + ' · výročí za 1 den',
       gftMe: me, gftOther: acc(other), gftOtherGen: otherGen, gftOtherName: other,
       gftMeNote: 'Přání vidíte oba, nákupy jen vy.',
-      gftSwitch: () => { this.setState({ giftMe: other, giftTab: tab === 'buys' ? 'wish' : tab, wishFilter: 'all' }); this.toast('Prohlížíte jako ' + other + ' · nákupy ' + (me === 'Adrian' ? 'Adriana' : 'Makinky') + ' jsou teď skryté', { icon: 'ph-user-switch' }); },
+      gftSwitch: () => { this.setState({ giftMe: other, giftTab: tab === 'buys' ? 'wish' : tab, wishFilter: 'all' }); this.toast('Prohlížíte jako ' + other + ' · nákupy ' + this.whoGen(me) + ' jsou teď skryté', { icon: 'ph-user-switch' }); },
       gftTabs: [['wish', 'Přání', visible.length], ['buys', 'Moje nákupy', mineBuys.length], ['dates', 'Příležitosti', 3], ['ideas', 'Nápady', ideas.length]].map(t => ({
         label: t[1], count: t[2],
         weight: tab === t[0] ? 500 : 400,

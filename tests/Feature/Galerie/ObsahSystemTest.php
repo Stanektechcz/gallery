@@ -400,6 +400,27 @@ class ObsahSystemTest extends TestCase
     }
 
     /**
+     * První spuštění nabízí skutečné účty, ne dvě napsané adresy.
+     *
+     * Stálo tam `adrian.stanek@gmail.com` a `makinka@gmail.com`. U jiné
+     * dvojice to byly cizí adresy — a člověk si podle nich vybíral, kdo je.
+     */
+    public function test_ucty_nesou_skutecne_adresy(): void
+    {
+        $ucty = $this->getJson('/api/data/system')->assertOk()->json('data.UCTY');
+
+        $this->assertSame([$this->adri->name, $this->adri->email], $ucty[0]);
+        $this->assertSame([$this->maki->name, $this->maki->email], $ucty[1]);
+
+        // Přihlášený první, ve stejném pořadí jako `DVOJICE` — obrazovka
+        // podle indexu pozná, který účet je ten její.
+        Sanctum::actingAs($this->maki);
+
+        $this->assertSame($this->maki->email,
+            $this->getJson('/api/data/system')->assertOk()->json('data.UCTY.0.1'));
+    }
+
+    /**
      * Dva stejně pojmenovaní lidé se neslijí do jednoho.
      *
      * Bez pořadového čísla by mapa energie i dělba práce počítaly práci

@@ -850,7 +850,7 @@ class Knihovna implements PoskytovatelObsahu
                 'seed' => $a['n'],
                 'bg' => $a['bg'],
             ], $alba),
-            'PHOTOS' => array_map(fn (array $f) => [
+            'PHOTOS' => array_map(fn (array $f) => array_filter([
                 'id' => $f['id'],
                 'di' => $poradiDnu[$f['day']] ?? 0,
                 'day' => $f['dayLabel'],
@@ -860,7 +860,18 @@ class Knihovna implements PoskytovatelObsahu
                 'fav' => $f['fav'],
                 'seed' => $f['n'],
                 'bg' => $f['bg'],
-            ], $fotky),
+                /*
+                 * Kdo to nahrál a čím.
+                 *
+                 * Telefonní rozvržení si obojí vyrábělo z pořadového čísla:
+                 * `seed % 3 === 0 ? 'Makinka' : 'Adrian'` a k tomu iPhone
+                 * podle toho jména. Statistika „kdo víc fotí" tak měřila
+                 * zbytek po dělení, ne knihovnu — a jmenovala u toho lidi,
+                 * kteří tam nemusí být.
+                 */
+                'author' => $f['author'] ?? null,
+                'dev' => $f['dev'] ?? null,
+            ], fn ($v) => $v !== null), $fotky),
         ];
     }
 
