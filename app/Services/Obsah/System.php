@@ -77,7 +77,108 @@ class System implements PoskytovatelObsahu
             'SECLIFE' => $this->zivotSekci($prostor),
             'ABARS' => $this->sloupce($prostor),
             'AFORMS' => $this->prepinace($prostor),
+            'CONFLICTS' => $this->rozpory($prostor),
         ], fn ($v) => $v !== null && $v !== []);
+    }
+
+    /**
+     * Rozpory mezi zařízeními: `[id, co, kde, ikona, moje, kdy, jejich, kdy, sloučeno]`.
+     *
+     * Dvě verze téhož záznamu, které vznikly, když byl jeden z telefonů
+     * offline. Nabídnutá sloučená verze se **nevymýšlí** — je to prázdné
+     * pole a rozhodnutí zůstává na dvojici. Domyslet za ně, co si vlastně
+     * chtěli poznamenat, by bylo horší než nechat je vybrat.
+     *
+     * @return list<array<int, mixed>>
+     */
+    private function rozpory(GallerySpace $prostor): array
+    {
+        if (! Schema::hasTable('drive_conflicts') || ! Schema::hasTable('storage_connections')) {
+            return [];
+        }
+
+        return DB::table('drive_conflicts as r')
+            ->join('storage_connections as s', 's.id', '=', 'r.storage_connection_id')
+            ->where('s.gallery_space_id', $prostor->id)
+            ->whereNull('r.resolved_at')
+            ->orderByDesc('r.detected_at')
+            ->limit(20)
+            ->get(['r.id', 'r.entity_type', 'r.entity_id', 'r.conflict_type', 'r.app_state', 'r.drive_state', 'r.detected_at'])
+            ->map(function (object $r) {
+                $kdy = CarbonImmutable::parse($r->detected_at);
+
+                return [
+                    'c'.$r->id,
+                    $this->popisRozporu((string) $r->entity_type, (int) $r->entity_id),
+                    $this->kdeRozpor((string) $r->entity_type),
+                    $this->ikonaRozporu((string) $r->entity_type),
+                    $this->stranaRozporu($r->app_state),
+                    $this->pred($kdy),
+                    $this->stranaRozporu($r->drive_state),
+                    $this->pred($kdy),
+                    // Sloučenou verzi si dvojice vybere sama.
+                    '',
+                ];
+            })
+            ->values()
+            ->all();
+    }
+
+    private function popisRozporu(string $druh, int $id): string
+    {
+        $nazev = match ($druh) {
+            'media_item' => Schema::hasTable('media_items')
+                ? DB::table('media_items')->where('id', $id)->value('original_filename')
+                : null,
+            'album' => Schema::hasTable('albums')
+                ? DB::table('albums')->where('id', $id)->value('title')
+                : null,
+            default => null,
+        };
+
+        return $nazev ? $this->kdeRozpor($druh).' — '.$nazev : $this->kdeRozpor($druh);
+    }
+
+    private function kdeRozpor(string $druh): string
+    {
+        return match ($druh) {
+            'media_item' => 'Knihovna',
+            'album' => 'Alba',
+            'todo' => 'Plánování → Nástěnka',
+            default => 'Úložiště',
+        };
+    }
+
+    private function ikonaRozporu(string $druh): string
+    {
+        return match ($druh) {
+            'media_item' => 'ph-image',
+            'album' => 'ph-folders',
+            'todo' => 'ph-list-checks',
+            default => 'ph-cloud-warning',
+        };
+    }
+
+    /** Jedna strana rozporu jako věta, ne jako JSON. */
+    private function stranaRozporu(mixed $stav): string
+    {
+        $data = json_decode((string) $stav, true);
+
+        if (! is_array($data) || $data === []) {
+            return 'beze změny';
+        }
+
+        foreach (['caption', 'title', 'name', 'note'] as $klic) {
+            if (! empty($data[$klic])) {
+                return (string) $data[$klic];
+            }
+        }
+
+        return implode(', ', array_map(
+            fn ($k, $v) => $k.': '.(is_scalar($v) ? (string) $v : '…'),
+            array_keys($data),
+            $data,
+        ));
     }
 
     /**

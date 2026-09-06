@@ -45,7 +45,7 @@ class Mechanismy implements PoskytovatelObsahu
      */
     public function uplne(): array
     {
-        return ['FAV', 'FORGIVEN', 'ANTI', 'ML_LOAD', 'FAMILY', 'TRUTHS', 'PAUSE_LOG', 'PAUSE_PLAN'];
+        return ['FAV', 'FORGIVEN', 'ANTI', 'ML_LOAD', 'FAMILY', 'TRUTHS', 'PAUSE_LOG', 'PAUSE_PLAN', 'CAS_ROWS'];
     }
 
     public function kolekce(GallerySpace $prostor): array
@@ -62,7 +62,60 @@ class Mechanismy implements PoskytovatelObsahu
             'PAUSE_LOG' => $this->pauzy($prostor, $jmena),
             'PAUSE_PLAN' => $this->pravidlaPauzy($prostor),
             'TICHO' => $this->ticho($prostor),
+            'CAS_ROWS' => $this->casVersusSluzba($prostor, $jmena),
         ], fn ($v) => $v !== null && $v !== []);
+    }
+
+    /**
+     * Čas versus služba: `[{ task, hours, service, doer }]`.
+     *
+     * Kolik hodin měsíčně padne na kterou práci doma — ze zapsaného protokolu
+     * dělby práce, ne z odhadu. Cena služby se **nepočítá**: ceník úklidové
+     * firmy aplikace nezná a vymyslet ho by znamenalo tvrdit dvojici, že se
+     * jí vyplatí něco, co nikdo nenacenil.
+     *
+     * @param  array<int, string>  $jmena
+     * @return list<array<string, mixed>>
+     */
+    private function casVersusSluzba(GallerySpace $prostor, array $jmena): array
+    {
+        if (! Schema::hasTable('house_chore_log')) {
+            return [];
+        }
+
+        $od = CarbonImmutable::now()->subDays(90);
+
+        $prace = DB::table('house_chore_log')
+            ->where('gallery_space_id', $prostor->id)
+            ->where('done_at', '>=', $od)
+            ->selectRaw('chore_name, user_id, SUM(minutes) AS minut, COUNT(*) AS kolikrat')
+            ->groupBy('chore_name', 'user_id')
+            ->get();
+
+        if ($prace->isEmpty()) {
+            return [];
+        }
+
+        return $prace
+            ->groupBy('chore_name')
+            ->map(function ($radky, string $nazev) use ($jmena) {
+                // Kdo to dělá nejčastěji — ne kdo to dělal naposledy.
+                $hlavni = $radky->sortByDesc('kolikrat')->first();
+                $minut = (int) $radky->sum('minut');
+
+                return [
+                    'task' => $nazev,
+                    // Na měsíc: protokol je za čtvrt roku.
+                    'hours' => round($minut / 60 / 3, 1),
+                    // Cenu služby aplikace nezná; nula znamená „nenaceněno".
+                    'service' => 0,
+                    'doer' => $jmena[$hlavni->user_id] ?? 'spolu',
+                ];
+            })
+            ->sortByDesc('hours')
+            ->take(12)
+            ->values()
+            ->all();
     }
 
     /**

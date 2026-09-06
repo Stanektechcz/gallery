@@ -82,6 +82,8 @@ class Knihovna implements PoskytovatelObsahu
             'APEOPLE' => $this->osobyDoZalozek($lide),
             'ATAGS' => $this->stitkyKnihovny($prostor),
             'YBCH' => $this->roky($prostor),
+            // Kdy dvojice fotí — z hodiny v EXIF, ne z odhadu.
+            'HOURS' => $this->hodiny($media),
             // Čísla u položek postranního panelu a součet na úvodní obrazovce.
             'NAVCNT' => $this->navPocty($prostor),
             'TOTAL' => $this->celkem($prostor),
@@ -954,6 +956,58 @@ class Knihovna implements PoskytovatelObsahu
     }
 
     /** Číslo s mezerou po tisících — prototyp je tak píše všude. */
+    /**
+     * Kdy fotíme: `[{ label, n, reg }]`.
+     *
+     * `n` je kolik snímků v tom pásmu vzniklo, `reg` kolik z nich je
+     * pravidelných — tedy kolik různých dnů se v tom pásmu fotilo. Jedno
+     * odpoledne se sto snímky není zvyk; deset odpolední po deseti ano.
+     *
+     * @param  Collection<int, MediaItem>  $media
+     * @return list<array<string, mixed>>
+     */
+    private function hodiny(Collection $media): array
+    {
+        $pasma = [
+            ['do 12:00', 0, 12],
+            ['12–17', 12, 17],
+            ['17–20', 17, 20],
+            ['20–22', 20, 22],
+            ['po 22:00', 22, 24],
+        ];
+
+        $sCasem = $media->filter(fn (MediaItem $m) => $m->taken_at !== null);
+
+        if ($sCasem->isEmpty()) {
+            return [];
+        }
+
+        $radky = [];
+
+        foreach ($pasma as [$popis, $od, $do]) {
+            $vPasmu = $sCasem->filter(function (MediaItem $m) use ($od, $do) {
+                $hodina = (int) CarbonImmutable::parse($m->taken_at)->hour;
+
+                return $hodina >= $od && $hodina < $do;
+            });
+
+            if ($vPasmu->isEmpty()) {
+                continue;
+            }
+
+            $radky[] = [
+                'label' => $popis,
+                'n' => $vPasmu->count(),
+                'reg' => $vPasmu
+                    ->map(fn (MediaItem $m) => CarbonImmutable::parse($m->taken_at)->format('Y-m-d'))
+                    ->unique()
+                    ->count(),
+            ];
+        }
+
+        return $radky;
+    }
+
     /**
      * Štítky knihovny: `{ all: [[název, počet]], sug: [] }`.
      *

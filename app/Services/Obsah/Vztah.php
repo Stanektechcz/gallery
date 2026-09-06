@@ -12,6 +12,7 @@ use App\Models\CoupleVetoProposal;
 use App\Models\GallerySpace;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 /**
@@ -66,6 +67,8 @@ class Vztah implements PoskytovatelObsahu
             'PROMISES' => $sliby = $this->sliby($prostor, $jmena),
             'NUDGES' => $this->zadosti($prostor, $jmena),
             'PATIENCE' => $this->trpelivost($prostor, $jmena),
+            // Témata, ke kterým se dvojice vrací, aniž by je zavřela.
+            'DISP' => $this->vracejiciSeTemata($body, $prostor),
             // Telefon kreslí sliby z vlastní kolekce; tvar je tentýž.
             'MOBIL' => $sliby ? ['PROMISES' => $sliby] : [],
         ], fn ($v) => $v !== null && $v !== []);
@@ -202,6 +205,52 @@ class Vztah implements PoskytovatelObsahu
         return CoupleDisagreementPoint::where('gallery_space_id', $prostor->id)
             ->orderBy('id')
             ->get();
+    }
+
+    /**
+     * Témata, která se vracejí: `[{ topic, date, end, cost }]`.
+     *
+     * Jeden řádek na každé, kdy se to téma znovu objevilo v protokolu
+     * nesouhlasu. Obrazovka z toho počítá, jak často se vrací a jak dlouho
+     * mezi tím bývá.
+     *
+     * `end` je „dohoda" jen tehdy, když k tématu existuje **zapsané
+     * rozhodnutí** — jinak „odloženo". `cost` zůstává nula: co ten odklad
+     * stál, nikdo neměří, a vyčíslit ho odhadem by znamenalo poslat dvojici
+     * účet za něco, co si nespočítala.
+     *
+     * @param  Collection<int, CoupleDisagreementPoint>  $body
+     * @return list<array<string, mixed>>
+     */
+    private function vracejiciSeTemata(Collection $body, GallerySpace $prostor): array
+    {
+        $temata = $body->filter(fn (CoupleDisagreementPoint $b) => trim((string) $b->topic) !== '');
+
+        if ($temata->isEmpty()) {
+            return [];
+        }
+
+        $rozhodnuta = Schema::hasTable('couple_decisions')
+            ? DB::table('couple_decisions')
+                ->where('gallery_space_id', $prostor->id)
+                ->pluck('title')
+                ->map(fn ($t) => mb_strtolower(trim((string) $t)))
+            : collect();
+
+        return $temata
+            ->map(function (CoupleDisagreementPoint $b) use ($rozhodnuta) {
+                $tema = trim((string) $b->topic);
+
+                return [
+                    'topic' => $tema,
+                    'date' => CarbonImmutable::parse($b->created_at)->toDateString(),
+                    'end' => $rozhodnuta->contains(mb_strtolower($tema)) ? 'dohoda' : 'odloženo',
+                    // Cenu odkladu nikdo neměří; nula je pravda, odhad by byl účet.
+                    'cost' => 0,
+                ];
+            })
+            ->values()
+            ->all();
     }
 
     /**

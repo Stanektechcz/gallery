@@ -58,13 +58,13 @@ Změřeno v prohlížeči proti běžícímu serveru, ne odhadem:
 | --- | --- |
 | Klíčů v `window.GalerieData` | **190** — z toho 9 jsou pomocné funkce, ne data |
 | Kolekcí celkem | **181** |
-| Obsluhuje server | **111** (109 přes `/api/data`, `ADMIN` a `STORAGE` přes přístupovou vrstvu) |
-| Z toho kolekcí, které prototyp má | **92** |
+| Obsluhuje server | **121** (119 přes `/api/data`, `ADMIN` a `STORAGE` přes přístupovou vrstvu) |
+| Z toho kolekcí, které prototyp má | **102** |
 | Katalogy rozhraní — zůstávají statické záměrně | ~51 |
 | Přihlašovací záslepky prototypu — **daty se stát nesmí** | 6 |
-| **Obsah dvojice, který ještě není napojený** | **~32** |
+| **Obsah dvojice, který ještě není napojený** | **~22** |
 
-Sedmnáct ze sto devíti kolekcí prototyp v `GalerieData` vůbec nemá — mřížku fotek
+Sedmnáct ze sto devatenácti kolekcí prototyp v `GalerieData` vůbec nemá — mřížku fotek
 (`PHOTOS`, `DAYS`, `ALBUMS`, `ATREE`), čísla u nabídky (`NAVCNT`, `TOTAL`),
 měnu, spíž a odkazy si dokument vyráběl sám ve funkcích. Server je dodává
 navíc a přepínače v dokumentu je berou přednostně.
@@ -109,6 +109,7 @@ Podle toho, kde už skutečný obsah je a kde na něm záleží:
 | 24 | **Klid a pohoda** | `KL_EN`, `KL_ATTN`, `KL_TASKS`, `KL_ASK_LOG`, `KL_ASK_NOW` | `wellbeing_energy`, `wellbeing_attention`, `wellbeing_tasks`, `wellbeing_answers` | hotovo, **píše i zpátky** |
 | 25 | **Příběh a výstupy** | `STORY`, `STORYMS`, `PORDERS`, `EM_ITEMS`, `EM_LOG`, `PAPER_ROWS`, `GV_C`, `ABARS.tier` | `couple_story_*`, `print_orders`, `emergency_access_*`, `paper_backup_rows`, `guest_comments`, `watch_titles` | hotovo, **píše i zpátky** |
 | 26 | **Mechanismy pro dva** | `FAV`, `FORGIVEN`, `ANTI`, `ML_LOAD`, `FAMILY`, `TRUTHS`, `PAUSE_LOG`, `PAUSE_PLAN`, `TICHO` | `couple_favours`, `couple_forgiven`, `couple_anti_budget`, `couple_mental_load`, `couple_family_contacts`, `couple_truths`, `couple_pause` | hotovo, **píše i zpátky**; `TICHO` se počítá |
+| 27 | **Odvozené — bez vlastní tabulky** | `HOURS`, `RECON`, `CAS_ROWS`, `COSTMEAN`, `DELAY`, `EST`, `SURPRISE`, `CONFLICTS`, `DISP`, `SOLO` | `media_items`, `house_chore_log`, `house_dues`, `budget_category_limits`, `transactions`, `drive_conflicts`, `couple_disagreement_points`, `event_participants` | hotovo — počítá se, neukládá |
 
 ## Knihovna: co se muselo změnit v dokumentu
 
@@ -368,26 +369,9 @@ Tohle **není** katalog rozhraní — je to obsah dvojice, který se pořád kre
 z `galerie-data.js`. Seřazeno podle toho, co je hotové nejdřív: první skupina
 má tabulky i data, poslední je potřeba teprve vymyslet.
 
-Zbývá dvaatřicet kolekcí a dělí se na tři skupiny podle toho, **proč** ještě
-nejsou napojené. To je ten rozdíl, na kterém záleží: první skupina je práce,
-druhá je rozhodnutí, třetí je slepá ulička.
-
-### Jde spočítat z toho, co v aplikaci je
-
-Tabulku nepotřebují — potřebují poskytovatele.
-
-| Kolekce | Z čeho |
-| --- | --- |
-| `HOURS` (kdy fotíme) | hodina v `media_items.taken_at` |
-| `RECON` (rekonstrukce dne) | fotky, transakce, zprávy a polohy jednoho dne |
-| `CAS_ROWS` (čas versus služba) | `house_chore_log.minutes` a ceník služeb |
-| `COSTMEAN` (co ta cesta znamenala) | `trip_expenses` proti ročnímu rozpočtu |
-| `DELAY` (cena odkladu) | `house_dues` po termínu |
-| `EST` (odhad versus skutečnost) | `budget_category_limits` proti `transactions` |
-| `SURPRISE` (nečekané výdaje) | `transactions` mimo obvyklé kategorie |
-| `CONFLICTS` (rozpory mezi zařízeními) | `sync_conflicts` |
-| `DISP` (o čem se nedohodneme) | `couple_disagreement_points` |
-| `SOLO` (čas pro sebe) | `calendar_events` bez druhého účastníka |
+Zbývá dvaadvacet kolekcí a dělí se na dvě skupiny podle toho, **proč** ještě
+nejsou napojené. To je ten rozdíl, na kterém záleží: první je rozhodnutí,
+druhá slepá ulička.
 
 ### Nemá to kdo zapsat
 

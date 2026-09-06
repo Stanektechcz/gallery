@@ -64,7 +64,72 @@ class Klid implements PoskytovatelObsahu
             'KL_TASKS' => $this->cekaNaOkno($prostor),
             'KL_ASK_LOG' => $this->otazky($prostor),
             'KL_ASK_NOW' => $this->dnesniOtazka($prostor),
+            'SOLO' => $this->casProSebe($prostor),
         ], fn ($v) => $v !== null && $v !== []);
+    }
+
+    /**
+     * Čas pro sebe: `[{ week, a, k }]`, šest týdnů zpátky.
+     *
+     * Počítá se z událostí v kalendáři, u kterých je **jen jeden z dvojice**.
+     * Není to všechen čas o samotě — jen ten, který si někdo zapsal; a přesně
+     * to je na tom podstatné: co se nezapíše, se taky nenaplánuje.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function casProSebe(GallerySpace $prostor): array
+    {
+        if (! Schema::hasTable('calendar_events') || ! Schema::hasTable('event_participants')) {
+            return [];
+        }
+
+        [$prvni, $druhy] = array_pad(array_keys($this->jmena($prostor)), 2, null);
+
+        if ($prvni === null || $druhy === null) {
+            return [];
+        }
+
+        $od = CarbonImmutable::now()->startOfWeek()->subWeeks(5);
+
+        $udalosti = DB::table('calendar_events as u')
+            ->join('event_participants as ucast', 'ucast.event_id', '=', 'u.id')
+            ->where('u.gallery_space_id', $prostor->id)
+            ->where('u.starts_at', '>=', $od)
+            ->get(['u.id', 'u.starts_at', 'ucast.user_id'])
+            ->groupBy('id');
+
+        if ($udalosti->isEmpty()) {
+            return [];
+        }
+
+        $tydny = [];
+
+        foreach ($udalosti as $ucastnici) {
+            // Událost, kde jsou oba, není čas pro sebe.
+            if ($ucastnici->pluck('user_id')->unique()->count() !== 1) {
+                continue;
+            }
+
+            $kdo = (int) $ucastnici->first()->user_id;
+            $tyden = CarbonImmutable::parse($ucastnici->first()->starts_at)->startOfWeek();
+            $klic = $tyden->format('Y-m-d');
+
+            $tydny[$klic] ??= ['week' => $tyden->format('j. n.'), 'a' => 0, 'k' => 0];
+
+            if ($kdo === $prvni) {
+                $tydny[$klic]['a']++;
+            } elseif ($kdo === $druhy) {
+                $tydny[$klic]['k']++;
+            }
+        }
+
+        if (! $tydny) {
+            return [];
+        }
+
+        ksort($tydny);
+
+        return array_values($tydny);
     }
 
     /**

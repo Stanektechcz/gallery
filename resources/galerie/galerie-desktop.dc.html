@@ -15463,8 +15463,11 @@ class Component extends DCLogic {
   // Rekonstrukce dne: jeden den zpětně z fotek, poloh, transakcí a zpráv.
   reconVals() {
     const s = this.state;
-    const key = s.rcDay || 'zadar';
-    const day = RECON[key] || RECON.zadar;
+    // Klíč „zadar" má jen ukázka. Se skutečnými dny tam není a `day.title`
+    // by shodilo celý `renderVals` — tedy aplikaci, ne jen tuhle obrazovku.
+    const rcKeys = Object.keys(RECON);
+    const key = RECON[s.rcDay] ? s.rcDay : rcKeys[0];
+    const day = RECON[key] || { label: '', title: 'Zatím není co rekonstruovat', sources: 'žádných dat', steps: [], gap: '' };
     return {
       rcTitle: day.title,
       rcNote: 'Sestaveno z ' + day.sources + '. Nic z toho nikdo nepsal — pořadí i časy vycházejí z dat. Věty jsou návrh, ne fakt.',

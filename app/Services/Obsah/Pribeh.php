@@ -6,6 +6,7 @@ use App\Models\GallerySpace;
 use App\Models\MediaItem;
 use App\Support\SpaceContext;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
@@ -38,7 +39,7 @@ class Pribeh implements PoskytovatelObsahu
      */
     public function uplne(): array
     {
-        return ['STORY', 'STORYMS', 'PORDERS', 'EM_ITEMS', 'EM_LOG', 'PAPER_ROWS', 'GV_C'];
+        return ['STORY', 'STORYMS', 'PORDERS', 'EM_ITEMS', 'EM_LOG', 'PAPER_ROWS', 'GV_C', 'RECON'];
     }
 
     public function kolekce(GallerySpace $prostor): array
@@ -52,7 +53,281 @@ class Pribeh implements PoskytovatelObsahu
             'PAPER_ROWS' => $this->papir($prostor),
             'GV_C' => $this->komentareHostu($prostor),
             'ABARS' => ($t = $this->tierlisty($prostor)) ? ['tier' => $t] : null,
+            'RECON' => $this->rekonstrukce($prostor),
         ], fn ($v) => $v !== null && $v !== []);
+    }
+
+    /**
+     * Rekonstrukce dne: `{ klíč: { label, title, sources, steps, gap } }`.
+     *
+     * Den poskládaný z toho, co po něm zbylo — z fotek, plateb, zápisů
+     * a zpráv. **Nic se nevypráví.** Ukázka měla věty jako „Vzhůru dřív než
+     * ostatní"; tady stojí, co data říkají: kolik fotek, odkud, za kolik.
+     *
+     * Díra v datech se hlásí, ne zaplňuje. Dvě hodiny, o kterých aplikace nic
+     * neví, jsou informace — domyslet je znamená napsat dvojici do vzpomínek
+     * něco, co si nepamatuje.
+     *
+     * @return array<string, array<string, mixed>>
+     */
+    private function rekonstrukce(GallerySpace $prostor): array
+    {
+        $dny = $this->dnySDaty($prostor);
+
+        if ($dny === []) {
+            return [];
+        }
+
+        $vysledek = [];
+
+        foreach ($dny as $den) {
+            $kroky = $this->krokyDne($prostor, $den);
+
+            // Den o jednom kroku není rekonstrukce, je to jedna fotka.
+            if (count($kroky) < 2) {
+                continue;
+            }
+
+            $vysledek[$den->format('Y-m-d')] = [
+                'label' => $den->format('j. n. Y'),
+                'title' => $this->denCesky($den),
+                'sources' => $this->zdroje($kroky),
+                'steps' => array_map(
+                    fn (array $k) => [$k['cas'], $k['text'], $k['zdroj'], $k['ikona']],
+                    $kroky,
+                ),
+                'gap' => $this->dira($kroky),
+            ];
+        }
+
+        return $vysledek;
+    }
+
+    /**
+     * Dny, po kterých zbylo nejvíc — nejvýš tři, od nejnovějšího.
+     *
+     * @return list<CarbonImmutable>
+     */
+    private function dnySDaty(GallerySpace $prostor): array
+    {
+        $dny = MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
+            ->where('gallery_space_id', $prostor->id)
+            ->whereNull('trashed_at')
+            ->whereNotNull('taken_at')
+            ->get(['taken_at'])
+            ->countBy(fn (MediaItem $m) => CarbonImmutable::parse($m->taken_at)->format('Y-m-d'))
+            ->sortDesc()
+            ->take(3)
+            ->keys();
+
+        return $dny->map(fn (string $d) => CarbonImmutable::parse($d))->all();
+    }
+
+    /**
+     * Kroky jednoho dne, seřazené v čase.
+     *
+     * @return list<array<string, string>>
+     */
+    private function krokyDne(GallerySpace $prostor, CarbonImmutable $den): array
+    {
+        $od = $den->startOfDay();
+        $do = $den->endOfDay();
+        $kroky = [];
+
+        // Fotky se slučují do shluků: dvacet snímků z jednoho místa za dvacet
+        // minut je jeden okamžik, ne dvacet řádků.
+        $fotky = MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
+            ->where('gallery_space_id', $prostor->id)
+            ->whereNull('trashed_at')
+            ->whereBetween('taken_at', [$od, $do])
+            ->orderBy('taken_at')
+            ->get(['taken_at', 'location_name', 'original_filename']);
+
+        foreach ($this->shluky($fotky) as $shluk) {
+            $kroky[] = [
+                'cas' => $shluk['od']->format('G:i'),
+                'text' => $this->vetaShluku($shluk),
+                'zdroj' => $shluk['pocet'] === 1
+                    ? 'fotka '.$shluk['nazev'].' · čas z EXIF'
+                    : 'fotky · '.$this->pocet($shluk['pocet'], 'snímek', 'snímky', 'snímků').' za sebou',
+                'ikona' => $shluk['pocet'] > 5 ? 'ph-images' : 'ph-camera',
+            ];
+        }
+
+        if (Schema::hasTable('transactions')) {
+            $platby = DB::table('transactions')
+                ->where('gallery_space_id', $prostor->id)
+                ->whereBetween('occurred_at', [$od, $do])
+                ->orderBy('occurred_at')
+                ->get(['occurred_at', 'description', 'counterparty', 'amount_from', 'currency_from', 'place']);
+
+            foreach ($platby as $p) {
+                $kdy = CarbonImmutable::parse($p->occurred_at);
+                $co = $p->description ?: ($p->counterparty ?: 'Platba');
+
+                $kroky[] = [
+                    // Transakce mívá jen datum; bez času se řadí na konec dne.
+                    'cas' => $kdy->format('G:i') === '0:00' ? '—' : $kdy->format('G:i'),
+                    'text' => $co.', '.$this->castka((float) $p->amount_from, (string) $p->currency_from)
+                        .($p->place ? ' · '.$p->place : '').'.',
+                    'zdroj' => 'transakce'.($p->counterparty ? ' · '.$p->counterparty : ''),
+                    'ikona' => 'ph-receipt',
+                ];
+            }
+        }
+
+        if (Schema::hasTable('journal_entries')) {
+            $zapisy = DB::table('journal_entries')
+                ->where('gallery_space_id', $prostor->id)
+                ->whereDate('entry_date', $den->toDateString())
+                ->get(['title', 'created_at']);
+
+            foreach ($zapisy as $z) {
+                $kroky[] = [
+                    'cas' => CarbonImmutable::parse($z->created_at)->format('G:i'),
+                    'text' => 'Zápis v deníku: „'.$z->title.'".',
+                    'zdroj' => 'deník',
+                    'ikona' => 'ph-notebook',
+                ];
+            }
+        }
+
+        usort($kroky, fn (array $a, array $b) => strcmp(
+            str_pad($a['cas'] === '—' ? '99:99' : $a['cas'], 5, '0', STR_PAD_LEFT),
+            str_pad($b['cas'] === '—' ? '99:99' : $b['cas'], 5, '0', STR_PAD_LEFT),
+        ));
+
+        return $kroky;
+    }
+
+    /**
+     * Fotky do shluků: nový shluk začíná po půl hodině bez snímku nebo na
+     * jiném místě.
+     *
+     * @param  Collection<int, MediaItem>  $fotky
+     * @return list<array<string, mixed>>
+     */
+    private function shluky($fotky): array
+    {
+        $shluky = [];
+        $aktualni = null;
+
+        foreach ($fotky as $m) {
+            $kdy = CarbonImmutable::parse($m->taken_at);
+            $misto = (string) ($m->location_name ?? '');
+
+            $novy = $aktualni === null
+                || $misto !== $aktualni['misto']
+                || $kdy->diffInMinutes($aktualni['do']) > 30;
+
+            if ($novy) {
+                if ($aktualni !== null) {
+                    $shluky[] = $aktualni;
+                }
+
+                $aktualni = [
+                    'od' => $kdy, 'do' => $kdy, 'misto' => $misto,
+                    'pocet' => 0, 'nazev' => $m->original_filename,
+                ];
+            }
+
+            $aktualni['do'] = $kdy;
+            $aktualni['pocet']++;
+        }
+
+        if ($aktualni !== null) {
+            $shluky[] = $aktualni;
+        }
+
+        return $shluky;
+    }
+
+    /** @param  array<string, mixed>  $shluk */
+    private function vetaShluku(array $shluk): string
+    {
+        $minut = (int) $shluk['od']->diffInMinutes($shluk['do']);
+        $kde = $shluk['misto'] !== '' ? ' — '.$shluk['misto'] : '';
+
+        if ($shluk['pocet'] === 1) {
+            return 'Jedna fotka'.$kde.'.';
+        }
+
+        return $this->pocet($shluk['pocet'], 'fotka', 'fotky', 'fotek')
+            .($minut > 0 ? ' za '.$this->pocet($minut, 'minutu', 'minuty', 'minut') : ' během chvíle')
+            .$kde.'.';
+    }
+
+    /**
+     * Nejdelší díra mezi kroky.
+     *
+     * Hlásí se, nezaplňuje: dvě hodiny, o kterých aplikace nic neví, jsou
+     * informace.
+     *
+     * @param  list<array<string, string>>  $kroky
+     */
+    private function dira(array $kroky): string
+    {
+        $casy = array_values(array_filter(array_column($kroky, 'cas'), fn (string $c) => $c !== '—'));
+
+        if (count($casy) < 2) {
+            return '';
+        }
+
+        $nejvic = 0;
+        $od = $do = '';
+
+        for ($i = 1; $i < count($casy); $i++) {
+            $a = CarbonImmutable::createFromFormat('G:i', $casy[$i - 1]);
+            $b = CarbonImmutable::createFromFormat('G:i', $casy[$i]);
+            $minut = (int) $a->diffInMinutes($b);
+
+            if ($minut > $nejvic) {
+                $nejvic = $minut;
+                $od = $casy[$i - 1];
+                $do = $casy[$i];
+            }
+        }
+
+        if ($nejvic < 120) {
+            return 'Den drží pohromadě — mezi zápisy není delší prázdno než dvě hodiny.';
+        }
+
+        return 'Mezi '.$od.' a '.$do.' nejsou žádná data — '
+            .$this->pocet((int) round($nejvic / 60), 'hodina', 'hodiny', 'hodin')
+            .' prázdno. Jestli si vzpomenete, doplňte je; jinak den zůstane s dírou, což je taky odpověď.';
+    }
+
+    /** @param  list<array<string, string>>  $kroky */
+    private function zdroje(array $kroky): string
+    {
+        $podle = array_count_values(array_map(
+            fn (array $k) => str_contains($k['zdroj'], 'transakce') ? 'transakce'
+                : (str_contains($k['zdroj'], 'deník') ? 'denik' : 'fotky'),
+            $kroky,
+        ));
+
+        return implode(', ', array_filter([
+            isset($podle['fotky']) ? $this->pocet($podle['fotky'], 'shluku fotek', 'shluků fotek', 'shluků fotek') : null,
+            isset($podle['transakce']) ? $this->pocet($podle['transakce'], 'platby', 'plateb', 'plateb') : null,
+            isset($podle['denik']) ? $this->pocet($podle['denik'], 'zápisu', 'zápisů', 'zápisů') : null,
+        ]));
+    }
+
+    private function castka(float $castka, string $mena): string
+    {
+        $znak = match (strtoupper($mena)) {
+            'CZK' => 'Kč', 'EUR' => '€', 'USD' => '$', default => $mena,
+        };
+
+        return number_format(abs($castka), 0, ',', ' ').' '.$znak;
+    }
+
+    /** „Pátek 24. července 2026" — nadpis rekonstruovaného dne. */
+    private function denCesky(CarbonImmutable $den): string
+    {
+        $dny = ['Neděle', 'Pondělí', 'Úterý', 'Středa', 'Čtvrtek', 'Pátek', 'Sobota'];
+
+        return $dny[$den->dayOfWeek].' '.$den->day.'. '.self::MESICE[$den->month].' '.$den->year;
     }
 
     /**
