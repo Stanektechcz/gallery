@@ -15888,7 +15888,11 @@ class Component extends DCLogic {
         undo: () => this.setState({ quarGone: prev, quarAsked: asked })
       });
     };
-    const freed = Object.keys(gone).filter(k => gone[k] === 'drop').length * 3.4;
+    // Uvolněné místo je součet skutečných velikostí. Odhad 3,4 MB na položku
+    // zůstává jen tam, kde server velikost neposlal — u 184MB videa byl vedle
+    // o dva řády.
+    const zaklad = (s.quar === null || s.quar === undefined ? QUAR : s.quar);
+    const freed = zaklad.reduce((a, q) => a + (gone[q.id] === 'drop' ? (typeof q.mb === 'number' ? q.mb : 3.4) : 0), 0);
     return {
       quarHead: this.pl(list.length, 'položka v karanténě', 'položky v karanténě', 'položek v karanténě') + ' · uvolněno ' + freed.toFixed(1).replace('.', ',') + ' MB',
       quarOne: !!one,

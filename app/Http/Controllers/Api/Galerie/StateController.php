@@ -8,9 +8,10 @@ use App\Models\CoupleState;
 use App\Models\GallerySpace;
 use App\Services\Provoz\AdminVeStavu;
 use App\Services\Provoz\DomacnostVeStavu;
-use App\Services\Provoz\VztahVeStavu;
 use App\Services\Provoz\PlanovaniVeStavu;
 use App\Services\Provoz\TrezorVeStavu;
+use App\Services\Provoz\UklidVeStavu;
+use App\Services\Provoz\VztahVeStavu;
 use App\Services\Provoz\ZdraviVeStavu;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -27,6 +28,7 @@ class StateController extends Controller
         private readonly ZdraviVeStavu $zdravi,
         private readonly TrezorVeStavu $trezor,
         private readonly PlanovaniVeStavu $planovani,
+        private readonly UklidVeStavu $uklid,
     ) {}
 
     public function show(Request $request): JsonResponse
@@ -153,6 +155,18 @@ class StateController extends Controller
                 $state->zapomen(PlanovaniVeStavu::SERVEROVE);
             }
 
+            /*
+             * Úklid knihovny.
+             *
+             * „Pustit" a „Sloučit" měnily jen prohlížeč toho, kdo klikl —
+             * originál ležel na disku dál a druhý z dvojice viděl karanténu
+             * nedotčenou. Klíče ve stavu zůstávají (drží tlačítko Zpět), ale
+             * rozhodnutí se provede v knihovně.
+             */
+            if ($this->uklid->tykaSe($patch)) {
+                $patch = $this->uklid->zpracuj($patch, GallerySpace::findOrFail($coupleId));
+            }
+
             $state->applyPatch($patch);
 
             return response()->json([
@@ -173,5 +187,4 @@ class StateController extends Controller
 
         return response()->json(['data' => (object) [], 'rev' => 0]);
     }
-
 }
