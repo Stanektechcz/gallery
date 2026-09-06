@@ -57,7 +57,7 @@ Změřeno v prohlížeči proti běžícímu serveru, ne odhadem:
 | | Počet |
 | --- | --- |
 | Kolekcí v `window.GalerieData` celkem | **189** |
-| Z nich obsluhuje server | **52** (50 přes `/api/data`, `ADMIN` a `STORAGE` přes přístupovou vrstvu) |
+| Z nich obsluhuje server | **57** (55 přes `/api/data`, `ADMIN` a `STORAGE` přes přístupovou vrstvu) |
 | Katalogy rozhraní — zůstávají statické záměrně | ~50 |
 | **Obsah dvojice, který ještě není napojený** | **~82** |
 
