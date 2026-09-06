@@ -61,7 +61,7 @@ Podle toho, kde už skutečný obsah je a kde na něm záleží:
 | 3 | **Plánování** | `CALEV`, `ATASKS`, `LATER_ITEMS`, `AL.doneTasks`, `EVSEED` | `calendar_events`, `event_participants`, `event_reminders`, `shared_todos`, `shared_todo_lists`, `life_events` | hotovo, **píše i zpátky** |
 | 4 | **Domácnost** | `HOUSE_CHORES`, `HOUSE_LOG`, `HOUSE_WEEK`, `HOUSE_DUES`, `HOUSE_INV`, `PANTRY` | `house_chores`, `house_chore_log`, `house_dues`, `house_inventory`, `house_pantry`, `house_week(_capacity)` | hotovo |
 | 5 | **Cesty a místa** | `TRIPS`, `TRIP_BY_TITLE`, `NOWTRIP`, `PLACES`, `PLACE_BY_TITLE` | `trips`, `trip_days`, `trip_activities`, `trip_expenses`, `trip_budget_limits`, `trip_packing_items`, `trip_document_checks`, `travel_journal_entries`, `places`, `place_plans`, `place_notes` | hotovo |
-| 6 | **Vztah** | `DEC_LIST`, `ARB`, `VERSIONS`, `DEC_COOL`, `SPOR_MINE`, `SPOR_THEIRS`, `VETO_USED`, `VETO_PROP` | `couple_decisions`, `couple_decision_revisions`, `couple_cooling_purchases`, `couple_disagreement_points`, `couple_veto_proposals`, `couple_vetoes` | hotovo |
+| 6 | **Vztah** | `DEC_LIST`, `ARB`, `VERSIONS`, `DEC_COOL`, `SPOR_*`, `VETO_*`, `PROMISES`, `NUDGES`, `PATIENCE` | `couple_decisions`, `couple_decision_revisions`, `couple_cooling_purchases`, `couple_disagreement_points`, `couple_veto_proposals`, `couple_vetoes`, `couple_promises`, `couple_nudges`, `couple_nudge_reminders` | hotovo, **píše i zpátky** |
 | 7 | **Zdraví a cyklus** | `CYC_BASE`, `CYC_STARTS`, `KL_DAYS`, `KL_MOOD` | `cycle_days`, `cycle_settings`, `wellbeing_moods` | hotovo |
 | 8 | **Sdílení a systém** | `SHARES`, `GUEST_Q`, `KAPS`, `VAULT_ITEMS`, `OFFPACKS` | `shared_links`, `guest_uploads`, `time_capsules`, `media_items.is_hidden` | hotovo |
 
@@ -93,14 +93,7 @@ zůstal v historii i v přístupovém logu. Podpis platí pro jediný soubor a k
 na konci zítřejšího dne — tedy ve stejný okamžik pro všechny dlaždice, aby si
 je prohlížeč mohl nechat v paměti.
 
-## Plánování: co píše zpátky a co zůstává ve stavu
-
-`PROMISES` (sliby) a `PATIENCE` (kolikrát se to muselo připomínat) **zůstávají
-ve stavu páru** a do databáze se nepřenášejí. Není to opomenutí: prototyp je
-umí zakládat, uzavírat i rušit po dohodě a ukládá je do `/api/state`, který je
-sdílený mezi oběma partnery a přežije zavření prohlížeče. Tabulka, do které by
-nikdo jiný nepsal, by přidala druhý zdroj pravdy a žádnou funkci — a to je
-přesně to, co zásada „jedna pravda" zakazuje.
+## Plánování: co píše zpátky
 
 ### Cesta zpátky: `PlanovaniVeStavu`
 
@@ -222,6 +215,34 @@ Nic z toho se **nemaže**: rozhodnutí, které zmizí ze seznamu, je změněné,
 rozvaha zavřená, lhůta vyřízená. Veto navíc nese datum, ne popisek — vrací se
 po dvanácti měsících a bez data by se nedalo spočítat, kolik jich komu zbývá.
 
+### Sliby, žádosti a trpělivost
+
+**Slib, který zmizí ze seznamu, je zrušený po dohodě — ne nedodržený.** Ten
+rozdíl je celý smysl té sekce a prototyp ho umí říct jen tím, že řádek odebere;
+v databázi zůstává jako `released` a do statistiky „dodrženo z pěti" se nepočítá.
+
+Stav `late` se **neukládá**, odvozuje se z data. Uložený by po termínu pořád
+tvrdil, že slib platí — a „čtyři dny po termínu" je pravda jen ten den, kdy se
+to čte. Termín drží databáze dvakrát: slovy (`do pátku` — to člověk vysloví)
+i datem (bez něj se nedá spočítat, o kolik je po termínu).
+
+**Trpělivost není vlastní seznam, ale pohled na žádosti mezi partnery.** Kdo si
+co vyžádal, kdo to má na starost a kolikrát se mu to za poslední měsíc muselo
+připomenout. Proto dostaly tabulku žádosti (`couple_nudges`) a jejich připomínky
+(`couple_nudge_reminders`) — a trpělivost se z nich počítá:
+
+- Připomínka je **záznam s časem, ne čítač.** Obrazovka mluví o posledním měsíci
+  a z čísla se měsíc vyčíst nedá. Do stavu se vejde jen počet, takže server
+  zapisuje **rozdíl** proti tomu, co má uložené; jinak by z jedné byly tři.
+- Co **převzalo pravidlo**, se nemá nikomu připomínat, a proto to v přehledu
+  není. Prototyp si to pamatuje podle textu úkolu (`patAuto`); v databázi je to
+  `automated_at` na žádosti.
+- Odmítnutá žádost není nesplněný slib a do trpělivosti nepatří.
+
+Jedna změna v dokumentu to vyžádala: tlačítko **„Připomenout" dosud jen ukázalo
+hlášku** a nikam nic nezapsalo, takže celý přehled trpělivosti stál na čísle,
+které nikdo nikdy nezapsal. Teď připomínku i započítá — hláška zůstala stejná.
+
 ## Cyklus: soukromý zápis, ne společný obsah
 
 Kalendář cyklu je zápis **jednoho člověka**. Aplikace na to má nastavení sdílení
@@ -286,10 +307,9 @@ z těchhle tří důvodů:
 | **Nemá to kdo napsat** — prototyp obsah jen ukazuje, obrazovka, kde by se dal změnit, neexistuje | `TACIT`, `SPEAK`, `PAST_DEC`, `PM_*`, `REVISIT`, `GV_C`, `GV_VOICE_POOL` |
 | **Data nikde nejsou** — aplikace je odnikud nebere | `WEATHER` (předpověď) |
 
-A dvě, které patří do stavu páru, ne do tabulky: `PROMISES` a `PATIENCE`.
-Prototyp je umí zakládat i rušit, stav je sdílený mezi oběma partnery a přežije
-zavření prohlížeče — tabulka, do které by nikdo jiný nepsal, by přidala druhý
-zdroj pravdy a žádnou funkci.
+Ve stavu páru nezůstává **nic z obsahu** — jen to, co je opravdu jen zobrazení:
+otevřená záložka, rozepsaný text, který se ještě neodeslal, zvolený měsíc
+v kalendáři.
 
 Pravidlo, které to celé řídí: **tabulka bez zápisu je horší než žádná tabulka.**
 Kde prototyp obsah drží ve svém stavu, vzniká i cesta zpátky:
@@ -298,7 +318,7 @@ Kde prototyp obsah drží ve svém stavu, vzniká i cesta zpátky:
 | --- | --- | --- |
 | `PlanovaniVeStavu` | události, nástěnka, „až budeme mít čas" | tabulky vlastní modul — bez zápisu má dvojice dva kalendáře |
 | `DomacnostVeStavu` | dělba práce, lhůty, byt | nevlastní je nikdo; bez zápisu se stav a databáze rozejdou |
-| `VztahVeStavu` | rozhodnutí, rozvahy, protokol, veto | totéž |
+| `VztahVeStavu` | rozhodnutí, rozvahy, protokol, veto, sliby, žádosti, připomínky | totéž |
 | `ZdraviVeStavu` | zapsané dny cyklu, nálada | cyklus vlastní modul |
 | `TrezorVeStavu` | co je schované z knihovny | jinak fotku schová jen jeden prohlížeč |
 | `AdminVeStavu` | administrace ze staršího klienta | záchranná síť |

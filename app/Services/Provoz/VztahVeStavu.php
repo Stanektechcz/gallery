@@ -6,6 +6,9 @@ use App\Models\CoupleCoolingPurchase;
 use App\Models\CoupleDecision;
 use App\Models\CoupleDecisionRevision;
 use App\Models\CoupleDisagreementPoint;
+use App\Models\CoupleNudge;
+use App\Models\CoupleNudgeReminder;
+use App\Models\CouplePromise;
 use App\Models\CoupleVeto;
 use App\Models\CoupleVetoProposal;
 use App\Models\GallerySpace;
@@ -28,7 +31,10 @@ use Illuminate\Support\Facades\Schema;
 class VztahVeStavu
 {
     /** Klíče, které patří databázi. Do stavu se neukládají. */
-    public const SERVEROVE = ['decs', 'cools', 'sporMine', 'sporTheirs', 'vetoLog', 'vetoProps'];
+    public const SERVEROVE = [
+        'decs', 'cools', 'sporMine', 'sporTheirs', 'vetoLog', 'vetoProps',
+        'proms', 'nudges', 'patAuto',
+    ];
 
     public function tykaSe(array $patch): bool
     {
@@ -70,6 +76,224 @@ class VztahVeStavu
         if (is_array($patch['vetoLog'] ?? null)) {
             $this->zapisVeta($patch['vetoLog'], $prostor, $jmena);
         }
+
+        if (is_array($patch['proms'] ?? null)) {
+            $this->zapisSliby($patch['proms'], $prostor, $jmena);
+        }
+
+        if (is_array($patch['nudges'] ?? null)) {
+            $this->zapisZadosti($patch['nudges'], $prostor, $jmena, $kdo);
+        }
+
+        if (is_array($patch['patAuto'] ?? null)) {
+            $this->zapisPravidla($patch['patAuto'], $prostor);
+        }
+    }
+
+    /**
+     * Sliby.
+     *
+     * Slib, který zmizel ze seznamu, byl **zrušen po dohodě** — ne nedodržen.
+     * Ten rozdíl je celý smysl téhle sekce a prototyp ho umí říct jen tím, že
+     * řádek odebere; v databázi zůstává, protože se na něj nemá zapomenout.
+     *
+     * @param  array<int, mixed>  $radky
+     * @param  array<string, int>  $jmena
+     */
+    private function zapisSliby(array $radky, GallerySpace $prostor, array $jmena): void
+    {
+        $vDatabazi = CouplePromise::where('gallery_space_id', $prostor->id)
+            ->where('state', '!=', 'released')
+            ->get();
+
+        $podle = $this->podleId($vDatabazi);
+        $prisly = [];
+
+        foreach ($radky as $r) {
+            if (! is_array($r) || ! isset($r['id'], $r['what'])) {
+                continue;
+            }
+
+            $prisly[] = (string) $r['id'];
+            // `late` je odvozený stav, ne uložený: po termínu se pozná z data.
+            $stav = (string) ($r['state'] ?? 'open');
+            $stav = $stav === 'late' ? 'open' : $stav;
+
+            if ($podle->has($r['id'])) {
+                $s = $podle[$r['id']];
+
+                $s->update([
+                    'what' => (string) $r['what'],
+                    'state' => in_array($stav, ['open', 'kept', 'broken'], true) ? $stav : $s->state,
+                    'due_label' => $r['due'] ?? $s->due_label,
+                    'due_on' => $this->terminSlibu($r, $s->due_on ? CarbonImmutable::parse($s->due_on) : null),
+                    'settled_at' => in_array($stav, ['kept', 'broken'], true) ? ($s->settled_at ?? now()) : null,
+                ]);
+
+                continue;
+            }
+
+            $slibil = $jmena[$r['who'] ?? ''] ?? null;
+
+            if (! $slibil) {
+                continue;
+            }
+
+            CouplePromise::create([
+                'client_id' => (string) $r['id'],
+                'gallery_space_id' => $prostor->id,
+                'promised_by' => $slibil,
+                'promised_to' => $jmena[$r['to'] ?? ''] ?? null,
+                'what' => (string) $r['what'],
+                'due_label' => $r['due'] ?? null,
+                'due_on' => $this->terminSlibu($r, null),
+                'state' => in_array($stav, ['open', 'kept', 'broken'], true) ? $stav : 'open',
+                'said' => $r['said'] ?? null,
+                'settled_at' => in_array($stav, ['kept', 'broken'], true) ? now() : null,
+            ]);
+        }
+
+        $vDatabazi
+            ->reject(fn (CouplePromise $s) => in_array($s->uuid, $prisly, true)
+                || ($s->client_id && in_array($s->client_id, $prisly, true)))
+            ->each(fn (CouplePromise $s) => $s->update(['state' => 'released', 'settled_at' => now()]));
+    }
+
+    /**
+     * Termín slibu.
+     *
+     * Prototyp posílá slova („do pátku") a k nim počet dní, který si sám
+     * spočítal. Datum se bere z toho počtu — je to jediné číslo, které o termínu
+     * doopravdy něco říká.
+     *
+     * @param  array<string, mixed>  $r
+     */
+    private function terminSlibu(array $r, ?CarbonImmutable $puvodni): ?CarbonImmutable
+    {
+        $dni = $r['days'] ?? null;
+
+        // 99 je v prototypu „bez termínu", ne devadesát devět dní.
+        if ($dni === null || (int) $dni === 99) {
+            return str_contains(mb_strtolower((string) ($r['due'] ?? '')), 'bez termínu') ? null : $puvodni;
+        }
+
+        return CarbonImmutable::now()->startOfDay()->addDays((int) $dni);
+    }
+
+    /**
+     * Žádosti mezi partnery a připomínky k nim.
+     *
+     * Připomínka se do stavu vejde jen jako číslo; server z něj udělá záznam
+     * s časem, protože přehled trpělivosti mluví o posledním měsíci a z čítače
+     * se měsíc vyčíst nedá.
+     *
+     * @param  array<int, mixed>  $radky
+     * @param  array<string, int>  $jmena
+     */
+    private function zapisZadosti(array $radky, GallerySpace $prostor, array $jmena, ?User $kdo): void
+    {
+        $vDatabazi = CoupleNudge::where('gallery_space_id', $prostor->id)->withCount('pripominky')->get();
+        $podle = $this->podleId($vDatabazi);
+        $prisly = [];
+
+        foreach ($radky as $r) {
+            if (! is_array($r) || ! isset($r['id'], $r['text'])) {
+                continue;
+            }
+
+            $prisly[] = (string) $r['id'];
+            $stav = (string) ($r['state'] ?? 'ceka');
+            $stav = in_array($stav, ['ceka', 'prijato', 'odmitnuto', 'hotovo'], true) ? $stav : 'ceka';
+
+            if ($podle->has($r['id'])) {
+                $z = $podle[$r['id']];
+
+                $z->update([
+                    'text' => (string) $r['text'],
+                    'kind' => (string) ($r['kind'] ?? $z->kind),
+                    'state' => $stav,
+                    'note' => ($r['note'] ?? '') !== '' ? $r['note'] : null,
+                    'closed_at' => in_array($stav, ['hotovo', 'odmitnuto'], true) ? ($z->closed_at ?? now()) : null,
+                ]);
+
+                $this->zapisPripominky($z, (int) ($r['rem'] ?? 0), $kdo);
+
+                continue;
+            }
+
+            $odKoho = $jmena[$r['from'] ?? ''] ?? null;
+            $komu = $jmena[$r['to'] ?? ''] ?? null;
+
+            if (! $odKoho || ! $komu) {
+                continue;
+            }
+
+            $nova = CoupleNudge::create([
+                'client_id' => (string) $r['id'],
+                'gallery_space_id' => $prostor->id,
+                'asked_by' => $odKoho,
+                'asked_of' => $komu,
+                'text' => (string) $r['text'],
+                'kind' => (string) ($r['kind'] ?? 'cestou'),
+                'state' => $stav,
+                'note' => ($r['note'] ?? '') !== '' ? $r['note'] : null,
+                'closed_at' => in_array($stav, ['hotovo', 'odmitnuto'], true) ? now() : null,
+            ]);
+
+            $this->zapisPripominky($nova, (int) ($r['rem'] ?? 0), $kdo);
+        }
+
+        // Zrušená žádost se maže — na rozdíl od slibu je to prosba, ne závazek,
+        // a prototyp na ni má tlačítko „zrušit".
+        $vDatabazi
+            ->reject(fn (CoupleNudge $z) => in_array($z->uuid, $prisly, true)
+                || ($z->client_id && in_array($z->client_id, $prisly, true)))
+            ->each(fn (CoupleNudge $z) => $z->delete());
+    }
+
+    /**
+     * Přibylé připomínky.
+     *
+     * Zapisuje se **rozdíl**: kolik jich klient hlásí navíc proti tomu, co je
+     * uložené. Přepsat je znovu všechny by z jedné připomínky udělalo pět.
+     */
+    private function zapisPripominky(CoupleNudge $z, int $kolik, ?User $kdo): void
+    {
+        $uz = $z->pripominky_count ?? $z->pripominky()->count();
+        $chybi = $kolik - (int) $uz;
+
+        for ($i = 0; $i < $chybi; $i++) {
+            CoupleNudgeReminder::create([
+                'couple_nudge_id' => $z->id,
+                'reminded_by' => $kdo?->id,
+                'created_at' => now(),
+            ]);
+        }
+    }
+
+    /**
+     * Co převzalo pravidlo.
+     *
+     * Prototyp si to pamatuje podle textu úkolu — vlastní identifikátor ta mapa
+     * nemá. Věc, kterou obstarává automatizace, se nemá nikomu připomínat.
+     *
+     * @param  array<string, mixed>  $mapa
+     */
+    private function zapisPravidla(array $mapa, GallerySpace $prostor): void
+    {
+        $automatizovane = array_keys(array_filter($mapa));
+
+        CoupleNudge::where('gallery_space_id', $prostor->id)
+            ->get()
+            ->each(function (CoupleNudge $z) use ($automatizovane) {
+                $ma = in_array($z->text, $automatizovane, true);
+
+                if ($ma === ($z->automated_at !== null)) {
+                    return;
+                }
+
+                $z->update(['automated_at' => $ma ? now() : null]);
+            });
     }
 
     /**

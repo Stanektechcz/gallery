@@ -5,6 +5,8 @@ namespace App\Services\Obsah;
 use App\Models\CoupleCoolingPurchase;
 use App\Models\CoupleDecision;
 use App\Models\CoupleDisagreementPoint;
+use App\Models\CoupleNudge;
+use App\Models\CouplePromise;
 use App\Models\CoupleVeto;
 use App\Models\CoupleVetoProposal;
 use App\Models\GallerySpace;
@@ -27,6 +29,9 @@ class Vztah implements PoskytovatelObsahu
 {
     private const MESICE = [1 => 'ledna', 'února', 'března', 'dubna', 'května', 'června',
         'července', 'srpna', 'září', 'října', 'listopadu', 'prosince'];
+
+    /** Žádosti se čtou dvakrát — pro seznam i pro přehled trpělivosti. */
+    private ?Collection $zadostiCache = null;
 
     public function skupina(): string
     {
@@ -58,6 +63,11 @@ class Vztah implements PoskytovatelObsahu
             'SPOR_THEIRS' => $this->protokol($body, $this->ja(), false),
             'VETO_USED' => $this->veta($prostor, $jmena),
             'VETO_PROP' => $this->navrhy($prostor, $jmena),
+            'PROMISES' => $sliby = $this->sliby($prostor, $jmena),
+            'NUDGES' => $this->zadosti($prostor, $jmena),
+            'PATIENCE' => $this->trpelivost($prostor, $jmena),
+            // Telefon kreslí sliby z vlastní kolekce; tvar je tentýž.
+            'MOBIL' => $sliby ? ['PROMISES' => $sliby] : [],
         ], fn ($v) => $v !== null && $v !== []);
     }
 
@@ -258,6 +268,125 @@ class Vztah implements PoskytovatelObsahu
             ], fn ($v) => $v !== null))
             ->values()
             ->all();
+    }
+
+    /**
+     * Sliby: `{ id, who, to, what, due, days, state, said }`.
+     *
+     * `days` se počítá **teď**, ne ukládá: „čtyři dny po termínu" platí jen ten
+     * den, kdy se to čte. Stav `late` se ze stejného důvodu odvozuje z data —
+     * uložený by po termínu pořád tvrdil, že slib platí.
+     *
+     * @param  array<int, string>  $jmena
+     * @return list<array<string, mixed>>
+     */
+    private function sliby(GallerySpace $prostor, array $jmena): array
+    {
+        if (! Schema::hasTable('couple_promises')) {
+            return [];
+        }
+
+        $dnes = CarbonImmutable::now()->startOfDay();
+
+        return CouplePromise::where('gallery_space_id', $prostor->id)
+            // Zrušené po dohodě zůstávají v databázi, ale na obrazovku nepatří:
+            // prototyp je z ní odebírá a nesmí se mu vrátit.
+            ->where('state', '!=', 'released')
+            ->orderByDesc('created_at')
+            ->limit(60)
+            ->get()
+            ->map(function (CouplePromise $s) use ($jmena, $dnes) {
+                $termin = $s->due_on ? CarbonImmutable::parse($s->due_on)->startOfDay() : null;
+                $dni = $termin ? (int) $dnes->diffInDays($termin, false) : 99;
+                $stav = $s->state === 'open' && $dni < 0 ? 'late' : $s->state;
+
+                return [
+                    'id' => $s->uuid,
+                    'who' => $jmena[$s->promised_by] ?? '—',
+                    'to' => $jmena[$s->promised_to] ?? '—',
+                    'what' => $s->what,
+                    'due' => $s->due_label ?: ($termin ? $termin->format('j. n.') : 'bez termínu'),
+                    'days' => $dni,
+                    'state' => $stav,
+                    'said' => (string) ($s->said ?? 'zapsáno ručně'),
+                ];
+            })
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Žádosti mezi partnery: `[id, od, komu, co, druh, kdy, stav, poznámka]`.
+     *
+     * Pole, ne objekt — prototyp je tak čte a rozebírá podle pořadí.
+     *
+     * @param  array<int, string>  $jmena
+     * @return list<array<int, mixed>>
+     */
+    private function zadosti(GallerySpace $prostor, array $jmena): array
+    {
+        return $this->nudge($prostor)
+            ->map(fn (CoupleNudge $z) => [
+                $z->uuid,
+                $jmena[$z->asked_by] ?? '—',
+                $jmena[$z->asked_of] ?? '—',
+                $z->text,
+                $z->kind,
+                $this->kdy(CarbonImmutable::parse($z->created_at)),
+                $z->state,
+                (string) ($z->note ?? ''),
+                // Kolikrát se to muselo připomenout — prototyp si z toho drží
+                // počítadlo a posílá ho zpátky, když přibude další.
+                $z->pripominky->count(),
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Trpělivost: `{ task, who, rem, done }`.
+     *
+     * Není to vlastní seznam, ale **pohled na žádosti**: kdo co komu slíbil
+     * obstarat a kolikrát se mu to muselo za poslední měsíc připomenout.
+     * Připomínat je práce jako každá jiná — jen se za ni nikdy neděkuje.
+     *
+     * @param  array<int, string>  $jmena
+     * @return list<array<string, mixed>>
+     */
+    private function trpelivost(GallerySpace $prostor, array $jmena): array
+    {
+        $mesic = CarbonImmutable::now()->subMonth();
+
+        return $this->nudge($prostor)
+            // Odmítnutá žádost není nesplněný slib; a co převzalo pravidlo,
+            // se nemá nikomu připomínat.
+            ->reject(fn (CoupleNudge $z) => $z->state === 'odmitnuto' || $z->automated_at !== null)
+            ->map(fn (CoupleNudge $z) => [
+                'task' => $z->text,
+                // Kdo to má na starost — připomínal ten druhý.
+                'who' => $jmena[$z->asked_of] ?? '—',
+                'rem' => $z->pripominky
+                    ->filter(fn ($p) => CarbonImmutable::parse($p->created_at)->gte($mesic))
+                    ->count(),
+                'done' => $z->state === 'hotovo',
+            ])
+            ->filter(fn (array $r) => $r['rem'] > 0 || ! $r['done'])
+            ->values()
+            ->all();
+    }
+
+    /** @return Collection<int, CoupleNudge> */
+    private function nudge(GallerySpace $prostor): Collection
+    {
+        if (! Schema::hasTable('couple_nudges')) {
+            return collect();
+        }
+
+        return $this->zadostiCache ??= CoupleNudge::where('gallery_space_id', $prostor->id)
+            ->with('pripominky')
+            ->orderByDesc('created_at')
+            ->limit(60)
+            ->get();
     }
 
     // ——— formát ———

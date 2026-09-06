@@ -21646,7 +21646,8 @@ class Component extends DCLogic {
   ndAll() {
     const s = this.state;
     if (s.nudges) return s.nudges;
-    return NUDGES.map(n => ({ id: n[0], from: n[1], to: n[2], text: n[3], kind: n[4], when: n[5], state: n[6], note: n[7] }));
+    // Deváté pole je počet už odeslaných připomínek; napsané řádky ho nemají.
+    return NUDGES.map(n => ({ id: n[0], from: n[1], to: n[2], text: n[3], kind: n[4], when: n[5], state: n[6], note: n[7], rem: n[8] || 0 }));
   }
   ndSet(list, note, prev, icon) {
     this.setState({ nudges: list });
@@ -21718,7 +21719,13 @@ class Component extends DCLogic {
         later: () => this.ndPatch(n.id, { state: 'prijato', note: me + ': až večer' }, 'Přijato s jiným časem — až večer', 'ph-clock'),
         reject: () => this.ndPatch(n.id, { state: 'odmitnuto', note: me + ': dneska to nestihnu' }, 'Odmítnuto s důvodem — ' + this.whoGen(n.from) + ' to uvidí', 'ph-x-circle'),
         finish: () => this.ndPatch(n.id, { state: 'hotovo', note: 'hotovo dnes' }, 'Hotovo — ' + n.text, 'ph-check-square'),
-        remind: () => this.toast('Připomínka odeslána — ' + this.whoDat(n.to) + ', bez zvuku', { icon: 'ph-bell' }),
+        // Připomínka se počítá. Bez toho by přehled trpělivosti — „za měsíc
+        // padlo N připomínek“ — stál na čísle, které nikdo nikdy nezapsal.
+        remind: () => {
+          const prev = this.ndAll();
+          this.ndSet(prev.map(x => x.id === n.id ? Object.assign({}, x, { rem: (x.rem || 0) + 1 }) : x), null, null);
+          this.toast('Připomínka odeslána — ' + this.whoDat(n.to) + ', bez zvuku', { icon: 'ph-bell' });
+        },
         toTask: () => {
           const prevB = s.xBoard;
           const cols = this.boardOf('all').map(c => Object.assign({}, c, { items: c.items.slice() }));

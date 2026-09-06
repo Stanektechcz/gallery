@@ -5381,7 +5381,7 @@ const MCAPKIND = {
 };
 
 // Sliby a rodina.
-const PROMISES = [
+const PROMISES = MOB.PROMISES || (MOB.PROMISES = [
   { id: 'p1', who: 'Adrian', to: 'Makinka', what: 'Zavolám tvé mámě kvůli tomu plotu', due: 'do pátku', days: 4, state: 'open', said: 'v deníku 28. 8.' },
   { id: 'p2', who: 'Adrian', to: 'Makinka', what: 'Do konce měsíce vyřídím STK', due: '30. 9.', days: 27, state: 'open', said: 've zprávách 25. 8.' },
   { id: 'p3', who: 'Makinka', to: 'Adrian', what: 'Vyberu fotky do knihy za červenec', due: 'do neděle', days: 6, state: 'open', said: 'nahlas u večeře' },
@@ -5389,7 +5389,7 @@ const PROMISES = [
   { id: 'p5', who: 'Adrian', to: 'Makinka', what: 'Přestanu odkládat papíry na stůl', due: 'průběžně', days: 0, state: 'kept', said: 'po hádce 2. 8.' },
   { id: 'p6', who: 'Makinka', to: 'Adrian', what: 'Naučím se ten recept na pekáč', due: 'do konce srpna', days: 0, state: 'kept', said: 'v hlasovce 4. 8.' },
   { id: 'p7', who: 'Makinka', to: 'Adrian', what: 'Nebudu řešit práci po devíti večer', due: 'průběžně', days: 0, state: 'broken', said: 'slib z ledna' }
-];
+]);
 const FAMILY = [
   { id: 'f1', name: 'Máma Adriana', side: 'Adrian', last: 'před 4 dny', lastWho: 'Adrian', every: 7, over: false },
   { id: 'f2', name: 'Táta Adriana', side: 'Adrian', last: 'před 19 dny', lastWho: 'Makinka', every: 14, over: true },
