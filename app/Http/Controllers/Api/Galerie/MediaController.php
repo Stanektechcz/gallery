@@ -20,6 +20,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
@@ -171,6 +172,56 @@ class MediaController extends Controller
             // Náhled se nemění; ať se pro druhou obrazovku nestahuje znovu.
             'Cache-Control' => 'private, max-age=86400',
         ]);
+    }
+
+    /**
+     * Přehrání videa.
+     *
+     * Prohlížeč video stahuje sám, stejně jako obrázek v CSS, a hlavičku
+     * `Authorization` k němu nepřidá — adresa je proto podepsaná, ne za
+     * tokenem. Podpis platí pro jediný soubor a den.
+     *
+     * Odpovídá **po částech** (`Range`): bez toho se ve videu nedá přeskakovat
+     * a Safari ho nezačne přehrávat vůbec. Pro to je potřeba soubor na disku,
+     * takže vzdálené úložiště dostane obyčejný proud — přehraje se od začátku.
+     */
+    public function video(Request $request, string $uuid): SymfonyResponse
+    {
+        $media = MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
+            ->where('uuid', $uuid)
+            ->whereNull('trashed_at')
+            ->where('is_hidden', false)
+            ->first();
+
+        abort_if($media === null, 404, 'Takový soubor tu není.');
+        abort_if($media->media_type !== 'video', 404, 'Tenhle soubor není video.');
+
+        // Kompatibilní převod má přednost: originál bývá v kodeku, který
+        // prohlížeč neotevře, a člověk by viděl černou plochu.
+        $varianta = $media->variants()
+            ->whereIn('type', ['video_compat', 'original'])
+            ->orderByRaw("CASE type WHEN 'video_compat' THEN 0 ELSE 1 END")
+            ->first();
+
+        abort_if($varianta === null, 404, 'Soubor s videem na disku není.');
+
+        $disk = Storage::disk($varianta->disk);
+        $hlavicky = [
+            'Content-Type' => $media->mime_type ?: 'video/mp4',
+            'Cache-Control' => 'private, max-age=86400',
+        ];
+
+        try {
+            $cesta = $disk->path($varianta->path);
+
+            if (is_file($cesta)) {
+                return response()->file($cesta, $hlavicky);
+            }
+        } catch (\Throwable) {
+            // Vzdálené úložiště `path()` nemá — spadne se na proud níž.
+        }
+
+        return $disk->response($varianta->path, $media->original_filename, $hlavicky);
     }
 
     /** Do koše, ne z disku — trvale maže až úklid po třiceti dnech. */

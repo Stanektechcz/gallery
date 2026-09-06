@@ -31,10 +31,16 @@ class Sdileni implements PoskytovatelObsahu
         return 'sdileni';
     }
 
-    /** Trezor se posílá celý — vrácená položka v něm nemá zůstat viset. */
+    /**
+     * Odkazy se posílají celé.
+     *
+     * Zneplatněný odkaz musí z obrazovky zmizet hned. Bez toho by tam zůstal
+     * viset řádek s adresou, která už nefunguje — a dvojice by ji někomu
+     * poslala.
+     */
     public function uplne(): array
     {
-        return [];
+        return ['SHARES'];
     }
 
     public function kolekce(GallerySpace $prostor): array
@@ -71,6 +77,10 @@ class Sdileni implements PoskytovatelObsahu
                 $vyprselo = $do && $do->lt($dnes);
 
                 return array_filter([
+                    // Číslo řádku v tabulce. Obrazovka podle něj pozná odkaz,
+                    // který má upravit nebo zneplatnit — podle názvu to nešlo,
+                    // dva odkazy se můžou jmenovat stejně.
+                    'id' => (int) $o->id,
                     'name' => $o->name ?: 'Sdílený odkaz',
                     // Zkrácená podoba, jakou prototyp kreslí do tabulky.
                     'url' => rtrim(preg_replace('~^https?://~', '', config('app.url')), '/')

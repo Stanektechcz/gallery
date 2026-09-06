@@ -136,6 +136,75 @@ class HostVzkazTest extends TestCase
             ->assertStatus(422);
     }
 
+    /**
+     * Host svůj vzkaz uvidí.
+     *
+     * Stránka vzkazy nevracela: host něco napsal, stránka se překreslila
+     * a po jeho větě nikde nezbyla stopa. Vypadalo to, jako by se nic
+     * nestalo — a lidé psali totéž znovu.
+     */
+    public function test_host_svuj_vzkaz_uvidi(): void
+    {
+        $odkaz = $this->odkaz(['allow_comments' => true]);
+
+        $this->postJson('/s/'.$odkaz->token.'/vzkaz', [
+            'jmeno' => 'Babička',
+            'text' => 'Kluci, ten stromek je letos nádherný.',
+        ])->assertStatus(201);
+
+        $this->get('/s/'.$odkaz->token)
+            ->assertOk()
+            ->assertInertia(fn ($stranka) => $stranka
+                ->component('Shares/Show')
+                ->where('link.allow_comments', true)
+                ->where('comments.0.jmeno', 'Babička')
+                ->where('comments.0.text', 'Kluci, ten stromek je letos nádherný.'));
+    }
+
+    /** Schovaný vzkaz se hostovi nevrací — „schovat" znamená schovat. */
+    public function test_schovany_vzkaz_se_nevraci(): void
+    {
+        $odkaz = $this->odkaz(['allow_comments' => true]);
+
+        DB::table('guest_comments')->insert([
+            'uuid' => (string) Str::uuid(),
+            'gallery_space_id' => $this->prostor->id,
+            'shared_link_id' => $odkaz->id,
+            'guest_name' => 'Kdosi',
+            'body' => 'Tohle tam být nemá.',
+            'kind' => 'text',
+            'is_hidden' => true,
+            'is_pinned' => false,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $this->get('/s/'.$odkaz->token)
+            ->assertOk()
+            ->assertInertia(fn ($stranka) => $stranka->where('comments', []));
+    }
+
+    /** Bez povolených vzkazů stránka žádné nenabízí ani neukazuje. */
+    public function test_bez_povoleni_stranka_vzkazy_nema(): void
+    {
+        $odkaz = $this->odkaz(['allow_comments' => false]);
+
+        DB::table('guest_comments')->insert([
+            'uuid' => (string) Str::uuid(),
+            'gallery_space_id' => $this->prostor->id,
+            'shared_link_id' => $odkaz->id,
+            'guest_name' => 'Babička',
+            'body' => 'Starší vzkaz.',
+            'kind' => 'text',
+            'is_hidden' => false,
+            'is_pinned' => false,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $this->get('/s/'.$odkaz->token)
+            ->assertOk()
+            ->assertInertia(fn ($stranka) => $stranka->where('link.allow_comments', false)->where('comments', []));
+    }
+
     private function odkaz(array $navic = []): SharedLink
     {
         return SharedLink::create(array_merge([

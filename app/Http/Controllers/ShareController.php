@@ -149,10 +149,49 @@ class ShareController extends Controller
                 'name'              => $link->name,
                 'allow_download'    => $link->allow_download,
                 'allow_guest_upload' => $link->allow_guest_upload,
+                'allow_comments'    => $link->allow_comments,
                 'show_metadata'     => $link->show_metadata,
             ],
             'media' => $media,
+            'comments' => $this->vzkazy($link),
         ]);
+    }
+
+    /**
+     * Vzkazy u odkazu — tak, jak je uvidí host.
+     *
+     * Bez nich host napsal vzkaz a už ho nikdy neuviděl: stránka se překreslila
+     * a po jeho větě nikde nezbyla stopa. Vypadalo to, jako by se nic nestalo,
+     * a lidé psali totéž znovu.
+     *
+     * Schované vzkazy sem nepatří: „schovat" znamená, že to dvojice nechce mít
+     * u fotek — ani pro toho, kdo to napsal. Hlasovky taky ne, ty si přehrává
+     * dvojice v aplikaci.
+     *
+     * @return list<array<string, string>>
+     */
+    private function vzkazy(SharedLink $link): array
+    {
+        if (! $link->allow_comments || ! \Illuminate\Support\Facades\Schema::hasTable('guest_comments')) {
+            return [];
+        }
+
+        return DB::table('guest_comments')
+            ->where('shared_link_id', $link->id)
+            ->where('is_hidden', false)
+            ->where('kind', '!=', 'voice')
+            ->whereNotNull('body')
+            ->orderBy('created_at')
+            ->limit(200)
+            ->get(['uuid', 'guest_name', 'body', 'created_at'])
+            ->map(fn (object $v) => [
+                'id' => (string) $v->uuid,
+                'jmeno' => (string) $v->guest_name,
+                'text' => (string) $v->body,
+                'kdy' => \Carbon\CarbonImmutable::parse($v->created_at)->diffForHumans(),
+            ])
+            ->values()
+            ->all();
     }
 
     public function verify(Request $request, string $token): RedirectResponse

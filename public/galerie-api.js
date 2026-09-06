@@ -430,6 +430,21 @@
         });
     },
 
+    // Úprava jedné věci mimo stav (nastavení sdíleného odkazu). Jako post,
+    // jen jiná metoda — server podle ní pozná změnu od založení.
+    patch: function (path, body) {
+      if (mode !== 'http') return Promise.resolve(null);
+      return fetch(base + '/' + path, {
+        method: 'PATCH', headers: headers(), credentials: 'same-origin',
+        body: JSON.stringify(body || {})
+      }).then(function (r) {
+        return r.json().then(function (b) {
+          if (!r.ok) throw Object.assign(new Error('HTTP ' + r.status), { body: b, status: r.status });
+          return b;
+        });
+      });
+    },
+
     // Smazání jedné položky (fotka do koše). Stejná cesta jako post: v lokálním
     // režimu vrací null, aby volající poznal, že backend není.
     del: function (path) {

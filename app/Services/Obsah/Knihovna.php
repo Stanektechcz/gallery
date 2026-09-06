@@ -39,6 +39,9 @@ class Knihovna implements PoskytovatelObsahu
     /** Které snímky mají zmenšeninu; `media_item_id => ano/ne`. */
     private array $nahledy = [];
 
+    /** A která videa mají soubor, který jde přehrát. */
+    private array $prehratelne = [];
+
     public function skupina(): string
     {
         return 'knihovna';
@@ -165,7 +168,7 @@ class Knihovna implements PoskytovatelObsahu
             $den = $dny[$klic];
             $video = $m->media_type === 'video';
 
-            return [
+            $radek = [
                 'id' => $m->uuid,
                 'day' => $klic,
                 'dayLabel' => $den['label'],
@@ -207,6 +210,36 @@ class Knihovna implements PoskytovatelObsahu
                     default => 'pending',
                 },
                 /*
+                 * Adresa k přehrání a plakát pod ní.
+                 *
+                 * Prohlížeč fotky měl místo videa obrázek s namalovaným pruhem
+                 * přehrávání a časem „0:42 z 2:04". Dvě tlačítka pod ním neměla
+                 * obsluhu — nebylo co ovládat.
+                 *
+                 * Podepsaná adresa, ne token: `<video src>` si prohlížeč
+                 * stahuje sám a hlavičku `Authorization` k němu nepřidá.
+                 */
+                'video' => $video ? $this->prehrani($m) : null,
+                'poster' => $video ? $this->plakat($m) : null,
+                /*
+                 * Údaje o snímku ze snímku, ne z ukázky.
+                 *
+                 * Panel „informace" ukazoval u každé fotky totéž: „HEIC,
+                 * 4032 × 3024, iPhone 15 Pro, 24 mm ekv., ƒ/1,8 · 1/240 s ·
+                 * ISO 64". U videa k tomu „3840 × 2160" a „30 fps". Byla to
+                 * tvrzení o cizím přístroji i o cizí fotce.
+                 *
+                 * Co aplikace neví, se neposílá — obrazovka takový řádek
+                 * vynechá, místo aby si ho vymyslela.
+                 */
+                'typ' => $this->typSouboru($m),
+                'rozmery' => $m->width && $m->height ? $m->width.' × '.$m->height : null,
+                'clona' => $m->aperture ? 'ƒ/'.rtrim(rtrim(number_format((float) $m->aperture, 1, ',', ''), '0'), ',') : null,
+                'cas' => $m->shutter_speed ?: null,
+                'iso' => $m->iso ? 'ISO '.(int) $m->iso : null,
+                'ohnisko' => $m->focal_length ? round((float) $m->focal_length).' mm' : null,
+                'fps' => $video && $m->frame_rate ? round((float) $m->frame_rate).' fps' : null,
+                /*
                  * Co obrazovka úklidu nabídne doplnit.
                  *
                  * Prototyp to měl napsané v `AMISS` jako seznam ukázkových
@@ -218,6 +251,15 @@ class Knihovna implements PoskytovatelObsahu
                 ])),
                 'n' => $poradi,
             ];
+
+            /*
+             * Co aplikace neví, se neposílá.
+             *
+             * Přes dvě stě dlaždic × devět prázdných polí je pár desítek
+             * kilobajtů navíc na každé otevření knihovny — a obrazovka se
+             * chová stejně, protože `null` i chybějící klíč jsou pro ni totéž.
+             */
+            return array_filter($radek, fn ($v) => $v !== null);
         })->values()->all();
     }
 
@@ -854,6 +896,69 @@ class Knihovna implements PoskytovatelObsahu
     }
 
     /**
+     * Typ souboru tak, jak ho člověk pozná: „JPEG", „MP4".
+     *
+     * Z `mime_type`, ne z přípony — ta se dá přejmenovat a pak by panel
+     * tvrdil něco jiného, než co v souboru je.
+     */
+    private function typSouboru(MediaItem $m): ?string
+    {
+        $mime = (string) ($m->mime_type ?? '');
+
+        if ($mime === '' || ! str_contains($mime, '/')) {
+            return null;
+        }
+
+        $podtyp = strtoupper(explode('/', $mime)[1]);
+
+        return match ($podtyp) {
+            'JPEG', 'JPG' => 'JPEG',
+            'QUICKTIME' => 'MOV',
+            'X-MSVIDEO' => 'AVI',
+            'SVG+XML' => 'SVG',
+            default => $podtyp,
+        };
+    }
+
+    /**
+     * Adresa, ze které jde video přehrát — nebo `null`, když není co.
+     *
+     * Bez převedeného ani původního souboru se nevrací nic: přehrávač, který
+     * ukáže černou plochu, je horší než poctivá informace, že video ještě není
+     * zpracované.
+     */
+    private function prehrani(MediaItem $m): ?string
+    {
+        if (! array_key_exists($m->id, $this->prehratelne)) {
+            $this->zjistiVidea([(int) $m->id]);
+        }
+
+        if (! ($this->prehratelne[$m->id] ?? false)) {
+            return null;
+        }
+
+        return URL::temporarySignedRoute(
+            'galerie.media.video',
+            CarbonImmutable::tomorrow()->endOfDay(),
+            ['uuid' => $m->uuid],
+        );
+    }
+
+    /** První snímek videa, než ho člověk spustí. */
+    private function plakat(MediaItem $m): ?string
+    {
+        if (! $this->maNahled($m)) {
+            return null;
+        }
+
+        return URL::temporarySignedRoute(
+            'galerie.media.thumb',
+            CarbonImmutable::tomorrow()->endOfDay(),
+            ['uuid' => $m->uuid],
+        );
+    }
+
+    /**
      * Má snímek co ukázat?
      *
      * Bez tohohle by mřížka poslala tolik požadavků, kolik má dlaždic, a všechny
@@ -890,6 +995,31 @@ class Knihovna implements PoskytovatelObsahu
 
         foreach ($id as $jeden) {
             $this->nahledy[$jeden] = in_array($jeden, $maji, true);
+        }
+    }
+
+    /**
+     * Která videa mají soubor k přehrání — jedním dotazem, ne po jednom.
+     *
+     * @param  list<int>  $id
+     */
+    private function zjistiVidea(array $id): void
+    {
+        $id = array_values(array_diff($id, array_keys($this->prehratelne)));
+
+        if (! $id) {
+            return;
+        }
+
+        $maji = DB::table('media_variants')
+            ->whereIn('media_item_id', $id)
+            ->whereIn('type', ['video_compat', 'original'])
+            ->distinct()
+            ->pluck('media_item_id')
+            ->all();
+
+        foreach ($id as $jeden) {
+            $this->prehratelne[$jeden] = in_array($jeden, $maji, true);
         }
     }
 

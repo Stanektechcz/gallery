@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\Galerie\MechanismController;
 use App\Http\Controllers\Api\Galerie\MediaController;
 use App\Http\Controllers\Api\Galerie\PravidloController;
 use App\Http\Controllers\Api\Galerie\RozporController;
+use App\Http\Controllers\Api\Galerie\SdileniController;
 use App\Http\Controllers\Api\Galerie\StateController;
 use App\Http\Controllers\Api\Galerie\StorageController;
 use App\Http\Controllers\Api\Galerie\TiskController;
@@ -118,6 +119,19 @@ Route::middleware(['auth:sanctum', 'throttle:120,1'])->prefix('api')->group(func
     Route::post('tisk/stav', [TiskController::class, 'step'])->name('galerie.tisk.step');
 
     /*
+     * Sdílení odkazem.
+     *
+     * Obrazovka slibovala odkaz, který někomu pošlete, a celý ho držela ve
+     * stavu prohlížeče: po odhlášení zmizel a otevřít ho nešlo nikdy — token
+     * se nikde nezaložil.
+     */
+    Route::post('sdileni', [SdileniController::class, 'store'])->name('galerie.sdileni.store');
+    Route::patch('sdileni/{odkaz}', [SdileniController::class, 'update'])
+        ->whereNumber('odkaz')->name('galerie.sdileni.update');
+    Route::delete('sdileni/{odkaz}', [SdileniController::class, 'destroy'])
+        ->whereNumber('odkaz')->name('galerie.sdileni.destroy');
+
+    /*
      * Vyřešení rozporu mezi aplikací a Diskem.
      *
      * „Vyřešeno" přepsalo jediné pole ve stavu prohlížeče. Rozpor zůstal
@@ -213,3 +227,15 @@ Route::middleware(['auth:sanctum', 'throttle:600,1'])->prefix('api')->group(func
 Route::middleware(['signed', 'throttle:600,1'])
     ->get('api/media/{uuid}/thumb', [MediaController::class, 'thumb'])
     ->name('galerie.media.thumb');
+
+/*
+ * Přehrání videa.
+ *
+ * Ze stejného důvodu jako náhled: `<video src>` si prohlížeč stahuje sám
+ * a hlavičku `Authorization` k němu nepřidá. Prohlížeč fotky měl místo videa
+ * obrázek s namalovaným pruhem přehrávání — tlačítka pod ním neměla obsluhu,
+ * protože nebylo co ovládat.
+ */
+Route::middleware(['signed', 'throttle:600,1'])
+    ->get('api/media/{uuid}/video', [MediaController::class, 'video'])
+    ->name('galerie.media.video');
