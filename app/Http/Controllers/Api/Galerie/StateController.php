@@ -11,6 +11,7 @@ use App\Services\Provoz\DarkyVeStavu;
 use App\Services\Provoz\DomacnostVeStavu;
 use App\Services\Provoz\KapsleVeStavu;
 use App\Services\Provoz\KlidVeStavu;
+use App\Services\Provoz\MechanismyVeStavu;
 use App\Services\Provoz\NastaveniVeStavu;
 use App\Services\Provoz\PlanovaniVeStavu;
 use App\Services\Provoz\PravidlaVeStavu;
@@ -45,6 +46,7 @@ class StateController extends Controller
         private readonly NastaveniVeStavu $nastaveni,
         private readonly KlidVeStavu $klid,
         private readonly PribehVeStavu $pribeh,
+        private readonly MechanismyVeStavu $mechanismy,
     ) {}
 
     public function show(Request $request): JsonResponse
@@ -287,6 +289,20 @@ class StateController extends Controller
                 $skutecnost += $this->pribeh->zpracuj($patch, GallerySpace::findOrFail($coupleId), $uzivatel);
                 $patch = $this->pribeh->bezPribehu($patch);
                 $state->zapomen(PribehVeStavu::SERVEROVE);
+            }
+
+            /*
+             * Mechanismy pro dva.
+             *
+             * Laskavosti, odpuštěné věci, anti-rozpočet, rodina, dvě pravdy.
+             * Nebylo to ztracené — leželo to v jednom JSON dokumentu, kam se
+             * nedá zeptat. Kolik laskavostí je nevyrovnaných, se z blobu
+             * nedozví ani upozornění, ani týdenní přehled.
+             */
+            if ($this->mechanismy->tykaSe($patch)) {
+                $skutecnost += $this->mechanismy->zpracuj($patch, GallerySpace::findOrFail($coupleId), $uzivatel);
+                $patch = $this->mechanismy->bezMechanismu($patch);
+                $state->zapomen(MechanismyVeStavu::SERVEROVE);
             }
 
             $state->applyPatch($patch);

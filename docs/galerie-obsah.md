@@ -56,28 +56,26 @@ Změřeno v prohlížeči proti běžícímu serveru, ne odhadem:
 
 | | Počet |
 | --- | --- |
-| Klíčů v `window.GalerieData` | **190** — z toho 8 jsou pomocné funkce, ne data |
-| Kolekcí celkem | **182** |
-| Obsluhuje server | **83** (81 přes `/api/data`, `ADMIN` a `STORAGE` přes přístupovou vrstvu) |
-| Z toho kolekcí, které prototyp má | **72** |
-| Katalogy rozhraní — zůstávají statické záměrně | ~50 |
-| **Obsah dvojice, který ještě není napojený** | **~60** |
+| Klíčů v `window.GalerieData` | **190** — z toho 9 jsou pomocné funkce, ne data |
+| Kolekcí celkem | **181** |
+| Obsluhuje server | **111** (109 přes `/api/data`, `ADMIN` a `STORAGE` přes přístupovou vrstvu) |
+| Z toho kolekcí, které prototyp má | **92** |
+| Katalogy rozhraní — zůstávají statické záměrně | ~51 |
+| Přihlašovací záslepky prototypu — **daty se stát nesmí** | 6 |
+| **Obsah dvojice, který ještě není napojený** | **~32** |
 
-Devět z osmdesáti jedna kolekcí prototyp v `GalerieData` vůbec nemá — mřížku fotek
+Sedmnáct ze sto devíti kolekcí prototyp v `GalerieData` vůbec nemá — mřížku fotek
 (`PHOTOS`, `DAYS`, `ALBUMS`, `ATREE`), čísla u nabídky (`NAVCNT`, `TOTAL`),
 měnu, spíž a odkazy si dokument vyráběl sám ve funkcích. Server je dodává
 navíc a přepínače v dokumentu je berou přednostně.
 
-Ze stavu páru se pořád ukládá **17 obsahových klíčů** (`quar`, `paper`,
-`emItems`, `emLog`, `favList`, `forgList`, `antiList`, `mlLoad`, `hsVisits`,
-`tichoData`, `pauseLog`, `pausePlan`, `klAttn`, `klEn`, `klAskLog`, `pmMine`,
-`cycSel`). Žádný z nich už nezastiňuje kolekci, kterou zároveň dodává server —
-čekají na tabulku, ne na vrstvu. `quar` je mezi nimi jen formálně: prototyp do
-něj nikdy nezapisuje.
+Ze stavu páru se pořád ukládají **čtyři obsahové klíče** (`quar`, `emLog`,
+`hsVisits`, `pmMine`). `quar` je mezi nimi jen formálně — prototyp do něj
+nikdy nezapisuje; `emLog` píše server sám do protokolu; `pmMine` nemá
+v prototypu obrazovku, kde by se dal změnit.
 
-Zachycených je **třicet dva**. Všechny případy, kdy stav přebíjel skutečná data
-(`rules`, `ruleLog`, `season`, `chat`, `msgList`, `wishes`, `ideas`, `buys`,
-`kapsules`, `sw`), jsou vyřešené.
+Zachycených je **čtyřicet pět**. Všechny případy, kdy stav přebíjel skutečná
+data nebo kdy se rozhodnutí nedostalo dál než do prohlížeče, jsou vyřešené.
 
 ## Pořadí
 
@@ -108,6 +106,9 @@ Podle toho, kde už skutečný obsah je a kde na něm záleží:
 | 21 | **Datování skenů** | `DATING` | `media_items` — sousední soubor, tentýž import, album, přístroj | hotovo, **píše i zpátky** |
 | 22 | **Rok v číslech** | `ABARS.zprCisla` | tytéž tabulky jako „kdo sekci živí", jen po letech | hotovo |
 | 23 | **Co se ty dny dělo** | `KL_EV` | `calendar_events`, `trips`, `budget_category_limits` | hotovo — posílá se jen se zapsanou náladou |
+| 24 | **Klid a pohoda** | `KL_EN`, `KL_ATTN`, `KL_TASKS`, `KL_ASK_LOG`, `KL_ASK_NOW` | `wellbeing_energy`, `wellbeing_attention`, `wellbeing_tasks`, `wellbeing_answers` | hotovo, **píše i zpátky** |
+| 25 | **Příběh a výstupy** | `STORY`, `STORYMS`, `PORDERS`, `EM_ITEMS`, `EM_LOG`, `PAPER_ROWS`, `GV_C`, `ABARS.tier` | `couple_story_*`, `print_orders`, `emergency_access_*`, `paper_backup_rows`, `guest_comments`, `watch_titles` | hotovo, **píše i zpátky** |
+| 26 | **Mechanismy pro dva** | `FAV`, `FORGIVEN`, `ANTI`, `ML_LOAD`, `FAMILY`, `TRUTHS`, `PAUSE_LOG`, `PAUSE_PLAN`, `TICHO` | `couple_favours`, `couple_forgiven`, `couple_anti_budget`, `couple_mental_load`, `couple_family_contacts`, `couple_truths`, `couple_pause` | hotovo, **píše i zpátky**; `TICHO` se počítá |
 
 ## Knihovna: co se muselo změnit v dokumentu
 
@@ -367,16 +368,46 @@ Tohle **není** katalog rozhraní — je to obsah dvojice, který se pořád kre
 z `galerie-data.js`. Seřazeno podle toho, co je hotové nejdřív: první skupina
 má tabulky i data, poslední je potřeba teprve vymyslet.
 
-| Oblast | Kolekce | Tabulka |
-| --- | --- | --- |
-| **Tisk — objednávky** | `PORDERS`, `POSTEPS` | **chybí** — `photo_books` je návrh, ne zakázka; objednání podle prototypu řeší tiskárna, aplikace ho nezakládá |
-| **Sloupce bez zdroje** | `ABARS.tier` | tierlisty nemají tabulku vůbec |
-| **Klid a pohoda** | `KL_EN`, `KL_TASKS`, `KL_ATTN`, `KL_ASK_LOG` | mapa energie po částech dne, rozpočet pozornosti ani „kolik lidí je na to potřeba" nemají, kdo by je zapsal |
-| **Příběh dvojice** | `STORY`, `STORYMS` | **chybí** — `album_story_blocks` je vyprávění uvnitř alba, ne kapitoly dvojice |
-| **Nouzový přístup** | `EM_ITEMS`, `EM_LOG` | **chybí** — `travel_emergency_cards` je karta k cestě, ne přístup k datům |
-| **Mechanismy vztahu bez obrazovky pro úpravu** | `TACIT`, `SPEAK`, `FORGIVEN`, `PM_*`, `PAST_*`, `TICHO`, `SCEN`, `P60`, `HORIZON`, `JOY`, `HOURS`, `PAUSE_*`, `AUTO_DEC`, `SURPRISE`, `CONFLICTS`, `RITUALS`, `ML_LOAD`, `VIS_ROWS`, `FAMILY`, `REVISIT`, `TRUTHS` | **chybí** |
-| **Hosté** | `GV_C`, `GV_VOICE_POOL` | **chybí** (komentář hosta nemá uživatele) |
-| **Počasí** | `WEATHER` | data nikde nejsou |
+Zbývá dvaatřicet kolekcí a dělí se na tři skupiny podle toho, **proč** ještě
+nejsou napojené. To je ten rozdíl, na kterém záleží: první skupina je práce,
+druhá je rozhodnutí, třetí je slepá ulička.
+
+### Jde spočítat z toho, co v aplikaci je
+
+Tabulku nepotřebují — potřebují poskytovatele.
+
+| Kolekce | Z čeho |
+| --- | --- |
+| `HOURS` (kdy fotíme) | hodina v `media_items.taken_at` |
+| `RECON` (rekonstrukce dne) | fotky, transakce, zprávy a polohy jednoho dne |
+| `CAS_ROWS` (čas versus služba) | `house_chore_log.minutes` a ceník služeb |
+| `COSTMEAN` (co ta cesta znamenala) | `trip_expenses` proti ročnímu rozpočtu |
+| `DELAY` (cena odkladu) | `house_dues` po termínu |
+| `EST` (odhad versus skutečnost) | `budget_category_limits` proti `transactions` |
+| `SURPRISE` (nečekané výdaje) | `transactions` mimo obvyklé kategorie |
+| `CONFLICTS` (rozpory mezi zařízeními) | `sync_conflicts` |
+| `DISP` (o čem se nedohodneme) | `couple_disagreement_points` |
+| `SOLO` (čas pro sebe) | `calendar_events` bez druhého účastníka |
+
+### Nemá to kdo zapsat
+
+Obrazovka ta čísla ukazuje, ale nikde je nezadává — tabulka by zůstala prázdná
+a obrazovka by místo ukázky ukazovala nulu. Napojit je znamená **nejdřív
+domyslet, kdo a kde je zapíše**.
+
+`JOY` (účet radosti), `P60` (plán na šedesát dní), `SCEN` (scénáře),
+`HORIZON` (co nás čeká), `VIS_ROWS` (neviditelná práce), `AUTO_DEC`
+(rozhodnuto tím, že se nerozhodlo), `TACIT` (tiché dohody), `SPEAK` (kdo mluví
+za koho), `REVISIT` (k čemu se vrátit), `RITUALS` (roční rituály),
+`PAST_DEC`/`PAST_CASES` (jak jsme rozhodovali dřív), `PM_*` (rozvaha rizik),
+`BUS` (co kdo ví o provozu), `GV_VOICE_POOL` (hlasovky hostů).
+
+### Data nikde nejsou
+
+| Kolekce | Proč |
+| --- | --- |
+| `WEATHER` | předpověď se nemá odkud vzít; tabulka, kterou nikdo neplní, je horší než ukázka |
+| `POSTEPS` | názvy kroků zásilky — katalog tiskárny, ne data dvojice |
 
 ## Co zůstalo v katalogu — a proč
 
@@ -384,16 +415,20 @@ Co v katalogu zůstalo, tam zůstalo z jednoho z těchhle tří důvodů:
 
 | Důvod | Kolekce |
 | --- | --- |
-| **Není to obsah dvojice** — katalog rozhraní | `FLOWS`, `PHASES`, `CYC_SYMPTOMS`, `CYC_MOODS`, `CYC_SHARE`, `KL_HELP`, `KL_QUESTIONS`, `RWEATHER`, `PLACE_KEY`, `EVKIND`, … (53 katalogů) |
-| **Nemá to kdo napsat** — prototyp obsah jen ukazuje, obrazovka, kde by se dal změnit, neexistuje | `TACIT`, `SPEAK`, `PAST_DEC`, `PM_*`, `REVISIT`, `GV_C`, `GV_VOICE_POOL` |
+| **Není to obsah dvojice** — katalog rozhraní | `FLOWS`, `PHASES`, `CYC_SYMPTOMS`, `CYC_MOODS`, `CYC_SHARE`, `KL_HELP`, `KL_QUESTIONS`, `RWEATHER`, `PLACE_KEY`, `EVKIND`, `PKIND`, `SETROWS`, … (~51 katalogů) |
+| **Přihlašovací záslepky prototypu** | `LOCKMAIL`, `LOCKPIN`, `LOCKPWD`, `LOCKREC`, `LOCKWHO`, `VAULT_PWD` |
+| **Odvozené v dokumentu** | `AMISS`, `CYC_TODAY`, `GRAF` |
 | **Data nikde nejsou** — aplikace je odnikud nebere | `WEATHER` (předpověď) |
 
-Ze stavu páru se zachytává **devatenáct obsahových klíčů** (`evList`,
-`evDoneMap`, `xBoard`, `hsLater`, `chores`, `choreLog`, `dues`, `inv`, `decs`,
-`cools`, `sporMine`, `sporTheirs`, `vetoLog`, `vetoProps`, `proms`, `nudges`,
-`patAuto`, `cycDays`, `klMood`) a `vaultAdded`. Zbylých **dvacet pět** se do
-stavu pořád ukládá — jsou vypsané výš v části „Kde to doopravdy stojí" a čekají
-na svou vrstvu. Co ve stavu zůstat má, je jen zobrazení: otevřená záložka,
+Přihlašovací záslepky jsou zvláštní případ: **daty se stát nesmí.** Jsou to
+heslo a PIN napsané v souboru, aby se dal prototyp ukázat. S nasazeným
+backendem ověřuje přihlášení server (`api.signIn`) a tyhle konstanty už nic
+neřídí — udělat z nich tabulku by znamenalo uložit hesla do databáze v čitelné
+podobě.
+
+Ze stavu páru se zachytává **čtyřicet pět obsahových klíčů**. Zbylé čtyři
+(`quar`, `emLog`, `hsVisits`, `pmMine`) se do stavu pořád ukládají a jsou
+popsané výš. Co ve stavu zůstat **má**, je jen zobrazení: otevřená záložka,
 rozepsaný neodeslaný text, zvolený měsíc v kalendáři.
 
 Pravidlo, které to celé řídí: **tabulka bez zápisu je horší než žádná tabulka.**
@@ -413,6 +448,9 @@ Kde prototyp obsah drží ve svém stavu, vzniká i cesta zpátky:
 | `DarkyVeStavu` | přání, nápady, chystané dárky | totéž; nákup navíc musí zůstat soukromý toho, kdo ho pořizuje |
 | `KapsleVeStavu` | zapečetěné vzkazy | dopis na příští rok přežije výměnu telefonu jen v databázi |
 | `NastaveniVeStavu` | přepínače formulářů (`sw`) | „sync každé čtyři hodiny" jinak změní jen barvu; napojení se dál řídí databází |
+| `KlidVeStavu` | mapa energie, rozpočet pozornosti, odpovědi | mapa je o okně, kdy mají sílu **oba** — druhý se k ní nedostal |
+| `PribehVeStavu` | kapitoly, nouzový přístup, papírový list | „soukromé zápisy se nouzově neodemknou" musí platit i na druhém zařízení |
+| `MechanismyVeStavu` | laskavosti, odpuštěné, anti-rozpočet, rodina, dvě pravdy | nebylo to ztracené, ale nešlo se na to zeptat |
 | `AdminVeStavu` | administrace ze staršího klienta | záchranná síť |
 
 Vrstvy, které skutečnost **vracejí, ale neukládají** (pravidla, historie běhů,
