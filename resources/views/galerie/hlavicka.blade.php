@@ -85,6 +85,28 @@
   // Kolekce obsahu ze serveru (finance, knihovna, …). Klíč = jméno kolekce,
   // kterou prototyp kreslí; hodnota = skutečné řádky z databáze.
   var obsah = {};
+  // Kolekce, které server dodává celé — u nich se smí smazat i to, co neposlal.
+  var uplne = {};
+  // Totéž pro úzké rozvržení: telefon kreslí knihovnu z vlastních, mnohem
+  // menších kolekcí, které nejsou v `GalerieData`.
+  var mobil = {};
+
+  /*
+   * Obsah do kolekcí telefonu.
+   *
+   * Volá se z obou stran, protože se nedá spolehnout na pořadí: data ze serveru
+   * můžou dorazit dřív, než runtime prototypu dokument vůbec přeloží, i později.
+   * Kolekce se proto — stejně jako u `GalerieData` — přepisují **na místě**.
+   */
+  function doMobilu() {
+    var cil = window.GalerieMobil;
+    if (! cil) return;
+
+    Object.keys(mobil).forEach(function (klic) { navlec(cil, klic, mobil[klic], false); });
+    if (window.GalerieObnovObrazovku) window.GalerieObnovObrazovku();
+  }
+
+  window.GalerieObsahMobil = doMobilu;
 
   function obal(data) {
     if (! data || data.__galerieObaleno) return;
@@ -111,7 +133,7 @@
 
     // A znovu vyměnit kolekce, které už ze serveru dorazily — runtime načítá
     // `galerie-data.js` znovu a s ním se vrátí i ukázková data.
-    Object.keys(obsah).forEach(function (klic) { navlec(data, klic, obsah[klic]); });
+    Object.keys(obsah).forEach(function (klic) { navlec(data, klic, obsah[klic], !!uplne[klic]); });
   }
 
   /*
@@ -126,7 +148,7 @@
    * Skalární kolekce (číslo, řetězec) takhle vyměnit nejdou — u těch zůstává
    * hodnota z načtení a jsou proto vypsané v `docs/galerie-obsah.md`.
    */
-  function navlec(data, klic, hodnota) {
+  function navlec(data, klic, hodnota, cela) {
     if (! data) return false;
 
     var cil = data[klic];
@@ -140,13 +162,24 @@
 
       if (cil && typeof cil === 'object' && hodnota && typeof hodnota === 'object') {
         /*
-         * Klíče se **přepisují, nemažou.**
+         * Klíče se **přepisují, nemažou** — pokud server neřekne, že kolekci
+         * dodává celou.
          *
          * `FIN` má vedle účtů ještě `upcoming`, `alerts`, `rules` a `imports`.
          * Když se objekt vyprázdnil a naplnil jen tím, co server posílá, zbytek
          * zmizel a obrazovka spadla na `undefined.filter`. Co server nedodá,
-         * zůstává ukázkové — stejné pravidlo jako u celých kolekcí.
+         * zůstává ukázkové.
+         *
+         * `PERSONS` je opačný případ: seznam lidí přichází celý a nechat vedle
+         * skutečných tváří ukázkovou Kláru znamená ukazovat dvojici někoho,
+         * kdo neexistuje.
          */
+        if (cela) {
+          Object.keys(cil).forEach(function (k) {
+            if (! Object.prototype.hasOwnProperty.call(hodnota, k)) delete cil[k];
+          });
+        }
+
         Object.keys(hodnota).forEach(function (k) { cil[k] = hodnota[k]; });
         return true;
       }
@@ -215,7 +248,7 @@
    * Po skupinách, ne jednou odpovědí: obrazovka financí nemá čekat, až se spočítá
    * kuchařka. Každá skupina se navlékne, jakmile dorazí — na pořadí nezáleží.
    */
-  var SKUPINY = ['finance'];
+  var SKUPINY = ['finance', 'knihovna'];
 
   function skupiny() {
     return SKUPINY.map(function (jmeno) {
@@ -226,9 +259,15 @@
 
           var neslo = [];
 
+          (b.uplne || []).forEach(function (klic) { uplne[klic] = true; });
+
           Object.keys(b.data).forEach(function (klic) {
+            // Úzké rozvržení má vlastní, mnohem menší tvar týchž fotek a drží
+            // si ho stranou od `GalerieData`.
+            if (klic === 'MOBIL') { Object.assign(mobil, b.data[klic]); doMobilu(); return; }
+
             obsah[klic] = b.data[klic];
-            if (! navlec(window.GalerieData, klic, b.data[klic])) neslo.push(klic);
+            if (! navlec(window.GalerieData, klic, b.data[klic], !!uplne[klic])) neslo.push(klic);
           });
 
           // Aplikace už běží; překreslit, ať se data objeví bez čekání na klik.

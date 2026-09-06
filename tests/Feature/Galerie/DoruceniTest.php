@@ -164,16 +164,20 @@ class DoruceniTest extends TestCase
      * **bez dotazu** a čte ji s `ignoreSearch`, takže jedno otevření
      * `/?rozvrzeni=telefon` přepsalo uloženou kopii `/` — a prohlížeč pak i na
      * počítači nabízel telefonní verzi, dokud se paměť nevymazala.
+     *
+     * Cesta je jednosegmentová schválně: dokument si skripty načítá relativně
+     * (`galerie-api.js`), takže z `/rozvrzeni/telefon` by mířily do
+     * neexistujícího `/rozvrzeni/` a telefonní verze by se nespustila.
      */
     public function test_rozvrzeni_jde_vynutit_vlastni_cestou(): void
     {
         $pocitac = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120';
 
         $telefonni = $this->withHeader('User-Agent', $pocitac)
-            ->get('/rozvrzeni/telefon')->assertOk()->getContent();
+            ->get('/rozvrzeni-telefon')->assertOk()->getContent();
 
         $siroke = $this->withHeader('User-Agent', 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Mobile/15E148')
-            ->get('/rozvrzeni/siroke')->assertOk()->getContent();
+            ->get('/rozvrzeni-siroke')->assertOk()->getContent();
 
         $this->assertNotSame(strlen($telefonni), strlen($siroke));
         $this->assertSame(
@@ -185,8 +189,10 @@ class DoruceniTest extends TestCase
     /** Jiná hodnota než ta dvojice cestu nemá — ať se z ní nestane skládání souborů. */
     public function test_nezname_rozvrzeni_neexistuje(): void
     {
-        $this->get('/rozvrzeni/../../etc/passwd')->assertNotFound();
-        $this->get('/rozvrzeni/cokoliv')->assertNotFound();
+        $this->get('/rozvrzeni-../../etc/passwd')->assertNotFound();
+        $this->get('/rozvrzeni-cokoliv')->assertNotFound();
+        // Původní cesta se dvěma segmenty rozbíjela relativní adresy skriptů.
+        $this->get('/rozvrzeni/telefon')->assertNotFound();
     }
 
     /** Statické soubory prototypu musí být tam, kam si o ně dokument říká. */

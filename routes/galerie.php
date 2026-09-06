@@ -119,3 +119,16 @@ Route::middleware(['auth:sanctum', 'throttle:600,1'])->prefix('api')->group(func
     Route::get('media/{uuid}/raw', [MediaController::class, 'raw'])->name('galerie.media.raw');
     Route::delete('media/{uuid}', [MediaController::class, 'destroy'])->name('galerie.media.destroy');
 });
+
+/*
+ * Náhled do mřížky.
+ *
+ * Originály by z jednoho otevření knihovny udělaly stovky megabajtů, takže
+ * dlaždice bere zmenšeninu. Stojí mimo `auth:sanctum` a místo tokenu se ověřuje
+ * podpisem: obrázek v CSS si prohlížeč stahuje sám a hlavičku `Authorization`
+ * k němu nepřidá. Podpis platí pro jediný soubor a den; token v adrese by
+ * zůstal v historii prohlížeče i v přístupovém logu.
+ */
+Route::middleware(['signed', 'throttle:600,1'])
+    ->get('api/media/{uuid}/thumb', [MediaController::class, 'thumb'])
+    ->name('galerie.media.thumb');

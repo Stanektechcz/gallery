@@ -95,8 +95,12 @@ Route::middleware([])->withoutMiddleware([App\Http\Middleware\HandleInertiaReque
      * Service worker prototypu si dokument ukládá pod adresu bez dotazu a čte ji
      * s `ignoreSearch`; jedno otevření `/?rozvrzeni=telefon` tak přepsalo uloženou
      * kopii `/` a prohlížeč pak i na počítači nabízel telefonní verzi.
+     *
+     * Pomlčka, ne lomítko: dokument si skripty i ikony načítá relativně
+     * (`galerie-api.js`), takže z `/rozvrzeni/telefon` mířily na
+     * `/rozvrzeni/galerie-api.js` — a telefonní verze se vůbec nespustila.
      */
-    Route::get('/rozvrzeni/{rozvrzeni}', App\Http\Controllers\Galerie\PrototypController::class)
+    Route::get('/rozvrzeni-{rozvrzeni}', App\Http\Controllers\Galerie\PrototypController::class)
         ->whereIn('rozvrzeni', ['telefon', 'siroke'])
         ->name('galerie.rozvrzeni');
     Route::get('/sw.js', [App\Http\Controllers\Galerie\PrototypController::class, 'serviceWorker'])

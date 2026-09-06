@@ -4793,18 +4793,29 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 </div>
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:840,&quot;height&quot;:1000}}">
-const DAYS = [
+/*
+ * Knihovna telefonu.
+ *
+ * Kolekce se drží v `window.GalerieMobil`, a ne jen v konstantách, aby do nich
+ * server mohl vložit skutečné fotky. Konstanta si totiž pamatuje pole z okamžiku
+ * překladu dokumentu; obsah se proto vyměňuje **uvnitř** téhož pole. Bez odpovědi
+ * ze serveru zůstávají řádky napsané, jak byly.
+ */
+const MOB = (window.GalerieMobil = window.GalerieMobil || {});
+const DAYS = MOB.DAYS || (MOB.DAYS = [
   ['Neděle 16. srpna 2026', 'Pustevny', 9],
   ['Sobota 15. srpna 2026', 'Brno · doma', 6],
   ['Čtvrtek 24. července 2026', 'Zadar', 12],
   ['Sobota 19. července 2026', 'Split', 9],
   ['Pátek 21. června 2026', 'Praha', 6]
-];
-const PHOTOS = (() => {
+]);
+const PHOTOS = MOB.PHOTOS || (MOB.PHOTOS = (() => {
   const out = []; let n = 1;
   DAYS.forEach((d, di) => { for (let i = 0; i < d[2]; i++) { out.push({ id: 'p' + n, di: di, day: d[0], place: d[1], video: n % 11 === 0, dur: '0:' + (20 + n % 40), fav: n % 7 === 0, seed: n }); n++; } });
   return out;
-})();
+})());
+// Data mohla dorazit dřív, než runtime dokument přeložil; tohle si je vyžádá.
+if (window.GalerieObsahMobil) window.GalerieObsahMobil();
 
 const TRIPS = {
   chorvatsko: {
@@ -5554,8 +5565,15 @@ class Component extends DCLogic {
   placeVisited(p) { const v = this.state.places[p[0]]; return v === undefined ? p[2] === 1 : v; }
   tripOfPlace(name) { return Object.keys(TRIPS).find(id => TRIPS[id].place === name) || null; }
 
+  // Vlastní úpravy mají přednost, pak skutečná alba ze serveru, a teprve když
+  // není ani jedno, zůstávají napsaná.
   albumsList() {
-    return this.state.albums || [
+    if (this.state.albums) return this.state.albums;
+
+    const ze = (window.GalerieMobil || {}).ALBUMS;
+    if (ze && ze.length) return ze;
+
+    return [
       { id: 'a1', name: 'Chorvatsko 2026', ids: PHOTOS.filter(p => p.place === 'Zadar' || p.place === 'Split').map(p => p.id), seed: 4 },
       { id: 'a2', name: 'Beskydy', ids: PHOTOS.filter(p => p.place === 'Pustevny').map(p => p.id), seed: 7 }
     ];
@@ -5783,6 +5801,9 @@ class Component extends DCLogic {
     const h = (n * 47 + 12) % 360, s = 16 + (n % 5) * 5;
     return 'linear-gradient(' + (130 + (n % 5) * 12) + 'deg, hsl(' + h + ' ' + s + '% 58%), hsl(' + ((h + 34) % 360) + ' ' + (s + 6) + '% 30%))';
   }
+  // Pozadí dlaždice: skutečná fotka nese náhled s sebou, napsaná má jen číslo,
+  // ze kterého se dopočítá barevný přechod.
+  tlo(p) { return p && p.bg ? p.bg : this.bg(p ? p.seed : 0); }
   // Domácnost — táž logika jako v širokém rozvržení.
   mHouseVals() {
     const s = this.state;
@@ -9417,7 +9438,7 @@ class Component extends DCLogic {
     const tile = p => {
       const on = s.sel.indexOf(p.id) >= 0;
       return {
-        bg: this.bg(p.seed), video: p.video, dur: p.dur, fav: this.isFav(p),
+        bg: this.tlo(p), video: p.video, dur: p.dur, fav: this.isFav(p),
         selectMode: s.selectMode, on: on,
         ring: on ? '3px solid var(--g-acc)' : 'none',
         checkBg: on ? 'var(--g-acc)' : 'rgba(20,19,18,.32)',
@@ -9962,7 +9983,7 @@ class Component extends DCLogic {
       isPlace: screen === 'place', isStats: screen === 'stats', isSync: screen === 'sync',
       isDay: screen === 'day',
       day: {
-        strip: dPhotos.slice(0, 4).map(p => ({ bg: this.bg(p.seed), tap: () => this.setState({ lb: p.id }) })),
+        strip: dPhotos.slice(0, 4).map(p => ({ bg: this.tlo(p), tap: () => this.setState({ lb: p.id }) })),
         stats: [
           { label: 'Fotek', value: String(dPhotos.length) },
           { label: 'Útraty', value: dSpend ? this.kc(dSpend) : '—' },
@@ -9976,7 +9997,7 @@ class Component extends DCLogic {
         lineMeta: this.pl(dLine.length, 'událost', 'události', 'událostí'),
         line: dLine,
         photoMeta: this.pl(dPhotos.length, 'položka', 'položky', 'položek'),
-        photos: dPhotos.map(p => ({ bg: this.bg(p.seed), fav: this.isFav(p), video: p.video, dur: p.dur, tap: () => this.setState({ lb: p.id }) })),
+        photos: dPhotos.map(p => ({ bg: this.tlo(p), fav: this.isFav(p), video: p.video, dur: p.dur, tap: () => this.setState({ lb: p.id }) })),
         addCta: dDiary ? 'Otevřít zápis v deníku' : 'Napsat zápis k tomuto dni',
         addNote: () => dDiary
           ? (this.setState({ tab: 'more' }), this.push('diary'))
@@ -10006,7 +10027,7 @@ class Component extends DCLogic {
         ].filter(Boolean),
         photoMeta: this.pl(pPhotos.length, 'fotka', 'fotky', 'fotek')
           + (pSpots ? ' · ' + pSpots + ' přiřazeno z návrhu' : ''),
-        photos: pPhotos.map(p => ({ bg: this.bg(p.seed), fav: this.isFav(p), tap: () => this.setState({ lb: p.id }) })),
+        photos: pPhotos.map(p => ({ bg: this.tlo(p), fav: this.isFav(p), tap: () => this.setState({ lb: p.id }) })),
         txs: pTxs.map(t => ({
           name: t.name, date: t.date, cat: t.cat, icon: t.icon,
           amount: (t.amount > 0 ? '+ ' : '− ') + this.kc(Math.abs(t.amount)),
@@ -10121,7 +10142,7 @@ class Component extends DCLogic {
       ],
       photoCount: String(lib.length),
       goMemories: () => this.goTab('memories'),
-      homeTiles: lib.slice(0, 9).map(p => ({ bg: this.bg(p.seed), fav: this.isFav(p), video: p.video, dur: p.dur, open: () => this.setState({ lb: p.id }) })),
+      homeTiles: lib.slice(0, 9).map(p => ({ bg: this.tlo(p), fav: this.isFav(p), video: p.video, dur: p.dur, open: () => this.setState({ lb: p.id }) })),
       homePlaces: DAYS.slice(0, 4).map((d, i) => ({ name: d[1], meta: d[0].split(' 20')[0] + ' · ' + this.pl(d[2], 'fotka', 'fotky', 'fotek'), bg: this.bg(4 + i * 5), go: () => this.setState({ dayId: d[0], tab: 'home', stack: ['day'], sheet: null }) })),
 
       // vzpomínky
@@ -10281,7 +10302,12 @@ class Component extends DCLogic {
         cover: (() => {
           const live = a.ids.filter(id => !s.trashed[id]);
           const pick = [live[0], live[Math.floor(live.length / 2)], live[live.length - 1]].filter(Boolean);
-          return pick.map((id, i) => ({ bg: this.bg((PHOTOS.find(p => p.id === id) || { seed: a.seed + i * 7 }).seed + i * 3) }));
+          return pick.map((id, i) => {
+            const p = PHOTOS.find(x => x.id === id);
+            // Skutečná fotka jde na obálku tak, jak je; bez ní se barva odvodí
+            // z čísla alba, jak to prototyp dělal vždycky.
+            return { bg: p && p.bg ? p.bg : this.bg((p ? p.seed : a.seed + i * 7) + i * 3) };
+          });
         })(),
         go: () => { this.setState({ albumId: a.id }); this.push('album'); }
       })),
@@ -10291,7 +10317,7 @@ class Component extends DCLogic {
         const items = a.ids.filter(id => !s.trashed[id]).map(id => PHOTOS.find(p => p.id === id)).filter(Boolean);
         return {
           meta: this.pl(items.length, 'položka', 'položky', 'položek') + ' · sdílíte s Makinkou',
-          items: items.map(p => ({ bg: this.bg(p.seed), fav: this.isFav(p), tap: () => this.setState({ lb: p.id }) })),
+          items: items.map(p => ({ bg: this.tlo(p), fav: this.isFav(p), tap: () => this.setState({ lb: p.id }) })),
           share: () => {
             const prev = this.sharesList(), n = s.seq;
             this.setState({ shares: [{ id: 's-n' + n, name: 'Album ' + a.name, url: 'galerie.app/s/' + Math.random().toString(36).slice(2, 8), when: 'právě teď · platí 7 dní' }].concat(prev), seq: n + 1 });
@@ -10307,7 +10333,7 @@ class Component extends DCLogic {
       trashRows: Object.keys(s.trashed).filter(id => s.trashed[id]).map(id => {
         const p = PHOTOS.find(x => x.id === id) || { seed: 3, day: 'Nahráno dnes', place: 'telefon' };
         return {
-          name: id.toUpperCase() + '.HEIC', meta: p.day + ' · ' + p.place + ' · trvale za 30 dní', bg: this.bg(p.seed),
+          name: id.toUpperCase() + '.HEIC', meta: p.day + ' · ' + p.place + ' · trvale za 30 dní', bg: this.tlo(p),
           restore: () => { const prev = s.trashed, n = Object.assign({}, s.trashed); delete n[id]; this.setState({ trashed: n }); this.toast('Obnoveno do knihovny', { icon: 'ph-arrow-counter-clockwise', undo: () => this.setState({ trashed: prev }) }); }
         };
       }),
@@ -10366,6 +10392,10 @@ class Component extends DCLogic {
               badge = n0 ? String(n0) : null;
             }
             if (liveBadge[route] !== undefined) badge = liveBadge[route] > 0 ? String(liveBadge[route]) : null;
+            // Počty knihovny, oblíbených, lidí a úklidu počítá server; prázdný
+            // řetězec znamená nulu, a ta se nemá kreslit vůbec.
+            const zeServeru = (GD.NAVCNT || {})[route];
+            if (zeServeru !== undefined) badge = zeServeru || null;
             // Tři položky vedou na tutéž obrazovku, ale s jiným pohledem —
             // jinak by Oblíbené ukázaly nefiltrovanou knihovnu.
             const SPECIAL = {

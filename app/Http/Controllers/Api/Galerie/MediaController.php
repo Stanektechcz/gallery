@@ -134,6 +134,44 @@ class MediaController extends Controller
         return Storage::disk($originál->disk)->response($originál->path, $media->original_filename);
     }
 
+    /**
+     * Náhled do mřížky knihovny.
+     *
+     * Vlastní adresa, ne `raw`: mřížka ukáže i sto dlaždic naráz a stahovat do
+     * nich originály by znamenalo stovky megabajtů na jedno otevření obrazovky.
+     * Když náhled ještě nevznikl (fronta ho teprve zpracuje), vydá se originál —
+     * pomalé je pořád lepší než prázdné místo.
+     */
+    /**
+     * Náhled do mřížky.
+     *
+     * Na rozdíl od zbytku modulu **není za `auth:sanctum`**, a to z jednoho
+     * praktického důvodu: dlaždici stahuje prohlížeč jako obrázek v CSS, kam
+     * hlavičku `Authorization` nepřidá, a token v adrese by skončil v historii
+     * i v logu. Adresa je proto podepsaná a časově omezená — podpis platí pro
+     * jediný soubor a nedá se přepsat na cizí.
+     */
+    public function thumb(Request $request, string $uuid): StreamedResponse
+    {
+        $media = MediaItem::withoutGlobalScope(\App\Support\SpaceContext::SCOPE)
+            ->where('uuid', $uuid)
+            ->first();
+
+        abort_if($media === null, 404, 'Takový soubor tu není.');
+
+        $varianta = $media->variants()
+            ->whereIn('type', ['thumbnail', 'small', 'video_poster', 'original'])
+            ->orderByRaw("CASE type WHEN 'thumbnail' THEN 0 WHEN 'small' THEN 1 WHEN 'video_poster' THEN 2 ELSE 3 END")
+            ->first();
+
+        abort_if($varianta === null, 404, 'Náhled ani originál na disku nejsou.');
+
+        return Storage::disk($varianta->disk)->response($varianta->path, $media->original_filename, [
+            // Náhled se nemění; ať se pro druhou obrazovku nestahuje znovu.
+            'Cache-Control' => 'private, max-age=86400',
+        ]);
+    }
+
     /** Do koše, ne z disku — trvale maže až úklid po třiceti dnech. */
     public function destroy(Request $request, string $uuid): JsonResponse
     {

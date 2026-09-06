@@ -228,10 +228,14 @@ aby podalo neplatný.
 Bez backendu (`GalerieApi.mode !== 'http'`) tlačítka řeknou, že administrace
 potřebuje server. Předstírat úspěch je horší než přiznat, že server není.
 
-Vynucené rozvržení má **vlastní cestu** (`/rozvrzeni/telefon`, `/rozvrzeni/siroke`),
+Vynucené rozvržení má **vlastní cestu** (`/rozvrzeni-telefon`, `/rozvrzeni-siroke`),
 ne parametr v dotazu: service worker prototypu ukládá dokument pod adresu bez dotazu
 a čte ji s `ignoreSearch`, takže jedno otevření `/?rozvrzeni=telefon` přepsalo
 uloženou kopii `/` a prohlížeč pak i na počítači nabízel telefonní verzi.
+
+Cesta je **jednosegmentová**, a to schválně. S `/rozvrzeni/telefon` mířily relativní
+adresy skriptů (`galerie-api.js`) do neexistujícího `/rozvrzeni/`, takže telefonní
+dokument se vůbec nespustil a zůstal viset na nevyplněných `{{ }}`.
 
 ## Postranní panel
 

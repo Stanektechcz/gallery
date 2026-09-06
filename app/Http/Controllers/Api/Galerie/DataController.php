@@ -36,7 +36,16 @@ class DataController extends Controller
                 continue;
             }
 
-            return response()->json(['data' => $poskytovatel->kolekce($prostor)])
+            $data = $poskytovatel->kolekce($prostor);
+
+            // Klient přepisuje klíče a nemaže je; u kolekcí, které server dodává
+            // celé, by mu tak vedle skutečných dat zůstala ukázka.
+            $uplne = array_values(array_filter(
+                $poskytovatel->uplne(),
+                fn (string $klic) => array_key_exists($klic, $data),
+            ));
+
+            return response()->json(['data' => $data, 'uplne' => $uplne])
                 // Krátká paměť: obsah se mění po zápisu, ne po vteřině, a panel
                 // i obrazovky se překreslují častěji, než se data mění.
                 ->header('Cache-Control', 'private, max-age=30');

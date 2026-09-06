@@ -31,6 +31,7 @@ class AppServiceProvider extends ServiceProvider
             ->needs('$poskytovatele')
             ->give(fn ($app) => [
                 $app->make(\App\Services\Obsah\Finance::class),
+                $app->make(\App\Services\Obsah\Knihovna::class),
             ]);
     }
 

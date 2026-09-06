@@ -26,4 +26,16 @@ interface PoskytovatelObsahu
      * @return array<string, mixed>
      */
     public function kolekce(GallerySpace $prostor): array;
+
+    /**
+     * Kolekce dodané **celé** — klient v nich smí smazat, co server neposlal.
+     *
+     * Výchozí chování je opačné: klíče se přepisují, nemažou. `FIN` má vedle účtů
+     * ještě čtyři jiné části, které server nepočítá, a vyprázdnit je by rozbilo
+     * obrazovku. U `PERSONS` platí opak — nechat vedle skutečných lidí ukázkovou
+     * Kláru znamená ukazovat dvojici někoho, kdo neexistuje.
+     *
+     * @return list<string>
+     */
+    public function uplne(): array;
 }

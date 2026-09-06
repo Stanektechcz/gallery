@@ -1000,7 +1000,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
           <div style="display:flex; align-items:flex-end; gap:14px; flex-wrap:wrap; margin-bottom:20px">
             <div>
               <h2 style="margin:0; font-size:30px">Alba</h2>
-              <div style="font-size:13px; color:var(--g-ink2); margin-top:3px">7 hlavních alb · 34 podalb · neomezená hierarchie</div>
+              <div style="font-size:13px; color:var(--g-ink2); margin-top:3px">{{ albumsMeta }}</div>
             </div>
             <div style="margin-left:auto; display:flex; gap:8px; align-items:center">
               <div class="seg" role="group" aria-label="Zobrazení alb">
@@ -15245,7 +15245,11 @@ class Component extends DCLogic {
     const h = (n * 47 + 12) % 360, s = 16 + (n % 5) * 5, l1 = dark ? 40 : 58, l2 = dark ? 20 : 30;
     return `linear-gradient(${130 + (n % 5) * 12}deg, hsl(${h} ${s}% ${l1}%), hsl(${(h + 34) % 360} ${s + 6}% ${l2}%))`;
   }
+  // Dny knihovny ze serveru (GET /api/data/knihovna). Bez odpovědi zůstávají
+  // ukázkové, ať mřížka nezůstane prázdná.
   days() {
+    const ze = (window.GalerieData || {}).DAYS;
+    if (ze && ze.length) return ze;
     return [
       { key: '2026-08-16', label: 'Neděle 16. srpna 2026', short: '16. 8. 2026', place: 'Pustevny, Beskydy', album: 'Beskydy → Pustevny', n: 9, y: 2026 },
       { key: '2026-08-15', label: 'Sobota 15. srpna 2026', short: '15. 8. 2026', place: 'Ostrava', album: 'Doma', n: 6, y: 2026 },
@@ -15256,6 +15260,10 @@ class Component extends DCLogic {
     ];
   }
   photos() {
+    // Skutečné fotky ze serveru. Nezapamatovávají se do `_ph` — dorazí až po
+    // prvním vykreslení a zapamatovaná ukázka by je už nepustila ke slovu.
+    const ze = (window.GalerieData || {}).PHOTOS;
+    if (ze && ze.length) return ze;
     if (this._ph) return this._ph;
     const out = []; let i = 0;
     this.days().forEach(d => {
@@ -15284,7 +15292,10 @@ class Component extends DCLogic {
       .filter(a => !arch[a.id])
       .map(a => names[a.id] ? { ...a, name: names[a.id].name, path: (a.path || '').replace(/[^→]+$/, names[a.id].name), place: names[a.id].place || a.place, date: names[a.id].date || a.date } : a);
   }
+  // Alba ze serveru; bez odpovědi zůstávají ukázková.
   baseAlbums() {
+    const ze = (window.GalerieData || {}).ALBUMS;
+    if (ze && ze.length) return ze;
     return [
       { id: 'chorvatsko', name: 'Chorvatsko 2026', path: 'Chorvatsko 2026', date: '12. – 26. 7. 2026', place: 'Dalmácie', count: '1 842 položek', subs: 5, fav: true, shared: true, n: 3, desc: 'Dva týdny, jedno auto a nejvíc fotek za celý rok.' },
       { id: 'beskydy', name: 'Beskydy → Pustevny', path: 'Beskydy → Pustevny', date: '15. – 16. 8. 2026', place: 'Pustevny, Beskydy', count: '34 položek', subs: 2, fav: true, shared: false, n: 7, desc: 'Víkend na horách. Vstávali jsme ve čtyři, aby stálo za to vyjít nad mlhu.' },
@@ -15295,8 +15306,10 @@ class Component extends DCLogic {
       { id: 'naroz', name: 'Makinčiny narozeniny 2026', path: 'Makinčiny narozeniny 2026', date: '4. 4. 2026', place: 'Ostrava', count: '186 položek', subs: 0, fav: false, shared: true, n: 31, desc: 'Třicet svíček a jeden pokažený dort.' }
     ];
   }
+  // Strom alb ze serveru (`ATREE`); bez odpovědi zůstává ukázkový. Sedmé pole
+  // řádku nese id skutečného alba, aby kliknutí otevřelo je, a ne napsané „praha".
   tree() {
-    const t = [
+    const t = (window.GalerieData || {}).ATREE || [
       ['Chorvatsko 2026', 0, '1 842', 1, 1, 3], ['Zadar', 1, '512', 0, 0, 4], ['Krka', 1, '308', 0, 0, 5],
       ['Plitvice', 1, '441', 0, 1, 6], ['Ráno u vodopádů', 2, '96', 0, 0, 8],
       ['Česká republika', 0, '5 903', 0, 0, 11], ['Praha', 1, '3 190', 0, 0, 12],
@@ -15307,7 +15320,7 @@ class Component extends DCLogic {
     return t.map((r, i) => ({
       name: r[0], indent: (12 + r[1] * 22) + 'px', count: r[2] + ' položek',
       fav: !!r[3], shared: !!r[4], icon: r[1] > 2 ? 'ph-folder' : 'ph-folder-open',
-      go: () => this.setState({ route: 'album', albumId: r[0] === 'Pustevny' ? 'beskydy' : 'praha' })
+      go: () => this.setState({ route: 'album', albumId: r[6] !== undefined ? r[6] : (r[0] === 'Pustevny' ? 'beskydy' : 'praha') })
     }));
   }
 
@@ -15909,8 +15922,8 @@ class Component extends DCLogic {
     const zoom = !!s.cmpZoom;
     const clear = open.filter(g => g.items.some(i => i.best));
     const ready = open.filter(g => keep[g.id] !== undefined);
-    const missDate = photos.filter(p => AMISS.date.has(p.id) && (s.edits[p.id] || {}).dateShort === undefined);
-    const missPlace = photos.filter(p => AMISS.place.has(p.id) && (s.edits[p.id] || {}).place === undefined);
+    const missDate = photos.filter(p => this.mChybi(p, 'date') && (s.edits[p.id] || {}).dateShort === undefined);
+    const missPlace = photos.filter(p => this.mChybi(p, 'place') && (s.edits[p.id] || {}).place === undefined);
     const fixing = tab === 'noPlace' ? 'place' : 'date';
     const fixRowsSrc = fixing === 'place' ? missPlace : missDate;
     const setEdit = (id, patch) => {
@@ -15972,9 +15985,11 @@ class Component extends DCLogic {
             this.setState({ dupDone: done.concat(g.id) });
             this.toast('Necháváme obě · nález se už nepřipomene', { icon: 'ph-check-circle', undo: () => this.setState({ dupDone: prev }) });
           },
-          compare: () => toCompare(g.items.map(i => 'p' + i.n)),
+          // Skutečná fotka má vlastní identifikátor i náhled; u napsaného nálezu
+          // se obojí odvozuje z pořadí, jak to prototyp dělal vždycky.
+          compare: () => toCompare(g.items.map(i => i.id || ('p' + i.n))),
           items: g.items.map((i, idx) => ({
-            name: i.name, meta: i.meta, best: !!i.best, bg: this.bg(i.n),
+            name: i.name, meta: i.meta, best: !!i.best, bg: i.bg || this.bg(i.n),
             chosen: sel === idx,
             ring: sel === idx ? '2px solid var(--g-acc)' : '1px solid var(--g-line)',
             keep: () => this.setState({ dupKeep: Object.assign({}, keep, { [g.id]: idx }) })
@@ -25944,13 +25959,21 @@ class Component extends DCLogic {
     return ph;
   }
   isFav(p) { const e = this.state.favs[p.id]; return e === undefined ? p.fav : e; }
+  /*
+   * Chybí fotce datum nebo místo?
+   *
+   * Skutečná fotka to o sobě ví sama (`miss` ze serveru). U napsaných dat se to
+   * bere z `AMISS`, což je seznam ukázkových identifikátorů — ten o fotkách
+   * z databáze nic neví a bez téhle výhybky by úklid vždycky hlásil nulu.
+   */
+  mChybi(p, co) { return p.miss ? p.miss.indexOf(co) >= 0 : AMISS[co].has(p.id); }
   edited(p) {
     const ed = this.state.edits[p.id] || {};
     const o = Object.assign({}, p, ed);
-    if (AMISS.date.has(p.id) && ed.dateShort === undefined) {
+    if (this.mChybi(p, 'date') && ed.dateShort === undefined) {
       o.missingDate = true; o.dateShort = 'Chybí datum'; o.dayLabel = 'Bez data pořízení';
     }
-    if (AMISS.place.has(p.id) && ed.place === undefined) {
+    if (this.mChybi(p, 'place') && ed.place === undefined) {
       o.missingPlace = true; o.place = 'Chybí místo';
     }
     return o;
@@ -26617,14 +26640,21 @@ class Component extends DCLogic {
     const s = this.state, R = s.route;
     const ph = this.visible();
     const albums = this.albums();
-    const album = albums.find(a => a.id === s.albumId) || albums[1];
+    // `albums[1]` je záložka z doby, kdy byla alba napsaná v dokumentu a bylo jich
+    // sedm. Se skutečnými alby jich může být i jedno a druhý prvek pak neexistuje —
+    // celá obrazovka spadla na `album.name`.
+    const album = albums.find(a => a.id === s.albumId) || albums[1] || albums[0];
     const cur = s.lb ? this.edited(this.photos().find(p => p.id === s.lb)) : null;
     const curIdx = s.lb ? this.photos().findIndex(p => p.id === s.lb) : 0;
     const cols = { small: '92px', med: '150px', big: '230px' }[s.grid] || '150px';
     // Definice žije v galerie-data.js (sdílí ji mobilní nabídka Více);
     // tady se jen doplní živý odznak vzpomínek.
+    // Čísla u položek: dnešní vzpomínky si počítá dokument, zbytek přichází ze
+    // serveru podle cesty (`NAVCNT`). Bez odpovědi zůstávají napsaná.
+    const navPocty = (window.GalerieData || {}).NAVCNT || {};
     const navGroupDefs = NAV_GROUPS.map(g => [g[0], g[1].map(n =>
-      n[3] === '@memToday' ? [n[0], n[1], n[2], String(this.memTodayCount())] : n)]);
+      n[3] === '@memToday' ? [n[0], n[1], n[2], String(this.memTodayCount())]
+        : navPocty[n[0]] !== undefined ? [n[0], n[1], n[2], String(navPocty[n[0]])] : n)]);
     const activeRoute = R === 'album' ? 'albums' : R === 'trip' ? 'x-cesty' : R === 'person' ? 'x-lide'
       : R === 'x-ucty' && (s.finTab || 0) !== 1 ? 'x-finance'
       : R === 'recipe' ? 'x-kucharka' : R === 'place' ? 'x-mista' : R;
@@ -27547,7 +27577,7 @@ class Component extends DCLogic {
       ...this.capVals(),
       ...this.obVals(),
 
-      todayLabel: 'Neděle 16. srpna 2026', totalLabel: '24 316 vzpomínek · 7 let',
+      todayLabel: 'Neděle 16. srpna 2026', totalLabel: (window.GalerieData || {}).TOTAL || '24 316 vzpomínek · 7 let',
       greeting: 'Dobré ráno, Adriane',
       ...(() => {
         // Domů jako rozcestník: dnešní vzpomínka, týden v číslech a cestovní režim.
@@ -27747,7 +27777,11 @@ class Component extends DCLogic {
 
       albViewCards: s.albView !== 'list' && s.albView !== 'tree', albViewList: s.albView === 'list', albViewTree: s.albView === 'tree',
       setAlbCards: () => this.setState({ albView: 'cards' }), setAlbList: () => this.setState({ albView: 'list' }), setAlbTree: () => this.setState({ albView: 'tree' }),
-      albumList: albums.map(a => ({ ...a, bg: this.bg(a.n), go: () => this.setState({ route: 'album', albumId: a.id }) })),
+      // Skutečné album má obálku z fotky; napsané zůstává barevným přechodem.
+      albumList: albums.map(a => ({ ...a, bg: a.bg || this.bg(a.n), go: () => this.setState({ route: 'album', albumId: a.id }) })),
+      albumsMeta: this.pl(albums.filter(a => (a.path || '').indexOf('→') < 0).length, 'hlavní album', 'hlavní alba', 'hlavních alb')
+        + ' · ' + this.pl(albums.reduce((a, x) => a + (+x.subs || 0), 0), 'podalbum', 'podalba', 'podalb')
+        + ' · neomezená hierarchie',
       tree: this.tree(),
       newAlbum: () => this.setState({ naOpen: true, naName: '', naParent: '', naWithSel: s.sel.length > 0 }),
       naOpen: s.naOpen, naName: s.naName || '',
@@ -27785,7 +27819,12 @@ class Component extends DCLogic {
 
       album, crumbs: ('Alba → ' + album.path).split(' → ').map((c, i, arr) => ({ name: i === arr.length - 1 ? c : c + '  →', go: i === 0 ? this.go('albums') : this.go('albums') })),
       hasSubs: album.subs > 0, albumEmpty: albumPhotos.length === 0,
-      subAlbums: Array.from({ length: Math.min(album.subs, 5) }, (_, i) => {
+      // Skutečná podalba přicházejí se serverem; napsané album si je dokreslí,
+      // jako to prototyp dělal vždycky.
+      subAlbums: (album.children || []).length ? album.children.slice(0, 5).map(sub => ({
+        name: sub.name, meta: sub.count, bg: sub.bg || this.bg(sub.n),
+        go: () => this.setState({ route: 'album', albumId: sub.id, sel: [], selectMode: false })
+      })) : Array.from({ length: Math.min(album.subs, 5) }, (_, i) => {
         const name = ['Zadar', 'Krka', 'Plitvice', 'Cesta tam', 'Poslední den'][i] || 'Podalbum ' + (i + 1);
         const id = album.id + '-sub' + i;
         return {
@@ -27806,7 +27845,7 @@ class Component extends DCLogic {
         };
       }),
       albumItems: albumPhotos.map(p => this.tile(this.edited(p))),
-      related: albums.filter(a => a.id !== album.id).slice(0, 3).map(a => ({ name: a.name, meta: a.count, bg: this.bg(a.n), go: () => this.setState({ route: 'album', albumId: a.id }) })),
+      related: albums.filter(a => a.id !== album.id).slice(0, 3).map(a => ({ name: a.name, meta: a.count, bg: a.bg || this.bg(a.n), go: () => this.setState({ route: 'album', albumId: a.id }) })),
       albumFavLabel: album.fav ? 'V oblíbených' : 'Do oblíbených', albumFavColor: album.fav ? 'var(--g-mag)' : 'var(--g-ink)',
       toggleFavAlbum: () => this.toast(album.fav ? 'Odebráno z oblíbených' : 'Přidáno do oblíbených', { icon: 'ph-heart-straight', color: 'var(--g-mag)' }),
       openMove: () => this.setState({ confirm: { title: 'Přesunout album', body: 'Vyberte nové umístění pro „' + album.name + '“. Album nelze vložit do sebe ani do svého podalba — taková místa nejsou v seznamu nabízená.', cta: 'Přesunout sem', btnBg: 'var(--g-acc)', go: () => { this.setState({ confirm: null }); this.toast('Album přesunuto', { undo: true }); } } }),
@@ -27890,7 +27929,7 @@ class Component extends DCLogic {
 
       mapSrc: this.mapSrc(),
       mapCountLabel: 'Jen položky s polohou · 18 402',
-      mapFixLabel: 'Doplnit polohu (' + this.photos().filter(p => AMISS.place.has(p.id) && (s.edits[p.id] || {}).place === undefined).length + ')',
+      mapFixLabel: 'Doplnit polohu (' + this.photos().filter(p => this.mChybi(p, 'place') && (s.edits[p.id] || {}).place === undefined).length + ')',
       mapFixPlaces: () => { this.setState({ route: 'x-uklid', clnTab: 'noPlace' }); this.toast('Fotky bez místa — doplňte je v Úklidu knihovny', { icon: 'ph-map-pin-plus' }); },
       mapFitAll: () => this.mapTell({ type: 'fit' }),
       mapChips: pins.map(p => ({

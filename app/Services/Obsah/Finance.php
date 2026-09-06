@@ -43,6 +43,16 @@ class Finance implements PoskytovatelObsahu
         return 'finance';
     }
 
+    /**
+     * Nic. `FIN` má vedle účtů ještě splátky, upozornění, pravidla a importy,
+     * které se počítají jinde; `BUD` zase části, které aplikace nevede. Smazat
+     * je znamená prázdné obrazovky, ne pravdu.
+     */
+    public function uplne(): array
+    {
+        return [];
+    }
+
     public function kolekce(GallerySpace $prostor): array
     {
         $rozpocet = $this->rozpocet($prostor);
