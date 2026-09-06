@@ -14,6 +14,7 @@ use App\Services\Provoz\KlidVeStavu;
 use App\Services\Provoz\NastaveniVeStavu;
 use App\Services\Provoz\PlanovaniVeStavu;
 use App\Services\Provoz\PravidlaVeStavu;
+use App\Services\Provoz\PribehVeStavu;
 use App\Services\Provoz\RozboryVeStavu;
 use App\Services\Provoz\TrezorVeStavu;
 use App\Services\Provoz\UklidVeStavu;
@@ -43,6 +44,7 @@ class StateController extends Controller
         private readonly KapsleVeStavu $kapsle,
         private readonly NastaveniVeStavu $nastaveni,
         private readonly KlidVeStavu $klid,
+        private readonly PribehVeStavu $pribeh,
     ) {}
 
     public function show(Request $request): JsonResponse
@@ -272,6 +274,19 @@ class StateController extends Controller
                 $skutecnost += $this->klid->zpracuj($patch, GallerySpace::findOrFail($coupleId), $uzivatel);
                 $patch = $this->klid->bezKlidu($patch);
                 $state->zapomen(KlidVeStavu::SERVEROVE);
+            }
+
+            /*
+             * Příběh, nouzový přístup a papírová záloha.
+             *
+             * „Soukromé zápisy v deníku se nouzově neodemknou" je rozhodnutí,
+             * které musí platit i na druhém zařízení — ne jen v prohlížeči
+             * toho, kdo přepínač vypnul.
+             */
+            if ($this->pribeh->tykaSe($patch)) {
+                $skutecnost += $this->pribeh->zpracuj($patch, GallerySpace::findOrFail($coupleId), $uzivatel);
+                $patch = $this->pribeh->bezPribehu($patch);
+                $state->zapomen(PribehVeStavu::SERVEROVE);
             }
 
             $state->applyPatch($patch);

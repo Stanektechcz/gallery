@@ -281,7 +281,7 @@
    * kuchařka. Každá skupina se navlékne, jakmile dorazí — na pořadí nezáleží.
    */
   var SKUPINY = ['finance', 'knihovna', 'planovani', 'domacnost', 'cesty', 'vztah', 'zdravi', 'sdileni',
-    'zpravy', 'kucharka', 'darky', 'denik', 'pravidla', 'rozbory', 'uklid', 'system', 'klid'];
+    'zpravy', 'kucharka', 'darky', 'denik', 'pravidla', 'rozbory', 'uklid', 'system', 'klid', 'pribeh'];
 
   function skupiny() {
     return SKUPINY.map(function (jmeno) {
