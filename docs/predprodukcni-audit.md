@@ -175,8 +175,8 @@ commitu, protože se prolne s každou otevřenou větví.
 | Náhledy mřížky a video | podepsaná adresa na jediný soubor a den, ne token v URL |
 | Bezpečnostní hlavičky | `nosniff`, `SAMEORIGIN`, `Referrer-Policy`, `Permissions-Policy`, CSP, HSTS přes HTTPS |
 | Tlačítka bez obsluhy | z 1268 žádné |
-| Průchod aplikací | 52 obrazovek bez chyby v konzoli a bez porušení CSP |
-| Testy | 1175 zelených |
+| Průchod aplikací | 57 obrazovek v obou rozvrženích bez chyby v konzoli, medián přepnutí 79 ms |
+| Testy | 1177 zelených |
 
 ## Opraveno ve třetím průchodu
 
@@ -412,10 +412,105 @@ a nikdo nepoznal proč. `StateController` teď těch třicet dva klíčů ze sta
 vyhazuje bez ohledu na to, který zapisovač je zpracoval; seznamy bez tabulky
 si stav nechávají, pro ně je jediné místo, kde můžou přežít.
 
+## Pátý průchod: srovnání s prototypem po prvcích
+
+Předchozí průchody porovnávaly **data**. Tenhle porovnal i to ostatní, ve
+třech osách.
+
+### Obrazovky: 57 z 57, bez jediné chyby
+
+Průchod celou navigací v obou rozvrženích — každá položka se otevřela, změřil
+se čas překreslení a odchytily se chyby v konzoli i nezpracovaná odmítnutí
+slibů. Výsledek: **žádná chyba**, medián přepnutí obrazovky **79 ms**,
+nejpomalejší 234 ms (Deník). Úzké rozvržení totéž přes nabídku Více.
+
+První měření hlásilo 27 až 60 sekund na obrazovku a vypadalo jako vážný
+výkonnostní problém. Nebylo: skrytá karta škrtí časovače na jednu sekundu
+a měření navíc přečkalo přerušení mezi voláními. Se zobrazenou kartou
+a `flushSync` jsou to desítky milisekund. Stojí to za zápis, protože příště
+to bude vypadat stejně děsivě.
+
+### Kolekce: 32 z 32 seznamů, 127 ze 127 kolekcí obsahu
+
+Viz `docs/galerie-obsah.md` a průchody výš.
+
+### Ovládací prvky: 61 tlačítek, která hlásila úspěch a nic nedělala
+
+Tohle byla ta osa, kde se ještě ukrývaly tiché lži. Hledá je
+`scripts/audit-slibotechna.php`:
+
+```bash
+php scripts/audit-slibotechna.php
+```
+
+Najde obsluhy, které zavolají `this.toast(…)` s větou v minulém čase a jinak
+neudělají nic — ani nezmění stav, ani nesáhnou na server. Vyřízne z těla
+volání hlášky i s argumenty (počítáním závorek, ne regulárním výrazem —
+argumenty bývají vnořené objekty) a podívá se, jestli zbylo ještě něco, co
+něco dělá.
+
+Ze šedesáti jedna zbylo **sedm** a všech sedm je poctivých: dvě varování
+(„Bez serveru se účet připojit nedá") a tři poznámky u náhledu sdíleného
+odkazu („Tohle je náhled, stahovat může host"), dva informační řádky.
+
+Co se napojilo doopravdy:
+
+| Co | Bylo | Je |
+| --- | --- | --- |
+| Exporty do CSV (3×) | „připraven ke stažení" a nic | soubor se středníkem a BOM, aby ho Excel otevřel se sloupci |
+| Originál z historie verzí | „Stahuji originál…" | stahovač, který v aplikaci byl — tlačítko na něj nebylo napojené |
+| Oblíbené album | hláška, srdíčko beze změny | přepnutí, které je vidět |
+| Zkopírovat odkaz (2×) | „Odkaz zkopírován" vždycky | schránka, a když ji prohlížeč nepůjčí, řekne se to |
+| Kontrola verze | „Máte nejnovější verzi 2026.8.16" napevno | dotaz service workeru |
+| Prodloužit odkaz o 30 dní | hláška, odkaz vypršel podle plánu | zápis do `shared_links` od pozdějšího z dneška a stávající platnosti |
+| Roky v knihovně | osm let s počty „6 204, 4 812…" napevno | `YBCH` z `taken_at`, a kliknutí rok vyfiltruje |
+| Statistika sdíleného odkazu | sinusovka po dnech, „Lidí" = otevření ÷ 3,2, jmenný seznam „Babička, Klára, Táta" se zařízeními a časy | jen to, co `shared_links` vede: počet otevření, heslo, stahování, platnost |
+
+Statistika odkazu si zaslouží vlastní odstavec. Je to místo, kam se člověk
+podívá, když má podezření, že se odkaz dostal dál, než měl — a vymyšlený
+seznam návštěv tam škodí dvakrát: uklidní, když nemá, a při skutečném úniku
+ukáže špatná jména.
+
+Zbylých víc než třicet tlačítek vede na věci, které aplikace neumí:
+plánované platby, rozdělení platby mezi kategorie, investiční pozice, tiskové
+PDF, napojení banky. Dostala jednu společnou větu, `zatimNeumime()`:
+
+> Tohle zatím neumíme — plánované platby
+
+Věta je v přítomném čase a bez omluvy. Kdo se dozví „tohle zatím neumíme", ví,
+na čem je; kdo se dozví „uloženo", to zjistí až ve chvíli, kdy na to spoléhal.
+
+### Dvě chyby po předchozím průchodu
+
+Zámek aplikace se zpřísnil natolik, že **zamykal i tam, kde nebylo čím
+odemknout**. Zamčené sekce (Deník, Finance) chtěly kód, a dokud si ho člověk
+nenastavil, žádný neměl — do vlastního deníku se nedostal. Zamykat se dá jen
+tím, čím se dá odemknout; to teď platí u zámku aplikace, u automatického
+zamčení i u zamčených sekcí.
+
+A poznávací značka klíče: `createToken()` je metoda Sanctumu a o sloupci
+`suffix` neví, takže se nikdy nevyplnil a v seznamu klíčů stálo u každého
+`…????`.
+
 ## Co zbývá
 
-Z auditu nic. Zbytek jsou věci, které si dvojice může přát, ne nesrovnalosti:
-například aby nákupní seznam uměl i položky přidané ručně, mimo recept.
+Z auditu nic. Zbývají **přání**, ne nesrovnalosti — a jsou vidět, protože
+každé z nich má na svém tlačítku větu „tohle zatím neumíme":
+
+- plánované platby a jejich přeskočení
+- rozdělení jedné platby mezi víc kategorií, opakovaná platba, poznámka
+  u transakce
+- vyhrazené částky (zakládání a vklady) a pravidla vyrovnávání
+- napojení banky a stahování transakcí
+- investiční pozice a rebalance
+- tiskové PDF výroční knihy a tisk papírové zálohy
+- itinerář cesty: přidávání položek, duplikace, export
+- připomínky (k dárkům, ke kontaktům, druhému z dvojice)
+- poznámky k místu, cíle v mapě odsud, album pro rodinu s hlasovým vzkazem
+
+Žádné z toho není rozbité — jsou to funkce, které v aplikaci nikdy nebyly
+a prototyp je jen naznačoval. Rozdíl proti stavu před auditem je, že to teď
+obrazovka řekne rovnou.
 
 ## Co se nechalo úmyslně
 
