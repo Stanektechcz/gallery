@@ -22,6 +22,9 @@ class User extends Authenticatable
         'password', 'remember_token', 'invitation_token',
         // A secret that reaches the browser once is a secret in somebody's browser history.
         'two_factor_secret', 'two_factor_recovery_codes',
+        // The app-lock code is the owner's alone: not their partner's, and not
+        // the browser's. Even hashed it never leaves the server.
+        'app_lock_pin', 'app_lock_recovery',
     ];
 
     /** Every place that shows a person shows their face; deriving it twice invites drift. */
@@ -74,6 +77,10 @@ class User extends Authenticatable
             'two_factor_secret' => 'encrypted',
             'two_factor_recovery_codes' => 'encrypted:array',
             'two_factor_confirmed_at' => 'datetime',
+            // Jako heslo: uloží se haš, ověřuje se přes `Hash::check`.
+            'app_lock_pin' => 'hashed',
+            'app_lock_recovery' => 'hashed',
+            'app_lock_set_at' => 'datetime',
         ];
     }
 

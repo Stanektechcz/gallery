@@ -17,6 +17,7 @@ use App\Http\Controllers\Api\Galerie\TokenController;
 use App\Http\Controllers\Api\Galerie\TrezorController;
 use App\Http\Controllers\Api\Galerie\UlozisteController;
 use App\Http\Controllers\Api\Galerie\WebauthnController;
+use App\Http\Controllers\Api\Galerie\ZamekController;
 use App\Http\Controllers\Api\Galerie\ZaznamController;
 use Illuminate\Support\Facades\Route;
 
@@ -153,9 +154,37 @@ Route::middleware(['auth:sanctum', 'throttle:120,1'])->prefix('api')->group(func
      * hesla, ne běžné klepání po aplikaci.
      */
     Route::get('trezor', [TrezorController::class, 'stav'])->name('galerie.trezor.stav');
+    /*
+     * Třetí parametr `throttle` je předpona počítadla, a je tu schválně.
+     *
+     * Bez ní si `ThrottleRequests` klíčuje pokusy jen podle uživatele
+     * a adresy, takže **všechny cesty ve skupině sdílejí jedno počítadlo**:
+     * limit 120/min na běžné klepání by po pár minutách prohlížení vyčerpal
+     * i limit 10/min na hádání hesla a člověk by dostal 429 na trezor jen
+     * proto, že si prohlédl fotky.
+     */
     Route::post('trezor/odemknout', [TrezorController::class, 'odemkni'])
-        ->middleware('throttle:10,1')->name('galerie.trezor.odemknout');
+        ->middleware('throttle:10,1,trezor-odemknout')->name('galerie.trezor.odemknout');
     Route::post('trezor/zamknout', [TrezorController::class, 'zamkni'])->name('galerie.trezor.zamknout');
+
+    /*
+     * Zámek aplikace.
+     *
+     * Šestimístný kód se porovnával v prohlížeči s konstantou `LOCKPIN`
+     * z veřejného `galerie-data.js` — kódy obou partnerů si mohl přečíst
+     * kdokoli a obrazovka je sama vypisovala v nápovědě. Kód teď patří
+     * jednomu člověku a ověřuje ho server.
+     *
+     * Ověřování i obnova mají vlastní, tvrdší limit: je to hádání šesti
+     * číslic, tedy milion možností, a bez limitu je to otázka minut.
+     */
+    Route::get('zamek', [ZamekController::class, 'stav'])->name('galerie.zamek.stav');
+    Route::post('zamek', [ZamekController::class, 'nastav'])
+        ->middleware('throttle:10,1,zamek-nastavit')->name('galerie.zamek.nastav');
+    Route::post('zamek/overit', [ZamekController::class, 'over'])
+        ->middleware('throttle:20,1,zamek-overit')->name('galerie.zamek.overit');
+    Route::post('zamek/obnovit', [ZamekController::class, 'obnov'])
+        ->middleware('throttle:5,1,zamek-obnovit')->name('galerie.zamek.obnovit');
 
     /*
      * Koš.

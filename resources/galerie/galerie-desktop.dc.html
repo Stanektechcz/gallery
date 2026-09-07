@@ -14023,6 +14023,60 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
     </div>
   </sc-if>
 
+  <!-- KÓD ZÁMKU -->
+  <!--
+    Řádky „Kód Adriana" a „Kód Makinky" v nastavení vedly na obyčejnou hlášku
+    a kód se stejně nedal změnit — byl napevno v `galerie-data.js`. Tenhle
+    dialog nastavuje **můj** kód: první se zakládá heslem do galerie, další
+    tím starým, a hned po uložení ukáže obnovovací kód. Ten se ukazuje
+    jedinkrát, protože v databázi z něj zůstane jen haš.
+  -->
+  <sc-if value="{{ pinOpen }}">
+    <div onClick="{{ pinClose }}" class="dialog-backdrop" style="z-index:82; animation:fadeIn .14s ease">
+      <div onClick="{{ stop }}" role="dialog" aria-label="{{ pinTitle }}" class="dialog" style="background:var(--g-raise)">
+        <div class="dialog-title">{{ pinTitle }}</div>
+        <div class="dialog-body">{{ pinBody }}</div>
+
+        <sc-if value="{{ pinIsForm }}">
+          <div>
+            <sc-if value="{{ pinChceStary }}">
+              <div class="field"><label>Dosavadní kód</label><input class="input" type="password" inputMode="numeric" value="{{ pinStary }}" onChange="{{ pinSetStary }}" placeholder="Šest číslic" style="letter-spacing:.3em"></div>
+            </sc-if>
+            <sc-if value="{{ pinChceHeslo }}">
+              <div class="field"><label>Heslo do galerie</label><input class="input" type="password" value="{{ pinHeslo }}" onChange="{{ pinSetHeslo }}" placeholder="Zadejte heslo"></div>
+            </sc-if>
+            <div class="field" style="margin-top:12px"><label>Nový kód</label><input class="input" inputMode="numeric" value="{{ pinNovy }}" onChange="{{ pinSetNovy }}" placeholder="Šest číslic" style="letter-spacing:.3em"></div>
+            <div class="field" style="margin-top:12px"><label>Nový kód pro kontrolu</label><input class="input" inputMode="numeric" value="{{ pinZnovu }}" onChange="{{ pinSetZnovu }}" placeholder="Šest číslic" style="letter-spacing:.3em"></div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ pinMaKod }}">
+          <div>
+            <div style="font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--g-ink3); margin-bottom:6px">Obnovovací kód</div>
+            <div style="font-size:22px; letter-spacing:.16em; font-variant-numeric:tabular-nums; padding:14px 16px; border-radius:2px; background:var(--g-panel); text-align:center">{{ pinObnovovaci }}</div>
+            <div style="display:flex; gap:9px; align-items:flex-start; margin-top:12px; padding:11px 12px; border-radius:2px; background:var(--g-mag-soft); font-size:13px">
+              <i class="ph-duotone ph-warning-octagon" style="font-size:18px; color:var(--g-mag); flex:none"></i>
+              <span>Opište si ho na papír. Podruhé ho neukážeme — v databázi z něj zůstane jen otisk, ze kterého se kód přečíst nedá.</span>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ pinError }}">
+          <div style="display:flex; gap:9px; align-items:flex-start; padding:11px 12px; border-radius:2px; background:var(--g-mag-soft); font-size:13px">
+            <i class="ph-duotone ph-warning-octagon" style="font-size:18px; color:var(--g-mag); flex:none"></i><span>{{ pinErrorText }}</span>
+          </div>
+        </sc-if>
+
+        <div class="dialog-actions">
+          <button class="btn btn-secondary" onClick="{{ pinClose }}">{{ pinZavritLabel }}</button>
+          <sc-if value="{{ pinIsForm }}">
+            <button class="btn btn-primary" onClick="{{ pinSave }}" disabled="{{ pinCant }}">{{ pinSaveLabel }}</button>
+          </sc-if>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
   <!-- LIGHTBOX -->
   <sc-if value="{{ lightboxOpen }}">
     <div role="dialog" aria-label="Detail vzpomínky" style="position:fixed; inset:0; z-index:90; display:flex; flex-direction:column; background:var(--g-lb-bg); color:var(--g-lb-fg); animation:fadeIn .14s ease">
@@ -15517,15 +15571,8 @@ class Component extends DCLogic {
      * trezorem, takže zamčený trezor je prázdný i v datech, ne jen na pohled.
      */
     const ze_serveru = VAULT_ITEMS.map(v => v.id);
-    /*
-     * A `vaultAdded` se od něj odpíchne.
-     *
-     * Server bere ten seznam jako **úplný**: co v něm není, vrací zpátky do
-     * knihovny. Když začínal prázdný, první přesun do trezoru poslal jediné
-     * id — a všechno ostatní se tím odemklo a vrátilo do mřížky. Trezor se
-     * vyprázdnil jedním kliknutím.
-     */
-    const added = s.vaultAdded || ze_serveru;
+    // A `vaultAdded` se od něj odpíchne — viz `vaultIds()`.
+    const added = this.vaultIds();
     const items = VAULT_ITEMS.filter(v => !removed.includes(v.id) && added.includes(v.id))
       .concat(added.filter(id => !ze_serveru.includes(id)).map(id => {
         const p = photos.find(x => x.id === id);
@@ -16247,7 +16294,7 @@ class Component extends DCLogic {
           const others = cmp.filter(x => x.id !== p.id);
           const prevTrash = s.trashRows, prevSel = s.cmpSel;
           const rows = (this._trashNow || []).concat(others.map(o => ({
-            name: o.name, from: o.album || 'Knihovna', by: 'Adrian', when: 'právě teď', left: '30 dní', n: o.n
+            name: o.name, from: o.album || 'Knihovna', by: this.meWho(), when: 'právě teď', left: '30 dní', n: o.n
           })));
           this.setState({ trashRows: rows, cmpSel: [p.id] });
           this.toast('Necháváme ' + p.name + ' · ' + this.pl(others.length, 'ostatní šla', 'ostatní šly', 'ostatních šlo') + ' do koše', {
@@ -17138,7 +17185,7 @@ class Component extends DCLogic {
         const t = (s.fgDraft || '').trim();
         if (!t) return;
         const prev = list;
-        set([{ id: 'g' + Date.now(), what: t, by: 'Adrian', date: '2026-09-04', tries: 0 }].concat(list));
+        set([{ id: 'g' + Date.now(), what: t, by: this.meWho(), date: this.dnesIso(), tries: 0 }].concat(list));
         this.setState({ fgDraft: '' });
         this.toast('Uzavřeno. Od teď to není argument — je to historie.', { icon: 'ph-seal-check', undo: () => set(prev) });
       },
@@ -20199,7 +20246,7 @@ class Component extends DCLogic {
         const prevDone = resolved, prevTrash = s.trashRows;
         const drop = items.filter((it, i) => i !== keptIdx);
         const rows = (this._trashNow || []).slice();
-        drop.forEach(d => rows.unshift({ name: d.name, from: 'Srovnání série', by: 'Adrian', when: 'právě teď', left: '30 dní', n: 4 }));
+        drop.forEach(d => rows.unshift({ name: d.name, from: 'Srovnání série', by: this.meWho(), when: 'právě teď', left: '30 dní', n: 4 }));
         this.setState({ serDone: { ...prevDone, [g.id]: true }, trashRows: rows, serIdx: Math.min(groups.length - 1, gi + 1) });
         this.toast('Ponechán ' + items[keptIdx].name + ' · ' + this.pl(drop.length, 'snímek do koše', 'snímky do koše', 'snímků do koše'), {
           icon: 'ph-broom', undo: () => this.setState({ serDone: prevDone, trashRows: prevTrash, serIdx: gi })
@@ -21586,6 +21633,12 @@ class Component extends DCLogic {
    * Rok z vedlejšího pole platí jen tehdy, když ho v textu není: dvě různá
    * čísla by jinak tiše přepsala to, co je napsané.
    */
+  // Dnešek jako `YYYY-MM-DD`. Zápisy si nesly napsané datum („2026-09-04"),
+  // takže den po dni tvrdily, že vznikly čtvrtého září.
+  dnesIso() {
+    const d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
   msIso(d) {
     const M = ['ledna', 'února', 'března', 'dubna', 'května', 'června', 'července', 'srpna', 'září', 'října', 'listopadu', 'prosince'];
     const txt = String((d && d.date) || '').trim();
@@ -27068,7 +27121,9 @@ class Component extends DCLogic {
         });
         const st = Object.assign(this.blkDefaults(), { edits: ed, favs: favs, sel: [], selectMode: false });
         if (s.blkVault) {
-          const va = s.vaultAdded || [];
+          // Úplný seznam, ne prázdný začátek — jinak by tahle úprava vrátila
+          // z trezoru do mřížky všechno, co v něm už bylo.
+          const va = this.vaultIds();
           st.vaultAdded = va.concat(ids.filter(i => !va.includes(i)));
         }
         this.setState(st);
@@ -27672,6 +27727,18 @@ class Component extends DCLogic {
   }
   lockNow = why => {
     clearTimeout(this._gateT);
+    /*
+     * Zamykat se dá jen tím, čím se dá odemknout.
+     *
+     * Dokud si člověk kód nenastavil, není čím zámek otevřít — a automatické
+     * zamčení po pěti minutách nečinnosti by ho z vlastní galerie vystrnadilo
+     * až do dalšího přihlášení heslem. Dřív to nevadilo, protože kód „měl"
+     * každý: byl napsaný v ukázce.
+     */
+    if (! this.zamek().nastaveno) {
+      if (why) this.toast('Zamknout jde, až si nastavíte kód — Nastavení → Zámek', { icon: 'ph-lock-simple', local: true });
+      return;
+    }
     this.setState({
       appLocked: true, lockPin: '', lockErr: null, lockTries: 0, lockRec: false, lockRecCode: '',
       secUntil: 0, gatePin: '', gateErr: null, lb: null, show: null, searchOpen: false, keysOpen: false, notifOpen: false,
@@ -27694,6 +27761,16 @@ class Component extends DCLogic {
         const k = who || ((res.user || {}).name === LOCKWHO.M ? 'M' : 'A');
         this.setState({ lockWho: k, lockStep: 'pin', lockPwd: '', lockErr: null, lockTries: 0, lockTrusted: s.lockTrust !== false });
         this.toast('Přihlášeno · ' + (LOCKWHO[k] || '') + (s.lockTrust !== false ? ' · zařízení zapamatováno' : ''), { icon: 'ph-envelope-simple-open' });
+        /*
+         * Kdo kód nemá, nemá po přihlášení co zadávat.
+         *
+         * Klávesnice na kód se ukazovala vždycky, protože kód byl napsaný
+         * v ukázce a „měl ho" každý. Teď si ho každý nastavuje sám — a nechat
+         * před někým, kdo si ho ještě nenastavil, zamčené dveře bez klíče
+         * by znamenalo, že se do vlastní galerie nedostane.
+         */
+        const dal = () => { if (!this.zamek().nastaveno) this.lockOpen('Přihlášeno · kód zámku si můžete nastavit v Nastavení → Zámek'); };
+        if (window.GalerieObnovit) GalerieObnovit('system').then(dal); else dal();
       }).catch(e => {
         this.setState({ lockErr: e && e.status === 422 ? 'E-mail nebo heslo nesouhlasí.' : 'Server neodpověděl — zkuste to znovu.' });
       });
@@ -27725,36 +27802,155 @@ class Component extends DCLogic {
     this.setState({ appLocked: false, lockPin: '', lockErr: null, lockTries: 0, lockRec: false, lockRecCode: '', lockAt: Date.now(), lockBioBusy: false });
     this.toast(note || 'Odemčeno · ' + LOCKWHO[this.state.lockWho || 'A'], { icon: 'ph-lock-key-open' });
   }
+  // Co server říká o mém zámku: `{ nastaveno, delka, zmeneno }`.
+  zamek() { return (window.GalerieData || {}).ZAMEK || {}; }
+  /*
+   * Co je v trezoru — jako úplný seznam, od kterého se odpíchne každý zápis.
+   *
+   * Server bere `vaultAdded` jako **úplný**: co v něm není, vrací zpátky do
+   * knihovny. Když se seznam začínal prázdný, každé „Do trezoru" poslalo jen
+   * to právě vybrané — a všechno ostatní se tím odemklo a vrátilo do mřížky.
+   * Trezor se vyprazdňoval jedním kliknutím a nikde po tom nezůstala stopa.
+   */
+  vaultIds() {
+    const s = this.state;
+    if (s.vaultAdded) return s.vaultAdded;
+    return (window.GalerieData && window.GalerieData.VAULT_ITEMS || []).map(v => v.id);
+  }
+  /*
+   * Ověření kódu dělá server.
+   *
+   * Šest číslic se porovnávalo v prohlížeči s `LOCKPIN` z `galerie-data.js`,
+   * tedy s kódy obou partnerů napsanými ve veřejném souboru — a obrazovka je
+   * ještě vypisovala v nápovědě nad klávesnicí. Navíc šlo porovnání přeskočit
+   * přepsáním `appLocked` v konzoli.
+   *
+   * `POST /api/zamek/overit` porovnává proti haši u účtu **přihlášeného
+   * člověka**, počítá pokusy a po třech na půl minuty zavře. Kód partnera je
+   * jeho a odsud se k němu nedostanu.
+   */
+  lockOver(pin, kam) {
+    const api = window.GalerieApi;
+    if (!api || api.mode !== 'http') { kam('Ověřit kód umí jen server a ten teď neodpovídá.'); return; }
+    api.post('zamek/overit', { kod: pin })
+      .then(() => kam(null))
+      .catch(e => {
+        const b = (e && e.body) || {};
+        kam(b.chyba || (e && e.status === 429
+          ? 'Příliš mnoho pokusů za sebou. Zkuste to za minutu.'
+          : 'Ověřit se nepodařilo — server neodpověděl.'));
+      });
+  }
   lockTry(pin) {
-    if (pin === LOCKPIN[this.state.lockWho || 'A']) { this.lockOpen(); return; }
-    const t = (this.state.lockTries || 0) + 1;
-    this.setState({
-      lockTries: t, lockPin: '',
-      lockErr: t >= 3
-        ? 'Třikrát špatně. Zkuste odemknutí dotykem nebo obnovovací kód.'
-        : 'Kód nesouhlasí — ' + (3 - t === 1 ? 'zbývá poslední pokus.' : 'zbývají ' + (3 - t) + ' pokusy.')
+    // Kdo kód nastavený nemá, nemá co zadávat — obrazovka ho pošle si ho
+    // nastavit místo toho, aby ho nechala hádat něco, co neexistuje.
+    if (!this.zamek().nastaveno) { this.lockOpen('Odemčeno · kód zámku si nastavte v Nastavení → Zámek'); return; }
+    this.setState({ lockBusy: true });
+    this.lockOver(pin, chyba => {
+      if (!chyba) { this.setState({ lockBusy: false }); this.lockOpen(); return; }
+      this.setState({ lockBusy: false, lockTries: (this.state.lockTries || 0) + 1, lockPin: '', lockErr: chyba });
     });
   }
   lockDigit(d) {
-    if ((this.state.lockTries || 0) >= 3) return;
+    if ((this.state.lockTries || 0) >= 3 || this.state.lockBusy) return;
     const pin = ((this.state.lockPin || '') + d).slice(0, 6);
     this.setState({ lockPin: pin, lockErr: null });
     if (pin.length === 6) setTimeout(() => this.lockTry(pin), 150);
   }
   lockBack() { this.setState({ lockPin: (this.state.lockPin || '').slice(0, -1), lockErr: null }); }
+  /*
+   * Obnovovací kód taky ověřuje server — a spotřebuje ho.
+   *
+   * Porovnával se s `LOCKREC` ('zadar-2026-oba') z téhož veřejného souboru,
+   * takže poslední záloha od zamčené aplikace byla čitelná ze zdrojáku.
+   * Server ho po použití zahodí i s kódem zámku, takže si člověk musí hned
+   * nastavit nový: jednorázová záloha, ne druhé trvalé heslo na papíře.
+   */
   lockRecGo() {
-    if ((this.state.lockRecCode || '').trim().toLowerCase() !== LOCKREC) {
-      this.setState({ lockErr: 'Obnovovací kód nesouhlasí. Najdete ho v Nastavení na druhém telefonu.' });
-      return;
-    }
-    this.lockOpen('Odemčeno obnovovacím kódem — nastavte si nový kód');
-    this.setState({ route: 'settings', setTab: 'zamek' });
+    const api = window.GalerieApi;
+    if (!api || api.mode !== 'http') { this.setState({ lockErr: 'Obnovit kód umí jen server a ten teď neodpovídá.' }); return; }
+    this.setState({ lockBusy: true });
+    api.post('zamek/obnovit', { kod: this.state.lockRecCode || '' })
+      .then(() => {
+        this.setState({ lockBusy: false });
+        this.lockOpen('Odemčeno obnovovacím kódem — nastavte si nový');
+        this.setState({ route: 'settings', setTab: 'zamek', pinOpen: true, pinStep: 'novy' });
+        if (window.GalerieObnovit) GalerieObnovit('system');
+      })
+      .catch(e => {
+        const b = (e && e.body) || {};
+        this.setState({ lockBusy: false, lockErr: b.chyba || 'Obnovovací kód nesouhlasí.' });
+      });
   }
   gateGo() {
-    if ((this.state.gatePin || '') !== LOCKPIN[this.state.lockWho || 'A']) {
-      this.setState({ gateErr: 'Kód nesouhlasí.', gatePin: '' });
-      return;
-    }
+    const pin = this.state.gatePin || '';
+    if (!this.zamek().nastaveno) { this.setState({ gateErr: 'Kód zámku si nejdřív nastavte v Nastavení → Zámek.' }); return; }
+    this.setState({ gateBusy: true });
+    this.lockOver(pin, chyba => {
+      this.setState({ gateBusy: false });
+      if (chyba) { this.setState({ gateErr: chyba, gatePin: '' }); return; }
+      this.gateOtevri();
+    });
+  }
+  /*
+   * Dialog na nastavení vlastního kódu.
+   *
+   * Má dva stavy: formulář a — hned po uložení — obnovovací kód. Ten se
+   * ukazuje jednou a nikde se neukládá, protože v databázi z něj zůstane
+   * jen haš. Dialog se proto po zobrazení kódu zavírá tlačítkem „Mám ho
+   * opsaný", ne křížkem mimochodem.
+   */
+  pinVals() {
+    const s = this.state;
+    const zam = this.zamek();
+    const ma = !!zam.nastaveno;
+    const novy = s.pinNovy || '';
+    const znovu = s.pinZnovu || '';
+    const hotovo = !!s.pinObnovovaci;
+
+    return {
+      pinOpen: !!s.pinOpen,
+      pinIsForm: !hotovo,
+      pinMaKod: hotovo,
+      pinObnovovaci: s.pinObnovovaci || '',
+      pinTitle: hotovo ? 'Kód nastaven' : (ma ? 'Změnit kód zámku' : 'Nastavit kód zámku'),
+      pinBody: hotovo
+        ? 'Od teď se aplikace odemyká tímhle kódem. Zbývá si schovat obnovovací kód.'
+        : (ma
+          ? 'Šest číslic, které znáte jen vy. Změnu potvrdíte dosavadním kódem.'
+          : 'Šest číslic, které znáte jen vy — partner je nevidí. Poprvé se potvrzuje heslem do galerie.'),
+      // Kdo kód má, mění ho tím starým; kdo ho nemá, prokáže se heslem.
+      // Jinak by si ho na cizím odemčeném telefonu nastavil kdokoli.
+      pinChceStary: !hotovo && ma,
+      pinChceHeslo: !hotovo && !ma,
+      pinStary: s.pinStary || '', pinSetStary: e => this.setState({ pinStary: e.target.value.replace(/\D/g, '').slice(0, 6), pinErr: null }),
+      pinHeslo: s.pinHeslo || '', pinSetHeslo: e => this.setState({ pinHeslo: e.target.value, pinErr: null }),
+      pinNovy: novy, pinSetNovy: e => this.setState({ pinNovy: e.target.value.replace(/\D/g, '').slice(0, 6), pinErr: null }),
+      pinZnovu: znovu, pinSetZnovu: e => this.setState({ pinZnovu: e.target.value.replace(/\D/g, '').slice(0, 6), pinErr: null }),
+      pinError: !!s.pinErr, pinErrorText: s.pinErr || '',
+      pinCant: s.pinBusy || novy.length !== 6 || znovu.length !== 6
+        || (ma ? (s.pinStary || '').length !== 6 : (s.pinHeslo || '').length < 4),
+      pinSaveLabel: s.pinBusy ? 'Ukládá se…' : 'Uložit kód',
+      pinZavritLabel: hotovo ? 'Mám ho opsaný' : 'Zrušit',
+      pinClose: () => this.setState({ pinOpen: false, pinStary: '', pinHeslo: '', pinNovy: '', pinZnovu: '', pinErr: null, pinObnovovaci: null, pinBusy: false }),
+      pinSave: () => {
+        if (novy !== znovu) { this.setState({ pinErr: 'Kódy se neshodují.' }); return; }
+        const api = window.GalerieApi;
+        if (!api || api.mode !== 'http') { this.setState({ pinErr: 'Kód ukládá server a ten teď neodpovídá.' }); return; }
+        this.setState({ pinBusy: true, pinErr: null });
+        api.post('zamek', ma ? { kod: novy, stary: s.pinStary || '' } : { kod: novy, heslo: s.pinHeslo || '' })
+          .then(b => {
+            this.setState({ pinBusy: false, pinStary: '', pinHeslo: '', pinNovy: '', pinZnovu: '', pinObnovovaci: b.obnovovaci || '' });
+            if (window.GalerieObnovit) GalerieObnovit('system');
+          })
+          .catch(e => {
+            const b = (e && e.body) || {};
+            this.setState({ pinBusy: false, pinErr: b.chyba || 'Kód se nepodařilo uložit.' });
+          });
+      }
+    };
+  }
+  gateOtevri() {
     clearTimeout(this._gateT);
     this._gateT = setTimeout(() => {
       this.setState({ secUntil: 0 });
@@ -28321,6 +28517,30 @@ class Component extends DCLogic {
     // Definice sekcí nastavení žije v galerie-data.js (čte ji i druhé rozhraní).
     const setRowsMap = JSON.parse(JSON.stringify(SETROWS));
     setRowsMap.menu = { title: 'Uspořádání menu', sub: 'Přeskládej si navigaci a schovej, co nepoužíváš.', rows: [] };
+    /*
+     * Zámek: jeden kód, a je můj.
+     *
+     * Stály tu řádky „Kód Adriana" a „Kód Makinky", oba s vymyšleným datem
+     * poslední změny („naposledy změněno 4. 3. 2026") a oba vedoucí na
+     * hlášku, která nic neudělala — kód byl stejně napevno v ukázce.
+     *
+     * Kód partnera tady nemá co dělat: nastavuje si ho sám a nikdo jiný
+     * ho nevidí. A obnovovací kód se nedá „vytisknout" na požádání, protože
+     * v databázi z něj zůstal jen haš — dostane se jednou, při nastavení.
+     */
+    const zam = this.zamek();
+    if (setRowsMap.zamek) {
+      setRowsMap.zamek.rows = setRowsMap.zamek.rows
+        .filter(r => r[0].indexOf('Kód ') !== 0 && r[0] !== 'Obnovovací kód')
+        .concat([
+          zam.nastaveno
+            ? ['Můj kód', 'Šest číslic · naposledy změněno ' + (zam.zmeneno ? dLong(zam.zmeneno) : 'neznámo kdy'), 'Změnit kód']
+            : ['Můj kód', 'Zatím žádný — bez něj se aplikace nezamyká', 'Nastavit kód'],
+          zam.nastaveno
+            ? ['Obnovovací kód', 'Dostali jste ho při nastavení kódu. Nový vznikne, až kód změníte.', 'Změnit kód']
+            : ['Obnovovací kód', 'Vznikne, jakmile si nastavíte kód zámku', 'Nastavit kód']
+        ]);
+    }
     const setCur = setRowsMap[s.setTab] || setRowsMap.profil;
 
 
@@ -29324,7 +29544,7 @@ class Component extends DCLogic {
         { label: 'Přesunout do koše', icon: 'ph-trash', go: () => {
           const prevTrash = s.trashRows, prevAlb = s.albArchived || {};
           const rows = (this._trashNow || []).slice();
-          rows.unshift({ name: 'Album ' + album.name, from: album.path, by: 'Adrian', when: 'právě teď', left: '30 dní', n: album.n });
+          rows.unshift({ name: 'Album ' + album.name, from: album.path, by: this.meWho(), when: 'právě teď', left: '30 dní', n: album.n });
           this.setState({ trashRows: rows, albArchived: { ...prevAlb, [album.id]: true }, albMenu: false, route: 'albums' });
           this.toast('Album přesunuto do koše · 30 dní na vrácení', { icon: 'ph-trash', undo: () => this.setState({ trashRows: prevTrash, albArchived: prevAlb, route: 'album', albumId: album.id }) });
         } }
@@ -29683,7 +29903,9 @@ class Component extends DCLogic {
           else this.setState({ setVals: { ...s.setVals, [key]: v } });
           this.toast(label + ' — ' + v, { icon: 'ph-check-circle' });
         };
-        const act = SETACT[base] || null;
+        // `Nastavit kód` v katalogu akcí není — a bez záznamu by se řádek
+        // vykreslil jako obyčejný text a nešel by zmáčknout.
+        const act = SETACT[base] || (base === 'Nastavit kód' ? ['ph-password', null] : null);
         return {
           label, hint: r[1], value: val,
           isToggle, isEnum: !isToggle && !!opts,
@@ -29710,9 +29932,17 @@ class Component extends DCLogic {
               return;
             }
             if (act && act[1] === 'lock-now') { this.lockNow('Aplikace zamčena'); return; }
-            // Obnovovací kód se do hlášky nevypisuje: byl by v historii oznámení
-            // i na snímku obrazovky, a je to poslední klíč od zamčené aplikace.
-            if (label === 'Obnovovací kód') { this.toast('Obnovovací kód najdete v Nastavení → Zámek — vytiskněte a schovejte', { icon: 'ph-printer' }); return; }
+            /*
+             * Kód i obnovovací kód vedou do téhož dialogu.
+             *
+             * „Obnovovací kód" dřív vypisoval `LOCKREC` do hlášky — a ta
+             * skončí v historii oznámení i na snímku obrazovky. Nový se
+             * vydává jen jednou, při nastavení kódu, a nikde jinde.
+             */
+            if (label === 'Můj kód' || label === 'Obnovovací kód') {
+              this.setState({ pinOpen: true, pinStary: '', pinHeslo: '', pinNovy: '', pinZnovu: '', pinErr: null, pinObnovovaci: null });
+              return;
+            }
             if (act && act[1] && act[1].indexOf('dl-') === 0) { this.exportData(act[1], label); return; }
             if (act && act[1]) { this.setState({ route: act[1] }); return; }
             this.toast(label + ' — ' + base, { icon: act ? act[0] : 'ph-arrow-right', undo: base === 'Vymazat' || base === 'Odpojit' });
@@ -29732,12 +29962,14 @@ class Component extends DCLogic {
         { label: 'Stáhnout', icon: 'ph-download-simple', go: () => this.toast('Připravuji archiv — ' + this.pl(s.sel.length, 'položka', 'položky', 'položek') + ' v původní kvalitě', { icon: 'ph-download-simple' }) },
         { label: 'Sdílet', icon: 'ph-share-network', go: () => this.setState({ shareOpen: true }) },
         { label: 'Oblíbené', icon: 'ph-heart-straight', go: () => { const prev = s.favs; const f = { ...s.favs }; s.sel.forEach(id => { f[id] = true; }); this.setState({ favs: f }); this.toast(this.pl(s.sel.length, 'položka přidána', 'položky přidány', 'položek přidáno') + ' do oblíbených', { icon: 'ph-heart-straight', color: 'var(--g-mag)', undo: () => this.setState({ favs: prev }) }); } },
-        { label: 'Do trezoru', icon: 'ph-lock-key', go: () => { const prev = s.vaultAdded || []; this.setState({ vaultAdded: prev.concat(s.sel.filter(i => !prev.includes(i))), sel: [], selectMode: false }); this.toast(this.pl(s.sel.length, 'položka zamčena', 'položky zamčeny', 'položek zamčeno') + ' v trezoru', { icon: 'ph-lock-key', undo: () => this.setState({ vaultAdded: prev, sel: s.sel, selectMode: true }) }); } },
+        // `vaultIds()`, ne `s.vaultAdded || []` — viz komentář u té metody:
+        // prázdný začátek by při prvním přesunu vyprázdnil celý trezor.
+        { label: 'Do trezoru', icon: 'ph-lock-key', go: () => { const prev = this.vaultIds(); this.setState({ vaultAdded: prev.concat(s.sel.filter(i => !prev.includes(i))), sel: [], selectMode: false }); this.toast(this.pl(s.sel.length, 'položka zamčena', 'položky zamčeny', 'položek zamčeno') + ' v trezoru', { icon: 'ph-lock-key', undo: () => this.setState({ vaultAdded: prev, sel: s.sel, selectMode: true }) }); } },
         { label: 'Do koše', icon: 'ph-trash', go: () => {
           const prevDel = s.deleted || [], prevTrash = s.trashRows, ids = s.sel;
           const items = this.photos().filter(p => ids.includes(p.id));
           const rows = (this._trashNow || []).slice();
-          items.forEach(p => rows.unshift({ id: p.id, name: p.name, from: this.edited(p).album || 'Knihovna', by: 'Adrian', when: 'právě teď', left: '30 dní', n: p.n }));
+          items.forEach(p => rows.unshift({ id: p.id, name: p.name, from: this.edited(p).album || 'Knihovna', by: this.meWho(), when: 'právě teď', left: '30 dní', n: p.n }));
           this.setState({ deleted: prevDel.concat(ids.filter(i => !prevDel.includes(i))), trashRows: rows, sel: [], selectMode: false });
           this.toast(this.pl(ids.length, 'položka přesunuta', 'položky přesunuty', 'položek přesunuto') + ' do koše · 30 dní na vrácení', {
             icon: 'ph-trash', undo: () => this.setState({ deleted: prevDel, trashRows: prevTrash, sel: ids, selectMode: true })
@@ -29829,6 +30061,7 @@ class Component extends DCLogic {
       ].map(q => ({ ...q, bg: this.bg(q.n), retryGo: () => this.toast('Zkouším přenos znovu', { icon: 'ph-arrow-clockwise' }) })),
 
       confirmOpen: !!s.confirm, confirm: s.confirm || {}, closeConfirm: () => this.setState({ confirm: null }),
+      ...this.pinVals(),
       toastOpen: !!s.toast, toast: s.toast || {}, closeToast: () => this.setState({ toast: null }),
       undo: () => {
         const f = this._undoFn; this._undoFn = null;

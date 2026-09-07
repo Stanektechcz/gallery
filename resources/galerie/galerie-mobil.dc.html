@@ -4399,6 +4399,60 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
           </div>
         </sc-if>
 
+        <!-- KÓD ZÁMKU -->
+        <!--
+          Řádky „Kód Adriana" a „Kód Makinky" vedly na obyčejnou hlášku a kód
+          se stejně nedal změnit — byl napevno v `galerie-data.js`. Tenhle
+          panel nastavuje **můj** kód a hned po uložení ukáže obnovovací kód,
+          který se podruhé neukazuje: v databázi z něj zůstane jen otisk.
+        -->
+        <sc-if value="{{ pinOpen }}">
+          <div onClick="{{ pinClose }}" style="position:absolute; inset:0; z-index:26; background:rgba(20,19,18,.42); animation:mFade .14s ease">
+            <div onClick="{{ stop }}" role="dialog" aria-label="{{ pinTitle }}" style="position:absolute; left:0; right:0; bottom:0; max-height:86%; overflow:auto; background:var(--g-raise); border-radius:14px 14px 0 0; padding:16px 18px 22px; animation:mSheet .2s ease">
+              <div style="width:44px; height:4px; border-radius:2px; background:var(--g-line); margin:0 auto 14px"></div>
+              <div style="font-size:19px">{{ pinTitle }}</div>
+              <div style="font-size:12.5px; color:var(--g-ink2); margin-top:4px; text-wrap:pretty">{{ pinBody }}</div>
+
+              <sc-if value="{{ pinIsForm }}">
+                <div style="margin-top:14px">
+                  <sc-if value="{{ pinChceStary }}">
+                    <div class="field"><label>Dosavadní kód</label><input class="input" type="password" inputMode="numeric" value="{{ pinStary }}" onInput="{{ pinSetStary }}" placeholder="Šest číslic" style="width:100%; box-sizing:border-box; min-height:48px; font-family:inherit; letter-spacing:.3em"></div>
+                  </sc-if>
+                  <sc-if value="{{ pinChceHeslo }}">
+                    <div class="field"><label>Heslo do galerie</label><input class="input" type="password" value="{{ pinHeslo }}" onInput="{{ pinSetHeslo }}" placeholder="Zadejte heslo" style="width:100%; box-sizing:border-box; min-height:48px; font-family:inherit"></div>
+                  </sc-if>
+                  <div class="field" style="margin-top:10px"><label>Nový kód</label><input class="input" inputMode="numeric" value="{{ pinNovy }}" onInput="{{ pinSetNovy }}" placeholder="Šest číslic" style="width:100%; box-sizing:border-box; min-height:48px; font-family:inherit; letter-spacing:.3em"></div>
+                  <div class="field" style="margin-top:10px"><label>Nový kód pro kontrolu</label><input class="input" inputMode="numeric" value="{{ pinZnovu }}" onInput="{{ pinSetZnovu }}" placeholder="Šest číslic" style="width:100%; box-sizing:border-box; min-height:48px; font-family:inherit; letter-spacing:.3em"></div>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ pinMaKod }}">
+                <div style="margin-top:14px">
+                  <div style="font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:var(--g-ink3); margin-bottom:6px">Obnovovací kód</div>
+                  <div style="font-size:20px; letter-spacing:.14em; font-variant-numeric:tabular-nums; padding:14px 12px; border-radius:2px; background:var(--g-panel); text-align:center">{{ pinObnovovaci }}</div>
+                  <div style="display:flex; gap:8px; align-items:flex-start; margin-top:10px; padding:11px 12px; border-radius:2px; background:var(--g-mag-soft); font-size:12.5px">
+                    <i class="ph-duotone ph-warning-octagon" style="font-size:17px; color:var(--g-mag); flex:none"></i>
+                    <span>Opište si ho na papír. Podruhé ho neukážeme — v databázi z něj zůstane jen otisk.</span>
+                  </div>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ pinError }}">
+                <div style="display:flex; gap:8px; align-items:flex-start; margin-top:12px; padding:11px 12px; border-radius:2px; background:var(--g-mag-soft); font-size:12.5px">
+                  <i class="ph-duotone ph-warning-octagon" style="font-size:17px; color:var(--g-mag); flex:none"></i><span>{{ pinErrorText }}</span>
+                </div>
+              </sc-if>
+
+              <div style="display:flex; gap:8px; margin-top:16px">
+                <button onClick="{{ pinClose }}" class="btn btn-secondary" style="flex:1; min-height:48px">{{ pinZavritLabel }}</button>
+                <sc-if value="{{ pinIsForm }}">
+                  <button onClick="{{ pinSave }}" disabled="{{ pinCant }}" class="btn btn-primary" style="flex:1; min-height:48px">{{ pinSaveLabel }}</button>
+                </sc-if>
+              </div>
+            </div>
+          </div>
+        </sc-if>
+
         <!-- BOTTOM SHEET -->
         <sc-if value="{{ sheetOn }}">
           <div onClick="{{ closeSheet }}" style="position:absolute; inset:0; z-index:20; background:rgba(20,19,18,.42); animation:mFade .14s ease">
@@ -6167,7 +6221,8 @@ class Component extends DCLogic {
     const map = this.mechKeyMap();
     const hits = Object.keys(patch).filter(k => map[k]);
     if (!hits.length) return;
-    this.setState({ mechLog: [{ what: map[hits[0]], by: 'Adrian', at: Date.now(), dev: 'telefon' }].concat(this.state.mechLog || []).slice(0, 60) });
+    // Kdo změnu udělal, ne Adrian napevno: záznam čte i ten druhý.
+    this.setState({ mechLog: [{ what: map[hits[0]], by: this.meWho(), at: Date.now(), dev: 'telefon' }].concat(this.state.mechLog || []).slice(0, 60) });
   }
   mechLogVals2() {
     const log = this.state.mechLog || [];
@@ -7469,7 +7524,14 @@ class Component extends DCLogic {
   // Kódy, profily i obnovovací kód jsou v galerie-data.js, takže platí v obou
   // rozhraních stejně. Tři pokusy, pak dotyk nebo obnovovací kód. Zamčené sekce
   // se nevykreslují vůbec — obsah není v DOM, dokud nepadne kód.
-  lockData() { const D = window.GalerieData || {}; return { PIN: D.LOCKPIN || {}, WHO: D.LOCKWHO || {}, REC: D.LOCKREC || '', MAIL: D.LOCKMAIL || {}, PWD: D.LOCKPWD || '' }; }
+  /*
+   * Jen jména a adresy — ze serveru.
+   *
+   * Byly tu i `PIN`, `REC` a `PWD`, tedy kódy obou partnerů, obnovovací kód
+   * a heslo, všechno z `galerie-data.js`. Ověřovat je uměl prohlížeč, takže
+   * je aplikace musela znát; teď je zná jen databáze a ověřuje je server.
+   */
+  lockData() { const D = window.GalerieData || {}; return { WHO: D.LOCKWHO || {}, MAIL: D.LOCKMAIL || {} }; }
   // Přihlášení určuje, kdo aplikaci používá — profil se nepřepíná zvenčí,
   // vybírá se e-mailem a heslem. Kód pak patří tomu, kdo je přihlášený.
   async lockSignIn() {
@@ -7489,6 +7551,16 @@ class Component extends DCLogic {
           const k = who || ((res.user || {}).name === L.WHO.M ? 'M' : 'A');
           this.setState({ lockWho: k, lockStep: 'pin', lockPwd: '', lockErr: null, lockTries: 0, lockTrusted: s.lockTrust !== false, lockSignBusy: false });
           this.toast('Přihlášeno · ' + (L.WHO[k] || '') + (s.lockTrust !== false ? ' · zařízení zapamatováno' : ''), { icon: 'ph-envelope-simple-open' });
+          /*
+           * Kdo kód nemá, nemá po přihlášení co zadávat.
+           *
+           * Klávesnice na kód se ukazovala vždycky, protože kód byl napsaný
+           * v ukázce a „měl" ho každý. Teď si ho každý nastavuje sám — a nechat
+           * před někým, kdo si ho ještě nenastavil, zamčené dveře bez klíče by
+           * znamenalo, že se do vlastní galerie nedostane.
+           */
+          if (window.GalerieObnovit) await GalerieObnovit('system');
+          if (! this.zamek().nastaveno) this.lockOpen('Přihlášeno · kód zámku si můžete nastavit v Nastavení → Zámek');
           return;
         }
       } catch (e) {
@@ -7553,14 +7625,46 @@ class Component extends DCLogic {
     this.setState({ appLocked: false, lockPin: '', lockErr: null, lockTries: 0, lockRec: false, lockRecCode: '', lockBioBusy: false, lockAt: Date.now() });
     this.toast(note || 'Odemčeno · ' + (this.lockData().WHO[this.state.lockWho || 'A'] || ''), { icon: 'ph-lock-key-open' });
   }
+  // Co server říká o mém zámku: `{ nastaveno, delka, zmeneno }`.
+  zamek() { return (window.GalerieData || {}).ZAMEK || {}; }
+  /*
+   * Ověření kódu dělá server — stejně jako v širokém rozvržení.
+   *
+   * Šest číslic se porovnávalo v prohlížeči s `LOCKPIN` z `galerie-data.js`,
+   * tedy s kódy obou partnerů napsanými ve veřejném souboru.
+   */
+  lockOver(pin, kam) {
+    const api = window.GalerieApi;
+    if (!api || api.mode !== 'http') { kam('Ověřit kód umí jen server a ten teď neodpovídá.'); return; }
+    api.post('zamek/overit', { kod: pin })
+      .then(() => kam(null))
+      .catch(e => {
+        const b = (e && e.body) || {};
+        kam(b.chyba || (e && e.status === 429
+          ? 'Příliš mnoho pokusů za sebou. Zkuste to za minutu.'
+          : 'Ověřit se nepodařilo — server neodpověděl.'));
+      });
+  }
   lockTry(pin) {
-    if (pin === this.lockData().PIN[this.state.lockWho || 'A']) { this.lockOpen(); return; }
-    const t = (this.state.lockTries || 0) + 1;
-    this.setState({ lockTries: t, lockPin: '',
-      lockErr: t >= 3 ? 'Třikrát špatně. Zkuste odemknutí dotykem nebo obnovovací kód.'
-        : 'Kód nesouhlasí — ' + (3 - t === 1 ? 'zbývá poslední pokus.' : 'zbývají ' + (3 - t) + ' pokusy.') });
+    if (!this.zamek().nastaveno) { this.lockOpen('Odemčeno · kód zámku si nastavte v Nastavení → Zámek'); return; }
+    this.setState({ lockBusy: true });
+    this.lockOver(pin, chyba => {
+      if (!chyba) { this.setState({ lockBusy: false }); this.lockOpen(); return; }
+      this.setState({ lockBusy: false, lockTries: (this.state.lockTries || 0) + 1, lockPin: '', lockErr: chyba });
+    });
   }
   lockNow(why) {
+    /*
+     * Zamykat se dá jen tím, čím se dá odemknout.
+     *
+     * Dokud si člověk kód nenastavil, není čím zámek otevřít — automatické
+     * zamčení po nečinnosti by ho z vlastní galerie vystrnadilo až do dalšího
+     * přihlášení heslem. Dřív to nevadilo: kód „měl" každý, byl v ukázce.
+     */
+    if (! this.zamek().nastaveno) {
+      if (why) this.toast('Zamknout jde, až si nastavíte kód — Nastavení → Zámek', { icon: 'ph-lock-simple', local: true });
+      return;
+    }
     // Na zapamatovaném zařízení stačí kód, jinak se přihlašuje znovu — stejné
     // pravidlo v obou rozvrženích.
     this.setState({ appLocked: true, lockPin: '', lockErr: null, lockTries: 0, secUntil: 0,
@@ -7656,28 +7760,108 @@ class Component extends DCLogic {
       lockRecClose: () => this.setState({ lockRec: false, lockRecCode: '' }),
       lockRecCode: s.lockRecCode || '',
       lockRecSet: e => this.setState({ lockRecCode: e.target.value }),
+      /*
+       * Obnovovací kód ověřuje server a spotřebuje ho.
+       *
+       * Porovnával se s `LOCKREC` ('zadar-2026-oba') z veřejného souboru,
+       * takže poslední záloha od zamčené aplikace šla přečíst ze zdrojáku.
+       */
       lockRecGo: () => {
-        if ((s.lockRecCode || '').trim().toLowerCase() !== String(L.REC).toLowerCase()) {
-          this.setState({ lockErr: 'Obnovovací kód nesouhlasí.' }); return;
-        }
-        this.lockOpen('Odemčeno obnovovacím kódem');
+        const api = window.GalerieApi;
+        if (!api || api.mode !== 'http') { this.setState({ lockErr: 'Obnovit kód umí jen server a ten teď neodpovídá.' }); return; }
+        this.setState({ lockBusy: true });
+        api.post('zamek/obnovit', { kod: s.lockRecCode || '' })
+          .then(() => {
+            this.setState({ lockBusy: false });
+            this.lockOpen('Odemčeno obnovovacím kódem — nastavte si nový');
+            if (window.GalerieObnovit) GalerieObnovit('system');
+          })
+          .catch(e => {
+            const b = (e && e.body) || {};
+            this.setState({ lockBusy: false, lockErr: b.chyba || 'Obnovovací kód nesouhlasí.' });
+          });
       },
-      lockRecHint: 'Obnovovací kód jste si zapsali při prvním spuštění. Pošleme ho i na ' + (L.MAIL[who] || '') + '.',
+      // Kód se nikam neposílá: v databázi z něj zůstal jen otisk, takže ho
+      // aplikace nemá odkud vzít. Slib „pošleme ho i na váš e-mail" byl lež.
+      lockRecHint: 'Obnovovací kód jste dostali jednou, když jste si nastavili kód zámku. Po použití platit přestane.',
       lockBlocked: blocked,
       // Zámek zamčené sekce (Deník, Finance, Zprávy) — odemkne na patnáct minut.
       gateOn: gateOn,
       gateTitle: 'Tahle sekce je zamčená',
-      gateSub: 'Zamčené sekce se otevírají zvlášť. Kód ' + (L.WHO[who] || '') + ' odemkne na patnáct minut.',
+      gateSub: this.zamek().nastaveno
+        ? 'Zamčené sekce se otevírají zvlášť. Váš kód je odemkne na patnáct minut.'
+        : 'Zamčené sekce se otevírají kódem. Zatím žádný nemáte — nastavíte si ho v Nastavení → Zámek.',
       gatePin: s.gatePin || '',
       gateSet: e => this.setState({ gatePin: (e.target.value || '').replace(/[^0-9]/g, '').slice(0, 6), gateErr: null }),
       gateErrOn: !!s.gateErr, gateErrText: s.gateErr || '',
       gateGo: () => {
-        if ((s.gatePin || '') !== L.PIN[who]) { this.setState({ gateErr: 'Kód nesouhlasí.', gatePin: '' }); return; }
-        this.setState({ secUntil: Date.now() + 900000, gatePin: '', gateErr: null });
-        this.toast('Odemčeno na patnáct minut', { icon: 'ph-lock-key-open' });
+        if (!this.zamek().nastaveno) { this.setState({ gateErr: 'Kód zámku si nejdřív nastavte v Nastavení → Zámek.' }); return; }
+        this.setState({ gateBusy: true });
+        this.lockOver(s.gatePin || '', chyba => {
+          this.setState({ gateBusy: false });
+          if (chyba) { this.setState({ gateErr: chyba, gatePin: '' }); return; }
+          this.setState({ secUntil: Date.now() + 900000, gatePin: '', gateErr: null });
+          this.toast('Odemčeno na patnáct minut', { icon: 'ph-lock-key-open' });
+        });
       },
       gateBack: () => this.goTab('home'),
-      lockManual: () => this.lockNow('Aplikace zamčena')
+      lockManual: () => this.lockNow('Aplikace zamčena'),
+      ...this.pinVals()
+    };
+  }
+
+  /*
+   * Panel na nastavení vlastního kódu — táž pravidla jako v širokém rozvržení.
+   *
+   * Dva stavy: formulář a hned po uložení obnovovací kód. Ten se ukazuje
+   * jednou a nikde se neukládá, protože v databázi z něj zůstane jen haš.
+   */
+  pinVals() {
+    const s = this.state;
+    const ma = !!this.zamek().nastaveno;
+    const novy = s.pinNovy || '';
+    const znovu = s.pinZnovu || '';
+    const hotovo = !!s.pinObnovovaci;
+    const cislice = e => (e.target.value || '').replace(/\D/g, '').slice(0, 6);
+
+    return {
+      pinOpen: !!s.pinOpen,
+      pinIsForm: !hotovo,
+      pinMaKod: hotovo,
+      pinObnovovaci: s.pinObnovovaci || '',
+      pinTitle: hotovo ? 'Kód nastaven' : (ma ? 'Změnit kód zámku' : 'Nastavit kód zámku'),
+      pinBody: hotovo
+        ? 'Od teď se aplikace odemyká tímhle kódem. Zbývá si schovat obnovovací kód.'
+        : (ma
+          ? 'Šest číslic, které znáte jen vy. Změnu potvrdíte dosavadním kódem.'
+          : 'Šest číslic, které znáte jen vy — partner je nevidí. Poprvé se potvrzuje heslem do galerie.'),
+      pinChceStary: !hotovo && ma,
+      pinChceHeslo: !hotovo && !ma,
+      pinStary: s.pinStary || '', pinSetStary: e => this.setState({ pinStary: cislice(e), pinErr: null }),
+      pinHeslo: s.pinHeslo || '', pinSetHeslo: e => this.setState({ pinHeslo: e.target.value, pinErr: null }),
+      pinNovy: novy, pinSetNovy: e => this.setState({ pinNovy: cislice(e), pinErr: null }),
+      pinZnovu: znovu, pinSetZnovu: e => this.setState({ pinZnovu: cislice(e), pinErr: null }),
+      pinError: !!s.pinErr, pinErrorText: s.pinErr || '',
+      pinCant: s.pinBusy || novy.length !== 6 || znovu.length !== 6
+        || (ma ? (s.pinStary || '').length !== 6 : (s.pinHeslo || '').length < 4),
+      pinSaveLabel: s.pinBusy ? 'Ukládá se…' : 'Uložit kód',
+      pinZavritLabel: hotovo ? 'Mám ho opsaný' : 'Zrušit',
+      pinClose: () => this.setState({ pinOpen: false, pinStary: '', pinHeslo: '', pinNovy: '', pinZnovu: '', pinErr: null, pinObnovovaci: null, pinBusy: false }),
+      pinSave: () => {
+        if (novy !== znovu) { this.setState({ pinErr: 'Kódy se neshodují.' }); return; }
+        const api = window.GalerieApi;
+        if (!api || api.mode !== 'http') { this.setState({ pinErr: 'Kód ukládá server a ten teď neodpovídá.' }); return; }
+        this.setState({ pinBusy: true, pinErr: null });
+        api.post('zamek', ma ? { kod: novy, stary: s.pinStary || '' } : { kod: novy, heslo: s.pinHeslo || '' })
+          .then(b => {
+            this.setState({ pinBusy: false, pinStary: '', pinHeslo: '', pinNovy: '', pinZnovu: '', pinObnovovaci: b.obnovovaci || '' });
+            if (window.GalerieObnovit) GalerieObnovit('system');
+          })
+          .catch(e => {
+            const b = (e && e.body) || {};
+            this.setState({ pinBusy: false, pinErr: b.chyba || 'Kód se nepodařilo uložit.' });
+          });
+      }
     };
   }
 
@@ -10744,7 +10928,30 @@ class Component extends DCLogic {
         const GD = window.GalerieData || {};
         const ROWS = GD.SETROWS || {}, OPT = GD.SETOPT || {}, BIND = GD.SETBIND || {}, ACT = GD.SETACT || {};
         const tab = s.setTab || 'profil';
-        const cur = ROWS[tab] || { title: 'Uspořádání menu', sub: 'Přeskládejte si navigaci a schovejte, co nepoužíváte.', rows: [] };
+        let cur = ROWS[tab] || { title: 'Uspořádání menu', sub: 'Přeskládejte si navigaci a schovejte, co nepoužíváte.', rows: [] };
+        /*
+         * Zámek: jeden kód, a je můj — stejně jako v širokém rozvržení.
+         *
+         * Stály tu řádky „Kód Adriana" a „Kód Makinky" s vymyšleným datem
+         * poslední změny a oba vedly na hlášku, která nic neudělala. Kód
+         * partnera tady nemá co dělat: nastavuje si ho sám.
+         */
+        if (tab === 'zamek') {
+          const zam = this.zamek();
+          const dLong = GD.dLong || (x => x);
+          cur = Object.assign({}, cur, {
+            rows: (cur.rows || [])
+              .filter(r => r[0].indexOf('Kód ') !== 0 && r[0] !== 'Obnovovací kód')
+              .concat([
+                zam.nastaveno
+                  ? ['Můj kód', 'Šest číslic · naposledy změněno ' + (zam.zmeneno ? dLong(zam.zmeneno) : 'neznámo kdy'), 'Změnit kód']
+                  : ['Můj kód', 'Zatím žádný — bez něj se aplikace nezamyká', 'Nastavit kód'],
+                zam.nastaveno
+                  ? ['Obnovovací kód', 'Dostali jste ho při nastavení kódu. Nový vznikne, až kód změníte.', 'Změnit kód']
+                  : ['Obnovovací kód', 'Vznikne, jakmile si nastavíte kód zámku', 'Nastavit kód']
+              ])
+          });
+        }
         const NAV = GD.NAV_GROUPS || [];
         const hide = s.navHide || {};
         const setRows = (cur.rows || []).map(r => {
@@ -10753,7 +10960,9 @@ class Component extends DCLogic {
           const opts = OPT[label] || null;
           const isToggle = base === 'Zapnuto' || base === 'Vypnuto';
           const bound = BIND[label] || null;
-          const act = ACT[base] || null;
+          // `Nastavit kód` v katalogu akcí není — bez záznamu by se řádek
+          // vykreslil jako text a nešel by zmáčknout.
+          const act = ACT[base] || (base === 'Nastavit kód' ? ['ph-password', null] : null);
           const stored = (s.setVals || {})[key];
           let val;
           if (bound === 'grid') val = s.cols === 2 ? 'Velká' : s.cols === 4 ? 'Malá' : 'Střední';
@@ -10797,8 +11006,15 @@ class Component extends DCLogic {
               const kind = act ? act[1] : null;
               if (kind === 'lock-now') { this.lockNow('Aplikace zamčena'); return; }
               if (kind === 'offline') { this.netToggle(); return; }
-              if (label === 'Obnovovací kód' || base === 'Vytisknout') {
-                this.toast('Obnovovací kód ' + this.lockData().REC + ' — vytiskněte a schovejte', { icon: 'ph-printer' });
+              /*
+               * Kód i obnovovací kód vedou do téhož dialogu.
+               *
+               * „Obnovovací kód" dřív vypisoval `LOCKREC` do hlášky — a ta
+               * skončí v historii oznámení i na snímku obrazovky. Nový se
+               * vydává jen jednou, při nastavení kódu.
+               */
+              if (label === 'Můj kód' || label === 'Obnovovací kód') {
+                this.setState({ pinOpen: true, pinStary: '', pinHeslo: '', pinNovy: '', pinZnovu: '', pinErr: null, pinObnovovaci: null });
                 return;
               }
               if (base === 'Odhlásit ostatní') {

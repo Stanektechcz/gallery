@@ -126,6 +126,16 @@ class System implements PoskytovatelObsahu
                  */
                 'LOCKWHO' => $this->kdoSePrihlasuje($prostor, 0),
                 'LOCKMAIL' => $this->kdoSePrihlasuje($prostor, 1),
+                /*
+                 * Zámek aplikace — o kódu jen to, jestli vůbec je.
+                 *
+                 * `LOCKPIN` byly dva šestimístné kódy napsané v `galerie-data.js`
+                 * a `lockTry()` je porovnával v prohlížeči. Kód teď zná jen
+                 * databáze, a to jako haš; sem chodí pouze `nastaveno` a datum
+                 * poslední změny, aby obrazovka věděla, jestli má kód chtít,
+                 * nebo nabídnout jeho nastavení.
+                 */
+                'ZAMEK' => $this->stavZamku(),
                 'TREZOR' => $this->stavTrezoru(),
                 'VAULT_ITEMS' => $this->obsahTrezoru($trezor),
                 'AL' => array_filter([
@@ -160,6 +170,25 @@ class System implements PoskytovatelObsahu
         }
 
         return $mapa;
+    }
+
+    /**
+     * Co obrazovka o zámku smí vědět.
+     *
+     * Jen jestli má přihlášený člověk kód nastavený a odkdy. Samotný kód sem
+     * nepatří ani v podobě haše — obrazovka ho nepotřebuje, ověřuje ho server.
+     *
+     * @return array{nastaveno: bool, delka: int, zmeneno: ?string}
+     */
+    private function stavZamku(): array
+    {
+        $clovek = auth()->user();
+
+        return [
+            'nastaveno' => (bool) ($clovek?->app_lock_pin),
+            'delka' => 6,
+            'zmeneno' => $clovek?->app_lock_set_at?->toDateString(),
+        ];
     }
 
     /**

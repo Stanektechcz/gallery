@@ -176,7 +176,7 @@ commitu, protože se prolne s každou otevřenou větví.
 | Bezpečnostní hlavičky | `nosniff`, `SAMEORIGIN`, `Referrer-Policy`, `Permissions-Policy`, CSP, HSTS přes HTTPS |
 | Tlačítka bez obsluhy | z 1268 žádné |
 | Průchod aplikací | 52 obrazovek bez chyby v konzoli a bez porušení CSP |
-| Testy | 1146 zelených |
+| Testy | 1159 zelených |
 
 ## Opraveno ve třetím průchodu
 
@@ -267,17 +267,50 @@ kdy runtime prototypu načte `galerie-data.js` podruhé — a prostým přiřaze
 si tam skupiny přepisovaly navzájem, takže po druhém průchodu se polovina
 klíčů vrátila na ukázková data. Poznat se to dalo jen na časování.
 
+### Kód zámku aplikace patří člověku, ne souboru
+
+Šestimístný kód se porovnával v prohlížeči s `LOCKPIN` z `galerie-data.js` —
+s kódy **obou** partnerů napsanými ve veřejném souboru. Obrazovka je navíc
+sama vypisovala v nápovědě nad klávesnicí („Prototyp — Adrian 240613, Makinka
+190522, obnovovací kód zadar-2026-oba"), takže kód partnera měl každý po ruce.
+A protože porovnání běželo na klientovi, dal se zámek otevřít i bez kódu.
+
+Kód si teď nastavuje každý sám a leží u jeho účtu jako haš (`users.app_lock_pin`,
+`app_lock_recovery`, obojí `hashed`, obojí v `$hidden`). Nevidí ho partner,
+nevidí ho odpověď serveru a z databáze se přečíst nedá — dá se jen ověřit.
+Ven chodí jedině `ZAMEK = { nastaveno, delka, zmeneno }`, aby obrazovka věděla,
+jestli má kód chtít.
+
+`ZamekController` k tomu drží čtyři cesty: `stav`, `nastav` (první kód proti
+heslu do galerie, další proti tomu starému), `over` a `obnov`. Obnovovací kód
+se vydává **jednou**, hned po nastavení, a po použití se spotřebuje i s kódem
+zámku — jednorázová záloha, ne druhé trvalé heslo na papíře. Při přepisu se
+odpouští, jak ho člověk opíše z papíru: malá písmena i mezery místo pomlček.
+
+Dvě věci, které z toho vyplynuly:
+
+- **Zamykat se dá jen tím, čím se dá odemknout.** Dokud si člověk kód
+  nenastavil, nezamyká se — ani po nečinnosti, ani tlačítkem. Dřív to nevadilo,
+  protože kód „měl" každý; teď by ho automatické zamčení vystrnadilo z vlastní
+  galerie až do dalšího přihlášení heslem.
+- **Limit na hádání se sdílel s běžným klepáním.** `ThrottleRequests` si bez
+  třetího parametru klíčuje pokusy jen podle uživatele a adresy, takže všechny
+  cesty ve skupině měly **jedno počítadlo**: pár minut prohlížení fotek by
+  vyčerpalo limit 5/min na obnovovací kód. Každá tvrdší cesta má teď vlastní
+  předponu.
+
+Ověřeno v obou rozvrženích: kód partnera cizí zámek neotevře, kód z ukázky
+(`240613`) taky ne, obnovovací kód z ukázky (`zadar-2026-oba`) taky ne, a po
+použití toho pravého se aplikace otevře a rovnou nabídne nastavit nový.
+
+### Přidání do trezoru trezor vyprazdňovalo — i mimo obrazovku trezoru
+
+Táž chyba jako výš seděla ještě ve dvou hromadných akcích („Do trezoru"
+u výběru a hromadná úprava): obě četly `s.vaultAdded || []`, takže první použití
+poslalo serveru jen právě vybrané a všechno ostatní z trezoru odemklo. Všechna
+tři místa teď berou úplný seznam z `vaultIds()`.
+
 ## Co zbývá
-
-### Kód zámku aplikace se porovnává v prohlížeči
-
-`LOCKPIN` a `LOCKREC` jsou pořád konstanty v `galerie-data.js` a `lockTry()`
-je porovnává na klientovi. Po opravách výš už se nikde nevypisují a obrazovka
-o sobě netvrdí víc, než umí („Kód zamyká aplikaci na tomhle zařízení. K datům
-se bez přihlášení nedostane nikdo."), takže to není lež — ale ani zámek.
-
-Udělat z něj zámek znamená rozhodnout, **kde kód bydlí**: stav je společný pro
-dvojici, takže by ho druhý viděl. To je otázka na dvojici, ne na kód.
 
 ### Zbylých šestnáct klíčů `xRows`
 
@@ -290,8 +323,7 @@ nedá se na ně zeptat odjinud: nákupní seznam neuvidí připomínka.
 
 | Kolekce | Proč |
 | --- | --- |
-| `LOCKPIN`, `LOCKREC` | kód zámku aplikace — viz „Co zbývá"; **daty se stát nesmí**, dokud se nerozhodne, komu patří |
-| `LOCKPWD`, `VAULT_PWD` | v ukázce zůstávají, ale **nic je už nečte**; jeden test hlídá, že heslo odtud trezor neotevře |
+| `LOCKPIN`, `LOCKREC`, `LOCKPWD`, `VAULT_PWD` | v ukázce zůstávají, ale **nic je už nečte**; testy hlídají, že ani jedno z těch hesel nic neotevře |
 | ~53 katalogů rozhraní | názvy obrazovek, měsíce, ikony, prázdné stavy — nejsou to data dvojice |
 | `AMISS`, `CYC_TODAY`, `GRAF` | dopočítává si je dokument sám |
 
