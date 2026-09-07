@@ -7,6 +7,7 @@ use App\Models\SystemSetting;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 
 class GalleryDoctorCommand extends Command
@@ -33,6 +34,7 @@ class GalleryDoctorCommand extends Command
         $this->checkQueue();
         $this->checkScheduler();
         $this->checkThumbnailCoverage();
+        $this->checkWebServer();
         $this->checkGoogleDrive();
 
         // Summary
@@ -248,6 +250,47 @@ class GalleryDoctorCommand extends Command
                 $this->check("Failed jobs: {$failed}", $failed === 0, $failed < 10 ? 'WARN' : 'FAIL');
             } catch (\Throwable) {
                 $this->check('jobs table accessible', false);
+            }
+        }
+    }
+
+    /**
+     * Co web server pouští k aplikaci a co si vyřídí sám.
+     *
+     * Tohle je jediná kategorie chyb, kterou testy chytit nemůžou: v Laravelu
+     * routa existuje a odpovídá, jenže požadavek k ní nikdy nedojde, protože
+     * ho web server odbaví dřív. Na aaPanelu má vhost blok `location ~ .*\.js$`
+     * bez `try_files`, takže `/sw.js` — soubor, který v `public/` schválně
+     * není — skončí jako statická 404. Prohlížeč pak nemá service worker
+     * čím aktualizovat: starý zůstane zaregistrovaný napořád a podává obsah
+     * z paměti, do kterého nasazení nevidí.
+     *
+     * Proto se to zkouší po síti, ne přes routovací tabulku.
+     */
+    private function checkWebServer(): void
+    {
+        $this->section('Web Server');
+
+        $zaklad = rtrim((string) config('app.url'), '/');
+
+        if ($zaklad === '' || str_contains($zaklad, 'localhost')) {
+            $this->check('APP_URL nemíří na veřejnou adresu — cesty přes web server se nezkouší', false, 'WARN');
+
+            return;
+        }
+
+        foreach (['/sw.js' => 'javascript', '/offline.html' => 'html'] as $cesta => $ocekavany) {
+            try {
+                $odpoved = Http::withoutVerifying()->timeout(8)->get($zaklad.$cesta);
+                $typ = (string) $odpoved->header('Content-Type');
+
+                $this->check(
+                    "{$cesta} → {$odpoved->status()}".($odpoved->successful() ? '' : ' (web server ho nepustil k aplikaci?)'),
+                    $odpoved->successful() && str_contains($typ, $ocekavany),
+                    'FAIL',
+                );
+            } catch (\Throwable $e) {
+                $this->check("{$cesta} — nedosažitelné ({$e->getMessage()})", false, 'WARN');
             }
         }
     }
