@@ -205,7 +205,52 @@ class CoupleState extends Model
      */
     public function toClientObject(): object
     {
-        return (object) array_merge($this->data ?? [], $this->private ?? []);
+        /*
+         * Čte se **surový JSON**, ne přetypovaná kopie.
+         *
+         * Přetypování `'data' => 'array'` dekóduje asociativně, a tím se ztratí
+         * rozdíl mezi `{}` a `[]`: prázdný objekt i prázdné pole jsou v PHP
+         * prázdné pole a při odeslání zpátky z obojího vyjde `[]`. Klient
+         * porovnává obsah přes `JSON.stringify`, uvidí rozdíl, který sám
+         * nezpůsobil, zapíše znovu — a server zase odpoví polem.
+         *
+         * Ta smyčka byla tichá a drahá: aplikace při nečinnosti posílala kolem
+         * čtyřiceti `PATCH /api/state` za minutu s pořád stejným obsahem,
+         * revize stavu vyšplhala do desetitisíců, a na serveru to WAF po sto
+         * dvaceti požadavcích za minutu vyhodnotil jako útok a zablokoval
+         * adresu, ze které se dvojice dívala. Aplikace pak nešla načíst vůbec.
+         */
+        $ven = new \stdClass;
+
+        foreach ([$this->surovy('data'), $this->private ?? []] as $cast) {
+            foreach ((array) $cast as $klic => $hodnota) {
+                $ven->{$klic} = $hodnota;
+            }
+        }
+
+        return $ven;
+    }
+
+    /**
+     * Uložený sloupec tak, jak leží v databázi — objekty zůstanou objekty.
+     *
+     * @return array<string, mixed>
+     */
+    private function surovy(string $sloupec): array
+    {
+        $json = $this->getAttributes()[$sloupec] ?? null;
+
+        if (! is_string($json) || $json === '') {
+            return (array) ($this->{$sloupec} ?? []);
+        }
+
+        $rozlozene = json_decode($json);
+
+        // Poškozený JSON není důvod poslat prázdno: přetypovaná kopie je pořád
+        // lepší než nic, jen bez rozlišení `{}` a `[]`.
+        return $rozlozene instanceof \stdClass
+            ? get_object_vars($rozlozene)
+            : (array) ($this->{$sloupec} ?? []);
     }
 
     /** Totéž pro čtení v PHP, kde na rozdílu mezi polem a objektem nezáleží. */

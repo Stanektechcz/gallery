@@ -262,6 +262,51 @@ class StavTest extends TestCase
         $this->getJson('/api/state')->assertUnauthorized();
     }
 
+    /**
+     * Prázdný objekt se nesmí vrátit jako prázdné pole.
+     *
+     * PHP mezi `{}` a `[]` po `json_decode(..., true)` nerozliší a při
+     * odeslání zpátky z obojího vyjde `[]`. Klient porovnává obsah přes
+     * `JSON.stringify`, uviděl rozdíl, který sám nezpůsobil, a zapsal znovu —
+     * server zase odpověděl polem. Aplikace při nečinnosti posílala kolem
+     * čtyřiceti `PATCH /api/state` za minutu s pořád stejným obsahem, revize
+     * stavu šla do desetitisíců, a na serveru to WAF po sto dvaceti
+     * požadavcích za minutu vyhodnotil jako útok a zablokoval adresu, ze které
+     * se dvojice dívala. Aplikace pak nešla načíst vůbec.
+     */
+    public function test_prazdny_objekt_zustane_objektem(): void
+    {
+        $this->actingAs($this->adri)
+            ->patchJson('/api/state', ['data' => ['favs' => new \stdClass, 'sel' => []]])
+            ->assertOk();
+
+        $telo = $this->actingAs($this->adri)->getJson('/api/state')->assertOk()->getContent();
+
+        $this->assertStringContainsString('"favs":{}', $telo, 'Prázdný objekt se vrátil jako pole.');
+        // A pole zůstane polem — obojí platí, jinak se smyčka jen otočí.
+        $this->assertStringContainsString('"sel":[]', $telo);
+    }
+
+    /**
+     * Mapa s číselnými klíči taky.
+     *
+     * `{"0":"adrianovo"}` je v PHP totéž co `["adrianovo"]` a `json_encode`
+     * z toho udělá pole. Oblíbené se takhle vracely v jiném tvaru, než v jakém
+     * odešly, a spouštěly tutéž smyčku.
+     */
+    public function test_mapa_s_ciselnymi_klici_zustane_objektem(): void
+    {
+        // Přes `stdClass`, ne pole: `['0' => 'x']` by PHP odeslalo jako `["x"]`
+        // a test by zkoušel něco jiného, než co posílá prohlížeč.
+        $this->actingAs($this->adri)
+            ->patchJson('/api/state', ['data' => ['favs' => json_decode('{"0":"adrianovo"}')]])
+            ->assertOk();
+
+        $telo = $this->actingAs($this->adri)->getJson('/api/state')->assertOk()->getContent();
+
+        $this->assertStringContainsString('"favs":{"0":"adrianovo"}', $telo);
+    }
+
     /** Kdo nepatří do žádného prostoru, nemá ani stav — a dozví se proč. */
     public function test_ucet_bez_prostoru_dostane_srozumitelnou_chybu(): void
     {

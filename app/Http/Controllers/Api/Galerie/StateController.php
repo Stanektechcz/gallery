@@ -96,7 +96,7 @@ class StateController extends Controller
         $coupleId = $this->parId($request);
         $uzivatel = $request->user();
 
-        return DB::transaction(function () use ($validated, $coupleId, $uzivatel) {
+        return DB::transaction(function () use ($validated, $coupleId, $uzivatel, $request) {
             $state = CoupleState::where('couple_id', $coupleId)->lockForUpdate()->first()
                 ?? CoupleState::forCouple($coupleId);
 
@@ -431,7 +431,7 @@ class StateController extends Controller
             }
 
             $state->zapomenFilmy(self::SERVEROVE_SEZNAMY);
-            $state->applyPatch($patch);
+            $state->applyPatch($this->sPuvodnimTvarem($patch, $request));
 
             return response()->json([
                 // Skutečnost se vrací, ale **neukládá**: administrace má jediný
@@ -458,6 +458,53 @@ class StateController extends Controller
                 'rev' => $state->rev,
             ]);
         });
+    }
+
+    /**
+     * Vrátí hodnotám tvar, ve kterém přišly — objekt zůstane objektem.
+     *
+     * PHP mezi `{}` a `[]` po `json_decode(..., true)` nerozliší: prázdný
+     * objekt i prázdné pole jsou prázdné pole, a `{"0":"x"}` je totéž co
+     * `["x"]`. Při odeslání zpátky z toho `json_encode` udělá pole — a klient,
+     * který porovnává obsah přes `JSON.stringify`, uvidí rozdíl, který sám
+     * nezpůsobil. Zapíše tedy znovu, server zase odpoví polem, a takhle
+     * dokola.
+     *
+     * Ta smyčka byla tichá a drahá: aplikace při nečinnosti posílala kolem
+     * čtyřiceti `PATCH /api/state` za minutu s pořád stejným obsahem, revize
+     * stavu vyšplhala do desetitisíců — a na serveru to WAF po sto dvaceti
+     * požadavcích za minutu vyhodnotil jako útok a zablokoval adresu, ze které
+     * se dvojice dívala. Aplikace pak nešla načíst vůbec.
+     *
+     * Tvar se bere z těla požadavku, kde ještě je. Hodnotu, kterou po cestě
+     * přepsala některá z vrstev zápisu, necháváme být — ta už není to, co
+     * přišlo od klienta.
+     *
+     * @param  array<string, mixed>  $patch
+     * @return array<string, mixed>
+     */
+    private function sPuvodnimTvarem(array $patch, Request $request): array
+    {
+        $puvodni = json_decode((string) $request->getContent())->data ?? null;
+
+        if (! $puvodni instanceof \stdClass) {
+            return $patch;
+        }
+
+        foreach ($patch as $klic => $hodnota) {
+            if (! property_exists($puvodni, (string) $klic)) {
+                continue;
+            }
+
+            $sTvarem = $puvodni->{$klic};
+
+            // Jen když jde pořád o tutéž hodnotu, jen jinak zapsanou.
+            if (json_decode(json_encode($sTvarem), true) == $hodnota) {
+                $patch[$klic] = $sTvarem;
+            }
+        }
+
+        return $patch;
     }
 
     public function destroy(Request $request): JsonResponse
