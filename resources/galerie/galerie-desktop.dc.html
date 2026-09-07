@@ -19443,7 +19443,7 @@ class Component extends DCLogic {
         title: r.t, meta: r.m, bg: this.bg((r.t.length * 11 + i * 3) % 40),
         done: () => {
           const prevRows = this.rowsOf('datesSaved'), prevD = s.xDiary.dates;
-          const entry = { date: 'Dnes · 16. srpna 2026', title: r.t, text: 'Podnikli jsme. Zápis doplňte, dokud to máte v hlavě.', meta: 'z uložených nápadů' };
+          const entry = { date: this.dnesCesky(), title: r.t, text: 'Podnikli jsme. Zápis doplňte, dokud to máte v hlavě.', meta: 'z uložených nápadů' };
           this.setRows('datesSaved', prevRows.filter(x => x.id !== r.id));
           this.setState({ xDiary: { ...s.xDiary, dates: [entry].concat(this.diaryOf('dates')) }, appTab: 2 });
           this.toast('„' + r.t + '“ zapsáno do historie randíček', {
@@ -19535,7 +19535,7 @@ class Component extends DCLogic {
           transcript: 'Přepis: „' + r.t.toLowerCase() + '“ — automatický přepis se ukládá k zápisu a dá se v něm hledat.',
           toDiary: () => {
             const prev = this.diaryOf('diary');
-            this.setState({ xDiary: { ...s.xDiary, diary: [{ date: 'Dnes · 16. srpna 2026', title: r.t, text: 'Přepsáno z hlasovky.', meta: 'z hlasovky · ' + r.m }].concat(prev) }, appTab: 0 });
+            this.setState({ xDiary: { ...s.xDiary, diary: [{ date: this.dnesCesky(), title: r.t, text: 'Přepsáno z hlasovky.', meta: 'z hlasovky · ' + r.m }].concat(prev) }, appTab: 0 });
             this.toast('Hlasovka přepsána do zápisu', { icon: 'ph-notebook', undo: () => this.setState({ xDiary: { ...this.state.xDiary, diary: prev } }) });
           },
           del: () => {
@@ -19666,7 +19666,7 @@ class Component extends DCLogic {
           })()
         };
       })(),
-      dnNew: () => this.setState({ dnDlg: { mode: 'new', key, orig: null, date: 'Dnes · 16. srpna 2026', title: '', text: '', mood: 'radost', priv: false, letter: false, openAt: '18. října 2026', who: lockWho } })
+      dnNew: () => this.setState({ dnDlg: { mode: 'new', key, orig: null, date: this.dnesCesky(), title: '', text: '', mood: 'radost', priv: false, letter: false, openAt: '18. října 2026', who: lockWho } })
     };
   }
   // Datum v češtině („18. října 2026“) → timestamp; 0 znamená nepřečtené datum.
@@ -21906,6 +21906,17 @@ class Component extends DCLogic {
    */
   // Dnešek jako `YYYY-MM-DD`. Zápisy si nesly napsané datum („2026-09-04"),
   // takže den po dni tvrdily, že vznikly čtvrtého září.
+  /*
+   * Datum zápisu — dnešní, ne to, ke kterému se kreslil prototyp.
+   *
+   * Zápis založený kdykoli jindy si nesl „Dnes · 16. srpna 2026" a deník
+   * pak tvrdil, že všechno vzniklo v jeden srpnový den.
+   */
+  dnesCesky() {
+    const M = ['ledna', 'února', 'března', 'dubna', 'května', 'června', 'července', 'srpna', 'září', 'října', 'listopadu', 'prosince'];
+    const d = this.dnes();
+    return 'Dnes · ' + d.getDate() + '. ' + M[d.getMonth()] + ' ' + d.getFullYear();
+  }
   dnesIso() {
     const d = new Date();
     return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
@@ -23151,7 +23162,7 @@ class Component extends DCLogic {
     const diaries = items.filter(x => x.kind === 'diary');
     if (diaries.length) {
       patch.xDiary = Object.assign({}, s.xDiary, {
-        diary: diaries.map(x => ({ date: 'Dnes · 16. srpna 2026', title: x.title.slice(0, 46), text: x.raw, meta: 'z rychlého vstupu' })).concat(this.diaryOf('diary'))
+        diary: diaries.map(x => ({ date: this.dnesCesky(), title: x.title.slice(0, 46), text: x.raw, meta: 'z rychlého vstupu' })).concat(this.diaryOf('diary'))
       });
     }
     const links = items.filter(x => x.kind === 'link');
@@ -24026,7 +24037,7 @@ class Component extends DCLogic {
       },
       dgToDiary: () => {
         const prev = this.diaryOf('diary');
-        this.setState({ xDiary: Object.assign({}, s.xDiary, { diary: [{ date: 'Dnes · 16. srpna 2026', title: 'Týdenní shrnutí', text: text, meta: 'z automatické karty' }].concat(prev) }) });
+        this.setState({ xDiary: Object.assign({}, s.xDiary, { diary: [{ date: this.dnesCesky(), title: 'Týdenní shrnutí', text: text, meta: 'z automatické karty' }].concat(prev) }) });
         this.toast('Shrnutí uloženo jako zápis v deníku', { icon: 'ph-notebook', undo: () => this.setState({ xDiary: Object.assign({}, this.state.xDiary, { diary: prev }) }) });
       },
       dgToChat: () => {
@@ -29379,7 +29390,7 @@ class Component extends DCLogic {
         }
         if (appKey === 'contact') { this.printSheetExport(); return; }
         if (appKey === 'prepress') { this.prepressExport(); return; }
-        if (appKey === 'diary') { this.setState({ dnDlg: { mode: 'new', key: 'diary', orig: null, date: 'Dnes · 16. srpna 2026', title: '', text: '', mood: 'radost' } }); return; }
+        if (appKey === 'diary') { this.setState({ dnDlg: { mode: 'new', key: 'diary', orig: null, date: this.dnesCesky(), title: '', text: '', mood: 'radost' } }); return; }
         if (appKey === 'recipes' || appKey === 'weekMenu') {
           const keys = Object.keys(RECIPES), prev = this.menuOf(), DAYS = ['Pondělí', 'Úterý', 'Středa', 'Čtvrtek', 'Pátek', 'Sobota', 'Neděle'];
           const next = {};
@@ -30186,7 +30197,16 @@ class Component extends DCLogic {
       ...this.calVals(),
 
       mapSrc: this.mapSrc(),
-      mapCountLabel: 'Jen položky s polohou · 18 402',
+      /*
+       * Kolik položek má polohu — spočítané, ne napsané.
+       *
+       * Stálo tu „18 402" u dvojice, která má na mapě tři body.
+       */
+      mapCountLabel: (() => {
+        const b = (window.GalerieData || {}).MAPBODY;
+        if (! b || ! b.length) return 'Jen položky s polohou';
+        return 'Jen položky s polohou · ' + this.cislo(b.reduce((a, x) => a + (x.count || x.pocet || 0), 0));
+      })(),
       mapFixLabel: 'Doplnit polohu (' + this.photos().filter(p => this.mChybi(p, 'place') && (s.edits[p.id] || {}).place === undefined).length + ')',
       mapFixPlaces: () => { this.setState({ route: 'x-uklid', clnTab: 'noPlace' }); this.toast('Fotky bez místa — doplňte je v Úklidu knihovny', { icon: 'ph-map-pin-plus' }); },
       mapFitAll: () => this.mapTell({ type: 'fit' }),

@@ -5934,6 +5934,36 @@ class Component extends DCLogic {
     const d = new Date();
     return new Date(d.getFullYear(), d.getMonth(), d.getDate());
   }
+  /*
+   * Datum zápisu — dnešní, ne to, ke kterému se kreslil prototyp.
+   *
+   * Zápis založený kdykoli jindy si nesl „Dnes · 16. srpna 2026" a deník
+   * pak tvrdil, že všechno vzniklo v jeden srpnový den.
+   */
+  dnesCesky() {
+    const M = ['ledna', 'února', 'března', 'dubna', 'května', 'června', 'července', 'srpna', 'září', 'října', 'listopadu', 'prosince'];
+    const d = this.dnes();
+    return 'Dnes · ' + d.getDate() + '. ' + M[d.getMonth()] + ' ' + d.getFullYear();
+  }
+  /*
+   * Jméno v pátém pádě, na oslovení.
+   *
+   * Čeština má u pátého pádu spoustu výjimek, takže se řeší jen ty tvary,
+   * které tahle aplikace potká: jména dvojice. Co se nepovede, zůstane
+   * v prvním pádě — špatně skloněné jméno je horší než neskloněné.
+   */
+  pate(jmeno) {
+    const s = String(jmeno || '').trim();
+    if (! s) return '';
+
+    const posledni = s.slice(-1);
+
+    if (posledni === 'a') return s.slice(0, -1) + 'o';
+    if ('bdflmnprstvz'.indexOf(posledni) >= 0) return s + 'e';
+    if ('kgh'.indexOf(posledni) >= 0) return s.slice(0, -1) + ({ k: 'ku', g: 'gu', h: 'hu' })[posledni];
+
+    return s;
+  }
   dnesIso() {
     const d = this.dnes();
     return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
@@ -9109,7 +9139,7 @@ class Component extends DCLogic {
       dgMomentMeta: 'sobota 6:12 · Pustevny',
       dgDiary: () => {
         const prev = this.diaryList();
-        this.setState({ diary: [{ id: 'd-dg' + seed, date: 'Dnes · 16. srpna 2026', title: 'Týdenní shrnutí', text: text, meta: 'z automatické karty' }].concat(prev) });
+        this.setState({ diary: [{ id: 'd-dg' + seed, date: this.dnesCesky(), title: 'Týdenní shrnutí', text: text, meta: 'z automatické karty' }].concat(prev) });
         this.toast('Shrnutí uloženo do deníku', { icon: 'ph-notebook', undo: () => this.setState({ diary: prev }) });
       },
       dgRegen: () => { this.setState({ mDgSeed: seed + 1 }); this.toast('Shrnutí sestaveno znovu', { icon: 'ph-arrows-clockwise' }); },
@@ -9179,7 +9209,7 @@ class Component extends DCLogic {
     }
     const diaries = items.filter(x => x.kind === 'diary');
     if (diaries.length) {
-      patch.diary = diaries.map(x => ({ id: 'd-q' + (n++), date: 'Dnes · 16. srpna 2026', title: x.title.slice(0, 42), text: x.raw, meta: 'z rychlého vstupu' })).concat(this.diaryList());
+      patch.diary = diaries.map(x => ({ id: 'd-q' + (n++), date: this.dnesCesky(), title: x.title.slice(0, 42), text: x.raw, meta: 'z rychlého vstupu' })).concat(this.diaryList());
     }
     const links = items.filter(x => x.kind === 'link');
     if (links.length) sec.itinWish = links.map(x => [x.title, 'odkaz z rychlého vstupu', 'chceme']).concat(sec.itinWish || []);
@@ -10249,7 +10279,15 @@ class Component extends DCLogic {
 
     const heads = {
       // Oslovení patří přihlášenému účtu, ne napevno jednomu z nich.
-      home: ['Neděle 16. srpna', 'Dobré ráno, ' + ((s.lockWho || 'A') === 'M' ? 'Makinko' : 'Adriane')],
+      home: (() => {
+        // Dnešek a oslovení podle skutečnosti: den z hodin, jméno z `DVOJICE`.
+        const D = ['Neděle', 'Pondělí', 'Úterý', 'Středa', 'Čtvrtek', 'Pátek', 'Sobota'];
+        const M = ['ledna', 'února', 'března', 'dubna', 'května', 'června', 'července', 'srpna', 'září', 'října', 'listopadu', 'prosince'];
+        const d = this.dnes();
+        const h = new Date().getHours();
+        const cast = h < 10 ? 'Dobré ráno' : h < 18 ? 'Dobrý den' : 'Dobrý večer';
+        return [D[d.getDay()] + ' ' + d.getDate() + '. ' + M[d.getMonth()], cast + ', ' + this.pate(this.meWho())];
+      })(),
       memories: ['Knihovna', 'Vzpomínky'],
       trips: ['Cestování', 'Cesty a výlety'],
       finance: ['Srpen 2026', 'Finance'],
