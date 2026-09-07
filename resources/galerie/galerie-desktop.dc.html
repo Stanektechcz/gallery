@@ -82,7 +82,7 @@ body{margin:0;background:var(--g-bg)}
 a{color:var(--g-acc)}
 a:hover{color:var(--g-acc-deep)}
 /* Výchozí hodnoty responzivních rozestupů; logika je přepisuje podle skutečné šířky. */
-:root{--pad-x:24px;--grid-min:190px;--col-gap:20px;--h1:34px}
+:root{--pad-x:24px;--grid-min:190px;--col-gap:20px;--h1:34px;--sirka-strany:none}
 /* Průchod klávesnicí: jeden viditelný prstenec pro všechno, žádná modrá výchozí. */
 :focus{outline:none}
 :focus-visible{outline:2px solid var(--g-acc);outline-offset:2px;border-radius:2px}
@@ -974,6 +974,14 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                     </div>
                   </div>
                 </sc-for>
+                <!--
+                  Kolečko „Načítám další vzpomínky…" a zástupné dlaždice se kreslily
+                  **pořád**. Mřížka přitom vykresluje všechny fotky najednou, takže
+                  se nikdy nic dalšího nenačítalo: kdo měl v oblíbených jednu fotku,
+                  viděl ji a pod ní nekonečné načítání. Teď se ukáže, jen dokud
+                  se data ze serveru opravdu stahují.
+                -->
+                <sc-if value="{{ libNacita }}">
                 <div style="display:flex; align-items:center; justify-content:center; gap:9px; padding:34px 0 0; color:var(--g-ink3); font-size:13px">
                   <i class="ph-duotone ph-circle-notch" style="font-size:17px; animation:spin 1.1s linear infinite"></i>Načítám další vzpomínky…
                 </div>
@@ -982,6 +990,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                     <div style="aspect-ratio:1; border-radius:2px; background:linear-gradient(90deg, var(--g-panel) 25%, var(--g-line2) 50%, var(--g-panel) 75%); background-size:320px 100%; animation:shimmer 1.3s infinite linear"></div>
                   </sc-for>
                 </div>
+                </sc-if>
               </sc-if>
             </div>
 
@@ -1405,7 +1414,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 
       <!-- DETAIL OSOBY -->
       <sc-if value="{{ isPerson }}">
-        <div data-screen-label="Detail osoby" style="padding:8px var(--pad-x) 80px; max-width:1240px; animation:fadeIn .2s ease">
+        <div data-screen-label="Detail osoby" style="padding:8px var(--pad-x) 80px; max-width:var(--sirka-strany); animation:fadeIn .2s ease">
           <div style="display:flex; align-items:baseline; gap:14px; border-top:3px solid var(--g-ink); padding-top:9px; margin-bottom:1px">
             <button onClick="{{ goPeople }}" style="border:0; background:transparent; padding:0; cursor:pointer; font-family:inherit; font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:var(--g-ink2)">Vzpomínky → Lidé  →</button>
             <span style="font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:var(--g-ink3)">{{ person.name }}</span>
@@ -1563,7 +1572,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 
       <!-- DETAIL RECEPTU -->
       <sc-if value="{{ isRecipe }}">
-        <div data-screen-label="Detail receptu" style="padding:8px var(--pad-x) 90px; max-width:1240px; animation:fadeIn .2s ease">
+        <div data-screen-label="Detail receptu" style="padding:8px var(--pad-x) 90px; max-width:var(--sirka-strany); animation:fadeIn .2s ease">
           <div style="display:flex; align-items:baseline; gap:14px; border-top:3px solid var(--g-ink); padding-top:9px; margin-bottom:1px">
             <button onClick="{{ goCookbook }}" style="border:0; background:transparent; padding:0; cursor:pointer; font-family:inherit; font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:var(--g-ink2)">Společný život → Naše kuchařka  →</button>
             <span style="font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:var(--g-ink3)">{{ recipe.title }}</span>
@@ -1696,7 +1705,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 
       <!-- DETAIL MÍSTA -->
       <sc-if value="{{ isPlace }}">
-        <div data-screen-label="Detail místa" style="padding:8px var(--pad-x) 90px; max-width:1240px; animation:fadeIn .2s ease">
+        <div data-screen-label="Detail místa" style="padding:8px var(--pad-x) 90px; max-width:var(--sirka-strany); animation:fadeIn .2s ease">
           <div style="display:flex; align-items:baseline; gap:14px; border-top:3px solid var(--g-ink); padding-top:9px; margin-bottom:1px">
             <button onClick="{{ goPlaces }}" style="border:0; background:transparent; padding:0; cursor:pointer; font-family:inherit; font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:var(--g-ink2)">Cestování → Místa a podniky  →</button>
             <span style="font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:var(--g-ink3)">{{ place.title }}</span>
@@ -2618,7 +2627,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 
       <!-- FINANCE -->
       <sc-if value="{{ isFin }}">
-        <div data-screen-label="Finance" style="padding:8px var(--pad-x) 90px; max-width:1240px; animation:fadeIn .2s ease">
+        <div data-screen-label="Finance" style="padding:8px var(--pad-x) 90px; max-width:var(--sirka-strany); animation:fadeIn .2s ease">
           <div style="display:flex; align-items:baseline; gap:14px; border-top:3px solid var(--g-ink); padding-top:9px; margin-bottom:1px">
             <span style="font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:var(--g-ink2)">Finance</span>
             <span style="font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:var(--g-ink3)">Přehled a účty</span>
@@ -3296,7 +3305,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 
       <!-- TRANSAKCE -->
       <sc-if value="{{ isTx }}">
-        <div data-screen-label="Transakce" style="padding:8px var(--pad-x) 90px; max-width:1240px; animation:fadeIn .2s ease">
+        <div data-screen-label="Transakce" style="padding:8px var(--pad-x) 90px; max-width:var(--sirka-strany); animation:fadeIn .2s ease">
           <div style="display:flex; align-items:baseline; gap:14px; border-top:3px solid var(--g-ink); padding-top:9px; margin-bottom:1px">
             <button onClick="{{ txToBudget }}" style="border:0; background:transparent; padding:0; cursor:pointer; font-family:inherit; font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:var(--g-ink2)">Finance → Rozpočty  →</button>
             <span style="font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:var(--g-ink3)">Transakce</span>
@@ -3479,7 +3488,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 
       <!-- ROZPOČTY -->
       <sc-if value="{{ isBudget }}">
-        <div data-screen-label="Rozpočty" style="padding:8px var(--pad-x) 90px; max-width:1240px; animation:fadeIn .2s ease">
+        <div data-screen-label="Rozpočty" style="padding:8px var(--pad-x) 90px; max-width:var(--sirka-strany); animation:fadeIn .2s ease">
           <div style="display:flex; align-items:baseline; gap:14px; border-top:3px solid var(--g-ink); padding-top:9px; margin-bottom:1px">
             <button onClick="{{ budOverview }}" style="border:0; background:transparent; padding:0; cursor:pointer; font-family:inherit; font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:var(--g-ink2)">Finance → Přehled  →</button>
             <span style="font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:var(--g-ink3)">Rozpočty</span>
@@ -4092,7 +4101,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 
       <!-- APLIKAČNÍ STRÁNKY -->
       <sc-if value="{{ isApp }}">
-        <div style="padding:8px var(--pad-x) 80px; max-width:1180px; animation:fadeIn .2s ease">
+        <div style="padding:8px var(--pad-x) 80px; max-width:var(--sirka-strany); animation:fadeIn .2s ease">
           <div style="display:flex; align-items:baseline; gap:14px; border-top:3px solid var(--g-ink); padding-top:9px; margin-bottom:1px">
             <div style="font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:var(--g-ink2)">{{ appGroup }}</div>
             <sc-if value="{{ appBadge }}">
@@ -8067,7 +8076,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 
       <!-- TREZOR -->
       <sc-if value="{{ isVault }}">
-        <div data-screen-label="Trezor" style="padding:8px var(--pad-x) 90px; max-width:1240px; animation:fadeIn .2s ease">
+        <div data-screen-label="Trezor" style="padding:8px var(--pad-x) 90px; max-width:var(--sirka-strany); animation:fadeIn .2s ease">
           <div style="display:flex; align-items:baseline; gap:14px; border-top:3px solid var(--g-ink); padding-top:9px; margin-bottom:1px">
             <div style="font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--g-ink3)">Sdílení a systém</div>
             <div style="margin-left:auto; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:{{ vltHeadColor }}">{{ vltHead }}</div>
@@ -8299,7 +8308,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 
       <!-- ÚKLID KNIHOVNY -->
       <sc-if value="{{ isClean }}">
-        <div data-screen-label="Úklid knihovny" style="padding:8px var(--pad-x) 90px; max-width:1240px; animation:fadeIn .2s ease">
+        <div data-screen-label="Úklid knihovny" style="padding:8px var(--pad-x) 90px; max-width:var(--sirka-strany); animation:fadeIn .2s ease">
           <div style="display:flex; align-items:baseline; gap:14px; border-top:3px solid var(--g-ink); padding-top:9px; margin-bottom:1px">
             <div style="font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--g-ink3)">Vzpomínky</div>
             <div style="margin-left:auto; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--g-ink3)">{{ clnHead }}</div>
@@ -8615,7 +8624,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 
       <!-- KLID A POHODA -->
       <sc-if value="{{ isKlid }}">
-        <div data-screen-label="Klid a pohoda" style="padding:8px var(--pad-x) 90px; max-width:1240px; animation:fadeIn .2s ease">
+        <div data-screen-label="Klid a pohoda" style="padding:8px var(--pad-x) 90px; max-width:var(--sirka-strany); animation:fadeIn .2s ease">
           <div style="display:flex; align-items:baseline; gap:14px; border-top:3px solid var(--g-ink); padding-top:9px; margin-bottom:1px">
             <div style="font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--g-ink3)">Společný život</div>
             <div style="margin-left:auto; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--g-ink3)">{{ klHead }}</div>
@@ -9535,7 +9544,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 
       <!-- VÝROČNÍ ZPRÁVA -->
       <sc-if value="{{ isZpr }}">
-        <div data-screen-label="Výroční zpráva" style="padding:8px var(--pad-x) 90px; max-width:1240px; animation:fadeIn .2s ease">
+        <div data-screen-label="Výroční zpráva" style="padding:8px var(--pad-x) 90px; max-width:var(--sirka-strany); animation:fadeIn .2s ease">
           <div style="display:flex; align-items:baseline; gap:14px; border-top:3px solid var(--g-ink); padding-top:9px; margin-bottom:1px">
             <div style="font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--g-ink3)">Vzpomínky</div>
             <div style="margin-left:auto; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--g-ink3)">{{ zprHead }}</div>
@@ -9702,7 +9711,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 
       <!-- NEDĚLNÍ DESET MINUT -->
       <sc-if value="{{ isNed }}">
-        <div data-screen-label="Nedělní deset minut" style="padding:8px var(--pad-x) 90px; max-width:1240px; animation:fadeIn .2s ease">
+        <div data-screen-label="Nedělní deset minut" style="padding:8px var(--pad-x) 90px; max-width:var(--sirka-strany); animation:fadeIn .2s ease">
           <div style="display:flex; align-items:baseline; gap:14px; border-top:3px solid var(--g-ink); padding-top:9px; margin-bottom:1px">
             <div style="font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--g-ink3)">Společný život</div>
             <div style="margin-left:auto; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--g-ink3)">{{ nedHead }}</div>
@@ -9799,7 +9808,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 
       <!-- ČASOVÁ KAPSLE -->
       <sc-if value="{{ isKaps }}">
-        <div data-screen-label="Časová kapsle" style="padding:8px var(--pad-x) 90px; max-width:1240px; animation:fadeIn .2s ease">
+        <div data-screen-label="Časová kapsle" style="padding:8px var(--pad-x) 90px; max-width:var(--sirka-strany); animation:fadeIn .2s ease">
           <div style="display:flex; align-items:baseline; gap:14px; border-top:3px solid var(--g-ink); padding-top:9px; margin-bottom:1px">
             <div style="font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--g-ink3)">Vzpomínky</div>
             <div style="margin-left:auto; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--g-ink3)">{{ kapHead }}</div>
@@ -9880,7 +9889,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 
       <!-- DOMÁCNOST -->
       <sc-if value="{{ isHouse }}">
-        <div data-screen-label="Domácnost" style="padding:8px var(--pad-x) 90px; max-width:1240px; animation:fadeIn .2s ease">
+        <div data-screen-label="Domácnost" style="padding:8px var(--pad-x) 90px; max-width:var(--sirka-strany); animation:fadeIn .2s ease">
           <div style="display:flex; align-items:baseline; gap:14px; border-top:3px solid var(--g-ink); padding-top:9px; margin-bottom:1px">
             <div style="font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--g-ink3)">Společný život</div>
             <div style="margin-left:auto; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--g-ink3)">{{ hsHead }}</div>
@@ -10694,7 +10703,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 
       <!-- ROZHODNUTÍ -->
       <sc-if value="{{ isDec }}">
-        <div data-screen-label="Rozhodnutí" style="padding:8px var(--pad-x) 90px; max-width:1240px; animation:fadeIn .2s ease">
+        <div data-screen-label="Rozhodnutí" style="padding:8px var(--pad-x) 90px; max-width:var(--sirka-strany); animation:fadeIn .2s ease">
           <div style="display:flex; align-items:baseline; gap:14px; border-top:3px solid var(--g-ink); padding-top:9px; margin-bottom:1px">
             <div style="font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--g-ink3)">Společný život</div>
             <div style="margin-left:auto; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--g-ink3)">{{ dcHead }}</div>
@@ -11639,7 +11648,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 
       <!-- DÁRKY A PŘÁNÍ -->
       <sc-if value="{{ isGifts }}">
-        <div data-screen-label="Dárky a přání" style="padding:8px var(--pad-x) 90px; max-width:1240px; animation:fadeIn .2s ease">
+        <div data-screen-label="Dárky a přání" style="padding:8px var(--pad-x) 90px; max-width:var(--sirka-strany); animation:fadeIn .2s ease">
           <div style="display:flex; align-items:baseline; gap:14px; border-top:3px solid var(--g-ink); padding-top:9px; margin-bottom:1px">
             <div style="font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--g-ink3)">Společný život</div>
             <div style="margin-left:auto; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--g-ink3)">{{ gftHead }}</div>
@@ -11837,7 +11846,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 
       <!-- CYKLUS -->
       <sc-if value="{{ isCycle }}">
-        <div data-screen-label="Cyklus" style="padding:8px var(--pad-x) 90px; max-width:1240px; animation:fadeIn .2s ease">
+        <div data-screen-label="Cyklus" style="padding:8px var(--pad-x) 90px; max-width:var(--sirka-strany); animation:fadeIn .2s ease">
           <div style="display:flex; align-items:baseline; gap:14px; border-top:3px solid var(--g-ink); padding-top:9px; margin-bottom:1px">
             <div style="font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--g-ink3)">Společný život</div>
             <div style="margin-left:auto; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--g-ink3)">{{ cycHead }}</div>
@@ -27408,7 +27417,15 @@ class Component extends DCLogic {
       if (d.type === 'ready') {
         this._mapTheme = this.state.theme;
         this.mapTell({ type: 'theme', theme: this.state.theme });
-        this.mapTell({ type: 'focus', key: this.state.mapPlace || 'zadar' });
+        /*
+         * Body na mapě jsou shluky vlastních fotek podle GPS.
+         *
+         * `mapa.html` je měla zapsané v souboru — deset míst včetně počtů
+         * („Ostrava 6 402 fotek"). Dvojice viděla cizí archiv a na svoje
+         * fotky se přes mapu nedostala vůbec.
+         */
+        this.mapTell({ type: 'body', body: (window.GalerieData || {}).MAPBODY || [] });
+        if (this.state.mapPlace) this.mapTell({ type: 'focus', key: this.state.mapPlace });
       }
     };
     window.addEventListener('message', this._mapMsg);
@@ -28717,26 +28734,27 @@ class Component extends DCLogic {
     const setCur = setRowsMap[s.setTab] || setRowsMap.profil;
 
 
-    // Jediný seznam míst pro obě strany — klíče i počty musí odpovídat PLACES v mapa.html.
-    const pins = [
-      ['zadar', 'Zadar', '512'], ['plitvice', 'Plitvická jezera', '441'], ['krka', 'Krka', '308'],
-      ['brac', 'Brač', '196'], ['praha', 'Praha', '3190'], ['ostrava', 'Ostrava', '6402'],
-      ['brno', 'Brno', '884'], ['beskydy', 'Pustevny', '1106'], ['viden', 'Vídeň', '318'],
-      ['krakov', 'Krakov', '204']
-    ];
-    const mapPlaces = {
-      zadar: { name: 'Zadar', meta: 'Chorvatsko · 512 položek · červenec 2024 a 2026' },
-      plitvice: { name: 'Plitvická jezera', meta: 'Chorvatsko · 441 položek · červenec 2024' },
-      krka: { name: 'Krka', meta: 'Chorvatsko · 308 položek · červenec 2026' },
-      brac: { name: 'Brač', meta: 'Chorvatsko · 196 položek · červenec 2026' },
-      praha: { name: 'Praha', meta: 'Česko · 3 190 položek · 2019 – 2026' },
-      ostrava: { name: 'Ostrava', meta: 'Česko · 6 402 položek · doma' },
-      brno: { name: 'Brno', meta: 'Česko · 884 položek · 2021 – 2026' },
-      beskydy: { name: 'Pustevny', meta: 'Česko · 1 106 položek · 2023 – 2026' },
-      viden: { name: 'Vídeň', meta: 'Rakousko · 318 položek · květen 2026' },
-      krakov: { name: 'Krakov', meta: 'Polsko · 204 položek · září 2022' }
-    };
-    const mapPlaceCur = mapPlaces[s.mapPlace] || mapPlaces.zadar;
+    /*
+     * Místa v panelu vedle mapy — tytéž shluky, jaké kreslí mapa.
+     *
+     * Byl tu seznam deseti měst zapsaný v dokumentu, včetně počtů („Ostrava ·
+     * 6 402 položek · doma") a zemí. Musel se ručně držet shodný se seznamem
+     * v `mapa.html`, což se dalo splnit jen tak dlouho, dokud oba lhaly stejně.
+     * Teď obojí vychází z `MAPBODY`, tedy z GPS ve fotkách dvojice.
+     */
+    const mapBody = (window.GalerieData || {}).MAPBODY || [];
+    const pins = mapBody.map(b => [b.key, b.name, String(b.count)]);
+    const mapPlaces = {};
+    mapBody.forEach(b => {
+      mapPlaces[b.key] = {
+        name: b.name,
+        // Co aplikace o shluku ví: kolik fotek a kde. Zemi ani měsíce
+        // z GPS neurčí, takže je nepíše.
+        meta: this.pl(b.count, 'položka', 'položky', 'položek') + ' · ' + b.lat.toFixed(3) + ', ' + b.lon.toFixed(3)
+      };
+    });
+    // Bez fotek s polohou není co vybrat; panel na to má prázdný stav.
+    const mapPlaceCur = mapPlaces[s.mapPlace] || mapPlaces[pins[0] && pins[0][0]] || { name: 'Zatím žádné místo', meta: 'Mapa se zaplní, jakmile budou fotky se souřadnicemi.' };
 
     return {
       // Kdo je přihlášený — jméno, iniciála i barva profilu berou z přihlášení,
@@ -29613,7 +29631,28 @@ class Component extends DCLogic {
       favAlbums: albums.filter(a => a.fav).map(a => ({ name: a.name, meta: a.date + ' · ' + a.count, bg: this.bg(a.n), go: () => this.setState({ route: 'album', albumId: a.id }) })),
 
       libTitle: R === 'favorites' ? 'Oblíbené' : 'Všechny vzpomínky',
-      libSubtitle: R === 'favorites' ? '318 fotek, 24 videí a 6 alb, které jste si označili' : '24 316 položek · 2019 – 2026 · seskupeno po dnech',
+      /*
+       * Podnadpis se počítá z toho, co je na obrazovce.
+       *
+       * Stálo tu „318 fotek, 24 videí a 6 alb, které jste si označili" a
+       * „24 316 položek · 2019 – 2026" — obojí napevno. Dvojice se čtyřmi
+       * fotkami četla čísla cizí knihovny.
+       */
+      libSubtitle: (() => {
+        const fotek = ph.filter(p => !p.isVideo).length;
+        const videi = ph.length - fotek;
+        const casti = [];
+        if (fotek) casti.push(this.pl(fotek, 'fotka', 'fotky', 'fotek'));
+        if (videi) casti.push(this.pl(videi, 'video', 'videa', 'videí'));
+        if (!casti.length) return R === 'favorites' ? 'Zatím jste si nic neoznačili' : 'Zatím tu nic není';
+        const roky = (YBCH || []).map(r => r[0]);
+        const rozsah = roky.length ? (roky.length > 1 ? Math.min.apply(null, roky) + ' – ' + Math.max.apply(null, roky) : String(roky[0])) : null;
+        return R === 'favorites'
+          ? casti.join(', ') + ', které jste si označili'
+          : casti.join(', ') + (rozsah ? ' · ' + rozsah : '') + ' · seskupeno po dnech';
+      })(),
+      // Kolečko pod mřížkou jen dokud se opravdu stahuje ze serveru.
+      libNacita: (window.GalerieNacita || 0) > 0,
       libEmpty: ph.length === 0, emptyTitle: s.query ? 'Bez výsledků' : 'Zatím tu nic není',
       emptyText: s.query ? 'Pro „' + s.query + '“ jsme nic nenašli. Zkuste jiný výraz nebo upravte filtry.' : 'Nahrajte první fotky a založí se vám časová osa.',
       groups, skeletons: [1, 2, 3, 4, 5, 6, 7, 8],

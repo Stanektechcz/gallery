@@ -32,8 +32,19 @@
 <body>
 <div id="map"></div>
 <script>
-// Místa archivu se skutečnými souřadnicemi — geometrie se nikdy nekreslí od ruky.
-var PLACES = [
+/*
+ * Body na mapě přicházejí z aplikace, ne odsud.
+ *
+ * Tady byl seznam deseti míst zapsaný v souboru — Zadar 512 fotek, Ostrava
+ * 6 402, Praha 3 190. Dvojice, která tam nikdy nebyla, viděla cizí archiv
+ * rozsypaný po Evropě a na svoje fotky se přes mapu nedostala.
+ *
+ * Aplikace pošle zprávou `body` shluky svých fotek podle GPS. Než dorazí,
+ * kreslí se prázdná mapa — což je pravda o dvojici, která zatím nemá fotku
+ * s polohou. Seznam níž zůstává jen jako záloha pro otevření souboru samotného
+ * mimo aplikaci (vývoj, náhled) a je označený, aby si ho nikdo nespletl s daty.
+ */
+var UKAZKA = [
   { key: 'zadar',    name: 'Zadar',             lat: 44.1194, lon: 15.2314, count: 512,  size: 62, hue: 200 },
   { key: 'plitvice', name: 'Plitvická jezera',  lat: 44.8654, lon: 15.5820, count: 441,  size: 54, hue: 150 },
   { key: 'krka',     name: 'Krka',              lat: 43.8009, lon: 15.9714, count: 308,  size: 48, hue: 175 },
@@ -46,8 +57,16 @@ var PLACES = [
   { key: 'krakov',   name: 'Krakov',            lat: 50.0647, lon: 19.9450, count: 204,  size: 42, hue: 220 }
 ];
 
+/*
+ * Body, které se opravdu kreslí.
+ *
+ * Prázdné do chvíle, než aplikace pošle svoje — mimo aplikaci (otevření
+ * souboru přímo) se použije ukázka, aby šlo na mapě pracovat i bez backendu.
+ */
+var PLACES = [];
+
 var params = new URLSearchParams(location.search);
-var selected = params.get('place') || 'zadar';
+var selected = params.get('place') || '';
 var mini = params.get('mini') === '1';
 document.body.dataset.theme = params.get('theme') === 'dark' ? 'dark' : 'light';
 
@@ -68,17 +87,47 @@ function pinHtml(p, sel) {
 }
 
 var markers = {};
-PLACES.forEach(function (p) {
-  if (mini && p.key !== selected) return;
-  var m = L.marker([p.lat, p.lon], {
-    icon: L.divIcon({ className: '', html: pinHtml(p, p.key === selected), iconSize: [p.size, p.size], iconAnchor: [p.size / 2, p.size / 2] }),
-    title: p.name, keyboard: true, riseOnHover: true
-  }).addTo(map);
-  if (!mini) m.bindTooltip(p.name + ' · ' + p.count.toLocaleString('cs-CZ'), { className: 'lbl', direction: 'top', offset: [0, -p.size / 2 - 2] });
-  m.on('click', function () { select(p.key, true); });
-  m.on('keypress', function (e) { if (e.originalEvent.key === 'Enter') select(p.key, true); });
-  markers[p.key] = { marker: m, place: p };
-});
+
+/*
+ * Velikost špendlíku podle počtu fotek.
+ *
+ * Odmocnina, ne přímá úměra: mezi shlukem o deseti a o tisíci fotkách je
+ * stonásobek, a kdyby se velikost násobila stejně, jeden špendlík by překryl
+ * celou mapu. Takhle je největší zhruba dvakrát tak velký jako nejmenší.
+ */
+function velikost(count) {
+  return Math.round(Math.min(76, 34 + Math.sqrt(Math.max(1, count)) * 4));
+}
+
+// Barva se odvozuje z názvu, aby totéž místo mělo pokaždé tutéž — jinak by se
+// mapa při každém načtení přebarvila.
+function odstin(klic) {
+  var h = 0;
+  String(klic).split('').forEach(function (ch, i) { h = (h * 31 + ch.charCodeAt(0) + i) % 360; });
+  return h;
+}
+
+function vykresli() {
+  Object.keys(markers).forEach(function (k) { map.removeLayer(markers[k].marker); });
+  markers = {};
+
+  PLACES.forEach(function (p) {
+    if (mini && p.key !== selected) return;
+    p.size = p.size || velikost(p.count);
+    p.hue = p.hue === undefined ? odstin(p.key || p.name) : p.hue;
+
+    var m = L.marker([p.lat, p.lon], {
+      icon: L.divIcon({ className: '', html: pinHtml(p, p.key === selected), iconSize: [p.size, p.size], iconAnchor: [p.size / 2, p.size / 2] }),
+      title: p.name, keyboard: true, riseOnHover: true
+    }).addTo(map);
+    if (!mini) m.bindTooltip(p.name + ' · ' + p.count.toLocaleString('cs-CZ'), { className: 'lbl', direction: 'top', offset: [0, -p.size / 2 - 2] });
+    m.on('click', function () { select(p.key, true); });
+    m.on('keypress', function (e) { if (e.originalEvent.key === 'Enter') select(p.key, true); });
+    markers[p.key] = { marker: m, place: p };
+  });
+}
+
+vykresli();
 
 function redraw() {
   PLACES.forEach(function (p) {
@@ -104,22 +153,56 @@ function focus(key) {
 }
 
 function fitAll() {
+  // Bez jediného bodu se `fitBounds` neumí rozhodnout a Leaflet spadne.
+  // Prázdná mapa je legitimní stav: dvojice zatím nemá fotku s polohou.
+  if (!PLACES.length) { map.setView([49.8, 15.5], 6); return; }
   map.fitBounds(L.latLngBounds(PLACES.map(function (p) { return [p.lat, p.lon]; })).pad(0.18));
 }
-if (mini) {
-  var one = markers[selected] || markers.zadar;
-  map.setView(one.marker.getLatLng(), 10);
-} else fitAll();
+
+function srovnej() {
+  if (!mini) { fitAll(); return; }
+  var one = markers[selected] || markers[Object.keys(markers)[0]];
+  if (one) map.setView(one.marker.getLatLng(), 10); else fitAll();
+}
+
+srovnej();
 
 // Řízení z aplikace: výběr místa, přiblížení na vše, přepnutí tématu.
 addEventListener('message', function (e) {
   var d = e.data || {};
   if (d.target !== 'galerie-mapa') return;
+  /*
+   * Body z aplikace. Přijdou jednou po `ready` a pak při každé změně knihovny.
+   *
+   * `selected` se drží, jen když v nové sadě opravdu je — jinak by mapa
+   * ukazovala vybrané místo, které mezitím zmizelo.
+   */
+  if (d.type === 'body' && Array.isArray(d.body)) {
+    PLACES = d.body;
+    if (!PLACES.some(function (p) { return p.key === selected; })) selected = (PLACES[0] || {}).key || '';
+    vykresli();
+    srovnej();
+  }
   if (d.type === 'focus') focus(d.key);
   if (d.type === 'select') select(d.key, false);
   if (d.type === 'fit') fitAll();
   if (d.type === 'theme') { document.body.dataset.theme = d.theme === 'dark' ? 'dark' : 'light'; }
 });
+/*
+ * Mimo aplikaci se po chvíli nakreslí ukázka.
+ *
+ * Uvnitř aplikace pošle rodič `body` hned po `ready`, takže se sem nedojde.
+ * Otevřít `mapa.html` samotnou je ale běžné při práci na mapě samé a prázdné
+ * plátno by se ladilo špatně.
+ */
+setTimeout(function () {
+  if (PLACES.length || parent !== window) return;
+  PLACES = UKAZKA;
+  selected = selected || 'zadar';
+  vykresli();
+  srovnej();
+}, 400);
+
 parent.postMessage({ source: 'galerie-mapa', type: 'ready', place: selected }, '*');
 </script>
 </body>

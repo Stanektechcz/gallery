@@ -40,6 +40,9 @@ class Knihovna implements PoskytovatelObsahu
     /** Které snímky mají zmenšeninu; `media_item_id => ano/ne`. */
     private array $nahledy = [];
 
+    /** Co si přihlášený člověk označil jako oblíbené; `media_item_id => true`. */
+    private array $oblibene = [];
+
     /** A která videa mají soubor, který jde přehrát. */
     private array $prehratelne = [];
 
@@ -71,6 +74,7 @@ class Knihovna implements PoskytovatelObsahu
             return [];
         }
 
+        $this->nactiOblibene($media);
         $dny = $this->dny($media);
         $fotky = $this->fotky($media, $dny);
         $alba = $this->alba($prostor);
@@ -91,6 +95,15 @@ class Knihovna implements PoskytovatelObsahu
             // Čísla u položek postranního panelu a součet na úvodní obrazovce.
             'NAVCNT' => $this->navPocty($prostor),
             'TOTAL' => $this->celkem($prostor),
+            /*
+             * Body na mapě — z GPS ve fotkách, ne z napsaného seznamu.
+             *
+             * `mapa.html` měla deset míst zapsaných v souboru: Zadar 512 fotek,
+             * Ostrava 6 402, Praha 3 190. Dvojice, která tam nikdy nebyla,
+             * viděla cizí archiv rozsypaný po Evropě a na svoje fotky se přes
+             * mapu nedostala vůbec.
+             */
+            'MAPBODY' => $this->bodyNaMape($media),
             // Úzké rozvržení kreslí tytéž fotky z vlastních kolekcí; drží si je
             // ve `window.GalerieMobil`, ne v `GalerieData`.
             'MOBIL' => $this->mobil($dny, $fotky, $alba),
@@ -131,6 +144,28 @@ class Knihovna implements PoskytovatelObsahu
                 // („Žádné duplicity", „Nic ke sloučení") a ukázka na jejich
                 // místě posílala dvojici uklízet fotky a štítky, které nemá.
             ]];
+    }
+
+    /**
+     * Co si přihlášený člověk označil — jedním dotazem na celou mřížku.
+     *
+     * @param  Collection<int, MediaItem>  $media
+     */
+    private function nactiOblibene(Collection $media): void
+    {
+        $ja = auth()->id();
+
+        if ($ja === null || ! Schema::hasTable('user_favorites')) {
+            return;
+        }
+
+        $this->oblibene = DB::table('user_favorites')
+            ->where('user_id', $ja)
+            ->whereIn('media_item_id', $media->pluck('id'))
+            ->pluck('media_item_id')
+            ->flip()
+            ->map(fn () => true)
+            ->all();
     }
 
     /** @return Collection<int, MediaItem> */
@@ -210,7 +245,19 @@ class Knihovna implements PoskytovatelObsahu
                 'isVideo' => $video,
                 'orient' => $this->orientace($m),
                 'dur' => $video && $m->duration_ms ? $this->trvani((int) $m->duration_ms) : null,
-                'fav' => (bool) $m->is_favorite,
+                /*
+                 * Oblíbené si označuje **člověk**, ne dvojice.
+                 *
+                 * Četlo se `media_items.is_favorite`, což je příznak na fotce.
+                 * Zbytek aplikace přitom ukládá označení do `user_favorites`,
+                 * tedy ke konkrétnímu člověku — a obrazovka se jmenuje „fotky,
+                 * které jste si označili". Kdo si fotku označil, viděl ji dál
+                 * neoznačenou a v Oblíbených prázdno.
+                 *
+                 * Příznak na fotce se bere jako druhý zdroj: může ho nastavit
+                 * import a zahodit ho by znamenalo ztratit, co dvojice měla.
+                 */
+                'fav' => isset($this->oblibene[$m->id]) || (bool) $m->is_favorite,
                 // Stav zpracování, ne výmysl: co ještě nemá náhled, se pozná.
                 'pending' => $m->status !== 'ready',
                 'error' => $m->status === 'failed',
@@ -1328,6 +1375,71 @@ class Knihovna implements PoskytovatelObsahu
         }
 
         return $radky;
+    }
+
+    /**
+     * Shluky fotek podle polohy: `[{ key, name, lat, lon, count }]`.
+     *
+     * Slučuje se po **desetinách stupně**, tedy zhruba po jedenácti kilometrech.
+     * Přesnější dělení by z jednoho výletu udělalo dvacet špendlíků; hrubší by
+     * slepilo dvě města dohromady. Jméno se bere z `location_name`, když ho
+     * fotka má; jinak zůstanou souřadnice, protože vymyslet název místa podle
+     * polohy aplikace neumí a „Někde u Brna" by bylo tvrzení, ne údaj.
+     *
+     * Trezor se sem nepočítá — mapa je jedno ze čtyř míst, kde se schované
+     * fotky nemají objevit.
+     *
+     * @param  Collection<int, MediaItem>  $media
+     * @return list<array<string, mixed>>
+     */
+    private function bodyNaMape(Collection $media): array
+    {
+        $shluky = [];
+
+        foreach ($media as $m) {
+            if ($m->latitude === null || $m->longitude === null || $m->is_hidden) {
+                continue;
+            }
+
+            $lat = round((float) $m->latitude, 1);
+            $lon = round((float) $m->longitude, 1);
+            $klic = $lat.'|'.$lon;
+
+            $shluky[$klic] ??= ['lat' => 0.0, 'lon' => 0.0, 'pocet' => 0, 'jmena' => []];
+            $shluky[$klic]['lat'] += (float) $m->latitude;
+            $shluky[$klic]['lon'] += (float) $m->longitude;
+            $shluky[$klic]['pocet']++;
+
+            if ($m->location_name) {
+                $shluky[$klic]['jmena'][(string) $m->location_name] = ($shluky[$klic]['jmena'][(string) $m->location_name] ?? 0) + 1;
+            }
+        }
+
+        $body = [];
+
+        foreach ($shluky as $s) {
+            // Střed shluku, ne první fotka: špendlík má sedět doprostřed toho,
+            // co zastupuje.
+            $lat = $s['lat'] / $s['pocet'];
+            $lon = $s['lon'] / $s['pocet'];
+
+            arsort($s['jmena']);
+            $jmeno = (string) (array_key_first($s['jmena']) ?? '');
+
+            $body[] = [
+                'key' => 'b'.substr(md5($lat.'|'.$lon), 0, 8),
+                'name' => $jmeno !== '' ? $jmeno : round($lat, 3).', '.round($lon, 3),
+                'lat' => round($lat, 6),
+                'lon' => round($lon, 6),
+                'count' => $s['pocet'],
+            ];
+        }
+
+        // Od největšího: velké shluky se kreslí jako první a menší se pak
+        // vejdou nad ně.
+        usort($body, fn (array $a, array $b) => $b['count'] <=> $a['count']);
+
+        return $body;
     }
 
     /** Štítek bez diakritiky, mezer a velkých písmen — na porovnání. */

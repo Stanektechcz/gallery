@@ -32,6 +32,7 @@ class GalleryDoctorCommand extends Command
         $this->checkBinaries();
         $this->checkQueue();
         $this->checkScheduler();
+        $this->checkThumbnailCoverage();
         $this->checkGoogleDrive();
 
         // Summary
@@ -367,6 +368,50 @@ class GalleryDoctorCommand extends Command
      * Media with no original on this server cannot be sent and are counted apart, so a
      * genuinely finished backup is not reported as incomplete forever.
      */
+    /**
+     * Kolik položek nemá čím se vykreslit v mřížce.
+     *
+     * Dlaždice bere zmenšeninu; když ji položka nemá, nakreslí se barevný
+     * přechod. Z pohledu člověka to vypadá jako prázdná fotka — a protože
+     * nic nespadne, dá se v tom stavu žít týdny a myslet si, že se nahrávání
+     * pokazilo. Tohle je jediné místo, kde se to dá říct nahlas.
+     *
+     * Nepočítá se to jako chyba: knihovna se zpracovává na pozadí a chvíli
+     * po nahrání je bez zmenšenin každá položka. Chyba je, když jich je hodně
+     * a fronta nic nedělá — a to už je vidět vedle na kontrole fronty.
+     */
+    private function checkThumbnailCoverage(): void
+    {
+        try {
+            $celkem = DB::table('media_items')->whereNull('trashed_at')->count();
+
+            if ($celkem === 0) {
+                return;
+            }
+
+            $sNahledem = DB::table('media_items')
+                ->whereNull('trashed_at')
+                ->whereExists(fn ($q) => $q->select(DB::raw(1))
+                    ->from('media_variants')
+                    ->whereColumn('media_variants.media_item_id', 'media_items.id')
+                    ->whereIn('media_variants.type', ['thumbnail', 'small', 'video_poster', 'original']))
+                ->count();
+
+            $bez = $celkem - $sNahledem;
+            $procent = (int) round($sNahledem / $celkem * 100);
+
+            $this->check(
+                $bez === 0
+                    ? "Thumbnails: all {$celkem} items renderable"
+                    : "Thumbnails: {$bez} of {$celkem} items have none ({$procent}% ready) — grid shows a colour instead of the photo",
+                $bez === 0,
+                'WARN',
+            );
+        } catch (\Throwable $e) {
+            $this->check('Thumbnails: could not be read ('.$e->getMessage().')', false, 'WARN');
+        }
+    }
+
     private function checkDriveCoverage(): void
     {
         try {

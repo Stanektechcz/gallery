@@ -365,7 +365,19 @@
     return SKUPINY.map(nactiSkupinu);
   }
 
+  /*
+   * Kolik skupin obsahu se právě stahuje.
+   *
+   * Mřížka knihovny pod sebou kreslila točící se kolečko s textem „Načítám
+   * další vzpomínky…" a osm zástupných dlaždic — **pořád**, bez ohledu na to,
+   * jestli se něco načítá. Kdo měl v oblíbených jednu fotku, viděl ji a pod ní
+   * nekonečné načítání něčeho, co nikdy nedorazilo. Tohle číslo dává obrazovce
+   * možnost se zeptat.
+   */
+  window.GalerieNacita = 0;
+
   function nactiSkupinu(jmeno) {
+    window.GalerieNacita++;
     return fetch('/api/data/' + jmeno, { headers: hlavicky(), credentials: 'same-origin' })
         .then(function (r) { return r.ok ? r.json() : null; })
         .then(function (b) {
@@ -412,7 +424,13 @@
 
           return true;
         })
-      .catch(function () { return false; });
+      .catch(function () { return false; })
+      .then(function (ok) {
+        window.GalerieNacita = Math.max(0, window.GalerieNacita - 1);
+        // Až doběhne poslední skupina, obrazovka schová načítání sama.
+        if (window.GalerieNacita === 0 && window.GalerieObnovObrazovku) window.GalerieObnovObrazovku();
+        return ok;
+      });
   }
 
   /*

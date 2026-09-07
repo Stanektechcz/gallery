@@ -37,11 +37,18 @@ class SecurityHeaders
         'script-src' => ["'self'", "'unsafe-inline'", "'unsafe-eval'", 'https://unpkg.com'],
         'style-src' => ["'self'", "'unsafe-inline'", 'https://unpkg.com', 'https://fonts.googleapis.com'],
         'font-src' => ["'self'", 'data:', 'https://fonts.gstatic.com', 'https://unpkg.com'],
-        // `data:` kvůli náhledům skládaným v prohlížeči, `blob:` kvůli
-        // souborům vybraným k nahrání. Mapové dlaždice chodí z Mapy.com.
-        'img-src' => ["'self'", 'data:', 'blob:', 'https://api.mapy.com'],
+        /*
+         * `data:` kvůli náhledům skládaným v prohlížeči, `blob:` kvůli souborům
+         * vybraným k nahrání.
+         *
+         * Dlaždice mapy chodí z OpenStreetMap — `mapa.html` je načítá jako
+         * obrázky, takže rozhoduje `img-src`. Dokud tam ten původ nebyl, mapa
+         * se otevřela prázdná: špendlíky nakreslené, pod nimi šedé plátno.
+         */
+        'img-src' => ["'self'", 'data:', 'blob:', 'https://api.mapy.com',
+            'https://tile.openstreetmap.org', 'https://*.tile.openstreetmap.org'],
         'media-src' => ["'self'", 'blob:'],
-        'connect-src' => ["'self'", 'https://api.mapy.com'],
+        'connect-src' => ["'self'", 'https://api.mapy.com', 'https://tile.openstreetmap.org'],
         'worker-src' => ["'self'", 'blob:'],
         'manifest-src' => ["'self'"],
         'object-src' => ["'none'"],
