@@ -391,10 +391,17 @@ class ZbyleSeznamyTest extends TestCase
 
         $this->postJson('/api/sdileni/'.$odkaz.'/prodlouzit')->assertOk()->assertJson(['ok' => true]);
 
-        // Počítá se od stávající platnosti, ne ode dneška: u odkazu, který
-        // platí ještě tři dny, by prodloužení od dneška bylo zkrácení o tři.
+        /*
+         * Počítá se od stávající platnosti, ne ode dneška: u odkazu, který
+         * platí ještě tři dny, by prodloužení od dneška bylo zkrácení o tři.
+         *
+         * Porovnává se **datum**, ne rozdíl ve dnech. `round()` na rozdílu od
+         * půlnoci vycházel odpoledne o den výš, takže test procházel dopoledne
+         * a po obědě padal — a nešlo poznat, jestli je rozbité prodlužování,
+         * nebo jen hodina, ve které se pouští testy.
+         */
         $do = CarbonImmutable::parse(DB::table('shared_links')->where('id', $odkaz)->value('expires_at'));
-        $this->assertSame(33, (int) round(now()->startOfDay()->diffInDays($do)));
+        $this->assertSame(now()->addDays(33)->toDateString(), $do->toDateString());
     }
 
     /** Prošlý odkaz se prodlužuje ode dneška, ne od data, které minulo. */
@@ -418,7 +425,8 @@ class ZbyleSeznamyTest extends TestCase
         $radek = DB::table('shared_links')->where('id', $odkaz)->first();
         $do = CarbonImmutable::parse($radek->expires_at);
 
-        $this->assertSame(30, (int) round(now()->startOfDay()->diffInDays($do)));
+        // Datum, ne rozdíl ve dnech — viz test výš.
+        $this->assertSame(now()->addDays(30)->toDateString(), $do->toDateString());
         $this->assertTrue((bool) $radek->is_active);
     }
 

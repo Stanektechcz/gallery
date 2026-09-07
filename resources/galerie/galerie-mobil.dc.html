@@ -115,23 +115,25 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 </style>
 </helmet>
 
-<div data-theme="{{ theme }}" style="padding:40px 44px 70px; background:var(--g-bg); color:var(--g-ink); font-family:'Barlow',sans-serif; font-size:15px; min-height:100vh; display:flex; gap:44px; align-items:flex-start; flex-wrap:wrap">
+<div data-theme="{{ theme }}" style="{{ scenaStyl }}">
 
-  <div style="flex:none">
-    <div style="display:flex; align-items:baseline; gap:10px; border-top:3px solid var(--g-ink); padding-top:8px; margin-bottom:2px">
-      <span style="font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--g-ink2)">Mobil · funkční prototyp</span>
-      <span style="font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--g-ink3); margin-left:auto">{{ devMeta }}</span>
-    </div>
-    <div style="border-top:1px solid var(--g-ink); margin-bottom:12px"></div>
+  <div style="{{ sloupecStyl }}">
+    <sc-if value="{{ vitrina }}">
+      <div style="display:flex; align-items:baseline; gap:10px; border-top:3px solid var(--g-ink); padding-top:8px; margin-bottom:2px">
+        <span style="font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--g-ink2)">Mobil · funkční prototyp</span>
+        <span style="font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--g-ink3); margin-left:auto">{{ devMeta }}</span>
+      </div>
+      <div style="border-top:1px solid var(--g-ink); margin-bottom:12px"></div>
 
-    <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:16px">
-      <sc-for list="{{ devices }}" as="d" hint-placeholder-count="4">
-        <button onClick="{{ d.pick }}" style="min-height:44px; padding:0 12px; border:1px solid {{ d.bd }}; border-radius:2px; background:{{ d.bg }}; color:{{ d.fg }}; cursor:pointer; font-family:inherit; font-size:12.5px">{{ d.label }}</button>
-      </sc-for>
-    </div>
+      <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:16px">
+        <sc-for list="{{ devices }}" as="d" hint-placeholder-count="4">
+          <button onClick="{{ d.pick }}" style="min-height:44px; padding:0 12px; border:1px solid {{ d.bd }}; border-radius:2px; background:{{ d.bg }}; color:{{ d.fg }}; cursor:pointer; font-family:inherit; font-size:12.5px">{{ d.label }}</button>
+        </sc-for>
+      </div>
+    </sc-if>
 
-    <div style="width:{{ devW }}; height:{{ devH }}; border-radius:44px; padding:11px; background:var(--g-ink); box-shadow:0 20px 50px rgba(0,0,0,.18)">
-      <div style="width:100%; height:100%; box-sizing:border-box; padding-left:{{ panePad }}; border-radius:34px; overflow:hidden; background:var(--g-raise); display:flex; flex-direction:column; position:relative">
+    <div style="{{ ramecekStyl }}">
+      <div style="width:100%; height:100%; box-sizing:border-box; padding-left:{{ panePad }}; border-radius:{{ ramecekRadius }}; overflow:hidden; background:var(--g-raise); display:flex; flex-direction:column; position:relative">
 
         <!-- TABLET: BOČNÍ PANEL -->
         <sc-if value="{{ twoPane }}">
@@ -169,8 +171,13 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
           </div>
         </sc-if>
 
-        <div style="display:flex; justify-content:space-between; padding:12px 22px 2px; font-size:12px; color:var(--g-ink2); flex:none">
-          <span>9:41</span>
+        <!--
+          Falešný stavový pruh patří k nakreslenému telefonu. Na skutečném je
+          nad ním ten opravdový — dva vedle sebe, a v tom nakresleném stálo
+          napořád 9:41.
+        -->
+        <div style="display:flex; justify-content:space-between; padding:{{ pruhPad }}; font-size:12px; color:var(--g-ink2); flex:none">
+          <span>{{ pruhCas }}</span>
           <span style="display:flex; gap:6px; align-items:center">
             <sc-if value="{{ queuePending }}"><span style="font-size:10.5px; color:var(--g-acc)">{{ queuePending }}↑</span></sc-if>
             <i class="ph-duotone {{ netIcon }}" style="color:{{ netColor }}"></i><i class="ph-duotone ph-battery-high"></i>
@@ -5584,6 +5591,14 @@ class Component extends DCLogic {
     albums: null, shares: null, albumId: null, guestMsgs: [],
     toast: null, seq: 1,
     dev: '390', cols: null,
+    /*
+     * Vitrína se zapíná podle šířky okna, ne podle adresy.
+     *
+     * Na telefonu je okno úzké a aplikace má vyplnit displej; na počítači
+     * (kde si tenhle dokument někdo otevře schválně, aby se na telefonní
+     * verzi podíval) se hodí rámeček i přepínač velikostí.
+     */
+    vitrina: typeof window !== 'undefined' && window.innerWidth >= 900,
     sortMem: 'new', sortFin: 'date', sortTrips: 'when', sortPlaces: 'name', sortAlbums: 'new', txMonth: 'month',
     placeId: null, dayId: null, txExtra: [], itinDone: {}, net: true, queue: null, playing: null,
     lbPanel: false, lbTags: null, lbVers: null,
@@ -5682,6 +5697,13 @@ class Component extends DCLogic {
       if (Date.now() - (this._act || 0) > ms) this.lockNow('Zamčeno po nečinnosti · ' + (this.state.lockIdle || '5 min'));
     }, 4000);
     if (this.state.lockStart === false) this.setState({ appLocked: false });
+    // Otočení telefonu i zvětšení okna na počítači mění, jestli má smysl vitrína.
+    this._vitrina = () => {
+      const siroko = window.innerWidth >= 900;
+      if (siroko !== this.state.vitrina) this.setState({ vitrina: siroko });
+    };
+    window.addEventListener('resize', this._vitrina);
+    window.addEventListener('orientationchange', this._vitrina);
     /*
      * Zamčeno jen tam, kde je čím odemknout — viz `gateBlocked` a `lockNow`.
      *
@@ -5752,6 +5774,8 @@ class Component extends DCLogic {
   }
   componentWillUnmount() {
     window.removeEventListener('storage', this._zamekZnovu);
+    window.removeEventListener('resize', this._vitrina);
+    window.removeEventListener('orientationchange', this._vitrina);
     ['pointerdown', 'keydown'].forEach(e => window.removeEventListener(e, this._actH));
     clearInterval(this._idleI); clearTimeout(this.tt); if (this._un) this._un(); if (this._unApi) this._unApi(); }
 
@@ -10413,6 +10437,33 @@ class Component extends DCLogic {
             : i.key === 'sync' && (qWait + qErr) ? String(qWait + qErr) : null
         }))
       })),
+
+      /*
+       * Vitrína, nebo aplikace.
+       *
+       * Telefonní dokument je z návrhářského balíku: nadpis, přepínač
+       * velikostí a nakreslený telefon, ve kterém teprve běží aplikace. Na
+       * širokém okně je to k něčemu — je to prohlížečka návrhu. Na skutečném
+       * telefonu z toho byl telefon v telefonu a přepínač displejů na displeji,
+       * který se přepnout nedá.
+       */
+      vitrina: !!s.vitrina,
+      scenaStyl: s.vitrina
+        ? 'padding:40px 44px 70px; background:var(--g-bg); color:var(--g-ink); font-family:\'Barlow\',sans-serif; font-size:15px; min-height:100vh; display:flex; gap:44px; align-items:flex-start; flex-wrap:wrap'
+        : 'padding:0; background:var(--g-bg); color:var(--g-ink); font-family:\'Barlow\',sans-serif; font-size:15px; display:block',
+      sloupecStyl: s.vitrina ? 'flex:none' : '',
+      ramecekStyl: s.vitrina
+        ? 'width:' + dev[2] + 'px; height:' + dev[3] + 'px; border-radius:44px; padding:11px; background:var(--g-ink); box-shadow:0 20px 50px rgba(0,0,0,.18)'
+        // `dvh` počítá s lištou prohlížeče, která se na telefonu schovává;
+        // s `vh` zůstal spodní pruh aplikace pod okrajem displeje.
+        : 'width:100%; height:100dvh; border-radius:0; padding:0; background:var(--g-ink)',
+      ramecekRadius: s.vitrina ? '34px' : '0',
+      // Na skutečném telefonu má stavový pruh svůj vlastní čas o kus výš;
+      // tenhle se schová, ať tam nejsou dva. V okně zobrazuje ten skutečný.
+      pruhPad: s.vitrina ? '12px 22px 2px' : '0',
+      pruhCas: s.vitrina
+        ? (() => { const d = new Date(); return d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0'); })()
+        : '',
 
       // zařízení a responzivita
       devW: dev[2] + 'px', devH: dev[3] + 'px',

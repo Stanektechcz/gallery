@@ -185,6 +185,26 @@ class DoruceniTest extends TestCase
         $this->assertStringContainsString('SHELL_FILES.map(f => shell.add(', $worker);
     }
 
+    /**
+     * Na telefonu aplikace, ne vitrína prototypu.
+     *
+     * Telefonní dokument je z návrhářského balíku a je postavený jako ukázka:
+     * nadpis, přepínač velikostí displeje a uprostřed nakreslený telefon,
+     * ve kterém teprve běží aplikace. Na skutečném telefonu z toho byl telefon
+     * v telefonu, s cizím časem 9:41 nahoře. Vitrína zůstává, ale rozhoduje
+     * o ní šířka okna — a strop, který ji drží, musí v dokumentu zůstat.
+     */
+    public function test_telefonni_dokument_ma_vitrinu_podminenou(): void
+    {
+        $telo = (string) $this->get('/rozvrzeni-telefon')->assertOk()->getContent();
+
+        $this->assertStringContainsString('<sc-if value="{{ vitrina }}">', $telo);
+        $this->assertStringContainsString('{{ ramecekStyl }}', $telo);
+
+        // Napevno napsaný čas patřil k nakreslenému telefonu.
+        $this->assertStringNotContainsString('<span>9:41</span>', $telo);
+    }
+
     /** A nesmí ho zastínit statický soubor, který by šel kolem PHP. */
     public function test_service_worker_neni_v_public(): void
     {
