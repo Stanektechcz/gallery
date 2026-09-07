@@ -39,10 +39,19 @@ class ObsahPravidlaTest extends TestCase
         Sanctum::actingAs($this->adri);
     }
 
-    /** Bez pravidel a vzpomínek se nic neposílá. */
+    /**
+     * Bez pravidel se neposílá nic — kromě prázdných vzpomínek.
+     *
+     * Ukázkové vzpomínky jsou vymyšlený životopis („Makince je třicet")
+     * a jejich odkazy vedou do knihovny na místa, která archiv nezná.
+     * Obrazovka umí být prázdná a říct to; to je poctivější.
+     */
     public function test_bez_pravidel_se_skupina_neposila(): void
     {
-        $this->assertSame([], $this->getJson('/api/data/pravidla')->assertOk()->json('data'));
+        $this->assertSame(
+            ['MEMS' => []],
+            $this->getJson('/api/data/pravidla')->assertOk()->json('data'),
+        );
     }
 
     /** Pravidlo nese spouštěč, akci i počet běhů. */

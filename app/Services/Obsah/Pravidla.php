@@ -33,11 +33,28 @@ class Pravidla implements PoskytovatelObsahu
 
     public function kolekce(GallerySpace $prostor): array
     {
-        return array_filter([
-            'RULEDEF' => $this->pravidla($prostor),
-            'RULOG' => $this->historie($prostor),
-            'MEMS' => $this->vzpominky($prostor),
-        ], fn ($v) => $v !== null && $v !== []);
+        return array_filter(
+            [
+                'RULEDEF' => $this->pravidla($prostor),
+                'RULOG' => $this->historie($prostor),
+                'MEMS' => $this->vzpominky($prostor),
+            ],
+            /*
+             * `MEMS` chodí **i prázdné**.
+             *
+             * Vzpomínky jsou vymyšlený životopis: „Makince je třicet",
+             * „Týden před stěhováním", „Den u vodopádů — Krka, Chorvatsko".
+             * Dvojice čte o dnech, které neprožila, a když na ně klikne,
+             * skončí v knihovně na „Pro ‚Beskydy‘ jsme nic nenašli" — odkaz
+             * vede na místo, které archiv nezná.
+             *
+             * Obrazovka umí být prázdná: „Na dnes nic nemáme." To je proti
+             * vypůjčené minulosti poctivé. Vzpomínky počítá `gallery:memories`
+             * z toho, co v archivu doopravdy je.
+             */
+            fn ($v, string $k) => $k === 'MEMS' ? $v !== null : ($v !== null && $v !== []),
+            ARRAY_FILTER_USE_BOTH,
+        );
     }
 
     /**

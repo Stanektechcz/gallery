@@ -5591,7 +5591,7 @@ class Component extends DCLogic {
     cycDays: {}, cycTab: 'kalendar', cycMonth: 0, cycSel: null, cycLegend: false,
     cycShare: 'dates', cycRemind: true, cycRemindDays: 2, cycTrack: true,
     cycFlow: 'none', cycSy: [], cycMood: [], cycPain: 0, cycNote: '', cycStart: false,
-    secId: 'weekly', secTab: 0, secDone: {}, calMonth: 0, calDay: 16,
+    secId: 'weekly', secTab: 0, secDone: {}, calMonth: 0, calDay: new Date().getDate(),
     theme: 'light'
   };
 
@@ -5920,6 +5920,23 @@ class Component extends DCLogic {
     }
     this.setState(patch);
     this.tt = setTimeout(() => this.setState({ toast: null }), 4200);
+  }
+  /*
+   * Dnešek — jednou a na jednom místě.
+   *
+   * V prototypu byl napsaný napevno (16. srpna 2026), protože se k tomu dni
+   * kreslil. V běžící aplikaci to znamenalo kalendář otevřený v cizím měsíci
+   * a odpočty od data, které už bylo.
+   *
+   * Vrací půlnoc, ať porovnání dnů nezáleží na hodině.
+   */
+  dnes() {
+    const d = new Date();
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  }
+  dnesIso() {
+    const d = this.dnes();
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
   }
   bg(n) {
     const h = (n * 47 + 12) % 360, s = 16 + (n % 5) * 5;
@@ -6788,14 +6805,15 @@ class Component extends DCLogic {
     // konkrétního dne odpočet nemá — vymýšlet ho by znamenalo lhát.
     const MONTHN = D.MONTHN || {};
     const monthNo = word => { const ks = Object.keys(MONTHN); for (let x = 0; x < ks.length; x++) if (MONTHN[ks[x]] === word) return +ks[x]; return null; };
-    const rtToday = new Date(2026, 7, 16);
+    const rtToday = this.dnes();
     const rtDaysFrom = txt => {
       const mm = String(txt || '').match(/(\d{1,2})\.\s*([a-záčďéěíňóřšťúůýž]+)/i);
       if (!mm) return null;
       const mo = monthNo(mm[2].toLowerCase());
       if (!mo) return null;
-      let d = new Date(2026, mo - 1, +mm[1]);
-      if (d < rtToday) d = new Date(2027, mo - 1, +mm[1]);
+      const rok = rtToday.getFullYear();
+      let d = new Date(rok, mo - 1, +mm[1]);
+      if (d < rtToday) d = new Date(rok + 1, mo - 1, +mm[1]);
       return Math.round((d - rtToday) / 86400000);
     };
     const rtNextRows = key === 'rtNext' ? RITUALS.map(r => {
@@ -8500,8 +8518,8 @@ class Component extends DCLogic {
   cycModel() {
     const all = this.cycDays();
     const keys = Object.keys(all).sort();
-    const today = dParse(CYC_TODAY);
-    const bleed = keys.map(k => all[k]).filter(d => d.flow !== 'none' && !d.predicted && d.day <= CYC_TODAY);
+    const today = dParse(this.dnesIso());
+    const bleed = keys.map(k => all[k]).filter(d => d.flow !== 'none' && !d.predicted && d.day <= this.dnesIso());
 
     const starts = [];
     let prev = null;
@@ -8543,7 +8561,7 @@ class Component extends DCLogic {
     }
 
     let now = null;
-    const current = cycles.filter(c => c.start <= CYC_TODAY).pop() || null;
+    const current = cycles.filter(c => c.start <= this.dnesIso()).pop() || null;
     if (current) {
       const den = dDiff(dParse(current.start), today) + 1;
       if (den >= 1) now = { day: den, phase: this.cycPhaseFor(den - 1, avg) };
@@ -8596,7 +8614,7 @@ class Component extends DCLogic {
     // Který příznak se v které fázi objevuje. Jeden výskyt není vzorec.
     const inPhase = {};
     cycles.forEach(c => {
-      const end = c.end || CYC_TODAY;
+      const end = c.end || this.dnesIso();
       keys.forEach(k => {
         if (k < c.start || k > end) return;
         const ph = this.cycPhaseFor(dDiff(dParse(c.start), dParse(k)), avg);
@@ -9892,7 +9910,7 @@ class Component extends DCLogic {
       if (cycFc[iso]) return cycFc[iso].phase;
       const c = cyc.cycles.filter(x => x.start <= iso).pop();
       if (!c) return null;
-      const end = c.end || CYC_TODAY;
+      const end = c.end || this.dnesIso();
       if (iso > end) return null;
       return this.cycPhaseFor(dDiff(dParse(c.start), dParse(iso)), cyc.avg);
     };
@@ -9902,7 +9920,7 @@ class Component extends DCLogic {
       return c ? dDiff(dParse(c.start), dParse(iso)) + 1 : null;
     };
     const monthGrid = off => {
-      const base = new Date(2026, 7 + off, 1);
+      const base = (() => { const t = this.dnes(); return new Date(t.getFullYear(), t.getMonth() + off, 1); })();
       const first = new Date(base.getFullYear(), base.getMonth(), 1);
       const lead = (first.getDay() + 6) % 7;
       const cells = [];
@@ -9912,10 +9930,10 @@ class Component extends DCLogic {
       }
       return { cells: cells, label: MON_NOM[base.getMonth()] + ' ' + base.getFullYear(), year: base.getFullYear(), month: base.getMonth() };
     };
-    const cycEdit = s.cycSel || CYC_TODAY;
+    const cycEdit = s.cycSel || this.dnesIso();
     const cycRec = cyc.all[cycEdit] || null;
     const cycEditTitleVal = dLong(cycEdit);
-    const cycFuture = cycEdit > CYC_TODAY;
+    const cycFuture = cycEdit > this.dnesIso();
 
     // — finance —
     const txs = this.txAll();
@@ -11307,7 +11325,7 @@ class Component extends DCLogic {
           bg: !c.inMonth ? 'transparent' : key ? 'var(--g-cyc-bg-' + key + ')' : 'transparent',
           fg: c.inMonth ? 'var(--g-ink)' : 'var(--g-ink3)',
           op: c.inMonth ? '1' : '.35',
-          bd: c.iso === CYC_TODAY ? '2px solid var(--g-ink)' : rec && rec.predicted ? '1px dashed var(--g-cyc-l)' : '1px solid transparent',
+          bd: c.iso === this.dnesIso() ? '2px solid var(--g-ink)' : rec && rec.predicted ? '1px dashed var(--g-cyc-l)' : '1px solid transparent',
           dot: bleeding ? FLOW_DOT[rec.flow] : 'transparent',
           mark: ph && PHASES[ph][1] && !bleeding ? PHASES[ph][1] : '',
           markColor: ph ? PHASES[ph][2] : 'transparent',
@@ -11461,6 +11479,7 @@ class Component extends DCLogic {
       calPrev: () => this.setState({ calMonth: s.calMonth - 1 }),
       calNext: () => this.setState({ calMonth: s.calMonth + 1 }),
       calGrid: monthGrid(s.calMonth).cells.map(c => {
+        // Ukázkové akce jsou vedené jen dnem v měsíci, takže patří k tomu, na kterém kalendář začíná.
         const isAug = s.calMonth === 0 && c.inMonth;
         const evs = isAug ? CAL_EVENTS.filter(e => e[0] === c.n) : [];
         const ph = cycPhaseOf(c.iso);
@@ -11468,16 +11487,16 @@ class Component extends DCLogic {
         return {
           n: String(c.n), fg: c.inMonth ? 'var(--g-ink)' : 'var(--g-ink3)', op: c.inMonth ? '1' : '.35',
           bg: c.n === s.calDay && isAug ? 'var(--g-acc-soft)' : 'transparent',
-          bd: c.iso === CYC_TODAY ? '2px solid var(--g-ink)' : '1px solid transparent',
+          bd: c.iso === this.dnesIso() ? '2px solid var(--g-ink)' : '1px solid transparent',
           cyc: key ? 'var(--g-cyc-' + ({ m: 'm', fert: 'fert', ovul: 'ovul', pms: 'pms' }[key]) + ')' : 'transparent',
           dots: evs.slice(0, 3).map(e => ({ color: CAL_KIND[e[2]][2] })),
           aria: dLong(c.iso) + (evs.length ? ' · ' + this.pl(evs.length, 'akce', 'akce', 'akcí') : ''),
           tap: () => { if (isAug) this.setState({ calDay: c.n }); }
         };
       }),
-      calDayLabel: s.calDay + '. srpna 2026',
+      calDayLabel: dLong(dIso(new Date(monthGrid(0).year, monthGrid(0).month, s.calDay))),
       calDayRows: (() => {
-        const iso = dIso(new Date(2026, 7, s.calDay));
+        const iso = dIso(new Date(monthGrid(0).year, monthGrid(0).month, s.calDay));
         const ph = cycPhaseOf(iso);
         const rows = CAL_EVENTS.filter(e => e[0] === s.calDay).map(e => ({
           title: e[1], meta: CAL_KIND[e[2]][0] + ' · ' + e[3], icon: CAL_KIND[e[2]][1], color: CAL_KIND[e[2]][2],
