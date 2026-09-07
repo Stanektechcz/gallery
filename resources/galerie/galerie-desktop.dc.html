@@ -18,7 +18,7 @@
 <script src="galerie-admin.js"></script>
 <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/duotone/style.css">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600&display=swap">
-<script src="./image-slot.js"></script>
+<!-- `image-slot.js` je nástroj na skládání prototypu (přetáhni sem obrázek). V běžícím archivu kreslil přes fotky svůj popisek a nabízel nahrát jinou. -->
 <style>
 /* Tokeny převzaté z repozitáře (resources/css/app.css) — světlá je výchozí pro galerii. */
 :root, [data-theme="light"]{
@@ -311,11 +311,11 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 
           <div style="display:grid; grid-template-columns:minmax(0,1.55fr) minmax(300px,.85fr); gap:26px; align-items:stretch">
             <div style="position:relative; border-radius:2px; overflow:hidden; min-height:400px; background:var(--g-photo)">
-              <image-slot id="home-hero" shape="rect" fit="cover" placeholder="Titulní vzpomínka — přetáhni fotku"></image-slot>
+              <div style="position:absolute; inset:0; background:{{ heroBg }}"></div>
               <div style="position:absolute; inset:auto 0 0 0; padding:26px 28px; pointer-events:none; background:linear-gradient(to top, rgba(12,11,11,.82), rgba(12,11,11,.35) 55%, transparent)">
                 <div style="font-size:11px; letter-spacing:.16em; text-transform:uppercase; color:rgba(255,255,255,.72)">Vzpomínka dne</div>
                 <div style="font-size:34px; line-height:1.1; color:#fff; margin-top:6px; letter-spacing:-.015em">{{ greeting }}</div>
-                <div style="font-size:14.5px; color:rgba(255,255,255,.8); margin-top:6px">Plitvická jezera, 21. července 2024 — před dvěma roky jste šli ještě před rozedněním.</div>
+                <div style="font-size:14.5px; color:rgba(255,255,255,.8); margin-top:6px">{{ heroPopis }}</div>
               </div>
             </div>
 
@@ -1094,7 +1094,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
       <sc-if value="{{ isAlbum }}">
         <div style="padding:0 0 90px; animation:fadeIn .2s ease">
           <div style="position:relative; height:340px; overflow:hidden; background:var(--g-photo)">
-            <image-slot id="album-cover" shape="rect" fit="cover" placeholder="Titulní fotografie alba"></image-slot>
+            <div style="position:absolute; inset:0; background:{{ albumCoverBg }}"></div>
             <div style="position:absolute; inset:0; pointer-events:none; background:linear-gradient(to top, rgba(12,11,11,.85), rgba(12,11,11,.2) 60%, rgba(12,11,11,.35))"></div>
             <div style="position:absolute; inset:auto 0 0 0; padding:22px 24px">
               <nav aria-label="Cesta" style="display:flex; align-items:center; gap:7px; font-size:12.5px; color:rgba(255,255,255,.78); flex-wrap:wrap">
@@ -1192,7 +1192,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
       <sc-if value="{{ isTrip }}">
         <div data-screen-label="Detail cesty" style="padding:0 0 90px; animation:fadeIn .2s ease">
           <div style="position:relative; height:300px; overflow:hidden; background:var(--g-photo)">
-            <image-slot id="trip-cover" shape="rect" fit="cover" placeholder="Titulní fotografie cesty"></image-slot>
+            <div style="position:absolute; inset:0; background:{{ tripCoverBg }}"></div>
             <div style="position:absolute; inset:0; pointer-events:none; background:linear-gradient(to top, rgba(12,11,11,.86), rgba(12,11,11,.18) 62%, rgba(12,11,11,.34))"></div>
             <div style="position:absolute; inset:auto 0 0 0; padding:20px 24px">
               <nav aria-label="Cesta" style="display:flex; align-items:center; gap:8px; font-size:12.5px; color:rgba(255,255,255,.78)">
@@ -14134,7 +14134,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
             <sc-if value="{{ current.isPhoto }}">
               <div onWheel="{{ lbWheel }}" onDoubleClick="{{ lbDouble }}" onMouseDown="{{ lbPanStart }}" onMouseMove="{{ lbPanMove }}" onMouseUp="{{ lbPanEnd }}" onMouseLeave="{{ lbPanEnd }}" style="position:relative; width:min(100%,1180px); height:100%; max-height:100%; display:grid; place-items:center; overflow:hidden; cursor:{{ lbCursor }}">
                 <div style="position:relative; width:{{ current.frameW }}; aspect-ratio:{{ current.ratio }}; max-height:100%; border-radius:2px; overflow:hidden; background:{{ current.bg }}; transform:{{ lbTransform }}; transition:{{ lbTransition }}">
-                  <image-slot id="lightbox-photo" shape="rect" fit="cover" placeholder="Otevřená fotografie"></image-slot>
+                  <!-- Fotku kreslí rámeček výš (`current.bg`); slot přes ni psal „Otevřená fotografie" a nabízel nahrát jinou. -->
                   <sc-if value="{{ lbSplitOn }}">
                     <div style="position:absolute; inset:0; width:{{ lbSplitW }}; overflow:hidden; background:{{ lbSplitBg }}; border-right:2px solid #fff; box-shadow:2px 0 8px rgba(0,0,0,.35)">
                       <span style="position:absolute; left:10px; top:10px; padding:3px 9px; border-radius:2px; background:rgba(0,0,0,.55); color:#fff; font-size:11.5px; white-space:nowrap">{{ lbSplitLabelA }}</span>
@@ -17435,6 +17435,30 @@ class Component extends DCLogic {
    * se zařadit nedá, vrací `null` — věta se pak musí přeformulovat, protože
    * čeština nemá minulý čas bez rodu a hádat ho znamená oslovit člověka špatně.
    */
+  /*
+   * Jméno v pátém pádě, na oslovení.
+   *
+   * „Dobré ráno, Adrian" zní jako z automatu; „Adriane" jako od někoho, kdo
+   * ho zná. Čeština má u pátého pádu spoustu výjimek, takže se řeší jen ty
+   * tvary, které tahle aplikace potká: jména dvojice. Co se nepovede,
+   * zůstane v prvním pádě — špatně skloněné jméno je horší než neskloněné.
+   */
+  pate(jmeno) {
+    const s = String(jmeno || '').trim();
+    if (! s) return '';
+
+    const posledni = s.slice(-1);
+
+    // Ženská jména na -a: Makinka → Makinko, Klára → Kláro.
+    if (posledni === 'a') return s.slice(0, -1) + 'o';
+    // Mužská na tvrdou souhlásku: Adrian → Adriane, Petr → Petře nechávám být.
+    if ('bdflmnprstvz'.indexOf(posledni) >= 0) return s + 'e';
+    // Na -k, -g, -h se mění na -u: Marek → Marku.
+    if ('kgh'.indexOf(posledni) >= 0) return s.slice(0, -1) + ({ k: 'ku', g: 'gu', h: 'hu' })[posledni];
+
+    return s;
+  }
+
   rodPripona(jmeno) {
     const s = String(jmeno || '').trim();
     if (! s) return null;
@@ -27325,7 +27349,17 @@ class Component extends DCLogic {
     const sel = this.state.sel.includes(id) ? this.state.sel.filter(x => x !== id) : this.state.sel.concat(id);
     this.setState({ sel });
   }
-  openLb(id) { this.setState({ lb: id, lbZoom: { scale: 1, x: 0, y: 0 } }); }
+  /*
+   * Otevřít se dá jen snímek, který v archivu opravdu je.
+   *
+   * Pojistka pro případ, že se na nějaké dlaždici zase objeví číslo z ukázky:
+   * lepší nic než rozbitá obrazovka. Dlaždice samy míří na skutečné fotky, viz
+   * `timeline` a `onThisDay`.
+   */
+  openLb(id) {
+    if (! this.photos().some(p => p.id === id)) return;
+    this.setState({ lb: id, lbZoom: { scale: 1, x: 0, y: 0 } });
+  }
 
   txCatOut(map) {
     const S = window.GalerieStore, o = {};
@@ -27368,6 +27402,20 @@ class Component extends DCLogic {
   }
   componentDidMount() {
     this.persistLoad();
+    /*
+     * Zamčeno jen tam, kde je čím odemknout.
+     *
+     * `prihlasen` bez `nastaveno` znamená člověka, který je uvnitř a kód
+     * si nezavedl; ten se před zamčenou obrazovkou nemá jak pohnout.
+     * Nepřihlášeného naopak nechává stát, kde je: tam je zamčená obrazovka
+     * přihlášením, ne zámkem.
+     */
+    this._zamekZnovu = () => {
+      const z = this.zamek();
+      if (z.prihlasen && ! z.nastaveno && this.state.appLocked) this.setState({ appLocked: false });
+    };
+    this._zamekZnovu();
+    window.addEventListener('storage', this._zamekZnovu);
     /*
      * Když druhý změnil totéž.
      *
@@ -27711,7 +27759,7 @@ class Component extends DCLogic {
       lb: null, sel: [], selectMode: false, searchOpen: false
     });
   };
-  componentWillUnmount() { if (this._unApi) this._unApi(); clearInterval(this._idleI); clearTimeout(this._gateT); ['pointerdown', 'keydown', 'wheel'].forEach(t => window.removeEventListener(t, this._actH, true)); clearInterval(this._recI); clearTimeout(this._typT); clearTimeout(this._repT); clearInterval(this._si); window.removeEventListener('keydown', this._key); window.removeEventListener('message', this._mapMsg); window.removeEventListener('resize', this._resize); window.removeEventListener('galerie-stret', this._stret); if (this._ro) this._ro.disconnect(); clearInterval(this._qi); clearInterval(this._vt); clearTimeout(this._tt); if (this._un) this._un(); }
+  componentWillUnmount() { window.removeEventListener('storage', this._zamekZnovu); if (this._unApi) this._unApi(); clearInterval(this._idleI); clearTimeout(this._gateT); ['pointerdown', 'keydown', 'wheel'].forEach(t => window.removeEventListener(t, this._actH, true)); clearInterval(this._recI); clearTimeout(this._typT); clearTimeout(this._repT); clearInterval(this._si); window.removeEventListener('keydown', this._key); window.removeEventListener('message', this._mapMsg); window.removeEventListener('resize', this._resize); window.removeEventListener('galerie-stret', this._stret); if (this._ro) this._ro.disconnect(); clearInterval(this._qi); clearInterval(this._vt); clearTimeout(this._tt); if (this._un) this._un(); }
   step(d) {
     const ph = this.photos(), i = ph.findIndex(p => p.id === this.state.lb);
     const n = ph[(i + d + ph.length) % ph.length];
@@ -28346,8 +28394,14 @@ class Component extends DCLogic {
     const album = albumZakladni && (s.albFav || {})[albumZakladni.id] !== undefined
       ? Object.assign({}, albumZakladni, { fav: (s.albFav || {})[albumZakladni.id] })
       : albumZakladni;
-    const cur = s.lb ? this.edited(this.photos().find(p => p.id === s.lb)) : null;
-    const curIdx = s.lb ? this.photos().findIndex(p => p.id === s.lb) : 0;
+    /*
+     * Otevřená fotka. `find` může vrátit nic — snímek se mezitím smazal, nebo
+     * dlaždice nesla ukázkové číslo. Pak se stůl chová, jako by byl zavřený;
+     * dřív na tom spadlo vykreslení celé obrazovky.
+     */
+    const curZdroj = s.lb ? this.photos().find(p => p.id === s.lb) : null;
+    const cur = curZdroj ? this.edited(curZdroj) : null;
+    const curIdx = Math.max(0, s.lb ? this.photos().findIndex(p => p.id === s.lb) : 0);
     const cols = { small: '92px', med: '150px', big: '230px' }[s.grid] || '150px';
     // Definice žije v galerie-data.js (sdílí ji mobilní nabídka Více);
     // tady se jen doplní živý odznak vzpomínek.
@@ -28883,6 +28937,8 @@ class Component extends DCLogic {
           icon: 'ph-receipt', undo: () => this.setState({ tripSpend: prev })
         });
       },
+      // Titulní fotografie cesty — z obálky, ne z prázdného slotu.
+      tripCoverBg: trip.bg || (this.photos()[0] || {}).bg || 'var(--g-photo)',
       tripDocs: trip.docs.map(d => ({
         title: d[0], meta: d[1], tag: d[2] || null, tagClass: tripTag(d[2]), icon: d[3],
         go: () => this.toast(d[0] + ' — ' + d[1], { icon: d[3] })
@@ -29477,8 +29533,26 @@ class Component extends DCLogic {
       ...this.capVals(),
       ...this.obVals(),
 
-      todayLabel: 'Neděle 16. srpna 2026', totalLabel: (window.GalerieData || {}).TOTAL || '24 316 vzpomínek · 7 let',
-      greeting: 'Dobré ráno, Adriane',
+      /*
+       * Dnešek a pozdrav podle skutečnosti.
+       *
+       * Stálo tu „Neděle 16. srpna 2026" a „Dobré ráno, Adriane" — den napevno
+       * a jméno napevno. Makinka byla vítaná Adrianovým jménem a v jedenáct
+       * večer jí aplikace přála dobré ráno.
+       */
+      todayLabel: (() => {
+        const D = ['Neděle', 'Pondělí', 'Úterý', 'Středa', 'Čtvrtek', 'Pátek', 'Sobota'];
+        const M = ['ledna', 'února', 'března', 'dubna', 'května', 'června', 'července', 'srpna', 'září', 'října', 'listopadu', 'prosince'];
+        const d = new Date();
+        return D[d.getDay()] + ' ' + d.getDate() + '. ' + M[d.getMonth()] + ' ' + d.getFullYear();
+      })(),
+      totalLabel: (window.GalerieData || {}).TOTAL || '',
+      greeting: (() => {
+        const h = new Date().getHours();
+        const cast = h < 10 ? 'Dobré ráno' : h < 18 ? 'Dobrý den' : 'Dobrý večer';
+        // Páté pádem, ne prvním: „Dobré ráno, Adriane", ne „Adrian".
+        return cast + ', ' + this.pate(this.meWho());
+      })(),
       ...(() => {
         // Domů jako rozcestník: dnešní vzpomínka, týden v číslech a cestovní režim.
         const memN = this.memTodayCount();
@@ -29494,6 +29568,11 @@ class Component extends DCLogic {
           return d['np' + i] !== undefined ? d['np' + i] : p[4] === 'hotovo';
         }).length;
         return {
+          // Titulní plocha nahoře ukazuje tutéž vzpomínku jako panel níž.
+          heroBg: top ? this.bg(top.n) : ((this.photos()[0] || {}).bg || 'var(--g-photo)'),
+          heroPopis: top
+            ? top.place + ', ' + top.date + ' — ' + (top.back === 1 ? 'před rokem' : 'před ' + top.back + ' lety') + '.'
+            : 'Na dnešek zatím žádná vzpomínka není.',
           homeMemAny: !!top,
           homeMem: top ? {
             title: top.title, place: top.place, date: top.date,
@@ -29561,7 +29640,12 @@ class Component extends DCLogic {
         { name: 'Vánoce 2025', meta: 'před týdnem · 412 položek', bg: this.bg(17), go: () => this.setState({ route: 'album', albumId: 'vanoce' }) }
       ],
       onThisDay: [2019, 2021, 2021, 2024, 2024, 2024, 2025].map((y, i) => ({
-        year: y, bg: this.bg(40 + i * 5), isVideo: i === 3, dur: '0:24', open: () => this.openLb('p' + (i + 4))
+        year: y, isVideo: i === 3, dur: '0:24',
+        ...(() => {
+          const vse = this.photos();
+          const p = vse.length ? vse[(40 + i * 5) % vse.length] : null;
+          return { bg: p ? p.bg : this.bg(40 + i * 5), open: () => p && this.openLb(p.id) };
+        })()
       })),
       ...(() => {
         const dis = s.sugDismiss || {};
@@ -29781,6 +29865,10 @@ class Component extends DCLogic {
       albumItems: albumPhotos.map(p => this.tile(this.edited(p))),
       related: albums.filter(a => a.id !== album.id).slice(0, 3).map(a => ({ name: a.name, meta: a.count, bg: a.bg || this.bg(a.n), go: () => this.setState({ route: 'album', albumId: a.id }) })),
       albumFavLabel: album.fav ? 'V oblíbených' : 'Do oblíbených', albumFavColor: album.fav ? 'var(--g-mag)' : 'var(--g-ink)',
+      // Titulní fotografie alba. Dřív tu byl `<image-slot>`, tedy nástroj na
+      // skládání prototypu: přes obálku psal „Titulní fotografie alba"
+      // a nabízel do ní přetáhnout obrázek.
+      albumCoverBg: album.bg || 'var(--g-photo)',
       albumDownload: () => this.stahniAlbum(album.id, album.name),
       /*
        * Oblíbené album se doopravdy přepne.
@@ -29870,7 +29958,13 @@ class Component extends DCLogic {
       ].map(t => ({
         ...t, titleSize: t.milestone ? '27px' : '21px', dot: t.milestone ? 'var(--g-mag)' : 'var(--g-acc)',
         cols: 'repeat(' + t.items.length + ', minmax(0,1fr))',
-        items: t.items.map((_, i) => ({ bg: this.bg(t.n + i * 4), ratio: t.ratio, open: () => this.openLb('p' + (t.n + i)) })),
+        // Dlaždice pásu berou snímky z knihovny; barevný přechod zůstane jen
+        // tam, kde archiv ještě žádný nemá.
+        items: t.items.map((_, i) => {
+          const vse = this.photos();
+          const p = vse.length ? vse[(t.n + i) % vse.length] : null;
+          return { bg: p ? p.bg : this.bg(t.n + i * 4), ratio: t.ratio, open: () => p && this.openLb(p.id) };
+        }),
         go: () => this.setState({ route: 'album', albumId: 'beskydy' })
       })),
 

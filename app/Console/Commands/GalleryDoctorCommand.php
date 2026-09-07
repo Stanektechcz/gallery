@@ -174,6 +174,21 @@ class GalleryDoctorCommand extends Command
         $this->check('imagick extension', $imagick, 'WARN');
         $this->check('gd extension', extension_loaded('gd'), 'WARN');
 
+        /*
+         * Ani jedna knihovna znamená, že zmenšenina nevznikne nikdy.
+         *
+         * Každá zvlášť je jen doporučení — jedna zastoupí druhou. Chybět můžou
+         * ale obě, a pak už to není varování: nahrávání projde, soubory se
+         * uloží, a galerie do konce světa kreslí barevné obdélníky místo fotek.
+         * Zvlášť to pak vypadá jako chyba galerie, ne jako chybějící balíček.
+         */
+        if (! $imagick && ! extension_loaded('gd')) {
+            $this->check(
+                'Some image library (no gd, no imagick) — no thumbnail can ever be built; install php-gd or php-imagick for THIS php',
+                false,
+            );
+        }
+
         if (! $imagick) {
             $this->check('HEIC/HEIF thumbnails (iPhone photos)', false, 'WARN');
 

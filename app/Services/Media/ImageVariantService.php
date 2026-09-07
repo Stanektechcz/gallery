@@ -12,7 +12,7 @@ use Intervention\Image\ImageManager;
 
 class ImageVariantService
 {
-    private ImageManager $manager;
+    private ?ImageManager $manager = null;
 
     private const VARIANTS = [
         'placeholder' => ['width' => 64,   'quality' => 40],
@@ -22,12 +22,21 @@ class ImageVariantService
         'large' => ['width' => 2560, 'quality' => 88],
     ];
 
-    public function __construct()
+    /**
+     * Ovladač obrázků, sestavený až při prvním čtení souboru.
+     *
+     * Intervention si zdraví ovladače ověřuje v konstruktoru a bez knihovny
+     * vyhodí výjimku. Dokud se to dělalo tady, stačilo tuhle službu vyžádat —
+     * a spadlo i to, co s obrázky nedělá nic: zpracování videa, nebo příkaz,
+     * který chtěl nejdřív slušně oznámit, že knihovna chybí.
+     *
+     * GD neumí HEIC/HEIF. Imagick má proto přednost, kdykoliv je po ruce; na
+     * serveru s libheif pak vzniknou z iPhonových fotek stejné náhledy jako
+     * z JPEGů.
+     */
+    private function manager(): ImageManager
     {
-        // GD cannot read HEIC/HEIF. Prefer Imagick whenever it is available;
-        // on a server with libheif support this also creates the same WebP
-        // previews for iPhone photographs as for JPEGs.
-        $this->manager = extension_loaded('imagick')
+        return $this->manager ??= extension_loaded('imagick')
             ? new ImageManager(new ImagickDriver)
             : new ImageManager(new GdDriver);
     }
@@ -47,7 +56,7 @@ class ImageVariantService
     public function generateVariant(MediaItem $mediaItem, string $sourcePath, string $type, array $config): ?MediaVariant
     {
         try {
-            $image = $this->manager->read($sourcePath);
+            $image = $this->manager()->read($sourcePath);
             $image->scaleDown(width: $config['width']);
 
             $ext = 'webp'; // prefer WebP
@@ -88,7 +97,7 @@ class ImageVariantService
     private function calculateBlurHashAndColor(MediaItem $mediaItem, string $sourcePath): void
     {
         try {
-            $image = $this->manager->read($sourcePath);
+            $image = $this->manager()->read($sourcePath);
             $image->scaleDown(width: 64); // tiny version for hash/color
 
             // Dominant color via simple pixel sampling

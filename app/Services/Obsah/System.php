@@ -217,6 +217,14 @@ class System implements PoskytovatelObsahu
         $clovek = auth()->user();
 
         return [
+            /*
+             * Jestli se dívá někdo přihlášený.
+             *
+             * Obrazovka podle toho pozná rozdíl mezi „kód nemám nastavený"
+             * a „nejsem přihlášený" — v obou případech totiž `nastaveno`
+             * vyjde `false`, ale první z nich má být uvnitř a druhý venku.
+             */
+            'prihlasen' => $clovek !== null,
             'nastaveno' => (bool) ($clovek?->app_lock_pin),
             'delka' => 6,
             'zmeneno' => $clovek?->app_lock_set_at?->toDateString(),

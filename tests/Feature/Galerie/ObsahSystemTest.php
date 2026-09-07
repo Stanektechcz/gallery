@@ -528,6 +528,32 @@ class ObsahSystemTest extends TestCase
             ->assertJsonPath('ok', false);
     }
 
+    /**
+     * Zámek říká i to, jestli se dívá někdo přihlášený.
+     *
+     * Bez toho vyjde „kód nemám nastavený" i „nejsem přihlášený" stejně —
+     * jako `nastaveno: false`. Obrazovka podle toho ale rozhoduje, jestli
+     * má odemknout: první z těch dvou patří dovnitř, druhý ven.
+     */
+    public function test_zamek_rozlisi_prihlaseneho_od_nastaveneho_kodu(): void
+    {
+        $zamek = $this->getJson('/api/data/system')->assertOk()->json('data.ZAMEK');
+
+        $this->assertTrue($zamek['prihlasen']);
+        $this->assertFalse($zamek['nastaveno']);
+    }
+
+    /** S nastaveným kódem zůstává `nastaveno` pravda — zámek má čím otevřít. */
+    public function test_zamek_s_kodem_hlasi_nastaveno(): void
+    {
+        $this->adri->forceFill(['app_lock_pin' => bcrypt('123456'), 'app_lock_set_at' => now()])->save();
+
+        $zamek = $this->getJson('/api/data/system')->assertOk()->json('data.ZAMEK');
+
+        $this->assertTrue($zamek['prihlasen']);
+        $this->assertTrue($zamek['nastaveno']);
+    }
+
     private function fotka(array $navic = [], int $poradi = 1): MediaItem
     {
         return MediaItem::create(array_merge([

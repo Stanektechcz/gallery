@@ -20,6 +20,21 @@ class GenerateMissingThumbnailsCommand extends Command
 
     public function handle(VideoProcessingService $videos, ImageVariantService $images): int
     {
+        /*
+         * Bez obrázkové knihovny nemá smysl začínat.
+         *
+         * Intervention si ovladač ověřuje už v konstruktoru, takže se to jinak
+         * projeví výjimkou u první položky a výpisem zásobníku volání odněkud
+         * z `vendor/`. Kdo to čte, hledá chybu v galerii — a přitom v tomhle
+         * PHP jen chybí balíček. Řekne se to tedy rovnou a jednou větou.
+         */
+        if (! extension_loaded('gd') && ! extension_loaded('imagick')) {
+            $this->error('Tohle PHP ('.PHP_BINARY.', '.PHP_VERSION.') neumí otevřít obrázek: chybí gd i imagick.');
+            $this->line('Doinstalujte php-gd nebo php-imagick pro tuhle verzi PHP a spusťte příkaz znovu.');
+
+            return 1;
+        }
+
         // Do not rely only on the database relation: older deploys created a
         // thumbnail row even when the file write failed. Those rows are the
         // source of repeated /files/... 404s in the gallery.

@@ -5682,6 +5682,19 @@ class Component extends DCLogic {
       if (Date.now() - (this._act || 0) > ms) this.lockNow('Zamčeno po nečinnosti · ' + (this.state.lockIdle || '5 min'));
     }, 4000);
     if (this.state.lockStart === false) this.setState({ appLocked: false });
+    /*
+     * Zamčeno jen tam, kde je čím odemknout — viz `gateBlocked` a `lockNow`.
+     *
+     * Kdo je přihlášený a kód si nenastavil, stál před klávesnicí, která
+     * nepřijme žádné číslo. Server o zámku říká ve skupině `system`, a ta
+     * dorazí až po vykreslení; proto se to hlídá i po každé nové odpovědi.
+     */
+    this._zamekZnovu = () => {
+      const z = this.zamek();
+      if (z.prihlasen && ! z.nastaveno && this.state.appLocked) this.setState({ appLocked: false });
+    };
+    this._zamekZnovu();
+    window.addEventListener('storage', this._zamekZnovu);
     setTimeout(() => this.syncTabStrips(), 60);
     this.persistLoad();
     // Ťuknutí na upozornění otevře přímo tu obrazovku, o které upozornění bylo.
@@ -5738,6 +5751,7 @@ class Component extends DCLogic {
     }
   }
   componentWillUnmount() {
+    window.removeEventListener('storage', this._zamekZnovu);
     ['pointerdown', 'keydown'].forEach(e => window.removeEventListener(e, this._actH));
     clearInterval(this._idleI); clearTimeout(this.tt); if (this._un) this._un(); if (this._unApi) this._unApi(); }
 
