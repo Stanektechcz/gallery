@@ -302,7 +302,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 
       <!-- DOMŮ -->
       <sc-if value="{{ isHome }}" hint-placeholder-val="{{ true }}">
-        <div style="padding:8px var(--pad-x) 64px; max-width:1560px; animation:fadeIn .25s ease">
+        <div style="padding:8px var(--pad-x) 64px; max-width:var(--sirka-strany); animation:fadeIn .25s ease">
           <div style="display:flex; align-items:baseline; gap:14px; border-top:3px solid var(--g-ink); padding-top:9px; margin-bottom:1px">
             <div style="font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:var(--g-ink2)">{{ todayLabel }}</div>
             <div style="font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:var(--g-ink3); margin-left:auto">{{ totalLabel }}</div>
@@ -1873,7 +1873,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
       <!-- ČASOVÁ OSA -->
       <sc-if value="{{ isTimeline }}">
         <div style="display:flex; animation:fadeIn .2s ease">
-          <div style="flex:1; min-width:0; padding:8px var(--pad-x) 90px; max-width:1100px">
+          <div style="flex:1; min-width:0; padding:8px var(--pad-x) 90px; max-width:var(--sirka-strany)">
             <h2 style="margin:0; font-size:30px">Časová osa</h2>
             <div style="font-size:13px; color:var(--g-ink2); margin-top:3px; margin-bottom:18px">{{ tlPodnadpis }}</div>
 
@@ -2557,7 +2557,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 
       <!-- ÚLOŽIŠTĚ A SYNCHRONIZACE -->
       <sc-if value="{{ isStorage }}">
-        <div style="padding:8px var(--pad-x) 70px; max-width:1000px; animation:fadeIn .2s ease">
+        <div style="padding:8px var(--pad-x) 70px; max-width:var(--sirka-strany); animation:fadeIn .2s ease">
           <h2 style="margin:0; font-size:30px">Úložiště a synchronizace</h2>
           <div style="font-size:13px; color:var(--g-ink2); margin:3px 0 26px">{{ diskIntro }}</div>
 
@@ -2758,7 +2758,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
           </sc-if>
 
           <sc-if value="{{ finIsInv }}">
-            <div style="margin-top:26px; max-width:1040px; display:flex; flex-direction:column; gap:26px">
+            <div style="margin-top:26px; max-width:var(--sirka-strany); display:flex; flex-direction:column; gap:26px">
               <div style="display:flex; align-items:flex-end; gap:30px; flex-wrap:wrap">
                 <div>
                   <div style="font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--g-ink3)">Hodnota portfolia</div>
@@ -2956,7 +2956,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                     <button class="btn btn-ghost" onClick="{{ mineDisable }}" style="font-size:12.5px; color:var(--g-ink3)">Vypnout</button>
                   </div>
 
-                  <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr)); gap:16px; max-width:1040px">
+                  <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr)); gap:16px; max-width:var(--sirka-strany)">
                     <sc-for list="{{ mineRows }}" as="r" hint-placeholder-count="2">
                       <div style="padding:16px 17px; border-radius:2px; background:var(--g-raise); border:1px solid var(--g-line2)">
                         <div style="display:flex; align-items:baseline; gap:10px; flex-wrap:wrap">
@@ -3018,7 +3018,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                 </sc-for>
               </div>
 
-              <div style="display:flex; flex-direction:column; gap:12px; max-width:1040px">
+              <div style="display:flex; flex-direction:column; gap:12px; max-width:var(--sirka-strany)">
                 <sc-for list="{{ arbRows }}" as="r" hint-placeholder-count="4">
                   <div style="padding:16px 17px; border-radius:2px; background:var(--g-raise); border:1px solid {{ r.border }}">
                     <div style="display:flex; align-items:baseline; gap:10px; flex-wrap:wrap">
@@ -3751,7 +3751,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 
           <!-- ANOMÁLIE A VYROVNÁNÍ -->
           <sc-if value="{{ budIsAnom }}">
-            <div style="margin-top:26px; max-width:1000px; display:flex; flex-direction:column; gap:30px">
+            <div style="margin-top:26px; max-width:var(--sirka-strany); display:flex; flex-direction:column; gap:30px">
               <div>
                 <div style="display:flex; align-items:baseline; gap:10px; padding-bottom:9px; border-bottom:1px solid var(--g-ink); flex-wrap:wrap">
                   <span style="font-size:12px; letter-spacing:.14em; text-transform:uppercase">Co vybočuje</span>
@@ -3888,7 +3888,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                 </div>
               </div>
 
-              <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr)); gap:18px; margin-bottom:16px; max-width:1040px">
+              <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr)); gap:18px; margin-bottom:16px; max-width:var(--sirka-strany)">
                 <sc-for list="{{ surpSplit }}" as="p" hint-placeholder-count="3">
                   <div>
                     <div style="display:flex; align-items:baseline; gap:8px; font-size:13.5px; color:var(--g-ink2)">{{ p.name }}<span style="margin-left:auto; color:var(--g-ink); font-variant-numeric:tabular-nums">{{ p.v }}</span></div>
@@ -3904,7 +3904,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                 <button class="btn btn-primary" onClick="{{ surpAdd }}" disabled="{{ surpAddOff }}" style="opacity:{{ surpAddOp }}">Zapsat odběr</button>
               </div>
 
-              <div style="display:flex; flex-direction:column; gap:10px; max-width:1040px">
+              <div style="display:flex; flex-direction:column; gap:10px; max-width:var(--sirka-strany)">
                 <sc-for list="{{ surpRows }}" as="d" hint-placeholder-count="6">
                   <div style="padding:14px 16px; border-radius:2px; background:var(--g-raise); border:1px solid {{ d.border }}">
                     <div style="display:flex; align-items:baseline; gap:10px; flex-wrap:wrap">
@@ -4417,7 +4417,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
             <!-- OFFLINE A ZAŘÍZENÍ -->
             <sc-if value="{{ appIsOff }}">
               <sc-if value="{{ ofsIsState }}">
-                <div style="display:flex; flex-direction:column; gap:24px; max-width:1000px">
+                <div style="display:flex; flex-direction:column; gap:24px; max-width:var(--sirka-strany)">
                   <div style="display:flex; gap:16px; align-items:flex-start; padding:20px 22px; background:var(--g-panel); border-radius:2px; flex-wrap:wrap">
                     <i class="ph-duotone {{ ofsStateIcon }}" style="font-size:30px; color:{{ ofsStateColor }}; flex:none"></i>
                     <div style="flex:1 1 320px; min-width:260px">
@@ -5104,7 +5104,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
             <!-- KUCHAŘKA -->
             <sc-if value="{{ appIsCook }}">
               <sc-if value="{{ ckIsSuggest }}">
-                <div style="display:flex; flex-direction:column; gap:24px; max-width:1100px">
+                <div style="display:flex; flex-direction:column; gap:24px; max-width:var(--sirka-strany)">
                   <p style="margin:0; font-size:14px; line-height:1.6; color:var(--g-ink2); max-width:70ch; text-wrap:pretty">{{ ckSugHead }}</p>
 
                   <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:stretch">
@@ -5636,7 +5636,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 
             <!-- SROVNAT SÉRII -->
             <sc-if value="{{ appIsSer }}">
-              <div style="display:flex; flex-direction:column; gap:18px; max-width:1060px">
+              <div style="display:flex; flex-direction:column; gap:18px; max-width:var(--sirka-strany)">
                 <sc-if value="{{ serEmpty }}">
                   <div style="padding:30px 0; font-size:14.5px; color:var(--g-ink2)">Žádná série skoro shodných snímků — knihovna je v tomhle čistá.</div>
                 </sc-if>
@@ -5686,7 +5686,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 
             <!-- SPOLEČNÉ VÝBĚRY -->
             <sc-if value="{{ appIsCur }}">
-              <div style="display:flex; flex-direction:column; gap:20px; max-width:1060px">
+              <div style="display:flex; flex-direction:column; gap:20px; max-width:var(--sirka-strany)">
                 <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap">
                   <span style="font-size:13px; color:var(--g-ink2)">{{ curHead }}</span>
                   <div style="flex:1; min-width:120px; max-width:240px; height:5px; border-radius:2px; background:var(--g-line2); overflow:hidden"><div style="height:100%; width:{{ curProgress }}; background:var(--g-acc)"></div></div>
@@ -5806,7 +5806,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 
             <!-- VÝROČNÍ ALBUM -->
             <sc-if value="{{ appIsAnn }}">
-              <div style="display:flex; flex-direction:column; gap:20px; max-width:1060px">
+              <div style="display:flex; flex-direction:column; gap:20px; max-width:var(--sirka-strany)">
                 <sc-if value="{{ annIsLine }}">
                   <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap">
                     <span style="font-size:13px; color:var(--g-ink2)">{{ annHead }}</span>
@@ -5879,7 +5879,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 
             <!-- SVĚTOVÝ ITINERÁŘ -->
             <sc-if value="{{ appIsGeo }}">
-              <div style="display:flex; flex-direction:column; gap:20px; max-width:1040px">
+              <div style="display:flex; flex-direction:column; gap:20px; max-width:var(--sirka-strany)">
                 <sc-if value="{{ geoIsBeen }}">
                   <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap">
                     <span style="font-size:13px; color:var(--g-ink2)">{{ geoHead }}</span>
@@ -5962,7 +5962,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 
             <!-- STATISTIKY KNIHOVNY -->
             <sc-if value="{{ appIsLib }}">
-              <div style="display:flex; flex-direction:column; gap:26px; max-width:1040px">
+              <div style="display:flex; flex-direction:column; gap:26px; max-width:var(--sirka-strany)">
 
                 <sc-if value="{{ libIsOver }}">
                   <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap">
@@ -6145,7 +6145,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 
             <!-- AUTOMATIZACE A PRAVIDLA -->
             <sc-if value="{{ appIsRul }}">
-              <div style="display:flex; flex-direction:column; gap:24px; max-width:1060px">
+              <div style="display:flex; flex-direction:column; gap:24px; max-width:var(--sirka-strany)">
 
                 <sc-if value="{{ rulIsList }}">
                   <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:20px; max-width:620px">
@@ -6271,7 +6271,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 
             <!-- TÝDENNÍ PŘEHLED -->
             <sc-if value="{{ appIsWk }}">
-              <div style="display:flex; flex-direction:column; gap:24px; max-width:1060px">
+              <div style="display:flex; flex-direction:column; gap:24px; max-width:var(--sirka-strany)">
 
                 <sc-if value="{{ wkIsNow }}">
                   <div>
@@ -6409,7 +6409,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                 </div>
               </sc-if>
               <sc-if value="{{ nowModeActive }}">
-              <div style="display:flex; flex-direction:column; gap:22px; max-width:1080px">
+              <div style="display:flex; flex-direction:column; gap:22px; max-width:var(--sirka-strany)">
                 <div style="display:flex; align-items:flex-end; gap:26px; flex-wrap:wrap">
                   <div>
                     <div style="font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--g-ink3)">{{ nowWhere }}</div>
@@ -6584,7 +6584,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 
             <!-- VZPOMÍNKY -->
             <sc-if value="{{ appIsMem }}">
-              <div style="display:flex; flex-direction:column; gap:22px; max-width:1080px">
+              <div style="display:flex; flex-direction:column; gap:22px; max-width:var(--sirka-strany)">
 
                 <sc-if value="{{ memIsToday }}">
                   <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap">
@@ -6831,7 +6831,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 
             <!-- TISK A FOTOKNIHY -->
             <sc-if value="{{ appIsPrint }}">
-              <div style="display:flex; flex-direction:column; gap:20px; max-width:1120px">
+              <div style="display:flex; flex-direction:column; gap:20px; max-width:var(--sirka-strany)">
 
                 <sc-if value="{{ printIsJobs }}">
                   <div style="font-size:13px; color:var(--g-ink2)">{{ pHead }}</div>
@@ -7101,7 +7101,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 
             <!-- NÁŠ PŘÍBĚH -->
             <sc-if value="{{ appIsStory }}">
-              <div style="display:flex; flex-direction:column; gap:18px; max-width:1080px">
+              <div style="display:flex; flex-direction:column; gap:18px; max-width:var(--sirka-strany)">
                 <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap">
                   <span style="font-size:13px; color:var(--g-ink2)">{{ storyHead }}</span>
                   <div style="flex:1; min-width:120px; max-width:220px; height:5px; border-radius:2px; background:var(--g-line2); overflow:hidden"><div style="height:100%; width:{{ storyProgress }}; background:var(--g-acc)"></div></div>
@@ -8498,7 +8498,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 
           <!-- SROVNAT SÉRII -->
             <sc-if value="{{ clnOnSeries }}">
-              <div style="display:flex; flex-direction:column; gap:18px; max-width:1060px">
+              <div style="display:flex; flex-direction:column; gap:18px; max-width:var(--sirka-strany)">
                 <sc-if value="{{ serEmpty }}">
                   <div style="padding:30px 0; font-size:14.5px; color:var(--g-ink2)">Žádná série skoro shodných snímků — knihovna je v tomhle čistá.</div>
                 </sc-if>
@@ -8923,7 +8923,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                     <button class="btn btn-ghost" onClick="{{ dayDisable }}" style="font-size:12.5px; color:var(--g-ink3)">Vypnout</button>
                   </div>
 
-                  <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr)); gap:16px; max-width:1040px">
+                  <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr)); gap:16px; max-width:var(--sirka-strany)">
                     <sc-for list="{{ dayPeople }}" as="p" hint-placeholder-count="2">
                       <div style="padding:15px 16px; border-radius:2px; background:var(--g-raise); border:1px solid var(--g-line2)">
                         <div style="display:flex; align-items:baseline; gap:10px">
@@ -9004,7 +9004,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                   </div>
                   <div style="font-size:13.5px; color:var(--g-ink2); max-width:840px; margin-bottom:24px; text-wrap:pretty">{{ blizTrend }}</div>
 
-                  <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr)); gap:30px; max-width:1040px; align-items:start">
+                  <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr)); gap:30px; max-width:var(--sirka-strany); align-items:start">
                     <div>
                       <div style="font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--g-ink3); margin-bottom:12px">Kdo navrhuje, kdo odmítá</div>
                       <div style="display:flex; flex-direction:column; gap:11px">
@@ -9087,7 +9087,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                 <div style="font-size:13.5px; color:var(--g-ink2); text-wrap:pretty">{{ fsBest }}</div>
               </div>
 
-              <div style="display:flex; flex-direction:column; gap:12px; max-width:1040px">
+              <div style="display:flex; flex-direction:column; gap:12px; max-width:var(--sirka-strany)">
                 <sc-for list="{{ fsRows }}" as="f" hint-placeholder-count="5">
                   <div style="padding:15px 16px; border-radius:2px; background:var(--g-raise); border:1px solid var(--g-line2)">
                     <div style="display:flex; align-items:baseline; gap:10px; flex-wrap:wrap">
@@ -9135,7 +9135,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                 <div style="font-size:13.5px; color:var(--g-ink3); text-wrap:pretty">{{ quartAvg }}</div>
               </div>
 
-              <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr)); gap:14px; max-width:1040px">
+              <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr)); gap:14px; max-width:var(--sirka-strany)">
                 <sc-for list="{{ quartRows }}" as="q" hint-placeholder-count="4">
                   <div style="padding:15px 16px; border-radius:2px; background:var(--g-raise); border:1px solid {{ q.border }}">
                     <div style="display:flex; align-items:baseline; gap:10px; flex-wrap:wrap">
@@ -9169,7 +9169,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                 </sc-for>
               </div>
 
-              <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr)); gap:26px; margin-top:28px; max-width:1040px; align-items:start">
+              <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr)); gap:26px; margin-top:28px; max-width:var(--sirka-strany); align-items:start">
                 <div>
                   <div style="font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--g-ink3); margin-bottom:11px">Doplnit chybějící okno</div>
                   <div style="display:flex; flex-direction:column; gap:10px">
@@ -9618,7 +9618,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
               </div>
               <div style="font-size:14px; color:var(--g-ink2); max-width:860px; margin-bottom:26px; text-wrap:pretty">{{ svedLead }}</div>
 
-              <div style="display:flex; flex-direction:column; gap:11px; max-width:1040px">
+              <div style="display:flex; flex-direction:column; gap:11px; max-width:var(--sirka-strany)">
                 <sc-for list="{{ svedRows }}" as="g" hint-placeholder-count="6">
                   <div style="padding:15px 16px; border-radius:2px; background:var(--g-raise); border:1px solid var(--g-line2)">
                     <div style="display:flex; align-items:baseline; gap:10px; flex-wrap:wrap">
@@ -9644,7 +9644,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 
           <!-- ODCHOD Z APLIKACE -->
           <sc-if value="{{ zprOnExit }}">
-            <div style="max-width:1000px">
+            <div style="max-width:var(--sirka-strany)">
               <div style="display:flex; align-items:center; gap:22px; flex-wrap:wrap; padding:15px 17px; border-radius:2px; background:var(--g-panel); margin-bottom:20px">
                 <i class="ph-duotone ph-sign-out" style="font-size:26px; color:var(--g-ink2)"></i>
                 <div style="flex:1; min-width:260px">
@@ -10197,7 +10197,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                     <button class="btn btn-ghost" onClick="{{ parDisable }}" style="font-size:12.5px; color:var(--g-ink3)">Vypnout</button>
                   </div>
 
-                  <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr)); gap:14px; max-width:1040px">
+                  <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr)); gap:14px; max-width:var(--sirka-strany)">
                     <sc-for list="{{ parRows }}" as="p" hint-placeholder-count="4">
                       <div style="padding:15px 16px; border-radius:2px; background:var(--g-raise); border:1px solid var(--g-line2)">
                         <div style="display:flex; align-items:baseline; gap:10px; flex-wrap:wrap">
@@ -10265,7 +10265,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                 <div style="font-size:13.5px; color:var(--g-ink2); text-wrap:pretty">{{ indepHours }}</div>
               </div>
 
-              <div style="display:flex; flex-direction:column; gap:26px; max-width:1040px">
+              <div style="display:flex; flex-direction:column; gap:26px; max-width:var(--sirka-strany)">
                 <sc-for list="{{ indepAxes }}" as="ax" hint-placeholder-count="3">
                   <div>
                     <div style="font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--g-ink3); padding-bottom:8px; border-bottom:1px solid var(--g-ink)">{{ ax.name }}</div>
@@ -10318,7 +10318,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                 <div style="font-size:13.5px; color:var(--g-ink2); text-wrap:pretty">{{ trustOneSide }}</div>
               </div>
 
-              <div style="display:flex; flex-direction:column; gap:11px; max-width:1040px">
+              <div style="display:flex; flex-direction:column; gap:11px; max-width:var(--sirka-strany)">
                 <sc-for list="{{ trustRows }}" as="t" hint-placeholder-count="5">
                   <div style="padding:15px 16px; border-radius:2px; background:var(--g-raise); border:1px solid {{ t.border }}">
                     <div style="display:flex; align-items:baseline; gap:10px; flex-wrap:wrap">
@@ -10999,7 +10999,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                     <i class="ph-duotone ph-prohibit" style="font-size:19px; color:var(--g-mag); flex:none"></i><span style="text-wrap:pretty">{{ kidsNoMech }}</span>
                   </div>
 
-                  <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr)); gap:16px; max-width:1040px">
+                  <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr)); gap:16px; max-width:var(--sirka-strany)">
                     <sc-for list="{{ kidsPos }}" as="p" hint-placeholder-count="2">
                       <div style="padding:16px 17px; border-radius:2px; background:var(--g-raise); border:1px solid var(--g-line2)">
                         <div style="display:flex; align-items:baseline; gap:10px; flex-wrap:wrap">
@@ -11019,7 +11019,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                     </sc-for>
                   </div>
 
-                  <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr)); gap:30px; max-width:1040px; margin-top:30px; align-items:start">
+                  <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr)); gap:30px; max-width:var(--sirka-strany); margin-top:30px; align-items:start">
                     <div>
                       <div style="font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--g-ink3); padding-bottom:8px; border-bottom:1px solid var(--g-ink)">Co tomu stojí v cestě</div>
                       <div style="display:flex; flex-direction:column; gap:2px; margin-top:8px">
@@ -11157,7 +11157,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                 <div style="font-size:13px; color:var(--g-ink3); text-wrap:pretty">{{ expEternalLine }}</div>
               </div>
 
-              <div style="display:flex; flex-direction:column; gap:10px; max-width:1040px">
+              <div style="display:flex; flex-direction:column; gap:10px; max-width:var(--sirka-strany)">
                 <sc-for list="{{ expRows }}" as="e" hint-placeholder-count="6">
                   <div style="padding:15px 16px; border-radius:2px; background:var(--g-raise); border:1px solid {{ e.border }}; opacity:{{ e.dim }}">
                     <div style="display:flex; align-items:baseline; gap:10px; flex-wrap:wrap">
@@ -11209,7 +11209,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                 </sc-if>
               </div>
 
-              <div style="display:flex; flex-direction:column; gap:12px; max-width:1000px">
+              <div style="display:flex; flex-direction:column; gap:12px; max-width:var(--sirka-strany)">
                 <sc-for list="{{ spTags }}" as="t" hint-placeholder-count="4">
                   <div style="padding:14px 16px; border-radius:2px; background:var(--g-raise); border:1px solid var(--g-line2)">
                     <div style="display:flex; align-items:baseline; gap:11px; flex-wrap:wrap">
