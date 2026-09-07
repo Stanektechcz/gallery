@@ -13,6 +13,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\URL;
+use Illuminate\Support\Str;
 
 /**
  * Knihovna ve tvaru, ve kterém ji kreslí prototyp.
@@ -102,7 +103,19 @@ class Knihovna implements PoskytovatelObsahu
              * napsané „Knihovna je uklizená". Nechat místo toho čtyři vymyšlené
              * nálezy by znamenalo posílat dvojici uklízet fotky, které nemá.
              */
-            + ['DUP_GROUPS' => $this->duplicity($prostor)];
+            + ['DUP_GROUPS' => $this->duplicity($prostor)]
+            /*
+             * Návrhy na sloučení štítků chodí **i prázdné** — táž úvaha jako
+             * u duplicit výš.
+             *
+             * Ukázka nabízela sloučit `#jidlo + #jídlo` a `#more + #moře`.
+             * Takové dva štítky ale vedle sebe existovat nemůžou: `tags` má
+             * jednoznačný index na `(gallery_space_id, slug)` a obě pravopisné
+             * podoby mají tentýž slug. Byla to práce, kterou nikdo nemá —
+             * a prototyp má pro prázdno napsané „Nic ke sloučení", takže
+             * prázdno tady není k nerozeznání od rozbité obrazovky.
+             */
+            + ['AL' => ['tagMerge' => $this->slucitelneStitky($prostor)]];
     }
 
     /** @return Collection<int, MediaItem> */
@@ -1221,6 +1234,52 @@ class Knihovna implements PoskytovatelObsahu
                 ->all(),
             'sug' => [],
         ];
+    }
+
+    /**
+     * Štítky, které jsou nejspíš tentýž štítek dvakrát.
+     *
+     * Porovnává se podoba bez diakritiky, mezer a pomlček, takže se najde
+     * `#foto 2024` vs. `#foto2024` nebo `#letní tábor` vs. `#letnítábor` —
+     * dvojice, které v databázi opravdu vedle sebe stojí, protože mají různý
+     * `slug`. Rozdíl pouze v diakritice tady nikdy nebude: `tags` má
+     * jednoznačný index na `(gallery_space_id, slug)` a `#jidlo` s `#jídlo`
+     * mají slug tentýž, takže se druhý z nich nezaloží.
+     *
+     * Návrh se nabízí, jen když má co sloučit. Prázdno je odpověď, ne chyba.
+     *
+     * @return list<array<int, string>>
+     */
+    private function slucitelneStitky(GallerySpace $prostor): array
+    {
+        if (! Schema::hasTable('tags')) {
+            return [];
+        }
+
+        $stitky = DB::table('tags')
+            ->where('gallery_space_id', $prostor->id)
+            ->orderBy('name')
+            ->pluck('name')
+            ->filter(fn (?string $j) => (string) $j !== '');
+
+        return $stitky
+            ->groupBy(fn (string $jmeno) => $this->klicStitku($jmeno))
+            ->filter(fn (Collection $skupina) => $skupina->count() > 1)
+            ->map(fn (Collection $skupina) => [
+                $skupina->map(fn (string $j) => '#'.$j)->implode(' + '),
+                'stejný štítek psaný dvěma způsoby',
+                'sloučit',
+            ])
+            ->values()
+            ->all();
+    }
+
+    /** Štítek bez diakritiky, mezer a velkých písmen — na porovnání. */
+    private function klicStitku(string $jmeno): string
+    {
+        $bez = Str::ascii(mb_strtolower(trim($jmeno)));
+
+        return preg_replace('/[^a-z0-9]/', '', $bez) ?? $bez;
     }
 
     /**

@@ -10,6 +10,7 @@ use App\Services\Provoz\UlozisteGalerie;
 use App\Services\Storage\DriveConnectionResolver;
 use App\Support\SpaceContext;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
@@ -73,11 +74,30 @@ class System implements PoskytovatelObsahu
         // `CONFLICTS` taky: vyřešený rozpor musí z obrazovky zmizet hned.
         // Bez toho by tam po kliknutí zůstal viset řádek, který v databázi
         // už otevřený není — a při dalším načtení by se „vrátil".
-        return ['DATA_HEALTH', 'SECLIFE', 'TRASH', 'CONFLICTS'];
+        //
+        // A `LOCKWHO`/`LOCKMAIL`: v prostoru s jediným člověkem by jinak vedle
+        // něj zůstala druhá ukázková volba i s cizí adresou.
+        return ['DATA_HEALTH', 'SECLIFE', 'TRASH', 'CONFLICTS', 'LOCKWHO', 'LOCKMAIL'];
     }
 
     public function kolekce(GallerySpace $prostor): array
     {
+        /*
+         * Trezor chodí **vždycky, i prázdný a i zamčený**.
+         *
+         * Ukázka měla čtyři složky („Doklady · 12 souborů · šifrováno",
+         * „Skeny pasů · sdílet nelze") a obrazovka je ukazovala každému, kdo se
+         * dostal přes heslo natištěné o dva řádky výš. Dvojí lež v jednom:
+         * obsah nebyl její a šifrování aplikace nedělá — jen schovává před
+         * mřížkou, hledáním a sdílením.
+         *
+         * Zamčený trezor posílá prázdno. Zámek, který přesto vypíše, co je za
+         * ním, žádný zámek není.
+         */
+        $trezor = $this->trezorOtevreny()
+            ? $this->schovaneMedia($prostor)
+            : new Collection;
+
         return array_filter([
             'DATA_HEALTH' => $this->zdraviDat($prostor),
             'SECLIFE' => $this->zivotSekci($prostor),
@@ -88,7 +108,151 @@ class System implements PoskytovatelObsahu
             'TRASH' => $this->kos($prostor),
             'DVOJICE' => $this->jmenaDvojice($prostor),
             'UCTY' => $this->uctyDvojice($prostor),
-        ], fn ($v) => $v !== null && $v !== []);
+        ], fn ($v) => $v !== null && $v !== [])
+            + [
+                /*
+                 * Kdo se přihlašuje — jménem a adresou dvojice.
+                 *
+                 * Přihlašovací obrazovka nabízela „Adrian" a „Makinka" a do
+                 * kolonky předvyplnila `adrian.stanek@gmail.com`. U jiné
+                 * dvojice to byla cizí adresa, kterou člověk poslušně odeslal
+                 * a dostal „E-mail nebo heslo nesouhlasí" — bez nápovědy, co
+                 * je vlastně špatně.
+                 *
+                 * Posílá se jako objekt se dvěma klíči, protože `LOCKWHO`
+                 * a `LOCKMAIL` jsou v prototypu objekty: navlékají se na
+                 * místě a všech patnáct míst, která je čtou, uvidí to pravé
+                 * hned. Pořadí je totéž jako u `DVOJICE`.
+                 */
+                'LOCKWHO' => $this->kdoSePrihlasuje($prostor, 0),
+                'LOCKMAIL' => $this->kdoSePrihlasuje($prostor, 1),
+                'TREZOR' => $this->stavTrezoru(),
+                'VAULT_ITEMS' => $this->obsahTrezoru($trezor),
+                'AL' => array_filter([
+                    // Co čeká na zařazení — spočítané, ne napsané.
+                    'inbox' => $this->akcniInbox($prostor),
+                    'vault' => $this->trezorDoSeznamu($trezor),
+                ], fn (array $v, string $k) => $k === 'vault' || $v !== [], ARRAY_FILTER_USE_BOTH),
+            ];
+    }
+
+    /**
+     * `{ A: …, M: … }` z členů prostoru — jména (`$sloupec` 0) nebo adresy (1).
+     *
+     * Klíče `A` a `M` jsou z prototypu; nejsou to iniciály konkrétních lidí,
+     * jen „první" a „druhý". Když je v prostoru jen jeden člověk, druhý klíč
+     * se nevyplní a obrazovka nabídne jedinou volbu — což je pravda.
+     *
+     * @return array<string, string>
+     */
+    private function kdoSePrihlasuje(GallerySpace $prostor, int $sloupec): array
+    {
+        $lide = $this->uctyDvojice($prostor);
+        $klice = ['A', 'M'];
+        $mapa = [];
+
+        foreach (array_slice($lide, 0, 2) as $i => $clovek) {
+            // Adresa se porovnává s tím, co člověk napsal do kolonky, a ten
+            // ji píše, jak mu přijde; přihlašování rozlišovat velikost nemá.
+            $mapa[$klice[$i]] = $sloupec === 1
+                ? mb_strtolower((string) $clovek[1])
+                : (string) $clovek[0];
+        }
+
+        return $mapa;
+    }
+
+    /**
+     * Je trezor právě odemčený?
+     *
+     * Čte se `vault_unlocked_until` ze sezení — tentýž klíč, jaký hlídá výdej
+     * souborů (`ProtectVaultMedia`) a jaký nastavuje `TrezorController`.
+     * Jediné místo pravdy: kdyby si obrazovka vedla vlastní odpočet, dala by
+     * se otevřít přepsáním čísla v konzoli a soubory by stejně nedostala.
+     */
+    private function trezorOtevreny(): bool
+    {
+        return (int) session('vault_unlocked_until', 0) > CarbonImmutable::now()->timestamp;
+    }
+
+    /** @return array{odemceno: bool, zbyva: int} */
+    private function stavTrezoru(): array
+    {
+        $zbyva = max(0, (int) session('vault_unlocked_until', 0) - CarbonImmutable::now()->timestamp);
+
+        return ['odemceno' => $zbyva > 0, 'zbyva' => $zbyva];
+    }
+
+    /**
+     * Co v trezoru doopravdy leží.
+     *
+     * Volá se jen s odemčeným trezorem — viz `kolekce()`.
+     *
+     * @return Collection<int, MediaItem>
+     */
+    private function schovaneMedia(GallerySpace $prostor): Collection
+    {
+        return MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
+            ->where('gallery_space_id', $prostor->id)
+            ->whereNull('trashed_at')
+            ->where('is_hidden', true)
+            ->with('primaryAlbum:id,title')
+            ->orderByDesc('taken_at')
+            ->limit(200)
+            ->get(['id', 'uuid', 'primary_album_id', 'original_filename', 'media_type', 'taken_at']);
+    }
+
+    /**
+     * Obsah trezoru ve tvaru, ve kterém ho kreslí jeho obrazovka.
+     *
+     * Náhled se **záměrně neposílá**. U ostatních mřížek chodí jako podepsaná
+     * adresa s platností do konce zítřka; u trezoru by to znamenalo, že se
+     * z nejcitlivějších souborů stanou odkazy, které fungují bez přihlášení
+     * a přežijí i zamčení. Dlaždici si prototyp umí nakreslit i sám.
+     *
+     * @param  Collection<int, MediaItem>  $schovane
+     * @return list<array<string, mixed>>
+     */
+    private function obsahTrezoru(Collection $schovane): array
+    {
+        return $schovane
+            ->map(fn (MediaItem $m) => [
+                // `id` je uuid: pod ním se položka vrací z trezoru zpátky.
+                'id' => (string) $m->uuid,
+                'name' => (string) ($m->original_filename ?: 'Bez názvu'),
+                'meta' => implode(' · ', array_filter([
+                    $m->primaryAlbum?->title,
+                    $m->taken_at ? CarbonImmutable::parse($m->taken_at)->format('j. n. Y') : null,
+                    'mimo mřížku, hledání i sdílení',
+                ])),
+                'n' => (int) $m->id,
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Týž trezor ve tvaru seznamu, po albech.
+     *
+     * Ukázka tu psala „Doklady · 12 souborů · šifrováno". Aplikace obsah
+     * trezoru **nešifruje** — schová ho před mřížkou, hledáním a sdílením.
+     * Tvrdit u něj šifrování je slib, který nikdo nedrží, a přesně ten, kvůli
+     * kterému by tam dvojice dala doklady.
+     *
+     * @param  Collection<int, MediaItem>  $schovane
+     * @return list<array<int, string>>
+     */
+    private function trezorDoSeznamu(Collection $schovane): array
+    {
+        return $schovane
+            ->groupBy(fn (MediaItem $m) => $m->primaryAlbum?->title ?: 'Bez alba')
+            ->map(fn (Collection $v, string $album) => [
+                $album,
+                $this->pocet($v->count(), 'položka', 'položky', 'položek').' · schované před mřížkou i sdílením',
+                'trezor',
+            ])
+            ->values()
+            ->all();
     }
 
     /**
@@ -1076,5 +1240,90 @@ class System implements PoskytovatelObsahu
             ->min('occurred_at');
 
         return $prvni ? (int) floor(CarbonImmutable::parse($prvni)->diffInMonths(now())) : 0;
+    }
+
+    /**
+     * Akční inbox: co v aplikaci opravdu čeká na zařazení.
+     *
+     * Obrazovka měla čtyři napsané řádky — „3 originály čekají na přenos",
+     * „12 fotek bez data", „Nezařazená transakce 1 240 Kč". U dvojice,
+     * která má knihovnu uklizenou, to byla práce, kterou nikdo nemá.
+     *
+     * Odložené a vyřízené položky (`snoozed`, `inboxDone`) tu nejsou:
+     * je to triáž toho, kdo se dívá, a aplikace pro ni tabulku nemá.
+     * Zůstávají tam, kde byly — ve stavu, který se ukládá u obou.
+     *
+     * @return list<array<int, string>>
+     */
+    private function akcniInbox(GallerySpace $prostor): array
+    {
+        $radky = [];
+
+        $fotky = MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
+            ->where('gallery_space_id', $prostor->id)
+            ->whereNull('trashed_at')
+            ->where('is_hidden', false);
+
+        $bezData = (clone $fotky)->whereNull('taken_at')->count();
+
+        if ($bezData > 0) {
+            $radky[] = [
+                $this->pocet($bezData, 'fotka bez data', 'fotky bez data', 'fotek bez data'),
+                'knihovna · datum se dá doplnit z okolních dnů',
+                'akce',
+            ];
+        }
+
+        $bezMista = (clone $fotky)->whereNull('location_name')->whereNull('latitude')->count();
+
+        if ($bezMista > 0) {
+            $radky[] = [
+                $this->pocet($bezMista, 'fotka bez místa', 'fotky bez místa', 'fotek bez místa'),
+                'knihovna · místo se dá doplnit z téhož dne',
+                'akce',
+            ];
+        }
+
+        $nezalohovane = (clone $fotky)->where('storage_status', '!=', 'mirrored')->count();
+
+        if ($nezalohovane > 0 && $this->disky->forSpace($prostor->id)) {
+            $radky[] = [
+                $this->pocet($nezalohovane, 'originál čeká na přenos', 'originály čekají na přenos', 'originálů čeká na přenos'),
+                'úložiště · druhá kopie na Disku',
+                'akce',
+            ];
+        }
+
+        if (Schema::hasTable('transactions')) {
+            $bezKategorie = DB::table('transactions')
+                ->where('gallery_space_id', $prostor->id)
+                ->whereNull('category_id')
+                ->count();
+
+            if ($bezKategorie > 0) {
+                $radky[] = [
+                    $this->pocet($bezKategorie, 'nezařazená transakce', 'nezařazené transakce', 'nezařazených transakcí'),
+                    'finance · bez zařazení nesedí rozpočet',
+                    'zařadit',
+                ];
+            }
+        }
+
+        if (Schema::hasTable('travel_inbox_items')) {
+            $cesty = DB::table('travel_inbox_items')
+                ->where('gallery_space_id', $prostor->id)
+                ->where('state', '!=', 'filed')
+                ->count();
+
+            if ($cesty > 0) {
+                $radky[] = [
+                    $this->pocet($cesty, 'věc v cestovní schránce', 'věci v cestovní schránce', 'věcí v cestovní schránce'),
+                    'cesty · čeká na zařazení k cestě',
+                    'zařadit',
+                ];
+            }
+        }
+
+        return $radky;
     }
 }

@@ -380,7 +380,28 @@
             // si ho stranou od `GalerieData`.
             if (klic === 'MOBIL') { Object.assign(mobil, b.data[klic]); doMobilu(); return; }
 
-            obsah[klic] = b.data[klic];
+            /*
+             * Kolekci, na které se skládá víc skupin, si **poskládáme**.
+             *
+             * `obsah` je plochá mapa a slouží k tomu, aby se data ze serveru
+             * dala navléct znovu, až runtime prototypu načte `galerie-data.js`
+             * podruhé. Prostým přiřazením si ale skupiny přepisovaly navzájem:
+             * `AL` posílá knihovna (`tagMerge`) i systém (`inbox`, `vault`),
+             * takže si tu zůstala jen ta, která dorazila později — a při
+             * dalším průchodu se zbytek vrátil na ukázková data.
+             *
+             * Poznat se to dalo jen na časování: podle toho, která skupina
+             * doběhla dřív, byla obrazovka jednou skutečná a jindy vymyšlená.
+             */
+            var drive = obsah[klic];
+            var slozeno = b.data[klic];
+
+            if (drive && slozeno && ! Array.isArray(drive) && ! Array.isArray(slozeno)
+                && typeof drive === 'object' && typeof slozeno === 'object') {
+              slozeno = Object.assign({}, drive, slozeno);
+            }
+
+            obsah[klic] = slozeno;
             if (! navlec(window.GalerieData, klic, b.data[klic], !!uplne[klic])) neslo.push(klic);
           });
 

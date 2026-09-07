@@ -51,8 +51,11 @@ class AutoTagCommand extends Command
                 continue;
             }
 
-            $uzMa = $item->tags->pluck('name')->map(fn ($n) => mb_strtolower($n))->all();
-            $nove = array_values(array_filter($navrhy, fn ($t) => ! in_array(mb_strtolower($t), $uzMa, true)));
+            // Porovnává se slug, ne jméno: „jídlo" a „jidlo" jsou v této tabulce
+            // z principu tentýž štítek, takže podle jmen by se navrhoval znovu
+            // a hlásil by se jako přidaný, i když by se nic nepřidalo.
+            $uzMa = $item->tags->pluck('name')->map(fn ($n) => Str::slug($n) ?: mb_strtolower($n))->all();
+            $nove = array_values(array_filter($navrhy, fn ($t) => ! in_array(Str::slug($t) ?: mb_strtolower($t), $uzMa, true)));
 
             if (! $nove) {
                 continue;
@@ -65,10 +68,17 @@ class AutoTagCommand extends Command
                 foreach ($nove as $jmeno) {
                     // Slug si model nedoplňuje sám a sloupec je povinný, takže se počítá
                     // tady — jinak první nový štítek spadne na omezení databáze.
+                    $slug = Str::slug($jmeno) ?: mb_strtolower($jmeno);
+
+                    // Hledá se podle slugu, ne podle jména. `tags` má jednoznačný index
+                    // na `(gallery_space_id, slug)` a „jídlo" se slugem shoduje s „jidlo";
+                    // hledání podle jména by existující štítek nenašlo, pokusilo by se
+                    // založit druhý se stejným slugem a celý příkaz by spadl na omezení
+                    // databáze uprostřed dávky. Zůstane jméno, které dorazilo první.
                     $tag = Tag::firstOrCreate(
-                        ['gallery_space_id' => $item->gallery_space_id, 'name' => $jmeno],
+                        ['gallery_space_id' => $item->gallery_space_id, 'slug' => $slug],
                         [
-                            'slug' => Str::slug($jmeno) ?: mb_strtolower($jmeno),
+                            'name' => $jmeno,
                             'depth' => 0,
                             'created_by' => $item->uploaded_by ?? $item->owner_user_id,
                         ],

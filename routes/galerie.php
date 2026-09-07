@@ -14,6 +14,7 @@ use App\Http\Controllers\Api\Galerie\StateController;
 use App\Http\Controllers\Api\Galerie\StorageController;
 use App\Http\Controllers\Api\Galerie\TiskController;
 use App\Http\Controllers\Api\Galerie\TokenController;
+use App\Http\Controllers\Api\Galerie\TrezorController;
 use App\Http\Controllers\Api\Galerie\UlozisteController;
 use App\Http\Controllers\Api\Galerie\WebauthnController;
 use App\Http\Controllers\Api\Galerie\ZaznamController;
@@ -139,6 +140,22 @@ Route::middleware(['auth:sanctum', 'throttle:120,1'])->prefix('api')->group(func
      * viděl celou dobu.
      */
     Route::post('rozpory/vyresit', RozporController::class)->name('galerie.rozpor.vyresit');
+
+    /*
+     * Trezor.
+     *
+     * Odemčení porovnával prohlížeč s konstantou z `galerie-data.js` — tedy
+     * s heslem, které si mohl přečíst kdokoli, kdo si otevřel adresu skriptu.
+     * Zámek je přitom v aplikaci skutečný; tyhle tři cesty na něj obrazovku
+     * konečně napojují.
+     *
+     * Odemykání má vlastní, tvrdší limit než zbytek skupiny — je to hádání
+     * hesla, ne běžné klepání po aplikaci.
+     */
+    Route::get('trezor', [TrezorController::class, 'stav'])->name('galerie.trezor.stav');
+    Route::post('trezor/odemknout', [TrezorController::class, 'odemkni'])
+        ->middleware('throttle:10,1')->name('galerie.trezor.odemknout');
+    Route::post('trezor/zamknout', [TrezorController::class, 'zamkni'])->name('galerie.trezor.zamknout');
 
     /*
      * Koš.

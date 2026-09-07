@@ -3,6 +3,7 @@
 namespace Tests\Feature\Galerie;
 
 use App\Models\GallerySpace;
+use App\Models\MediaItem;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -36,6 +37,32 @@ class SeznamyTest extends TestCase
         $this->prostor->members()->syncWithoutDetaching([$this->adri->id => ['role' => 'owner']]);
 
         Sanctum::actingAs($this->adri);
+    }
+
+    /**
+     * Jedna fotka v knihovně.
+     *
+     * Prázdná knihovna se celá neposílá — prázdná mřížka a nenačtená aplikace
+     * vypadají z pohledu člověka stejně — takže testy, které se ptají na její
+     * seznamy, potřebují mít v knihovně aspoň něco.
+     */
+    private function fotka(string $soubor = 'IMG_1.jpg'): MediaItem
+    {
+        return MediaItem::create([
+            'uuid' => (string) Str::uuid(),
+            'gallery_space_id' => $this->prostor->id,
+            'owner_user_id' => $this->adri->id,
+            'uploaded_by' => $this->adri->id,
+            'original_filename' => $soubor,
+            'safe_filename' => Str::slug(pathinfo($soubor, PATHINFO_FILENAME)).'.jpg',
+            'extension' => 'jpg',
+            'mime_type' => 'image/jpeg',
+            'media_type' => 'photo',
+            'size_bytes' => 1000,
+            'uploaded_at' => now(),
+            'status' => 'ready',
+            'storage_status' => 'local',
+        ]);
     }
 
     /** Uložená randíčka chodí z tabulky, ne z ukázky. */
@@ -186,5 +213,75 @@ class SeznamyTest extends TestCase
 
         $this->assertSame('EUR karta', $radek[0]);
         $this->assertSame('napojeno', $radek[2]);
+    }
+
+    /**
+     * Akční inbox se počítá z toho, co opravdu chybí.
+     *
+     * Obrazovka měla čtyři napsané řádky — „12 fotek bez data",
+     * „Nezařazená transakce 1 240 Kč". U dvojice, která má uklizeno,
+     * to byla práce, kterou nikdo nemá.
+     */
+    public function test_akcni_inbox_se_pocita(): void
+    {
+        $this->assertNull($this->getJson('/api/data/system')->assertOk()->json('data.AL.inbox'));
+
+        $this->fotka();
+
+        $inbox = $this->getJson('/api/data/system')->assertOk()->json('data.AL.inbox');
+        $popisky = array_column($inbox, 0);
+
+        $this->assertContains('1 fotka bez data', $popisky);
+        $this->assertContains('1 fotka bez místa', $popisky);
+    }
+
+    /**
+     * Návrh na sloučení štítků vzniká z opravdu dvojího zápisu, ne z ukázky.
+     *
+     * Obrazovka nabízela sloučit `#hory + #kopce` u dvojice, která ani jeden
+     * z těch štítků nemá. Teď se nabízí jen to, co v tabulce vedle sebe
+     * skutečně stojí — a když nic, nenabízí se nic.
+     */
+    public function test_slucitelne_stitky_se_poznaji_z_dvojiho_zapisu(): void
+    {
+        $this->fotka();
+
+        // `#letní tábor` a `#letnítábor` mají různý slug, takže vedle sebe
+        // existovat můžou. `#hory` nemá s čím splynout.
+        foreach (['letní tábor', 'letnítábor', 'hory'] as $jmeno) {
+            DB::table('tags')->insert([
+                'gallery_space_id' => $this->prostor->id,
+                'name' => $jmeno,
+                'slug' => Str::slug($jmeno) ?: $jmeno,
+                'created_at' => now(), 'updated_at' => now(),
+            ]);
+        }
+
+        $navrhy = $this->getJson('/api/data/knihovna')->assertOk()->json('data.AL.tagMerge');
+
+        $this->assertCount(1, $navrhy, '#hory nemá s čím splynout.');
+        $this->assertStringContainsString('#letní tábor', $navrhy[0][0]);
+        $this->assertStringContainsString('#letnítábor', $navrhy[0][0]);
+    }
+
+    /**
+     * Bez dvojího zápisu se posílá prázdný seznam, ne ukázka.
+     *
+     * Tohle je celý smysl klíče: `tagMerge` chodí i prázdný, aby přepsal
+     * `#jidlo + #jídlo` z `galerie-data.js`. Kdyby se neposlal, obrazovka by
+     * u uklizené knihovny dál nabízela slučovat štítky, které dvojice nemá.
+     */
+    public function test_bez_dvojiho_zapisu_chodi_prazdny_seznam(): void
+    {
+        $this->fotka();
+
+        DB::table('tags')->insert([
+            'gallery_space_id' => $this->prostor->id,
+            'name' => 'hory',
+            'slug' => 'hory',
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $this->assertSame([], $this->getJson('/api/data/knihovna')->assertOk()->json('data.AL.tagMerge'));
     }
 }

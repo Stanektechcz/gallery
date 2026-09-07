@@ -267,15 +267,38 @@ class ObsahSystemTest extends TestCase
         $this->assertSame(['Knihovna'], $r->all());
     }
 
-    /** Obě kolekce server dodává celé. */
+    /**
+     * Kolekce, které server dodává celé.
+     *
+     * `LOCKWHO` a `LOCKMAIL` jsou mezi nimi proto, že v prostoru s jediným
+     * člověkem by vedle něj jinak zůstala druhá ukázková volba i s cizí
+     * adresou. `TRASH` a `CONFLICTS` v seznamu chybí, protože jsou prázdné
+     * a neposílají se — `uplne` se hlásí jen k tomu, co v odpovědi je.
+     */
     public function test_zdravi_i_sekce_prichazeji_cele(): void
     {
         $this->fotka();
 
         $this->assertSame(
-            ['DATA_HEALTH', 'SECLIFE'],
+            ['DATA_HEALTH', 'SECLIFE', 'LOCKWHO', 'LOCKMAIL'],
             $this->getJson('/api/data/system')->assertOk()->json('uplne'),
         );
+    }
+
+    /**
+     * Kdo se přihlašuje, řekne server — ne konstanta v ukázce.
+     *
+     * Přihlašovací obrazovka nabízela „Adrian" a „Makinka" a předvyplňovala
+     * `adrian.stanek@gmail.com`. U jiné dvojice to byla cizí adresa: člověk ji
+     * poslušně odeslal a dostal „E-mail nebo heslo nesouhlasí".
+     */
+    public function test_prihlaseni_zna_skutecna_jmena_a_adresy(): void
+    {
+        $data = $this->getJson('/api/data/system')->assertOk()->json('data');
+
+        $this->assertSame($this->adri->name, $data['LOCKWHO']['A']);
+        $this->assertSame(mb_strtolower($this->adri->email), $data['LOCKMAIL']['A']);
+        $this->assertStringNotContainsString('@gmail.com', json_encode($data['LOCKMAIL']));
     }
 
     /** Čísla druhého páru se do odpovědi nedostanou. */

@@ -8075,8 +8075,16 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
               <p style="font-size:14px; color:var(--g-ink2); margin:6px 0 20px; text-wrap:pretty">Obsah se nenajde v hledání, neobjeví se v mřížce ani na mapě a do sdíleného odkazu se nedá vložit. Odemčení platí patnáct minut, pak se zamkne samo.</p>
 
               <div class="field"><label>Heslo do galerie</label><input class="input" type="password" value="{{ vltPwd }}" onChange="{{ vltSetPwd }}" placeholder="Zadejte heslo"></div>
-              <div style="font-size:12px; color:var(--g-ink3); margin-top:5px">V prototypu je heslo <strong>zadar2026</strong>.</div>
-              <div class="field" style="margin-top:12px"><label>Kód z aplikace v telefonu</label><input class="input" value="{{ vltCode }}" onChange="{{ vltSetCode }}" placeholder="Šest číslic" style="letter-spacing:.3em"></div>
+              <!--
+                Pod kolonkou stálo „V prototypu je heslo zadar2026“ a přesně
+                s tím se zadané heslo porovnávalo — v prohlížeči, proti
+                konstantě z veřejného souboru. Ověřuje ho server.
+
+                Kolonka „Kód z aplikace v telefonu“ je pryč: kontrolovalo se
+                u ní jen to, že má šest číslic, takže prošlo cokoli. Políčko,
+                které nic neověřuje, je horší než žádné — vypadá jako druhá
+                pojistka a není.
+              -->
 
               <sc-if value="{{ vltError }}">
                 <div style="display:flex; gap:9px; align-items:flex-start; margin-top:12px; padding:11px 12px; border-radius:2px; background:var(--g-mag-soft); font-size:13px">
@@ -8138,11 +8146,26 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 
                 <div>
                   <h4 style="margin:0 0 4px; font-size:19px">Přístup a dědictví</h4>
-                  <div style="font-size:13px; color:var(--g-ink2); margin-bottom:14px">Kdo se k archivu dostane, když se vám něco stane. Nastavení platí pro celý prostor, ne jen pro trezor.</div>
+                  <!--
+                    Tenhle formulář sliboval víc, než aplikace umí.
+
+                    Stálo v něm, že se přístup po 180 dnech nečinnosti otevře
+                    sám, a řádek dole hlásil „Aktivní: Klára Staňková
+                    (klara@example.com)" — jméno, které nikdo nezadal. Přitom
+                    v aplikaci není nic, co by nečinnost hlídalo, komukoli
+                    psalo nebo přístup otvíralo: uložením se zapsala jen
+                    poznámka do stavu dvojice.
+
+                    Nechat to tak by znamenalo, že dvojice spoléhá na
+                    pojistku, která neexistuje — a přijde se na to až ve chvíli,
+                    kdy na tom bude záležet. Text proto říká, co se doopravdy
+                    stane: poznámka se uloží, předání zařídí člověk.
+                  -->
+                  <div style="font-size:13px; color:var(--g-ink2); margin-bottom:14px">Komu má archiv připadnout, kdyby se vám něco stalo. Zatím je to <strong>zapsané přání</strong>: aplikace ho uloží a ukáže, ale sama nikomu nic neotevře ani nenapíše.</div>
                   <div class="field"><label>Důvěrník</label><input class="input" value="{{ vltHeirName }}" onChange="{{ vltSetHeirName }}" placeholder="Jméno"></div>
                   <div class="field" style="margin-top:10px"><label>E-mail</label><input class="input" value="{{ vltHeirMail }}" onChange="{{ vltSetHeirMail }}" placeholder="adresa@example.com"></div>
                   <div class="field" style="margin-top:10px">
-                    <label>Přístup se otevře po nečinnosti</label>
+                    <label>Po jaké nečinnosti si to přejete</label>
                     <select class="input" aria-label="Doba nečinnosti" value="{{ vltHeirDelay }}" onChange="{{ vltSetHeirDelay }}">
                       <option value="90">90 dnech</option>
                       <option value="180">180 dnech</option>
@@ -12800,8 +12823,14 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
           <button class="btn btn-primary" onClick="{{ lockSignIn }}" disabled="{{ lockSignCant }}" style="width:100%; margin-top:14px; gap:7px"><i class="ph-duotone ph-sign-in" style="font-size:17px"></i>Přihlásit se</button>
           <div style="display:flex; gap:10px; align-items:baseline; margin-top:18px; padding-top:11px; border-top:1px solid var(--g-line)">
             <div style="font-size:12px; line-height:1.6; color:var(--g-ink3)">{{ lockPwdHint }}</div>
-            <button class="btn btn-ghost" onClick="{{ obStart }}" style="flex:none; font-size:12.5px; gap:6px"><i class="ph-duotone ph-sparkle" style="font-size:15px"></i>První spuštění</button>
-            <button class="btn btn-ghost" onClick="{{ lockSkip }}" style="margin-left:auto; flex:none; font-size:12.5px">Přeskočit zámek</button>
+            <button class="btn btn-ghost" onClick="{{ obStart }}" style="margin-left:auto; flex:none; font-size:12.5px; gap:6px"><i class="ph-duotone ph-sparkle" style="font-size:15px"></i>První spuštění</button>
+            <!--
+              Vedle přihlášení stálo tlačítko „Přeskočit zámek“ a jeho hláška
+              to říkala rovnou: „v prototypu jde dovnitř i bez kódu“. Jedním
+              klepnutím se otevřel celý archiv bez hesla, bez kódu, bez čehokoli
+              — na obrazovce, která o dva řádky výš slibovala, že se dovnitř
+              nedostane nikdo.
+            -->
           </div>
         </sc-if>
 
@@ -14287,7 +14316,10 @@ class Component extends DCLogic {
     tplOpen: false, ckHaveOpen: false, anomOff: {}, settleDone: false, dnHeatOpen: true,
     serIdx: 0, serKeep: {}, serDone: {}, keysOpen: false, tripMode: true,
     appLocked: true, lockWho: 'A', lockPin: '', lockTries: 0, lockErr: null, lockRec: false, lockRecCode: '',
-    lockStep: 'pwd', lockMail: 'adrian.stanek@gmail.com', lockPwd: '', lockTrusted: false, lockTrust: true,
+    // Kolonka na e-mail začíná prázdná; předvyplněná byla cizí adresa
+    // (`adrian.stanek@gmail.com`) a člověk ji poslušně odeslal. Skutečnou
+    // adresu dodá server v `LOCKMAIL` a doplní ji `lockVals`.
+    lockStep: 'pwd', lockMail: '', lockPwd: '', lockTrusted: false, lockTrust: true,
     lockIdle: '5 min', lockSecs: 'Deník a Finance', lockBio: true, lockStart: true, lockBioBusy: false,
     lockAt: 0, secUntil: 0, gatePin: '', gateErr: null,
     curVotes: {}, curIdx: 0, curWho: 'A', curSets: [], annPick: {}, annFmt: 'čtverec 21 cm',
@@ -15450,25 +15482,64 @@ class Component extends DCLogic {
       const left = (this.state.vaultLeft || 0) - 1;
       if (left <= 0) {
         clearInterval(this._vt);
+        this._vt = null;
         this.setState({ vaultLeft: 0 });
         this.toast('Trezor se po patnácti minutách sám zamkl', { icon: 'ph-lock-simple' });
+        // Obsah trezoru drží server; po zamčení ho přestane posílat.
+        if (window.GalerieObnovit) GalerieObnovit('system');
       } else this.setState({ vaultLeft: left });
     }, 1000);
   }
   vltVals() {
     const s = this.state;
-    const left = s.vaultLeft || 0;
+    /*
+     * Kolik zbývá, ví sezení na serveru.
+     *
+     * Odpočet žil jen v paměti karty: po obnovení stránky se trezor tvářil
+     * zamčeně, i když sezení běželo dál a soubory se vydávaly — a naopak se
+     * dal libovolně natáhnout. Tohle je jen jeho obraz.
+     */
+    const trez = (window.GalerieData && window.GalerieData.TREZOR) || {};
+    const left = s.vaultLeft !== undefined ? s.vaultLeft : (trez.zbyva || 0);
+    if (left > 0 && !this._vt) setTimeout(() => {
+      if (this.state.vaultLeft === undefined) this.setState({ vaultLeft: left });
+      this.vltTick();
+    }, 0);
     const tries = s.vaultTries || 0;
-    const added = s.vaultAdded || [];
     const removed = s.vaultRemoved || [];
     const pick = s.vaultPick || [];
     const photos = this.photos();
-    const items = VAULT_ITEMS.filter(v => !removed.includes(v.id))
-      .concat(added.map(id => {
+    /*
+     * Trezor drží server, ne obrazovka.
+     *
+     * `VAULT_ITEMS` bývaly čtyři napsané složky („Doklady · 12 souborů ·
+     * šifrováno"). Teď je to skutečný obsah — a chodí jen s odemčeným
+     * trezorem, takže zamčený trezor je prázdný i v datech, ne jen na pohled.
+     */
+    const ze_serveru = VAULT_ITEMS.map(v => v.id);
+    /*
+     * A `vaultAdded` se od něj odpíchne.
+     *
+     * Server bere ten seznam jako **úplný**: co v něm není, vrací zpátky do
+     * knihovny. Když začínal prázdný, první přesun do trezoru poslal jediné
+     * id — a všechno ostatní se tím odemklo a vrátilo do mřížky. Trezor se
+     * vyprázdnil jedním kliknutím.
+     */
+    const added = s.vaultAdded || ze_serveru;
+    const items = VAULT_ITEMS.filter(v => !removed.includes(v.id) && added.includes(v.id))
+      .concat(added.filter(id => !ze_serveru.includes(id)).map(id => {
         const p = photos.find(x => x.id === id);
         return { id: id, name: p ? p.name : id, meta: (p ? p.dateShort + ' · ' + p.place : '') + ' · přesunuto dnes', n: p ? p.n : 3 };
       }));
-    const heir = Object.assign({ name: 'Klára Staňková', mail: 'klara@example.com', delay: '180', notify: true, vault: false }, s.vaultHeirSaved || {});
+    /*
+     * Důvěrník začíná prázdný.
+     *
+     * Předvyplněná byla „Klára Staňková (klara@example.com)" a řádek pod
+     * formulářem hlásil, že se po 180 dnech dostane k archivu. Dvojice se tak
+     * hned při prvním otevření dočetla, že jejich vzpomínky zdědí někdo, koho
+     * nikdy nezadala.
+     */
+    const heir = Object.assign({ name: '', mail: '', delay: '180', notify: true, vault: false }, s.vaultHeirSaved || {});
     const draft = Object.assign({}, heir, s.vaultHeir || {});
     const dirty = ['name', 'mail', 'delay', 'notify', 'vault'].some(k => draft[k] !== heir[k]);
     const setHeir = patch => this.setState({ vaultHeir: Object.assign({}, draft, patch) });
@@ -15482,24 +15553,57 @@ class Component extends DCLogic {
       vltLeft: Math.floor(left / 60) + ':' + String(left % 60).padStart(2, '0'),
       vltPct: Math.round((left / 900) * 100) + '%',
       vltPwd: s.vaultPwd || '', vltSetPwd: e => this.setState({ vaultPwd: e.target.value, vaultErr: null }),
-      vltCode: s.vaultCode || '', vltSetCode: e => this.setState({ vaultCode: e.target.value.replace(/\D/g, '').slice(0, 6), vaultErr: null }),
       vltError: !!s.vaultErr, vltErrorText: s.vaultErr || '',
       vltBlocked: tries >= 3, vltBlockedOp: tries >= 3 ? '.45' : '1',
-      vltUnlockLabel: tries >= 3 ? 'Přístup uzavřen na 30 s' : 'Odemknout trezor',
+      vltUnlockLabel: s.vaultBusy ? 'Ověřuje se…' : (tries >= 3 ? 'Přístup uzavřen na 30 s' : 'Odemknout trezor'),
+      /*
+       * Odemyká server, ne prohlížeč.
+       *
+       * Původně se zadané heslo porovnávalo s konstantou `VAULT_PWD`
+       * z `galerie-data.js` — z veřejného souboru, který si mohl kdokoli
+       * otevřít v prohlížeči; obrazovka ho navíc sama vypisovala pod
+       * kolonkou. Druhé ověření se kontrolovalo jen na šest číslic, takže
+       * prošlo `000000`. A patnáctiminutové sezení bylo číslo v paměti
+       * karty: k souborům nedosáhlo a dalo se přepsat v konzoli.
+       *
+       * Teď rozhoduje `POST /api/trezor/odemknout`: heslo do galerie proti
+       * `users.password`, odpočet ze sezení a týž klíč, jaký hlídá výdej
+       * souborů. Neúspěšný pokus jde do auditu, jak obrazovka slibuje.
+       */
       vltUnlock: () => {
-        if (tries >= 3) return;
-        if ((s.vaultPwd || '') !== VAULT_PWD) {
-          const t = tries + 1;
-          this.setState({ vaultTries: t, vaultErr: t >= 3 ? 'Tři neúspěšné pokusy. Přístup je na půl minuty uzavřený a záznam šel do auditu.' : 'Heslo nesouhlasí. Zbývají ' + this.pl(3 - t, 'pokus', 'pokusy', 'pokusů') + '.' });
-          if (t >= 3) setTimeout(() => this.setState({ vaultTries: 0, vaultErr: null }), 30000);
-          return;
-        }
-        if ((s.vaultCode || '').length !== 6) { this.setState({ vaultErr: 'Kód z aplikace má šest číslic.' }); return; }
-        this.setState({ vaultLeft: 900, vaultPwd: '', vaultCode: '', vaultErr: null, vaultTries: 0 });
-        this.vltTick();
-        this.toast('Trezor odemčen na patnáct minut', { icon: 'ph-lock-key-open' });
+        if (tries >= 3 || s.vaultBusy) return;
+        if (!window.GalerieApi || GalerieApi.mode !== 'http') { this.setState({ vaultErr: 'Trezor jde odemknout jen s připojeným serverem.' }); return; }
+        this.setState({ vaultBusy: true });
+        GalerieApi.post('trezor/odemknout', { heslo: s.vaultPwd || '' })
+          .then(b => {
+            this.setState({ vaultBusy: false, vaultLeft: b.zbyva || 0, vaultPwd: '', vaultErr: null, vaultTries: 0 });
+            this.vltTick();
+            this.toast('Trezor odemčen na patnáct minut', { icon: 'ph-lock-key-open' });
+            if (window.GalerieObnovit) GalerieObnovit('system');
+          })
+          .catch(e => {
+            const b = (e && e.body) || {};
+            const t = tries + 1;
+            // 429 bez `chyba` je limit na počet pokusů za minutu, ne špatné
+            // heslo — hláška „Odemknout se nepodařilo" by poslala člověka
+            // zkoušet znovu přesně to, co teď stejně neprojde.
+            const zpráva = b.chyba
+              || (e && e.status === 429 ? 'Příliš mnoho pokusů za sebou. Zkuste to za minutu.' : null)
+              || 'Odemknout se nepodařilo — server neodpověděl.';
+            this.setState({ vaultBusy: false, vaultTries: t, vaultErr: zpráva });
+            if (b.blok) setTimeout(() => this.setState({ vaultTries: 0, vaultErr: null }), b.blok * 1000);
+          });
       },
-      vltLock: () => { clearInterval(this._vt); this.setState({ vaultLeft: 0 }); this.toast('Trezor zamčen', { icon: 'ph-lock-simple' }); },
+      vltLock: () => {
+        clearInterval(this._vt);
+        this._vt = null;
+        this.setState({ vaultLeft: 0 });
+        this.toast('Trezor zamčen', { icon: 'ph-lock-simple' });
+        // Zamknout musí i server — jinak zůstane výdej souborů otevřený.
+        if (window.GalerieApi && GalerieApi.mode === 'http') {
+          GalerieApi.post('trezor/zamknout', {}).then(() => { if (window.GalerieObnovit) GalerieObnovit('system'); }).catch(() => {});
+        }
+      },
       vltCount: this.pl(items.length, 'položka', 'položky', 'položek') + ' · mimo hledání, mřížku i mapu',
       vltItems: items.map(v => ({
         name: v.name, meta: v.meta, bg: this.bg(v.n),
@@ -15543,18 +15647,18 @@ class Component extends DCLogic {
       vltHeirMail: draft.mail, vltSetHeirMail: e => setHeir({ mail: e.target.value }),
       vltHeirDelay: draft.delay, vltSetHeirDelay: e => setHeir({ delay: e.target.value }),
       vltHeirOpts: [
-        { label: 'Poslat důvěrníkovi upozornění předem', note: 'Dozví se o roli hned, ne až při aktivaci.', on: !!draft.notify, toggle: () => setHeir({ notify: !draft.notify }) },
-        { label: 'Zpřístupnit i trezor', note: 'Bez tohoto zůstane trezor zamčený navždy.', on: !!draft.vault, toggle: () => setHeir({ vault: !draft.vault }) }
+        { label: 'Říct důvěrníkovi o té roli předem', note: 'Poznámka pro vás dva — aplikace mu sama nenapíše.', on: !!draft.notify, toggle: () => setHeir({ notify: !draft.notify }) },
+        { label: 'Přeji si předat i trezor', note: 'Bez tohohle má trezor zůstat zamčený.', on: !!draft.vault, toggle: () => setHeir({ vault: !draft.vault }) }
       ].map(o => Object.assign({}, o, { bg: o.on ? 'var(--g-acc)' : 'transparent', check: o.on ? '#fff' : 'transparent' })),
       vltHeirDirty: dirty,
       vltSaveHeir: () => {
         const prev = s.vaultHeirSaved;
         this.setState({ vaultHeirSaved: draft, vaultHeir: null });
-        this.toast('Dědictví nastaveno · ' + draft.name, { icon: 'ph-check-circle', undo: () => this.setState({ vaultHeirSaved: prev, vaultHeir: null }) });
+        this.toast('Přání zapsáno · ' + draft.name, { icon: 'ph-check-circle', undo: () => this.setState({ vaultHeirSaved: prev, vaultHeir: null }) });
       },
       vltResetHeir: () => this.setState({ vaultHeir: null }),
       vltHeirState: heir.name
-        ? 'Aktivní: ' + heir.name + ' (' + heir.mail + ') se dostane k archivu po ' + ({ '90': '90 dnech', '180': '180 dnech', '365': 'roce' }[heir.delay] || heir.delay) + ' bez přihlášení' + (heir.vault ? ', a to včetně trezoru.' : '. Trezor zůstane zamčený.')
+        ? 'Zapsáno: archiv má po ' + ({ '90': '90 dnech', '180': '180 dnech', '365': 'roce' }[heir.delay] || heir.delay) + ' nečinnosti připadnout ' + heir.name + (heir.mail ? ' (' + heir.mail + ')' : '') + (heir.vault ? ', a to včetně trezoru.' : '; trezor má zůstat zamčený.') + ' Aplikace to sama neudělá — přístup musí předat člověk.'
         : 'Bez důvěrníka. Kdyby se vám něco stalo, archiv nikdo neotevře.',
 
     };
@@ -27577,7 +27681,9 @@ class Component extends DCLogic {
   };
   lockSignIn() {
     const s = this.state;
-    const mail = (s.lockMail || '').trim().toLowerCase();
+    // Prázdná kolonka znamená „ten, kdo je vybraný" — táž adresa, jakou
+    // obrazovka nabízí; jinak by odeslání beze změny nedávalo smysl.
+    const mail = ((s.lockMail || LOCKMAIL[s.lockWho || 'A'] || '')).trim().toLowerCase();
     const who = Object.keys(LOCKMAIL).find(k => LOCKMAIL[k] === mail);
     const api = window.GalerieApi;
     // Se nasazeným backendem ověřuje heslo server a vrací token pro API;
@@ -27593,12 +27699,18 @@ class Component extends DCLogic {
       });
       return;
     }
-    if (!who || (s.lockPwd || '') !== LOCKPWD) {
-      this.setState({ lockErr: 'E-mail nebo heslo nesouhlasí. Účty máme jen dva.' });
-      return;
-    }
-    this.setState({ lockWho: who, lockStep: 'pin', lockPwd: '', lockErr: null, lockTrusted: s.lockTrust !== false });
-    this.toast('Přihlášeno · ' + LOCKWHO[who] + (s.lockTrust !== false ? ' · zařízení zapamatováno' : ''), { icon: 'ph-envelope-simple-open' });
+    /*
+     * Bez serveru se přihlásit nedá.
+     *
+     * Tady se heslo porovnávalo s konstantou `LOCKPWD` z `galerie-data.js` —
+     * z veřejného souboru, který si server podá komukoli — a obrazovka ho
+     * o kus níž sama vypisovala. Kdokoli, kdo se dostal na adresu aplikace,
+     * byl uvnitř; přihlášení bylo dekorace.
+     *
+     * Ověřit heslo umí jen server. Když neodpovídá, je poctivější to říct
+     * než pustit dovnitř na heslo, které stojí ve zdrojáku.
+     */
+    this.setState({ lockErr: 'Přihlásit se jde jen k serveru a ten teď neodpovídá.' });
   }
   // Upozornění: odběr přes service worker, odhlášení ho zruší i na serveru.
   pushToggle(on) {
@@ -27763,28 +27875,45 @@ class Component extends DCLogic {
       lockIsPwd: s.lockStep !== 'pin',
       lockIsPin: s.lockStep === 'pin',
       lockHeadline: s.lockStep === 'pin' ? 'Zamčeno' : 'Přihlášení',
-      lockMail: s.lockMail || '',
+      // Než člověk začne psát, nabídne se adresa toho, kdo je vybraný —
+      // ta skutečná ze serveru, ne ukázková.
+      lockMail: s.lockMail !== undefined && s.lockMail !== '' ? s.lockMail : (LOCKMAIL[who] || ''),
       lockSetMail: e => this.setState({ lockMail: e.target.value, lockErr: null }),
       lockPwd: s.lockPwd || '',
       lockSetPwd: e => this.setState({ lockPwd: e.target.value, lockErr: null }),
       lockPwdKey: e => { if (e.key === 'Enter') this.lockSignIn(); },
       lockSignIn: () => this.lockSignIn(),
-      lockSignCant: !(s.lockMail || '').trim() || (s.lockPwd || '').length < 4,
+      lockSignCant: !(s.lockMail || LOCKMAIL[who] || '').trim() || (s.lockPwd || '').length < 4,
       lockTrustOn: s.lockTrust !== false,
       lockTrustToggle: () => this.setState({ lockTrust: s.lockTrust === false }),
       lockTrustBg: s.lockTrust !== false ? 'var(--g-acc)' : 'transparent',
       lockTrustMark: s.lockTrust !== false ? '#fff' : 'transparent',
       lockOtherAcct: () => this.setState({ lockStep: 'pwd', lockPwd: '', lockPin: '', lockErr: null, lockTries: 0, lockTrusted: false }),
-      lockPwdHint: 'Prototyp — heslo ' + LOCKPWD + ' pro oba účty.',
+      /*
+       * Nápověda pod heslem už heslo neříká.
+       *
+       * Stálo v ní „Prototyp — heslo zadar2026 pro oba účty." a to heslo
+       * doopravdy fungovalo. Vypsané přihlašovací údaje jsou to poslední,
+       * co má být na zamčené obrazovce.
+       */
+      lockPwdHint: 'Heslo je totéž jako do galerie. Ověřuje ho server.',
       lockWhoName: LOCKWHO[who] || '',
       lockWhoIni: (LOCKWHO[who] || '?')[0],
       lockWhoMail: LOCKMAIL[who] || '',
       lockWhoDotBg: who === 'A' ? 'var(--g-acc-soft)' : 'var(--g-mag-soft)',
       lockWhoDotFg: who === 'A' ? 'var(--g-acc-deep)' : 'var(--g-mag)',
-      lockSkip: () => this.lockOpen('Zámek přeskočen — v prototypu jde dovnitř i bez kódu'),
       lockSub: blocked
         ? 'Kód jsme třikrát nepřijali. Odemkněte dotykem, nebo použijte obnovovací kód z druhého telefonu.'
-        : 'Archiv je jen náš. Bez kódu se dovnitř nedostane nikdo — ani na půjčeném zařízení.',
+        /*
+         * Zamčená obrazovka neslibuje víc, než umí.
+         *
+         * Stálo tu „Bez kódu se dovnitř nedostane nikdo — ani na půjčeném
+         * zařízení." Kód se přitom porovnává v prohlížeči s konstantou
+         * `LOCKPIN` a vedle kolonky bylo tlačítko „Přeskočit zámek", které
+         * pustilo dovnitř bez čehokoli. To, co dvojici doopravdy chrání, je
+         * přihlášení — a to ověřuje server.
+         */
+        : 'Kód zamyká aplikaci na tomhle zařízení. K datům se bez přihlášení nedostane nikdo.',
       lockWhos: Object.keys(LOCKWHO).map(k => ({
         name: LOCKWHO[k], ini: LOCKWHO[k][0],
         pick: () => this.setState({ lockWho: k, lockPin: '', lockErr: null, lockTries: 0, lockMail: LOCKMAIL[k], lockPwd: '' }),
@@ -27819,7 +27948,8 @@ class Component extends DCLogic {
       lockRecCant: (s.lockRecCode || '').trim().length < 4,
       lockIdleLabel: (s.lockIdle || '5 min') === 'Nikdy' ? 'vypnuté' : 'po ' + (s.lockIdle || '5 min') + ' nečinnosti',
       lockLastLabel: s.lockAt ? 'naposledy odemčeno ' + clock(s.lockAt) : 'poslední odemčení včera 22:14',
-      lockHint: 'Prototyp — Adrian ' + LOCKPIN.A + ', Makinka ' + LOCKPIN.M + ', obnovovací kód ' + LOCKREC,
+      // A nápověda nad klávesnicí nevypisuje kódy obou lidí ani obnovovací kód.
+      lockHint: 'Kód si každý z vás nastavuje v Nastavení → Zámek.',
       lockNowGo: () => this.lockNow('Aplikace zamčena'),
 
       gateOn: gateOn,
@@ -29580,7 +29710,9 @@ class Component extends DCLogic {
               return;
             }
             if (act && act[1] === 'lock-now') { this.lockNow('Aplikace zamčena'); return; }
-            if (label === 'Obnovovací kód') { this.toast('Obnovovací kód ' + LOCKREC + ' — vytiskněte a schovejte', { icon: 'ph-printer' }); return; }
+            // Obnovovací kód se do hlášky nevypisuje: byl by v historii oznámení
+            // i na snímku obrazovky, a je to poslední klíč od zamčené aplikace.
+            if (label === 'Obnovovací kód') { this.toast('Obnovovací kód najdete v Nastavení → Zámek — vytiskněte a schovejte', { icon: 'ph-printer' }); return; }
             if (act && act[1] && act[1].indexOf('dl-') === 0) { this.exportData(act[1], label); return; }
             if (act && act[1]) { this.setState({ route: act[1] }); return; }
             this.toast(label + ' — ' + base, { icon: act ? act[0] : 'ph-arrow-right', undo: base === 'Vymazat' || base === 'Odpojit' });

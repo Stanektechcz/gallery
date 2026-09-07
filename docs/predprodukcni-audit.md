@@ -1,6 +1,6 @@
 # Předprodukční audit
 
-Stav k 6. 9. 2026. Co je opravené, co zbývá a co se úmyslně nechalo tak.
+Stav k 7. 9. 2026. Co je opravené, co zbývá a co se úmyslně nechalo tak.
 
 Metoda: nálezy se **ověřovaly útokem nebo v prohlížeči**, ne čtením kódu.
 U každého je napsané, jak se pozná, že platí.
@@ -176,32 +176,122 @@ commitu, protože se prolne s každou otevřenou větví.
 | Bezpečnostní hlavičky | `nosniff`, `SAMEORIGIN`, `Referrer-Policy`, `Permissions-Policy`, CSP, HSTS přes HTTPS |
 | Tlačítka bez obsluhy | z 1268 žádné |
 | Průchod aplikací | 52 obrazovek bez chyby v konzoli a bez porušení CSP |
-| Testy | 1119 zelených |
+| Testy | 1146 zelených |
+
+## Opraveno ve třetím průchodu
+
+### `xRows` — sklad, do kterého se z většiny nepsalo
+
+Šestnáct z třiceti dvou klíčů teď chodí ze skutečných tabulek a zpátky do nich:
+`datesSaved`, `gifts`, `ticket`, `travelInbox`, `recipes`, `weekMenu`, `voice`,
+`tripsPlanned`, `tripsPast`, `placesWish`, `placesVisited`, `accounts`, `films`,
+`inbox`, `tagMerge`, `vault`. Zápis obstarává `SeznamyVeStavu`: vezme si z patche
+jen klíče, které tabulku mají, a zbytek nechá projít do stavu — vyhodit celý
+`xRows` kvůli sousedovi by znamenalo ztratit nákupní seznam.
+
+Dva z nich chodí **i prázdné**, protože prázdno je u nich odpověď, ne rozbitá
+obrazovka:
+
+- `tagMerge` nabízel sloučit `#jidlo + #jídlo`. Takové dva štítky vedle sebe
+  existovat nemůžou — `tags` má jednoznačný index na `(gallery_space_id, slug)`
+  a obě pravopisné podoby mají tentýž slug.
+- `vault` psal u každé složky „šifrováno". Aplikace obsah trezoru **nešifruje**;
+  schová ho před mřížkou, hledáním a sdílením.
+
+Cestou se ukázalo, že `AutoTagCommand` hledal štítek podle jména, ne podle slugu:
+u prostoru, kde už „jidlo" existuje, by návrh „jídlo" spadl na omezení databáze
+a shodil celou dávku.
+
+### Konflikt při souběžném zápisu se přizná
+
+Server teď porovnává revize **po klíčích**: zapíše všechno, o co se ti dva
+nepřetahují, a v odpovědi pošle `strety` — seznam klíčů, které zahodil. Datová
+vrstva z toho udělá událost `galerie-stret` a obrazovka ukáže hlášku. Obrazovka,
+která se sama vrátí o krok zpět a mlčí, je horší než přiznaný střet.
+
+### Trezor zamykala konstanta z veřejného souboru
+
+Nejhorší nález celého auditu. Obrazovka „Trezor" porovnávala zadané heslo
+s `VAULT_PWD` z `galerie-data.js` — ze souboru, který server podá komukoli —
+a pod kolonkou ho **sama vypisovala**. Druhé ověření „kódem z aplikace" se
+kontrolovalo jen na šest číslic, takže prošlo `000000`. Patnáctiminutové sezení
+bylo číslo v paměti karty: k souborům nedosáhlo a dalo se přepsat v konzoli.
+Za tou zdí pak nebyl obsah dvojice, ale čtyři napsané složky včetně „Skeny pasů".
+
+Přitom skutečný zámek v aplikaci existoval celou dobu: `vault_unlocked_until`
+v sezení a `ProtectVaultMedia` na výdeji médií. Nový `TrezorController` je jeho
+druhé okno — heslo do galerie proti `users.password`, tentýž klíč v sezení,
+neúspěšný pokus do auditu. Zamčený trezor **neposílá, co je v něm**.
+
+Náhledy se u trezoru záměrně neposílají: jinde chodí jako podepsaná adresa
+s platností do konce zítřka, což by z nejcitlivějších souborů udělalo odkazy
+fungující bez přihlášení a přežívající zamčení.
+
+Ověřeno v prohlížeči: `zadar2026` neotevře nic, správné heslo ano, odpočet
+přežije obnovení stránky a po zamčení obsah z odpovědi zmizí.
+
+### Přidání do trezoru trezor vyprazdňovalo
+
+`TrezorVeStavu` bere `vaultAdded` jako **úplný** seznam a co v něm není, vrací
+do knihovny. Obrazovka ho ale začínala prázdný, takže první přesun poslal jediné
+id — a všechno ostatní se odemklo a vrátilo do mřížky. Teď se seznam odpíchne od
+toho, co poslal server. Ověřeno: po přesunu druhé fotky mají obě `is_hidden = 1`.
+
+### „Přeskočit zámek" a heslo natištěné na zamčené obrazovce
+
+Na přihlašovací obrazovce stálo tlačítko, jehož vlastní hláška zněla „v prototypu
+jde dovnitř i bez kódu" — jedno klepnutí otevřelo celý archiv bez hesla i bez
+kódu, o dva řádky pod slibem, že se dovnitř nedostane nikdo. Pryč je z obou
+rozvržení, spolu s:
+
+- porovnáním hesla proti `LOCKPWD` (bez serveru se přihlásit nedá),
+- nápovědou „Prototyp — heslo zadar2026 pro oba účty",
+- nápovědou vypisující kódy obou lidí i obnovovací kód,
+- hláškou, která obnovovací kód psala do oznámení.
+
+`LOCKWHO` a `LOCKMAIL` teď dodává server ze členů prostoru: přihlašovací kolonka
+už nepředvyplňuje `adrian.stanek@gmail.com` cizí dvojici.
+
+### Dědictví slibovalo, co aplikace neumí
+
+Formulář „Přístup a dědictví" hlásil „Aktivní: Klára Staňková
+(klara@example.com) se dostane k archivu po 180 dnech bez přihlášení" — jméno,
+které nikdo nezadal, a pojistka, kterou v aplikaci nic nedělá. Předvyplněný
+důvěrník je pryč a text říká, co se doopravdy stane: přání se uloží a ukáže,
+předání zařídí člověk.
+
+### Kolekce ze dvou skupin si přepisovaly navzájem
+
+`AL` posílá knihovna i systém. Hlavička si data drží v ploché mapě pro chvíli,
+kdy runtime prototypu načte `galerie-data.js` podruhé — a prostým přiřazením
+si tam skupiny přepisovaly navzájem, takže po druhém průchodu se polovina
+klíčů vrátila na ukázková data. Poznat se to dalo jen na časování.
 
 ## Co zbývá
 
-### `xRows` je společný sklad, do kterého se z většiny nepíše
+### Kód zámku aplikace se porovnává v prohlížeči
 
-Filmy, seriály a watchlist z něj teď mají tabulku. Zbytek klíčů (`shopping`,
-`gifts`, `voice`, `datesSaved`, `weekMenu` a další) žije dál jen ve stavu
-prohlížeče. Není to tichá lež jako tabulka bez zápisu — data se ukládají
-a přežijí zavření záložky —, ale nedá se na ně zeptat odjinud: nákupní seznam
-neuvidí připomínka a z nápadu na dárek nevznikne úkol.
+`LOCKPIN` a `LOCKREC` jsou pořád konstanty v `galerie-data.js` a `lockTry()`
+je porovnává na klientovi. Po opravách výš už se nikde nevypisují a obrazovka
+o sobě netvrdí víc, než umí („Kód zamyká aplikaci na tomhle zařízení. K datům
+se bez přihlášení nedostane nikdo."), takže to není lež — ale ani zámek.
 
-Je to samostatná práce srovnatelná s celým prvním bodem, ne dodělávka.
+Udělat z něj zámek znamená rozhodnout, **kde kód bydlí**: stav je společný pro
+dvojici, takže by ho druhý viděl. To je otázka na dvojici, ne na kód.
 
-### Konflikt při souběžném zápisu zahodí změnu
+### Zbylých šestnáct klíčů `xRows`
 
-Když klient staví na starší revizi, server vrátí 409 a **patch se neaplikuje**.
-Obrazovka se překreslí podle serveru, ale to, co člověk mezitím napsal, zmizí
-bez hlášky. Dokud si dvojice neotevře tutéž obrazovku na dvou zařízeních
-naráz, nestane se to; až se to stane, nikdo se to nedozví.
+`shopping`, `snoozed`, `inboxDone`, `datesGen`, `balancing`, `story`, `print`,
+`orders`, `dupes`, `users`, `jobs`, `api`, `tarify` a další žijí dál jen ve
+stavu. Není to tichá lež — data se ukládají a přežijí zavření záložky —, ale
+nedá se na ně zeptat odjinud: nákupní seznam neuvidí připomínka.
 
 ## Co se nechalo úmyslně
 
 | Kolekce | Proč |
 | --- | --- |
-| `LOCKMAIL`, `LOCKPIN`, `LOCKPWD`, `LOCKREC`, `LOCKWHO`, `VAULT_PWD` | přihlašovací záslepky prototypu — **daty se stát nesmí**, jsou to hesla napsaná v souboru |
+| `LOCKPIN`, `LOCKREC` | kód zámku aplikace — viz „Co zbývá"; **daty se stát nesmí**, dokud se nerozhodne, komu patří |
+| `LOCKPWD`, `VAULT_PWD` | v ukázce zůstávají, ale **nic je už nečte**; jeden test hlídá, že heslo odtud trezor neotevře |
 | ~53 katalogů rozhraní | názvy obrazovek, měsíce, ikony, prázdné stavy — nejsou to data dvojice |
 | `AMISS`, `CYC_TODAY`, `GRAF` | dopočítává si je dokument sám |
 

@@ -3736,7 +3736,11 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                   <div style="margin-top:16px; padding-top:11px; border-top:1px solid var(--g-line); font-size:12px; line-height:1.6; color:var(--g-ink3); text-wrap:pretty">{{ lockPwdHint }}</div>
                   <div style="display:flex; gap:8px; margin-top:4px">
                     <button onClick="{{ obStart }}" style="min-height:44px; display:flex; align-items:center; gap:6px; padding:0 10px 0 0; border:0; background:transparent; cursor:pointer; font-family:inherit; font-size:12.5px; color:var(--g-acc)"><i class="ph-duotone ph-sparkle" style="font-size:15px"></i>První spuštění</button>
-                    <button onClick="{{ lockSkip }}" style="min-height:44px; margin-left:auto; display:flex; align-items:center; padding:0; border:0; background:transparent; cursor:pointer; font-family:inherit; font-size:12.5px; color:var(--g-ink3)">Přeskočit zámek</button>
+                    <!--
+                      Tlačítko „Přeskočit zámek“ je pryč. Otevřelo celý archiv
+                      bez hesla i bez kódu — na obrazovce, která o dva řádky výš
+                      slibovala, že se dovnitř nedostane nikdo.
+                    -->
                   </div>
                 </div>
               </sc-if>
@@ -5510,7 +5514,9 @@ class Component extends DCLogic {
     setTab: 'profil', setVals: {}, lockIdle: null, lockSecs: null, lockBio: null, lockStart: null, sort: 'desc',
     admTab: 0, admUsers: null, admJobs: null, admKeys: null, admPlan: null, admRisk: {}, admJobPause: {}, admLog: [], admNewMail: '', admNewKeyName: '',
     appLocked: true, lockWho: 'A', lockPin: '', lockTries: 0, lockErr: null,
-    lockStep: 'pwd', lockMail: 'adrian.stanek@gmail.com', lockPwd: '', lockTrust: true, lockTrusted: false, lockAt: 0,
+    // Kolonka na e-mail začíná prázdná; předvyplněná byla cizí adresa
+    // a člověk ji poslušně odeslal. Skutečnou dodá server v `LOCKMAIL`.
+    lockStep: 'pwd', lockMail: '', lockPwd: '', lockTrust: true, lockTrusted: false, lockAt: 0,
     lockRec: false, lockRecCode: '', lockBioBusy: false, secUntil: 0, gatePin: '', gateErr: null,
     hsTab: 'chores', chores: null, choreLog: null, dues: null, inv: null,
     dcTab: 'mem', decs: null, cools: null, coolLimit: 3000, proms: null, fam: null,
@@ -7468,7 +7474,9 @@ class Component extends DCLogic {
   // vybírá se e-mailem a heslem. Kód pak patří tomu, kdo je přihlášený.
   async lockSignIn() {
     const s = this.state, L = this.lockData();
-    const mail = (s.lockMail || '').trim().toLowerCase();
+    // Prázdná kolonka znamená „ten, kdo je vybraný" — táž adresa, jakou
+    // obrazovka nabízí; jinak by odeslání beze změny nedávalo smysl.
+    const mail = (s.lockMail || L.MAIL[s.lockWho || 'A'] || '').trim().toLowerCase();
     const who = Object.keys(L.MAIL).find(k => L.MAIL[k] === mail);
     const api = window.GalerieApi;
     // Se nasazeným backendem ověřuje heslo server a vrací token pro API;
@@ -7489,12 +7497,14 @@ class Component extends DCLogic {
       }
       this.setState({ lockSignBusy: false });
     }
-    if (!who || (s.lockPwd || '') !== L.PWD) {
-      this.setState({ lockErr: 'E-mail nebo heslo nesouhlasí. Účty máme jen dva.' });
-      return;
-    }
-    this.setState({ lockWho: who, lockStep: 'pin', lockPwd: '', lockErr: null, lockTries: 0, lockTrusted: s.lockTrust !== false });
-    this.toast('Přihlášeno · ' + L.WHO[who] + (s.lockTrust !== false ? ' · zařízení zapamatováno' : ''), { icon: 'ph-envelope-simple-open' });
+    /*
+     * Bez serveru se přihlásit nedá — stejně jako v širokém rozvržení.
+     *
+     * Heslo se tu porovnávalo s `LOCKPWD` z `galerie-data.js`, tedy
+     * s konstantou z veřejného souboru, kterou obrazovka o kus níž sama
+     * vypisovala. Kdo znal adresu aplikace, byl uvnitř.
+     */
+    this.setState({ lockSignBusy: false, lockErr: 'Přihlásit se jde jen k serveru a ten teď neodpovídá.' });
   }
   // Upozornění: odběr přes service worker, odhlášení ho zruší i na serveru.
   async pushToggle(on) {
@@ -7578,21 +7588,23 @@ class Component extends DCLogic {
       lockWhoDotFg: who === 'A' ? 'var(--g-acc-deep)' : 'var(--g-mag)',
       lockSub: blocked
         ? 'Kód jsme třikrát nepřijali. Odemkněte otiskem, nebo použijte obnovovací kód z druhého telefonu.'
-        : 'Archiv je jen náš. Bez kódu se dovnitř nedostane nikdo — ani na půjčeném zařízení.',
-      lockMail: s.lockMail || '',
+        // Zamčená obrazovka neslibuje víc, než umí — viz široké rozvržení.
+        : 'Kód zamyká aplikaci na tomhle zařízení. K datům se bez přihlášení nedostane nikdo.',
+      // Než člověk začne psát, nabídne se adresa vybraného — ta ze serveru.
+      lockMail: s.lockMail !== undefined && s.lockMail !== '' ? s.lockMail : (L.MAIL[who] || ''),
       lockSetMail: e => this.setState({ lockMail: e.target.value, lockErr: null }),
       lockPwdVal: s.lockPwd || '',
       lockSetPwd: e => this.setState({ lockPwd: e.target.value, lockErr: null }),
       lockPwdKey: e => { if (e.key === 'Enter') this.lockSignIn(); },
       lockSignIn: () => this.lockSignIn(),
-      lockSignCant: !(s.lockMail || '').trim() || (s.lockPwd || '').length < 4,
+      lockSignCant: !(s.lockMail || L.MAIL[who] || '').trim() || (s.lockPwd || '').length < 4,
       lockTrustOn: s.lockTrust !== false,
       lockTrustToggle: () => this.setState({ lockTrust: s.lockTrust === false }),
       lockTrustBg: s.lockTrust !== false ? 'var(--g-acc)' : 'transparent',
       lockTrustMark: s.lockTrust !== false ? '#fff' : 'transparent',
       lockOtherAcct: () => this.setState({ lockStep: 'pwd', lockPwd: '', lockPin: '', lockErr: null, lockTries: 0, lockTrusted: false, lockRec: false }),
-      lockPwdHint: 'Prototyp — heslo ' + L.PWD + ' pro oba účty.',
-      lockSkip: () => this.lockOpen('Zámek přeskočen — v prototypu jde dovnitř i bez kódu'),
+      // Nápověda pod heslem už heslo neříká — viz široké rozvržení.
+      lockPwdHint: 'Heslo je totéž jako do galerie. Ověřuje ho server.',
       // Profil se vybírá tady, ne přepínačem přes celou aplikaci: výběr přepíše
       // i e-mail, takže se přihlašuje ten, komu kód patří.
       lockWhos: Object.keys(L.WHO).map(k => ({
@@ -7606,7 +7618,8 @@ class Component extends DCLogic {
       })),
       lockIdleLabel: (s.lockIdle || '5 min') === 'Nikdy' ? 'vypnuté' : 'po ' + (s.lockIdle || '5 min') + ' nečinnosti',
       lockLastLabel: s.lockAt ? 'naposledy odemčeno ' + clock(s.lockAt) : 'poslední odemčení včera 22:14',
-      lockHint: 'Prototyp — Adrian ' + (L.PIN.A || '') + ', Makinka ' + (L.PIN.M || '') + ', obnovovací kód ' + L.REC,
+      // A nápověda nad klávesnicí nevypisuje kódy obou lidí ani obnovovací kód.
+      lockHint: 'Kód si každý z vás nastavuje v Nastavení → Zámek.',
       lockPin: pin,
       lockDots: [0, 1, 2, 3, 4, 5].map(i => ({ bg: i < pin.length ? 'var(--g-ink)' : 'transparent' })),
       lockKeys: ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'bio', '0', 'del'].map(k => ({
