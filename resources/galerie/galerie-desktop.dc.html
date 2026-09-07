@@ -5445,13 +5445,26 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                             <div style="display:flex; align-items:flex-end; gap:8px; max-width:74%">
                               <div style="padding:10px 13px; border-radius:2px; background:{{ m.bg }}">
                                 <sc-if value="{{ m.isPhoto }}">
-                                  <div style="width:220px; aspect-ratio:4/3; border-radius:2px; background:{{ m.photoBg }}; margin-bottom:7px"></div>
+                                  <sc-if value="{{ m.hasPhoto }}">
+                                    <button onClick="{{ m.openPhoto }}" aria-label="Otevřít fotku" style="display:block; padding:0; border:0; background:transparent; cursor:{{ m.photoCursor }}; margin-bottom:7px">
+                                      <img src="{{ m.photoUrl }}" alt="{{ m.photoAlt }}" loading="lazy" style="display:block; max-width:260px; max-height:320px; width:auto; height:auto; border-radius:2px; background:var(--g-panel)" />
+                                    </button>
+                                  </sc-if>
+                                  <sc-if value="{{ m.noPhoto }}">
+                                    <div style="width:220px; aspect-ratio:4/3; border-radius:2px; background:{{ m.photoBg }}; margin-bottom:7px"></div>
+                                  </sc-if>
                                 </sc-if>
                                 <sc-if value="{{ m.isVoice }}">
                                   <div style="display:flex; align-items:center; gap:9px; margin-bottom:5px">
                                     <i class="ph-duotone ph-microphone" style="font-size:17px; color:var(--g-acc)"></i>
                                     <span style="font-size:12px; color:var(--g-ink3)">hlasovka · {{ m.len }}</span>
                                   </div>
+                                  <sc-if value="{{ m.hasAudio }}">
+                                    <audio src="{{ m.audioSrc }}" controls="{{ m.hasAudio }}" preload="none" style="width:100%; margin-bottom:6px; height:34px"></audio>
+                                  </sc-if>
+                                  <sc-if value="{{ m.noAudio }}">
+                                    <div style="font-size:12px; color:var(--g-ink3); margin-bottom:6px">{{ m.audioNote }}</div>
+                                  </sc-if>
                                 </sc-if>
                                 <sc-if value="{{ m.isFile }}">
                                   <button onClick="{{ m.openFile }}" style="display:flex; align-items:center; gap:10px; width:100%; padding:8px 10px; margin-bottom:6px; border:1px solid var(--g-line); border-radius:2px; background:var(--g-bg); cursor:pointer; font-family:inherit; text-align:left; color:inherit" style-hover="border-color:var(--g-acc)">
@@ -20028,7 +20041,7 @@ class Component extends DCLogic {
   msgsOf() {
     const s = this.state;
     if (s.msgList) return s.msgList;
-    return MSGS.map((m, i) => ({ id: m[0], who: m[1], day: m[2], time: m[3], type: m[4], text: m[5], extra: m[6], audio: m[7] || null, bg: m[8] || null, n: i * 5 }));
+    return MSGS.map((m, i) => ({ id: m[0], who: m[1], day: m[2], time: m[3], type: m[4], text: m[5], extra: m[6], audio: m[7] || null, bg: m[8] || null, odkaz: m[9] || null, n: i * 5 }));
   }
   msgsSet(list) { this.setState({ msgList: list }); }
   /*
@@ -20218,6 +20231,22 @@ class Component extends DCLogic {
         align: mine ? 'flex-end' : 'flex-start',
         bg: mine ? 'var(--g-acc-soft)' : 'var(--g-panel)',
         isText: m.type === 't', isVoice: m.type === 'v', isPhoto: m.type === 'p', isFile: m.type === 'f',
+        /*
+         * Přehrávač rovnou v hovoru.
+         *
+         * Bublina dosud kreslila jen mikrofon a délku; pustit se hlasovka dala
+         * pouze na záložce Hlasovky. Kdo ji dostal v hovoru, viděl, že přišla,
+         * a poslechnout si ji tam nemohl.
+         *
+         * Adresa se stahuje přes `fetch` do `blob:` (proud je za přihlášením),
+         * takže první překreslení ji ještě nemá — do té doby se nekreslí nic.
+         * Bublina bez nahrávky to řekne místo toho, aby nabídla tlačítko, pod
+         * kterým nic není.
+         */
+        audioSrc: m.type === 'v' ? (this.hlasSrc(m) || '') : '',
+        hasAudio: m.type === 'v' && !! this.hlasSrc(m),
+        noAudio: m.type === 'v' && ! m.audio,
+        audioNote: 'Nahrávka k téhle zprávě na serveru není — zůstal jen popisek.',
         showText: m.type !== 'f',
         fileIcon: (MSGFILES.find(f => f[0] === m.text) || [])[2] || 'ph-file',
         fileMeta: m.extra,
@@ -20226,7 +20255,20 @@ class Component extends DCLogic {
           this.toast(ok ? m.text + ' stažen' : 'Stažení se nepovedlo', { icon: 'ph-download-simple' });
         },
         // Skutečný snímek; barva zůstává jen tam, kde k bublině žádný není.
-        photoBg: m.bg || this.bg(m.n % 40), place: m.extra,
+        /*
+         * Snímek si tvar nese sám.
+         *
+         * Kreslil se jako pozadí obdélníku 4:3 s `cover`, takže z fotky na
+         * výšku zbyl proužek uprostřed. A nedal se otevřít — nebylo kam
+         * kliknout. Barevný obdélník zůstává jen tam, kde archiv snímek nemá.
+         */
+        hasPhoto: m.type === 'p' && !! m.bg,
+        noPhoto: m.type === 'p' && ! m.bg,
+        photoUrl: m.bg || '',
+        photoAlt: 'Fotka v hovoru' + (m.extra ? ' — ' + m.extra : ''),
+        photoCursor: m.odkaz ? 'zoom-in' : 'default',
+        openPhoto: () => { if (m.odkaz) this.openLb(m.odkaz); },
+        photoBg: this.bg(m.n % 40), place: m.extra,
         len: m.extra,
         pinned: !!pins[m.id],
         pinIcon: pins[m.id] ? 'ph-push-pin-slash' : 'ph-push-pin',

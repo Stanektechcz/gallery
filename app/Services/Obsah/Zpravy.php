@@ -98,15 +98,17 @@ class Zpravy implements PoskytovatelObsahu
     }
 
     /**
-     * Zpráva: `[id, strana, den, čas, druh, text, doplněk, nahrávka, obrázek]`.
+     * Zpráva: `[id, strana, den, čas, druh, text, doplněk, nahrávka, obrázek, odkaz]`.
      *
      * Předposlední pole je identifikátor hlasovky. Bez něj byla bublina
      * „hlasovka · 0:12" jen popiskem: přehrát se nedalo nic, protože
      * odkaz na nahrávku nikam nevedl.
      *
-     * Poslední je pozadí bubliny s fotkou. Prototyp si ho počítal z pořadí
-     * repliky, takže poslaná fotka měla v hovoru barvu, která s ní neměla nic
-     * společného — a u obou z dvojice jinou.
+     * Předposlední je adresa fotky. Prototyp si pozadí bubliny počítal
+     * z pořadí repliky, takže poslaná fotka měla v hovoru barvu, která s ní
+     * neměla nic společného — a u obou z dvojice jinou.
+     *
+     * Poslední je odkaz do knihovny, aby se fotka z bubliny dala otevřít.
      *
      * @param  Collection<int, object>  $zpravy
      * @return list<array<int, mixed>>
@@ -128,6 +130,7 @@ class Zpravy implements PoskytovatelObsahu
                 $this->doplnek($m),
                 $this->nahravka($m),
                 $this->obrazek($m),
+                (string) ($m->attachment_ref ?? ''),
             ];
         })->values()->all();
     }
@@ -259,9 +262,16 @@ class Zpravy implements PoskytovatelObsahu
         ));
     }
 
+    /**
+     * Holá adresa, ne hodnota pro `background`.
+     *
+     * Bublina fotku kreslila jako pozadí pevného obdélníku 4:3, takže na výšku
+     * pořízený snímek byl oříznutý na proužek uprostřed. Obrázek si tvar nese
+     * sám — stačí ho pustit ke slovu, a k tomu je potřeba adresa, ne CSS.
+     */
     private function adresa(string $kam): string
     {
-        return "url('".$kam."') center/cover no-repeat #2b2842";
+        return $kam;
     }
 
     /** Položka knihovny, na kterou zpráva odkazuje. */
