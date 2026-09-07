@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToGallerySpace;
 use App\Services\Planning\LifeEventService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -10,7 +11,7 @@ use Illuminate\Support\Str;
 
 class CalendarEvent extends Model
 {
-    use \App\Models\Concerns\BelongsToGallerySpace, HasFactory;
+    use BelongsToGallerySpace, HasFactory;
 
     protected $fillable = [
         'uuid', 'gallery_space_id', 'created_by', 'trip_id', 'source_trip_id', 'album_id', 'title',

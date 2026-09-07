@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToGallerySpace;
 use App\Services\Planning\LifeEventService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -11,7 +12,7 @@ use Illuminate\Support\Str;
 
 class Recipe extends Model
 {
-    use \App\Models\Concerns\BelongsToGallerySpace, HasFactory, SoftDeletes;
+    use BelongsToGallerySpace, HasFactory, SoftDeletes;
 
     protected $fillable = [
         'uuid', 'gallery_space_id', 'created_by', 'updated_by', 'cover_media_id', 'album_id',

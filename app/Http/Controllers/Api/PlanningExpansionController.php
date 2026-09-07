@@ -396,7 +396,7 @@ class PlanningExpansionController extends Controller
             }
         }
 
-return true;
+        return true;
     }
 
     private function requireTables(array $tables): void
@@ -414,7 +414,7 @@ return true;
             }
         }
 
-return now()->addWeeks(13)->next(Carbon::SATURDAY)->setTime(10, 0);
+        return now()->addWeeks(13)->next(Carbon::SATURDAY)->setTime(10, 0);
     }
 
     private function space(User $user, int $id)

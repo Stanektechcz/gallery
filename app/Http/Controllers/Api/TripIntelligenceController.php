@@ -457,7 +457,7 @@ class TripIntelligenceController extends Controller
             $query->select(['item.*', 'assignee.name as assignee_name']);
         }
 
-return $query->get();
+        return $query->get();
     }
 
     private function packingPayload(object $item): array

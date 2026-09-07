@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToGallerySpace;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -10,7 +11,7 @@ use Illuminate\Support\Str;
 
 class Album extends Model
 {
-    use \App\Models\Concerns\BelongsToGallerySpace, HasFactory, SoftDeletes;
+    use BelongsToGallerySpace, HasFactory, SoftDeletes;
 
     protected $fillable = [
         'uuid',

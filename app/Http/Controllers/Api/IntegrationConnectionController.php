@@ -218,12 +218,12 @@ class IntegrationConnectionController extends Controller
         )
             ->get()
             ->mapWithKeys(fn (StorageConnection $row) => [$row->provider => [
-            'account' => $row->account_email,
-            'status' => $row->connection_status,
-            'last_ok' => $row->last_successful_request_at?->toIso8601String(),
-            'last_error' => $row->last_error_message,
-            'last_error_at' => $row->last_error_at?->toIso8601String(),
-        ]])->all();
+                'account' => $row->account_email,
+                'status' => $row->connection_status,
+                'last_ok' => $row->last_successful_request_at?->toIso8601String(),
+                'last_error' => $row->last_error_message,
+                'last_error_at' => $row->last_error_at?->toIso8601String(),
+            ]])->all();
     }
 
     /**
