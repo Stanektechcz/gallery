@@ -28210,7 +28210,21 @@ class Component extends DCLogic {
         const dal = () => { if (!this.zamek().nastaveno) this.lockOpen('Přihlášeno · kód zámku si můžete nastavit v Nastavení → Zámek'); };
         if (window.GalerieObnovit) GalerieObnovit('system').then(dal); else dal();
       }).catch(e => {
-        this.setState({ lockErr: e && e.status === 422 ? 'E-mail nebo heslo nesouhlasí.' : 'Server neodpověděl — zkuste to znovu.' });
+        /*
+         * Co server řekl, to se má říct dál.
+         *
+         * „Server neodpověděl" u odpovědi 429 pošle člověka zkoušet znovu —
+         * a tím si limit drží vyčerpaný. U 419 zase čeká na heslo, které
+         * projít nemůže, dokud se stránka nenačte znovu.
+         */
+        const stav = e && e.status;
+        this.setState({
+          lockErr: stav === 422 ? 'E-mail nebo heslo nesouhlasí.'
+            : stav === 429 ? 'Moc pokusů za sebou. Zkuste to za minutu.'
+            : stav === 419 ? 'Sezení vypršelo — načtěte stránku znovu.'
+            : stav ? 'Server odpověděl chybou ' + stav + '. Zkuste to znovu.'
+            : 'Server neodpověděl — zkuste to znovu.'
+        });
       });
       return;
     }

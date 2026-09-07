@@ -31,8 +31,18 @@ use Illuminate\Support\Facades\Route;
  *
  * Stav patří páru, ne uživateli: oba partneři čtou a píší tentýž záznam.
  */
-// Přihlášení je vstupní cesta, proto tvrdší limit než na zbytek.
-Route::middleware(['throttle:20,1'])->post('sanctum/token', [TokenController::class, 'store'])
+/*
+ * Přihlášení je vstupní cesta, proto tvrdší limit než na zbytek.
+ *
+ * Třetí parametr je **předpona počítadla** a je tu nutná. Bez ní si
+ * `ThrottleRequests` klíčuje pokusy jen podle uživatele a adresy, takže každá
+ * cesta se stejným limitem sdílí jedno počítadlo — a přihlášení si ho dělilo
+ * s otiskem prstu o kus níž. Zamčená obrazovka se na otisk ptá při každém
+ * otevření, takže po pár načteních stránky byl limit vyčerpaný a přihlášení
+ * dostalo 429 dřív, než ho někdo stihl zkusit. Obrazovka na to řekla „Server
+ * neodpověděl" a člověk to zkoušel dál — čímž si limit držel vyčerpaný.
+ */
+Route::middleware(['throttle:20,1,prihlaseni'])->post('sanctum/token', [TokenController::class, 'store'])
     ->name('galerie.token.store');
 
 /*
@@ -42,7 +52,7 @@ Route::middleware(['throttle:20,1'])->post('sanctum/token', [TokenController::cl
  * ve které ještě nikdo přihlášený není. Challenge se drží v sezení a cache,
  * takže odpověď nejde přehrát; limit je stejně tvrdý jako u hesla.
  */
-Route::middleware(['throttle:20,1'])->prefix('api/webauthn')->group(function () {
+Route::middleware(['throttle:20,1,otisk'])->prefix('api/webauthn')->group(function () {
     Route::post('login/options', [WebauthnController::class, 'loginOptions'])->name('galerie.webauthn.login.options');
     Route::post('login', [WebauthnController::class, 'login'])->name('galerie.webauthn.login');
 });

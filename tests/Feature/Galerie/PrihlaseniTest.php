@@ -135,4 +135,32 @@ class PrihlaseniTest extends TestCase
     {
         $this->postJson('/sanctum/token', ['email' => 'adrian@vzpominky.test'])->assertStatus(422);
     }
+
+    /**
+     * Otisk prstu nesmí ujídat z limitu na přihlášení.
+     *
+     * `ThrottleRequests` si bez předpony klíčuje pokusy jen podle uživatele
+     * a adresy, takže dvě cesty se stejným limitem sdílejí jedno počítadlo.
+     * Zamčená obrazovka se na otisk ptá při každém otevření — po pár načteních
+     * stránky byl limit vyčerpaný a přihlášení dostalo 429 dřív, než ho někdo
+     * stihl zkusit. Obrazovka na to řekla „Server neodpověděl" a člověk to
+     * zkoušel dál, čímž si limit držel vyčerpaný.
+     */
+    public function test_otisk_neujida_z_limitu_na_prihlaseni(): void
+    {
+        // Limit na otisk je 20 za minutu; vyčerpáme ho celý.
+        for ($i = 0; $i < 21; $i++) {
+            $this->postJson('/api/webauthn/login/options', ['email' => 'adrian@vzpominky.test']);
+        }
+
+        $this->postJson('/api/webauthn/login/options', ['email' => 'adrian@vzpominky.test'])
+            ->assertStatus(429);
+
+        // A přihlášení musí pořád fungovat.
+        $this->postJson('/sanctum/token', [
+            'email' => 'adrian@vzpominky.test',
+            'password' => 'zadar2026',
+            'device_name' => 'prohlížeč',
+        ])->assertOk();
+    }
 }

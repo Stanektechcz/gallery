@@ -7704,7 +7704,21 @@ class Component extends DCLogic {
           return;
         }
       } catch (e) {
-        this.setState({ lockSignBusy: false, lockErr: e && e.status === 422 ? 'E-mail nebo heslo nesouhlasí.' : 'Server neodpověděl — zkuste to znovu.' });
+        /*
+         * Co server řekl, to se má říct dál.
+         *
+         * „Server neodpověděl" u odpovědi 429 pošle člověka zkoušet znovu —
+         * a tím si limit drží vyčerpaný.
+         */
+        const stav = e && e.status;
+        this.setState({
+          lockSignBusy: false,
+          lockErr: stav === 422 ? 'E-mail nebo heslo nesouhlasí.'
+            : stav === 429 ? 'Moc pokusů za sebou. Zkuste to za minutu.'
+            : stav === 419 ? 'Sezení vypršelo — načtěte stránku znovu.'
+            : stav ? 'Server odpověděl chybou ' + stav + '. Zkuste to znovu.'
+            : 'Server neodpověděl — zkuste to znovu.'
+        });
         return;
       }
       this.setState({ lockSignBusy: false });
