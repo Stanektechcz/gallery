@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\CalendarPlanningController;
+use App\Http\Controllers\Api\ChatController;
 use App\Http\Controllers\Api\Galerie\AdminController;
 use App\Http\Controllers\Api\Galerie\AlbumArchivController;
 use App\Http\Controllers\Api\Galerie\DataController;
@@ -280,6 +281,17 @@ Route::middleware(['auth:sanctum', 'throttle:600,1'])->prefix('api')->group(func
 Route::middleware(['signed', 'throttle:600,1'])
     ->get('api/media/{uuid}/thumb', [MediaController::class, 'thumb'])
     ->name('galerie.media.thumb');
+
+/*
+ * Obrázek poslaný do chatu.
+ *
+ * Ze stejného důvodu jako náhled výš: bublina si ho kreslí přes `background`
+ * a prohlížeč k němu hlavičku `Authorization` nepřidá. Bez toho ukazovala
+ * barvu spočítanou z pořadí repliky — s poslanou fotkou bez souvislosti.
+ */
+Route::middleware(['signed', 'throttle:600,1'])
+    ->get('api/chat/{uuid}/nahled', [ChatController::class, 'signedMedia'])
+    ->name('galerie.chat.nahled');
 
 /*
  * Přehrání videa.

@@ -472,6 +472,33 @@ class ChatController extends Controller
         ]);
     }
 
+    /**
+     * Táž příloha, ale pro `background: url(…)`.
+     *
+     * Mimo `auth:sanctum` a ověřená podpisem, ze stejného důvodu jako
+     * zmenšenina v knihovně: obrázek v CSS si prohlížeč stahuje sám
+     * a hlavičku `Authorization` k němu nepřidá. Bublina s poslanou fotkou
+     * proto ukazovala barvu spočítanou z pořadí repliky — u každého z dvojice
+     * jinou a s fotkou bez souvislosti.
+     *
+     * Podpis platí pro jednu zprávu a jeden den; prostor se neověřuje znovu,
+     * protože adresu vydal server právě tomu, kdo do prostoru patří.
+     */
+    public function signedMedia(string $uuid)
+    {
+        $this->available();
+
+        $message = ChatMessage::withoutGlobalScopes()->where('uuid', $uuid)->firstOrFail();
+
+        abort_unless($message->media_path && Storage::disk(self::DISK)->exists($message->media_path), 404);
+
+        return Storage::disk(self::DISK)->response($message->media_path, null, [
+            'Content-Type' => $message->media_mime ?? 'application/octet-stream',
+            'Cache-Control' => 'private, max-age=86400',
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
+    }
+
     /** Toggles one emoji for the caller. Sending the same one again takes it back. */
     public function react(Request $request, string $uuid): JsonResponse
     {

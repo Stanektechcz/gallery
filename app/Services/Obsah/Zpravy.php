@@ -9,6 +9,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\URL;
 
 /**
  * Zprávy a hlasovky ve tvaru, ve kterém je kreslí prototyp.
@@ -34,6 +35,9 @@ class Zpravy implements PoskytovatelObsahu
 
     /** @var array<string, array{ms: ?int}>|null */
     private ?array $nahravky = null;
+
+    /** Dohledané položky knihovny, ať se totéž nehledá u každé bubliny znovu. */
+    private array $polozky = [];
 
     public function skupina(): string
     {
@@ -94,11 +98,15 @@ class Zpravy implements PoskytovatelObsahu
     }
 
     /**
-     * Zpráva: `[id, strana, den, čas, druh, text, doplněk, nahrávka]`.
+     * Zpráva: `[id, strana, den, čas, druh, text, doplněk, nahrávka, obrázek]`.
      *
-     * Poslední pole je identifikátor hlasovky. Bez něj byla bublina
+     * Předposlední pole je identifikátor hlasovky. Bez něj byla bublina
      * „hlasovka · 0:12" jen popiskem: přehrát se nedalo nic, protože
      * odkaz na nahrávku nikam nevedl.
+     *
+     * Poslední je pozadí bubliny s fotkou. Prototyp si ho počítal z pořadí
+     * repliky, takže poslaná fotka měla v hovoru barvu, která s ní neměla nic
+     * společného — a u obou z dvojice jinou.
      *
      * @param  Collection<int, object>  $zpravy
      * @return list<array<int, mixed>>
@@ -119,6 +127,7 @@ class Zpravy implements PoskytovatelObsahu
                 $this->text($m),
                 $this->doplnek($m),
                 $this->nahravka($m),
+                $this->obrazek($m),
             ];
         })->values()->all();
     }
@@ -181,10 +190,101 @@ class Zpravy implements PoskytovatelObsahu
     {
         return match ($this->druh($m)) {
             'v' => $this->delka($m),
-            'p' => (string) ($m->attachment_ref ?? ''),
+            // U fotky z knihovny stál pod bublinou identifikátor
+            // (`65288338-c361-…`). Místo je to, co dvojici něco říká.
+            'p' => $this->misto($m),
             'f' => $m->media_size ? $this->velikost((int) $m->media_size) : '',
             default => '',
         };
+    }
+
+    /**
+     * Kde ta fotka je — u odkazu do knihovny se dohledá, u nahraného obrázku
+     * není odkud brát.
+     */
+    private function misto(object $m): string
+    {
+        $polozka = $this->polozka($m);
+
+        if ($polozka !== null) {
+            return (string) ($polozka->location_name ?: $polozka->original_filename ?: '');
+        }
+
+        $ref = trim((string) ($m->attachment_ref ?? ''));
+
+        /*
+         * Odkaz, který se nepodařilo dohledat.
+         *
+         * Když to není identifikátor, je to napsané místo — takové zprávy
+         * vznikaly dřív a pořád dávají smysl. Identifikátor se naopak zamlčí:
+         * „65288338-c361-4bcd-…" pod fotkou nikomu nic neřekne.
+         */
+        return preg_match('~^[0-9a-f]{8}-[0-9a-f]{4}-~i', $ref) ? '' : $ref;
+    }
+
+    /**
+     * Pozadí bubliny s fotkou — `background` tak, jak ho prototyp kreslí.
+     *
+     * U odkazu do knihovny je to podepsaná adresa zmenšeniny, u obrázku
+     * nahraného rovnou do chatu podepsaná adresa té přílohy. Podpis proto, že
+     * obrázek v CSS si prohlížeč stahuje sám a hlavičku `Authorization`
+     * k němu nepřidá — stejně jako u dlaždic v knihovně.
+     *
+     * Bez souboru se vrací prázdno a bublina si nechá barvu z prototypu.
+     */
+    private function obrazek(object $m): string
+    {
+        if ($this->druh($m) !== 'p') {
+            return '';
+        }
+
+        if ($m->media_path) {
+            return $this->adresa(URL::temporarySignedRoute(
+                'galerie.chat.nahled',
+                CarbonImmutable::tomorrow()->endOfDay(),
+                ['uuid' => $m->uuid],
+            ));
+        }
+
+        $polozka = $this->polozka($m);
+
+        if ($polozka === null || ! $this->maZmensenina((int) $polozka->id)) {
+            return '';
+        }
+
+        return $this->adresa(URL::temporarySignedRoute(
+            'galerie.media.thumb',
+            CarbonImmutable::tomorrow()->endOfDay(),
+            ['uuid' => $polozka->uuid],
+        ));
+    }
+
+    private function adresa(string $kam): string
+    {
+        return "url('".$kam."') center/cover no-repeat #2b2842";
+    }
+
+    /** Položka knihovny, na kterou zpráva odkazuje. */
+    private function polozka(object $m): ?object
+    {
+        $ref = trim((string) ($m->attachment_ref ?? ''));
+
+        if ($ref === '' || ! Schema::hasTable('media_items')) {
+            return null;
+        }
+
+        return $this->polozky[$ref] ??= DB::table('media_items')
+            ->where('gallery_space_id', $this->prostorId)
+            ->where('uuid', $ref)
+            ->first(['id', 'uuid', 'location_name', 'original_filename']);
+    }
+
+    private function maZmensenina(int $id): bool
+    {
+        return DB::table('media_variants')
+            ->where('media_item_id', $id)
+            ->whereIn('type', ['thumbnail', 'small', 'original'])
+            ->exists();
     }
 
     /**

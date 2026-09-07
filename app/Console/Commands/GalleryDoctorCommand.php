@@ -138,6 +138,22 @@ class GalleryDoctorCommand extends Command
 
         $memLimit = (int) ini_get('memory_limit');
         $this->check("memory_limit >= 256M ({$memLimit}M)", $memLimit >= 256 || $memLimit === -1, 'WARN');
+
+        /*
+         * Kolik smí přijít v jednom požadavku.
+         *
+         * Nahrávka hlasu smí mít 25 MB a fotka z telefonu klidně 12. Když je
+         * strop níž, PHP tělo zahodí ještě před aplikací a ta pak odpoví
+         * „pole audio musí být soubor" — což zní jako chyba nahrávání a není.
+         */
+        $mb = fn (string $klic) => (int) rtrim((string) ini_get($klic), 'MmGg')
+            * (stripos((string) ini_get($klic), 'g') !== false ? 1024 : 1);
+
+        $post = $mb('post_max_size');
+        $soubor = $mb('upload_max_filesize');
+
+        $this->check("post_max_size >= 32M ({$post}M)", $post >= 32 || $post === 0, 'WARN');
+        $this->check("upload_max_filesize >= 32M ({$soubor}M) — voice notes are up to 25M", $soubor >= 32, 'WARN');
     }
 
     private function checkBinaries(): void

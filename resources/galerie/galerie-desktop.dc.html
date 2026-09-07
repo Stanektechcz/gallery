@@ -12550,6 +12550,30 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
     </div>
   </sc-if>
 
+  <!-- FOTKA DO CHATU -->
+  <sc-if value="{{ msgPickOpen }}">
+    <div onClick="{{ msgPickClose }}" class="dialog-backdrop" style="z-index:74; animation:fadeIn .14s ease">
+      <div onClick="{{ stop }}" role="dialog" aria-label="Fotka do chatu" class="dialog" style="width:min(560px,100%); background:var(--g-raise); gap:16px; max-height:88vh; overflow-y:auto">
+        <div style="display:flex; align-items:center; gap:10px">
+          <h3 style="margin:0; font-size:23px">Fotka do chatu</h3>
+          <button class="btn btn-icon" onClick="{{ msgPickClose }}" aria-label="Zavřít" style="margin-left:auto"><i class="ph-duotone ph-x" style="font-size:18px"></i></button>
+        </div>
+        <sc-if value="{{ msgPickEmpty }}">
+          <div style="font-size:13.5px; color:var(--g-ink2)">V knihovně zatím žádná fotka není. Až nějakou nahrajete, půjde poslat odsud.</div>
+        </sc-if>
+        <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(84px,1fr)); gap:7px">
+          <sc-for list="{{ msgPickItems }}" as="p" hint-placeholder-count="12">
+            <button onClick="{{ p.go }}" aria-label="{{ p.aria }}" title="{{ p.aria }}" style="aspect-ratio:1; padding:0; border:0; border-radius:2px; overflow:hidden; background:{{ p.bg }}; outline:1px solid var(--g-line2); cursor:pointer"></button>
+          </sc-for>
+        </div>
+        <div style="font-size:12.5px; color:var(--g-ink2); display:flex; gap:8px; align-items:flex-start; padding:10px 12px; border-radius:2px; background:var(--g-panel)">
+          <i class="ph-duotone ph-image" style="font-size:17px; color:var(--g-acc); flex:none"></i>
+          <span>Do hovoru se pošle odkaz na fotku, ne její kopie — zůstává jedna a tatáž položka knihovny.</span>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
   <!-- PRAVIDLO -->
   <sc-if value="{{ rulDlgOpen }}">
     <div onClick="{{ rulDlgClose }}" class="dialog-backdrop" style="z-index:90; animation:fadeIn .14s ease">
@@ -14406,7 +14430,7 @@ class Component extends DCLogic {
     curVotes: {}, curIdx: 0, curWho: 'A', curSets: [], annPick: {}, annFmt: 'čtverec 21 cm',
     annLayout: 'jedna na stranu', geoWantDone: {},
     nowDone: {}, nowSpend: [], nowNotes: [], nowPack: {}, nowUploads: 0, nowDlg: null, nowSpDlg: null,
-    msgList: null, msgDraft: '', msgQuery: '', msgPin: {}, msgReact: {}, msgPlay: null, msgTyping: false, msgRec: false, msgRecT: 0, msgPanel: false, msgEmoji: null, arcCols: 6, arcMeta: true, arcSheet: 0, arcMark: {},
+    msgList: null, msgDraft: '', msgQuery: '', msgPin: {}, msgReact: {}, msgPickOpen: false, msgPlay: null, msgTyping: false, msgRec: false, msgRecT: 0, msgPanel: false, msgEmoji: null, arcCols: 6, arcMeta: true, arcSheet: 0, arcMark: {},
     storyList: null, msList: null, storyOpen: {}, storyDrag: null, chDlg: null, msDlg: null, msYear: 'vše', invExtra: 3000, invYearsN: 10, invRate: 6,
     // Kalendář se otevírá na dnešku, ne na dni, ke kterému se kreslil prototyp.
     calYear: new Date().getFullYear(), calMonth: new Date().getMonth(), calDay: new Date().getDate(),
@@ -20004,7 +20028,7 @@ class Component extends DCLogic {
   msgsOf() {
     const s = this.state;
     if (s.msgList) return s.msgList;
-    return MSGS.map((m, i) => ({ id: m[0], who: m[1], day: m[2], time: m[3], type: m[4], text: m[5], extra: m[6], audio: m[7] || null, n: i * 5 }));
+    return MSGS.map((m, i) => ({ id: m[0], who: m[1], day: m[2], time: m[3], type: m[4], text: m[5], extra: m[6], audio: m[7] || null, bg: m[8] || null, n: i * 5 }));
   }
   msgsSet(list) { this.setState({ msgList: list }); }
   /*
@@ -20101,11 +20125,47 @@ class Component extends DCLogic {
         if (! res) { this.msgSend('v', nazev, delka); return; }
         this.msgSend('v', nazev, delka, res.uuid || res.id || null);
         this.toast('Hlasovka nahrána · ' + delka, { icon: 'ph-microphone' });
-      }).catch(() => {
-        this.toast('Nahrávku se nepodařilo uložit', { icon: 'ph-warning', color: 'var(--g-mag)' });
+      }).catch(e => {
+        // Důvod říká server; vlastní obecná věta ho jen zakryla.
+        const b = (e && e.body) || {};
+        const proc = b.message || (b.errors && b.errors.audio && b.errors.audio[0]) || '';
+        this.toast(proc ? 'Hlasovku se nepodařilo uložit — ' + proc : 'Hlasovku se nepodařilo uložit',
+          { icon: 'ph-warning', color: 'var(--g-mag)' });
       });
     });
   }
+  /*
+   * Okno na výběr souboru.
+   *
+   * Vstup vzniká za běhu, protože v šabloně by musel být napořád schovaný
+   * a `sc-if` by ho při každém překreslení vyrobil znovu — a rozdělaný výběr
+   * by se ztratil. Zrušené okno slibuje `cancel`; starší prohlížeče ho nemají,
+   * tam zůstane jen nesplněný příslib a žádná akce.
+   */
+  chatVyberSoubor() {
+    return new Promise(hotovo => {
+      const vstup = document.createElement('input');
+      vstup.type = 'file';
+      vstup.accept = 'image/*';
+      vstup.style.display = 'none';
+      vstup.onchange = () => { hotovo(vstup.files && vstup.files[0] ? vstup.files[0] : null); vstup.remove(); };
+      vstup.oncancel = () => { hotovo(null); vstup.remove(); };
+      document.body.appendChild(vstup);
+      vstup.click();
+    });
+  }
+
+  /*
+   * Zpráva vznikla na serveru — obrazovka si ji přečte odtamtud.
+   *
+   * `msgList` se zahazuje schválně: dokud v něm něco je, kreslí se hovor
+   * z něj a nová bublina by se ze serveru neukázala.
+   */
+  chatZeServeru() {
+    this.setState({ msgList: null, msgDraft: '' });
+    if (window.GalerieObnovit) GalerieObnovit('zpravy');
+  }
+
   msgSend(type, text, extra, audio) {
     const list = this.msgsOf();
     const now = new Date();
@@ -20165,7 +20225,8 @@ class Component extends DCLogic {
           const ok = this.download(m.text.replace(/\s+/g, '-'), 'Ukázkový soubor z chatu\n\n' + m.text + '\n' + m.extra, 'text/plain;charset=utf-8');
           this.toast(ok ? m.text + ' stažen' : 'Stažení se nepovedlo', { icon: 'ph-download-simple' });
         },
-        photoBg: this.bg(m.n % 40), place: m.extra,
+        // Skutečný snímek; barva zůstává jen tam, kde k bublině žádný není.
+        photoBg: m.bg || this.bg(m.n % 40), place: m.extra,
         len: m.extra,
         pinned: !!pins[m.id],
         pinIcon: pins[m.id] ? 'ph-push-pin-slash' : 'ph-push-pin',
@@ -20234,16 +20295,73 @@ class Component extends DCLogic {
         msgKey: e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); const t = (s.msgDraft || '').trim(); if (t) this.msgSend('t', t); } },
         msgCant: !(s.msgDraft || '').trim(),
         msgSendGo: () => { const t = (s.msgDraft || '').trim(); if (t) this.msgSend('t', t); },
-        msgAttach: () => {
-          const p = photos[Math.floor(Math.random() * photos.length)];
-          const e = this.edited(p);
-          this.msgSend('p', 'Poslal jsem fotku z ' + e.place, e.place);
-        },
+        // Fotka z knihovny: napřed se vybere, pak se pošle. Dřív si tlačítko
+        // vybralo samo, náhodně, a do hovoru napsalo, že jsem ji poslal.
+        msgAttach: () => this.setState({ msgPickOpen: true }),
         msgAttachFile: () => {
-          const f = MSGFILES[Math.floor(Math.random() * MSGFILES.length)];
-          this.msgSend('f', f[0], f[1]);
-          this.toast(f[0] + ' odesláno · ' + f[1], { icon: 'ph-paperclip' });
+          const api = window.GalerieApi;
+
+          if (! api || api.mode !== 'http' || ! api.nahrajDoChatu) {
+            this.zatimNeumime('přílohy v chatu bez připojení k serveru');
+            return;
+          }
+
+          this.chatVyberSoubor().then(f => {
+            if (! f) return;
+
+            /*
+             * Server u chatu přijímá zatím jen obrázek. Říct to je poctivější
+             * než soubor tiše zahodit — nebo, jako dřív, oznámit odeslání
+             * něčeho, co nikdy neexistovalo.
+             */
+            if (! /^image\//.test(f.type || '')) {
+              this.toast('Do chatu zatím umíme poslat jen obrázek', { icon: 'ph-warning', color: 'var(--g-mag)' });
+              return;
+            }
+
+            this.toast('Nahrávám ' + f.name + '…', { icon: 'ph-upload-simple', local: true });
+
+            api.nahrajDoChatu(f, (s.msgDraft || '').trim()).then(r => {
+              if (! r) { this.toast('Přílohu se nepodařilo odeslat', { icon: 'ph-warning', color: 'var(--g-mag)' }); return; }
+              this.chatZeServeru();
+              this.toast(f.name + ' odesláno', { icon: 'ph-paperclip' });
+            }).catch(e => {
+              const b = (e && e.body) || {};
+              this.toast(b.message || 'Přílohu se nepodařilo odeslat', { icon: 'ph-warning', color: 'var(--g-mag)' });
+            });
+          });
         },
+
+        // ——— výběr fotky z knihovny ———
+        msgPickOpen: !!s.msgPickOpen,
+        msgPickClose: () => this.setState({ msgPickOpen: false }),
+        msgPickEmpty: photos.length === 0,
+        msgPickItems: photos.slice(0, 24).map(p => {
+          const e = this.edited(p);
+          return {
+            bg: p.bg, aria: e.name + ' · ' + e.dateShort + ' · ' + e.place,
+            go: () => {
+              const api = window.GalerieApi;
+
+              if (! api || api.mode !== 'http') { this.zatimNeumime('posílání fotek do chatu bez serveru'); return; }
+
+              this.setState({ msgPickOpen: false });
+
+              api.post('v1/chat', {
+                body: (s.msgDraft || '').trim() || e.name,
+                attachment_type: 'media',
+                attachment_ref: p.id
+              }).then(r => {
+                if (! r) { this.toast('Fotku se nepodařilo poslat', { icon: 'ph-warning', color: 'var(--g-mag)' }); return; }
+                this.chatZeServeru();
+                this.toast('Fotka odeslána do chatu', { icon: 'ph-image' });
+              }).catch(x => {
+                const b = (x && x.body) || {};
+                this.toast(b.message || 'Fotku se nepodařilo poslat', { icon: 'ph-warning', color: 'var(--g-mag)' });
+              });
+            }
+          };
+        }),
         // ——— boční panel se sdíleným obsahem ———
         shPhotos: all.filter(m => m.type === 'p').slice(-6).reverse().map(m => ({
           bg: this.bg(m.n % 40), place: m.extra || '—',

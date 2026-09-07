@@ -214,6 +214,91 @@ class ObsahZpravyTest extends TestCase
 
     // ——— pomůcky ———
 
+    /**
+     * Bublina s fotkou ukazuje tu fotku.
+     *
+     * Prototyp si její pozadí počítal z pořadí repliky (`bg(m.n % 40)`),
+     * takže poslaný snímek měl v hovoru barvu, která s ním neměla nic
+     * společného — a po další zprávě jinou. Pod bublinou navíc stál
+     * identifikátor místo místa.
+     */
+    public function test_fotka_v_chatu_nese_svuj_nahled(): void
+    {
+        $polozka = $this->polozkaSNahledem();
+
+        $this->zprava([
+            'body' => 'Tohle bylo po východu',
+            'attachment_type' => 'media',
+            'attachment_ref' => $polozka['uuid'],
+        ]);
+
+        $radek = collect($this->getJson('/api/data/zpravy')->assertOk()->json('data.MSGS'))
+            ->firstWhere(5, 'Tohle bylo po východu');
+
+        $this->assertSame('p', $radek[4]);
+        $this->assertSame('Pustevny', $radek[6]);
+        $this->assertStringContainsString('/api/media/'.$polozka['uuid'].'/thumb', $radek[8]);
+        $this->assertStringContainsString('signature=', $radek[8]);
+    }
+
+    /** Bez zmenšeniny se nic neslibuje — bublina si nechá barvu z prototypu. */
+    public function test_fotka_bez_zmenseniny_nema_nahled(): void
+    {
+        $polozka = $this->polozkaSNahledem(false);
+
+        $this->zprava([
+            'body' => 'Bez náhledu',
+            'attachment_type' => 'media',
+            'attachment_ref' => $polozka['uuid'],
+        ]);
+
+        $radek = collect($this->getJson('/api/data/zpravy')->assertOk()->json('data.MSGS'))
+            ->firstWhere(5, 'Bez náhledu');
+
+        $this->assertSame('', $radek[8]);
+    }
+
+    /**
+     * Položka knihovny, na kterou se dá odkázat.
+     *
+     * @return array{id: int, uuid: string}
+     */
+    private function polozkaSNahledem(bool $sVariantou = true): array
+    {
+        $uuid = (string) Str::uuid();
+
+        $id = DB::table('media_items')->insertGetId([
+            'uuid' => $uuid,
+            'gallery_space_id' => $this->prostor->id,
+            'owner_user_id' => $this->adri->id,
+            'uploaded_by' => $this->adri->id,
+            'original_filename' => 'IMG_9001.jpg',
+            'safe_filename' => 'img-9001.jpg',
+            'extension' => 'jpg',
+            'mime_type' => 'image/jpeg',
+            'media_type' => 'photo',
+            'size_bytes' => 1024,
+            'location_name' => 'Pustevny',
+            'status' => 'ready',
+            'storage_status' => 'local',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        if ($sVariantou) {
+            DB::table('media_variants')->insert([
+                'media_item_id' => $id,
+                'type' => 'thumbnail',
+                'disk' => 'public',
+                'path' => "media/{$uuid}/thumbnail.webp",
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+
+        return ['id' => $id, 'uuid' => $uuid];
+    }
+
     private function zprava(array $navic = []): ChatMessage
     {
         $kdy = $navic['created_at'] ?? now();

@@ -498,6 +498,31 @@
     },
 
     /*
+     * Obrázek do chatu.
+     *
+     * Zvlášť od `post` ze stejného důvodu jako hlasovka: jde o soubor, takže
+     * hranici těla si `FormData` skládá samo a `Content-Type` se k němu
+     * nesmí přidat ručně.
+     */
+    nahrajDoChatu: function (soubor, text) {
+      if (mode !== 'http' || ! soubor) return Promise.resolve(null);
+      var telo = new FormData();
+      telo.append('image', soubor, soubor.name || 'priloha');
+      if (text) telo.append('body', text);
+
+      var h = headers();
+      delete h['Content-Type'];
+
+      return fetch(base + '/v1/chat', { method: 'POST', headers: h, credentials: 'same-origin', body: telo })
+        .then(function (r) {
+          return r.json().then(function (b) {
+            if (! r.ok) throw Object.assign(new Error('HTTP ' + r.status), { body: b, status: r.status });
+            return b;
+          });
+        });
+    },
+
+    /*
      * Adresa k přehrání hlasovky.
      *
      * Přes `fetch` do `blob:`, ne přímým odkazem: proud je za přihlášením
