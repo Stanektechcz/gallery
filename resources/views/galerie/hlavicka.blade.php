@@ -11,7 +11,10 @@
      udělat, aniž by se do prototypu sáhlo. --}}
 <link rel="preload" as="script" href="/galerie-data.js">
 <link rel="preload" as="script" href="/galerie-mechanismy-logika.js">
-<link rel="preload" as="script" href="/image-slot.js">
+{{-- `image-slot.js` se tu předstahoval, dokud ho dokument načítal. Komponentu
+     jsme odstranili (kreslila přes fotky svůj popisek a nabízela nahrát jinou),
+     ale nápověda zůstala: prohlížeč stahoval sto kilobajtů, které nikdo
+     nepoužil, a psal o tom do konzole. --}}
 <link rel="preload" as="style" href="/_ds/broadsheet-a4da30e6-ea56-42b3-88f2-00edc07c2f31/styles.css">
 <script>
 (function () {

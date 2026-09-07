@@ -8,6 +8,7 @@ use App\Models\GallerySpace;
 use App\Services\Obsah\PoskytovatelObsahu;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Obsah, který prototyp kreslí — ze skutečné databáze.
@@ -36,7 +37,41 @@ class DataController extends Controller
                 continue;
             }
 
-            $data = $poskytovatel->kolekce($prostor);
+            /*
+             * Jedna rozbitá kolekce nesmí vzít celou skupinu.
+             *
+             * `system` staví přes dvacet kolekcí — zámek, úložiště, zdraví
+             * dat, trezor, akční inbox. Když jedna z nich hodí výjimku,
+             * odpovědí je 500 a klient přijde o všechny; obrazovky pak tiše
+             * ukazují ukázková data a nikde není vidět, že se něco stalo.
+             * Přesně to se dělo na produkci, kde `/api/data/system` vracelo
+             * 500 a lokálně týž kód procházel.
+             *
+             * Zapíše se to do logu se jménem skupiny, řekne se to i klientovi
+             * a skupina se pošle prázdná — což je stav, se kterým prototyp
+             * počítá. Ve vývoji se výjimka nechá projít, ať se na ni přijde
+             * dřív, než se nasadí.
+             */
+            try {
+                $data = $poskytovatel->kolekce($prostor);
+            } catch (\Throwable $e) {
+                if (config('app.debug')) {
+                    throw $e;
+                }
+
+                Log::error("Skupina obsahu „{$skupina}\" se nepodařila sestavit", [
+                    'vyjimka' => $e::class,
+                    'zprava' => $e->getMessage(),
+                    'kde' => $e->getFile().':'.$e->getLine(),
+                    'prostor' => $prostor->id,
+                ]);
+
+                return response()->json([
+                    'data' => (object) [],
+                    'uplne' => [],
+                    'chyba' => 'Skupinu se nepodařilo sestavit — podrobnosti jsou v logu serveru.',
+                ]);
+            }
 
             // Klient přepisuje klíče a nemaže je; u kolekcí, které server dodává
             // celé, by mu tak vedle skutečných dat zůstala ukázka.
