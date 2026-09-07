@@ -3742,7 +3742,9 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                   <button onClick="{{ lockSignIn }}" disabled="{{ lockSignCant }}" class="btn btn-primary btn-block" style="min-height:48px; margin-top:12px; gap:7px"><i class="ph-duotone ph-sign-in" style="font-size:17px"></i>Přihlásit se</button>
                   <div style="margin-top:16px; padding-top:11px; border-top:1px solid var(--g-line); font-size:12px; line-height:1.6; color:var(--g-ink3); text-wrap:pretty">{{ lockPwdHint }}</div>
                   <div style="display:flex; gap:8px; margin-top:4px">
+                    <sc-if value="{{ obPrvni }}">
                     <button onClick="{{ obStart }}" style="min-height:44px; display:flex; align-items:center; gap:6px; padding:0 10px 0 0; border:0; background:transparent; cursor:pointer; font-family:inherit; font-size:12.5px; color:var(--g-acc)"><i class="ph-duotone ph-sparkle" style="font-size:15px"></i>První spuštění</button>
+                    </sc-if>
                     <!--
                       Tlačítko „Přeskočit zámek“ je pryč. Otevřelo celý archiv
                       bez hesla i bez kódu — na obrazovce, která o dva řádky výš
@@ -4824,6 +4826,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
     </div>
   </div>
 
+  <sc-if value="{{ vitrina }}">
   <div style="width:340px; flex:none; padding-top:38px">
     <div style="border-top:3px solid var(--g-ink); padding-top:8px; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--g-ink2)">Jak to funguje</div>
     <div style="border-top:1px solid var(--g-ink); margin-bottom:16px"></div>
@@ -4854,6 +4857,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
       </div>
     </sc-for>
   </div>
+  </sc-if>
 
 </div>
 </x-dc>
@@ -9411,6 +9415,15 @@ class Component extends DCLogic {
     const block = ['', paired ? '' : 'Zadejte kód — v prototypu ' + MOBCODE + '.', onCount ? '' : 'Vyberte aspoň jednu sekci.', '', pin.length === 6 ? '' : 'Kód musí mít šest číslic.', ''][step];
     return {
       obOn: !!s.obOpen,
+      /*
+       * Průvodce prvním spuštěním jen tam, kde je co zakládat.
+       *
+       * Nabízel se na přihlašovací obrazovce i dvojici, která už roky existuje
+       * — a slibuje zakládání účtů, sekcí a sdílení, tedy přesně to, co je
+       * hotové. Server o dvojici říká v `DVOJICE`; když ji zná, průvodce se
+       * neukazuje. Když neřekl nic, tvrdit nebudeme nic a tlačítko zůstane.
+       */
+      obPrvni: (((window.GalerieData || {}).DVOJICE || []).length < 2),
       obStart: () => this.setState({ obOpen: true, obStep: 0 }),
       obStepNum: 'Krok ' + (step + 1) + ' z ' + MOBSTEPS.length,
       obTitle: MOBSTEPS[step][0],
