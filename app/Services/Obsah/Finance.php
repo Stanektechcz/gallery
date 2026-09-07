@@ -113,10 +113,25 @@ class Finance implements PoskytovatelObsahu
              * Adrian" a „ČSOB · Makinka" někoho cizího, u toho „sync dnes
              * 8:14" jako by se opravdu synchronizovalo.
              */
-            'AL' => $ucty ? ['accounts' => array_map(
-                fn (array $u) => [$u[0], trim($u[1].' · '.$u[5]), $u[4]],
-                $ucty,
-            )] : [],
+            'AL' => array_filter([
+                'accounts' => array_map(
+                    fn (array $u) => [$u[0], trim($u[1].' · '.$u[5]), $u[4]],
+                    $ucty,
+                ),
+                /*
+                 * Vyrovnání mezi rozpočty.
+                 *
+                 * Záložka „Vyrovnávání" měla tři napsané řádky („Restaurace
+                 * do Potravin · vyrovnáno 500 Kč") a jedno „pravidlo", které
+                 * nikde neexistovalo. Vyrovnání se přitom zapisují do
+                 * `budget_settlements` a jde o peníze mezi dvěma lidmi —
+                 * tam je vymyšlený řádek obzvlášť špatný nápad.
+                 */
+                'balancing' => $this->vyrovnani($prostor),
+                // `balancing` chodí i prázdný: prázdný stav pro něj prototyp
+                // nemá, ale ukázka na jeho místě tvrdí, že se mezi rozpočty
+                // přesouvaly peníze. Prázdný seznam je proti tomu poctivý.
+            ], fn (array $v, string $k) => $k === 'balancing' || $v !== [], ARRAY_FILTER_USE_BOTH),
             // Totéž číslo jako v hlavičce rozpočtu — dvě různá by si na dvou
             // obrazovkách protiřečila.
             'INCOMES' => $rozpocet ? (int) round($this->mesicniPrijem($rozpocet)) : 0,
@@ -868,6 +883,49 @@ class Finance implements PoskytovatelObsahu
      * Makinčin rozpočet na Německo je v eurech; napsat u něj „zbývá 60 Kč" by byla
      * přesně ta tichá nepravda, kvůli které se pak dělají rozhodnutí naslepo.
      */
+    /**
+     * Vyrovnání mezi rozpočty: `[co, kolik a kdy, štítek]`.
+     *
+     * Ukázka tvrdila „automaticky" — jako by aplikace peníze mezi rozpočty
+     * přesouvala sama. Nepřesouvá: každé vyrovnání někdo zapsal a v tabulce
+     * je u něj podepsaný. Štítek proto říká, kdo to byl.
+     *
+     * @return list<array<int, string>>
+     */
+    private function vyrovnani(GallerySpace $prostor): array
+    {
+        if (! Schema::hasTable('budget_settlements') || ! Schema::hasTable('budgets')) {
+            return [];
+        }
+
+        $jmena = $prostor->members()->pluck('users.name', 'users.id')->all();
+
+        return DB::table('budget_settlements as v')
+            ->join('budgets as r', 'r.id', '=', 'v.budget_id')
+            ->where('r.gallery_space_id', $prostor->id)
+            ->orderByDesc('v.settled_through')
+            ->limit(30)
+            ->get(['v.amount', 'v.currency', 'v.settled_through', 'v.note', 'v.from_user_id', 'v.to_user_id', 'v.created_by', 'r.name as rozpocet'])
+            ->map(function (object $v) use ($jmena) {
+                $od = $jmena[$v->from_user_id] ?? null;
+                $komu = $jmena[$v->to_user_id] ?? null;
+
+                return [
+                    $v->note ?: ($od && $komu ? $od.' → '.$komu : (string) $v->rozpocet),
+                    trim(implode(' · ', array_filter([
+                        'vyrovnáno '.$this->castka((float) $v->amount, (string) $v->currency),
+                        CarbonImmutable::parse($v->settled_through)->format('j. n.'),
+                        $v->note && $od && $komu ? $od.' → '.$komu : null,
+                    ]))),
+                    // Kdo to zapsal. „Automaticky" by byla lež: vyrovnání
+                    // vzniká jen tím, že ho někdo z dvojice provede.
+                    ($jmena[$v->created_by] ?? null) ?: 'zapsáno ručně',
+                ];
+            })
+            ->values()
+            ->all();
+    }
+
     private function castka(float $castka, string $mena): string
     {
         return number_format($castka, 0, ',', ' ').' '.$this->znakMeny($mena);

@@ -35,10 +35,19 @@ class ObsahPribehTest extends TestCase
         Sanctum::actingAs($this->adri);
     }
 
-    /** Prázdný příběh nechává ukázku — vyprávění o ničem není vyprávění. */
+    /**
+     * Prázdný příběh nechává ukázku — vyprávění o ničem není vyprávění.
+     *
+     * Jediné, co odsud chodí vždycky, je prázdný seznam odeslaných objednávek:
+     * ukázka na jeho místě tvrdí, že dvojice zaplatila 1 190 Kč za fotoknihu.
+     * Tvrzení o penězích má být pravdivé, i když je celá skupina jinak ticho.
+     */
     public function test_bez_kapitol_se_pribeh_neposila(): void
     {
-        $this->assertSame([], $this->getJson('/api/data/pribeh')->assertOk()->json('data'));
+        $this->assertSame(
+            ['AL' => ['orders' => []]],
+            $this->getJson('/api/data/pribeh')->assertOk()->json('data'),
+        );
     }
 
     /**

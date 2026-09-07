@@ -5,7 +5,10 @@ namespace App\Services\Obsah;
 use App\Models\GallerySpace;
 use App\Models\MediaItem;
 use App\Models\StorageConnection;
+use App\Models\User;
 use App\Services\Finance\LedgerService;
+use App\Services\Provoz\AdministraceGalerie;
+use App\Services\Provoz\PlanovaneUlohy;
 use App\Services\Provoz\UlozisteGalerie;
 use App\Services\Storage\DriveConnectionResolver;
 use App\Support\SpaceContext;
@@ -54,6 +57,10 @@ class System implements PoskytovatelObsahu
         private readonly LedgerService $kniha,
         private readonly Formulare $formulare,
         private readonly DriveConnectionResolver $disky,
+        // Účty, klíče a tarify už administrace umí spočítat; druhý výpočet
+        // by znamenal dvě čísla o téže věci, která se časem rozejdou.
+        private readonly AdministraceGalerie $sprava,
+        private readonly PlanovaneUlohy $ulohy,
     ) {}
 
     public function skupina(): string
@@ -138,11 +145,36 @@ class System implements PoskytovatelObsahu
                 'ZAMEK' => $this->stavZamku(),
                 'TREZOR' => $this->stavTrezoru(),
                 'VAULT_ITEMS' => $this->obsahTrezoru($trezor),
-                'AL' => array_filter([
-                    // Co čeká na zařazení — spočítané, ne napsané.
-                    'inbox' => $this->akcniInbox($prostor),
-                    'vault' => $this->trezorDoSeznamu($trezor),
-                ], fn (array $v, string $k) => $k === 'vault' || $v !== [], ARRAY_FILTER_USE_BOTH),
+                'AL' => array_filter(
+                    [
+                        // Co čeká na zařazení — spočítané, ne napsané.
+                        'inbox' => $this->akcniInbox($prostor),
+                        'vault' => $this->trezorDoSeznamu($trezor),
+                    ]
+                    + $this->inboxRozhodnute($prostor)
+                    + $this->spravaDoSeznamu($prostor),
+                    /*
+                     * Tyhle chodí **i prázdné**, každý z jiného důvodu.
+                     *
+                     * `vault`, `inbox`, `snoozed`, `inboxDone` a `users` mají
+                     * v prototypu napsaný prázdný stav („Nic není odložené"),
+                     * takže prázdno není k nerozeznání od rozbité obrazovky.
+                     *
+                     * `api`, `tarify` a `jobs` prázdný stav nemají, a přesto
+                     * chodí: jejich ukázka tvrdí něco o penězích a o přístupu.
+                     * „Rodinný 200 GB · aktivní · 249 Kč měsíčně" u dvojice bez
+                     * předplatného, „Mobilní aplikace · klíč …8f2a · aktivní"
+                     * u dvojice, která žádný klíč nevydala, a „Noční záloha ·
+                     * hotovo" jako ujištění, že zálohy běží. Prázdný seznam je
+                     * proti tomu poctivý.
+                     */
+                    fn (array $v, string $k) => in_array(
+                        $k,
+                        ['vault', 'inbox', 'snoozed', 'inboxDone', 'users', 'api', 'tarify', 'jobs'],
+                        true,
+                    ) || $v !== [],
+                    ARRAY_FILTER_USE_BOTH,
+                ),
             ];
     }
 
@@ -178,7 +210,7 @@ class System implements PoskytovatelObsahu
      * Jen jestli má přihlášený člověk kód nastavený a odkdy. Samotný kód sem
      * nepatří ani v podobě haše — obrazovka ho nepotřebuje, ověřuje ho server.
      *
-     * @return array{nastaveno: bool, delka: int, zmeneno: ?string}
+     * @return array<string, mixed>
      */
     private function stavZamku(): array
     {
@@ -188,6 +220,57 @@ class System implements PoskytovatelObsahu
             'nastaveno' => (bool) ($clovek?->app_lock_pin),
             'delka' => 6,
             'zmeneno' => $clovek?->app_lock_set_at?->toDateString(),
+        ] + $this->zarizeniASezeni($clovek);
+    }
+
+    /**
+     * Zařízení a sezení — spočítaná, ne napsaná.
+     *
+     * V nastavení stálo „iPhone Adrian, iPhone Makinka, iPad v ložnici ·
+     * 3 zařízení" a „Tento telefon a iPhone Makinka (dnes 7:12)". U dvojice,
+     * která se přihlásila z jednoho notebooku, to bylo tvrzení o cizích
+     * telefonech — a zrovna na obrazovce, kde má člověk poznat, že se někdo
+     * přihlásil odjinud.
+     *
+     * Zařízení jsou vydané přihlašovací klíče (`personal_access_tokens`,
+     * pojmenované při přihlášení), sezení řádky v `sessions`. Obojí jen moje:
+     * kolik zařízení má partner, není moje věc.
+     *
+     * @return array<string, mixed>
+     */
+    private function zarizeniASezeni(?User $clovek): array
+    {
+        if ($clovek === null) {
+            return ['zarizeni' => 0, 'zarizeniPopis' => '', 'sezeni' => 0, 'sezeniPopis' => ''];
+        }
+
+        $klice = DB::table('personal_access_tokens')
+            ->where('tokenable_type', User::class)
+            ->where('tokenable_id', $clovek->id)
+            ->where(fn ($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now()))
+            ->orderByDesc('last_used_at')
+            ->get(['name', 'last_used_at']);
+
+        $sezeni = Schema::hasTable('sessions')
+            ? DB::table('sessions')
+                ->where('user_id', $clovek->id)
+                // Sezení bez aktivity za poslední dva týdny je mrtvé; počítat
+                // ho mezi „aktivní" by z toho čísla udělalo nesmysl.
+                ->where('last_activity', '>=', now()->subDays(14)->timestamp)
+                ->orderByDesc('last_activity')
+                ->get(['ip_address', 'last_activity'])
+            : collect();
+
+        return [
+            'zarizeni' => $klice->count(),
+            'zarizeniPopis' => $klice->isEmpty()
+                ? 'Zatím žádné — tohle okno běží na přihlášení přes prohlížeč'
+                : $klice->take(3)->map(fn (object $k) => (string) ($k->name ?: 'bez názvu'))->implode(', '),
+            'sezeni' => $sezeni->count(),
+            'sezeniPopis' => $sezeni->isEmpty()
+                ? 'Žádné otevřené sezení kromě tohohle'
+                : $this->pocet($sezeni->count(), 'otevřené sezení', 'otevřená sezení', 'otevřených sezení')
+                    .' · naposledy '.CarbonImmutable::createFromTimestamp((int) $sezeni->first()->last_activity)->format('j. n. G:i'),
         ];
     }
 
@@ -1300,6 +1383,13 @@ class System implements PoskytovatelObsahu
                 $this->pocet($bezData, 'fotka bez data', 'fotky bez data', 'fotek bez data'),
                 'knihovna · datum se dá doplnit z okolních dnů',
                 'akce',
+                null, null, null, null,
+                // Osmý prvek je **klíč kategorie**. Prototyp čte první tři,
+                // filmy do sedmého; tenhle je za nimi, takže se ukázka nemění.
+                // Slouží k tomu, aby odložení nebo vyřešení přežilo změnu
+                // počtu: „12 fotek bez data" a „13 fotek bez data" je pořád
+                // tentýž řádek a rozhodnutí o něm má platit dál.
+                'inbox:fotky-bez-data',
             ];
         }
 
@@ -1310,6 +1400,7 @@ class System implements PoskytovatelObsahu
                 $this->pocet($bezMista, 'fotka bez místa', 'fotky bez místa', 'fotek bez místa'),
                 'knihovna · místo se dá doplnit z téhož dne',
                 'akce',
+                null, null, null, null, 'inbox:fotky-bez-mista',
             ];
         }
 
@@ -1320,6 +1411,7 @@ class System implements PoskytovatelObsahu
                 $this->pocet($nezalohovane, 'originál čeká na přenos', 'originály čekají na přenos', 'originálů čeká na přenos'),
                 'úložiště · druhá kopie na Disku',
                 'akce',
+                null, null, null, null, 'inbox:originaly-bez-kopie',
             ];
         }
 
@@ -1334,6 +1426,7 @@ class System implements PoskytovatelObsahu
                     $this->pocet($bezKategorie, 'nezařazená transakce', 'nezařazené transakce', 'nezařazených transakcí'),
                     'finance · bez zařazení nesedí rozpočet',
                     'zařadit',
+                    null, null, null, null, 'inbox:transakce-bez-kategorie',
                 ];
             }
         }
@@ -1349,10 +1442,180 @@ class System implements PoskytovatelObsahu
                     $this->pocet($cesty, 'věc v cestovní schránce', 'věci v cestovní schránce', 'věcí v cestovní schránce'),
                     'cesty · čeká na zařazení k cestě',
                     'zařadit',
+                    null, null, null, null, 'inbox:cestovni-schranka',
                 ];
             }
         }
 
-        return $radky;
+        // Co je odbyté nebo odložené, v inboxu být nemá.
+        $rozhodnute = $this->rozhodnutiInboxu($prostor);
+
+        return array_values(array_filter(
+            $radky,
+            fn (array $r) => ! isset($rozhodnute[$r[7]]),
+        ));
+    }
+
+    /**
+     * Rozhodnutí o inboxu, která ještě platí.
+     *
+     * Odložení má datum: po něm se řádek sám vrátí mezi ostatní. Bez toho by
+     * z „odložit" bylo tiché smazání a dvojice by se o té věci už nikdy
+     * nedozvěděla.
+     *
+     * @return array<string, object>
+     */
+    private function rozhodnutiInboxu(GallerySpace $prostor): array
+    {
+        if (! Schema::hasTable('inbox_states')) {
+            return [];
+        }
+
+        return DB::table('inbox_states')
+            ->where('gallery_space_id', $prostor->id)
+            ->where(fn ($q) => $q
+                ->where('state', 'done')
+                ->orWhere(fn ($v) => $v->where('state', 'snoozed')->whereDate('snoozed_until', '>', now())))
+            ->get()
+            ->keyBy('item_key')
+            ->all();
+    }
+
+    /**
+     * Odložené a vyřízené řádky inboxu.
+     *
+     * Obě záložky kreslily ukázku — „Ceny půjčoven aut · odloženo do 1. 9."
+     * a „PDF letenky · zařazeno do Jízdenky" u dvojice, která na žádné
+     * z toho nesáhla. Ukládá se jen rozhodnutí, takže si text řádku pamatuje
+     * ten záznam sám; počty by po čase stejně nesouhlasily.
+     *
+     * @return array{snoozed: list<array<int, ?string>>, inboxDone: list<array<int, ?string>>}
+     */
+    private function inboxRozhodnute(GallerySpace $prostor): array
+    {
+        if (! Schema::hasTable('inbox_states')) {
+            return ['snoozed' => [], 'inboxDone' => []];
+        }
+
+        $jmena = $prostor->members()->pluck('users.name', 'users.id')->all();
+
+        $zaznamy = DB::table('inbox_states')
+            ->where('gallery_space_id', $prostor->id)
+            ->orderByDesc('updated_at')
+            ->limit(60)
+            ->get();
+
+        $odlozene = [];
+        $hotove = [];
+
+        foreach ($zaznamy as $z) {
+            $klic = [null, null, null, null, $z->item_key];
+
+            if ($z->state === 'snoozed' && $z->snoozed_until && CarbonImmutable::parse($z->snoozed_until)->isAfter(now())) {
+                $odlozene[] = array_merge([
+                    (string) $z->title,
+                    'odloženo do '.CarbonImmutable::parse($z->snoozed_until)->format('j. n.'),
+                    'odloženo',
+                ], $klic);
+
+                continue;
+            }
+
+            if ($z->state === 'done') {
+                $hotove[] = array_merge([
+                    (string) $z->title,
+                    trim(implode(' · ', array_filter([
+                        'vyřešeno',
+                        $z->resolved_at ? CarbonImmutable::parse($z->resolved_at)->format('j. n.') : null,
+                        $jmena[$z->by_user_id] ?? null,
+                    ]))),
+                    'hotovo',
+                ], $klic);
+            }
+        }
+
+        return ['snoozed' => $odlozene, 'inboxDone' => $hotove];
+    }
+
+    /**
+     * Správa: účty, plánované úlohy, přístupové klíče a tarify.
+     *
+     * Všechno to obrazovky kreslily z ukázky — „Klíč …8f2a", „Noční záloha ·
+     * poslední běh 3:00" a „Rodinný 200 GB · aktivní" u dvojice, která tarif
+     * nemá a klíč nikdy nevydala. Data přitom existují a administrace je
+     * ukazuje; jen tyhle čtyři seznamy na ně nebyly napojené.
+     *
+     * Úlohy a klíče vidí jen správce: klíč je přihlašovací údaj a plánované
+     * úlohy jsou vnitřek serveru, ne obsah dvojice.
+     *
+     * @return array<string, list<array<int, ?string>>>
+     */
+    private function spravaDoSeznamu(GallerySpace $prostor): array
+    {
+        $seznamy = [];
+
+        $seznamy['users'] = array_map(fn (array $u) => [
+            (string) $u['name'],
+            trim(implode(' · ', array_filter([(string) $u['role'], (string) $u['last']]))),
+            (string) $u['state'],
+        ], $this->sprava->ucty($prostor));
+
+        $tarify = $this->sprava->tarifySeznam();
+        $muj = (string) ($this->sprava->soucasnyTarif($prostor) ?? '');
+
+        $seznamy['tarify'] = array_map(fn (array $t) => [
+            (string) $t['name'],
+            trim(implode(' · ', array_filter([
+                (string) $t['id'] === $muj ? 'aktivní' : null,
+                $t['gb'] > 0 ? $t['gb'].' GB' : null,
+                $t['price'] > 0 ? $this->castka((float) $t['price'], 'CZK').' měsíčně' : 'zdarma',
+            ]))),
+            (string) $t['id'] === $muj ? 'aktivní' : 'zařadit',
+        ], $tarify);
+
+        /*
+         * Kdo správcem není, dostane oba seznamy **prázdné**, ne žádné.
+         *
+         * Neposlat je by znamenalo nechat na obrazovce ukázku — tedy klíč
+         * „Mobilní aplikace · aktivní" a „Noční záloha · hotovo" jako ujištění,
+         * že někdo někam přistupuje a zálohy běží.
+         */
+        $seznamy['jobs'] = [];
+        $seznamy['api'] = [];
+
+        if (! auth()->user()?->isAdmin()) {
+            return $seznamy;
+        }
+
+        $seznamy['jobs'] = array_map(fn (array $u) => [
+            (string) $u['name'],
+            trim(implode(' · ', array_filter([
+                (string) $u['cron'],
+                $u['last'] !== 'nikdy' ? 'naposledy '.$u['last'] : 'zatím neběžela',
+                $u['dur'] !== '—' ? (string) $u['dur'] : null,
+            ]))),
+            (string) $u['state'],
+        ], $this->ulohy->seznam()->all());
+
+        $seznamy['api'] = array_map(fn (array $k) => [
+            (string) $k['name'],
+            trim(implode(' · ', array_filter([
+                /*
+                 * Celý klíč se nikdy nikam neposílá — v databázi je jen jeho
+                 * otisk. Poslední čtyři znaky stačí, aby se dva rozeznaly.
+                 *
+                 * U klíčů vydaných dřív, než se poznávací značka začala
+                 * ukládat, se nedá doplnit: otevřený text má jen ten, kdo si
+                 * ho tenkrát opsal. Píše se to natvrdo místo `…????`, aby si
+                 * nikdo nemyslel, že je to část klíče.
+                 */
+                $k['suffix'] === '????' ? 'bez poznávací značky' : 'klíč …'.$k['suffix'],
+                'vytvořen '.$k['made'],
+                (string) $k['used'],
+            ]))),
+            (string) $k['state'],
+        ], $this->sprava->klice($prostor));
+
+        return $seznamy;
     }
 }

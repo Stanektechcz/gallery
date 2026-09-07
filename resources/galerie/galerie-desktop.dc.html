@@ -7767,6 +7767,15 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                       <i class="ph-duotone {{ r.actIcon }}" style="font-size:15px"></i><span>{{ r.actLabel }}</span>
                     </span>
                   </sc-if>
+                  <!--
+                    Odložit. Záložka „Odloženo" u akčního inboxu existovala,
+                    ale nikde nešlo nic odložit — kreslila jen ukázku.
+                  -->
+                  <sc-if value="{{ r.hasSnooze }}">
+                    <span onClick="{{ r.snooze }}" role="button" title="Odložit o týden" style="flex:none; display:flex; align-items:center; gap:6px; padding:5px 9px; border:1px solid var(--g-line2); border-radius:2px; font-size:12.5px; color:var(--g-ink2); background:var(--g-bg)" style-hover="border-color:var(--g-acc); color:var(--g-acc-deep); background:var(--g-acc-soft)">
+                      <i class="ph-duotone ph-alarm" style="font-size:15px"></i><span>Odložit</span>
+                    </span>
+                  </sc-if>
                   <span onClick="{{ r.del }}" role="button" title="Odebrat položku" aria-label="Odebrat položku" style="flex:none; display:flex; align-items:center; padding:6px; border:1px solid transparent; border-radius:2px; color:var(--g-ink3)" style-hover="border-color:var(--g-mag); color:var(--g-mag)">
                     <i class="ph-duotone ph-trash" style="font-size:15px"></i>
                   </span>
@@ -14419,7 +14428,16 @@ class Component extends DCLogic {
      * a ten si serverové klíče nedrží, takže by je každé načtení zapomnělo.
      */
     return (AL[key] || []).map((r, i) => ({
-      t: r[0], m: r[1], g: r[2] || null, id: key + '-' + i,
+      t: r[0], m: r[1], g: r[2] || null,
+      /*
+       * Identifikátor řádku dává server, když ho má.
+       *
+       * Do teď to bylo pořadí (`inbox-0`), takže „vyřešeno" viselo na tom,
+       * kolikátý řádek to zrovna byl — přibyla položka a rozhodnutí sedělo
+       * na jiné. U seznamů, které se počítají (akční inbox), je navíc i text
+       * proměnlivý: „12 fotek bez data" se zítra jmenuje jinak.
+       */
+      id: r[7] || (key + '-' + i), klic: r[7] || null,
       tier: r[3] || null, rate: r[4] || null,
       ep: r[5] === undefined ? null : r[5], epN: r[6] === undefined ? null : r[6]
     }));
@@ -14757,6 +14775,16 @@ class Component extends DCLogic {
    * a identifikátory pak míří na skutečné řádky.
    */
   xRowsProTitul(id, patch) {
+    /*
+     * Akční inbox potřebuje totéž, jen z jiného důvodu.
+     *
+     * Řádek se počítá z toho, co chybí, takže po vyřešení zmizí — a seznam
+     * „Hotovo" by pak neměl co napsat. Text řádku se proto posílá spolu
+     * s rozhodnutím a uloží se k němu.
+     */
+    if (String(id || '').indexOf('inbox:') === 0) {
+      return Object.assign({}, patch, { xRows: { ...this.state.xRows, inbox: this.rowsOf('inbox') } });
+    }
     const key = String(id || '').split('-')[0];
     if (['films', 'series', 'watchlist'].indexOf(key) < 0) return patch;
     if (this.state.xRows[key]) return patch;
@@ -28530,6 +28558,21 @@ class Component extends DCLogic {
      */
     const zam = this.zamek();
     if (setRowsMap.zamek) {
+      /*
+       * Zařízení a sezení taky ze serveru.
+       *
+       * Stálo tu „iPhone Adrian, iPhone Makinka, iPad v ložnici · 3 zařízení"
+       * a „Tento telefon a iPhone Makinka (dnes 7:12)" — u dvojice, která se
+       * přihlásila z jednoho notebooku. A zrovna tahle obrazovka má člověku
+       * říct, že se někdo přihlásil odjinud.
+       */
+      setRowsMap.zamek.rows = setRowsMap.zamek.rows.map(r => {
+        if (r[0] === 'Důvěryhodná zařízení') {
+          return [r[0], zam.zarizeniPopis || r[1], (zam.zarizeni || 0) + ' ' + this.pl(zam.zarizeni || 0, 'zařízení', 'zařízení', 'zařízení').split(' ')[1]];
+        }
+        if (r[0] === 'Aktivní sezení') return [r[0], zam.sezeniPopis || r[1], 'Odhlásit ostatní'];
+        return r;
+      });
       setRowsMap.zamek.rows = setRowsMap.zamek.rows
         .filter(r => r[0].indexOf('Kód ') !== 0 && r[0] !== 'Obnovovací kód')
         .concat([
@@ -29165,10 +29208,47 @@ class Component extends DCLogic {
           actLabel: act ? (done ? 'Vrátit' : act[1]) : null,
           act: e => {
             e.stopPropagation();
-            this.setState({ rowDone: { ...s.rowDone, [id]: !done } });
+            /*
+             * `xRowsProTitul` sem přibylo kvůli inboxu.
+             *
+             * Rozhodnutí „vyřešeno" se ukládá na serveru a ten k němu
+             * potřebuje text řádku: po vyřešení se ten řádek přestane
+             * počítat a v seznamu „Hotovo" by nebylo co napsat.
+             */
+            /*
+             * Ze záložky „Odloženo" se řádek probouzí, ne odbývá.
+             *
+             * Tlačítko se jmenuje „Probudit" a dělalo totéž co „Vyřešit" —
+             * odložená věc se tím označila za hotovou, aniž se cokoli stalo.
+             */
+            if (appKey === 'snoozed' && String(id).indexOf('inbox:') === 0) {
+              const prev = s.inboxSt || {};
+              this.setState({ inboxSt: { ...prev, [id]: 'act' } });
+              this.toast('Zpět mezi návrhy — ' + r.t, { icon: 'ph-alarm', undo: () => this.setState({ inboxSt: prev }) });
+              return;
+            }
+            this.setState(this.xRowsProTitul(id, { rowDone: { ...s.rowDone, [id]: !done } }));
             this.toast(done ? 'Vráceno — ' + r.t : act[2].charAt(0).toUpperCase() + act[2].slice(1) + ' — ' + r.t, {
               icon: done ? 'ph-arrow-counter-clockwise' : act[0],
               undo: done ? false : () => this.setState({ rowDone: { ...this.state.rowDone, [id]: false } })
+            });
+          },
+          /*
+           * Druhá akce: odložit.
+           *
+           * Obrazovka akčního inboxu má záložku „Odloženo", ale nikde nešlo
+           * nic odložit — ta záložka jen kreslila tři napsané řádky z ukázky.
+           * Odložení je na týden a pak se řádek sám vrátí; kdyby platilo
+           * navždy, bylo by z něj tiché smazání.
+           */
+          hasSnooze: appKey === 'inbox' && String(id).indexOf('inbox:') === 0 && !done,
+          snooze: e => {
+            e.stopPropagation();
+            const prev = s.inboxSt || {};
+            this.setState(this.xRowsProTitul(id, { inboxSt: { ...prev, [id]: 'snooze' } }));
+            this.toast('Odloženo o týden — ' + r.t, {
+              icon: 'ph-alarm',
+              undo: () => this.setState({ inboxSt: { ...this.state.inboxSt, [id]: 'act' } })
             });
           },
           del: e => {
@@ -29941,6 +30021,23 @@ class Component extends DCLogic {
              */
             if (label === 'Můj kód' || label === 'Obnovovací kód') {
               this.setState({ pinOpen: true, pinStary: '', pinHeslo: '', pinNovy: '', pinZnovu: '', pinErr: null, pinObnovovaci: null });
+              return;
+            }
+            /*
+             * „Odhlásit ostatní" ukazovalo hlášku a nic nedělalo.
+             *
+             * Ruší se sezení v prohlížeči i vydané klíče — přihlásit se dá
+             * obojím. Tohle zařízení zůstává, jinak by se člověk odhlásil
+             * sám sobě.
+             */
+            if (base === 'Odhlásit ostatní') {
+              if (!window.GalerieApi || GalerieApi.mode !== 'http') { this.toast('Odhlásit jinde umí jen server', { icon: 'ph-warning' }); return; }
+              GalerieApi.post('zamek/odhlasit-ostatni', {})
+                .then(b => {
+                  this.toast(b.zprava || 'Odhlášeno jinde', { icon: 'ph-sign-out' });
+                  if (window.GalerieObnovit) GalerieObnovit('system');
+                })
+                .catch(() => this.toast('Odhlásit se nepodařilo — server neodpověděl', { icon: 'ph-warning' }));
               return;
             }
             if (act && act[1] && act[1].indexOf('dl-') === 0) { this.exportData(act[1], label); return; }

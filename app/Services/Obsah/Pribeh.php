@@ -64,9 +64,112 @@ class Pribeh implements PoskytovatelObsahu
             'PAPER_ROWS' => $this->papir($prostor),
             'GV_C' => $this->komentareHostu($prostor),
             'ABARS' => ($t = $this->tierlisty($prostor)) ? ['tier' => $t] : null,
-            'AL' => $this->filmy($prostor),
+            /*
+             * Vedle filmů ještě tři seznamy, které kreslila ukázka: kapitoly
+             * příběhu, rozpracované tisky a odeslané objednávky. Všechny tři
+             * mají tabulku, ze které se čte jinde na téže obrazovce — jen
+             * `xRows` na ni nikdy nebylo napojené.
+             */
+            'AL' => $this->filmy($prostor)
+                + array_filter([
+                    'story' => $this->kapitolyDoSeznamu($prostor),
+                    'print' => $this->tiskDoSeznamu($objednavky, false),
+                    // Odeslané objednávky chodí i prázdné: ukázka na jejich
+                    // místě tvrdí „doručeno 8. 1. 2026 · 1 190 Kč", tedy že
+                    // dvojice zaplatila. Prázdný seznam je proti tomu poctivý.
+                    'orders' => $this->tiskDoSeznamu($objednavky, true),
+                ], fn (array $v, string $k) => $k === 'orders' || $v !== [], ARRAY_FILTER_USE_BOTH),
             'RECON' => $this->rekonstrukce($prostor),
         ], fn ($v) => $v !== null && $v !== []);
+    }
+
+    /**
+     * Kapitoly příběhu jako seznam `[název, popis, štítek]`.
+     *
+     * Obrazovka je kreslila z ukázky — „Jak jsme se potkali · kapitola 1 ·
+     * 12 fotek · 2016" u dvojice, která žádnou kapitolu nenapsala. Počet fotek
+     * je týž, jaký ukazuje osa příběhu: z roku kapitoly, ne vymyšlený.
+     *
+     * @return list<array<int, string>>
+     */
+    private function kapitolyDoSeznamu(GallerySpace $prostor): array
+    {
+        $kapitoly = $this->kapitoly($prostor);
+
+        if ($kapitoly === []) {
+            return [];
+        }
+
+        $radky = [];
+
+        foreach ($kapitoly as $i => $k) {
+            [, $nazev, $rok, $stav, $fotek] = $k;
+
+            $radky[] = [
+                (string) $nazev,
+                implode(' · ', array_filter([
+                    'kapitola '.($i + 1),
+                    $fotek > 0 ? $this->pocet((int) $fotek, 'fotka', 'fotky', 'fotek') : null,
+                    $rok !== '' ? $rok : null,
+                ])),
+                $stav === 'hotovo' ? 'hotovo' : 'píše se',
+            ];
+        }
+
+        return $radky;
+    }
+
+    /**
+     * Tisk jako dva seznamy: rozpracované a odeslané.
+     *
+     * Dělí je `step`: nula znamená koncept, který si dvojice skládá a nikam
+     * neodešla. Ukázka měla oba plné — „Fotokniha Chorvatsko 2026 · 42 stran"
+     * a „doručeno 8. 1. 2026 · 1 190 Kč" — u dvojice, která si nic neobjednala.
+     *
+     * @param  list<array<int, mixed>>  $objednavky
+     * @return list<array<int, string>>
+     */
+    private function tiskDoSeznamu(array $objednavky, bool $odeslane): array
+    {
+        $kroky = TiskController::KROKY;
+        $radky = [];
+
+        foreach ($objednavky as $o) {
+            [, $nazev, $druh, $cena, $krok, $termin, $sledovani] = $o;
+            $mena = (string) ($o[9] ?? 'CZK');
+
+            if (((int) $krok > 0) !== $odeslane) {
+                continue;
+            }
+
+            $radky[] = [
+                (string) $nazev,
+                implode(' · ', array_filter([
+                    $this->druhTisku((string) $druh),
+                    $odeslane ? ($kroky[(int) $krok] ?? null) : null,
+                    $odeslane ? $termin : null,
+                    (int) $cena > 0 ? $this->castka((int) $cena, $mena) : null,
+                    $odeslane && $sledovani !== '' ? 'zásilka '.$sledovani : null,
+                ])),
+                $odeslane
+                    ? ((int) $krok >= count($kroky) - 1 ? 'hotovo' : 'probíhá')
+                    : 'koncept',
+            ];
+        }
+
+        return $radky;
+    }
+
+    private function druhTisku(string $druh): string
+    {
+        return match ($druh) {
+            'book', 'kniha' => 'fotokniha',
+            'calendar', 'kalendar' => 'kalendář',
+            'frame', 'ramecek' => 'rámeček',
+            'cards', 'prani' => 'přání',
+            'print', 'tisk' => 'tisk',
+            default => $druh !== '' ? $druh : 'tisk',
+        };
     }
 
     /**
@@ -244,6 +347,7 @@ class Pribeh implements PoskytovatelObsahu
         $dny = MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
             ->where('gallery_space_id', $prostor->id)
             ->whereNull('trashed_at')
+            ->where('is_hidden', false)
             ->whereNotNull('taken_at')
             ->get(['taken_at'])
             ->countBy(fn (MediaItem $m) => CarbonImmutable::parse($m->taken_at)->format('Y-m-d'))
@@ -270,6 +374,9 @@ class Pribeh implements PoskytovatelObsahu
         $fotky = MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
             ->where('gallery_space_id', $prostor->id)
             ->whereNull('trashed_at')
+            // Rekonstrukce dne vypisuje jména souborů a místa — u trezoru je
+            // i jméno souboru obsah.
+            ->where('is_hidden', false)
             ->whereBetween('taken_at', [$od, $do])
             ->orderBy('taken_at')
             ->get(['taken_at', 'location_name', 'original_filename']);
@@ -572,6 +679,10 @@ class Pribeh implements PoskytovatelObsahu
                 (string) ($o->tracking ?? ''),
                 (int) $o->id,
                 (string) ($o->note ?? ''),
+                // Měna je desátá, tedy za vším, co prototyp čte podle indexu —
+                // ten se nemění. Potřebuje ji seznam „Tisk a fotoknihy": cena
+                // bez měny je u objednávky z ciziny jen číslo.
+                (string) ($o->currency ?: 'CZK'),
             ])
             ->values()
             ->all();
@@ -754,6 +865,7 @@ class Pribeh implements PoskytovatelObsahu
         return MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
             ->where('gallery_space_id', $prostor->id)
             ->whereNull('trashed_at')
+            ->where('is_hidden', false)
             ->whereNotNull('taken_at')
             ->get(['taken_at'])
             ->countBy(fn (MediaItem $m) => (string) CarbonImmutable::parse($m->taken_at)->year)

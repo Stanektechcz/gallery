@@ -103,7 +103,7 @@ class Knihovna implements PoskytovatelObsahu
              * napsané „Knihovna je uklizená". Nechat místo toho čtyři vymyšlené
              * nálezy by znamenalo posílat dvojici uklízet fotky, které nemá.
              */
-            + ['DUP_GROUPS' => $this->duplicity($prostor)]
+            + ['DUP_GROUPS' => $duplicity = $this->duplicity($prostor)]
             /*
              * Návrhy na sloučení štítků chodí **i prázdné** — táž úvaha jako
              * u duplicit výš.
@@ -115,7 +115,22 @@ class Knihovna implements PoskytovatelObsahu
              * a prototyp má pro prázdno napsané „Nic ke sloučení", takže
              * prázdno tady není k nerozeznání od rozbité obrazovky.
              */
-            + ['AL' => ['tagMerge' => $this->slucitelneStitky($prostor)]];
+            + ['AL' => [
+                'tagMerge' => $this->slucitelneStitky($prostor),
+                /*
+                 * Duplicity ještě jednou, jako seznam.
+                 *
+                 * Táž obrazovka je kreslí dvakrát: nahoře jako nálezy
+                 * (`DUP_GROUPS`) a v záložce jako řádky. Ty řádky braly
+                 * ukázku — „Zadar, večer — 3 kopie · 11,8 MB navíc" u dvojice,
+                 * která tam nikdy nebyla. Počítá se to z týchž nálezů, aby si
+                 * dvě čísla o téže věci neprotiřečila.
+                 */
+                'dupes' => $this->duplicityDoSeznamu($duplicity),
+                // Obojí chodí i prázdné: prototyp má pro ně napsaný prázdný stav
+                // („Žádné duplicity", „Nic ke sloučení") a ukázka na jejich
+                // místě posílala dvojici uklízet fotky a štítky, které nemá.
+            ]];
     }
 
     /** @return Collection<int, MediaItem> */
@@ -825,6 +840,16 @@ class Knihovna implements PoskytovatelObsahu
         return MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
             ->where('gallery_space_id', $prostor->id)
             ->whereNull('trashed_at')
+            /*
+             * Trezor se do let nepočítá.
+             *
+             * Pruh let vede mřížku: kdyby u roku stálo dvanáct a mřížka jich
+             * ukázala jedenáct, ten rozdíl je přesně to, co má trezor schovat.
+             * Pravidlo napříč aplikací: co popisuje mřížku, hledání, mapu nebo
+             * osu, trezor vynechává; co popisuje úložiště a zálohy, ho počítá,
+             * protože místo na disku zabírá.
+             */
+            ->where('is_hidden', false)
             ->whereNotNull('taken_at')
             ->pluck('taken_at')
             ->countBy(fn ($kdy) => CarbonImmutable::parse($kdy)->year)
@@ -1272,6 +1297,37 @@ class Knihovna implements PoskytovatelObsahu
             ])
             ->values()
             ->all();
+    }
+
+    /**
+     * Nálezy duplicit ve tvaru seznamu `[název, popis, štítek]`.
+     *
+     * Bere se z už spočítaných nálezů, ne druhým dotazem: dvě čísla o téže
+     * věci se časem rozejdou a obrazovka by u sebe měla dvě různá.
+     *
+     * @param  list<array<string, mixed>>  $nalezy
+     * @return list<array<int, string>>
+     */
+    private function duplicityDoSeznamu(array $nalezy): array
+    {
+        $radky = [];
+
+        foreach ($nalezy as $n) {
+            $polozky = $n['items'] ?? [];
+            $prvni = $polozky[0]['name'] ?? 'Bez názvu';
+
+            $radky[] = [
+                $prvni.' — '.$this->pocet(count($polozky), 'kopie', 'kopie', 'kopií'),
+                trim(implode(' · ', array_filter([
+                    (string) $n['match'],
+                    // U podobných se nic neuvolní — nález nabízí nechat obě.
+                    ($n['freed'] ?? 0) > 0 ? $n['freed'].' MB navíc' : null,
+                ]))),
+                ($n['freed'] ?? 0) > 0 ? 'sloučit' : 'porovnat',
+            ];
+        }
+
+        return $radky;
     }
 
     /** Štítek bez diakritiky, mezer a velkých písmen — na porovnání. */

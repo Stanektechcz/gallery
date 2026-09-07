@@ -76,7 +76,10 @@ class Vztah implements PoskytovatelObsahu
             // Vzorce, na kterých se nikdo nedohodl a přesto platí.
             'TACIT' => $this->pravidla->najdi($prostor),
             // Uložené nápady na randíčko.
-            'AL' => ($napady = $this->randicka($prostor)) ? ['datesSaved' => $napady] : [],
+            'AL' => array_filter([
+                'datesSaved' => $this->randicka($prostor),
+                'datesGen' => $this->vygenerovanaRandicka($prostor),
+            ], fn (array $v) => $v !== []),
             // Telefon kreslí sliby z vlastní kolekce; tvar je tentýž.
             'MOBIL' => $sliby ? ['PROMISES' => $sliby] : [],
         ], fn ($v) => $v !== null && $v !== []);
@@ -568,10 +571,6 @@ class Vztah implements PoskytovatelObsahu
      * dvojice včetně cen. `couple_date_ideas` přitom v aplikaci je a plní ji
      * generátor návrhů i ruční zápis.
      *
-     * Vygenerované návrhy (`datesGen`) tu nejsou schválně: ty vznikají při
-     * kliknutí na „Zamíchat návrh" a uložený návrh z minulého týdne by se
-     * tvářil jako čerstvý.
-     *
      * @return list<array<int, ?string>>
      */
     private function randicka(GallerySpace $prostor): array
@@ -601,6 +600,60 @@ class Vztah implements PoskytovatelObsahu
                         'done' => 'bylo',
                         default => 'uloženo',
                     },
+                ];
+            })
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Vygenerované návrhy, které dvojice ještě neuložila.
+     *
+     * Záložka „Vygenerované" kreslila tři napsané nápady („Slepá mapa — kam
+     * ukáže prst") a tvářila se, že je aplikace právě vymyslela. Vznikají
+     * přitom v `couple_date_ideas` při kliknutí na „Zamíchat návrh" a leží
+     * tam se stavem, který ještě není `saved`.
+     *
+     * U každého se proto píše, **kdy vznikl**. To byla původní námitka proti
+     * tomu je vůbec posílat — návrh z minulého týdne by se tvářil jako
+     * čerstvý —, a datum ji řeší líp než tři vymyšlené řádky.
+     *
+     * @return list<array<int, ?string>>
+     */
+    private function vygenerovanaRandicka(GallerySpace $prostor): array
+    {
+        if (! Schema::hasTable('couple_date_ideas')) {
+            return [];
+        }
+
+        return DB::table('couple_date_ideas')
+            ->where('gallery_space_id', $prostor->id)
+            ->whereNotIn('status', ['saved', 'planned', 'done'])
+            ->orderByDesc('created_at')
+            ->limit(20)
+            ->get(['title', 'theme', 'estimated_cost', 'currency', 'estimated_minutes', 'created_at'])
+            ->map(function (object $n) {
+                $kdy = CarbonImmutable::parse($n->created_at);
+                $dnes = CarbonImmutable::now()->startOfDay();
+                $dni = (int) $kdy->startOfDay()->diffInDays($dnes);
+
+                return [
+                    (string) $n->title,
+                    trim(implode(' · ', array_filter([
+                        match (true) {
+                            $dni === 0 => 'vygenerováno dnes',
+                            $dni === 1 => 'vygenerováno včera',
+                            default => 'vygenerováno '.$kdy->day.'. '.$kdy->month.'.',
+                        },
+                        $n->theme ?: null,
+                        $n->estimated_cost
+                            ? ((int) round((float) $n->estimated_cost)).' '.($n->currency ?: 'Kč')
+                            : null,
+                        $n->estimated_minutes ? ((int) $n->estimated_minutes).' minut' : null,
+                    ]))),
+                    // „Nové" jen prvních čtyřiadvacet hodin. Návrh, na který
+                    // se týden nesáhlo, není novinka.
+                    $dni === 0 ? 'nové' : 'návrh',
                 ];
             })
             ->values()

@@ -10,9 +10,11 @@ use App\Services\Provoz\AdminVeStavu;
 use App\Services\Provoz\DarkyVeStavu;
 use App\Services\Provoz\DomacnostVeStavu;
 use App\Services\Provoz\FilmyVeStavu;
+use App\Services\Provoz\InboxVeStavu;
 use App\Services\Provoz\KapsleVeStavu;
 use App\Services\Provoz\KlidVeStavu;
 use App\Services\Provoz\MechanismyVeStavu;
+use App\Services\Provoz\NakupyVeStavu;
 use App\Services\Provoz\NastaveniVeStavu;
 use App\Services\Provoz\PlanovaniVeStavu;
 use App\Services\Provoz\PravidlaVeStavu;
@@ -32,6 +34,24 @@ class StateController extends Controller
 {
     use UrcujePar;
 
+    /**
+     * Seznamy `xRows`, které počítá server — do stavu žádný z nich nepatří.
+     *
+     * Prototyp čte `xRows[klíč]` přednostně před tím, co dorazilo ze serveru.
+     * Uložený seznam by tedy ten serverový navždy zastínil a obrazovka by
+     * ukazovala snímek z okamžiku, kdy se naposledy něco kliklo.
+     *
+     * Seznamy, které tabulku **nemají** (a je jich pár), tu schválně nejsou:
+     * pro ně je stav jediné místo, kde můžou přežít.
+     */
+    private const SERVEROVE_SEZNAMY = [
+        'accounts', 'balancing', 'datesGen', 'datesSaved', 'doneTasks', 'dupes',
+        'films', 'gifts', 'inbox', 'inboxDone', 'jobs', 'orders', 'placesVisited',
+        'placesWish', 'print', 'recipes', 'series', 'shopping', 'snoozed', 'story',
+        'tagMerge', 'tarify', 'ticket', 'travelInbox', 'tripsPast', 'tripsPlanned',
+        'users', 'vault', 'voice', 'watchlist', 'weekMenu', 'api',
+    ];
+
     public function __construct(
         private readonly AdminVeStavu $sprava,
         private readonly DomacnostVeStavu $domacnost,
@@ -50,6 +70,8 @@ class StateController extends Controller
         private readonly PribehVeStavu $pribeh,
         private readonly MechanismyVeStavu $mechanismy,
         private readonly FilmyVeStavu $filmy,
+        private readonly InboxVeStavu $inbox,
+        private readonly NakupyVeStavu $nakupy,
         private readonly SeznamyVeStavu $seznamy,
     ) {}
 
@@ -359,6 +381,56 @@ class StateController extends Controller
                 $patch = $this->seznamy->bezSeznamu($patch);
             }
 
+            /*
+             * Akční inbox.
+             *
+             * „Vyřešit" jen přeškrtlo řádek v prohlížeči a po obnovení stránky
+             * byl zpátky. Ukládá se **rozhodnutí**, ne obsah: samotné řádky se
+             * dál počítají z toho, co v aplikaci chybí, takže se seznam sám
+             * vyprázdní, jakmile se ta věc opraví.
+             */
+            if ($this->inbox->tykaSe($patch)) {
+                $this->inbox->zpracuj($patch, GallerySpace::findOrFail($coupleId), $uzivatel);
+                $patch = $this->inbox->bezInboxu($patch);
+                $state->zapomenFilmy(InboxVeStavu::SEZNAMY);
+            }
+
+            /*
+             * Nákupní seznam.
+             *
+             * „Koupeno" přeškrtlo řádek jen v prohlížeči. Seznam se přitom
+             * počítá ze surovin naplánovaných jídel, takže se sám mění —
+             * ukládá se proto jen to, co spočítat nejde: že to někdo koupil.
+             */
+            if ($this->nakupy->tykaSe($patch)) {
+                $this->nakupy->zpracuj($patch, GallerySpace::findOrFail($coupleId), $uzivatel);
+                $patch = $this->nakupy->bezNakupu($patch);
+                $state->zapomenFilmy(NakupyVeStavu::SEZNAMY);
+            }
+
+            /*
+             * A nakonec: **spočítaný seznam nepatří do stavu.**
+             *
+             * `xRows` je společný sklad třiceti dvou seznamů a dvacet z nich
+             * teď server počítá z tabulek. Prototyp přitom čte `xRows[klíč]`
+             * přednostně před tím, co dorazilo ze serveru — takže jakmile se
+             * takový seznam jednou uložil do stavu, obrazovka ho odtamtud
+             * kreslila napořád. Vyřešený řádek inboxu se vracel na místo,
+             * odškrtnutá položka se odškrtávala znovu a nikdo nepoznal proč.
+             *
+             * Zapisovače výš si své klíče uklidí samy; tohle je pojistka pro
+             * ty, které tabulku mají, ale zápis z prototypu k nim nevede —
+             * ten seznam se dá jen číst a psát se do něj má jinudy.
+             */
+            if (is_array($patch['xRows'] ?? null)) {
+                $patch['xRows'] = array_diff_key($patch['xRows'], array_flip(self::SERVEROVE_SEZNAMY));
+
+                if ($patch['xRows'] === []) {
+                    unset($patch['xRows']);
+                }
+            }
+
+            $state->zapomenFilmy(self::SERVEROVE_SEZNAMY);
             $state->applyPatch($patch);
 
             return response()->json([

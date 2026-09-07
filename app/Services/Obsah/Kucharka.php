@@ -7,6 +7,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 
 /**
  * Kuchařka ve tvaru, ve kterém ji kreslí prototyp.
@@ -68,10 +69,6 @@ class Kucharka implements PoskytovatelObsahu
      * se bral z `galerie-data.js`. Dvojice tak v jedné záložce viděla své
      * recepty a ve vedlejší cizí.
      *
-     * Nákupní seznam mezi nimi není: aplikace pro něj tabulku nemá a vyrobit
-     * ho z receptů by znamenalo tvrdit, že něco chybí ve spíži, o které nic
-     * nevíme. Zůstává tam, kde dosud byl — ve stavu prohlížeče.
-     *
      * @param  array<string, array<string, mixed>>  $recepty
      * @return array<string, list<array<int, ?string>>>
      */
@@ -86,7 +83,106 @@ class Kucharka implements PoskytovatelObsahu
         return array_filter([
             'recipes' => array_map($doRadku, array_values($recepty)),
             'weekMenu' => $this->menu($prostor),
+            'shopping' => $this->nakupy($prostor),
         ], fn (array $v) => $v !== []);
+    }
+
+    /**
+     * Nákupní seznam ze surovin naplánovaných jídel.
+     *
+     * Původně tady nebyl schválně: „vyrobit ho z receptů by znamenalo tvrdit,
+     * že něco chybí ve spíži, o které nic nevíme". Jenže na obrazovce mezitím
+     * stálo „Rajčata 1 kg · z receptu Rajčatová polévka" — a to je totéž
+     * tvrzení, jen o cizí spíži a bez opory v datech.
+     *
+     * Řeší to dvě věci. Suroviny označené v receptu jako spížové se odsud
+     * **vynechávají** — právě u nich aplikace neví, jestli doma jsou. A u každé
+     * položky je vidět, z jakého receptu pochází, takže se dá poznat, co se
+     * dá škrtnout.
+     *
+     * Množství se sčítá napříč recepty a přepočítává na počet porcí, jak to
+     * dělá plánovač jídel; kdyby se počítalo znovu a jinak, měla by dvojice
+     * u téhož jídla dvě různá čísla.
+     *
+     * @return list<array<int, ?string>>
+     */
+    private function nakupy(GallerySpace $prostor): array
+    {
+        if (! Schema::hasTable('planned_meals') || ! Schema::hasTable('recipe_ingredients')) {
+            return [];
+        }
+
+        $od = CarbonImmutable::now()->startOfDay();
+
+        $suroviny = DB::table('planned_meals as j')
+            ->join('recipes as r', 'r.id', '=', 'j.recipe_id')
+            ->join('recipe_ingredients as s', 's.recipe_id', '=', 'r.id')
+            ->where('j.gallery_space_id', $prostor->id)
+            ->whereIn('j.status', ['planned', 'confirmed'])
+            ->where('j.planned_for', '>=', $od)
+            ->where('j.planned_for', '<', $od->addDays(14))
+            // Co je ve spíži, se nekupuje — a je to jediná surovina, o které
+            // aplikace poctivě neví, jestli doma je.
+            ->where('s.is_pantry', false)
+            ->orderBy('s.name')
+            ->limit(200)
+            ->get([
+                's.name', 's.unit', 's.quantity', 's.is_scalable', 's.quantity_note',
+                'r.title as recept', 'r.base_servings', 'j.servings',
+            ]);
+
+        if ($suroviny->isEmpty()) {
+            return [];
+        }
+
+        $odskrtnute = Schema::hasTable('meal_shopping_states')
+            ? DB::table('meal_shopping_states')
+                ->where('gallery_space_id', $prostor->id)
+                ->whereNull('calendar_event_id')
+                ->whereNull('trip_id')
+                ->pluck('is_checked', 'item_key')
+            : collect();
+
+        $polozky = [];
+
+        foreach ($suroviny as $s) {
+            // Týž klíč, jaký používá plánovač jídel — jinak by se odškrtnutí
+            // v jedné obrazovce v druhé neprojevilo.
+            $klic = sha1(Str::lower(trim((string) $s->name)).'|'.Str::lower(trim((string) $s->unit)));
+            $nasobek = (float) ($s->servings ?: 0) / max(.01, (float) ($s->base_servings ?: 1));
+
+            $polozky[$klic] ??= ['nazev' => (string) $s->name, 'jednotka' => (string) $s->unit, 'kolik' => 0.0, 'cislo' => false, 'recepty' => [], 'poznamky' => []];
+            $polozky[$klic]['recepty'][(string) $s->recept] = true;
+
+            if ($s->quantity !== null) {
+                $polozky[$klic]['kolik'] += (float) $s->quantity * ($s->is_scalable ? $nasobek : 1);
+                $polozky[$klic]['cislo'] = true;
+            }
+
+            if ($s->quantity_note) {
+                $polozky[$klic]['poznamky'][(string) $s->quantity_note] = true;
+            }
+        }
+
+        $radky = [];
+
+        foreach ($polozky as $klic => $p) {
+            $mnozstvi = $p['cislo']
+                ? rtrim(rtrim(number_format($p['kolik'], abs($p['kolik']) >= 10 ? 1 : 2, ',', ' '), '0'), ',')
+                : implode(', ', array_keys($p['poznamky']));
+
+            $radky[] = [
+                trim($p['nazev'].' '.trim($mnozstvi.' '.$p['jednotka'])),
+                'z receptu '.implode(' a ', array_keys($p['recepty'])),
+                ($odskrtnute[$klic] ?? false) ? 'koupeno' : null,
+                null, null, null, null,
+                // Klíč, aby odškrtnutí přežilo změnu množství: „Rajčata 1 kg"
+                // se po přidání dalšího jídla jmenuje jinak.
+                'shopping:'.$klic,
+            ];
+        }
+
+        return $radky;
     }
 
     /**

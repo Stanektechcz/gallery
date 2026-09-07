@@ -205,6 +205,8 @@ class Predpoved
         $body = MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
             ->where('gallery_space_id', $prostor->id)
             ->whereNull('trashed_at')
+            // Podle trezoru se nehádá, kde dvojice je.
+            ->where('is_hidden', false)
             ->whereNotNull('latitude')
             ->whereNotNull('longitude')
             ->where('taken_at', '>=', $od)

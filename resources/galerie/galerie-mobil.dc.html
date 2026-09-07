@@ -6387,7 +6387,10 @@ class Component extends DCLogic {
     const done = s.rowDone || {};
     // Klíč 'series' má v AL watchlist seriálů — na záložce Srovnat sérii by to
     // byl cizí obsah, takže ho tam nepouštíme.
-    const src = (kind === 'ser' ? [] : (AL[key] || [])).map((r, i) => ({ t: r[0], m: r[1], g: r[2] || null, id: key + '-' + i }));
+    // Identifikátor dává server, když ho má (`r[7]`) — jinak pořadí. U seznamů,
+    // které se počítají, je pořadí i text proměnlivý: „12 fotek bez data" se
+    // zítra jmenuje jinak a rozhodnutí o tom řádku má platit dál.
+    const src = (kind === 'ser' ? [] : (AL[key] || [])).map((r, i) => ({ t: r[0], m: r[1], g: r[2] || null, id: r[7] || (key + '-' + i), klic: r[7] || null }));
     const q = (s.allQuery || '').trim().toLowerCase();
     const rows = (q ? src.filter(r => (r.t + ' ' + r.m).toLowerCase().indexOf(q) >= 0) : src);
     const mob = map[s.allRoute];
@@ -10941,6 +10944,12 @@ class Component extends DCLogic {
           const dLong = GD.dLong || (x => x);
           cur = Object.assign({}, cur, {
             rows: (cur.rows || [])
+              // Zařízení a sezení taky ze serveru — viz široké rozvržení.
+              .map(r => {
+                if (r[0] === 'Důvěryhodná zařízení') return [r[0], zam.zarizeniPopis || r[1], (zam.zarizeni || 0) + ' zařízení'];
+                if (r[0] === 'Aktivní sezení') return [r[0], zam.sezeniPopis || r[1], 'Odhlásit ostatní'];
+                return r;
+              })
               .filter(r => r[0].indexOf('Kód ') !== 0 && r[0] !== 'Obnovovací kód')
               .concat([
                 zam.nastaveno
@@ -11017,9 +11026,17 @@ class Component extends DCLogic {
                 this.setState({ pinOpen: true, pinStary: '', pinHeslo: '', pinNovy: '', pinZnovu: '', pinErr: null, pinObnovovaci: null });
                 return;
               }
+              // „Odhlásit ostatní" ukazovalo hlášku a nic nedělalo — přitom je
+              // to jediné, co má člověk po ruce, když se někdo přihlásí odjinud.
               if (base === 'Odhlásit ostatní') {
                 this.setState({ secUntil: 0 });
-                this.toast('Ostatní zařízení odhlášena · tady zůstáváte přihlášeni', { icon: 'ph-sign-out' });
+                if (!window.GalerieApi || GalerieApi.mode !== 'http') { this.toast('Odhlásit jinde umí jen server', { icon: 'ph-warning' }); return; }
+                GalerieApi.post('zamek/odhlasit-ostatni', {})
+                  .then(b => {
+                    this.toast(b.zprava || 'Odhlášeno jinde', { icon: 'ph-sign-out' });
+                    if (window.GalerieObnovit) GalerieObnovit('system');
+                  })
+                  .catch(() => this.toast('Odhlásit se nepodařilo — server neodpověděl', { icon: 'ph-warning' }));
                 return;
               }
               if (kind && kind.indexOf('dl-') === 0) { this.setExport(kind, label); return; }

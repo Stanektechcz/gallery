@@ -152,22 +152,20 @@ class ObsahSdileniTest extends TestCase
     }
 
     /**
-     * Trezor se počítá z toho, co v něm doopravdy je.
+     * Trezor odsud nechodí vůbec.
      *
-     * Druhý seznam by znamenal, že „48 fotek v trezoru" platí i poté, co je
-     * někdo vrátil zpátky.
+     * Tenhle poskytovatel ho posílal na každé načtení stránky bez ohledu na
+     * zámek, takže obsah byl v prohlížeči dřív, než si obrazovka řekla o heslo.
+     * Dodává ho `system`, a jen s odemčeným trezorem — viz `TrezorTest`.
      */
-    public function test_trezor_se_pocita_ze_skrytych_polozek(): void
+    public function test_trezor_odsud_nechodi(): void
     {
         $this->fotka(['is_hidden' => true]);
-        $this->fotka(['is_hidden' => true], 2);
-        $this->fotka(['is_hidden' => false], 3);
+        $this->fotka(['is_hidden' => false], 2);
 
-        $trezor = $this->getJson('/api/data/sdileni')->assertOk()->json('data.VAULT_ITEMS');
+        $data = (array) $this->getJson('/api/data/sdileni')->assertOk()->json('data');
 
-        $this->assertCount(1, $trezor);
-        $this->assertSame('Mimo album', $trezor[0]['name']);
-        $this->assertStringStartsWith('2 položky · mimo mřížku', $trezor[0]['meta']);
+        $this->assertArrayNotHasKey('VAULT_ITEMS', $data);
     }
 
     /** Balíčky do offline se počítají z knihovny, ne z katalogu. */

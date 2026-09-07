@@ -185,6 +185,10 @@ Route::middleware(['auth:sanctum', 'throttle:120,1'])->prefix('api')->group(func
         ->middleware('throttle:20,1,zamek-overit')->name('galerie.zamek.overit');
     Route::post('zamek/obnovit', [ZamekController::class, 'obnov'])
         ->middleware('throttle:5,1,zamek-obnovit')->name('galerie.zamek.obnovit');
+    // „Odhlásit ostatní" v nastavení jen ukázalo hlášku. Je to přitom jediné,
+    // co má člověk po ruce, když zjistí, že se někdo přihlásil odjinud.
+    Route::post('zamek/odhlasit-ostatni', [ZamekController::class, 'odhlasOstatni'])
+        ->name('galerie.zamek.odhlasit');
 
     /*
      * Koš.

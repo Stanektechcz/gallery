@@ -245,6 +245,14 @@ class AdministraceGalerie
 
     // ——— tarify ———
 
+    /** Který tarif prostor právě má — jako `id`, ve stejném tvaru jako seznam. */
+    public function soucasnyTarif(GallerySpace $prostor): ?string
+    {
+        $tarif = $this->tarify->plan($prostor);
+
+        return $tarif ? (string) $tarif->id : null;
+    }
+
     /** @return list<array<string, mixed>> */
     public function tarifySeznam(): array
     {

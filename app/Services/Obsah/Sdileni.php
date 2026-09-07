@@ -17,9 +17,10 @@ use Illuminate\Support\Facades\Schema;
  * z nich neukazoval nic — pět napsaných odkazů na doménu, která nikam nevede,
  * a dvě fotky od babičky, které nikdo nenahrál.
  *
- * Trezor se **nepočítá z vlastní tabulky**, ale z toho, co v něm doopravdy je:
- * skryté položky knihovny. Druhý seznam by znamenal, že „48 fotek v trezoru"
- * platí i poté, co je někdo vrátil zpátky.
+ * Trezor odsud **nechodí**. Skládal se tu ze skrytých položek knihovny a
+ * posílal se na každé načtení stránky bez ohledu na zámek, takže obsah byl
+ * v prohlížeči dřív, než si obrazovka řekla o heslo. Dodává ho `System`, a jen
+ * s odemčeným trezorem.
  */
 class Sdileni implements PoskytovatelObsahu
 {
@@ -49,7 +50,20 @@ class Sdileni implements PoskytovatelObsahu
             'SHARES' => $this->odkazy($prostor),
             'GUEST_Q' => $this->hoste($prostor),
             'KAPS' => $this->kapsle($prostor),
-            'VAULT_ITEMS' => $this->trezor($prostor),
+            /*
+             * `VAULT_ITEMS` odsud **nechodí** — dodává je `System`, a jen se
+             * skutečně odemčeným trezorem.
+             *
+             * Tenhle poskytovatel je posílal na každé načtení stránky bez
+             * ohledu na zámek, takže obsah trezoru byl venku pořád: obrazovka
+             * si sice řekla o heslo, ale to, co za tou zdí je, měl prohlížeč
+             * dávno v paměti. Zámek, který se dá obejít otevřením konzole,
+             * není zámek.
+             *
+             * A ještě jedna věc: dva poskytovatelé téže kolekce se přetahovali
+             * o to, který dorazí později. Podle časování obrazovka ukazovala
+             * jednou zamčené prázdno a jindy obsah.
+             */
             'OFFPACKS' => $this->baliky($prostor),
         ], fn ($v) => $v !== null && $v !== []);
     }
@@ -204,41 +218,6 @@ class Sdileni implements PoskytovatelObsahu
                     'body' => $otevrena ? (string) ($k->message ?? '') : '',
                 ];
             })
-            ->values()
-            ->all();
-    }
-
-    /**
-     * Trezor: `{ id, name, meta, n }`.
-     *
-     * Počítá se z toho, co v něm doopravdy je — ze skrytých položek knihovny
-     * po albech. Druhý seznam by znamenal, že „48 fotek v trezoru" platí
-     * i poté, co je někdo vrátil zpátky.
-     *
-     * @return list<array<string, mixed>>
-     */
-    private function trezor(GallerySpace $prostor): array
-    {
-        $skryte = MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
-            ->where('gallery_space_id', $prostor->id)
-            ->where('is_hidden', true)
-            ->whereNull('trashed_at')
-            ->with('primaryAlbum:id,title')
-            ->get();
-
-        if ($skryte->isEmpty()) {
-            return [];
-        }
-
-        return $skryte
-            ->groupBy(fn (MediaItem $m) => $m->primaryAlbum?->title ?: 'Mimo album')
-            ->map(fn (Collection $co, string $nazev) => [
-                'id' => 'trezor-'.md5($nazev),
-                'name' => $nazev,
-                'meta' => $this->pocet($co->count(), 'položka', 'položky', 'položek')
-                    .' · mimo mřížku i mapu',
-                'n' => (int) $co->first()->id,
-            ])
             ->values()
             ->all();
     }

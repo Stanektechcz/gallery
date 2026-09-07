@@ -42,10 +42,17 @@ class FilmyVeStavuTest extends TestCase
         Sanctum::actingAs($this->adri);
     }
 
-    /** Bez titulů se nic neposílá — obrazovka si nechá ukázku. */
+    /**
+     * Bez titulů se seznamy filmů neposílají — obrazovka si nechá ukázku.
+     *
+     * `orders` je vedle nich, a prázdné: ukázka na jeho místě tvrdí
+     * „doručeno 8. 1. 2026 · 1 190 Kč", tedy že dvojice zaplatila.
+     */
     public function test_bez_titulu_se_seznamy_neposilaji(): void
     {
-        $this->assertNull($this->getJson('/api/data/pribeh')->assertOk()->json('data.AL'));
+        $al = (array) $this->getJson('/api/data/pribeh')->assertOk()->json('data.AL');
+
+        $this->assertSame(['orders' => []], $al);
     }
 
     /** Nový titul z obrazovky vznikne v tabulce. */
@@ -156,29 +163,31 @@ class FilmyVeStavuTest extends TestCase
     }
 
     /**
-     * Cizí seznamy si klíče nechávají.
+     * Cizí klíče v `rowDone` zůstávají.
      *
-     * `xRows` drží i nákupní seznam a nápady na dárky; `rowDone` odškrtnuté
-     * řádky napříč aplikací. Vyhodit je celé kvůli jednomu filmu by smazalo
-     * věci, které vlastní tabulku nemají.
+     * `rowDone` drží odškrtnuté řádky napříč celou aplikací. Vyhodit ho celý
+     * kvůli jednomu filmu by smazalo věci, které vlastní tabulku nemají.
+     *
+     * Seznamy samotné jsou dnes jiný případ: `films` i `shopping` server
+     * počítá, a spočítaný seznam se do stavu neukládá vůbec — prototyp čte
+     * `xRows[klíč]` přednostně, takže by uložený snímek ten serverový navždy
+     * zastínil.
      */
-    public function test_cizi_seznamy_zustavaji_ve_stavu(): void
+    public function test_cizi_klice_zustavaji_ve_stavu(): void
     {
         $this->titul('Dune: Part Two');
 
         $this->stav([
             'xRows' => [
                 'films' => [['t' => 'Dune: Part Two', 'm' => '', 'g' => 'hotovo', 'id' => 'films-0']],
-                'shopping' => [['t' => 'Rajčata', 'm' => 'ručně přidáno', 'g' => null, 'id' => 'shopping-0']],
             ],
-            'rowDone' => ['films-0' => true, 'shopping-0' => true],
+            'rowDone' => ['films-0' => true, 'poznamky-0' => true],
         ])->assertOk();
 
         $stav = (array) $this->getJson('/api/state')->assertOk()->json('data');
 
-        $this->assertSame('Rajčata', $stav['xRows']['shopping'][0]['t']);
-        $this->assertArrayNotHasKey('films', $stav['xRows']);
-        $this->assertSame(['shopping-0' => true], $stav['rowDone']);
+        $this->assertArrayNotHasKey('xRows', $stav);
+        $this->assertSame(['poznamky-0' => true], $stav['rowDone']);
     }
 
     /** Do cizího prostoru se zápis nedostane. */

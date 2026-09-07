@@ -213,6 +213,69 @@ class ZamekTest extends TestCase
     }
 
     /**
+     * Zařízení a sezení se počítají, ne píší.
+     *
+     * V nastavení stálo „iPhone Adrian, iPhone Makinka, iPad v ložnici ·
+     * 3 zařízení" — u dvojice s jedním notebookem. A zrovna tahle obrazovka
+     * má člověku říct, že se někdo přihlásil odjinud.
+     */
+    public function test_zarizeni_a_sezeni_se_pocitaji(): void
+    {
+        $zamek = $this->getJson('/api/data/system')->assertOk()->json('data.ZAMEK');
+
+        $this->assertSame(0, $zamek['zarizeni']);
+        $this->assertStringNotContainsString('iPad', $zamek['zarizeniPopis']);
+
+        $this->adri->createToken('telefon');
+        $this->adri->createToken('prohlížeč');
+
+        $zamek = $this->getJson('/api/data/system')->assertOk()->json('data.ZAMEK');
+
+        $this->assertSame(2, $zamek['zarizeni']);
+        $this->assertStringContainsString('telefon', $zamek['zarizeniPopis']);
+    }
+
+    /**
+     * Klíč si při založení zapamatuje své poslední čtyři znaky.
+     *
+     * Sloupec `suffix` v tabulce byl a nikdo ho nevyplňoval, takže v seznamu
+     * klíčů stálo u každého `…????` — dva se od sebe nedaly rozeznat a odvolat
+     * se dal jen hádáním, který je který.
+     */
+    public function test_klic_si_pamatuje_poznavaci_znacku(): void
+    {
+        $klic = $this->adri->createToken('telefon');
+
+        $this->assertSame(substr($klic->plainTextToken, -4), $klic->accessToken->fresh()->suffix);
+
+        // A je to opravdu jen značka, ne kus klíče, se kterým by šlo dovnitř.
+        $this->assertSame(4, mb_strlen((string) $klic->accessToken->fresh()->suffix));
+    }
+
+    /**
+     * A „Odhlásit ostatní" doopravdy odhlásí.
+     *
+     * Tlačítko jen ukázalo hlášku „Ostatní zařízení odhlášena". Přitom je to
+     * jediné, co má člověk po ruce, když zjistí, že se někdo přihlásil odjinud.
+     */
+    public function test_odhlaseni_ostatnich_zrusi_klice(): void
+    {
+        $this->adri->createToken('telefon');
+        $this->adri->createToken('tablet');
+        $cizi = $this->maki->createToken('makinčin telefon');
+
+        $this->postJson('/api/zamek/odhlasit-ostatni')
+            ->assertOk()
+            ->assertJson(['klice' => 2]);
+
+        $this->assertSame(0, DB::table('personal_access_tokens')->where('tokenable_id', $this->adri->id)->count());
+
+        // Klíč partnera zůstává: odhlašuju sebe, ne jeho.
+        $this->assertSame(1, DB::table('personal_access_tokens')->where('tokenable_id', $this->maki->id)->count());
+        $this->assertNotNull($cizi);
+    }
+
+    /**
      * O kódu se ven neposílá nic než to, že existuje.
      *
      * Ani haš: obrazovka ho nepotřebuje a co jednou dorazí do prohlížeče,

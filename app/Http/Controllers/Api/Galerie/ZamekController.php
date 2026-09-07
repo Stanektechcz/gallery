@@ -4,9 +4,12 @@ namespace App\Http\Controllers\Api\Galerie;
 
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 /**
@@ -180,6 +183,48 @@ class ZamekController extends Controller
         AuditLog::record('app_lock.recovered');
 
         return response()->json($this->odpoved($request) + ['odemceno' => true]);
+    }
+
+    /**
+     * Odhlásit ostatní zařízení.
+     *
+     * Tlačítko v nastavení jen ukázalo hlášku „Ostatní zařízení odhlášena" —
+     * a nic se nestalo. Je to přitom to jediné, co má člověk po ruce, když
+     * zjistí, že se někdo přihlásil odjinud.
+     *
+     * Ruší se obojí, protože přihlásit se dá obojím: sezení v prohlížeči
+     * (`sessions`) i vydané klíče (`personal_access_tokens`). Tohle zařízení
+     * zůstává — jinak by se člověk odhlásil sám sobě a k ničemu se nedostal.
+     */
+    public function odhlasOstatni(Request $request): JsonResponse
+    {
+        $clovek = $request->user();
+        $sezeni = 0;
+
+        if (Schema::hasTable('sessions')) {
+            $sezeni = DB::table('sessions')
+                ->where('user_id', $clovek->id)
+                ->where('id', '!=', $request->session()->getId())
+                ->delete();
+        }
+
+        $tohle = $clovek->currentAccessToken();
+
+        $klice = DB::table('personal_access_tokens')
+            ->where('tokenable_type', User::class)
+            ->where('tokenable_id', $clovek->id)
+            ->when($tohle?->id, fn ($q, $id) => $q->where('id', '!=', $id))
+            ->delete();
+
+        AuditLog::record('app_lock.sign_out_others', null, ['sezeni' => $sezeni, 'klice' => $klice]);
+
+        return response()->json([
+            'sezeni' => $sezeni,
+            'klice' => $klice,
+            'zprava' => $sezeni + $klice > 0
+                ? 'Odhlášeno jinde: '.($sezeni + $klice).'× · tady zůstáváte přihlášeni'
+                : 'Nikde jinde jste přihlášení nebyli',
+        ]);
     }
 
     private function blokDo(Request $request): int

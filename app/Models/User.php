@@ -10,7 +10,13 @@ use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable
 {
-    use HasApiTokens, HasFactory, Notifiable;
+    // `createToken` se přejmenovává, aby šlo dole doplnit `suffix` — je to
+    // metoda z rysu, ne z rodiče, takže `parent::` na ni nedosáhne.
+    use HasApiTokens {
+        createToken as sanctumCreateToken;
+    }
+
+    use HasFactory, Notifiable;
 
     protected $fillable = [
         'uuid', 'name', 'email', 'password', 'role', 'avatar_path', 'avatar_preset', 'avatar_colour',
@@ -102,6 +108,26 @@ class User extends Authenticatable
     public function isPartner(): bool
     {
         return $this->role === 'partner';
+    }
+
+    /**
+     * Klíč si při založení zapamatuje své poslední čtyři znaky.
+     *
+     * Sloupec `suffix` v tabulce byl a nikdo ho nevyplňoval: `createToken()`
+     * je metoda Sanctumu a o něm neví. V seznamu klíčů proto u každého stálo
+     * `…????` — dva klíče se od sebe nedaly rozeznat a odvolat se dal jen
+     * hádáním, který je který.
+     *
+     * Ukládají se právě čtyři znaky: tolik, aby klíč šel poznat, a málo na
+     * to, aby šel použít. Zbytek Sanctum drží jen jako otisk.
+     */
+    public function createToken(string $name, array $abilities = ['*'], ?\DateTimeInterface $expiresAt = null)
+    {
+        $klic = $this->sanctumCreateToken($name, $abilities, $expiresAt);
+
+        $klic->accessToken->forceFill(['suffix' => substr($klic->plainTextToken, -4)])->save();
+
+        return $klic;
     }
 
     public function gallerySpaces()

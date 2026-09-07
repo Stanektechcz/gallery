@@ -121,22 +121,29 @@ class SeznamyTest extends TestCase
     }
 
     /**
-     * Cizí seznamy ve `xRows` zůstanou ve stavu.
+     * Seznam, který počítá server, ve stavu nezůstane.
      *
-     * Nákupní seznam ani nápady na fotky tabulku nemají; vyhodit celý klíč
-     * kvůli sousedovi by znamenalo je ztratit.
+     * Prototyp čte `xRows[klíč]` přednostně před tím, co dorazilo ze serveru,
+     * takže uložený snímek by ten serverový navždy zastínil: vyřešený řádek
+     * inboxu by se vracel na místo a nikdo by nepoznal proč. Klíč, který
+     * tabulku nemá, naopak zůstává — pro ten je stav jediné místo.
      */
-    public function test_seznamy_bez_tabulky_zustavaji_ve_stavu(): void
+    public function test_spocitany_seznam_ve_stavu_nezustane(): void
     {
         $this->patchJson('/api/state', ['data' => ['xRows' => [
             'datesSaved' => [['t' => 'Keramika pro dva', 'm' => '', 'g' => 'uloženo']],
-            'shopping' => [['t' => 'Rajčata 1 kg', 'm' => 'ručně přidáno', 'g' => null, 'id' => 'shopping-n1']],
+            'shopping' => [['t' => 'Rajčata 1 kg', 'm' => 'ručně přidáno', 'g' => null]],
+            'poznamky' => [['t' => 'Zavolat instalatérovi', 'm' => 'ručně přidáno', 'g' => null]],
         ]]])->assertOk();
 
         $stav = (array) $this->getJson('/api/state')->assertOk()->json('data');
 
-        $this->assertSame('Rajčata 1 kg', $stav['xRows']['shopping'][0]['t']);
+        $this->assertSame('Zavolat instalatérovi', $stav['xRows']['poznamky'][0]['t']);
         $this->assertArrayNotHasKey('datesSaved', $stav['xRows']);
+        $this->assertArrayNotHasKey('shopping', $stav['xRows']);
+
+        // A nápad se přesto uložil tam, kam patří.
+        $this->assertSame('Keramika pro dva', DB::table('couple_date_ideas')->value('title'));
     }
 
     /** Nová jízdenka vznikne, trasa se z názvu nehádá. */
@@ -224,7 +231,9 @@ class SeznamyTest extends TestCase
      */
     public function test_akcni_inbox_se_pocita(): void
     {
-        $this->assertNull($this->getJson('/api/data/system')->assertOk()->json('data.AL.inbox'));
+        // Prázdný, ne chybějící: prototyp má pro prázdný inbox napsané
+        // „Inbox je prázdný", takže ukázka na jeho místě není potřeba.
+        $this->assertSame([], $this->getJson('/api/data/system')->assertOk()->json('data.AL.inbox'));
 
         $this->fotka();
 

@@ -67,6 +67,8 @@ class Uklid implements PoskytovatelObsahu
             ->where('gallery_space_id', $prostor->id)
             ->where('is_archived', true)
             ->whereNull('trashed_at')
+            // Trezor se z úklidu vynechává — jméno souboru je taky obsah.
+            ->where('is_hidden', false)
             ->orderByDesc('updated_at')
             ->limit(40)
             ->get()
@@ -115,6 +117,15 @@ class Uklid implements PoskytovatelObsahu
             ->where('gallery_space_id', $prostor->id)
             ->whereNull('trashed_at')
             ->where('is_archived', false)
+            /*
+             * Co je v trezoru, se v úklidu neobjeví.
+             *
+             * Fronta „doplnit datum" vypisovala i skryté položky, a to jménem
+             * souboru — u trezoru je i to obsah („Skeny pasů.jpg"). Slib zní,
+             * že se to nenajde v mřížce, hledání ani na mapě; úklid je čtvrté
+             * místo, kde by se to jinak našlo.
+             */
+            ->where('is_hidden', false)
             ->whereNull('taken_at')
             ->orderBy('original_filename')
             ->limit(40)
@@ -127,6 +138,7 @@ class Uklid implements PoskytovatelObsahu
         $sDatem = MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
             ->where('gallery_space_id', $prostor->id)
             ->whereNull('trashed_at')
+            ->where('is_hidden', false)
             ->whereNotNull('taken_at')
             ->get(['id', 'original_filename', 'taken_at', 'primary_album_id', 'camera_make', 'camera_model', 'uploaded_at']);
 

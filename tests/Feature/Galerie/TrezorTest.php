@@ -130,6 +130,29 @@ class TrezorTest extends TestCase
         $this->assertFalse($data['TREZOR']['odemceno']);
     }
 
+    /**
+     * A neposílá ho **žádná** skupina.
+     *
+     * Trezor dodával i poskytovatel `sdileni`, a ten se o zámek nestaral:
+     * obsah tak byl v prohlížeči na každé načtení stránky, dřív než si
+     * obrazovka řekla o heslo. Zámek, který se obejde otevřením konzole,
+     * není zámek — a dva poskytovatelé téže kolekce se navíc přetahovali
+     * o to, který dorazí později.
+     */
+    public function test_zadna_skupina_neposila_trezor_pri_zamceni(): void
+    {
+        $this->schovanaFotka('pas.jpg');
+
+        $skupiny = ['system', 'sdileni', 'knihovna', 'uklid'];
+
+        foreach ($skupiny as $skupina) {
+            $data = (array) $this->getJson('/api/data/'.$skupina)->assertOk()->json('data');
+
+            $this->assertSame([], $data['VAULT_ITEMS'] ?? [], "Skupina {$skupina} posílá obsah zamčeného trezoru.");
+            $this->assertStringNotContainsString('pas.jpg', json_encode($data), "Skupina {$skupina} prozrazuje, co je v trezoru.");
+        }
+    }
+
     /** Odemčený trezor pošle skutečný obsah — a bez podepsaných náhledů. */
     public function test_odemceny_trezor_posle_obsah(): void
     {
