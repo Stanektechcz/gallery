@@ -379,9 +379,15 @@ class GalleryDoctorCommand extends Command
 
         // Čtvrt hodiny. Worker zvedá úlohy po vteřinách, takže i při plné frontě je pořád
         // něco rezervované; když se patnáct minut nehnulo nic, neběží.
+        /*
+         * Pojistka ve scheduleru běží po pěti minutách, takže i bez démona by
+         * se fronta měla hnout. Když se nehnula, neběží ani cron — a to je
+         * jiná porucha než chybějící worker; hláška proto říká, kam se dívat.
+         */
         $this->check(
             $ceka >= 15
-                ? "Pending jobs: {$pending} — nejstarší čeká {$ceka} min a nikdo ji nezpracovává; běží queue worker?"
+                ? "Pending jobs: {$pending} — nejstarší čeká {$ceka} min a nikdo ji nezpracovává. ".
+                  'Zkontrolujte queue worker (supervisor) i cron `schedule:run` — bez cronu neběží ani záložní `queue-drain`.'
                 : "Pending jobs: {$pending} — nejstarší čeká {$ceka} min",
             $ceka < 15,
             'FAIL',

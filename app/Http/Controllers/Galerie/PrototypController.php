@@ -25,6 +25,24 @@ class PrototypController extends Controller
 
     private const TELEFON = 'galerie-mobil.dc.html';
 
+    /**
+     * Co si worker ukládá do skořápky (`SHELL_FILES` v `sw.js`).
+     *
+     * Drží se tu proto, že podle nich se počítá název paměti. Kdyby seznam
+     * v `sw.js` narostl a tady ne, nová položka by se po nasazení neobnovila
+     * — a přesně tak v paměti přežila náhradní obrazovka se starým jménem
+     * aplikace.
+     *
+     * @var list<string>
+     */
+    private const SKORAPKA = [
+        'offline.html',
+        'manifest.webmanifest',
+        'icons/icon.svg',
+        'icons/icon-192.png',
+        'icons/icon-512.png',
+    ];
+
     public function __invoke(Request $request, ?string $rozvrzeni = null): Response
     {
         $soubor = $this->cesta($this->rozvrzeni($request, $rozvrzeni));
@@ -120,6 +138,27 @@ class PrototypController extends Controller
             }
         }
 
+        /*
+         * Do otisku patří **všechno, co skořápka drží** — ne jen dokumenty.
+         *
+         * Skořápka se ukládá jednou při instalaci workera a pak se z ní čte,
+         * dokud se nezmění název paměti. Když se otisk počítal jen z dokumentů
+         * a manifestu sestavení, přežila v ní náhradní obrazovka `offline.html`
+         * z doby, kdy se aplikace jmenovala jinak: nasazení, které měnilo jen
+         * ji, nechalo název paměti stejný a prohlížeč podával starou kopii dál.
+         *
+         * Dvojice pak při každém výpadku spojení viděla „Maki čeká na
+         * připojení" — jméno, které aplikace nenesla už měsíce, a obrazovku,
+         * kterou nešlo nijak zahodit.
+         */
+        foreach (self::SKORAPKA as $soubor) {
+            $cesta = public_path($soubor);
+
+            if (File::exists($cesta)) {
+                $casy[] = File::lastModified($cesta);
+            }
+        }
+
         $manifest = public_path('build/manifest.json');
 
         if (File::exists($manifest)) {
@@ -148,6 +187,9 @@ class PrototypController extends Controller
      *
      * `d.route || d.url` je tu proto, že odesílání upozornění v aplikaci posílá
      * cíl pod klíčem `url`; worker prototypu čte `route`.
+     *
+     * Zbylé dvě náhrady řeší dvě věci, na kterých se aplikace umí zaseknout
+     * natrvalo. Obě jsou u svého kódu popsané.
      */
     private function naServeru(string $worker): string
     {
@@ -155,6 +197,51 @@ class PrototypController extends Controller
             "const target = 'Galerie%20mobil%20aplikace.dc.html' + (route ? '#' + route : '');" => "const target = '/' + (route ? '#' + route : '');",
             "if (c.url.indexOf('Galerie') >= 0) {" => 'if (c.url.indexOf(self.registration.scope) === 0) {',
             'data: { route: d.route || null },' => 'data: { route: d.route || d.url || null },',
+
+            /*
+             * Skořápka se obnoví při každém probuzení workera, ne jen při změně
+             * názvu paměti.
+             *
+             * Ukládala se jednou při instalaci a pak se z ní jen četlo. Když
+             * nasazení změnilo jen náhradní obrazovku, název paměti zůstal
+             * stejný a v prohlížeči zůstala kopie z doby, kdy se aplikace
+             * jmenovala jinak — „Maki čeká na připojení". Vymazat ji nešlo
+             * odnikud z aplikace.
+             */
+            '    await self.clients.claim();' => <<<'JS'
+    // Skořápka znovu ze sítě: soubor, který se mezitím změnil, by v paměti
+    // zůstal až do přejmenování paměti — a náhradní obrazovka se starým jménem
+    // aplikace tam takhle přežila měsíce.
+    const shell = await caches.open(SHELL);
+    await Promise.all(SHELL_FILES.map(f => shell.add(new Request(f, { cache: 'reload' })).catch(() => {})));
+    await self.clients.claim();
+JS,
+
+            /*
+             * Náhradní obrazovka až po druhém pokusu.
+             *
+             * Navigace se stahuje jako `fetch(req, { cache: 'no-store' })`, což
+             * je požadavek se změněným nastavením — a takový se v některých
+             * prohlížečích chová jinak než ten původní. Když selže, není to
+             * ještě důkaz, že aplikace nemá signál: prostý požadavek na tutéž
+             * adresu klidně projde. Bez tohohle druhého pokusu se dvojice
+             * dívala na „bez signálu" u zapnutého připojení a nemohla se dostat
+             * dovnitř ani po obnovení stránky.
+             */
+            "        if (req.mode === 'navigate') {\n          const off = await caches.match('offline.html');" => <<<'JS'
+        if (req.mode === 'navigate') {
+          // Druhý pokus prostým požadavkem — teprve pak je „bez signálu" pravda.
+          try {
+            const znovu = await fetch(url.href, { credentials: 'same-origin' });
+            if (znovu && znovu.ok) {
+              const c = await caches.open(SHELL);
+              c.put(bare, znovu.clone());
+              return znovu;
+            }
+          } catch (e2) {}
+
+          const off = await caches.match('offline.html');
+JS,
         ]);
     }
 

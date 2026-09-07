@@ -12,7 +12,16 @@
   h1 { font-family:'Barlow Condensed',system-ui,sans-serif; font-size:28px; line-height:1.1; margin:0 0 10px }
   p { font-size:14.5px; line-height:1.55; color:#5b5770; margin:0 0 8px }
   b { color:#16151f; font-weight:500 }
-  @media (prefers-color-scheme: dark) { body { background:#0f0f1a; color:#f0f0f5 } p { color:#9ca3af } b { color:#f0f0f5 } }
+  .akce { display:flex; gap:8px; flex-wrap:wrap; margin-top:16px }
+  button { font:inherit; font-size:13.5px; padding:7px 13px; border-radius:2px; cursor:pointer;
+           border:1px solid #16151f; background:#16151f; color:#f6f5fb }
+  button.tise { background:transparent; color:#16151f; border-color:#c9c6d6 }
+  small { display:block; margin-top:12px; font-size:12px; color:#8b8799; line-height:1.5 }
+  @media (prefers-color-scheme: dark) {
+    body { background:#0f0f1a; color:#f0f0f5 } p { color:#9ca3af } b { color:#f0f0f5 }
+    button { border-color:#f0f0f5; background:#f0f0f5; color:#0f0f1a }
+    button.tise { background:transparent; color:#f0f0f5; border-color:#3a3850 }
+  }
 </style>
 </head>
 <body>
@@ -20,6 +29,45 @@
   <h1>Zatím bez signálu</h1>
   <p>Aplikace nemá připojení a tuhle obrazovku ještě neměla v paměti.</p>
   <p><b>O nic jste nepřišli.</b> Co jste zapsali offline, leží ve frontě a odejde samo, jakmile se signál vrátí — na to nemusíte myslet.</p>
+  <div class="akce">
+    <button type="button" onclick="location.reload()">Zkusit znovu</button>
+    <button type="button" class="tise" id="reset">Načíst aplikaci znovu</button>
+  </div>
+  <small id="stav"></small>
 </main>
+<script>
+  /*
+   * Cesta ven, když se aplikace zasekne na téhle obrazovce.
+   *
+   * Skořápku drží service worker a čte ji z paměti prohlížeče. Když se v ní
+   * usadí něco starého nebo rozbitého, tahle stránka se ukazuje pořád dokola
+   * a z aplikace se k tomu nedá dostat — je pod ní. Tlačítko workera odhlásí
+   * a paměť vysype; při dalším načtení se všechno stáhne znovu.
+   *
+   * Nic to nemaže z archivu. Zápisy pořízené bez signálu čekají v IndexedDB
+   * (`galerie-queue`), a ta se schválně nechává být.
+   */
+  document.getElementById('reset').addEventListener('click', async function () {
+    var stav = document.getElementById('stav');
+    stav.textContent = 'Uklízím paměť…';
+
+    try {
+      if ('serviceWorker' in navigator) {
+        var regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map(function (r) { return r.unregister(); }));
+      }
+
+      if ('caches' in window) {
+        var jmena = await caches.keys();
+        await Promise.all(jmena.map(function (n) { return caches.delete(n); }));
+      }
+    } catch (e) {
+      stav.textContent = 'Paměť se vyprázdnit nepodařilo. Zkuste stránku otevřít v anonymním okně.';
+      return;
+    }
+
+    location.replace('/');
+  });
+</script>
 </body>
 </html>

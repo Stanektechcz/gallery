@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Galerie;
 
+use App\Http\Controllers\Galerie\PrototypController;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\File;
@@ -124,6 +125,64 @@ class DoruceniTest extends TestCase
         clearstatcache();
 
         $this->assertNotSame($puvodni, $this->verze((string) $this->get('/sw.js')->getContent()));
+    }
+
+    /**
+     * Změna náhradní obrazovky přejmenuje paměť.
+     *
+     * Otisk se počítal jen z dokumentů a manifestu sestavení, takže nasazení,
+     * které měnilo jen `offline.html`, nechalo název paměti stejný. V prohlížeči
+     * pak zůstala kopie z doby, kdy se aplikace jmenovala jinak — a dvojice při
+     * každém výpadku spojení četla „Maki čeká na připojení".
+     */
+    public function test_zmena_nahradni_obrazovky_prejmenuje_pamet(): void
+    {
+        $puvodni = $this->verze((string) $this->get('/sw.js')->assertOk()->getContent());
+
+        touch(public_path('offline.html'));
+        clearstatcache();
+
+        $this->assertNotSame($puvodni, $this->verze((string) $this->get('/sw.js')->getContent()));
+    }
+
+    /**
+     * Co si worker ukládá do skořápky, musí controller vědět.
+     *
+     * Otisk paměti se počítá z těch souborů. Kdyby seznam v `sw.js` narostl
+     * a v controlleru ne, nová položka by se po nasazení nikdy neobnovila —
+     * přesně tak v paměti přežila náhradní obrazovka se starým jménem.
+     */
+    public function test_seznam_skorapky_sedi_s_workerem(): void
+    {
+        $worker = File::get(resource_path('galerie/sw.js'));
+
+        preg_match('/const SHELL_FILES = \[(.*?)\];/s', $worker, $c);
+        preg_match_all("/'([^']+)'/", $c[1] ?? '', $souboryVeWorkeru);
+
+        $controller = new \ReflectionClass(PrototypController::class);
+
+        $this->assertSame(
+            $souboryVeWorkeru[1],
+            $controller->getConstant('SKORAPKA'),
+            'SHELL_FILES v sw.js a SKORAPKA v PrototypControlleru se rozešly.',
+        );
+    }
+
+    /**
+     * Náhradní obrazovka až po druhém pokusu.
+     *
+     * Navigace se stahuje s vlastním nastavením (`cache: 'no-store'`), což
+     * v některých prohlížečích selže i při zapnutém připojení. Bez druhého,
+     * prostého pokusu se dvojice dívala na „bez signálu" a nemohla se dostat
+     * dovnitř ani po obnovení stránky.
+     */
+    public function test_worker_zkusi_navigaci_podruhe(): void
+    {
+        $worker = (string) $this->get('/sw.js')->assertOk()->getContent();
+
+        $this->assertStringContainsString("await fetch(url.href, { credentials: 'same-origin' })", $worker);
+        // A skořápku obnoví při každém probuzení, ne jen při přejmenování paměti.
+        $this->assertStringContainsString('SHELL_FILES.map(f => shell.add(', $worker);
     }
 
     /** A nesmí ho zastínit statický soubor, který by šel kolem PHP. */

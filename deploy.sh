@@ -151,6 +151,11 @@ echo "== Čistím cache =="
 # Kód se změnil, takže config, routy i pohledy uložené v cache jsou zastaralé.
 "$PHP" artisan optimize:clear
 
+# Běžícím workerům se řekne, ať doběhnou a nastartují znovu — jinak by až do
+# příštího restartu serveru zpracovávali úlohy starým kódem. Když žádný neběží,
+# je to prázdná operace.
+"$PHP" artisan queue:restart >/dev/null 2>&1 || true
+
 # ——— build assetů ———
 #
 # Až za migracemi, a schválně: kvůli tomuhle kroku se kdysi nasazení zaseklo v půlce.

@@ -87,6 +87,26 @@ Schedule::command('queue:retry all')
     ->everyTenMinutes()
     ->name('retry-pending-drive');
 
+/*
+ * Fronta se vyprázdní, i když démona nikdo nespustil.
+ *
+ * Úlohy leží v databázi a bere si je trvale běžící `queue:work` pod dohledem
+ * supervisoru. Když ho nikdo nenastaví — nebo spadne po restartu serveru —
+ * fronta jen tiše roste: doktor v ní našel 2 371 úloh, z nichž nejstarší
+ * čekala třináct dní. Stály s nimi náhledy, zrcadlení originálů na Disk
+ * i upozornění, a nikde to nevypadalo jako porucha; prostě se nic nedělo.
+ *
+ * Tohle démona nenahrazuje, jen jistí. `--stop-when-empty` skončí, jakmile
+ * není co dělat, `--max-time` běh ukončí i tehdy, když práce přibývá rychleji,
+ * a `withoutOverlapping` hlídá, aby vedle sebe neběželo víc kopií. Zámek drží
+ * deset minut: kdyby proces spadl, nesmí frontu zablokovat napořád.
+ */
+Schedule::command('queue:work --stop-when-empty --max-time=280 --tries=3 --no-interaction')
+    ->everyFiveMinutes()
+    ->withoutOverlapping(10)
+    ->runInBackground()
+    ->name('queue-drain');
+
 Schedule::command('gallery:rebuild-albums')
     ->hourly()
     ->name('quick-reconciliation');
