@@ -12871,7 +12871,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
             <span style="flex:none; width:17px; height:17px; border:1px solid var(--g-line); border-radius:2px; background:{{ lockTrustBg }}; display:grid; place-items:center; color:{{ lockTrustMark }}"><i class="ph-duotone ph-check" style="font-size:12px"></i></span>
             Věřit tomuto zařízení — příště bude stačit kód
           </button>
-          <button class="btn btn-primary" onClick="{{ lockSignIn }}" disabled="{{ lockSignCant }}" style="width:100%; margin-top:14px; gap:7px"><i class="ph-duotone ph-sign-in" style="font-size:17px"></i>Přihlásit se</button>
+          <button class="btn btn-primary" onClick="{{ lockSignIn }}" disabled="{{ lockSignCant }}" style="width:100%; margin-top:14px; gap:7px"><i class="ph-duotone ph-sign-in" style="font-size:17px"></i>{{ lockSignLabel }}</button>
           <div style="display:flex; gap:10px; align-items:baseline; margin-top:18px; padding-top:11px; border-top:1px solid var(--g-line)">
             <div style="font-size:12px; line-height:1.6; color:var(--g-ink3)">{{ lockPwdHint }}</div>
             <button class="btn btn-ghost" onClick="{{ obStart }}" style="margin-left:auto; flex:none; font-size:12.5px; gap:6px"><i class="ph-duotone ph-sparkle" style="font-size:15px"></i>První spuštění</button>
@@ -27821,6 +27821,8 @@ class Component extends DCLogic {
       query: 1, txQuery: 1, msgQuery: 1, plQuery: 1, trQuery: 1, dnQuery: 1, ckQuery: 1, xQuery: 1, srPlace: 1,
       gv: 1, gvPwd: 1, gvPwdErr: 1, gvTries: 1, gvC: 1,
       appLocked: 1, lockPin: 1, lockPwd: 1, lockTries: 1, lockRec: 1, lockRecCode: 1, lockStep: 1, lockAt: 1, secUntil: 1, gatePin: 1,
+      // Uložený by po obnovení stránky nechal tlačítko viset na „Přihlašuji…".
+      lockSignBusy: 1,
       queuePct: 1, queuePaused: 1, emStatus: 1, emLeft: 1,
       msgPlay: 1, msgTyping: 1, msgRec: 1, msgRecT: 1, msgEmoji: 1,
       homeEdit: 1, boardDrag: 1, calDrag: 1, tierDrag: 1, storyDrag: 1, pmReveal: 1, sporReveal: 1
@@ -28194,7 +28196,13 @@ class Component extends DCLogic {
     // Se nasazeným backendem ověřuje heslo server a vrací token pro API;
     // bez něj platí ověření v prototypu. Chování a hlášky jsou stejné.
     if (api && api.signIn && api.mode === 'http') {
+      // Druhé kliknutí, než dorazí odpověď, je druhý požadavek — a limit je
+      // dvacet za minutu. Netrpělivé klikání si ho vyčerpalo samo.
+      if (s.lockSignBusy) return;
+      this.setState({ lockSignBusy: true });
+
       api.signIn(mail, s.lockPwd || '', 'prohlížeč').then(res => {
+        this.setState({ lockSignBusy: false });
         if (!res || !res.token) return;
         const k = who || ((res.user || {}).name === LOCKWHO.M ? 'M' : 'A');
         this.setState({ lockWho: k, lockStep: 'pin', lockPwd: '', lockErr: null, lockTries: 0, lockTrusted: s.lockTrust !== false });
@@ -28219,6 +28227,7 @@ class Component extends DCLogic {
          */
         const stav = e && e.status;
         this.setState({
+          lockSignBusy: false,
           lockErr: stav === 422 ? 'E-mail nebo heslo nesouhlasí.'
             : stav === 429 ? 'Moc pokusů za sebou. Zkuste to za minutu.'
             : stav === 419 ? 'Sezení vypršelo — načtěte stránku znovu.'
@@ -28531,7 +28540,8 @@ class Component extends DCLogic {
       lockSetPwd: e => this.setState({ lockPwd: e.target.value, lockErr: null }),
       lockPwdKey: e => { if (e.key === 'Enter') this.lockSignIn(); },
       lockSignIn: () => this.lockSignIn(),
-      lockSignCant: !(s.lockMail || LOCKMAIL[who] || '').trim() || (s.lockPwd || '').length < 4,
+      lockSignCant: !!s.lockSignBusy || !(s.lockMail || LOCKMAIL[who] || '').trim() || (s.lockPwd || '').length < 4,
+      lockSignLabel: s.lockSignBusy ? 'Přihlašuji…' : 'Přihlásit se',
       lockTrustOn: s.lockTrust !== false,
       lockTrustToggle: () => this.setState({ lockTrust: s.lockTrust === false }),
       lockTrustBg: s.lockTrust !== false ? 'var(--g-acc)' : 'transparent',
