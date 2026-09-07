@@ -130,6 +130,9 @@ Route::middleware(['auth:sanctum', 'throttle:120,1'])->prefix('api')->group(func
     Route::post('sdileni', [SdileniController::class, 'store'])->name('galerie.sdileni.store');
     Route::patch('sdileni/{odkaz}', [SdileniController::class, 'update'])
         ->whereNumber('odkaz')->name('galerie.sdileni.update');
+    // „Prodloužit o 30 dní" ve statistice odkazu jen ohlásilo, že se to stalo.
+    Route::post('sdileni/{odkaz}/prodlouzit', [SdileniController::class, 'prodluz'])
+        ->whereNumber('odkaz')->name('galerie.sdileni.prodlouzit');
     Route::delete('sdileni/{odkaz}', [SdileniController::class, 'destroy'])
         ->whereNumber('odkaz')->name('galerie.sdileni.destroy');
 

@@ -5842,6 +5842,53 @@ class Component extends DCLogic {
       }
     };
   }
+  /*
+   * Do schránky, a teprve pak hláška.
+   *
+   * „Odkaz zkopírován" chodilo bez ohledu na to, co ve schránce doopravdy
+   * zůstalo — a člověk na to přišel, až když ho někam vložil. Schránka navíc
+   * není samozřejmost: bez zabezpečeného spojení ji prohlížeč nepůjčí, a to
+   * si zaslouží vlastní větu, ne mlčení.
+   */
+  kopiruj(text, hotovo, nahradni) {
+    const zaloha = () => {
+      try {
+        const el = document.createElement('textarea');
+        el.value = text;
+        el.setAttribute('readonly', '');
+        el.style.position = 'fixed';
+        el.style.opacity = '0';
+        document.body.appendChild(el);
+        el.select();
+        const ok = document.execCommand('copy');
+        el.remove();
+        return ok;
+      } catch (e) { return false; }
+    };
+    const konec = ok => this.toast(ok ? hotovo : (nahradni || 'Schránka není povolená — odkaz zkopírujte ručně'), { icon: ok ? 'ph-copy' : 'ph-warning' });
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(String(text || '')).then(() => konec(true)).catch(() => konec(zaloha()));
+      return;
+    }
+    konec(zaloha());
+  }
+  /*
+   * Co aplikace zatím neumí, se řekne rovnou.
+   *
+   * Tohle nahradilo víc než třicet hlášek v minulém čase — „Uloženo",
+   * „Prodlouženo", „Připomeneme týden předem" —, za kterými nebyl žádný
+   * zápis. Vypadaly jako potvrzení a dvojice podle nich spoléhala na věci,
+   * které se nestaly: že platba je naplánovaná, že expirace odkazu je
+   * posunutá, že se někdo ozve.
+   *
+   * Věta je schválně v přítomném čase a bez omluvy. Kdo se dozví „tohle
+   * zatím neumíme", ví, na čem je; kdo se dozví „uloženo", to zjistí až
+   * ve chvíli, kdy na to spoléhal.
+   */
+  zatimNeumime(co) {
+    this.toast('Tohle zatím neumíme — ' + co, { icon: 'ph-hourglass-medium' });
+  }
   toast(text, opts = {}) {
     clearTimeout(this.tt);
     const patch = { toast: { text: text, icon: opts.icon || 'ph-check-circle', undo: opts.undo || null } };
@@ -5924,7 +5971,7 @@ class Component extends DCLogic {
           this.setState({ fam: list.map(x => x.id === f.id ? { ...x, last: 'dnes', lastWho: nx, over: false } : x) });
           this.toast(f.name + ' — ozvali jste se · příště ' + nx, { icon: 'ph-phone-call', undo: () => this.setState({ fam: list }) });
         },
-        share: () => this.toast('Sdílené album pro ' + f.name + ' · odkaz zkopírován', { icon: 'ph-link-simple' })
+        share: () => this.kopiruj(location.origin + '/s/', 'Adresa sdílení zkopírována · odkaz pro ' + f.name + ' založíte ve Sdílení')
       })),
       chFairTitle: diff < 45 ? 'Rozdělené skoro na půl'
         : this.rodPripona(lead) === null
@@ -6504,7 +6551,7 @@ class Component extends DCLogic {
       trigIcon: RTRIG[r[0]].icon,
       act: RACT[r[1]].label + (r[4] ? ' · ' + r[4] : ''),
       actIcon: RACT[r[1]].icon,
-      add: () => this.toast('Pravidlo přidáno — ' + r[2], { icon: 'ph-plus-circle' })
+      add: () => this.zatimNeumime('zakládání pravidel z telefonu')
     })) : [];
     const isRulSug = rulSug.length > 0;
     const rulLog = (key === 'rulLog' ? RULOG : []).map(l => ({
@@ -6695,7 +6742,7 @@ class Component extends DCLogic {
         score: String(96 - i * 9) + ' %', w: (96 - i * 9) + '%',
         why: i === 0 ? 'Máte doma všechno kromě bazalky.' : i === 1 ? 'Na dnešní počasí a čas, který zbývá.' : i === 2 ? 'Nevařili jste to nejdéle.' : 'Zbytky z pátku se využijí.',
         color: i === 0 ? 'var(--g-ok)' : 'var(--g-acc)',
-        cook: () => this.toast(( r.title || rk) + ' — dnes vaříme tohle', { icon: 'ph-cooking-pot' }) };
+        cook: () => this.zatimNeumime('zapsání dnešního vaření z telefonu') };
     }) : [];
     const isCkSuggest = ckSuggest.length > 0;
     const ckPantry = key === 'ckPantry' ? PANTRY.map(p => ({
@@ -7681,7 +7728,8 @@ class Component extends DCLogic {
     const pin = s.lockPin || '';
     const blocked = (s.lockTries || 0) >= 3;
     const sess = !!(s.secUntil && s.secUntil > Date.now());
-    const gateOn = !s.appLocked && this.lockedRoutes().indexOf(this.currentRoute()) >= 0 && !sess;
+    // Zamykat se dá jen tím, čím se dá odemknout — viz široké rozvržení.
+    const gateOn = !s.appLocked && this.zamek().nastaveno && this.lockedRoutes().indexOf(this.currentRoute()) >= 0 && !sess;
     const clock = ms => { const d = new Date(ms); return d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0'); };
     return {
       isLocked: !!s.appLocked,
@@ -8917,7 +8965,26 @@ class Component extends DCLogic {
       offNotifTrack: notif ? 'var(--g-acc)' : 'var(--g-line)',
       offNotifKnob: notif ? '20px' : '2px',
       offNotifToggle: () => { this.setState({ mNotif: !notif }); this.toast(notif ? 'Oznámení vypnuta' : 'Oznámení zapnuta', { icon: 'ph-bell' }); },
-      offUpdate: () => this.toast('Máte nejnovější verzi 2026.8.16', { icon: 'ph-arrows-clockwise' })
+      /*
+       * Kontrola verze se doopravdy zeptá.
+       *
+       * Hláška tvrdila „Máte nejnovější verzi 2026.8.16" — číslo bylo napsané
+       * v dokumentu, takže se to tvrdilo i o verzi tři měsíce staré. Novou
+       * verzi zná service worker; tohle si o ni řekne a počká na odpověď.
+       */
+      offUpdate: () => {
+        if (! navigator.serviceWorker) { this.toast('Tenhle prohlížeč verze neřídí', { icon: 'ph-warning' }); return; }
+        navigator.serviceWorker.getRegistration()
+          .then(reg => {
+            if (! reg) { this.toast('Aplikace není nainstalovaná — verzi hlídá prohlížeč', { icon: 'ph-info' }); return; }
+            return reg.update().then(() => {
+              this.toast(reg.waiting ? 'Nová verze je stažená · projeví se po zavření aplikace' : 'Máte nejnovější verzi', {
+                icon: reg.waiting ? 'ph-arrow-circle-down' : 'ph-check-circle'
+              });
+            });
+          })
+          .catch(() => this.toast('Verzi se nepodařilo ověřit', { icon: 'ph-warning' }));
+      }
     };
   }
   // ── Rok v číslech ──
@@ -8979,7 +9046,7 @@ class Component extends DCLogic {
         this.push('sec');
         this.toast('Rok v číslech ' + year + ' předán do výběrů k tisku · ' + pages + ' stran · ' + this.kc(price), { icon: 'ph-book-bookmark' });
       },
-      ybPdf: () => this.toast('Tiskové PDF · ' + pages + ' stran · CMYK se spadem 3 mm', { icon: 'ph-file-pdf' })
+      ybPdf: () => this.zatimNeumime('tiskové PDF')
     };
   }
   // ── týdenní shrnutí (automatická karta na Domů) ──
@@ -9614,7 +9681,8 @@ class Component extends DCLogic {
           this.setState({ tasksExtra: prev.concat([{ id: 'nd' + n.id, label: n.text, who: n.to === me ? 'já' : n.to, when: (MNDKIND[n.kind] || ['bez termínu'])[0] }]) });
           this.toast('Ze žádosti je úkol', { icon: 'ph-check-square', undo: () => this.setState({ tasksExtra: prev }) });
         },
-        remind: () => this.toast('Připomínka odeslána — ' + this.whoDat(n.to) + ', bez zvuku', { icon: 'ph-bell' }),
+        // Hlásilo, že připomínka odešla — a nic se neodeslalo.
+        remind: () => this.zatimNeumime('odesílání připomínek druhému'),
         del: () => { const prev = all; this.ndSet(all.filter(x => x.id !== n.id), 'Žádost zrušena', prev, 'ph-trash'); }
       };
     };
@@ -10683,7 +10751,13 @@ class Component extends DCLogic {
           const msgs = acts.length - likes;
           return [likes ? this.pl(likes, 'srdíčko', 'srdíčka', 'srdíček') : null, msgs ? this.pl(msgs, 'vzkaz', 'vzkazy', 'vzkazů') : null].filter(Boolean).join(' · ');
         })(),
-        copy: () => this.toast('Odkaz zkopírován', { icon: 'ph-copy' }),
+        /*
+       * Odkaz se doopravdy zkopíruje.
+       *
+       * Hláška „Odkaz zkopírován" chodila i tehdy, když ve schránce zůstalo,
+       * co v ní bylo — a člověk to zjistil, až když vložil něco jiného.
+       */
+      copy: () => this.kopiruj(r.url, 'Odkaz zkopírován'),
         revoke: () => { const prev = this.sharesList(); this.setState({ shares: prev.filter(x => x.id !== r.id) }); this.toast('Odkaz zneplatněn', { icon: 'ph-link-break', undo: () => this.setState({ shares: prev }) }); }
       })),
       sharesMeta: this.pl(this.sharesList().length, 'aktivní odkaz', 'aktivní odkazy', 'aktivních odkazů'),

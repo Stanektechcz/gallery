@@ -110,6 +110,39 @@ class SdileniController extends Controller
         return $this->odpoved($prostor, 'Nastavení sdílení uloženo.', $radek);
     }
 
+    /**
+     * Prodloužit platnost odkazu o třicet dní.
+     *
+     * Tlačítko „Prodloužit o 30 dní" ve statistice odkazu jen ohlásilo
+     * „Expirace prodloužena" a odkaz vypršel přesně tak, jak měl. Je to
+     * přitom to, čím člověk zachraňuje odkaz, který má někomu ještě
+     * fungovat — třeba babičce, která si fotky ještě nestáhla.
+     *
+     * Počítá se od **pozdějšího z dneška a stávající platnosti**: u odkazu,
+     * který platí ještě měsíc, by prodloužení od dneška byla ve skutečnosti
+     * zkrácení.
+     */
+    public function prodluz(Request $request, int $odkaz): JsonResponse
+    {
+        $prostor = GallerySpace::findOrFail($this->parId($request));
+        $radek = $this->najdi($prostor, $odkaz);
+
+        $od = $radek->expires_at && $radek->expires_at->isFuture()
+            ? CarbonImmutable::parse($radek->expires_at)
+            : CarbonImmutable::now();
+
+        $radek->update(['expires_at' => $od->addDays(30), 'is_active' => true]);
+
+        AuditLog::record('share.extend', $radek, ['token' => $radek->token]);
+
+        return response()->json([
+            'ok' => true,
+            'id' => $radek->id,
+            'plati_do' => $radek->expires_at->format('j. n. Y'),
+            'zprava' => 'Platnost odkazu prodloužena o 30 dní.',
+        ]);
+    }
+
     public function destroy(Request $request, int $odkaz): JsonResponse
     {
         $prostor = GallerySpace::findOrFail($this->parId($request));

@@ -14895,7 +14895,7 @@ class Component extends DCLogic {
       recipeCookToday: () => { this.toast(r.title + ' zařazeno do menu na týden', { icon: 'ph-calendar-plus', undo: true }); this.setState({ route: 'x-kucharka', appTab: 2 }); },
       recipeOpenPhotos: () => r.photoMatch ? this.setState({ route: 'all', query: r.photoMatch })
         : this.toast('Z tohoto receptu zatím fotky nemáme — vyfoťte ho a zařadí se sem', { icon: 'ph-camera' }),
-      recipeMore2: () => this.toast('Tisknout na kartu, duplikovat, zapsat vaření', { icon: 'ph-dots-three' })
+      recipeMore2: () => this.zatimNeumime('tisk receptu na kartu ani duplikaci')
     };
   }
   placeVals() {
@@ -14929,7 +14929,7 @@ class Component extends DCLogic {
         this.toast(vis ? p.title + ' zpět v seznamu přání' : p.title + ' označeno jako navštívené', { icon: vis ? 'ph-heart-straight' : 'ph-check-circle', undo: true });
       },
       placeAddToTrip: () => { this.toast(p.title + ' přidáno do itineráře — vyberte den', { icon: 'ph-airplane-tilt' }); this.setState({ route: 'x-cesty', appTab: 0 }); },
-      placeAddNote: () => this.toast('Nová poznámka k místu', { icon: 'ph-pencil-simple' }),
+      placeAddNote: () => this.zatimNeumime('poznámky k místu'),
       placeOpenPhotos: () => p.photoMatch ? this.setState({ route: 'all', query: p.photoMatch })
         : this.toast('Z tohoto místa ještě fotky nemáme', { icon: 'ph-camera' }),
       ...(() => {
@@ -14989,13 +14989,15 @@ class Component extends DCLogic {
           }
         };
       })(),
-      placeMore: () => this.toast('Sdílet místo, exportovat do mapy, archivovat', { icon: 'ph-dots-three' })
+      placeMore: () => this.zatimNeumime('export místa do mapy ani archivaci')
     };
   }
   amount(n, unit) {
     return unit !== 'porce' ? n + ' ' + unit : n + (n < 5 ? ' porce' : ' porcí');
   }
   kc(n) { return Math.round(n).toLocaleString('cs-CZ').replace(/\u00a0/g, ' ') + ' ' + ((window.GalerieData || {}).MENA || 'Kč'); }
+  // Číslo s mezerou po tisících — bez měny, na počty.
+  cislo(n) { return Number(n || 0).toLocaleString('cs-CZ').replace(/\u00a0/g, ' '); }
   budgetVals() {
     const s = this.state, C = 427.26, R = 68;
     const lim = i => { const v = s.budLimits[i]; return v === undefined ? BUD.cats[i][1] : v; };
@@ -15153,7 +15155,7 @@ class Component extends DCLogic {
       budOver: over.map(c => ({
         name: c.name, diff: '+ ' + this.kc(c.spent - c.limit),
         go: () => this.setState({ budTab: 1 }),
-        balance: () => this.toast(c.name + ' vyrovnáno z kategorie Ostatní', { icon: 'ph-arrows-left-right', undo: true })
+        balance: () => this.zatimNeumime('přesouvání peněz mezi kategoriemi — vyrovnání zapíšete v Rozpočtech')
       })),
       budCats: cats.map(c => {
         const st = status(c);
@@ -15169,12 +15171,12 @@ class Component extends DCLogic {
           changed: c.limit !== BUD.cats[c.i][1],
           reset: () => { const n = { ...s.budLimits }; delete n[c.i]; this.setState({ budLimits: n }); },
           tx: () => this.setState({ route: 'x-transakce', appTab: 0 }),
-          balance: () => this.toast(c.name + ' — vyrovnat z jiné kategorie', { icon: 'ph-arrows-left-right' })
+          balance: () => this.zatimNeumime('přesouvání peněz mezi kategoriemi')
         };
       }),
       budPlanSum: this.kc(plan), budPlanDiff: plan === 50000 ? 'shodné s uloženým plánem' : 'změněno o ' + this.kc(plan - 50000),
       budPlanChanged: plan !== 50000,
-      budSavePlan: () => this.toast('Plán uložen — historie plánu zaznamenána', { icon: 'ph-check-circle', undo: true }),
+      budSavePlan: () => this.zatimNeumime('ukládání verzí plánu — změny rozpočtu se zapisují rovnou'),
       budResetPlan: () => this.setState({ budLimits: {} }),
       budMonths: BUD.months.map((m, i) => ({
         label: m[0], h: Math.round(m[1] / maxM * 100) + '%',
@@ -15194,21 +15196,21 @@ class Component extends DCLogic {
           pctLabel: Math.round(pct * 100) + ' %',
           dash: (pct * 163.4).toFixed(1) + ' 163.4',
           color: g[2] >= g[1] ? 'var(--g-ok)' : 'var(--g-acc)',
-          add: () => this.toast('Vklad 1 000 Kč do „' + g[0] + '“', { icon: 'ph-piggy-bank', undo: true }),
+          add: () => this.zatimNeumime('vklady do vyhrazené částky'),
           go: () => g[6] ? this.relatedGo(g[6]) : this.setState({ route: 'x-transakce', appTab: 2 }),
           hasLink: !!g[6], linkLabel: g[6] ? 'Otevřít související' : 'Opakované platby'
         };
       }),
       budGoalsTotal: this.kc(BUD.goals.reduce((a, g) => a + g[2], 0)),
       budGoalsMonthly: this.kc(BUD.goals.reduce((a, g) => a + g[3], 0)),
-      budAddGoal: () => this.toast('Nová vyhrazená částka — pojmenujte cíl', { icon: 'ph-plus' }),
+      budAddGoal: () => this.zatimNeumime('zakládání vyhrazených částek'),
       budRules: (AL.balancing || []).map(r => ({
         title: r[0], meta: r[1], tag: r[2],
         tagClass: r[2] === 'pravidlo' ? 'tag-neutral' : 'tag-accent',
         go: () => this.toast(r[0], { icon: 'ph-gear' })
       })),
       budHistory: (ADIARY.plan || []).map(d => ({ date: d[0], title: d[1], text: d[2], meta: d[3] || null })),
-      budAddRule: () => this.toast('Nové pravidlo vyrovnávání', { icon: 'ph-plus' }),
+      budAddRule: () => this.zatimNeumime('pravidla vyrovnávání'),
       budYear: [
         { label: 'Příjmy za 12 měsíců', value: this.kc(BUD.year.income) },
         { label: 'Výdaje', value: this.kc(BUD.year.spent) },
@@ -15222,7 +15224,18 @@ class Component extends DCLogic {
         color: GRAF(k),
         go: () => this.setState({ route: 'x-transakce', appTab: 0 })
       })),
-      budExport: () => this.toast('Export do CSV připraven ke stažení', { icon: 'ph-download-simple' }),
+      /*
+       * Export doopravdy stáhne soubor.
+       *
+       * Tlačítko „Export do CSV" jen ohlásilo, že je soubor „připraven ke
+       * stažení" — a nic se nestáhlo. Kdo si chtěl rozpočet otevřít v tabulce,
+       * odešel s prázdnou a nevěděl proč.
+       */
+      budExport: () => {
+        const radky = BUD.yearCats.map(c => [c[0], c[1]]);
+        const ok = this.csv('rozpocet-rok.csv', ['Kategorie', 'Částka'], radky);
+        this.toast(ok ? 'Rozpočet po kategoriích stažen · ' + radky.length + ' řádků' : 'Stažení se nepodařilo', { icon: ok ? 'ph-download-simple' : 'ph-warning' });
+      },
       budAddTx: () => this.setState({ route: 'x-transakce', appTab: 1 }),
       budAccounts: () => this.setState({ route: 'x-ucty', finTab: 1 }),
       budOverview: () => this.setState({ route: 'x-finance', finTab: 0 })
@@ -15322,7 +15335,14 @@ class Component extends DCLogic {
         }
       })),
       txBulkRec: () => { this.toast(selIds.length + '× označeno jako opakovaná platba', { icon: 'ph-repeat', undo: true }); this.setState({ txSel: [] }); },
-      txBulkExport: () => this.toast(selIds.length + ' transakcí v CSV', { icon: 'ph-download-simple' }),
+      // Vybrané transakce se stáhnou; dřív se jen napsalo, kolik jich je.
+      txBulkExport: () => {
+        const vybrane = all.filter(r => selIds.indexOf(r.id) >= 0);
+        const ok = this.csv('transakce-vyber.csv',
+          ['Datum', 'Popis', 'Kategorie', 'Částka', 'Účet', 'Poznámka'],
+          vybrane.map(r => [r.date, r.name, r.cat, r.amount, r.account, r.note || '']));
+        this.toast(ok ? vybrane.length + ' transakcí staženo v CSV' : 'Stažení se nepodařilo', { icon: ok ? 'ph-download-simple' : 'ph-warning' });
+      },
       txUnCount: unCount, txHasUn: unCount > 0 && filt !== 'un',
       txGoUn: () => this.setState({ txFilter: 'un', txPickCat: null }),
       txOpenRow: open, txIsOpen: !!open,
@@ -15357,14 +15377,19 @@ class Component extends DCLogic {
         { icon: 'ph-chart-donut', label: 'Rozpočet', value: open.cat, go: () => this.setState({ route: 'x-rozpocty', budTab: 1 }) },
         open.f.receipt && { icon: 'ph-receipt', label: 'Doklad', value: 'účtenka vyfocena', go: () => this.toast('Doklad k ' + open.name, { icon: 'ph-receipt' }) }
       ].filter(Boolean) : [],
-      txSplit: () => this.toast('Rozdělit platbu mezi kategorie', { icon: 'ph-arrows-split' }),
-      txMakeRec: () => this.toast(open ? open.name + ' → opakovaná platba' : '', { icon: 'ph-repeat', undo: true }),
-      txEditNote: () => this.toast('Upravit poznámku', { icon: 'ph-pencil-simple' }),
+      txSplit: () => this.zatimNeumime('rozdělení jedné platby mezi víc kategorií'),
+      txMakeRec: () => this.zatimNeumime('označení platby za opakovanou'),
+      txEditNote: () => this.zatimNeumime('úpravu poznámky u transakce'),
       txHide: () => { this.toast(open ? open.name + ' skryto z rozpočtu' : '', { icon: 'ph-eye-slash', undo: true }); this.setState({ txOpen: null }); },
       txAdd: () => this.setState({ xaOpen: true, xaMode: 'tx', xaA: '', xaB: '' }),
       txImport: () => this.setState({ route: 'x-ucty', appTab: 1 }),
       txToBudget: () => this.setState({ route: 'x-rozpocty', budTab: 0 }),
-      txExportAll: () => this.toast('Export všech transakcí do CSV', { icon: 'ph-download-simple' })
+      txExportAll: () => {
+        const ok = this.csv('transakce.csv',
+          ['Datum', 'Popis', 'Kategorie', 'Částka', 'Účet', 'Poznámka'],
+          all.map(r => [r.date, r.name, r.cat, r.amount, r.account, r.note || '']));
+        this.toast(ok ? all.length + ' transakcí staženo v CSV' : 'Stažení se nepodařilo', { icon: ok ? 'ph-download-simple' : 'ph-warning' });
+      }
     };
   }
   finVals() {
@@ -15435,7 +15460,7 @@ class Component extends DCLogic {
         };
       }),
       finAccHealth: FIN.accounts.filter(a => !(s.acOff || {})[a[0]]).length + ' z ' + FIN.accounts.length + ' účtů aktivních · importy běží ráno v 8:00, zařazování hned po nich',
-      finAddAccount: () => this.toast('Napojit další banku — vyberte poskytovatele', { icon: 'ph-plus' }),
+      finAddAccount: () => this.zatimNeumime('napojení banky z téhle obrazovky — účty se zakládají v Nastavení'),
       // Kolik účtů se synchronizuje, ví seznam účtů — ne napsaná pětka.
       finSyncAll: () => {
         const zive = FIN.accounts.filter(a => !(s.acOff || {})[a[0]]).length;
@@ -15447,14 +15472,14 @@ class Component extends DCLogic {
         date: u[0], title: u[1], value: this.kc(u[2]), kind: u[3], cat: u[4],
         thisMonth: u[5], dot: u[5] ? 'var(--g-acc)' : 'var(--g-ink3)',
         go: () => this.setState({ route: 'x-rozpocty', budTab: u[4] === 'Rezerva' || u[4] === 'Cesty' ? 2 : 1 }),
-        skip: () => this.toast(u[1] + ' — tento měsíc přeskočeno', { icon: 'ph-skip-forward', undo: true })
+        skip: () => this.zatimNeumime('přeskočení plánované platby')
       })),
       finUpNote: 'Platby označené modrou tečkou padnou ještě do srpnového rozpočtu.',
-      finAddPayment: () => this.toast('Nová plánovaná platba', { icon: 'ph-plus' }),
+      finAddPayment: () => this.zatimNeumime('plánované platby'),
       finRules: FIN.rules.map(r => ({
         pattern: r[0], cat: r[1], count: r[2] + '× letos',
         go: () => this.setState({ route: 'x-rozpocty', budTab: 1 }),
-        edit: () => this.toast('Upravit pravidlo: ' + r[0], { icon: 'ph-pencil-simple' })
+        edit: () => this.zatimNeumime('úpravu pravidla importu')
       })),
       finRulesNote: 'Zařazování běží při každém importu. Co pravidla nepokryjí, skončí v Nezařazených.',
       finImports: FIN.imports.map(i => ({
@@ -15682,7 +15707,14 @@ class Component extends DCLogic {
       vltCount: this.pl(items.length, 'položka', 'položky', 'položek') + ' · mimo hledání, mřížku i mapu',
       vltItems: items.map(v => ({
         name: v.name, meta: v.meta, bg: this.bg(v.n),
-        open: () => this.toast(v.name + ' otevřeno v trezoru · náhled se nikam neukládá', { icon: 'ph-eye' }),
+        /*
+         * „Otevřít" doopravdy otevře.
+         *
+         * Hláška hlásila „otevřeno v trezoru · náhled se nikam neukládá"
+         * a žádný náhled se neotevřel. Položka trezoru je běžná fotka
+         * knihovny, jen skrytá — světelný stůl na ni umí.
+         */
+        open: () => this.openLb(v.id),
         out: () => this.setState({
           confirm: {
             title: 'Vrátit „' + v.name + '“ do knihovny?',
@@ -15868,7 +15900,7 @@ class Component extends DCLogic {
         tagLabel: f.over ? 'po lhůtě' : 'v pořádku',
         nextWho: other(f.lastWho),
         done: () => { const prev = list; set(list.map(x => x.id === f.id ? { ...x, last: 'dnes', lastWho: other(x.lastWho), over: false } : x)); this.toast(f.name + ' — ozvali jste se · příště je na ' + this.whoDat(other(f.lastWho)), { icon: 'ph-phone-call', undo: () => set(prev) }); },
-        remind: () => this.toast('Připomeneme v souhrnu, ne hláškou · ' + f.name, { icon: 'ph-bell-simple' }),
+        remind: () => this.zatimNeumime('připomínky k rodinným kontaktům'),
         // Odkaz pro rodinu se zakládá ve Sdílení; odsud vede jen cesta tam.
         share: () => { this.setState({ route: 'shared' }); this.toast('Sdílené album pro ' + f.name + ' — vyberte fotky a odkaz vznikne tady', { icon: 'ph-link-simple' }); }
       }))
@@ -15986,7 +16018,7 @@ class Component extends DCLogic {
         toggle: () => { const prev = rows; this.setState({ paper: rows.map(x => x.id === r.id ? { ...x, on: !x.on } : x) }); this.toast(r.label + (r.on ? ' se na list netiskne' : ' se na list vytiskne'), { icon: 'ph-printer', undo: () => this.setState({ paper: prev }) }); }
       })),
       ppCount: this.pl(rows.filter(r => r.on).length, 'údaj na listu', 'údaje na listu', 'údajů na listu'),
-      ppPrint: () => this.toast('List se připravuje k tisku · vejde se na jednu stranu A4', { icon: 'ph-printer' }),
+      ppPrint: () => this.zatimNeumime('tisk — list si zatím vytiskněte z prohlížeče'),
       ppMark: () => { const prev = rows; this.setState({ paper: rows.map(x => ({ ...x, changed: false })) }); this.toast('Označeno jako vytištěné · změny se počítají od dneška', { icon: 'ph-check-circle', undo: () => this.setState({ paper: prev }) }); }
     };
   }
@@ -16009,7 +16041,7 @@ class Component extends DCLogic {
         border: t.kept ? 'var(--g-line2)' : 'var(--g-acc)',
         canKeep: !t.kept,
         keep: () => { const prev = list; set(list.map(x => x.id === t.id ? { ...x, kept: true } : x)); this.toast('Obě verze zapsány do deníku · bez rozhodnutí, kdo má pravdu', { icon: 'ph-notebook', undo: () => set(prev) }); },
-        more: () => this.toast('Hledáme další doklady v fotkách, zprávách a transakcích z toho období', { icon: 'ph-magnifying-glass' }),
+        more: () => this.zatimNeumime('dohledávání dalších dokladů k události'),
         drop: () => { const prev = list; set(list.filter(x => x.id !== t.id)); this.toast('Událost odložena · dá se vrátit', { icon: 'ph-x', undo: () => set(prev) }); }
       })),
       trNewTitle: s.trT || '',
@@ -16062,7 +16094,7 @@ class Component extends DCLogic {
       splitInsight: mode === 'ratio'
         ? 'Po zaplacení zůstane Adrianovi ' + Math.round((leftA / INCOMES.Adrian) * 100) + ' % a Makince ' + Math.round((leftM / INCOMES.Makinka) * 100) + ' % vlastní výplaty. To je ten smysl — na volné peníze zbyde oběma stejně velký kus.'
         : 'Půl na půl znamená, že Makince zůstane ' + Math.round((leftM / INCOMES.Makinka) * 100) + ' % výplaty a Adrianovi ' + Math.round((leftA / INCOMES.Adrian) * 100) + ' %. Rozdíl ' + Math.abs(Math.round((leftA / INCOMES.Adrian) * 100) - Math.round((leftM / INCOMES.Makinka) * 100)) + ' procentních bodů nese ten s nižším příjmem.',
-      splitApply: () => this.toast('Poměr uložen · trvalé příkazy se přepočítají od příštího měsíce', { icon: 'ph-check-circle' })
+      splitApply: () => this.zatimNeumime('přepočet trvalých příkazů podle poměru')
     };
   }
   emVals() {
@@ -16156,7 +16188,7 @@ class Component extends DCLogic {
           finish(d, 'manual', v);
         },
         skip: () => finish(d, 'skip'),
-        askFamily: () => this.toast('Snímek přidán do albumu pro babičku · může k němu nahrát hlas', { icon: 'ph-microphone' })
+        askFamily: () => this.zatimNeumime('album pro rodinu s hlasovým vzkazem')
       }))
     };
   }
@@ -18001,7 +18033,7 @@ class Component extends DCLogic {
         ? 'Makinka nevyužila obálku ' + this.pl(zeroK, 'měsíc', 'měsíce', 'měsíců') + ' ze šesti a průměrně bere ' + Math.round((sumK / max) * 100) + ' % toho, na co má nárok. Nejsou to ušetřené peníze — je to zvyk nic si nedovolit, a v indexu zatížení se to pozná dřív než v rozpočtu.'
         : 'Oba obálku využívají. To je nudné číslo, které o vztahu říká hodně.',
       envAct: () => { this.setState({ route: 'x-klid', klTab: 'klBurn' }); this.toast('Nevyužitá obálka je jeden ze signálů v indexu zatížení', { icon: 'ph-heartbeat' }); },
-      envRaise: () => this.toast('Obálka zvednuta na ' + this.kc(limit + 500) + ' — bez zdůvodnění, tak jak má být', { icon: 'ph-plus-circle' })
+      envRaise: () => this.zatimNeumime('zvednutí obálky — limit se mění v Rozpočtech')
     };
   }
   selfTimeVals() {
@@ -19133,6 +19165,22 @@ class Component extends DCLogic {
   // ——— helpers ———
   go = r => () => this.setState({ route: r, sel: [], selectMode: false, appTab: 0, notifOpen: false, albMenu: false });
   pl(n, one, few, many) { return n + ' ' + (n === 1 ? one : n >= 2 && n <= 4 ? few : many); }
+  /*
+   * Co aplikace zatím neumí, se řekne rovnou.
+   *
+   * Tohle nahradilo víc než třicet hlášek v minulém čase — „Uloženo",
+   * „Prodlouženo", „Připomeneme týden předem" —, za kterými nebyl žádný
+   * zápis. Vypadaly jako potvrzení a dvojice podle nich spoléhala na věci,
+   * které se nestaly: že platba je naplánovaná, že expirace odkazu je
+   * posunutá, že se někdo ozve.
+   *
+   * Věta je schválně v přítomném čase a bez omluvy. Kdo se dozví „tohle
+   * zatím neumíme", ví, na čem je; kdo se dozví „uloženo", to zjistí až
+   * ve chvíli, kdy na to spoléhal.
+   */
+  zatimNeumime(co) {
+    this.toast('Tohle zatím neumíme — ' + co, { icon: 'ph-hourglass-medium' });
+  }
   toast(text, opts = {}) {
     clearTimeout(this._tt);
     this._undoFn = typeof opts.undo === 'function' ? opts.undo : null;
@@ -19638,7 +19686,9 @@ class Component extends DCLogic {
           tagClass: off ? 'tag-neutral' : r.g === 'ruční' ? 'tag-accent-2' : 'tag-accent',
           syncLabel: off ? 'Napojení pozastaveno' : 'Poslední synchronizace dnes v 8:14',
           syncColor: off ? 'var(--g-ink3)' : 'var(--g-ok)',
-          sync: () => this.toast(r.t + ' — synchronizuji…  hotovo, 3 nové transakce', { icon: 'ph-arrows-clockwise' }),
+        // Hlásilo, že synchronizace proběhla a přinesla tři nové transakce —
+        // to číslo bylo napsané v dokumentu a nic se nesynchronizovalo.
+        sync: () => this.zatimNeumime('stahování transakcí z banky'),
           toggle: () => {
             const prev = s.acOff || {};
             this.setState({ acOff: { ...prev, [r.id]: !off } });
@@ -19650,7 +19700,7 @@ class Component extends DCLogic {
           rules: () => this.setState({ route: 'x-ucty', finTab: 1, appTab: 2 })
         };
       }),
-      acAdd: () => this.toast('Napojení nové banky — vyberte poskytovatele a potvrďte v bankovní aplikaci', { icon: 'ph-bank' }),
+      acAdd: () => this.zatimNeumime('napojení banky'),
       acHealth: rows.filter(r => !(s.acOff || {})[r.id]).length + ' ze ' + rows.length + ' účtů aktivních · importy běží každé ráno v 8:00'
     };
   }
@@ -20622,7 +20672,7 @@ class Component extends DCLogic {
             });
           }
         })),
-        geoWantAdd: () => this.toast('Nový cíl — napište zemi a orientační termín', { icon: 'ph-plus' })
+        geoWantAdd: () => this.zatimNeumime('přidání cíle odsud — místo založíte v Mapě')
       };
     }
     const been = Object.keys(counts).length;
@@ -20893,7 +20943,7 @@ class Component extends DCLogic {
         wkSlipped: slipped.map(x => ({
           title: x[0], note: x[1],
           go: () => this.setState({ route: x[2], appTab: x[3] }),
-          push: () => this.toast('„' + x[0] + '“ přesunuto na příští týden', { icon: 'ph-arrow-right' })
+          push: () => this.zatimNeumime('přesun položky týdenního přehledu')
         })),
         wkDays: ['Po', 'Út', 'St', 'Čt', 'Pá', 'So', 'Ne'].map((d, i) => {
           const n = [12, 4, 18, 6, 0, 34, 122][i];
@@ -20947,7 +20997,7 @@ class Component extends DCLogic {
         title: w[0], photos: this.pl(w[1], 'fotka', 'fotky', 'fotek'), tasks: w[2], note: w[3],
         tiles: Array.from({ length: 5 }, (_, x) => this.bg((w[4] + x * 4) % 40)),
         bar: Math.round((w[1] / 318) * 100) + '%',
-        open: () => this.toast('„' + w[0] + '“ — otevřen archivovaný přehled', { icon: 'ph-calendar-blank' })
+        open: () => this.zatimNeumime('otevírání archivovaných přehledů')
       })),
       wkPastNote: 'Nejsilnější byl týden 27. července – 2. srpna (318 fotek), nejslabší 20. – 26. července (96).'
     };
@@ -21006,7 +21056,7 @@ class Component extends DCLogic {
             this.setState({ nowDone: { ...prev, [id]: !st } });
             this.toast(st ? 'Vráceno mezi nesplněné' : '„' + p[2] + '“ odškrtnuto', { icon: 'ph-check-circle', undo: () => this.setState({ nowDone: prev }) });
           },
-          shift: () => this.toast('„' + p[2] + '“ posunuto o hodinu — program dne se přepočítal', { icon: 'ph-clock-clockwise' }),
+          shift: () => this.zatimNeumime('posouvání programu dne'),
           nav: () => { this.setState({ route: 'map' }); this.toast('Navigace na ' + p[2], { icon: 'ph-navigation-arrow' }); }
         };
       });
@@ -21039,7 +21089,7 @@ class Component extends DCLogic {
           day: d.day, title: d.title, text: d.text,
           photosLabel: this.pl(d.photos, 'fotka', 'fotky', 'fotek') + ' toho dne',
           tiles: Array.from({ length: 4 }, (_, x) => this.bg((i * 11 + x * 5) % 40)),
-          open: () => this.toast('„' + d.title + '“ — otevřen zápis k úpravě', { icon: 'ph-pencil-simple' })
+          open: () => this.zatimNeumime('úpravu zápisu odsud — otevřete ho v Deníku')
         })),
         nowDiaryNew: () => this.setState({ nowDlg: { text: '', photos: 0 } }),
         nowDiaryVoice: () => {
@@ -23366,7 +23416,7 @@ class Component extends DCLogic {
           icon: 'ph-book-bookmark', undo: () => this.jobsSet(prev)
         });
       },
-      ybExport: () => this.toast('PDF pro tiskárnu · ' + pages + ' stran · CMYK, spad 3 mm — připraveno ke stažení', { icon: 'ph-file-pdf' }),
+      ybExport: () => this.zatimNeumime('tiskové PDF — knihu objednáte tlačítkem výš'),
       ybCheck: () => { this.setState({ appTab: 3 }); this.toast('Předtisková kontrola — Rok v číslech ' + year, { icon: 'ph-shield-check' }); }
     };
   }
@@ -23950,6 +24000,21 @@ class Component extends DCLogic {
     };
   }
   // ——— export dat ———
+  /*
+   * CSV pro tabulkové procesory.
+   *
+   * Středník a BOM na začátku: Excel s českým nastavením otevře čárkou
+   * oddělený soubor jako jeden sloupec a bez BOM zobrazí diakritiku rozsypaně.
+   * Je to nudné, ale bez toho ten export nikdo nepoužije.
+   */
+  csv(name, hlavicka, radky) {
+    const pole = h => {
+      const t = String(h === null || h === undefined ? '' : h);
+      return /[";\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t;
+    };
+    const text = '\uFEFF' + [hlavicka].concat(radky).map(r => r.map(pole).join(';')).join('\r\n') + '\r\n';
+    return this.download(name, text, 'text/csv;charset=utf-8');
+  }
   download(name, text, mime) {
     try {
       const blob = new Blob([text], { type: mime || 'text/plain;charset=utf-8' });
@@ -25036,7 +25101,7 @@ class Component extends DCLogic {
           mo: p.mo ? this.kc(p.mo) + ' měsíčně' : 'bez dokupování',
           bar: Math.round((p.val / total) * 100) + '%',
           whoClass: p.who === 'společné' ? 'tag-neutral' : 'tag-accent',
-          buy: () => this.toast('Jednorázový nákup ' + p.name + ' — potvrďte v bance', { icon: 'ph-trend-up' }),
+          buy: () => this.zatimNeumime('nákup investic'),
           hide: () => {
             const prev = hide;
             this.setState({ invHide: { ...prev, [p.name]: true } });
@@ -25079,8 +25144,9 @@ class Component extends DCLogic {
           }
         };
       })(),
-      invAdd: () => this.toast('Nová pozice — vyberte typ (ETF, akcie, krypto, spoření) a zadejte nákup', { icon: 'ph-plus' }),
-      invRebalance: () => this.toast('Návrh rebalance: přidat 12 000 Kč do EM ETF a snížit hotovost o 8 000 Kč', { icon: 'ph-scales' }),
+      invAdd: () => this.zatimNeumime('zakládání investičních pozic'),
+      // Návrh byl napsaný v dokumentu — týž pro každé portfolio.
+      invRebalance: () => this.zatimNeumime('návrh rebalance portfolia'),
       invShowAll: () => {
         const prev = hide;
         if (!Object.keys(prev).length) { this.toast('Nic není skryté', { icon: 'ph-info' }); return; }
@@ -25480,21 +25546,35 @@ class Component extends DCLogic {
       tkRows: rows.map(r => {
         const k = kindOf(r.t);
         const saved = s.rowDone[r.id];
+        // Kód se počítá jednou a použije dvakrát — na obrazovce i v souboru.
+        const kod = (() => {
+          const A = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+          let h = 0;
+          (r.t + r.m).split('').forEach((ch, i) => { h = (h * 31 + ch.charCodeAt(0) + i) % 100000; });
+          return A[h % 24] + A[(h >> 3) % 24] + String(1000 + (h % 9000));
+        })();
         return {
           title: r.t, meta: r.m, icon: k[0], kind: k[1],
           tag: saved ? 'v cestě' : (r.g || 'rezervace'),
           tagClass: saved ? 'tag-accent' : r.g === 'zaplaceno' ? 'tag-accent' : r.g === 'archiv' ? 'tag-neutral' : 'tag-accent-2',
-          code: (() => {
-            const A = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
-            let h = 0;
-            (r.t + r.m).split('').forEach((ch, i) => { h = (h * 31 + ch.charCodeAt(0) + i) % 100000; });
-            return A[h % 24] + A[(h >> 3) % 24] + String(1000 + (h % 9000));
-          })(),
+          code: kod,
           save: () => {
             this.setState({ rowDone: { ...s.rowDone, [r.id]: !saved } });
             this.toast(saved ? 'Odebráno z cesty — ' + r.t : 'Uloženo do cesty — ' + r.t, { icon: saved ? 'ph-arrow-counter-clockwise' : 'ph-suitcase-rolling' });
           },
-          download: () => this.toast('Stahuji ' + r.t + ' (PDF)', { icon: 'ph-download-simple' }),
+          /*
+           * Jízdenka ke stažení — jako text, ne jako PDF.
+           *
+           * Tlačítko hlásilo „Stahuji … (PDF)" a nestahovalo nic. PDF aplikace
+           * vyrábět neumí; co umí, je dát dvojici to, co o jízdence ví, v
+           * podobě, kterou si uloží do telefonu. Slibovat formát, který nepřijde,
+           * je horší než dát jiný.
+           */
+          download: () => {
+            const text = r.t + '\n' + r.m + '\n\nRezervační kód: ' + kod + '\n';
+            const ok = this.download(r.t.replace(/[^\p{L}\p{N}]+/gu, '-').toLowerCase() + '.txt', text);
+            this.toast(ok ? 'Jízdenka stažena · ' + r.t : 'Stažení se nepodařilo', { icon: ok ? 'ph-download-simple' : 'ph-warning' });
+          },
           go: () => this.openRow(r.t, r.m)
         };
       }),
@@ -25915,7 +25995,13 @@ class Component extends DCLogic {
       gvMsg: row ? (row.msg || null) : null,
       gvNoMeta: !meta,
       gvCanDownload: !!(row && row.download),
-      gvDownload: () => this.toast('Host by teď dostal ZIP s originály · zapsali jsme stažení do aktivity', { icon: 'ph-download-simple' }),
+      /*
+       * Náhled odkazu nic nestahuje — a přestal tvrdit, že něco zapsal.
+       *
+       * Stálo tu „zapsali jsme stažení do aktivity". Tohle je náhled toho, co
+       * uvidí host; nic se tu neodesílá a do aktivity se nic nezapisuje.
+       */
+      gvDownload: () => this.toast('Tohle je náhled. Stahovat může host v odkazu, který mu pošlete.', { icon: 'ph-info' }),
       gvCanUpload: !!(row && row.guest) && !(s.gvSent || {})[row && row.name],
       gvSent: !!(row && (s.gvSent || {})[row.name]),
       /*
@@ -25925,7 +26011,7 @@ class Component extends DCLogic {
        * babičky — dvojice pak ve Sdílených viděla zásilku, kterou nikdo
        * neposlal.
        */
-      gvUpload: () => this.toast('Tady host vybere fotky ze svého telefonu. V náhledu se nic neodesílá.', { icon: 'ph-tray-arrow-down' }),
+      gvUpload: () => this.toast('Tohle je náhled. Nahrávat může host v odkazu, který mu pošlete.', { icon: 'ph-info' }),
       /*
        * Náhled hosta ukazuje, co host uvidí — nevyrábí obsah.
        *
@@ -25937,7 +26023,7 @@ class Component extends DCLogic {
        * Nahrát vzkaz může host na svém odkazu; tady se jen řekne, jak to
        * u něj vypadá.
        */
-      gvRecord: () => this.toast('Tady host nahraje vzkaz. V náhledu se nic neukládá — otevřete odkaz, jak ho dostane on.', { icon: 'ph-microphone' }),
+      gvRecord: () => this.toast('Tohle je náhled. Vzkaz nahraje host v odkazu, který mu pošlete.', { icon: 'ph-info' }),
       gvTiles: tiles.map(p => ({ bg: p.bg, open: () => this.toast('Host by fotku otevřel na celou obrazovku' + (row.download ? ' a mohl ji stáhnout' : ' — bez možnosti stahovat'), { icon: 'ph-arrows-out' }) })),
       gvCanComment: !!(row && row.comments),
       gvNoComment: !!row && !row.comments,
@@ -26046,35 +26132,57 @@ class Component extends DCLogic {
     });
     const peak = Math.max(1, ...bars);
     const uniq = Math.max(1, Math.round(views / 3.2));
-    const DEV = ['telefon Android', 'iPhone', 'notebook', 'iPad'];
-    const WHO = row.comments ? ['Babička', 'Klára', 'někdo s odkazem', 'Táta'] : ['někdo s odkazem', 'někdo s odkazem', 'někdo s odkazem', 'někdo s odkazem'];
+    /*
+     * Kdo odkaz otevřel, aplikace neví — a přestala to předstírat.
+     *
+     * Tenhle panel je místo, kam se člověk podívá, když má podezření, že se
+     * odkaz dostal dál, než měl. Byla v něm vymyšlená návštěvnost: sinusovka
+     * po dnech, „Lidí" jako otevření děleno 3,2, „Stažení" jako otevření
+     * děleno pěti — a jmenný seznam „Babička, Klára, Táta" se zařízeními
+     * a časy. Nic z toho se nikam nezapisuje; `shared_links` počítá jediné
+     * číslo, `use_count`.
+     *
+     * Vymyšlený seznam návštěv je tady horší než prázdno dvakrát: uklidní,
+     * když nemá, a když se odkaz opravdu dostane dál, ukáže špatná jména.
+     */
     return {
       statOpen: true,
       statName: row.name,
       statClose: () => this.setState({ shrStat: null }),
       statNums: [
         { label: 'Otevření', value: String(views), note: 'celkem od vytvoření' },
-        { label: 'Lidí', value: String(uniq), note: 'odhad podle zařízení' },
-        { label: 'Nejvíc', value: String(peak) + '×', note: 'nejrušnější den' },
-        { label: 'Stažení', value: row.download ? String(Math.round(views / 5)) : 'vypnuto', note: row.download ? 'originálů v ZIPu' : 'stahování zakázáno' }
+        { label: 'Heslo', value: row.protection === 'Heslo' ? 'ano' : 'ne', note: row.protection === 'Heslo' ? 'bez hesla se odkaz neotevře' : 'odkaz otevře kdokoli, kdo ho má' },
+        { label: 'Stahování', value: row.download ? 'povolené' : 'zakázané', note: row.download ? 'originály v plné kvalitě' : 'jen prohlížení' },
+        { label: 'Platí do', value: row.expires || '—', note: 'pak se odkaz neotevře' }
       ],
-      statBars: bars.map((v, i) => ({
-        h: Math.max(3, Math.round((v / peak) * 90)) + 'px',
-        fill: i >= 12 ? 'var(--g-acc)' : 'var(--g-line)',
-        title: v + ' otevření'
-      })),
-      statFrom: 'před 14 dny', statTo: 'dnes',
-      statVisits: [0, 1, 2, 3].map(i => ({
-        who: WHO[i], device: DEV[(seed + i) % 4],
-        when: ['dnes 9:12', 'včera 21:40', 'před 3 dny', 'před 6 dny'][i]
-      })),
-      statInsight: views > 60
+      // Sloupce po dnech ani seznam návštěv se nekreslí: aplikace o odkazu
+      // vede jediné číslo, celkový počet otevření.
+      statBars: [],
+      statFrom: '', statTo: '',
+      statVisits: [],
+      statInsight: (views > 60
         ? 'Odkaz žije vlastním životem — ' + views + ' otevření je víc než rodina. Zvažte heslo, nebo ho zneplatněte a pošlete nový jen těm, komu má patřit.'
         : views > 10
           ? 'Chodí sem pár lidí opakovaně. Prodloužení expirace je bezpečnější než nový odkaz — starý odkaz nikdo nemusí přeposílat dál.'
-          : 'Zatím to skoro nikdo neotevřel. Zkontrolujte, jestli odkaz dorazil — a jestli není chráněný heslem, které jste neposlali.',
-      statExtend: () => this.toast('Expirace „' + row.name + '“ prodloužena o 30 dní', { icon: 'ph-calendar-plus' }),
-      statQuiet: () => this.toast('Počítání otevření vypnuto · statistiky zůstávají do dneška', { icon: 'ph-eye-slash' })
+          : 'Zatím to skoro nikdo neotevřel. Zkontrolujte, jestli odkaz dorazil — a jestli není chráněný heslem, které jste neposlali.')
+        + ' Kdo a kdy odkaz otevřel, aplikace nezaznamenává — ví jen, kolikrát.',
+      /*
+       * Prodloužení doopravdy prodlouží.
+       *
+       * Hláška hlásila „Expirace prodloužena o 30 dní" a odkaz vypršel přesně
+       * tak, jak měl. Je to přitom tlačítko, kterým člověk zachraňuje odkaz,
+       * co má někomu ještě fungovat.
+       */
+      statExtend: () => {
+        if (!window.GalerieApi || GalerieApi.mode !== 'http') { this.zatimNeumime('prodloužení bez serveru'); return; }
+        GalerieApi.post('sdileni/' + row.id + '/prodlouzit', {})
+          .then(b => {
+            this.toast('Odkaz „' + row.name + '“ platí do ' + (b.plati_do || 'nového termínu'), { icon: 'ph-calendar-plus' });
+            if (window.GalerieObnovit) GalerieObnovit('sdileni');
+          })
+          .catch(() => this.toast('Prodloužit se nepodařilo — server neodpověděl', { icon: 'ph-warning' }));
+      },
+      statQuiet: () => this.zatimNeumime('vypnutí počítání otevření — odkaz jde jen zneplatnit')
     };
   }
   // Domácnost: dělba s rotací, kapacita týdne, lhůty a závazky, inventář bytu.
@@ -26129,7 +26237,7 @@ class Component extends DCLogic {
             else setChores(chores.map(c => c.id === t.chore.id ? { ...c, who: other(c.who) } : c));
             this.toast(better ? t.chore.name + ' přesunuto na ' + better.name.toLowerCase() : t.chore.name + ' přebírá ' + other(t.chore.who), { icon: 'ph-arrows-left-right', undo: () => setChores(prev) });
           },
-          keep: () => this.toast('Necháváme tak · varování zmizí do konce týdne', { icon: 'ph-check' })
+          keep: () => this.zatimNeumime('odložení varování o rozvržení prací')
         };
       }).filter(Boolean);
 
@@ -26553,7 +26661,7 @@ class Component extends DCLogic {
             ? 'Pro ' + acc(other) + ' máte připraveno ' + this.pl(forThis.length, 'dárek', 'dárky', 'dárků') + (done ? ', z toho ' + done + ' zabalený.' : ', nic zabaleného.') + ' Co chystá ' + other + ', se tu nedozvíte.'
             : 'Pro ' + acc(other) + ' zatím nic. Co chystá ' + other + ', se tu nedozvíte.',
           plan: () => this.setState({ giftTab: 'wish', wishFilter: 'other' }),
-          remind: () => this.toast('Připomeneme týden předem · zapsáno do Automatizace', { icon: 'ph-bell-ringing' })
+          remind: () => this.zatimNeumime('připomínku k dárku — do Automatizace se nic nezapsalo')
         };
       }),
 
@@ -26984,7 +27092,9 @@ class Component extends DCLogic {
     return {
       verList: rows,
       verMeta: list.length ? this.pl(list.length + 1, 'verze', 'verze', 'verzí') : 'jen originál',
-      verDownload: () => this.toast('Stahuji originál ' + cur.name + ' · ' + (cur.size || 'plná kvalita'), { icon: 'ph-download-simple' }),
+      // Stahovač originálu v aplikaci je; tohle tlačítko na něj jen nebylo
+      // napojené a místo souboru ukázalo hlášku „Stahuji…".
+      verDownload: () => this.stahniOriginal(cur && cur.id, cur && cur.name),
       verCompareSplit: () => this.setState({ lbSplit: true, lbSplitMode: 'orig', lbSplitPos: 50 }),
       verCompare: () => {
         const prevR = s.lbRot || {}, prevC = s.lbCropOn || {};
@@ -27748,6 +27858,15 @@ class Component extends DCLogic {
   gateBlocked() {
     const s = this.state;
     if (s.appLocked) return false;
+    /*
+     * Zamykat se dá jen tím, čím se dá odemknout.
+     *
+     * Zamčené sekce (Deník, Finance) chtějí kód — a dokud si ho člověk
+     * nenastavil, žádný nemá. Bez téhle podmínky by se do vlastního deníku
+     * nedostal vůbec: obrazovka by chtěla kód, který neexistuje. Dřív to
+     * nevadilo, protože kód „měl" každý — byl napsaný v ukázce.
+     */
+    if (! this.zamek().nastaveno) return false;
     return this.lockedRoutes().indexOf(s.route) >= 0 && !(s.secUntil && s.secUntil > Date.now());
   }
   lockIdleMs() {
@@ -28198,7 +28317,18 @@ class Component extends DCLogic {
     // `albums[1]` je záložka z doby, kdy byla alba napsaná v dokumentu a bylo jich
     // sedm. Se skutečnými alby jich může být i jedno a druhý prvek pak neexistuje —
     // celá obrazovka spadla na `album.name`.
-    const album = albums.find(a => a.id === s.albumId) || albums[1] || albums[0];
+    const albumZakladni = albums.find(a => a.id === s.albumId) || albums[1] || albums[0];
+    /*
+     * Srdíčko u alba se přepíná, ne jen hlásí.
+     *
+     * `albumFavLabel` četl `album.fav`, což je hodnota ze serveru — takže
+     * po kliknutí zůstalo tlačítko, jaké bylo, a hláška „Přidáno do
+     * oblíbených" lhala. Přepnutí přebíjí serverovou hodnotu, dokud ho
+     * server nepotvrdí.
+     */
+    const album = albumZakladni && (s.albFav || {})[albumZakladni.id] !== undefined
+      ? Object.assign({}, albumZakladni, { fav: (s.albFav || {})[albumZakladni.id] })
+      : albumZakladni;
     const cur = s.lb ? this.edited(this.photos().find(p => p.id === s.lb)) : null;
     const curIdx = s.lb ? this.photos().findIndex(p => p.id === s.lb) : 0;
     const cols = { small: '92px', med: '150px', big: '230px' }[s.grid] || '150px';
@@ -28754,10 +28884,10 @@ class Component extends DCLogic {
       tripPhotoMeta: tripPhotoSrc.length ? tripPhotoSrc.length + ' v archivu z této cesty' : 'cesta se ještě nekonala',
       tripHasDiary: !!trip.diary,
       tripDiary: (trip.diary || []).map(d => ({ date: d[0], title: d[1], text: d[2], meta: d[3] })),
-      tripAddItem: () => this.toast('Nová položka itineráře — vyberte den', { icon: 'ph-plus' }),
+      tripAddItem: () => this.zatimNeumime('přidávání do itineráře'),
       tripOpenPhotos: () => trip.photoMatch ? this.setState({ route: 'all', query: trip.photoMatch }) : this.toast('Fotky se zařadí po návratu', { icon: 'ph-info' }),
       tripAddExpense: () => this.setState({ tripExp: { label: '', amount: '', cat: 'Cesty' } }),
-      tripMore: () => this.toast('Duplikovat cestu, exportovat itinerář, archivovat', { icon: 'ph-dots-three' }),
+      tripMore: () => this.zatimNeumime('duplikaci cesty ani export itineráře'),
       tripLiveCan: !trip.past,
       tripLive: () => { this.setState({ route: 'x-teď', appTab: 0 }); this.toast('Režim na cestě — dnešní program, útrata dne a offline mapa', { icon: 'ph-compass' }); },
 
@@ -29497,10 +29627,23 @@ class Component extends DCLogic {
       toggleSort: () => this.setState({ sort: s.sort === 'desc' ? 'asc' : 'desc' }),
       selectModeLabel: s.selectMode ? 'Hotovo' : 'Vybrat',
       toggleSelectMode: () => this.setState({ selectMode: !s.selectMode, sel: s.selectMode ? [] : s.sel }),
-      years: [2026, 2025, 2024, 2023, 2022, 2021, 2020, 2019].map((y, i) => ({
-        label: y, count: ['6 204', '4 812', '5 190', '2 640', '1 908', '1 502', '1 060', '1 000'][i],
-        bg: y === 2026 ? 'var(--g-panel)' : 'transparent', fg: y === 2026 ? 'var(--g-ink)' : 'var(--g-ink2)',
-        go: () => this.toast('Přeskočeno na rok ' + y, { icon: 'ph-calendar-dots' })
+      /*
+       * Roky a počty ze skutečné knihovny — a proskočení na rok, které skáče.
+       *
+       * Osm let s počty „6 204, 4 812, 5 190…" bylo napsaných v dokumentu:
+       * dvojice s fotkami z jednoho roku viděla osm sloupců cizí knihovny.
+       * `YBCH` počítá roky z `taken_at`; kliknutí teď rok opravdu vyfiltruje,
+       * dřív jen napsalo „Přeskočeno na rok 2019" a nic se nestalo.
+       */
+      years: (YBCH || []).map(r => ({
+        label: r[0], count: this.cislo(r[1]),
+        bg: String(s.srYear) === String(r[0]) ? 'var(--g-panel)' : 'transparent',
+        fg: String(s.srYear) === String(r[0]) ? 'var(--g-ink)' : 'var(--g-ink2)',
+        go: () => {
+          const stejny = String(s.srYear) === String(r[0]);
+          this.setState({ srYear: stejny ? 'kdykoli' : String(r[0]), searchOpen: !stejny, query: '' });
+          this.toast(stejny ? 'Filtr roku zrušen' : 'Zobrazen rok ' + r[0], { icon: 'ph-calendar-dots' });
+        }
       })),
 
       hasFilters: s.filters.length > 0, filterCount: s.filters.length,
@@ -29600,7 +29743,21 @@ class Component extends DCLogic {
       related: albums.filter(a => a.id !== album.id).slice(0, 3).map(a => ({ name: a.name, meta: a.count, bg: a.bg || this.bg(a.n), go: () => this.setState({ route: 'album', albumId: a.id }) })),
       albumFavLabel: album.fav ? 'V oblíbených' : 'Do oblíbených', albumFavColor: album.fav ? 'var(--g-mag)' : 'var(--g-ink)',
       albumDownload: () => this.stahniAlbum(album.id, album.name),
-      toggleFavAlbum: () => this.toast(album.fav ? 'Odebráno z oblíbených' : 'Přidáno do oblíbených', { icon: 'ph-heart-straight', color: 'var(--g-mag)' }),
+      /*
+       * Oblíbené album se doopravdy přepne.
+       *
+       * Tlačítko jen ohlásilo „Přidáno do oblíbených" a srdíčko nad ním
+       * zůstalo, jaké bylo — po obnovení stránky po tom nebyla stopa.
+       */
+      toggleFavAlbum: () => {
+        const prev = s.albFav || {};
+        const nove = !album.fav;
+        this.setState({ albFav: { ...prev, [album.id]: nove } });
+        this.toast(nove ? 'Přidáno do oblíbených' : 'Odebráno z oblíbených', {
+          icon: 'ph-heart-straight', color: 'var(--g-mag)',
+          undo: () => this.setState({ albFav: prev })
+        });
+      },
       openMove: () => this.setState({ confirm: { title: 'Přesunout album', body: 'Vyberte nové umístění pro „' + album.name + '“. Album nelze vložit do sebe ani do svého podalba — taková místa nejsou v seznamu nabízená.', cta: 'Přesunout sem', btnBg: 'var(--g-acc)', go: () => { this.setState({ confirm: null }); this.toast('Album přesunuto', { undo: true }); } } }),
       albMenuOpen: !!s.albMenu,
       openAlbumMore: () => this.setState({ albMenu: !s.albMenu }),

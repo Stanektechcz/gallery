@@ -367,6 +367,61 @@ class ZbyleSeznamyTest extends TestCase
         $this->assertArrayNotHasKey('rowDone', $stav);
     }
 
+    /**
+     * „Prodloužit o 30 dní" doopravdy prodlouží.
+     *
+     * Tlačítko ve statistice odkazu ohlásilo „Expirace prodloužena" a odkaz
+     * vypršel přesně tak, jak měl — přitom je to to, čím člověk zachraňuje
+     * odkaz, který má někomu ještě fungovat.
+     */
+    public function test_prodlouzeni_odkazu(): void
+    {
+        $odkaz = DB::table('shared_links')->insertGetId([
+            'uuid' => (string) Str::uuid(),
+            'token' => Str::random(24),
+            'created_by' => $this->adri->id,
+            'gallery_space_id' => $this->prostor->id,
+            'target_type' => 'selection',
+            'name' => 'Fotky pro babičku',
+            'expires_at' => now()->addDays(3),
+            'is_active' => true,
+            'use_count' => 0,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $this->postJson('/api/sdileni/'.$odkaz.'/prodlouzit')->assertOk()->assertJson(['ok' => true]);
+
+        // Počítá se od stávající platnosti, ne ode dneška: u odkazu, který
+        // platí ještě tři dny, by prodloužení od dneška bylo zkrácení o tři.
+        $do = CarbonImmutable::parse(DB::table('shared_links')->where('id', $odkaz)->value('expires_at'));
+        $this->assertSame(33, (int) round(now()->startOfDay()->diffInDays($do)));
+    }
+
+    /** Prošlý odkaz se prodlužuje ode dneška, ne od data, které minulo. */
+    public function test_prodlouzeni_prosleho_odkazu(): void
+    {
+        $odkaz = DB::table('shared_links')->insertGetId([
+            'uuid' => (string) Str::uuid(),
+            'token' => Str::random(24),
+            'created_by' => $this->adri->id,
+            'gallery_space_id' => $this->prostor->id,
+            'target_type' => 'selection',
+            'name' => 'Starý odkaz',
+            'expires_at' => now()->subMonths(2),
+            'is_active' => false,
+            'use_count' => 0,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $this->postJson('/api/sdileni/'.$odkaz.'/prodlouzit')->assertOk();
+
+        $radek = DB::table('shared_links')->where('id', $odkaz)->first();
+        $do = CarbonImmutable::parse($radek->expires_at);
+
+        $this->assertSame(30, (int) round(now()->startOfDay()->diffInDays($do)));
+        $this->assertTrue((bool) $radek->is_active);
+    }
+
     /** Cizí klíče v `rowDone` projdou beze změny — patří jiným obrazovkám. */
     public function test_cizi_klice_v_rowdone_zustanou(): void
     {

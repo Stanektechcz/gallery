@@ -15,7 +15,6 @@ class User extends Authenticatable
     use HasApiTokens {
         createToken as sanctumCreateToken;
     }
-
     use HasFactory, Notifiable;
 
     protected $fillable = [
