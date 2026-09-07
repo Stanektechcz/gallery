@@ -148,7 +148,7 @@ class PrototypController extends Controller
          * ji, nechalo název paměti stejný a prohlížeč podával starou kopii dál.
          *
          * Dvojice pak při každém výpadku spojení viděla „Maki čeká na
-         * připojení" — jméno, které aplikace nenesla už měsíce, a obrazovku,
+         * připojení" — jméno, které aplikace přestala nést 6. září, a obrazovku,
          * kterou nešlo nijak zahodit.
          */
         foreach (self::SKORAPKA as $soubor) {
@@ -211,7 +211,7 @@ class PrototypController extends Controller
             '    await self.clients.claim();' => <<<'JS'
     // Skořápka znovu ze sítě: soubor, který se mezitím změnil, by v paměti
     // zůstal až do přejmenování paměti — a náhradní obrazovka se starým jménem
-    // aplikace tam takhle přežila měsíce.
+    // aplikace tam takhle přežila přes nasazení, které ji přejmenovalo.
     const shell = await caches.open(SHELL);
     await Promise.all(SHELL_FILES.map(f => shell.add(new Request(f, { cache: 'reload' })).catch(() => {})));
     await self.clients.claim();
