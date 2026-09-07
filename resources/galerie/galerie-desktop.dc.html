@@ -12887,7 +12887,9 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
           <button class="btn btn-primary" onClick="{{ lockSignIn }}" disabled="{{ lockSignCant }}" style="width:100%; margin-top:14px; gap:7px"><i class="ph-duotone ph-sign-in" style="font-size:17px"></i>{{ lockSignLabel }}</button>
           <div style="display:flex; gap:10px; align-items:baseline; margin-top:18px; padding-top:11px; border-top:1px solid var(--g-line)">
             <div style="font-size:12px; line-height:1.6; color:var(--g-ink3)">{{ lockPwdHint }}</div>
-            <button class="btn btn-ghost" onClick="{{ obStart }}" style="margin-left:auto; flex:none; font-size:12.5px; gap:6px"><i class="ph-duotone ph-sparkle" style="font-size:15px"></i>První spuštění</button>
+            <sc-if value="{{ obPrvni }}">
+              <button class="btn btn-ghost" onClick="{{ obStart }}" style="margin-left:auto; flex:none; font-size:12.5px; gap:6px"><i class="ph-duotone ph-sparkle" style="font-size:15px"></i>První spuštění</button>
+            </sc-if>
             <!--
               Vedle přihlášení stálo tlačítko „Přeskočit zámek“ a jeho hláška
               to říkala rovnou: „v prototypu jde dovnitř i bez kódu“. Jedním
@@ -22820,6 +22822,14 @@ class Component extends DCLogic {
     ][step];
     return {
       obOn: !!s.obOpen,
+      /*
+       * Průvodce prvním spuštěním jen tam, kde je co zakládat.
+       *
+       * Zakládá dvojici, zapíná sekce a nastavuje sdílení — tedy přesně to, co
+       * je po jeho dokončení hotové. Nabízet ho dál znamená zvát člověka, aby
+       * si přepsal nastavení, které si zrovna udělal.
+       */
+      obPrvni: ! (this.state.obApplied || (((window.GalerieData || {}).DVOJICE || []).length >= 2)),
       obStart: () => this.setState({ obOpen: true, obStep: 0 }),
       obClose: () => this.setState({ obOpen: false }),
       obNarrow: (s.vw || 1440) < 860,
@@ -29918,7 +29928,10 @@ class Component extends DCLogic {
       quickActions: [
         { label: 'Přidat cokoliv (Q)', icon: 'ph-lightning', go: () => this.setState({ capOpen: true, capText: '', capKind: {}, capSkip: {} }) },
         { label: 'Požádat druhého', icon: 'ph-hand-heart', go: () => this.setState({ route: 'x-zadosti', appTab: 0 }) },
-        { label: 'Nastavení pro dva', icon: 'ph-sparkle', go: () => this.setState({ obOpen: true, obStep: 0 }) },
+        // „Nastavení pro dva" je týž průvodce; po dokončení mezi rychlé akce nepatří.
+        ...(s.obApplied || (((window.GalerieData || {}).DVOJICE || []).length >= 2)
+          ? []
+          : [{ label: 'Nastavení pro dva', icon: 'ph-sparkle', go: () => this.setState({ obOpen: true, obStep: 0 }) }]),
         { label: 'Nahrát fotografie', icon: 'ph-upload-simple', go: () => this.setState({ uploadOpen: true }) },
         { label: 'Vytvořit album', icon: 'ph-folder-plus', go: () => this.setState({ naOpen: true, naName: '', naParent: '', naWithSel: s.sel.length > 0 }) },
         { label: 'Přidat místo', icon: 'ph-map-pin-plus', go: this.go('map') },

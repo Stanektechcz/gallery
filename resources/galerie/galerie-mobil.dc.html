@@ -9437,7 +9437,9 @@ class Component extends DCLogic {
        * hotové. Server o dvojici říká v `DVOJICE`; když ji zná, průvodce se
        * neukazuje. Když neřekl nic, tvrdit nebudeme nic a tlačítko zůstane.
        */
-      obPrvni: (((window.GalerieData || {}).DVOJICE || []).length < 2),
+      // Hotovo poznáme dvěma způsoby a stačí jeden: průvodce doběhl,
+      // nebo server o dvojici ví.
+      obPrvni: ! (s.obApplied || (((window.GalerieData || {}).DVOJICE || []).length >= 2)),
       obStart: () => this.setState({ obOpen: true, obStep: 0 }),
       obStepNum: 'Krok ' + (step + 1) + ' z ' + MOBSTEPS.length,
       obTitle: MOBSTEPS[step][0],
