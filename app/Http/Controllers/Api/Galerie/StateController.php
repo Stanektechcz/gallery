@@ -14,6 +14,7 @@ use App\Services\Provoz\InboxVeStavu;
 use App\Services\Provoz\KapsleVeStavu;
 use App\Services\Provoz\KlidVeStavu;
 use App\Services\Provoz\MechanismyVeStavu;
+use App\Services\Provoz\MediaVeStavu;
 use App\Services\Provoz\NakupyVeStavu;
 use App\Services\Provoz\NastaveniVeStavu;
 use App\Services\Provoz\PlanovaniVeStavu;
@@ -73,6 +74,7 @@ class StateController extends Controller
         private readonly InboxVeStavu $inbox,
         private readonly NakupyVeStavu $nakupy,
         private readonly SeznamyVeStavu $seznamy,
+        private readonly MediaVeStavu $media,
     ) {}
 
     public function show(Request $request): JsonResponse
@@ -200,6 +202,16 @@ class StateController extends Controller
             if ($this->trezor->tykaSe($patch)) {
                 $this->trezor->zpracuj($patch, GallerySpace::findOrFail($coupleId));
                 $patch = $this->trezor->bezTrezoru($patch);
+            }
+
+            /*
+             * Oblíbené a úpravy fotek (popisek, místo, datum, štítky).
+             *
+             * Zůstávají ve stavu, ale propíšou se i do databáze — jinak by
+             * opravené datum fotku přesunulo jen v jednom prohlížeči.
+             */
+            if ($this->media->tykaSe($patch)) {
+                $this->media->zpracuj($patch, $state->toClientArray(), GallerySpace::findOrFail($coupleId), $uzivatel);
             }
 
             /*

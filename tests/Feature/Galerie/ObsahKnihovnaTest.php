@@ -249,7 +249,8 @@ class ObsahKnihovnaTest extends TestCase
         $odpoved = $this->getJson('/api/data/knihovna')->assertOk();
 
         // Úzké rozvržení kreslí tytéž lidi z `APEOPLE`, takže platí totéž.
-        $this->assertSame(['PERSONS', 'APEOPLE'], $odpoved->json('uplne'));
+        // `ATAGS` chodí i bez štítků (prázdné záložky), proto je v seznamu také.
+        $this->assertSame(['PERSONS', 'ATAGS', 'APEOPLE'], $odpoved->json('uplne'));
     }
 
     /** Skrytá osoba se pozná — prototyp podle toho plní záložku „Skryté". */

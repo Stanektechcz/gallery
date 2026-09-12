@@ -31479,6 +31479,22 @@ class Component extends DCLogic {
       lbAlbumOpts: albums.map(a => ({ value: a.name, label: a.path || a.name })).concat([{ value: '', label: 'Bez albumu' }]),
       lbSetAlbum: e => {
         const v = e.target.value, prev = s.edits;
+        /*
+         * Se serverem jde změna alba do databáze (název alba je jedinečný jen
+         * v rámci obrazovky, proto se album dohledá podle něj mezi serverovými).
+         * Místní přepis v `edits` by po obnovení stránky tvrdil staré album.
+         */
+        const naServeru = this.albaNaServeru() && s.lb && ((window.GalerieData || {}).PHOTOS || []).some(p => p.id === s.lb);
+        const cil = naServeru ? ((window.GalerieData || {}).ALBUMS || []).find(a => a.name === v) : null;
+        if (naServeru && (cil || v === '')) {
+          window.GalerieApi.post('alba/zaradit', { album: cil ? cil.id : null, media: [s.lb] })
+            .then(res => {
+              if (window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data, res.prazdne);
+              this.toast(v ? 'Přesunuto do „' + v + '“' : 'Odebráno z albumu', { icon: 'ph-folder-plus' });
+            })
+            .catch(er => this.toast(((er && er.body) || {}).zprava || 'Album se nepodařilo změnit', { icon: 'ph-warning', color: 'var(--g-mag)' }));
+          return;
+        }
         const ed = { ...s.edits };
         ed[s.lb] = { ...(ed[s.lb] || {}), album: v };
         this.setState({ edits: ed });
