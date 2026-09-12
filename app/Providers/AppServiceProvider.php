@@ -17,6 +17,7 @@ use App\Services\Billing\EntitlementService;
 use App\Services\Obsah\Cesty;
 use App\Services\Obsah\Darky;
 use App\Services\Obsah\Denik;
+use App\Services\Obsah\Dnes;
 use App\Services\Obsah\Domacnost;
 use App\Services\Obsah\Finance;
 use App\Services\Obsah\FinanceRozbory;
@@ -25,12 +26,12 @@ use App\Services\Obsah\Knihovna;
 use App\Services\Obsah\Kucharka;
 use App\Services\Obsah\Mechanismy;
 use App\Services\Obsah\Planovani;
-use App\Services\Obsah\Tyden;
 use App\Services\Obsah\Pravidla;
 use App\Services\Obsah\Pribeh;
 use App\Services\Obsah\Rozhodovani;
 use App\Services\Obsah\Sdileni;
 use App\Services\Obsah\System;
+use App\Services\Obsah\Tyden;
 use App\Services\Obsah\Uklid;
 use App\Services\Obsah\Vztah;
 use App\Services\Obsah\Zdravi;
@@ -86,6 +87,7 @@ class AppServiceProvider extends ServiceProvider
                 $app->make(Mechanismy::class),
                 $app->make(Rozhodovani::class),
                 $app->make(Tyden::class),
+                $app->make(Dnes::class),
             ]);
     }
 

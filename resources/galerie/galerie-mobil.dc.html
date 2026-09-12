@@ -5707,7 +5707,9 @@ class Component extends DCLogic {
     ['pointerdown', 'keydown'].forEach(e => window.addEventListener(e, this._actH));
     this._idleI = setInterval(() => {
       const ms = this.lockIdleMs();
-      if (!ms || this.state.appLocked) return;
+      // Bez kódu se nezamyká ani nehlásí — hláška každé čtyři vteřiny šla do
+      // proudu událostí a s ním do stavu na serveru (PATCH každé 4 s).
+      if (!ms || this.state.appLocked || !this.zamek().nastaveno) return;
       if (Date.now() - (this._act || 0) > ms) this.lockNow('Zamčeno po nečinnosti · ' + (this.state.lockIdle || '5 min'));
     }, 4000);
     if (this.state.lockStart === false) this.setState({ appLocked: false });
@@ -5970,7 +5972,8 @@ class Component extends DCLogic {
         id: id, text: text, icon: opts.icon || 'ph-check-circle', who: this.ndMe(),
         clock: d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0'),
         canUndo: typeof opts.undo === 'function', undone: false
-      }].concat(this.state.events || []);
+        // Strop: proud jde do společného stavu s každým zápisem.
+      }].concat((this.state.events || []).slice(0, 199));
     }
     this.setState(patch);
     this.tt = setTimeout(() => this.setState({ toast: null }), 4200);
@@ -7877,7 +7880,7 @@ class Component extends DCLogic {
      * přihlášení heslem. Dřív to nevadilo: kód „měl" každý, byl v ukázce.
      */
     if (! this.zamek().nastaveno) {
-      if (why) this.toast('Zamknout jde, až si nastavíte kód — Nastavení → Zámek', { icon: 'ph-lock-simple', local: true });
+      if (why) this.toast('Zamknout jde, až si nastavíte kód — Nastavení → Zámek', { icon: 'ph-lock-simple', local: true, silent: true });
       return;
     }
     // Na zapamatovaném zařízení stačí kód, jinak se přihlašuje znovu — stejné

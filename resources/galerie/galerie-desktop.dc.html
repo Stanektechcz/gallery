@@ -322,8 +322,8 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
             <div style="display:flex; flex-direction:column; gap:22px">
               <div>
                 <div style="font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--g-ink3); margin-bottom:10px">Poslední nahrávání</div>
-                <div style="font-size:20px; line-height:1.25">Makinka přidala 34 fotek do <a href="#" onClick="{{ openAlbumBeskydy }}" style="color:var(--g-acc)">Beskydy → Pustevny</a></div>
-                <div style="font-size:13px; color:var(--g-ink2); margin-top:6px">včera ve 21:40 · 34 originálů bezpečně uloženo</div>
+                <div style="font-size:20px; line-height:1.25">{{ upText }}<sc-if value="{{ upHasAlbum }}"> do <a href="#" onClick="{{ upGo }}" style="color:var(--g-acc)">{{ upAlbum }}</a></sc-if></div>
+                <div style="font-size:13px; color:var(--g-ink2); margin-top:6px">{{ upMeta }}</div>
               </div>
               <div style="display:flex; flex-direction:column; gap:7px">
                 <div style="font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--g-ink3); margin-bottom:3px">Rychlé akce</div>
@@ -673,11 +673,11 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                 <sc-if value="{{ homeQ.sent }}">
                   <div style="display:flex; flex-direction:column; gap:10px; margin-top:12px">
                     <div style="padding:11px 12px; background:var(--g-panel); border-radius:2px">
-                      <div style="font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--g-ink3)">Adrian</div>
+                      <div style="font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--g-ink3)">{{ homeQ.jaJmeno }}</div>
                       <div style="font-size:14.5px; line-height:1.5; margin-top:3px">{{ homeQ.mine }}</div>
                     </div>
                     <div style="padding:11px 12px; background:var(--g-mag-soft); border-radius:2px">
-                      <div style="font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--g-mag)">Makinka</div>
+                      <div style="font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--g-mag)">{{ homeQ.onJmeno }}</div>
                       <div style="font-size:14.5px; line-height:1.5; margin-top:3px">{{ homeQ.theirs }}</div>
                     </div>
                   </div>
@@ -710,8 +710,10 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                 <div style="font-size:13px; color:var(--g-ink2); margin-top:9px">{{ homeGoal.left }}</div>
                 <div style="font-size:12.5px; color:var(--g-ink3); margin-top:2px">{{ homeGoal.tempo }} · {{ homeGoal.eta }}</div>
                 <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:12px">
-                  <button class="btn btn-secondary" onClick="{{ homeGoal.add1 }}" style="font-size:12.5px">+ 1 000 Kč</button>
-                  <button class="btn btn-secondary" onClick="{{ homeGoal.add5 }}" style="font-size:12.5px">+ 5 000 Kč</button>
+                  <sc-if value="{{ homeGoal.canAdd }}">
+                    <button class="btn btn-secondary" onClick="{{ homeGoal.add1 }}" style="font-size:12.5px">+ 1 000 Kč</button>
+                    <button class="btn btn-secondary" onClick="{{ homeGoal.add5 }}" style="font-size:12.5px">+ 5 000 Kč</button>
+                  </sc-if>
                   <button class="btn btn-ghost" onClick="{{ homeGoal.go }}" style="font-size:12.5px; margin-left:auto">Rozpočty →</button>
                 </div>
               </div>
@@ -821,7 +823,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
           <div style="margin-top:44px">
             <div style="display:flex; align-items:baseline; gap:12px; margin-bottom:14px">
               <h3 style="margin:0; font-size:23px">Vzpomínky z tohoto dne</h3>
-              <span style="font-size:12px; color:var(--g-ink3)">16. srpna · 2019, 2021, 2024</span>
+              <span style="font-size:12px; color:var(--g-ink3)">{{ otdHead }}</span>
               <button class="btn btn-ghost" onClick="{{ goAll }}" style="margin-left:auto; font-size:13px">Zobrazit vše</button>
             </div>
             <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:6px">
@@ -13857,15 +13859,14 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
             <button class="btn btn-secondary" onClick="{{ pickCamera }}" style="gap:6px"><i class="ph-duotone ph-camera" style="font-size:16px"></i>Vyfotit</button>
           </div>
         </div>
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px">
-          <div class="field"><label>Cílové album</label>
-            <select class="input" aria-label="Cílové album"><option>Beskydy → Pustevny</option><option>Chorvatsko 2026 → Zadar</option><option>Česká republika → Praha → Akce → Muzeum</option><option>+ Vytvořit nové album…</option></select>
-          </div>
-          <div class="field"><label>Místo</label><input class="input" value="Pustevny, Beskydy"></div>
-          <div class="field"><label>Společné datum (volitelné)</label><input class="input" type="date" value="2026-08-16"></div>
-          <div class="field"><label>Štítky</label><input class="input" placeholder="výlet, hory, ráno"></div>
+        <!-- Cílové album, místo, společné datum a štítky tu byly jako pole, která
+             nahrávání vůbec nepřečetlo: vybrané album se ignorovalo a „Pustevny,
+             Beskydy" bylo předvyplněné u každého. Datum a poloha se berou z EXIF,
+             do alba se fotky zařadí po nahrání v knihovně. -->
+        <div style="font-size:13px; color:var(--g-ink2); display:flex; gap:8px; align-items:flex-start">
+          <i class="ph-duotone ph-map-pin-area" style="font-size:17px; color:var(--g-acc); flex:none"></i>
+          <span>Datum a poloha se vezmou ze souborů. Do alba fotky zařadíte po nahrání — v knihovně je označte a zvolte „Přidat do alba".</span>
         </div>
-        <label class="radio"><input type="checkbox" checked="{{ true }}"><span class="dot"></span>Zachovat původní datum a polohu ze souborů</label>
         <div style="font-size:12.5px; color:var(--g-ink2); display:flex; gap:8px; align-items:flex-start; padding:10px 12px; border-radius:2px; background:var(--g-panel)">
           <i class="ph-duotone ph-info" style="font-size:17px; color:var(--g-acc); flex:none"></i>
           <span>Nechte galerii otevřenou, dokud se přenos nedokončí. Na mobilu se nahrávání po zavření aplikace pozastaví a příště bude pokračovat.</span>
@@ -19356,7 +19357,9 @@ class Component extends DCLogic {
         who: this.meWho(), at: d.getTime(),
         clock: d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0'),
         canUndo: typeof opts.undo === 'function', undone: false
-      }].concat(this.state.events || []);
+        // Strop: proud se ukládá do společného stavu a posílá s každým zápisem.
+        // Bez něj rostl donekonečna a s ním i každý PATCH.
+      }].concat((this.state.events || []).slice(0, 199));
     }
     // Offline: každá změna se odloží do fronty a odešle až po obnovení připojení.
     if (this.state.offline && opts.icon !== 'ph-info' && !opts.local) {
@@ -21217,6 +21220,11 @@ class Component extends DCLogic {
   tyden() {
     const w = (window.GalerieData || {}).WEEK;
     return w && w.now ? w : null;
+  }
+  // Úvodní obrazovka ze serveru (`DNES`); `null` znamená ukázku bez přihlášení.
+  dnesData() {
+    const d = (window.GalerieData || {}).DNES;
+    return d && d.den ? d : null;
   }
   wkZeServeru(key) {
     const W = this.tyden(), s = this.state, photos = this.photos();
@@ -24216,6 +24224,32 @@ class Component extends DCLogic {
   // ——— Týdenní shrnutí (automatická karta) ———
   digestVals() {
     const s = this.state;
+    const W = this.tyden();
+    if (W) {
+      /*
+       * Týdenní shrnutí z téhož `WEEK` jako Týdenní přehled. Ukázka měla
+       * „214 fotek, sobota na Pustevnách, 31 h spolu" a tlačítko „Sestavit
+       * znovu", které jen přehodilo mezi dvěma napsanými sadami čísel.
+       */
+      const N = W.now;
+      const text = N.title + '. ' + N.stats.map(x => x[0] + ' ' + x[1]).join(', ') + '.';
+      const m = N.moments[0];
+      return {
+        dgHead: N.title,
+        dgMeta: 'spočítáno z knihovny, úkolů, deníku a výdajů',
+        dgNums: N.stats.map(x => ({ label: x[0], value: x[1], note: x[2] })),
+        dgGood: N.moments.map(x => ({ title: x.title, note: x.meta, go: () => this.setState({ route: 'x-tyden', appTab: 0 }) })),
+        dgBad: N.slipped.map(x => ({ title: x[0], note: x[1], go: () => this.setState({ route: x[2], appTab: 0 }) })),
+        dgMoment: m ? { bg: m.tiles[0] || 'var(--g-panel)', title: m.title, meta: m.meta } : { bg: 'var(--g-panel)', title: 'Zatím bez fotek', meta: 'z tohohle týdne' },
+        dgRuleOn: false, dgRuleLabel: 'Týdenní přehled', dgRuleIcon: 'ph-calendar-dots', dgRuleColor: 'var(--g-ink3)',
+        dgRuleToggle: () => this.setState({ route: 'x-tyden', appTab: 0 }),
+        dgRegen: () => { window.GalerieObnovit && window.GalerieObnovit('tyden'); this.toast('Shrnutí se přepočítá ze serveru', { icon: 'ph-arrows-clockwise' }); },
+        dgToDiary: () => this.setState({ route: 'x-denik', appTab: 0, dnDlg: { mode: 'new', key: 'diary', orig: null, date: this.dnesCesky(), title: 'Týdenní shrnutí', text: text, mood: 'radost' } }),
+        dgToChat: () => { this.setState({ route: 'x-zpravy', appTab: 0 }); this.msgSend('t', text, ''); },
+        dgGoWeek: () => this.setState({ route: 'x-tyden', appTab: 0 }),
+        dgGoRules: () => this.setState({ route: 'x-pravidla', appTab: 0 })
+      };
+    }
     const seed = s.dgSeed || 0;
     const rule = this.rulesAll().find(r => r.id === 'r5');
     const ruleOn = rule ? !!rule.on : false;
@@ -24907,6 +24941,19 @@ class Component extends DCLogic {
     const mpr = this.memPrefs();
     const memAny = this.memAll().some(m => mpr[m.kind] && m.count >= mpr.minPhotos && !(s.memHidden || {})[m.id] && !(s.memLater || {})[m.id]);
     W.mem.show = W.mem.show && memAny;
+    /*
+     * Dlaždice bez skutečných dat se přihlášené dvojici neukazují — stejně
+     * jako „Dnes před lety" bez vzpomínek. Kapsli „z prvního ledna" aplikace
+     * nemá kde uložit a cíl „Cesta na Islandu" nikdo nezaložil.
+     */
+    const D = this.dnesData();
+    if (D) {
+      W.archive.show = W.archive.show && D.archiv.length > 0;
+      W.rhythm.show = W.rhythm.show && !!D.rytmus;
+      W.goal.show = W.goal.show && !!D.cil;
+      W.capsule.show = false;
+      W.day.show = W.day.show && D.den.radky.length > 0;
+    }
     const hiddenList = defs.filter(d => hide[d[0]]);
     return {
       homeW: W,
@@ -24945,7 +24992,11 @@ class Component extends DCLogic {
     const s = this.state, ph = this.photos();
     const p = ph[(ph.length - 7) % ph.length] || ph[0];
     const d = this.diaryOf('diary')[0] || { title: '—', text: '', date: '' };
-    const items = [
+    const D = this.dnesData();
+    // Se serverem jen to, co ke stejnému dni opravdu je; prázdné schová dlaždici.
+    const items = D ? (D.archiv.length ? D.archiv : [['Archiv', 'ph-archive', 'Dnes nic z archivu', '', '', 'var(--g-panel)', 'all']]).map(a => ({
+      kind: a[0], icon: a[1], title: a[2], meta: a[3], body: a[4], bg: a[5], go: () => this.setState({ route: a[6], appTab: 0 })
+    })) : [
       { kind: 'Fotka', icon: 'ph-image', title: 'Ráno nad mlhou', meta: '16. srpna 2024 · Lysá hora', body: 'Vstávání ve čtyři se vyplatilo — nad mlhou jsme byli sami.', bg: p ? p.bg : 'var(--g-photo)', go: () => this.setState({ route: 'all' }) },
       { kind: 'Výdaj', icon: 'ph-receipt', title: 'Kino a večeře', meta: '16. srpna 2023 · ' + this.kc(980), body: 'Ke stejnému dni loni: první letní kino v Lucerně.', bg: 'var(--g-panel)', go: () => this.setState({ route: 'x-transakce', appTab: 0 }) },
       { kind: 'Zápis', icon: 'ph-notebook', title: d.title, meta: d.date, body: (d.text || '').slice(0, 130), bg: 'var(--g-panel)', go: () => this.setState({ route: 'x-denik', appTab: 0 }) },
@@ -24963,6 +25014,26 @@ class Component extends DCLogic {
   }
   // Rytmus vztahu — 52 týdnů roku obarvených podle toho, kde jsme byli.
   homeRhythmVals() {
+    const R = (this.dnesData() || {}).rytmus;
+    if (R) {
+      // Doma, nebo na cestě — „každý jinde" a „u rodiny" aplikace nepozná, tak to netvrdí.
+      const DOMA = { id: 'home', label: 'doma', color: 'var(--g-acc-soft)' }, CESTA = { id: 'trip', label: 'na cestách', color: 'var(--g-acc)' };
+      const weeks = R.tydny.map((k, w) => {
+        const K = k === 'trip' ? CESTA : DOMA;
+        return { i: w, kind: k, color: K.color, label: 'Týden ' + (w + 1) + ' · ' + K.label };
+      });
+      const cnt = id => weeks.filter(w => w.kind === id).length;
+      return {
+        homeRhythm: {
+          days: R.dni !== null ? R.dni.toLocaleString('cs-CZ') : '—',
+          years: R.dni !== null ? (R.dni / 365.25).toFixed(1).replace('.', ',') + ' roku od prvního milníku' : 'začátek zapíšete jako milník',
+          weeks,
+          legend: [DOMA, CESTA].map(k => ({ label: k.label, color: k.color, n: this.pl(cnt(k.id), 'týden', 'týdny', 'týdnů') })),
+          note: 'Letos ' + this.pl(cnt('trip'), 'týden', 'týdny', 'týdnů') + ' na cestách — podle zapsaných cest.',
+          go: () => this.setState({ route: 'x-statistiky', appTab: 0 })
+        }
+      };
+    }
     const KIND = [
       { id: 'home', label: 'doma', color: 'var(--g-acc-soft)' },
       { id: 'trip', label: 'na cestách', color: 'var(--g-acc)' },
@@ -24999,6 +25070,45 @@ class Component extends DCLogic {
     ];
     const i = (s.homeQIdx || 0) % QS.length;
     const cur = QS[i];
+    if (this.dnesData()) {
+      /*
+       * Odpovědi se ukládají do společného stavu — každý pod svým jménem.
+       * Ukázka měla odpověď druhého napsanou předem („Že jsi ráno uvařil
+       * kávu…") a po odeslání ji „odemkla", i když druhý nic nenapsal.
+       */
+      const ja = this.meWho(), on = this.otherWho();
+      const krestni = n => String(n || '').trim().split(/\s+/)[0] || 'Druhý';
+      const odp = (s.homeQAns || {})[i] || {};
+      const moje = odp[ja] || '', jeho = odp[on] || '';
+      const txt = (s.homeQText || {})[i] || '';
+      const odeslat = () => {
+        if (!txt.trim()) return;
+        this.setState({ homeQAns: Object.assign({}, s.homeQAns || {}, { [i]: Object.assign({}, odp, { [ja]: txt.trim() }) }) });
+        this.toast(jeho ? 'Odpověď uložena — teď vidíte i odpověď druhého' : 'Odpověď uložena — odpověď druhého se ukáže, až odpoví', { icon: 'ph-lock-key-open' });
+      };
+      return {
+        homeQ: {
+          question: cur.q,
+          pos: 'Otázka ' + (i + 1) + ' z ' + QS.length,
+          text: moje || txt,
+          set: e => this.setState({ homeQText: Object.assign({}, s.homeQText || {}, { [i]: e.target.value }) }),
+          send: odeslat,
+          cant: !txt.trim(),
+          // Obě odpovědi vedle sebe až ve chvíli, kdy jsou obě.
+          sent: !!(moje && jeho),
+          jaJmeno: krestni(ja), onJmeno: krestni(on),
+          mine: moje,
+          theirs: moje && jeho ? jeho : '',
+          locked: !(moje && jeho),
+          // První pád křestního jména — `pate()` dává oslovení („Markéto").
+          lockNote: moje
+            ? krestni(on) + ' zatím neodpověděl' + (/a$/.test(krestni(on)) ? 'a' : '') + '. Jakmile odpoví, uvidíte to tady.'
+            : 'Odpověď druhého se odemkne, až odpovíte taky. Nikdo neopisuje.',
+          another: () => this.setState({ homeQIdx: i + 1 }),
+          keydown: e => { if (e.key === 'Enter') { e.preventDefault(); odeslat(); } }
+        }
+      };
+    }
     const sent = (s.homeQSent || {})[i];
     const txt = (s.homeQText || {})[i] || '';
     return {
@@ -25014,6 +25124,7 @@ class Component extends DCLogic {
         },
         cant: !txt.trim(),
         sent: !!sent,
+        jaJmeno: 'Adrian', onJmeno: 'Makinka',
         mine: txt,
         theirs: cur.a,
         locked: !sent,
@@ -25026,6 +25137,25 @@ class Component extends DCLogic {
   // Náš cíl — spořicí dlaždice s tempem a předpovědí data.
   homeGoalVals() {
     const s = this.state;
+    const C = (this.dnesData() || {}).cil;
+    if (C) {
+      /*
+       * Cíl z rozpočtu. Vklad z dlaždice se nezapisuje nikam — ukázková
+       * tlačítka „+ 1 000 Kč" jen přičítala k číslu na obrazovce, takže
+       * se u serverového cíle neukazují.
+       */
+      return {
+        homeGoal: {
+          name: C.name, saved: C.saved, target: C.target,
+          pct: C.pct + '%', pctNum: C.pct + ' %',
+          left: 'Zbývá ' + C.left,
+          tempo: C.mesicne ? 'Potřeba ' + C.mesicne + ' měsíčně' : 'Bez termínu',
+          eta: C.termin ? 'termín ' + C.termin : 'spoří se průběžně',
+          canAdd: false, add1: () => {}, add5: () => {}, reset: () => {},
+          go: () => this.setState({ route: 'x-rozpocty', appTab: 0 })
+        }
+      };
+    }
     const target = 120000, monthly = 6500;
     const saved = 68400 + (s.homeGoalAdd || 0);
     const left = Math.max(0, target - saved);
@@ -25046,7 +25176,7 @@ class Component extends DCLogic {
         left: left > 0 ? 'Zbývá ' + this.kc(left) : 'Cíl je splněný',
         tempo: 'Tempem ' + this.kc(monthly) + ' měsíčně',
         eta: left > 0 ? 'hotovo v ' + M[eta.getMonth()] + ' ' + eta.getFullYear() : 'můžeme kupovat letenky',
-        add1: add(1000), add5: add(5000),
+        canAdd: true, add1: add(1000), add5: add(5000),
         reset: () => { this.setState({ homeGoalAdd: 0 }); this.toast('Vklady z dlaždice vráceny', { icon: 'ph-arrow-counter-clockwise' }); },
         go: () => this.setState({ route: 'x-rozpocty', appTab: 0 })
       }
@@ -25080,6 +25210,12 @@ class Component extends DCLogic {
   // Den na jedné ose — fotky, zprávy, výdaje a místa jednoho dne v jedné řadě.
   homeDayVals() {
     const ph = this.photos();
+    const D = this.dnesData();
+    if (D) {
+      // Den ze serveru: fotky, zprávy, výdaje, úkoly, hlasovky a zápisy v pořadí podle času.
+      const rows = D.den.radky.map(r => ({ time: r[0], icon: r[1], kind: r[2], text: r[3], bg: r[5], go: () => this.setState({ route: r[4], appTab: 0 }) }));
+      return { homeDay: { rows, head: this.pl(rows.length, 'záznam', 'záznamy', 'záznamů') + ' · ' + D.den.nadpis } };
+    }
     const rows = [
       { time: '6:40', icon: 'ph-sun-horizon', kind: 'Ráno', text: 'Káva na balkoně, ještě před budíkem', go: () => this.setState({ route: 'x-denik', appTab: 0 }) },
       { time: '8:15', icon: 'ph-chats-circle', kind: 'Zpráva', text: 'Makinka: „Vezmeš cestou chleba?“', go: () => this.setState({ route: 'x-zpravy', appTab: 0 }) },
@@ -28001,7 +28137,17 @@ class Component extends DCLogic {
     ['pointerdown', 'keydown', 'wheel'].forEach(t => window.addEventListener(t, this._actH, true));
     this._idleI = setInterval(() => {
       const ms = this.lockIdleMs();
-      if (!ms || this.state.appLocked) return;
+      /*
+       * Bez nastaveného kódu se po nečinnosti nezamyká — a ani se to nehlásí.
+       *
+       * Hláška „Zamknout jde, až si nastavíte kód" se dřív ozvala při každém
+       * tiku, tedy každé čtyři vteřiny, dokud se nikdo nedotkl myši. Každá
+       * hláška se zapisuje do proudu událostí a ten do společného stavu:
+       * nechaná karta tak posílala PATCH každé čtyři vteřiny s pořád větším
+       * stavem (4 400 stejných událostí, 800 KB) — přesně to, za co firewall
+       * serveru adresu zablokuje.
+       */
+      if (!ms || this.state.appLocked || !this.zamek().nastaveno) return;
       if (Date.now() - (this._act || 0) > ms) this.lockNow('Zamčeno po nečinnosti · ' + (this.state.lockIdle || '5 min'));
     }, 4000);
     this._lastKey = this.histKey(this.state);
@@ -28057,7 +28203,8 @@ class Component extends DCLogic {
       appLocked: 1, lockPin: 1, lockPwd: 1, lockTries: 1, lockRec: 1, lockRecCode: 1, lockStep: 1, lockAt: 1, secUntil: 1, gatePin: 1,
       // Uložený by po obnovení stránky nechal tlačítko viset na „Přihlašuji…".
       lockSignBusy: 1,
-      queuePct: 1, queuePaused: 1, emStatus: 1, emLeft: 1,
+      // Fronta přenosů je jen tohohle okna; do společného stavu nepatří.
+      queuePct: 1, queuePaused: 1, queueFiles: 1, queueInfo: 1, emStatus: 1, emLeft: 1,
       msgPlay: 1, msgTyping: 1, msgRec: 1, msgRecT: 1, msgEmoji: 1,
       homeEdit: 1, boardDrag: 1, calDrag: 1, tierDrag: 1, storyDrag: 1, pmReveal: 1, sporReveal: 1
     };
@@ -28265,7 +28412,28 @@ class Component extends DCLogic {
         this.toast('Nahrávat jde jen při spojení se serverem', { icon: 'ph-cloud-slash', color: 'var(--g-mag)' });
         return;
       }
-      const v = await api.nahrajVse(files, (hotovo, celkem) => this.setState({ queuePct: Math.max(4, Math.round((hotovo / celkem) * 100)) }));
+      /*
+       * Fronta přenosů ze skutečných souborů: jméno, velikost a stav každého.
+       * Soubory samotné (`File`) do stavu nepatří — ten se ukládá na server —
+       * drží se v `this._fronta` kvůli „Zkusit znovu".
+       */
+      api.pauza = false;
+      this._fronta = files;
+      const start = Date.now();
+      const polozky = files.map(f => ({ name: f.name, size: f.size, stav: 'ceka', zprava: '' }));
+      let hotovoBajtu = 0;
+      const obnov = () => {
+        const hotovo = polozky.filter(p => ['hotovo', 'duplicitni', 'selhalo'].indexOf(p.stav) >= 0).length;
+        this.setState({ queueFiles: polozky.slice(), queueInfo: { hotovo, celkem: polozky.length, bajtu: hotovoBajtu, start, konec: hotovo === polozky.length ? Date.now() : 0 } });
+      };
+      obnov();
+      const v = await api.nahrajVse(files,
+        (hotovo, celkem) => this.setState({ queuePct: Math.max(4, Math.round((hotovo / celkem) * 100)) }),
+        (i, stav, zprava) => {
+          polozky[i] = Object.assign({}, polozky[i], { stav, zprava });
+          if (stav === 'hotovo' || stav === 'duplicitni') hotovoBajtu += files[i].size;
+          obnov();
+        });
       this.setState({ queuePct: 100 });
       // Nové fotky rovnou do knihovny — bez toho se ukázaly až po obnovení stránky.
       if ((v.ulozeno || v.duplicitni) && window.GalerieObnovit) GalerieObnovit('knihovna');
@@ -28426,7 +28594,8 @@ class Component extends DCLogic {
      * každý: byl napsaný v ukázce.
      */
     if (! this.zamek().nastaveno) {
-      if (why) this.toast('Zamknout jde, až si nastavíte kód — Nastavení → Zámek', { icon: 'ph-lock-simple', local: true });
+      // `silent`: rada, ne změna obsahu — do proudu událostí nepatří.
+      if (why) this.toast('Zamknout jde, až si nastavíte kód — Nastavení → Zámek', { icon: 'ph-lock-simple', local: true, silent: true });
       return;
     }
     this.setState({
@@ -30184,20 +30353,51 @@ class Component extends DCLogic {
         { label: 'Otevřít mapu', icon: 'ph-map-trifold', go: this.go('map') },
         { label: 'Zobrazit oblíbené', icon: 'ph-heart-straight', go: this.go('favorites') }
       ],
-      resume: [
-        { name: 'Chorvatsko 2026 → Zadar', meta: 'naposledy včera · 512 položek', bg: this.bg(4), go: () => this.setState({ route: 'album', albumId: 'chorvatsko' }) },
-        { name: 'Beskydy → Pustevny', meta: 'naposledy dnes · 34 položek', bg: this.bg(7), go: () => this.setState({ route: 'album', albumId: 'beskydy' }) },
-        { name: 'Praha → Muzeum → 21. 6.', meta: 'před 3 dny · 46 položek', bg: this.bg(15), go: () => this.setState({ route: 'album', albumId: 'praha' }) },
-        { name: 'Vánoce 2025', meta: 'před týdnem · 412 položek', bg: this.bg(17), go: () => this.setState({ route: 'album', albumId: 'vanoce' }) }
-      ],
-      onThisDay: [2019, 2021, 2021, 2024, 2024, 2024, 2025].map((y, i) => ({
-        year: y, isVideo: i === 3, dur: '0:24',
-        ...(() => {
-          const vse = this.photos();
-          const p = vse.length ? vse[(40 + i * 5) % vse.length] : null;
-          return { bg: p ? p.bg : this.bg(40 + i * 5), open: () => p && this.openLb(p.id) };
-        })()
-      })),
+      /*
+       * Poslední nahrávání, alba k pokračování a vzpomínky z tohoto dne jsou
+       * ze serveru (`DNES`, `ALBUMS`). Ukázka „Makinka přidala 34 fotek do
+       * Beskydy → Pustevny" zůstává jen bez přihlášení.
+       */
+      ...(() => {
+        const D = this.dnesData();
+        if (! D) {
+          return {
+            upText: 'Makinka přidala 34 fotek', upHasAlbum: true, upAlbum: 'Beskydy → Pustevny',
+            upGo: () => this.setState({ route: 'album', albumId: 'beskydy' }),
+            upMeta: 'včera ve 21:40 · 34 originálů bezpečně uloženo',
+            otdHead: '16. srpna · 2019, 2021, 2024',
+            resume: [
+              { name: 'Chorvatsko 2026 → Zadar', meta: 'naposledy včera · 512 položek', bg: this.bg(4), go: () => this.setState({ route: 'album', albumId: 'chorvatsko' }) },
+              { name: 'Beskydy → Pustevny', meta: 'naposledy dnes · 34 položek', bg: this.bg(7), go: () => this.setState({ route: 'album', albumId: 'beskydy' }) },
+              { name: 'Praha → Muzeum → 21. 6.', meta: 'před 3 dny · 46 položek', bg: this.bg(15), go: () => this.setState({ route: 'album', albumId: 'praha' }) },
+              { name: 'Vánoce 2025', meta: 'před týdnem · 412 položek', bg: this.bg(17), go: () => this.setState({ route: 'album', albumId: 'vanoce' }) }
+            ],
+            onThisDay: [2019, 2021, 2021, 2024, 2024, 2024, 2025].map((y, i) => ({
+              year: y, isVideo: i === 3, dur: '0:24',
+              ...(() => {
+                const vse = this.photos();
+                const p = vse.length ? vse[(40 + i * 5) % vse.length] : null;
+                return { bg: p ? p.bg : this.bg(40 + i * 5), open: () => p && this.openLb(p.id) };
+              })()
+            }))
+          };
+        }
+        const U = D.nahrani, V = D.vyroci;
+        const otevri = id => this.photos().some(p => p.id === id) ? this.openLb(id) : this.setState({ route: 'all' });
+        return {
+          upText: U ? U.kdo + ' · ' + U.pocet : 'Zatím nic nenahráno',
+          upHasAlbum: !!(U && U.album),
+          upAlbum: U ? U.album : '',
+          upGo: () => U && U.albumId ? this.setState({ route: 'album', albumId: U.albumId }) : this.setState({ route: 'all' }),
+          upMeta: U ? U.kdy + ' · ' + U.ulozeno : 'Fotky a videa přidáte tlačítkem Nahrát nahoře.',
+          otdHead: V.den + (V.roky.length ? ' · ' + V.roky.join(', ') : ' · z minulých let zatím nic'),
+          resume: this.baseAlbums().slice(0, 4).map(a => ({
+            name: a.path || a.name, meta: [a.date, a.count].filter(Boolean).join(' · '),
+            bg: a.bg || this.bg(a.n || 0), go: () => this.setState({ route: 'album', albumId: a.id })
+          })),
+          onThisDay: V.fotky.map(p => ({ year: p.year, isVideo: p.isVideo, dur: p.dur, bg: p.bg, open: () => otevri(p.id) }))
+        };
+      })(),
       ...(() => {
         const dis = s.sugDismiss || {};
         const raw = [
@@ -30236,7 +30436,20 @@ class Component extends DCLogic {
             cta: 'Napsat zápis',
             go: () => this.setState({ route: 'x-denik', appTab: 0, dnDlg: { mode: 'new', key: 'diary', orig: null, date: 'Sobota · 15. srpna 2026', title: '', text: '', mood: 'radost' } })
           }
-        ].filter(x => !dis[x.id]);
+        ].filter(x => !dis[x.id] && !this.dnesData());
+        /*
+         * Návrhy ze serveru — jen ty, které jde z dat spočítat. Ukázkové
+         * („Rezervace v Lisabonu není zaplacená", „chybí tři suroviny") se
+         * přihlášené dvojici neukazují: tlačítko u nich tvrdilo, že doplnilo
+         * nákupní seznam, a nedoplnilo nic.
+         */
+        const tint = { 'ph-folder-plus': 'var(--g-acc)', 'ph-copy': 'var(--g-warn)', 'ph-notebook': 'var(--g-ok)' };
+        ((this.dnesData() || {}).navrhy || []).filter(x => !dis[x.id]).forEach(x => raw.push({
+          id: x.id, icon: x.icon, tint: tint[x.icon] || 'var(--g-acc)', title: x.title, body: x.body, cta: x.cta,
+          go: x.route === 'album-new'
+            ? () => this.setState({ naOpen: true, naName: x.album, naParent: '', naWithSel: false })
+            : () => this.setState({ route: x.route, appTab: 0 })
+        }));
         return {
           sugAny: raw.length > 0,
           sugCount: this.pl(raw.length, 'návrh', 'návrhy', 'návrhů'),
@@ -30257,12 +30470,21 @@ class Component extends DCLogic {
         };
       })(),
       recent: this.photos().slice(0, 14).map(p => ({ ...this.tile(p), open: () => this.openLb(p.id) })),
-      places: [
-        { name: 'Pustevny', country: 'Česko', meta: '16. 8. 2026 · 34 položek', bg: this.bg(7), go: this.go('map') },
-        { name: 'Zadar', country: 'Chorvatsko', meta: '19. 7. 2026 · 512 položek', bg: this.bg(4), go: this.go('map') },
-        { name: 'Praha', country: 'Česko', meta: '21. 6. 2026 · 46 položek', bg: this.bg(15), go: this.go('map') },
-        { name: 'Vídeň', country: 'Rakousko', meta: '2. 5. 2026 · 318 položek', bg: this.bg(13), go: this.go('map') }
-      ],
+      // Místa z GPS ve fotkách (`MAPBODY`); proklik otevře knihovnu jen s fotkami toho místa.
+      places: this.dnesData()
+        ? ((window.GalerieData || {}).MAPBODY || []).slice(0, 4).map(b => {
+          const foto = this.photos().find(p => (b.ids || []).indexOf(p.id) >= 0);
+          return {
+            name: b.name, country: '', meta: this.pl(b.count, 'položka', 'položky', 'položek'),
+            bg: foto ? foto.bg : this.bg(b.count), go: () => this.setState({ route: 'all', query: '', misto: { name: b.name, ids: b.ids || [] } })
+          };
+        })
+        : [
+          { name: 'Pustevny', country: 'Česko', meta: '16. 8. 2026 · 34 položek', bg: this.bg(7), go: this.go('map') },
+          { name: 'Zadar', country: 'Chorvatsko', meta: '19. 7. 2026 · 512 položek', bg: this.bg(4), go: this.go('map') },
+          { name: 'Praha', country: 'Česko', meta: '21. 6. 2026 · 46 položek', bg: this.bg(15), go: this.go('map') },
+          { name: 'Vídeň', country: 'Rakousko', meta: '2. 5. 2026 · 318 položek', bg: this.bg(13), go: this.go('map') }
+        ],
       favAlbums: albums.filter(a => a.fav).map(a => ({ name: a.name, meta: a.date + ' · ' + a.count, bg: this.bg(a.n), go: () => this.setState({ route: 'album', albumId: a.id }) })),
 
       libTitle: R === 'favorites' ? 'Oblíbené' : 'Všechny vzpomínky',
@@ -30770,19 +30992,30 @@ class Component extends DCLogic {
       } }),
 
       ...this.diskVals(),
-      activity: [
-        ['M', 'Makinka přidala 34 fotek do Beskydy → Pustevny', 'dnes v 8:12', 7],
-        ['A', 'Adrian vytvořil album Beskydy → Pustevny', 'dnes v 8:04', 7],
-        ['M', 'Makinka upravila popisek u fotky z Plitvic', 'včera ve 21:40', 6],
-        ['A', 'Adrian vytvořil sdílený odkaz Beskydy s Makinkou', 'včera ve 20:18', 4],
-        ['M', 'Makinka doplnila místo u 42 fotek z roku 2019', '14. 8. 2026', 23],
-        ['A', 'Adrian obnovil fotku z koše', '12. 8. 2026', 9],
-        ['M', 'Makinka označila album Vánoce 2025 jako oblíbené', '9. 8. 2026', 17],
-        ['A', 'Adrian přesunul 118 fotek do Chorvatsko 2026 → Krka', '3. 8. 2026', 5]
-      ].map(a => ({
-        initial: a[0], text: a[1], when: a[2], thumb: this.bg(a[3]),
-        avBg: a[0] === 'A' ? 'var(--g-acc-soft)' : 'var(--g-mag-soft)', avFg: a[0] === 'A' ? 'var(--g-acc-deep)' : 'var(--g-mag)'
-      })),
+      // Aktivita z auditního logu serveru; ukázková („Makinka přidala 34 fotek…") jen bez přihlášení.
+      activity: (this.dnesData()
+        ? (this.dnesData().aktivita.length ? this.dnesData().aktivita : [['·', 'Zatím tu nic není — nahrání, sdílení a obnovení z koše se sem zapisují samy.', '', null]])
+          .map(a => {
+            const prvni = this.dva()[0] || '';
+            const ja = prvni && prvni.charAt(0).toUpperCase() === a[0];
+            return {
+              initial: a[0], text: a[1], when: a[2], thumb: a[3] || '',
+              avBg: ja ? 'var(--g-acc-soft)' : 'var(--g-mag-soft)', avFg: ja ? 'var(--g-acc-deep)' : 'var(--g-mag)'
+            };
+          })
+        : [
+          ['M', 'Makinka přidala 34 fotek do Beskydy → Pustevny', 'dnes v 8:12', 7],
+          ['A', 'Adrian vytvořil album Beskydy → Pustevny', 'dnes v 8:04', 7],
+          ['M', 'Makinka upravila popisek u fotky z Plitvic', 'včera ve 21:40', 6],
+          ['A', 'Adrian vytvořil sdílený odkaz Beskydy s Makinkou', 'včera ve 20:18', 4],
+          ['M', 'Makinka doplnila místo u 42 fotek z roku 2019', '14. 8. 2026', 23],
+          ['A', 'Adrian obnovil fotku z koše', '12. 8. 2026', 9],
+          ['M', 'Makinka označila album Vánoce 2025 jako oblíbené', '9. 8. 2026', 17],
+          ['A', 'Adrian přesunul 118 fotek do Chorvatsko 2026 → Krka', '3. 8. 2026', 5]
+        ].map(a => ({
+          initial: a[0], text: a[1], when: a[2], thumb: this.bg(a[3]),
+          avBg: a[0] === 'A' ? 'var(--g-acc-soft)' : 'var(--g-mag-soft)', avFg: a[0] === 'A' ? 'var(--g-acc-deep)' : 'var(--g-mag)'
+        }))),
 
       setTabs: SETSEC.map(t => ({
         label: t[1], icon: t[2], bg: s.setTab === t[0] ? 'var(--g-panel)' : 'transparent',
@@ -30998,17 +31231,64 @@ class Component extends DCLogic {
       celaObrazovka: this.celaObrazovka,
       queueOpen: s.queueOpen, queueActive: s.queuePct > 0 && s.queuePct < 100,
       toggleQueue: () => this.setState({ queueOpen: !s.queueOpen }),
-      queuePct: s.queuePct + '%', queueLabel: s.queuePaused ? 'Nahrávání pozastaveno' : 'Nahrávám ' + Math.round(s.queuePct * 2.18) + ' z 218',
-      queueMeta: s.queuePaused ? 'Pokračovat můžete kdykoli' : '18,4 MB/s · zbývá asi 3 min · nechte galerii otevřenou',
-      pauseIcon: s.queuePaused ? 'ph-play' : 'ph-pause',
-      pauseQueue: () => this.setState({ queuePaused: !s.queuePaused }),
-      queueItems: [
-        { name: 'IMG_2711.HEIC', status: 'Dokončeno · originál uložen', icon: 'ph-check-circle', color: 'var(--g-ok)', n: 2 },
-        { name: 'MOV_2712.MP4', status: 'Přenáším originál — 62 %', icon: 'ph-cloud-arrow-up', color: 'var(--g-acc)', n: 9 },
-        { name: 'IMG_2713.HEIC', status: 'Zpracovávám náhled', icon: 'ph-circle-notch', color: 'var(--g-acc)', n: 4 },
-        { name: 'IMG_2714.HEIC', status: 'Čeká ve frontě', icon: 'ph-clock', color: 'var(--g-ink3)', n: 6 },
-        { name: 'IMG_2715.HEIC', status: 'Přenos selhal — slabé připojení', icon: 'ph-warning-circle', color: 'var(--g-mag)', retry: true, n: 8 }
-      ].map(q => ({ ...q, bg: this.bg(q.n), retryGo: () => this.toast('Zkouším přenos znovu', { icon: 'ph-arrow-clockwise' }) })),
+      ...(() => {
+        /*
+         * Panel přenosů podle skutečné fronty (`queueFiles`, `queueInfo`).
+         * Ukázka tvrdila „Nahrávám 4 z 218 · 18,4 MB/s · zbývá asi 3 min"
+         * u tří fotek a tlačítko pauzy nic nezastavilo.
+         */
+        const Q = s.queueFiles || [], I = s.queueInfo || { hotovo: 0, celkem: 0, bajtu: 0, start: Date.now(), konec: 0 };
+        const sekund = Math.max(1, ((I.konec || Date.now()) - I.start) / 1000);
+        const rychlost = I.bajtu / sekund;
+        const zbyvaBajtu = Q.filter(p => p.stav === 'ceka' || p.stav === 'nahravam' || p.stav === 'opakuji').reduce((a, p) => a + p.size, 0);
+        const mb = b => (b / (1024 * 1024)).toFixed(1).replace('.', ',');
+        const zbyva = rychlost > 0 && zbyvaBajtu > 0 ? Math.ceil(zbyvaBajtu / rychlost / 60) : 0;
+        const STAV = {
+          ceka: ['Čeká ve frontě', 'ph-clock', 'var(--g-ink3)'],
+          nahravam: ['Přenáším originál', 'ph-cloud-arrow-up', 'var(--g-acc)'],
+          opakuji: ['Přenos se nepovedl — zkouším znovu', 'ph-arrow-clockwise', 'var(--g-warn)'],
+          hotovo: ['Dokončeno · originál uložen', 'ph-check-circle', 'var(--g-ok)'],
+          duplicitni: ['Už v knihovně je — přeskočeno', 'ph-copy', 'var(--g-ink3)'],
+          selhalo: ['Nenahráno', 'ph-warning-circle', 'var(--g-mag)']
+        };
+        const hotovo = I.celkem > 0 && I.hotovo === I.celkem;
+        return {
+          queuePct: s.queuePct + '%',
+          queueLabel: s.queuePaused && !hotovo ? 'Nahrávání pozastaveno' : hotovo ? 'Hotovo · ' + this.pl(I.celkem, 'soubor', 'soubory', 'souborů') : 'Nahrávám ' + (I.hotovo + 1 > I.celkem ? I.celkem : I.hotovo + 1) + ' z ' + I.celkem,
+          queueMeta: hotovo
+            ? mb(I.bajtu) + ' MB za ' + Math.round(sekund) + ' s'
+            : s.queuePaused
+              ? 'Rozběhnuté soubory doběhnou, další počkají'
+              : (rychlost > 0 ? mb(rychlost) + ' MB/s' + (zbyva ? ' · zbývá asi ' + zbyva + ' min' : '') + ' · ' : '') + 'nechte galerii otevřenou',
+          pauseIcon: s.queuePaused ? 'ph-play' : 'ph-pause',
+          pauseQueue: () => {
+            const dal = !s.queuePaused;
+            if (window.GalerieApi) window.GalerieApi.pauza = dal;
+            this.setState({ queuePaused: dal });
+          },
+          queueItems: Q.slice(0, 60).map((p, i) => {
+            const st = STAV[p.stav] || STAV.ceka;
+            return {
+              name: p.name, status: st[0] + (p.zprava && p.stav === 'selhalo' ? ' — ' + p.zprava : ''), icon: st[1], color: st[2],
+              retry: p.stav === 'selhalo', bg: 'var(--g-panel)',
+              retryGo: async () => {
+                const f = (this._fronta || [])[i];
+                const api = window.GalerieApi;
+                if (!f || !api || !api.nahrajVse) return this.toast('Soubor už není k dispozici — vyberte ho znovu', { icon: 'ph-warning' });
+                const dalsi = (this.state.queueFiles || []).slice();
+                dalsi[i] = Object.assign({}, dalsi[i], { stav: 'nahravam', zprava: '' });
+                this.setState({ queueFiles: dalsi });
+                const v = await api.nahrajVse([f]);
+                const po = (this.state.queueFiles || []).slice();
+                po[i] = Object.assign({}, po[i], { stav: v.selhalo.length ? 'selhalo' : v.duplicitni ? 'duplicitni' : 'hotovo', zprava: v.selhalo.length ? v.selhalo[0].zprava : '' });
+                this.setState({ queueFiles: po });
+                if (!v.selhalo.length && window.GalerieObnovit) GalerieObnovit('knihovna');
+                this.toast(this.nahraniHlaska(v), { icon: v.selhalo.length ? 'ph-warning' : 'ph-cloud-check' });
+              }
+            };
+          })
+        };
+      })(),
 
       confirmOpen: !!s.confirm, confirm: s.confirm || {}, closeConfirm: () => this.setState({ confirm: null }),
       ...this.pinVals(),

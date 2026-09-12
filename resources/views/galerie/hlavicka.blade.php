@@ -366,14 +366,15 @@
    */
   var SKUPINY = ['finance', 'knihovna', 'planovani', 'domacnost', 'cesty', 'vztah', 'zdravi', 'sdileni',
     'zpravy', 'kucharka', 'darky', 'denik', 'pravidla', 'rozbory', 'uklid', 'system', 'klid', 'pribeh',
-    'mechanismy', 'rozhodovani', 'tyden'];
+    'mechanismy', 'rozhodovani', 'tyden', 'dnes'];
 
   /*
    * Tři dávky místo dvaceti požadavků. První nese to, co je vidět hned
    * (knihovna, zámek, plán, zprávy), takže obrazovka nečeká na kuchařku.
    */
   var DAVKY = [
-    ['system', 'knihovna', 'planovani', 'zpravy'],
+    // `dnes` je úvodní obrazovka — ta se ukáže jako první.
+    ['system', 'knihovna', 'planovani', 'zpravy', 'dnes'],
     ['finance', 'domacnost', 'cesty', 'vztah', 'zdravi', 'sdileni', 'kucharka'],
     ['darky', 'denik', 'pravidla', 'rozbory', 'uklid', 'klid', 'pribeh', 'mechanismy', 'rozhodovani', 'tyden']
   ];

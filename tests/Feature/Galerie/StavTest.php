@@ -307,6 +307,56 @@ class StavTest extends TestCase
         $this->assertStringContainsString('"favs":{"0":"adrianovo"}', $telo);
     }
 
+    /**
+     * Zápis jiného klíče nesmí převrátit tvar těch, na které nesahá.
+     *
+     * Přetypování `data` čte asociativně, takže uložení kvůli `appTab` vrátilo
+     * `shared.txCat` jako `[]`. Klient to bral jako změnu od partnera, zapsal
+     * `shared` znovu — a každých dvacet vteřin šly ven dva zbytečné PATCHe.
+     */
+    public function test_zapis_jineho_klice_nezmeni_tvar_ostatnich(): void
+    {
+        $this->actingAs($this->adri)
+            ->patchJson('/api/state', ['data' => ['shared' => json_decode('{"favs":{"0":"adrianovo"},"txCat":{},"visited":{}}')]])
+            ->assertOk();
+
+        $this->actingAs($this->adri)->patchJson('/api/state', ['data' => ['appTab' => 2]])->assertOk();
+        // A totéž po úklidu, který stav přepisuje mimo patch (`tierOrder` se zahazuje).
+        $this->actingAs($this->adri)->patchJson('/api/state', ['data' => ['tierOrder' => ['a']]])->assertOk();
+        $this->actingAs($this->adri)->patchJson('/api/state', ['data' => ['appTab' => 3]])->assertOk();
+
+        $telo = $this->actingAs($this->adri)->getJson('/api/state')->assertOk()->getContent();
+
+        $this->assertStringContainsString('"shared":{"favs":{"0":"adrianovo"},"txCat":{},"visited":{}}', $telo);
+    }
+
+    /**
+     * Proud událostí má strop.
+     *
+     * Hláška opakovaná každé čtyři vteřiny ho nafoukla na 4 400 položek a
+     * 800 KB, které šly s každým zápisem i načtením stavu.
+     */
+    public function test_proud_udalosti_ma_strop(): void
+    {
+        $udalosti = array_map(fn (int $i) => ['id' => 'ev'.$i, 'text' => 'Událost '.$i], range(1, 500));
+
+        $telo = $this->actingAs($this->adri)->patchJson('/api/state', ['data' => ['events' => $udalosti]])->assertOk();
+
+        $this->assertCount(CoupleState::UDALOSTI_STROP, $telo->json('data.events'));
+        // Nejnovější jsou na začátku a zůstávají.
+        $this->assertSame('ev1', $telo->json('data.events.0.id'));
+        $this->assertCount(CoupleState::UDALOSTI_STROP, $this->actingAs($this->adri)->getJson('/api/state')->json('data.events'));
+    }
+
+    /** Klient smí `{}` vědomě vyměnit za `[]` — vrátí se to, co poslal. */
+    public function test_vedoma_zmena_tvaru_se_zapise(): void
+    {
+        $this->actingAs($this->adri)->patchJson('/api/state', ['data' => ['sel' => new \stdClass]])->assertOk();
+        $this->actingAs($this->adri)->patchJson('/api/state', ['data' => ['sel' => []]])->assertOk();
+
+        $this->assertStringContainsString('"sel":[]', $this->actingAs($this->adri)->getJson('/api/state')->getContent());
+    }
+
     /** Kdo nepatří do žádného prostoru, nemá ani stav — a dozví se proč. */
     public function test_ucet_bez_prostoru_dostane_srozumitelnou_chybu(): void
     {

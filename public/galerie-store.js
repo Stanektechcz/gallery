@@ -49,8 +49,12 @@
     var changed = false;
     KEYS.forEach(function (k) {
       if (shared[k] === undefined) return;
-      if (JSON.stringify(shared[k]) === JSON.stringify(data[k])) return;
-      data[k] = shared[k];
+      // Mapa, kterou server (PHP) vrátil jako pole — `{}` jako `[]`, `{"0":"x"}`
+      // jako `["x"]`. Obsah je týž; porovnávat tvar znamenalo zapsat znovu
+      // a při každém dvacetivteřinovém načtení stavu poslat dva PATCHe.
+      var prisla = MAP_KEYS.indexOf(k) >= 0 && Array.isArray(shared[k]) ? Object.assign({}, shared[k]) : shared[k];
+      if (JSON.stringify(prisla) === JSON.stringify(data[k])) return;
+      data[k] = prisla;
       changed = true;
     });
     if (!changed) return;

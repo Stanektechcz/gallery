@@ -37,6 +37,16 @@ class CoupleState extends Model
         'admChecking',
     ];
 
+    /**
+     * Kolik posledních událostí z proudu `events` stav drží.
+     *
+     * Klient proud jen přidával. Hláška, která se opakovala každé čtyři
+     * vteřiny, ho nafoukla na 4 400 položek a 800 KB — a ten celý stav šel
+     * s každým zápisem i načtením. Víc než pár set posledních změn nikdo
+     * nečte.
+     */
+    public const UDALOSTI_STROP = 200;
+
     /** Klíče, které patří do šifrovaného sloupce, ne do otevřeného JSONu. */
     public const PRIVATE_KEYS = [
         'blizWA', 'blizWM', 'blizAdd', 'blizBlock',
@@ -71,10 +81,53 @@ class CoupleState extends Model
             return false;
         }
 
-        $this->data = $zbyle;
+        $this->zapisData($zbyle);
         $this->save();
 
         return true;
+    }
+
+    /**
+     * Uloží otevřená data a **nezměněné klíče nechá v tvaru, v jakém ležely**.
+     *
+     * Přetypování `data` čte JSON asociativně, takže každé uložení přes
+     * `$this->data = …` převedlo `{}` na `[]` u všech klíčů — i u těch, na které
+     * zápis vůbec nesahal. Oprava v kontroleru hlídala jen klíč, který zrovna
+     * přišel. Stačilo, aby partner změnil cokoli jiného, a `shared.txCat` se
+     * vrátil jako pole; klient to viděl jako změnu, zapsal znovu, a každých
+     * dvacet vteřin (tak často se stav načítá) šly ven dva zbytečné PATCHe.
+     *
+     * Klíče z `$zapsane` přišly od klienta a berou se tak, jak přišly — i když
+     * klient `{}` vědomě vyměnil za `[]`, jinak by se smyčka jen otočila.
+     *
+     * @param  array<string, mixed>  $data
+     * @param  list<string|int>  $zapsane
+     */
+    private function zapisData(array $data, array $zapsane = []): void
+    {
+        $surove = $this->surovy('data');
+
+        foreach ($data as $klic => $hodnota) {
+            if ($hodnota instanceof \stdClass || ! array_key_exists($klic, $surove) || in_array($klic, $zapsane, true)) {
+                continue;
+            }
+
+            // Tatáž hodnota, jen dekódovaná asociativně: vezme se původní zápis.
+            if (json_encode(json_decode(json_encode($surove[$klic]), true)) === json_encode($hodnota)) {
+                $data[$klic] = $surove[$klic];
+            }
+        }
+
+        $this->attributes['data'] = json_encode($data === [] ? new \stdClass : $data);
+
+        /*
+         * Eloquent pozná změnu JSON sloupce podle dekódovaného obsahu — a pro
+         * něj jsou `{}` a `[]` totéž. Změna jen tvaru by se tak neuložila
+         * vůbec. Bez původní hodnoty se sloupec bere jako změněný.
+         */
+        if ($this->attributes['data'] !== $this->getRawOriginal('data')) {
+            unset($this->original['data']);
+        }
     }
 
     /**
@@ -127,7 +180,7 @@ class CoupleState extends Model
             return false;
         }
 
-        $this->data = $data;
+        $this->zapisData($data);
         $this->save();
 
         return true;
@@ -136,7 +189,8 @@ class CoupleState extends Model
     /** Sloučení částečného patche po klíčích. Hodnoty se nahrazují celé. */
     public function applyPatch(array $patch): void
     {
-        $open = $this->data ?? [];
+        // Surově: klíče, které patch nemění, se uloží přesně tak, jak ležely.
+        $open = $this->surovy('data');
         $priv = $this->private ?? [];
         $revize = $this->rev_keys ?? [];
         $nova = ($this->rev ?? 0) + 1;
@@ -145,6 +199,10 @@ class CoupleState extends Model
             // Hesla a kódy se zahazují, ať přijdou odkudkoli — viz NEUKLADAT.
             if (in_array($key, self::NEUKLADAT, true)) {
                 continue;
+            }
+
+            if ($key === 'events' && is_array($value) && array_is_list($value) && count($value) > self::UDALOSTI_STROP) {
+                $value = array_slice($value, 0, self::UDALOSTI_STROP);
             }
 
             if (in_array($key, self::PRIVATE_KEYS, true)) {
@@ -158,7 +216,7 @@ class CoupleState extends Model
             $revize[$key] = $nova;
         }
 
-        $this->data = $open;
+        $this->zapisData($open, array_keys($patch));
         $this->private = $priv;
         $this->rev_keys = $revize;
         $this->rev = $nova;
@@ -226,6 +284,11 @@ class CoupleState extends Model
             foreach ((array) $cast as $klic => $hodnota) {
                 $ven->{$klic} = $hodnota;
             }
+        }
+
+        // Už uložený nafouknutý proud se posílá zkrácený hned, ne až po dalším zápisu.
+        if (is_array($ven->events ?? null) && count($ven->events) > self::UDALOSTI_STROP) {
+            $ven->events = array_slice($ven->events, 0, self::UDALOSTI_STROP);
         }
 
         return $ven;

@@ -447,32 +447,52 @@
      * konci se řekne, kolik prošlo, kolik už v knihovně bylo a která jména
      * zůstala venku. `onProgress(hotovo, celkem)` hlásí postup.
      */
-    nahrajVse: function (files, onProgress) {
+    /*
+     * `onItem(index, stav, zprava)` hlásí jednotlivé soubory — `nahravam`,
+     * `hotovo`, `duplicitni`, `opakuji`, `selhalo`. Panel přenosů podle toho
+     * kreslí skutečná jména; dřív ukazoval pět vymyšlených („IMG_2711.HEIC,
+     * Přenáším originál — 62 %") a „Nahrávám 4 z 218" u tří fotek.
+     *
+     * `api.pauza = true` zastaví start dalších souborů; rozběhnuté doběhnou.
+     */
+    nahrajVse: function (files, onProgress, onItem) {
       var api = this;
       var seznam = Array.prototype.slice.call(files || []);
       var celkem = seznam.length, hotovo = 0, ulozeno = 0, duplicitni = 0;
       var selhalo = [];
-      var fronta = seznam.map(function (f) { return { f: f, pokus: 0 }; });
+      var fronta = seznam.map(function (f, i) { return { f: f, i: i, pokus: 0 }; });
+      var hlas = function (i, stav, zprava) { try { if (onItem) onItem(i, stav, zprava || ''); } catch (e) {} };
+
+      function pockejNaPokracovani() {
+        if (!api.pauza) return Promise.resolve();
+        return new Promise(function (hotovo) { setTimeout(hotovo, 400); }).then(pockejNaPokracovani);
+      }
 
       function dalsi() {
-        var polozka = fronta.shift();
-        if (!polozka) return Promise.resolve();
-        return api.upload(polozka.f, { taken_at: polozka.f.lastModified }).then(function (b) {
-          if (b && b.status === 'duplicate') duplicitni++; else ulozeno++;
-          hotovo++;
-          if (onProgress) onProgress(hotovo, celkem);
-        }, function (e) {
-          // 413 a 422 se opakováním nespraví (velký soubor, nepodporovaný formát).
-          var stav = e && e.status;
-          if (polozka.pokus < 1 && stav !== 413 && stav !== 422) {
-            polozka.pokus++;
-            fronta.push(polozka);
-          } else {
-            selhalo.push({ jmeno: polozka.f.name, stav: stav || 0, zprava: (e && e.body && e.body.message) || '' });
+        return pockejNaPokracovani().then(function () {
+          var polozka = fronta.shift();
+          if (!polozka) return;
+          hlas(polozka.i, 'nahravam');
+          return api.upload(polozka.f, { taken_at: polozka.f.lastModified }).then(function (b) {
+            if (b && b.status === 'duplicate') { duplicitni++; hlas(polozka.i, 'duplicitni'); } else { ulozeno++; hlas(polozka.i, 'hotovo'); }
             hotovo++;
             if (onProgress) onProgress(hotovo, celkem);
-          }
-        }).then(dalsi);
+          }, function (e) {
+            // 413 a 422 se opakováním nespraví (velký soubor, nepodporovaný formát).
+            var stav = e && e.status;
+            var zprava = (e && e.body && e.body.message) || '';
+            if (polozka.pokus < 1 && stav !== 413 && stav !== 422) {
+              polozka.pokus++;
+              fronta.push(polozka);
+              hlas(polozka.i, 'opakuji', zprava);
+            } else {
+              selhalo.push({ jmeno: polozka.f.name, stav: stav || 0, zprava: zprava });
+              hlas(polozka.i, 'selhalo', zprava);
+              hotovo++;
+              if (onProgress) onProgress(hotovo, celkem);
+            }
+          }).then(dalsi);
+        });
       }
 
       var soubezne = Math.min(3, Math.max(1, celkem));
