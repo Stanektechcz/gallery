@@ -5,6 +5,7 @@ namespace Tests\Feature\Galerie;
 use App\Jobs\Media\CalculateMediaHashesJob;
 use App\Jobs\Media\ExtractMediaMetadataJob;
 use App\Jobs\Media\GenerateImageVariantsJob;
+use App\Jobs\MirrorMediaToCloud;
 use App\Models\BillingPlan;
 use App\Models\GallerySpace;
 use App\Models\MediaItem;
@@ -27,6 +28,9 @@ use Tests\TestCase;
 class MediaTest extends TestCase
 {
     use RefreshDatabase;
+
+    /** Začátek skutečného souboru MP4 (`ftyp` box), podle kterého ho pozná `finfo`. */
+    private const MP4 = "\x00\x00\x00\x18ftypmp42\x00\x00\x00\x00mp42isom";
 
     private User $adri;
 
@@ -79,6 +83,23 @@ class MediaTest extends TestCase
         Queue::assertPushed(CalculateMediaHashesJob::class);
     }
 
+    /**
+     * Kopie na Disk se zařadí hned po nahrání.
+     *
+     * Původní nahrávání ji zařazovalo, nové rozhraní nahrává touhle cestou
+     * — a ta ne. Fotky se na Disk dostaly nejdřív při nočním dorovnání,
+     * a když neběžela fronta, nikdy.
+     */
+    public function test_nahrani_zaradi_kopii_na_disk(): void
+    {
+        $odpoved = $this->post('/api/media', ['file' => $this->fotka('vylet.jpg')])->assertCreated();
+
+        $media = MediaItem::where('uuid', $odpoved->json('id'))->first()
+            ?? MediaItem::latest('id')->first();
+
+        Queue::assertPushed(MirrorMediaToCloud::class, fn (MirrorMediaToCloud $uloha) => $uloha->mediaId === $media->id);
+    }
+
     /** Knihovna má hlídat originály, ne kopie. */
     public function test_tentyz_soubor_se_neulozi_dvakrat(): void
     {
@@ -118,7 +139,8 @@ class MediaTest extends TestCase
 
     public function test_velky_soubor_po_castech_se_slozi(): void
     {
-        $casti = ['prvni-cast--', 'druha-cast--', 'treti-cast'];
+        // První část nese hlavičku MP4 — server kontroluje obsah, ne jen příponu.
+        $casti = [self::MP4.'prvni-cast--', 'druha-cast--', 'treti-cast'];
 
         foreach ($casti as $poradi => $cast) {
             $odpoved = $this->call('POST', '/api/media/chunk', [], [], [], $this->hlavicky([
@@ -179,9 +201,27 @@ class MediaTest extends TestCase
             'X-Chunk-Index' => '0',
             'X-Chunk-Count' => '1',
             'X-File-Name' => rawurlencode('../../tajne/vzpominka.mp4'),
-        ]), 'data')->assertCreated();
+        ]), self::MP4.'data')->assertCreated();
 
         $this->assertSame('vzpominka.mp4', MediaItem::sole()->original_filename);
+    }
+
+    /**
+     * Do knihovny patří fotky a videa, ne cokoli.
+     *
+     * Textová poznámka se dřív uložila jako „fotka": zabrala místo v tarifu,
+     * dostala dlaždici, kterou nejde zobrazit, a úlohy na náhled i kopii na Disk
+     * na ní padaly. A přejmenovat dokument na `.jpg` nestačí.
+     */
+    public function test_jiny_soubor_nez_fotka_ci_video_neprojde(): void
+    {
+        $this->post('/api/media', ['file' => UploadedFile::fake()->createWithContent('poznamka.txt', 'jen text')])
+            ->assertStatus(422);
+
+        $this->post('/api/media', ['file' => UploadedFile::fake()->createWithContent('prevlek.jpg', 'jen text')])
+            ->assertStatus(422);
+
+        $this->assertSame(0, MediaItem::count());
     }
 
     // ——— výdej a mazání ———
@@ -189,12 +229,12 @@ class MediaTest extends TestCase
     public function test_original_se_vydava_pres_aplikaci(): void
     {
         $nahrane = $this->post('/api/media', [
-            'file' => UploadedFile::fake()->createWithContent('vylet.jpg', 'obsah fotky'),
+            'file' => $soubor = $this->fotka('vylet.jpg'),
         ])->assertCreated();
 
         $odpoved = $this->get('/api/media/'.$nahrane->json('id').'/raw')->assertOk();
 
-        $this->assertSame('obsah fotky', $odpoved->streamedContent());
+        $this->assertSame($soubor->get(), $odpoved->streamedContent());
     }
 
     /** Cizí pár se k souboru nedostane, ani když zná jeho identifikátor. */

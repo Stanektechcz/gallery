@@ -109,6 +109,27 @@
     return h;
   }
 
+  /*
+   * Strop na nahrávací požadavky: nejvýš sto za minutu.
+   *
+   * Firewall serveru má pravidlo „víc než 120 požadavků za 60 vteřin" a adresu,
+   * která ho překročí, zablokuje — nginx pak na všechno odpoví zavřeným
+   * spojením a aplikace nejde načíst vůbec. Dvě stě malých fotek po třech
+   * souběžně se přes ten práh dostane legitimně. Radši o chvíli pomalejší
+   * nahrávání než zablokovaný telefon.
+   */
+  var nahravaciCasy = [];
+  function pockejNaSlot() {
+    var ted = Date.now();
+    nahravaciCasy = nahravaciCasy.filter(function (t) { return ted - t < 60000; });
+    if (nahravaciCasy.length < 100) {
+      nahravaciCasy.push(ted);
+      return Promise.resolve();
+    }
+    var za = 60000 - (ted - nahravaciCasy[0]) + 50;
+    return new Promise(function (hotovo) { setTimeout(hotovo, za); }).then(pockejNaSlot);
+  }
+
   function notify() {
     var snap = snapshot();
     subs.forEach(function (fn) { try { fn(snap); } catch (e) {} });
@@ -386,8 +407,16 @@
         var fd = new FormData();
         fd.append('file', file, file.name);
         Object.keys(meta || {}).forEach(function (k) { fd.append(k, meta[k]); });
-        return fetch(base + '/media', { method: 'POST', headers: hdr(), credentials: 'same-origin', body: fd })
-          .then(function (r) { return r.status === 202 ? { status: 'queued' } : r.json(); });
+        return pockejNaSlot().then(function () {
+          return fetch(base + '/media', { method: 'POST', headers: hdr(), credentials: 'same-origin', body: fd });
+        }).then(function (r) {
+          if (r.status === 202) return { status: 'queued' };
+          return r.json().then(function (b) {
+            // Chybová odpověď dřív prošla jako „nahráno" — do knihovny nedorazilo nic.
+            if (!r.ok) throw Object.assign(new Error(b.message || 'HTTP ' + r.status), { status: r.status, body: b });
+            return b;
+          });
+        });
       }
       var id = 'up-' + Date.now() + '-' + Math.random().toString(16).slice(2, 8);
       var count = Math.ceil(file.size / CHUNK);
@@ -399,10 +428,60 @@
         h['X-Chunk-Index'] = String(i);
         h['X-Chunk-Count'] = String(count);
         h['X-File-Name'] = encodeURIComponent(file.name);
-        return fetch(base + '/media/chunk', { method: 'POST', headers: h, credentials: 'same-origin', body: part })
-          .then(function (r) { if (!r.ok && r.status !== 202) throw new Error('HTTP ' + r.status); return send(i + 1); });
+        return pockejNaSlot().then(function () {
+          return fetch(base + '/media/chunk', { method: 'POST', headers: h, credentials: 'same-origin', body: part });
+        }).then(function (r) { if (!r.ok && r.status !== 202) throw Object.assign(new Error('HTTP ' + r.status), { status: r.status }); return send(i + 1); });
       };
       return send(0);
+    },
+
+    /*
+     * Nahrání víc souborů najednou.
+     *
+     * Dřív šly soubory po jednom, takže dvě stě fotek z telefonu trvalo tolik,
+     * kolik trvá dvě stě nahrání za sebou. A co selhalo, hláška poslala „do
+     * fronty, odejde po připojení" — přitom žádná fronta pro soubory není:
+     * soubor se ztratil a nikdo o tom nevěděl.
+     *
+     * Teď běží tři nahrávání souběžně, co selže, se zkusí ještě jednou, a na
+     * konci se řekne, kolik prošlo, kolik už v knihovně bylo a která jména
+     * zůstala venku. `onProgress(hotovo, celkem)` hlásí postup.
+     */
+    nahrajVse: function (files, onProgress) {
+      var api = this;
+      var seznam = Array.prototype.slice.call(files || []);
+      var celkem = seznam.length, hotovo = 0, ulozeno = 0, duplicitni = 0;
+      var selhalo = [];
+      var fronta = seznam.map(function (f) { return { f: f, pokus: 0 }; });
+
+      function dalsi() {
+        var polozka = fronta.shift();
+        if (!polozka) return Promise.resolve();
+        return api.upload(polozka.f, { taken_at: polozka.f.lastModified }).then(function (b) {
+          if (b && b.status === 'duplicate') duplicitni++; else ulozeno++;
+          hotovo++;
+          if (onProgress) onProgress(hotovo, celkem);
+        }, function (e) {
+          // 413 a 422 se opakováním nespraví (velký soubor, nepodporovaný formát).
+          var stav = e && e.status;
+          if (polozka.pokus < 1 && stav !== 413 && stav !== 422) {
+            polozka.pokus++;
+            fronta.push(polozka);
+          } else {
+            selhalo.push({ jmeno: polozka.f.name, stav: stav || 0, zprava: (e && e.body && e.body.message) || '' });
+            hotovo++;
+            if (onProgress) onProgress(hotovo, celkem);
+          }
+        }).then(dalsi);
+      }
+
+      var soubezne = Math.min(3, Math.max(1, celkem));
+      var vlakna = [];
+      for (var i = 0; i < soubezne; i++) vlakna.push(dalsi());
+
+      return Promise.all(vlakna).then(function () {
+        return { celkem: celkem, ulozeno: ulozeno, duplicitni: duplicitni, selhalo: selhalo };
+      });
     },
 
     // ——— Upozornění ———

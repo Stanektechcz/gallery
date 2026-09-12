@@ -19279,7 +19279,8 @@ class Component extends DCLogic {
   }
 
   // ——— helpers ———
-  go = r => () => this.setState({ route: r, sel: [], selectMode: false, appTab: 0, notifOpen: false, albMenu: false });
+  // Přechod jinam zruší i filtr místa z mapy — jinak by se knihovna příště otevřela vyfiltrovaná.
+  go = r => () => this.setState({ route: r, sel: [], selectMode: false, appTab: 0, notifOpen: false, albMenu: false, misto: null });
   pl(n, one, few, many) { return n + ' ' + (n === 1 ? one : n >= 2 && n <= 4 ? few : many); }
   /*
    * Co aplikace zatím neumí, se řekne rovnou.
@@ -27608,6 +27609,9 @@ class Component extends DCLogic {
     let ph = this.photos().filter(p => !del.includes(p.id) && !vault.includes(p.id));
     if (this.state.route === 'favorites') ph = ph.filter(p => this.isFav(p));
     if (q) ph = ph.filter(p => (p.place + ' ' + p.album + ' ' + p.name + ' ' + p.tags.join(' ')).toLowerCase().includes(q));
+    // Místo z mapy: položky shluku, ne hledání podle jména (to bývá souřadnice).
+    const misto = this.state.misto;
+    if (misto && misto.ids && this.state.route === 'all') ph = ph.filter(p => misto.ids.indexOf(p.id) >= 0);
     return ph;
   }
   isFav(p) { const e = this.state.favs[p.id]; return e === undefined ? p.fav : e; }
@@ -27890,7 +27894,7 @@ class Component extends DCLogic {
   persistSkip() {
     if (!this._pSkip) this._pSkip = {
       route: 1, lb: 1, lbZoom: 1, confirm: 1, toast: 1, sel: 1, selectMode: 1, show: 1,
-      query: 1, txQuery: 1, msgQuery: 1, plQuery: 1, trQuery: 1, dnQuery: 1, ckQuery: 1, xQuery: 1, srPlace: 1,
+      query: 1, misto: 1, txQuery: 1, msgQuery: 1, plQuery: 1, trQuery: 1, dnQuery: 1, ckQuery: 1, xQuery: 1, srPlace: 1,
       gv: 1, gvPwd: 1, gvPwdErr: 1, gvTries: 1, gvC: 1,
       appLocked: 1, lockPin: 1, lockPwd: 1, lockTries: 1, lockRec: 1, lockRecCode: 1, lockStep: 1, lockAt: 1, secUntil: 1, gatePin: 1,
       // Uložený by po obnovení stránky nechal tlačítko viset na „Přihlašuji…".
@@ -28098,21 +28102,37 @@ class Component extends DCLogic {
       this.setState({ uploadOpen: false, queueOpen: true, queuePct: 4 });
       this.toast(this.pl(files.length, 'položka se nahrává', 'položky se nahrávají', 'položek se nahrává') + ' · ' + mb.toFixed(1).replace('.', ',') + ' MB', { icon: 'ph-upload-simple' });
       const api = window.GalerieApi;
-      let done = 0, failed = 0;
-      for (const f of files) {
-        if (api && api.upload) { try { await api.upload(f, { taken_at: f.lastModified }); } catch (e) { failed += 1; } }
-        done += 1;
-        this.setState({ queuePct: Math.round((done / files.length) * 100) });
+      if (!api || !api.nahrajVse || api.mode !== 'http') {
+        this.setState({ queuePct: 0, queueOpen: false });
+        this.toast('Nahrávat jde jen při spojení se serverem', { icon: 'ph-cloud-slash', color: 'var(--g-mag)' });
+        return;
       }
+      const v = await api.nahrajVse(files, (hotovo, celkem) => this.setState({ queuePct: Math.max(4, Math.round((hotovo / celkem) * 100)) }));
       this.setState({ queuePct: 100 });
-      this.toast(failed
-        ? this.pl(failed, 'položka čeká ve frontě', 'položky čekají ve frontě', 'položek čeká ve frontě') + ' · odejde po připojení'
-        : this.pl(files.length, 'položka nahrána', 'položky nahrány', 'položek nahráno') + ' · originály bezpečně uloženy',
-        { icon: failed ? 'ph-cloud-slash' : 'ph-cloud-check' });
+      // Nové fotky rovnou do knihovny — bez toho se ukázaly až po obnovení stránky.
+      if ((v.ulozeno || v.duplicitni) && window.GalerieObnovit) GalerieObnovit('knihovna');
+      this.toast(this.nahraniHlaska(v), { icon: v.selhalo.length ? 'ph-warning' : 'ph-cloud-check', color: v.selhalo.length ? 'var(--g-mag)' : undefined });
     };
     document.body.appendChild(inp);
     inp.click();
   };
+  /*
+   * Hláška po nahrání — co prošlo, co už v knihovně bylo, co zůstalo venku.
+   *
+   * Selhaný soubor se jmenuje, ať je jasné, co nahrát znovu; žádná fronta
+   * na soubory neexistuje a slibovat ji by znamenalo ztratit fotku potichu.
+   */
+  nahraniHlaska(v) {
+    const casti = [];
+    if (v.ulozeno) casti.push(this.pl(v.ulozeno, 'položka nahrána', 'položky nahrány', 'položek nahráno'));
+    if (v.duplicitni) casti.push(this.pl(v.duplicitni, 'už v knihovně byla', 'už v knihovně byly', 'už v knihovně bylo'));
+    if (v.selhalo.length) {
+      const jmena = v.selhalo.slice(0, 3).map(x => x.jmeno).join(', ') + (v.selhalo.length > 3 ? ' a další' : '');
+      const duvod = (v.selhalo[0] && v.selhalo[0].zprava) ? ' (' + v.selhalo[0].zprava + ')' : '';
+      casti.push(this.pl(v.selhalo.length, 'se nenahrála', 'se nenahrály', 'se nenahrálo') + ': ' + jmena + duvod + ' — zkuste je nahrát znovu');
+    }
+    return casti.join(' · ') || 'Nic k nahrání';
+  }
   startUpload = () => this.pickMedia();
 
   pickFiles = () => this.pickMedia('soubory');
@@ -29147,7 +29167,7 @@ class Component extends DCLogic {
     const mapPlaces = {};
     mapBody.forEach(b => {
       mapPlaces[b.key] = {
-        name: b.name,
+        name: b.name, ids: b.ids || [],
         // Co aplikace o shluku ví: kolik fotek a kde. Zemi ani měsíce
         // z GPS neurčí, takže je nepíše.
         meta: this.pl(b.count, 'položka', 'položky', 'položek') + ' · ' + b.lat.toFixed(3) + ', ' + b.lon.toFixed(3)
@@ -30119,9 +30139,10 @@ class Component extends DCLogic {
         }
       })),
 
-      hasFilters: s.filters.length > 0, filterCount: s.filters.length,
-      activeFilters: s.filters.map(f => ({ label: f, remove: () => this.setState({ filters: s.filters.filter(x => x !== f) }) })),
-      clearFilters: () => this.setState({ filters: [], filtersOpen: false, query: '' }),
+      hasFilters: s.filters.length > 0 || !!(s.misto && R === 'all'), filterCount: s.filters.length + (s.misto && R === 'all' ? 1 : 0),
+      activeFilters: (s.misto && R === 'all' ? [{ label: 'Místo: ' + s.misto.name, remove: () => this.setState({ misto: null }) }] : [])
+        .concat(s.filters.map(f => ({ label: f, remove: () => this.setState({ filters: s.filters.filter(x => x !== f) }) }))),
+      clearFilters: () => this.setState({ filters: [], filtersOpen: false, query: '', misto: null }),
       openFilters: () => this.setState({ filtersOpen: true }), closeFilters: () => this.setState({ filtersOpen: false }),
       filtersOpen: s.filtersOpen, applyFilters: () => this.setState({ filtersOpen: false, route: 'all' }),
       quickDates: ['Tento měsíc', 'Loni v tuto dobu', 'Rok 2024', 'Léto 2026', 'Vlastní'].map(l => ({ label: l, go: () => this.setState({ filters: Array.from(new Set(s.filters.concat(l))) }) })),
@@ -30340,7 +30361,9 @@ class Component extends DCLogic {
         fg: s.mapPlace === p[0] ? 'var(--g-acc-deep)' : 'var(--g-ink2)',
         go: () => { this.setState({ mapPlace: p[0] }); this.mapTell({ type: 'focus', key: p[0] }); }
       })),
-      mapPlace: { ...mapPlaceCur, go: () => this.setState({ route: 'all', query: mapPlaceCur.name }) },
+      mapPlace: { ...mapPlaceCur, go: () => this.setState(mapPlaceCur.ids && mapPlaceCur.ids.length
+        ? { route: 'all', query: '', misto: { name: mapPlaceCur.name, ids: mapPlaceCur.ids } }
+        : { route: 'all', query: mapPlaceCur.name }) },
       mapItems: this.photos().slice(2, 14).map(p => ({ bg: p.bg, open: () => this.openLb(p.id) })),
       mapAlbums: albums.slice(0, 3).map(a => ({ name: a.name, meta: a.date, bg: this.bg(a.n), go: () => this.setState({ route: 'album', albumId: a.id }) })),
 

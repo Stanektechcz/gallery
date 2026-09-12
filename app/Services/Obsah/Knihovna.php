@@ -1405,10 +1405,16 @@ class Knihovna implements PoskytovatelObsahu
             $lon = round((float) $m->longitude, 1);
             $klic = $lat.'|'.$lon;
 
-            $shluky[$klic] ??= ['lat' => 0.0, 'lon' => 0.0, 'pocet' => 0, 'jmena' => []];
+            $shluky[$klic] ??= ['lat' => 0.0, 'lon' => 0.0, 'pocet' => 0, 'jmena' => [], 'ids' => []];
             $shluky[$klic]['lat'] += (float) $m->latitude;
             $shluky[$klic]['lon'] += (float) $m->longitude;
             $shluky[$klic]['pocet']++;
+
+            // Co ve shluku je — „Otevřít galerii místa" podle toho filtruje.
+            // Strop drží odpověď malou; víc se na jednu obrazovku nevejde.
+            if (count($shluky[$klic]['ids']) < 500) {
+                $shluky[$klic]['ids'][] = (string) $m->uuid;
+            }
 
             if ($m->location_name) {
                 $shluky[$klic]['jmena'][(string) $m->location_name] = ($shluky[$klic]['jmena'][(string) $m->location_name] ?? 0) + 1;
@@ -1432,6 +1438,15 @@ class Knihovna implements PoskytovatelObsahu
                 'lat' => round($lat, 6),
                 'lon' => round($lon, 6),
                 'count' => $s['pocet'],
+                /*
+                 * Položky shluku.
+                 *
+                 * „Otevřít galerii místa" hledalo v knihovně jméno shluku — a u
+                 * fotek bez pojmenovaného místa je jméno souřadnice, takže
+                 * knihovna odpověděla „Pro ‚49.837, 18.273' jsme nic nenašli".
+                 * Odkaz, který vede do prázdna.
+                 */
+                'ids' => $s['ids'],
             ];
         }
 

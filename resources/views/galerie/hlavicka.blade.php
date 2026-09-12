@@ -383,9 +383,17 @@
    */
   window.GalerieNacita = 0;
 
-  function nactiSkupinu(jmeno) {
+  /*
+   * `cerstve` obchází třicetivteřinovou paměť odpovědi.
+   *
+   * Skupiny se posílají s `max-age=30`, aby se při překreslování nestahovaly
+   * pořád dokola. Jenže obnovení po zápisu (nahrání fotek, zpráva do chatu,
+   * nový kód zámku) tak dostalo odpověď z doby před zápisem — a nahrané fotky
+   * se v knihovně ukázaly až za půl minuty nebo po obnovení stránky.
+   */
+  function nactiSkupinu(jmeno, cerstve) {
     window.GalerieNacita++;
-    return fetch('/api/data/' + jmeno, { headers: hlavicky(), credentials: 'same-origin' })
+    return fetch('/api/data/' + jmeno, { headers: hlavicky(), credentials: 'same-origin', cache: cerstve ? 'no-cache' : 'default' })
         .then(function (r) { return r.ok ? r.json() : null; })
         .then(function (b) {
           if (! b || ! b.data) return false;
@@ -449,7 +457,7 @@
    */
   window.GalerieObnovit = function (jmeno) {
     if (SKUPINY.indexOf(jmeno) < 0) return Promise.resolve(false);
-    return nactiSkupinu(jmeno);
+    return nactiSkupinu(jmeno, true);
   };
 
   window.GalerieAdminObnov = nacti;

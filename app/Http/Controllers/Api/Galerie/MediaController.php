@@ -8,6 +8,7 @@ use App\Jobs\Media\CalculateMediaHashesJob;
 use App\Jobs\Media\ExtractMediaMetadataJob;
 use App\Jobs\Media\GenerateImageVariantsJob;
 use App\Jobs\Media\GenerateVideoPosterJob;
+use App\Jobs\MirrorMediaToCloud;
 use App\Models\AuditLog;
 use App\Models\GallerySpace;
 use App\Models\MediaItem;
@@ -248,6 +249,27 @@ class MediaController extends Controller
     private function prijmi(Request $request, string $cesta, string $jmeno, $takenAt): JsonResponse
     {
         $prostorId = $this->parId($request);
+
+        /*
+         * Do knihovny patří fotky a videa, ne cokoli.
+         *
+         * Tahle cesta brala jakýkoli soubor: textová poznámka se uložila jako
+         * „fotka", zabrala místo v tarifu, dostala dlaždici, kterou nejde
+         * zobrazit, a úlohy na náhled a kopii na Disk na ní padaly. Rozhoduje
+         * přípona i obsah — přejmenovaný dokument na `.jpg` neprojde.
+         */
+        $pripona = $this->pripona($jmeno);
+        $obsah = (string) (File::mimeType($cesta) ?: '');
+        $znamaPripona = in_array($pripona, MediaFormatService::allExtensions(), true);
+        $obrazNeboVideo = str_starts_with($obsah, 'image/') || str_starts_with($obsah, 'video/')
+            // RAW a HEIC finfo často nepozná; tam musí stačit přípona.
+            || MediaFormatService::isRaw($pripona) || in_array($pripona, ['heic', 'heif', 'avif'], true);
+
+        abort_unless($znamaPripona && $obrazNeboVideo, 422, sprintf(
+            'Soubor „%s" není fotka ani video, do knihovny ho nahrát nejde.',
+            mb_substr($jmeno, 0, 80),
+        ));
+
         $bajtu = (int) filesize($cesta);
         $hash = hash_file('sha256', $cesta);
 
@@ -279,7 +301,6 @@ class MediaController extends Controller
             ));
         }
 
-        $pripona = $this->pripona($jmeno);
         $mime = $this->mime($cesta, $pripona);
         $druh = MediaFormatService::isVideo($pripona) || str_starts_with($mime, 'video/') ? 'video' : 'photo';
 
@@ -368,6 +389,28 @@ class MediaController extends Controller
                     'error' => $e->getMessage(),
                 ]);
             }
+        }
+
+        /*
+         * Kopie na Google Disk hned po nahrání.
+         *
+         * Původní nahrávání (`UploadController`) ji zařazovalo, tohle ne — a přes
+         * tuhle cestu nahrává nové rozhraní všechno. Fotky se tak na Disk
+         * dostaly nejdřív v noci, při dorovnání zálohy, a když neběžela fronta,
+         * nikdy: doktor hlásil „0 z 203 originálů zkopírováno".
+         *
+         * Stejně obalené jako ostatní úlohy, a z ostřejšího důvodu: na frontě
+         * `sync` běží úloha přímo v požadavku a výpadek Disku nesmí shodit
+         * nahrání, které už je v bezpečí. Když prostor žádné napojení nemá,
+         * úloha skončí sama (`activeConnection` vrátí nic).
+         */
+        try {
+            MirrorMediaToCloud::dispatch($media->id);
+        } catch (\Throwable $e) {
+            Log::warning('Kopii na Disk se nepodařilo zařadit', [
+                'media_id' => $media->id,
+                'error' => $e->getMessage(),
+            ]);
         }
     }
 

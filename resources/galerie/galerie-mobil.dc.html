@@ -8461,18 +8461,38 @@ class Component extends DCLogic {
       inp.remove();
       if (!files.length) return;
       const mb = files.reduce((a, f) => a + f.size, 0) / (1024 * 1024);
-      this.setState({ extra: (this.state.extra || 0) + files.length, sheet: null, tab: 'memories', stack: [], filter: 'all' });
+      // Počítadlo se nezvedá dopředu: dřív knihovna ukázala „+N" dřív, než
+      // cokoli dorazilo, a u selhaného nahrání to tam zůstalo.
+      this.setState({ sheet: null, tab: 'memories', stack: [], filter: 'all' });
       this.toast(this.pl(files.length, 'položka se nahrává', 'položky se nahrávají', 'položek se nahrává') + ' · ' + mb.toFixed(1).replace('.', ',') + ' MB', { icon: 'ph-upload-simple' });
       const api = window.GalerieApi;
-      if (!api || !api.upload) return;
-      let failed = 0;
-      for (const f of files) {
-        try { await api.upload(f, { taken_at: f.lastModified }); } catch (e) { failed += 1; }
+      if (!api || !api.nahrajVse || api.mode !== 'http') {
+        this.toast('Nahrávat jde jen při spojení se serverem', { icon: 'ph-cloud-slash' });
+        return;
       }
-      if (failed) this.toast(this.pl(failed, 'položka čeká ve frontě', 'položky čekají ve frontě', 'položek čeká ve frontě') + ' · odejde po připojení', { icon: 'ph-cloud-slash' });
+      const v = await api.nahrajVse(files);
+      if ((v.ulozeno || v.duplicitni) && window.GalerieObnovit) GalerieObnovit('knihovna');
+      this.toast(this.nahraniHlaska(v), { icon: v.selhalo.length ? 'ph-warning' : 'ph-cloud-check' });
     };
     document.body.appendChild(inp);
     inp.click();
+  }
+  /*
+   * Hláška po nahrání — co prošlo, co už v knihovně bylo, co zůstalo venku.
+   *
+   * Selhaný soubor se jmenuje, ať je jasné, co nahrát znovu; žádná fronta
+   * na soubory neexistuje a slibovat ji by znamenalo ztratit fotku potichu.
+   */
+  nahraniHlaska(v) {
+    const casti = [];
+    if (v.ulozeno) casti.push(this.pl(v.ulozeno, 'položka nahrána', 'položky nahrány', 'položek nahráno'));
+    if (v.duplicitni) casti.push(this.pl(v.duplicitni, 'už v knihovně byla', 'už v knihovně byly', 'už v knihovně bylo'));
+    if (v.selhalo.length) {
+      const jmena = v.selhalo.slice(0, 3).map(x => x.jmeno).join(', ') + (v.selhalo.length > 3 ? ' a další' : '');
+      const duvod = (v.selhalo[0] && v.selhalo[0].zprava) ? ' (' + v.selhalo[0].zprava + ')' : '';
+      casti.push(this.pl(v.selhalo.length, 'se nenahrála', 'se nenahrály', 'se nenahrálo') + ': ' + jmena + duvod + ' — zkuste je nahrát znovu');
+    }
+    return casti.join(' · ') || 'Nic k nahrání';
   }
   /*
    * Kdo ti dva jsou — a jak se jejich jména skloňují.
