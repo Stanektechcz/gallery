@@ -292,7 +292,7 @@ class ObsahSystemTest extends TestCase
      * Kdo se přihlašuje, řekne server — ne konstanta v ukázce.
      *
      * Přihlašovací obrazovka nabízela „Adrian" a „Makinka" a předvyplňovala
-     * `adrian.stanek@gmail.com`. U jiné dvojice to byla cizí adresa: člověk ji
+     * `adrian@example.com`. U jiné dvojice to byla cizí adresa: člověk ji
      * poslušně odeslal a dostal „E-mail nebo heslo nesouhlasí".
      */
     public function test_prihlaseni_zna_skutecna_jmena_a_adresy(): void
@@ -301,7 +301,8 @@ class ObsahSystemTest extends TestCase
 
         $this->assertSame($this->adri->name, $data['LOCKWHO']['A']);
         $this->assertSame(mb_strtolower($this->adri->email), $data['LOCKMAIL']['A']);
-        $this->assertStringNotContainsString('@gmail.com', json_encode($data['LOCKMAIL']));
+        $this->assertStringNotContainsString('adrian@example.com', json_encode($data['LOCKMAIL']));
+        $this->assertStringNotContainsString('makinka@example.com', json_encode($data['LOCKMAIL']));
     }
 
     /** Čísla druhého páru se do odpovědi nedostanou. */
@@ -428,7 +429,7 @@ class ObsahSystemTest extends TestCase
     /**
      * První spuštění nabízí skutečné účty, ne dvě napsané adresy.
      *
-     * Stálo tam `adrian.stanek@gmail.com` a `makinka@gmail.com`. U jiné
+     * Stálo tam `adrian@example.com` a `makinka@example.com`. U jiné
      * dvojice to byly cizí adresy — a člověk si podle nich vybíral, kdo je.
      */
     public function test_ucty_nesou_skutecne_adresy(): void
@@ -467,7 +468,7 @@ class ObsahSystemTest extends TestCase
      * Bez připojeného Disku obrazovka neříká, že je záloha hotová.
      *
      * Celá obrazovka úložiště byla napsaná v designovém souboru — „Připojeno —
-     * adrian.stanek@gmail.com" a „24 316 originálů bezpečně uloženo". Dvojici,
+     * adrian@example.com" a „24 316 originálů bezpečně uloženo". Dvojici,
      * která Disk připojený nemá, tvrdila, že jsou její fotky ve dvou kopiích.
      */
     public function test_bez_disku_se_netvrdi_ze_je_zaloha(): void

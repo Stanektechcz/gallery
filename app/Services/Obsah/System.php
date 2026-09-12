@@ -140,7 +140,7 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
                  * Kdo se přihlašuje — jménem a adresou dvojice.
                  *
                  * Přihlašovací obrazovka nabízela „Adrian" a „Makinka" a do
-                 * kolonky předvyplnila `adrian.stanek@gmail.com`. U jiné
+                 * kolonky předvyplnila `adrian@example.com`. U jiné
                  * dvojice to byla cizí adresa, kterou člověk poslušně odeslal
                  * a dostal „E-mail nebo heslo nesouhlasí" — bez nápovědy, co
                  * je vlastně špatně.
@@ -398,7 +398,7 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
      * Jméno a adresa obou, ve stejném pořadí jako `DVOJICE`.
      *
      * První spuštění nabízelo výběr ze dvou napsaných účtů včetně adres
-     * (`adrian.stanek@gmail.com`). U jiné dvojice to byla cizí adresa
+     * (`adrian@example.com`). U jiné dvojice to byla cizí adresa
      * a člověk si podle ní vybíral, kdo je.
      *
      * Nic nového se tím neodhaluje: jsou to členové téhož prostoru a vidí
@@ -524,7 +524,7 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
      * Úložiště a synchronizace — celá obrazovka ze skutečnosti.
      *
      * Byla to nejnebezpečnější obrazovka v aplikaci. Stálo v ní „Připojeno —
-     * adrian.stanek@gmail.com", „poslední úspěšná synchronizace dnes v 8:12"
+     * adrian@example.com", „poslední úspěšná synchronizace dnes v 8:12"
      * a „24 316 originálů bezpečně uloženo" — všechno napsané v designovém
      * souboru. Dvojici, která Disk připojený nemá, tvrdila, že jsou její fotky
      * ve dvou kopiích. To není zastaralé číslo, to je nepravda o záloze.

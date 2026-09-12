@@ -324,9 +324,22 @@
       get: function () { return mech; },
       set: function (v) {
         if (! v || v === mech) return;
-        if (! mech) { mech = v; return; }
+        if (! mech) mech = v;
+        // Tatáž nádoba se nenavléká sama do sebe: `length = 0` by ji vyprázdnilo
+        // dřív, než by se z ní stihlo číst (`Object.assign({}, mech, …)`).
+        else Object.keys(v).forEach(function (k) { if (v[k] !== mech[k]) navlec(mech, k, v[k], false); });
 
-        Object.keys(v).forEach(function (k) { navlec(mech, k, v[k], false); });
+        /*
+         * Co poslal server, má přednost i před pozdějším přiřazením souboru.
+         *
+         * Runtime prototypu umí skripty spustit znovu; `galerie-mechanismy.js`
+         * by pak do nádob vrátil život ukázkové dvojice (její děti, rodiče,
+         * přátele) přes prázdné sbírky přihlášené dvojice.
+         */
+        var zeServeru = window.GalerieMechZeServeru;
+        if (zeServeru && v !== zeServeru) {
+          Object.keys(zeServeru).forEach(function (k) { navlec(mech, k, zeServeru[k], false); });
+        }
       }
     });
   } catch (e) {}

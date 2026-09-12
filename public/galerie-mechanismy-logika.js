@@ -12,6 +12,18 @@
       INDEP = G.INDEP, TRUST = G.TRUST, EXPIRE = G.EXPIRE;
   // Data ze sdíleného katalogu (rozhodnutí a tichá pravidla).
   function DESK() { return window.GalerieData || { DEC_LIST: [], TACIT: [] }; }
+  /*
+   * Jména dvojice z komponentu, ne „Adrian" a „Makinka" napevno.
+   *
+   * Mechanismy psaly jména ukázkové dvojice do nadpisů, sloupců i hlášek —
+   * a porovnávaly s nimi data (`who === 'Adrian'`). U jiné dvojice pak nic
+   * neodpovídalo a obrazovky ukazovaly nuly pod cizími jmény. `dva()` vrací
+   * jména z `DVOJICE`; bez přihlášení ukázková, takže ukázka zůstává stejná.
+   * Věty jsou psané bez rodu, kde to jde — skloňování umí `sklon()`.
+   */
+  function DVA(self) { const d = self.dva ? self.dva() : []; return [d[0] || 'Adrian', d[1] || 'Makinka']; }
+  function KR(j) { return String(j || '').trim().split(/\s+/)[0]; }
+  function PAD(self, j, pad) { return self.sklon ? self.sklon(KR(j), pad) : KR(j); }
 
   window.GalerieMechLogic = {
   // Opt-in vrstva: citlivé funkce nic nesledují, dokud je někdo nezapne.
@@ -33,8 +45,10 @@
     const on = this.optOn('day');
     const bonus = s.dayBonus || {};
     const score = w => (DAY_LOAD.find(d => d.who === w) || { items: [] }).items.reduce((a, i) => a + i[1], 0) + (bonus[w] || 0);
-    const sA = score('Adrian'), sM = score('Makinka');
-    const worse = sA === sM ? null : sA > sM ? 'Adrian' : 'Makinka';
+    const [jA, jM] = DVA(this);
+    const sA = score(jA), sM = score(jM);
+    const worse = sA === sM ? null : sA > sM ? jA : jM;
+    const druhy = worse === jA ? jM : jA;
     const given = !!s.dayGiven, shifted = !!s.dayShift;
     const maxS = Math.max(sA, sM, 1);
     return {
@@ -43,10 +57,10 @@
       dayDisable: () => this.optOff('day', 'Kdo je dnes na tom hůř'),
       dayOptWhy: 'Máte mapu energie i náladu dvou, ale nic z toho neřekne, kdo dnes uvaří. Tohle to řekne — jedním číslem za den, ne debatou u sporáku. Nic se nikam nehlásí a nikdo za to nedostane bod.',
       dayHead: worse
-        ? (worse === 'Makinka' ? 'Makinka je dnes na tom hůř' : 'Adrian je dnes na tom hůř') + ' · ' + Math.abs(sA - sM) + ' bod' + (Math.abs(sA - sM) === 1 ? '' : 'y') + ' rozdíl'
-        : 'Dnes jste na tom stejně',
+        ? KR(worse) + ' je dnes na tom hůř · ' + Math.abs(sA - sM) + ' bod' + (Math.abs(sA - sM) === 1 ? '' : 'y') + ' rozdíl'
+        : DAY_LOAD.length ? 'Dnes jste na tom stejně' : 'Dnešní zátěž zatím nikdo nezapsal',
       dayNote: worse
-        ? (given ? (worse === 'Makinka' ? 'Makinka' : 'Adrian') + ' se výhody vzdal' + (worse === 'Makinka' ? 'a' : '') + '. To se taky počítá — jen se to nikde neúčtuje.' : 'Dnes ' + (worse === 'Makinka' ? 'Makinka' : 'Adrian') + ' nic nemusí. Není to odměna, je to logistika.')
+        ? (given ? KR(worse) + ' · výhoda vzdaná. To se taky počítá — jen se to nikde neúčtuje.' : 'Dnes ' + KR(worse) + ' nic nemusí. Není to odměna, je to logistika.')
         : 'Rozdíl je nula. Dnes se dělí všechno normálně.',
       dayNoteColor: given ? 'var(--g-ink3)' : worse ? 'var(--g-ink)' : 'var(--g-ink2)',
       dayPeople: DAY_LOAD.map(d => {
@@ -54,25 +68,27 @@
         return {
           who: d.who, v: String(sc),
           w: Math.round(sc / maxS * 100) + '%',
-          fill: d.who === 'Adrian' ? 'var(--g-acc)' : 'var(--g-mag)',
+          fill: d.who === jA ? 'var(--g-acc)' : 'var(--g-mag)',
           lead: worse === d.who,
           items: d.items.map(i => ({ text: i[0], pts: i[1] ? '+' + i[1] : '—', color: i[1] >= 2 ? 'var(--g-mag)' : 'var(--g-ink3)' })),
           worse: () => { const prev = bonus; this.setState({ dayBonus: Object.assign({}, bonus, { [d.who]: (bonus[d.who] || 0) + 1 }) }); this.toast(d.who + ' — je to dnes horší, než to vypadá. Zapsáno.', { icon: 'ph-plus', undo: () => this.setState({ dayBonus: prev }) }); }
         };
       }),
       dayCanShift: !!worse && !shifted && !given,
-      dayShiftLabel: worse ? 'Dnešní práce bere ' + (worse === 'Makinka' ? 'Adrian' : 'Makinka') : 'Dnešní práce',
-      dayDoShift: () => { this.setState({ dayShift: true, route: 'x-domacnost', hsTab: 'chores' }); this.toast('Dnešní práce přešly na ' + (worse === 'Makinka' ? 'Adriana' : 'Makinku') + ' · zítra se to nepamatuje', { icon: 'ph-arrows-left-right', undo: () => this.setState({ dayShift: false }) }); },
+      dayShiftLabel: worse ? 'Dnešní práce bere ' + KR(druhy) : 'Dnešní práce',
+      dayDoShift: () => { this.setState({ dayShift: true, route: 'x-domacnost', hsTab: 'chores' }); this.toast('Dnešní práce přešly na ' + PAD(this, druhy, 'acc') + ' · zítra se to nepamatuje', { icon: 'ph-arrows-left-right', undo: () => this.setState({ dayShift: false }) }); },
       dayCanGive: !!worse && !given,
       dayGiveLabel: 'Vzdát se výhody',
       dayGive: () => { this.setState({ dayGiven: true }); this.toast('Výhoda se nepřenáší do zítřka a nikde se nesčítá', { icon: 'ph-hand-heart', undo: () => this.setState({ dayGiven: false }) }); },
       dayShifted: shifted,
       dayHist: DAY_HIST.map(h => ({
         d: h.d, pts: h.pts,
-        who: h.who === 'nikdo' ? 'nerozhodně' : h.who,
-        color: h.who === 'Adrian' ? 'var(--g-acc)' : h.who === 'Makinka' ? 'var(--g-mag)' : 'var(--g-ink3)'
+        who: h.who === 'nikdo' ? 'nerozhodně' : KR(h.who),
+        color: h.who === jA ? 'var(--g-acc)' : h.who === jM ? 'var(--g-mag)' : 'var(--g-ink3)'
       })),
-      dayHistLine: 'Za posledních pět dní: dvakrát Adrian, dvakrát Makinka, jednou nerozhodně. Kdyby to bylo pětkrát stejně, byla by to informace o práci, ne o dni.',
+      // Souhrn z historie, ne napsaná věta „dvakrát Adrian, dvakrát Makinka".
+      dayHistLine: !DAY_HIST.length ? 'Historie zatím prázdná — začne prvním zapsaným dnem.'
+        : 'Za posledních ' + this.pl(DAY_HIST.length, 'den', 'dny', 'dní') + ': ' + KR(jA) + ' ' + DAY_HIST.filter(h => h.who === jA).length + '×, ' + KR(jM) + ' ' + DAY_HIST.filter(h => h.who === jM).length + '×, nerozhodně ' + DAY_HIST.filter(h => h.who !== jA && h.who !== jM).length + '×. Kdyby to bylo pořád stejně, byla by to informace o práci, ne o dni.',
       dayFoot: 'Skóre se resetuje o půlnoci. Nikdo si nic nenese do zítřka — jinak by z toho byl další účet.'
     };
   },
@@ -87,7 +103,9 @@
     const weeks = BLIZ.weeks.map((w, i) => [w[0], w[1] + (i === BLIZ.weeks.length - 1 ? extra : 0)]);
     const total = weeks.reduce((a, w) => a + w[1], 0);
     const maxW = Math.max.apply(null, weeks.map(w => w[1]).concat([1]));
-    const iA = BLIZ.init.Adrian, iM = BLIZ.init.Makinka;
+    const [jA, jM] = DVA(this);
+    const iA = (BLIZ.init || {})[jA] || 0, iM = (BLIZ.init || {})[jM] || 0;
+    const nA = (BLIZ.no || {})[jA] || 0, nM = (BLIZ.no || {})[jM] || 0;
     const bothIn = wA !== undefined && wM !== undefined;
     const blocks = BLIZ.block.filter(b => !blocked[b[0]]).slice().sort((a, b) => b[1] - a[1]);
     const maxB = Math.max.apply(null, blocks.map(b => b[1]).concat([1]));
@@ -103,20 +121,21 @@
         h: Math.round(w[1] / maxW * 100) + '%',
         fill: w[1] === 0 ? 'var(--g-line)' : 'var(--g-acc)'
       })),
-      blizTrend: weeks.slice(4).reduce((a, w) => a + w[1], 0) < weeks.slice(0, 4).reduce((a, w) => a + w[1], 0)
+      blizTrend: !weeks.length ? 'Zatím nic zapsaného — trend se ukáže po několika týdnech.'
+        : weeks.slice(4).reduce((a, w) => a + w[1], 0) < weeks.slice(0, 4).reduce((a, w) => a + w[1], 0)
         ? 'Poslední čtyři týdny je to méně než předchozí čtyři. Podívejte se na tabulku níž — pravděpodobně tam ten důvod stojí.'
         : 'Poslední čtyři týdny to drží.',
       blizInit: [
-        { name: 'Navrhoval Adrian', v: String(iA), w: Math.round(iA / Math.max(iA, iM, 1) * 100) + '%', color: 'var(--g-acc)' },
-        { name: 'Navrhovala Makinka', v: String(iM), w: Math.round(iM / Math.max(iA, iM, 1) * 100) + '%', color: 'var(--g-mag)' },
-        { name: 'Odmítl Adrian', v: String(BLIZ.no.Adrian), w: Math.round(BLIZ.no.Adrian / Math.max(BLIZ.no.Adrian, BLIZ.no.Makinka, 1) * 100) + '%', color: 'var(--g-ink3)' },
-        { name: 'Odmítla Makinka', v: String(BLIZ.no.Makinka), w: Math.round(BLIZ.no.Makinka / Math.max(BLIZ.no.Adrian, BLIZ.no.Makinka, 1) * 100) + '%', color: 'var(--g-ink3)' }
+        { name: 'Navrhuje ' + KR(jA), v: String(iA), w: Math.round(iA / Math.max(iA, iM, 1) * 100) + '%', color: 'var(--g-acc)' },
+        { name: 'Navrhuje ' + KR(jM), v: String(iM), w: Math.round(iM / Math.max(iA, iM, 1) * 100) + '%', color: 'var(--g-mag)' },
+        { name: 'Odmítá ' + KR(jA), v: String(nA), w: Math.round(nA / Math.max(nA, nM, 1) * 100) + '%', color: 'var(--g-ink3)' },
+        { name: 'Odmítá ' + KR(jM), v: String(nM), w: Math.round(nM / Math.max(nA, nM, 1) * 100) + '%', color: 'var(--g-ink3)' }
       ],
-      blizInitLine: iA > iM * 2
-        ? 'Navrhuje skoro vždycky Adrian a odmítá skoro vždycky Makinka. To je dvojí zátěž: jeden nosí riziko odmítnutí, druhý nosí povinnost odpovědět. Ani jedno není příjemné.'
-        : 'Iniciativa je rozdělená.',
+      blizInitLine: iA > iM * 2 || iM > iA * 2
+        ? 'Navrhuje skoro vždycky ' + KR(iA > iM ? jA : jM) + '. To je dvojí zátěž: jeden nosí riziko odmítnutí, druhý nosí povinnost odpovědět. Ani jedno není příjemné.'
+        : iA + iM ? 'Iniciativa je rozdělená.' : 'Zatím nikdo nic nezapsal.',
       blizPrivate: bothIn
-        ? 'Tento týden: Adrian ' + wA + ' z 5, Makinka ' + wM + ' z 5.' + (Math.abs(wA - wM) >= 2 ? ' Rozdíl dva body a víc — o tom se dá mluvit bez viníka.' : ' Podobně.')
+        ? 'Tento týden: ' + KR(jA) + ' ' + wA + ' z 5, ' + KR(jM) + ' ' + wM + ' z 5.' + (Math.abs(wA - wM) >= 2 ? ' Rozdíl dva body a víc — o tom se dá mluvit bez viníka.' : ' Podobně.')
         : wA !== undefined || wM !== undefined
           ? 'Jeden z vás už odpověděl. Čísla se zobrazí, až odpoví oba — dřív by to bylo hodnocení, ne rozhovor.'
           : 'Chuť tenhle týden zadává každý sám. Ukáže se, až to udělají oba.',
@@ -155,7 +174,9 @@
     const even = !!s.mineEven;
     const rows = SOLO_MONEY.map(m => Object.assign({}, m, { income: inc[m.who] || m.income, share: even ? 50 : m.share }));
     const flat = SOLO_COST.rent + SOLO_COST.life;
-    const maxI = Math.max.apply(null, rows.map(r => r.income));
+    const [jA] = DVA(this);
+    // Bez řádků by `Math.max()` vrátil −Infinity a šířky pruhů NaN.
+    const maxI = Math.max.apply(null, rows.map(r => r.income).concat([1]));
     const solo = r => r.income - (SOLO_COST.rent + SOLO_COST.alone) - Math.round(r.debt ? 3400 : 0);
     const both = rows.map(r => ({ r: r, left: solo(r) }));
     const weak = both.slice().sort((a, b) => a.left - b.left)[0];
@@ -164,14 +185,15 @@
       mineEnable: () => this.optEnable('solo', 'Každý sám'),
       mineDisable: () => this.optOff('solo', 'Každý sám'),
       mineOptWhy: 'Celá aplikace počítá „naše“. To je v pořádku, dokud to funguje. Tady se to jednou rozpočítá na dva — příjem, dluh, majetek a to, co by z toho zbylo, kdyby jeden zůstal sám. Není to plán odchodu, je to test, jestli zůstáváte dobrovolně.',
-      mineHead: 'Nájem a život ve dvou ' + this.kc(flat) + ' · sám ' + this.kc(SOLO_COST.rent + SOLO_COST.alone),
+      mineHead: !rows.length ? 'Zatím nic zapsaného — příjmy, dluhy a náklady si tu každý vyplní sám'
+        : 'Nájem a život ve dvou ' + this.kc(flat) + ' · sám ' + this.kc(SOLO_COST.rent + SOLO_COST.alone),
       mineNote: 'Když jeden odejde, náklady se nepůlí. Nájem zůstane celý a k životu ubere jen část — to je ten rozdíl, který nikdo nepočítá dopředu.',
       mineRows: both.map(x => ({
-        who: x.r.who, note: x.r.note,
-        tag: x.r.who === 'Adrian' ? 'tag-accent' : 'tag-accent-2',
+        who: KR(x.r.who), note: x.r.note,
+        tag: x.r.who === jA ? 'tag-accent' : 'tag-accent-2',
         income: this.kc(x.r.income),
         w: Math.round(x.r.income / maxI * 100) + '%',
-        fill: x.r.who === 'Adrian' ? 'var(--g-acc)' : 'var(--g-mag)',
+        fill: x.r.who === jA ? 'var(--g-acc)' : 'var(--g-mag)',
         debt: x.r.debt ? this.kc(x.r.debt) + ' · ' + x.r.debtNote : x.r.debtNote,
         debtColor: x.r.debt ? 'var(--g-mag)' : 'var(--g-ok)',
         own: this.kc(x.r.own),
@@ -179,13 +201,13 @@
         left: (x.left >= 0 ? '+' : '−') + this.kc(Math.abs(x.left)),
         leftColor: x.left >= 0 ? 'var(--g-ok)' : 'var(--g-mag)',
         leftLine: x.left >= 0
-          ? 'Sám by ' + (x.r.who === 'Makinka' ? 'jí' : 'mu') + ' po nájmu a životě zbylo ' + this.kc(x.left) + ' měsíčně.'
-          : 'Sám by ' + (x.r.who === 'Makinka' ? 'jí' : 'mu') + ' chybělo ' + this.kc(-x.left) + ' měsíčně. Z vlastního majetku by to vydrželo ' + Math.max(1, Math.round(x.r.own / -x.left)) + ' měsíců.',
+          ? 'Samotnému by po nájmu a životě zbylo ' + this.kc(x.left) + ' měsíčně.'
+          : 'Samotnému by chybělo ' + this.kc(-x.left) + ' měsíčně. Z vlastního majetku by to vydrželo ' + Math.max(1, Math.round(x.r.own / -x.left)) + ' měsíců.',
         setInc: e => this.setState({ mineInc: Object.assign({}, inc, { [x.r.who]: parseInt(String(e.target.value).replace(/\s/g, ''), 10) || x.r.income }) }),
         incVal: String(x.r.income)
       })),
-      mineWeak: weak
-        ? (weak.r.who === 'Makinka' ? 'Makinka' : 'Adrian') + ' by na tom byl' + (weak.r.who === 'Makinka' ? 'a' : '') + ' sám hůř. To není argument v hádce — je to důvod, proč má obálka jen pro sebe smysl u ' + (weak.r.who === 'Makinka' ? 'ní' : 'něj') + ' víc.'
+      mineWeak: weak && rows.length > 1
+        ? 'Samostatně na tom hůř: ' + KR(weak.r.who) + '. To není argument v hádce — je to důvod, proč má obálka jen pro sebe smysl právě tam víc.'
         : '',
       mineEvenOn: even,
       mineEvenLabel: even ? 'Podíly jsou 50 : 50' : 'Vyrovnat podíly na 50 : 50',
@@ -201,9 +223,13 @@
     const on = this.optOn('kids');
     const st = s.kidsStance || {}, yr = s.kidsYear || {}, fixed = s.kidsFixed || {};
     const talks = (s.kidsTalks || []).concat(KIDS.talks);
-    const pos = KIDS.pos.map(p => Object.assign({}, p, { stance: st[p.who] || p.stance, year: yr[p.who] || p.year }));
+    const [jA, jM] = DVA(this);
+    // Bez zapsaných pozic dvě prázdné — každý svoji, pod svým jménem. Dřív tu
+    // stály pozice ukázkové dvojice a prázdné pole shodilo `pos[0].stance`.
+    const zaklad = KIDS.pos.length ? KIDS.pos : [jA, jM].map(w => ({ who: w, stance: 'nevím', year: null, sure: 0, note: '' }));
+    const pos = zaklad.map(p => Object.assign({}, p, { stance: st[p.who] || p.stance, year: yr[p.who] || p.year }));
     const years = pos.map(p => p.year);
-    const gap = Math.abs(years[0] - years[1]);
+    const gap = years[0] && years[1] ? Math.abs(years[0] - years[1]) : 0;
     const blocks = KIDS.blockers.map(b => Object.assign({}, b, { state: fixed[b.what] ? 'vyřešeno' : b.state }));
     const openB = blocks.filter(b => b.state !== 'vyřešeno');
     const STC = { 'ano': ['tag-accent', 'var(--g-acc-deep)'], 'ne': ['tag-accent-2', 'var(--g-mag)'], 'nevím': ['tag-neutral', 'var(--g-ink2)'] };
@@ -215,19 +241,19 @@
       kidsOptWhy: 'Největší rozhodnutí, které pár dělá, tady dosud nemělo řádek. Tahle záložka na nic netlačí: nemá termín, nepočítá odpočet a nikdy nepošle připomínku. Drží jen dvě pozice, dvě čísla a seznam toho, co tomu stojí v cestě.',
       kidsHead: pos[0].stance === pos[1].stance
         ? 'Oba říkáte „' + pos[0].stance + '“'
-        : 'Adrian: ' + pos[0].stance + ' · Makinka: ' + pos[1].stance,
+        : KR(pos[0].who) + ': ' + pos[0].stance + ' · ' + KR(pos[1].who) + ': ' + pos[1].stance,
       kidsGap: gap
         ? this.pl(gap, 'rok rozdílu', 'roky rozdílu', 'let rozdílu') + ' v tom, kdy. Rozdíl v roce není nesouhlas — je to informace o tom, kolik času máte na ' + this.pl(openB.length, 'tu jednu věc', 'ty věci', 'ty věci') + ' níž.'
-        : 'Ve roce se shodujete.',
+        : years[0] && years[1] ? 'Ve roce se shodujete.' : 'Rok zatím nikdo nezapsal.',
       kidsNoMech: 'Arbitr se na tohle nepoužije. Losování ani minimaximum tady nemají co dělat — u rozhodnutí, které nese jeden člověk v těle, nemůže padnout mechanismem.',
       kidsPos: pos.map(p => {
         const sc = STC[p.stance] || STC['nevím'];
         return {
-          who: p.who, note: p.note, stance: p.stance, tag: sc[0], color: sc[1],
-          year: String(p.year),
+          who: KR(p.who), note: p.note, stance: p.stance, tag: sc[0], color: sc[1],
+          year: p.year ? String(p.year) : '',
           sure: p.sure + ' z 5',
           w: Math.round(p.sure / 5 * 100) + '%',
-          fill: p.who === 'Adrian' ? 'var(--g-acc)' : 'var(--g-mag)',
+          fill: p.who === jA ? 'var(--g-acc)' : 'var(--g-mag)',
           picks: ['ano', 'nevím', 'ne'].map(x => ({
             label: x,
             bg: p.stance === x ? 'var(--g-acc-soft)' : 'transparent',
@@ -247,7 +273,9 @@
         open: () => { if (b.route) this.setState({ route: b.route }); }
       })),
       kidsTalks: talks.map(t => ({ when: t.when, mins: this.pl(t.mins, 'minuta', 'minuty', 'minut'), out: t.out })),
-      kidsTalkLine: 'Za rok dva rozhovory. To je málo na rozhodnutí téhle velikosti — a pořád víc než jeden odložený.',
+      kidsTalkLine: talks.length
+        ? this.pl(talks.length, 'zapsaný rozhovor', 'zapsané rozhovory', 'zapsaných rozhovorů') + '. Na rozhodnutí téhle velikosti se nepočítá, kolik jich má být — jen že nějaký byl.'
+        : 'Zatím žádný zapsaný rozhovor.',
       kidsNewMins: s.kidsM || '', kidsNewOut: s.kidsO || '',
       kidsSetMins: e => this.setState({ kidsM: e.target.value }),
       kidsSetOut: e => this.setState({ kidsO: e.target.value }),
@@ -281,17 +309,18 @@
       parEnable: () => this.optEnable('par', 'Rodiče'),
       parDisable: () => this.optOff('par', 'Rodiče'),
       parOptWhy: 'Rodina v téhle aplikaci řeší návštěvy a jejich symetrii. Neřeší, kdo bude za deset let starat se o koho, za čí peníze a jak daleko. Tahle záložka to jen drží zapsané — bez odpočtů a bez morálky.',
-      parHead: ready + ' ze ' + all + ' věcí vyřízených · ' + this.pl(rows.length, 'rodič', 'rodiče', 'rodičů'),
+      parHead: rows.length ? ready + ' ze ' + all + ' věcí vyřízených · ' + this.pl(rows.length, 'rodič', 'rodiče', 'rodičů') : 'Zatím nikdo zapsaný',
       parNote: 'Plná moc, dokumenty a dohoda o financování. Tři věci, které se vyřizují za hodinu, dokud je čas — a nedají se vyřídit vůbec, když čas není.',
-      parW: Math.round(ready / all * 100) + '%',
-      parPct: Math.round(ready / all * 100) + ' %',
+      // Bez zapsaných rodičů by podíl vyšel 0/0 = NaN.
+      parW: (all ? Math.round(ready / all * 100) : 0) + '%',
+      parPct: (all ? Math.round(ready / all * 100) : 0) + ' %',
       parRows: rows.map(p => ({
         name: p.name, health: p.health,
         age: this.pl(p.age, 'rok', 'roky', 'let'),
         dist: p.dist <= 30 ? p.dist + ' km' : p.dist + ' km — na jednu návštěvu celý den',
         distColor: p.dist <= 30 ? 'var(--g-ink3)' : 'var(--g-warn)',
-        who: 'má ' + p.who,
-        whoTag: p.who === 'Adrian' ? 'tag-accent' : 'tag-accent-2',
+        who: 'má ' + KR(p.who),
+        whoTag: p.who === DVA(this)[0] ? 'tag-accent' : 'tag-accent-2',
         horizon: 'za ' + Math.max(1, 80 - p.age) + ' let mu bude osmdesát',
         cost: p.cost ? this.kc(p.cost) + ' měsíčně už teď' : 'zatím bez nákladů',
         costColor: p.cost ? 'var(--g-mag)' : 'var(--g-ink3)',
@@ -306,7 +335,7 @@
         vault: () => { this.setState({ route: 'x-trezor' }); this.toast('Dokumenty k ' + p.name + ' patří do trezoru', { icon: 'ph-lock-key' }); },
         visit: () => this.setState({ hsTab: 'vis' })
       })),
-      parBalance: 'Blízko máte ' + this.pl(near, 'rodiče', 'rodiče', 'rodičů') + ', daleko ' + (rows.length - near) + '. Vzdálenost rozhodne o tom, kdo bude jezdit — a to nebude spravedlivé, ať se dohodnete jakkoli.',
+      parBalance: !rows.length ? '' : 'Blízko máte ' + this.pl(near, 'rodiče', 'rodiče', 'rodičů') + ', daleko ' + (rows.length - near) + '. Vzdálenost rozhodne o tom, kdo bude jezdit — a to nebude spravedlivé, ať se dohodnete jakkoli.',
       parCost: cost ? 'Dnes to stojí ' + this.kc(cost) + ' měsíčně. Za deset let to může být deset násobek — a bude to na dvou lidech.' : 'Dnes to nestojí nic.',
       parOldest: oldest ? 'Nejstarší je ' + oldest.name.toLowerCase() + ' · ' + oldest.age + ' let. U ' + (oldest.missing.length ? this.pl(oldest.missing.length, 'té jedné věci', 'těch věcí', 'těch věcí') + ' chybí podpis' : 'něj je vyřízeno vše') + '.' : '',
       parBudget: () => this.setState({ route: 'x-rozpocty', budTab: 2 }),
@@ -328,8 +357,8 @@
       const mid = mechOf(r), m = M[mid];
       let pick = '', why = '';
       if (mid === 'los') { pick = Math.random() < 0.5 ? r.optA : r.optM; why = 'Los padl na „' + pick + '“. Druhá varianta byla stejně snesitelná — právě proto tohle los rozhodnout mohl.'; }
-      else if (mid === 'last') { pick = r.owner === 'Makinka' ? r.optM : r.optA; why = r.owner + ' má v oblasti „' + r.area + '“ poslední slovo. Dohodnuto předem, ne teď.'; }
-      else if (mid === 'minimax') { pick = r.lossM > r.lossA ? r.optM : r.optA; why = 'Menší škoda nese ' + (r.lossM > r.lossA ? 'Adrian — ' + r.lossA + ' z 5' : 'Makinka — ' + r.lossM + ' z 5') + '. Vyhrává varianta, u které ten druhý bolí méně.'; }
+      else if (mid === 'last') { pick = r.owner === DVA(this)[1] ? r.optM : r.optA; why = KR(r.owner) + ' má v oblasti „' + r.area + '“ poslední slovo. Dohodnuto předem, ne teď.'; }
+      else if (mid === 'minimax') { pick = r.lossM > r.lossA ? r.optM : r.optA; why = 'Menší škoda: ' + (r.lossM > r.lossA ? KR(DVA(this)[0]) + ' — ' + r.lossA + ' z 5' : KR(DVA(this)[1]) + ' — ' + r.lossM + ' z 5') + '. Vyhrává varianta, u které ten druhý bolí méně.'; }
       else { pick = 'Odloženo o sedm dní'; why = 'Nerozhodlo se nic. Za týden se to otevře znovu a odklad už použít nelze.'; }
       const prevD = done, prevDec = decs;
       const patch = { arbDone: Object.assign({}, done, { [r.id]: { pick: pick, why: why, mech: m.name, when: 'právě teď' } }) };
@@ -403,7 +432,13 @@
     const draws = all.filter(d => !moved[d.id]);
     const srcOf = d => srcOver[d.id] || d.src;
     const SRC = { surprise: ['překvapení', 'tag-accent', 'var(--g-acc)'], omission: ['opomenutí', 'tag-accent-2', 'var(--g-mag)'], both: ['obojí', 'tag-neutral', 'var(--g-warn)'] };
-    const budget = Math.round(SURP.spendYear * SURP.pct / 100);
+    /*
+     * Roční výdaje: ukázka je má napsané (964 000 Kč), dvojice je má v knize
+     * výdajů za poslední rok (`RULEXP`). Bez nich je rozpočet nula a podíly
+     * se nepočítají — jinak by „0 z 0" vyšlo jako NaN %.
+     */
+    const zaRok = SURP.spendYear || ((DESK().RULEXP || []).reduce((a, x) => a + (x[2] || 0), 0));
+    const budget = Math.round(zaRok * SURP.pct / 100);
     const used = draws.reduce((a, d) => a + d.amount, 0);
     const sum = k => draws.filter(d => srcOf(d) === k).reduce((a, d) => a + d.amount, 0);
     const sS = sum('surprise'), oS = sum('omission'), bS = sum('both');
@@ -417,15 +452,16 @@
         : 'Přes rozpočet o ' + this.kc(-left),
       surpHeadColor: left >= 0 ? 'var(--g-ink)' : 'var(--g-mag)',
       surpNote: 'Tři procenta ročních výdajů, na která schválně není plán. Nedělá se z nich kategorie a nikdo je nemusí obhajovat. Jediná povinnost: u každého odběru je zdroj.',
-      surpW: Math.min(100, Math.round(used / budget * 100)) + '%',
+      surpW: (budget ? Math.min(100, Math.round(used / budget * 100)) : 0) + '%',
       surpFill: left >= 0 ? 'var(--g-acc)' : 'var(--g-mag)',
-      surpPct: Math.round(used / budget * 100) + ' %',
+      surpPct: (budget ? Math.round(used / budget * 100) : 0) + ' %',
       surpSplit: [
         { name: 'Skutečná překvapení', v: this.kc(sS), w: used ? Math.round(sS / used * 100) + '%' : '0%', color: 'var(--g-acc)' },
         { name: 'Záměrná opomenutí', v: this.kc(oS), w: used ? Math.round(oS / used * 100) + '%' : '0%', color: 'var(--g-mag)' },
         { name: 'Obojí zároveň', v: this.kc(bS), w: used ? Math.round(bS / used * 100) + '%' : '0%', color: 'var(--g-warn)' }
       ],
-      surpVerdict: omPct >= 40
+      surpVerdict: !draws.length ? 'Zatím žádný odběr. Až něco nečekaného přijde, zapište to sem i se zdrojem.'
+        : omPct >= 40
         ? 'Opomenutí jsou ' + omPct + ' % odběrů. Tohle už není rozpočet překvapení — je to rozpočet zapomínání, a ten se dá naplánovat.'
         : 'Opomenutí jsou ' + omPct + ' % odběrů. Zbytek jsou věci, které opravdu nešly předvídat — na to ten rozpočet je.',
       surpVerdictColor: omPct >= 40 ? 'var(--g-mag)' : 'var(--g-ok)',
@@ -474,14 +510,16 @@
   verzeVals: function () {
     const s = this.state;
     const extra = s.verSteps || {};
-    const pickId = s.verPick || VERS[0].id;
-    const row = VERS.find(v => v.id === pickId) || VERS[0];
+    const [jA, jM] = DVA(this), oba = KR(jA) + ' a ' + KR(jM);
+    // Bez zapsaných rozhodnutí prázdný záznam — `VERS[0].id` shodil celou obrazovku.
+    const pickId = s.verPick || (VERS[0] || {}).id;
+    const row = VERS.find(v => v.id === pickId) || VERS[0] || { id: '', title: 'Zatím žádné rozhodnutí s verzemi', unit: '', money: false, route: 'x-rozhodnuti', steps: [] };
     const steps = row.steps.concat(extra[pickId] || []);
     const fmt = v => row.money ? this.kc(v) : v + ' ' + row.unit;
     const vals = steps.map(x => x.v);
-    const min = Math.min.apply(null, vals), max = Math.max.apply(null, vals);
+    const min = vals.length ? Math.min.apply(null, vals) : 0, max = vals.length ? Math.max.apply(null, vals) : 0;
     const span = Math.max(1, max - min);
-    const first = steps[0].v, last = steps[steps.length - 1].v;
+    const first = steps.length ? steps[0].v : 0, last = steps.length ? steps[steps.length - 1].v : 0;
     const byWho = {};
     steps.forEach((x, i) => { if (!i) return; byWho[x.by] = (byWho[x.by] || 0) + (x.v - steps[i - 1].v); });
     const movers = Object.keys(byWho).map(k => ({ name: k, d: byWho[k] })).sort((a, b) => Math.abs(b.d) - Math.abs(a.d));
@@ -497,9 +535,9 @@
         go: () => this.setState({ verPick: v.id })
       })),
       verTitle: row.title,
-      verHead: 'Od ' + fmt(first) + ' k ' + fmt(last) + ' · ' + this.pl(steps.length, 'verze', 'verze', 'verzí'),
+      verHead: !steps.length ? 'Zatím bez verzí — první zapíšete níž' : 'Od ' + fmt(first) + ' k ' + fmt(last) + ' · ' + this.pl(steps.length, 'verze', 'verze', 'verzí'),
       verNote: 'Výsledek si každý pamatuje. Cestu k němu ne — a přesně tam je vidět, kdo ustoupil a o kolik. Tenhle záznam nikdo nepíše, skládá se ze zápisů.',
-      verNet: (last - first === 0 ? 'Skončili jste tam, kde jste začali' : 'Čistý posun ' + (last > first ? '+' : '−') + fmt(Math.abs(last - first))) + ' po ' + this.pl(steps.length - 1, 'změně', 'změnách', 'změnách') + '.',
+      verNet: steps.length < 2 ? '' : (last - first === 0 ? 'Skončili jste tam, kde jste začali' : 'Čistý posun ' + (last > first ? '+' : '−') + fmt(Math.abs(last - first))) + ' po ' + this.pl(steps.length - 1, 'změně', 'změnách', 'změnách') + '.',
       verSteps: steps.map((x, i) => {
         const prevV = i ? steps[i - 1].v : x.v;
         const d = x.v - prevV;
@@ -509,12 +547,12 @@
           delta: !i ? 'první nápad' : d === 0 ? 'bez změny' : (d > 0 ? '+' : '−') + fmt(Math.abs(d)),
           deltaColor: !i ? 'var(--g-ink3)' : d > 0 ? 'var(--g-mag)' : d < 0 ? 'var(--g-ok)' : 'var(--g-ink3)',
           w: Math.max(4, Math.round((x.v - min) / span * 100)) + '%',
-          fill: x.by === 'Adrian' ? 'var(--g-acc)' : x.by === 'Makinka' ? 'var(--g-mag)' : 'var(--g-ink2)',
+          fill: x.by === jA ? 'var(--g-acc)' : x.by === jM ? 'var(--g-mag)' : 'var(--g-ink2)',
           last: i === steps.length - 1,
           canBack: i !== steps.length - 1,
           back: () => {
             const prev = extra;
-            const add = (extra[pickId] || []).concat([{ v: x.v, by: 'Adrian a Makinka', when: 'dnes', why: 'Vrátili jste se k verzi ' + ('v' + (i + 1)) + ' z ' + x.when + '. Mezikroky zůstávají v záznamu — proto se k nim dá vrátit.' }]);
+            const add = (extra[pickId] || []).concat([{ v: x.v, by: oba, when: 'dnes', why: 'Vrátili jste se k verzi ' + ('v' + (i + 1)) + ' z ' + x.when + '. Mezikroky zůstávají v záznamu — proto se k nim dá vrátit.' }]);
             this.setState({ verSteps: Object.assign({}, extra, { [pickId]: add }) });
             this.toast('Vráceno k ' + fmt(x.v) + ' · zapsáno jako nová verze', { icon: 'ph-clock-counter-clockwise', undo: () => this.setState({ verSteps: prev }) });
           }
@@ -523,14 +561,14 @@
       verMovers: movers.map(m => ({
         name: m.name,
         d: (m.d > 0 ? '+' : m.d < 0 ? '−' : '') + fmt(Math.abs(m.d)),
-        dir: (m.d === 0 ? 'nikam' : (m.name === 'Makinka' ? 'posunula ' : m.name === 'Adrian a Makinka' ? 'posunuli ' : 'posunul ') + (m.d > 0 ? 'nahoru' : 'dolů')),
+        dir: (m.d === 0 ? 'nikam' : 'posun ' + (m.d > 0 ? 'nahoru' : 'dolů')),
         w: Math.round(Math.abs(m.d) / maxAbs * 100) + '%',
-        fill: m.name === 'Adrian' ? 'var(--g-acc)' : m.name === 'Makinka' ? 'var(--g-mag)' : 'var(--g-ink3)'
+        fill: m.name === jA ? 'var(--g-acc)' : m.name === jM ? 'var(--g-mag)' : 'var(--g-ink3)'
       })),
       verBig: big
-        ? 'Největší posun má na svědomí ' + big.name + ' — ' + (big.d > 0 ? 'nahoru o ' : 'dolů o ') + fmt(Math.abs(big.d)) + '. Poslední slovo ' + (steps[steps.length - 1].by === 'Makinka' ? 'měla Makinka' : steps[steps.length - 1].by === 'Adrian a Makinka' ? 'jste měli oba' : 'měl ' + steps[steps.length - 1].by) + '.'
+        ? 'Největší posun: ' + KR(big.name) + ' — ' + (big.d > 0 ? 'nahoru o ' : 'dolů o ') + fmt(Math.abs(big.d)) + '. Poslední slovo: ' + (steps[steps.length - 1].by === oba ? 'oba' : KR(steps[steps.length - 1].by)) + '.'
         : '',
-      verNewVal: s.verV || '', verNewBy: s.verB || 'Adrian', verNewWhy: s.verY || '',
+      verNewVal: s.verV || '', verNewBy: s.verB || jA, verNewWhy: s.verY || '',
       verSetVal: e => this.setState({ verV: e.target.value }),
       verSetBy: e => this.setState({ verB: e.target.value }),
       verSetWhy: e => this.setState({ verY: e.target.value }),
@@ -540,9 +578,10 @@
         const v = parseInt(String(s.verV || '').replace(/\s/g, ''), 10);
         if (!v) return;
         const prev = extra;
-        const add = (extra[pickId] || []).concat([{ v: v, by: s.verB || 'Adrian', when: 'dnes', why: (s.verY || '').trim() || 'Bez zapsaného důvodu — za rok nikdo nebude vědět proč.' }]);
+        const kdo = s.verB === 'oba' ? oba : (s.verB || jA);
+        const add = (extra[pickId] || []).concat([{ v: v, by: kdo, when: 'dnes', why: (s.verY || '').trim() || 'Bez zapsaného důvodu — za rok nikdo nebude vědět proč.' }]);
         this.setState({ verSteps: Object.assign({}, extra, { [pickId]: add }), verV: '', verY: '' });
-        this.toast('Verze ' + fmt(v) + ' zapsána · ' + (s.verB || 'Adrian'), { icon: 'ph-git-branch', undo: () => this.setState({ verSteps: prev }) });
+        this.toast('Verze ' + fmt(v) + ' zapsána · ' + KR(kdo), { icon: 'ph-git-branch', undo: () => this.setState({ verSteps: prev }) });
       },
       verOpen: () => this.setState({ route: row.route, dcTab: 'mem' })
     };
@@ -551,17 +590,27 @@
   // Odchod z aplikace: export bez druhého. Realistický, a nikdy nepoužitý.
   exitVals: function () {
     const s = this.state;
-    const who = s.exitWho || 'Adrian';
+    const [jA, jM] = DVA(this);
+    const who = s.exitWho === jA || s.exitWho === jM ? s.exitWho : jA;
     const off = s.exitOff || {};
     const made = s.exitMade || 0;
     const decs = s.decs === null || s.decs === undefined ? DESK().DEC_LIST : s.decs;
+    /*
+     * Platby a fotky z knihy a knihovny dvojice. Ukázka měla napsaných 1 284
+     * plateb a 8 460 fotografií — a k nim 2,4 a 41 GB. Velikost fotek je
+     * součet souborů v knihovně, jen když ho server zná; platby jsou text.
+     */
+    const G = DESK();
+    const ukazka = !(G.DVOJICE || []).length;
+    const statistiky = G.LIBSTATS || {};
     const cnt = k => k === 'veta' ? this.vetoList().filter(v => v.who === who).length
       : k === 'prom' ? this.promList().filter(p => p.who === who || p.to === who).length
-      : k === 'tacit' ? DESK().TACIT.length
+      : k === 'tacit' ? (G.TACIT || []).length
       : k === 'forg' ? this.forgList().length
       : k === 'truth' ? this.truthList().length
       : k === 'dec' ? decs.length
-      : k === 'money' ? 1284 : 8460;
+      : k === 'money' ? (ukazka ? 1284 : (G.RULEXP || []).length)
+      : (ukazka ? 8460 : (statistiky.total || 0));
     // Skloňování přes this.pl, ne pevný genitiv — jinak vyjde „1 vet“.
     const UNITS = {
       veta: ['veto', 'veta', 'vet'],
@@ -578,15 +627,15 @@
     const on = EXIT_PACK.filter(p => !off[p.key]);
     const mb = on.reduce((a, p) => a + p.mb, 0);
     return {
-      exitWho: who,
-      exitPeople: ['Adrian', 'Makinka'].map(p => ({
-        name: p,
+      exitWho: KR(who),
+      exitPeople: [jA, jM].map(p => ({
+        name: KR(p),
         weight: who === p ? 500 : 400,
         bg: who === p ? 'var(--g-acc-soft)' : 'transparent',
         fg: who === p ? 'var(--g-acc-deep)' : 'var(--g-ink2)',
         pick: () => this.setState({ exitWho: p })
       })),
-      exitHead: 'Balíček pro ' + (who === 'Makinka' ? 'Makinku' : 'Adriana') + ' · ' + size(mb),
+      exitHead: 'Balíček pro ' + PAD(this, who, 'acc') + ' · ' + size(mb),
       exitNote: 'Tohle není rozvod. Je to pojistka proti tomu, aby aplikace byla důvod zůstat. Kdo si může odejít se svou částí, zůstává dobrovolně.',
       exitHonest: 'Balíček je připravený od prvního dne. Vygenerován ' + made + '× — a doufáme, že to tak zůstane.',
       exitSize: size(mb),
@@ -605,7 +654,7 @@
       exitMake: () => this.setState({
         confirm: {
           title: 'Připravit balíček k odchodu?', btnBg: 'var(--g-ink)',
-          body: 'Vygeneruje se ' + size(mb) + ' pro ' + (who === 'Makinka' ? 'Makinku' : 'Adriana') + '. Druhý člověk se to nedozví — a to je záměr. Export nic nemaže a nic neruší.',
+          body: 'Vygeneruje se ' + size(mb) + ' pro ' + PAD(this, who, 'acc') + '. Druhý člověk se to nedozví — a to je záměr. Export nic nemaže a nic neruší.',
           cta: 'Vygenerovat',
           // Skutečný soubor, ne maketa: obsah vybraných částí se poskládá
           // a stáhne. Fotografie zůstávají odkazem — ty by šly z API.
@@ -634,7 +683,7 @@
               const url = URL.createObjectURL(blob);
               const a = document.createElement('a');
               a.href = url;
-              a.download = 'odchod-' + (who === 'Makinka' ? 'makinka' : 'adrian') + '-' + new Date().toISOString().slice(0, 10) + '.json';
+              a.download = 'odchod-' + KR(who).toLowerCase().normalize('NFD').replace(/[^a-z0-9]+/g, '') + '-' + new Date().toISOString().slice(0, 10) + '.json';
               document.body.appendChild(a);
               a.click();
               a.remove();
@@ -657,8 +706,9 @@
       const w = Math.max(0, Math.min(5, Math.max(0, g.w0 - g.months / 14) + (adj[g.id] || 0)));
       return Object.assign({}, g, { w: w });
     }).sort((a, b) => b.w - a.w);
+    const [jA, jM] = DVA(this);
     const load = who => Math.round(rows.filter(r => r.who === who).reduce((a, r) => a + r.w, 0) * 10) / 10;
-    const lA = load('Adrian'), lM = load('Makinka'), lB = load('oba');
+    const lA = load(jA), lM = load(jM), lB = load('oba');
     const pushed = who => rows.filter(r => r.who === who && r.kind.indexOf('protlačil') === 0).length;
     const maxL = Math.max(lA, lM, 1);
     const heavy = rows.filter(r => r.w >= 3.5);
@@ -668,19 +718,18 @@
         : 'Nic z toho už netíží víc než napůl',
       svedNote: 'Každé rozhodnutí má i tuhle stranu: kdo ho protlačil, kdo ho odmítl a komu z toho zůstalo. Váha sama slábne — o ' + '1 bod za čtrnáct měsíců' + ' — pokud ji někdo ručně nevrátí zpátky.',
       svedBars: [
-        { name: 'Adrian nese', v: String(lA).replace('.', ','), w: Math.round(lA / maxL * 100) + '%', color: 'var(--g-acc)', note: this.pl(pushed('Adrian'), 'věc protlačil', 'věci protlačil', 'věcí protlačil') },
-        { name: 'Makinka nese', v: String(lM).replace('.', ','), w: Math.round(lM / maxL * 100) + '%', color: 'var(--g-mag)', note: this.pl(pushed('Makinka'), 'věc protlačila', 'věci protlačila', 'věcí protlačila') },
+        { name: KR(jA) + ' nese', v: String(lA).replace('.', ','), w: Math.round(lA / maxL * 100) + '%', color: 'var(--g-acc)', note: 'protlačeno: ' + pushed(jA) },
+        { name: KR(jM) + ' nese', v: String(lM).replace('.', ','), w: Math.round(lM / maxL * 100) + '%', color: 'var(--g-mag)', note: 'protlačeno: ' + pushed(jM) },
         { name: 'Nesete oba', v: String(lB).replace('.', ','), w: Math.round(lB / maxL * 100) + '%', color: 'var(--g-ink2)', note: 'rozhodnutí, za která nemůže nikdo sám' }
       ],
-      svedLead: lA > lM
-        ? 'Adrian nese víc — a taky víc věcí protlačil. To spolu souvisí častěji, než by kdokoli přiznal.'
-        : lM > lA
-          ? 'Makinka nese víc. U ní jsou to hlavně věci, které odmítla — odmítnutí tíží dýl než souhlas.'
-          : 'Nesete to skoro stejně.',
+      svedLead: !rows.length ? 'Zatím nic zapsaného.'
+        : lA !== lM
+        ? KR(lA > lM ? jA : jM) + ' nese víc. Odmítnutí tíží dýl než souhlas a protlačená věc taky — tabulka níž ukáže, co z toho to je.'
+        : 'Nesete to skoro stejně.',
       svedRows: rows.map(r => ({
         what: r.what, kind: r.kind, note: r.note,
-        who: r.who === 'oba' ? 'oba' : r.who,
-        whoTag: r.who === 'Adrian' ? 'tag-accent' : r.who === 'Makinka' ? 'tag-accent-2' : 'tag-neutral',
+        who: r.who === 'oba' ? 'oba' : KR(r.who),
+        whoTag: r.who === jA ? 'tag-accent' : r.who === jM ? 'tag-accent-2' : 'tag-neutral',
         age: r.months < 12 ? r.months + ' měsíců zpátky' : Math.round(r.months / 12) + ' roky zpátky',
         cost: r.cost ? 'stálo to ' + this.kc(r.cost) : 'nestálo to peníze',
         v: r.w.toFixed(1).replace('.', ','),
@@ -707,12 +756,13 @@
       return Object.assign({}, f, { n: n, tn: tn, tw: tw, cost: Math.round(n * f.esc * 10) / 10, rate: tn ? tw / tn : 0 });
     }).sort((a, b) => b.cost - a.cost);
     const top = rows[0];
-    const maxCost = Math.max.apply(null, rows.map(r => r.cost));
+    const [jA, jM] = DVA(this);
+    const maxCost = Math.max.apply(null, rows.map(r => r.cost).concat([0.1]));
     const totalN = rows.reduce((a, r) => a + r.n, 0);
     const best = rows.slice().sort((a, b) => b.rate - a.rate)[0];
     return {
       fsBig: String(totalN),
-      fsHead: 'Za půl roku ' + this.pl(totalN, 'začátek', 'začátky', 'začátků') + ' · ' + this.pl(rows.length, 'spouštěč', 'spouštěče', 'spouštěčů'),
+      fsHead: !rows.length ? 'Zatím žádný zapsaný spouštěč' : 'Za půl roku ' + this.pl(totalN, 'začátek', 'začátky', 'začátků') + ' · ' + this.pl(rows.length, 'spouštěč', 'spouštěče', 'spouštěčů'),
       fsNote: 'Hádka nezačíná tématem. Začíná slovem, otázkou nebo tichem — a to se dá spočítat. Jakmile spouštěč má jméno, dá se na něj připravit odpověď dopředu.',
       fsPredict: top
         ? 'Předpověď: až padne „' + top.trig + '“, eskaluje to v ' + Math.round(top.esc * 100) + ' % případů. Co zabralo místo toho: ' + top.anti.toLowerCase() + ' — ' + top.tw + ' z ' + top.tn + '.'
@@ -720,8 +770,8 @@
       fsBest: best ? 'Nejspolehlivější protilék je „' + best.anti.toLowerCase() + '“ — ' + Math.round(best.rate * 100) + ' % úspěšnost. Tenhle si zapamatujte první.' : '',
       fsRows: rows.map(f => ({
         trig: f.trig, kind: f.kind, anti: f.anti,
-        who: f.who === 'oba' ? 'začínají oba' : 'začíná ' + f.who,
-        whoTag: f.who === 'Adrian' ? 'tag-accent' : f.who === 'Makinka' ? 'tag-accent-2' : 'tag-neutral',
+        who: f.who === 'oba' ? 'začínají oba' : 'začíná ' + KR(f.who),
+        whoTag: f.who === jA ? 'tag-accent' : f.who === jM ? 'tag-accent-2' : 'tag-neutral',
         n: this.pl(f.n, 'krát', 'krát', 'krát'),
         esc: Math.round(f.esc * 100) + ' % eskaluje',
         escColor: f.esc >= 0.75 ? 'var(--g-mag)' : f.esc >= 0.6 ? 'var(--g-warn)' : 'var(--g-ink2)',
@@ -745,7 +795,9 @@
   quartVals: function () {
     const s = this.state;
     const plan = s.quartPlan || {}, talk = s.quartTalk || {}, took = s.quartTook || {};
-    const rows = QUART.map(q => {
+    // Bez zapsaných oken čtyři prázdná — jinak by „Zapsat okno" hlásilo, že všechna stojí.
+    const ctvrtleti = QUART.length ? QUART : ['Q1', 'Q2', 'Q3', 'Q4'].map((q, i) => ({ id: 'q' + (i + 1), q: q, when: null, a: null, m: null, talked: false, mins: 0, took: '', state: 'empty' }));
+    const rows = ctvrtleti.map(q => {
       const p = plan[q.id] || {};
       const when = p.when || q.when;
       const mins = talk[q.id] !== undefined ? talk[q.id] : q.mins;
@@ -795,7 +847,7 @@
         if (!empty) { this.toast('Všechna čtyři okna už stojí', { icon: 'ph-info' }); return; }
         const prev = plan;
         this.setState({
-          quartPlan: Object.assign({}, plan, { [empty.id]: { when: (s.quartW || '').trim(), a: (s.quartA || '').trim() || 'Adrian — bez plánu', m: (s.quartM || '').trim() || 'Makinka — bez plánu' } }),
+          quartPlan: Object.assign({}, plan, { [empty.id]: { when: (s.quartW || '').trim(), a: (s.quartA || '').trim() || KR(DVA(this)[0]) + ' — bez plánu', m: (s.quartM || '').trim() || KR(DVA(this)[1]) + ' — bez plánu' } }),
           quartW: '', quartA: '', quartM: ''
         });
         this.toast(empty.q + ' zapsané · ' + (s.quartW || '').trim(), { icon: 'ph-calendar-plus', undo: () => this.setState({ quartPlan: prev }) });
@@ -820,35 +872,38 @@
   indepVals: function () {
     const s = this.state;
     const swap = s.indepSwap || {}, learn = s.indepLearn || {};
+    const [jA, jM] = DVA(this);
     const rows = INDEP.map(i => ({
       ...i,
-      holder: swap[i.id] ? (i.holder === 'Adrian' ? 'Makinka' : 'Adrian') : i.holder,
+      holder: swap[i.id] ? (i.holder === jA ? jM : jA) : i.holder,
       pain: learn[i.id] ? Math.max(1, i.pain - 2) : i.pain
     }));
     const AX = ['peníze', 'duše', 'provoz'];
     const holds = who => rows.filter(r => r.holder === who);
     const painOn = who => holds(who).reduce((a, r) => a + r.pain, 0);
-    const pA = painOn('Adrian'), pM = painOn('Makinka');
+    const pA = painOn(jA), pM = painOn(jM);
     const hoursLeft = rows.filter(r => !learn[r.id]).reduce((a, r) => a + r.hours, 0);
     const worstFor = who => rows.filter(r => r.holder !== who).slice().sort((a, b) => b.pain - a.pain)[0];
-    const wA = worstFor('Adrian'), wM = worstFor('Makinka');
+    const wA = worstFor(jA), wM = worstFor(jM);
     return {
-      indepHead: 'Bez Makinky by to Adriana bolelo ' + pM + ' z 30 · bez Adriana Makinku ' + pA + ' z 30',
+      indepHead: !rows.length ? 'Matice je prázdná — zapište, co kdo drží a jak moc by to bez něj bolelo'
+        : 'Bez ' + PAD(this, jM, 'gen') + ': bolest ' + pM + ' z 30 · bez ' + PAD(this, jA, 'gen') + ': ' + pA + ' z 30',
       indepNote: 'Nezávislost není odchod. Je to schopnost přežít týden, kdy je druhý na kapačkách — a vědomí, co přesně by chybělo. Jediná chvilka pak má novou cenu.',
       indepBars: [
-        { name: 'Adrian drží', v: String(holds('Adrian').length) + ' věcí · bolest ' + pA, w: Math.round(pA / Math.max(pA, pM, 1) * 100) + '%', color: 'var(--g-acc)' },
-        { name: 'Makinka drží', v: String(holds('Makinka').length) + ' věcí · bolest ' + pM, w: Math.round(pM / Math.max(pA, pM, 1) * 100) + '%', color: 'var(--g-mag)' }
+        { name: KR(jA) + ' drží', v: String(holds(jA).length) + ' věcí · bolest ' + pA, w: Math.round(pA / Math.max(pA, pM, 1) * 100) + '%', color: 'var(--g-acc)' },
+        { name: KR(jM) + ' drží', v: String(holds(jM).length) + ' věcí · bolest ' + pM, w: Math.round(pM / Math.max(pA, pM, 1) * 100) + '%', color: 'var(--g-mag)' }
       ],
-      indepWorst: (wA ? 'Adrian by bez Makinky nejvíc trpěl na „' + wA.what.toLowerCase() + '“. ' : '') + (wM ? 'Makinka bez Adriana na „' + wM.what.toLowerCase() + '“.' : ''),
-      indepHours: hoursLeft
-        ? this.pl(hoursLeft, 'hodina', 'hodiny', 'hodin') + ' by celou matici vyrovnalo. Šest z nich je jedno odpoledne — a je to nejlepší investice v téhle aplikaci.'
+      indepWorst: (wA ? KR(jA) + ' bez druhého nejvíc na „' + wA.what.toLowerCase() + '“. ' : '') + (wM ? KR(jM) + ' na „' + wM.what.toLowerCase() + '“.' : ''),
+      indepHours: !rows.length ? ''
+        : hoursLeft
+        ? this.pl(hoursLeft, 'hodina', 'hodiny', 'hodin') + ' předávání by celou matici vyrovnalo — a je to nejlepší investice v téhle aplikaci.'
         : 'Celá matice je vyrovnaná. Oba unesou všechno.',
       indepAxes: AX.map(ax => ({
         name: ax,
         items: rows.filter(r => r.axis === ax).map(r => ({
           what: r.what, note: r.note, fix: r.fix,
-          holder: r.holder,
-          holderTag: r.holder === 'Adrian' ? 'tag-accent' : 'tag-accent-2',
+          holder: KR(r.holder),
+          holderTag: r.holder === jA ? 'tag-accent' : 'tag-accent-2',
           pain: r.pain + ' z 5',
           painColor: r.pain >= 4 ? 'var(--g-mag)' : r.pain >= 3 ? 'var(--g-warn)' : 'var(--g-ink2)',
           w: Math.round(r.pain / 5 * 100) + '%',
@@ -862,7 +917,7 @@
             this.setState({ indepLearn: Object.assign({}, learn, { [r.id]: true }) });
             this.toast('„' + r.what + '“ předáno · bolest ' + r.pain + ' → ' + Math.max(1, r.pain - 2), { icon: 'ph-graduation-cap', undo: () => this.setState({ indepLearn: prev }) });
           },
-          swap: () => { const prev = swap; this.setState({ indepSwap: Object.assign({}, swap, { [r.id]: !swap[r.id] }) }); this.toast('„' + r.what + '“ na měsíc přebírá ' + (r.holder === 'Adrian' ? 'Makinka' : 'Adrian'), { icon: 'ph-user-switch', undo: () => this.setState({ indepSwap: prev }) }); },
+          swap: () => { const prev = swap; this.setState({ indepSwap: Object.assign({}, swap, { [r.id]: !swap[r.id] }) }); this.toast('„' + r.what + '“ na měsíc přebírá ' + KR(r.holder === jA ? jM : jA), { icon: 'ph-user-switch', undo: () => this.setState({ indepSwap: prev }) }); },
           vault: () => { this.setState({ route: 'x-trezor' }); this.toast('Co k „' + r.what + '“ patří, má být v trezoru', { icon: 'ph-lock-key' }); }
         }))
       })),
@@ -881,7 +936,7 @@
     const oneSided = rows.filter(r => r.kind === 'slyší jen jednu stranu');
     const KIND = { 'věří': 'tag-accent', 'věří s otázkou': 'tag-neutral', 'bojí se': 'tag-accent-2', 'slyší jen jednu stranu': 'tag-accent-2' };
     return {
-      trustHead: this.pl(rows.length, 'člověk drží vaši síť', 'lidé drží vaši síť', 'lidí drží vaši síť') + ' · ' + this.pl(worriers.length, 'má obavy', 'mají obavy', 'má obavy'),
+      trustHead: !rows.length ? 'Síť zatím nikdo nezapsal' : this.pl(rows.length, 'člověk drží vaši síť', 'lidé drží vaši síť', 'lidí drží vaši síť') + ' · ' + this.pl(worriers.length, 'má obavy', 'mají obavy', 'má obavy'),
       trustNote: 'Váš vztah je pro pár lidí vnější infrastruktura — plánují podle něj vlastní život. To je jediný signál, který do téhle aplikace přichází zvenku, a nedá se vyrobit uvnitř.',
       trustBig: String(believers) + ' / ' + rows.length,
       trustWorry: worriers.length
@@ -893,7 +948,7 @@
       trustRows: rows.map(t => ({
         name: t.name, signal: t.signal, kind: t.kind,
         tagClass: KIND[t.kind] || 'tag-neutral',
-        side: t.side === 'oba' ? 'na obou stranách' : 'blíž ' + (t.side === 'Makinka' ? 'Makince' : 'Adrianovi'),
+        side: t.side === 'oba' ? 'na obou stranách' : 'blíž ' + PAD(this, t.side, 'dat'),
         last: 'naposledy ' + t.last,
         lastColor: t.last.indexOf('týd') > 0 ? 'var(--g-mag)' : 'var(--g-ink3)',
         bel: t.believes + ' z 5', belW: Math.round(t.believes / 5 * 100) + '%',

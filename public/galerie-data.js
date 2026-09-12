@@ -1742,9 +1742,9 @@
       'host': 'jen sdílené odkazy, nic v nastavení'
     },
     users: [
-      { id: 'u1', name: 'Adrian', mail: 'adrian.stanek@gmail.com', role: 'vlastník', last: 'dnes 7:40', state: 'aktivní' },
-      { id: 'u2', name: 'Makinka', mail: 'makinka.hrncirova@gmail.com', role: 'správce', last: 'dnes 6:58', state: 'aktivní' },
-      { id: 'u3', name: 'Klára', mail: 'klara.hrncirova@gmail.com', role: 'host', last: 'nikdy', state: 'pozvaná' }
+      { id: 'u1', name: 'Adrian', mail: 'adrian@example.com', role: 'vlastník', last: 'dnes 7:40', state: 'aktivní' },
+      { id: 'u2', name: 'Makinka', mail: 'makinka@example.com', role: 'správce', last: 'dnes 6:58', state: 'aktivní' },
+      { id: 'u3', name: 'Klára', mail: 'klara@example.com', role: 'host', last: 'nikdy', state: 'pozvaná' }
     ],
     jobs: [
       { id: 'j1', name: 'Noční záloha', cron: 'denně 3:00', last: 'dnes 3:00', dur: '42 s', state: 'hotovo' },
@@ -1785,7 +1785,7 @@
   const LOCKPIN = { A: '240613', M: '190522' };
   const LOCKWHO = { A: 'Adrian', M: 'Makinka' };
   const LOCKREC = 'zadar-2026-oba';
-  const LOCKMAIL = { A: 'adrian.stanek@gmail.com', M: 'makinka.hrncirova@gmail.com' };
+  const LOCKMAIL = { A: 'adrian@example.com', M: 'makinka@example.com' };
   const LOCKPWD = 'zadar2026';
   const VAULT_ITEMS = [
     { id: 'v1', name: 'Doklady', meta: '12 souborů · šifrováno · naposledy otevřeno 4. 8.', n: 6 },
@@ -1832,7 +1832,7 @@
 
   // Papírová záloha: co musí být na papíře, když nic nefunguje.
   const PAPER_ROWS = [
-    { id: 'a1', label: 'Kde jsou originály fotek', value: 'Google Drive · účet adrian.stanek@gmail.com · složka Galerie', on: true, changed: false },
+    { id: 'a1', label: 'Kde jsou originály fotek', value: 'Google Drive · účet adrian@example.com · složka Galerie', on: true, changed: false },
     { id: 'a2', label: 'Druhá kopie', value: 'Externí disk WD 4 TB · šuplík v ložnici · poslední záloha 1. 9. 2026', on: true, changed: true },
     { id: 'a3', label: 'Kdo má přístup k účtu', value: 'Adrian (hlavní), Makinka (plný), obnovovací kód u babičky Věry', on: true, changed: false },
     { id: 'a4', label: 'Kde je hlavní heslo', value: 'Správce hesel Bitwarden · záložní klíč v obálce u rodičů Makinky', on: true, changed: true },
@@ -2337,7 +2337,7 @@
       ['Smazat účet po exportu', 'Až po vašem potvrzení, že export otevřel', 'Nezapnuto']
     ] },
     import: { title: 'Import z jiné galerie', sub: 'Přenos z Google Photos, iCloudu nebo disku. Předem řekneme, co se přenese celé, co částečně a co se nedá zachránit — a nic nemažeme u zdroje.', rows: [
-      ['Zdroj', 'Google Photos · přihlášeno jako adrian@gmail.com', 'Změnit zdroj'],
+      ['Zdroj', 'Google Photos · přihlášeno jako adrian@example.com', 'Změnit zdroj'],
       ['Co se přenese celé', 'Fotky a videa v originále, datum, poloha, albumy', '18 402 položek'],
       ['Popisky a komentáře', 'Přenesou se jako popisek se zdrojem „import“', '1 214 popisků'],
       ['Osoby a tváře', 'Skupiny se přenesou, jména je nutné potvrdit ručně', '9 osob k potvrzení'],
@@ -2376,7 +2376,7 @@
       ['Potvrdit před mobilními daty', 'Ochrana proti nechtěnému přenosu', 'Zapnuto']
     ] },
     ulozeni: { title: 'Úložiště a synchronizace', sub: 'Kde leží originály a jak se tam dostávají.', rows: [
-      ['Připojený Google účet', 'adrian.stanek@gmail.com', 'Odpojit'],
+      ['Připojený Google účet', 'adrian@example.com', 'Odpojit'],
       ['Využití prostoru', '114,5 GB ze 200 GB', 'Detail'],
       ['Chyby synchronizace', '3 originály se nepřenesly', 'Zkusit znovu'],
       ['Lokální náhledy', '7,5 GB v cache', 'Vymazat']

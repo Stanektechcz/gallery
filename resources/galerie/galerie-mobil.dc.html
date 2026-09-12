@@ -512,7 +512,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                 </sc-for>
               </div>
 
-              <div style="padding:16px 18px 6px; font-size:17px">Rozpočet srpna</div>
+              <div style="padding:16px 18px 6px; font-size:17px">{{ rozpocetNadpis }}</div>
               <div style="padding:0 18px">
                 <sc-for list="{{ finBars }}" as="b" hint-placeholder-count="6">
                   <button onClick="{{ b.go }}" style="display:block; width:100%; text-align:left; border:0; background:{{ b.rowBg }}; padding:9px 6px; margin:0 -6px; cursor:pointer; font-family:inherit; color:inherit; border-radius:2px">
@@ -767,7 +767,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                       <div style="flex:none; font-size:11.5px; color:var(--g-ink3); font-variant-numeric:tabular-nums">{{ d.av }}/{{ d.mv }}</div>
                     </div>
                   </sc-for>
-                  <div style="font-size:11.5px; color:var(--g-ink3); line-height:1.5; text-wrap:pretty">Horní pás Adrian, dolní Makinka. Pětka je dobrý den, jednička ten, kdy je lepší nic neřešit.</div>
+                  <div style="font-size:11.5px; color:var(--g-ink3); line-height:1.5; text-wrap:pretty">Horní pás {{ jmA }}, dolní {{ jmM }}. Pětka je dobrý den, jednička ten, kdy je lepší nic neřešit.</div>
                 </div>
               </sc-if>
 
@@ -1077,12 +1077,12 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                         <div style="flex:none; font-size:13px; color:{{ c.color }}">{{ c.diff }}</div>
                       </div>
                       <div style="display:flex; align-items:center; gap:8px; margin-top:6px">
-                        <div style="flex:none; width:34px; font-size:11px; color:var(--g-ink3)">2025</div>
+                        <div style="flex:none; width:34px; font-size:11px; color:var(--g-ink3)">{{ rokLoni }}</div>
                         <div style="flex:1; height:7px; border-radius:2px; background:var(--g-line2); overflow:hidden"><div style="height:100%; width:{{ c.w25 }}; background:var(--g-ink3)"></div></div>
                         <div style="flex:none; font-size:12px; font-variant-numeric:tabular-nums">{{ c.y25 }}</div>
                       </div>
                       <div style="display:flex; align-items:center; gap:8px; margin-top:4px">
-                        <div style="flex:none; width:34px; font-size:11px; color:var(--g-ink3)">2026</div>
+                        <div style="flex:none; width:34px; font-size:11px; color:var(--g-ink3)">{{ rokLetos }}</div>
                         <div style="flex:1; height:7px; border-radius:2px; background:var(--g-line2); overflow:hidden"><div style="height:100%; width:{{ c.w26 }}; background:{{ c.color }}"></div></div>
                         <div style="flex:none; font-size:12px; font-variant-numeric:tabular-nums">{{ c.y26 }}</div>
                       </div>
@@ -1352,11 +1352,11 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                       </div>
                       <div style="font-size:11.5px; color:var(--g-ink3); margin-top:3px">{{ c.where }}</div>
                       <div style="border-left:2px solid var(--g-acc); padding-left:9px; margin-top:9px">
-                        <div style="font-size:10.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--g-acc)">Adrian · {{ c.aWhen }}</div>
+                        <div style="font-size:10.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--g-acc)">{{ jmA }} · {{ c.aWhen }}</div>
                         <div style="font-size:13.5px; margin-top:2px; text-wrap:pretty">{{ c.aVal }}</div>
                       </div>
                       <div style="border-left:2px solid var(--g-mag); padding-left:9px; margin-top:7px">
-                        <div style="font-size:10.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--g-mag)">Makinka · {{ c.mWhen }}</div>
+                        <div style="font-size:10.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--g-mag)">{{ jmM }} · {{ c.mWhen }}</div>
                         <div style="font-size:13.5px; margin-top:2px; text-wrap:pretty">{{ c.mVal }}</div>
                       </div>
                       <sc-if value="{{ c.hasPick }}">
@@ -1503,10 +1503,10 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                       </div>
                       <div style="display:flex; gap:8px; margin-top:8px">
                         <button onClick="{{ c.voteA }}" style="flex:1; min-height:44px; display:flex; align-items:center; justify-content:center; gap:6px; border:1px solid var(--g-line); border-radius:2px; background:transparent; cursor:pointer; font-family:inherit; font-size:12.5px; color:{{ c.aColor }}">
-                          <i class="ph-duotone ph-user" style="font-size:15px"></i>Adrian · {{ c.a }}
+                          <i class="ph-duotone ph-user" style="font-size:15px"></i>{{ jmA }} · {{ c.a }}
                         </button>
                         <button onClick="{{ c.voteM }}" style="flex:1; min-height:44px; display:flex; align-items:center; justify-content:center; gap:6px; border:1px solid var(--g-line); border-radius:2px; background:transparent; cursor:pointer; font-family:inherit; font-size:12.5px; color:{{ c.mColor }}">
-                          <i class="ph-duotone ph-user" style="font-size:15px"></i>Makinka · {{ c.mk }}
+                          <i class="ph-duotone ph-user" style="font-size:15px"></i>{{ jmM }} · {{ c.mk }}
                         </button>
                       </div>
                     </div>
@@ -2166,7 +2166,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                       <div style="width:{{ chFairM }}; background:var(--g-mag)"></div>
                     </div>
                     <div style="display:flex; gap:12px; font-size:12px; color:var(--g-ink2); font-variant-numeric:tabular-nums">
-                      <span>Adrian {{ chMinsA }}</span><span>Makinka {{ chMinsM }}</span>
+                      <span>{{ jmA }} {{ chMinsA }}</span><span>{{ jmM }} {{ chMinsM }}</span>
                     </div>
                     <sc-if value="{{ chBalanceCan }}">
                       <button onClick="{{ chBalance }}" style="width:100%; min-height:44px; margin-top:11px; border:1px solid var(--g-line); border-radius:2px; background:transparent; cursor:pointer; font-family:inherit; font-size:13px; color:inherit">Vyrovnat rotaci</button>
@@ -3332,8 +3332,8 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                   <div style="font-size:11.5px; color:var(--g-ink3); margin-top:3px">{{ whResNote }}</div>
                   <div style="font-size:12px; color:var(--g-ink2); margin-top:10px">{{ whAccNote }}</div>
                   <div style="display:flex; gap:7px; margin-top:10px">
-                    <button onClick="{{ whToggleA }}" style="flex:1; min-height:44px; display:flex; align-items:center; justify-content:center; gap:6px; border:1px solid var(--g-line); border-radius:2px; background:{{ whABg }}; color:inherit; cursor:pointer; font-family:inherit; font-size:12.5px"><i class="ph-duotone {{ whABox }}" style="font-size:16px; color:var(--g-acc)"></i>Adrian</button>
-                    <button onClick="{{ whToggleM }}" style="flex:1; min-height:44px; display:flex; align-items:center; justify-content:center; gap:6px; border:1px solid var(--g-line); border-radius:2px; background:{{ whMBg }}; color:inherit; cursor:pointer; font-family:inherit; font-size:12.5px"><i class="ph-duotone {{ whMBox }}" style="font-size:16px; color:var(--g-acc)"></i>Makinka</button>
+                    <button onClick="{{ whToggleA }}" style="flex:1; min-height:44px; display:flex; align-items:center; justify-content:center; gap:6px; border:1px solid var(--g-line); border-radius:2px; background:{{ whABg }}; color:inherit; cursor:pointer; font-family:inherit; font-size:12.5px"><i class="ph-duotone {{ whABox }}" style="font-size:16px; color:var(--g-acc)"></i>{{ jmA }}</button>
+                    <button onClick="{{ whToggleM }}" style="flex:1; min-height:44px; display:flex; align-items:center; justify-content:center; gap:6px; border:1px solid var(--g-line); border-radius:2px; background:{{ whMBg }}; color:inherit; cursor:pointer; font-family:inherit; font-size:12.5px"><i class="ph-duotone {{ whMBox }}" style="font-size:16px; color:var(--g-acc)"></i>{{ jmM }}</button>
                   </div>
                   <div style="display:flex; gap:7px; margin-top:10px">
                     <button onClick="{{ whTake }}" style="flex:1; min-height:44px; display:flex; align-items:center; justify-content:center; gap:6px; border:1px solid var(--g-acc); border-radius:2px; background:var(--g-acc); color:#fff; cursor:pointer; font-family:inherit; font-size:13px"><i class="ph-duotone ph-check-circle" style="font-size:16px"></i>Provést</button>
@@ -4485,7 +4485,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 
               <sc-if value="{{ sheetIsSearch }}">
                 <div style="margin-top:14px">
-                  <input value="{{ query }}" onInput="{{ setQuery }}" onKeyDown="{{ queryKey }}" placeholder="Zeptejte se větou — fotky z Chorvatska v červenci" aria-label="Hledat" class="input" style="width:100%; box-sizing:border-box; min-height:44px; font-family:inherit" />
+                  <input value="{{ query }}" onInput="{{ setQuery }}" onKeyDown="{{ queryKey }}" placeholder="Zeptejte se větou — fotky z července, kde jsme oba" aria-label="Hledat" class="input" style="width:100%; box-sizing:border-box; min-height:44px; font-family:inherit" />
                   <div style="font-size:12px; color:var(--g-ink3); margin-top:8px; text-wrap:pretty">{{ searchMeta }}</div>
 
                   <sc-if value="{{ nlAny }}">
@@ -5098,7 +5098,7 @@ const CAL_KIND = { plan: ['Plán', 'ph-calendar-dot', 'var(--g-acc)'], vyroci: [
 const SECTIONS = [
   { id: 'weekly', g: 'Domů a plán', label: 'Náš týden', icon: 'ph-sparkle', note: 'Jen aktuální a nadcházející plány — starší akce se po termínu uzavírají samy.',
     tabs: [['Akce týdne', 'wkEvents'], ['Pro nás dva', 'wkUs'], ['Objevit', 'wkFind']] },
-  { id: 'cestanyni', g: 'Cestování', label: 'Cesta právě nyní', icon: 'ph-compass', note: 'Den 5 z 8 · Brač, Bol. Program dne, útrata a deník na jeden tap.',
+  { id: 'cestanyni', g: 'Cestování', label: 'Cesta právě nyní', icon: 'ph-compass', note: 'Program dne, útrata a deník cesty, která právě běží — na jeden tap.',
     tabs: [['Dnešní program', 'nowPlan'], ['Útrata dne', 'nowMoney'], ['Deník z cesty', 'nowLog']] },
   { id: 'vzpominkyDnes', g: 'Domů a plán', label: 'Vzpomínky', icon: 'ph-sparkle', note: 'Dnes před lety — připomínka chodí v 8:30 oběma.',
     tabs: [['Na dnes', 'memToday'], ['Uložené', 'memKeep'], ['Odložené', 'memLate']] },
@@ -5583,6 +5583,152 @@ const GIFT_OCC = [
   { name: 'Vánoce', name2: 'Vánoce 2026', when: '24. prosince 2026', days: 112, budget: 12000 }
 ];
 
+/*
+ * Ukázka telefonu → data přihlášené dvojice.
+ *
+ * Většina kolekcí telefonu jsou konstanty napsané v tomto dokumentu (transakce
+ * z Albertu, úkoly „Zaplatit pension v Sintře", rodina „Máma Adriana", žádosti,
+ * dárky, výdaje za rok). Server je nikdy nenahrazoval: do `window.GalerieMobil`
+ * posílá jen knihovnu, cesty, sliby a domácnost. Přihlášená dvojice tak na
+ * telefonu četla cizí život, i když v počítači viděla svůj.
+ *
+ * Data dvojice přitom na stránce jsou — v `GalerieData`, ve tvaru pro počítač.
+ * Tady se z nich telefonní tvary skládají a vkládají **dovnitř** týchž polí
+ * a objektů: konstanta drží odkaz z okamžiku překladu, takže jiný objekt by
+ * nikdo neviděl a všech sto míst, která konstanty čtou, zůstává beze změny.
+ *
+ * Běží na začátku každého vykreslení (data dorážejí po skupinách a po akcích
+ * se vracejí znovu). Bez `DVOJICE` — nepřihlášený návštěvník — nedělá nic
+ * a ukázka zůstává. Co v datech dvojice není, je prázdné, ne ukázkové.
+ */
+const telefonZeServeru = (() => {
+  const nahrad = (cil, nove) => {
+    if (Array.isArray(cil)) { cil.length = 0; Array.prototype.push.apply(cil, nove || []); return; }
+    Object.keys(cil).forEach(k => { delete cil[k]; });
+    Object.assign(cil, nove || {});
+  };
+  const krestni = j => String(j || '').trim().split(/\s+/)[0];
+  const radek = r => [String((r || [])[0] || ''), String((r || [])[1] || ''), (r || [])[2] || null];
+
+  return () => {
+    const G = window.GalerieData || {};
+    if (!(G.DVOJICE || []).length) return false;
+    const AL = G.AL || {};
+    const al = klic => (AL[klic] || []).map(radek);
+
+    // — finance —
+    nahrad(TXS, (G.TX || []).map(t => [t[0], t[1], t[2], t[3], t[4], t[5], t[6], null, t[8] || null]));
+    nahrad(CATS, ((G.BUD || {}).cats || []).map(c => [c[0], c[1] || 0]));
+    nahrad(TXCATS, Array.from(new Set((G.TXCATS || []).concat(['Příjem', 'Nezařazeno']))));
+    // Posledních šest měsíců z knihy; letošní měsíc nese server spočítaný.
+    nahrad(MONTHS, ((G.BUD || {}).months || []).slice(-6).map(m => {
+      const n = String(m[0] || '').split(' ')[0];
+      return [n.charAt(0).toUpperCase() + n.slice(1, 3), m[1] || 0];
+    }));
+    nahrad(MCOST, G.COSTMEAN || []);
+    // Učení rozpočtu z cest potřebuje plán proti skutečnosti po kategoriích;
+    // ten server nemá, takže se neučí z ničeho, místo aby se učil z Tater.
+    nahrad(TRIPHIST, []);
+    nahrad(TRIPPLAN, {});
+
+    // — plán a deník —
+    const sloupce = (G.ATASKS || {}).all || [];
+    nahrad(TASKS, sloupce.map(c => [c[0], (c[1] || []).map(r => [r[0], krestni(r[1]), r[2], r[3] ? 1 : 0])]));
+    const hotove = [];
+    const boardUkoly = sloupce.map((c, ci) => ({
+      id: 'c' + ci, label: c[0],
+      items: (c[1] || []).filter((r, ri) => {
+        const polozka = { id: r[4] || ('s' + ci + '-' + ri), t: r[0], who: krestni(r[1]), when: r[2] };
+        if (r[3]) { hotove.push(polozka); return false; }
+        return true;
+      }).map((r, ri) => ({ id: r[4] || ('s' + ci + '-' + ri), t: r[0], who: krestni(r[1]), when: r[2] }))
+    })).concat([{ id: 'done', label: 'Hotovo', items: hotove }]);
+    nahrad(MBBOARD, {
+      tasks: boardUkoly,
+      // Pásma se na telefonu přetahují jen v okně; zařazení titulů ze serveru
+      // tu není, takže pásma začínají prázdná.
+      tier: ['S', 'A', 'B', 'C'].map(t => ({ id: t, label: t, items: [] }))
+    });
+    nahrad(DIARY, ((G.ADIARY || {}).diary || []).map(d => [d[0], d[1], d[2], d[3] || '', null]));
+    nahrad(INBOX, (AL.inbox || []).map((r, i) => ({
+      id: 'si' + i, icon: 'ph-tray', src: String(r[1] || ''), title: String(r[0] || ''),
+      why: '', cta: 'Vyřízeno', taps: '', eff: 'server', res: 'vyřízeno'
+    })));
+    nahrad(MEVSEED, G.EVSEED || []);
+    nahrad(MNUDGES, G.NUDGES || []);
+    nahrad(FAMILY, G.FAMILY || []);
+    nahrad(DEC_LIST, G.DEC_LIST || []);
+    nahrad(DEC_COOL, G.DEC_COOL || []);
+    nahrad(GIFT_WISHES, G.GIFT_WISHES || []);
+    nahrad(GIFT_BUYS, G.GIFT_BUYS || []);
+    nahrad(GIFT_IDEAS, G.GIFT_IDEAS || []);
+    nahrad(GIFT_OCC, G.GIFT_OCC || []);
+    nahrad(VAULT, (G.VAULT_ITEMS || []).map(v => [v.name, v.meta || '']));
+    // Rituály jsou nabídka, poznámky u nich („6 věcí od Adriana") ukázka.
+    MRITUALS.forEach(r => { r[6] = ''; });
+
+    // — cyklus —
+    if (G.CYC_STARTS) nahrad(CYC_STARTS, G.CYC_STARTS);
+    if (G.CYC_BASE) nahrad(CYC_BASE, G.CYC_BASE);
+
+    // — místa, kuchyně, balíčky, rok v číslech —
+    const mista = G.PLACES || {};
+    nahrad(PLACES, Object.keys(mista).map((k, i) => {
+      const p = mista[k] || {};
+      return [p.title || k, [p.city, p.kind].filter(Boolean).join(' · '), p.tag === 'chceme' ? 0 : 1, p.photoMatch || p.title || k, i * 7, null, null, String(p.title || k).split(' ').pop()];
+    }));
+    const recepty = G.RECIPES || {};
+    nahrad(MRECIPES, Object.keys(recepty).map(k => {
+      const r = recepty[k] || {};
+      return { id: k, title: r.title || k, kind: String(r.kind || '').split(' · ')[0], mins: parseInt(r.time, 10) || 0, fits: [], why: '', ing: (r.ing || []).map(x => Array.isArray(x) ? x[2] : x).filter(Boolean) };
+    }));
+    nahrad(MWEATHER, G.WEATHER || []);
+    nahrad(MPACKS, G.OFFPACKS || []);
+    const letos = new Date().getFullYear();
+    nahrad(MYB, ((G.ROKVCISLECH || {})[letos]) || []);
+    // Kolik dní zpátky leží dny knihovny — heatmapa roku.
+    const dnes = new Date(); dnes.setHours(0, 0, 0, 0);
+    nahrad(DAY_AGO, (G.DAYS || []).map(d => Math.max(0, Math.round((dnes - new Date(d.key + 'T00:00:00')) / 86400000))));
+
+    // — řádky sekcí: stejné seznamy jako v počítači —
+    const tyden = (G.WEEK || {}).next || {};
+    const svet = G.SVET || {};
+    const lide = G.APEOPLE || {};
+    const stitky = G.ATAGS || {};
+    const milniky = (G.ADIARY || {}).ms || [];
+    nahrad(SECROWS, {
+      wkEvents: (tyden.rows || []).map(r => [r[1], r[0] + (r[2] ? ' · ' + krestni(r[2]) : ''), null]),
+      wkUs: [], wkFind: [],
+      nowToday: [], nowStreak: [], nowArch: [],
+      voice: al('voice'), voiceTx: [],
+      watch: al('watchlist'), movies: al('films'), series: al('series'),
+      tier: ((G.ABARS || {}).tier || []).map(t => [t[0], t[1], null]),
+      recipes: al('recipes'), shop: al('shopping'), menu: al('weekMenu'),
+      nowPlan: [], nowMoney: [], nowLog: [],
+      memToday: [], memKeep: [], memLate: [],
+      datesGen: al('datesGen'), datesSaved: al('datesSaved'), datesDone: [],
+      gifts: al('gifts'),
+      anniv: milniky.map(m => [m[1], m[0], null]),
+      remind: [],
+      itinWish: (svet.chceme || []).map(w => [w[0], w[2] || '', w[3] || null]),
+      itinDone: (svet.zeme || []).map(z => [z[0], (z[3] || 0) + ' fotek · poprvé ' + z[2], 'byli jsme']),
+      tickets: al('ticket'), ticketsOld: [],
+      people: (lide.ok || []).map(p => [p[0], p[1], 'potvrzeno']),
+      peopleSug: (lide.sug || []).map(p => [p[0], p[1], 'potvrdit']),
+      tags: (stitky.all || []).map(t => ['#' + t[0], t[1] + ' fotek', null]),
+      tagMerge: al('tagMerge'),
+      dupes: al('dupes'), dupesDone: [],
+      archive: [], recovery: [],
+      tv: [], print: al('print'),
+      story: al('story'),
+      ms: milniky.map(m => [m[1], m[0], null]),
+      burps: [], farts: [],
+      autoRules: [], autoLog: []
+    });
+    return true;
+  };
+})();
+
 class Component extends DCLogic {
   state = {
     tab: 'home', stack: [], tripId: 'chorvatsko', mechId: null, allRoute: null, allTab: 0, allQuery: '', moreQuery: '', moreShut: {}, recentRoutes: [],
@@ -5644,6 +5790,10 @@ class Component extends DCLogic {
     return a;
   }
   txOrd(d) { const m = String(d).match(/(\d+)\.\s*(\d+)\./); return m ? parseInt(m[2], 10) * 100 + parseInt(m[1], 10) : 0; }
+  // Bez `DVOJICE` se dívá nepřihlášený návštěvník a telefon ukazuje ukázku.
+  ukazka() { return !(((window.GalerieData || {}).DVOJICE) || []).length; }
+  // Měsíc, za který se počítá rozpočet: ukázka je celá ze srpna, dvojice žije teď.
+  mesicRozpoctu() { return this.ukazka() ? 8 : new Date().getMonth() + 1; }
   sortTx(list) {
     const k = this.state.sortFin, a = list.slice();
     if (k === 'high') a.sort((x, y) => Math.abs(y.amount) - Math.abs(x.amount));
@@ -5820,7 +5970,7 @@ class Component extends DCLogic {
   // ——— přetahování prstem: nástěnka a tierlist ———
   mbBoard(kind) {
     const st = this.state.mbCols || {};
-    return st[kind] || MBBOARD[kind];
+    return st[kind] || MBBOARD[kind] || [];
   }
   mbSet(kind, cols, note, prev) {
     this.setState({ mbCols: Object.assign({}, this.state.mbCols || {}, { [kind]: cols }) });
@@ -6139,7 +6289,7 @@ class Component extends DCLogic {
       capTitle: clashes.length ? this.pl(clashes.length, 'kolize v týdnu', 'kolize v týdnu', 'kolizí v týdnu') : 'Týden bez kolizí',
       capDays: HOUSE_WEEK.map(d => ({
         name: d.name, date: d.date, note: d.note,
-        people: [['Adrian', d.a], ['Makinka', d.m]].map(p => ({
+        people: [[this.krestni(this.dva()[0]), d.a], [this.krestni(this.dva()[1]), d.m]].map(p => ({
           name: p[0], free: String(p[1]).replace('.', ',') + ' h',
           width: Math.min(100, Math.round((p[1] / 8) * 100)) + '%',
           color: p[1] < 1 ? 'var(--g-mag)' : 'var(--g-ink2)',
@@ -6169,7 +6319,7 @@ class Component extends DCLogic {
         service: () => {
           if (!i.service) { this.toast(i.name + ' servis nepotřebuje', { icon: 'ph-info' }); return; }
           const prev = dues;
-          setDues([{ id: 'd' + Date.now(), what: 'Servis — ' + i.name, kind: 'lhůta', date: i.serviceNext, days: i.serviceDays, amount: i.servicePrice || 0, who: 'Adrian' }].concat(dues));
+          setDues([{ id: 'd' + Date.now(), what: 'Servis — ' + i.name, kind: 'lhůta', date: i.serviceNext, days: i.serviceDays, amount: i.servicePrice || 0, who: this.meWho() }].concat(dues));
           this.setState({ hsTab: 'due' });
           this.toast('Servis zapsán mezi lhůty · ' + i.serviceNext, { icon: 'ph-calendar-plus', undo: () => setDues(prev) });
         },
@@ -6252,7 +6402,8 @@ class Component extends DCLogic {
   // Dárky a přání — stejná data i pravidla jako v širokém rozvržení.
   mGiftVals() {
     const s = this.state;
-    const me = s.giftMe || 'Adrian';
+    // Výchozí stav nese „Adrian"; kdo v dvojici není, za toho se dárky neprohlížejí.
+    const me = this.dva().indexOf(s.giftMe) >= 0 ? s.giftMe : this.meWho();
     const other = this.druhy(me);
     const otherGen = this.sklon(other, 'gen');
     const acc = n => this.sklon(n, 'acc');
@@ -6357,7 +6508,7 @@ class Component extends DCLogic {
       gftIdeas: ideas.map(i => ({
         text: i.text, source: i.source, icon: i.icon,
         toWish: () => { const prev = wishes; this.setState({ wishes: [{ id: 'w' + Date.now(), who: i.forWhom || other, title: i.title, price: i.price, size: i.price > 2000 ? 'big' : 'small', note: 'Z nápadu: ' + i.source, added: 'dnes' }].concat(wishes), ideas: ideas.filter(x => x.id !== i.id) }); this.toast('„' + i.title + '“ mezi přání', { icon: 'ph-gift', undo: () => this.setState({ wishes: prev, ideas: ideas }) }); },
-        toBuy: () => { this.setState({ ideas: ideas.filter(x => x.id !== i.id) }); addBuy(other, i.title, i.price, null, 'Vánoce 2026'); }
+        toBuy: () => { this.setState({ ideas: ideas.filter(x => x.id !== i.id) }); addBuy(other, i.title, i.price, null, 'Vánoce ' + new Date().getFullYear()); }
       }))
     };
   }
@@ -6685,7 +6836,7 @@ class Component extends DCLogic {
     // Návrhy pravidel: spouštěč × akce ze stejných definic, jaké nabízí velké rozhraní.
     const RTRIG = D.RTRIG || {}, RACT = D.RACT || {};
     const rulSug = key === 'rulSug' ? [
-      ['tag', 'album', 'Fotky s tagem moře do albumu Moře 2026', 'moře', 'Moře 2026'],
+      ['tag', 'album', 'Fotky s tagem moře do albumu Moře ' + new Date().getFullYear(), 'moře', 'Moře ' + new Date().getFullYear()],
       ['spend', 'notify', 'Výdaj nad 2 000 Kč hned oznámit oběma', '2000', 'Velký výdaj'],
       ['week', 'digest', 'V pondělí ráno sestavit týdenní shrnutí', '', '']
     ].filter(r => RTRIG[r[0]] && RACT[r[1]]).map(r => ({
@@ -6707,7 +6858,7 @@ class Component extends DCLogic {
       : key === 'saved' ? MSGS.filter(x => (x[6] || '') !== '' || x[4] === 'v').slice(0, 6)
       : [];
     const msgs = msgSrc.map(x => ({
-      mine: x[1] === 'A', who: x[1] === 'A' ? 'Adrian' : 'Makinka', time: x[3],
+      mine: x[1] === 'A', who: this.krestni(this.dva()[x[1] === 'A' ? 0 : 1]), time: x[3],
       voice: x[4] === 'v', text: x[5], extra: x[6] || '', hasExtra: !!x[6],
       align: x[1] === 'A' ? 'flex-end' : 'flex-start',
       bg: x[1] === 'A' ? 'var(--g-acc-soft)' : 'var(--g-panel)'
@@ -6822,7 +6973,7 @@ class Component extends DCLogic {
       fg: mp.time === t ? 'var(--g-raise)' : 'var(--g-ink2)',
       pick: () => { mpSet({ time: t }); this.toast('Připomínky chodí v ' + t, { icon: 'ph-clock' }); }
     })) : [];
-    const mpWho = key === 'memPrefs' ? [['oba', 'Oběma'], ['A', 'Jen Adrianovi'], ['M', 'Jen Makince']].map(w => ({
+    const mpWho = key === 'memPrefs' ? [['oba', 'Oběma'], ['A', 'Jen ' + this.whoDat(this.krestni(this.dva()[0]))], ['M', 'Jen ' + this.whoDat(this.krestni(this.dva()[1]))]].map(w => ({
       label: w[1], bg: mp.who === w[0] ? 'var(--g-ink)' : 'transparent',
       fg: mp.who === w[0] ? 'var(--g-raise)' : 'var(--g-ink2)',
       pick: () => { mpSet({ who: w[0] }); this.toast('Chodí: ' + w[1].toLowerCase(), { icon: 'ph-users' }); }
@@ -6858,19 +7009,30 @@ class Component extends DCLogic {
       left: this.kc(Math.max(0, ENV.limit - mo.a)) + ' nevyužito',
       color: mo.a >= ENV.limit ? 'var(--g-mag)' : 'var(--g-acc)'
     })) : [];
-    const csSplit = key === 'csSplit' ? (() => {
-      const inA = 52000, inM = 41000, tot = inA + inM;
-      const shA = Math.round(inA / tot * 100), shM = 100 - shA;
-      return COSTMEAN.slice(0, 5).map(c => ({
-        name: c[0], kc: this.kc(c[1]),
-        half: this.kc(Math.round(c[1] / 2)),
-        byA: this.kc(Math.round(c[1] * shA / 100)),
-        byM: this.kc(Math.round(c[1] * shM / 100)),
-        note: 'napůl by ' + (shA > 50 ? 'Makinka' : 'Adrian') + ' platil o ' + this.kc(Math.abs(Math.round(c[1] / 2) - Math.round(c[1] * shM / 100))) + ' víc',
-        wA: shA + '%', wM: shM + '%'
-      }));
-    })() : [];
-    const csSplitHead = key === 'csSplit' ? 'Podle příjmů: Adrian 56 %, Makinka 44 %. Rovný půl na půl vypadá spravedlivě, dokud se příjmy liší.' : '';
+    /*
+     * Dělení podle příjmů z `INCOMES` (měsíčně podle jména), jako v počítači.
+     *
+     * Stály tu napsané výplaty 52 000 a 41 000 Kč a nadpis „Adrian 56 %,
+     * Makinka 44 %". Bez zapsaného příjmu obou se poměr nepočítá — rozdělí
+     * se napůl a nadpis to řekne.
+     */
+    const [jmenoA, jmenoM] = this.dva();
+    const prijmy = D.INCOMES || {};
+    const inA = this.ukazka() ? 52000 : +(prijmy[jmenoA] || 0), inM = this.ukazka() ? 41000 : +(prijmy[jmenoM] || 0);
+    const znamePrijmy = inA > 0 && inM > 0;
+    const shA = znamePrijmy ? Math.round(inA / (inA + inM) * 100) : 50, shM = 100 - shA;
+    const csSplit = key === 'csSplit' ? COSTMEAN.slice(0, 5).map(c => ({
+      name: c[0], kc: this.kc(c[1]),
+      half: this.kc(Math.round(c[1] / 2)),
+      byA: this.kc(Math.round(c[1] * shA / 100)),
+      byM: this.kc(Math.round(c[1] * shM / 100)),
+      note: shA === 50 ? 'podle příjmů i napůl vychází stejně'
+        : 'napůl: ' + this.krestni(shA > 50 ? jmenoM : jmenoA) + ' o ' + this.kc(Math.abs(Math.round(c[1] / 2) - Math.round(c[1] * shM / 100))) + ' víc',
+      wA: shA + '%', wM: shM + '%'
+    })) : [];
+    const csSplitHead = key !== 'csSplit' ? ''
+      : znamePrijmy ? 'Podle příjmů: ' + this.krestni(jmenoA) + ' ' + shA + ' %, ' + this.krestni(jmenoM) + ' ' + shM + ' %. Rovný půl na půl vypadá spravedlivě, dokud se příjmy liší.'
+      : 'Příjem obou zatím není zapsaný — dělí se napůl. Zapište výplaty ve Financích a poměr se spočítá.';
     const isCsList = csList.length > 0, isCsCompare = csCompare.length > 0,
           isCsSeason = csSeason.length > 0, isCsSplit = csSplit.length > 0;
 
@@ -6966,7 +7128,7 @@ class Component extends DCLogic {
     const whOptsFor = src => src === 'recipes' ? Object.keys(RECIPES).map(k => (RECIPES[k] || {}).title || k).concat(['Zbytky', 'Objednáme'])
       : src === 'watch' ? ((D.AL || {}).watchlist || []).map(r => r[0])
       : src === 'places' ? Object.keys(D.PLACES || {}).map(k => (D.PLACES[k] || {}).title).filter(Boolean)
-      : src === 'who' ? ['Adrian', 'Makinka'] : ['Ano', 'Ne'];
+      : src === 'who' ? this.dva().slice(0, 2).map(j => this.krestni(j)) : ['Ano', 'Ne'];
     const whList = whOptsFor(whDef[3]);
     const whPicks = key === 'whSpin' ? WHEELDEF.map((w, i) => ({
       label: w[1], icon: w[2],
@@ -6992,10 +7154,11 @@ class Component extends DCLogic {
       share: Math.round(100 / Math.max(1, whList.length)) + ' %'
     })) : [];
     const isWhOpts = whOptRows.length > 0;
-    const whLogRows = key === 'whLog' ? (s.whLogM || [
+    // Historie kolečka je jen ta, kterou dvojice vytočila; dvě napsané jízdy patří ukázce.
+    const whLogRows = key === 'whLog' ? (s.whLogM || (this.ukazka() ? [
       { what: 'Chorvatský peka', wheel: 'Co k večeři', when: 'včera 18:20' },
       { what: 'Shogun', wheel: 'Co si pustit', when: '13. srpna' }
-    ]) : [];
+    ] : [])) : [];
     const isWhLog = whLogRows.length > 0;
 
     const offOn = s.offPackM || {};
@@ -7035,8 +7198,8 @@ class Component extends DCLogic {
       aVal: c[4], aWhen: c[5], mVal: c[6], mWhen: c[7], merged: c[8],
       picked: evPick[c[0]] || null,
       hasPick: !!evPick[c[0]],
-      pickA: () => { this.setState({ evPick: Object.assign({}, evPick, { [c[0]]: c[4] }) }); this.toast('Ponechána verze Adriana', { icon: 'ph-check' }); },
-      pickM: () => { this.setState({ evPick: Object.assign({}, evPick, { [c[0]]: c[6] }) }); this.toast('Ponechána verze Makinky', { icon: 'ph-check' }); },
+      pickA: () => { this.setState({ evPick: Object.assign({}, evPick, { [c[0]]: c[4] }) }); this.toast('Ponechána verze: ' + this.krestni(this.dva()[0]), { icon: 'ph-check' }); },
+      pickM: () => { this.setState({ evPick: Object.assign({}, evPick, { [c[0]]: c[6] }) }); this.toast('Ponechána verze: ' + this.krestni(this.dva()[1]), { icon: 'ph-check' }); },
       pickBoth: () => { this.setState({ evPick: Object.assign({}, evPick, { [c[0]]: c[8] }) }); this.toast('Sloučeno — ' + c[8], { icon: 'ph-git-merge' }); }
     })) : [];
     const isEvConf = evConf.length > 0;
@@ -7096,7 +7259,7 @@ class Component extends DCLogic {
     const isEv = evRows.length > 0;
     // Momentky: krátké zápisy z vlákna — hlasovka nebo fotka s poznámkou.
     const momRows = kind === 'chat' ? (D.MSGS || []).filter(x => x[4] === 'v' || (x[6] || '') !== '').map(x => ({
-      who: x[1] === 'A' ? 'Adrian' : 'Makinka', when: x[3],
+      who: this.krestni(this.dva()[x[1] === 'A' ? 0 : 1]), when: x[3],
       text: x[5], extra: x[6] || '', hasExtra: !!x[6],
       icon: x[4] === 'v' ? 'ph-microphone' : 'ph-image',
       color: x[1] === 'A' ? 'var(--g-acc)' : 'var(--g-mag)'
@@ -7107,7 +7270,10 @@ class Component extends DCLogic {
     // ——— Týdenní přehled z kalendáře ———
     // Prototyp má svoje „dnes" (16. 8. 2026); měsíce v CALEV jsou od nuly.
     const CALEV = D.CALEV || [], EVKIND = D.EVKIND || {};
-    const TODAY = { y: 2026, m: 7, d: 16 };
+    // Se serverem skutečný dnešek — události z CALEV mají skutečná data a týden
+    // „od 16. 8. 2026" by je nechal navždy v minulosti nebo budoucnosti.
+    const dnesni = new Date();
+    const TODAY = this.ukazka() ? { y: 2026, m: 7, d: 16 } : { y: dnesni.getFullYear(), m: dnesni.getMonth(), d: dnesni.getDate() };
     // Zabalené číslo (20260716) slouží jen k řazení. Rozdíl dnů se musí počítat
     // z kalendáře, jinak vyjde mezi 24. 7. a 16. 8. „92 dní" a akce přes
     // hranici měsíce do tohoto týdne nikdy nespadnou.
@@ -7227,7 +7393,8 @@ class Component extends DCLogic {
     const KL_DAYS = D.KL_DAYS || [], KL_MOOD = D.KL_MOOD || {}, KL_ATTN = D.KL_ATTN || [],
           KL_EN = D.KL_EN || {}, KL_EV = D.KL_EV || [], KL_HELP = D.KL_HELP || [];
     const klMood = key === 'klMood' ? KL_DAYS.map((d, i) => {
-      const aArr = KL_MOOD.Adrian || [], mArr = KL_MOOD.Makinka || [];
+      // Nálada je ze serveru pod skutečnými jmény, ne pod „Adrian"/„Makinka".
+      const aArr = KL_MOOD[this.dva()[0]] || [], mArr = KL_MOOD[this.dva()[1]] || [];
       const a = i < aArr.length ? aArr[i] : null, mk = i < mArr.length ? mArr[i] : null;
       return { day: d, hasA: a !== null && a !== undefined, hasM: mk !== null && mk !== undefined,
         aw: ((a || 0) / 5 * 100) + '%', mw: ((mk || 0) / 5 * 100) + '%',
@@ -7235,8 +7402,8 @@ class Component extends DCLogic {
         low: (a !== null && a <= 2) || (mk !== null && mk <= 2) };
     }) : [];
     const isKlMood = klMood.length > 0;
-    const klEnergy = key === 'klEnergy' ? ['Adrian', 'Makinka'].map((w, wi) => ({
-      name: w, color: wi === 0 ? 'var(--g-acc)' : 'var(--g-mag)',
+    const klEnergy = key === 'klEnergy' ? this.dva().slice(0, 2).map((w, wi) => ({
+      name: this.krestni(w), color: wi === 0 ? 'var(--g-acc)' : 'var(--g-mag)',
       days: (KL_EN[w] || []).map((code, di) => ({
         label: ['Po', 'Út', 'St', 'Čt', 'Pá', 'So', 'Ne'][di] || '',
         parts: String(code || '').split('').map((c, pi) => ({
@@ -7313,49 +7480,68 @@ class Component extends DCLogic {
     const gearHead = phoneShare + ' % knihovny vzniklo na telefonu.';
     const isGear = gearRows.length > 0;
 
+    /*
+     * Kdo co nahrál: se serverem ze statistik celé knihovny (`LIBSTATS.autori`).
+     *
+     * Dlaždice telefonu autora nenesou, takže se dopočítával ze zbytku po
+     * dělení pořadí a nejaktivnější hodina z téhož čísla. Z toho vycházelo,
+     * kdo „víc fotí" — vymyšleně. Ukázka si to počítá dál po svém.
+     */
+    const LS = !this.ukazka() ? (D.LIBSTATS || null) : null;
+    const autori = (LS && LS.autori) || {};
     const whoLib = key === 'libWho' ? gearLib : [];
-    const cntBy = (list, w) => list.filter(p => authorOf(p) === w).length;
+    const cntBy = (list, w) => LS ? ((autori[w] || {})[list === favLib ? 'favs' : 'count'] || 0) : list.filter(p => authorOf(p) === w).length;
     const favLib = whoLib.filter(p => (this.isFav ? this.isFav(p) : p.fav));
-    const shareOf = w => whoLib.length ? Math.round(cntBy(whoLib, w) / whoLib.length * 100) : 0;
-    const favShareOf = w => favLib.length ? Math.round(cntBy(favLib, w) / favLib.length * 100) : 0;
+    const celkem = LS ? (LS.total || 0) : whoLib.length;
+    const celkemFav = LS ? (LS.favs || 0) : favLib.length;
+    const shareOf = w => celkem ? Math.round(cntBy(whoLib, w) / celkem * 100) : 0;
+    const favShareOf = w => celkemFav ? Math.round(cntBy(favLib, w) / celkemFav * 100) : 0;
     const topPlaceOf = w => {
+      if (LS) return (autori[w] || {}).place || '—';
       const o = {};
       whoLib.filter(p => authorOf(p) === w).forEach(p => { const k = (p.place || '').split(',')[0].trim(); if (k) o[k] = (o[k] || 0) + 1; });
       const ks = Object.keys(o).sort((a, b) => o[b] - o[a]);
       return ks[0] || '—';
     };
     const hourOf = w => {
+      if (LS) { const h = (autori[w] || {}).hour; return h === null || h === undefined ? '—' : h + ':00'; }
       const h = Array.from({ length: 24 }, () => 0);
       whoLib.filter(p => authorOf(p) === w).forEach(p => { h[7 + ((p.seed || 0) * 5) % 15] += 1; });
       return h.indexOf(Math.max.apply(null, h)) + ':00';
     };
-    const whoCards = key === 'libWho' ? ['Adrian', 'Makinka'].map((w, i) => ({
-      name: w, count: String(cntBy(whoLib, w)),
+    const whoCards = key === 'libWho' ? this.dva().slice(0, 2).map((w, i) => ({
+      name: this.krestni(w), count: String(cntBy(whoLib, w)),
       sharePct: shareOf(w) + ' %', shareW: shareOf(w) + '%',
       favPct: favShareOf(w) + ' %', favW: favShareOf(w) + '%',
       color: i === 0 ? 'var(--g-acc)' : 'var(--g-mag)'
     })) : [];
     const whoRows = key === 'libWho' ? [
-      ['Nahráno položek', String(cntBy(whoLib, 'Adrian')), String(cntBy(whoLib, 'Makinka'))],
+      ['Nahráno položek', String(cntBy(whoLib, this.dva()[0])), String(cntBy(whoLib, this.dva()[1]))],
       ['Podíl v knihovně', shareOf(this.dva()[0]) + ' %', shareOf(this.dva()[1]) + ' %'],
       ['Podíl v oblíbených', favShareOf(this.dva()[0]) + ' %', favShareOf(this.dva()[1]) + ' %'],
-      ['Videí', String(whoLib.filter(p => p.video && authorOf(p) === this.dva()[0]).length), String(whoLib.filter(p => p.video && authorOf(p) === this.dva()[1]).length)],
+      LS
+        ? ['Videí', String((autori[this.dva()[0]] || {}).videos || 0), String((autori[this.dva()[1]] || {}).videos || 0)]
+        : ['Videí', String(whoLib.filter(p => p.video && authorOf(p) === this.dva()[0]).length), String(whoLib.filter(p => p.video && authorOf(p) === this.dva()[1]).length)],
       ['Nejčastější místo', topPlaceOf(this.dva()[0]), topPlaceOf(this.dva()[1])],
       ['Nejaktivnější hodina', hourOf(this.dva()[0]), hourOf(this.dva()[1])]
     ].map(x => ({ label: x[0], a: x[1], mk: x[2] })) : [];
-    const whoHead = whoCards.length
-      ? (shareOf(this.dva()[0]) >= 50 ? this.dva()[0] : this.dva()[1]) + ' má v knihovně větší podíl. Počítáno z aktuálního obsahu.'
-      : '';
+    const whoHead = !whoCards.length ? ''
+      : !celkem ? 'Knihovna je zatím prázdná — srovnání se ukáže po prvních fotkách.'
+      : this.krestni(shareOf(this.dva()[0]) >= 50 ? this.dva()[0] : this.dva()[1]) + ' má v knihovně větší podíl. Počítáno z aktuálního obsahu.';
     const isWho = whoCards.length > 0;
 
     // ——— Sazba výročního albumu ———
     const annFmt = s.annFmtM || 'čtverec 21 cm';
     const annPages = 24 + (gearLib.length ? 0 : 0) + (annFmt === 'A4 na šířku' ? 4 : annFmt === 'A4 na výšku' ? 2 : 0);
     const annPrice = annPages * 46;
-    const annPl = key === 'annPrint' ? Object.keys(PLACES || {}).slice(0, 8).map((k, i) => ({
-      year: String(2019 + i), place: (PLACES[k] || {}).title || 'Bez místa',
-      count: this.pl(6 + i * 3, 'fotka', 'fotky', 'fotek'), page: String(3 + i * 2)
-    })) : [];
+    // Řady alba jsou roky kolem výročí z `VYROCNI`; ukázka si vymýšlela roky
+    // od 2019 a počty „6 + 3 × pořadí" k místům ze seznamu.
+    const annPl = key !== 'annPrint' ? [] : !this.ukazka()
+      ? ((D.VYROCNI || {}).rows || []).map((r, i) => ({ year: String(r.year), place: r.place || 'Bez místa', count: this.pl(r.count || 0, 'fotka', 'fotky', 'fotek'), page: String(3 + i * 2) }))
+      : Object.keys(PLACES || {}).slice(0, 8).map((k, i) => ({
+        year: String(2019 + i), place: (PLACES[k] || {}).title || 'Bez místa',
+        count: this.pl(6 + i * 3, 'fotka', 'fotky', 'fotek'), page: String(3 + i * 2)
+      }));
     const annFmts = key === 'annPrint' ? ['čtverec 21 cm', 'A4 na výšku', 'A4 na šířku'].map(x => ({
       label: x,
       bg: x === annFmt ? 'var(--g-ink)' : 'transparent',
@@ -7382,8 +7568,8 @@ class Component extends DCLogic {
       mk: vote(p.id, 'M') === 1 ? 'pro' : vote(p.id, 'M') === 0 ? 'proti' : '—',
       aColor: vote(p.id, 'A') === 1 ? 'var(--g-ok)' : vote(p.id, 'A') === 0 ? 'var(--g-mag)' : 'var(--g-ink3)',
       mColor: vote(p.id, 'M') === 1 ? 'var(--g-ok)' : vote(p.id, 'M') === 0 ? 'var(--g-mag)' : 'var(--g-ink3)',
-      voteA: () => { const prev = votes; this.setState({ curVotesM: Object.assign({}, votes, { [p.id]: Object.assign({}, votes[p.id], { A: vote(p.id, 'A') === 1 ? 0 : 1 }) }) }); this.toast('Adrian — ' + (vote(p.id, 'A') === 1 ? 'proti' : 'pro'), { icon: 'ph-thumbs-up', undo: () => this.setState({ curVotesM: prev }) }); },
-      voteM: () => { const prev = votes; this.setState({ curVotesM: Object.assign({}, votes, { [p.id]: Object.assign({}, votes[p.id], { M: vote(p.id, 'M') === 1 ? 0 : 1 }) }) }); this.toast('Makinka — ' + (vote(p.id, 'M') === 1 ? 'proti' : 'pro'), { icon: 'ph-thumbs-up', undo: () => this.setState({ curVotesM: prev }) }); }
+      voteA: () => { const prev = votes; this.setState({ curVotesM: Object.assign({}, votes, { [p.id]: Object.assign({}, votes[p.id], { A: vote(p.id, 'A') === 1 ? 0 : 1 }) }) }); this.toast(this.krestni(this.dva()[0]) + ' — ' + (vote(p.id, 'A') === 1 ? 'proti' : 'pro'), { icon: 'ph-thumbs-up', undo: () => this.setState({ curVotesM: prev }) }); },
+      voteM: () => { const prev = votes; this.setState({ curVotesM: Object.assign({}, votes, { [p.id]: Object.assign({}, votes[p.id], { M: vote(p.id, 'M') === 1 ? 0 : 1 }) }) }); this.toast(this.krestni(this.dva()[1]) + ' — ' + (vote(p.id, 'M') === 1 ? 'proti' : 'pro'), { icon: 'ph-thumbs-up', undo: () => this.setState({ curVotesM: prev }) }); }
     }));
     const isCur = (key === 'curVote' || key === 'curMatch' || key === 'curSplit' || key === 'curDone') && curCand.length > 0;
     const curNote = key === 'curVote' ? 'Každý hlasuje sám. Shoda i rozpor se pak ukáže v dalších záložkách — a nikdo nemusí nic obhajovat.'
@@ -7732,7 +7918,7 @@ class Component extends DCLogic {
    *
    * Dokud server neřekl, kdo tu je (`ZAMEK` chodí za přihlášením), byly tu
    * ukázková data prototypu: výběr „Adrian / Makinka" a v kolonce předvyplněná
-   * `adrian.stanek@gmail.com`. Dvě osobní adresy na veřejné stránce, a jedna
+   * `adrian@example.com`. Dvě osobní adresy na veřejné stránce, a jedna
    * z nich špatná. Nepřihlášený dostane obyčejné přihlášení: e-mail a heslo.
    */
   lockData() {
@@ -8146,7 +8332,7 @@ class Component extends DCLogic {
       stat: [
         { label: 'Řetězců', value: String(M.VERS.length) },
         { label: 'Verzí', value: String(M.VERS.reduce((a, v) => a + v.steps.length + (vExtra[v.id] || []).length, 0)) },
-        { label: 'Nejdelší', value: String(Math.max.apply(null, M.VERS.map(v => v.steps.length + (vExtra[v.id] || []).length))) }
+        { label: 'Nejdelší', value: String(Math.max.apply(null, M.VERS.map(v => v.steps.length + (vExtra[v.id] || []).length).concat([0]))) }
       ],
       rows: M.VERS.map(v => {
         const steps = v.steps.concat(vExtra[v.id] || []);
@@ -8189,7 +8375,7 @@ class Component extends DCLogic {
       optWhy: 'Největší rozhodnutí, které pár dělá. Bez termínu, bez odpočtu a bez připomínek — jen dvě pozice a to, co tomu stojí v cestě.',
       meta: !!opt['kids'] ? M.KIDS.pos.map(p => (kSt[p.who] || p.stance)).join(' · ') : 'vypnuté',
       note: 'Arbitr se na tohle nepoužije. U rozhodnutí, které nese jeden člověk v těle, nemůže padnout mechanismem.',
-      stat: M.KIDS.pos.map(p => ({ label: p.who, value: kSt[p.who] || p.stance })).concat([{ label: 'Překážky', value: String(M.KIDS.blockers.filter(b => !kFixed[b.what]).length) }]),
+      stat: M.KIDS.pos.map(p => ({ label: this.krestni(p.who), value: kSt[p.who] || p.stance })).concat([{ label: 'Překážky', value: String(M.KIDS.blockers.filter(b => !kFixed[b.what]).length) }]),
       rows: M.KIDS.blockers.map(b => R(b.what, kFixed[b.what] ? 'vyřešeno' : b.state, b.kind,
         kFixed[b.what] ? null 
 : A('Vyřešeno', 'ph-check-circle', () => {
@@ -8203,7 +8389,8 @@ class Component extends DCLogic {
     const sSrc = s.surpSrc || {}, sMoved = s.surpMoved || {};
     const draws = M.SURP.draws.concat(s.surpExtra || []).filter(d => !sMoved[d.id]);
     const srcOf = d => sSrc[d.id] || d.src;
-    const budget = Math.round(M.SURP.spendYear * M.SURP.pct / 100);
+    // Roční výdaje dvojice z knihy (`RULEXP`); ukázka má svoje napsané.
+    const budget = Math.round((M.SURP.spendYear || ((window.GalerieData || {}).RULEXP || []).reduce((a, x) => a + (x[2] || 0), 0)) * M.SURP.pct / 100);
     const used = draws.reduce((a, d) => a + d.amount, 0);
     out.push({
       id: 'surp', label: 'Rozpočet překvapení', icon: 'ph-lightning', group: 'Peníze',
@@ -8230,11 +8417,11 @@ class Component extends DCLogic {
       optWhy: 'Celá aplikace počítá „naše“. Tady se to jednou rozpočítá na dva — a je vidět, co by z toho zbylo, kdyby jeden zůstal sám.',
       meta: !!opt['solo'] ? 'nájem sám ' + this.kc(M.SOLO_COST.rent + M.SOLO_COST.alone) : 'vypnuté',
       note: 'Když jeden odejde, náklady se nepůlí. Nájem zůstane celý — to je ten rozdíl, který nikdo nepočítá dopředu.',
-      stat: M.SOLO_MONEY.map(m => ({ label: m.who, value: this.kc(inc[m.who] || m.income) })).concat([{ label: 'Život sám', value: this.kc(M.SOLO_COST.rent + M.SOLO_COST.alone) }]),
+      stat: M.SOLO_MONEY.map(m => ({ label: this.krestni(m.who), value: this.kc(inc[m.who] || m.income) })).concat([{ label: 'Život sám', value: this.kc(M.SOLO_COST.rent + M.SOLO_COST.alone) }]),
       rows: M.SOLO_MONEY.map(m => {
         const income = inc[m.who] || m.income;
         const left = income - (M.SOLO_COST.rent + M.SOLO_COST.alone) - (m.debt ? 3400 : 0);
-        return R(m.who, (left >= 0 ? 'zbylo by ' : 'chybělo by ') + this.kc(Math.abs(left)) + ' měsíčně · ' + m.debtNote, this.kc(m.own));
+        return R(this.krestni(m.who), (left >= 0 ? 'zbylo by ' : 'chybělo by ') + this.kc(Math.abs(left)) + ' měsíčně · ' + m.debtNote, this.kc(m.own));
       })
     });
 
@@ -8242,15 +8429,15 @@ class Component extends DCLogic {
     const bonus = s.dayBonus || {};
     const score = w => (M.DAY_LOAD.filter(d => d.who === w)[0] || { items: [] }).items.reduce((a, i) => a + i[1], 0) + (bonus[w] || 0);
     const sA = score(this.dva()[0]), sM = score(this.dva()[1]);
-    const worse = sA === sM ? null : sA > sM ? 'Adrian' : 'Makinka';
+    const worse = sA === sM ? null : this.krestni(sA > sM ? this.dva()[0] : this.dva()[1]);
     out.push({
       id: 'day', label: 'Kdo je dnes na tom hůř', icon: 'ph-battery-low', group: 'Klid', optKey: 'day',
       optWhy: 'Máte mapu energie i náladu dvou, ale nic z toho neřekne, kdo dnes uvaří. Tohle to řekne jedním číslem za den. Nikdo za to nedostane bod.',
       meta: !!opt['day'] ? (worse ? worse + ' · rozdíl ' + Math.abs(sA - sM) : 'dnes stejně') : 'vypnuté',
       note: 'Skóre se resetuje o půlnoci. Nikdo si nic nenese do zítřka — jinak by z toho byl další účet.',
-      stat: [{ label: 'Adrian', value: String(sA) }, { label: 'Makinka', value: String(sM) }, { label: 'Dnes nemusí', value: worse || '—' }],
-      series: M.DAY_LOAD.map(d => ({ label: d.who.slice(0, 3), v: String(score(d.who)), max: Math.max(sA, sM, 1) })),
-      rows: M.DAY_LOAD.map(d => R(d.who, d.items.map(i => i[0]).join(' · '), String(score(d.who)),
+      stat: [{ label: this.krestni(this.dva()[0]), value: String(sA) }, { label: this.krestni(this.dva()[1]), value: String(sM) }, { label: 'Dnes nemusí', value: worse || '—' }],
+      series: M.DAY_LOAD.map(d => ({ label: this.krestni(d.who).slice(0, 3), v: String(score(d.who)), max: Math.max(sA, sM, 1) })),
+      rows: M.DAY_LOAD.map(d => R(this.krestni(d.who), d.items.map(i => i[0]).join(' · '), String(score(d.who)),
         A('Je to horší', 'ph-plus', () => {
           const prev = bonus;
           this.setState({ dayBonus: Object.assign({}, bonus, { [d.who]: (bonus[d.who] || 0) + 1 }) });
@@ -8269,8 +8456,9 @@ class Component extends DCLogic {
       series: M.BLIZ.weeks.map(w => ({ label: w[0], v: String(w[1]), max: Math.max.apply(null, M.BLIZ.weeks.map(x => x[1]).concat([1])) })),
       stat: [
         { label: 'Za 8 týdnů', value: String(bWeeks) },
-        { label: 'Navrhuje A', value: String(M.BLIZ.init.Adrian) },
-        { label: 'Navrhuje M', value: String(M.BLIZ.init.Makinka) }
+        // Iniciativa pod jmény dvojice; `init.Adrian` u jiné dvojice vypsal „undefined".
+        { label: 'Navrhuje ' + this.krestni(this.dva()[0]), value: String((M.BLIZ.init || {})[this.dva()[0]] || 0) },
+        { label: 'Navrhuje ' + this.krestni(this.dva()[1]), value: String((M.BLIZ.init || {})[this.dva()[1]] || 0) }
       ],
       rows: M.BLIZ.block.filter(b => !bBlock[b[0]]).map(b => R(b[0], this.pl(b[1], 'krát', 'krát', 'krát') + ' stálo v cestě', '',
         A('Vyřešeno', 'ph-check-circle', () => {
@@ -8290,7 +8478,7 @@ class Component extends DCLogic {
       id: 'fight', label: 'Začátek hádky', icon: 'ph-warning-circle', group: 'Klid',
       meta: fRows[0] ? 'nejdražší: ' + fRows[0].trig : '',
       note: 'Hádka nezačíná tématem, ale slovem, otázkou nebo tichem. Jakmile spouštěč má jméno, dá se na něj připravit odpověď dopředu.',
-      series: fRows.map(x => ({ label: String(x.n), v: String(Math.round(x.cost)), max: Math.max.apply(null, fRows.map(y => y.cost)) })),
+      series: fRows.map(x => ({ label: String(x.n), v: String(Math.round(x.cost)), max: Math.max.apply(null, fRows.map(y => y.cost).concat([1])) })),
       stat: [
         { label: 'Začátků', value: String(fRows.reduce((a, x) => a + x.n, 0)) },
         { label: 'Spouštěčů', value: String(fRows.length) },
@@ -8306,7 +8494,9 @@ class Component extends DCLogic {
 
     // Čtvrt-rok pro sebe
     const qTalk = s.quartTalk || {}, qPlan = s.quartPlan || {};
-    const qRows = M.QUART.map(q => {
+    // Bez zapsaných oken čtyři prázdná, jako v počítači.
+    const qZaklad = M.QUART.length ? M.QUART : ['Q1', 'Q2', 'Q3', 'Q4'].map((q, i) => ({ id: 'q' + (i + 1), q: q, when: null, mins: 0 }));
+    const qRows = qZaklad.map(q => {
       const p = qPlan[q.id] || {};
       const when = p.when || q.when;
       const mins = qTalk[q.id] !== undefined ? qTalk[q.id] : q.mins;
@@ -8339,12 +8529,12 @@ class Component extends DCLogic {
       meta: this.pl(M.INDEP.filter(i => !iLearn[i.id]).length, 'věc drží jeden', 'věci drží jeden', 'věcí drží jeden'),
       note: 'Nezávislost není odchod. Je to schopnost přežít týden, kdy je druhý na kapačkách — a vědomí, co přesně by chybělo.',
       stat: [
-        { label: 'Drží ' + this.dva()[0], value: String(M.INDEP.filter(i => i.holder === this.dva()[0]).length) },
-        { label: 'Drží ' + this.dva()[1], value: String(M.INDEP.filter(i => i.holder === this.dva()[1]).length) },
+        { label: 'Drží ' + this.krestni(this.dva()[0]), value: String(M.INDEP.filter(i => i.holder === this.dva()[0]).length) },
+        { label: 'Drží ' + this.krestni(this.dva()[1]), value: String(M.INDEP.filter(i => i.holder === this.dva()[1]).length) },
         { label: 'Předáno', value: String(Object.keys(iLearn).length) }
       ],
       rows: M.INDEP.map(i => R(i.what,
-        'drží ' + i.holder + ' · bolest ' + (iLearn[i.id] ? Math.max(1, i.pain - 2) : i.pain) + ' z 5' + (i.hours ? ' · ' + i.hours + ' h na předání' : ''),
+        'drží ' + this.krestni(i.holder) + ' · bolest ' + (iLearn[i.id] ? Math.max(1, i.pain - 2) : i.pain) + ' z 5' + (i.hours ? ' · ' + i.hours + ' h na předání' : ''),
         i.axis,
         iLearn[i.id] ? null : A('Naučit se', 'ph-graduation-cap', () => {
           const prev = iLearn;
@@ -8409,8 +8599,8 @@ class Component extends DCLogic {
       meta: this.pl(svRows.filter(g => g.w >= 3.5).length, 'věc pořád tíží', 'věci pořád tíží', 'věcí pořád tíží'),
       note: 'Kdo rozhodnutí protlačil, kdo ho odmítl a komu z toho zůstalo. Váha sama slábne o bod za čtrnáct měsíců.',
       stat: [
-        { label: this.dva()[0], value: String(Math.round(svRows.filter(g => g.who === this.dva()[0]).reduce((a, g) => a + g.w, 0) * 10) / 10) },
-        { label: this.dva()[1], value: String(Math.round(svRows.filter(g => g.who === this.dva()[1]).reduce((a, g) => a + g.w, 0) * 10) / 10) },
+        { label: this.krestni(this.dva()[0]), value: String(Math.round(svRows.filter(g => g.who === this.dva()[0]).reduce((a, g) => a + g.w, 0) * 10) / 10) },
+        { label: this.krestni(this.dva()[1]), value: String(Math.round(svRows.filter(g => g.who === this.dva()[1]).reduce((a, g) => a + g.w, 0) * 10) / 10) },
         { label: 'Oba', value: String(Math.round(svRows.filter(g => g.who === 'oba').reduce((a, g) => a + g.w, 0) * 10) / 10) }
       ],
       rows: svRows.map(g => R(g.what, g.kind + ' · ' + g.note, g.w.toFixed(1).replace('.', ',') + ' z 5',
@@ -8593,6 +8783,9 @@ class Component extends DCLogic {
     return kdo === a ? b : a;
   }
 
+  /* Jen křestní jméno — do popisků, kde se celé jméno nevejde. */
+  krestni(jmeno) { return String(jmeno || '').trim().split(/\s+/)[0]; }
+
   sklon(jmeno, pad) {
     const s = String(jmeno || '').trim();
     if (! s) return s;
@@ -8688,7 +8881,7 @@ class Component extends DCLogic {
   push(k, extra) { this.setState(Object.assign({ stack: this.state.stack.concat([k]), sheet: null, sel: [], selectMode: false }, extra || {})); }
   goTab(t, extra) { this.setState(Object.assign({ tab: t, stack: [], sheet: null, sel: [], selectMode: false }, extra || {})); }
 
-  library() { return PHOTOS.concat(Array.from({ length: this.state.extra }, (_, i) => ({ id: 'n' + i, di: -1, day: 'Dnes · 30. srpna 2026', place: 'Právě nahráno', video: false, dur: '0:00', fav: false, seed: 90 + i }))).filter(p => !this.state.trashed[p.id]); }
+  library() { return PHOTOS.concat(Array.from({ length: this.state.extra }, (_, i) => ({ id: 'n' + i, di: -1, day: 'Dnes · ' + this.dnes().getDate() + '. ' + MON_CS[this.dnes().getMonth()] + ' ' + this.dnes().getFullYear(), place: 'Právě nahráno', video: false, dur: '0:00', fav: false, seed: 90 + i }))).filter(p => !this.state.trashed[p.id]); }
   isFav(p) { const v = this.state.favs[p.id]; return v === undefined ? p.fav : v; }
   diaryList() { return this.state.diary || DIARY.map((d, i) => ({ id: 'd' + i, date: d[0], title: d[1], text: d[2], meta: d[3], audio: d[4] })); }
   // ── cyklus: odvození cyklů, průměrů a předpovědi z dnů ──
@@ -8888,11 +9081,12 @@ class Component extends DCLogic {
   mMatch(r) {
     const have = r.ing.filter(x => this.mHave(x));
     const miss = r.ing.filter(x => !this.mHave(x));
-    return { have: have.length, miss: miss, missN: miss.length, pct: Math.round((have.length / r.ing.length) * 100) };
+    return { have: have.length, miss: miss, missN: miss.length, pct: r.ing.length ? Math.round((have.length / r.ing.length) * 100) : 0 };
   }
   mDay() {
     const i = Math.min(MWEATHER.length - 1, Math.max(0, this.state.mDayI || 0));
-    const w = MWEATHER[i];
+    // Bez předpovědi (server ji nemá, když chybí poloha) neutrální den místo pádu.
+    const w = MWEATHER[i] || ['Dnes', 'ph-cloud', null, null, '', 'předpověď není k dispozici'];
     return { i: i, label: w[0], icon: w[1], max: w[2], min: w[3], mode: w[4], note: w[5], weekend: i === 0 };
   }
   // Skóre: zásoby (0–58) + počasí (0–36) + čas (0–16).
@@ -8928,7 +9122,8 @@ class Component extends DCLogic {
     const time = s.mTime || 60;
     const tab = s.mCookTab || 0;
     const ranked = MRECIPES.map(r => this.mScore(r)).sort((a, b) => b.total - a.total);
-    const top = ranked[0];
+    // Kuchařka bez receptů: prázdný návrh místo pádu celého telefonu na `top.r`.
+    const top = ranked[0] || { r: { title: 'Zatím žádný recept', kind: '', mins: 0, why: 'Recepty přidáte v Kuchařce.' }, m: { pct: 0, miss: [], missN: 0 }, total: 0, pantry: 0, wx: 0, tf: 0 };
     const pan = this.mPantry();
     const soon = pan.filter(p => p.qty > 0 && p.days !== null && p.days <= 5).sort((a, b) => a.days - b.days);
     const out = pan.filter(p => p.qty <= 0);
@@ -9031,7 +9226,8 @@ class Component extends DCLogic {
     if (id === 'film') return (SECROWS.watch || []).map(r => ({ label: r[0], note: r[1] }));
     if (id === 'vylet') return (SECROWS.itinWish || []).map(r => ({ label: r[0], note: r[1] }))
       .concat((SECROWS.datesSaved || []).map(r => ({ label: r[0], note: r[1] })));
-    return [{ label: 'Adrian', note: 'bez odmlouvání' }, { label: 'Makinka', note: 'bez odmlouvání' }, { label: 'Oba společně', note: 'půl na půl' }, { label: 'Odložit na zítra', note: 'zítra je taky den' }];
+    return this.dva().slice(0, 2).map(j => ({ label: this.krestni(j), note: 'bez odmlouvání' }))
+      .concat([{ label: 'Oba společně', note: 'půl na půl' }, { label: 'Odložit na zítra', note: 'zítra je taky den' }]);
   }
   mWheelVals() {
     const s = this.state;
@@ -9185,10 +9381,11 @@ class Component extends DCLogic {
         ['ph-apple-logo', 'iPhone', 'Safari → Sdílet → Přidat na plochu.'],
         ['ph-android-logo', 'Android', 'Chrome nabídne instalaci sám, nebo menu → Přidat na plochu.']
       ].map(x => ({ icon: x[0], label: x[1], note: x[2] })),
+      // Verze a „4 zařízení" byly napsané; zařízení jsou vydané klíče ze serveru.
       offCache: [
-        { label: 'Verze', value: '2026.8.16' },
+        ...(this.ukazka() ? [{ label: 'Verze', value: '2026.8.16' }] : []),
         { label: 'Cache', value: this.mb(size + 42) },
-        { label: 'Zařízení', value: '4' }
+        { label: 'Zařízení', value: this.ukazka() ? '4' : String((this.zamek() || {}).zarizeni || 0) }
       ],
       offNotifOn: notif,
       offNotifTrack: notif ? 'var(--g-acc)' : 'var(--g-line)',
@@ -9220,7 +9417,8 @@ class Component extends DCLogic {
   mYbVals() {
     const s = this.state;
     const on = s.mYbCh || MYB.reduce((a, c) => { a[c[0]] = c[0] !== 'finance'; return a; }, {});
-    const year = s.mYbYear || 2026;
+    const letos = this.ukazka() ? 2026 : new Date().getFullYear();
+    const year = s.mYbYear || letos;
     const fmtI = s.mYbFmt === undefined ? 1 : s.mYbFmt;
     const F = MBOOKFMT[fmtI];
     const chosen = MYB.filter(c => on[c[0]]);
@@ -9231,7 +9429,7 @@ class Component extends DCLogic {
     const cur = chosen[pg] || null;
     return {
       isYb: (s.stack.length ? s.stack[s.stack.length - 1] : s.tab) === 'yearbook',
-      ybYears: [2025, 2026].map(y => ({
+      ybYears: [letos - 1, letos].map(y => ({
         label: String(y), on: year === y,
         bg: year === y ? 'var(--g-ink)' : 'transparent',
         fg: year === y ? 'var(--g-bg)' : 'var(--g-ink)',
@@ -9365,7 +9563,11 @@ class Component extends DCLogic {
       const words = t.split(' ').length;
       const clean = x => x.replace(/https?:\/\/\S+/g, '').replace(/(\d+(?:[ \u00a0]\d{3})*(?:[.,]\d{1,2})?)\s*(kč|czk|,-)/gi, '')
         .replace(/^[+-]?\d+(?:[.,]\d{1,2})?\s+/, '').replace(/\s{2,}/g, ' ').trim().replace(/^[-–,;:]\s*/, '');
-      const addr = t.match(/^\s*(Makinka|Makinko|Adrian|Adriane)\s*[:,]\s*(.+)$/i);
+      // Oslovení podle jmen dvojice: kmen jména a nanejvýš dvě písmena navíc
+      // pokryjí i pátý pád („Jano:"). Napevno tu byla jen „Makinko" a „Adriane".
+      const kmeny = this.dva().map(j => this.krestni(j)).filter(Boolean)
+        .map(j => (j.length > 3 ? j.slice(0, -1) : j).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+      const addr = kmeny.length ? t.match(new RegExp('^\\s*((?:' + kmeny.join('|') + ')\\S{0,2})\\s*[:,]\\s*(.+)$', 'i')) : null;
       const askVerb = /(vezmeš|můžeš|mohl bys|mohla bys|zvládneš|stihneš|objednáš|zavoláš|vyzvedneš|koupíš|uděláš|prosím)/.test(low);
       const isAsk = !!addr || (askVerb && /\?/.test(t));
       let kind, conf;
@@ -9379,7 +9581,7 @@ class Component extends DCLogic {
       else { kind = 'task'; conf = 'krátká věta bez částky'; }
       const c = clean(addr ? addr[2] : t) || t;
       const title = kind === 'link' ? (c || url[0]) : c.charAt(0).toUpperCase() + c.slice(1);
-      return { raw: t, kind: over[i] || kind, title: title, to: addr ? (/^makink/i.test(addr[1]) ? 'Makinka' : 'Adrian') : null, amount: amt, income: income, when: when, conf: conf, url: url ? url[0] : null };
+      return { raw: t, kind: over[i] || kind, title: title, to: addr ? (this.dva().find(j => addr[1].toLowerCase().indexOf(this.krestni(j).toLowerCase().slice(0, Math.max(3, this.krestni(j).length - 1))) === 0) || this.otherWho()) : null, amount: amt, income: income, when: when, conf: conf, url: url ? url[0] : null };
     });
   }
   mCapCommit() {
@@ -9474,7 +9676,8 @@ class Component extends DCLogic {
     DAYS.forEach(d => { if (d[0]) set[String(d[0]).split(' · ')[0]] = String(d[0]).split(' · ')[0]; });
     Object.keys(TRIPS).forEach(k => { const t = TRIPS[k]; set[t.title.split(' ')[0]] = t.title; if (t.place) set[t.place] = t.place; });
     PLACES.forEach(p => { const c = String(p[1]).split(' · ')[0]; if (c) set[c] = c; });
-    ['Chorvatsko', 'Beskydy', 'Portugalsko', 'Island', 'Praha', 'Ostrava', 'Zadar', 'Brač'].forEach(x => { set[x] = x; });
+    // Napsaná místa ukázky jen bez přihlášení — dvojici by hledání nabízelo Brač.
+    if (this.ukazka()) ['Chorvatsko', 'Beskydy', 'Portugalsko', 'Island', 'Praha', 'Ostrava', 'Zadar', 'Brač'].forEach(x => { set[x] = x; });
     this._nlPl = Object.keys(set).filter(k => k.length > 2).map(k => ({ key: k.toLowerCase(), label: set[k] }));
     return this._nlPl;
   }
@@ -9497,12 +9700,20 @@ class Component extends DCLogic {
     }
     let who = null;
     if (/ (oba|spolu|společně) /.test(low)) { who = 'oba'; tokens.push({ kind: 'who', label: 'Oba', value: 'oba', word: 'oba' }); cut.push('oba', 'spolu', 'společně'); }
-    else if (/ (adrian|adriana) /.test(low)) { who = 'Adrian'; tokens.push({ kind: 'who', label: 'Adrian', value: 'Adrian', word: 'adrian' }); cut.push('adrian', 'adriana'); }
-    else if (/ (makinka|makinky|makinčiny) /.test(low)) { who = 'Makinka'; tokens.push({ kind: 'who', label: 'Makinka', value: 'Makinka', word: 'makinka' }); cut.push('makinka', 'makinky', 'makinčiny'); }
+    else {
+      // Jméno z dvojice v jakémkoli tvaru — „Jana", „Jany", „Janiny" sdílí kmen.
+      for (const jmeno of this.dva().slice(0, 2)) {
+        const k = this.krestni(jmeno).toLowerCase();
+        if (!k) continue;
+        const kmen = k.length > 3 ? k.slice(0, -1) : k;
+        const tvar = new RegExp(' (' + kmen.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\S*) ').exec(low);
+        if (tvar) { who = jmeno; tokens.push({ kind: 'who', label: this.krestni(jmeno), value: jmeno, word: tvar[1] }); cut.push(tvar[1]); break; }
+      }
+    }
     let year = null;
     const ym = low.match(/ (20\d\d) /);
     if (ym) { year = ym[1]; tokens.push({ kind: 'year', label: ym[1], value: ym[1], word: ym[1] }); cut.push(ym[1]); }
-    else if (/ (letos|tenhle rok) /.test(low)) { year = '2026'; tokens.push({ kind: 'year', label: 'Letos', value: '2026', word: 'letos' }); cut.push('letos', 'tenhle rok'); }
+    else if (/ (letos|tenhle rok) /.test(low)) { year = String(this.ukazka() ? 2026 : new Date().getFullYear()); tokens.push({ kind: 'year', label: 'Letos', value: year, word: 'letos' }); cut.push('letos', 'tenhle rok'); }
     else if (/ (loni|minulý rok) /.test(low)) { year = '2025'; tokens.push({ kind: 'year', label: 'Loni', value: '2025', word: 'loni' }); cut.push('loni', 'minulý rok'); }
     let month = null;
     for (const m of MMON) {
@@ -9621,7 +9832,8 @@ class Component extends DCLogic {
       obSkip: () => { this.setState({ obOpen: false, obStep: 0 }); this.toast('Nastavení přeskočeno — najdete ho ve Více', { icon: 'ph-fast-forward' }); },
       obName: name,
       obSetName: e => this.setState({ obName: e.target.value }),
-      obWhos: [['A', 'Adrian', 'adrian.stanek@gmail.com'], ['M', 'Makinka', 'makinka@gmail.com']].map(w => {
+      // Jména a adresy účtů ze serveru (`DVOJICE`, `LOCKMAIL`), ne napsané v kódu.
+      obWhos: [['A', this.krestni(this.dva()[0]), ((window.GalerieData || {}).LOCKMAIL || {}).A || ''], ['M', this.krestni(this.dva()[1]), ((window.GalerieData || {}).LOCKMAIL || {}).M || '']].map(w => {
         const on = (s.obWho || 'A') === w[0];
         return {
           label: w[1], mail: w[2],
@@ -9742,7 +9954,7 @@ class Component extends DCLogic {
         bd: tab === i ? 'var(--g-ink)' : 'var(--g-line)',
         pick: () => this.setState({ chgTab: i })
       })),
-      chgWhos: [['oba', 'Oba'], ['Adrian', 'Adrian'], ['Makinka', 'Makinka']].map(x => ({
+      chgWhos: [['oba', 'Oba']].concat(this.dva().slice(0, 2).map(j => [j, this.krestni(j)])).map(x => ({
         label: x[1],
         bg: who === x[0] ? 'var(--g-ink)' : 'transparent',
         fg: who === x[0] ? 'var(--g-bg)' : 'var(--g-ink2)',
@@ -9817,10 +10029,11 @@ class Component extends DCLogic {
     const div = base === 'rok' ? 1 : base === 'mesic' ? 12 : 365;
     const unit = base === 'rok' ? 'za rok' : base === 'mesic' ? 'za měsíc' : 'na den';
     const rows = MCOST.slice().sort((a, b) => b[1] - a[1]);
-    const max = rows[0][1];
+    // Bez sledovaných nákladů `rows[0]` není — dřív tu padal celý telefon.
+    const max = rows.length ? Math.max(1, rows[0][1]) : 1;
     return {
       isCost: (s.stack.length ? s.stack[s.stack.length - 1] : s.tab) === 'cost',
-      csHead: 'Rok 2026 · ' + this.kc(year) + ' přes sledované položky. Přepočítáno ' + unit + '.',
+      csHead: 'Rok ' + (this.ukazka() ? 2026 : new Date().getFullYear()) + ' · ' + this.kc(year) + ' přes sledované položky. Přepočítáno ' + unit + '.',
       csBases: [['rok', 'Za rok'], ['mesic', 'Za měsíc'], ['den', 'Na den']].map(b => ({
         label: b[1],
         bg: base === b[0] ? 'var(--g-ink)' : 'transparent',
@@ -10060,6 +10273,13 @@ class Component extends DCLogic {
     const back = { inboxSt: s.inboxSt || {}, txCat: s.txCat, places: s.places, queue: this.queueList(), itinExtra: s.itinExtra };
     const undo = () => this.setState(back);
     const mark = extra => this.setState(Object.assign({ inboxSt: Object.assign({}, back.inboxSt, { [p.id]: 'done' }) }, extra || {}));
+    // Položka inboxu ze serveru nemá napsaný účinek — odškrtne se a nic dalšího
+    // se nepředstírá (ukázka tu přidávala nocleh v Sintře do cizí cesty).
+    if (p.eff === 'server') {
+      mark();
+      this.toast('Vyřízeno — ' + p.title, { icon: 'ph-check-circle', undo: undo });
+      return;
+    }
     if (p.eff === 'upload') {
       mark({ queue: this.queueList().map(r => r.id === 'q1' ? Object.assign({}, r, { st: 'up', meta: '48,2 MB · nahrává se' }) : r) });
       this.toast('3 originály se nahrávají', { icon: 'ph-cloud-arrow-up', undo: undo });
@@ -10079,6 +10299,7 @@ class Component extends DCLogic {
     }
   }
   inboxOpen(p) {
+    if (p.eff === 'server') { this.setState({ tab: 'more' }); return; }
     if (p.eff === 'upload') { this.setState({ tab: 'more' }); this.push('sync'); }
     else if (p.eff === 'place') { this.setState({ tab: 'more', placeId: 'Kavárna Alma', stack: ['places'] }); this.push('place'); }
     else if (p.eff === 'tx') this.goTab('finance', { txOpen: 't10', sheet: 'tx' });
@@ -10090,6 +10311,8 @@ class Component extends DCLogic {
   }
 
   renderVals() {
+    // Konstanty telefonu naplnit daty dvojice dřív, než je kdokoli přečte.
+    telefonZeServeru();
     const s = this.state;
     const screen = s.stack.length ? s.stack[s.stack.length - 1] : s.tab;
     const lib = this.library();
@@ -10125,7 +10348,10 @@ class Component extends DCLogic {
     const lbStep = d => { const n = shown[(lbIdx + d + shown.length) % shown.length]; if (n) this.setState({ lb: n.id }); };
 
     // — cesty —
-    const trip = TRIPS[s.tripId];
+    // Výchozí `tripId` je ukázkové „chorvatsko"; dvojice takovou cestu nemá
+    // a telefon padal na `trip.days`. Pak první skutečná cesta, nebo žádná.
+    const trip = TRIPS[s.tripId] || TRIPS[Object.keys(TRIPS)[0]]
+      || { title: 'Zatím žádná cesta', when: '', tag: '', place: '', seed: 0, desc: '', stats: [], days: [] };
     const itinKey = (di, ii) => s.tripId + '-' + di + '-' + ii;
     const itinOn = (di, ii, base) => { const v = s.itin[itinKey(di, ii)]; return v === undefined ? base === 1 : v; };
     let itinDone = 0, itinAll = 0;
@@ -10173,15 +10399,21 @@ class Component extends DCLogic {
 
     // — finance —
     const txs = this.txAll();
-    // rozpočty i přehled počítají jen aktuální měsíc (srpen = txOrd 800–899)
-    const inMonth = t => { const o = this.txOrd(t.date); return o >= 800 && o < 900; };
+    // Rozpočty i přehled počítají jen aktuální měsíc (txOrd 900–999 = září).
+    // Dřív napevno srpen — u dvojice v jiném měsíci byl rozpočet vždy prázdný.
+    const mesicRozp = this.mesicRozpoctu();
+    const mesGen = ['ledna', 'února', 'března', 'dubna', 'května', 'června', 'července', 'srpna', 'září', 'října', 'listopadu', 'prosince'][mesicRozp - 1];
+    const mesNom = ['leden', 'únor', 'březen', 'duben', 'květen', 'červen', 'červenec', 'srpen', 'září', 'říjen', 'listopad', 'prosinec'][mesicRozp - 1];
+    const inMonth = t => { const o = this.txOrd(t.date); return o >= mesicRozp * 100 && o < (mesicRozp + 1) * 100; };
     const spentOf = c => txs.filter(t => t.cat === c && t.amount < 0 && inMonth(t)).reduce((a, t) => a + Math.abs(t.amount), 0);
     const txFiltered = this.sortTx(txs.filter(t => (!s.txCat2 || t.cat === s.txCat2) && (!s.txTrip || t.trip === s.txTrip) && (s.txMonth === 'all' || s.txTrip || inMonth(t))));
     const income = txs.filter(t => t.amount > 0 && inMonth(t)).reduce((a, t) => a + t.amount, 0);
     const spend = txs.filter(t => t.amount < 0 && inMonth(t)).reduce((a, t) => a + Math.abs(t.amount), 0);
     const monthTxCount = txs.filter(inMonth).length;
     const budgetSpent = spend;
-    const budgetPct = Math.round(spend / CATS.reduce((a, c) => a + c[1], 0) * 100);
+    // Bez limitů v rozpočtu podíl neexistuje — ne „Infinity %".
+    const budgetZaklad = CATS.reduce((a, c) => a + c[1], 0);
+    const budgetPct = budgetZaklad > 0 ? Math.round(spend / budgetZaklad * 100) : 0;
     const txOpen = s.txOpen ? txs.find(t => t.id === s.txOpen) : null;
 
     // — hledání v přirozeném jazyce —
@@ -10278,7 +10510,7 @@ class Component extends DCLogic {
       }
       if (s.addKind === 'diary') {
         const prev = this.diaryList();
-        this.setState({ diary: [{ id: 'd-n' + n, date: 'Dnes · 30. srpna 2026', title: a, text: b || '—', meta: 'nový zápis' }].concat(prev), sheet: null, addA: '', addB: '', seq: n + 1 });
+        this.setState({ diary: [{ id: 'd-n' + n, date: 'Dnes · ' + this.dnes().getDate() + '. ' + MON_CS[this.dnes().getMonth()] + ' ' + this.dnes().getFullYear(), title: a, text: b || '—', meta: 'nový zápis' }].concat(prev), sheet: null, addA: '', addB: '', seq: n + 1 });
         this.toast('Zápis uložen', { icon: 'ph-notebook', undo: () => this.setState({ diary: prev }) });
       } else if (s.addKind === 'task') {
         const prev = s.tasksExtra || [];
@@ -10381,7 +10613,8 @@ class Component extends DCLogic {
     const catMax = Math.max.apply(null, catRank.map(c => c.sp).concat([1]));
 
     // — průřez dnem —
-    const dayId = s.dayId || DAYS[0][0];
+    // Prázdná knihovna nemá první den — `DAYS[0][0]` shodil celý telefon.
+    const dayId = s.dayId || (DAYS[0] || [''])[0];
     const dPhotos = lib.filter(p => p.day === dayId);
     const dPlace = (dPhotos[0] && dPhotos[0].place) || (DAYS.find(d => d[0] === dayId) || [])[1] || '—';
     const dTxDate = this.dayToTx(dayId);
@@ -10420,7 +10653,8 @@ class Component extends DCLogic {
     });
 
     // — detail místa —
-    const pRow = PLACES.find(p => p[0] === s.placeId) || PLACES[0];
+    // Dvojice bez míst: prázdné místo, ne pád celé obrazovky na `pRow[3]`.
+    const pRow = PLACES.find(p => p[0] === s.placeId) || PLACES[0] || ['', '', 0, '', 0, null, null, ''];
     const pVisited = this.placeVisited(pRow);
     const pTripId = this.tripOfPlace(pRow[3]);
     const pPhotos = lib.filter(p => p.place === pRow[3] || this.spotOf(p) === pRow[0]);
@@ -10449,8 +10683,8 @@ class Component extends DCLogic {
       { label: 'Detaily', items: [
         mkIdx('trip', 'Detail cesty', 'ph-map-trifold', 'trips', ['trip']),
         mkIdx('album', 'Detail albumu', 'ph-folder', 'more', ['albums', 'album'], { albumId: firstAlbum ? firstAlbum.id : null }),
-        mkIdx('place', 'Detail místa', 'ph-map-pin', 'more', ['places', 'place'], { placeId: PLACES[0][0] }),
-        mkIdx('day', 'Průřez dnem', 'ph-calendar-heart', 'memories', ['day'], { dayId: DAYS[0][0] })
+        mkIdx('place', 'Detail místa', 'ph-map-pin', 'more', ['places', 'place'], { placeId: (PLACES[0] || [])[0] || null }),
+        mkIdx('day', 'Průřez dnem', 'ph-calendar-heart', 'memories', ['day'], { dayId: (DAYS[0] || [''])[0] })
       ] },
       { label: 'Knihovna a sdílení', items: [
         mkIdx('albums', 'Alba', 'ph-folders', 'more', ['albums']),
@@ -10496,7 +10730,7 @@ class Component extends DCLogic {
       })(),
       memories: ['Knihovna', 'Vzpomínky'],
       trips: ['Cestování', 'Cesty a výlety'],
-      finance: ['Srpen 2026', 'Finance'],
+      finance: [mesNom.charAt(0).toUpperCase() + mesNom.slice(1) + ' ' + (this.ukazka() ? 2026 : new Date().getFullYear()), 'Finance'],
       more: ['Vše ostatní', 'Více'],
       albums: ['Knihovna', 'Alba'],
       album: ['Album', (this.albumsList().find(a => a.id === s.albumId) || { name: 'Album' }).name],
@@ -10516,7 +10750,8 @@ class Component extends DCLogic {
       settings: ['Účet', 'Nastavení'],
       vault: ['Soukromé', 'Trezor'],
       place: [pVisited ? 'byli jsme' : 'chceme', pRow[0]],
-      day: ['Průřez dnem', dayId.replace(' 2026', '').replace(' 2027', '')],
+      // Letošní rok se v nadpisu nepíše — letos je 2026 jen v ukázce.
+      day: ['Průřez dnem', dayId.replace(' ' + (this.ukazka() ? 2026 : new Date().getFullYear()), '')],
       stats: ['Souhrny', 'Přehled'],
       cyklus: ['Společně', 'Cyklus'],
       kalendar: ['Domů a plán', 'Kalendář'],
@@ -10583,7 +10818,7 @@ class Component extends DCLogic {
         who: m.who, when: m.when, text: m.text,
         icon: m.kind === 'like' ? 'ph-heart-straight' : 'ph-chat-teardrop-text',
         color: m.kind === 'like' ? 'var(--g-mag)' : 'var(--g-acc)',
-        share: (this.sharesList().find(x => x.id === m.shareId) || { name: 'Beskydy s Makinkou · výchozí odkaz' }).name,
+        share: (this.sharesList().find(x => x.id === m.shareId) || { name: 'výchozí odkaz' }).name,
         go: () => this.push('shares')
       })),
       guestEmpty: (s.guestMsgs || []).length === 0,
@@ -10597,6 +10832,14 @@ class Component extends DCLogic {
       openSearch: () => this.setState({ sheet: 'search', query: '' }),
       openUpload: () => this.setState({ sheet: 'upload' }),
       stop: e => e.stopPropagation(),
+
+      // Jména dvojice a měsíc rozpočtu pro šablonu — stály tam napsané
+      // „Adrian", „Makinka" a „Rozpočet srpna".
+      jmA: String(this.dva()[0] || '').trim().split(/\s+/)[0],
+      jmM: String(this.dva()[1] || '').trim().split(/\s+/)[0],
+      rozpocetNadpis: 'Rozpočet ' + mesGen,
+      rokLoni: String((this.ukazka() ? 2026 : new Date().getFullYear()) - 1),
+      rokLetos: String(this.ukazka() ? 2026 : new Date().getFullYear()),
 
       // vzhled a rozvržení
       theme: s.theme,
@@ -10727,7 +10970,8 @@ class Component extends DCLogic {
           fotoMapaPopis: this.pl(fotek, 'fotka s polohou', 'fotky s polohou', 'fotek s polohou') + ' · ' + this.pl(body.length, 'místo', 'místa', 'míst')
         };
       })(),
-      placePins: PLACES.map((p, i) => ({
+      // Špendlík jen u místa se souřadnicemi — místa ze serveru je v tomto tvaru nemají.
+      placePins: PLACES.filter(p => p[5] !== null && p[5] !== undefined).map((p, i) => ({
         name: p[0], short: p[7],
         left: Math.round(8 + (p[5] + 12) / 32 * 84) + '%',
         top: Math.round(Math.max(20, Math.min(92, 88 - (p[6] - 36) / 16 * 62 + (i - 1.5) * 12))) + '%',
@@ -10768,9 +11012,11 @@ class Component extends DCLogic {
         ring: 'conic-gradient(' + (budgetPct > 100 ? 'var(--g-mag)' : 'var(--g-acc)') + ' 0deg ' + (Math.min(100, budgetPct) * 3.6) + 'deg, var(--g-line2) ' + (Math.min(100, budgetPct) * 3.6) + 'deg 360deg)',
         pct: budgetPct + '%',
         title: this.kc(budgetSpent) + ' z ' + this.kc(budgetTotal),
-        note: (budgetPct > 100
-          ? 'Rozpočet srpna je přečerpaný o ' + this.kc(budgetSpent - budgetTotal) + '. Podívejte se na Cesty a Dopravu.'
-          : 'Do konce srpna zbývá ' + this.kc(budgetTotal - budgetSpent) + ' napříč šesti kategoriemi.')
+        note: (budgetTotal <= 0
+          ? 'Rozpočet zatím nemá limity — nastavte je ve Financích a přehled začne počítat.'
+          : budgetPct > 100
+          ? 'Rozpočet ' + mesGen + ' je přečerpaný o ' + this.kc(budgetSpent - budgetTotal) + '. Podívejte se, která kategorie utíká.'
+          : 'Do konce ' + mesGen + ' zbývá ' + this.kc(budgetTotal - budgetSpent) + ' napříč ' + this.pl(CATS.length, 'kategorií', 'kategoriemi', 'kategoriemi').replace(/^1 kategorií$/, 'jednou kategorií') + '.')
           + (budgetSpent - budgetInCats > 0 ? ' Z toho ' + this.kc(budgetSpent - budgetInCats) + ' zatím leží mimo rozpočtové kategorie.' : '')
       },
       spendMonths: MONTHS.map((m, i) => {
@@ -10780,10 +11026,10 @@ class Component extends DCLogic {
           h: Math.max(4, Math.round(v / maxMonth * 84)) + 'px',
           color: live ? 'var(--g-acc)' : 'var(--g-line)',
           labelColor: live ? 'var(--g-acc)' : 'var(--g-ink3)',
-          go: live ? () => this.goTab('finance') : () => this.toast(m[0] + ' 2026 · ' + this.kc(v) + ' — archivní souhrn', { icon: 'ph-archive' })
+          go: live ? () => this.goTab('finance') : () => this.toast(m[0] + ' · ' + this.kc(v) + ' — archivní souhrn', { icon: 'ph-archive' })
         };
       }),
-      spendNote: 'Srpen se počítá živě z ' + this.pl(monthTxCount, 'srpnové platby', 'srpnových plateb', 'srpnových plateb') + ' — zařazení kategorie se hned promítne. Starší měsíce jsou uzavřený archiv.',
+      spendNote: mesNom.charAt(0).toUpperCase() + mesNom.slice(1) + ' se počítá živě z ' + this.pl(monthTxCount, 'platby', 'plateb', 'plateb') + ' — zařazení kategorie se hned promítne. Starší měsíce jsou uzavřený archiv.',
       heatWeeks: heatWeeks,
       heatNote: 'Půl roku po dnech; ' + this.pl(heatDays, 'den má fotky', 'dny mají fotky', 'dnů má fotky') + '. Klepnutím na políčko se otevře průřez tím dnem.',
       topCats: catRank.map((c, i) => ({
@@ -10898,7 +11144,7 @@ class Component extends DCLogic {
       filterActive: s.filter !== 'all',
       clearFilter: () => this.setState({ filter: 'all', sheet: null }),
       memGroups: groups.map(g => ({
-        day: g.day.replace(' 2026', '').replace(' 2027', ''), place: g.place, count: this.pl(g.items.length, 'fotka', 'fotky', 'fotek'),
+        day: g.day.replace(' ' + (this.ukazka() ? 2026 : new Date().getFullYear()), ''), place: g.place, count: this.pl(g.items.length, 'fotka', 'fotky', 'fotek'),
         pickOn: s.selectMode,
         open: () => { this.setState({ dayId: g.day }); this.push('day'); },
         pickAll: () => this.setState({ selectMode: true, sel: Array.from(new Set(s.sel.concat(g.items.map(p => p.id)))) }),
@@ -11004,12 +11250,12 @@ class Component extends DCLogic {
       txFilterLabel: s.txTrip ? 'Cesta: ' + TRIPS[s.txTrip].title : 'Kategorie: ' + s.txCat2,
       txClearFilter: () => this.setState({ txCat2: null, txTrip: null }),
       txCountLabel: this.pl(txFiltered.length, 'platba', 'platby', 'plateb'),
-      txScopeLabel: s.txTrip ? 'celá cesta · ' + txFiltered.length : (s.txMonth === 'all' ? 'všechny měsíce · ' + txFiltered.length : 'srpen · ' + txFiltered.length),
+      txScopeLabel: s.txTrip ? 'celá cesta · ' + txFiltered.length : (s.txMonth === 'all' ? 'všechny měsíce · ' + txFiltered.length : mesNom + ' · ' + txFiltered.length),
       txScopeToggle: () => {
-        if (s.txTrip) { this.setState({ txTrip: null, txMonth: 'month' }); this.toast('Zpět na srpnové platby', { icon: 'ph-calendar-blank' }); return; }
+        if (s.txTrip) { this.setState({ txTrip: null, txMonth: 'month' }); this.toast('Zpět na platby za ' + mesNom, { icon: 'ph-calendar-blank' }); return; }
         const all = s.txMonth !== 'all';
         this.setState({ txMonth: all ? 'all' : 'month' });
-        this.toast(all ? 'Zobrazuji i starší měsíce — pruhy rozpočtu zůstávají srpnové' : 'Jen srpnové platby', { icon: 'ph-calendar-blank' });
+        this.toast(all ? 'Zobrazuji i starší měsíce — pruhy rozpočtu zůstávají za ' + mesNom : 'Jen platby za ' + mesNom, { icon: 'ph-calendar-blank' });
       },
       txRows: txFiltered.map(t => ({
         name: t.name, date: t.date, cat: t.cat, icon: t.icon,
@@ -11064,7 +11310,7 @@ class Component extends DCLogic {
         const a = this.albumsList().find(x => x.id === s.albumId) || this.albumsList()[0] || { name: '—', ids: [], seed: 3 };
         const items = a.ids.filter(id => !s.trashed[id]).map(id => PHOTOS.find(p => p.id === id)).filter(Boolean);
         return {
-          meta: this.pl(items.length, 'položka', 'položky', 'položek') + ' · sdílíte s Makinkou',
+          meta: this.pl(items.length, 'položka', 'položky', 'položek') + ' · sdílíte oba',
           items: items.map(p => ({ bg: this.tlo(p), fav: this.isFav(p), tap: () => this.setState({ lb: p.id }) })),
           share: () => {
             const prev = this.sharesList(), n = s.seq;
@@ -11532,12 +11778,17 @@ class Component extends DCLogic {
       nlSumNote: nlSumRows.length
         ? this.pl(nlSumRows.length, 'platba', 'platby', 'plateb') + ' · průměrně ' + this.kc(Math.round(nlSum / nlSumRows.length))
         : 'Žádná platba neodpovídá — zkuste jiné slovo nebo měsíc.',
-      nlExamples: [
+      nlExamples: (this.ukazka() ? [
         'fotky z Chorvatska v červenci',
         'kolik jsme dali za restaurace v srpnu',
         'co jsme nedotáhli',
         'Makinčiny zápisy'
-      ].map(t => ({ label: t, go: () => this.setState({ query: t }) })),
+      ] : [
+        'fotky z července',
+        'kolik jsme dali za restaurace v srpnu',
+        'co jsme nedotáhli',
+        this.krestni(this.dva()[1]) + ' zápisy'
+      ]).map(t => ({ label: t, go: () => this.setState({ query: t }) })),
       srSavedAny: srSaved.length > 0,
       srSavedRows: srSaved.map(x => ({
         name: x.name, meta: x.meta,
@@ -11575,7 +11826,9 @@ class Component extends DCLogic {
           else this.toast(r.title + ' — jen v archivu, detail cesty už není', { icon: 'ph-archive' });
         }
       })),
-      learnNote: 'Tři uzavřené cesty: plán ' + this.kc(learn.plan) + ', realita ' + this.kc(learn.real) + ' — ' + this.pctSign(learn.ratio - 1) + '.',
+      learnNote: !learn.rows.length
+        ? 'Zatím žádná uzavřená cesta s rozpočtem — odhad se bude učit z první.'
+        : this.pl(learn.rows.length, 'uzavřená cesta', 'uzavřené cesty', 'uzavřených cest') + ': plán ' + this.kc(learn.plan) + ', realita ' + this.kc(learn.real) + ' — ' + this.pctSign(learn.ratio - 1) + '.',
       learnCats: Object.keys(learn.cats).map(k => {
         const o = learn.cats[k], d = o.real / o.plan - 1;
         return { name: k, dev: this.pctSign(d), d: d, pct: Math.min(100, Math.round(Math.abs(d) * 320)) + '%', color: d > 0.05 ? 'var(--g-mag)' : 'var(--g-ok)' };
@@ -11592,9 +11845,14 @@ class Component extends DCLogic {
           go: () => { this.setState({ tripId: id, tab: 'trips', stack: [] }); this.push('trip'); }
         };
       }),
-      learnTeaser: {
+      // Bez uzavřené cesty s plánem není z čeho se učit — dřív tu padal celý telefon.
+      learnTeaser: !learn.rows.length ? {
+        label: 'Cesty: plán proti realitě',
+        note: 'Až bude mít uzavřená cesta rozpočet i útraty, ukáže se tu, co utíká nejvíc.',
+        go: () => { this.setState({ tab: 'more' }); this.push('stats'); }
+      } : {
         label: 'Cesty: plán proti realitě ' + this.pctSign(learn.ratio - 1),
-        note: 'Nejvíc utíká ' + Object.keys(learn.cats).map(k => ({ k: k, d: learn.cats[k].real / learn.cats[k].plan - 1 })).sort((a, b) => b.d - a.d)[0].k.toLowerCase() + '. Odhad pro Lisabon i Beskydy je v Přehledu.',
+        note: 'Nejvíc utíká ' +Object.keys(learn.cats).map(k => ({ k: k, d: learn.cats[k].real / learn.cats[k].plan - 1 })).sort((a, b) => b.d - a.d)[0].k.toLowerCase() + '. Odhad pro plánované cesty je v Přehledu.',
         go: () => { this.setState({ tab: 'more' }); this.push('stats'); }
       },
 
@@ -11663,7 +11921,8 @@ class Component extends DCLogic {
         op: f.recorded ? '1' : '.72',
         ovul: f.phase === 'ovulation',
         aria: dShort(f.day) + ' · ' + PHASES[f.phase][0] + ' · ' + f.fert + ' %',
-        tap: () => this.setState({ cycSel: f.day, cycMonth: (dParse(f.day).getFullYear() - 2026) * 12 + dParse(f.day).getMonth() - 7 })
+        // Posun měsíce od dneška (tak ho počítá `monthGrid`), ne od srpna 2026.
+        tap: () => this.setState({ cycSel: f.day, cycMonth: (dParse(f.day).getFullYear() - this.dnes().getFullYear()) * 12 + dParse(f.day).getMonth() - this.dnes().getMonth() })
       })),
       cycFertNote: cyc.pred
         ? 'Křivka je nesymetrická schválně: spermie přežijí až pět dní, vajíčko zhruba den. Vrchol ' + dShort(cyc.pred.ovulation) + ', dál do budoucna klesá spolehlivost.'
@@ -11699,7 +11958,7 @@ class Component extends DCLogic {
         pick: () => { this.setState({ cycShare: o[0] }); this.toast('Sdílení s partnerem — ' + o[1].toLowerCase(), { icon: 'ph-share-network' }); }
       })),
       cycPartner: {
-        title: s.cycShare === 'none' ? 'Adrian nevidí nic' : s.cycShare === 'dates' ? 'Adrian vidí jen termíny' : 'Adrian vidí celý deník',
+        title: this.krestni(this.otherWho()) + (s.cycShare === 'none' ? ' nevidí nic' : s.cycShare === 'dates' ? ' vidí jen termíny' : ' vidí celý deník'),
         note: s.cycShare === 'none'
           ? 'Filtruje to server, ne obrazovka — nesdílený údaj se z aplikace vůbec neodešle.'
           : s.cycShare === 'dates'
@@ -11871,7 +12130,10 @@ class Component extends DCLogic {
           clear: () => this.setState({ secQuery: '', secFilter: 'all' }),
           hasClear: !!q || filt !== 'all',
           rows: rows,
-          empty: rows.length === 0 && !anyBlock,
+          // `anyBlock` patří obrazovkám z počítače, v sekci telefonu neexistuje.
+          // Dokud byly seznamy ukázkové a nikdy prázdné, výraz se k němu nedostal;
+          // s prázdným seznamem dvojice spadl celý telefon na ReferenceError.
+          empty: rows.length === 0,
           filteredEmpty: rows.length === 0 && all.length > 0,
           ...(() => {
             // Jednotný prázdný stav: text podle záložky, jinak obecný.
@@ -11922,7 +12184,8 @@ class Component extends DCLogic {
       lbPanelOn: !!(lbP && s.lbPanel),
       lbDetail: lbP ? (() => {
         const D = window.GalerieData || {};
-        const authorOf = p => ((p.seed || 0) % 3 === 0 ? 'Makinka' : 'Adrian');
+        // Autor ze snímku; bez údaje „neuvedeno" — ne jméno podle zbytku po dělení.
+        const authorOf = p => p.author || (this.ukazka() ? ((p.seed || 0) % 3 === 0 ? 'Makinka' : 'Adrian') : 'neuvedeno');
         const tagsAll = s.lbTags || {};
         const tags = tagsAll[lbP.id] || ((D.ATAGS || {}).all || []).slice(0, 3).map(t => t[0]);
         const vers = (s.lbVers || {})[lbP.id] || [];

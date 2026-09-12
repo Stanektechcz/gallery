@@ -14440,7 +14440,7 @@ class Component extends DCLogic {
     serIdx: 0, serKeep: {}, serDone: {}, keysOpen: false, tripMode: true,
     appLocked: true, lockWho: 'A', lockPin: '', lockTries: 0, lockErr: null, lockRec: false, lockRecCode: '',
     // Kolonka na e-mail začíná prázdná; předvyplněná byla cizí adresa
-    // (`adrian.stanek@gmail.com`) a člověk ji poslušně odeslal. Skutečnou
+    // (`adrian@example.com`) a člověk ji poslušně odeslal. Skutečnou
     // adresu dodá server v `LOCKMAIL` a doplní ji `lockVals`.
     lockStep: 'pwd', lockMail: '', lockPwd: '', lockTrusted: false, lockTrust: true,
     lockIdle: '5 min', lockSecs: 'Deník a Finance', lockBio: true, lockStart: true, lockBioBusy: false,
@@ -17907,7 +17907,7 @@ class Component extends DCLogic {
    * Úložiště a synchronizace.
    *
    * Celá tahle obrazovka byla napsaná v designovém souboru: „Připojeno —
-   * adrian.stanek@gmail.com", „poslední synchronizace dnes v 8:12",
+   * adrian@example.com", „poslední synchronizace dnes v 8:12",
    * „24 316 originálů bezpečně uloženo", kapacita 52/19/5 %. Dvojici, která
    * Disk připojený nemá, to tvrdilo, že jsou její fotky ve dvou kopiích.
    * To není zastaralé číslo — to je nepravda o záloze.
@@ -23090,7 +23090,7 @@ class Component extends DCLogic {
     const max = rows.length ? Math.max(1, rows[0][1]) : 1;
     if (key === 'csCompare') {
       const REF = [
-        ['Týden v Chorvatsku pro dva', 48200, 'ph-airplane-tilt'],
+        ['Týden u moře pro dva', 48200, 'ph-airplane-tilt'],
         ['Nový notebook', 38000, 'ph-laptop'],
         ['Roční předplatné všeho', 8760, 'ph-monitor-play'],
         ['Kurz keramiky pro oba', 6400, 'ph-flower-lotus'],
@@ -23472,7 +23472,7 @@ class Component extends DCLogic {
       /*
        * Kdo jsou ti dva — ze serveru, ne z napsaných adres.
        *
-       * Stálo tu `adrian.stanek@gmail.com` a `makinka@gmail.com`. U jiné
+       * Stálo tu `adrian@example.com` a `makinka@example.com`. U jiné
        * dvojice to byly cizí adresy a člověk si podle nich vybíral, kdo je.
        */
       obWhos: (((window.GalerieData || {}).UCTY || []).length >= 2

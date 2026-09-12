@@ -35,6 +35,34 @@ class MechanismyTest extends TestCase
     }
 
     /** Chybějící soubor hlásí 503, ne prázdno — klient si pak nechá vlastní data. */
+    /**
+     * Katalogy ano, život ukázkové dvojice ne.
+     *
+     * Soubor nese vedle skupin záložek i postoj „Adriana a Makinky" k dětem,
+     * zdraví jejich rodičů a jmenovitě jejich přátele. Přihlášená dvojice to
+     * dostávala jako svoje; teď dostane prázdné sbírky ve stejném tvaru.
+     */
+    public function test_osobni_sbirky_ukazky_chodi_prazdne(): void
+    {
+        $data = $this->getJson('/api/mechanisms')->assertOk()->json('data');
+
+        foreach (['DAY_LOAD', 'DAY_HIST', 'SOLO_MONEY', 'PARENTS', 'ARB_ROWS', 'VERS', 'SVED', 'FIGHT_START', 'QUART', 'INDEP', 'TRUST', 'EXPIRE'] as $klic) {
+            $this->assertSame([], $data[$klic], $klic.' patří ukázce.');
+        }
+        $this->assertSame(['pos' => [], 'blockers' => [], 'talks' => []], $data['KIDS']);
+        $this->assertSame([], $data['BLIZ']['weeks']);
+        $this->assertSame([], $data['SURP']['draws']);
+
+        // Katalogy zůstávají — bez nich by obrazovky neměly záložky ani druhy arbitrů.
+        $this->assertNotEmpty($data['DC_GRPS']);
+        $this->assertNotEmpty($data['ARB_MECH']);
+        $this->assertNotEmpty($data['EXIT_PACK']);
+
+        $obsah = (string) $this->getJson('/api/mechanisms')->getContent();
+        $this->assertStringContainsString('"init":{}', $obsah, 'Prázdná mapa musí být objekt, jinak klient čte init.Adrian z pole.');
+        $this->assertStringNotContainsString('Spal 5,5 hodiny', $obsah);
+    }
+
     public function test_chybejici_soubor_hlasi_503(): void
     {
         config(['galerie.mechanisms_path' => storage_path('nic/mechanismy.json')]);

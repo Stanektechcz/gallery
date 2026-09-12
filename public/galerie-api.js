@@ -703,6 +703,9 @@
         .then(function (r) { if (!r.ok) return null; return r.json(); })
         .then(function (b) {
           if (!b || !b.data) return null;
+          // Hlavička si serverovou verzi pamatuje a navlékne ji znovu, kdyby
+          // runtime později spustil `galerie-mechanismy.js` s ukázkou.
+          window.GalerieMechZeServeru = b.data;
           window.GalerieMech = Object.assign({}, window.GalerieMech || {}, b.data);
           return b.data;
         })
