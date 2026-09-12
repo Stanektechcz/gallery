@@ -430,7 +430,19 @@
         h['X-File-Name'] = encodeURIComponent(file.name);
         return pockejNaSlot().then(function () {
           return fetch(base + '/media/chunk', { method: 'POST', headers: h, credentials: 'same-origin', body: part });
-        }).then(function (r) { if (!r.ok && r.status !== 202) throw Object.assign(new Error('HTTP ' + r.status), { status: r.status }); return send(i + 1); });
+        }).then(function (r) {
+          if (!r.ok && r.status !== 202) throw Object.assign(new Error('HTTP ' + r.status), { status: r.status });
+          /*
+           * Poslední část vrací hotový záznam (`id` fotky, `stored`/`duplicate`).
+           * Dřív se zahodil a vracel se jen identifikátor přenosu — duplicitní
+           * velké video se tak hlásilo jako nahrané a fotku nešlo zařadit do alba.
+           */
+          if (i === count - 1 && r.status !== 202) {
+            return r.json().then(function (b) { return Object.assign({ name: file.name, bytes: file.size }, b); },
+              function () { return { id: id, status: 'complete', name: file.name, bytes: file.size }; });
+          }
+          return send(i + 1);
+        });
       };
       return send(0);
     },
@@ -459,7 +471,7 @@
       var api = this;
       var seznam = Array.prototype.slice.call(files || []);
       var celkem = seznam.length, hotovo = 0, ulozeno = 0, duplicitni = 0;
-      var selhalo = [];
+      var selhalo = [], media = [];
       var fronta = seznam.map(function (f, i) { return { f: f, i: i, pokus: 0 }; });
       var hlas = function (i, stav, zprava) { try { if (onItem) onItem(i, stav, zprava || ''); } catch (e) {} };
 
@@ -474,6 +486,8 @@
           if (!polozka) return;
           hlas(polozka.i, 'nahravam');
           return api.upload(polozka.f, { taken_at: polozka.f.lastModified }).then(function (b) {
+            // Identifikátory nahraných fotek — kvůli zařazení do alba, odkud se nahrávalo.
+            if (b && b.id && String(b.id).indexOf('up-') !== 0) media.push(b.id);
             if (b && b.status === 'duplicate') { duplicitni++; hlas(polozka.i, 'duplicitni'); } else { ulozeno++; hlas(polozka.i, 'hotovo'); }
             hotovo++;
             if (onProgress) onProgress(hotovo, celkem);
@@ -500,7 +514,7 @@
       for (var i = 0; i < soubezne; i++) vlakna.push(dalsi());
 
       return Promise.all(vlakna).then(function () {
-        return { celkem: celkem, ulozeno: ulozeno, duplicitni: duplicitni, selhalo: selhalo };
+        return { celkem: celkem, ulozeno: ulozeno, duplicitni: duplicitni, selhalo: selhalo, media: media };
       });
     },
 

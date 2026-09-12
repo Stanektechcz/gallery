@@ -1107,7 +1107,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
               <h1 style="margin:8px 0 0; font-size:40px; color:#fff; letter-spacing:-.02em">{{ album.name }}</h1>
               <div style="display:flex; align-items:center; gap:16px; margin-top:8px; font-size:14px; color:rgba(255,255,255,.85); flex-wrap:wrap">
                 <span>{{ album.date }}</span><span>{{ album.place }}</span><span>{{ album.count }}</span>
-                <span style="display:flex; align-items:center; gap:5px"><i class="ph-duotone ph-cloud-check" style="font-size:16px"></i>Originály bezpečně uloženy</span>
+                <span style="display:flex; align-items:center; gap:5px"><i class="ph-duotone {{ albumSyncIcon }}" style="font-size:16px"></i>{{ albumSyncLabel }}</span>
               </div>
               <p style="margin:9px 0 0; max-width:640px; font-size:14.5px; color:rgba(255,255,255,.78)">{{ album.desc }}</p>
             </div>
@@ -14824,7 +14824,8 @@ class Component extends DCLogic {
   tagsOf(key) {
     const o = this.state.xTags[key];
     if (o) return o;
-    return (ATAGS[key] || ATAGS.all).map(t => ({ t: t[0], c: t[1] }));
+    // Pojistka: vyprázdněná kolekce ze serveru nesmí shodit celou aplikaci.
+    return (ATAGS[key] || ATAGS.all || []).map(t => ({ t: t[0], c: t[1] }));
   }
   setRows(key, list) { this.setState({ xRows: { ...this.state.xRows, [key]: list } }); }
   /*
@@ -17729,6 +17730,12 @@ class Component extends DCLogic {
    * sám prohlížeč (album, duplicita ze srovnávače) — takové věci server nezná
    * a mazat je u něj nemá smysl.
    */
+  // Alba vede server, jakmile aplikace mluví s backendem a knihovna přišla z něj.
+  albaNaServeru() {
+    const api = window.GalerieApi;
+    return !!(api && api.mode === 'http' && api.post && (window.GalerieData || {}).ALBUMS);
+  }
+
   kosNaServeru(t) {
     return !!(t && t.id) && window.GalerieApi && window.GalerieApi.mode === 'http';
   }
@@ -27806,7 +27813,7 @@ class Component extends DCLogic {
     else if (mode === 'set' && s.blkTime) summary.push({ icon: 'ph-clock', text: 'Čas pořízení se přepíše na ' + s.blkTime + ', datum zůstane.' });
     if (mode === 'shift' && shiftN !== 0) summary.push({ icon: 'ph-arrows-left-right', text: 'Datum se posune o ' + (shiftN > 0 ? '+' : '') + shiftN + ' ' + (unit === 'day' ? 'dní' : 'hodin') + ' — pořadí položek zůstane.' });
     if (place) summary.push({ icon: 'ph-map-pin', text: 'Místo se nastaví na „' + place + '“.' });
-    if (album) summary.push({ icon: 'ph-folder-plus', text: album === '__none' ? 'Položky se odeberou z albumu.' : 'Položky se zařadí do „' + album + '“.' });
+    if (album) summary.push({ icon: 'ph-folder-plus', text: album === '__none' ? 'Položky se odeberou z albumu.' : 'Položky se zařadí do „' + ((this.albums().find(a => a.id === album) || {}).path || album) + '“.' });
     if (tagsAdd.length) summary.push({ icon: 'ph-tag', text: 'Přidají se štítky: ' + tagsAdd.join(', ') + '.' });
     if (rmTag) summary.push({ icon: 'ph-tag', text: 'Odebere se štítek „' + rmTag + '“ tam, kde je.' });
     if (s.blkFav) summary.push({ icon: 'ph-heart-straight', text: 'Vše se přidá do oblíbených.' });
@@ -27830,8 +27837,9 @@ class Component extends DCLogic {
       blkSetPlace: e => this.setState({ blkPlace: e.target.value }),
       blkPlaceSug: ['Zadar, Chorvatsko', 'Pustevny, Beskydy', 'Ostrava', 'Praha'].map(x => ({ label: x, go: () => this.setState({ blkPlace: x }) })),
       blkAlbum: album,
+      // Se serverem se album vybírá podle identifikátoru — zařazení jde do databáze.
       blkAlbumOpts: [{ value: '', label: 'Nechat beze změny' }]
-        .concat(this.albums().map(a => ({ value: a.name, label: a.path || a.name })))
+        .concat(this.albums().filter(a => !this.albaNaServeru() || !a.mine).map(a => ({ value: this.albaNaServeru() ? a.id : a.name, label: a.path || a.name })))
         .concat([{ value: '__none', label: 'Odebrat z albumu' }]),
       blkSetAlbum: e => this.setState({ blkAlbum: e.target.value }),
       blkTagsAdd: s.blkTagsAdd || '',
@@ -27850,6 +27858,20 @@ class Component extends DCLogic {
       blkReset: () => this.setState(Object.assign(this.blkDefaults(), { blkOpen: true })),
       blkApply: () => {
         if (clean) return;
+        /*
+         * Zařazení do alba jde se serverem do databáze. Dřív se zapsalo jen
+         * do `edits[id].album` v prohlížeči: fotka ukázala nové album na
+         * jedné obrazovce, ale v albu na Disku ani v druhém rozhraní nebyla.
+         */
+        const api = window.GalerieApi;
+        if (album && this.albaNaServeru()) {
+          api.post('alba/zaradit', { album: album === '__none' ? null : album, media: ids })
+            .then(res => {
+              if (window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data, res.prazdne);
+              this.toast(res.zprava, { icon: 'ph-folder-simple-plus' });
+            })
+            .catch(e => this.toast(((e && e.body) || {}).zprava || 'Zařadit do alba se nepodařilo', { icon: 'ph-warning', color: 'var(--g-mag)' }));
+        }
         const prevEdits = s.edits, prevFavs = s.favs, prevVault = s.vaultAdded;
         const ed = Object.assign({}, s.edits), favs = Object.assign({}, s.favs);
         sub.forEach(p => {
@@ -27875,7 +27897,8 @@ class Component extends DCLogic {
             }
           }
           if (place) { patch.place = place; patch.missingPlace = false; }
-          if (album) patch.album = album === '__none' ? '' : album;
+          // Se serverem album nese knihovna; místní přepis by po obnovení tvrdil staré.
+          if (album && !this.albaNaServeru()) patch.album = album === '__none' ? '' : album;
           if (tagsAdd.length || rmTag) {
             const base = (cur.tags || []).filter(t => t !== rmTag);
             patch.tags = base.concat(tagsAdd.filter(t => !base.includes(t)));
@@ -28417,6 +28440,9 @@ class Component extends DCLogic {
        * Soubory samotné (`File`) do stavu nepatří — ten se ukládá na server —
        * drží se v `this._fronta` kvůli „Zkusit znovu".
        */
+      // Album, ze kterého se nahrává — zjištěné hned, ne až po přenosu, kdy už může být jinde.
+      const doAlba = this.state.route === 'album' && this.albaNaServeru()
+        && ((window.GalerieData || {}).ALBUMS || []).some(a => a.id === this.state.albumId) ? this.state.albumId : null;
       api.pauza = false;
       this._fronta = files;
       const start = Date.now();
@@ -28435,8 +28461,21 @@ class Component extends DCLogic {
           obnov();
         });
       this.setState({ queuePct: 100 });
-      // Nové fotky rovnou do knihovny — bez toho se ukázaly až po obnovení stránky.
-      if ((v.ulozeno || v.duplicitni) && window.GalerieObnovit) GalerieObnovit('knihovna');
+      /*
+       * „Nahrát do alba" z obrazovky alba nahrálo do knihovny a album zůstalo
+       * prázdné. Nahrané fotky se teď do toho alba zařadí.
+       */
+      if (doAlba && (v.media || []).length) {
+        try {
+          const res = await api.post('alba/zaradit', { album: doAlba, media: v.media });
+          if (window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data, res.prazdne);
+        } catch (e) {
+          this.toast('Fotky jsou nahrané, ale do alba se zařadit nepodařilo — zařaďte je v knihovně', { icon: 'ph-warning', color: 'var(--g-mag)' });
+        }
+      } else if ((v.ulozeno || v.duplicitni) && window.GalerieObnovit) {
+        // Nové fotky rovnou do knihovny — bez toho se ukázaly až po obnovení stránky.
+        GalerieObnovit('knihovna');
+      }
       this.toast(this.nahraniHlaska(v), { icon: v.selhalo.length ? 'ph-warning' : 'ph-cloud-check', color: v.selhalo.length ? 'var(--g-mag)' : undefined });
     };
     document.body.appendChild(inp);
@@ -30579,18 +30618,45 @@ class Component extends DCLogic {
       naOpen: s.naOpen, naName: s.naName || '',
       naSetName: e => this.setState({ naName: e.target.value }),
       naClose: () => this.setState({ naOpen: false }),
-      naParents: [{ label: 'Kořen — samostatné album', value: '' }].concat(this.baseAlbums().map(a => ({ label: a.path, value: a.path }))),
+      // Nadřazené album se vybírá podle identifikátoru — cesta se u serverového alba nedá poslat.
+      naParents: [{ label: 'Kořen — samostatné album', value: '' }].concat(this.baseAlbums().map(a => ({ label: a.path, value: a.id }))),
       naParent: s.naParent || '',
       naSetParent: e => this.setState({ naParent: e.target.value }),
       naHasSel: s.sel.length > 0, naSelLabel: s.sel.length + ' vybraných položek přidat do albumu',
       naWithSel: !!s.naWithSel,
       naToggleSel: () => this.setState({ naWithSel: !s.naWithSel }),
-      naCantSave: (s.naName || '').trim().length < 2,
-      naPreview: ((s.naParent ? s.naParent + ' → ' : '') + ((s.naName || '').trim() || 'Nové album')),
+      naCantSave: (s.naName || '').trim().length < 2 || !!s.naBusy,
+      naPreview: (() => {
+        const rodic = this.baseAlbums().find(a => a.id === s.naParent);
+        return (rodic ? rodic.path + ' → ' : '') + ((s.naName || '').trim() || 'Nové album');
+      })(),
       naSave: () => {
         const name = (s.naName || '').trim();
-        if (name.length < 2) return;
-        const path = (s.naParent ? s.naParent + ' → ' : '') + name;
+        if (name.length < 2 || s.naBusy) return;
+        const rodic = this.baseAlbums().find(a => a.id === s.naParent);
+        const path = (rodic ? rodic.path + ' → ' : '') + name;
+        const api = window.GalerieApi;
+        /*
+         * Se serverem album vzniká v databázi (a složka na Disku) a vybrané
+         * fotky se do něj opravdu zařadí. Dřív vzniklo jen v prohlížeči
+         * s hláškou „Album vytvořeno" a nikde jinde o něm nikdo nevěděl.
+         */
+        if (api && api.mode === 'http' && api.post) {
+          this.setState({ naBusy: true });
+          api.post('alba', { nazev: name, rodic: rodic && !rodic.mine ? rodic.id : null, media: s.naWithSel ? s.sel : [] })
+            .then(res => {
+              if (window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data, res.prazdne);
+              this.setState({ naBusy: false, naOpen: false, naName: '', naParent: '', naWithSel: false, route: 'album', albumId: res.album, sel: [], selectMode: false });
+              this.toast(res.zprava, { icon: 'ph-folder-plus' });
+            })
+            .catch(e => {
+              const t = (e && e.body) || {};
+              const prvni = t.errors ? (Object.values(t.errors)[0] || [])[0] : null;
+              this.setState({ naBusy: false });
+              this.toast(t.zprava || prvni || 'Album se nepodařilo založit', { icon: 'ph-warning', color: 'var(--g-mag)' });
+            });
+          return;
+        }
         const id = 'my-' + Date.now();
         const n = s.naWithSel ? s.sel.length : 0;
         const album = {
@@ -30609,6 +30675,17 @@ class Component extends DCLogic {
         });
       },
 
+      // Stav originálů podle fotek v albu — „bezpečně uloženy" stálo i u prázdného alba a u chyb.
+      ...(() => {
+        const chyba = albumPhotos.filter(p => p.sync === 'error').length, ceka = albumPhotos.filter(p => p.sync === 'pending').length;
+        return {
+          albumSyncIcon: chyba ? 'ph-warning-circle' : ceka ? 'ph-cloud-arrow-up' : 'ph-cloud-check',
+          albumSyncLabel: !albumPhotos.length ? 'Zatím bez fotek'
+            : chyba ? this.pl(chyba, 'originál se nezpracoval', 'originály se nezpracovaly', 'originálů se nezpracovalo')
+              : ceka ? this.pl(ceka, 'originál se zpracovává', 'originály se zpracovávají', 'originálů se zpracovává')
+                : 'Originály uložené'
+        };
+      })(),
       album, crumbs: ('Alba → ' + album.path).split(' → ').map((c, i, arr) => ({ name: i === arr.length - 1 ? c : c + '  →', go: i === 0 ? this.go('albums') : this.go('albums') })),
       hasSubs: album.subs > 0, albumEmpty: albumPhotos.length === 0,
       // Skutečná podalba přicházejí se serverem; napsané album si je dokreslí,

@@ -515,6 +515,7 @@ class Dnes implements PoskytovatelObsahu
             'share.update' => 'úprava sdíleného odkazu',
             'share.extend' => 'prodloužení sdíleného odkazu',
             'share.revoke' => 'zrušení sdíleného odkazu',
+            'album.create' => 'nové album',
         ];
 
         $zaznamy = DB::table('audit_logs')
@@ -544,7 +545,7 @@ class Dnes implements PoskytovatelObsahu
             }
 
             $data = json_decode((string) $z->payload, true) ?: [];
-            $radky[] = ['z' => $z, 'n' => 1, 'soubor' => $data['filename'] ?? null];
+            $radky[] = ['z' => $z, 'n' => 1, 'soubor' => $data['filename'] ?? $data['title'] ?? null];
             $predchozi = ['klic' => $klic, 'od' => $z->created_at];
         }
 

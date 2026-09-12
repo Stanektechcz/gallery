@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\CalendarPlanningController;
 use App\Http\Controllers\Api\ChatController;
 use App\Http\Controllers\Api\Galerie\AdminController;
+use App\Http\Controllers\Api\Galerie\AlbaController;
 use App\Http\Controllers\Api\Galerie\AlbumArchivController;
 use App\Http\Controllers\Api\Galerie\DataController;
 use App\Http\Controllers\Api\Galerie\KosController;
@@ -123,6 +124,15 @@ Route::middleware(['auth:sanctum', 'throttle:120,1'])->prefix('api')->group(func
     Route::get('alba/{album}/archiv', AlbumArchivController::class)
         ->whereUuid('album')
         ->name('galerie.album.archiv');
+
+    /*
+     * Založit album a zařadit do něj fotky.
+     *
+     * „Album vytvořeno" dosud zapsalo jen do stavu v prohlížeči — album nebylo
+     * v databázi ani na Disku a fotky v něm ležely jen na jedné obrazovce.
+     */
+    Route::post('alba', [AlbaController::class, 'store'])->name('galerie.alba.store');
+    Route::post('alba/zaradit', [AlbaController::class, 'zarad'])->name('galerie.alba.zaradit');
 
     /*
      * Objednávka tisku.

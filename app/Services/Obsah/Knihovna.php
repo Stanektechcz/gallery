@@ -1296,7 +1296,13 @@ class Knihovna implements PoskytovatelObsahu
             ->get(['t.name', DB::raw('COUNT(m.id) AS pocet')]);
 
         if ($stitky->isEmpty()) {
-            return [];
+            /*
+             * Prázdné záložky, ne prázdné pole. `ATAGS` je úplná kolekce, takže
+             * po akci (třeba založení alba) ji klient vyprázdní — a z objektu
+             * se sekcemi zbyl `{}`. Obrazovka čte `ATAGS.all.map`, spadla
+             * a s ní celá aplikace („Root.renderVals(): Cannot read … 'map'").
+             */
+            return ['all' => [], 'sug' => []];
         }
 
         return [
