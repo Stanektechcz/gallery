@@ -27,7 +27,7 @@ use Illuminate\Support\Str;
  * Náhled se posílá jako `background` v CSS: prototyp každou dlaždici kreslí
  * jako barevný přechod, takže `url(…) center/cover` sedne beze změny značek.
  */
-class Knihovna implements PoskytovatelObsahu
+class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
 {
     /**
      * Kolik fotek se posílá do mřížky.
@@ -36,6 +36,14 @@ class Knihovna implements PoskytovatelObsahu
      * by znamenalo megabajty JSONu a zamrzlý prohlížeč.
      */
     private const FOTEK = 240;
+
+    /** Statistiky prázdné knihovny — tvar jako `statistiky()`, samé nuly. */
+    private const PRAZDNE_STATISTIKY = [
+        'total' => 0, 'videos' => 0, 'favs' => 0, 'pending' => 0, 'errors' => 0, 'videoAvg' => null,
+        'years' => [], 'places' => [], 'placeN' => 0, 'months' => [],
+        'hours' => [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        'dev' => [], 'lens' => [], 'autori' => [],
+    ];
 
     /** Které snímky mají zmenšeninu; `media_item_id => ano/ne`. */
     private array $nahledy = [];
@@ -62,6 +70,35 @@ class Knihovna implements PoskytovatelObsahu
     public function uplne(): array
     {
         return ['PERSONS', 'ATAGS', 'APEOPLE'];
+    }
+
+    /**
+     * Prázdné kolekce pro modul, který dvojice zatím nepoužila.
+     *
+     * Bez nich zůstala na obrazovce ukázka z prototypu (viz MaPrazdneKolekce).
+     *
+     * @return array<string, mixed>
+     */
+    public function prazdne(): array
+    {
+        return [
+            'PHOTOS' => [],
+            'DAYS' => [],
+            'ALBUMS' => [],
+            'ATREE' => [],
+            'PERSONS' => new \stdClass,
+            'APEOPLE' => ['ok' => [], 'sug' => [], 'hidden' => []],
+            'ATAGS' => ['all' => [], 'sug' => []],
+            'YBCH' => [],
+            'HOURS' => [],
+            'FOTODNY' => new \stdClass,
+            'LIBSTATS' => self::PRAZDNE_STATISTIKY,
+            'MAPBODY' => [],
+            'DUP_GROUPS' => [],
+            'AL' => ['tagMerge' => [], 'dupes' => []],
+            // Telefon má vlastní kopie a bez nich si vygeneruje ukázkové fotky.
+            'MOBIL' => ['DAYS' => [], 'ALBUMS' => [], 'PHOTOS' => []],
+        ];
     }
 
     public function kolekce(GallerySpace $prostor): array
@@ -92,6 +129,8 @@ class Knihovna implements PoskytovatelObsahu
             'YBCH' => $this->roky($prostor),
             // Kdy dvojice fotí — z hodiny v EXIF, ne z odhadu.
             'HOURS' => $this->hodiny($media),
+            'FOTODNY' => (object) $this->fotekPoDnech($prostor),
+            'LIBSTATS' => $this->statistiky($prostor),
             // Čísla u položek postranního panelu a součet na úvodní obrazovce.
             'NAVCNT' => $this->navPocty($prostor),
             'TOTAL' => $this->celkem($prostor),
@@ -1129,6 +1168,158 @@ class Knihovna implements PoskytovatelObsahu
         return 'linear-gradient('.$uhel.'deg, '
             .'hsl('.$odstin.' '.$sytost.'% 58%), '
             .'hsl('.(($odstin + 34) % 360).' '.($sytost + 6).'% 30%))';
+    }
+
+    /**
+     * Kolik fotek a videí je z kterého dne: `{ "2026-08-16": 34 }`.
+     *
+     * Fotokalendář počítal fotky na den vzorečkem z data — pseudonáhodná
+     * čísla, která u každé dvojice tvrdila, že v úterý nafotila 57 snímků.
+     * `DAYS` na to nestačí: nese jen dny posledních pár set fotek, takže
+     * starší měsíce by vyšly prázdné. Počty jsou přes celou knihovnu, jeden
+     * dotaz se seskupením podle dne.
+     *
+     * @return array<string, int>
+     */
+    private function fotekPoDnech(GallerySpace $prostor): array
+    {
+        return MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
+            ->where('gallery_space_id', $prostor->id)
+            ->whereNull('trashed_at')
+            ->where('is_hidden', false)
+            ->toBase()
+            ->selectRaw('DATE(COALESCE(taken_at, uploaded_at, created_at)) as den, COUNT(*) as pocet')
+            ->groupBy('den')
+            ->pluck('pocet', 'den')
+            ->filter(fn ($pocet, $den) => $den !== null && $den !== '')
+            ->map(fn ($pocet) => (int) $pocet)
+            ->all();
+    }
+
+    /**
+     * Statistiky přes celou knihovnu.
+     *
+     * Obrazovka Statistiky počítala z fotek, které prohlížeč dostal do mřížky
+     * — z posledních dvou set čtyřiceti. U dvojice s deseti tisíci fotkami
+     * pak tvrdila „240 položek v knihovně", nejčastější místo z posledního
+     * výletu a hodinu focení vymyšlenou pro snímky bez času. Video mělo
+     * napsanou průměrnou délku 48 sekund.
+     *
+     * Jeden průchod přes sloupce, které statistika potřebuje; mapy chodí
+     * jako `{ klíč: počet }`, hodiny jako pole 24 čísel. Snímek bez času
+     * se do hodin nepočítá, bez místa do míst — nic se nedoplňuje.
+     *
+     * @return array<string, mixed>
+     */
+    private function statistiky(GallerySpace $prostor): array
+    {
+        $radky = MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
+            ->where('gallery_space_id', $prostor->id)
+            ->whereNull('trashed_at')
+            ->where('is_hidden', false)
+            ->toBase()
+            ->get(['id', 'media_type', 'taken_at', 'uploaded_at', 'created_at', 'location_name', 'uploaded_by',
+                'camera_make', 'camera_model', 'lens_model', 'duration_ms', 'status', 'is_favorite']);
+
+        if ($radky->isEmpty()) {
+            return self::PRAZDNE_STATISTIKY;
+        }
+
+        $ja = auth()->id();
+        $oblibene = $ja !== null && Schema::hasTable('user_favorites')
+            ? DB::table('user_favorites')->where('user_id', $ja)->pluck('media_item_id')->flip()->all()
+            : [];
+        $jmena = DB::table('users')->whereIn('id', $radky->pluck('uploaded_by')->filter()->unique())->pluck('name', 'id');
+
+        $s = self::PRAZDNE_STATISTIKY;
+        $delky = [];
+        $autori = [];
+
+        foreach ($radky as $r) {
+            $video = $r->media_type === 'video';
+            $oblibena = isset($oblibene[$r->id]) || (bool) $r->is_favorite;
+            $kdy = $r->taken_at ?? $r->uploaded_at ?? $r->created_at;
+            $den = $kdy ? CarbonImmutable::parse($kdy) : null;
+            $misto = trim(explode(',', (string) ($r->location_name ?? ''))[0]);
+            $pristroj = trim((string) ($r->camera_model ?? '')) !== ''
+                ? (trim((string) $r->camera_make) === '' || stripos((string) $r->camera_model, (string) $r->camera_make) !== false
+                    ? trim((string) $r->camera_model)
+                    : trim($r->camera_make.' '.$r->camera_model))
+                : trim((string) ($r->camera_make ?? ''));
+            $hodina = $r->taken_at ? (int) CarbonImmutable::parse($r->taken_at)->format('G') : null;
+
+            $s['total']++;
+            $s['videos'] += $video ? 1 : 0;
+            $s['favs'] += $oblibena ? 1 : 0;
+            $s['pending'] += $r->status !== 'ready' && $r->status !== 'failed' ? 1 : 0;
+            $s['errors'] += $r->status === 'failed' ? 1 : 0;
+
+            if ($video && $r->duration_ms) {
+                $delky[] = (int) $r->duration_ms;
+            }
+
+            if ($den) {
+                $s['years'][$den->year] = ($s['years'][$den->year] ?? 0) + 1;
+                $s['months'][$den->month - 1] = ($s['months'][$den->month - 1] ?? 0) + 1;
+            }
+
+            if ($misto !== '') {
+                $s['places'][$misto] = ($s['places'][$misto] ?? 0) + 1;
+            }
+
+            if ($hodina !== null) {
+                $s['hours'][$hodina]++;
+            }
+
+            $s['dev'][$pristroj] = ($s['dev'][$pristroj] ?? 0) + 1;
+            $objektiv = trim((string) ($r->lens_model ?? ''));
+            $s['lens'][$objektiv] = ($s['lens'][$objektiv] ?? 0) + 1;
+
+            $kdo = $jmena[$r->uploaded_by] ?? null;
+
+            if ($kdo !== null) {
+                $a = $autori[$kdo] ?? ['count' => 0, 'favs' => 0, 'videos' => 0, 'mista' => [], 'hodiny' => array_fill(0, 24, 0)];
+                $a['count']++;
+                $a['favs'] += $oblibena ? 1 : 0;
+                $a['videos'] += $video ? 1 : 0;
+
+                if ($misto !== '') {
+                    $a['mista'][$misto] = ($a['mista'][$misto] ?? 0) + 1;
+                }
+
+                if ($hodina !== null) {
+                    $a['hodiny'][$hodina]++;
+                }
+
+                $autori[$kdo] = $a;
+            }
+        }
+
+        arsort($s['places']);
+        $s['placeN'] = count($s['places']);
+        // Míst bývají stovky; obrazovka ukazuje prvních pár a počet.
+        $s['places'] = array_slice($s['places'], 0, 40, true);
+        $s['videoAvg'] = $delky ? (int) round(array_sum($delky) / count($delky) / 1000) : null;
+        // Pole z klíčů `0–11` a let by JSON poslal jako seznam; obrazovka čte mapu.
+        $s['years'] = (object) $s['years'];
+        $s['months'] = (object) $s['months'];
+        $s['places'] = (object) $s['places'];
+        $s['dev'] = (object) $s['dev'];
+        $s['lens'] = (object) $s['lens'];
+        $s['autori'] = (object) array_map(function (array $a) {
+            arsort($a['mista']);
+            $nejHodina = max($a['hodiny']) > 0 ? array_search(max($a['hodiny']), $a['hodiny'], true) : null;
+
+            return [
+                'count' => $a['count'],
+                'favs' => $a['favs'],
+                'videos' => $a['videos'],
+                'place' => array_key_first($a['mista']),
+                'hour' => $nejHodina,
+            ];
+        }, $autori);
+
+        return $s;
     }
 
     private function den(MediaItem $m): CarbonImmutable

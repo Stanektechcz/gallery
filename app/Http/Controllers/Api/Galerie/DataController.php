@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\Galerie\Concerns\UrcujePar;
 use App\Http\Controllers\Controller;
 use App\Models\GallerySpace;
 use App\Services\Obsah\PoskytovatelObsahu;
+use App\Services\Obsah\PrazdneKolekce;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -124,12 +125,12 @@ class DataController extends Controller
                 ];
             }
 
+            // Co poskytovatel neposlal, dostane klient prázdné — ne ukázku z prototypu.
+            [$data, $uplne] = PrazdneKolekce::doplnit($poskytovatel, $data);
+
             // Klient přepisuje klíče a nemaže je; u kolekcí, které server dodává
             // celé, by mu tak vedle skutečných dat zůstala ukázka.
-            $uplne = array_values(array_filter(
-                $poskytovatel->uplne(),
-                fn (string $klic) => array_key_exists($klic, $data),
-            ));
+            $uplne = array_values(array_filter($uplne, fn (string $klic) => array_key_exists($klic, $data)));
 
             // Prázdná skupina jako objekt, ne `[]` — klient čte klíče.
             return ['data' => $data === [] ? (object) [] : $data, 'uplne' => $uplne];

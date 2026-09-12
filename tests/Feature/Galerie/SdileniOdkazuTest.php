@@ -172,7 +172,8 @@ class SdileniOdkazuTest extends TestCase
         $odpoved = $this->deleteJson('/api/sdileni/'.$odkaz->id)->assertOk();
 
         $this->assertSame(0, SharedLink::count());
-        $this->assertContains('SHARES', $odpoved->json('prazdne'));
+        // Poslední odkaz pryč: seznam přijde prázdný a úplný, takže z obrazovky zmizí.
+        $this->assertSame([], $odpoved->json('data.SHARES'));
     }
 
     /** Cizí odkaz nejde ani upravit, ani zneplatnit. */

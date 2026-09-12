@@ -24,7 +24,7 @@ use Illuminate\Support\Facades\Schema;
  * Tvary jsou dané prototypem a nemění se: `TX` je pole na devíti pozicích,
  * `BUD.cats` na šesti. Přizpůsobuje se obsah, ne obrazovka.
  */
-class Finance implements PoskytovatelObsahu
+class Finance implements MaPrazdneKolekce, PoskytovatelObsahu
 {
     /** Kolik transakcí se posílá. Obrazovka jich ukáže dvacítky, ne tisíce. */
     private const TRANSAKCI = 120;
@@ -57,6 +57,39 @@ class Finance implements PoskytovatelObsahu
         // `INCOMES` celé: ukázkový Adrian s výplatou nesmí zůstat vedle
         // skutečné dvojice, která se jmenuje jinak nebo příjem nezapsala.
         return ['ATX', 'INCOMES'];
+    }
+
+    /**
+     * Prázdné kolekce pro modul, který dvojice zatím nepoužila.
+     *
+     * Bez nich zůstala na obrazovce ukázka z prototypu (viz MaPrazdneKolekce).
+     *
+     * @return array<string, mixed>
+     */
+    public function prazdne(): array
+    {
+        return [
+            'TX' => [],
+            'TXCATS' => [],
+            'ATX' => [
+                'all' => ['rows' => [], 'foot' => '', 'sum' => ''],
+                'un' => ['rows' => [], 'foot' => '', 'sum' => ''],
+                'rec' => ['rows' => [], 'foot' => '', 'sum' => ''],
+                'imp' => ['rows' => [], 'foot' => '', 'sum' => ''],
+            ],
+            'BUD' => [
+                'month' => '', 'today' => 0, 'days' => 0, 'income' => 0, 'plan' => 0, 'surplus' => 0,
+                'cats' => [], 'months' => [], 'goals' => [], 'paid' => [],
+                'year' => ['income' => 0, 'spent' => 0, 'saved' => 0, 'worst' => '', 'best' => ''],
+                'yearCats' => [],
+            ],
+            'FIN' => ['accounts' => [], 'upcoming' => [], 'alerts' => [], 'rules' => [], 'imports' => []],
+            'INCOMES' => new \stdClass,
+            'SHARED' => [],
+            'RULEXP' => [],
+            'ABARS' => ['bud' => [], 'year' => [], 'fc' => [], 'res' => []],
+            'AL' => ['accounts' => [], 'balancing' => []],
+        ];
     }
 
     public function kolekce(GallerySpace $prostor): array
@@ -144,6 +177,7 @@ class Finance implements PoskytovatelObsahu
              */
             'INCOMES' => (object) $this->prijmyOsob($prostor, $mena),
             'SHARED' => $this->pevneNaklady($rozpocet),
+            'RULEXP' => $this->vydajeZaRok($prostor),
             /*
              * Měna, ve které se kreslí částky.
              *
@@ -156,6 +190,45 @@ class Finance implements PoskytovatelObsahu
     }
 
     // ——— transakce ———
+
+    /**
+     * Výdaje za poslední rok pro hledání a pravidla: `[den, popis, částka, datum]`.
+     *
+     * Hledání („kolik jsme dali za restaurace v srpnu") i zkouška pravidla
+     * „výdaj nad limit" četly šest řádků z `galerie-data.js` — „Restaurace
+     * U Kastelána 1 260 Kč" u každé dvojice. `TX` na to nestačí: nese jen
+     * posledních sto dvacet pohybů a měsíc by vyšel poloviční. Den je
+     * v genitivu („12. srpna"), protože tak ho hledání porovnává s měsícem;
+     * čtvrté pole je datum, aby pravidlo umělo vzít jen poslední měsíc.
+     *
+     * @return list<array{0: string, 1: string, 2: int, 3: string}>
+     */
+    private function vydajeZaRok(GallerySpace $prostor): array
+    {
+        $mesice = [1 => 'ledna', 'února', 'března', 'dubna', 'května', 'června',
+            'července', 'srpna', 'září', 'října', 'listopadu', 'prosince'];
+
+        return Transaction::withoutGlobalScope(SpaceContext::SCOPE)
+            ->where('gallery_space_id', $prostor->id)
+            // Převod mezi vlastními účty výdaj není — v hledání by zdvojil útratu.
+            ->where('type', 'expense')
+            ->where('occurred_at', '>=', CarbonImmutable::now()->subYear()->startOfDay())
+            ->orderByDesc('occurred_at')
+            ->limit(2000)
+            ->get(['occurred_at', 'description', 'counterparty', 'amount_from', 'amount_to'])
+            ->map(function (Transaction $t) use ($mesice) {
+                $kdy = CarbonImmutable::parse($t->occurred_at);
+
+                return [
+                    $kdy->day.'. '.$mesice[$kdy->month],
+                    (string) ($t->description ?: ($t->counterparty ?: 'Bez popisu')),
+                    (int) round(abs((float) ($t->amount_from ?? $t->amount_to ?? 0))),
+                    $kdy->toDateString(),
+                ];
+            })
+            ->values()
+            ->all();
+    }
 
     /** @return Collection<int, Transaction> */
     private function pohyby(GallerySpace $prostor): Collection
@@ -566,6 +639,16 @@ class Finance implements PoskytovatelObsahu
         // obrazovka ukazovala plán, který nikdo neporovnal se skutečností.
         $utraceno = $this->utracenoPoKategoriich($prostor, $dnes->startOfMonth(), $dnes->endOfMonth());
 
+        /*
+         * Obvyklá útrata kategorie: průměr tří celých měsíců před tímhle.
+         *
+         * „Anomálie" v prototypu brala za obvyklé 82 % limitu — vymyšlené číslo,
+         * podle kterého obrazovka hlásila, že kategorie „vybočuje". Tady je to
+         * skutečný průměr; kategorie bez historie má nulu a za anomálii se nebere.
+         */
+        $pred = $dnes->startOfMonth()->subMonths(3);
+        $obvykle = array_map(fn (float $v) => $v / 3, $this->utracenoPoKategoriich($prostor, $pred, $dnes->startOfMonth()->subSecond()));
+
         $prijem = $this->mesicniPrijem($rozpocet);
         $plan = $naMesic((float) $limity->sum('amount'));
 
@@ -576,7 +659,7 @@ class Finance implements PoskytovatelObsahu
             'income' => (int) round($prijem),
             'plan' => (int) round($plan),
             'surplus' => (int) round($prijem - $plan),
-            'cats' => $limity->map(function (object $limit) use ($utraceno, $mena, $naMesic) {
+            'cats' => $limity->map(function (object $limit) use ($utraceno, $obvykle, $mena, $naMesic) {
                 $skutecnost = (float) ($utraceno[$limit->finance_category_id] ?? 0);
                 $limitMesicne = $naMesic((float) $limit->amount);
 
@@ -591,8 +674,11 @@ class Finance implements PoskytovatelObsahu
                     // tedy to s nejnižší, ne s nejvyšší — obráceně by obrazovka
                     // označila za jisté zrovna to, co odpadne první.
                     (int) ($limit->priority ?? 100) <= self::PEVNE ? 'nedotknutelné' : null,
+                    // Obvyklá měsíční útrata (průměr tří předchozích měsíců).
+                    (int) round($obvykle[$limit->finance_category_id] ?? 0),
                 ];
             })->values()->all(),
+            'paid' => $this->kdoCoZaplatil($prostor, $dnes),
             'months' => $this->mesice($prostor, $mena),
             'year' => $this->rok($prostor, $rozpocet),
             'goals' => $this->cile($rozpocet),
@@ -726,6 +812,38 @@ class Finance implements PoskytovatelObsahu
             ->groupBy('category_id')
             ->pluck('castka', 'category_id')
             ->map(fn ($v) => (float) $v)
+            ->all();
+    }
+
+    /**
+     * Kdo tento měsíc co zaplatil: `[jméno, kategorie, částka]`.
+     *
+     * Vyrovnání mezi dvojicí v prototypu počítalo z napsaných řádků („Adrian ·
+     * Nákupy a benzín 14 820 Kč") a oznamovalo, kdo komu dluží. Tady se sčítá
+     * kniha: plátce z transakce, a když chybí, kdo ji zapsal.
+     *
+     * @return list<array{0: string, 1: string, 2: int}>
+     */
+    private function kdoCoZaplatil(GallerySpace $prostor, CarbonImmutable $dnes): array
+    {
+        $jmena = System::jmenaClenu($prostor);
+
+        return DB::table('transactions as t')
+            ->leftJoin('partners as p', 'p.id', '=', 't.payer_partner_id')
+            ->leftJoin('finance_categories as k', 'k.id', '=', 't.category_id')
+            ->where('t.gallery_space_id', $prostor->id)
+            ->where('t.type', 'expense')
+            ->whereNull('t.deleted_at')
+            ->where('t.excluded_from_budget', false)
+            ->whereBetween('t.occurred_at', [$dnes->startOfMonth()->toDateString(), $dnes->endOfMonth()->toDateString()])
+            ->selectRaw('COALESCE(p.user_id, t.created_by) AS kdo, COALESCE(k.name, ?) AS kategorie, SUM(ABS(t.amount_from)) AS castka', ['Nezařazeno'])
+            ->groupBy('kdo', 'kategorie')
+            ->orderByDesc('castka')
+            ->limit(12)
+            ->get()
+            ->filter(fn ($r) => isset($jmena[(int) $r->kdo]))
+            ->map(fn ($r) => [$jmena[(int) $r->kdo], (string) $r->kategorie, (int) round((float) $r->castka)])
+            ->values()
             ->all();
     }
 

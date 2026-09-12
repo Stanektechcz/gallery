@@ -42,12 +42,12 @@ class ObsahMechanismyTest extends TestCase
         Sanctum::actingAs($this->adri);
     }
 
-    /** Prázdný účet nechává ukázku. */
+    /** Prázdný účet chodí prázdný, ne ukázkový. */
     public function test_bez_zaznamu_se_nic_neposila(): void
     {
         $data = $this->getJson('/api/data/mechanismy')->assertOk()->json('data');
 
-        $this->assertArrayNotHasKey('FAV', $data);
+        $this->assertPrazdne($data['FAV'] ?? null);
     }
 
     /** Laskavost ví, kdo ji udělal a jestli je vyrovnaná. */
@@ -211,7 +211,7 @@ class ObsahMechanismyTest extends TestCase
             'updated_at' => now(),
         ]);
 
-        $this->assertArrayNotHasKey('FAV', $this->getJson('/api/data/mechanismy')->assertOk()->json('data'));
+        $this->assertPrazdne($this->getJson('/api/data/mechanismy')->assertOk()->json('data.FAV'));
     }
 
     // ——— pomůcky ———

@@ -48,10 +48,10 @@ class ObsahPravidlaTest extends TestCase
      */
     public function test_bez_pravidel_se_skupina_neposila(): void
     {
-        $this->assertSame(
-            ['MEMS' => []],
-            $this->getJson('/api/data/pravidla')->assertOk()->json('data'),
-        );
+        $data = $this->getJson('/api/data/pravidla')->assertOk()->json('data');
+
+        $this->assertSame([], $data['MEMS']);
+        $this->assertPrazdne($data);
     }
 
     /** Pravidlo nese spouštěč, akci i počet běhů. */

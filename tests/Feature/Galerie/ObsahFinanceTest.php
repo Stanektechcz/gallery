@@ -40,10 +40,10 @@ class ObsahFinanceTest extends TestCase
         Sanctum::actingAs($this->adri);
     }
 
-    /** Bez financí se nic neposílá — klient si nechá ukázková data. */
+    /** Bez financí chodí jen prázdné kolekce — ukázka z prototypu se smaže. */
     public function test_bez_financi_se_skupina_neposila(): void
     {
-        $this->assertSame([], $this->getJson('/api/data/finance')->assertOk()->json('data'));
+        $this->assertPrazdne($this->getJson('/api/data/finance')->assertOk()->json('data'));
     }
 
     /**
@@ -236,6 +236,59 @@ class ObsahFinanceTest extends TestCase
         $this->assertSame(-12, $radek[4], 'Výdaj má být záporný — podle znaménka volí prototyp barvu.');
         $this->assertSame('EUR hotovost', $radek[5]);
         $this->assertStringStartsWith('ph-', $radek[6], 'Prototyp kreslí ikony Phosphor.');
+    }
+
+    /**
+     * Hledání a pravidla dostanou výdaje za poslední rok.
+     *
+     * Obojí četlo šest napsaných řádků („Restaurace U Kastelána"). Příjem ani
+     * výdaj starší než rok mezi ně nepatří; den je v genitivu, jak ho hledání
+     * porovnává s měsícem, a vedle něj datum pro „poslední měsíc" v pravidlech.
+     */
+    public function test_vydaje_pro_hledani_jsou_z_knihy(): void
+    {
+        $this->regensburg();
+        $penezenka = Wallet::create([
+            'gallery_space_id' => $this->prostor->id, 'name' => 'Karta',
+            'kind' => 'bank', 'currency' => 'CZK', 'opening_balance' => 0, 'is_active' => true,
+        ]);
+        $zaklad = ['gallery_space_id' => $this->prostor->id, 'currency_from' => 'CZK', 'state' => 'approved', 'created_by' => $this->adri->id];
+        $kdy = now()->subDays(3)->startOfDay()->addHours(12);
+
+        Transaction::create($zaklad + ['type' => 'expense', 'occurred_at' => $kdy, 'wallet_from_id' => $penezenka->id, 'amount_from' => 640.4, 'description' => 'Bistro na rohu']);
+        Transaction::create($zaklad + ['type' => 'expense', 'occurred_at' => now()->subYears(2), 'wallet_from_id' => $penezenka->id, 'amount_from' => 99, 'description' => 'Dávno']);
+        Transaction::create(['gallery_space_id' => $this->prostor->id, 'type' => 'income', 'occurred_at' => $kdy, 'wallet_to_id' => $penezenka->id, 'amount_to' => 42000, 'currency_to' => 'CZK', 'description' => 'Výplata', 'state' => 'approved', 'created_by' => $this->adri->id]);
+
+        $vydaje = $this->getJson('/api/data/finance')->assertOk()->json('data.RULEXP');
+
+        $mesice = [1 => 'ledna', 'února', 'března', 'dubna', 'května', 'června', 'července', 'srpna', 'září', 'října', 'listopadu', 'prosince'];
+        $this->assertSame([[$kdy->day.'. '.$mesice[$kdy->month], 'Bistro na rohu', 640, $kdy->toDateString()]], $vydaje);
+    }
+
+    /**
+     * „Kdo co zaplatil" je z knihy tohoto měsíce, ne pět napsaných řádků.
+     *
+     * Obrazovka vyrovnání počítala dluh mezi dvěma lidmi z ukázky
+     * („Adrian · Nákupy a benzín 14 820 Kč"). Minulý měsíc a vyřazené
+     * z rozpočtu se nepočítají.
+     */
+    public function test_kdo_co_zaplatil_je_z_tohoto_mesice(): void
+    {
+        $this->regensburg();
+        $penezenka = Wallet::create([
+            'gallery_space_id' => $this->prostor->id, 'name' => 'Karta',
+            'kind' => 'bank', 'currency' => 'EUR', 'opening_balance' => 0, 'is_active' => true,
+        ]);
+        $potraviny = FinanceCategory::where('gallery_space_id', $this->prostor->id)->where('name', 'Potraviny')->sole();
+        $zaklad = ['gallery_space_id' => $this->prostor->id, 'type' => 'expense', 'wallet_from_id' => $penezenka->id, 'currency_from' => 'EUR', 'category_id' => $potraviny->id, 'state' => 'approved', 'created_by' => $this->adri->id];
+
+        Transaction::create($zaklad + ['occurred_at' => now()->startOfMonth()->addDay(), 'amount_from' => 30, 'description' => 'Lidl']);
+        Transaction::create($zaklad + ['occurred_at' => now()->startOfMonth()->addDays(2), 'amount_from' => 12.6, 'description' => 'Pekárna']);
+        Transaction::create($zaklad + ['occurred_at' => now()->subMonthNoOverflow()->startOfMonth()->addDay(), 'amount_from' => 90, 'description' => 'Loni']);
+
+        $zaplaceno = $this->getJson('/api/data/finance')->assertOk()->json('data.BUD.paid');
+
+        $this->assertSame([[$this->adri->name, 'Potraviny', 43]], $zaplaceno);
     }
 
     /** Ikony aplikace jsou z Lucide, prototyp kreslí Phosphor. */

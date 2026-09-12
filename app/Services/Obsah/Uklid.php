@@ -18,7 +18,7 @@ use Illuminate\Support\Facades\Schema;
  * (`is_archived`), výběry jsou pořadová čísla do mřížky a tisk jsou skutečné
  * zakázky z `photo_books`.
  */
-class Uklid implements PoskytovatelObsahu
+class Uklid implements MaPrazdneKolekce, PoskytovatelObsahu
 {
     /** Kolik fotek posílá knihovna do mřížky — výběry musí ukazovat dovnitř. */
     private const FOTEK = 240;
@@ -38,6 +38,30 @@ class Uklid implements PoskytovatelObsahu
     public function uplne(): array
     {
         return ['DATING'];
+    }
+
+    /**
+     * Prázdné kolekce pro modul, který dvojice zatím nepoužila.
+     *
+     * Bez nich zůstala na obrazovce ukázka z prototypu (viz MaPrazdneKolekce).
+     *
+     * @return array<string, mixed>
+     */
+    public function prazdne(): array
+    {
+        return [
+            'DATING' => [],
+            'PJOBS' => [],
+            'QUAR' => [],
+            'AGRID' => [
+                'anniv' => ['idx' => [], 'note' => ''],
+                'show' => ['idx' => [], 'note' => ''],
+                'contact' => ['idx' => [], 'note' => ''],
+                'noDate' => ['idx' => [], 'note' => '', 'strip' => ''],
+                'noPlace' => ['idx' => [], 'note' => '', 'strip' => ''],
+                'compare' => ['pairs' => [], 'note' => ''],
+            ],
+        ];
     }
 
     public function kolekce(GallerySpace $prostor): array

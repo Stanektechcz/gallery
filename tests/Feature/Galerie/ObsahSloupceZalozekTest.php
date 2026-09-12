@@ -81,7 +81,7 @@ class ObsahSloupceZalozekTest extends TestCase
     {
         $this->prace();
 
-        $this->assertArrayNotHasKey('ABARS', $this->getJson('/api/data/domacnost')->assertOk()->json('data'));
+        $this->assertPrazdne($this->getJson('/api/data/domacnost')->assertOk()->json('data.ABARS'));
     }
 
     /** Přehled cyklu stojí na zaznamenaných začátcích. */
@@ -110,7 +110,7 @@ class ObsahSloupceZalozekTest extends TestCase
 
         $data = $this->getJson('/api/data/zdravi')->assertOk()->json('data');
 
-        $this->assertArrayNotHasKey('ABARS', $data);
+        $this->assertPrazdne($data['ABARS'] ?? null);
     }
 
     // ——— pomůcky ———

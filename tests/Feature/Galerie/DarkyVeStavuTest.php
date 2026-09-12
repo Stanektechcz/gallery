@@ -86,7 +86,7 @@ class DarkyVeStavuTest extends TestCase
         Sanctum::actingAs($this->maki);
         $data = $this->getJson('/api/data/darky')->assertOk()->json('data');
 
-        $this->assertArrayNotHasKey('GIFT_BUYS', $data);
+        $this->assertPrazdne($data['GIFT_BUYS'] ?? null);
     }
 
     /** Nápad se dá povýšit na přání — v tabulce, ne jen na obrazovce. */

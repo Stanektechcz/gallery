@@ -26,7 +26,7 @@ use Illuminate\Support\Facades\Schema;
  * v `p60Calc`, rituál na obrazovku aplikace. Nový řádek by byl přepínač,
  * který nic nepřepne.
  */
-class Rozhodovani implements PoskytovatelObsahu
+class Rozhodovani implements MaPrazdneKolekce, PoskytovatelObsahu
 {
     public function skupina(): string
     {
@@ -44,6 +44,27 @@ class Rozhodovani implements PoskytovatelObsahu
     public function uplne(): array
     {
         return ['BUS', 'PM_DEC', 'PM_MINE', 'PM_THEIRS', 'PM_HIST', 'PAST_DEC', 'PAST_CASES', 'REVISIT'];
+    }
+
+    /**
+     * Prázdné kolekce pro modul, který dvojice zatím nepoužila.
+     *
+     * Bez nich zůstala na obrazovce ukázka z prototypu (viz MaPrazdneKolekce).
+     *
+     * @return array<string, mixed>
+     */
+    public function prazdne(): array
+    {
+        return [
+            'BUS' => [],
+            'PM_DEC' => [],
+            'PM_MINE' => [],
+            'PM_THEIRS' => [],
+            'PM_HIST' => [],
+            'PAST_DEC' => [],
+            'PAST_CASES' => [],
+            'REVISIT' => new \stdClass,
+        ];
     }
 
     public function kolekce(GallerySpace $prostor): array

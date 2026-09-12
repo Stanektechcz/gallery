@@ -36,7 +36,7 @@ class ObsahPribehTest extends TestCase
     }
 
     /**
-     * Prázdný příběh nechává ukázku — vyprávění o ničem není vyprávění.
+     * Prázdný příběh chodí prázdný — ukázkové kapitoly by vyprávěly cizí život.
      *
      * Jediné, co odsud chodí vždycky, je prázdný seznam odeslaných objednávek:
      * ukázka na jeho místě tvrdí, že dvojice zaplatila 1 190 Kč za fotoknihu.
@@ -44,10 +44,10 @@ class ObsahPribehTest extends TestCase
      */
     public function test_bez_kapitol_se_pribeh_neposila(): void
     {
-        $this->assertSame(
-            ['AL' => ['orders' => []]],
-            $this->getJson('/api/data/pribeh')->assertOk()->json('data'),
-        );
+        $data = $this->getJson('/api/data/pribeh')->assertOk()->json('data');
+
+        $this->assertSame([], $data['AL']['orders']);
+        $this->assertPrazdne($data);
     }
 
     /**
@@ -82,6 +82,35 @@ class ObsahPribehTest extends TestCase
         $this->assertSame(2, $k[4]);
         $this->assertSame(1, $k[5]);
         $this->assertSame('Třicet čtyři metrů.', $k[6]);
+    }
+
+    /**
+     * Návrh kapitoly stojí na souhrnu roku přes všechny fotky.
+     *
+     * Tlačítko „Složit návrh" psalo pořád o 412 fotkách z Ostravy, Prahy
+     * a Beskyd. Souhrn nese počet, nejčastější místa, nejplodnější den,
+     * zápisy a cesty — a vznikne i bez jediné kapitoly.
+     */
+    public function test_souhrn_roku_pro_navrh_kapitoly(): void
+    {
+        $this->fotka(['taken_at' => '2025-06-21 10:00:00', 'location_name' => 'Brno'], 1);
+        $this->fotka(['taken_at' => '2025-06-21 11:00:00', 'location_name' => 'Brno'], 2);
+        $this->fotka(['taken_at' => '2025-08-02 11:00:00', 'location_name' => 'Olomouc'], 3);
+        $this->fotka(['taken_at' => '2026-01-01 00:10:00'], 4);
+
+        DB::table('trips')->insert([
+            'gallery_space_id' => $this->prostor->id, 'created_by' => $this->adri->id, 'name' => 'Silvestr na horách',
+            'start_date' => '2025-12-30', 'end_date' => '2026-01-02', 'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $roky = $this->getJson('/api/data/pribeh')->assertOk()->json('data.STORY_ROKY');
+
+        $this->assertSame(3, $roky['2025']['fotek']);
+        $this->assertSame(['Brno', 'Olomouc'], $roky['2025']['mista']);
+        $this->assertSame('21. června', $roky['2025']['den']);
+        $this->assertSame(1, $roky['2025']['cest'], 'Cesta přes Silvestra patří do obou let.');
+        $this->assertSame(1, $roky['2026']['cest']);
+        $this->assertSame([], $roky['2026']['mista']);
     }
 
     /** Milník ví, ke které kapitole patří. */

@@ -46,7 +46,7 @@ class ObsahRozboryTest extends TestCase
     /** Bez transakcí se nic neposílá. */
     public function test_bez_financi_se_skupina_neposila(): void
     {
-        $this->assertSame([], $this->getJson('/api/data/rozbory')->assertOk()->json('data'));
+        $this->assertPrazdne($this->getJson('/api/data/rozbory')->assertOk()->json('data'));
     }
 
     /**
@@ -91,7 +91,7 @@ class ObsahRozboryTest extends TestCase
 
         $data = $this->getJson('/api/data/rozbory')->assertOk()->json('data');
 
-        $this->assertArrayNotHasKey('P60', $data);
+        $this->assertPrazdne($data['P60'] ?? null);
     }
 
     /**
@@ -161,7 +161,7 @@ class ObsahRozboryTest extends TestCase
 
         $data = $this->getJson('/api/data/rozbory')->assertOk()->json('data');
 
-        $this->assertArrayNotHasKey('ENV', $data);
+        $this->assertPrazdne($data['ENV'] ?? null);
     }
 
     /** Obálka dělí útratu podle toho, kdo platil. */
@@ -296,7 +296,7 @@ class ObsahRozboryTest extends TestCase
 
         $data = $this->getJson('/api/data/rozbory')->assertOk()->json('data');
 
-        $this->assertArrayNotHasKey('TRIPCOST', $data);
+        $this->assertPrazdne($data['TRIPCOST'] ?? null);
     }
 
     /** Rozbory jiného páru se do odpovědi nedostanou. */

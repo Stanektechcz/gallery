@@ -39,7 +39,7 @@ class TiskTest extends TestCase
     /** Bez objednávek se nic neposílá. */
     public function test_bez_objednavek_se_nic_neposila(): void
     {
-        $this->assertArrayNotHasKey('PORDERS', $this->getJson('/api/data/pribeh')->assertOk()->json('data'));
+        $this->assertPrazdne($this->getJson('/api/data/pribeh')->assertOk()->json('data.PORDERS'));
     }
 
     /**

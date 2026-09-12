@@ -23,7 +23,7 @@ use Illuminate\Support\Facades\Schema;
  * drží si vlastní seznam ve stavu (`evList`, `xBoard`, `hsLater`) — tak je
  * prototyp napsaný a nemění se to.
  */
-class Planovani implements PoskytovatelObsahu
+class Planovani implements MaPrazdneKolekce, PoskytovatelObsahu
 {
     /** Kolik dopředu a dozadu kalendář posílá. */
     private const DNU_ZPET = 90;
@@ -63,6 +63,24 @@ class Planovani implements PoskytovatelObsahu
     public function uplne(): array
     {
         return [];
+    }
+
+    /**
+     * Prázdné kolekce pro modul, který dvojice zatím nepoužila.
+     *
+     * Bez nich zůstala na obrazovce ukázka z prototypu (viz MaPrazdneKolekce).
+     *
+     * @return array<string, mixed>
+     */
+    public function prazdne(): array
+    {
+        return [
+            'CALEV' => [],
+            'ATASKS' => ['all' => [], 'home' => []],
+            'LATER_ITEMS' => [],
+            'EVSEED' => [],
+            'AL' => ['doneTasks' => []],
+        ];
     }
 
     public function kolekce(GallerySpace $prostor): array

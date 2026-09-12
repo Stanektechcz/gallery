@@ -49,8 +49,9 @@ class ObsahZdraviTest extends TestCase
     {
         $data = $this->getJson('/api/data/zdravi')->assertOk()->json('data');
 
-        $this->assertSame(['KL_DAYS'], array_keys($data));
         $this->assertCount(14, $data['KL_DAYS']);
+        // Všechno ostatní prázdné — žádná nálada ani cyklus, které nikdo nezapsal.
+        $this->assertPrazdne(array_diff_key($data, ['KL_DAYS' => true]));
     }
 
     /** Zapsaný den nese průtok, příznaky i bolest — a nikdy se netváří jako odhad. */
@@ -107,7 +108,7 @@ class ObsahZdraviTest extends TestCase
 
         Sanctum::actingAs($this->adri);
 
-        $this->assertArrayNotHasKey('CYC_BASE', $this->getJson('/api/data/zdravi')->assertOk()->json('data'));
+        $this->assertPrazdne($this->getJson('/api/data/zdravi')->assertOk()->json('data.CYC_BASE'));
     }
 
     /**

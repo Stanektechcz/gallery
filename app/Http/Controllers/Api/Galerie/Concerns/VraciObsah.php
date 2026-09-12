@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Galerie\Concerns;
 
 use App\Models\GallerySpace;
 use App\Services\Obsah\PoskytovatelObsahu;
+use App\Services\Obsah\PrazdneKolekce;
 
 /**
  * Odpověď na akci nese obsah — včetně toho, co po ní zbylo prázdné.
@@ -22,11 +23,13 @@ trait VraciObsah
     /** @return array{data: array<string, mixed>, prazdne: list<string>} */
     protected function obsahPoAkci(PoskytovatelObsahu $poskytovatel, GallerySpace $prostor): array
     {
-        $data = $poskytovatel->kolekce($prostor);
+        // S prázdnými výchozími hodnotami ve správném tvaru — `[]` místo objektu
+        // se sekcemi shodilo obrazovku, která čte `ATAGS.all`.
+        [$data, $uplne] = PrazdneKolekce::doplnit($poskytovatel, $poskytovatel->kolekce($prostor));
 
         return [
             'data' => $data,
-            'prazdne' => array_values(array_diff($poskytovatel->uplne(), array_keys($data))),
+            'prazdne' => array_values(array_diff($uplne, array_keys($data))),
         ];
     }
 }

@@ -47,7 +47,7 @@ class UcetRadostiTest extends TestCase
     {
         $this->udalost(null, now()->subDays(3));
 
-        $this->assertArrayNotHasKey('JOY', $this->getJson('/api/data/klid')->assertOk()->json('data'));
+        $this->assertPrazdne($this->getJson('/api/data/klid')->assertOk()->json('data.JOY'));
     }
 
     /** Jednou nebo dvakrát to není zvyk, ze kterého se dá číst. */
@@ -56,7 +56,7 @@ class UcetRadostiTest extends TestCase
         $this->udalost('Randíčko', now()->subDays(3));
         $this->udalost('Randíčko', now()->subDays(10));
 
-        $this->assertArrayNotHasKey('JOY', $this->getJson('/api/data/klid')->assertOk()->json('data'));
+        $this->assertPrazdne($this->getJson('/api/data/klid')->assertOk()->json('data.JOY'));
     }
 
     /**

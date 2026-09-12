@@ -45,10 +45,10 @@ class ObsahDarkyTest extends TestCase
         Sanctum::actingAs($this->adri);
     }
 
-    /** Bez dárků se nic neposílá — klient si nechá ukázková data. */
+    /** Bez dárků chodí jen prázdné kolekce — ukázka z prototypu se smaže. */
     public function test_bez_darku_se_skupina_neposila(): void
     {
-        $this->assertSame([], $this->getJson('/api/data/darky')->assertOk()->json('data'));
+        $this->assertPrazdne($this->getJson('/api/data/darky')->assertOk()->json('data'));
     }
 
     /** Přání je veřejné — o to jde, aby druhý věděl, co si přeju. */
@@ -92,7 +92,7 @@ class ObsahDarkyTest extends TestCase
         ]);
 
         // Adrian je obdarovaný — nesmí to vidět.
-        $this->assertSame([], $this->getJson('/api/data/darky')->assertOk()->json('data'));
+        $this->assertPrazdne($this->getJson('/api/data/darky')->assertOk()->json('data'));
 
         Sanctum::actingAs($this->maki);
 
@@ -156,7 +156,7 @@ class ObsahDarkyTest extends TestCase
     /** Bez zápisů se nic neposílá. */
     public function test_bez_zapisu_se_denik_neposila(): void
     {
-        $this->assertSame([], $this->getJson('/api/data/denik')->assertOk()->json('data'));
+        $this->assertPrazdne($this->getJson('/api/data/denik')->assertOk()->json('data'));
     }
 
     /** Zápis nese datum slovy, nadpis i text. */
@@ -213,6 +213,10 @@ class ObsahDarkyTest extends TestCase
 
         $this->assertSame('Poprvé jsme se potkali', $m[1]);
         $this->assertSame('před 10 lety', $m[3]);
+        // Datum strojově a příznak připomínky — z nich počítá kalendář
+        // i obrazovka Milníky nejbližší výročí místo napsaného 18. října.
+        $this->assertSame(now()->subYears(10)->toDateString(), $m[4]);
+        $this->assertTrue($m[5]);
     }
 
     /**
@@ -237,7 +241,7 @@ class ObsahDarkyTest extends TestCase
             ['share_level' => CycleSetting::SHARE_NONE],
         );
 
-        $this->assertSame([], $this->getJson('/api/data/denik')->assertOk()->json('data'));
+        $this->assertPrazdne($this->getJson('/api/data/denik')->assertOk()->json('data'));
 
         CycleSetting::where('user_id', $this->maki->id)->update(['share_level' => CycleSetting::SHARE_DATES]);
 

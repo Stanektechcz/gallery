@@ -29,7 +29,7 @@ use Illuminate\Support\Facades\Schema;
  * Posílá se jen to, co má oporu: řádek o cyklu, když existují záznamy, řádek
  * o rozpočtu, když existuje rozpočet. Zbytek se **neposílá**, ne dopočítává.
  */
-class System implements PoskytovatelObsahu
+class System implements MaPrazdneKolekce, PoskytovatelObsahu
 {
     /** Do kolika dnů bez zápisu se sekce považuje za živou. */
     private const ZIVA_DNI = 90;
@@ -85,6 +85,25 @@ class System implements PoskytovatelObsahu
         // A `LOCKWHO`/`LOCKMAIL`: v prostoru s jediným člověkem by jinak vedle
         // něj zůstala druhá ukázková volba i s cizí adresou.
         return ['DATA_HEALTH', 'SECLIFE', 'TRASH', 'CONFLICTS', 'LOCKWHO', 'LOCKMAIL'];
+    }
+
+    /**
+     * Prázdné kolekce pro modul, který dvojice zatím nepoužila.
+     *
+     * Bez nich zůstala na obrazovce ukázka z prototypu (viz MaPrazdneKolekce).
+     *
+     * @return array<string, mixed>
+     */
+    public function prazdne(): array
+    {
+        return [
+            'CONFLICTS' => [],
+            'DATA_HEALTH' => [],
+            'SECLIFE' => [],
+            'VAULT_ITEMS' => [],
+            'ABARS' => ['health' => [], 'risk' => []],
+            'AL' => ['inbox' => [], 'snoozed' => [], 'inboxDone' => [], 'vault' => [], 'users' => [], 'jobs' => [], 'api' => [], 'tarify' => []],
+        ];
     }
 
     public function kolekce(GallerySpace $prostor): array

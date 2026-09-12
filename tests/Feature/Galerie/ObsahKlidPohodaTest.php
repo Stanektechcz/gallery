@@ -46,7 +46,7 @@ class ObsahKlidPohodaTest extends TestCase
     {
         $data = $this->getJson('/api/data/klid')->assertOk()->json('data');
 
-        $this->assertArrayNotHasKey('KL_EN', $data);
+        $this->assertPrazdne($data['KL_EN'] ?? null);
     }
 
     /**
@@ -177,7 +177,7 @@ class ObsahKlidPohodaTest extends TestCase
 
         $data = $this->getJson('/api/data/klid')->assertOk()->json('data');
 
-        $this->assertArrayNotHasKey('KL_ASK_LOG', $data);
+        $this->assertPrazdne($data['KL_ASK_LOG'] ?? null);
 
         $this->odpoved($this->maki, 'Co jsem tenhle týden odložil?', 'Nové brýle.', now()->subWeek());
 
@@ -223,7 +223,7 @@ class ObsahKlidPohodaTest extends TestCase
             'created_at' => now(), 'updated_at' => now(),
         ]);
 
-        $this->assertArrayNotHasKey('KL_EN', $this->getJson('/api/data/klid')->assertOk()->json('data'));
+        $this->assertPrazdne($this->getJson('/api/data/klid')->assertOk()->json('data.KL_EN'));
     }
 
     // ——— pomůcky ———

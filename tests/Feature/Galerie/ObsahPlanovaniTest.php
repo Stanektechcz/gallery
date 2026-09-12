@@ -45,10 +45,10 @@ class ObsahPlanovaniTest extends TestCase
         Sanctum::actingAs($this->adri);
     }
 
-    /** Bez událostí a úkolů se nic neposílá — klient si nechá ukázková data. */
+    /** Bez událostí a úkolů chodí jen prázdné kolekce — ukázka z prototypu se smaže. */
     public function test_bez_planu_se_skupina_neposila(): void
     {
-        $this->assertSame([], $this->getJson('/api/data/planovani')->assertOk()->json('data'));
+        $this->assertPrazdne($this->getJson('/api/data/planovani')->assertOk()->json('data'));
     }
 
     /**

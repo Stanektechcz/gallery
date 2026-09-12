@@ -46,7 +46,7 @@ class TichaPravidlaTest extends TestCase
     /** Bez zápisů se žádné pravidlo nenajde — a nic se nepošle. */
     public function test_bez_dat_se_nic_neposila(): void
     {
-        $this->assertArrayNotHasKey('TACIT', $this->getJson('/api/data/vztah')->assertOk()->json('data'));
+        $this->assertPrazdne($this->getJson('/api/data/vztah')->assertOk()->json('data.TACIT'));
     }
 
     /**

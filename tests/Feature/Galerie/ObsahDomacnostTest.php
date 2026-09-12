@@ -49,10 +49,10 @@ class ObsahDomacnostTest extends TestCase
         Sanctum::actingAs($this->adri);
     }
 
-    /** Prázdná domácnost nechává ukázku — prázdná obrazovka vypadá jako rozbitá. */
+    /** Prázdná domácnost chodí prázdná — ukázkové práce by tvrdily, že je někdo dělá. */
     public function test_bez_domacnosti_se_skupina_neposila(): void
     {
-        $this->assertSame([], $this->getJson('/api/data/domacnost')->assertOk()->json('data'));
+        $this->assertPrazdne($this->getJson('/api/data/domacnost')->assertOk()->json('data'));
     }
 
     /**

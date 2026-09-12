@@ -52,8 +52,13 @@ class ObsahCestyTest extends TestCase
     {
         $odpoved = $this->getJson('/api/data/cesty')->assertOk();
 
-        $this->assertSame('{"NOWTRIP":{}}', json_encode(json_decode($odpoved->getContent())->data));
+        $this->assertPrazdne($odpoved->json('data'));
+        // Mapy musí přijít jako `{}` a úplné, jinak by u klienta zůstaly ukázkové cesty.
+        $this->assertSame('{}', json_encode(json_decode($odpoved->getContent())->data->TRIPS));
+        $this->assertSame('{}', json_encode(json_decode($odpoved->getContent())->data->NOWTRIP));
         $this->assertContains('NOWTRIP', $odpoved->json('uplne'));
+        $this->assertContains('TRIPS', $odpoved->json('uplne'));
+        $this->assertContains('PLACES', $odpoved->json('uplne'));
     }
 
     /**

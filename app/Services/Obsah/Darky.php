@@ -18,7 +18,7 @@ use Illuminate\Support\Facades\Schema;
  *
  * Přání jsou naopak veřejná — o to jde, aby je druhý viděl.
  */
-class Darky implements PoskytovatelObsahu
+class Darky implements MaPrazdneKolekce, PoskytovatelObsahu
 {
     public function skupina(): string
     {
@@ -28,6 +28,24 @@ class Darky implements PoskytovatelObsahu
     public function uplne(): array
     {
         return [];
+    }
+
+    /**
+     * Prázdné kolekce pro modul, který dvojice zatím nepoužila.
+     *
+     * Bez nich zůstala na obrazovce ukázka z prototypu (viz MaPrazdneKolekce).
+     *
+     * @return array<string, mixed>
+     */
+    public function prazdne(): array
+    {
+        return [
+            'GIFT_WISHES' => [],
+            'GIFT_BUYS' => [],
+            'GIFT_IDEAS' => [],
+            'GIFT_OCC' => [],
+            'AL' => ['gifts' => []],
+        ];
     }
 
     public function kolekce(GallerySpace $prostor): array

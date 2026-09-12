@@ -46,7 +46,7 @@ class ObsahSdileniTest extends TestCase
     /** Bez odkazů, hostů a kapslí se nic neposílá. */
     public function test_bez_obsahu_se_skupina_neposila(): void
     {
-        $this->assertSame([], $this->getJson('/api/data/sdileni')->assertOk()->json('data'));
+        $this->assertPrazdne($this->getJson('/api/data/sdileni')->assertOk()->json('data'));
     }
 
     /**
@@ -165,7 +165,7 @@ class ObsahSdileniTest extends TestCase
 
         $data = (array) $this->getJson('/api/data/sdileni')->assertOk()->json('data');
 
-        $this->assertArrayNotHasKey('VAULT_ITEMS', $data);
+        $this->assertPrazdne($data['VAULT_ITEMS'] ?? null);
     }
 
     /** Balíčky do offline se počítají z knihovny, ne z katalogu. */

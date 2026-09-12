@@ -58,7 +58,7 @@ class ObsahSloupceTest extends TestCase
 
         $data = $this->getJson('/api/data/finance')->assertOk()->json('data');
 
-        $this->assertArrayNotHasKey('ABARS', $data);
+        $this->assertPrazdne($data['ABARS'] ?? null);
     }
 
     /** Měsíční sloupec ukazuje utraceno z limitu — a nad 95 % varuje. */

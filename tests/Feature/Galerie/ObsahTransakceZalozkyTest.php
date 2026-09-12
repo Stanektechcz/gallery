@@ -35,10 +35,10 @@ class ObsahTransakceZalozkyTest extends TestCase
         Sanctum::actingAs($this->adri);
     }
 
-    /** Bez financí zůstává ukázka — prázdná obrazovka vypadá jako rozbitá. */
+    /** Bez financí chodí prázdné záložky, ne ukázkové nákupy. */
     public function test_bez_financi_se_zalozky_neposilaji(): void
     {
-        $this->assertSame([], $this->getJson('/api/data/finance')->assertOk()->json('data'));
+        $this->assertPrazdne($this->getJson('/api/data/finance')->assertOk()->json('data'));
     }
 
     /** Řádek nese den, popis, kategorii a částku se znaménkem. */
@@ -160,9 +160,10 @@ class ObsahTransakceZalozkyTest extends TestCase
 
         $odpoved = $this->getJson('/api/data/finance')->assertOk();
 
-        $this->assertArrayNotHasKey('ATX', $odpoved->json('data'));
-        // `INCOMES` úplné je — příjmy po osobách chodí vždycky, i prázdné.
-        $this->assertNotContains('ATX', $odpoved->json('uplne'));
+        // Záložky chodí prázdné, ale se všemi čtyřmi částmi — obrazovka čte
+        // `ATX[key] || ATX.all` a z prázdného objektu by spadla.
+        $this->assertSame(['all', 'un', 'rec', 'imp'], array_keys($odpoved->json('data.ATX')));
+        $this->assertPrazdne($odpoved->json('data.ATX.all.rows'));
     }
 
     // ——— pomůcky ———

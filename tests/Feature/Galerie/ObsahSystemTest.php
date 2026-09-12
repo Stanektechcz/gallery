@@ -48,7 +48,7 @@ class ObsahSystemTest extends TestCase
     {
         $data = $this->getJson('/api/data/system')->assertOk()->json('data');
 
-        $this->assertArrayNotHasKey('DATA_HEALTH', $data);
+        $this->assertPrazdne($data['DATA_HEALTH'] ?? null);
     }
 
     /** Knihovna je tvrdé číslo — a je to skutečný počet. */
@@ -279,10 +279,13 @@ class ObsahSystemTest extends TestCase
     {
         $this->fotka();
 
-        $this->assertSame(
-            ['DATA_HEALTH', 'SECLIFE', 'LOCKWHO', 'LOCKMAIL'],
-            $this->getJson('/api/data/system')->assertOk()->json('uplne'),
-        );
+        $uplne = $this->getJson('/api/data/system')->assertOk()->json('uplne');
+
+        foreach (['DATA_HEALTH', 'SECLIFE', 'LOCKWHO', 'LOCKMAIL', 'CONFLICTS', 'VAULT_ITEMS'] as $klic) {
+            $this->assertContains($klic, $uplne);
+        }
+
+        $this->assertNotContains('AL', $uplne);
     }
 
     /**

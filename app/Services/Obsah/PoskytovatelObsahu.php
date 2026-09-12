@@ -19,9 +19,9 @@ interface PoskytovatelObsahu
     /**
      * Kolekce ve tvaru `['TX' => [...], 'BUD' => [...]]`.
      *
-     * Prázdná kolekce se **nevrací**: klient si pro ni nechá ukázková data, což
-     * je u nezaložené oblasti čitelnější než prázdná obrazovka bez vysvětlení.
-     * Vrací se jen to, co v databázi opravdu je.
+     * Vrací se jen to, co v databázi opravdu je. Co chybí, doplní
+     * `MaPrazdneKolekce::prazdne()` jako prázdné kolekce správného tvaru —
+     * ukázka z prototypu na obrazovce přihlášené dvojice nezůstává.
      *
      * @return array<string, mixed>
      */

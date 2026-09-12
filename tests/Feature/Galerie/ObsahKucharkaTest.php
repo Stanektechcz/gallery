@@ -36,10 +36,10 @@ class ObsahKucharkaTest extends TestCase
         Sanctum::actingAs($this->adri);
     }
 
-    /** Bez receptů se nic neposílá — klient si nechá ukázková data. */
+    /** Bez receptů chodí jen prázdné kolekce — ukázka z prototypu se smaže. */
     public function test_bez_receptu_se_skupina_neposila(): void
     {
-        $this->assertSame([], $this->getJson('/api/data/kucharka')->assertOk()->json('data'));
+        $this->assertPrazdne($this->getJson('/api/data/kucharka')->assertOk()->json('data'));
     }
 
     /** Recept nese druh, čas, počet porcí i popis. */

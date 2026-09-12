@@ -51,7 +51,7 @@ class Tyden implements PoskytovatelObsahu
     /** Celý: ukázkový týden vedle skutečného nemá co dělat. */
     public function uplne(): array
     {
-        return ['WEEK'];
+        return ['WEEK', 'ROKVCISLECH', 'VYROCNI', 'SVET'];
     }
 
     public function kolekce(GallerySpace $prostor): array
@@ -66,13 +66,263 @@ class Tyden implements PoskytovatelObsahu
         $fotky = $this->fotky($prostor, $od, $pondeli->addWeek());
         $ukoly = $this->ukoly($prostor, $od, $pondeli->addWeeks(2));
 
+        $rok = CarbonImmutable::now()->year;
+
         return [
             'WEEK' => [
                 'now' => $this->tentoTyden($prostor, $pondeli, $fotky, $ukoly, $jmena),
                 'next' => $this->pristi($prostor, $pondeli->addWeek(), $ukoly, $jmena),
                 'past' => $this->minule($pondeli, $fotky, $ukoly),
             ],
+            // Kapitoly knihy „Rok v číslech" za letošek a loňsko.
+            'ROKVCISLECH' => [
+                (string) ($rok - 1) => $this->rokVCislech($prostor, $rok - 1, $jmena),
+                (string) $rok => $this->rokVCislech($prostor, $rok, $jmena),
+            ],
+            'VYROCNI' => $this->vyrocniAlbum($prostor),
+            'SVET' => $this->svet($prostor),
         ];
+    }
+
+    /**
+     * Výroční album: jedna řada fotek za každý rok ke dni výročí.
+     *
+     * Obrazovka měla jedenáct let od 2016 s napsanými místy (Ostrava, Zadar,
+     * Brač) a počty „6 + i·5 fotek" — pro každou dvojici stejné. Den výročí je
+     * první společný milník; bez něj album nemá podle čeho vzniknout.
+     *
+     * @return array<string, mixed>
+     */
+    private function vyrocniAlbum(GallerySpace $prostor): array
+    {
+        $od = Schema::hasTable('relationship_milestones')
+            ? DB::table('relationship_milestones')->where('gallery_space_id', $prostor->id)->where('visibility', '!=', 'private')->min('occurred_on')
+            : null;
+
+        if (! $od) {
+            return ['den' => '', 'rows' => []];
+        }
+
+        $zacatek = CarbonImmutable::parse($od);
+        $dnes = CarbonImmutable::now();
+        $radky = [];
+
+        for ($rok = $zacatek->year; $rok <= $dnes->year; $rok++) {
+            $den = CarbonImmutable::create($rok, $zacatek->month, min($zacatek->day, CarbonImmutable::create($rok, $zacatek->month)->daysInMonth));
+
+            // Dva dny kolem výročí: oslava se často fotí den předem nebo potom.
+            $fotky = DB::table('media_items')->where('gallery_space_id', $prostor->id)->whereNull('trashed_at')->whereNull('deleted_at')->where('is_hidden', false)
+                ->whereBetween('taken_at', [$den->subDays(2)->startOfDay(), $den->addDays(2)->endOfDay()])
+                ->orderBy('taken_at')->get(['id', 'uuid', 'location_name']);
+
+            if ($fotky->isEmpty()) {
+                continue;
+            }
+
+            $this->zjistiNahledy($fotky->take(5)->pluck('id')->all());
+
+            $radky[] = [
+                'year' => (string) $rok,
+                'count' => $fotky->count(),
+                'place' => (string) ($fotky->pluck('location_name')->filter()->countBy()->sortDesc()->keys()->first() ?? ''),
+                'fotky' => $fotky->take(5)->map(fn ($f) => ['id' => (string) $f->uuid, 'bg' => $this->nahled($f)])->values()->all(),
+            ];
+        }
+
+        return ['den' => $zacatek->day.'. '.self::MESICE[$zacatek->month], 'rows' => $radky];
+    }
+
+    /**
+     * Světový itinerář: kde jsme byli (podle GPS a míst ve fotkách) a kam chceme.
+     *
+     * Obrazovka měla osm zemí napsaných v kódu (Chorvatsko 2026: Zadar, Krka,
+     * Brač…) a pět přání (Lofoty, Japonsko, Island). Země jsou z fotek, přání
+     * z míst označených „chceme" a z naplánovaných cest.
+     *
+     * @return array<string, list<array<int, mixed>>>
+     */
+    private function svet(GallerySpace $prostor): array
+    {
+        $zeme = DB::table('media_items')->where('gallery_space_id', $prostor->id)->whereNull('trashed_at')->whereNull('deleted_at')
+            ->whereNotNull('location_country')->where('location_country', '!=', '')
+            ->get(['location_country', 'location_country_code', 'location_name', 'taken_at', 'uploaded_at'])
+            ->groupBy('location_country')
+            ->map(fn (Collection $f, string $nazev) => [
+                $nazev,
+                (string) ($f->pluck('location_country_code')->filter()->first() ?? ''),
+                (int) $f->map(fn ($x) => CarbonImmutable::parse($x->taken_at ?? $x->uploaded_at)->year)->min(),
+                $f->count(),
+                $f->pluck('location_name')->filter()->countBy()->sortDesc()->keys()->take(5)->values()->all(),
+            ])
+            ->sortByDesc(fn (array $z) => $z[3])
+            ->values()
+            ->all();
+
+        $chceme = [];
+
+        if (Schema::hasColumn('places', 'lifecycle_status')) {
+            DB::table('places')->where('gallery_space_id', $prostor->id)->whereIn('lifecycle_status', ['idea', 'planned'])
+                ->orderBy('name')->limit(30)->get(['name', 'city', 'country', 'lifecycle_status'])
+                ->each(function ($m) use (&$chceme) {
+                    $chceme[] = [(string) $m->name, 'ph-map-pin', trim(implode(', ', array_filter([$m->city, $m->country]))), $m->lifecycle_status === 'planned' ? 'plánujeme' : 'někdy'];
+                });
+        }
+
+        if (Schema::hasTable('trips')) {
+            DB::table('trips')->where('gallery_space_id', $prostor->id)->whereDate('start_date', '>', CarbonImmutable::today()->toDateString())
+                ->orderBy('start_date')->limit(10)->get(['name', 'start_date'])
+                ->each(function ($c) use (&$chceme) {
+                    $chceme[] = [(string) $c->name, 'ph-airplane-tilt', 'cesta od '.CarbonImmutable::parse($c->start_date)->format('j. n. Y'), 'naplánováno'];
+                });
+        }
+
+        return ['zeme' => $zeme, 'chceme' => $chceme];
+    }
+
+    /**
+     * Kapitoly „Rok v číslech": `[klíč, název, stran, poznámka, [[popisek, hodnota, doplněk]]]`.
+     *
+     * Kniha se skládala z napsaných čísel („4 218 fotek, sedm výjezdů, fond na
+     * Island") a obrazovka navíc spadla, jakmile knihovna poslala vlastní seznam
+     * roků pod stejným klíčem. Kapitola, pro kterou v daném roce nic není,
+     * se vynechá — tisknout dvoustranu s nulami nemá smysl.
+     *
+     * @param  array<int, string>  $jmena
+     * @return list<array<int, mixed>>
+     */
+    private function rokVCislech(GallerySpace $prostor, int $rok, array $jmena): array
+    {
+        $od = CarbonImmutable::create($rok)->startOfYear();
+        $do = $od->endOfYear();
+        $kapitoly = [];
+
+        $media = DB::table('media_items')->where('gallery_space_id', $prostor->id)->whereNull('trashed_at')->whereNull('deleted_at')
+            ->whereRaw('COALESCE(taken_at, uploaded_at, created_at) BETWEEN ? AND ?', [$od->toDateTimeString(), $do->toDateTimeString()])
+            ->get(['media_type', 'duration_ms', 'taken_at', 'uploaded_at', 'created_at']);
+
+        if ($media->isNotEmpty()) {
+            $videa = $media->where('media_type', 'video');
+            $minut = (int) round($videa->sum('duration_ms') / 60000);
+            $mesice = $media->countBy(fn ($m) => CarbonImmutable::parse($m->taken_at ?? $m->uploaded_at ?? $m->created_at)->month)->sortDesc();
+            $alb = DB::table('albums')->where('gallery_space_id', $prostor->id)->whereNull('deleted_at')->whereBetween('created_at', [$od, $do])->count();
+
+            $kapitoly[] = ['fotky', 'Fotky a videa', 4, 'Kolik jsme toho nafotili.', array_values(array_filter([
+                ['Fotek', $this->cislo($media->count() - $videa->count()), 'za rok '.$rok],
+                $videa->count() ? ['Videí', $this->cislo($videa->count()), intdiv($minut, 60).' h '.($minut % 60).' min záznamu'] : null,
+                ['Albumů', $this->cislo($alb), 'založených v roce '.$rok],
+                ['Nejplodnější měsíc', self::MESICE_1[$mesice->keys()->first()], $this->cislo($mesice->first()).' snímků'],
+            ]))];
+        }
+
+        if (Schema::hasTable('trips')) {
+            $cesty = DB::table('trips')->where('gallery_space_id', $prostor->id)
+                ->whereDate('start_date', '<=', $do->toDateString())->whereDate('end_date', '>=', $od->toDateString())
+                ->get(['name', 'start_date', 'end_date']);
+
+            if ($cesty->isNotEmpty()) {
+                $delky = $cesty->mapWithKeys(fn ($c) => [$c->name => (int) CarbonImmutable::parse($c->start_date)->diffInDays(CarbonImmutable::parse($c->end_date)) + 1]);
+                $nejdelsi = $delky->sortDesc()->keys()->first();
+
+                $kapitoly[] = ['cesty', 'Cesty', 4, 'Kam jsme vyrazili.', [
+                    ['Cest', (string) $cesty->count(), $this->pocet($delky->sum(), 'den', 'dny', 'dní').' na cestách'],
+                    ['Nejdelší cesta', $this->pocet($delky[$nejdelsi], 'den', 'dny', 'dní'), $nejdelsi],
+                ]];
+            }
+        }
+
+        if (Schema::hasTable('shared_todos')) {
+            $hotove = DB::table('shared_todos')->where('gallery_space_id', $prostor->id)->where('status', 'completed')
+                ->whereBetween('completed_at', [$od, $do])->get(['completed_by']);
+
+            if ($hotove->isNotEmpty()) {
+                $podil = $hotove->countBy('completed_by')->sortDesc();
+                $kdo = $podil->map(fn ($n, $id) => (int) round($n / $hotove->count() * 100).' % '.($jmena[(int) $id] ?? 'bez jména'))->take(2)->implode(', ');
+
+                $kapitoly[] = ['domov', 'Domácnost', 2, 'Kdo co odškrtl — bez komentáře.', [
+                    ['Úkolů hotových', $this->cislo($hotove->count()), $kdo],
+                ]];
+            }
+        }
+
+        if (Schema::hasTable('transactions')) {
+            $pohyby = DB::table('transactions')->where('gallery_space_id', $prostor->id)->whereNull('deleted_at')
+                ->whereNotIn('state', ['draft', 'rejected'])->whereBetween('occurred_at', [$od->toDateString(), $do->toDateString()])
+                ->selectRaw('type, SUM(ABS(COALESCE(amount_from, amount_to))) AS castka')->groupBy('type')->pluck('castka', 'type');
+
+            if ($pohyby->isNotEmpty()) {
+                $vydaje = (float) ($pohyby['expense'] ?? 0);
+                $prijmy = (float) ($pohyby['income'] ?? 0);
+
+                $kapitoly[] = ['finance', 'Finance', 3, 'Roční souhrn bez detailů transakcí.', [
+                    ['Výdaje', $this->kc($vydaje), 'zapsané v knize'],
+                    ['Příjmy', $this->kc($prijmy), 'zapsané v knize'],
+                    ['Rozdíl', $this->kc($prijmy - $vydaje), $prijmy >= $vydaje ? 'zbylo' : 'chybělo'],
+                ]];
+            }
+        }
+
+        if (Schema::hasTable('recipe_cooking_sessions')) {
+            $vareni = DB::table('recipe_cooking_sessions as v')->join('recipes as r', 'r.id', '=', 'v.recipe_id')
+                ->where('r.gallery_space_id', $prostor->id)->whereBetween('v.cooked_at', [$od, $do])->count();
+
+            if ($vareni) {
+                $kapitoly[] = ['kuchyne', 'Kuchyně', 2, 'Co jsme uvařili.', [['Vaření', $this->cislo($vareni), 'zapsaných z kuchařky']]];
+            }
+        }
+
+        if (Schema::hasTable('watch_titles')) {
+            $tituly = DB::table('watch_titles')->where('gallery_space_id', $prostor->id)->where('status', 'seen')
+                ->whereBetween('updated_at', [$od, $do])->get(['kind']);
+
+            if ($tituly->isNotEmpty()) {
+                $kapitoly[] = ['kultura', 'Filmy a seriály', 2, 'Večery u projektoru.', array_values(array_filter([
+                    ['Filmů', (string) $tituly->where('kind', 'film')->count(), 'viděných'],
+                    $tituly->where('kind', '!=', 'film')->count() ? ['Seriálů', (string) $tituly->where('kind', '!=', 'film')->count(), 'viděných'] : null,
+                ]))];
+            }
+        }
+
+        if (Schema::hasTable('journal_entries')) {
+            $ja = auth()->id();
+            $zapisu = DB::table('journal_entries')->where('gallery_space_id', $prostor->id)->whereNull('deleted_at')
+                ->where(fn ($q) => $q->where('visibility', '!=', 'private')->orWhere('created_by', $ja))
+                ->whereBetween('entry_date', [$od->toDateString(), $do->toDateString()])->count();
+            $hlasovky = Schema::hasTable('voice_notes')
+                ? DB::table('voice_notes')->where('gallery_space_id', $prostor->id)->whereBetween('created_at', [$od, $do])->get(['duration_ms'])
+                : collect();
+
+            if ($zapisu || $hlasovky->isNotEmpty()) {
+                $minut = (int) round($hlasovky->sum('duration_ms') / 60000);
+                $kapitoly[] = ['denik', 'Deník a hlasovky', 3, 'Vlastními slovy.', [
+                    ['Zápisů', $this->cislo($zapisu), 'v deníku'],
+                    ['Hlasovek', $this->cislo($hlasovky->count()), intdiv($minut, 60).' h '.($minut % 60).' min mluvení'],
+                ]];
+            }
+        }
+
+        if (Schema::hasTable('relationship_milestones')) {
+            $milniky = DB::table('relationship_milestones')->where('gallery_space_id', $prostor->id)->where('visibility', '!=', 'private')
+                ->whereBetween('occurred_on', [$od->toDateString(), $do->toDateString()])->count();
+
+            if ($milniky) {
+                $kapitoly[] = ['milniky', 'Milníky', 2, 'Osa roku na jedné dvoustraně.', [['Milníků', (string) $milniky, 'zapsaných v roce '.$rok]]];
+            }
+        }
+
+        return $kapitoly;
+    }
+
+    private const MESICE_1 = [1 => 'leden', 'únor', 'březen', 'duben', 'květen', 'červen',
+        'červenec', 'srpen', 'září', 'říjen', 'listopad', 'prosinec'];
+
+    private function cislo(int $n): string
+    {
+        return number_format($n, 0, ',', "\u{00A0}");
+    }
+
+    private function kc(float $castka): string
+    {
+        return number_format($castka, 0, ',', "\u{00A0}").' Kč';
     }
 
     // ——— tento týden ———

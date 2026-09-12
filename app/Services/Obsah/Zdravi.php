@@ -20,7 +20,7 @@ use Illuminate\Support\Facades\Schema;
  * Poslat mu všechno „protože jsou pár" by bylo přesně to, čemu se ta volba má
  * vyhnout.
  */
-class Zdravi implements PoskytovatelObsahu
+class Zdravi implements MaPrazdneKolekce, PoskytovatelObsahu
 {
     /** Kolik dní zpátky kreslí křivka nálady. */
     private const DNU_NALADY = 14;
@@ -39,6 +39,25 @@ class Zdravi implements PoskytovatelObsahu
     public function uplne(): array
     {
         return ['CYC_BASE'];
+    }
+
+    /**
+     * Prázdné kolekce pro modul, který dvojice zatím nepoužila.
+     *
+     * Bez nich zůstala na obrazovce ukázka z prototypu (viz MaPrazdneKolekce).
+     *
+     * @return array<string, mixed>
+     */
+    public function prazdne(): array
+    {
+        return [
+            'CYC_BASE' => new \stdClass,
+            'CYC_STARTS' => [],
+            'KL_MOOD' => new \stdClass,
+            'KL_EV' => [],
+            'KL_DAYS' => [],
+            'ABARS' => ['cycle' => []],
+        ];
     }
 
     public function kolekce(GallerySpace $prostor): array

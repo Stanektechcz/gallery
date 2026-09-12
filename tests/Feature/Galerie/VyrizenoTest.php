@@ -48,8 +48,8 @@ class VyrizenoTest extends TestCase
     {
         $data = $this->getJson('/api/data/mechanismy')->assertOk()->json('data');
 
-        $this->assertArrayNotHasKey('VIS_ROWS', $data);
-        $this->assertArrayNotHasKey('SPEAK', $data);
+        $this->assertPrazdne($data['VIS_ROWS'] ?? null);
+        $this->assertPrazdne($data['SPEAK'] ?? null);
     }
 
     /**

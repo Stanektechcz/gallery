@@ -20,7 +20,7 @@ use Illuminate\Support\Facades\Schema;
  * je přání dvojice a je uložené, `real` je měřené z toho, co je zapsané
  * jinde. Uložený `real` by po prvním úklidu ukazoval loňský stav.
  */
-class Klid implements PoskytovatelObsahu
+class Klid implements MaPrazdneKolekce, PoskytovatelObsahu
 {
     /** Kolik dní zpátky se měří skutečně strávený čas. */
     private const MERENO_DNI = 30;
@@ -56,6 +56,25 @@ class Klid implements PoskytovatelObsahu
     public function uplne(): array
     {
         return ['KL_EN', 'KL_ATTN', 'KL_TASKS', 'KL_ASK_LOG'];
+    }
+
+    /**
+     * Prázdné kolekce pro modul, který dvojice zatím nepoužila.
+     *
+     * Bez nich zůstala na obrazovce ukázka z prototypu (viz MaPrazdneKolekce).
+     *
+     * @return array<string, mixed>
+     */
+    public function prazdne(): array
+    {
+        return [
+            'JOY' => [],
+            'KL_ASK_LOG' => [],
+            'KL_ATTN' => [],
+            'KL_EN' => new \stdClass,
+            'KL_TASKS' => [],
+            'SOLO' => [],
+        ];
     }
 
     public function kolekce(GallerySpace $prostor): array

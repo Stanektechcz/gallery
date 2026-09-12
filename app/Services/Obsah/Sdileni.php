@@ -22,7 +22,7 @@ use Illuminate\Support\Facades\Schema;
  * v prohlížeči dřív, než si obrazovka řekla o heslo. Dodává ho `System`, a jen
  * s odemčeným trezorem.
  */
-class Sdileni implements PoskytovatelObsahu
+class Sdileni implements MaPrazdneKolekce, PoskytovatelObsahu
 {
     private const MESICE = [1 => 'ledna', 'února', 'března', 'dubna', 'května', 'června',
         'července', 'srpna', 'září', 'října', 'listopadu', 'prosince'];
@@ -42,6 +42,23 @@ class Sdileni implements PoskytovatelObsahu
     public function uplne(): array
     {
         return ['SHARES'];
+    }
+
+    /**
+     * Prázdné kolekce pro modul, který dvojice zatím nepoužila.
+     *
+     * Bez nich zůstala na obrazovce ukázka z prototypu (viz MaPrazdneKolekce).
+     *
+     * @return array<string, mixed>
+     */
+    public function prazdne(): array
+    {
+        return [
+            'SHARES' => [],
+            'GUEST_Q' => [],
+            'KAPS' => [],
+            'OFFPACKS' => [],
+        ];
     }
 
     public function kolekce(GallerySpace $prostor): array

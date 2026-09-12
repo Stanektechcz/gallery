@@ -44,10 +44,10 @@ class ObsahZpravyTest extends TestCase
         Sanctum::actingAs($this->adri);
     }
 
-    /** Bez zpráv se nic neposílá — klient si nechá ukázková data. */
+    /** Bez zpráv chodí jen prázdné kolekce — ukázka z prototypu se smaže. */
     public function test_bez_zprav_se_skupina_neposila(): void
     {
-        $this->assertSame([], $this->getJson('/api/data/zpravy')->assertOk()->json('data'));
+        $this->assertPrazdne($this->getJson('/api/data/zpravy')->assertOk()->json('data'));
     }
 
     /**

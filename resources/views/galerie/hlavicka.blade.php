@@ -141,11 +141,23 @@
     var cil = window.GalerieMobil;
     if (! cil) return;
 
-    Object.keys(mobil).forEach(function (klic) { navlec(cil, klic, mobil[klic], false); });
+    // Kolekce telefonu posílá server vždy celé — ukázkové cesty vedle skutečných
+    // (mapa podle klíče) by se jinak jen přepsaly, ne smazaly.
+    Object.keys(mobil).forEach(function (klic) { navlec(cil, klic, mobil[klic], true); });
     if (window.GalerieObnovObrazovku) window.GalerieObnovObrazovku();
   }
 
   window.GalerieObsahMobil = doMobilu;
+
+  /*
+   * Přišla tahle kolekce ze serveru?
+   *
+   * Obrazovky poznávaly „bez odpovědi serveru" podle prázdného seznamu
+   * (`ze && ze.length`) a místo prázdné knihovny si vygenerovaly ukázkové
+   * fotky. Prázdná kolekce ze serveru je ale odpověď, ne její absence.
+   */
+  window.GalerieZeServeru = function (klic) { return Object.prototype.hasOwnProperty.call(obsah, klic); };
+  window.GalerieMobilZeServeru = function (klic) { return Object.prototype.hasOwnProperty.call(mobil, klic); };
 
   function obal(data) {
     if (! data || data.__galerieObaleno) return;

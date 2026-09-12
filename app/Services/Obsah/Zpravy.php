@@ -21,7 +21,7 @@ use Illuminate\Support\Facades\URL;
  * a myslí tím „moje". Posílá se proto `A` za přihlášeného a `M` za toho druhého —
  * jinak by si každý z dvojice četl vlastní zprávy jako cizí.
  */
-class Zpravy implements PoskytovatelObsahu
+class Zpravy implements MaPrazdneKolekce, PoskytovatelObsahu
 {
     private const ZPRAV = 200;
 
@@ -47,6 +47,22 @@ class Zpravy implements PoskytovatelObsahu
     public function uplne(): array
     {
         return [];
+    }
+
+    /**
+     * Prázdné kolekce pro modul, který dvojice zatím nepoužila.
+     *
+     * Bez nich zůstala na obrazovce ukázka z prototypu (viz MaPrazdneKolekce).
+     *
+     * @return array<string, mixed>
+     */
+    public function prazdne(): array
+    {
+        return [
+            'MSGS' => [],
+            'AMSG' => [],
+            'MSGFILES' => [],
+        ];
     }
 
     public function kolekce(GallerySpace $prostor): array

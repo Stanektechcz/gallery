@@ -11,6 +11,7 @@ use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
@@ -134,6 +135,60 @@ class ObsahTydenTest extends TestCase
     public function test_tyden_je_uplna_kolekce(): void
     {
         $this->assertContains('WEEK', $this->getJson('/api/data/tyden')->assertOk()->json('uplne'));
+    }
+
+    /**
+     * Výroční album: řada za každý rok ke dni prvního společného milníku.
+     *
+     * Dřív jedenáct let od 2016 s napsanými místy. Rok bez fotek kolem výročí
+     * se vynechá, soukromý milník den výročí neurčuje.
+     */
+    public function test_vyrocni_album_je_z_milniku_a_fotek(): void
+    {
+        DB::table('relationship_milestones')->insert([
+            ['uuid' => (string) Str::uuid(), 'gallery_space_id' => $this->prostor->id, 'created_by' => $this->adri->id, 'title' => 'Poprvé', 'occurred_on' => '2023-09-14', 'visibility' => 'shared', 'created_at' => now(), 'updated_at' => now()],
+            ['uuid' => (string) Str::uuid(), 'gallery_space_id' => $this->prostor->id, 'created_by' => $this->maki->id, 'title' => 'Jen moje', 'occurred_on' => '2020-01-01', 'visibility' => 'private', 'created_at' => now(), 'updated_at' => now()],
+        ]);
+        $this->fotka(['taken_at' => '2024-09-15 18:00:00', 'location_name' => 'Pálava']);
+        $this->fotka(['taken_at' => '2026-09-13 10:00:00', 'location_name' => 'Brno']);
+        $this->fotka(['taken_at' => '2025-03-01 10:00:00']);
+
+        $album = $this->getJson('/api/data/tyden')->assertOk()->json('data.VYROCNI');
+
+        $this->assertSame('14. září', $album['den']);
+        $this->assertSame(['2024', '2026'], array_column($album['rows'], 'year'));
+        $this->assertSame('Pálava', $album['rows'][0]['place']);
+        $this->assertSame(1, $album['rows'][0]['count']);
+    }
+
+    /** Země jsou z fotek, přání z naplánovaných cest — ne osm napsaných zemí. */
+    public function test_svet_je_ze_zemi_ve_fotkach(): void
+    {
+        $this->fotka(['taken_at' => '2024-05-01 10:00:00', 'location_country' => 'Rakousko', 'location_name' => 'Vídeň']);
+        $this->fotka(['taken_at' => '2025-05-01 10:00:00', 'location_country' => 'Rakousko', 'location_name' => 'Vídeň']);
+        $this->fotka(['taken_at' => '2026-01-01 10:00:00', 'location_country' => 'Česko', 'location_name' => 'Brno']);
+        DB::table('trips')->insert([
+            'gallery_space_id' => $this->prostor->id, 'created_by' => $this->adri->id, 'name' => 'Podzimní Lucern',
+            'start_date' => '2026-10-10', 'end_date' => '2026-10-12', 'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $svet = $this->getJson('/api/data/tyden')->assertOk()->json('data.SVET');
+
+        $this->assertSame(['Rakousko', '', 2024, 2, ['Vídeň']], $svet['zeme'][0]);
+        $this->assertSame('Česko', $svet['zeme'][1][0]);
+        $this->assertSame(['Podzimní Lucern', 'ph-airplane-tilt', 'cesta od 10. 10. 2026', 'naplánováno'], $svet['chceme'][0]);
+    }
+
+    /** Rok v číslech je pod vlastním klíčem — `YBCH` patří pruhu let v knihovně. */
+    public function test_rok_v_cislech_je_letos_i_loni(): void
+    {
+        $this->fotka(['taken_at' => '2026-02-01 10:00:00']);
+
+        $roky = $this->getJson('/api/data/tyden')->assertOk()->json('data.ROKVCISLECH');
+
+        $this->assertSame(['2025', '2026'], collect(array_keys($roky))->map(fn ($r) => (string) $r)->sort()->values()->all());
+        $this->assertSame('fotky', $roky['2026'][0][0]);
+        $this->assertSame('1', $roky['2026'][0][4][0][1]);
     }
 
     // ——— pomůcky ———

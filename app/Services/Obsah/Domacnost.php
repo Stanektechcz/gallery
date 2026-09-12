@@ -23,7 +23,7 @@ use Illuminate\Support\Facades\Schema;
  * Popisky se počítají tady, ne v databázi: „před 11 dny" a „za 5 dní" jsou
  * pravdivé jen v ten den, kdy se čtou.
  */
-class Domacnost implements PoskytovatelObsahu
+class Domacnost implements MaPrazdneKolekce, PoskytovatelObsahu
 {
     private const DNY = ['po', 'út', 'st', 'čt', 'pá', 'so', 'ne'];
 
@@ -64,6 +64,26 @@ class Domacnost implements PoskytovatelObsahu
     public function uplne(): array
     {
         return [];
+    }
+
+    /**
+     * Prázdné kolekce pro modul, který dvojice zatím nepoužila.
+     *
+     * Bez nich zůstala na obrazovce ukázka z prototypu (viz MaPrazdneKolekce).
+     *
+     * @return array<string, mixed>
+     */
+    public function prazdne(): array
+    {
+        return [
+            'HOUSE_CHORES' => [],
+            'HOUSE_LOG' => [],
+            'HOUSE_WEEK' => [],
+            'HOUSE_DUES' => [],
+            'HOUSE_INV' => [],
+            'PANTRY' => [],
+            'MOBIL' => ['HOUSE_CHORES' => [], 'HOUSE_LOG' => [], 'HOUSE_WEEK' => [], 'HOUSE_DUES' => [], 'HOUSE_INV' => [], 'MPANTRY' => []],
+        ];
     }
 
     public function kolekce(GallerySpace $prostor): array

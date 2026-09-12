@@ -20,7 +20,7 @@ use Illuminate\Support\Facades\Schema;
  * „Ticho v datech" se naopak nezapisuje — počítá se z toho, kdy se naposledy
  * sáhlo do které sekce. Uložené by to bylo druhou, zastarávající pravdou.
  */
-class Mechanismy implements PoskytovatelObsahu
+class Mechanismy implements MaPrazdneKolekce, PoskytovatelObsahu
 {
     /** Sekce, u kterých se sleduje, kdy do nich naposledy někdo sáhl. */
     private const SEKCE = [
@@ -46,6 +46,31 @@ class Mechanismy implements PoskytovatelObsahu
     public function uplne(): array
     {
         return ['FAV', 'FORGIVEN', 'ANTI', 'ML_LOAD', 'FAMILY', 'TRUTHS', 'PAUSE_LOG', 'PAUSE_PLAN', 'CAS_ROWS'];
+    }
+
+    /**
+     * Prázdné kolekce pro modul, který dvojice zatím nepoužila.
+     *
+     * Bez nich zůstala na obrazovce ukázka z prototypu (viz MaPrazdneKolekce).
+     *
+     * @return array<string, mixed>
+     */
+    public function prazdne(): array
+    {
+        return [
+            'FAV' => [],
+            'FORGIVEN' => [],
+            'ANTI' => [],
+            'ML_LOAD' => [],
+            'FAMILY' => [],
+            'TRUTHS' => [],
+            'PAUSE_LOG' => [],
+            'PAUSE_PLAN' => [],
+            'CAS_ROWS' => [],
+            'VIS_ROWS' => [],
+            'SPEAK' => [],
+            'TICHO' => [],
+        ];
     }
 
     public function kolekce(GallerySpace $prostor): array

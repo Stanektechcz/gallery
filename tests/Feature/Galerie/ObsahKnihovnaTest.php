@@ -41,10 +41,10 @@ class ObsahKnihovnaTest extends TestCase
         Sanctum::actingAs($this->adri);
     }
 
-    /** Prázdná knihovna nechává ukázku — prázdná mřížka vypadá jako rozbitá aplikace. */
+    /** Prázdná knihovna chodí prázdná — ukázkové fotky by byly cizí. */
     public function test_bez_fotek_se_skupina_neposila(): void
     {
-        $this->assertSame([], $this->getJson('/api/data/knihovna')->assertOk()->json('data'));
+        $this->assertPrazdne($this->getJson('/api/data/knihovna')->assertOk()->json('data'));
     }
 
     /**
@@ -250,7 +250,11 @@ class ObsahKnihovnaTest extends TestCase
 
         // Úzké rozvržení kreslí tytéž lidi z `APEOPLE`, takže platí totéž.
         // `ATAGS` chodí i bez štítků (prázdné záložky), proto je v seznamu také.
-        $this->assertSame(['PERSONS', 'ATAGS', 'APEOPLE'], $odpoved->json('uplne'));
+        $this->assertContains('PERSONS', $odpoved->json('uplne'));
+        $this->assertContains('APEOPLE', $odpoved->json('uplne'));
+        // Skládané kolekce (`AL`, `MOBIL`) úplné být nesmí — smazaly by jiné skupiny.
+        $this->assertNotContains('AL', $odpoved->json('uplne'));
+        $this->assertNotContains('MOBIL', $odpoved->json('uplne'));
     }
 
     /** Skrytá osoba se pozná — prototyp podle toho plní záložku „Skryté". */
@@ -387,6 +391,56 @@ class ObsahKnihovnaTest extends TestCase
         $this->assertSame([['Sobota 10. ledna 2026', 'Praha', 1]], $mobil['DAYS']);
         $this->assertSame(0, $mobil['PHOTOS'][0]['di']);
         $this->assertSame('Praha', $mobil['PHOTOS'][0]['place']);
+    }
+
+    /**
+     * Fotokalendář dostane počet fotek za každý den celé knihovny.
+     *
+     * Dřív si ho počítal vzorečkem z data — u každé dvojice stejná vymyšlená
+     * čísla. Koš a trezor se nepočítají, stejně jako v mřížce.
+     */
+    public function test_kalendar_dostane_skutecne_pocty_po_dnech(): void
+    {
+        $this->fotka(['taken_at' => '2026-01-10 08:00:00'], 1);
+        $this->fotka(['taken_at' => '2026-01-10 18:30:00'], 2);
+        $this->fotka(['taken_at' => '2025-12-24 20:00:00'], 3);
+        $this->fotka(['taken_at' => '2025-12-24 21:00:00', 'trashed_at' => now()], 4);
+        $this->fotka(['taken_at' => '2025-12-24 22:00:00', 'is_hidden' => true], 5);
+
+        $dny = $this->getJson('/api/data/knihovna')->assertOk()->json('data.FOTODNY');
+
+        $this->assertSame(['2025-12-24' => 1, '2026-01-10' => 2], collect($dny)->sortKeys()->all());
+    }
+
+    /**
+     * Statistiky jsou přes celou knihovnu, ne přes výřez mřížky.
+     *
+     * Obrazovka počítala z posledních 240 fotek a snímku bez času vymyslela
+     * hodinu. Bez času se do hodin nepočítá nic, video nese skutečnou délku.
+     */
+    public function test_statistiky_knihovny_jsou_ze_vsech_fotek(): void
+    {
+        // Místo je první část adresy — „Praha, Česko" i „Praha" jsou jedno místo.
+        $this->fotka(['taken_at' => '2026-01-10 08:15:00', 'location_name' => 'Praha, Česko', 'camera_make' => 'Apple', 'camera_model' => 'iPhone 15'], 1);
+        $this->fotka(['taken_at' => '2025-07-01 20:00:00', 'location_name' => 'Praha', 'media_type' => 'video', 'duration_ms' => 30_000], 2);
+        $this->fotka(['taken_at' => null, 'uploaded_at' => '2026-02-01 10:00:00', 'is_favorite' => true], 3);
+
+        $s = $this->getJson('/api/data/knihovna')->assertOk()->json('data.LIBSTATS');
+
+        $this->assertSame(3, $s['total']);
+        $this->assertSame(1, $s['videos']);
+        $this->assertSame(1, $s['favs']);
+        $this->assertSame(30, $s['videoAvg']);
+        $this->assertSame(['2025' => 1, '2026' => 2], collect($s['years'])->sortKeys()->all());
+        $this->assertSame(['Praha' => 2], $s['places']);
+        $this->assertSame(1, $s['placeN']);
+        $this->assertSame(1, $s['hours'][8]);
+        $this->assertSame(1, $s['hours'][20]);
+        $this->assertSame(2, array_sum($s['hours']), 'Snímek bez času pořízení se do hodin nepočítá.');
+        // Značka se přidá, když ji model sám nenese — stejně jako u dlaždice.
+        $this->assertSame(1, $s['dev']['Apple iPhone 15']);
+        $this->assertSame(3, $s['autori']['Adrian']['count']);
+        $this->assertSame('Praha', $s['autori']['Adrian']['place']);
     }
 
     // ——— pomůcky ———

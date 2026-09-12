@@ -102,7 +102,7 @@ class ZbyleSeznamyTest extends TestCase
         $data = $this->getJson('/api/data/vztah')->assertOk()->json('data.AL');
 
         $this->assertSame('Kolo k přehradě', $data['datesSaved'][0][0]);
-        $this->assertArrayNotHasKey('datesGen', $data);
+        $this->assertPrazdne($data['datesGen'] ?? null);
     }
 
     /**

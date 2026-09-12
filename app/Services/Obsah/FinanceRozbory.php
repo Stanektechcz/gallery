@@ -21,7 +21,7 @@ use Illuminate\Support\Facades\Schema;
  * Co se spočítat nedá, se **neposílá** — obrazovka pak drží ukázku, a to je
  * pořád lepší než vymyšlené číslo, podle kterého se dvojice rozhoduje.
  */
-class FinanceRozbory implements PoskytovatelObsahu
+class FinanceRozbory implements MaPrazdneKolekce, PoskytovatelObsahu
 {
     /** Kolik měsíců zpátky kreslí obálka a vlastní inflace. */
     private const MESICU = 6;
@@ -37,6 +37,30 @@ class FinanceRozbory implements PoskytovatelObsahu
     public function uplne(): array
     {
         return [];
+    }
+
+    /**
+     * Prázdné kolekce pro modul, který dvojice zatím nepoužila.
+     *
+     * Bez nich zůstala na obrazovce ukázka z prototypu (viz MaPrazdneKolekce).
+     *
+     * @return array<string, mixed>
+     */
+    public function prazdne(): array
+    {
+        return [
+            'COSTMEAN' => [],
+            'DELAY' => [],
+            'ENV' => ['limit' => 0, 'months' => []],
+            'EST' => [],
+            'HORIZON' => [],
+            'INFL' => [],
+            'P60' => ['start' => 0, 'daily' => 0, 'events' => []],
+            'SCEN' => [],
+            'SEASON' => [],
+            'SURPRISE' => [],
+            'TRIPCOST' => new \stdClass,
+        ];
     }
 
     public function kolekce(GallerySpace $prostor): array

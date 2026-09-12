@@ -43,7 +43,7 @@ class FilmyVeStavuTest extends TestCase
     }
 
     /**
-     * Bez titulů se seznamy filmů neposílají — obrazovka si nechá ukázku.
+     * Bez titulů chodí seznamy filmů prázdné — ne ukázkové „Dune 2".
      *
      * `orders` je vedle nich, a prázdné: ukázka na jeho místě tvrdí
      * „doručeno 8. 1. 2026 · 1 190 Kč", tedy že dvojice zaplatila.
@@ -52,7 +52,9 @@ class FilmyVeStavuTest extends TestCase
     {
         $al = (array) $this->getJson('/api/data/pribeh')->assertOk()->json('data.AL');
 
-        $this->assertSame(['orders' => []], $al);
+        foreach (['films', 'series', 'watchlist', 'orders'] as $seznam) {
+            $this->assertSame([], $al[$seznam]);
+        }
     }
 
     /** Nový titul z obrazovky vznikne v tabulce. */

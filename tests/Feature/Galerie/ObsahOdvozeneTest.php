@@ -109,7 +109,7 @@ class ObsahOdvozeneTest extends TestCase
 
         $data = $this->getJson('/api/data/pribeh')->assertOk()->json('data');
 
-        $this->assertArrayNotHasKey('RECON', $data);
+        $this->assertPrazdne($data['RECON'] ?? null);
     }
 
     /**

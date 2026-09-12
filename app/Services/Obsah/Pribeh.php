@@ -23,7 +23,7 @@ use Illuminate\Support\Facades\Storage;
  * Aplikace k tomu doplní jen to, co skutečně ví — kolik je ke kapitole fotek,
  * kdy se naposledy kopírovalo do cloudu.
  */
-class Pribeh implements PoskytovatelObsahu
+class Pribeh implements MaPrazdneKolekce, PoskytovatelObsahu
 {
     private const MESICE = [1 => 'ledna', 'února', 'března', 'dubna', 'května', 'června',
         'července', 'srpna', 'září', 'října', 'listopadu', 'prosince'];
@@ -44,11 +44,36 @@ class Pribeh implements PoskytovatelObsahu
         return ['STORY', 'STORYMS', 'PORDERS', 'EM_ITEMS', 'EM_LOG', 'PAPER_ROWS', 'GV_C', 'RECON'];
     }
 
+    /**
+     * Prázdné kolekce pro modul, který dvojice zatím nepoužila.
+     *
+     * Bez nich zůstala na obrazovce ukázka z prototypu (viz MaPrazdneKolekce).
+     *
+     * @return array<string, mixed>
+     */
+    public function prazdne(): array
+    {
+        return [
+            'STORY' => [],
+            'STORYMS' => [],
+            'STORY_ROKY' => new \stdClass,
+            'PORDERS' => [],
+            'EM_ITEMS' => [],
+            'EM_LOG' => [],
+            'PAPER_ROWS' => [],
+            'GV_C' => [],
+            'RECON' => new \stdClass,
+            'ABARS' => ['tier' => []],
+            'AL' => ['films' => [], 'series' => [], 'watchlist' => [], 'story' => [], 'print' => [], 'orders' => []],
+        ];
+    }
+
     public function kolekce(GallerySpace $prostor): array
     {
         return array_filter([
             'STORY' => $this->kapitoly($prostor),
             'STORYMS' => $this->milniky($prostor),
+            'STORY_ROKY' => $this->rokyPribehu($prostor),
             'PORDERS' => $objednavky = $this->objednavky($prostor),
             /*
              * Kroky zásilky. Katalog, ale patří k `step` v databázi — dvě
@@ -869,6 +894,65 @@ class Pribeh implements PoskytovatelObsahu
             ->whereNotNull('taken_at')
             ->get(['taken_at'])
             ->countBy(fn (MediaItem $m) => (string) CarbonImmutable::parse($m->taken_at)->year)
+            ->all();
+    }
+
+    /**
+     * Souhrn každého roku pro návrh kapitoly: `{ rok: { fotek, mista, den, zapisu, cest } }`.
+     *
+     * Tlačítko „Složit návrh" psalo pořád tutéž větu o 412 fotkách z Ostravy,
+     * Prahy a Beskyd. Prohlížeč to sám spočítat nemůže — knihovna mu posílá
+     * jen posledních pár set fotek, takže by rok vyšel poloviční. Počty jsou
+     * proto odsud, přes všechny fotky.
+     *
+     * @return array<string, array<string, mixed>>
+     */
+    private function rokyPribehu(GallerySpace $prostor): array
+    {
+        $media = MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
+            ->where('gallery_space_id', $prostor->id)
+            ->whereNull('trashed_at')
+            ->where('is_hidden', false)
+            ->whereNotNull('taken_at')
+            ->toBase()
+            ->get(['taken_at', 'location_name']);
+
+        if ($media->isEmpty()) {
+            return [];
+        }
+
+        $zapisy = $this->zapisyPoRocich($prostor);
+        $cesty = Schema::hasTable('trips')
+            ? DB::table('trips')->where('gallery_space_id', $prostor->id)->get(['start_date', 'end_date'])
+            : collect();
+
+        return $media
+            ->groupBy(fn (object $m) => (string) CarbonImmutable::parse($m->taken_at)->year)
+            ->sortKeys()
+            ->map(function (Collection $fotky, string $rok) use ($zapisy, $cesty) {
+                $den = $fotky->countBy(fn (object $m) => CarbonImmutable::parse($m->taken_at)->toDateString())
+                    ->sortDesc()
+                    ->keys()
+                    ->first();
+                $kdy = CarbonImmutable::parse($den);
+
+                return [
+                    'fotek' => $fotky->count(),
+                    'mista' => $fotky->pluck('location_name')
+                        ->filter(fn ($misto) => trim((string) $misto) !== '')
+                        ->countBy()
+                        ->sortDesc()
+                        ->keys()
+                        ->take(3)
+                        ->values()
+                        ->all(),
+                    'den' => $kdy->day.'. '.self::MESICE[$kdy->month],
+                    'zapisu' => (int) ($zapisy[$rok] ?? 0),
+                    // Cesta přes Silvestra patří do obou let.
+                    'cest' => $cesty->filter(fn (object $c) => (int) substr((string) $c->start_date, 0, 4) <= (int) $rok
+                        && (int) substr((string) $c->end_date, 0, 4) >= (int) $rok)->count(),
+                ];
+            })
             ->all();
     }
 

@@ -49,7 +49,7 @@ class PredpovedTest extends TestCase
         $this->fakePocasi();
         $this->recept();
 
-        $this->assertArrayNotHasKey('WEATHER', $this->getJson('/api/data/kucharka')->assertOk()->json('data'));
+        $this->assertPrazdne($this->getJson('/api/data/kucharka')->assertOk()->json('data.WEATHER'));
     }
 
     /** Řádky nesou den, ikonu, teploty, režim a větu z čísel. */
@@ -148,7 +148,7 @@ class PredpovedTest extends TestCase
 
         $data = $this->getJson('/api/data/kucharka')->assertOk()->json('data');
 
-        $this->assertArrayNotHasKey('WEATHER', $data);
+        $this->assertPrazdne($data['WEATHER'] ?? null);
     }
 
     /** @param  array<string, mixed>  $denne */

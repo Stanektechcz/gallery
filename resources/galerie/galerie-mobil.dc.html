@@ -5668,7 +5668,8 @@ class Component extends DCLogic {
     if (this.state.albums) return this.state.albums;
 
     const ze = (window.GalerieMobil || {}).ALBUMS;
-    if (ze && ze.length) return ze;
+    // Prázdná alba ze serveru jsou odpověď — ukázkové „Chorvatsko 2026" jen bez něj.
+    if (ze && (ze.length || (window.GalerieMobilZeServeru && window.GalerieMobilZeServeru('ALBUMS')))) return ze;
 
     return [
       { id: 'a1', name: 'Chorvatsko 2026', ids: PHOTOS.filter(p => p.place === 'Zadar' || p.place === 'Split').map(p => p.id), seed: 4 },
@@ -7185,7 +7186,7 @@ class Component extends DCLogic {
       pick: () => this.setState({ kapPick: t.key })
     })) : [];
 
-    const YBCH2 = D.YBCH || [], AUTO_DEC = D.AUTO_DEC || [], ANTI = D.ANTI || [];
+    const YBCH2 = D.ROKVCISLECH ? (D.ROKVCISLECH[String(new Date().getFullYear())] || []) : (D.YBCH || []).filter(c => Array.isArray(c[4])), AUTO_DEC = D.AUTO_DEC || [], ANTI = D.ANTI || [];
     const zprStats = key === 'zprCisla' ? ((YBCH2[0] && YBCH2[0][4]) || []).map(x => ({ label: x[0], value: x[1], note: x[2] })) : [];
     const zprDec = key === 'zprDec' ? AUTO_DEC.map(d => ({
       title: d.what, kind: d.kind, date: d.date.split('-').reverse().join('. '),
@@ -7399,7 +7400,9 @@ class Component extends DCLogic {
     ] : [];
     const isGeo = geoRows.length > 0;
     const isGeoNum = geoStats.length > 0;
-    const YBCH = D.YBCH || [];
+    // Kapitoly z `ROKVCISLECH` (letošek); `YBCH` ze serveru jsou roky časové osy, ne kapitoly.
+    const ROKY = D.ROKVCISLECH;
+    const YBCH = ROKY ? (ROKY[String(new Date().getFullYear())] || []) : (D.YBCH || []).filter(c => Array.isArray(c[4]));
     const ybCards = key === 'yearBook' ? YBCH.map(c => ({
       title: c[1], note: c[3],
       stats: (c[4] || []).map(x => ({ label: x[0], value: x[1], note: x[2] }))

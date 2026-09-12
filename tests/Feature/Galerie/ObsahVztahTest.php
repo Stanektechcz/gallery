@@ -106,13 +106,13 @@ class ObsahVztahTest extends TestCase
 
         $data = $this->getJson('/api/data/vztah')->assertOk()->json('data');
 
-        $this->assertArrayNotHasKey('AUTO_DEC', $data);
+        $this->assertPrazdne($data['AUTO_DEC'] ?? null);
     }
 
-    /** Bez rozhodnutí se nic neposílá — klient si nechá ukázková data. */
+    /** Bez rozhodnutí chodí jen prázdné kolekce — ukázka z prototypu se smaže. */
     public function test_bez_rozhodnuti_se_skupina_neposila(): void
     {
-        $this->assertSame([], $this->getJson('/api/data/vztah')->assertOk()->json('data'));
+        $this->assertPrazdne($this->getJson('/api/data/vztah')->assertOk()->json('data'));
     }
 
     /**

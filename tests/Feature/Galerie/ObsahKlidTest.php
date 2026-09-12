@@ -46,7 +46,7 @@ class ObsahKlidTest extends TestCase
 
         $data = $this->getJson('/api/data/zdravi')->assertOk()->json('data');
 
-        $this->assertArrayNotHasKey('KL_EV', $data);
+        $this->assertPrazdne($data['KL_EV'] ?? null);
     }
 
     /** Den na cestě dostane značku za každý den, který do těch čtrnácti spadá. */

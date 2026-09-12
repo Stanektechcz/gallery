@@ -41,12 +41,12 @@ class ObsahRozhodovaniTest extends TestCase
         Sanctum::actingAs($this->adri);
     }
 
-    /** Prázdno nechává ukázku — prázdná obrazovka vypadá jako rozbitá. */
+    /** Prázdno chodí prázdné, ne ukázkové. */
     public function test_bez_zaznamu_se_nic_neposila(): void
     {
         $data = $this->getJson('/api/data/rozhodovani')->assertOk()->json('data');
 
-        $this->assertSame([], $data);
+        $this->assertPrazdne($data);
     }
 
     /** Věc, kterou umí jen jeden, zná svého člověka i váhu. */

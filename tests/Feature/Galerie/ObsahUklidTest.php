@@ -39,7 +39,7 @@ class ObsahUklidTest extends TestCase
     /** Prázdná knihovna nemá co uklízet. */
     public function test_bez_knihovny_se_skupina_neposila(): void
     {
-        $this->assertSame([], $this->getJson('/api/data/uklid')->assertOk()->json('data'));
+        $this->assertPrazdne($this->getJson('/api/data/uklid')->assertOk()->json('data'));
     }
 
     /**
@@ -134,7 +134,7 @@ class ObsahUklidTest extends TestCase
 
         $v = $this->getJson('/api/data/uklid')->assertOk()->json('data.AGRID');
 
-        $this->assertArrayNotHasKey('show', $v);
+        $this->assertPrazdne($v['show'] ?? null);
         $this->assertArrayHasKey('contact', $v);
     }
 

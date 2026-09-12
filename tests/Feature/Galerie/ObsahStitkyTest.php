@@ -37,12 +37,12 @@ class ObsahStitkyTest extends TestCase
         Sanctum::actingAs($this->adri);
     }
 
-    /** Bez knihovny zůstává ukázka — prázdná obrazovka vypadá jako rozbitá. */
+    /** Bez knihovny chodí prázdné záložky štítků, ne ukázkové. */
     public function test_bez_knihovny_se_stitky_neposilaji(): void
     {
         $data = $this->getJson('/api/data/knihovna')->assertOk()->json('data');
 
-        $this->assertArrayNotHasKey('ATAGS', $data);
+        $this->assertPrazdne($data['ATAGS'] ?? null);
     }
 
     /** Štítek nese počet fotek, kterých se opravdu týká. */
