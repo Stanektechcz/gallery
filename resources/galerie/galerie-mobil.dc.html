@@ -5653,7 +5653,12 @@ class Component extends DCLogic {
     else a.sort((x, y) => this.txOrd(y.date) - this.txOrd(x.date));
     return a;
   }
-  queueList() { return this.state.queue || QUEUE.map(q => ({ id: q[0], title: q[1], meta: q[2], icon: q[3], st: q[4] })); }
+  // Se serverem žádná vymyšlená fronta: „3 originály · Pustevny, chyba 502" svítilo v liště jako 3↑.
+  queueList() {
+    const api = window.GalerieApi;
+    if (this.state.queue) return this.state.queue;
+    return api && api.mode === 'http' ? [] : QUEUE.map(q => ({ id: q[0], title: q[1], meta: q[2], icon: q[3], st: q[4] }));
+  }
   placeVisited(p) { const v = this.state.places[p[0]]; return v === undefined ? p[2] === 1 : v; }
   tripOfPlace(name) { return Object.keys(TRIPS).find(id => TRIPS[id].place === name) || null; }
 
@@ -9273,6 +9278,34 @@ class Component extends DCLogic {
   // ── týdenní shrnutí (automatická karta na Domů) ──
   mDigestVals() {
     const s = this.state;
+    /*
+     * Shrnutí ze serveru (`WEEK`) — týž týden jako na velké obrazovce.
+     * Ukázka „214 fotek, Radhošť před svítáním, Lisabon dotažený" zůstává
+     * jen bez přihlášení.
+     */
+    const W = (window.GalerieData || {}).WEEK;
+    if (W && W.now) {
+      const N = W.now, m = N.moments[0];
+      const text = N.title + '. ' + N.stats.map(x => x[0] + ' ' + x[1]).join(', ') + '.';
+      return {
+        dgOn: s.mDgHide !== true,
+        dgHead: N.title,
+        dgMeta: 'spočítáno z knihovny, úkolů, deníku a výdajů',
+        dgNums: N.stats.slice(0, 3).map(x => ({ label: x[0], value: x[1] })),
+        dgGood: N.moments.slice(0, 2).map(x => ({ title: x.title, note: x.meta, go: () => this.goTab('memories') })),
+        dgBad: N.slipped.slice(0, 2).map(x => ({ title: x[0], note: x[1], go: () => { this.setState({ tab: 'more' }); this.push('tasks'); } })),
+        dgMomentBg: m ? (m.tiles[0] || 'var(--g-panel)') : 'var(--g-panel)',
+        dgMomentTitle: m ? m.title : 'Zatím bez fotek',
+        dgMomentMeta: m ? m.meta : 'z tohohle týdne',
+        dgDiary: () => {
+          const prev = this.diaryList();
+          this.setState({ diary: [{ id: 'd-dg-' + Date.now(), date: this.dnesCesky(), title: 'Týdenní shrnutí', text: text, meta: 'z týdenního přehledu' }].concat(prev) });
+          this.toast('Shrnutí uloženo do deníku', { icon: 'ph-notebook', undo: () => this.setState({ diary: prev }) });
+        },
+        dgRegen: () => { if (window.GalerieObnovit) window.GalerieObnovit('tyden'); this.toast('Shrnutí se přepočítá ze serveru', { icon: 'ph-arrows-clockwise' }); },
+        dgHide: () => { this.setState({ mDgHide: true }); this.toast('Karta skryta', { icon: 'ph-eye-slash', undo: () => this.setState({ mDgHide: false }) }); }
+      };
+    }
     const seed = s.mDgSeed || 0;
     const shopLeft = this.secRowsOf('shop').filter(r => !r.done).length;
     const NUM = [
@@ -10819,14 +10852,39 @@ class Component extends DCLogic {
       })).filter(g => g.items.length),
 
       // domů
-      heroBg: this.bg(21), heroTitle: 'Plitvice, před dvěma roky',
-      heroOpen: () => this.setState({ lb: shown.length ? shown[0].id : null }),
-      homeStats: [
-        { label: 'Knihovna', value: String(lib.length), meta: 'položek v telefonu', color: 'var(--g-ink3)', go: () => this.goTab('memories') },
-        { label: 'Návrhy', value: String(this.inboxList().length), meta: 'čeká na potvrzení', color: 'var(--g-mag)', go: () => { this.setState({ tab: 'more' }); this.push('inbox'); } },
-        { label: 'Úkoly na dnes', value: String(TASKS[0][1].length), meta: 'z toho 1 po termínu', color: 'var(--g-warn)', go: () => { this.setState({ tab: 'more' }); this.push('tasks'); } },
-        { label: 'Do konce měsíce', value: this.kc(income - spend), meta: 'zbývá v rozpočtu', color: 'var(--g-ok)', go: () => this.goTab('finance') }
-      ],
+      /*
+       * Vzpomínka dne a čísla z úvodní obrazovky serveru (`DNES`, `WEEK`).
+       * Stálo tu napevno „Plitvice, před dvěma roky" a „z toho 1 po termínu".
+       */
+      ...(() => {
+        const DN = (window.GalerieData || {}).DNES, WK = (window.GalerieData || {}).WEEK;
+        const finance = { label: 'Do konce měsíce', value: this.kc(income - spend), meta: 'zbývá v rozpočtu', color: 'var(--g-ok)', go: () => this.goTab('finance') };
+        if (!DN || !DN.vyroci) {
+          return {
+            heroBg: this.bg(21), heroTitle: 'Plitvice, před dvěma roky',
+            heroOpen: () => this.setState({ lb: shown.length ? shown[0].id : null }),
+            homeStats: [
+              { label: 'Knihovna', value: String(lib.length), meta: 'položek v telefonu', color: 'var(--g-ink3)', go: () => this.goTab('memories') },
+              { label: 'Návrhy', value: String(this.inboxList().length), meta: 'čeká na potvrzení', color: 'var(--g-mag)', go: () => { this.setState({ tab: 'more' }); this.push('inbox'); } },
+              { label: 'Úkoly na dnes', value: String(TASKS[0][1].length), meta: 'z toho 1 po termínu', color: 'var(--g-warn)', go: () => { this.setState({ tab: 'more' }); this.push('tasks'); } },
+              finance
+            ]
+          };
+        }
+        const f = DN.vyroci.fotky[0], leta = f ? new Date().getFullYear() - f.year : 0;
+        const poTerminu = WK && WK.now ? WK.now.slipped.length : 0;
+        return {
+          heroBg: f ? f.bg : (lib[0] ? this.tlo(lib[0]) : this.bg(21)),
+          heroTitle: f ? DN.vyroci.den + ', ' + (leta === 1 ? 'před rokem' : 'před ' + leta + ' lety') : 'Z tohoto dne zatím nic z minulých let',
+          heroOpen: () => f && lib.some(p => p.id === f.id) ? this.setState({ lb: f.id }) : this.goTab('memories'),
+          homeStats: [
+            { label: 'Knihovna', value: String(lib.length), meta: 'položek v knihovně', color: 'var(--g-ink3)', go: () => this.goTab('memories') },
+            { label: 'Návrhy', value: String(DN.navrhy.length), meta: DN.navrhy.length ? 'z vašich fotek a deníku' : 'nic nečeká', color: 'var(--g-mag)', go: () => { this.setState({ tab: 'more' }); this.push('inbox'); } },
+            { label: 'Po termínu', value: String(poTerminu), meta: poTerminu ? 'úkoly k dotažení' : 'nic nezůstalo', color: 'var(--g-warn)', go: () => { this.setState({ tab: 'more' }); this.push('tasks'); } },
+            finance
+          ]
+        };
+      })(),
       photoCount: String(lib.length),
       goMemories: () => this.goTab('memories'),
       homeTiles: lib.slice(0, 9).map(p => ({ bg: this.tlo(p), fav: this.isFav(p), video: p.video, dur: p.dur, open: () => this.setState({ lb: p.id }) })),
