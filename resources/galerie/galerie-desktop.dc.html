@@ -105,11 +105,11 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 
   <aside style="display:flex; flex-direction:column; padding:18px 14px 14px; min-width:0; min-height:0; overflow:hidden; background:var(--g-bg); border-right:1px solid var(--g-line2); position:{{ sbPos }}; left:{{ sbLeft }}; top:0; bottom:0; width:{{ sbDrawerW }}; z-index:{{ sbZ }}; box-shadow:{{ sbShadow }}; transition:left .18s ease">
     <div style="display:flex; align-items:center; justify-content:center; flex-wrap:wrap; row-gap:10px; gap:10px; padding:0 6px 22px">
-      <div style="width:30px; height:30px; flex:none; border-radius:2px; background:var(--g-ink); color:var(--g-bg); display:grid; place-items:center; font-size:13px; letter-spacing:.02em">A&amp;M</div>
+      <div style="width:30px; height:30px; flex:none; border-radius:2px; background:var(--g-ink); color:var(--g-bg); display:grid; place-items:center; font-size:13px; letter-spacing:.02em">{{ dvojiceInicialy }}</div>
       <sc-if value="{{ sbOpen }}" hint-placeholder-val="{{ true }}">
         <div style="min-width:0">
           <div style="font-size:15px; line-height:1.1">Naše vzpomínky</div>
-          <div style="font-size:11px; color:var(--g-ink3); letter-spacing:.04em">Adrian &amp; Makinka</div>
+          <div style="font-size:11px; color:var(--g-ink3); letter-spacing:.04em">{{ dvojiceJmena }}</div>
         </div>
       </sc-if>
       <button class="btn btn-icon" onClick="{{ toggleSidebar }}" title="Sbalit panel" aria-label="Sbalit panel" style="margin-left:{{ brandPush }}; flex:none; color:var(--g-ink3); width:28px; height:28px">
@@ -933,7 +933,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
               </sc-if>
 
               <sc-if value="{{ showListMode }}">
-                <table class="table" style="margin-top:6px">
+                <div class="tabulka-obal" style="overflow-x:auto; max-width:100%; min-width:0"><table class="table" style="margin-top:6px">
                   <thead><tr><th style="width:56px"></th><th>Název</th><th>Pořízeno</th><th>Album</th><th>Místo</th><th>Autor</th><th>Velikost</th><th>Originál</th></tr></thead>
                   <tbody>
                     <sc-for list="{{ listItems }}" as="p" hint-placeholder-count="10">
@@ -944,7 +944,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                       </tr>
                     </sc-for>
                   </tbody>
-                </table>
+                </table></div>
               </sc-if>
 
               <sc-if value="{{ showGridMode }}">
@@ -1057,7 +1057,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
           </sc-if>
 
           <sc-if value="{{ albViewList }}">
-            <table class="table">
+            <div class="tabulka-obal" style="overflow-x:auto; max-width:100%; min-width:0"><table class="table">
               <thead><tr><th style="width:52px"></th><th>Album</th><th>Rozsah dat</th><th>Místo</th><th>Položky</th><th>Podalba</th><th>Sdílení</th></tr></thead>
               <tbody>
                 <sc-for list="{{ albumList }}" as="a" hint-placeholder-count="8">
@@ -1068,7 +1068,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                   </tr>
                 </sc-for>
               </tbody>
-            </table>
+            </table></div>
           </sc-if>
 
           <sc-if value="{{ albViewCards }}">
@@ -2436,7 +2436,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
               </div>
             </div>
           </sc-if>
-          <table class="table">
+          <div class="tabulka-obal" style="overflow-x:auto; max-width:100%; min-width:0"><table class="table">
             <thead><tr><th style="width:48px"></th><th>Sdílení</th><th>Obsah</th><th>Vytvořeno</th><th>Expirace</th><th>Ochrana</th><th>Otevření</th><th style="text-align:right">Akce</th></tr></thead>
             <tbody>
               <sc-for list="{{ shares }}" as="s" hint-placeholder-count="5">
@@ -2456,7 +2456,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                 </tr>
               </sc-for>
             </tbody>
-          </table>
+          </table></div>
 
           <sc-if value="{{ statOpen }}">
             <div style="margin-top:22px; padding:18px 20px; border-radius:2px; background:var(--g-raise); border:1px solid var(--g-line2)">
@@ -2533,7 +2533,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
               <p style="font-size:14px; color:var(--g-ink2)">Nic jste v posledních 30 dnech nevyhodili.</p>
             </div>
           </sc-if>
-          <table class="table" style="margin-top:12px">
+          <div class="tabulka-obal" style="overflow-x:auto; max-width:100%; min-width:0"><table class="table" style="margin-top:12px">
             <thead><tr><th style="width:48px"></th><th>Položka</th><th>Původní umístění</th><th>Odstranil</th><th>Odstraněno</th><th>Trvale za</th><th style="text-align:right">Akce</th></tr></thead>
             <tbody>
               <sc-for list="{{ trash }}" as="t" hint-placeholder-count="4">
@@ -2551,7 +2551,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                 </tr>
               </sc-for>
             </tbody>
-          </table>
+          </table></div>
         </div>
       </sc-if>
 
@@ -3179,7 +3179,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                 </div>
               </div>
 
-              <table class="table">
+              <div class="tabulka-obal" style="overflow-x:auto; max-width:100%; min-width:0"><table class="table">
                 <thead><tr><th>Co řešíme</th><th style="width:140px">Měsíčně</th><th style="width:140px">Za rok</th><th style="width:160px">Za deset let</th><th style="width:230px">S ušlým výnosem</th></tr></thead>
                 <tbody>
                   <sc-for list="{{ hzRows }}" as="r" hint-placeholder-count="5">
@@ -3198,7 +3198,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                     </tr>
                   </sc-for>
                 </tbody>
-              </table>
+              </table></div>
               <div style="display:flex; align-items:flex-end; gap:16px; flex-wrap:wrap; margin-top:16px">
                 <div style="flex:1 1 500px; font-size:14px; color:var(--g-ink2); text-wrap:pretty">{{ hzVerdict }}</div>
                 <button class="btn btn-secondary" onClick="{{ hzToDec }}" style="font-size:12.5px; padding:6px 12px">Zapsat, na čem jsme se dohodli</button>
@@ -3226,7 +3226,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                 <button class="btn btn-ghost" onClick="{{ inflToggle }}" style="gap:6px"><i class="ph-duotone ph-funnel" style="font-size:16px"></i>{{ inflCoreLabel }}</button>
               </div>
 
-              <table class="table">
+              <div class="tabulka-obal" style="overflow-x:auto; max-width:100%; min-width:0"><table class="table">
                 <thead><tr><th>Co kupujeme</th><th style="width:140px">Jak často</th><th style="width:120px">2025</th><th style="width:120px">2026</th><th style="width:180px">Změna</th><th style="width:150px">Dopad</th></tr></thead>
                 <tbody>
                   <sc-for list="{{ inflRows }}" as="r" hint-placeholder-count="8">
@@ -3243,7 +3243,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                     </tr>
                   </sc-for>
                 </tbody>
-              </table>
+              </table></div>
               <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap; margin-top:16px">
                 <div style="flex:1 1 420px; font-size:14px; color:var(--g-ink2); text-wrap:pretty">{{ inflWorst }}</div>
                 <button class="btn btn-secondary" onClick="{{ inflToBud }}" style="font-size:12.5px; padding:6px 12px">Zvednout limity podle toho</button>
@@ -3266,7 +3266,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 
               <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr)); gap:30px; align-items:start">
                 <div>
-                  <table class="table">
+                  <div class="tabulka-obal" style="overflow-x:auto; max-width:100%; min-width:0"><table class="table">
                     <thead><tr><th>Co jsme odhadovali</th><th style="width:110px">Kdo</th><th style="width:120px">Odhad</th><th style="width:120px">Skutečnost</th><th style="width:150px">Chyba</th></tr></thead>
                     <tbody>
                       <sc-for list="{{ kalRows }}" as="r" hint-placeholder-count="8">
@@ -3282,7 +3282,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                         </tr>
                       </sc-for>
                     </tbody>
-                  </table>
+                  </table></div>
                 </div>
 
                 <div style="padding:16px 18px; border-radius:2px; background:var(--g-panel)">
@@ -3956,7 +3956,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
               </div>
 
               <div style="font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--g-ink3); margin-bottom:10px">{{ casWorthHead }}</div>
-              <table class="table">
+              <div class="tabulka-obal" style="overflow-x:auto; max-width:100%; min-width:0"><table class="table">
                 <thead><tr><th>Práce</th><th style="width:120px">Kdo</th><th style="width:100px">Čas</th><th style="width:130px">Náš čas v Kč</th><th style="width:200px">Cena služby</th><th style="width:160px">Verdikt</th></tr></thead>
                 <tbody>
                   <sc-for list="{{ casRows }}" as="r" hint-placeholder-count="7">
@@ -3973,7 +3973,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                     </tr>
                   </sc-for>
                 </tbody>
-              </table>
+              </table></div>
               <div style="font-size:13.5px; color:var(--g-ink2); margin-top:14px; max-width:720px; text-wrap:pretty">{{ casHint }}</div>
             </div>
           </sc-if>
@@ -3997,7 +3997,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                 <button class="btn btn-ghost" onClick="{{ dtToNed }}" style="gap:6px"><i class="ph-duotone ph-timer" style="font-size:16px"></i>Na nedělní agendu</button>
               </div>
 
-              <table class="table">
+              <div class="tabulka-obal" style="overflow-x:auto; max-width:100%; min-width:0"><table class="table">
                 <thead><tr><th>Co se odkládalo</th><th style="width:140px">Jak dlouho</th><th style="width:220px">Co to stálo</th><th style="width:160px">Stav</th><th style="text-align:right; width:150px">Akce</th></tr></thead>
                 <tbody>
                   <sc-for list="{{ dtRows }}" as="r" hint-placeholder-count="7">
@@ -4017,7 +4017,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                     </tr>
                   </sc-for>
                 </tbody>
-              </table>
+              </table></div>
               <div style="font-size:14px; color:var(--g-ink2); margin-top:16px; max-width:800px; text-wrap:pretty">{{ dtWorst }}</div>
             </div>
           </sc-if>
@@ -4088,7 +4088,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                 </sc-for>
               </div>
 
-              <table class="table">
+              <div class="tabulka-obal" style="overflow-x:auto; max-width:100%; min-width:0"><table class="table">
                 <thead><tr><th>Co je pryč</th><th style="width:120px">Kdy</th><th style="width:150px">Typ</th><th style="width:170px">Co to dělá</th><th style="text-align:right; width:200px">Akce</th></tr></thead>
                 <tbody>
                   <sc-for list="{{ antiRows }}" as="a" hint-placeholder-count="10">
@@ -4101,7 +4101,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                     </tr>
                   </sc-for>
                 </tbody>
-              </table>
+              </table></div>
               <div style="font-size:14px; color:var(--g-ink2); margin-top:16px; max-width:760px; text-wrap:pretty">{{ antiLesson }}</div>
             </div>
           </sc-if>
@@ -4654,7 +4654,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                         </div>
                       </sc-for>
                     </div>
-                    <table class="table" style="margin-top:22px">
+                    <div class="tabulka-obal" style="overflow-x:auto; max-width:100%; min-width:0"><table class="table" style="margin-top:22px">
                       <thead><tr><th>Společný výdaj</th><th style="width:150px">Měsíčně</th><th style="width:150px">Adrian</th><th style="width:150px">Makinka</th></tr></thead>
                       <tbody>
                         <sc-for list="{{ splitRows }}" as="r" hint-placeholder-count="6">
@@ -4666,7 +4666,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                           </tr>
                         </sc-for>
                       </tbody>
-                    </table>
+                    </table></div>
                     <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap; margin-top:20px; padding:14px 16px; border-radius:2px; background:var(--g-panel)">
                       <div style="flex:1 1 320px; font-size:14px; color:var(--g-ink2); text-wrap:pretty">{{ splitInsight }}</div>
                       <button class="btn btn-primary" onClick="{{ splitApply }}" style="font-size:13px">Nastavit tento poměr</button>
@@ -7018,7 +7018,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                   <div style="background:#fff; padding:26px; border:1px solid var(--g-line2); box-shadow:0 8px 26px rgba(0,0,0,.10); max-width:860px">
                     <div style="display:flex; align-items:baseline; gap:10px; padding-bottom:12px; border-bottom:1px solid #111; color:#111">
                       <span style="font-size:14px; letter-spacing:.12em; text-transform:uppercase">Kontaktní arch</span>
-                      <span style="font-size:12px; color:#666; margin-left:auto">Naše galerie · Adrian a Makinka</span>
+                      <span style="font-size:12px; color:#666; margin-left:auto">Naše galerie{{ dvojiceZapati }}</span>
                     </div>
                     <div style="display:grid; grid-template-columns:{{ arcGrid }}; gap:8px; margin-top:16px">
                       <sc-for list="{{ arcCells }}" as="c" hint-placeholder-count="24">
@@ -7976,7 +7976,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 
             <sc-if value="{{ appIsTable }}">
               <div style="max-width:900px">
-                <table class="table">
+                <div class="tabulka-obal" style="overflow-x:auto; max-width:100%; min-width:0"><table class="table">
                   <thead>
                     <tr>
                       <sc-for list="{{ appTableCols }}" as="c" hint-placeholder-count="4">
@@ -7999,7 +7999,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                       </tr>
                     </sc-for>
                   </tbody>
-                </table>
+                </table></div>
                 <div style="display:flex; align-items:center; gap:14px; padding:16px 2px 0; font-size:13.5px; color:var(--g-ink2)">
                   <span>{{ appTableFoot }}</span>
                   <sc-if value="{{ appTableSorted }}">
@@ -8482,7 +8482,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                 </div>
               </sc-if>
 
-              <table class="table">
+              <div class="tabulka-obal" style="overflow-x:auto; max-width:100%; min-width:0"><table class="table">
                 <thead><tr><th style="width:56px"></th><th>Položka</th><th>Proč jsme si nebyli jistí</th><th style="width:150px">Zbývá</th><th style="text-align:right; width:200px">Akce</th></tr></thead>
                 <tbody>
                   <sc-for list="{{ quarRows }}" as="q" hint-placeholder-count="5">
@@ -8498,7 +8498,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                     </tr>
                   </sc-for>
                 </tbody>
-              </table>
+              </table></div>
               <sc-if value="{{ quarEmpty }}">
                 <div style="max-width:440px; margin:50px auto; text-align:center">
                   <i class="ph-duotone ph-check-circle" style="font-size:40px; color:var(--g-ok)"></i>
@@ -8615,7 +8615,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                 </div>
                 <button class="btn btn-secondary" onClick="{{ fixAll }}" style="gap:6px"><i class="ph-duotone ph-magic-wand" style="font-size:16px"></i>{{ fixAllLabel }}</button>
               </div>
-              <table class="table">
+              <div class="tabulka-obal" style="overflow-x:auto; max-width:100%; min-width:0"><table class="table">
                 <thead><tr><th style="width:56px"></th><th>Položka</th><th style="width:190px">Kde chybí</th><th style="width:260px">{{ fixColLabel }}</th><th style="width:150px; text-align:right">Akce</th></tr></thead>
                 <tbody>
                   <sc-for list="{{ fixRows }}" as="r" hint-placeholder-count="6">
@@ -8631,7 +8631,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                     </tr>
                   </sc-for>
                 </tbody>
-              </table>
+              </table></div>
               <sc-if value="{{ fixEmpty }}">
                 <div style="max-width:440px; margin:50px auto; text-align:center">
                   <i class="ph-duotone ph-check-circle" style="font-size:40px; color:var(--g-ok)"></i>
@@ -8780,7 +8780,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
               </div>
 
               <div style="font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--g-ink3); margin-bottom:10px">Co se do týdne vejde</div>
-              <table class="table">
+              <div class="tabulka-obal" style="overflow-x:auto; max-width:100%; min-width:0"><table class="table">
                 <thead><tr><th>Věc</th><th style="width:220px">Potřebuje</th><th style="width:170px">Kolik oken</th><th style="text-align:right; width:200px">Kam s tím</th></tr></thead>
                 <tbody>
                   <sc-for list="{{ klEnTasks }}" as="t" hint-placeholder-count="5">
@@ -8811,7 +8811,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                     <td style="text-align:right"><button class="btn btn-primary" onClick="{{ klTaskAdd }}" disabled="{{ klTaskCant }}" style="font-size:12.5px; padding:6px 11px">Přidat</button></td>
                   </tr>
                 </tbody>
-              </table>
+              </table></div>
             </div>
           </sc-if>
 
@@ -8827,7 +8827,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                 <button class="btn btn-ghost" onClick="{{ klAttnReset }}" style="gap:6px"><i class="ph-duotone ph-equals" style="font-size:16px"></i>Nastavit podle skutečnosti</button>
               </div>
 
-              <table class="table">
+              <div class="tabulka-obal" style="overflow-x:auto; max-width:100%; min-width:0"><table class="table">
                 <thead><tr><th>Oblast</th><th style="width:150px">Chcete dát</th><th style="width:230px">Skutečně dostává</th><th style="width:110px">Rozdíl</th><th style="text-align:right; width:150px">Odkud</th></tr></thead>
                 <tbody>
                   <sc-for list="{{ klAttnRows }}" as="a" hint-placeholder-count="7">
@@ -8855,7 +8855,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                     </tr>
                   </sc-for>
                 </tbody>
-              </table>
+              </table></div>
               <div style="font-size:14px; color:var(--g-ink2); margin-top:16px; max-width:760px; text-wrap:pretty">{{ klAttnWorst }}</div>
             </div>
           </sc-if>
@@ -9365,7 +9365,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                 <button class="btn btn-ghost" onClick="{{ joyToMood }}" style="gap:6px"><i class="ph-duotone ph-smiley" style="font-size:16px"></i>Odkud jsou zdvihy</button>
               </div>
 
-              <table class="table">
+              <div class="tabulka-obal" style="overflow-x:auto; max-width:100%; min-width:0"><table class="table">
                 <thead><tr><th>Co jsme dělali</th><th style="width:120px">Kolikrát</th><th style="width:120px">Cena</th><th style="width:100px">Čas</th><th style="width:200px">Zdvih nálady</th><th style="width:130px">Na hodinu</th></tr></thead>
                 <tbody>
                   <sc-for list="{{ joyRows }}" as="r" hint-placeholder-count="8">
@@ -9382,7 +9382,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                     </tr>
                   </sc-for>
                 </tbody>
-              </table>
+              </table></div>
               <div style="display:flex; align-items:flex-end; gap:16px; flex-wrap:wrap; margin-top:16px">
                 <div style="flex:1 1 480px; font-size:14px; color:var(--g-ink2); text-wrap:pretty">{{ joyBest }}</div>
                 <button class="btn btn-secondary" onClick="{{ joyPlan }}" style="font-size:12.5px; padding:6px 12px">Naplánovat to, co funguje</button>
@@ -9419,7 +9419,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                 </sc-for>
               </div>
 
-              <table class="table">
+              <div class="tabulka-obal" style="overflow-x:auto; max-width:100%; min-width:0"><table class="table">
                 <thead><tr><th>Co se muselo připomínat</th><th style="width:130px">Komu</th><th style="width:230px">Kolikrát</th><th style="width:140px">Stav</th><th style="text-align:right; width:190px">Akce</th></tr></thead>
                 <tbody>
                   <sc-for list="{{ patRows }}" as="r" hint-placeholder-count="8">
@@ -9435,7 +9435,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                     </tr>
                   </sc-for>
                 </tbody>
-              </table>
+              </table></div>
               <div style="display:flex; align-items:baseline; gap:16px; flex-wrap:wrap; margin-top:16px">
                 <div style="flex:1 1 460px; font-size:14px; color:var(--g-ink2); text-wrap:pretty">{{ patWorst }}</div>
                 <div style="font-size:13px; color:var(--g-acc)">{{ patDone }}</div>
@@ -9530,7 +9530,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                 <div style="font-size:12.5px; color:var(--g-ink3)">{{ tiDead }}</div>
               </div>
 
-              <table class="table">
+              <div class="tabulka-obal" style="overflow-x:auto; max-width:100%; min-width:0"><table class="table">
                 <thead><tr><th>Sekce</th><th style="width:130px">Naposledy</th><th style="width:230px">Mlčí</th><th style="text-align:right; width:230px">Akce</th></tr></thead>
                 <tbody>
                   <sc-for list="{{ tiRows }}" as="r" hint-placeholder-count="8">
@@ -9548,7 +9548,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                     </tr>
                   </sc-for>
                 </tbody>
-              </table>
+              </table></div>
 
               <div style="font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--g-ink3); margin:26px 0 10px">{{ tiTopicHead }}</div>
               <div style="display:flex; flex-direction:column; gap:2px; max-width:760px">
@@ -9964,7 +9964,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                 </sc-if>
               </div>
 
-              <table class="table">
+              <div class="tabulka-obal" style="overflow-x:auto; max-width:100%; min-width:0"><table class="table">
                 <thead><tr><th>Práce</th><th style="width:130px">Jak často</th><th style="width:150px">Teď má</th><th style="width:160px">Naposledy</th><th style="width:90px">Čas</th><th style="text-align:right; width:250px">Akce</th></tr></thead>
                 <tbody>
                   <sc-for list="{{ chRows }}" as="c" hint-placeholder-count="8">
@@ -9990,7 +9990,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                     </tr>
                   </sc-for>
                 </tbody>
-              </table>
+              </table></div>
 
               <div style="font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--g-ink3); margin:26px 0 10px">Co se stalo</div>
               <div style="display:flex; flex-direction:column; gap:2px; max-width:760px">
@@ -10165,7 +10165,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                   <div style="font-size:22px; font-variant-numeric:tabular-nums">{{ flatCostSum }}</div>
                 </div>
               </div>
-              <table class="table">
+              <div class="tabulka-obal" style="overflow-x:auto; max-width:100%; min-width:0"><table class="table">
                 <thead><tr><th>Věc</th><th style="width:110px">Kde</th><th style="width:130px">Koupeno</th><th style="width:180px">Skutečná cena</th><th style="width:130px">Záruka</th><th style="width:110px">Doklad</th><th style="text-align:right; width:220px">Akce</th></tr></thead>
                 <tbody>
                   <sc-for list="{{ flatRows }}" as="f" hint-placeholder-count="6">
@@ -10183,7 +10183,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                     </tr>
                   </sc-for>
                 </tbody>
-              </table>
+              </table></div>
             </div>
           </sc-if>
 
@@ -10452,7 +10452,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
               </div>
 
               <div style="font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--g-ink3); margin-bottom:10px">{{ spkAskHead }}</div>
-              <table class="table">
+              <div class="tabulka-obal" style="overflow-x:auto; max-width:100%; min-width:0"><table class="table">
                 <thead><tr><th>Kanál</th><th style="width:220px">Kdo odpovídá</th><th style="width:130px">Vede</th><th style="width:180px">Poznámka</th><th style="text-align:right; width:160px">Akce</th></tr></thead>
                 <tbody>
                   <sc-for list="{{ spkRows }}" as="r" hint-placeholder-count="7">
@@ -10475,7 +10475,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                     </tr>
                   </sc-for>
                 </tbody>
-              </table>
+              </table></div>
               <div style="font-size:14px; color:var(--g-ink2); margin-top:16px; max-width:800px; text-wrap:pretty">{{ spkVerdict }}</div>
             </div>
           </sc-if>
@@ -10505,7 +10505,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                 <button class="btn btn-secondary" onClick="{{ busAdd }}" style="gap:6px"><i class="ph-duotone ph-plus" style="font-size:16px"></i>Přidat věc</button>
               </div>
 
-              <table class="table">
+              <div class="tabulka-obal" style="overflow-x:auto; max-width:100%; min-width:0"><table class="table">
                 <thead><tr><th>Co to je</th><th style="width:130px">Typ</th><th style="width:120px">Kdo to umí</th><th style="width:130px">Váha</th><th style="width:150px">Stav</th><th style="text-align:right; width:170px">Akce</th></tr></thead>
                 <tbody>
                   <sc-for list="{{ busRows }}" as="r" hint-placeholder-count="10">
@@ -10523,7 +10523,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                     </tr>
                   </sc-for>
                 </tbody>
-              </table>
+              </table></div>
               <div style="font-size:14px; color:var(--g-ink2); margin-top:16px; max-width:780px; text-wrap:pretty">{{ busVerdict }}</div>
             </div>
           </sc-if>
@@ -10555,7 +10555,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                 </div>
               </div>
 
-              <table class="table">
+              <div class="tabulka-obal" style="overflow-x:auto; max-width:100%; min-width:0"><table class="table">
                 <thead><tr><th>Co se stalo</th><th style="width:130px">Od koho</th><th style="width:120px">Váha</th><th style="width:120px">Kdy</th><th style="width:200px">Platnost</th><th style="text-align:right; width:150px">Akce</th></tr></thead>
                 <tbody>
                   <sc-for list="{{ favRows }}" as="f" hint-placeholder-count="7">
@@ -10573,7 +10573,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                     </tr>
                   </sc-for>
                 </tbody>
-              </table>
+              </table></div>
             </div>
           </sc-if>
 
@@ -10607,7 +10607,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                 <div><div style="font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--g-ink3)">Čas v hlavě · Makinka</div><div style="font-size:24px; font-variant-numeric:tabular-nums">{{ mlMinsM }}</div></div>
               </div>
 
-              <table class="table">
+              <div class="tabulka-obal" style="overflow-x:auto; max-width:100%; min-width:0"><table class="table">
                 <thead><tr><th>Úkol</th><th style="width:130px">× rok</th><th style="width:140px">Kdo udělá</th><th style="width:210px">Kdo si pamatuje</th><th style="text-align:right; width:200px">Akce</th></tr></thead>
                 <tbody>
                   <sc-for list="{{ mlRows }}" as="r" hint-placeholder-count="10">
@@ -10620,7 +10620,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                     </tr>
                   </sc-for>
                 </tbody>
-              </table>
+              </table></div>
               <div style="font-size:13px; color:var(--g-ink2); margin-top:14px; max-width:760px; text-wrap:pretty">{{ mlHint }}</div>
             </div>
           </sc-if>
@@ -10650,7 +10650,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                 </sc-for>
               </div>
 
-              <table class="table">
+              <div class="tabulka-obal" style="overflow-x:auto; max-width:100%; min-width:0"><table class="table">
                 <thead><tr><th>Kdo</th><th style="width:130px">Strana</th><th style="width:110px">Návštěv</th><th style="width:110px">Hodin</th><th style="width:150px">Domlouvá to</th><th style="text-align:right; width:210px">Akce</th></tr></thead>
                 <tbody>
                   <sc-for list="{{ visRows }}" as="v" hint-placeholder-count="5">
@@ -10667,7 +10667,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                     </tr>
                   </sc-for>
                 </tbody>
-              </table>
+              </table></div>
               <div style="font-size:14px; color:var(--g-ink2); margin-top:16px; max-width:800px; text-wrap:pretty">{{ visPlan }}</div>
             </div>
           </sc-if>
@@ -10692,7 +10692,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                 </sc-for>
               </div>
 
-              <table class="table">
+              <div class="tabulka-obal" style="overflow-x:auto; max-width:100%; min-width:0"><table class="table">
                 <thead><tr><th>Věc</th><th style="width:130px">Přidal</th><th style="width:150px">Leží</th><th style="width:150px">Stav</th><th style="text-align:right; width:250px">Akce</th></tr></thead>
                 <tbody>
                   <sc-for list="{{ ltRows }}" as="l" hint-placeholder-count="8">
@@ -10717,7 +10717,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                     </tr>
                   </sc-for>
                 </tbody>
-              </table>
+              </table></div>
             </div>
           </sc-if>
         </div>
@@ -11356,7 +11356,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                 </div>
               </div>
 
-              <table class="table">
+              <div class="tabulka-obal" style="overflow-x:auto; max-width:100%; min-width:0"><table class="table">
                 <thead><tr><th>Co se rozhodlo samo</th><th style="width:160px">Jak</th><th style="width:170px">Co to stálo</th><th style="width:160px">Stav</th><th style="text-align:right; width:230px">Akce</th></tr></thead>
                 <tbody>
                   <sc-for list="{{ adRows }}" as="r" hint-placeholder-count="6">
@@ -11379,7 +11379,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                     </tr>
                   </sc-for>
                 </tbody>
-              </table>
+              </table></div>
               <div style="display:flex; align-items:flex-end; gap:16px; flex-wrap:wrap; margin-top:16px">
                 <div style="flex:1 1 500px; font-size:14px; color:var(--g-ink2); text-wrap:pretty">{{ adVerdict }}</div>
                 <button class="btn btn-secondary" onClick="{{ adRule }}" style="font-size:12.5px; padding:6px 12px">Založit to pravidlo</button>
@@ -11473,7 +11473,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                 </div>
               </div>
 
-              <table class="table">
+              <div class="tabulka-obal" style="overflow-x:auto; max-width:100%; min-width:0"><table class="table">
                 <thead><tr><th>Co je uzavřené</th><th style="width:130px">Odpustil</th><th style="width:200px">Kdy</th><th style="width:170px">Pokusy vytáhnout</th><th style="text-align:right; width:190px">Akce</th></tr></thead>
                 <tbody>
                   <sc-for list="{{ fgRows }}" as="f" hint-placeholder-count="5">
@@ -11486,7 +11486,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                     </tr>
                   </sc-for>
                 </tbody>
-              </table>
+              </table></div>
               <div style="font-size:14px; color:var(--g-ink2); margin-top:16px; text-wrap:pretty">{{ fgWorst }}</div>
 
               <div style="margin-top:24px; padding:16px 18px; border-radius:2px; background:var(--g-raise); border:1px solid var(--g-line2); max-width:640px">
@@ -11572,7 +11572,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                 <button class="btn btn-ghost" onClick="{{ pmAddDec }}" style="gap:6px"><i class="ph-duotone ph-scales" style="font-size:16px"></i>Nové rozhodnutí</button>
               </div>
 
-              <table class="table">
+              <div class="tabulka-obal" style="overflow-x:auto; max-width:100%; min-width:0"><table class="table">
                 <thead><tr><th>Co se může pokazit</th><th style="width:120px">Kdo</th><th style="width:120px">Šance</th><th style="width:120px">Dopad</th><th style="width:170px">Váha</th><th style="width:260px">Opatření</th></tr></thead>
                 <tbody>
                   <sc-for list="{{ pmRows }}" as="r" hint-placeholder-count="3">
@@ -11589,7 +11589,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                     </tr>
                   </sc-for>
                 </tbody>
-              </table>
+              </table></div>
               <div style="font-size:14px; color:var(--g-mag); margin-top:14px; max-width:780px; text-wrap:pretty">{{ pmShared }}</div>
               <div style="font-size:15px; margin-top:6px; max-width:780px; text-wrap:pretty">{{ pmTop }}</div>
 
@@ -12035,7 +12035,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
               </div>
               <div>
                 <h4 style="margin:0 0 10px; font-size:19px">Příznak a fáze</h4>
-                <table class="table" style="font-size:13.5px">
+                <div class="tabulka-obal" style="overflow-x:auto; max-width:100%; min-width:0"><table class="table" style="font-size:13.5px">
                   <thead><tr><th>Příznak</th><th style="width:150px">Nejčastěji ve fázi</th><th style="width:96px">Výskytů</th></tr></thead>
                   <tbody>
                     <sc-for list="{{ cycPatterns }}" as="p" hint-placeholder-count="5">
@@ -12046,7 +12046,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                       </tr>
                     </sc-for>
                   </tbody>
-                </table>
+                </table></div>
                 <sc-if value="{{ cycNoPatterns }}"><div style="padding:20px 0; font-size:14px; color:var(--g-ink2)">Zatím málo záznamů. Vzorec se ukáže, až se příznak objeví aspoň třikrát.</div></sc-if>
               </div>
             </div>
@@ -12857,11 +12857,12 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
       <div style="width:min(420px,100%); margin:auto; flex:none">
         <div style="display:flex; align-items:baseline; gap:12px; border-top:3px solid var(--g-ink); padding-top:9px">
           <div style="font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--g-ink3)">Galerie</div>
-          <div style="margin-left:auto; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--g-ink3)">Adrian &amp; Makinka</div>
+          <div style="margin-left:auto; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--g-ink3)">{{ dvojiceJmena }}</div>
         </div>
         <h1 style="margin:16px 0 5px; font-size:36px; line-height:1.08; letter-spacing:-.01em">{{ lockHeadline }}</h1>
         <p style="margin:0 0 20px; font-size:14px; line-height:1.55; color:var(--g-ink2); text-wrap:pretty">{{ lockSub }}</p>
         <sc-if value="{{ lockIsPwd }}" hint-placeholder-val="{{ true }}">
+          <sc-if value="{{ lockWhosOn }}">
           <div style="display:flex; gap:8px; margin-bottom:16px">
             <sc-for list="{{ lockWhos }}" as="w" hint-placeholder-count="2">
               <button onClick="{{ w.pick }}" style="flex:1; display:flex; align-items:center; gap:9px; padding:8px 10px; border:1px solid {{ w.bd }}; border-radius:2px; background:{{ w.bg }}; color:{{ w.fg }}; cursor:pointer; font-family:inherit; font-size:13.5px; text-align:left">
@@ -12869,6 +12870,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
               </button>
             </sc-for>
           </div>
+          </sc-if>
           <div class="field"><label>E-mail</label>
             <input class="input" type="email" value="{{ lockMail }}" onInput="{{ lockSetMail }}" onKeyDown="{{ lockPwdKey }}" placeholder="adresa@example.com" aria-label="E-mail" />
           </div>
@@ -13979,7 +13981,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
       <div style="flex:1; min-height:0; overflow:auto; padding:30px 18px 80px">
         <sc-if value="{{ gvGate }}">
           <div style="width:min(430px,100%); margin:6vh auto 0; padding:26px 26px 24px; border-radius:2px; background:var(--g-raise)">
-            <div style="width:34px; height:34px; border-radius:2px; background:var(--g-ink); color:var(--g-bg); display:grid; place-items:center; font-size:13px; letter-spacing:.02em; margin-bottom:16px">A&amp;M</div>
+            <div style="width:34px; height:34px; border-radius:2px; background:var(--g-ink); color:var(--g-bg); display:grid; place-items:center; font-size:13px; letter-spacing:.02em; margin-bottom:16px">{{ dvojiceInicialy }}</div>
             <h2 style="margin:0 0 6px; font-size:26px">{{ gvName }}</h2>
             <p style="margin:0 0 18px; font-size:14.5px; color:var(--g-ink2); text-wrap:pretty">Tenhle odkaz je chráněný heslem. Heslo vám pošleme zvlášť — nikdy není v odkazu.</p>
             <div class="field"><label>Heslo</label><input class="input" type="password" value="{{ gvPwd }}" onChange="{{ gvSetPwd }}" placeholder="Zadejte heslo"></div>
@@ -17506,8 +17508,26 @@ class Component extends DCLogic {
    * tvary, které tahle aplikace potká: jména dvojice. Co se nepovede,
    * zůstane v prvním pádě — špatně skloněné jméno je horší než neskloněné.
    */
+  /*
+   * Jména dvojice pro hlavičky a odznaky — křestní, ze serveru.
+   *
+   * Dokud server neřekl, kdo tu je (nepřihlášený návštěvník), žádná jména:
+   * přezdívky z ukázky na veřejnou stránku nepatří.
+   */
+  dvojiceNazvy() {
+    const D = (window.GalerieData || {}).DVOJICE;
+    if (! D || D.length < 2) return { znam: false, jmena: '', spojka: '', inicialy: '' };
+    const krestni = D.slice(0, 2).map(j => String(j || '').trim().split(/\s+/)[0]);
+    return {
+      znam: true,
+      jmena: krestni.join(' & '),
+      spojka: krestni.join(' a '),
+      inicialy: krestni.map(j => j.charAt(0).toUpperCase()).join('&')
+    };
+  }
   pate(jmeno) {
-    const s = String(jmeno || '').trim();
+    // Oslovuje se křestním jménem: „Kláro", ne „Klára Nováková" — pátý pád se jinak tvořil z příjmení.
+    const s = String(jmeno || '').trim().split(/\s+/)[0] || '';
     if (! s) return '';
 
     const posledni = s.slice(-1);
@@ -22829,7 +22849,7 @@ class Component extends DCLogic {
        * je po jeho dokončení hotové. Nabízet ho dál znamená zvát člověka, aby
        * si přepsal nastavení, které si zrovna udělal.
        */
-      obPrvni: ! (this.state.obApplied || (((window.GalerieData || {}).DVOJICE || []).length >= 2)),
+      obPrvni: ! (this.state.obApplied || window.GALERIE_UCTY_EXISTUJI || (((window.GalerieData || {}).DVOJICE || []).length >= 2)),
       obStart: () => this.setState({ obOpen: true, obStep: 0 }),
       obClose: () => this.setState({ obOpen: false }),
       obNarrow: (s.vw || 1440) < 860,
@@ -28242,8 +28262,9 @@ class Component extends DCLogic {
     const s = this.state;
     // Prázdná kolonka znamená „ten, kdo je vybraný" — táž adresa, jakou
     // obrazovka nabízí; jinak by odeslání beze změny nedávalo smysl.
-    const mail = ((s.lockMail || LOCKMAIL[s.lockWho || 'A'] || '')).trim().toLowerCase();
-    const who = Object.keys(LOCKMAIL).find(k => LOCKMAIL[k] === mail);
+    const mail = ((s.lockMail || this.zamekMail(s.lockWho || 'A'))).trim().toLowerCase();
+    // Kdo to je, se dá odhadnout jen z adres, které poslal server.
+    const who = this.zamekZnam() ? Object.keys(LOCKMAIL).find(k => (LOCKMAIL[k] || '').toLowerCase() === mail) : null;
     const api = window.GalerieApi;
     // Se nasazeným backendem ověřuje heslo server a vrací token pro API;
     // bez něj platí ověření v prototypu. Chování a hlášky jsou stejné.
@@ -28256,9 +28277,18 @@ class Component extends DCLogic {
       api.signIn(mail, s.lockPwd || '', 'prohlížeč').then(res => {
         this.setState({ lockSignBusy: false });
         if (!res || !res.token) return;
-        const k = who || ((res.user || {}).name === LOCKWHO.M ? 'M' : 'A');
+        /*
+         * Strana (A/M) až z adres od serveru.
+         *
+         * Dřív se hádala z ukázkového jména v `LOCKWHO` — partnerka se tak
+         * přihlásila jako Adrian: špatný pozdrav, cizí kód zámku, vlastní
+         * zprávy na straně toho druhého.
+         */
+        const email = String((res.user || {}).email || mail).toLowerCase();
+        const urci = () => Object.keys(LOCKMAIL).find(x => (LOCKMAIL[x] || '').toLowerCase() === email) || who || 'A';
+        const k = urci();
         this.setState({ lockWho: k, lockStep: 'pin', lockPwd: '', lockErr: null, lockTries: 0, lockTrusted: s.lockTrust !== false });
-        this.toast('Přihlášeno · ' + (LOCKWHO[k] || '') + (s.lockTrust !== false ? ' · zařízení zapamatováno' : ''), { icon: 'ph-envelope-simple-open' });
+        this.toast('Přihlášeno · ' + ((res.user || {}).name || LOCKWHO[k] || '') + (s.lockTrust !== false ? ' · zařízení zapamatováno' : ''), { icon: 'ph-envelope-simple-open' });
         /*
          * Kdo kód nemá, nemá po přihlášení co zadávat.
          *
@@ -28267,8 +28297,13 @@ class Component extends DCLogic {
          * před někým, kdo si ho ještě nenastavil, zamčené dveře bez klíče
          * by znamenalo, že se do vlastní galerie nedostane.
          */
-        const dal = () => { if (!this.zamek().nastaveno) this.lockOpen('Přihlášeno · kód zámku si můžete nastavit v Nastavení → Zámek'); };
-        if (window.GalerieObnovit) GalerieObnovit('system').then(dal); else dal();
+        const dal = () => {
+          // Teď už jsou v `LOCKMAIL` adresy od serveru — strana se určí znovu.
+          const spravne = urci();
+          if (spravne !== this.state.lockWho) this.setState({ lockWho: spravne });
+          if (!this.zamek().nastaveno) this.lockOpen('Přihlášeno · kód zámku si můžete nastavit v Nastavení → Zámek');
+        };
+        if (window.GalerieObnovit) GalerieObnovit('system').then(dal, dal); else dal();
       }).catch(e => {
         /*
          * Co server řekl, to se má říct dál.
@@ -28317,6 +28352,14 @@ class Component extends DCLogic {
   }
   // Co server říká o mém zámku: `{ nastaveno, delka, zmeneno }`.
   zamek() { return (window.GalerieData || {}).ZAMEK || {}; }
+  /*
+   * Jestli jména a adresy na zamčené obrazovce přišly od serveru.
+   *
+   * Bez toho jsou v `LOCKWHO` a `LOCKMAIL` ukázková data prototypu — cizí
+   * osobní adresy, které na veřejnou přihlašovací stránku nepatří.
+   */
+  zamekZnam() { return !!(window.GalerieData || {}).ZAMEK; }
+  zamekMail(who) { return this.zamekZnam() ? (LOCKMAIL[who] || '') : ''; }
   /*
    * Co je v trezoru — jako úplný seznam, od kterého se odpíchne každý zápis.
    *
@@ -28586,13 +28629,14 @@ class Component extends DCLogic {
       lockHeadline: s.lockStep === 'pin' ? 'Zamčeno' : 'Přihlášení',
       // Než člověk začne psát, nabídne se adresa toho, kdo je vybraný —
       // ta skutečná ze serveru, ne ukázková.
-      lockMail: s.lockMail !== undefined && s.lockMail !== '' ? s.lockMail : (LOCKMAIL[who] || ''),
+      lockMail: s.lockMail !== undefined && s.lockMail !== '' ? s.lockMail : this.zamekMail(who),
+      lockWhosOn: this.zamekZnam(),
       lockSetMail: e => this.setState({ lockMail: e.target.value, lockErr: null }),
       lockPwd: s.lockPwd || '',
       lockSetPwd: e => this.setState({ lockPwd: e.target.value, lockErr: null }),
       lockPwdKey: e => { if (e.key === 'Enter') this.lockSignIn(); },
       lockSignIn: () => this.lockSignIn(),
-      lockSignCant: !!s.lockSignBusy || !(s.lockMail || LOCKMAIL[who] || '').trim() || (s.lockPwd || '').length < 4,
+      lockSignCant: !!s.lockSignBusy || !(s.lockMail || this.zamekMail(who)).trim() || (s.lockPwd || '').length < 4,
       lockSignLabel: s.lockSignBusy ? 'Přihlašuji…' : 'Přihlásit se',
       lockTrustOn: s.lockTrust !== false,
       lockTrustToggle: () => this.setState({ lockTrust: s.lockTrust === false }),
@@ -28609,7 +28653,7 @@ class Component extends DCLogic {
       lockPwdHint: 'Heslo je totéž jako do galerie. Ověřuje ho server.',
       lockWhoName: LOCKWHO[who] || '',
       lockWhoIni: (LOCKWHO[who] || '?')[0],
-      lockWhoMail: LOCKMAIL[who] || '',
+      lockWhoMail: this.zamekMail(who),
       lockWhoDotBg: who === 'A' ? 'var(--g-acc-soft)' : 'var(--g-mag-soft)',
       lockWhoDotFg: who === 'A' ? 'var(--g-acc-deep)' : 'var(--g-mag)',
       lockSub: blocked
@@ -28626,7 +28670,7 @@ class Component extends DCLogic {
         : 'Kód zamyká aplikaci na tomhle zařízení. K datům se bez přihlášení nedostane nikdo.',
       lockWhos: Object.keys(LOCKWHO).map(k => ({
         name: LOCKWHO[k], ini: LOCKWHO[k][0],
-        pick: () => this.setState({ lockWho: k, lockPin: '', lockErr: null, lockTries: 0, lockMail: LOCKMAIL[k], lockPwd: '' }),
+        pick: () => this.setState({ lockWho: k, lockPin: '', lockErr: null, lockTries: 0, lockMail: this.zamekMail(k), lockPwd: '' }),
         bg: who === k ? 'var(--g-ink)' : 'var(--g-raise)',
         fg: who === k ? 'var(--g-bg)' : 'var(--g-ink)',
         bd: who === k ? 'var(--g-ink)' : 'var(--g-line)',
@@ -29842,6 +29886,7 @@ class Component extends DCLogic {
        * a jméno napevno. Makinka byla vítaná Adrianovým jménem a v jedenáct
        * večer jí aplikace přála dobré ráno.
        */
+      ...(() => { const n = this.dvojiceNazvy(); return { dvojiceJmena: n.jmena, dvojiceInicialy: n.inicialy || 'G', dvojiceZapati: n.znam ? ' · ' + n.spojka : '' }; })(),
       todayLabel: (() => {
         const D = ['Neděle', 'Pondělí', 'Úterý', 'Středa', 'Čtvrtek', 'Pátek', 'Sobota'];
         const M = ['ledna', 'února', 'března', 'dubna', 'května', 'června', 'července', 'srpna', 'září', 'října', 'listopadu', 'prosince'];

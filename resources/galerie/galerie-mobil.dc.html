@@ -139,7 +139,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
         <sc-if value="{{ twoPane }}">
           <div style="position:absolute; left:0; top:0; bottom:0; width:236px; z-index:7; display:flex; flex-direction:column; padding:16px 12px 14px; box-sizing:border-box; background:var(--g-bg); border-right:1px solid var(--g-line)">
             <div style="display:flex; align-items:center; gap:9px; padding:0 6px 16px">
-              <span style="width:28px; height:28px; flex:none; border-radius:2px; background:var(--g-ink); color:var(--g-bg); display:grid; place-items:center; font-size:12px">A&amp;M</span>
+              <span style="width:28px; height:28px; flex:none; border-radius:2px; background:var(--g-ink); color:var(--g-bg); display:grid; place-items:center; font-size:12px">{{ dvojiceInicialy }}</span>
               <span style="min-width:0">
                 <span style="display:block; font-size:14.5px; line-height:1.2">Galerie</span>
                 <span style="display:block; font-size:11px; color:var(--g-ink3)">tablet · dvoupanel</span>
@@ -3719,6 +3719,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                 <div style="width:100%; max-width:320px; margin-top:12px">
                   <div style="font-size:21px; text-align:center">Přihlášení</div>
                   <div style="font-size:12.5px; color:var(--g-ink3); margin-top:4px; text-align:center; line-height:1.5; text-wrap:pretty">Archiv je jen náš. Kód i obsah patří tomu, kdo je přihlášený.</div>
+                  <sc-if value="{{ lockWhosOn }}">
                   <div style="display:flex; gap:8px; margin-top:16px">
                     <sc-for list="{{ lockWhos }}" as="w" hint-placeholder-count="2">
                       <button onClick="{{ w.pick }}" style="flex:1; display:flex; align-items:center; gap:8px; min-height:48px; padding:0 10px; border:1px solid {{ w.bd }}; border-radius:2px; background:{{ w.bg }}; color:{{ w.fg }}; cursor:pointer; font-family:inherit; font-size:13.5px; text-align:left">
@@ -3726,6 +3727,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                       </button>
                     </sc-for>
                   </div>
+                  </sc-if>
                   <div class="field" style="margin-top:14px"><label>E-mail</label>
                     <input class="input" type="email" inputMode="email" value="{{ lockMail }}" onInput="{{ lockSetMail }}" onKeyDown="{{ lockPwdKey }}" placeholder="adresa@example.com" aria-label="E-mail" style="width:100%; box-sizing:border-box; min-height:48px; font-family:inherit; font-size:14px" />
                   </div>
@@ -5980,8 +5982,26 @@ class Component extends DCLogic {
    * které tahle aplikace potká: jména dvojice. Co se nepovede, zůstane
    * v prvním pádě — špatně skloněné jméno je horší než neskloněné.
    */
+  /*
+   * Jména dvojice pro hlavičky a odznaky — křestní, ze serveru.
+   *
+   * Dokud server neřekl, kdo tu je (nepřihlášený návštěvník), žádná jména:
+   * přezdívky z ukázky na veřejnou stránku nepatří.
+   */
+  dvojiceNazvy() {
+    const D = (window.GalerieData || {}).DVOJICE;
+    if (! D || D.length < 2) return { znam: false, jmena: '', spojka: '', inicialy: '' };
+    const krestni = D.slice(0, 2).map(j => String(j || '').trim().split(/\s+/)[0]);
+    return {
+      znam: true,
+      jmena: krestni.join(' & '),
+      spojka: krestni.join(' a '),
+      inicialy: krestni.map(j => j.charAt(0).toUpperCase()).join('&')
+    };
+  }
   pate(jmeno) {
-    const s = String(jmeno || '').trim();
+    // Oslovuje se křestním jménem: „Kláro", ne „Klára Nováková" — pátý pád se jinak tvořil z příjmení.
+    const s = String(jmeno || '').trim().split(/\s+/)[0] || '';
     if (! s) return '';
 
     const posledni = s.slice(-1);
@@ -7640,7 +7660,7 @@ class Component extends DCLogic {
       }).join('\n') + '\nEND:VCALENDAR';
     } else if (kind === 'dl-txt') {
       name = 'galerie-denik.txt';
-      body = 'DENÍK — Adrian a Makinka\n\n' + this.diaryList().map(x => x.date + ' · ' + x.title + '\n' + x.text + '\n').join('\n');
+      body = 'DENÍK' + (this.dvojiceNazvy().znam ? ' — ' + this.dvojiceNazvy().spojka : '') + '\n\n' + this.diaryList().map(x => x.date + ' · ' + x.title + '\n' + x.text + '\n').join('\n');
     } else if (kind === 'dl-csv') {
       name = 'galerie-transakce.csv'; mime = 'text/csv;charset=utf-8';
       body = 'datum;popis;kategorie;castka;ucet\n' + (D.TX || []).map(t => [t[1], t[2], (this.state.txCat[t[0]] === undefined ? t[3] : this.state.txCat[t[0]]), t[4], t[5]].join(';')).join('\n');
@@ -7671,7 +7691,19 @@ class Component extends DCLogic {
    * a heslo, všechno z `galerie-data.js`. Ověřovat je uměl prohlížeč, takže
    * je aplikace musela znát; teď je zná jen databáze a ověřuje je server.
    */
-  lockData() { const D = window.GalerieData || {}; return { WHO: D.LOCKWHO || {}, MAIL: D.LOCKMAIL || {} }; }
+  /*
+   * Jména a adresy pro zamčenou obrazovku — jen od serveru.
+   *
+   * Dokud server neřekl, kdo tu je (`ZAMEK` chodí za přihlášením), byly tu
+   * ukázková data prototypu: výběr „Adrian / Makinka" a v kolonce předvyplněná
+   * `adrian.stanek@gmail.com`. Dvě osobní adresy na veřejné stránce, a jedna
+   * z nich špatná. Nepřihlášený dostane obyčejné přihlášení: e-mail a heslo.
+   */
+  lockData() {
+    const D = window.GalerieData || {};
+    if (! D.ZAMEK) return { WHO: {}, MAIL: {}, znam: false };
+    return { WHO: D.LOCKWHO || {}, MAIL: D.LOCKMAIL || {}, znam: true };
+  }
   // Přihlášení určuje, kdo aplikaci používá — profil se nepřepíná zvenčí,
   // vybírá se e-mailem a heslem. Kód pak patří tomu, kdo je přihlášený.
   async lockSignIn() {
@@ -7679,7 +7711,7 @@ class Component extends DCLogic {
     // Prázdná kolonka znamená „ten, kdo je vybraný" — táž adresa, jakou
     // obrazovka nabízí; jinak by odeslání beze změny nedávalo smysl.
     const mail = (s.lockMail || L.MAIL[s.lockWho || 'A'] || '').trim().toLowerCase();
-    const who = Object.keys(L.MAIL).find(k => L.MAIL[k] === mail);
+    const who = Object.keys(L.MAIL).find(k => (L.MAIL[k] || '').toLowerCase() === mail);
     const api = window.GalerieApi;
     // Se nasazeným backendem ověřuje heslo server a vrací token pro API;
     // bez něj platí ověření v prototypu. Chování a hlášky jsou stejné.
@@ -7688,9 +7720,12 @@ class Component extends DCLogic {
       try {
         const res = await api.signIn(mail, s.lockPwd || '', 'telefon');
         if (res && res.token) {
-          const k = who || ((res.user || {}).name === L.WHO.M ? 'M' : 'A');
+          // Strana z e-mailu, který server vrátil — ne z ukázkového jména v `LOCKWHO`.
+          const email = String((res.user || {}).email || mail).toLowerCase();
+          const urci = () => { const M = this.lockData().MAIL; return Object.keys(M).find(x => (M[x] || '').toLowerCase() === email) || who || 'A'; };
+          const k = urci();
           this.setState({ lockWho: k, lockStep: 'pin', lockPwd: '', lockErr: null, lockTries: 0, lockTrusted: s.lockTrust !== false, lockSignBusy: false });
-          this.toast('Přihlášeno · ' + (L.WHO[k] || '') + (s.lockTrust !== false ? ' · zařízení zapamatováno' : ''), { icon: 'ph-envelope-simple-open' });
+          this.toast('Přihlášeno · ' + ((res.user || {}).name || L.WHO[k] || '') + (s.lockTrust !== false ? ' · zařízení zapamatováno' : ''), { icon: 'ph-envelope-simple-open' });
           /*
            * Kdo kód nemá, nemá po přihlášení co zadávat.
            *
@@ -7699,7 +7734,8 @@ class Component extends DCLogic {
            * před někým, kdo si ho ještě nenastavil, zamčené dveře bez klíče by
            * znamenalo, že se do vlastní galerie nedostane.
            */
-          if (window.GalerieObnovit) await GalerieObnovit('system');
+          if (window.GalerieObnovit) { try { await GalerieObnovit('system'); } catch (x) {} }
+          { const spravne = urci(); if (spravne !== this.state.lockWho) this.setState({ lockWho: spravne }); }
           if (! this.zamek().nastaveno) this.lockOpen('Přihlášeno · kód zámku si můžete nastavit v Nastavení → Zámek');
           return;
         }
@@ -7857,6 +7893,7 @@ class Component extends DCLogic {
       lockPwdKey: e => { if (e.key === 'Enter') this.lockSignIn(); },
       lockSignIn: () => this.lockSignIn(),
       lockSignCant: !(s.lockMail || L.MAIL[who] || '').trim() || (s.lockPwd || '').length < 4,
+      lockWhosOn: L.znam,
       lockTrustOn: s.lockTrust !== false,
       lockTrustToggle: () => this.setState({ lockTrust: s.lockTrust === false }),
       lockTrustBg: s.lockTrust !== false ? 'var(--g-acc)' : 'transparent',
@@ -9424,7 +9461,7 @@ class Component extends DCLogic {
     const impFiles = picked.reduce((a, x) => a + x[3], 0);
     const paired = (s.obPair || '').toUpperCase() === MOBCODE;
     const pin = s.obPin || '';
-    const name = s.obName === undefined ? 'Adrian a Makinka' : s.obName;
+    const name = s.obName === undefined ? (this.dvojiceNazvy().spojka || 'Naše galerie') : s.obName;
     const ready = [true, paired, onCount > 0, true, pin.length === 6, true][step];
     const block = ['', paired ? '' : 'Zadejte kód — v prototypu ' + MOBCODE + '.', onCount ? '' : 'Vyberte aspoň jednu sekci.', '', pin.length === 6 ? '' : 'Kód musí mít šest číslic.', ''][step];
     return {
@@ -9439,7 +9476,7 @@ class Component extends DCLogic {
        */
       // Hotovo poznáme dvěma způsoby a stačí jeden: průvodce doběhl,
       // nebo server o dvojici ví.
-      obPrvni: ! (s.obApplied || (((window.GalerieData || {}).DVOJICE || []).length >= 2)),
+      obPrvni: ! (s.obApplied || window.GALERIE_UCTY_EXISTUJI || (((window.GalerieData || {}).DVOJICE || []).length >= 2)),
       obStart: () => this.setState({ obOpen: true, obStep: 0 }),
       obStepNum: 'Krok ' + (step + 1) + ' z ' + MOBSTEPS.length,
       obTitle: MOBSTEPS[step][0],
@@ -10477,6 +10514,7 @@ class Component extends DCLogic {
        * který se přepnout nedá.
        */
       vitrina: !!s.vitrina,
+      dvojiceInicialy: this.dvojiceNazvy().inicialy || 'G',
       scenaStyl: s.vitrina
         ? 'padding:40px 44px 70px; background:var(--g-bg); color:var(--g-ink); font-family:\'Barlow\',sans-serif; font-size:15px; min-height:100vh; display:flex; gap:44px; align-items:flex-start; flex-wrap:wrap'
         : 'padding:0; background:var(--g-bg); color:var(--g-ink); font-family:\'Barlow\',sans-serif; font-size:15px; display:block',

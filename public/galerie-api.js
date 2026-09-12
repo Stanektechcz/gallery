@@ -243,12 +243,44 @@
       if (e.data && e.data.type === 'galerie-sync-done') { queuedBySw = false; lastSync = new Date(); notify(); }
     });
   }
-  window.addEventListener('beforeunload', function () {
+  /*
+   * Rozepsaná změna při zavírání karty.
+   *
+   * Posílala se přes `sendBeacon`, jenže ten umí jen POST a žádné hlavičky.
+   * Na `/api/state` žádný POST není a bez `Authorization` server odpoví 401
+   * — takže to, co člověk změnil v posledních 450 ms před zavřením karty,
+   * se tiše ztratilo. V síťovém logu to bylo vidět jako `POST /api/state 401`.
+   *
+   * `fetch` s `keepalive` přežije zavření stránky stejně jako beacon a nese
+   * hlavičky i správnou metodu. `pagehide` a přechod do pozadí se hlídají
+   * taky: na telefonu `beforeunload` často nepřijde vůbec.
+   */
+  function odesliPriOdchodu() {
     if (!Object.keys(pending).length) return;
     if (mode === 'local') { rev += 1; writeLocal(); return; }
+    var patch = pending;
+    pending = {};
     try {
-      navigator.sendBeacon(base + '/state', new Blob([JSON.stringify({ data: pending, rev: rev, _method: 'PATCH' })], { type: 'application/json' }));
-    } catch (e) {}
+      fetch(base + '/state', {
+        method: 'PATCH', headers: headers(), credentials: 'same-origin', keepalive: true,
+        body: JSON.stringify({ data: patch, rev: rev })
+      }).catch(function () {});
+    } catch (e) {
+      // Starší prohlížeč bez `keepalive`: změna zůstane uložená lokálně
+      // a odejde při příštím spuštění.
+      Object.keys(patch).forEach(function (k) { if (pending[k] === undefined) pending[k] = patch[k]; });
+      writeLocal();
+    }
+  }
+  window.addEventListener('beforeunload', odesliPriOdchodu);
+  window.addEventListener('pagehide', odesliPriOdchodu);
+  // Přechod do pozadí stránku nezavírá — tady stačí obyčejné odeslání, které
+  // si převezme odpověď serveru i novou revizi. Odeslání „naslepo" by nechalo
+  // starou revizi a další zápis téhož klíče by server vzal jako střet.
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState !== 'hidden' || !Object.keys(pending).length) return;
+    if (timer) { clearTimeout(timer); timer = null; }
+    flush();
   });
 
   window.GalerieApi = {

@@ -205,6 +205,28 @@ class DoruceniTest extends TestCase
         $this->assertStringNotContainsString('<span>9:41</span>', $telo);
     }
 
+    /**
+     * Přihlašovací obrazovka ví, jestli už je do čeho se přihlásit.
+     *
+     * Data o dvojici chodí až za přihlášením, takže nepřihlášený návštěvník
+     * viděl „První spuštění" i u galerie, která běží roky. Posílá se jen
+     * ano/ne — kolik účtů je a jak se jmenují, nepřihlášený vědět nemá.
+     */
+    public function test_dokument_rekne_jestli_existuji_ucty(): void
+    {
+        $this->assertStringContainsString(
+            'window.GALERIE_UCTY_EXISTUJI = false',
+            (string) $this->get('/')->assertOk()->getContent(),
+        );
+
+        $ucet = User::factory()->create(['name' => 'Markéta Kubíčková', 'email' => 'marketa@vzpominky.test']);
+        $telo = (string) $this->get('/')->assertOk()->getContent();
+
+        $this->assertStringContainsString('window.GALERIE_UCTY_EXISTUJI = true', $telo);
+        $this->assertStringNotContainsString($ucet->email, $telo);
+        $this->assertStringNotContainsString('Kubíčková', $telo);
+    }
+
     /** A nesmí ho zastínit statický soubor, který by šel kolem PHP. */
     public function test_service_worker_neni_v_public(): void
     {

@@ -29,6 +29,10 @@
   // že by chtěl vědět, čí je to sezení.
   window.GALERIE_USER = @json($ucet ?? null);
 
+  // Jen ano/ne: jestli už je do čeho se přihlásit. Podle toho zmizí „První
+  // spuštění" i před přihlášením — data o dvojici chodí až po něm.
+  window.GALERIE_UCTY_EXISTUJI = @json((bool) ($uctyExistuji ?? false));
+
   // Service worker drží skořápku offline a doručuje zápisy, které vznikly bez
   // signálu. Dosah „/" je podmínka, ne volba: ve scope /galerie/ by neviděl
   // /api/ a fronta zápisů by nefungovala.

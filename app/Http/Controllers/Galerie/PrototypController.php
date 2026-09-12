@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Galerie;
 
 use App\Http\Controllers\Controller;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\File;
@@ -245,6 +246,27 @@ JS,
         ]);
     }
 
+    /**
+     * Jestli už v aplikaci je účet, do kterého se dá přihlásit.
+     *
+     * Přihlašovací obrazovka to potřebuje vědět dřív, než se kdokoli přihlásí:
+     * „První spuštění" má smysl jen na prázdném serveru. Data o dvojici
+     * (`DVOJICE`) chodí až za přihlášením, takže nepřihlášený návštěvník
+     * průvodce viděl vždycky — i u galerie, která běží roky.
+     *
+     * Posílá se jen ano/ne. Kolik účtů je a jak se jmenují, nepřihlášený
+     * návštěvník vědět nemá.
+     */
+    private function uctyExistuji(): bool
+    {
+        try {
+            return User::query()->whereNotNull('password')->exists();
+        } catch (\Throwable) {
+            // Bez databáze (instalace, výpadek) průvodce nezakazujeme.
+            return false;
+        }
+    }
+
     private function cesta(string $soubor): string
     {
         return rtrim((string) config('galerie.prototyp_path', resource_path('galerie')), '/\\')
@@ -311,6 +333,7 @@ JS,
                 'name' => $uzivatel->name,
                 'email' => $uzivatel->email,
             ],
+            'uctyExistuji' => $this->uctyExistuji(),
         ])->render();
 
         $misto = stripos($dokument, '</head>');

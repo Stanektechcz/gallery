@@ -37,10 +37,10 @@ use Illuminate\Support\Facades\Route;
  * Třetí parametr je **předpona počítadla** a je tu nutná. Bez ní si
  * `ThrottleRequests` klíčuje pokusy jen podle uživatele a adresy, takže každá
  * cesta se stejným limitem sdílí jedno počítadlo — a přihlášení si ho dělilo
- * s otiskem prstu o kus níž. Zamčená obrazovka se na otisk ptá při každém
- * otevření, takže po pár načteních stránky byl limit vyčerpaný a přihlášení
- * dostalo 429 dřív, než ho někdo stihl zkusit. Obrazovka na to řekla „Server
- * neodpověděl" a člověk to zkoušel dál — čímž si limit držel vyčerpaný.
+ * s otiskem prstu o kus níž. Každé ťuknutí na otisk i každý pokus o heslo tak
+ * ubíraly z téhož limitu; po vyčerpání dostalo přihlášení 429 a obrazovka
+ * na to řekla „Server neodpověděl". Člověk to zkoušel dál — čímž si limit
+ * držel vyčerpaný.
  */
 Route::middleware(['throttle:20,1,prihlaseni'])->post('sanctum/token', [TokenController::class, 'store'])
     ->name('galerie.token.store');
