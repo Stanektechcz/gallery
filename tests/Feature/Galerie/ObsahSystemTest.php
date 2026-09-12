@@ -554,6 +554,27 @@ class ObsahSystemTest extends TestCase
         $this->assertTrue($zamek['nastaveno']);
     }
 
+    /**
+     * Víc skupin jednou odpovědí.
+     *
+     * Dvacet samostatných požadavků na načtení stránky se sčítalo do limitu
+     * firewallu (120 za minutu na adresu) a dvojice za jednou domácí adresou
+     * ho vyčerpala pár obnoveními. Dávka vrací totéž, co jednotlivé skupiny,
+     * a neznámé jméno ostatní nevezme.
+     */
+    public function test_davka_vrati_vic_skupin_jako_jednotlive(): void
+    {
+        $davka = $this->getJson('/api/data?skupiny=system,knihovna,neexistuje')->assertOk()->json('skupiny');
+
+        $this->assertSame(['system', 'knihovna'], array_keys($davka));
+        $this->assertSame(
+            $this->getJson('/api/data/system')->assertOk()->json('data.ZAMEK'),
+            $davka['system']['data']['ZAMEK'],
+        );
+
+        $this->getJson('/api/data')->assertStatus(422);
+    }
+
     private function fotka(array $navic = [], int $poradi = 1): MediaItem
     {
         return MediaItem::create(array_merge([

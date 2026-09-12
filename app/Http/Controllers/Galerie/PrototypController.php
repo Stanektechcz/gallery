@@ -243,6 +243,23 @@ JS,
 
           const off = await caches.match('offline.html');
 JS,
+
+            /*
+             * Soubory jdou kolem workera.
+             *
+             * Worker bral každý požadavek pod `/api/` jako data a ukládal jeho
+             * kopii do paměti — i náhledy, originály a nahrávky. Podepsané adresy
+             * náhledů se mění každý den, takže paměť rostla o celou mřížku denně
+             * a nikdy se nečistila; na telefonu tak aplikace po čase narazila na
+             * limit úložiště. Prohlížeč si soubory drží sám podle `Cache-Control`
+             * (náhled den), worker do toho nemá co mluvit.
+             */
+            "  // Data z API: nejdřív síť, kopie do paměti; offline se podá poslední známý stav.\n  if (url.pathname.indexOf('/api/') >= 0) {" => <<<'JS'
+  // Soubory (náhledy, originály, obrázky z chatu, nahrávky) nechat prohlížeči a jeho HTTP paměti.
+  if (/\/api\/(media|chat)\/[^/]+\/(thumb|raw|nahled|obrazek|video)$|\/api\/v1\/voice-notes\/[^/]+\/stream$|^\/files\//.test(url.pathname)) return;
+  // Data z API: nejdřív síť, kopie do paměti; offline se podá poslední známý stav.
+  if (url.pathname.indexOf('/api/') >= 0) {
+JS,
         ]);
     }
 

@@ -368,8 +368,21 @@
     'zpravy', 'kucharka', 'darky', 'denik', 'pravidla', 'rozbory', 'uklid', 'system', 'klid', 'pribeh',
     'mechanismy', 'rozhodovani'];
 
+  /*
+   * Tři dávky místo dvaceti požadavků. První nese to, co je vidět hned
+   * (knihovna, zámek, plán, zprávy), takže obrazovka nečeká na kuchařku.
+   */
+  var DAVKY = [
+    ['system', 'knihovna', 'planovani', 'zpravy'],
+    ['finance', 'domacnost', 'cesty', 'vztah', 'zdravi', 'sdileni', 'kucharka'],
+    ['darky', 'denik', 'pravidla', 'rozbory', 'uklid', 'klid', 'pribeh', 'mechanismy', 'rozhodovani']
+  ];
+
   function skupiny() {
-    return SKUPINY.map(nactiSkupinu);
+    // Skupina, kterou někdo přidá do SKUPINY a zapomene sem, se nesmí ztratit.
+    var vDavce = [].concat.apply([], DAVKY);
+    var zbytek = SKUPINY.filter(function (j) { return vDavce.indexOf(j) < 0; });
+    return DAVKY.concat(zbytek.length ? [zbytek] : []).map(nactiDavku);
   }
 
   /*
@@ -395,7 +408,47 @@
     window.GalerieNacita++;
     return fetch('/api/data/' + jmeno, { headers: hlavicky(), credentials: 'same-origin', cache: cerstve ? 'no-cache' : 'default' })
         .then(function (r) { return r.ok ? r.json() : null; })
-        .then(function (b) {
+        .then(navlecSkupinu)
+      .catch(function () { return false; })
+      .then(hotovaSkupina);
+  }
+
+  function hotovaSkupina(ok) {
+    window.GalerieNacita = Math.max(0, window.GalerieNacita - 1);
+    // Až doběhne poslední skupina, obrazovka schová načítání sama.
+    if (window.GalerieNacita === 0 && window.GalerieObnovObrazovku) window.GalerieObnovObrazovku();
+    return ok;
+  }
+
+  /*
+   * Víc skupin jedním požadavkem (`/api/data?skupiny=a,b`).
+   *
+   * Každá skupina zvlášť znamenala dvacet požadavků na jedno načtení stránky
+   * — a firewall serveru blokuje adresu po sto dvaceti za minutu. Dvojice sedí
+   * doma za jednou adresou, takže pár obnovení od obou stačilo, aby se
+   * aplikace přestala načítat. Když dávkový požadavek selže (starší server),
+   * skupiny se stáhnou po jedné jako dřív.
+   */
+  function nactiDavku(jmena) {
+    window.GalerieNacita++;
+    return fetch('/api/data?skupiny=' + jmena.join(','), { headers: hlavicky(), credentials: 'same-origin' })
+      .then(function (r) {
+        if (r.status === 404 || r.status === 405) throw new Error('bez dávky');
+        return r.ok ? r.json() : null;
+      })
+      .then(function (b) {
+        if (! b || ! b.skupiny) return false;
+        return jmena.map(function (jmeno) { return b.skupiny[jmeno] ? navlecSkupinu(b.skupiny[jmeno]) : false; })
+          .some(function (ok) { return ok; });
+      })
+      .catch(function (e) {
+        if (e && e.message === 'bez dávky') return Promise.all(jmena.map(function (j) { return nactiSkupinu(j); }));
+        return false;
+      })
+      .then(hotovaSkupina);
+  }
+
+  function navlecSkupinu(b) {
           if (! b || ! b.data) return false;
 
           var neslo = [];
@@ -438,14 +491,6 @@
           if (neslo.length) console.info('Galerie: skalární kolekce se projeví až po obnovení stránky —', neslo.join(', '));
 
           return true;
-        })
-      .catch(function () { return false; })
-      .then(function (ok) {
-        window.GalerieNacita = Math.max(0, window.GalerieNacita - 1);
-        // Až doběhne poslední skupina, obrazovka schová načítání sama.
-        if (window.GalerieNacita === 0 && window.GalerieObnovObrazovku) window.GalerieObnovObrazovku();
-        return ok;
-      });
   }
 
   /*

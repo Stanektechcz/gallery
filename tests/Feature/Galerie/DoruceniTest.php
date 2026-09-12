@@ -181,6 +181,8 @@ class DoruceniTest extends TestCase
         $worker = (string) $this->get('/sw.js')->assertOk()->getContent();
 
         $this->assertStringContainsString("await fetch(url.href, { credentials: 'same-origin' })", $worker);
+        // Náhledy a originály nejdou do paměti workera — rostla by o celou mřížku denně.
+        $this->assertStringContainsString('(thumb|raw|nahled|obrazek|video)$', $worker);
         // A skořápku obnoví při každém probuzení, ne jen při přejmenování paměti.
         $this->assertStringContainsString('SHELL_FILES.map(f => shell.add(', $worker);
     }

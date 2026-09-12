@@ -31,7 +31,58 @@ class DataController extends Controller
     public function __invoke(Request $request, string $skupina): JsonResponse
     {
         $prostor = GallerySpace::findOrFail($this->parId($request));
+        $odpoved = $this->sestav($skupina, $prostor);
 
+        abort_if($odpoved === null, 404, 'Takovou skupinu obsahu server nezná.');
+
+        return response()->json($odpoved)
+            // Krátká paměť: obsah se mění po zápisu, ne po vteřině, a panel
+            // i obrazovky se překreslují častěji, než se data mění.
+            ->header('Cache-Control', 'private, max-age=30');
+    }
+
+    /**
+     * Víc skupin jednou odpovědí: `GET /api/data?skupiny=knihovna,system`.
+     *
+     * Dvacet samostatných požadavků na každé načtení stránky je dvacet startů
+     * Laravelu — a firewall serveru blokuje adresu po sto dvaceti požadavcích
+     * za minutu. Dvojice sedí za jednou domácí adresou, takže pár obnovení
+     * stránky od obou stačilo. Neznámé jméno se přeskočí, ať překlep v jedné
+     * skupině nevezme ostatní.
+     */
+    public function davka(Request $request): JsonResponse
+    {
+        $prostor = GallerySpace::findOrFail($this->parId($request));
+
+        $jmena = array_values(array_unique(array_filter(
+            explode(',', (string) $request->query('skupiny', '')),
+            fn (string $jmeno) => preg_match('/^[a-z]{2,20}$/', $jmeno) === 1,
+        )));
+
+        abort_if($jmena === [] || count($jmena) > 30, 422, 'Chybí seznam skupin (?skupiny=knihovna,system).');
+
+        $skupiny = [];
+
+        foreach ($jmena as $jmeno) {
+            $odpoved = $this->sestav($jmeno, $prostor);
+
+            if ($odpoved !== null) {
+                $skupiny[$jmeno] = $odpoved;
+            }
+        }
+
+        return response()->json(['skupiny' => (object) $skupiny])
+            ->header('Cache-Control', 'private, max-age=30');
+    }
+
+    /**
+     * Jedna skupina tak, jak ji čeká klient: `{ data, uplne }`, nebo `null`,
+     * když ji server nezná.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function sestav(string $skupina, GallerySpace $prostor): ?array
+    {
         foreach ($this->poskytovatele as $poskytovatel) {
             if ($poskytovatel->skupina() !== $skupina) {
                 continue;
@@ -66,11 +117,11 @@ class DataController extends Controller
                     'prostor' => $prostor->id,
                 ]);
 
-                return response()->json([
+                return [
                     'data' => (object) [],
                     'uplne' => [],
                     'chyba' => 'Skupinu se nepodařilo sestavit — podrobnosti jsou v logu serveru.',
-                ]);
+                ];
             }
 
             // Klient přepisuje klíče a nemaže je; u kolekcí, které server dodává
@@ -80,12 +131,10 @@ class DataController extends Controller
                 fn (string $klic) => array_key_exists($klic, $data),
             ));
 
-            return response()->json(['data' => $data, 'uplne' => $uplne])
-                // Krátká paměť: obsah se mění po zápisu, ne po vteřině, a panel
-                // i obrazovky se překreslují častěji, než se data mění.
-                ->header('Cache-Control', 'private, max-age=30');
+            // Prázdná skupina jako objekt, ne `[]` — klient čte klíče.
+            return ['data' => $data === [] ? (object) [] : $data, 'uplne' => $uplne];
         }
 
-        abort(404, 'Takovou skupinu obsahu server nezná.');
+        return null;
     }
 }

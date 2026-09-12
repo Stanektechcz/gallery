@@ -75,6 +75,9 @@ Route::middleware(['auth:sanctum', 'throttle:120,1'])->prefix('api')->group(func
      * Prototyp kreslí z `GalerieData`; tohle jsou tytéž kolekce, jen se skutečnými
      * řádky. Neznámá skupina je 404, ne prázdno — ať se překlep pozná hned.
      */
+    // Víc skupin jednou odpovědí — načtení stránky místo dvaceti požadavků tři.
+    Route::get('data', [DataController::class, 'davka'])->name('galerie.data.davka');
+
     Route::get('data/{skupina}', DataController::class)
         ->whereAlpha('skupina')
         ->name('galerie.data');

@@ -3529,6 +3529,13 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
           <!-- MÍSTA -->
           <sc-if value="{{ isPlaces }}">
             <div data-screen-label="Mobil — Místa" style="animation:mIn .2s ease; padding:0 18px">
+              <sc-if value="{{ fotoMapaOn }}">
+                <div style="position:relative; height:280px; border:1px solid var(--g-line); border-radius:3px; background:var(--g-panel); margin-bottom:10px; overflow:hidden">
+                  <iframe src="{{ fotoMapaSrc }}" title="Fotky na mapě" loading="lazy" style="position:absolute; inset:0; width:100%; height:100%; border:0"></iframe>
+                </div>
+                <div style="font-size:12px; color:var(--g-ink3); margin:0 2px 16px">{{ fotoMapaPopis }}</div>
+              </sc-if>
+              <sc-if value="{{ fotoMapaOff }}">
               <div style="position:relative; height:186px; border:1px solid var(--g-line); border-radius:3px; background:var(--g-panel); margin-bottom:16px; overflow:hidden">
                 <div style="position:absolute; left:10px; top:9px; font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:var(--g-ink3)">Schéma míst · Evropa</div>
                 <sc-for list="{{ placePins }}" as="p" hint-placeholder-count="4">
@@ -3538,6 +3545,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                   </button>
                 </sc-for>
               </div>
+              </sc-if>
               <sc-for list="{{ placeRows }}" as="p" hint-placeholder-count="4">
                 <div style="display:flex; align-items:center; gap:12px; padding:12px 2px; border-bottom:1px solid var(--g-line2)">
                   <div style="flex:none; width:52px; height:52px; border-radius:2px; background:{{ p.bg }}"></div>
@@ -5703,6 +5711,21 @@ class Component extends DCLogic {
       if (Date.now() - (this._act || 0) > ms) this.lockNow('Zamčeno po nečinnosti · ' + (this.state.lockIdle || '5 min'));
     }, 4000);
     if (this.state.lockStart === false) this.setState({ appLocked: false });
+    /*
+     * Mapa se po načtení ozve (`ready`) a teprve pak dostane shluky a téma —
+     * dřív zpráva nemá kam dorazit. Posílá se do všech map na obrazovce.
+     */
+    this._fotoMapa = e => {
+      const d = e.data || {};
+      if (d.source !== 'galerie-mapa' || d.type !== 'ready') return;
+      const body = (window.GalerieData || {}).MAPBODY || [];
+      document.querySelectorAll('iframe[title="Fotky na mapě"]').forEach(f => {
+        if (!f.contentWindow || f.contentWindow !== e.source) return;
+        f.contentWindow.postMessage({ target: 'galerie-mapa', type: 'theme', theme: this.state.theme === 'dark' ? 'dark' : 'light' }, '*');
+        f.contentWindow.postMessage({ target: 'galerie-mapa', type: 'body', body }, '*');
+      });
+    };
+    window.addEventListener('message', this._fotoMapa);
     // Otočení telefonu i zvětšení okna na počítači mění, jestli má smysl vitrína.
     this._vitrina = () => {
       const siroko = window.innerWidth >= 900;
@@ -5779,6 +5802,7 @@ class Component extends DCLogic {
     }
   }
   componentWillUnmount() {
+    window.removeEventListener('message', this._fotoMapa);
     window.removeEventListener('storage', this._zamekZnovu);
     window.removeEventListener('resize', this._vitrina);
     window.removeEventListener('orientationchange', this._vitrina);
@@ -8495,6 +8519,38 @@ class Component extends DCLogic {
     return casti.join(' · ') || 'Nic k nahrání';
   }
   /*
+   * Vybraný den kalendáře jako `YYYY-MM-DD`.
+   *
+   * Dřív se pamatovalo jen číslo dne a platilo pro měsíc, na kterém kalendář
+   * začínal — v jiném měsíci se den vybrat nedal.
+   */
+  calVybrany() {
+    const s = this.state;
+    if (s.calSel) return s.calSel;
+    const d = this.dnes();
+    return dIso(new Date(d.getFullYear(), d.getMonth(), s.calDay || d.getDate()));
+  }
+  /*
+   * Události dne ve tvaru `[den, název, druh, čas]`, jaký kreslí karta dne.
+   *
+   * Ze serveru (`CALEV`, tytéž jako v počítači); ukázkové `CAL_EVENTS` jen
+   * tehdy, když server žádné neposlal — a pak jen v měsíci, ke kterému patří.
+   */
+  calUdalosti(iso) {
+    const server = (window.GalerieData || {}).CALEV;
+    const [y, m, d] = String(iso).split('-').map(Number);
+    if (Array.isArray(server) && server.length && server[0] && server[0].y !== undefined) {
+      const druh = { cesta: 'cesta', oslava: 'vyroci', vyroci: 'vyroci', ukol: 'ukol' };
+      return server
+        .filter(e => e.y === y && e.m === m - 1 && e.d === d)
+        .sort((a, b) => String(a.time || '99').localeCompare(String(b.time || '99')))
+        .map(e => [e.d, e.t, druh[e.kind] || 'plan', e.time || 'celý den']);
+    }
+    const t = this.dnes();
+    if (y !== t.getFullYear() || m - 1 !== t.getMonth()) return [];
+    return CAL_EVENTS.filter(e => e[0] === d);
+  }
+  /*
    * Kdo ti dva jsou — a jak se jejich jména skloňují.
    *
    * Telefonní rozvržení mělo „Adrian" a „Makinka" napsané na čtyřiceti
@@ -10615,6 +10671,22 @@ class Component extends DCLogic {
           : this.setState({ sheet: 'add', addKind: 'diary', addA: '', addB: '' })
       },
 
+      /*
+       * Mapa s fotkami — stejné shluky jako v počítači (`MAPBODY`).
+       *
+       * Místo ní tu bylo schéma s ukázkovými špendlíky rozmístěnými podle
+       * procent; kde se dvojice fotila, se na telefonu nedalo zjistit.
+       */
+      ...(() => {
+        const body = (window.GalerieData || {}).MAPBODY || [];
+        const fotek = body.reduce((a, b) => a + (b.count || 0), 0);
+        return {
+          fotoMapaOn: body.length > 0,
+          fotoMapaOff: body.length === 0,
+          fotoMapaSrc: 'mapa.html?theme=' + (s.theme === 'dark' ? 'dark' : 'light'),
+          fotoMapaPopis: this.pl(fotek, 'fotka s polohou', 'fotky s polohou', 'fotek s polohou') + ' · ' + this.pl(body.length, 'místo', 'místa', 'míst')
+        };
+      })(),
       placePins: PLACES.map((p, i) => ({
         name: p[0], short: p[7],
         left: Math.round(8 + (p[5] + 12) / 32 * 84) + '%',
@@ -11654,27 +11726,27 @@ class Component extends DCLogic {
       calMonthLabel: monthGrid(s.calMonth).label,
       calPrev: () => this.setState({ calMonth: s.calMonth - 1 }),
       calNext: () => this.setState({ calMonth: s.calMonth + 1 }),
+      calDnes: () => this.setState({ calMonth: 0, calSel: this.dnesIso(), calDay: this.dnes().getDate() }),
       calGrid: monthGrid(s.calMonth).cells.map(c => {
-        // Ukázkové akce jsou vedené jen dnem v měsíci, takže patří k tomu, na kterém kalendář začíná.
-        const isAug = s.calMonth === 0 && c.inMonth;
-        const evs = isAug ? CAL_EVENTS.filter(e => e[0] === c.n) : [];
+        const isAug = c.inMonth;
+        const evs = this.calUdalosti(c.iso);
         const ph = cycPhaseOf(c.iso);
         const key = { menstruation: 'm', fertile: 'fert', ovulation: 'ovul', pms: 'pms' }[ph || ''] || null;
         return {
           n: String(c.n), fg: c.inMonth ? 'var(--g-ink)' : 'var(--g-ink3)', op: c.inMonth ? '1' : '.35',
-          bg: c.n === s.calDay && isAug ? 'var(--g-acc-soft)' : 'transparent',
+          bg: c.iso === this.calVybrany() && isAug ? 'var(--g-acc-soft)' : 'transparent',
           bd: c.iso === this.dnesIso() ? '2px solid var(--g-ink)' : '1px solid transparent',
           cyc: key ? 'var(--g-cyc-' + ({ m: 'm', fert: 'fert', ovul: 'ovul', pms: 'pms' }[key]) + ')' : 'transparent',
           dots: evs.slice(0, 3).map(e => ({ color: CAL_KIND[e[2]][2] })),
           aria: dLong(c.iso) + (evs.length ? ' · ' + this.pl(evs.length, 'akce', 'akce', 'akcí') : ''),
-          tap: () => { if (isAug) this.setState({ calDay: c.n }); }
+          tap: () => { if (isAug) this.setState({ calSel: c.iso, calDay: c.n }); }
         };
       }),
-      calDayLabel: dLong(dIso(new Date(monthGrid(0).year, monthGrid(0).month, s.calDay))),
+      calDayLabel: dLong(this.calVybrany()),
       calDayRows: (() => {
-        const iso = dIso(new Date(monthGrid(0).year, monthGrid(0).month, s.calDay));
+        const iso = this.calVybrany();
         const ph = cycPhaseOf(iso);
-        const rows = CAL_EVENTS.filter(e => e[0] === s.calDay).map(e => ({
+        const rows = this.calUdalosti(iso).map(e => ({
           title: e[1], meta: CAL_KIND[e[2]][0] + ' · ' + e[3], icon: CAL_KIND[e[2]][1], color: CAL_KIND[e[2]][2],
           go: () => { if (e[2] === 'ukol') { this.setState({ tab: 'more', stack: [] }); this.push('tasks'); } else if (e[2] === 'cesta') { this.setState({ dayId: DAYS[0][0], tab: 'memories', stack: [] }); this.push('day'); } else { this.setState({ secId: 'weekly', secTab: 0, tab: 'more', stack: [] }); this.push('sec'); } }
         }));
@@ -11685,7 +11757,7 @@ class Component extends DCLogic {
         });
         return rows;
       })(),
-      calDayEmpty: CAL_EVENTS.filter(e => e[0] === s.calDay).length === 0,
+      calDayEmpty: this.calUdalosti(this.calVybrany()).length === 0,
       calLegend: Object.keys(CAL_KIND).map(k => ({ label: CAL_KIND[k][0], color: CAL_KIND[k][2], icon: CAL_KIND[k][1] })),
       calAdd: () => { this.setState({ sheet: 'add', addKind: 'task', addA: '', addB: '' }); },
 
