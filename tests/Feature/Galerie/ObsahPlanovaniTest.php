@@ -327,6 +327,25 @@ class ObsahPlanovaniTest extends TestCase
         ]);
     }
 
+    /**
+     * Plná minulost nesmí vytlačit budoucnost.
+     *
+     * Jeden vzestupný dotaz s limitem čtyřiceti vyčerpal limit na posledním
+     * čtvrtroce a dvojice pak v kalendáři neviděla nic dopředu.
+     */
+    public function test_plna_minulost_nevytlaci_budouci_udalosti(): void
+    {
+        for ($i = 1; $i <= 45; $i++) {
+            $this->udalost(['title' => 'Minulá '.$i, 'starts_at' => now()->subDays(2 + $i % 80)->setTime(9, 0)]);
+        }
+        $this->udalost(['title' => 'Svatba Kláry', 'starts_at' => now()->addMonths(2)->setTime(14, 0)]);
+
+        $nazvy = collect($this->getJson('/api/data/planovani')->assertOk()->json('data.CALEV'))->pluck('t');
+
+        $this->assertContains('Svatba Kláry', $nazvy);
+        $this->assertCount(46, $nazvy);
+    }
+
     // ——— pomůcky ———
 
     private function udalost(array $navic = []): CalendarEvent

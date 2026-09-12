@@ -4655,7 +4655,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                       </sc-for>
                     </div>
                     <div class="tabulka-obal" style="overflow-x:auto; max-width:100%; min-width:0"><table class="table" style="margin-top:22px">
-                      <thead><tr><th>Společný výdaj</th><th style="width:150px">Měsíčně</th><th style="width:150px">Adrian</th><th style="width:150px">Makinka</th></tr></thead>
+                      <thead><tr><th>Společný výdaj</th><th style="width:150px">Měsíčně</th><th style="width:150px">{{ splitJmenoA }}</th><th style="width:150px">{{ splitJmenoM }}</th></tr></thead>
                       <tbody>
                         <sc-for list="{{ splitRows }}" as="r" hint-placeholder-count="6">
                           <tr>
@@ -4669,7 +4669,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                     </table></div>
                     <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap; margin-top:20px; padding:14px 16px; border-radius:2px; background:var(--g-panel)">
                       <div style="flex:1 1 320px; font-size:14px; color:var(--g-ink2); text-wrap:pretty">{{ splitInsight }}</div>
-                      <button class="btn btn-primary" onClick="{{ splitApply }}" style="font-size:13px">Nastavit tento poměr</button>
+                      <button class="btn btn-primary" onClick="{{ splitApply }}" style="font-size:13px">{{ splitApplyLabel }}</button>
                     </div>
                   </div>
                 </sc-if>
@@ -6427,7 +6427,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                   <div>
                     <div style="font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--g-ink3)">{{ nowWhere }}</div>
                     <div style="font-size:32px; line-height:1.1">{{ nowDayLabel }} · {{ nowTitle }}</div>
-                    <div style="font-size:13px; color:var(--g-ink2); margin-top:3px">{{ nowWhen }} · {{ nowWeather }} · {{ nowSun }}</div>
+                    <div style="font-size:13px; color:var(--g-ink2); margin-top:3px">{{ nowWhen }}</div>
                   </div>
                   <div style="margin-left:auto; text-align:right">
                     <div style="font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--g-ink3)">Zbývá z fondu</div>
@@ -16132,32 +16132,50 @@ class Component extends DCLogic {
     };
   }
   // Rozpočet na dva příjmy: dělení podle výplaty, ne půl na půl.
+  /*
+   * Příjmy jsou `{ jméno: měsíčně }` ze serveru a jména z `DVOJICE`.
+   *
+   * Obrazovka četla `INCOMES.Adrian` a `INCOMES.Makinka` napsané v kódu, takže
+   * u skutečné dvojice radila podle ukázkové výplaty. Kdo příjem v knize nemá,
+   * v mapě chybí — a dělení podle příjmů se pak **nepočítá**, místo aby mu
+   * přisoudilo nulový podíl.
+   */
   splitVals() {
     const s = this.state;
-    const mode = s.splitMode || 'ratio';
+    const [jA, jM] = this.dva();
+    const iA = Number((INCOMES || {})[jA]) || 0, iM = Number((INCOMES || {})[jM]) || 0;
+    const znam = iA > 0 && iM > 0;
+    const mode = znam ? (s.splitMode || 'ratio') : 'half';
     const total = SHARED.reduce((a, x) => a + x.amount, 0);
-    const inc = INCOMES.Adrian + INCOMES.Makinka;
-    const rA = INCOMES.Adrian / inc, rM = INCOMES.Makinka / inc;
+    const inc = iA + iM;
+    const rA = znam ? iA / inc : .5, rM = znam ? iM / inc : .5;
     const share = mode === 'ratio' ? { a: rA, m: rM } : { a: .5, m: .5 };
     const payA = Math.round(total * share.a), payM = total - payA;
-    const leftA = INCOMES.Adrian - payA, leftM = INCOMES.Makinka - payM;
+    const leftA = iA - payA, leftM = iM - payM;
+    const proc = (cast, celek) => celek > 0 ? Math.round((cast / celek) * 100) : 0;
+    const zapis = () => { this.setState({ route: 'x-transakce', appTab: 0 }); this.toast('U příjmu vyberte, komu patří, nebo účet, na který přišel', { icon: 'ph-hand-coins' }); };
     return {
       appIsCost: true, csIsList: false, csIsCompare: false, csIsSeason: false, csIsSplit: true,
-      csHead: 'Společné výdaje ' + this.kc(total) + ' měsíčně. Při dělení podle příjmů platí Adrian ' + Math.round(rA * 100) + ' %, Makinka ' + Math.round(rM * 100) + ' % — po zaplacení jim zůstane skoro stejný podíl vlastní výplaty. Půl na půl vypadá spravedlivě, ale není.',
+      splitJmenoA: jA, splitJmenoM: jM,
+      csHead: total === 0
+        ? 'V rozpočtu zatím nejsou pevné společné výdaje — kategorie s nejvyšší prioritou, které se platí každý měsíc. Dokud tam nejsou, není co dělit.'
+        : ! znam
+          ? 'Společné výdaje ' + this.kc(total) + ' měsíčně. Podle příjmů je rozdělit zatím nejde: ' + (iA > 0 || iM > 0 ? 'příjem ' + (iA > 0 ? jM : jA) + ' v knize chybí' : 'v knize chybí příjmy vás obou') + '. Níž je proto jen půl na půl.'
+          : 'Společné výdaje ' + this.kc(total) + ' měsíčně. Při dělení podle příjmů platí ' + jA + ' ' + Math.round(rA * 100) + ' % a ' + jM + ' ' + Math.round(rM * 100) + ' % — po zaplacení zůstane oběma skoro stejný podíl vlastní výplaty. Půl na půl vypadá spravedlivě, ale není.',
       splitModes: [['ratio', 'Podle příjmů'], ['half', 'Půl na půl']].map(x => ({
         label: x[1],
         bg: mode === x[0] ? 'var(--g-acc-soft)' : 'transparent',
         fg: mode === x[0] ? 'var(--g-acc-deep)' : 'var(--g-ink2)',
-        go: () => this.setState({ splitMode: x[0] })
+        go: () => x[0] === 'ratio' && ! znam ? zapis() : this.setState({ splitMode: x[0] })
       })),
-      splitPeople: [[this.dva()[0], INCOMES[this.dva()[0]], payA, leftA], [this.dva()[1], INCOMES[this.dva()[1]], payM, leftM]].map(p => ({
+      splitPeople: [[jA, iA, payA, leftA], [jM, iM, payM, leftM]].map(p => ({
         name: p[0],
-        income: this.kc(p[1]),
+        income: p[1] > 0 ? this.kc(p[1]) : 'příjem nezapsaný',
         pays: this.kc(p[2]),
-        pct: Math.round((p[2] / total) * 100) + ' % společných výdajů',
-        left: this.kc(p[3]) + ' zůstane',
-        leftPct: Math.round((p[3] / p[1]) * 100) + ' % vlastní výplaty',
-        width: Math.round((p[2] / total) * 100) + '%',
+        pct: proc(p[2], total) + ' % společných výdajů',
+        left: p[1] > 0 ? this.kc(p[3]) + ' zůstane' : '—',
+        leftPct: p[1] > 0 ? proc(p[3], p[1]) + ' % vlastní výplaty' : 'bez příjmu se zbytek spočítat nedá',
+        width: proc(p[2], total) + '%',
         fill: this.barvaKdo(p[0])
       })),
       splitRows: SHARED.map(x => ({
@@ -16165,10 +16183,13 @@ class Component extends DCLogic {
         a: this.kc(Math.round(x.amount * share.a)),
         m: this.kc(x.amount - Math.round(x.amount * share.a))
       })),
-      splitInsight: mode === 'ratio'
-        ? 'Po zaplacení zůstane Adrianovi ' + Math.round((leftA / INCOMES.Adrian) * 100) + ' % a Makince ' + Math.round((leftM / INCOMES.Makinka) * 100) + ' % vlastní výplaty. To je ten smysl — na volné peníze zbyde oběma stejně velký kus.'
-        : 'Půl na půl znamená, že Makince zůstane ' + Math.round((leftM / INCOMES.Makinka) * 100) + ' % výplaty a Adrianovi ' + Math.round((leftA / INCOMES.Adrian) * 100) + ' %. Rozdíl ' + Math.abs(Math.round((leftA / INCOMES.Adrian) * 100) - Math.round((leftM / INCOMES.Makinka) * 100)) + ' procentních bodů nese ten s nižším příjmem.',
-      splitApply: () => this.zatimNeumime('přepočet trvalých příkazů podle poměru')
+      splitInsight: ! znam
+        ? 'Dělení podle příjmů potřebuje výplatu obou. Zapište příjem v Transakcích a u něj, komu patří — poměr se pak spočítá z průměru za poslední tři měsíce.'
+        : mode === 'ratio'
+          ? 'Po zaplacení zůstane: ' + jA + ' ' + proc(leftA, iA) + ' %, ' + jM + ' ' + proc(leftM, iM) + ' % vlastní výplaty. To je ten smysl — na volné peníze zbyde oběma stejně velký kus.'
+          : 'Půl na půl znamená, že zůstane: ' + jA + ' ' + proc(leftA, iA) + ' %, ' + jM + ' ' + proc(leftM, iM) + ' % výplaty. Rozdíl ' + Math.abs(proc(leftA, iA) - proc(leftM, iM)) + ' procentních bodů nese ten s nižším příjmem.',
+      splitApply: znam ? () => this.zatimNeumime('přepočet trvalých příkazů podle poměru') : zapis,
+      splitApplyLabel: znam ? 'Nastavit tento poměr' : 'Zapsat příjem'
     };
   }
   emVals() {
@@ -18405,36 +18426,54 @@ class Component extends DCLogic {
     };
   }
 
+  /*
+   * Server posílá u práce `service: 0`, protože ceník služeb aplikace nezná.
+   * Porovnání „naše hodiny > 0 Kč" pak u každé práce vyhlásilo „koupit je
+   * levnější" — rada postavená na čísle, které nikdo nezadal. Nenaceněná
+   * práce proto verdikt nedostane, a kdo nemá zapsaný příjem, nemá ani
+   * hodinovou mzdu (nula by jeho práci udělala zadarmo).
+   */
   casVals() {
     const s = this.state;
     const mode = s.casMode || 'net';
-    const rate = w => mode === 'free' ? 150 : ((INCOMES[w] || 0) / 160);
+    const prijmy = INCOMES || {};
+    const dva = this.dva();
+    const mzda = w => {
+      if (w === 'spolu') return dva.every(j => Number(prijmy[j]) > 0) ? (Number(prijmy[dva[0]]) + Number(prijmy[dva[1]])) / 2 : 0;
+      return Number(prijmy[w]) || 0;
+    };
+    const rate = w => mode === 'free' ? 150 : (mzda(w) / 160);
     const rows = CAS_ROWS.map(r => {
       const our = r.hours * rate(r.doer);
-      return { ...r, our: our, worth: r.service < our, diff: our - r.service };
+      const naceneno = r.service > 0 && our > 0;
+      return { ...r, our: our, naceneno: naceneno, bezMzdy: our === 0, worth: naceneno && r.service < our, diff: our - r.service };
     });
     const ourSum = rows.reduce((a, r) => a + r.our, 0);
     const svcSum = rows.reduce((a, r) => a + r.service, 0);
     const hSum = rows.reduce((a, r) => a + r.hours, 0);
     const worth = rows.filter(r => r.worth);
+    const nacenene = rows.filter(r => r.naceneno);
+    const bezMzdy = [...new Set(rows.filter(r => r.bezMzdy).map(r => r.doer))];
     return {
       casModes: [['net', 'Podle čisté mzdy'], ['free', 'Podle ceny volného času']].map(m => ({
         label: m[1], bg: mode === m[0] ? 'var(--g-ink)' : 'transparent', fg: mode === m[0] ? 'var(--g-bg)' : 'var(--g-ink2)',
         pick: () => this.setState({ casMode: m[0] })
       })),
-      casHead: 'Za měsíc na tom strávíte ' + (Math.round(hSum * 10) / 10).toFixed(1).replace('.', ',') + ' hodiny. V penězích ' + this.kc(ourSum) + ' — koupit se to dá za ' + this.kc(svcSum) + '.',
+      casHead: 'Za měsíc na tom strávíte ' + (Math.round(hSum * 10) / 10).toFixed(1).replace('.', ',') + ' hodiny. V penězích ' + this.kc(ourSum) + (svcSum > 0 ? ' — koupit se to dá za ' + this.kc(svcSum) + '.' : ' — kolik by stála služba, zatím nikdo nenacenil.'),
       casNote: mode === 'free'
         ? 'Hodina volného času je nastavená na 150 Kč. Není to mzda — je to cena toho, co za tu hodinu neuděláte.'
-        : 'Počítá se čistá hodinová mzda toho, kdo věc dělá. Proto stejná práce nemá u obou stejnou cenu.',
-      casOur: this.kc(ourSum), casSvc: this.kc(svcSum),
-      casDiff: this.kc(ourSum - svcSum),
-      casDiffColor: ourSum > svcSum ? 'var(--g-mag)' : 'var(--g-acc)',
-      casWorthHead: worth.length ? this.pl(worth.length, 'práce se nevyplatí dělat sami', 'práce se nevyplatí dělat sami', 'prací se nevyplatí dělat sami') : 'Všechno se vyplatí dělat sami',
+        : bezMzdy.length
+          ? 'Počítá se čistá hodinová mzda toho, kdo věc dělá. Bez zapsaného příjmu ji spočítat nejde (' + bezMzdy.join(', ') + ') — tyhle hodiny jsou v penězích zatím nula.'
+          : 'Počítá se čistá hodinová mzda toho, kdo věc dělá. Proto stejná práce nemá u obou stejnou cenu.',
+      casOur: this.kc(ourSum), casSvc: svcSum > 0 ? this.kc(svcSum) : 'nenaceněno',
+      casDiff: svcSum > 0 ? this.kc(ourSum - svcSum) : '—',
+      casDiffColor: svcSum > 0 && ourSum > svcSum ? 'var(--g-mag)' : 'var(--g-acc)',
+      casWorthHead: ! nacenene.length ? 'Služby zatím nejsou naceněné' : worth.length ? this.pl(worth.length, 'práce se nevyplatí dělat sami', 'práce se nevyplatí dělat sami', 'prací se nevyplatí dělat sami') : 'Všechno se vyplatí dělat sami',
       casRows: rows.map(r => ({
         task: r.task, doer: r.doer, doerTag: this.tagKdo(r.doer),
         hours: (Math.round(r.hours * 10) / 10).toFixed(1).replace('.', ',') + ' h',
-        our: this.kc(r.our), service: this.kc(r.service),
-        verdict: r.worth ? 'koupit je levnější' : 'dělat sami',
+        our: r.bezMzdy && mode !== 'free' ? 'mzda nezapsaná' : this.kc(r.our), service: r.service > 0 ? this.kc(r.service) : 'nenaceněno',
+        verdict: ! r.naceneno ? 'nejde porovnat' : r.worth ? 'koupit je levnější' : 'dělat sami',
         color: r.worth ? 'var(--g-mag)' : 'var(--g-ink2)',
         w: Math.round(Math.min(1, r.service / Math.max(r.our, 1)) * 100) + '%'
       })),
@@ -21168,7 +21207,85 @@ class Component extends DCLogic {
     };
   }
   // ——— Týdenní přehled ———
+  /*
+   * Týdenní přehled ze serveru (`WEEK`), jinak ukázka.
+   *
+   * Obrazovka měla celý týden napsaný v kódu — 196 fotek, Pustevny nad mlhou,
+   * pension v Sintře po termínu — a přihlášená dvojice tak četla shrnutí
+   * cizího týdne. Ukázka zůstává jen tam, kde server nic neposlal.
+   */
+  tyden() {
+    const w = (window.GalerieData || {}).WEEK;
+    return w && w.now ? w : null;
+  }
+  wkZeServeru(key) {
+    const W = this.tyden(), s = this.state, photos = this.photos();
+    const base = { appIsWk: true, wkIsNow: key === 'wkNow', wkIsNext: key === 'wkNext', wkIsPast: key === 'wkPast' };
+    const otevri = uuid => {
+      if (photos.some(p => p.id === uuid)) return this.openLb(uuid);
+      this.setState({ route: 'all' });
+      this.toast('Fotka je v knihovně starší, než kolik se jich načetlo najednou', { icon: 'ph-image' });
+    };
+    if (key === 'wkNow') {
+      const N = W.now, max = Math.max(1, ...N.days);
+      const radek = N.stats.map(x => x[0] + ': ' + x[1] + ' (' + x[2] + ')');
+      return {
+        ...base,
+        wkTitle: N.title,
+        wkLead: N.lead,
+        wkStats: N.stats.map(x => ({ label: x[0], value: x[1], note: x[2], icon: x[3] })),
+        wkMoments: N.moments.map(m => ({ title: m.title, meta: m.meta, note: m.note, tiles: m.tiles, open: () => otevri(m.photo) })),
+        wkSlipped: N.slipped.map(x => ({
+          title: x[0], note: x[1],
+          go: () => this.setState({ route: x[2], appTab: 0 }),
+          push: () => this.setState({ route: x[2], appTab: 0 })
+        })),
+        wkDays: ['Po', 'Út', 'St', 'Čt', 'Pá', 'So', 'Ne'].map((d, i) => {
+          const n = N.days[i] || 0;
+          return { label: d, count: n, h: Math.max(4, Math.round((n / max) * 78)) + 'px', color: n > max * .5 ? 'var(--g-acc)' : 'var(--g-acc-soft)' };
+        }),
+        wkDaysNote: N.daysNote,
+        wkShare: () => { this.setState({ route: 'x-zpravy', appTab: 0 }); this.msgSend('t', N.title + ' — ' + radek.join(', ') + '.', ''); },
+        wkExport: () => {
+          const txt = 'TÝDENNÍ PŘEHLED\n' + N.title + '\n\n' + radek.join('\n')
+            + (N.moments.length ? '\n\nMomenty:\n' + N.moments.map(m => '- ' + m.title + ' — ' + m.meta).join('\n') : '')
+            + (N.slipped.length ? '\n\nNedotaženo:\n' + N.slipped.map(x => '- ' + x[0] + ' (' + x[1] + ')').join('\n') : '');
+          const ok = this.download('tydenni-prehled.txt', txt, 'text/plain;charset=utf-8');
+          this.toast(ok ? 'Přehled stažen' : 'Export se nepovedl', { icon: 'ph-download-simple' });
+        },
+        wkDiary: () => this.setState({ route: 'x-denik', appTab: 0 })
+      };
+    }
+    if (key === 'wkNext') {
+      return {
+        ...base,
+        wkNextTitle: W.next.title,
+        wkNextLead: W.next.lead,
+        wkNextRows: W.next.rows.map(x => ({
+          when: x[0], title: x[1], who: x[2], icon: x[3],
+          whoClass: x[2] === 'oba' ? 'tag-neutral' : 'tag-accent',
+          go: () => this.setState({ route: 'calendar', calView: 'week' })
+        })),
+        wkNextFree: () => this.setState({ route: 'calendar', calView: 'free' }),
+        wkNextPlan: () => this.setState({ route: 'x-plan', appTab: 0 })
+      };
+    }
+    const nej = Math.max(1, ...W.past.rows.map(w => w.photos));
+    return {
+      ...base,
+      wkPastHead: W.past.head,
+      wkPastRows: W.past.rows.map(w => ({
+        title: w.title, photos: this.pl(w.photos, 'fotka', 'fotky', 'fotek'), tasks: w.tasks, note: w.note,
+        tiles: w.tiles,
+        bar: Math.round((w.photos / nej) * 100) + '%',
+        // Týden jde otevřít jako ten den v časové ose, kde začíná.
+        open: () => this.setState({ route: 'timeline' })
+      })),
+      wkPastNote: W.past.note
+    };
+  }
   wkVals(key) {
+    if (this.tyden()) return this.wkZeServeru(key);
     const s = this.state, photos = this.photos();
     const base = { appIsWk: true, wkIsNow: key === 'wkNow', wkIsNext: key === 'wkNext', wkIsPast: key === 'wkPast' };
     if (key === 'wkNow') {
@@ -21260,23 +21377,36 @@ class Component extends DCLogic {
       wkPastNote: 'Nejsilnější byl týden 27. července – 2. srpna (318 fotek), nejslabší 20. – 26. července (96).'
     };
   }
+  /*
+   * Probíhá teď nějaká cesta?
+   *
+   * Server posílá `NOWTRIP` jen s dneškem mezi začátkem a koncem cesty,
+   * jinak prázdný objekt. Cestovní režim byl ve výchozím stavu zapnutý nad
+   * ukázkovou cestou, takže horní lišta na každé obrazovce tvrdila „Jsme na
+   * cestě · den 5 z 8" dvojici, která seděla doma.
+   */
+  naCeste() {
+    return !!(NOWTRIP && NOWTRIP.title && Array.isArray(NOWTRIP.plan));
+  }
+  // Zapnout režim bez probíhající cesty nejde — ukáže se, kde cestu založit.
+  bezCesty() {
+    this.setState({ route: 'x-cesty', appTab: 0 });
+    this.toast('Žádná cesta dnes neprobíhá · režim se zapne sám, až bude dnešek mezi jejím začátkem a koncem', { icon: 'ph-compass' });
+  }
   // ——— Cesta právě nyní ———
   nowVals(key) {
     const s = this.state, T = NOWTRIP, photos = this.photos();
     const done = s.nowDone || {}, extra = s.nowSpend || [], notes = s.nowNotes || [];
-    const rows = T.spendRows.map((r, i) => ({ label: r[0], amount: r[1], cat: r[2], time: r[3], id: 'ns' + i }))
-      .concat(extra);
-    const todayTotal = rows.reduce((a, r) => a + r.amount, 0);
-    const spentAll = T.spent + extra.reduce((a, r) => a + r.amount, 0);
-    const left = T.fund - spentAll;
-    const daysLeft = T.days - T.day;
-    const perDay = Math.round(left / Math.max(1, daysLeft));
-    if (s.tripMode === false) {
+    if (s.tripMode === false || ! this.naCeste()) {
+      const cesta = this.naCeste();
       return {
         appIsNow: true, nowModeOff: true, nowModeActive: false,
         nowOffTitle: 'Právě nejsme na cestě',
-        nowOffText: 'Cestovní režim je vypnutý. Až vyrazíte, zapněte ho — dostanete dnešní program, rychlé nahrání fotek, cestovní deník a útratu proti fondu cesty na jedné obrazovce. Zápisy a útrata se pak uloží k dané cestě.',
+        nowOffText: cesta
+          ? 'Cestovní režim je vypnutý. Zapněte ho — dostanete dnešní program, cestovní deník a útratu proti fondu cesty na jedné obrazovce.'
+          : 'Dnes neprobíhá žádná cesta. Režim se nabídne sám ve dnech, kdy jste podle plánu na cestě — dostanete program dne, deník a útratu proti fondu cesty na jedné obrazovce.',
         nowOffOn: () => {
+          if (! cesta) return this.bezCesty();
           this.setState({ tripMode: true });
           this.toast('Cestovní režim zapnut · ' + NOWTRIP.title, { icon: 'ph-compass', local: true });
         },
@@ -21284,6 +21414,13 @@ class Component extends DCLogic {
         nowOffPlan: () => this.setState({ route: 'x-cesty', appTab: 0 })
       };
     }
+    const rows = (T.spendRows || []).map((r, i) => ({ label: r[0], amount: r[1], cat: r[2], time: r[3], id: 'ns' + i }))
+      .concat(extra);
+    const todayTotal = rows.reduce((a, r) => a + r.amount, 0);
+    const spentAll = (T.spent || 0) + extra.reduce((a, r) => a + r.amount, 0);
+    const left = (T.fund || 0) - spentAll;
+    const daysLeft = T.days - T.day;
+    const perDay = Math.round(left / Math.max(1, daysLeft));
     const base = {
       appIsNow: true, nowModeOff: false, nowModeActive: true,
       nowIsDay: key === 'nowDay', nowIsDiary: key === 'nowDiary',
@@ -21291,10 +21428,11 @@ class Component extends DCLogic {
       nowTitle: T.title, nowWhere: T.where,
       nowDayLabel: 'Den ' + T.day + ' z ' + T.days,
       nowProgress: Math.round((T.day / T.days) * 100) + '%',
-      nowWhen: T.when, nowWeather: T.weather, nowSun: T.sun,
+      // Počasí a západ slunce aplikace nezjišťuje; ukázkových 27 °C tu nesmí zůstat.
+      nowWhen: [T.when, T.weather, T.sun].filter(Boolean).join(' · '),
       nowLeft: this.kc(left), nowPerDay: this.kc(perDay) + ' na den',
       nowTodayTotal: this.kc(todayTotal),
-      nowFundPct: Math.round((spentAll / T.fund) * 100) + '%',
+      nowFundPct: (T.fund > 0 ? Math.min(100, Math.round((spentAll / T.fund) * 100)) : 0) + '%',
       nowFundLabel: this.kc(spentAll) + ' z ' + this.kc(T.fund) + ' · zbývá ' + this.kc(left),
       nowGoTrip: () => this.setState({ route: 'trip', tripId: T.id })
     };
@@ -21322,19 +21460,29 @@ class Component extends DCLogic {
         ...base,
         nowPlan: items,
         nowDoneN: this.pl(items.filter(i => i.strike !== 'none').length, 'bod hotový', 'body hotové', 'bodů hotových') + ' z ' + items.length,
-        nowShots: Array.from({ length: 6 }, (_, i) => {
-          const p = photos[(T.day * 9 + i * 4) % photos.length];
-          return { bg: this.bg((T.day * 7 + i * 5) % 40), open: () => this.openLb(p.id) };
-        }),
-        nowShotsLabel: (s.nowUploads || 0) + 42 + ' fotek z dneška · nahrává se přes wifi v apartmánu',
-        nowUpload: () => {
-          const prev = s.nowUploads || 0;
-          this.setState({ nowUploads: prev + 8 });
-          this.toast('8 fotek z telefonu přidáno do dne · nahraje se na wifi', { icon: 'ph-upload-simple', undo: () => this.setState({ nowUploads: prev }) });
-        },
+        /*
+         * Fotky z dneška jsou ty, které v knihovně opravdu mají dnešní den.
+         * Dřív tu bylo šest náhodných políček, „42 fotek z dneška" a tlačítko,
+         * které k číslu jen přičetlo osm — nic se nenahrálo.
+         */
+        ...(() => {
+          const dnes = photos.filter(p => p.day === this.dnesIso());
+          return {
+            nowShots: dnes.slice(0, 6).map(p => ({ bg: p.bg || this.bg(p.n || 0), open: () => this.openLb(p.id) })),
+            nowShotsLabel: dnes.length
+              ? this.pl(dnes.length, 'fotka z dneška', 'fotky z dneška', 'fotek z dneška') + ' v knihovně'
+              : 'Z dneška zatím v knihovně nic není'
+          };
+        })(),
+        nowUpload: () => this.pickMedia(),
         nowQuickNote: () => this.setState({ nowDlg: { text: '', photos: 0 } }),
         nowQuickSpend: () => this.setState({ nowSpDlg: { label: '', amount: '', cat: 'Jídlo' } }),
-        nowShare: () => { this.setState({ route: 'x-zpravy', appTab: 0 }); this.msgSend('t', 'Den ' + T.day + ' na Brači: ' + T.plan[1][2] + '. Zítra Vidova gora.', ''); }
+        nowShare: () => {
+          // Zpráva z toho, co v programu opravdu je — ne „na Brači, zítra Vidova gora".
+          const bod = (T.plan.find((p, i) => (done['np' + i] !== undefined ? done['np' + i] : p[4] === 'hotovo')) || T.plan[0] || [])[2];
+          this.setState({ route: 'x-zpravy', appTab: 0 });
+          this.msgSend('t', 'Den ' + T.day + ' z ' + T.days + ' · ' + T.title + (bod ? ': ' + bod : '') + '.', '');
+        }
       };
     }
     if (key === 'nowDiary') {
@@ -25227,16 +25375,26 @@ class Component extends DCLogic {
           });
         });
     }
-    // Týdenní souhrn — v pondělí ráno.
-    out.push({
-      id: 'n-week', days: 0, icon: 'ph-calendar-dots', color: 'var(--g-acc-deep)',
-      title: 'Týdenní přehled je hotový', meta: '196 fotek · 11 z 16 úkolů · 3 věci se nedotáhly',
-      when: 'pondělí 8:00', cta: 'Otevřít přehled',
-      go: () => this.setState({ route: 'x-tyden', appTab: 0, notifOpen: false })
-    });
+    // Týdenní souhrn — z čísel týdne, ne z ukázky („196 fotek · 11 z 16 úkolů").
+    const W = this.tyden();
+    if (W) {
+      out.push({
+        id: 'n-week-' + W.now.title, days: 0, icon: 'ph-calendar-dots', color: 'var(--g-acc-deep)',
+        title: 'Týdenní přehled', meta: W.now.stats.slice(0, 3).map(x => x[0] + ' ' + x[1]).join(' · ') + (W.now.slipped.length ? ' · po termínu ' + W.now.slipped.length : ''),
+        when: 'tento týden', cta: 'Otevřít přehled',
+        go: () => this.setState({ route: 'x-tyden', appTab: 0, notifOpen: false })
+      });
+    } else {
+      out.push({
+        id: 'n-week', days: 0, icon: 'ph-calendar-dots', color: 'var(--g-acc-deep)',
+        title: 'Týdenní přehled je hotový', meta: '196 fotek · 11 z 16 úkolů · 3 věci se nedotáhly',
+        when: 'pondělí 8:00', cta: 'Otevřít přehled',
+        go: () => this.setState({ route: 'x-tyden', appTab: 0, notifOpen: false })
+      });
+    }
     // Cestovní režim — nedokončené body dnešního programu.
     (() => {
-      if (s.tripMode === false) return;
+      if (s.tripMode === false || ! this.naCeste()) return;
       const T = NOWTRIP, d = s.nowDone || {};
       const next = T.plan.find((p, i) => !(d['np' + i] !== undefined ? d['np' + i] : p[4] === 'hotovo'));
       if (!next) return;
@@ -29734,15 +29892,16 @@ class Component extends DCLogic {
         ['V detailu média', [['←→', 'Předchozí a další'], ['C', 'Srovnat vedle sebe'], ['I', 'Info panel'], ['F', 'Oblíbená'], ['Esc', 'Zavřít']]]
       ].map(g => ({ title: g[0], rows: g[1].map(r => ({ key: r[0], label: r[1] })) })),
       // Cestovní režim jde vypnout — pak zmizí i chip v liště a widget na Domů.
-      tripModeOn: s.tripMode !== false,
+      tripModeOn: s.tripMode !== false && this.naCeste(),
       tripModeToggle: () => {
-        const on = s.tripMode !== false;
+        const on = s.tripMode !== false && this.naCeste();
+        if (! on && ! this.naCeste()) return this.bezCesty();
         this.setState({ tripMode: !on });
         this.toast(on ? 'Cestovní režim vypnut — nejsme na cestě' : 'Cestovní režim zapnut · ' + NOWTRIP.title, {
           icon: 'ph-compass', local: true
         });
       },
-      tripModeOff: s.tripMode === false,
+      tripModeOff: ! (s.tripMode !== false && this.naCeste()),
       tripModeLabel: s.tripMode !== false ? 'Nejsme na cestě' : 'Jsme na cestě',
       ...(appKind === 'cur' ? this.curVals(appKey) : { appIsCur: false }),
       ...(appKind === 'ann' ? this.annVals(appKey) : { appIsAnn: false }),
@@ -29928,8 +30087,10 @@ class Component extends DCLogic {
           return pr[m.kind] && m.count >= pr.minPhotos && !(s.memHidden || {})[m.id] && !(s.memLater || {})[m.id];
         });
         const top = memList[0];
-        const T = NOWTRIP;
-        const spentAll = T.spent + (s.nowSpend || []).reduce((a, r) => a + r.amount, 0);
+        // Bez běžící cesty je `NOWTRIP` prázdný; dlaždice je pak schovaná, ale
+        // počítá se při každém překreslení a nesmí spadnout na `undefined.filter`.
+        const T = this.naCeste() ? NOWTRIP : { title: '', where: '', day: 0, days: 1, spent: 0, fund: 0, plan: [] };
+        const spentAll = (T.spent || 0) + (s.nowSpend || []).reduce((a, r) => a + r.amount, 0);
         const doneN = T.plan.filter((p, i) => {
           const d = s.nowDone || {};
           return d['np' + i] !== undefined ? d['np' + i] : p[4] === 'hotovo';
@@ -29962,23 +30123,43 @@ class Component extends DCLogic {
               this.toast('Odloženo na zítra ráno', { icon: 'ph-clock-clockwise', undo: () => this.setState({ memLater: prev }) });
             }
           } : null,
-          homeWeek: [
-            { label: 'Fotek', value: '196', note: 'za tento týden' },
-            { label: 'Úkolů', value: '11 / 16', note: 'hotových' },
-            { label: 'Zápisů', value: '3', note: 'v deníku' },
-            { label: 'Utraceno', value: this.kc(6840), note: 'pod plánem' }
-          ],
-          homeWeekBars: [12, 4, 18, 6, 0, 34, 122].map((n, i) => ({
-            label: ['Po', 'Út', 'St', 'Čt', 'Pá', 'So', 'Ne'][i],
-            h: Math.max(3, Math.round((n / 122) * 46)) + 'px',
-            color: n > 30 ? 'var(--g-acc)' : 'var(--g-acc-soft)'
-          })),
+          // Týden v číslech je týž jako na obrazovce Týdenní přehled — ze serveru,
+          // ne „196 fotek, 11 / 16" napsaných v kódu.
+          ...(() => {
+            const W = this.tyden();
+            if (! W) {
+              return {
+                homeWeek: [
+                  { label: 'Fotek', value: '196', note: 'za tento týden' },
+                  { label: 'Úkolů', value: '11 / 16', note: 'hotových' },
+                  { label: 'Zápisů', value: '3', note: 'v deníku' },
+                  { label: 'Utraceno', value: this.kc(6840), note: 'pod plánem' }
+                ],
+                homeWeekBars: [12, 4, 18, 6, 0, 34, 122].map((n, i) => ({
+                  label: ['Po', 'Út', 'St', 'Čt', 'Pá', 'So', 'Ne'][i],
+                  h: Math.max(3, Math.round((n / 122) * 46)) + 'px',
+                  color: n > 30 ? 'var(--g-acc)' : 'var(--g-acc-soft)'
+                }))
+              };
+            }
+            const st = W.now.stats, max = Math.max(1, ...W.now.days);
+            const kratce = ['za tento týden', 'hotových', 'v deníku', ''];
+            return {
+              homeWeek: st.map((x, i) => ({ label: ['Fotek', 'Úkolů', 'Zápisů', 'Utraceno'][i] || x[0], value: x[1], note: kratce[i] || x[2] })),
+              homeWeekBars: W.now.days.map((n, i) => ({
+                label: ['Po', 'Út', 'St', 'Čt', 'Pá', 'So', 'Ne'][i],
+                h: Math.max(3, Math.round((n / max) * 46)) + 'px',
+                color: n > max * .5 ? 'var(--g-acc)' : 'var(--g-acc-soft)'
+              }))
+            };
+          })(),
           homeWeekGo: () => this.setState({ route: 'x-tyden', appTab: 0 }),
           homeTrip: {
             title: T.title, where: T.where,
             day: 'Den ' + T.day + ' z ' + T.days,
             pct: Math.round((T.day / T.days) * 100) + '%',
-            next: T.plan[Math.min(doneN, T.plan.length - 1)][0] + ' · ' + T.plan[Math.min(doneN, T.plan.length - 1)][2],
+            // Den bez programu (nebo s hotovým) nemá „další bod" — `plan[-1]` spadl.
+            next: T.plan.length ? T.plan[Math.min(doneN, T.plan.length - 1)][0] + ' · ' + T.plan[Math.min(doneN, T.plan.length - 1)][2] : 'na dnešek není nic naplánované',
             left: this.kc(T.fund - spentAll) + ' z fondu zbývá',
             doneLabel: doneN + ' z ' + T.plan.length + ' bodů dneška hotových',
             go: () => this.setState({ route: 'x-teď', appTab: 0 }),
@@ -29994,7 +30175,7 @@ class Component extends DCLogic {
         { label: 'Přidat cokoliv (Q)', icon: 'ph-lightning', go: () => this.setState({ capOpen: true, capText: '', capKind: {}, capSkip: {} }) },
         { label: 'Požádat druhého', icon: 'ph-hand-heart', go: () => this.setState({ route: 'x-zadosti', appTab: 0 }) },
         // „Nastavení pro dva" je týž průvodce; po dokončení mezi rychlé akce nepatří.
-        ...(s.obApplied || (((window.GalerieData || {}).DVOJICE || []).length >= 2)
+        ...(s.obApplied || window.GALERIE_UCTY_EXISTUJI || (((window.GalerieData || {}).DVOJICE || []).length >= 2)
           ? []
           : [{ label: 'Nastavení pro dva', icon: 'ph-sparkle', go: () => this.setState({ obOpen: true, obStep: 0 }) }]),
         { label: 'Nahrát fotografie', icon: 'ph-upload-simple', go: () => this.setState({ uploadOpen: true }) },

@@ -34,7 +34,7 @@ class Cesty implements PoskytovatelObsahu
 
     public function uplne(): array
     {
-        return ['TRIPS', 'TRIP_BY_TITLE', 'PLACES', 'PLACE_BY_TITLE'];
+        return ['TRIPS', 'TRIP_BY_TITLE', 'PLACES', 'PLACE_BY_TITLE', 'NOWTRIP'];
     }
 
     public function kolekce(GallerySpace $prostor): array
@@ -45,7 +45,15 @@ class Cesty implements PoskytovatelObsahu
         return array_filter([
             'TRIPS' => $cesty,
             'TRIP_BY_TITLE' => $this->rejstrik($cesty),
-            'NOWTRIP' => $this->prave($prostor, $cesty),
+            /*
+             * Běžící cesta chodí **vždycky**, když zrovna žádná není, tak prázdná.
+             *
+             * Neposlaná nechala u klienta ukázkový Brač a cestovní režim je ve
+             * výchozím stavu zapnutý — horní lišta pak na každé obrazovce
+             * tvrdila „Jsme na cestě · den 5 z 8" dvojici, která seděla doma.
+             * Prázdný objekt je úplná kolekce, takže ukázku smaže.
+             */
+            'NOWTRIP' => Schema::hasTable('trips') ? ($this->prave($prostor, $cesty) ?? (object) []) : null,
             'PLACES' => $mista,
             'PLACE_BY_TITLE' => $this->rejstrik($mista),
             // Tytéž cesty a místa ve tvaru seznamu — víc dotazů to nestojí.

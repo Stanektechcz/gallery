@@ -1585,7 +1585,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                 <div>
                   <div style="border:1px solid var(--g-line); border-radius:2px; padding:13px 14px; margin-bottom:14px">
                     <div style="font-size:16px">{{ all.now.head }}</div>
-                    <div style="font-size:11.5px; color:var(--g-ink3); margin-top:3px">{{ all.now.when }} · {{ all.now.weather }}</div>
+                    <div style="font-size:11.5px; color:var(--g-ink3); margin-top:3px">{{ all.now.when }}</div>
                     <div style="display:flex; align-items:baseline; gap:8px; font-size:12.5px; color:var(--g-ink2); margin-top:10px">Utraceno {{ all.now.spent }}<span style="margin-left:auto; color:var(--g-ink3)">z {{ all.now.fund }} · {{ all.now.pct }}</span></div>
                     <div style="height:7px; border-radius:2px; background:var(--g-line2); overflow:hidden; margin-top:5px"><div style="height:100%; width:{{ all.now.w }}; background:var(--g-acc)"></div></div>
                     <div style="font-size:11.5px; color:var(--g-ink3); margin-top:5px">Dnes {{ all.now.today }}</div>
@@ -6649,7 +6649,8 @@ class Component extends DCLogic {
       diary: (NOWTRIP.diary || []).map(d => ({ day: d[0], title: d[1], text: d[2] })),
       hasDiary: key === 'nowDiary',
       head: NOWTRIP.title + ' · den ' + NOWTRIP.day + ' z ' + NOWTRIP.days,
-      when: NOWTRIP.when, weather: NOWTRIP.weather + ' · ' + NOWTRIP.sun,
+      // Počasí aplikace nezjišťuje — bez něj se řádek nesmí rozpadnout na „undefined · undefined".
+      when: [NOWTRIP.when, NOWTRIP.weather, NOWTRIP.sun].filter(Boolean).join(' · '),
       fund: this.kc(NOWTRIP.fund), spent: this.kc(NOWTRIP.spent), today: this.kc(NOWTRIP.todaySpent),
       w: Math.round(NOWTRIP.spent / Math.max(1, NOWTRIP.fund) * 100) + '%',
       pct: Math.round(NOWTRIP.spent / Math.max(1, NOWTRIP.fund) * 100) + ' %',

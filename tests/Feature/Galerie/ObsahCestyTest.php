@@ -42,10 +42,18 @@ class ObsahCestyTest extends TestCase
         Sanctum::actingAs($this->adri);
     }
 
-    /** Bez cest a míst se nic neposílá — klient si nechá ukázková data. */
-    public function test_bez_cest_se_skupina_neposila(): void
+    /**
+     * Bez cest a míst chodí jen prázdná běžící cesta.
+     *
+     * Seznamy si klient nechá ukázkové, ale „jsme na cestě" nesmí tvrdit nikdy,
+     * když se nejede.
+     */
+    public function test_bez_cest_chodi_jen_prazdna_bezici_cesta(): void
     {
-        $this->assertSame([], $this->getJson('/api/data/cesty')->assertOk()->json('data'));
+        $odpoved = $this->getJson('/api/data/cesty')->assertOk();
+
+        $this->assertSame('{"NOWTRIP":{}}', json_encode(json_decode($odpoved->getContent())->data));
+        $this->assertContains('NOWTRIP', $odpoved->json('uplne'));
     }
 
     /**
@@ -231,15 +239,15 @@ class ObsahCestyTest extends TestCase
         $this->assertArrayNotHasKey('weather', $ted);
     }
 
-    /** Když nikam nejedeme, běžící cesta se neposílá. */
-    public function test_bez_bezici_cesty_se_nowtrip_neposila(): void
+    /** Když nikam nejedeme, běžící cesta je prázdná — ukázkový Brač se smaže. */
+    public function test_bez_bezici_cesty_je_nowtrip_prazdny(): void
     {
         $this->cesta(['name' => 'Portugalsko', 'start_date' => now()->addMonth(), 'end_date' => now()->addMonth()->addWeek()]);
 
-        $data = $this->getJson('/api/data/cesty')->assertOk()->json('data');
+        $odpoved = $this->getJson('/api/data/cesty')->assertOk();
 
-        $this->assertArrayHasKey('TRIPS', $data);
-        $this->assertArrayNotHasKey('NOWTRIP', $data);
+        $this->assertArrayHasKey('TRIPS', $odpoved->json('data'));
+        $this->assertSame('{}', json_encode(json_decode($odpoved->getContent())->data->NOWTRIP));
     }
 
     /**

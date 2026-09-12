@@ -25,6 +25,7 @@ use App\Services\Obsah\Knihovna;
 use App\Services\Obsah\Kucharka;
 use App\Services\Obsah\Mechanismy;
 use App\Services\Obsah\Planovani;
+use App\Services\Obsah\Tyden;
 use App\Services\Obsah\Pravidla;
 use App\Services\Obsah\Pribeh;
 use App\Services\Obsah\Rozhodovani;
@@ -84,6 +85,7 @@ class AppServiceProvider extends ServiceProvider
                 $app->make(Pribeh::class),
                 $app->make(Mechanismy::class),
                 $app->make(Rozhodovani::class),
+                $app->make(Tyden::class),
             ]);
     }
 

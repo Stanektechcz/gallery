@@ -366,7 +366,7 @@
    */
   var SKUPINY = ['finance', 'knihovna', 'planovani', 'domacnost', 'cesty', 'vztah', 'zdravi', 'sdileni',
     'zpravy', 'kucharka', 'darky', 'denik', 'pravidla', 'rozbory', 'uklid', 'system', 'klid', 'pribeh',
-    'mechanismy', 'rozhodovani'];
+    'mechanismy', 'rozhodovani', 'tyden'];
 
   /*
    * Tři dávky místo dvaceti požadavků. První nese to, co je vidět hned
@@ -375,7 +375,7 @@
   var DAVKY = [
     ['system', 'knihovna', 'planovani', 'zpravy'],
     ['finance', 'domacnost', 'cesty', 'vztah', 'zdravi', 'sdileni', 'kucharka'],
-    ['darky', 'denik', 'pravidla', 'rozbory', 'uklid', 'klid', 'pribeh', 'mechanismy', 'rozhodovani']
+    ['darky', 'denik', 'pravidla', 'rozbory', 'uklid', 'klid', 'pribeh', 'mechanismy', 'rozhodovani', 'tyden']
   ];
 
   function skupiny() {

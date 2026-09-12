@@ -161,7 +161,8 @@ class ObsahTransakceZalozkyTest extends TestCase
         $odpoved = $this->getJson('/api/data/finance')->assertOk();
 
         $this->assertArrayNotHasKey('ATX', $odpoved->json('data'));
-        $this->assertSame([], $odpoved->json('uplne'));
+        // `INCOMES` úplné je — příjmy po osobách chodí vždycky, i prázdné.
+        $this->assertNotContains('ATX', $odpoved->json('uplne'));
     }
 
     // ——— pomůcky ———

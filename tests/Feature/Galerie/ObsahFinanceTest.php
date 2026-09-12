@@ -5,6 +5,7 @@ namespace Tests\Feature\Galerie;
 use App\Models\Budget;
 use App\Models\FinanceCategory;
 use App\Models\GallerySpace;
+use App\Models\Partner;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Models\Wallet;
@@ -134,7 +135,64 @@ class ObsahFinanceTest extends TestCase
 
         // 2 891,37 € na šest měsíců
         $this->assertSame(482, $data['BUD']['income']);
-        $this->assertSame(482, $data['INCOMES'], 'Dvě různá čísla by si na dvou obrazovkách protiřečila.');
+    }
+
+    /**
+     * Příjem každého zvlášť, jak ho čte „Dělení podle příjmů".
+     *
+     * Dřív chodilo jedno číslo za domácnost, na `INCOMES[jméno]` nešlo navléct
+     * a obrazovka radila podle ukázkové výplaty 52 400 a 41 200 Kč.
+     */
+    public function test_prijmy_jsou_po_osobach_z_knihy(): void
+    {
+        $this->regensburg();
+        $this->adri->update(['name' => 'Adrian']);
+        $maki = User::factory()->create(['name' => 'Markéta Kubíčková']);
+        $this->prostor->members()->syncWithoutDetaching([$maki->id => ['role' => 'editor']]);
+
+        $adrian = Partner::create(['gallery_space_id' => $this->prostor->id, 'kind' => 'person', 'name' => 'Adrian', 'user_id' => $this->adri->id]);
+        $marketa = Partner::create(['gallery_space_id' => $this->prostor->id, 'kind' => 'person', 'name' => 'Markéta', 'user_id' => $maki->id]);
+        $jejiUcet = Wallet::create([
+            'gallery_space_id' => $this->prostor->id, 'partner_id' => $marketa->id, 'name' => 'Markétin účet',
+            'kind' => 'bank', 'currency' => 'EUR', 'opening_balance' => 0, 'is_active' => true,
+        ]);
+
+        $tento = now()->startOfMonth()->toDateString();
+        $minuly = now()->startOfMonth()->subMonthNoOverflow()->toDateString();
+        $prijem = fn (array $x) => Transaction::create($x + [
+            'gallery_space_id' => $this->prostor->id, 'type' => 'income', 'currency_to' => 'EUR',
+            'state' => 'approved', 'created_by' => $this->adri->id,
+        ]);
+
+        // Adrian: dvě výplaty po 2 000 € → průměr 2 000, ne 4 000 ani 1 333.
+        $prijem(['occurred_at' => $tento, 'amount_to' => 2000, 'beneficiary_partner_id' => $adrian->id]);
+        $prijem(['occurred_at' => $minuly, 'amount_to' => 2000, 'beneficiary_partner_id' => $adrian->id]);
+        // Stará výplata, návrh a koruny do průměru nepatří.
+        $prijem(['occurred_at' => now()->startOfMonth()->subMonths(5)->toDateString(), 'amount_to' => 9000, 'beneficiary_partner_id' => $adrian->id]);
+        $prijem(['occurred_at' => $tento, 'amount_to' => 9000, 'beneficiary_partner_id' => $adrian->id, 'state' => 'draft']);
+        $prijem(['occurred_at' => $tento, 'amount_to' => 30000, 'beneficiary_partner_id' => $adrian->id, 'currency_to' => 'CZK']);
+        // Markéta bez příjemce — pozná se podle účtu, na který peníze přišly.
+        $prijem(['occurred_at' => $tento, 'amount_to' => 1500, 'wallet_to_id' => $jejiUcet->id]);
+
+        $prijmy = $this->getJson('/api/data/finance')->assertOk()->json('data.INCOMES');
+
+        $this->assertSame(['Adrian' => 2000, 'Markéta Kubíčková' => 1500], $prijmy);
+    }
+
+    /**
+     * Kdo příjem nezapsal, v mapě není — a mapa je úplná.
+     *
+     * Nula by znamenala „nevydělává" a dělení by mu přisoudilo nulový podíl.
+     * Úplná proto, aby u klienta nezůstal ukázkový Adrian s výplatou.
+     */
+    public function test_bez_zapsanych_prijmu_je_mapa_prazdna_a_uplna(): void
+    {
+        $this->regensburg();
+
+        $odpoved = $this->getJson('/api/data/finance')->assertOk();
+
+        $this->assertSame('{}', json_encode(json_decode($odpoved->getContent())->data->INCOMES));
+        $this->assertContains('INCOMES', $odpoved->json('uplne'));
     }
 
     /**

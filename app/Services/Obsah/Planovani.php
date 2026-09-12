@@ -35,6 +35,11 @@ class Planovani implements PoskytovatelObsahu
 
     private const UDALOSTI = 40;
 
+    /** Kalendář: kolik událostí zpátky a dopředu. Každá je pár desítek bajtů. */
+    private const UDALOSTI_ZPET = 150;
+
+    private const UDALOSTI_VPRED = 300;
+
     /** Sloupce nástěnky. Zápis zpátky je podle nich pozná. */
     public const TENTO_TYDEN = 'Tento týden';
 
@@ -108,15 +113,30 @@ class Planovani implements PoskytovatelObsahu
         // Prototyp album pozná podle identifikátoru, který mu posílá knihovna.
         $alba = DB::table('albums')->where('gallery_space_id', $prostor->id)->pluck('uuid', 'id')->all();
 
-        return CalendarEvent::where('gallery_space_id', $prostor->id)
-            ->where('is_private', false)
-            ->whereBetween('starts_at', [
-                CarbonImmutable::now()->subDays(self::DNU_ZPET),
-                CarbonImmutable::now()->addDays(self::DNU_VPRED),
-            ])
+        /*
+         * Minulost a budoucnost zvlášť.
+         *
+         * Jeden dotaz od -90 dnů vzestupně s limitem čtyřiceti znamenal, že
+         * dvojice se čtyřiceti událostmi za poslední čtvrtrok neviděla v
+         * kalendáři **nic dopředu** — limit se vyčerpal na minulosti.
+         */
+        $ted = CarbonImmutable::now()->startOfDay();
+        $dotaz = fn () => CalendarEvent::where('gallery_space_id', $prostor->id)->where('is_private', false);
+        $minule = $dotaz()
+            ->where('starts_at', '>=', $ted->subDays(self::DNU_ZPET))
+            // Ostře menší: půlnoční událost dneška patří jen do budoucích.
+            ->where('starts_at', '<', $ted)
+            ->orderByDesc('starts_at')
+            ->limit(self::UDALOSTI_ZPET)
+            ->get();
+        $budouci = $dotaz()
+            ->where('starts_at', '>=', $ted)
+            ->where('starts_at', '<=', $ted->addDays(self::DNU_VPRED))
             ->orderBy('starts_at')
-            ->limit(self::UDALOSTI)
-            ->get()
+            ->limit(self::UDALOSTI_VPRED)
+            ->get();
+
+        return $minule->reverse()->concat($budouci)
             ->map(function (CalendarEvent $e) use ($jmena, $ucastnici, $pripomenuti, $alba) {
                 $kdy = CarbonImmutable::parse($e->starts_at);
 

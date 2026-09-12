@@ -421,6 +421,21 @@ class System implements PoskytovatelObsahu
      */
     private function jmenaDvojice(GallerySpace $prostor): array
     {
+        return array_slice(array_values(self::jmenaClenu($prostor)), 0, 2);
+    }
+
+    /**
+     * Totéž jako `DVOJICE`, jen s id uživatele: `[id => jméno]`.
+     *
+     * Jiné skupiny (třeba příjmy v Financích) posílají mapy podle jména
+     * a obrazovka je hledá jmény z `DVOJICE`. Kdyby si každá skupina jména
+     * skládala po svém, druhý Adrian by v jedné byl „Adrian (2)" a v druhé
+     * „Adrian" — a jeho příjem by se na obrazovce nenašel.
+     *
+     * @return array<int, string>
+     */
+    public static function jmenaClenu(GallerySpace $prostor): array
+    {
         $lide = $prostor->members()->pluck('users.name', 'users.id')->all();
         $ja = auth()->id();
 
@@ -431,12 +446,12 @@ class System implements PoskytovatelObsahu
         $videno = [];
         $jmena = [];
 
-        foreach ($lide as $jmeno) {
+        foreach ($lide as $id => $jmeno) {
             $videno[$jmeno] = ($videno[$jmeno] ?? 0) + 1;
-            $jmena[] = $videno[$jmeno] > 1 ? $jmeno.' ('.$videno[$jmeno].')' : $jmeno;
+            $jmena[$id] = $videno[$jmeno] > 1 ? $jmeno.' ('.$videno[$jmeno].')' : $jmeno;
         }
 
-        return array_slice($jmena, 0, 2);
+        return $jmena;
     }
 
     /**

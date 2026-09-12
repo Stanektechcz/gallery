@@ -54,7 +54,9 @@ class Finance implements PoskytovatelObsahu
      */
     public function uplne(): array
     {
-        return ['ATX'];
+        // `INCOMES` celé: ukázkový Adrian s výplatou nesmí zůstat vedle
+        // skutečné dvojice, která se jmenuje jinak nebo příjem nezapsala.
+        return ['ATX', 'INCOMES'];
     }
 
     public function kolekce(GallerySpace $prostor): array
@@ -132,9 +134,15 @@ class Finance implements PoskytovatelObsahu
                 // nemá, ale ukázka na jeho místě tvrdí, že se mezi rozpočty
                 // přesouvaly peníze. Prázdný seznam je proti tomu poctivý.
             ], fn (array $v, string $k) => $k === 'balancing' || $v !== [], ARRAY_FILTER_USE_BOTH),
-            // Totéž číslo jako v hlavičce rozpočtu — dvě různá by si na dvou
-            // obrazovkách protiřečila.
-            'INCOMES' => $rozpocet ? (int) round($this->mesicniPrijem($rozpocet)) : 0,
+            /*
+             * Příjem každého zvlášť, `{ jméno: měsíčně }`.
+             *
+             * Dřív tu chodilo jedno číslo za domácnost. Obrazovky „Dělení podle
+             * příjmů" a „Čas versus služba" ale čtou `INCOMES[jméno]` — skalár
+             * na objekt navléct nešel, takže zůstala ukázková výplata 52 400
+             * a 41 200 Kč a obrazovka podle ní radila, kdo kolik má platit.
+             */
+            'INCOMES' => (object) $this->prijmyOsob($prostor, $mena),
             'SHARED' => $this->pevneNaklady($rozpocet),
             /*
              * Měna, ve které se kreslí částky.
@@ -839,6 +847,67 @@ class Finance implements PoskytovatelObsahu
             ->unique()
             ->values()
             ->all();
+    }
+
+    /**
+     * Průměrný měsíční příjem každého z dvojice: `[jméno => částka]`.
+     *
+     * Bere se z příjmů v knize za poslední tři měsíce včetně běžného. Komu
+     * příjem patří, říká příjemce transakce, a když chybí, majitel účtu, na
+     * který peníze přišly. Průměr je přes měsíce, kdy nějaký příjem přišel —
+     * dvojice, která aplikaci používá druhý týden, by jinak měla třetinovou
+     * výplatu.
+     *
+     * Kdo příjem zapsaný nemá, v mapě **není**. Nula by na obrazovce znamenala
+     * „nevydělává nic" a dělení podle příjmů by mu přisoudilo nulový podíl.
+     *
+     * @return array<string, int>
+     */
+    private function prijmyOsob(GallerySpace $prostor, string $mena): array
+    {
+        $jmena = System::jmenaClenu($prostor);
+
+        if ($jmena === [] || ! Schema::hasTable('partners')) {
+            return [];
+        }
+
+        $radky = DB::table('transactions as t')
+            ->leftJoin('partners as prijemce', 'prijemce.id', '=', 't.beneficiary_partner_id')
+            ->leftJoin('wallets as ucet', 'ucet.id', '=', 't.wallet_to_id')
+            ->leftJoin('partners as majitel', 'majitel.id', '=', 'ucet.partner_id')
+            ->where('t.gallery_space_id', $prostor->id)
+            ->where('t.type', 'income')
+            ->whereNull('t.deleted_at')
+            // Návrh ani zamítnutý příjem na účet nepřišel.
+            ->whereNotIn('t.state', ['draft', 'rejected'])
+            ->where('t.occurred_at', '>=', CarbonImmutable::now()->startOfMonth()->subMonths(2)->toDateString())
+            // Příjem v jiné měně by se k výplatě v korunách přičetl jako koruny.
+            ->where(fn ($q) => $q->whereNull('t.currency_to')->orWhere('t.currency_to', $mena))
+            ->selectRaw('COALESCE(prijemce.user_id, majitel.user_id) AS kdo, t.occurred_at, t.amount_to')
+            ->get();
+
+        $soucty = [];
+        $mesice = [];
+
+        foreach ($radky as $r) {
+            if ($r->kdo === null || ! isset($jmena[(int) $r->kdo])) {
+                continue;
+            }
+
+            $kdo = (int) $r->kdo;
+            $soucty[$kdo] = ($soucty[$kdo] ?? 0) + (float) $r->amount_to;
+            $mesice[$kdo][substr((string) $r->occurred_at, 0, 7)] = true;
+        }
+
+        $prijmy = [];
+
+        foreach ($soucty as $kdo => $soucet) {
+            if ($soucet > 0) {
+                $prijmy[$jmena[$kdo]] = (int) round($soucet / count($mesice[$kdo]));
+            }
+        }
+
+        return $prijmy;
     }
 
     private function pevneNaklady(?Budget $rozpocet): array
