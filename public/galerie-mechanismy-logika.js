@@ -595,6 +595,7 @@
           }
         };
       }),
+      verMoversEmpty: !movers.length,
       verMovers: movers.map(m => ({
         name: m.name,
         d: (m.d > 0 ? '+' : m.d < 0 ? '−' : '') + fmt(Math.abs(m.d)),

@@ -2818,6 +2818,9 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
               <div>
                 <div style="font-size:12px; letter-spacing:.14em; text-transform:uppercase; padding-bottom:9px; border-bottom:1px solid var(--g-ink)">Rozložení podle typu</div>
                 <div style="display:flex; flex-direction:column; gap:14px; margin-top:16px">
+                  <sc-if value="{{ invAllocEmpty }}">
+                    <div style="font-size:13px; color:var(--g-ink3); padding:4px 2px; text-wrap:pretty">Zatím žádná investiční pozice — rozložení se spočítá z pozic, které si zapíšete.</div>
+                  </sc-if>
                   <sc-for list="{{ invAlloc }}" as="a" hint-placeholder-count="4">
                     <div>
                       <div style="display:flex; align-items:baseline; gap:10px; margin-bottom:6px">
@@ -2841,6 +2844,9 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                     </sc-for>
                   </div>
                 </div>
+                <sc-if value="{{ invRowsEmpty }}">
+                  <div style="font-size:13px; color:var(--g-ink3); padding:4px 2px; text-wrap:pretty">Žádná pozice k zobrazení.</div>
+                </sc-if>
                 <sc-for list="{{ invRows }}" as="p" hint-placeholder-count="5">
                   <div style="display:flex; gap:16px; align-items:flex-start; padding:15px 2px; border-bottom:1px solid var(--g-line2); flex-wrap:wrap">
                     <div style="flex:1 1 260px; min-width:0">
@@ -2909,6 +2915,9 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
               <div>
                 <div style="font-size:12px; letter-spacing:.14em; text-transform:uppercase; padding-bottom:9px; border-bottom:1px solid var(--g-ink)">Růst portfolia</div>
                 <div style="display:flex; align-items:flex-end; gap:14px; height:150px; margin-top:18px">
+                  <sc-if value="{{ invYearsEmpty }}">
+                    <div style="font-size:13px; color:var(--g-ink3); padding:4px 2px; text-wrap:pretty">Vývoj po letech aplikace nemá — historii ocenění pozic neukládá.</div>
+                  </sc-if>
                   <sc-for list="{{ invYears }}" as="y" hint-placeholder-count="5">
                     <div style="flex:1; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%; gap:6px">
                       <span style="font-size:12px; color:var(--g-ink2); font-variant-numeric:tabular-nums">{{ y.value }}</span>
@@ -3894,6 +3903,9 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                 <div style="flex:1 1 300px; max-width:380px; min-width:0">
                   <div style="padding-bottom:9px; border-bottom:1px solid var(--g-ink); font-size:12px; letter-spacing:.14em; text-transform:uppercase">Kategorie za rok</div>
                   <div style="display:flex; flex-direction:column; gap:14px; margin-top:18px">
+                    <sc-if value="{{ budYearCatsEmpty }}">
+                      <div style="font-size:13px; color:var(--g-ink3); padding:4px 2px; text-wrap:pretty">Za posledních dvanáct měsíců v knize není žádný výdaj.</div>
+                    </sc-if>
                     <sc-for list="{{ budYearCats }}" as="c" hint-placeholder-count="7">
                       <button onClick="{{ c.go }}" style="border:0; background:transparent; padding:0; cursor:pointer; text-align:left; font-family:inherit; color:inherit">
                         <div style="display:flex; align-items:baseline; gap:10px; margin-bottom:6px">
@@ -9351,6 +9363,9 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 
               <div style="font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--g-ink3); margin-bottom:11px">Předchozí otázky</div>
               <div style="display:flex; flex-direction:column; gap:14px">
+                <sc-if value="{{ klAskLogEmpty }}">
+                  <div style="font-size:13px; color:var(--g-ink3); padding:4px 2px; text-wrap:pretty">Zatím žádná otázka, na kterou jste odpověděli oba.</div>
+                </sc-if>
                 <sc-for list="{{ klAskLog }}" as="l" hint-placeholder-count="2">
                   <div style="padding-bottom:14px; border-bottom:1px solid var(--g-line2)">
                     <div style="display:flex; align-items:baseline; gap:10px">
@@ -11201,6 +11216,9 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                   <div>
                     <div style="font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--g-ink3); margin-bottom:11px">Kdo koho posunul</div>
                     <div style="display:flex; flex-direction:column; gap:11px">
+                      <sc-if value="{{ verMoversEmpty }}">
+                        <div style="font-size:13px; color:var(--g-ink3); padding:4px 2px; text-wrap:pretty">Zatím žádná verze — kdo co posunul, se ukáže po prvním zápisu.</div>
+                      </sc-if>
                       <sc-for list="{{ verMovers }}" as="m" hint-placeholder-count="3">
                         <div>
                           <div style="display:flex; align-items:baseline; gap:8px; font-size:13.5px; color:var(--g-ink2)">{{ m.name }}<span style="color:var(--g-ink3)">{{ m.dir }}</span><span style="margin-left:auto; color:var(--g-ink); font-variant-numeric:tabular-nums">{{ m.d }}</span></div>
@@ -11365,6 +11383,9 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 
               <div style="font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--g-ink3); margin-bottom:10px">Návrhy na stole</div>
               <div style="display:flex; flex-direction:column; gap:12px; max-width:940px; margin-bottom:26px">
+                <sc-if value="{{ vtPropsEmpty }}">
+                  <div style="font-size:13px; color:var(--g-ink3); padding:4px 2px; text-wrap:pretty">Na stole teď nic neleží — návrh přidáte níž.</div>
+                </sc-if>
                 <sc-for list="{{ vtProps }}" as="p" hint-placeholder-count="3">
                   <div style="padding:14px 16px; border-radius:2px; background:var(--g-raise); border:1px solid var(--g-line2)">
                     <div style="display:flex; align-items:baseline; gap:10px; flex-wrap:wrap">
@@ -15586,9 +15607,11 @@ class Component extends DCLogic {
         { label: 'Příjmy za 12 měsíců', value: this.kc(BUD.year.income) },
         { label: 'Výdaje', value: this.kc(BUD.year.spent) },
         { label: 'Uspořeno', value: this.kc(BUD.year.saved) },
-        { label: 'Nejdražší měsíc', value: BUD.year.worst },
-        { label: 'Nejlevnější měsíc', value: BUD.year.best }
+        // Bez měsíců v knize byly obě dlaždice prázdné.
+        { label: 'Nejdražší měsíc', value: BUD.year.worst || '—' },
+        { label: 'Nejlevnější měsíc', value: BUD.year.best || '—' }
       ],
+      budYearCatsEmpty: !BUD.yearCats.length,
       budYearCats: BUD.yearCats.map((c, k) => ({
         name: c[0], value: this.kc(c[1]),
         pct: Math.round(c[1] / BUD.yearCats[0][1] * 100) + '%',
@@ -17559,11 +17582,15 @@ class Component extends DCLogic {
      * bez ohledu na to, kolik toho opravdu rozhodli.
      */
     const explicit = (s.decs === null || s.decs === undefined ? DEC_LIST : s.decs).length;
-    const share = Math.round((rows.length / (rows.length + explicit)) * 100);
+    const celkem = rows.length + explicit;
+    // Bez jediného rozhodnutí je podíl 0 / 0 — dlaždice ukazovala „NaN %".
+    const share = celkem ? Math.round((rows.length / celkem) * 100) : 0;
     const KIND = { 'vyprodáno': 'nabídka zmizela', 'lhůta': 'propadla lhůta', 'mlčení': 'nikdo nic neřekl' };
     return {
-      adBig: share + ' %',
-      adHead: 'Z posledních ' + (rows.length + explicit) + ' velkých věcí rozhodl v ' + rows.length + ' případech čas. Ne jeden z vás — kalendář.',
+      adBig: celkem ? share + ' %' : '—',
+      adHead: celkem
+        ? 'Z posledních ' + celkem + ' velkých věcí rozhodl v ' + rows.length + ' případech čas. Ne jeden z vás — kalendář.'
+        : 'Zatím tu není žádné rozhodnutí, u kterého by se dalo poznat, jestli ho udělal čas.',
       adNote: 'Nerozhodnout je rozhodnutí, jen se u něj nikdo nemusí podepsat. Aplikace hledá tři vzorce: propadlou rozvahu, uplynulou lhůtu a věc, o které se čtyřikrát mluvilo a nikdy neuzavřela.',
       adCost: this.kc(cost),
       adCostNote: 'Tolik stálo to, že se nerozhodlo. Bez emocí — jen rozdíly cen, doplatky a předplatná, která běžela dál.',
@@ -18576,12 +18603,15 @@ class Component extends DCLogic {
     const soloA = solo(prvni), soloK = solo(druhy);
     const crit = rows.filter(r => r.crit === 3 && r.who !== 'oba' && !r.doc);
     const covered = rows.filter(r => r.doc || r.who === 'oba').length;
-    const score = Math.round((covered / rows.length) * 100);
+    // Prázdný seznam dával „NaN %" a větu „všechno zásadní umí oba" — bez jediné zapsané věci.
+    const score = rows.length ? Math.round((covered / rows.length) * 100) : 0;
     const kindTag = k => k === 'heslo' ? 'tag-accent' : k === 'kontakt' ? 'tag-accent-2' : 'tag-neutral';
     return {
-      busScore: score + ' %',
-      busColor: score >= 70 ? 'var(--g-acc)' : score >= 45 ? 'var(--g-ink)' : 'var(--g-mag)',
-      busHead: crit.length
+      busScore: rows.length ? score + ' %' : '—',
+      busColor: !rows.length ? 'var(--g-ink3)' : score >= 70 ? 'var(--g-acc)' : score >= 45 ? 'var(--g-ink)' : 'var(--g-mag)',
+      busHead: !rows.length
+        ? 'Zatím není zapsané nic, co domácnost drží — hesla, kontakty ani postupy.'
+        : crit.length
         ? 'Kdyby jeden z vás vypadl na týden, ' + this.pl(crit.length, 'zásadní věc by nikdo neuměl', 'zásadní věci by nikdo neuměl', 'zásadních věcí by nikdo neuměl') + '.'
         : 'Všechno zásadní umí oba, nebo je to zapsané.',
       busNote: 'Není to o nemoci ani o neštěstí. Stačí služebka, telefon vybitý na horách nebo tři dny v nemocnici s dítětem. Zdravá domácnost má každou zásadní věc na dvou místech.',
@@ -19460,6 +19490,24 @@ class Component extends DCLogic {
         moveColor: e.move ? 'var(--g-ink3)' : 'var(--g-ink2)'
       };
     });
+    /*
+     * Bez účtů a plateb je předpověď samé nuly.
+     *
+     * Obrazovka pak tvrdila „Nejhorší den zbude 0 Kč. Rezerva na nic navíc",
+     * „žádný den v minusu" a „61 napjatých dní" — rozbor něčeho, co není.
+     */
+    const maData = this.ukazka() || !!(P60.start || P60.daily || (P60.events || []).length);
+    if (!maData) {
+      return {
+        p60Min: '—', p60MinDay: '—', p60MinColor: 'var(--g-ink3)',
+        p60Head: 'Předpověď zatím není z čeho spočítat.',
+        p60Note: 'Počítá se z účtů, pravidelných plateb a průměrné denní útraty v transakcích. Jakmile je ve Financích založíte, objeví se tu, jak bude vypadat nejbližších šedesát dní.',
+        p60Points: path.points, p60ZeroY: path.zeroY, p60ShowZero: false, p60MinX: path.minX, p60MinY: path.minY,
+        p60Below: '—', p60Tight: '—', p60End: '—', p60Rows: [],
+        p60FixHead: 'Až bude předpověď, ukáže se tu, co posunout', p60Fixes: [],
+        p60ToTx: () => this.setState({ route: 'x-transakce' })
+      };
+    }
     return {
       p60Min: this.kc(base.min), p60MinDay: this.p60Day(base.minD),
       p60MinColor: base.min < 0 ? 'var(--g-mag)' : base.min < 10000 ? 'var(--g-ink)' : 'var(--g-acc)',
@@ -19479,7 +19527,8 @@ class Component extends DCLogic {
         label: f.label,
         gain: 'nejhorší den se zvedne o ' + this.kc(f.gain),
         min: 'na ' + this.kc(f.min),
-        apply: () => { this.setState({ route: 'x-rozpocty', budTab: 2 }); this.toast('„' + f.label + '“ o dva týdny později — zvedne nejhorší den o ' + this.kc(f.gain), { icon: 'ph-calendar-plus' }); }
+        // Nic se tím neposouvá — hláška „o dva týdny později" zněla, jako by se to stalo.
+        apply: () => { this.setState({ route: 'x-finance', finTab: 2 }); this.toast('Posuňte „' + f.label + '“ o dva týdny u plateb — nejhorší den se zvedne o ' + this.kc(f.gain), { icon: 'ph-calendar-plus' }); }
       })),
       p60ToTx: () => { this.setState({ route: 'x-transakce' }); this.toast('Denní útrata se počítá z těchto transakcí', { icon: 'ph-receipt' }); }
     };
@@ -19548,11 +19597,13 @@ class Component extends DCLogic {
       }),
       kalCoeffs: this.dva().map(w => {
         const k = this.kalCoeff(w);
+        // „0 záznamů · odhaduje realisticky“ — hodnocení bez jediného odhadu.
+        const pocet = EST.filter(e => e.who === w).length;
         return {
-          name: w, value: (k >= 1 ? '+' : '\u2212') + Math.round(Math.abs(k - 1) * 100) + ' %',
-          note: k >= 1.3 ? 'systematicky podceňuje' : k >= 1.1 ? 'mírně podceňuje' : 'odhaduje realisticky',
-          color: k >= 1.3 ? 'var(--g-mag)' : 'var(--g-ink)',
-          n: this.pl(EST.filter(e => e.who === w).length, 'záznam', 'záznamy', 'záznamů')
+          name: w, value: pocet ? (k >= 1 ? '+' : '\u2212') + Math.round(Math.abs(k - 1) * 100) + ' %' : '—',
+          note: !pocet ? 'zatím bez odhadů' : k >= 1.3 ? 'systematicky podceňuje' : k >= 1.1 ? 'mírně podceňuje' : 'odhaduje realisticky',
+          color: pocet && k >= 1.3 ? 'var(--g-mag)' : 'var(--g-ink)',
+          n: this.pl(pocet, 'záznam', 'záznamy', 'záznamů')
         };
       }),
       kalWhoOpts: this.dva().map(w => ({
@@ -19644,6 +19695,7 @@ class Component extends DCLogic {
         { name: this.meWho(), left: leftA + ' ze 3', color: leftA === 0 ? 'var(--g-mag)' : 'var(--g-acc)', dots: [1, 2, 3].map(i => ({ bg: i <= leftA ? 'var(--g-acc)' : 'var(--g-line2)' })) },
         { name: this.otherWho(), left: leftM + ' ze 3', color: leftM === 0 ? 'var(--g-mag)' : 'var(--g-mag)', dots: [1, 2, 3].map(i => ({ bg: i <= leftM ? 'var(--g-mag)' : 'var(--g-line2)' })) }
       ],
+      vtPropsEmpty: !props.length,
       vtProps: props.map(p => {
         const mine = p.by === this.meWho();
         const left = mine ? leftA : leftM;
@@ -20229,6 +20281,7 @@ class Component extends DCLogic {
         });
       },
       klAskLog: askLog.map(l => ({ q: l.q, a: l.a, m: l.m, when: l.when })),
+      klAskLogEmpty: !askLog.length,
       klAskHint: askDone ? 'Zapsáno. Další otázka přijde zítra v 19:00 — nebo ji vezměte hned.' : 'Odpověď druhého je zamčená, dokud nenapíšete svou. Tím se nedá odpovídat podle něj.'
     };
   }
@@ -27611,6 +27664,8 @@ class Component extends DCLogic {
         bd: who === w ? 'var(--g-ink)' : 'var(--g-line)',
         go: () => this.setState({ invWho: w })
       })),
+      // Prázdné sekce pod nadpisy (Rozložení podle typu, Pozice, Růst portfolia) dostanou větu.
+      invAllocEmpty: !Object.keys(byKind).length, invRowsEmpty: !shown.length, invYearsEmpty: !this.ukazka(),
       invAlloc: Object.keys(byKind).map((k, i) => {
         const pct = Math.round((byKind[k] / total) * 100);
         const tgt = target[k] || 0;
