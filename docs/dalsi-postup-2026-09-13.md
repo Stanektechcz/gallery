@@ -28,7 +28,9 @@ Třetí kolo (bod 2c) přidává jednu migraci: `add_note_to_transactions`
 (sloupec `note` u plateb — poznámka k platbě z galerie).
 
 Čtvrté kolo (bod 2d) přidává migraci `smazat_hesla_ze_stavu_dvojice` — smaže
-ze sdíleného stavu hesla a kódy, které tam počítač dřív poslal (viz 2d).
+ze sdíleného stavu hesla a kódy, které tam počítač dřív poslal (viz 2d),
+nastavení zámku a staré místní řádky telefonu (2e). Páté kolo (2e) migraci
+nepřidává.
 
 Druhé kolo (galerie, viz bod 2b) žádnou migraci nepřidává. Po nasazení je ale
 potřeba **jednou dogenerovat náhledy** — do té doby se chodily vydávat originály
@@ -201,6 +203,44 @@ nikdy pod `A`/`M` — ty jsou na každém zařízení opačně.
 
 ---
 
+## 2e. Páté kolo — co obrazovka čte a nikdo neposílá (13. 9. pozdě večer)
+
+Nový druh kontroly: šablona se projde proti hodnotám, které jí aplikace
+opravdu dává — jen viditelné větve, v 266 stavech počítače, na 79 obrazovkách
+telefonu a po kliknutí na všechno, co otevírá dialog nebo list (s plnými
+i prázdnými daty a s prázdnou knihovnou). Chybějící pole se totiž vykreslí
+jako prázdno bez jediné chyby v konzoli.
+
+| Commit | Obsah |
+|---|---|
+| `9d915eb5` | **Nastavení zámku patří zařízení** — „Zamknout při spuštění: Vypnuto" na jednom zařízení vypínalo zámek i druhému |
+| `f05cf23f` | Prázdné sekce řeknou, co v nich je (finance, nedělní deset minut, kniha příběhu, itinerář) |
+| `5070df35` | Vnořené záložky bez „NaN %" a bez rozborů z prázdných dat |
+| `430b3144` | **Bezpečnost:** náhled fotky v koši a obrázek ze smazané zprávy přestanou platit i přes dřív vydanou adresu — bod 12 hotový |
+| `ee2ad787` | Úklid starých místních řádků telefonu ze stavu (migrace z 2d) — bod 13 hotový |
+| `dcc3278f` | Dvoufázové ověření: políčko na přihlašovací obrazovce místo dialogu prohlížeče — bod 5.3 hotový |
+| `78c0c8d6` | Testy hlídají pravidla dokumentů prototypu (`sc-camel-`, `persistSkip`, SRI, políčko 2FA) |
+| `12f8d88c` | **Rozpočet a obálka se zakládají z galerie** (dřív slepá ulička „založte ho v Rozpočtech"); pruhy v Přehledech a v rozpočtu na telefonu se konečně vyplní; volba druhu události v kalendáři nebyla vidět; hlasovky bez tlačítek naprázdno; telefon nepadá na „Útraty" u cesty; prázdný deník otevře nový zápis |
+| `87659c81` | **„Přidat" v kalendáři s prázdnou knihovnou shodilo aplikaci**; „Fotky z tohoto dne" jsou opravdu z toho dne; Co dnes uvařit bez receptů bez mrtvých tlačítek; panel chatu ukazuje snímky z bublin |
+
+Nové cesty API: `POST finance/rozpocet/zalozit` (společný měsíční rozpočet,
+limity z průměru tří celých měsíců útrat, zároveň původní plán) a
+`POST finance/rozpocet/obalka` (limit obálky, kategorii „Obálka pro sebe"
+založí, když žádná obálka není). Žádná nová migrace.
+
+Testy: **1370 PHP testů**, všechny prošly (z toho 4 nové pro rozpočet a obálku).
+
+### Změny chování, o kterých mají oba vědět (2e)
+
+- **Zámek aplikace se nastavuje na každém zařízení zvlášť** (zamknout při
+  spuštění, automatické zamčení, otisk). Po nasazení si ho každý nastaví
+  znovu — ze společného stavu se nepřebírá, platí bezpečné výchozí hodnoty.
+- Kdo nemá rozpočet, založí ho tlačítkem v Rozpočtech (počítač) nebo ve
+  Financích (telefon). Limity kategorií bez útrat začínají na nule a mění
+  se tlačítky − / + u kategorie.
+
+---
+
 ## 3. Známé nedostatky — bezpečnost
 
 Seřazeno podle rizika. Nic z toho není aktivně zneužitelné bez jiné chyby,
@@ -235,11 +275,10 @@ ale každá položka zmenšuje, co by jedna chyba napáchala.
 11. ~~**Pokusy o heslo k trezoru se počítají v sezení**~~ — hotovo (2d): cache
     podle účtu s prodlužujícím se uzavřením. Na produkci musí `CACHE_STORE`
     být sdílený (databáze/redis), ne `array`.
-12. **Podepsané náhledy platí do konce zítřka.** Fotka smazaná do koše (ne do
-    trezoru) jde přes dřív vydanou adresu otevřít dál; trezor je už ošetřený.
-13. **Staré místní řádky v telefonu** (`txExtra`, `tasksExtra`, `diary` ve
-    stavu) se u dvojice už nezobrazují, ale ve stavu leží dál. Neškodí; úklid
-    by byl jednorázový skript nad `couple_states`.
+12. ~~**Podepsané náhledy platí do konce zítřka**~~ — hotovo (2e): náhled
+    fotky v koši i obrázek ze smazané zprávy dřív vydaná adresa nevydá.
+13. ~~**Staré místní řádky v telefonu**~~ — hotovo (2e): migrace
+    `smazat_hesla_ze_stavu_dvojice` je ze stavu smaže.
 
 ---
 
@@ -250,15 +289,15 @@ zůstává u dvojice jen to, co potřebuje napojení na cizí službu nebo vlast
 návrh — většina hlášek „bez připojeného serveru" platí jen pro ukázku.
 
 ### Potřebuje cizí službu
-- Automatické stahování transakcí a napojení banky (výpis jde importovat)
-- Investice: zakládání pozic, nákup, rebalance
+- Automatické stahování transakcí a napojení banky. **Import výpisu do knihy
+  galerie nemá** (staré rozhraní má jen `POST /api/banking/imports`) —
+  platby se zapisují ručně nebo z pravidelných plateb; obrazovky to od 2e
+  říkají, dřív tvrdily „zařazování běží při každém importu"
+- Investice: nákup a rebalance (nová pozice u dvojice založí spořicí účet)
 - Dvoufázové přihlášení se zapíná ve starém rozhraní — v galerii je jen jeho
   stav (zapnutí potřebuje QR kód ověřovací aplikace)
 
 ### Potřebuje návrh
-- Úprava pravidla importu (pravidla se zakládají, upravit je jde jen smazáním a novým)
-- Přesun položky týdenního přehledu, otevírání archivovaných přehledů
-- Vypnutí počítání otevření u sdíleného odkazu (odkaz jde zneplatnit)
 - Hromadné vrácení celé historie změn (jednotlivé kroky z okna vrátit jde)
 - Kompletní archiv originálů jedním souborem (dnes: originály na Google Disku,
   vybrané fotky jako ZIP z výběru; celé GB přes prohlížeč nejdou)
@@ -271,16 +310,19 @@ návrh — většina hlášek „bez připojeného serveru" platí jen pro ukáz
 
 ## 5. Kvalita a provoz
 
-1. **Prohlížečové testy do CI.** Detektory překryvů, přetékání a průchod
-   všech stránek teď žijí jen v `localStorage` vývojového prohlížeče.
-   Přepsat do Playwright: průchod 161 tras počítače a obrazovek telefonu,
-   s plnými a prázdnými daty (`prazdne()` poskytovatelů), na 360/768/1440 px.
+1. **Prohlížečové testy do CI.** Detektory překryvů, přetékání, průchod
+   všech stránek a od 2e i kontrola šablony proti hodnotám (chybějící pole,
+   obsluha kliknutí bez funkce, po otevření každého dialogu) teď žijí jen
+   v `localStorage` vývojového prohlížeče. Přepsat do Playwright: průchod
+   161 tras a 105 vnořených záložek počítače a obrazovek telefonu, s plnými
+   a prázdnými daty (`prazdne()` poskytovatelů) i prázdnou knihovnou,
+   na 360/768/1440 px.
 2. **Hlídat „tiché lži".** Vzorec, který se opakoval: tlačítko ohlásí úspěch
    (`toast`) a nic neuloží, nebo obrazovka sáhne po ukázce (`|| SAMPLE`).
    Test, který projde všechny `toast(` bez zápisu (stav, API), by je chytal
    dřív než člověk.
-3. **Dvoufázové ověření v aplikaci** se ptá dialogem prohlížeče
-   (`window.prompt`). Funguje, ale patří do přihlašovací obrazovky jako políčko.
+3. ~~**Dvoufázové ověření v aplikaci** se ptá dialogem prohlížeče~~ — hotovo
+   (2e): políčko „Kód z ověřovací aplikace" na přihlašovací obrazovce.
 4. **Fronta běží z plánovače** (`queue:work --stop-when-empty` každou minutu).
    Při dlouhém přenosu na Disk je lepší stálý worker (supervisor/systemd).
 5. **Nasazení bez SSH** — povolit klíč pro nasazení (nebo webhook z GitHubu),
