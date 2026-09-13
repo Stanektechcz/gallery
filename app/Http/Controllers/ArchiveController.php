@@ -69,7 +69,8 @@ class ArchiveController extends Controller
             'display_title' => $m->display_title ?? $m->original_filename,
             'variants' => $m->variants->map(fn ($v) => [
                 'type' => $v->type,
-                'url' => asset('storage/'.$v->path),
+                // Podepsaná adresa přes /files — přímé /storage obcházelo přihlášení.
+                'url' => \App\Models\MediaVariant::proxyUrl($v->path),
                 'dominant_color' => $v->dominant_color,
                 'aspect_ratio' => $v->aspect_ratio,
             ]),

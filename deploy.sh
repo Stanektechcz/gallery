@@ -147,6 +147,18 @@ echo "== Migrace =="
 "$PHP" artisan migrate --force
 
 echo
+echo "== Veřejný disk =="
+# `public/storage` (odkaz z `artisan storage:link`) vydává originály fotek webovým
+# serverem bez přihlášení — mimo kontrolu aplikace. Soubory chodí přes `/files`,
+# kde se ověřuje podpis nebo členství; přímý odkaz se proto odstraňuje.
+if [ -L public/storage ]; then
+    rm public/storage
+    echo "Odkaz public/storage odstraněn — fotky jdou jen přes /files."
+else
+    echo "Odkaz public/storage není — v pořádku."
+fi
+
+echo
 echo "== Čistím cache =="
 # Kód se změnil, takže config, routy i pohledy uložené v cache jsou zastaralé.
 "$PHP" artisan optimize:clear

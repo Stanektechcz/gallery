@@ -826,7 +826,8 @@ class Pribeh implements MaPrazdneKolekce, PoskytovatelObsahu
                 'len' => $k->duration,
                 // Bez adresy je hlasovka řádek, který tvrdí, že babička něco
                 // řekla, a nejde si to poslechnout.
-                'audio' => $k->audio_path ? Storage::disk('public')->url($k->audio_path) : null,
+                // Podepsaná — veřejná adresa /storage by hlasovku vydala komukoli.
+                'audio' => $k->audio_path ? \App\Models\MediaVariant::proxyUrl($k->audio_path) : null,
                 'pinned' => (bool) $k->is_pinned,
             ], fn ($v) => $v !== null))
             ->values()

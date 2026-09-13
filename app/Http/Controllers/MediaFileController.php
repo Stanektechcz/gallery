@@ -36,6 +36,23 @@ class MediaFileController extends Controller
             $path .= '.'.strtolower($extension);
         }
 
+        /*
+         * Kdo soubor dostane.
+         *
+         * Tahle adresa vydávala cokoli z veřejného disku **bez přihlášení**
+         * a s roční veřejnou cache: originály fotek, fotky v koši i v trezoru,
+         * hlasovky hostů. Stačilo znát uuid — a to je v každém sdíleném odkazu,
+         * v protokolu i v historii prohlížeče. Zrušení sdíleného odkazu tak
+         * nezrušilo nic: adresa originálu fungovala dál.
+         *
+         * Projde podepsaná adresa (vydává ji aplikace, platí nejvýš do zítřka),
+         * nebo přihlášený člen prostoru, kterému soubor patří. Cizí i neexistující
+         * soubor dostane totéž 404 — odpověď neprozradí, že tu něco je.
+         */
+        if (! $this->smi($request, $path)) {
+            abort(404);
+        }
+
         if (! Storage::disk('public')->exists($path)) {
             $fallback = $this->missingPreviewResponse($path);
             if ($fallback) {
@@ -93,10 +110,58 @@ class MediaFileController extends Controller
             'Content-Length' => $length,
             'Content-Range' => $range === null ? null : "bytes {$start}-{$end}/{$size}",
             'Accept-Ranges' => 'bytes',
-            'Cache-Control' => 'public, max-age=31536000, immutable',
+            // Soukromé fotky nepatří do sdílených mezipamětí (proxy, CDN).
+            'Cache-Control' => 'private, max-age=86400',
             'ETag' => $etag,
             'Last-Modified' => gmdate('D, d M Y H:i:s', $lastMod).' GMT',
+            'X-Content-Type-Options' => 'nosniff',
+            // SVG z disku je obrázek, ne stránka: skript v něm se nespustí.
+            'Content-Security-Policy' => "default-src 'none'; img-src 'self' data:; media-src 'self'; style-src 'unsafe-inline'; sandbox",
         ]));
+    }
+
+    /**
+     * Podepsaná adresa, nebo přihlášený člen prostoru — viz `serve()`.
+     *
+     * Trezorová fotka se členovi vydá, jen když má trezor v sezení odemčený
+     * (stejný klíč, jaký hlídá `ProtectVaultMedia`).
+     */
+    private function smi(Request $request, string $path): bool
+    {
+        if ($request->hasValidSignature()) {
+            return true;
+        }
+
+        $user = $request->user('sanctum') ?? $request->user();
+
+        if ($user === null || $user->is_active === false) {
+            return false;
+        }
+
+        if (preg_match('#^(?:media|variants)/([0-9a-f-]{36})/#i', $path, $shoda)) {
+            $media = MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
+                ->where('uuid', $shoda[1])
+                ->first(['id', 'gallery_space_id', 'is_hidden']);
+
+            if ($media === null || ! $this->clen($user, (int) $media->gallery_space_id)) {
+                return false;
+            }
+
+            return ! $media->is_hidden
+                || ($request->hasSession() && (int) $request->session()->get('vault_unlocked_until', 0) > now()->timestamp);
+        }
+
+        if (preg_match('#^hlasovky/(\d+)/#', $path, $shoda)) {
+            return $this->clen($user, (int) $shoda[1]);
+        }
+
+        // Neznámé místo na disku bez podpisu nikomu.
+        return false;
+    }
+
+    private function clen($user, int $prostor): bool
+    {
+        return $user->gallerySpaces()->where('gallery_spaces.id', $prostor)->exists();
     }
 
     private function mimeTypeForPath(string $path): string

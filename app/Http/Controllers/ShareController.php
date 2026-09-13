@@ -140,17 +140,28 @@ class ShareController extends Controller
             ]);
         }
 
-        $media = match ($link->target_type) {
-            'album' => MediaItem::where('primary_album_id', $link->target_id)->where('is_hidden', false)->with('variants')->limit(100)->get(),
-            'media' => MediaItem::where('id', $link->target_id)->where('is_hidden', false)->with('variants')->get(),
-            'selection' => $link->mediaItems()->where('is_hidden', false)->with('variants')->get(),
-            default => collect(),
-        };
-
-        // Strip GPS if configured
-        if ($link->hide_gps) {
-            $media->each(fn ($m) => $m->setHidden(array_merge($m->getHidden(), ['latitude', 'longitude', 'altitude'])));
-        }
+        /*
+         * Co host uvidí — výslovně, ne celý model.
+         *
+         * Stránka dostávala `MediaItem` tak, jak leží v databázi: identifikátory
+         * na Google Disku, otisky souborů, id vlastníka, název místa (i se
+         * skrytou GPS), a u variant cesty na disku. To vše v HTML stránky,
+         * kterou otevře kdokoli s odkazem. Stránka přitom čte jen uuid a adresu
+         * náhledu. Fotky v koši se navíc ukazovaly dál — `trashed_at` se tu
+         * nekontroloval (u stažení ano).
+         */
+        $media = $this->mediaOdkazu($link)->with('variants')->limit(200)->get()
+            ->map(fn (MediaItem $m) => [
+                'uuid' => $m->uuid,
+                'media_type' => $m->media_type,
+                'variants' => $m->variants
+                    // Originál jen tam, kde nic menšího není — stránka by jinak
+                    // neměla co ukázat. S vypnutým stahováním se jinak nevydává.
+                    ->filter(fn ($v) => $v->type !== 'original' || $m->variants->whereIn('type', ['thumbnail', 'small', 'medium'])->isEmpty())
+                    ->map(fn ($v) => ['type' => $v->type, 'url' => $v->url, 'width' => $v->width, 'height' => $v->height])
+                    ->values(),
+            ])
+            ->values();
 
         return Inertia::render('Shares/Show', [
             'link' => [
@@ -244,17 +255,32 @@ class ShareController extends Controller
     {
         $link = SharedLink::where('token', $token)->firstOrFail();
         abort_unless($link->isAccessible() && $link->allow_download && (! $link->password_hash || session("share_verified_{$token}")), 403);
-        $media = match ($link->target_type) {
-            'album' => MediaItem::where('primary_album_id', $link->target_id),
-            'media' => MediaItem::where('id', $link->target_id),
-            'selection' => $link->mediaItems(),
-            default => MediaItem::whereRaw('1 = 0'),
-        };
-        $item = $media->where('uuid', $uuid)->where('is_hidden', false)->whereNull('trashed_at')->firstOrFail();
+        $item = $this->mediaOdkazu($link)->where('uuid', $uuid)->firstOrFail();
         $variant = $item->variants()->where('type', 'original')->firstOrFail();
         DB::table('share_access_logs')->insert(['shared_link_id' => $link->id, 'action' => 'download', 'ip_hash' => hash('sha256', (string) $request->ip().config('app.key')), 'media_item_id' => $item->id, 'created_at' => now()]);
 
         return Storage::disk($variant->disk)->download($variant->path, $item->original_filename);
+    }
+
+    /**
+     * Fotky, které odkaz ukazuje — stejně pro stránku i pro stažení.
+     *
+     * Album zahrnuje i fotky vložené přes spojovací tabulku, ne jen ty
+     * s `primary_album_id`: galerie do alba řadí právě tak, a sdílené album
+     * se jinak hostovi otevřelo prázdné. Trezor ani koš host nevidí nikdy.
+     */
+    private function mediaOdkazu(SharedLink $link)
+    {
+        $dotaz = match ($link->target_type) {
+            'album' => MediaItem::where('gallery_space_id', $link->gallery_space_id)
+                ->where(fn ($q) => $q->where('primary_album_id', $link->target_id)
+                    ->orWhereHas('albums', fn ($a) => $a->where('albums.id', $link->target_id))),
+            'media' => MediaItem::where('gallery_space_id', $link->gallery_space_id)->where('id', $link->target_id),
+            'selection' => $link->mediaItems(),
+            default => MediaItem::whereRaw('1 = 0'),
+        };
+
+        return $dotaz->where('media_items.is_hidden', false)->whereNull('media_items.trashed_at');
     }
 
     public function destroy(string $id): JsonResponse

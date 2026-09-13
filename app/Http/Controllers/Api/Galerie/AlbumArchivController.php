@@ -42,7 +42,11 @@ class AlbumArchivController extends Controller
 
         $polozky = MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
             ->whereHas('albums', fn ($q) => $q->where('albums.id', $radek->id))
+            ->where('gallery_space_id', $prostorId)
             ->whereNull('trashed_at')
+            // Fotka v trezoru se do archivu nedostane: stažené album by ji
+            // vyneslo mimo zámek, i když je trezor zamčený.
+            ->where('is_hidden', false)
             ->with(['variants' => fn ($q) => $q->where('type', 'original')])
             ->limit(self::STROP)
             ->get();
@@ -65,8 +69,9 @@ class AlbumArchivController extends Controller
                 continue;
             }
 
-            // Dvě fotky téhož jména by se v archivu přepsaly.
-            $jmeno = $m->original_filename;
+            // Dvě fotky téhož jména by se v archivu přepsaly. Jméno bez cesty:
+            // „../../x.jpg" z nahrávání by při rozbalení zapsalo mimo složku.
+            $jmeno = basename(str_replace('\\', '/', (string) $m->original_filename)) ?: 'soubor';
 
             if (isset($pouzita[$jmeno])) {
                 $pouzita[$jmeno]++;

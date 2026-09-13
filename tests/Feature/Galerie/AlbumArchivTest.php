@@ -92,6 +92,37 @@ class AlbumArchivTest extends TestCase
         $this->assertContains('IMG_1 (2).jpg', $jmena);
     }
 
+    /**
+     * Fotka v trezoru se se stažením alba nevynese.
+     *
+     * Archiv bral všechno, co v albu leželo — i schované fotky, a to i se
+     * zamčeným trezorem.
+     */
+    public function test_trezor_se_do_archivu_nedostane(): void
+    {
+        $album = $this->album('Beskydy');
+        $this->doAlba($album, $this->fotka('VIDITELNA.jpg', true));
+        $skryta = $this->fotka('TREZOR.jpg', true);
+        $skryta->forceFill(['is_hidden' => true])->save();
+        $this->doAlba($album, $skryta);
+
+        $jmena = $this->vArchivu($this->get('/api/alba/'.$album->uuid.'/archiv')->assertOk());
+
+        $this->assertContains('VIDITELNA.jpg', $jmena);
+        $this->assertNotContains('TREZOR.jpg', $jmena);
+    }
+
+    /** Cesta ve jménu souboru se do archivu nepropíše — rozbalení nesmí psát mimo složku. */
+    public function test_jmeno_s_cestou_se_v_archivu_zkrati(): void
+    {
+        $album = $this->album('Beskydy');
+        $this->doAlba($album, $this->fotka('../../zly.jpg', true));
+
+        $jmena = $this->vArchivu($this->get('/api/alba/'.$album->uuid.'/archiv')->assertOk());
+
+        $this->assertSame(['zly.jpg'], $jmena);
+    }
+
     /** Album bez jediného originálu není archiv, je to nedorozumění. */
     public function test_album_bez_originalu_je_ctyristacityri(): void
     {

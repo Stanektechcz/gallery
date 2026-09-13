@@ -2,7 +2,9 @@
 
 namespace App\Models;
 
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\URL;
 
 class MediaVariant extends Model
 {
@@ -56,15 +58,24 @@ class MediaVariant extends Model
      * nothing: the response says what it is in Content-Type, which is what browsers
      * actually read.
      */
+    /**
+     * Podepsaná adresa souboru z veřejného disku.
+     *
+     * `/files/…` dřív vydávalo soubor komukoli, kdo znal cestu. Teď projde jen
+     * podpis nebo přihlášený člen prostoru (`MediaFileController::smi`), takže
+     * adresa, kterou aplikace vloží do obrázku, sdíleného odkazu nebo notifikace,
+     * nese podpis. Platí do konce zítřka — přes den se nemění, prohlížeč si
+     * obrázek podrží v mezipaměti, a zrušený odkaz přestane otevírat soubory
+     * nejpozději druhý den.
+     */
     public static function proxyUrl(string $path): string
     {
         $path = ltrim($path, '/');
         $extension = pathinfo($path, PATHINFO_EXTENSION);
+        $parametry = $extension === ''
+            ? ['path' => $path]
+            : ['path' => substr($path, 0, -(strlen($extension) + 1)), 'ext' => $extension];
 
-        if ($extension === '') {
-            return url('/files/'.$path);
-        }
-
-        return url('/files/'.substr($path, 0, -(strlen($extension) + 1))).'?ext='.$extension;
+        return URL::temporarySignedRoute('media.file', CarbonImmutable::tomorrow()->endOfDay(), $parametry);
     }
 }
