@@ -8,6 +8,7 @@ use App\Models\GuestUpload;
 use App\Models\MediaItem;
 use App\Models\SharedLink;
 use App\Services\Sharing\SharedContentService;
+use App\Support\SpaceContext;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -271,12 +272,23 @@ class ShareController extends Controller
      */
     private function mediaOdkazu(SharedLink $link)
     {
+        /*
+         * Bez rozsahu prostoru přihlášeného člověka.
+         *
+         * Host s vlastním účtem (babička, která má galerii taky) je přihlášený
+         * do svého prostoru a globální rozsah mu fotky z cizího odkazu tiše
+         * odfiltroval: stránka byla prázdná a stažení 404. O přístupu tady
+         * rozhoduje odkaz — a prostor se hlídá výslovně podle odkazu.
+         */
         $dotaz = match ($link->target_type) {
-            'album' => MediaItem::where('gallery_space_id', $link->gallery_space_id)
+            'album' => MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
+                ->where('gallery_space_id', $link->gallery_space_id)
                 ->where(fn ($q) => $q->where('primary_album_id', $link->target_id)
-                    ->orWhereHas('albums', fn ($a) => $a->where('albums.id', $link->target_id))),
-            'media' => MediaItem::where('gallery_space_id', $link->gallery_space_id)->where('id', $link->target_id),
-            'selection' => $link->mediaItems(),
+                    ->orWhereHas('albums', fn ($a) => $a->withoutGlobalScope(SpaceContext::SCOPE)->where('albums.id', $link->target_id))),
+            'media' => MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
+                ->where('gallery_space_id', $link->gallery_space_id)->where('id', $link->target_id),
+            'selection' => $link->mediaItems()->withoutGlobalScope(SpaceContext::SCOPE)
+                ->where('media_items.gallery_space_id', $link->gallery_space_id),
             default => MediaItem::whereRaw('1 = 0'),
         };
 

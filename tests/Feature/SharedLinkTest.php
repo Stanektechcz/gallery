@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\GallerySpace;
+use App\Models\MediaItem;
 use App\Models\Place;
 use App\Models\PlaceReview;
 use App\Models\Recipe;
@@ -131,6 +132,44 @@ class SharedLinkTest extends TestCase
             ->where('content.data.steps.0.instruction', 'Uvařte omáčku.')
             ->missing('content.data.cooking_sessions')
             ->missing('content.data.partner_feedback'));
+    }
+
+    /**
+     * Sdílený recept vidí i host přihlášený do jiné galerie — a fotka
+     * z trezoru se na veřejnou stránku nedostane, ani jako titulní.
+     */
+    public function test_shared_recipe_for_foreign_signed_in_guest_hides_vault_photos(): void
+    {
+        $trezor = MediaItem::create([
+            'uuid' => (string) Str::uuid(), 'gallery_space_id' => $this->space->id,
+            'owner_user_id' => $this->adrian->id, 'uploaded_by' => $this->adrian->id,
+            'original_filename' => 'TREZOR.jpg', 'safe_filename' => 'trezor.jpg', 'extension' => 'jpg',
+            'mime_type' => 'image/jpeg', 'media_type' => 'photo', 'size_bytes' => 10,
+            'uploaded_at' => now(), 'status' => 'ready', 'storage_status' => 'local',
+        ]);
+        $trezor->forceFill(['is_hidden' => true])->save();
+
+        $recipe = Recipe::create([
+            'gallery_space_id' => $this->space->id, 'created_by' => $this->adrian->id, 'cover_media_id' => $trezor->id,
+            'title' => 'Naše lasagne', 'category' => 'main_course', 'difficulty' => 'medium',
+            'status' => 'published', 'base_servings' => 2, 'currency' => 'CZK',
+        ]);
+        $recipe->media()->attach($trezor->id, ['role' => 'gallery', 'created_at' => now()]);
+
+        $link = SharedLink::create([
+            'gallery_space_id' => $this->space->id, 'created_by' => $this->adrian->id,
+            'token' => 'tok'.Str::random(20), 'name' => 'Recept', 'target_type' => 'recipe', 'target_id' => $recipe->id,
+        ]);
+
+        $babicka = User::factory()->create(['is_active' => true]);
+        $jejiGalerie = GallerySpace::create(['uuid' => (string) Str::uuid(), 'name' => 'Babička', 'slug' => 'babicka', 'owner_id' => $babicka->id]);
+        $jejiGalerie->members()->attach($babicka->id, ['role' => 'owner']);
+
+        $this->actingAs($babicka)->get('/s/'.$link->token)->assertOk()->assertInertia(fn (Assert $page) => $page
+            ->component('Shares/Content')
+            ->where('content.title', 'Naše lasagne')
+            ->where('content.data.cover', null)
+            ->where('content.data.media', []));
     }
 
     /** @test */

@@ -89,6 +89,39 @@ class SdilenaStrankaTest extends TestCase
         $this->get('/s/'.$odkaz->token.'/media/'.$vTrezoru->uuid.'/download')->assertNotFound();
     }
 
+    /**
+     * Host s vlastním účtem v jiné galerii vidí a stáhne totéž co host bez účtu.
+     *
+     * Rozsah prostoru přihlášeného člověka mu fotky z cizího odkazu tiše
+     * odfiltroval — stránka prázdná, stažení 404.
+     */
+    public function test_prihlaseny_host_z_jine_galerie_odkaz_vidi(): void
+    {
+        $foto = $this->fotka('VIDITELNA.jpg');
+        $this->doAlba($foto);
+
+        $odkaz = SharedLink::create([
+            'gallery_space_id' => $this->prostor->id,
+            'created_by' => $this->adri->id,
+            'token' => 'tok'.Str::random(20),
+            'name' => 'Beskydy',
+            'target_type' => 'album',
+            'target_id' => $this->album->id,
+            'allow_download' => true,
+        ]);
+
+        $babicka = User::factory()->create();
+        $jejiProstor = GallerySpace::create(['name' => 'Babiččina galerie', 'owner_id' => $babicka->id]);
+        $jejiProstor->members()->syncWithoutDetaching([$babicka->id => ['role' => 'owner']]);
+
+        $this->actingAs($babicka);
+
+        $media = $this->get('/s/'.$odkaz->token)->assertOk()->viewData('page')['props']['media'];
+        $this->assertSame([$foto->uuid], collect($media)->pluck('uuid')->all());
+
+        $this->get('/s/'.$odkaz->token.'/media/'.$foto->uuid.'/download')->assertOk();
+    }
+
     private function fotka(string $jmeno, array $navic = []): MediaItem
     {
         $m = MediaItem::create([

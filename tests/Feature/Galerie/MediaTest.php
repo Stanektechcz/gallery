@@ -237,6 +237,59 @@ class MediaTest extends TestCase
         $this->assertSame($soubor->get(), $odpoved->streamedContent());
     }
 
+    /** Originál z trezoru jen s odemčeným trezorem — uuid nestačí. */
+    public function test_original_z_trezoru_chce_odemceny_trezor(): void
+    {
+        $nahrane = $this->post('/api/media', ['file' => $soubor = $this->fotka('trezor.jpg')])->assertCreated();
+        MediaItem::where('uuid', $nahrane->json('id'))->update(['is_hidden' => true]);
+
+        $this->get('/api/media/'.$nahrane->json('id').'/raw')->assertNotFound();
+
+        $odpoved = $this->withSession(['vault_unlocked_until' => now()->addMinutes(5)->timestamp])
+            ->get('/api/media/'.$nahrane->json('id').'/raw')
+            ->assertOk();
+
+        $this->assertSame($soubor->get(), $odpoved->streamedContent());
+    }
+
+    /** Nesmyslný počet částí se odmítne dřív, než se cokoli zapíše na disk. */
+    public function test_prilis_mnoho_casti_neprojde(): void
+    {
+        $this->call('POST', '/api/media/chunk', [], [], [], $this->hlavicky([
+            'X-Upload-Id' => 'up-obr',
+            'X-Chunk-Index' => '0',
+            'X-Chunk-Count' => '999999',
+            'X-File-Name' => 'vzpominka.mp4',
+        ]), self::MP4)->assertStatus(422);
+
+        $this->assertSame([], Storage::disk('local')->allFiles('upload_chunks'));
+    }
+
+    /** Části jednoho člověka si cizí nahrávání se stejným identifikátorem nepřivlastní. */
+    public function test_casti_nahravani_patri_prihlasenemu(): void
+    {
+        $this->call('POST', '/api/media/chunk', [], [], [], $this->hlavicky([
+            'X-Upload-Id' => 'up-spolecne',
+            'X-Chunk-Index' => '0',
+            'X-Chunk-Count' => '2',
+            'X-File-Name' => 'vzpominka.mp4',
+        ]), self::MP4.'adrianova-cast')->assertStatus(202);
+
+        $maki = User::factory()->create();
+        $maki->gallerySpaces()->syncWithoutDetaching([$this->prostor->id => ['role' => 'editor']]);
+        Sanctum::actingAs($maki);
+
+        // Druhá část od jiného člověka nesloží cizí soubor — začíná vlastní nahrávání.
+        $this->call('POST', '/api/media/chunk', [], [], [], $this->hlavicky([
+            'X-Upload-Id' => 'up-spolecne',
+            'X-Chunk-Index' => '1',
+            'X-Chunk-Count' => '2',
+            'X-File-Name' => 'vzpominka.mp4',
+        ]), 'podvrh')->assertStatus(202);
+
+        $this->assertSame(0, MediaItem::count());
+    }
+
     /** Cizí pár se k souboru nedostane, ani když zná jeho identifikátor. */
     public function test_cizi_par_nedostane_cizi_soubor(): void
     {

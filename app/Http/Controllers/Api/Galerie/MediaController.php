@@ -49,6 +49,12 @@ class MediaController extends Controller
 
     private const CASTI_ADRESAR = 'upload_chunks/galerie';
 
+    /** 32 GB po osmi megabajtech je čtyři tisíce částí; víc je chyba nebo útok. */
+    private const NEJVIC_CASTI = 8192;
+
+    /** Klient posílá po osmi megabajtech; šestnáct je rezerva, ne pozvánka. */
+    private const NEJVETSI_CAST = 16 * 1024 * 1024;
+
     /** Malý soubor jedním požadavkem. */
     public function store(Request $request): JsonResponse
     {
@@ -81,21 +87,46 @@ class MediaController extends Controller
         $celkem = (int) $request->header('X-Chunk-Count');
         $jmeno = $this->bezpecneJmeno(urldecode((string) $request->header('X-File-Name', 'soubor')));
 
-        abort_unless($celkem > 0 && $poradi >= 0 && $poradi < $celkem, 422, 'Chybí hlavičky nahrávání.');
+        abort_unless($celkem > 0 && $celkem <= self::NEJVIC_CASTI && $poradi >= 0 && $poradi < $celkem, 422, 'Chybí hlavičky nahrávání.');
         // Identifikátor jde do cesty na disku, takže se nekontroluje jen na prázdno.
         abort_unless(preg_match('/^[A-Za-z0-9_-]{1,64}$/', $id) === 1, 422, 'Neplatný identifikátor nahrávání.');
 
         $disk = Storage::disk(self::CASTI_DISK);
-        $adresar = self::CASTI_ADRESAR.'/'.$id;
+        // Složka patří přihlášenému: cizí nahrávání se stejným identifikátorem
+        // si nemůže podstrčit ani přepsat části.
+        $adresar = self::CASTI_ADRESAR.'/'.$request->user()->id.'-'.$id;
 
         $vstup = $request->getContent(true);
-        $disk->writeStream($adresar.'/'.str_pad((string) $poradi, 6, '0', STR_PAD_LEFT), $vstup);
+        $cestaCasti = $adresar.'/'.str_pad((string) $poradi, 6, '0', STR_PAD_LEFT);
+        $disk->writeStream($cestaCasti, $vstup);
         if (is_resource($vstup)) {
             fclose($vstup);
         }
 
+        if ((int) $disk->size($cestaCasti) > self::NEJVETSI_CAST) {
+            $disk->deleteDirectory($adresar);
+            abort(413, 'Část nahrávaného souboru je příliš velká.');
+        }
+
         $casti = $disk->files($adresar);
         sort($casti);
+
+        /*
+         * Strop na velikost už během nahrávání.
+         *
+         * Tarif se kontroloval až po složení celého souboru — do té doby šlo
+         * posílat části bez konce a zaplnit disk serveru dřív, než by kontrola
+         * vůbec proběhla. Sčítá se po pětadvaceti částech a na konci; sčítat
+         * u každé by u čtyř tisíc částí znamenalo miliony dotazů na disk.
+         */
+        if (count($casti) % 25 === 0 || count($casti) >= $celkem) {
+            $zatim = array_sum(array_map(fn (string $c) => (int) $disk->size($c), $casti));
+
+            if ($zatim > (int) config('gallery.max_upload_size_gb', 32) * 1024 * 1024 * 1024) {
+                $disk->deleteDirectory($adresar);
+                abort(413, 'Soubor je větší, než kolik galerie přijme najednou.');
+            }
+        }
 
         if (count($casti) < $celkem) {
             return response()->json([
@@ -133,6 +164,17 @@ class MediaController extends Controller
     public function raw(Request $request, string $uuid): StreamedResponse
     {
         $media = $this->najdi($request, $uuid);
+
+        /*
+         * Fotka v trezoru jen s odemčeným trezorem.
+         *
+         * Stačilo znát uuid a originál ze zamčeného trezoru odešel komukoli
+         * z dvojice — i v prohlížeči, kde se trezor nikdy neodemkl. `/files`
+         * i archivy to hlídaly, tahle cesta ne. Tváří se jako neexistující,
+         * aby nešlo zkoušet, které uuid v trezoru leží.
+         */
+        abort_if($media->is_hidden && ! $this->trezorOdemceny($request), 404, 'Takový soubor tu není.');
+
         $originál = $media->variants()->where('type', 'original')->first();
 
         abort_if($originál === null, 404, 'Originál tohoto souboru na disku není.');
@@ -554,6 +596,13 @@ class MediaController extends Controller
     }
 
     // ——— pomocné ———
+
+    /** Stejný klíč v sezení jako TrezorController a `/files`. */
+    private function trezorOdemceny(Request $request): bool
+    {
+        return $request->hasSession()
+            && (int) $request->session()->get('vault_unlocked_until', 0) > now()->timestamp;
+    }
 
     private function najdi(Request $request, string $uuid): MediaItem
     {

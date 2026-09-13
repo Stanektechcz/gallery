@@ -8,6 +8,7 @@ use App\Models\PlaceReview;
 use App\Models\Recipe;
 use App\Models\SharedLink;
 use App\Models\User;
+use App\Support\SpaceContext;
 
 class SharedContentService
 {
@@ -110,14 +111,34 @@ class SharedContentService
         return ['type' => 'place_review', 'label' => 'Hodnocení podniku', 'title' => $review?->place?->name ?: ($link->name ?: 'Nedostupné hodnocení'), 'uuid' => $review?->uuid];
     }
 
+    /**
+     * Veřejný odkaz čte obsah bez rozsahu prostoru přihlášeného člověka.
+     *
+     * Host s vlastním účtem v jiné galerii by jinak dostal 404 nebo recept bez
+     * fotek. Prostor se hlídá výslovně podle odkazu — a fotky z trezoru
+     * a koše se na veřejnou stránku nedostanou nikdy, ani když je někdo
+     * k receptu kdysi přiložil.
+     */
+    private function verejneMedia($dotaz)
+    {
+        return $dotaz->withoutGlobalScope(SpaceContext::SCOPE)
+            ->where('media_items.is_hidden', false)
+            ->whereNull('media_items.trashed_at')
+            ->with('variants');
+    }
+
     private function recipePayload(SharedLink $link): array
     {
-        $recipe = Recipe::query()
+        $recipe = Recipe::withoutGlobalScope(SpaceContext::SCOPE)
             ->whereKey($link->target_id)
             ->where('gallery_space_id', $link->gallery_space_id)
-            ->with(['cover.variants', 'ingredients', 'steps.media.variants'])
+            ->with([
+                'cover' => fn ($q) => $this->verejneMedia($q),
+                'ingredients',
+                'steps.media' => fn ($q) => $this->verejneMedia($q),
+            ])
             ->firstOrFail();
-        $media = $recipe->media()->wherePivotNull('cooking_session_id')->with('variants')->get()->unique('id');
+        $media = $this->verejneMedia($recipe->media()->wherePivotNull('cooking_session_id'))->get()->unique('id');
 
         return [
             'type' => 'recipe',
@@ -176,7 +197,7 @@ class SharedContentService
             ->whereKey($link->target_id)
             ->where('gallery_space_id', $link->gallery_space_id)
             ->where('status', 'published')
-            ->with(['place', 'author:id,name', 'items', 'media.variants'])
+            ->with(['place', 'author:id,name', 'items', 'media' => fn ($q) => $this->verejneMedia($q)])
             ->firstOrFail();
 
         $ratingKeys = ['overall', 'service', 'staff_friendliness', 'food', 'food_quality', 'drink', 'speed', 'menu', 'atmosphere', 'cleanliness', 'value'];
