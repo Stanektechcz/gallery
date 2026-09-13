@@ -248,7 +248,11 @@ class MechanismyVeStavu
             return;
         }
 
-        [$prvni, $druhy] = array_pad(array_keys($prostor->members()->pluck('users.name', 'users.id')->all()), 2, null);
+        // `a` z obrazovky je verze toho, kdo píše; `m` toho druhého.
+        $ja = (int) (auth()->id() ?? $prostor->owner_id);
+        $lide = array_map('intval', $prostor->members()->pluck('users.id')->all());
+        usort($lide, fn (int $x, int $y) => [$x !== $ja, $x] <=> [$y !== $ja, $y]);
+        [$prvni, $druhy] = array_pad($lide, 2, null);
 
         $this->srovnej('couple_truths', $seznam, $prostor, function (array $p) use ($prvni, $druhy) {
             $nadpis = trim((string) ($p['title'] ?? ''));

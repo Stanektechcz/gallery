@@ -184,6 +184,12 @@ class ObsahRozboryTest extends TestCase
         // Minulý měsíc jen Adrian.
         $this->assertSame(300, $obalka['months'][4]['a']);
         $this->assertSame(0, $obalka['months'][4]['k']);
+
+        // Makinka vidí jako `a` sebe — obrazovka `a` popisuje jménem toho, kdo se dívá.
+        Sanctum::actingAs($this->maki);
+        $jeji = collect($this->getJson('/api/data/rozbory')->assertOk()->json('data.ENV.months'))->last();
+        $this->assertSame(640, $jeji['a']);
+        $this->assertSame(1100, $jeji['k']);
     }
 
     /**

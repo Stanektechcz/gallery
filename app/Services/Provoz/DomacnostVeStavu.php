@@ -94,7 +94,13 @@ class DomacnostVeStavu
             return;
         }
 
-        $lide = $prostor->members()->orderByRaw('users.id = ? desc', [$prostor->owner_id])->pluck('users.id')->all();
+        // `a` je ten, kdo píše — stejně jako v `Domacnost::dvojice()` a na obrazovce.
+        // Podle zakladatele prostoru se oprava druhého člověka zapsala jemu.
+        $ja = (int) (auth()->id() ?? $prostor->owner_id);
+        $lide = $prostor->members()->pluck('users.id')
+            ->map(fn ($id) => (int) $id)
+            ->sortBy(fn (int $id) => [$id === $ja ? 0 : 1, $id])
+            ->values()->all();
         [$prvni, $druhy] = [$lide[0] ?? null, $lide[1] ?? null];
 
         if ($prvni === null || $druhy === null) {

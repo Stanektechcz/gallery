@@ -410,22 +410,29 @@ class Klid implements MaPrazdneKolekce, PoskytovatelObsahu
     }
 
     /**
-     * Dvojice jménem, vlastník první — obrazovka kreslí jeho vlevo.
+     * Dvojice jménem, ten, kdo se dívá, první — stejně jako `DVOJICE`.
+     *
+     * Obrazovka kreslí vlevo a pod `a` první jméno z `DVOJICE`, a tam je
+     * první ten, kdo se dívá. Tady býval první vlastník prostoru: u něj to
+     * sedělo, ale druhému z dvojice se čas pro sebe i odpovědi na otázku dne
+     * ukazovaly pod prohozenými jmény.
      *
      * Prototyp klíčuje mapu **jménem**, ne identifikátorem. Dva členové se
      * shodným jménem by se tím do sebe složili a jeden by druhého přepsal;
      * druhý proto dostane číslo, stejně jako dvě Kláry v „Lidech".
      *
      * Řadí se tady, ne v SQL: `orderByRaw` přes `belongsToMany` pořadí
-     * nedrží a vlastník pak skončil uprostřed.
+     * nedrží a první pak skončil uprostřed.
      *
      * @return array<int, string>
      */
     public function jmena(GallerySpace $prostor): array
     {
+        $prvni = (int) (auth()->id() ?? $prostor->owner_id);
+
         $lide = $prostor->members()
             ->get(['users.id', 'users.name'])
-            ->sortBy(fn (object $u) => [(int) $u->id === (int) $prostor->owner_id ? 0 : 1, (int) $u->id])
+            ->sortBy(fn (object $u) => [(int) $u->id === $prvni ? 0 : 1, (int) $u->id])
             ->values();
 
         $jmena = [];

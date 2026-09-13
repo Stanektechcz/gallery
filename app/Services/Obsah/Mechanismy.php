@@ -439,13 +439,19 @@ class Mechanismy implements MaPrazdneKolekce, PoskytovatelObsahu
             ->orderByDesc('created_at')
             ->limit(40)
             ->get()
-            ->map(fn (object $p) => [
-                'id' => $p->uuid,
-                'title' => $p->title,
-                'when' => (string) ($p->context ?? ''),
-                'a' => (string) ($p->first_version ?? ''),
-                'm' => (string) ($p->second_version ?? ''),
-            ])
+            ->map(function (object $p) {
+                // `a` je verze toho, kdo se dívá — obrazovka ji podepíše jeho jménem.
+                $ja = (int) auth()->id();
+                $prohodit = $ja !== 0 && (int) ($p->second_user_id ?? 0) === $ja;
+
+                return [
+                    'id' => $p->uuid,
+                    'title' => $p->title,
+                    'when' => (string) ($p->context ?? ''),
+                    'a' => (string) (($prohodit ? $p->second_version : $p->first_version) ?? ''),
+                    'm' => (string) (($prohodit ? $p->first_version : $p->second_version) ?? ''),
+                ];
+            })
             ->values()
             ->all();
     }
@@ -567,9 +573,21 @@ class Mechanismy implements MaPrazdneKolekce, PoskytovatelObsahu
         };
     }
 
-    /** @return array<int, string> */
+    /**
+     * Jména dvojice, ten, kdo se dívá, první — jako `DVOJICE` na obrazovce.
+     *
+     * Pořadí z databáze bylo náhodné: „kdo mluví za nás" dával `a` tomu, kdo
+     * byl v tabulce členů dřív, a obrazovka ho popsala jménem toho, kdo se dívá.
+     *
+     * @return array<int, string>
+     */
     private function jmena(GallerySpace $prostor): array
     {
-        return $prostor->members()->pluck('users.name', 'users.id')->all();
+        $ja = (int) (auth()->id() ?? $prostor->owner_id);
+        $lide = $prostor->members()->pluck('users.name', 'users.id')->all();
+
+        uksort($lide, fn ($x, $y) => [(int) $x !== $ja, (int) $x] <=> [(int) $y !== $ja, (int) $y]);
+
+        return $lide;
     }
 }

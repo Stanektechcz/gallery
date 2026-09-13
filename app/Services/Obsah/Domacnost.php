@@ -503,10 +503,25 @@ class Domacnost implements MaPrazdneKolekce, PoskytovatelObsahu
      *
      * @return array<int, int|null>
      */
+    /**
+     * Kdo je `a` a kdo `m` — ten, kdo se dívá, je první.
+     *
+     * Obrazovka popisuje `a` jménem z `DVOJICE`, a tam je první ten, kdo se
+     * dívá. Tady bylo první místo zakladatele prostoru: u něj to sedělo, ale
+     * Makince se Adrianův volný čas ukazoval pod jejím jménem a její oprava
+     * se zapsala jemu. Zakladatel rozhoduje jen tam, kde se nikdo nedívá.
+     *
+     * @return array{0: int|null, 1: int|null}
+     */
     private function dvojice(GallerySpace $prostor): array
     {
-        $lide = $prostor->members()->orderByRaw('users.id = ? desc', [$prostor->owner_id])
-            ->pluck('users.id')
+        $prvni = (int) (auth()->id() ?? $prostor->owner_id);
+
+        // Řadí se v PHP: `orderByRaw` přes `belongsToMany` pořadí nedrží (viz `Klid::jmena`).
+        $lide = $prostor->members()->pluck('users.id')
+            ->map(fn ($id) => (int) $id)
+            ->sortBy(fn (int $id) => [$id === $prvni ? 0 : 1, $id])
+            ->values()
             ->all();
 
         return [$lide[0] ?? null, $lide[1] ?? null];

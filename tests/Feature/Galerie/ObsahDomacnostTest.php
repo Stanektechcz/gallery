@@ -265,6 +265,40 @@ class ObsahDomacnostTest extends TestCase
         $this->assertArrayNotHasKey('capWeek', (array) $this->getJson('/api/state')->assertOk()->json('data'));
     }
 
+    /**
+     * U druhého z dvojice je `a` on sám — ne zakladatel prostoru.
+     *
+     * Obrazovka popisuje `a` jménem toho, kdo se dívá. Server bral jako `a`
+     * zakladatele, takže Makinka viděla Adrianův volný čas pod svým jménem
+     * a její oprava se zapsala Adrianovi.
+     */
+    public function test_druhemu_z_dvojice_patri_jeho_vlastni_radek(): void
+    {
+        $pondeli = CarbonImmutable::now()->startOfWeek();
+        $this->udalost($pondeli->setTime(9, 0), $pondeli->setTime(17, 0), [$this->adri->id]);
+
+        Sanctum::actingAs($this->maki);
+
+        $tyden = $this->getJson('/api/data/domacnost')->assertOk()->json('data.HOUSE_WEEK');
+        $this->assertEquals(16.0, $tyden[0]['a'], 'Makinka má v pondělí volno — práce je Adrianova.');
+        $this->assertEquals(8.0, $tyden[0]['m']);
+
+        $tyden[0] = ['a' => 3.0, 'fixA' => true] + $tyden[0];
+        $this->patchJson('/api/state', ['data' => ['capWeek' => $tyden]])->assertOk();
+
+        $radek = DB::table('house_week')->where('weekday', 'po')->sole();
+        $this->assertEquals(3.0, DB::table('house_week_capacity')
+            ->where('house_week_id', $radek->id)->where('user_id', $this->maki->id)->value('free_hours'));
+        $this->assertSame(0, DB::table('house_week_capacity')
+            ->where('house_week_id', $radek->id)->where('user_id', $this->adri->id)->count());
+
+        // Adrian vidí totéž ze své strany.
+        Sanctum::actingAs($this->adri);
+        $jeho = $this->getJson('/api/data/domacnost')->assertOk()->json('data.HOUSE_WEEK');
+        $this->assertEquals(8.0, $jeho[0]['a']);
+        $this->assertEquals(3.0, $jeho[0]['m']);
+    }
+
     /** Návrat ke kalendáři opravu smaže, ne přepíše. */
     public function test_navrat_ke_kalendari_opravu_smaze(): void
     {

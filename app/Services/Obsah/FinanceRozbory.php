@@ -832,7 +832,11 @@ class FinanceRozbory implements MaPrazdneKolekce, PoskytovatelObsahu
     }
 
     /**
-     * Dvojice jako partneři plateb — zakladatel prostoru první.
+     * Dvojice jako partneři plateb — ten, kdo se dívá, první.
+     *
+     * Obrazovka obálky popisuje `a` jménem z `DVOJICE`, kde je první ten, kdo
+     * se dívá. Se zakladatelem prostoru na prvním místě viděla Makinka
+     * Adrianovo čerpání pod svým jménem.
      *
      * @return array<int, int|null>
      */
@@ -842,9 +846,11 @@ class FinanceRozbory implements MaPrazdneKolekce, PoskytovatelObsahu
             return [null, null];
         }
 
-        $lide = $prostor->members()
-            ->orderByRaw('users.id = ? desc', [$prostor->owner_id])
-            ->pluck('users.id');
+        $ja = (int) (auth()->id() ?? $prostor->owner_id);
+        $lide = $prostor->members()->pluck('users.id')
+            ->map(fn ($id) => (int) $id)
+            ->sortBy(fn (int $id) => [$id === $ja ? 0 : 1, $id])
+            ->values();
 
         $partneri = DB::table('partners')
             ->where('gallery_space_id', $prostor->id)

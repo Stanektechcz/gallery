@@ -69,14 +69,22 @@ class ObsahKlidPohodaTest extends TestCase
         $this->assertSame('020', $en['Makinka'][6]);
     }
 
-    /** Vlastník je první — obrazovka kreslí jeho pruh vlevo. */
-    public function test_vlastnik_je_v_mape_prvni(): void
+    /**
+     * První je ten, kdo se dívá — jako v `DVOJICE`, podle které obrazovka kreslí.
+     *
+     * Dřív byl první vlastník prostoru; druhý z dvojice pak viděl čas pro sebe
+     * a odpovědi na otázku dne pod prohozenými jmény.
+     */
+    public function test_ten_kdo_se_diva_je_v_mape_prvni(): void
     {
         $this->energie($this->maki, 0, 0, 1);
 
         $en = $this->getJson('/api/data/klid')->assertOk()->json('data.KL_EN');
-
         $this->assertSame('Adrian', array_key_first($en));
+
+        Sanctum::actingAs($this->maki);
+        $jeji = $this->getJson('/api/data/klid')->assertOk()->json('data.KL_EN');
+        $this->assertSame('Makinka', array_key_first($jeji));
     }
 
     /**

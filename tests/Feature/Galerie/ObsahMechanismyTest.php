@@ -156,6 +156,12 @@ class ObsahMechanismyTest extends TestCase
 
         $this->assertSame('Přišel jsem v 6:40.', $p['a']);
         $this->assertSame('Byla jsem tam první.', $p['m']);
+
+        // Makinka vidí jako `a` svou verzi — obrazovka ji podepíše jejím jménem.
+        Sanctum::actingAs($this->maki);
+        $jeji = $this->getJson('/api/data/mechanismy')->assertOk()->json('data.TRUTHS.0');
+        $this->assertSame('Byla jsem tam první.', $jeji['a']);
+        $this->assertSame('Přišel jsem v 6:40.', $jeji['m']);
     }
 
     /**
