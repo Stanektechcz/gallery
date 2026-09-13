@@ -48,6 +48,8 @@ class CoupleState extends Model
         // Nastavení zámku a předvolby zařízení. Sdílené vypnuly zámek i druhému
         // („Zamknout při spuštění: Vypnuto", automatické zamčení „Nikdy").
         'lockIdle', 'lockSecs', 'lockBio', 'lockStart', 'setVals', 'navHide', 'navOrd', 'memPrefs',
+        // Jednorázový kód druhého ověření z přihlašovací obrazovky.
+        'lockCode', 'lockNeeds2fa',
     ];
 
     /**

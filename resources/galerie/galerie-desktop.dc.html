@@ -12980,6 +12980,12 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
           <div class="field" style="margin-top:10px"><label>Heslo</label>
             <input class="input" type="password" value="{{ lockPwd }}" onInput="{{ lockSetPwd }}" onKeyDown="{{ lockPwdKey }}" placeholder="••••••••" aria-label="Heslo" />
           </div>
+          <sc-if value="{{ lockNeeds2fa }}">
+            <div class="field" style="margin-top:10px"><label>Kód z ověřovací aplikace</label>
+              <input class="input" value="{{ lockCode }}" onInput="{{ lockSetCode }}" onKeyDown="{{ lockPwdKey }}" inputMode="numeric" autoComplete="one-time-code" autoFocus="{{ true }}" placeholder="123456 nebo obnovovací kód" aria-label="Kód z ověřovací aplikace" />
+            </div>
+            <div style="font-size:12px; line-height:1.5; color:var(--g-ink3); margin-top:6px">Účet má zapnuté dvoufázové ověření. Heslo prošlo — chybí už jen kód.</div>
+          </sc-if>
           <sc-if value="{{ lockErrOn }}">
             <div style="display:flex; gap:7px; align-items:flex-start; margin-top:10px; font-size:12.5px; line-height:1.5; color:var(--g-mag)">
               <i class="ph-duotone ph-warning-circle" style="font-size:16px; flex:none"></i><span>{{ lockErrText }}</span>
@@ -30617,6 +30623,8 @@ class Component extends DCLogic {
       query: 1, misto: 1, txQuery: 1, msgQuery: 1, plQuery: 1, trQuery: 1, dnQuery: 1, ckQuery: 1, xQuery: 1, srPlace: 1,
       gv: 1, gvPwd: 1, gvPwdErr: 1, gvTries: 1, gvC: 1,
       appLocked: 1, lockPin: 1, lockPwd: 1, lockTries: 1, lockRec: 1, lockRecCode: 1, lockStep: 1, lockAt: 1, secUntil: 1, gatePin: 1,
+      // Kód druhého ověření při přihlášení — jednorázový a jen tohohle okna.
+      lockCode: 1, lockNeeds2fa: 1,
       // Uložený by po obnovení stránky nechal tlačítko viset na „Přihlašuji…".
       lockSignBusy: 1,
       // Fronta přenosů je jen tohohle okna; do společného stavu nepatří.
@@ -31207,10 +31215,14 @@ class Component extends DCLogic {
       // Druhé kliknutí, než dorazí odpověď, je druhý požadavek — a limit je
       // dvacet za minutu. Netrpělivé klikání si ho vyčerpalo samo.
       if (s.lockSignBusy) return;
+
+      // Kód druhého ověření jde s heslem, jakmile o něj server jednou požádal.
+      const kod = s.lockNeeds2fa ? (s.lockCode || '').trim() : '';
+      if (s.lockNeeds2fa && !kod) { this.setState({ lockErr: 'Zadejte kód z ověřovací aplikace, nebo obnovovací kód.' }); return; }
       this.setState({ lockSignBusy: true });
 
-      api.signIn(mail, s.lockPwd || '', 'prohlížeč').then(res => {
-        this.setState({ lockSignBusy: false });
+      api.signIn(mail, s.lockPwd || '', 'prohlížeč', kod || undefined, { bezDotazu: true }).then(res => {
+        this.setState({ lockSignBusy: false, lockNeeds2fa: false, lockCode: '' });
         if (!res || !res.token) return;
         /*
          * Strana (A/M) až z adres od serveru.
@@ -31248,6 +31260,20 @@ class Component extends DCLogic {
          * projít nemůže, dokud se stránka nenačte znovu.
          */
         const stav = e && e.status;
+        /*
+         * Dvoufázové ověření — políčko na obrazovce místo dialogu prohlížeče.
+         *
+         * Heslo prošlo, server chce ještě kód. Dřív se ptal `window.prompt`;
+         * po jeho zavření obrazovka hlásila „E-mail nebo heslo nesouhlasí",
+         * i když heslo bylo správně.
+         */
+        if (e && e.body && e.body.two_factor) {
+          this.setState({
+            lockSignBusy: false, lockNeeds2fa: true,
+            lockErr: kod ? 'Kód nesouhlasí — zkuste ho znovu, nebo použijte obnovovací kód.' : null
+          });
+          return;
+        }
         this.setState({
           lockSignBusy: false,
           lockErr: stav === 422 ? 'E-mail nebo heslo nesouhlasí.'
@@ -31710,8 +31736,11 @@ class Component extends DCLogic {
       lockWhosOn: this.zamekZnam(),
       lockSetMail: e => this.setState({ lockMail: e.target.value, lockErr: null }),
       lockPwd: s.lockPwd || '',
-      lockSetPwd: e => this.setState({ lockPwd: e.target.value, lockErr: null }),
+      lockSetPwd: e => this.setState({ lockPwd: e.target.value, lockErr: null, lockNeeds2fa: false, lockCode: '' }),
       lockPwdKey: e => { if (e.key === 'Enter') this.lockSignIn(); },
+      lockNeeds2fa: !!s.lockNeeds2fa,
+      lockCode: s.lockCode || '',
+      lockSetCode: e => this.setState({ lockCode: e.target.value.replace(/[^0-9A-Za-z-]/g, '').slice(0, 24), lockErr: null }),
       lockSignIn: () => this.lockSignIn(),
       lockSignCant: !!s.lockSignBusy || !(s.lockMail || this.zamekMail(who)).trim() || (s.lockPwd || '').length < 4,
       lockSignLabel: s.lockSignBusy ? 'Přihlašuji…' : 'Přihlásit se',

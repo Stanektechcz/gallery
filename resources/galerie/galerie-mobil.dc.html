@@ -3746,6 +3746,12 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                   <div class="field" style="margin-top:10px"><label>Heslo</label>
                     <input class="input" type="password" value="{{ lockPwdVal }}" onInput="{{ lockSetPwd }}" onKeyDown="{{ lockPwdKey }}" placeholder="••••••••" aria-label="Heslo" style="width:100%; box-sizing:border-box; min-height:48px; font-family:inherit; font-size:14px" />
                   </div>
+                  <sc-if value="{{ lockNeeds2fa }}">
+                    <div class="field" style="margin-top:10px"><label>Kód z ověřovací aplikace</label>
+                      <input class="input" value="{{ lockCode }}" onInput="{{ lockSetCode }}" onKeyDown="{{ lockPwdKey }}" inputMode="numeric" autoComplete="one-time-code" autoFocus="{{ true }}" placeholder="123456 nebo obnovovací kód" aria-label="Kód z ověřovací aplikace" style="width:100%; box-sizing:border-box; min-height:48px; font-family:inherit; font-size:14px" />
+                    </div>
+                    <div style="font-size:12px; line-height:1.5; color:var(--g-ink3); margin-top:6px">Účet má zapnuté dvoufázové ověření. Heslo prošlo — chybí už jen kód.</div>
+                  </sc-if>
                   <sc-if value="{{ lockErrOn }}">
                     <div style="display:flex; gap:6px; align-items:flex-start; margin-top:10px; font-size:12.5px; line-height:1.5; color:var(--g-mag)"><i class="ph-duotone ph-warning-circle" style="flex:none; font-size:16px"></i><span>{{ lockErrText }}</span></div>
                   </sc-if>
@@ -8187,10 +8193,14 @@ class Component extends DCLogic {
     // Se nasazeným backendem ověřuje heslo server a vrací token pro API;
     // bez něj platí ověření v prototypu. Chování a hlášky jsou stejné.
     if (api && api.signIn && api.mode === 'http') {
+      // Kód druhého ověření jde s heslem, jakmile o něj server jednou požádal.
+      const kod = s.lockNeeds2fa ? (s.lockCode || '').trim() : '';
+      if (s.lockNeeds2fa && !kod) { this.setState({ lockErr: 'Zadejte kód z ověřovací aplikace, nebo obnovovací kód.' }); return; }
       this.setState({ lockSignBusy: true, lockErr: null });
       try {
-        const res = await api.signIn(mail, s.lockPwd || '', 'telefon');
+        const res = await api.signIn(mail, s.lockPwd || '', 'telefon', kod || undefined, { bezDotazu: true });
         if (res && res.token) {
+          this.setState({ lockNeeds2fa: false, lockCode: '' });
           // Strana z e-mailu, který server vrátil — ne z ukázkového jména v `LOCKWHO`.
           const email = String((res.user || {}).email || mail).toLowerCase();
           const urci = () => { const M = this.lockData().MAIL; return Object.keys(M).find(x => (M[x] || '').toLowerCase() === email) || who || 'A'; };
@@ -8218,6 +8228,11 @@ class Component extends DCLogic {
          * a tím si limit drží vyčerpaný.
          */
         const stav = e && e.status;
+        // Heslo prošlo, server chce ještě kód druhého ověření — políčko na obrazovce.
+        if (e && e.body && e.body.two_factor) {
+          this.setState({ lockSignBusy: false, lockNeeds2fa: true, lockErr: kod ? 'Kód nesouhlasí — zkuste ho znovu, nebo použijte obnovovací kód.' : null });
+          return;
+        }
         this.setState({
           lockSignBusy: false,
           lockErr: stav === 422 ? 'E-mail nebo heslo nesouhlasí.'
@@ -8365,8 +8380,12 @@ class Component extends DCLogic {
       lockMail: s.lockMail !== undefined && s.lockMail !== '' ? s.lockMail : (L.MAIL[who] || ''),
       lockSetMail: e => this.setState({ lockMail: e.target.value, lockErr: null }),
       lockPwdVal: s.lockPwd || '',
-      lockSetPwd: e => this.setState({ lockPwd: e.target.value, lockErr: null }),
+      lockSetPwd: e => this.setState({ lockPwd: e.target.value, lockErr: null, lockNeeds2fa: false, lockCode: '' }),
       lockPwdKey: e => { if (e.key === 'Enter') this.lockSignIn(); },
+      // Dvoufázové ověření: políčko na kód místo dialogu prohlížeče.
+      lockNeeds2fa: !!s.lockNeeds2fa,
+      lockCode: s.lockCode || '',
+      lockSetCode: e => this.setState({ lockCode: e.target.value.replace(/[^0-9A-Za-z-]/g, '').slice(0, 24), lockErr: null }),
       lockSignIn: () => this.lockSignIn(),
       lockSignCant: !(s.lockMail || L.MAIL[who] || '').trim() || (s.lockPwd || '').length < 4,
       lockWhosOn: L.znam,

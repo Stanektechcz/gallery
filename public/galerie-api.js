@@ -361,8 +361,11 @@
     // Sanctum vrátí osobní token; ten se drží v paměti a v localStorage, aby
     // se po restartu aplikace nemuselo přihlašovat znovu. V lokálním režimu
     // vrací null — volající pak ověří heslo sam, jako dosud.
-    signIn: function (email, password, device, code) {
+    signIn: function (email, password, device, code, volby) {
       if (mode !== 'http') return Promise.resolve(null);
+      // `volby.bezDotazu`: přihlašovací obrazovka má na kód vlastní políčko —
+      // chyba s `two_factor` se vrátí jí, místo aby se ptal dialog prohlížeče.
+      var bezDotazu = !!(volby && volby.bezDotazu);
       var self = this;
       var url = (typeof window !== 'undefined' && window.GALERIE_TOKEN_URL) || '/sanctum/token';
       var telo = { email: email, password: password, device_name: device || 'telefon' };
@@ -381,7 +384,7 @@
            * obou rozvržení na kód políčko nemají — zeptá se proto prohlížeč
            * a pokus se zopakuje. Zrušení dotazu vrátí chybu jako dosud.
            */
-          if (r.status === 422 && b && b.two_factor && typeof window !== 'undefined' && window.prompt) {
+          if (!bezDotazu && r.status === 422 && b && b.two_factor && typeof window !== 'undefined' && window.prompt) {
             var zadany = window.prompt(code
               ? 'Kód nesouhlasí. Zadejte znovu kód z ověřovací aplikace, nebo obnovovací kód:'
               : 'Zadejte kód z ověřovací aplikace, nebo obnovovací kód:');
