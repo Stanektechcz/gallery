@@ -30974,6 +30974,52 @@ class Component extends DCLogic {
     };
   }
 
+  /*
+   * Co prohlížeč ze seznamu sám odebral (na serveru OdebraneVStavu).
+   *
+   * Seznamy přání, slibů, kapitol, pravidel… jdou na server celé a server
+   * z nich mazal, co v nich chybělo. Jenže seznam je kopie z doby načtení
+   * nebo posledního vlastního zápisu — co mezitím přidal ten druhý, v něm
+   * chybí, a karta otevřená přes víkend to při první úpravě smazala.
+   * Sleduje se všechno, co v seznamu kdy bylo; posílá se celé (sčítané),
+   * aby ho nepřepsal další zápis sloučený do téhož odeslání.
+   */
+  odebraneRozdil(prev, patch) {
+    const KLICE = ['wishes', 'ideas', 'buys', 'choreLog', 'dues', 'klTasks', 'fam', 'favList', 'forgList', 'antiList', 'rules', 'storyList', 'msList', 'emItems', 'paper', 'proms', 'nudges', 'cools'];
+    const z = this._odebZ || (this._odebZ = {});
+    const idcka = list => (Array.isArray(list) ? list : [])
+      .map(r => Array.isArray(r) ? r[0] : (r && typeof r === 'object' ? r.id : undefined))
+      .filter(id => id !== undefined && id !== null && id !== '')
+      .map(String);
+    // Dokud se seznam neupravil, drží ho data ze serveru — i to je „bylo v seznamu".
+    const zaklad = k => {
+      const Z = {
+        wishes: typeof GIFT_WISHES !== 'undefined' ? GIFT_WISHES : null, ideas: typeof GIFT_IDEAS !== 'undefined' ? GIFT_IDEAS : null,
+        buys: typeof GIFT_BUYS !== 'undefined' ? GIFT_BUYS : null, choreLog: typeof HOUSE_LOG !== 'undefined' ? HOUSE_LOG : null,
+        dues: typeof HOUSE_DUES !== 'undefined' ? HOUSE_DUES : null, klTasks: typeof KL_TASKS !== 'undefined' ? KL_TASKS : null,
+        fam: typeof FAMILY !== 'undefined' ? FAMILY : null, favList: typeof FAV !== 'undefined' ? FAV : null,
+        forgList: typeof FORGIVEN !== 'undefined' ? FORGIVEN : null, antiList: typeof ANTI !== 'undefined' ? ANTI : null,
+        rules: typeof RULEDEF !== 'undefined' ? RULEDEF : null, storyList: typeof STORY !== 'undefined' ? STORY : null,
+        msList: typeof STORYMS !== 'undefined' ? STORYMS : null, emItems: typeof EM_ITEMS !== 'undefined' ? EM_ITEMS : null,
+        paper: typeof PAPER_ROWS !== 'undefined' ? PAPER_ROWS : null, proms: typeof PROMISES !== 'undefined' ? PROMISES : null,
+        nudges: typeof NUDGES !== 'undefined' ? NUDGES : null, cools: typeof DEC_COOL !== 'undefined' ? DEC_COOL : null
+      };
+      return Z[k] || [];
+    };
+    KLICE.forEach(k => {
+      if (prev[k] === this.state[k]) return;
+      const sled = z[k] || (z[k] = {});
+      idcka(prev[k] === null || prev[k] === undefined ? zaklad(k) : prev[k]).concat(idcka(this.state[k])).forEach(id => { sled[id] = 1; });
+    });
+    if (!KLICE.some(k => k in patch)) return;
+    const out = {};
+    Object.keys(z).forEach(k => {
+      const ted = {};
+      idcka(this.state[k]).forEach(id => { ted[id] = 1; });
+      out[k] = Object.keys(z[k]).filter(id => !ted[id]).slice(-500);
+    });
+    patch.__odebrane = out;
+  }
   persistSave() {
     const api = window.GalerieApi;
     if (!api) return;
@@ -30984,11 +31030,25 @@ class Component extends DCLogic {
       if (prev[k] === this.state[k]) return;
       patch[k] = this.state[k];
     });
+    this.odebraneRozdil(prev, patch);
     this.zarizeniUloz(prev);
     this._pPrev = Object.assign({}, this.state);
     if (this._pQuiet) return;
     if (!Object.keys(patch).length) return;
     if ('evList' in patch || 'xBoard' in patch) this.planRozdil(prev, patch);
+    /*
+     * Trezor: co z něj prohlížeč vyjmul, se posílá výslovně.
+     *
+     * Server dřív vracel do knihovny všechno skryté, co v seznamu chybělo —
+     * a u zamčeného trezoru seznam nic nezná. Vyjmuté se počítá proti všemu,
+     * co v seznamu kdy bylo, a sčítá se (další zápis ho nepřepíše).
+     */
+    if ('vaultAdded' in patch) {
+      const z = this._vaultZ || (this._vaultZ = {});
+      (prev.vaultAdded || this.vaultIdsZ(prev)).concat(this.state.vaultAdded || []).forEach(id => { z[id] = 1; });
+      const ted = this.state.vaultAdded || [];
+      patch.vaultVyjmout = Object.keys(z).filter(id => ted.indexOf(id) < 0);
+    }
     api.save(patch);
     this.mechStamp(patch);
   }
@@ -31530,13 +31590,13 @@ class Component extends DCLogic {
   /*
    * Co je v trezoru — jako úplný seznam, od kterého se odpíchne každý zápis.
    *
-   * Server bere `vaultAdded` jako **úplný**: co v něm není, vrací zpátky do
-   * knihovny. Když se seznam začínal prázdný, každé „Do trezoru" poslalo jen
+   * Server bral `vaultAdded` jako **úplný**: co v něm nebylo, vracel zpátky do
+   * knihovny (dnes se vrací jen výslovně vyjmuté, viz persistSave). Když se seznam začínal prázdný, každé „Do trezoru" poslalo jen
    * to právě vybrané — a všechno ostatní se tím odemklo a vrátilo do mřížky.
    * Trezor se vyprazdňoval jedním kliknutím a nikde po tom nezůstala stopa.
    */
-  vaultIds() {
-    const s = this.state;
+  vaultIds() { return this.vaultIdsZ(this.state); }
+  vaultIdsZ(s) {
     if (s.vaultAdded) return s.vaultAdded;
     return (window.GalerieData && window.GalerieData.VAULT_ITEMS || []).map(v => v.id);
   }

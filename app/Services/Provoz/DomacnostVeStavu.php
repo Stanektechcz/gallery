@@ -61,7 +61,7 @@ class DomacnostVeStavu
 
         // Nejdřív záznamy: z nich se pozná, kdy se která práce naposledy udělala.
         if (is_array($patch['choreLog'] ?? null)) {
-            $this->zapisZaznamy($patch['choreLog'], $prostor, $jmena);
+            $this->zapisZaznamy($patch['choreLog'], $prostor, $jmena, OdebraneVStavu::pro($patch, 'choreLog'));
         }
 
         if (is_array($patch['chores'] ?? null)) {
@@ -69,7 +69,7 @@ class DomacnostVeStavu
         }
 
         if (is_array($patch['dues'] ?? null)) {
-            $this->zapisZavazky($patch['dues'], $prostor, $jmena);
+            $this->zapisZavazky($patch['dues'], $prostor, $jmena, OdebraneVStavu::pro($patch, 'dues'));
         }
 
         if (is_array($patch['inv'] ?? null)) {
@@ -182,7 +182,7 @@ class DomacnostVeStavu
      * @param  array<int, mixed>  $radky
      * @param  array<string, int>  $jmena
      */
-    private function zapisZaznamy(array $radky, GallerySpace $prostor, array $jmena): void
+    private function zapisZaznamy(array $radky, GallerySpace $prostor, array $jmena, ?array $odebrane = null): void
     {
         $zname = $this->podleId(HouseChoreLogEntry::where('gallery_space_id', $prostor->id)->get());
         $prvni = $radky[0] ?? null;
@@ -215,6 +215,8 @@ class DomacnostVeStavu
             ->whereNotNull('client_id')
             ->whereNotIn('client_id', $prisly ?: [''])
             ->whereNotIn('uuid', $prisly ?: [''])
+            // Jen co prohlížeč sám vzal zpět — záznam druhého v jeho seznamu chybí taky.
+            ->when($odebrane !== null, fn ($q) => $q->where(fn ($v) => $v->whereIn('client_id', $odebrane ?: [''])->orWhereIn('uuid', $odebrane ?: [''])))
             ->delete();
     }
 
@@ -314,7 +316,7 @@ class DomacnostVeStavu
      * @param  array<int, mixed>  $radky
      * @param  array<string, int>  $jmena
      */
-    private function zapisZavazky(array $radky, GallerySpace $prostor, array $jmena): void
+    private function zapisZavazky(array $radky, GallerySpace $prostor, array $jmena, ?array $odebrane = null): void
     {
         $vDatabazi = HouseDue::where('gallery_space_id', $prostor->id)
             ->whereNull('settled_at')
@@ -347,6 +349,7 @@ class DomacnostVeStavu
         $vDatabazi
             ->reject(fn (HouseDue $z) => in_array($z->uuid, $prisly, true)
                 || ($z->client_id && in_array($z->client_id, $prisly, true)))
+            ->filter(fn (HouseDue $z) => OdebraneVStavu::smi($odebrane, $z->uuid, $z->client_id))
             ->each(fn (HouseDue $z) => $z->update(['settled_at' => now()]));
     }
 

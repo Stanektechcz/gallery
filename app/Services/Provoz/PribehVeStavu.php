@@ -30,7 +30,16 @@ class PribehVeStavu
     private const MESICE = [1 => 'ledna', 'února', 'března', 'dubna', 'května', 'června',
         'července', 'srpna', 'září', 'října', 'listopadu', 'prosince'];
 
+    /** Právě zpracovávaný patch — nese `__odebrane` (viz OdebraneVStavu). */
+    private array $patch = [];
+
     public function __construct(private readonly Pribeh $obsah) {}
+
+    /** Jen to, co prohlížeč z daného seznamu výslovně odebral (null = starší klient). */
+    private function odebrane(string $klic): ?array
+    {
+        return OdebraneVStavu::pro($this->patch, $klic);
+    }
 
     public function tykaSe(array $patch): bool
     {
@@ -52,6 +61,8 @@ class PribehVeStavu
     /** @return array<string, mixed> */
     public function zpracuj(array $patch, GallerySpace $prostor, ?User $uzivatel): array
     {
+        $this->patch = $patch;
+
         if (array_key_exists('storyList', $patch)) {
             $this->kapitoly((array) $patch['storyList'], $prostor, $uzivatel);
         }
@@ -141,9 +152,12 @@ class PribehVeStavu
 
         // Co v seznamu není, dvojice smazala. Milníky zůstávají — přišly
         // o kapitolu, ne o to, že se staly.
+        $odebrane = $this->odebrane('storyList');
+
         DB::table('couple_story_chapters')
             ->where('gallery_space_id', $prostor->id)
             ->when($zustavaji !== [], fn ($q) => $q->whereNotIn('id', $zustavaji))
+            ->when($odebrane !== null, fn ($q) => $q->whereIn('uuid', $odebrane ?: ['']))
             ->delete();
     }
 
@@ -213,9 +227,12 @@ class PribehVeStavu
             ]);
         }
 
+        $odebrane = $this->odebrane('msList');
+
         DB::table('couple_story_milestones')
             ->where('gallery_space_id', $prostor->id)
             ->when($zustavaji !== [], fn ($q) => $q->whereNotIn('id', $zustavaji))
+            ->when($odebrane !== null, fn ($q) => $q->whereIn('uuid', $odebrane ?: ['']))
             ->delete();
     }
 
@@ -374,9 +391,12 @@ class PribehVeStavu
             ]);
         }
 
+        $odebrane = $this->odebrane('emItems');
+
         DB::table('emergency_access_items')
             ->where('gallery_space_id', $prostor->id)
             ->when($zustavaji !== [], fn ($q) => $q->whereNotIn('id', $zustavaji))
+            ->when($odebrane !== null, fn ($q) => $q->whereIn('uuid', $odebrane ?: ['']))
             ->delete();
     }
 
@@ -433,9 +453,12 @@ class PribehVeStavu
             ]);
         }
 
+        $odebrane = $this->odebrane('paper');
+
         DB::table('paper_backup_rows')
             ->where('gallery_space_id', $prostor->id)
             ->when($zustavaji !== [], fn ($q) => $q->whereNotIn('id', $zustavaji))
+            ->when($odebrane !== null, fn ($q) => $q->whereIn('uuid', $odebrane ?: ['']))
             ->delete();
     }
 

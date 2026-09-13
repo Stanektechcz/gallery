@@ -56,7 +56,7 @@ class PravidlaVeStavu
         }
 
         if (array_key_exists('rules', $patch)) {
-            $this->uloz((array) $patch['rules'], $prostor, $uzivatel);
+            $this->uloz((array) $patch['rules'], $prostor, $uzivatel, OdebraneVStavu::pro($patch, 'rules'));
         }
 
         /*
@@ -77,7 +77,7 @@ class PravidlaVeStavu
     /**
      * @param  list<mixed>  $pravidla  seznam v tom tvaru, ve kterém ho prototyp drží
      */
-    private function uloz(array $pravidla, GallerySpace $prostor, ?User $uzivatel): void
+    private function uloz(array $pravidla, GallerySpace $prostor, ?User $uzivatel, ?array $odebrane = null): void
     {
         $stavajici = DB::table('automation_rules')
             ->where('gallery_space_id', $prostor->id)
@@ -140,6 +140,8 @@ class PravidlaVeStavu
         DB::table('automation_rules')
             ->where('gallery_space_id', $prostor->id)
             ->when($zustavaji !== [], fn ($q) => $q->whereNotIn('id', $zustavaji))
+            // Jen pravidla, která prohlížeč sám odebral (viz OdebraneVStavu).
+            ->when($odebrane !== null, fn ($q) => $q->whereIn('uuid', $odebrane ?: ['']))
             ->delete();
     }
 

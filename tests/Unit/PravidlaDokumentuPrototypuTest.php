@@ -86,6 +86,28 @@ class PravidlaDokumentuPrototypuTest extends TestCase
         $this->assertStringContainsString('whOk', $dokument);
     }
 
+    /**
+     * Seznamy zapisované do tabulek posílají, co z nich prohlížeč odebral.
+     *
+     * Server mazal, co v odeslaném seznamu chybělo — a seznam je kopie
+     * z doby načtení. Karta otevřená přes víkend tak smazala, co mezitím
+     * přidal ten druhý; „Do trezoru" u zamčeného trezoru vrátilo celý trezor
+     * do knihovny.
+     */
+    public function test_seznamy_posilaji_rozdil_ne_jen_celek(): void
+    {
+        foreach (['galerie-desktop.dc.html', 'galerie-mobil.dc.html'] as $nazev) {
+            $dokument = self::dokument($nazev);
+
+            $this->assertStringContainsString('this.odebraneRozdil(prev, patch);', $dokument, $nazev);
+            $this->assertStringContainsString('patch.__odebrane = out;', $dokument, $nazev);
+        }
+
+        $pocitac = self::dokument('galerie-desktop.dc.html');
+        $this->assertStringContainsString("if ('evList' in patch || 'xBoard' in patch) this.planRozdil(prev, patch);", $pocitac);
+        $this->assertStringContainsString('patch.vaultVyjmout =', $pocitac);
+    }
+
     /** Ikony z cizího CDN s kontrolou integrity. */
     public function test_ikony_z_cdn_maji_kontrolu_integrity(): void
     {

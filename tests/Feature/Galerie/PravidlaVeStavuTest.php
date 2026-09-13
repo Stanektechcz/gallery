@@ -110,6 +110,29 @@ class PravidlaVeStavuTest extends TestCase
         );
     }
 
+    /** S rozdílem z prohlížeče se maže jen odebrané — pravidlo druhého zůstane. */
+    public function test_pravidlo_druheho_starsim_seznamem_nezmizi(): void
+    {
+        $zustane = (string) Str::uuid();
+        $odebrane = (string) Str::uuid();
+        $this->pravidlo(['uuid' => $zustane, 'name' => 'Zůstává']);
+        $this->pravidlo(['uuid' => $odebrane, 'name' => 'Odebrané']);
+        $this->pravidlo(['uuid' => (string) Str::uuid(), 'name' => 'Mezitím od druhého']);
+
+        $this->stav([
+            'rules' => [[
+                'id' => $zustane, 'name' => 'Zůstává', 'trig' => 'task', 'targ' => '',
+                'act' => 'task', 'aarg' => 'Něco', 'on' => true, 'who' => 'oba',
+            ]],
+            '__odebrane' => ['rules' => [$odebrane]],
+        ])->assertOk();
+
+        $this->assertEqualsCanonicalizing(
+            ['Zůstává', 'Mezitím od druhého'],
+            DB::table('automation_rules')->where('gallery_space_id', $this->prostor->id)->pluck('name')->all(),
+        );
+    }
+
     /**
      * Historie z prohlížeče se nepřebírá vůbec.
      *

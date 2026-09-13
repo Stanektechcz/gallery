@@ -20,6 +20,7 @@ use App\Services\Provoz\MechanismyVeStavu;
 use App\Services\Provoz\MediaVeStavu;
 use App\Services\Provoz\NakupyVeStavu;
 use App\Services\Provoz\NastaveniVeStavu;
+use App\Services\Provoz\OdebraneVStavu;
 use App\Services\Provoz\PlanovaniVeStavu;
 use App\Services\Provoz\PravidlaVeStavu;
 use App\Services\Provoz\PribehVeStavu;
@@ -217,7 +218,10 @@ class StateController extends Controller
              * toho, kdo klikl — druhý z dvojice by ji jinak dál viděl v mřížce.
              */
             if ($this->trezor->tykaSe($patch)) {
-                $this->trezor->zpracuj($patch, GallerySpace::findOrFail($coupleId));
+                // Vrátit z trezoru do knihovny smí jen ten, kdo ho má odemčený —
+                // jinak by heslo k trezoru obešel jeden zápis stavu.
+                $odemceno = $request->hasSession() && (int) $request->session()->get('vault_unlocked_until', 0) > now()->timestamp;
+                $this->trezor->zpracuj($patch, GallerySpace::findOrFail($coupleId), $odemceno);
                 $patch = $this->trezor->bezTrezoru($patch);
             }
 
@@ -484,6 +488,8 @@ class StateController extends Controller
             }
 
             $state->zapomenFilmy(self::SERVEROVE_SEZNAMY);
+            // Rozdíl pro převodníky (co prohlížeč odebral) do stavu nepatří.
+            unset($patch[OdebraneVStavu::KLIC]);
             $state->applyPatch($this->sPuvodnimTvarem($patch, $request));
 
             return response()->json([

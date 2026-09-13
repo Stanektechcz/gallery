@@ -208,9 +208,37 @@ class ObsahSdileniTest extends TestCase
     {
         $foto = $this->fotka(['is_hidden' => true]);
 
-        $this->patchJson('/api/state', ['data' => ['vaultAdded' => []]])->assertOk();
+        // Bez odemčeného trezoru se nevrací nic — heslo by obešel jeden zápis stavu.
+        $this->patchJson('/api/state', ['data' => ['vaultAdded' => [], 'vaultVyjmout' => [$foto->uuid]]])->assertOk();
+        $this->assertTrue($foto->refresh()->is_hidden);
+
+        $this->withSession(['vault_unlocked_until' => now()->addMinutes(5)->timestamp])
+            ->patchJson('/api/state', ['data' => ['vaultAdded' => [], 'vaultVyjmout' => [$foto->uuid]]])->assertOk();
 
         $this->assertFalse($foto->refresh()->is_hidden);
+    }
+
+    /**
+     * Vložení jedné fotky do trezoru nevrátí ostatní do knihovny.
+     *
+     * Obsah trezoru chodí jen s odemčeným trezorem a nejvýš dvě stě položek.
+     * Server bral seznam z prohlížeče jako úplný — „Do trezoru" u zamčeného
+     * trezoru (nebo z jiného zařízení) tak vrátilo do mřížky, hledání
+     * i sdílených odkazů všechno, co v trezoru leželo.
+     */
+    public function test_vlozeni_do_trezoru_nevrati_ostatni(): void
+    {
+        $vTrezoru = $this->fotka(['is_hidden' => true]);
+        $nova = $this->fotka([], 2);
+
+        $this->patchJson('/api/state', ['data' => ['vaultAdded' => [$nova->uuid]]])->assertOk();
+
+        $this->assertTrue($nova->refresh()->is_hidden);
+        $this->assertTrue($vTrezoru->refresh()->is_hidden);
+
+        // Ani prázdný seznam bez výslovného vyjmutí nic neodemkne.
+        $this->patchJson('/api/state', ['data' => ['vaultAdded' => []]])->assertOk();
+        $this->assertTrue($vTrezoru->refresh()->is_hidden);
     }
 
     /** Trezor se do stavu neukládá — jediná pravda je knihovna. */

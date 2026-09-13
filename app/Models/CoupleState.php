@@ -30,6 +30,8 @@ class CoupleState extends Model
      * Zahazuje se proto tady, kde je to jedno místo pro všechny.
      */
     public const NEUKLADAT = [
+        // Rozdíl pro zápis do tabulek (co prohlížeč odebral), viz OdebraneVStavu.
+        '__odebrane',
         'vaultPwd', 'lockPwd', 'lockPin', 'lockRec', 'lockRecCode',
         'gatePin', 'gvPwd', 'admNewMail', 'admNewKeyName',
         // Příznak „právě kontroluji" patří k jednomu kliknutí, ne do sdíleného

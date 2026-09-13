@@ -76,7 +76,24 @@ class DarkyVeStavu
             }
         }
 
-        $this->smazChybejici($zustavaji, $tykaSe, $prostor, $uzivatel);
+        $odebrane = [];
+
+        foreach (['wishes', 'ideas', 'buys'] as $klic) {
+            if (! array_key_exists($klic, $patch)) {
+                continue;
+            }
+
+            $zKlice = OdebraneVStavu::pro($patch, $klic);
+
+            if ($zKlice === null) {
+                $odebrane = null;
+                break;
+            }
+
+            $odebrane = array_merge($odebrane, $zKlice);
+        }
+
+        $this->smazChybejici($zustavaji, $tykaSe, $prostor, $uzivatel, $odebrane);
 
         $obsah = $this->obsah->kolekce($prostor);
 
@@ -155,10 +172,14 @@ class DarkyVeStavu
      * pro sebe, v jeho seznamu není — a smazat cizí schovaný dárek proto, že
      * o něm ten první neví, by bylo to nejhorší, co tahle vrstva může udělat.
      *
+     * A jen to, co prohlížeč výslovně odebral (viz OdebraneVStavu) — přání,
+     * které mezitím napsal ten druhý, v jeho seznamu chybí taky.
+     *
      * @param  list<int>  $zustavaji
      * @param  list<string>  $druhy
+     * @param  list<string>|null  $odebrane
      */
-    private function smazChybejici(array $zustavaji, array $druhy, GallerySpace $prostor, User $uzivatel): void
+    private function smazChybejici(array $zustavaji, array $druhy, GallerySpace $prostor, User $uzivatel, ?array $odebrane): void
     {
         if ($druhy === []) {
             return;
@@ -184,6 +205,7 @@ class DarkyVeStavu
                 ),
             )
             ->when($zustavaji !== [], fn ($q) => $q->whereNotIn('id', $zustavaji))
+            ->when($odebrane !== null, fn ($q) => $q->whereIn('uuid', $odebrane ?: ['']))
             ->delete();
     }
 

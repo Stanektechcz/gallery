@@ -60,7 +60,7 @@ class VztahVeStavu
         }
 
         if (is_array($patch['cools'] ?? null)) {
-            $this->zapisRozvahy($patch['cools'], $prostor, $jmena);
+            $this->zapisRozvahy($patch['cools'], $prostor, $jmena, OdebraneVStavu::pro($patch, 'cools'));
         }
 
         /*
@@ -81,11 +81,11 @@ class VztahVeStavu
         }
 
         if (is_array($patch['proms'] ?? null)) {
-            $this->zapisSliby($patch['proms'], $prostor, $jmena);
+            $this->zapisSliby($patch['proms'], $prostor, $jmena, OdebraneVStavu::pro($patch, 'proms'));
         }
 
         if (is_array($patch['nudges'] ?? null)) {
-            $this->zapisZadosti($patch['nudges'], $prostor, $jmena, $kdo);
+            $this->zapisZadosti($patch['nudges'], $prostor, $jmena, $kdo, OdebraneVStavu::pro($patch, 'nudges'));
         }
 
         if (is_array($patch['patAuto'] ?? null)) {
@@ -103,7 +103,7 @@ class VztahVeStavu
      * @param  array<int, mixed>  $radky
      * @param  array<string, int>  $jmena
      */
-    private function zapisSliby(array $radky, GallerySpace $prostor, array $jmena): void
+    private function zapisSliby(array $radky, GallerySpace $prostor, array $jmena, ?array $odebrane = null): void
     {
         $vDatabazi = CouplePromise::where('gallery_space_id', $prostor->id)
             ->where('state', '!=', 'released')
@@ -159,6 +159,8 @@ class VztahVeStavu
         $vDatabazi
             ->reject(fn (CouplePromise $s) => in_array($s->uuid, $prisly, true)
                 || ($s->client_id && in_array($s->client_id, $prisly, true)))
+            // Jen sliby, které prohlížeč sám odebral — slib druhého v jeho seznamu chybí taky.
+            ->filter(fn (CouplePromise $s) => OdebraneVStavu::smi($odebrane, $s->uuid, $s->client_id))
             ->each(fn (CouplePromise $s) => $s->update(['state' => 'released', 'settled_at' => now()]));
     }
 
@@ -193,7 +195,7 @@ class VztahVeStavu
      * @param  array<int, mixed>  $radky
      * @param  array<string, int>  $jmena
      */
-    private function zapisZadosti(array $radky, GallerySpace $prostor, array $jmena, ?User $kdo): void
+    private function zapisZadosti(array $radky, GallerySpace $prostor, array $jmena, ?User $kdo, ?array $odebrane = null): void
     {
         $vDatabazi = CoupleNudge::where('gallery_space_id', $prostor->id)->withCount('pripominky')->get();
         $podle = $this->podleId($vDatabazi);
@@ -251,6 +253,8 @@ class VztahVeStavu
         $vDatabazi
             ->reject(fn (CoupleNudge $z) => in_array($z->uuid, $prisly, true)
                 || ($z->client_id && in_array($z->client_id, $prisly, true)))
+            // Jen žádosti, které prohlížeč sám zrušil — žádost druhého v jeho seznamu chybí taky.
+            ->filter(fn (CoupleNudge $z) => OdebraneVStavu::smi($odebrane, $z->uuid, $z->client_id))
             ->each(fn (CoupleNudge $z) => $z->delete());
     }
 
@@ -380,7 +384,7 @@ class VztahVeStavu
      * @param  array<int, mixed>  $radky
      * @param  array<string, int>  $jmena
      */
-    private function zapisRozvahy(array $radky, GallerySpace $prostor, array $jmena): void
+    private function zapisRozvahy(array $radky, GallerySpace $prostor, array $jmena, ?array $odebrane = null): void
     {
         $otevrene = CoupleCoolingPurchase::where('gallery_space_id', $prostor->id)
             ->whereNull('closed_at')
@@ -425,6 +429,7 @@ class VztahVeStavu
         $otevrene
             ->reject(fn (CoupleCoolingPurchase $n) => in_array($n->uuid, $prisly, true)
                 || ($n->client_id && in_array($n->client_id, $prisly, true)))
+            ->filter(fn (CoupleCoolingPurchase $n) => OdebraneVStavu::smi($odebrane, $n->uuid, $n->client_id))
             ->each(fn (CoupleCoolingPurchase $n) => $n->update(['closed_at' => now()]));
     }
 

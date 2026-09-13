@@ -18,11 +18,11 @@ use App\Support\SpaceContext;
 class TrezorVeStavu
 {
     /** Klíče, které patří databázi. Do stavu se neukládají. */
-    public const SERVEROVE = ['vaultAdded', 'vaultRemoved'];
+    public const SERVEROVE = ['vaultAdded', 'vaultRemoved', 'vaultVyjmout'];
 
     public function tykaSe(array $patch): bool
     {
-        return array_key_exists('vaultAdded', $patch);
+        return array_key_exists('vaultAdded', $patch) || array_key_exists('vaultVyjmout', $patch);
     }
 
     /**
@@ -36,15 +36,18 @@ class TrezorVeStavu
      */
     public function bezTrezoru(array $patch): array
     {
-        return array_diff_key($patch, array_flip(['vaultAdded']));
+        return array_diff_key($patch, array_flip(['vaultAdded', 'vaultVyjmout']));
     }
 
-    public function zpracuj(array $patch, GallerySpace $prostor): void
+    public function zpracuj(array $patch, GallerySpace $prostor, bool $odemceno = false): void
     {
-        $vTrezoru = array_values(array_filter(
-            (array) ($patch['vaultAdded'] ?? []),
+        $idcka = fn (string $klic) => array_values(array_filter(
+            array_slice((array) ($patch[$klic] ?? []), 0, 5000),
             fn ($id) => is_string($id) && $id !== '',
         ));
+
+        $vTrezoru = $idcka('vaultAdded');
+        $vyjmout = array_values(array_diff($idcka('vaultVyjmout'), $vTrezoru));
 
         $dotaz = fn () => MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
             ->where('gallery_space_id', $prostor->id);
@@ -55,15 +58,16 @@ class TrezorVeStavu
         }
 
         /*
-         * A co v něm není, se vrací do knihovny.
+         * Vrací se jen to, co prohlížeč výslovně vyjmul.
          *
-         * Prototyp posílá celý seznam, takže vyjmutí pozná jen tenhle rozdíl.
-         * Týká se to jen položek, které se do trezoru dostaly tudy — skryté
-         * odjinud (import, pravidlo) zůstávají skryté.
+         * Dřív se vrátilo všechno skryté, co v odeslaném seznamu chybělo.
+         * Jenže obsah trezoru chodí jen s odemčeným trezorem a nejvýš
+         * dvě stě položek: „Do trezoru" u zamčeného trezoru nebo z druhého
+         * zařízení tak vrátilo celý trezor do mřížky, hledání i sdílených
+         * odkazů.
          */
-        (clone $dotaz())
-            ->where('is_hidden', true)
-            ->when($vTrezoru !== [], fn ($q) => $q->whereNotIn('uuid', $vTrezoru))
-            ->update(['is_hidden' => false]);
+        if ($vyjmout && $odemceno) {
+            (clone $dotaz())->where('is_hidden', true)->whereIn('uuid', $vyjmout)->update(['is_hidden' => false]);
+        }
     }
 }

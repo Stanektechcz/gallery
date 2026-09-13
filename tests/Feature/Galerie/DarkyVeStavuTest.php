@@ -156,6 +156,33 @@ class DarkyVeStavuTest extends TestCase
         $this->assertSame(1, DB::table('gift_ideas')->count());
     }
 
+    /**
+     * Přání, které mezitím napsal ten druhý, se starším seznamem nesmaže.
+     *
+     * Seznam v prohlížeči je kopie z doby načtení; karta otevřená přes
+     * víkend by jinak při první úpravě smazala všechno, co v ní chybí.
+     * Maže se jen to, co prohlížeč sám odebral (`__odebrane`).
+     */
+    public function test_prani_druheho_se_starsim_seznamem_nesmaze(): void
+    {
+        $moje = (string) Str::uuid();
+        $odebrane = (string) Str::uuid();
+        $druheho = (string) Str::uuid();
+        $this->darek(['uuid' => $moje, 'title' => 'Moje', 'status' => 'wish']);
+        $this->darek(['uuid' => $odebrane, 'title' => 'Odebrané', 'status' => 'wish']);
+        $this->darek(['uuid' => $druheho, 'title' => 'Mezitím od Makinky', 'status' => 'wish', 'created_by' => $this->maki->id]);
+
+        $this->stav([
+            'wishes' => [['id' => $moje, 'who' => 'Adrian', 'title' => 'Moje upravené', 'price' => 100]],
+            '__odebrane' => ['wishes' => [$odebrane]],
+        ])->assertOk();
+
+        $this->assertSame(['Mezitím od Makinky', 'Moje upravené'], DB::table('gift_ideas')->orderBy('title')->pluck('title')->all());
+
+        // Rozdíl se do sdíleného stavu neuloží.
+        $this->assertArrayNotHasKey('__odebrane', (array) $this->getJson('/api/state')->json('data'));
+    }
+
     // ——— pomůcky ———
 
     private function stav(array $patch)

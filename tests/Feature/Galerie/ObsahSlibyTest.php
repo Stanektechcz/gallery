@@ -153,6 +153,23 @@ class ObsahSlibyTest extends TestCase
         $this->assertNotSame('broken', $zmizi->state);
     }
 
+    /** Slib, který mezitím dal ten druhý, starší seznam nezruší. */
+    public function test_slib_druheho_starsim_seznamem_nezrusi(): void
+    {
+        $zustane = $this->slib(['what' => 'Zůstane']);
+        $zrusim = $this->slib(['what' => 'Zruším']);
+        $druheho = $this->slib(['what' => 'Mezitím od Makinky', 'promised_by' => $this->maki->id, 'promised_to' => $this->adri->id]);
+
+        $this->patchJson('/api/state', ['data' => [
+            'proms' => [$this->radekSlibu($zustane)],
+            '__odebrane' => ['proms' => [$zrusim->uuid]],
+        ]])->assertOk();
+
+        $this->assertSame('released', $zrusim->refresh()->state);
+        $this->assertSame('open', $druheho->refresh()->state);
+        $this->assertSame('open', $zustane->refresh()->state);
+    }
+
     /** Posunutý termín se přepočítá na datum. */
     public function test_posunuty_termin_se_prepocita(): void
     {

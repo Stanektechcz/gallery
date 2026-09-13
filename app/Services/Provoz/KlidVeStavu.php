@@ -69,7 +69,7 @@ class KlidVeStavu
         }
 
         if (array_key_exists('klTasks', $patch)) {
-            $this->cekaNaOkno((array) $patch['klTasks'], $prostor);
+            $this->cekaNaOkno((array) $patch['klTasks'], $prostor, OdebraneVStavu::pro($patch, 'klTasks'));
         }
 
         // Napsaná odpověď dorazila dřív než potvrzení, takže tenhle patch už
@@ -99,7 +99,7 @@ class KlidVeStavu
      *
      * @param  list<mixed>  $ukoly
      */
-    private function cekaNaOkno(array $ukoly, GallerySpace $prostor): void
+    private function cekaNaOkno(array $ukoly, GallerySpace $prostor, ?array $odebrane = null): void
     {
         if (! Schema::hasTable('wellbeing_tasks')) {
             return;
@@ -156,6 +156,8 @@ class KlidVeStavu
             ->where('gallery_space_id', $prostor->id)
             ->whereNull('done_at')
             ->when($zustavaji !== [], fn ($q) => $q->whereNotIn('id', $zustavaji))
+            // Hotové je jen to, co prohlížeč sám odebral (viz OdebraneVStavu).
+            ->when($odebrane !== null, fn ($q) => $q->whereIn('id', array_map('intval', $odebrane) ?: [0]))
             ->update(['done_at' => CarbonImmutable::now(), 'updated_at' => now()]);
     }
 

@@ -23,6 +23,17 @@ class MechanismyVeStavu
     /** Klíče, které patří databázi. Do stavu se neukládají. */
     public const SERVEROVE = ['favList', 'forgList', 'antiList', 'mlLoad', 'fam', 'truths', 'pauseLog', 'pausePlan'];
 
+    /** Tabulka → klíč seznamu v prohlížeči (kvůli tomu, co z něj výslovně odebral). */
+    private const KLICE = [
+        'couple_favours' => 'favList',
+        'couple_forgiven' => 'forgList',
+        'couple_anti_budget' => 'antiList',
+        'couple_family_contacts' => 'fam',
+    ];
+
+    /** Právě zpracovávaný patch — nese `__odebrane` (viz OdebraneVStavu). */
+    private array $patch = [];
+
     public function __construct(private readonly Mechanismy $obsah) {}
 
     public function tykaSe(array $patch): bool
@@ -46,6 +57,7 @@ class MechanismyVeStavu
     public function zpracuj(array $patch, GallerySpace $prostor, ?User $uzivatel): array
     {
         $lide = array_flip($prostor->members()->pluck('users.name', 'users.id')->all());
+        $this->patch = $patch;
 
         if (array_key_exists('favList', $patch)) {
             $this->laskavosti((array) $patch['favList'], $prostor, $lide);
@@ -231,9 +243,12 @@ class MechanismyVeStavu
             ]);
         }
 
+        $odebrane = OdebraneVStavu::pro($this->patch, self::KLICE['couple_family_contacts']);
+
         DB::table('couple_family_contacts')
             ->where('gallery_space_id', $prostor->id)
             ->when($zustavaji !== [], fn ($q) => $q->whereNotIn('id', $zustavaji))
+            ->when($odebrane !== null, fn ($q) => $q->whereIn('uuid', $odebrane ?: ['']))
             ->delete();
     }
 
@@ -307,9 +322,13 @@ class MechanismyVeStavu
             ]);
         }
 
+        // Jen co prohlížeč sám odebral — položka druhého v jeho seznamu chybí taky.
+        $odebrane = OdebraneVStavu::pro($this->patch, self::KLICE[$tabulka] ?? $tabulka);
+
         DB::table($tabulka)
             ->where('gallery_space_id', $prostor->id)
             ->when($zustavaji !== [], fn ($q) => $q->whereNotIn('id', $zustavaji))
+            ->when($odebrane !== null, fn ($q) => $q->whereIn('uuid', $odebrane ?: ['']))
             ->delete();
     }
 
