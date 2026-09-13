@@ -1532,7 +1532,7 @@
     txs: ['ph-receipt', 'Žádné transakce', 'Napojte účet, nahrajte výpis, nebo napište platbu rychlým vstupem.', 'Účty a napojení', 'ph-bank', 'x-ucty'],
     budgets: ['ph-chart-pie-slice', 'Žádné rozpočty', 'Rozpočet se dá založit na kategorii i na cestu — a pak hlídá sám.', 'Otevřít finance', 'ph-currency-circle-dollar', 'x-finance'],
     ms: ['ph-cake', 'Žádné milníky', 'První výročí, stěhování, desátý rok spolu — osa se z nich složí sama.', null, null, null],
-    diary: ['ph-notebook', 'Deník je prázdný', 'Zápis se dá napsat ručně, nadiktovat hlasovkou, nebo nechat vzniknout z týdenního shrnutí.', 'Přidat cokoliv', 'ph-lightning', null],
+    diary: ['ph-notebook', 'Deník je prázdný', 'Zápis se dá napsat ručně, nadiktovat hlasovkou, nebo nechat vzniknout z týdenního shrnutí.', 'Napsat zápis', 'ph-pencil-simple', null],
     wkEvents: ['ph-calendar-dots', 'Týden je prázdný', 'Akce přijdou z kalendáře, z cest a z pravidel.', 'Kalendář', 'ph-calendar-blank', 'x-tyden'],
     memToday: ['ph-clock-counter-clockwise', 'Dnes nic z archivu', 'Až budete mít fotky ze stejného dne v jiném roce, objeví se tady.', null, null, null]
   };

@@ -157,6 +157,83 @@ class FinanceAkceTest extends TestCase
         $this->assertSame(3, DB::table('finance_plan_log')->where('budget_id', $rozpocet->id)->where('action', '!=', 'puvodni-odhad')->count());
     }
 
+    /** Bez rozpočtu obrazovka Rozpočty radila „založte ho v Rozpočtech" — sama na sebe. */
+    public function test_rozpocet_se_zalozi_s_odhadem_limitu(): void
+    {
+        $potraviny = FinanceCategory::create(['gallery_space_id' => $this->prostor->id, 'name' => 'Potraviny', 'kind' => 'expense', 'is_active' => true]);
+        foreach (['2026-06-10' => 3000, '2026-07-10' => 2500, '2026-08-10' => 3140] as $den => $castka) {
+            $this->vydaj('Albert', $castka, $den)->update(['category_id' => $potraviny->id]);
+        }
+        // Tenhle měsíc se do odhadu nepočítá.
+        $this->vydaj('Albert', 9000)->update(['category_id' => $potraviny->id]);
+
+        $this->postJson('/api/finance/rozpocet/zalozit', ['prijem' => 60000])
+            ->assertStatus(201)
+            ->assertJsonPath('data.BUD.income', 60000)
+            ->assertJsonPath('data.BUD.month', 'září 2026');
+
+        $rozpocet = Budget::sole();
+        $this->assertTrue($rozpocet->isRolling());
+        $this->assertNull($rozpocet->owner_user_id);
+        // (3000 + 2500 + 3140) / 3 = 2880 → po stovkách nahoru 2900.
+        $this->assertEquals(2900, (float) $this->limit($rozpocet, 'Potraviny'));
+        // Vlastní kategorie dvojice zůstanou — výchozí sada se přidává jen do prázdného prostoru.
+        $this->assertSame(1, DB::table('budget_category_limits')->where('budget_id', $rozpocet->id)->count());
+        $this->assertEquals(2900, (float) DB::table('budget_category_limits')->where('finance_category_id', $potraviny->id)->value('baseline_amount'));
+
+        // Druhé založení nic nezdvojí.
+        $this->postJson('/api/finance/rozpocet/zalozit')->assertStatus(422)
+            ->assertJsonPath('zprava', 'Rozpočet už je založený — limity měňte u kategorií.');
+        $this->assertSame(1, Budget::count());
+    }
+
+    public function test_prazdny_prostor_dostane_vychozi_kategorie(): void
+    {
+        $this->postJson('/api/finance/rozpocet/zalozit')->assertStatus(201);
+
+        $rozpocet = Budget::sole();
+        $this->assertNull($rozpocet->monthly_income);
+        $this->assertSame(count(FinanceCategory::VYCHOZI), DB::table('budget_category_limits')->where('budget_id', $rozpocet->id)->count());
+        // Bez historie útrat začínají všechny limity na nule.
+        $this->assertEquals(0, (float) $this->limit($rozpocet, 'Benzín'));
+    }
+
+    /** „Zvednout obálku" bez kategorie obálky hlásilo „zatím neumíme". */
+    public function test_obalka_se_zalozi_a_pak_zveda(): void
+    {
+        $rozpocet = $this->rozpocet();
+
+        $this->postJson('/api/finance/rozpocet/obalka', ['castka' => 1500])
+            ->assertStatus(201)
+            ->assertJsonPath('zprava', 'Obálka založena — kategorie „Obálka pro sebe“ v rozpočtu');
+        $this->assertEquals(1500, (float) $this->limit($rozpocet, 'Obálka pro sebe'));
+        $this->assertSame('Obálka pro sebe', $this->getJson('/api/data/rozbory')->assertOk()->json('data.ENV.kategorie'));
+
+        $this->postJson('/api/finance/rozpocet/obalka', ['castka' => 2000])->assertOk();
+        $this->assertEquals(2000, (float) $this->limit($rozpocet, 'Obálka pro sebe'));
+        $this->assertSame(1, FinanceCategory::where('name', 'Obálka pro sebe')->count());
+
+        // Vlastní kategorie obálky se nepřepisuje novou.
+        FinanceCategory::where('name', 'Obálka pro sebe')->first()->delete();
+        FinanceCategory::create(['gallery_space_id' => $this->prostor->id, 'name' => 'Kapesné', 'kind' => 'expense', 'is_active' => true]);
+        $this->postJson('/api/finance/rozpocet/obalka', ['castka' => 800])->assertOk();
+        $this->assertEquals(800, (float) $this->limit($rozpocet, 'Kapesné'));
+
+        // Smazaná obálka se při novém založení vrátí, nenarazí na jedinečný název.
+        FinanceCategory::where('name', 'Kapesné')->first()->delete();
+        $this->postJson('/api/finance/rozpocet/obalka', ['castka' => 900])->assertStatus(201);
+        $this->assertSame(1, FinanceCategory::withTrashed()->where('name', 'Obálka pro sebe')->count());
+        $this->assertEquals(900, (float) $this->limit($rozpocet, 'Obálka pro sebe'));
+    }
+
+    public function test_obalka_bez_rozpoctu_rekne_proc(): void
+    {
+        $this->postJson('/api/finance/rozpocet/obalka', ['castka' => 1500])
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'Rozpočet zatím není — založte ho v Rozpočtech.');
+        $this->assertSame(0, FinanceCategory::count());
+    }
+
     public function test_vyhrazena_castka_a_vklad(): void
     {
         $this->rozpocet();

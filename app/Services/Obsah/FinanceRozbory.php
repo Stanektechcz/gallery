@@ -585,7 +585,7 @@ class FinanceRozbory implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function obalka(GallerySpace $prostor): ?array
     {
-        $kategorie = $this->osobniKategorie($prostor);
+        $kategorie = self::osobniKategorie($prostor);
 
         if (! $kategorie) {
             return null;
@@ -801,7 +801,7 @@ class FinanceRozbory implements MaPrazdneKolekce, PoskytovatelObsahu
      * Pozná se podle jména — vlastní příznak na to v aplikaci není a vymýšlet
      * ho jen kvůli jedné obrazovce by bylo horší než se zeptat názvu.
      */
-    private function osobniKategorie(GallerySpace $prostor): ?object
+    public static function osobniKategorie(GallerySpace $prostor): ?object
     {
         if (! Schema::hasTable('finance_categories')) {
             return null;
@@ -809,6 +809,7 @@ class FinanceRozbory implements MaPrazdneKolekce, PoskytovatelObsahu
 
         return DB::table('finance_categories')
             ->where('gallery_space_id', $prostor->id)
+            ->whereNull('deleted_at')
             ->where(function ($q) {
                 foreach (['obálka', 'obalka', 'osobní', 'osobni', 'kapesné', 'kapesne'] as $slovo) {
                     $q->orWhereRaw('LOWER(name) LIKE ?', ['%'.$slovo.'%']);

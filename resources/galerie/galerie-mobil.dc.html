@@ -521,10 +521,14 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                       <span style="font-size:12px; color:var(--g-ink2); font-variant-numeric:tabular-nums; margin-left:auto">{{ b.meta }}</span>
                     </div>
                     <div style="height:5px; border-radius:2px; background:var(--g-line2); overflow:hidden; margin-top:6px">
-                      <div style="height:100%; width:{{ b.w }}; background:{{ b.color }}; transition:width .3s ease"></div>
+                      <div style="height:100%; width:{{ b.pct }}; background:{{ b.color }}; transition:width .3s ease"></div>
                     </div>
                   </button>
                 </sc-for>
+                <sc-if value="{{ finBezRozpoctu }}">
+                  <div style="padding:4px 0 8px; font-size:13.5px; line-height:1.55; color:var(--g-ink2); text-wrap:pretty">Rozpočet zatím není. Limity kategorií se odhadnou z útrat posledních tří měsíců a upravíte je na počítači v Rozpočtech.</div>
+                  <button class="btn btn-secondary" onClick="{{ finZalozRozpocet }}" style="gap:7px; margin-bottom:6px"><i class="ph-duotone ph-plus-circle" style="font-size:16px"></i>Založit rozpočet</button>
+                </sc-if>
               </div>
 
               <button onClick="{{ learnTeaser.go }}" style="display:block; width:100%; text-align:left; margin-top:16px; padding:13px 18px; border:0; border-top:1px solid var(--g-line); border-bottom:1px solid var(--g-line); background:transparent; cursor:pointer; font-family:inherit; color:inherit" style-hover="background:var(--g-panel)">
@@ -11153,17 +11157,20 @@ class Component extends DCLogic {
     // a telefon padal na `trip.days`. Pak první skutečná cesta, nebo žádná.
     const trip = TRIPS[s.tripId] || TRIPS[Object.keys(TRIPS)[0]]
       || { title: 'Zatím žádná cesta', when: '', tag: '', place: '', seed: 0, desc: '', stats: [], days: [] };
-    const itinKey = (di, ii) => s.tripId + '-' + di + '-' + ii;
+    // Klíč cesty, která se opravdu ukazuje — „Útraty" posílaly ukázkové „chorvatsko"
+    // a obrazovka Finance pak padala na `TRIPS[txTrip].title`.
+    const tripKlic = TRIPS[s.tripId] ? s.tripId : (Object.keys(TRIPS)[0] || null);
+    const itinKey = (di, ii) => tripKlic + '-' + di + '-' + ii;
     const itinOn = (di, ii, base) => { const v = s.itin[itinKey(di, ii)]; return v === undefined ? base === 1 : v; };
     let itinDone = 0, itinAll = 0;
     trip.days.forEach((d, di) => d[2].forEach((it, ii) => { itinAll++; if (itinOn(di, ii, it[2])) itinDone++; }));
-    ((s.itinExtra && s.itinExtra[s.tripId]) || []).forEach(x => { itinAll++; if (s.itinDone[x.id]) itinDone++; });
+    ((s.itinExtra && s.itinExtra[tripKlic]) || []).forEach(x => { itinAll++; if (s.itinDone[x.id]) itinDone++; });
 
     // — učení rozpočtu z cest —
     const learn = this.tripLearn();
-    const tripFc = this.tripForecast(s.tripId);
-    const tripApplied = this.tripBudgetOf(s.tripId);
-    const tripHist = learn.rows.find(r => r.trip === s.tripId) || null;
+    const tripFc = this.tripForecast(tripKlic);
+    const tripApplied = this.tripBudgetOf(tripKlic);
+    const tripHist = learn.rows.find(r => r.trip === tripKlic) || null;
 
     // — cyklus, kalendář a sekce —
     const cyc = this.cycModel();
@@ -11377,7 +11384,7 @@ class Component extends DCLogic {
         this.setState({ tasksExtra: prev.concat([{ id: 'x' + n, label: a, who: b || 'spolu', when: 'bez termínu' }]), sheet: null, addA: '', addB: '', seq: n + 1 });
         this.toast('Úkol přidán', { icon: 'ph-check-square', undo: () => this.setState({ tasksExtra: prev }) });
       } else if (s.addKind === 'itin') {
-        const key = s.tripId, prev = s.itinExtra || {};
+        const key = tripKlic, prev = s.itinExtra || {};
         const list = (prev[key] || []).concat([{ label: a, meta: b || 'bez času', id: 'ie' + n }]);
         this.setState({ itinExtra: Object.assign({}, prev, { [key]: list }), sheet: null, addA: '', addB: '', seq: n + 1 });
         this.toast(a + ' přidáno do itineráře', { icon: 'ph-list-plus', undo: () => this.setState({ itinExtra: prev }) });
@@ -11404,7 +11411,7 @@ class Component extends DCLogic {
       }
     };
 
-    const extraItin = (s.itinExtra && s.itinExtra[s.tripId]) || [];
+    const extraItin = (s.itinExtra && s.itinExtra[tripKlic]) || [];
     const tasksExtra = this.galerieNaServeru() ? [] : (s.tasksExtra || []);
 
     const tabDef = [
@@ -11435,7 +11442,7 @@ class Component extends DCLogic {
     const ctxChips = [];
     if (screen === 'memories' && s.filter !== 'all') ctxChips.push({ label: 'Filtr: ' + (s.filter === 'fav' ? 'Oblíbené' : s.filter === 'video' ? 'Videa' : s.filter), go: () => this.setState({ filter: 'all' }) });
     if (screen === 'finance' && s.txCat2) ctxChips.push({ label: 'Kategorie: ' + s.txCat2, go: () => this.setState({ txCat2: null }) });
-    if (screen === 'finance' && s.txTrip) ctxChips.push({ label: 'Cesta: ' + TRIPS[s.txTrip].title, go: () => this.setState({ txTrip: null }) });
+    if (screen === 'finance' && s.txTrip) ctxChips.push({ label: 'Cesta: ' + (TRIPS[s.txTrip] ? TRIPS[s.txTrip].title : 'už neexistuje'), go: () => this.setState({ txTrip: null }) });
 
     // — seřazené seznamy —
     const tripIds = Object.keys(TRIPS).sort((a, b) => {
@@ -12154,7 +12161,7 @@ class Component extends DCLogic {
         doneMeta: itinDone + ' z ' + itinAll + ' splněno',
         actions: [
           { label: 'Fotky cesty', icon: 'ph-images', go: () => this.goTab('memories', { filter: trip.place }) },
-          { label: 'Útraty', icon: 'ph-wallet', go: () => this.goTab('finance', { txTrip: s.tripId, txCat2: null }) },
+          { label: 'Útraty', icon: 'ph-wallet', go: () => tripKlic ? this.goTab('finance', { txTrip: tripKlic, txCat2: null }) : this.toast('Zatím tu není žádná cesta', { icon: 'ph-info' }) },
           // Sdílet cestu = odkaz na fotky z cesty (podle místa cesty), jako výběr v knihovně.
           { label: 'Sdílet', icon: 'ph-share-network', go: () => {
             if (!this.galerieNaServeru()) { this.toast('Sdílet jde jen s připojeným serverem', { icon: 'ph-link-simple' }); return; }
@@ -12201,7 +12208,7 @@ class Component extends DCLogic {
         fcEst: tripFc ? this.kc(tripFc.est) : '',
         fcDev: tripFc ? this.pctSign(tripFc.dev) : '',
         fcCta: tripApplied ? 'Vrátit na plán' : 'Použít odhad jako rozpočet',
-        fcApply: () => this.tripApplyForecast(s.tripId),
+        fcApply: () => tripKlic && this.tripApplyForecast(tripKlic),
         histOn: !!tripHist,
         histPlan: tripHist ? this.kc(tripHist.plan) : '',
         histReal: tripHist ? this.kc(tripHist.real) : '',
@@ -12217,18 +12224,30 @@ class Component extends DCLogic {
         { label: 'Útraty', value: '− ' + this.kc(spend), color: 'var(--g-fin-vydaj)' },
         { label: 'Zbývá', value: this.kc(income - spend), color: 'var(--g-acc)' }
       ],
+      // Bez rozpočtu tu nebylo nic — ani pruh, ani cesta, jak rozpočet získat.
+      finBezRozpoctu: !CATS.length && this.galerieNaServeru(),
+      finZalozRozpocet: () => {
+        if (this.state.finZakladam) return;
+        this.setState({ finZakladam: true });
+        window.GalerieApi.post('finance/rozpocet/zalozit', {}).then(res => {
+          if (res && window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data, res.prazdne);
+          this.setState({ finZakladam: false });
+          this.toast((res && res.zprava) || 'Rozpočet založen', { icon: 'ph-check-circle' });
+        }).catch(e => { this.setState({ finZakladam: false }); this.chybaServeru(e, 'Rozpočet se nepodařilo založit'); });
+      },
       finBars: CATS.map(c => {
         const sp = spentOf(c[0]);
-        const pct = Math.min(100, Math.round(sp / c[1] * 100));
+        // Kategorie s limitem 0 (nový rozpočet bez historie útrat) psala „NaN%“.
+        const pct = c[1] ? Math.min(100, Math.round(sp / c[1] * 100)) : sp > 0 ? 100 : 0;
         return {
-          label: c[0], meta: this.kc(sp) + ' z ' + this.kc(c[1]), pct: pct + '%',
+          label: c[0], meta: c[1] ? this.kc(sp) + ' z ' + this.kc(c[1]) : this.kc(sp) + ' · bez limitu', pct: pct + '%',
           color: pct >= 95 ? 'var(--g-mag)' : 'var(--g-acc)',
           rowBg: s.txCat2 === c[0] ? 'var(--g-panel)' : 'transparent',
           go: () => this.setState({ txCat2: s.txCat2 === c[0] ? null : c[0], txTrip: null })
         };
       }),
       txFilterOn: !!(s.txCat2 || s.txTrip),
-      txFilterLabel: s.txTrip ? 'Cesta: ' + TRIPS[s.txTrip].title : 'Kategorie: ' + s.txCat2,
+      txFilterLabel: s.txTrip ? 'Cesta: ' + (TRIPS[s.txTrip] ? TRIPS[s.txTrip].title : 'už neexistuje') : 'Kategorie: ' + s.txCat2,
       txClearFilter: () => this.setState({ txCat2: null, txTrip: null }),
       txCountLabel: this.pl(txFiltered.length, 'platba', 'platby', 'plateb'),
       txScopeLabel: s.txTrip ? 'celá cesta · ' + txFiltered.length : (s.txMonth === 'all' ? 'všechny měsíce · ' + txFiltered.length : mesNom + ' · ' + txFiltered.length),
@@ -12264,7 +12283,7 @@ class Component extends DCLogic {
         }
       })) : [],
       txDetailLinks: txOpen ? [
-        txOpen.trip && { icon: 'ph-airplane-tilt', label: 'Cesta', value: TRIPS[txOpen.trip].title, go: () => { this.setState({ tripId: txOpen.trip, tab: 'trips', sheet: null }); this.push('trip'); } },
+        txOpen.trip && TRIPS[txOpen.trip] && { icon: 'ph-airplane-tilt', label: 'Cesta', value: TRIPS[txOpen.trip].title, go: () => { this.setState({ tripId: txOpen.trip, tab: 'trips', sheet: null }); this.push('trip'); } },
         { icon: 'ph-chart-donut', label: 'Rozpočet', value: txOpen.cat, go: () => this.setState({ sheet: null, txCat2: txOpen.cat, txTrip: null }) },
         { icon: 'ph-images', label: 'Fotky z toho dne', value: txOpen.date, go: () => this.goTab('memories', { sheet: null }) }
       ].filter(Boolean) : [],

@@ -719,8 +719,7 @@ class Finance implements MaPrazdneKolekce, PoskytovatelObsahu
          * podle kterého obrazovka hlásila, že kategorie „vybočuje". Tady je to
          * skutečný průměr; kategorie bez historie má nulu a za anomálii se nebere.
          */
-        $pred = $dnes->startOfMonth()->subMonths(3);
-        $obvykle = array_map(fn (float $v) => $v / 3, $this->utracenoPoKategoriich($prostor, $pred, $dnes->startOfMonth()->subSecond()));
+        $obvykle = $this->obvykleUtraty($prostor, $dnes);
 
         $prijem = $this->mesicniPrijem($rozpocet);
         $plan = $naMesic((float) $limity->sum('amount'));
@@ -873,6 +872,21 @@ class Finance implements MaPrazdneKolekce, PoskytovatelObsahu
             ->orderBy('l.priority')
             ->orderByDesc('l.amount')
             ->get(['l.id', 'l.finance_category_id', 'l.amount', 'l.priority', 'k.name as nazev', 'k.icon as ikona']));
+    }
+
+    /**
+     * Průměrná měsíční útrata po kategoriích za tři celé měsíce před `$dnes`.
+     *
+     * Z téhož čísla vychází „obvyklá útrata" na obrazovce i odhad limitů
+     * u nově zakládaného rozpočtu — dva výpočty by se rozešly.
+     *
+     * @return array<int, float>
+     */
+    public function obvykleUtraty(GallerySpace $prostor, CarbonImmutable $dnes): array
+    {
+        $pred = $dnes->startOfMonth()->subMonths(3);
+
+        return array_map(fn (float $v) => $v / 3, $this->utracenoPoKategoriich($prostor, $pred, $dnes->startOfMonth()->subSecond()));
     }
 
     /** @return array<int, float> */

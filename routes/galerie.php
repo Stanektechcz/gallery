@@ -192,7 +192,9 @@ Route::middleware(['auth:sanctum', 'dvojice', 'throttle:120,1'])->prefix('api')-
         Route::post('transakce/{uuid}/rozdelit', [FinanceAkceController::class, 'rozdelit'])->whereUuid('uuid')->name('rozdelit');
         Route::post('platby', [FinanceAkceController::class, 'pridatPlatbu'])->name('platby.store');
         Route::post('platby/{uuid}/preskocit', [FinanceAkceController::class, 'preskocit'])->whereUuid('uuid')->name('platby.preskocit');
+        Route::post('rozpocet/zalozit', [FinanceAkceController::class, 'zalozRozpocet'])->name('rozpocet.zalozit');
         Route::post('rozpocet/limity', [FinanceAkceController::class, 'limity'])->name('limity');
+        Route::post('rozpocet/obalka', [FinanceAkceController::class, 'obalka'])->name('obalka');
         Route::post('rozpocet/presun', [FinanceAkceController::class, 'presun'])->name('presun');
         Route::post('rozpocet/puvodni', [FinanceAkceController::class, 'puvodniPlan'])->name('puvodni');
         Route::post('cile', [FinanceAkceController::class, 'pridatCil'])->name('cile.store');

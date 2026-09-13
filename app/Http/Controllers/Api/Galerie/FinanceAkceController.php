@@ -12,10 +12,12 @@ use App\Models\BudgetSettlement;
 use App\Models\FinanceAccess;
 use App\Models\FinanceCategory;
 use App\Models\FinanceRecurring;
+use App\Models\FinanceSettings;
 use App\Models\GallerySpace;
 use App\Models\Transaction;
 use App\Models\Wallet;
 use App\Services\Obsah\Finance;
+use App\Services\Obsah\FinanceRozbory;
 use App\Support\SpaceContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -373,6 +375,72 @@ class FinanceAkceController extends Controller
 
     // ——— rozpočet ———
 
+    /**
+     * Založení rozpočtu z obrazovky Rozpočty.
+     *
+     * Bez rozpočtu obrazovka radila „založte ho v Rozpočtech" — tedy sama na
+     * sebe — a limity, tlačítka − / + ani obálka neměly do čeho zapisovat.
+     * Limity se odhadnou z průměrné útraty tří celých měsíců (po stovkách
+     * nahoru); kategorie bez útrat začínají na nule. Odhad je zároveň
+     * „původní plán", ke kterému se dá vrátit.
+     */
+    public function zalozRozpocet(Request $request): JsonResponse
+    {
+        $prostor = $this->prostor($request);
+        $data = $request->validate(['prijem' => ['nullable', 'numeric', 'min:0', 'max:100000000']]);
+
+        $rozpocet = $this->aktualniRozpocet($prostor);
+
+        if ($rozpocet !== null && DB::table('budget_category_limits')->where('budget_id', $rozpocet->id)->exists()) {
+            return $this->chyba('Rozpočet už je založený — limity měňte u kategorií.');
+        }
+
+        if ($rozpocet !== null) {
+            abort_unless(FinanceAccess::smiUpravit('budget', $rozpocet->id, $rozpocet->owner_user_id, $request->user()->id), 403,
+                'Do tohohle rozpočtu se smíte dívat, ale ne v něm měnit.');
+        }
+
+        $obvykle = $this->obsah->obvykleUtraty($prostor, now()->toImmutable());
+        $kategorii = 0;
+
+        DB::transaction(function () use ($prostor, $request, $data, $obvykle, &$rozpocet, &$kategorii) {
+            FinanceCategory::nachystej($prostor->id);
+
+            $rozpocet ??= Budget::withoutGlobalScope(SpaceContext::SCOPE)->create([
+                'gallery_space_id' => $prostor->id,
+                'owner_user_id' => null,
+                'name' => 'Domácnost',
+                'currency' => FinanceSettings::proProstor($prostor->id)->home_currency ?: 'CZK',
+                'starts_on' => now()->startOfMonth()->toDateString(),
+                'period_mode' => 'rolling',
+                'budget_kind' => 'monthly',
+                'scope' => 'ledger',
+                'is_shared' => true,
+                'monthly_income' => isset($data['prijem']) ? round((float) $data['prijem'], 2) : null,
+                'created_by' => $request->user()->id,
+            ]);
+
+            $kategorie = FinanceCategory::withoutGlobalScope(SpaceContext::SCOPE)
+                ->where('gallery_space_id', $prostor->id)->where('kind', 'expense')->where('is_active', true)
+                ->orderBy('sort_order')->get(['id']);
+
+            foreach ($kategorie as $k) {
+                $odhad = (float) (ceil(($obvykle[$k->id] ?? 0) / 100) * 100);
+
+                DB::table('budget_category_limits')->insert([
+                    'budget_id' => $rozpocet->id, 'finance_category_id' => $k->id,
+                    'amount' => $odhad, 'baseline_amount' => $odhad, 'priority' => 50,
+                    'created_at' => now(), 'updated_at' => now(),
+                ]);
+                $kategorii++;
+            }
+
+            $this->log($prostor, $rozpocet, 'puvodni-odhad', null, null, null, $request);
+        });
+
+        return $this->hotovo($prostor, 'Rozpočet založen · '.$kategorii.' '.($kategorii === 1 ? 'kategorie' : ($kategorii < 5 ? 'kategorie' : 'kategorií')).' s odhadem z posledních tří měsíců', 201);
+    }
+
     /** Měsíční limity kategorií: `{ kategorie: částka za měsíc }`. */
     public function limity(Request $request): JsonResponse
     {
@@ -412,6 +480,62 @@ class FinanceAkceController extends Controller
         });
 
         return $this->hotovo($prostor, $zmeneno ? 'Plán uložen · změněno '.$zmeneno.' '.($zmeneno === 1 ? 'kategorie' : 'kategorií') : 'Plán už byl uložený takhle');
+    }
+
+    /**
+     * Obálka jen pro sebe: měsíční limit její kategorie.
+     *
+     * Obálka se pozná podle názvu kategorie (viz FinanceRozbory). Kdo ji ještě
+     * nemá, dostával na „Zvednout obálku" jen „zatím neumíme" — tady se
+     * kategorie založí rovnou, i s limitem.
+     */
+    public function obalka(Request $request): JsonResponse
+    {
+        [$prostor, $rozpocet] = $this->rozpocetKZapisu($request);
+        $data = $request->validate(['castka' => ['required', 'numeric', 'min:0', 'max:100000000']]);
+
+        $nove = round((float) $data['castka'] * max(1, $rozpocet->monthsCovered()), 2);
+        $zalozena = false;
+
+        $nazev = DB::transaction(function () use ($prostor, $rozpocet, $nove, $request, &$zalozena) {
+            $existujici = FinanceRozbory::osobniKategorie($prostor);
+            $kategorie = $existujici
+                ? FinanceCategory::withoutGlobalScope(SpaceContext::SCOPE)->findOrFail($existujici->id)
+                : null;
+
+            if ($kategorie === null) {
+                // Dřív smazaná obálka se vrátí — nová by narazila na jedinečný název.
+                $kategorie = FinanceCategory::withoutGlobalScope(SpaceContext::SCOPE)->withTrashed()->firstOrNew(
+                    ['gallery_space_id' => $prostor->id, 'name' => 'Obálka pro sebe', 'kind' => 'expense'],
+                    ['icon' => 'wallet', 'sort_order' => (int) FinanceCategory::withoutGlobalScope(SpaceContext::SCOPE)->where('gallery_space_id', $prostor->id)->max('sort_order') + 10],
+                );
+                $kategorie->is_active = true;
+                $kategorie->deleted_at = null;
+                $kategorie->save();
+                $zalozena = true;
+            }
+
+            $radek = DB::table('budget_category_limits')->where('budget_id', $rozpocet->id)->where('finance_category_id', $kategorie->id);
+            $puvodni = $radek->value('amount');
+
+            if ($puvodni === null) {
+                DB::table('budget_category_limits')->insert([
+                    'budget_id' => $rozpocet->id, 'finance_category_id' => $kategorie->id,
+                    'amount' => $nove, 'baseline_amount' => $nove, 'priority' => 50,
+                    'created_at' => now(), 'updated_at' => now(),
+                ]);
+            } elseif (abs((float) $puvodni - $nove) >= 0.01) {
+                $radek->update(['amount' => $nove, 'updated_at' => now()]);
+            } else {
+                return $kategorie->name;
+            }
+
+            $this->log($prostor, $rozpocet, 'rucne', $kategorie->id, $puvodni === null ? null : (float) $puvodni, $nove, $request);
+
+            return $kategorie->name;
+        });
+
+        return $this->hotovo($prostor, $zalozena ? 'Obálka založena — kategorie „'.$nazev.'“ v rozpočtu' : 'Limit obálky „'.$nazev.'“ uložen', $zalozena ? 201 : 200);
     }
 
     /** Přesun peněz mezi kategoriemi: limit jedné dolů, druhé nahoru — plán celkem se nemění. */

@@ -3593,6 +3593,9 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                   <div style="position:absolute; top:-5px; bottom:-5px; left:{{ budPaceMark }}; width:2px; background:var(--g-ink)"></div>
                 </div>
                 <p style="margin:11px 0 0; font-size:14.5px; line-height:1.6; color:var(--g-ink2); text-wrap:pretty">{{ budInsight }}</p>
+                <sc-if value="{{ budCanCreate }}">
+                  <button class="btn btn-primary" onClick="{{ budCreate }}" style="gap:7px; margin-top:12px"><i class="ph-duotone ph-plus-circle" style="font-size:16px"></i>Založit rozpočet</button>
+                </sc-if>
               </div>
 
               <div style="display:flex; flex-wrap:wrap; gap:44px; margin-top:38px; align-items:flex-start">
@@ -5660,7 +5663,8 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                   <div style="font-size:13px; color:var(--g-ink2)">{{ vmHead }}</div>
                   <sc-for list="{{ vmRows }}" as="v" hint-placeholder-count="3">
                     <div style="display:flex; gap:14px; align-items:center; padding:14px; border-radius:2px; background:var(--g-raise); outline:1px solid var(--g-line2); flex-wrap:wrap">
-                      <button onClick="{{ v.play }}" aria-label="Přehrát" style="width:44px; height:44px; flex:none; border:0; border-radius:50%; background:var(--g-ink); color:var(--g-bg); cursor:pointer; display:grid; place-items:center"><i class="ph-duotone {{ v.playIcon }}" style="font-size:18px"></i></button>
+                      <!-- Přehrává se přehrávačem pod titulkem; kulaté tlačítko Přehrát nemělo obsluhu. -->
+                      <div aria-hidden="true" style="width:44px; height:44px; flex:none; border-radius:50%; background:var(--g-panel); color:var(--g-ink2); display:grid; place-items:center"><i class="ph-duotone ph-microphone" style="font-size:18px"></i></div>
                       <div style="flex:1 1 260px; min-width:0">
                         <div style="display:flex; align-items:baseline; gap:9px; flex-wrap:wrap">
                           <span style="font-size:15.5px">{{ v.title }}</span>
@@ -5676,7 +5680,6 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                       <div style="display:flex; gap:4px; flex:none; flex-wrap:wrap">
                         <button class="btn btn-ghost" onClick="{{ v.toDiary }}" style="font-size:12.5px; gap:5px"><i class="ph-duotone ph-notebook" style="font-size:15px"></i>Do zápisu</button>
                         <button class="btn btn-ghost" onClick="{{ v.pin }}" aria-label="Připnout" title="Připnout mezi vzpomínky" style="font-size:12.5px"><i class="ph-duotone ph-push-pin" style="font-size:15px"></i></button>
-                        <button class="btn btn-ghost" onClick="{{ v.save }}" aria-label="Stáhnout přepis" title="Stáhnout přepis" style="font-size:12.5px"><i class="ph-duotone ph-download-simple" style="font-size:15px"></i></button>
                       </div>
                     </div>
                   </sc-for>
@@ -8043,7 +8046,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                       <i class="ph-duotone ph-caret-right" style="font-size:14px; color:var(--g-ink3)"></i>
                     </div>
                     <div style="height:6px; border-radius:2px; background:var(--g-line2); overflow:hidden">
-                      <div style="height:100%; width:{{ b.w }}; background:{{ b.color }}; transition:width .3s ease"></div>
+                      <div style="height:100%; width:{{ b.pct }}; background:{{ b.color }}; transition:width .3s ease"></div>
                     </div>
                   </button>
                 </sc-for>
@@ -13499,7 +13502,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
         <div style="display:flex; flex-direction:column; gap:7px; flex:none">
           <div style="font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--g-ink3)">Druh</div>
           <div style="display:flex; gap:6px; flex-wrap:wrap">
-            <sc-for list="{{ chgKinds }}" as="k" hint-placeholder-count="6">
+            <sc-for list="{{ evKinds }}" as="k" hint-placeholder-count="6">
               <button onClick="{{ k.go }}" aria-pressed="{{ k.on }}" style="display:flex; align-items:center; gap:6px; padding:6px 12px; border:1px solid {{ k.bd }}; border-radius:2px; background:{{ k.bg }}; color:{{ k.fg }}; cursor:pointer; font-family:inherit; font-size:13px">
                 <span style="width:7px; height:7px; border-radius:50%; background:{{ k.dot }}"></span>{{ k.label }}
               </button>
@@ -15369,7 +15372,11 @@ class Component extends DCLogic {
     const maxM = Math.max(1, ...BUD.months.map(m => m[1]));
     const sel = Math.min(s.budMonth === undefined ? BUD.months.length - 1 : s.budMonth, BUD.months.length - 1);
     const vybrany = BUD.months[sel] || ['', 0];
-    const status = c => c.spent > c.limit ? ['překročeno', 'var(--g-mag)', 'tag-accent-2']
+    // Bez rozpočtu server měsíc neposílá (prázdná kolekce) — úvod psal „Plán na , čerpání…“.
+    const mesicBud = BUD.month || ['leden', 'únor', 'březen', 'duben', 'květen', 'červen', 'červenec', 'srpen', 'září', 'říjen', 'listopad', 'prosinec'][this.dnes().getMonth()] + ' ' + this.dnes().getFullYear();
+    // Nově založený rozpočet má u kategorií bez útrat limit 0 — dělení nulou psalo „NaN %“.
+    const status = c => !c.limit && !c.spent ? ['bez limitu', 'var(--g-ink3)', 'tag-neutral']
+      : c.spent > c.limit ? ['překročeno', 'var(--g-mag)', 'tag-accent-2']
       : c.spent === c.limit ? ['vyčerpáno', 'var(--g-ink3)', 'tag-neutral']
       : c.spent / c.limit > 0.9 ? ['na hraně', 'var(--g-warn)', 'tag-neutral'] : ['v plánu', 'var(--g-acc)', 'tag-neutral'];
     const tabs = ['Měsíc', 'Kategorie', 'Vyhrazené částky', 'Pravidla a historie', 'Rok', 'Anomálie a vyrovnání', 'Cena času', 'Antimuzeum', 'Obálka jen pro sebe', 'Daň z odkladu', 'Rozpočet překvapení'];
@@ -15497,7 +15504,7 @@ class Component extends DCLogic {
       ...(tab === 9 ? this.delayVals() : {}),
       budIsSurp: tab === 10,
       ...(tab === 10 ? this.surpVals() : {}),
-      budMonthLabel: BUD.month,
+      budMonthLabel: mesicBud,
       budHeadline: [
         { label: 'Příjmy', value: this.kc(BUD.income), note: this.ukazka() ? 'dva účty, po srážkách' : 'podle rozpočtu' },
         { label: 'Plán výdajů', value: this.kc(plan), note: cats.length + ' kategorií' },
@@ -15507,12 +15514,36 @@ class Component extends DCLogic {
       budPaceWidth: Math.min(pctSpent, 100) + '%', budPaceMark: pctMonth + '%',
       budPaceColor: pctSpent > pctMonth + 12 ? 'var(--g-mag)' : 'var(--g-acc)',
       // Věta z čísel, ne „Nájem a energie odešly hned prvního" u každého rozpočtu.
-      budInsight: !cats.length ? 'Rozpočet zatím nemá kategorie — založte je v Rozpočtech a tady se ukáže tempo čerpání.'
+      budInsight: !cats.length ? 'Rozpočet zatím nemá kategorie. Založte ho — limity se odhadnou z útrat posledních tří měsíců a tady se ukáže tempo čerpání.'
         : 'Utraceno ' + pctSpent + ' % plánu, měsíc uplynul z ' + pctMonth + ' %.'
           + (fixed > 0 ? ' Bez nedotknutelných plateb jste na ' + pctNoFixed + ' %' + (pctNoFixed <= pctMonth ? ', tedy v tempu.' : ', tedy rychleji než měsíc.') : ''),
+      /*
+       * Založit rozpočet.
+       *
+       * Bez rozpočtu obrazovka radila „založte ho v Rozpočtech“ — tedy sama
+       * na sebe — a limity ani obálka neměly kam zapisovat.
+       */
+      budCanCreate: !cats.length && !this.ukazka(),
+      budCreate: () => {
+        if (!this.financeNaServeru()) { this.zatimNeumime('zakládání rozpočtu bez připojeného serveru'); return; }
+        this.setState({
+          confirmValue: '',
+          confirm: {
+            title: 'Založit rozpočet', input: 'Příjem domácnosti za měsíc (nepovinné)',
+            body: 'Vznikne společný měsíční rozpočet. Limity kategorií se odhadnou z průměrné útraty posledních tří měsíců — upravíte je tlačítky − / + u kategorií.',
+            cta: 'Založit rozpočet', btnBg: 'var(--g-acc)',
+            go: () => {
+              const prijem = this.castkaZTextu(this.state.confirmValue);
+              if (String(this.state.confirmValue || '').trim() && !(prijem >= 0)) { this.toast('Příjem zadejte jako částku, nebo nechte prázdné', { icon: 'ph-warning' }); return; }
+              this.setState({ confirm: null, confirmValue: null });
+              this.financeAkce('finance/rozpocet/zalozit', { prijem: prijem >= 0 ? prijem : null }, () => { if (window.GalerieObnovit) window.GalerieObnovit('rozbory'); });
+            }
+          }
+        });
+      },
       budSurplus: this.kc(BUD.income - plan), budSurplusNote: this.ukazka() ? 'Přebytek jde poslední den měsíce automaticky do spoření.' : 'Rozdíl mezi příjmem a plánem výdajů.',
       budDonut: segs, budDonutR: String(R), budDonutC: C.toFixed(1),
-      budDonutTotal: this.kc(spent), budDonutSub: 'utraceno v ' + BUD.month,
+      budDonutTotal: this.kc(spent), budDonutSub: 'utraceno · ' + mesicBud,
       budOverCount: over.length, budHasOver: over.length > 0,
       budOver: over.map(c => ({
         name: c.name, diff: '+ ' + this.kc(c.spent - c.limit),
@@ -15524,11 +15555,11 @@ class Component extends DCLogic {
         return {
           name: c.name, icon: c.icon, note: c.note, flag: c.flag, hasFlag: !!c.flag,
           spent: this.kc(c.spent), limit: this.kc(c.limit),
-          left: c.spent > c.limit ? 'přes limit o ' + this.kc(c.spent - c.limit) : 'zbývá ' + this.kc(c.limit - c.spent),
-          pct: Math.min(Math.round(c.spent / c.limit * 100), 100) + '%',
-          pctLabel: Math.round(c.spent / c.limit * 100) + ' %',
+          left: c.spent > c.limit ? 'přes limit o ' + this.kc(c.spent - c.limit) : !c.limit ? 'limit nastavíte tlačítkem +' : 'zbývá ' + this.kc(c.limit - c.spent),
+          pct: (c.limit ? Math.min(Math.round(c.spent / c.limit * 100), 100) : c.spent > 0 ? 100 : 0) + '%',
+          pctLabel: c.limit ? Math.round(c.spent / c.limit * 100) + ' %' : '—',
           color: st[1], state: st[0], stateClass: st[2],
-          less: () => this.setState({ budLimits: { ...s.budLimits, [c.i]: Math.max(500, c.limit - 500) } }),
+          less: () => this.setState({ budLimits: { ...s.budLimits, [c.i]: Math.max(0, c.limit - 500) } }),
           more: () => this.setState({ budLimits: { ...s.budLimits, [c.i]: c.limit + 500 } }),
           changed: c.limit !== BUD.cats[c.i][1],
           reset: () => { const n = { ...s.budLimits }; delete n[c.i]; this.setState({ budLimits: n }); },
@@ -19001,25 +19032,30 @@ class Component extends DCLogic {
         zero: m.k === 0 ? 'bez čerpání' : ''
       })),
       envVerdict: !ENV.months.length
-        ? 'Obálka zatím nemá žádný měsíc. Nastavte limit v Rozpočtech a čerpání se začne počítat.'
+        ? 'Obálka zatím nemá žádný měsíc. Nastavte jí limit tlačítkem „Zvednout obálku“ a čerpání se začne počítat.'
         : zeroK
           ? kM + ' · obálka nevyužitá ' + this.pl(zeroK, 'měsíc', 'měsíce', 'měsíců') + ' z ' + ENV.months.length + ', průměrně ' + podil(sumK, max) + ' % toho, na co je nárok. Nejsou to ušetřené peníze — je to zvyk nic si nedovolit, a v indexu zatížení se to pozná dřív než v rozpočtu.'
           : 'Oba obálku využívají. To je nudné číslo, které o vztahu říká hodně.',
       envAct: () => { this.setState({ route: 'x-klid', klTab: 'klBurn' }); this.toast('Nevyužitá obálka je jeden ze signálů v indexu zatížení', { icon: 'ph-heartbeat' }); },
       // Zvednout obálku = měsíční limit její kategorie v rozpočtu.
+      // Bez kategorie obálky tlačítko dřív hlásilo „zatím neumíme“ — server ji teď založí.
       envRaise: () => {
-        if (!this.financeNaServeru() || !ENV.kategorie) { this.zatimNeumime('zvednutí obálky bez rozpočtu na serveru'); return; }
+        if (!this.financeNaServeru()) { this.zatimNeumime('zvednutí obálky bez připojeného serveru'); return; }
+        const zalozit = !ENV.kategorie;
         this.setState({
           confirmValue: String(Math.round(limit * 1.2 / 100) * 100 || 1000),
           confirm: {
-            title: 'Obálka jen pro sebe', input: 'Nový limit na měsíc pro každého',
-            body: 'Limit kategorie „' + ENV.kategorie + '“ v rozpočtu. Platí pro oba stejně — obálka nemá odůvodnění ani kontrolu, na co šla.',
-            cta: 'Nastavit limit', btnBg: 'var(--g-acc)',
+            title: zalozit ? 'Založit obálku jen pro sebe' : 'Obálka jen pro sebe',
+            input: 'Limit na měsíc pro každého',
+            body: zalozit
+              ? 'V rozpočtu vznikne kategorie „Obálka pro sebe“ s tímhle limitem. Platí pro oba stejně — obálka nemá odůvodnění ani kontrolu, na co šla.'
+              : 'Limit kategorie „' + ENV.kategorie + '“ v rozpočtu. Platí pro oba stejně — obálka nemá odůvodnění ani kontrolu, na co šla.',
+            cta: zalozit ? 'Založit obálku' : 'Nastavit limit', btnBg: 'var(--g-acc)',
             go: () => {
               const castka = this.castkaZTextu(this.state.confirmValue);
               if (!(castka >= 0)) { this.toast('Zadejte částku', { icon: 'ph-warning' }); return; }
               this.setState({ confirm: null, confirmValue: null });
-              this.financeAkce('finance/rozpocet/limity', { limity: { [ENV.kategorie]: castka } }, () => { if (window.GalerieObnovit) window.GalerieObnovit('rozbory'); });
+              this.financeAkce('finance/rozpocet/obalka', { castka: castka }, () => { if (window.GalerieObnovit) window.GalerieObnovit('rozbory'); });
             }
           }
         });
@@ -26248,6 +26284,8 @@ class Component extends DCLogic {
             this.toast('Menu na týden vygenerováno', { icon: 'ph-magic-wand', undo: () => this.nastavMenu({ ckMenu: prev }) });
             return;
           }
+          // Prázdný deník nabízel „Přidat cokoliv“ a tlačítko jen hlásilo, že není co otevřít.
+          if (key === 'diary') { this.setState({ dnDlg: { mode: 'new', key: 'diary', orig: null, date: this.dnesCesky(), title: '', text: '', mood: 'radost' } }); return; }
           if (route) { this.setState({ route: route, appTab: 0 }); return; }
           this.toast('Zatím tu není co otevřít', { icon: 'ph-info' });
         }
