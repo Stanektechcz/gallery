@@ -285,6 +285,23 @@ JS,
              * Kopie mladší minuty se na pozadí neobnovuje; při rozjetých
              * hodinách (záporné nebo velké stáří) platí to, co dřív.
              */
+            /*
+             * „Zbytek" jen pro statické soubory.
+             *
+             * Paměť napřed (a s `ignoreSearch`) brala každý požadavek, který
+             * nebyl navigace ani `/api/`: sdílenou stránku `/s/…` a její fotky,
+             * stahování z odkazu i stránky starého rozhraní (Inertia). Zneplatněný
+             * odkaz tak v prohlížeči dvojice dál ukazoval fotky z paměti a staré
+             * rozhraní dostávalo o krok starší data.
+             */
+            "  // Zbytek (ikony, manifest, fonty, design systém): nejdřív z paměti.\n  e.respondWith((async () => {" => <<<'JS'
+  // Zbytek (ikony, manifest, fonty, design systém): nejdřív z paměti.
+  // Jen statické soubory — sdílená stránka, stahování a staré rozhraní jdou kolem workera.
+  if (/^\/s\//.test(url.pathname) || req.headers.get('X-Inertia')
+    || !/(\.(png|jpe?g|gif|svg|webp|avif|ico|woff2?|ttf|otf|css|js|mjs|webmanifest)$|^\/(_ds|build|icons|fonts)\/)/i.test(url.pathname)) return;
+  e.respondWith((async () => {
+JS,
+
             "    const hit = await caches.match(req, { ignoreSearch: true });\n    if (hit) {\n      fetch(req).then(r => { if (r.ok) caches.open(SHELL).then(c => c.put(req, r)); }).catch(() => {});\n      return hit;\n    }" => <<<'JS'
     const hit = await caches.match(req, { ignoreSearch: true, ignoreVary: true });
     if (hit) {

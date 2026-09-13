@@ -204,6 +204,22 @@ class DoruceniTest extends TestCase
     }
 
     /**
+     * Paměť workera jen pro statické soubory.
+     *
+     * Brala napřed z paměti každý požadavek mimo navigaci a `/api/` — i fotky
+     * sdílené stránky a stránky starého rozhraní. Zneplatněný odkaz tak dál
+     * ukazoval fotky z paměti.
+     */
+    public function test_worker_nedrzi_sdilene_stranky_ani_stare_rozhrani(): void
+    {
+        $worker = (string) $this->get('/sw.js')->assertOk()->getContent();
+
+        $this->assertStringContainsString("if (/^\\/s\\//.test(url.pathname) || req.headers.get('X-Inertia')", $worker);
+        // Náhrada musí stát před blokem „Zbytek", jinak by se nepoužila.
+        $this->assertLessThan(strpos($worker, 'const hit = await caches.match(req, { ignoreSearch: true, ignoreVary: true })'), strpos($worker, "req.headers.get('X-Inertia')"));
+    }
+
+    /**
      * Druhé stažení téhož dokumentu skončí 304.
      *
      * Běhové prostředí prototypu si dokument po startu stáhne ještě jednou;
