@@ -138,6 +138,13 @@ Route::middleware(['auth:sanctum', 'dvojice', 'throttle:120,1'])->prefix('api')-
      */
     Route::post('alba', [AlbaController::class, 'store'])->name('galerie.alba.store');
     Route::post('alba/zaradit', [AlbaController::class, 'zarad'])->name('galerie.alba.zaradit');
+    // Správa alba z panelu — dřív jen stav prohlížeče (viz AlbaController).
+    Route::patch('alba/{album}', [AlbaController::class, 'update'])->whereUuid('album')->name('galerie.alba.update');
+    Route::post('alba/{album}/presunout', [AlbaController::class, 'presun'])->whereUuid('album')->name('galerie.alba.presun');
+    Route::post('alba/{album}/titulni', [AlbaController::class, 'titulni'])->whereUuid('album')->name('galerie.alba.titulni');
+    Route::delete('alba/{album}', [AlbaController::class, 'destroy'])->whereUuid('album')->name('galerie.alba.destroy');
+    Route::post('alba/{album}/obnovit', [AlbaController::class, 'obnov'])->whereUuid('album')->name('galerie.alba.obnovit');
+    Route::post('alba/{album}/sloucit', [AlbaController::class, 'sluc'])->whereUuid('album')->name('galerie.alba.sloucit');
 
     /*
      * Objednávka tisku.
@@ -300,6 +307,7 @@ Route::middleware(['auth:sanctum', 'dvojice', 'throttle:600,1,media'])->prefix('
     Route::get('media/{uuid}/raw', [MediaController::class, 'raw'])->name('galerie.media.raw');
     Route::delete('media/{uuid}', [MediaController::class, 'destroy'])->name('galerie.media.destroy');
     Route::post('media/do-kose', [MediaController::class, 'destroyMany'])->name('galerie.media.destroy-many');
+    Route::post('media/{uuid}/uprava', [MediaController::class, 'uprava'])->name('galerie.media.uprava');
 });
 
 /*

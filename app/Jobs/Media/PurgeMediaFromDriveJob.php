@@ -10,6 +10,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Bus;
 
 class PurgeMediaFromDriveJob implements ShouldQueue
 {
@@ -21,7 +22,9 @@ class PurgeMediaFromDriveJob implements ShouldQueue
 
     public static function dispatch(MediaItem $media): void
     {
-        (new static($media->id, $media->drive_file_id))->onQueue('drive');
+        // Úloha se musí do fronty opravdu odeslat — samotné `new static(...)->onQueue()`
+        // ji jen sestavilo a zahodilo, takže změna na Google Disku nikdy neproběhla.
+        Bus::dispatch((new static($media->id, $media->drive_file_id))->onQueue('drive'));
     }
 
     public function handle(): void

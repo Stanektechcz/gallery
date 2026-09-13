@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Intervention\Image\Drivers\Gd\Driver as GdDriver;
 use Intervention\Image\Drivers\Imagick\Driver as ImagickDriver;
+use Intervention\Image\Encoders\WebpEncoder;
 use Intervention\Image\ImageManager;
 
 class ImageVariantService
@@ -56,7 +57,15 @@ class ImageVariantService
     public function generateVariant(MediaItem $mediaItem, string $sourcePath, string $type, array $config): ?MediaVariant
     {
         try {
-            $image = $this->manager()->read($sourcePath);
+            /*
+             * API Intervention Image 4.
+             *
+             * Volalo se `read()` a `toWebp()` z verze 3. Ve verzi 4 (ta je
+             * v composer.lock) ty metody nejsou — každá varianta skončila
+             * výjimkou, kterou `catch` níž jen zalogoval. Nahrané fotky tak
+             * neměly jediný náhled a mřížka stahovala originály.
+             */
+            $image = $this->manager()->decodePath($sourcePath);
             $image->scaleDown(width: $config['width']);
 
             $ext = 'webp'; // prefer WebP
@@ -68,7 +77,8 @@ class ImageVariantService
             $filename = "{$type}.{$ext}";
             $path = "{$dir}/{$filename}";
 
-            $encoded = $image->toWebp($config['quality']);
+            // `strip`: náhled nepotřebuje EXIF — a GPS v něm by šla ven se sdíleným odkazem.
+            $encoded = $image->encode(new WebpEncoder(quality: $config['quality'], strip: true));
             $contents = $encoded->toString();
             if (! Storage::disk('public')->put($path, $contents, 'public')) {
                 throw new \RuntimeException("Variantu se nepodařilo uložit: {$path}");
@@ -97,7 +107,7 @@ class ImageVariantService
     private function calculateBlurHashAndColor(MediaItem $mediaItem, string $sourcePath): void
     {
         try {
-            $image = $this->manager()->read($sourcePath);
+            $image = $this->manager()->decodePath($sourcePath);
             $image->scaleDown(width: 64); // tiny version for hash/color
 
             // Dominant color via simple pixel sampling
@@ -108,7 +118,7 @@ class ImageVariantService
 
             for ($x = 0; $x < $w; $x += $step) {
                 for ($y = 0; $y < $h; $y += $step) {
-                    $pixel = $image->pickColor($x, $y);
+                    $pixel = $image->colorAt($x, $y);
                     $colors[] = [$pixel->red()->value(), $pixel->green()->value(), $pixel->blue()->value()];
                 }
             }

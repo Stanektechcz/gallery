@@ -3,8 +3,8 @@
     "configurations": [
         {
             "name": "gallery",
-            "runtimeExecutable": "C:/php/php.exe",
-            "runtimeArgs": ["artisan", "serve", "--port=8765"],
+            "runtimeExecutable": "C:/Program Files/Git/bin/bash.exe",
+            "runtimeArgs": ["-c", "cd public && exec C:/php/php.exe -d extension=gd -S 127.0.0.1:8765 ../vendor/laravel/framework/src/Illuminate/Foundation/resources/server.php"],
             "port": 8765
         }
     ]

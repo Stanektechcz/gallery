@@ -14,6 +14,7 @@ use App\Models\GallerySpace;
 use App\Models\MediaItem;
 use App\Services\Billing\EntitlementService;
 use App\Services\Media\MediaFormatService;
+use App\Services\Media\UpravaFotky;
 use App\Support\SpaceContext;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
@@ -190,9 +191,22 @@ class MediaController extends Controller
 
         abort_if($media === null, 404, 'Takový soubor tu není.');
 
+        /*
+         * Velikost je součástí podpisu (`velikost=velky`), nedá se dopsat.
+         *
+         * Prohlížeč fotky kreslil tentýž 320px náhled jako mřížka, roztažený na
+         * celou obrazovku. Dokud náhledy nevznikaly (viz ImageVariantService),
+         * chodil místo něj originál a nebylo to vidět; s náhledy by byla každá
+         * otevřená fotka rozmazaná. Upravená verze (otočení, výřez) má přednost.
+         */
+        $poradi = $request->query('velikost') === 'velky'
+            ? ['edited_preview', 'large', 'medium', 'small', 'original', 'video_poster', 'thumbnail']
+            : ['edited_thumbnail', 'thumbnail', 'small', 'video_poster', 'original'];
+
         $varianta = $media->variants()
-            ->whereIn('type', ['thumbnail', 'small', 'video_poster', 'original'])
-            ->orderByRaw("CASE type WHEN 'thumbnail' THEN 0 WHEN 'small' THEN 1 WHEN 'video_poster' THEN 2 ELSE 3 END")
+            ->whereIn('type', $poradi)
+            ->get()
+            ->sortBy(fn ($v) => array_search($v->type, $poradi, true))
             ->first();
 
         abort_if($varianta === null, 404, 'Náhled ani originál na disku nejsou.');
@@ -266,6 +280,31 @@ class MediaController extends Controller
         ]);
 
         return response()->json(['id' => $media->uuid, 'status' => 'trashed']);
+    }
+
+    /**
+     * Otočení a výřez z prohlížeče fotky — viz `UpravaFotky`.
+     *
+     * `otoceni: 0, vyrez: false` vrací fotku k originálu.
+     */
+    public function uprava(Request $request, string $uuid): JsonResponse
+    {
+        $media = $this->najdi($request, $uuid);
+
+        $data = $request->validate([
+            'otoceni' => ['required', 'integer', 'between:-360,360'],
+            'vyrez' => ['required', 'boolean'],
+        ]);
+
+        abort_unless($media->media_type === 'photo', 422, 'Otáčet a ořezávat jde jen fotky.');
+
+        $hotovo = app(UpravaFotky::class)->uloz($media, (int) $data['otoceni'], (bool) $data['vyrez'], $request->user());
+
+        abort_unless($hotovo, 409, 'Originál tu aplikace nemá — upravit se dá, až se stáhne z Disku.');
+
+        AuditLog::record('media.edit', $media, ['otoceni' => (int) $data['otoceni'], 'vyrez' => (bool) $data['vyrez']]);
+
+        return response()->json(['id' => $media->uuid, 'upraveno' => (int) $data['otoceni'] % 360 !== 0 || (bool) $data['vyrez']]);
     }
 
     /**

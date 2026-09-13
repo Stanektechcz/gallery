@@ -6,6 +6,8 @@ use App\Http\Controllers\Api\Galerie\Concerns\UrcujePar;
 use App\Http\Controllers\Api\Galerie\Concerns\VraciObsah;
 use App\Http\Controllers\Controller;
 use App\Jobs\Drive\CreateDriveFolderJob;
+use App\Jobs\Drive\MoveDriveFolderJob;
+use App\Jobs\Drive\RenameDriveFolderJob;
 use App\Models\Album;
 use App\Models\AuditLog;
 use App\Models\GallerySpace;
@@ -129,6 +131,184 @@ class AlbaController extends Controller
         return response()->json([
             'ok' => true,
             'zprava' => 'Do alba „'.$album->title.'" zařazeno: '.$pocet,
+        ] + $this->obsahPoAkci($this->obsah, $prostor));
+    }
+
+    /*
+     * ——— Správa alba z jeho panelu ———
+     *
+     * Přejmenování, přesun, koš, titulní fotka i sloučení se v prototypu
+     * zapisovaly jen do stavu prohlížeče (`albName`, `albArchived`, …). Album
+     * v databázi, složka na Google Disku, sdílený odkaz i staré rozhraní o tom
+     * nevěděly — „Album přesunuto" nepřesunulo nic.
+     */
+
+    /** Název, místo, datum a popis alba. Nový název přejmenuje i složku na Disku. */
+    public function update(Request $request, string $album): JsonResponse
+    {
+        $prostor = GallerySpace::findOrFail($this->parId($request));
+        $data = $request->validate([
+            'nazev' => ['required', 'string', 'min:2', 'max:160'],
+            'misto' => ['nullable', 'string', 'max:160'],
+            'datum' => ['nullable', 'date'],
+            'popis' => ['nullable', 'string', 'max:5000'],
+        ]);
+
+        $radek = $this->vProstoru($prostor)->where('uuid', $album)->firstOrFail();
+        $nazev = trim($data['nazev']);
+
+        if ($nazev !== $radek->title) {
+            $radek->update(['sync_status' => 'pending']);
+
+            try {
+                RenameDriveFolderJob::dispatch($radek, $nazev);
+            } catch (\Throwable $e) {
+                Log::warning('Přejmenování složky alba na Disku se nepodařilo zařadit', ['album' => $radek->id, 'chyba' => $e->getMessage()]);
+            }
+        }
+
+        // Jen pole, která přišla: neposlané datum (rozsah, který klient neumí
+        // přečíst) nesmí smazat to uložené.
+        $zmeny = ['title' => $nazev];
+        foreach (['misto' => 'location_name', 'datum' => 'event_date_start', 'popis' => 'description'] as $pole => $sloupec) {
+            if ($request->exists($pole)) {
+                $zmeny[$sloupec] = $data[$pole] ?? null;
+            }
+        }
+
+        $this->alba->update($radek, $zmeny, $request->user());
+
+        AuditLog::record('album.update', $radek, ['title' => $nazev]);
+
+        return response()->json(['ok' => true, 'zprava' => 'Údaje alba uloženy'] + $this->obsahPoAkci($this->obsah, $prostor));
+    }
+
+    /** Přesun pod jiné album, nebo mezi hlavní alba (`rodic` prázdný). */
+    public function presun(Request $request, string $album): JsonResponse
+    {
+        $prostor = GallerySpace::findOrFail($this->parId($request));
+        $data = $request->validate(['rodic' => ['nullable', 'uuid']]);
+
+        $radek = $this->vProstoru($prostor)->where('uuid', $album)->firstOrFail();
+        $rodic = empty($data['rodic']) ? null : $this->vProstoru($prostor)->where('uuid', $data['rodic'])->first();
+
+        if (! empty($data['rodic']) && $rodic === null) {
+            return response()->json(['ok' => false, 'zprava' => 'Cílové album už neexistuje.'], 422);
+        }
+
+        try {
+            $radek->moveTo($rodic?->id);
+        } catch (\InvalidArgumentException) {
+            return response()->json(['ok' => false, 'zprava' => 'Album nejde vložit do sebe ani do svého podalba.'], 422);
+        }
+
+        try {
+            MoveDriveFolderJob::dispatch($radek, $rodic?->drive_folder_id);
+        } catch (\Throwable $e) {
+            Log::warning('Přesun složky alba na Disku se nepodařilo zařadit', ['album' => $radek->id, 'chyba' => $e->getMessage()]);
+        }
+
+        AuditLog::record('album.move', $radek, ['rodic' => $rodic?->uuid]);
+
+        return response()->json([
+            'ok' => true,
+            'zprava' => 'Album přesunuto'.($rodic ? ' do „'.$rodic->title.'"' : ' mezi hlavní alba'),
+        ] + $this->obsahPoAkci($this->obsah, $prostor));
+    }
+
+    /** Titulní fotka — jen fotka z téhož prostoru, ne z koše ani z trezoru. */
+    public function titulni(Request $request, string $album): JsonResponse
+    {
+        $prostor = GallerySpace::findOrFail($this->parId($request));
+        $data = $request->validate(['foto' => ['required', 'uuid']]);
+
+        $radek = $this->vProstoru($prostor)->where('uuid', $album)->firstOrFail();
+        $foto = $this->media($prostor, [$data['foto']])->whereNull('trashed_at')->where('is_hidden', false)->first();
+
+        if ($foto === null) {
+            return response()->json(['ok' => false, 'zprava' => 'Tahle fotka titulní být nemůže.'], 422);
+        }
+
+        DB::transaction(function () use ($radek, $foto) {
+            $radek->update(['cover_media_id' => $foto->id]);
+            DB::table('album_media')->where('album_id', $radek->id)->update(['is_cover' => false]);
+            DB::table('album_media')->where('album_id', $radek->id)->where('media_item_id', $foto->id)->update(['is_cover' => true]);
+        });
+
+        return response()->json(['ok' => true, 'zprava' => 'Titulní fotka alba změněna'] + $this->obsahPoAkci($this->obsah, $prostor));
+    }
+
+    /**
+     * Album pryč, fotky zůstávají v knihovně.
+     *
+     * Smazání je měkké a jde vrátit (`obnovit`). Album s podalby se nesmaže:
+     * podalba by zůstala viset pod albem, které není vidět.
+     */
+    public function destroy(Request $request, string $album): JsonResponse
+    {
+        $prostor = GallerySpace::findOrFail($this->parId($request));
+        $radek = $this->vProstoru($prostor)->where('uuid', $album)->firstOrFail();
+
+        if ($this->vProstoru($prostor)->where('parent_id', $radek->id)->exists()) {
+            return response()->json(['ok' => false, 'zprava' => 'Album má podalba — nejdřív je přesuňte nebo smažte.'], 422);
+        }
+
+        $this->alba->softDelete($radek, $request->user());
+
+        return response()->json(['ok' => true, 'zprava' => 'Album smazáno — fotky zůstaly v knihovně'] + $this->obsahPoAkci($this->obsah, $prostor));
+    }
+
+    public function obnov(Request $request, string $album): JsonResponse
+    {
+        $prostor = GallerySpace::findOrFail($this->parId($request));
+        $radek = Album::withoutGlobalScope(SpaceContext::SCOPE)->withTrashed()
+            ->where('gallery_space_id', $prostor->id)->where('uuid', $album)->firstOrFail();
+
+        $radek->restore();
+        AuditLog::record('album.restore', $radek);
+
+        return response()->json(['ok' => true, 'zprava' => 'Album vráceno'] + $this->obsahPoAkci($this->obsah, $prostor));
+    }
+
+    /** Sloučit do jiného alba: fotky se přesunou, prázdné album zmizí. */
+    public function sluc(Request $request, string $album): JsonResponse
+    {
+        $prostor = GallerySpace::findOrFail($this->parId($request));
+        $data = $request->validate(['do' => ['required', 'uuid']]);
+
+        $zdroj = $this->vProstoru($prostor)->where('uuid', $album)->firstOrFail();
+        $cil = $this->vProstoru($prostor)->where('uuid', $data['do'])->first();
+
+        if ($cil === null || $cil->id === $zdroj->id) {
+            return response()->json(['ok' => false, 'zprava' => 'Cílové album neexistuje.'], 422);
+        }
+
+        if ($this->vProstoru($prostor)->where('parent_id', $zdroj->id)->exists()) {
+            return response()->json(['ok' => false, 'zprava' => 'Album má podalba — nejdřív je přesuňte.'], 422);
+        }
+
+        $pocet = DB::transaction(function () use ($zdroj, $cil, $request) {
+            $fotky = DB::table('album_media')->where('album_id', $zdroj->id)->pluck('media_item_id');
+            $poradi = (int) DB::table('album_media')->where('album_id', $cil->id)->max('sort_order');
+
+            DB::table('album_media')->insertOrIgnore($fotky->values()->map(fn ($id, $i) => [
+                'album_id' => $cil->id, 'media_item_id' => $id, 'sort_order' => $poradi + $i + 1,
+                'is_cover' => false, 'added_at' => now(), 'added_by' => $request->user()->id,
+            ])->all());
+
+            MediaItem::withoutGlobalScope(SpaceContext::SCOPE)->where('primary_album_id', $zdroj->id)->update(['primary_album_id' => $cil->id]);
+            DB::table('album_media')->where('album_id', $zdroj->id)->delete();
+
+            $this->alba->softDelete($zdroj, $request->user());
+            $this->prepocitej([$cil->id, $zdroj->id]);
+
+            return $fotky->count();
+        });
+
+        return response()->json([
+            'ok' => true,
+            'zprava' => 'Sloučeno do „'.$cil->title.'" · přesunuto '.$pocet,
+            'album' => $cil->uuid,
         ] + $this->obsahPoAkci($this->obsah, $prostor));
     }
 

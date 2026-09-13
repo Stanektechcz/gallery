@@ -14091,6 +14091,14 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
             <i class="ph-duotone ph-warning-octagon" style="font-size:18px; color:var(--g-mag); flex:none"></i><span>{{ confirm.warn }}</span>
           </div>
         </sc-if>
+        <!-- Výběr cíle (přesun a sloučení alba) — dialog dřív říkal „Vyberte nové umístění" a výběr neměl. -->
+        <sc-if value="{{ confirmOptions }}">
+          <select class="input" value="{{ confirmPick }}" onChange="{{ confirmSetPick }}" aria-label="{{ confirm.title }}" style="width:100%; margin-top:4px">
+            <sc-for list="{{ confirmOptions }}" as="o" hint-placeholder-count="4">
+              <option value="{{ o.value }}">{{ o.label }}</option>
+            </sc-for>
+          </select>
+        </sc-if>
         <div class="dialog-actions">
           <button class="btn btn-secondary" onClick="{{ closeConfirm }}">Zrušit</button>
           <button class="btn btn-primary" onClick="{{ confirm.go }}" style="background:{{ confirm.btnBg }}">{{ confirm.cta }}</button>
@@ -28529,20 +28537,63 @@ class Component extends DCLogic {
         : this.toast('Z tohoto dne není co sdílet', { icon: 'ph-warning' })
     };
   }
+  /*
+   * Uložit otočení a výřez na serveru (fotka ze serveru, server připojený).
+   *
+   * `zVerze` obnoví starší verzi — pošle její celkové hodnoty. Bez něj se ke
+   * poslední uložené verzi přičte, co je teď v prohlížeči natočené.
+   * Vrací false, když se to týká ukázky nebo server není (chování prototypu).
+   */
+  upravaNaServeru(cur, zVerze) {
+    const s = this.state, api = window.GalerieApi;
+    if (!cur || !api || !api.post || api.mode !== 'http' || !/^[0-9a-f-]{36}$/.test(String(cur.id))) return false;
+    const id = cur.id, prevV = s.vers || {}, list = prevV[id] || [];
+    const posledni = list[list.length - 1] || { rot: 0, crop: false };
+    const otoceni = zVerze ? (zVerze.rot || 0) : ((posledni.rot || 0) + ((s.lbRot || {})[id] || 0)) % 360;
+    const vyrez = zVerze ? !!zVerze.crop : !!(posledni.crop || (s.lbCropOn || {})[id]);
+    if (s.lbEditBusy) return true;
+    this.setState({ lbEditBusy: true });
+    api.post('media/' + id + '/uprava', { otoceni, vyrez }).then(() => {
+      const note = [otoceni ? 'otočení ' + otoceni + '°' : null, vyrez ? 'výřez' : null].filter(Boolean).join(' · ') || 'originál';
+      const dalsi = zVerze
+        ? zVerze.seznam
+        : list.concat([{ label: 'Verze ' + (list.length + 2), meta: 'dnes · ' + note + ' · ' + this.krestni(this.meWho()), rot: otoceni, crop: vyrez }]);
+      this.setState({
+        lbEditBusy: false,
+        vers: { ...(this.state.vers || {}), [id]: dalsi },
+        // Server už fotku otočil — místní natočení by ji otočilo podruhé.
+        lbRot: { ...(this.state.lbRot || {}), [id]: 0 },
+        lbCropOn: { ...(this.state.lbCropOn || {}), [id]: false }
+      });
+      if (window.GalerieObnovit) window.GalerieObnovit('knihovna');
+      this.toast(zVerze ? (zVerze.label === 'Originál' ? 'Vráceno na originál' : (zVerze.label || 'Verze') + ' obnovena') : 'Úprava uložena · originál zůstává nedotčený', {
+        icon: zVerze ? 'ph-arrow-counter-clockwise' : 'ph-check-circle',
+        undo: zVerze ? undefined : () => this.upravaNaServeru(cur, { rot: posledni.rot || 0, crop: !!posledni.crop, seznam: list, label: 'Předchozí verze' })
+      });
+    }).catch(e => {
+      this.setState({ lbEditBusy: false });
+      this.toast((e && e.body && e.body.message) || 'Úpravu se nepodařilo uložit', { icon: 'ph-warning', color: 'var(--g-mag)' });
+    });
+    return true;
+  }
   verVals(cur) {
     const s = this.state;
     if (!cur) return { verList: [], verMeta: '' };
     const list = (s.vers || {})[cur.id] || [];
+    const naServeru = !!(window.GalerieApi && window.GalerieApi.mode === 'http' && /^[0-9a-f-]{36}$/.test(String(cur.id)));
     const rows = [{
       label: 'Originál ze zařízení', meta: 'nahráno ' + cur.dateShort + ' · ' + (cur.author || 'autor neznámý') + ' · nedotčený',
       icon: 'ph-cloud-check', iconColor: 'var(--g-ok)', bg: 'transparent',
-      isCurrent: list.length === 0, canRestore: false
+      // Na serveru jde k originálu vrátit — upravené verze se jen smažou.
+      isCurrent: list.length === 0, canRestore: naServeru && list.length > 0,
+      restore: () => this.upravaNaServeru(cur, { rot: 0, crop: false, seznam: [], label: 'Originál' })
     }].concat(list.map((v, i) => ({
       label: v.label, meta: v.meta,
       icon: 'ph-pencil-simple', iconColor: 'var(--g-acc)',
       bg: i === list.length - 1 ? 'var(--g-lb-btn)' : 'transparent',
       isCurrent: i === list.length - 1, canRestore: i !== list.length - 1,
       restore: () => {
+        if (this.upravaNaServeru(cur, { rot: v.rot || 0, crop: !!v.crop, seznam: list.slice(0, i + 1), label: v.label })) return;
         const prevV = s.vers || {}, prevR = s.lbRot || {}, prevC = s.lbCropOn || {};
         this.setState({
           vers: { ...prevV, [cur.id]: list.slice(0, i + 1) },
@@ -29377,6 +29428,31 @@ class Component extends DCLogic {
         ? 'Originál tohohle souboru na serveru není'
         : 'Stažení se nepodařilo', { icon: 'ph-warning', color: 'var(--g-mag)' }));
   };
+
+  /*
+   * Správa alba na serveru.
+   *
+   * Přejmenování, přesun, koš, titulní fotka i sloučení se zapisovaly jen do
+   * stavu prohlížeče (`albName`, `albArchived`, …): album v databázi, složka
+   * na Disku i sdílený odkaz o nich nevěděly. `albumNaServeru` říká, jestli
+   * jde o album ze serveru (uuid) a server je připojený; `albumAkce` pošle
+   * požadavek, převezme knihovnu z odpovědi a ohlásí, co řekl server.
+   */
+  albumNaServeru(album) {
+    const api = window.GalerieApi;
+    return !!(album && api && api.mode === 'http' && /^[0-9a-f-]{36}$/.test(String(album.id)));
+  }
+  albumAkce(zadost, hotovo) {
+    return zadost.then(res => {
+      if (res && window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data, res.prazdne);
+      if (hotovo) hotovo(res || {});
+      return res;
+    }).catch(e => {
+      const t = (e && e.body) || {};
+      const prvni = t.errors ? (Object.values(t.errors)[0] || [])[0] : null;
+      this.toast(t.zprava || t.message || prvni || 'Album se nepodařilo upravit', { icon: 'ph-warning', color: 'var(--g-mag)' });
+    });
+  }
 
   /*
    * Stažení celého alba jako jednoho archivu.
@@ -31657,13 +31733,43 @@ class Component extends DCLogic {
           undo: () => this.setState({ albFav: prev })
         });
       },
-      openMove: () => this.setState({ confirm: { title: 'Přesunout album', body: 'Vyberte nové umístění pro „' + album.name + '“. Album nelze vložit do sebe ani do svého podalba — taková místa nejsou v seznamu nabízená.', cta: 'Přesunout sem', btnBg: 'var(--g-acc)', go: () => { this.setState({ confirm: null }); this.toast('Album přesunuto', { undo: true }); } } }),
+      // Dialog sliboval výběr umístění, neměl ho a ohlásil „Album přesunuto" bez přesunu.
+      openMove: () => {
+        if (!this.albumNaServeru(album)) { this.zatimNeumime('přesun alba bez připojeného serveru'); return; }
+        const moznosti = [{ value: '', label: 'Mezi hlavní alba' }].concat(albums.filter(a => a.id !== album.id && this.albumNaServeru(a)).map(a => ({ value: a.id, label: a.path || a.name })));
+        this.setState({ confirmPick: '', confirm: {
+          title: 'Přesunout album', options: moznosti,
+          body: 'Kam má „' + album.name + '“ patřit? Do sebe ani do svého podalba album vložit nejde.',
+          cta: 'Přesunout sem', btnBg: 'var(--g-acc)',
+          go: () => {
+            const rodic = this.state.confirmPick || null;
+            this.setState({ confirm: null });
+            this.albumAkce(window.GalerieApi.post('alba/' + album.id + '/presunout', { rodic }), res => this.toast(res.zprava || 'Album přesunuto', { icon: 'ph-folder-simple' }));
+          }
+        } });
+      },
       albMenuOpen: !!s.albMenu,
       openAlbumMore: () => this.setState({ albMenu: !s.albMenu }),
       closeAlbumMenu: () => this.setState({ albMenu: false }),
       albMenuItems: [
         { label: 'Upravit údaje alba', icon: 'ph-pencil-simple', go: () => this.setState({ albMenu: false, abDlg: { id: album.id, name: album.name, place: album.place || '', date: album.date || '', desc: (s.albDesc || {})[album.id] || '' } }) },
-        { label: 'Změnit titulní fotku', icon: 'ph-image', go: () => { this.setState({ albMenu: false }); this.toast('Vyberte v mřížce fotku a potvrďte jako titulní', { icon: 'ph-image' }); } },
+        /*
+         * Titulní fotka: jedna označená fotka v albu se stane obálkou.
+         * Dřív jen rada „vyberte v mřížce a potvrďte" — potvrdit nebylo kde.
+         */
+        { label: 'Změnit titulní fotku', icon: 'ph-image', go: () => {
+          this.setState({ albMenu: false });
+          if (!this.albumNaServeru(album)) { this.zatimNeumime('titulní fotku bez připojeného serveru'); return; }
+          if ((s.sel || []).length !== 1) {
+            this.setState({ selectMode: true, sel: [] });
+            this.toast('Označte v albu jednu fotku a znovu zvolte „Změnit titulní fotku"', { icon: 'ph-image', silent: true });
+            return;
+          }
+          this.albumAkce(window.GalerieApi.post('alba/' + album.id + '/titulni', { foto: s.sel[0] }), res => {
+            this.setState({ sel: [], selectMode: false });
+            this.toast(res.zprava || 'Titulní fotka alba změněna', { icon: 'ph-image' });
+          });
+        } },
         { label: 'Duplikovat strukturu', icon: 'ph-copy', go: () => {
           const mine = s.myAlbums || [];
           const id = album.id + '-copy' + (mine.length + 1);
@@ -31671,13 +31777,48 @@ class Component extends DCLogic {
           this.setState({ myAlbums: [copy].concat(mine), albMenu: false, route: 'album', albumId: id });
           this.toast('Struktura zduplikována — fotky zůstaly v původním albu', { icon: 'ph-copy', undo: () => this.setState({ myAlbums: mine, route: 'album', albumId: album.id }) });
         } },
-        { label: 'Sloučit s jiným albem', icon: 'ph-arrows-merge', go: () => { this.setState({ albMenu: false }); this.toast('Vyberte cílové album — fotky se přesunou, prázdné album zmizí', { icon: 'ph-arrows-merge' }); } },
+        // Sloučení: dřív jen věta „vyberte cílové album" bez výběru i bez sloučení.
+        { label: 'Sloučit s jiným albem', icon: 'ph-arrows-merge', go: () => {
+          this.setState({ albMenu: false });
+          if (!this.albumNaServeru(album)) { this.zatimNeumime('sloučení alb bez připojeného serveru'); return; }
+          const moznosti = albums.filter(a => a.id !== album.id && this.albumNaServeru(a)).map(a => ({ value: a.id, label: a.path || a.name }));
+          if (!moznosti.length) { this.toast('Není s čím sloučit — jiné album zatím neexistuje', { icon: 'ph-info' }); return; }
+          this.setState({ confirmPick: moznosti[0].value, confirm: {
+            title: 'Sloučit album', options: moznosti,
+            body: 'Fotky z „' + album.name + '“ se přesunou do vybraného alba a „' + album.name + '“ zmizí. Fotky zůstanou v knihovně.',
+            cta: 'Sloučit', btnBg: 'var(--g-acc)',
+            go: () => {
+              const cil = this.state.confirmPick;
+              this.setState({ confirm: null });
+              this.albumAkce(window.GalerieApi.post('alba/' + album.id + '/sloucit', { do: cil }), res => {
+                this.setState({ route: 'album', albumId: res.album || cil });
+                this.toast(res.zprava || 'Alba sloučena', { icon: 'ph-arrows-merge' });
+              });
+            }
+          } });
+        } },
         { label: 'Archivovat album', icon: 'ph-archive', go: () => {
           const prev = s.albArchived || {};
           this.setState({ albArchived: { ...prev, [album.id]: true }, albMenu: false, route: 'albums' });
           this.toast('„' + album.name + '“ archivováno — zmizí z Alb, zůstane v Archivu', { icon: 'ph-archive', undo: () => this.setState({ albArchived: prev, route: 'album', albumId: album.id }) });
         } },
         { label: 'Přesunout do koše', icon: 'ph-trash', go: () => {
+          /*
+           * Album ze serveru se smaže doopravdy (fotky zůstávají) a „Zpět" ho vrátí.
+           * Dřív se jen schovalo v tomhle prohlížeči a hláška slibovala 30 dní v koši.
+           */
+          if (this.albumNaServeru(album)) {
+            const api = window.GalerieApi;
+            this.setState({ albMenu: false });
+            this.albumAkce(api.del('alba/' + album.id), res => {
+              this.setState({ route: 'albums' });
+              this.toast(res.zprava || 'Album smazáno — fotky zůstaly v knihovně', {
+                icon: 'ph-trash',
+                undo: () => this.albumAkce(api.post('alba/' + album.id + '/obnovit'), () => this.setState({ route: 'album', albumId: album.id }))
+              });
+            });
+            return;
+          }
           const prevTrash = s.trashRows, prevAlb = s.albArchived || {};
           const rows = (this._trashNow || []).slice();
           rows.unshift({ name: 'Album ' + album.name, from: album.path, by: this.meWho(), when: 'právě teď', left: '30 dní', n: album.n });
@@ -31698,6 +31839,23 @@ class Component extends DCLogic {
       abCant: !((s.abDlg || {}).name || '').trim(),
       abSave: () => {
         const d = s.abDlg; if (!d) return;
+        /*
+         * Údaje alba ze serveru jdou do databáze (a název i do složky na Disku).
+         * Dřív se přepsaly jen v tomhle prohlížeči. Datum se posílá, jen když
+         * se dá přečíst — rozsah „12. – 26. 7. 2026" server neumí a smazat
+         * datum kvůli tomu by bylo horší.
+         */
+        if (this.albumNaServeru({ id: d.id })) {
+          const m = /(\d{1,2})\.\s*(\d{1,2})\.\s*(\d{4})/.exec(d.date || '');
+          const telo = { nazev: (d.name || '').trim(), misto: d.place || null, popis: d.desc || null };
+          if (m) telo.datum = m[3] + '-' + String(m[2]).padStart(2, '0') + '-' + String(m[1]).padStart(2, '0');
+          else if (!(d.date || '').trim()) telo.datum = null;
+          this.albumAkce(window.GalerieApi.patch('alba/' + d.id, telo), res => {
+            this.setState({ abDlg: null });
+            this.toast(res.zprava || 'Údaje alba uloženy', { icon: 'ph-check-circle' });
+          });
+          return;
+        }
         const prevMine = s.myAlbums || [], prevDesc = s.albDesc || {}, prevName = s.albName || {};
         this.setState({
           albName: { ...prevName, [d.id]: { name: d.name.trim(), place: d.place, date: d.date } },
@@ -32307,6 +32465,9 @@ class Component extends DCLogic {
       })(),
 
       confirmOpen: !!s.confirm, confirm: s.confirm || {}, closeConfirm: () => this.setState({ confirm: null }),
+      confirmOptions: (s.confirm && s.confirm.options && s.confirm.options.length) ? s.confirm.options : null,
+      confirmPick: s.confirmPick || '',
+      confirmSetPick: e => this.setState({ confirmPick: e.target.value }),
       ...this.pinVals(),
       toastOpen: !!s.toast, toast: s.toast || {}, closeToast: () => this.setState({ toast: null }),
       undo: () => {
@@ -32364,6 +32525,8 @@ class Component extends DCLogic {
          * obsluhu, protože nebylo co ovládat.
          */
         hasVideo: !!(cur.isVideo && cur.video),
+        // Velký obrázek ze serveru (`full`), ne 320px náhled z mřížky roztažený přes obrazovku.
+        bg: cur.full || cur.bg,
         videoUrl: cur.video || '', posterUrl: cur.poster || '',
         videoPending: !!(cur.isVideo && !cur.video),
         videoNote: cur.pending ? 'Video se ještě zpracovává — až bude hotové, přehraje se tady.'
@@ -32584,6 +32747,16 @@ class Component extends DCLogic {
       },
       ...this.verVals(cur),
       lbSaveEdit: () => {
+        /*
+         * Úprava fotky ze serveru doopravdy.
+         *
+         * „Uloženo jako nová verze" byl zápis úhlu do stavu a otočení přes CSS
+         * jen v tomhle prohlížeči — mřížka, stažený soubor i sdílený odkaz
+         * ukazovaly fotku neotočenou. Server vyrobí upravenou verzi z originálu
+         * (`/uprava`), takže se posílá úhel **celkem** (poslední verze + to, co
+         * je teď v prohlížeči natočené), a místní natočení se pak vynuluje.
+         */
+        if (this.upravaNaServeru(cur)) return;
         const prev = s.edits, prevV = s.vers || {};
         const ed = { ...s.edits };
         ed[s.lb] = { ...(ed[s.lb] || {}), editedAt: 'dnes' };

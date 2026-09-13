@@ -11,7 +11,9 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Storage;
+use Intervention\Image\Direction;
 use Intervention\Image\Drivers\Gd\Driver as GdDriver;
+use Intervention\Image\Encoders\WebpEncoder;
 use Intervention\Image\ImageManager;
 
 class ApplyMediaEditJob implements ShouldQueue
@@ -24,9 +26,15 @@ class ApplyMediaEditJob implements ShouldQueue
 
     public function __construct(private readonly int $mediaItemId, private readonly int $mediaEditId) {}
 
+    /**
+     * Úloha se musí opravdu odeslat do fronty.
+     *
+     * Tady se jen sestavila (`new static(...)->onQueue()`) a zahodila — úprava
+     * z původního rozhraní se zapsala do `media_edits` a nikdy nezpracovala.
+     */
     public static function dispatch(MediaItem $media, MediaEdit $edit): void
     {
-        (new static($media->id, $edit->id))->onQueue('media');
+        dispatch((new static($media->id, $edit->id))->onQueue('media'));
     }
 
     public function handle(): void
@@ -48,14 +56,15 @@ class ApplyMediaEditJob implements ShouldQueue
             return;
         }
 
+        // API Intervention Image 4 (`decodePath`, `encode`) — `read`/`toWebp` z verze 3 tu nejsou.
         $manager = new ImageManager(new GdDriver);
-        $image = $manager->read($sourcePath);
+        $image = $manager->decodePath($sourcePath);
 
         foreach ($edit->operations_json as $op) {
             match ($op['type']) {
                 'rotate' => $image->rotate($op['degrees'] ?? 90),
-                'mirror_h' => $image->flip('h'),
-                'mirror_v' => $image->flip('v'),
+                'mirror_h' => $image->flip(Direction::HORIZONTAL),
+                'mirror_v' => $image->flip(Direction::VERTICAL),
                 'crop' => $image->crop(
                     $op['width'] ?? $image->width(),
                     $op['height'] ?? $image->height(),
@@ -68,7 +77,7 @@ class ApplyMediaEditJob implements ShouldQueue
 
         // Save as edited_preview variant
         $path = "variants/{$media->uuid}/edited_preview.webp";
-        $encoded = $image->toWebp(88);
+        $encoded = $image->encode(new WebpEncoder(quality: 88, strip: true));
         Storage::disk('public')->put($path, $encoded->toString());
 
         MediaVariant::updateOrCreate(

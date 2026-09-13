@@ -10,6 +10,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Log;
 
 class RenameDriveFolderJob implements ShouldQueue
@@ -27,7 +28,9 @@ class RenameDriveFolderJob implements ShouldQueue
 
     public static function dispatch(Album $album, string $newName): void
     {
-        (new static($album->id, $newName))->onQueue('drive');
+        // Úloha se musí do fronty opravdu odeslat — samotné `new static(...)->onQueue()`
+        // ji jen sestavilo a zahodilo, takže změna na Google Disku nikdy neproběhla.
+        Bus::dispatch((new static($album->id, $newName))->onQueue('drive'));
     }
 
     public function handle(): void

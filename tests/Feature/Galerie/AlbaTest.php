@@ -3,6 +3,8 @@
 namespace Tests\Feature\Galerie;
 
 use App\Jobs\Drive\CreateDriveFolderJob;
+use App\Jobs\Drive\MoveDriveFolderJob;
+use App\Jobs\Drive\RenameDriveFolderJob;
 use App\Models\Album;
 use App\Models\GallerySpace;
 use App\Models\MediaItem;
@@ -102,6 +104,107 @@ class AlbaTest extends TestCase
         $album = $this->postJson('/api/alba', ['nazev' => 'Moje', 'media' => [$ciziFoto->uuid]])->assertOk()->json('album');
         $this->assertSame(0, DB::table('album_media')->where('album_id', Album::where('uuid', $album)->value('id'))->count());
         $this->assertNull($ciziFoto->fresh()->primary_album_id);
+    }
+
+    // ——— správa alba z panelu (dřív jen stav prohlížeče) ———
+
+    /** Přejmenování jde do databáze i na Disk. */
+    public function test_udaje_alba_se_ulozi_a_slozka_na_disku_prejmenuje(): void
+    {
+        $album = $this->postJson('/api/alba', ['nazev' => 'Pálava'])->assertOk()->json('album');
+
+        $odpoved = $this->patchJson('/api/alba/'.$album, ['nazev' => 'Pálava 2026', 'misto' => 'Mikulov', 'datum' => '2026-09-05', 'popis' => 'Vinobraní'])
+            ->assertOk();
+
+        $radek = Album::where('uuid', $album)->sole();
+        $this->assertSame('Pálava 2026', $radek->title);
+        $this->assertSame('Mikulov', $radek->location_name);
+        $this->assertSame('Vinobraní', $radek->description);
+        $this->assertSame('2026-09-05', $radek->event_date_start->toDateString());
+        Queue::assertPushed(RenameDriveFolderJob::class);
+        $this->assertContains('Pálava 2026', collect($odpoved->json('data.ALBUMS'))->pluck('name')->all(), json_encode($odpoved->json('data.ALBUMS')));
+    }
+
+    public function test_presun_alba_a_zakaz_vlozit_do_podalba(): void
+    {
+        $morava = $this->postJson('/api/alba', ['nazev' => 'Morava'])->json('album');
+        $palava = $this->postJson('/api/alba', ['nazev' => 'Pálava'])->json('album');
+
+        $this->postJson('/api/alba/'.$palava.'/presunout', ['rodic' => $morava])->assertOk();
+        $this->assertSame(Album::where('uuid', $morava)->value('id'), Album::where('uuid', $palava)->value('parent_id'));
+        Queue::assertPushed(MoveDriveFolderJob::class);
+
+        // Morava do vlastního podalba nesmí.
+        $this->postJson('/api/alba/'.$morava.'/presunout', ['rodic' => $palava])->assertStatus(422);
+
+        // Zpět mezi hlavní alba.
+        $this->postJson('/api/alba/'.$palava.'/presunout', ['rodic' => null])->assertOk();
+        $this->assertNull(Album::where('uuid', $palava)->value('parent_id'));
+    }
+
+    public function test_titulni_fotka_jen_z_vlastni_viditelne_knihovny(): void
+    {
+        $foto = $this->fotka();
+        $skryta = $this->fotka(['is_hidden' => true]);
+        $album = $this->postJson('/api/alba', ['nazev' => 'Pálava', 'media' => [$foto->uuid, $skryta->uuid]])->json('album');
+
+        $this->postJson('/api/alba/'.$album.'/titulni', ['foto' => $foto->uuid])->assertOk();
+        $this->assertSame($foto->id, Album::where('uuid', $album)->value('cover_media_id'));
+
+        $this->postJson('/api/alba/'.$album.'/titulni', ['foto' => $skryta->uuid])->assertStatus(422);
+        $this->assertSame($foto->id, Album::where('uuid', $album)->value('cover_media_id'));
+    }
+
+    public function test_smazani_alba_nechá_fotky_a_jde_vratit(): void
+    {
+        $foto = $this->fotka();
+        $album = $this->postJson('/api/alba', ['nazev' => 'Pálava', 'media' => [$foto->uuid]])->json('album');
+
+        $this->deleteJson('/api/alba/'.$album)->assertOk();
+        $this->assertSoftDeleted('albums', ['uuid' => $album]);
+        $this->assertNull($foto->fresh()->trashed_at, 'Fotky alba zůstávají v knihovně.');
+
+        $this->postJson('/api/alba/'.$album.'/obnovit')->assertOk();
+        $this->assertNotSoftDeleted('albums', ['uuid' => $album]);
+    }
+
+    public function test_album_s_podalby_se_nesmaze(): void
+    {
+        $rodic = $this->postJson('/api/alba', ['nazev' => 'Morava'])->json('album');
+        $this->postJson('/api/alba', ['nazev' => 'Pálava', 'rodic' => $rodic])->assertOk();
+
+        $this->deleteJson('/api/alba/'.$rodic)->assertStatus(422);
+        $this->assertNotSoftDeleted('albums', ['uuid' => $rodic]);
+    }
+
+    public function test_slouceni_presune_fotky_a_zdroj_zmizi(): void
+    {
+        $a = $this->fotka();
+        $b = $this->fotka();
+        $zdroj = $this->postJson('/api/alba', ['nazev' => 'Pálava', 'media' => [$a->uuid]])->json('album');
+        $cil = $this->postJson('/api/alba', ['nazev' => 'Morava', 'media' => [$b->uuid]])->json('album');
+
+        $this->postJson('/api/alba/'.$zdroj.'/sloucit', ['do' => $cil])->assertOk()->assertJsonPath('album', $cil);
+
+        $cilId = Album::where('uuid', $cil)->value('id');
+        $this->assertSame(2, DB::table('album_media')->where('album_id', $cilId)->count());
+        $this->assertSame($cilId, $a->fresh()->primary_album_id);
+        $this->assertSoftDeleted('albums', ['uuid' => $zdroj]);
+        $this->assertSame(2, (int) Album::where('uuid', $cil)->value('media_count'));
+    }
+
+    public function test_cizi_album_spravovat_nejde(): void
+    {
+        $cizi = User::factory()->create();
+        $ciziProstor = GallerySpace::create(['name' => 'Cizí', 'owner_id' => $cizi->id]);
+        $ciziAlbum = Album::withoutGlobalScopes()->create([
+            'uuid' => (string) Str::uuid(), 'gallery_space_id' => $ciziProstor->id, 'title' => 'Cizí', 'slug' => 'cizi-sprava',
+            'created_by' => $cizi->id,
+        ]);
+
+        $this->patchJson('/api/alba/'.$ciziAlbum->uuid, ['nazev' => 'Moje'])->assertNotFound();
+        $this->deleteJson('/api/alba/'.$ciziAlbum->uuid)->assertNotFound();
+        $this->assertSame('Cizí', $ciziAlbum->fresh()->title);
     }
 
     private function fotka(array $navic = []): MediaItem

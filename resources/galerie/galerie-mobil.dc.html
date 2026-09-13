@@ -4745,7 +4745,13 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
             </div>
             <div style="flex:1; min-height:0; display:flex; align-items:center; gap:4px; padding:0 6px">
               <button onClick="{{ lbPrev }}" aria-label="Předchozí" style="flex:none; width:44px; height:80px; border:0; background:transparent; cursor:pointer; color:rgba(255,255,255,.7)"><i class="ph-duotone ph-caret-left" style="font-size:24px"></i></button>
-              <div style="flex:1; height:70%; border-radius:2px; background:{{ lb.bg }}"></div>
+              <!-- Video se přehraje (dřív tu byl jen obrázek), fotka je velký obrázek ze serveru. -->
+              <sc-if value="{{ lb.hasVideo }}">
+                <video src="{{ lb.videoUrl }}" poster="{{ lb.posterUrl }}" controls playsinline preload="metadata" aria-label="Video" style="flex:1; min-width:0; height:70%; border-radius:2px; background:#000; object-fit:contain"></video>
+              </sc-if>
+              <sc-if value="{{ lb.noVideo }}">
+                <div style="flex:1; height:70%; border-radius:2px; background:{{ lb.bg }}"></div>
+              </sc-if>
               <button onClick="{{ lbNext }}" aria-label="Další" style="flex:none; width:44px; height:80px; border:0; background:transparent; cursor:pointer; color:rgba(255,255,255,.7)"><i class="ph-duotone ph-caret-right" style="font-size:24px"></i></button>
             </div>
             <sc-if value="{{ lbPanelOn }}">
@@ -12249,11 +12255,15 @@ class Component extends DCLogic {
       // lightbox
       lbOn: !!lbP,
       lb: lbP ? {
-        bg: this.bg(lbP.seed),
+        // Otevřená fotka byla barevný přechod z pořadového čísla (`bg(seed)`),
+        // ne fotka. Velký obrázek ze serveru, jinak aspoň náhled z mřížky.
+        bg: lbP.full || this.tlo(lbP),
+        hasVideo: !!(lbP.video && lbP.play), noVideo: !(lbP.video && lbP.play),
+        videoUrl: lbP.play || '', posterUrl: lbP.poster || '',
         meta: lbP.day + ' · ' + lbP.place + (this.spotOf(lbP) ? ' · ' + this.spotOf(lbP) : ''),
         favIcon: this.isFav(lbP) ? 'ph-heart-straight-fill' : 'ph-heart-straight',
         favColor: this.isFav(lbP) ? 'var(--g-mag)' : '#fff'
-      } : { bg: 'none', meta: '', favIcon: 'ph-heart-straight', favColor: '#fff' },
+      } : { bg: 'none', meta: '', favIcon: 'ph-heart-straight', favColor: '#fff', hasVideo: false, noVideo: true, videoUrl: '', posterUrl: '' },
       lbClose: () => this.setState({ lb: null }),
       lbPrev: () => lbStep(-1), lbNext: () => lbStep(1),
       lbFav: () => { if (!lbP) return; const was = this.isFav(lbP); this.setState({ favs: Object.assign({}, s.favs, { [lbP.id]: !was }) }); this.toast(was ? 'Odebráno z oblíbených' : 'Přidáno do oblíbených', { icon: 'ph-heart-straight' }); },

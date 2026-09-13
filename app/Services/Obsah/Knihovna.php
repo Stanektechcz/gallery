@@ -48,6 +48,12 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
     /** Které snímky mají zmenšeninu; `media_item_id => ano/ne`. */
     private array $nahledy = [];
 
+    /** Má snímek uloženou upravenou verzi (otočení, výřez); `media_item_id => true`. */
+    private array $upraveno = [];
+
+    /** Kdy se naposledy měnily úpravy snímku (i návrat k originálu); `media_item_id => unix čas`. */
+    private array $verzeUpravy = [];
+
     /** Co si přihlášený člověk označil jako oblíbené; `media_item_id => true`. */
     private array $oblibene = [];
 
@@ -108,7 +114,11 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
         // Prázdná knihovna nechává ukázku: prázdná mřížka a rozbitá aplikace
         // vypadají z pohledu člověka stejně.
         if ($media->isEmpty()) {
-            return [];
+            // Alba ale existovat můžou i bez fotek (založená dopředu, nebo po
+            // vyhození všech fotek do koše) — bez nich by nové album nebylo vidět.
+            $alba = $this->alba($prostor);
+
+            return $alba ? ['ALBUMS' => $alba, 'ATREE' => $this->strom($alba)] : [];
         }
 
         $this->nactiOblibene($media);
@@ -317,6 +327,10 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
                 'caption' => (string) ($m->caption ?? ''),
                 // Skutečný náhled místo barevného přechodu.
                 'bg' => $this->nahled($m),
+                // A velký obrázek pro prohlížeč fotky (`velky()`).
+                'full' => $this->velky($m),
+                // Otočení nebo výřez uložené na serveru — prohlížeč pak nic neotáčí sám.
+                'upraveno' => isset($this->upraveno[$m->id]) ?: null,
                 'tags' => $stitky[$m->id] ?? [],
                 'sync' => match ($m->status) {
                     'failed' => 'error',
@@ -445,7 +459,8 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
             // Obálka alba; bez ní si prototyp dokreslí barevný přechod z `n`.
             'bg' => $a->cover ? $this->nahled($a->cover) : null,
             // Celá cesta, ne jen jméno: prototyp ji kreslí jako „Chorvatsko → Zadar".
-            'path' => $a->full_display_path ?: $a->title,
+            // Oddělovač, jaký prototyp čte (drobečková navigace dělí podle „ → "); v databázi je „ / ".
+            'path' => str_replace(' / ', ' → ', $a->full_display_path ?: $a->title),
             'date' => $this->rozsah($a),
             'place' => $a->location_name ?: ($a->event_place_name ?: ''),
             'count' => $this->pocet((int) $a->media_count, 'položka', 'položky', 'položek'),
@@ -992,6 +1007,10 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
                 'fav' => $f['fav'],
                 'seed' => $f['n'],
                 'bg' => $f['bg'],
+                'full' => $f['full'] ?? null,
+                // Přehrání videa: telefon měl u videa jen obrázek, přehrát ho nešlo.
+                'play' => $f['video'] ?? null,
+                'poster' => $f['poster'] ?? null,
                 /*
                  * Kdo to nahrál a čím.
                  *
@@ -1029,13 +1048,38 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
             return $this->prechod((int) $m->id);
         }
 
-        $adresa = URL::temporarySignedRoute(
+        return "url('".$this->adresaNahledu($m, false)."') center/cover no-repeat #2b2842";
+    }
+
+    /**
+     * Velký obrázek pro prohlížeč fotky — `contain`, aby se nic neořízlo.
+     *
+     * Prohlížeč na počítači kreslil tentýž 320px náhled jako mřížka a na
+     * telefonu dokonce jen barevný přechod z pořadového čísla. Null, když
+     * soubor k zobrazení není (prohlížeč pak použije `bg`).
+     */
+    private function velky(object $m): ?string
+    {
+        return $this->maNahled($m)
+            ? "url('".$this->adresaNahledu($m, true)."') center/contain no-repeat #111"
+            : null;
+    }
+
+    /**
+     * Podepsaná adresa náhledu. `v` je okamžik poslední úpravy fotky: po
+     * otočení se adresa změní a prohlížeč si nepodrží starý obrázek z paměti.
+     */
+    private function adresaNahledu(object $m, bool $velky): string
+    {
+        return URL::temporarySignedRoute(
             'galerie.media.thumb',
             CarbonImmutable::tomorrow()->endOfDay(),
-            ['uuid' => $m->uuid],
+            array_filter([
+                'uuid' => $m->uuid,
+                'velikost' => $velky ? 'velky' : null,
+                'v' => $this->verzeUpravy[$m->id] ?? null,
+            ]),
         );
-
-        return "url('".$adresa."') center/cover no-repeat #2b2842";
     }
 
     /**
@@ -1129,12 +1173,33 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
             return;
         }
 
-        $maji = DB::table('media_variants')
+        $varianty = DB::table('media_variants')
             ->whereIn('media_item_id', $id)
-            ->whereIn('type', ['thumbnail', 'small', 'video_poster', 'original'])
-            ->distinct()
-            ->pluck('media_item_id')
-            ->all();
+            ->whereIn('type', ['thumbnail', 'small', 'video_poster', 'original', 'edited_thumbnail'])
+            ->get(['media_item_id', 'type', 'updated_at']);
+
+        $maji = $varianty->pluck('media_item_id')->unique()->all();
+
+        foreach ($varianty->where('type', 'edited_thumbnail') as $v) {
+            $this->upraveno[(int) $v->media_item_id] = true;
+        }
+
+        /*
+         * Verze do adresy náhledu: poslední zásah do úprav, i návrat k originálu.
+         *
+         * Kdyby se brala jen existující upravená verze, měla by fotka po návratu
+         * k originálu zase adresu z doby před úpravou — a tu si prohlížeč mezitím
+         * uložil i s upraveným obrázkem.
+         */
+        if (Schema::hasTable('media_edits')) {
+            DB::table('media_edits')->whereIn('media_item_id', $id)
+                ->groupBy('media_item_id')
+                ->selectRaw('media_item_id, MAX(created_at) as naposledy')
+                ->get()
+                ->each(function ($r) {
+                    $this->verzeUpravy[(int) $r->media_item_id] = strtotime((string) $r->naposledy) ?: 1;
+                });
+        }
 
         foreach ($id as $jeden) {
             $this->nahledy[$jeden] = in_array($jeden, $maji, true);
