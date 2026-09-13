@@ -24,6 +24,9 @@ Nasazení samo spustí tři nové migrace:
 `composer.lock` se změnil (league/commonmark 2.10.1), deploy proto spustí
 `composer install`.
 
+Třetí kolo (bod 2c) přidává jednu migraci: `add_note_to_transactions`
+(sloupec `note` u plateb — poznámka k platbě z galerie).
+
 Druhé kolo (galerie, viz bod 2b) žádnou migraci nepřidává. Po nasazení je ale
 potřeba **jednou dogenerovat náhledy** — do té doby se chodily vydávat originály
 (náhledy kvůli chybě v Intervention Image 4 nevznikaly vůbec):
@@ -61,6 +64,11 @@ php artisan gallery:thumbnails
 - **Smazání vzkazu hosta a sloučení osob se ptá** — obojí je natrvalo.
 - **Fotka přesunutá do trezoru přestane být vidět všude hned** — i přes
   odkazy vydané dřív (oblíbené, archiv, chat, sdílená stránka).
+- **Nový zápis deníku na počítači začíná jako soukromý** (jako v aplikaci);
+  sdílí se zrušením zaškrtnutí. Dopis do budoucnosti se ukládá jako časová kapsle.
+- **Trezor na telefonu chce heslo do galerie** (dřív tlačítko „Face ID" bez ověření).
+- **Nastavení ukazuje jen to, co funguje** — sekce Import, Ticho a Konec
+  aplikace u dvojice nejsou; jméno, e-mail, heslo a fotka se mění přímo tam.
 
 ---
 
@@ -125,6 +133,34 @@ a úkolu, hláška bez účtu u platby.
 
 ---
 
+## 2c. Třetí kolo — žádná tlačítka naprázdno (13. 9. večer)
+
+Cíl: žádná hláška „uloženo / odesláno / sloučeno", za kterou se nic nestalo,
+žádná ukázková data u dvojice, žádné prázdné klepnutí.
+
+| Commit | Obsah |
+|---|---|
+| `80a42210` | Finance z galerie do knihy (poznámka, rozpočet, opakování, rozdělení, plánované platby, převody, limity, cíle, vklady, vyrovnání), sdílení cyklu v databázi, tisk, připomínka druhému do telefonu, úpravy fotky z telefonu |
+| `9ca26e4d` | Místa (nový cíl, „byli jsme", poznámka), cesty (výdaj, bod programu, posun), dárky a zbylé „zatím neumíme" |
+| `fc118fb0` | **Deník na počítači do databáze** (nový, úprava, smazání; cizí soukromý zápis nejde změnit ani najít; smazaný se nevrací), hlasovky přehrávají skutečnou nahrávku a mažou se na serveru, **sloučení štítků**, poděkování za práci v domácnosti upozorněním, detail řádku místo prázdné hlášky, administrace bez falešného seznamu |
+| `7f3a1170` | **Telefon:** trezor odemyká server heslem (dřív „Face ID" bez ověření), domácnost / rozhodnutí / sliby / rodina / žádosti / kapsle se ukládají, inbox a nákupní seznam do databáze, skutečný export (tisk fotoknihy, ZIP originálů, CSV plateb, itineráře), synchronizace a offline bez simulace, instalace a upozornění doopravdy |
+| `e65a6a7a` | **Nastavení ze skutečného stavu** (jméno a e-mail, heslo, profilová fotka přes API účtu; úložiště, odkazy a zařízení spočítané; sekce bez funkce pryč), balíček k odchodu bez vymyšlené velikosti |
+| `0a203b84` | U dvojice se nedá „prohlížet jako druhý" (dárky, první spuštění) |
+
+Nové cesty API: `POST|PATCH|DELETE denik`, `POST stitky/sloucit`,
+`POST pripomenout` (s `druh: podekovani`), `finance/*`, `mista*`,
+`cesty/{id}/vydaj|program`, `cesty/program/{id}/posunout`. Galerie nově volá
+i existující `PATCH v1/profil`, `PUT v1/profil/heslo`, `POST v1/avatar`
+a `DELETE v1/voice-notes/{uuid}`.
+
+Testy: **1345 PHP testů**, všechny prošly. V prohlížeči ověřeno na vývojovém
+serveru: deník (nový soukromý → sdílený → smazaný), přehrání hlasovky, trezor
+na telefonu se špatným heslem, nákupní seznam z telefonu až do databáze
+a zpět, inbox z telefonu, jméno v nastavení, chybné současné heslo, detail
+řádku seznamu.
+
+---
+
 ## 3. Známé nedostatky — bezpečnost
 
 Seřazeno podle rizika. Nic z toho není aktivně zneužitelné bez jiné chyby,
@@ -168,41 +204,25 @@ ale každá položka zmenšuje, co by jedna chyba napáchala.
 
 ## 4. Funkce, které aplikace poctivě hlásí jako „zatím neumíme"
 
-Tlačítka neříkají, že se něco stalo, ale přiznají to. Tady je, co za nimi
-chybí. **Tučně** jsou ty, pro které už backend existuje (starší API `v1`)
-a stačí je napojit — nejlevnější výhra.
+Tlačítka neříkají, že se něco stalo, ale přiznají to. Po třetím kole (2c)
+zůstává u dvojice jen to, co potřebuje napojení na cizí službu nebo vlastní
+návrh — většina hlášek „bez připojeného serveru" platí jen pro ukázku.
 
-### Finance (největší mezera)
-- **Plánované platby: přidat, přeskočit** — `v1/rozpocet/pravidelne`
-- **Přesun peněz mezi kategoriemi** — `v1/rozpocet/rozpocty/{uuid}/prerozdelit`
-- **Poznámka u transakce** — `PATCH v1/rozpocet/transakce/{uuid}` (vyžaduje úplná pole)
-- **Import výpisu a pravidla zařazování** — `v1/banking/imports`, `v1/banking/rules`
-- Rozdělení jedné platby do víc kategorií (sdílené podíly v knize jsou, UI ne)
-- Označení platby za opakovanou, skrytí transakce z rozpočtu
-- Vyhrazené částky: založení a vklady; zvednutí obálky
-- Automatické stahování z banky, investice, rebalance
-- Dárek zapsaný rovnou do Financí, schválená rozvaha jako výdaj
+### Potřebuje cizí službu
+- Automatické stahování transakcí a napojení banky (výpis jde importovat)
+- Investice: zakládání pozic, nákup, rebalance
+- Dvoufázové přihlášení se zapíná ve starém rozhraní — v galerii je jen jeho
+  stav (zapnutí potřebuje QR kód ověřovací aplikace)
 
-### Cesty a místa
-- **Přidání místa do itineráře, posouvání programu dne** — `ItineraryController` existuje
-- Duplikace cesty, export itineráře, poznámky k místu, export do mapy
-
-### Galerie (zbývá)
-- Úpravy fotky z telefonu (otočení a výřez jsou zatím jen na počítači)
-- Přidání osoby na fotku ručně (rozpoznávání tváří aplikace nemá — návrhy
-  osob jsou prázdné a je to tak správně)
-- Sdílení cesty odkazem (sdílet jde fotky, výběr a alba)
-- Offline režim na počítači je jen přepínač v rozhraní; skutečná fronta
-  offline zápisů je v `galerie-api.js` a service workeru
-
-### Ostatní
-- Přidání do itineráře z telefonu (na počítači v detailu cesty)
-- Vyrovnání mezi partnery jako záznam v knize (dnes jen „označeno jako vyrovnané" pro měsíc)
-- Tiskové PDF (kniha, list, karta receptu)
-- Připomínky k rodinným kontaktům a k dárku, připomínka druhému z telefonu
-- Album pro rodinu s hlasovým vzkazem
-- Zakládání pravidel automatizace a zápis vaření z telefonu
-- Úprava zápisu deníku a pravidel importu přímo z přehledu
+### Potřebuje návrh
+- Úprava pravidla importu (pravidla se zakládají, upravit je jde jen smazáním a novým)
+- Přesun položky týdenního přehledu, otevírání archivovaných přehledů
+- Vypnutí počítání otevření u sdíleného odkazu (odkaz jde zneplatnit)
+- Hromadné vrácení celé historie změn (jednotlivé kroky z okna vrátit jde)
+- Kompletní archiv originálů jedním souborem (dnes: originály na Google Disku,
+  vybrané fotky jako ZIP z výběru; celé GB přes prohlížeč nejdou)
+- Přepis hlasovek na text (aplikace ho nedělá a netvrdí to)
+- Přidání osoby na fotku ručně (rozpoznávání tváří aplikace nemá)
 
 Úplný seznam: `grep -o "zatimNeumime('[^']*'" resources/galerie/*.html`.
 
@@ -233,7 +253,8 @@ a stačí je napojit — nejlevnější výhra.
 
 1. **Nasadit a projít kontrolní seznam z bodu 1** (hodina práce, odblokuje vše).
 2. Bezpečnost 3 (ikony do `public/vendor`) a 8 (npm audit) — malé, rychlé.
-3. Finance: napojit čtyři tučné položky z bodu 4 (backend hotový).
+3. Projít na produkci s oběma účty deník, nastavení účtu a trezor na telefonu
+   (bod 2c) — mění se tím, co druhý vidí.
 4. Prohlížečové testy do CI (bod 5.1) — bez nich se každá další úprava
    prototypu ověřuje ručně.
 5. Bezpečnost 1–2 (cookie místo tokenu, CSP s nonce) — větší zásah do
