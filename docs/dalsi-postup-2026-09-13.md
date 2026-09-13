@@ -24,8 +24,18 @@ Nasazení samo spustí tři nové migrace:
 `composer.lock` se změnil (league/commonmark 2.10.1), deploy proto spustí
 `composer install`.
 
+Druhé kolo (galerie, viz bod 2b) žádnou migraci nepřidává. Po nasazení je ale
+potřeba **jednou dogenerovat náhledy** — do té doby se chodily vydávat originály
+(náhledy kvůli chybě v Intervention Image 4 nevznikaly vůbec):
+
+```
+php artisan gallery:thumbnails
+```
+
 ### Po nasazení zkontrolovat
 
+- [ ] `php artisan gallery:thumbnails` doběhl; mřížka se načítá rychle a fotka
+      v prohlížeči je ostrá.
 - [ ] Přihlášení obou na počítači i telefonu novými adresami.
 - [ ] Výpis „Ukázková data v databázi" na konci `deploy.sh`. Po přečtení
       smazat řádky z ukázky: `php artisan gallery:ukazkova-data --smazat`.
@@ -44,6 +54,13 @@ Nasazení samo spustí tři nové migrace:
 - **Host** (role „host" v administraci) se do aplikace dvojice nepřihlásí —
   vidí jen odkazy, které dostane. Tak to administrace vždycky popisovala.
 - **Klíč k API „jen čtení"** opravdu jen čte.
+- **Telefon teď opravdu ukládá.** Do 13. 9. neposlal na server ani jeden
+  zápis stavu (třída měla dvakrát `componentDidUpdate`, druhá přepsala první).
+  Nastavení, štítky, srdíčka a další změny z telefonu se nově propíšou i do
+  počítače. Po nasazení pár dní hlídat počet `PATCH /api/state` v logu (WAF).
+- **Smazání vzkazu hosta a sloučení osob se ptá** — obojí je natrvalo.
+- **Fotka přesunutá do trezoru přestane být vidět všude hned** — i přes
+  odkazy vydané dřív (oblíbené, archiv, chat, sdílená stránka).
 
 ---
 
@@ -79,6 +96,35 @@ Testy: 1262 PHP testů, všechny prošly. Detektor překryvů a přetékání pr
 
 ---
 
+## 2b. Druhé kolo — galerie (13. 9. odpoledne)
+
+| Commit | Obsah |
+|---|---|
+| `8bbfe5b2` | `/files` jen s podpisem nebo pro člena prostoru; sdílená stránka neposílá celý model fotky, koš ani trezor |
+| `8ed80ceb` | Náhledy vznikají (Intervention Image 4), ostrý prohlížeč fotky, **otočení a výřez se ukládají** (s návratem k originálu), správa alb (přejmenovat, přesunout, titulní fotka, sloučit, smazat/obnovit) |
+| `8ab8dc6f` | **Telefon ukládá stav**; hromadné stažení výběru jako ZIP; sdílení, alba a štítky z telefonu na serveru |
+| `76571c8b` | Vzkazy hostů: skrýt / smazat / přilepit jako popisek platí i na sdíleném odkazu |
+| `896bd8ad` | Lidé: přejmenování, skrytí a sloučení osob v databázi |
+| `8e14dd3f` | Album osoby opravdu vznikne; odložení připomenutí na týden (ne navždy) |
+| `ca39e126` | Ruční platba, rychlý úkol a zápis do deníku z telefonu do databáze; bez vymyšlené cenové historie míst a ukázkového cíle spoření |
+| `f86061d9` | **Bezpečnost:** originál z trezoru jen s odemčeným trezorem; strop nahrávání po částech; sdílení funguje i hostům přihlášeným do jiné galerie; recept/hodnocení nevydá fotky z trezoru |
+| `c142c567` | **Bezpečnost:** podepsané adresy fotky, která odešla do trezoru, přestanou platit |
+| `aa73f860` | Výběry ze shody zakládají album, výroční album opravdu přidá návrh tisku |
+
+Nové cesty API (všechny za přihlášením dvojice, jen vlastní prostor):
+`POST media/archiv`, `POST media/{uuid}/uprava`, `PATCH|DELETE alba/{uuid}`
++ `presunout|titulni|obnovit|sloucit`, `PATCH|DELETE vzkazy-hostu/{uuid}`
++ `prilepit`, `PATCH osoby/{id}` + `sloucit`, `POST platby/rucne`,
+`POST rychle/denik`, `POST rychle/ukol`.
+
+Testy: **1308 PHP testů**, všechny prošly (s GD). V prohlížeči ověřeno na
+vývojovém serveru: sdílení a zneplatnění odkazu z telefonu, založení, doplnění
+a smazání alba z telefonu, štítky a srdíčka z telefonu až do databáze,
+moderace vzkazu (skrýt, přilepit, odlepit, smazat), rychlý zápis deníku
+a úkolu, hláška bez účtu u platby.
+
+---
+
 ## 3. Známé nedostatky — bezpečnost
 
 Seřazeno podle rizika. Nic z toho není aktivně zneužitelné bez jiné chyby,
@@ -109,6 +155,14 @@ ale každá položka zmenšuje, co by jedna chyba napáchala.
    postup; vyzkoušet na kopii databáze a Disku.
 10. Vývojový přístupový klíč „mereni" v **lokální** databázi (produkce ne) —
     smazat v tinkeru: `DB::table('personal_access_tokens')->where('name', 'mereni')->delete()`.
+11. **Pokusy o heslo k trezoru se počítají v sezení** — smazání cookies je
+    vynuluje. Zbývá limit 10 pokusů za minutu na účet; pro trezor s doklady
+    by patřil počítač v databázi (nebo cache podle uživatele).
+12. **Podepsané náhledy platí do konce zítřka.** Fotka smazaná do koše (ne do
+    trezoru) jde přes dřív vydanou adresu otevřít dál; trezor je už ošetřený.
+13. **Staré místní řádky v telefonu** (`txExtra`, `tasksExtra`, `diary` ve
+    stavu) se u dvojice už nezobrazují, ale ve stavu leží dál. Neškodí; úklid
+    by byl jednorázový skript nad `couple_states`.
 
 ---
 
@@ -133,7 +187,17 @@ a stačí je napojit — nejlevnější výhra.
 - **Přidání místa do itineráře, posouvání programu dne** — `ItineraryController` existuje
 - Duplikace cesty, export itineráře, poznámky k místu, export do mapy
 
+### Galerie (zbývá)
+- Úpravy fotky z telefonu (otočení a výřez jsou zatím jen na počítači)
+- Přidání osoby na fotku ručně (rozpoznávání tváří aplikace nemá — návrhy
+  osob jsou prázdné a je to tak správně)
+- Sdílení cesty odkazem (sdílet jde fotky, výběr a alba)
+- Offline režim na počítači je jen přepínač v rozhraní; skutečná fronta
+  offline zápisů je v `galerie-api.js` a service workeru
+
 ### Ostatní
+- Přidání do itineráře z telefonu (na počítači v detailu cesty)
+- Vyrovnání mezi partnery jako záznam v knize (dnes jen „označeno jako vyrovnané" pro měsíc)
 - Tiskové PDF (kniha, list, karta receptu)
 - Připomínky k rodinným kontaktům a k dárku, připomínka druhému z telefonu
 - Album pro rodinu s hlasovým vzkazem
