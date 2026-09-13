@@ -61,6 +61,24 @@ class PrototypController extends Controller
             ->header('Cache-Control', 'private, no-cache, must-revalidate')
             ->header('Vary', 'Accept-Encoding, User-Agent');
 
+        /*
+         * Druhé stažení téhož dokumentu.
+         *
+         * Běhové prostředí prototypu si po startu žádá dokument ještě jednou
+         * (`fetch(location.href)`) — potřebuje šablonu s původní velikostí písmen
+         * v atributech, kterou prohlížeč při čtení stránky zapomene. Bez
+         * validátoru to byly další dva megabajty při každém otevření.
+         *
+         * Otisk se počítá z odesílaného těla, tedy i s tokenem a s tím, kdo je
+         * přihlášený: shoda znamená opravdu tentýž dokument, ne jen tentýž soubor.
+         * Slabý je proto, že zabalené a nezabalené tělo je tatáž stránka.
+         */
+        $odpoved->setEtag(sha1($telo), true);
+
+        if ($odpoved->isNotModified($request)) {
+            return $odpoved;
+        }
+
         return $this->zabaleno($request, $odpoved, $telo);
     }
 
@@ -254,6 +272,30 @@ JS,
              * limit úložiště. Prohlížeč si soubory drží sám podle `Cache-Control`
              * (náhled den), worker do toho nemá co mluvit.
              */
+            /*
+             * Čerstvá kopie se hned znovu nestahuje.
+             *
+             * Prototyp si po startu žádá tentýž dokument podruhé. Navigace ho
+             * před chvílí uložila do paměti, jenže dokument nese `Vary:
+             * User-Agent` a dotaz z běhového prostředí se s uloženým požadavkem
+             * v hlavičkách nepotkal — paměť pokaždé minula a každé otevření
+             * aplikace znamenalo dva plné dokumenty ze serveru. Paměť workera
+             * patří jednomu prohlížeči, takže `Vary` tu nemá co rozlišovat.
+             *
+             * Kopie mladší minuty se na pozadí neobnovuje; při rozjetých
+             * hodinách (záporné nebo velké stáří) platí to, co dřív.
+             */
+            "    const hit = await caches.match(req, { ignoreSearch: true });\n    if (hit) {\n      fetch(req).then(r => { if (r.ok) caches.open(SHELL).then(c => c.put(req, r)); }).catch(() => {});\n      return hit;\n    }" => <<<'JS'
+    const hit = await caches.match(req, { ignoreSearch: true, ignoreVary: true });
+    if (hit) {
+      const stari = Date.now() - Date.parse(hit.headers.get('Date') || '');
+      if (!(stari >= 0 && stari < 60000)) {
+        fetch(req).then(r => { if (r.ok) caches.open(SHELL).then(c => c.put(req, r)); }).catch(() => {});
+      }
+      return hit;
+    }
+JS,
+
             "  // Data z API: nejdřív síť, kopie do paměti; offline se podá poslední známý stav.\n  if (url.pathname.indexOf('/api/') >= 0) {" => <<<'JS'
   // Soubory (náhledy, originály, obrázky z chatu, nahrávky) nechat prohlížeči a jeho HTTP paměti.
   if (/\/api\/(media|chat)\/[^/]+\/(thumb|raw|nahled|obrazek|video)$|\/api\/v1\/voice-notes\/[^/]+\/stream$|^\/files\//.test(url.pathname)) return;

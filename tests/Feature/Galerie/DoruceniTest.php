@@ -188,6 +188,57 @@ class DoruceniTest extends TestCase
     }
 
     /**
+     * Kopie uložená před chvílí se na pozadí nestahuje znovu.
+     *
+     * Prototyp si po startu žádá dokument podruhé a worker ho kromě podání
+     * z paměti stahoval ještě celý znovu — dva plné dokumenty na otevření.
+     */
+    public function test_worker_nestahuje_cerstvou_kopii_znovu(): void
+    {
+        $worker = (string) $this->get('/sw.js')->assertOk()->getContent();
+
+        // Dokument nese `Vary: User-Agent`; bez tohohle paměť workera pokaždé minula.
+        $this->assertStringContainsString('caches.match(req, { ignoreSearch: true, ignoreVary: true })', $worker);
+        $this->assertStringContainsString("Date.parse(hit.headers.get('Date') || '')", $worker);
+        $this->assertStringContainsString('if (!(stari >= 0 && stari < 60000)) {', $worker);
+    }
+
+    /**
+     * Druhé stažení téhož dokumentu skončí 304.
+     *
+     * Běhové prostředí prototypu si dokument po startu stáhne ještě jednou;
+     * bez validátoru to byly další dva megabajty při každém otevření.
+     */
+    public function test_druhe_stazeni_dokumentu_je_bez_tela(): void
+    {
+        $prvni = $this->get('/')->assertOk();
+        $otisk = (string) $prvni->headers->get('ETag');
+
+        $this->assertStringStartsWith('W/"', $otisk);
+
+        $druhe = $this->withHeader('If-None-Match', $otisk)->get('/')->assertStatus(304);
+
+        $this->assertSame('', (string) $druhe->getContent());
+    }
+
+    /**
+     * Otisk patří odeslanému dokumentu, ne souboru.
+     *
+     * Dokument nese token a jméno přihlášeného. Kdyby se otisk počítal jen ze
+     * souboru, po přihlášení by prohlížeč dostal 304 a držel si stránku bez nich.
+     */
+    public function test_po_prihlaseni_neplati_otisk_z_doby_pred_nim(): void
+    {
+        $otisk = (string) $this->get('/')->assertOk()->headers->get('ETag');
+
+        $this->actingAs(User::factory()->create(['name' => 'Jana']));
+
+        $telo = (string) $this->withHeader('If-None-Match', $otisk)->get('/')->assertOk()->getContent();
+
+        $this->assertStringContainsString('"name":"Jana"', $telo);
+    }
+
+    /**
      * Na telefonu aplikace, ne vitrína prototypu.
      *
      * Telefonní dokument je z návrhářského balíku a je postavený jako ukázka:
