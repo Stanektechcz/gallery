@@ -1,0 +1,114 @@
+<?php
+
+namespace Tests\Unit;
+
+use PHPUnit\Framework\TestCase;
+
+/**
+ * Pravidla, která se v dokumentech prototypu snadno poruší a nepozná.
+ *
+ * Každé z nich se v září 2026 porušilo doopravdy — a přišlo se na to až
+ * na druhém zařízení, v síťovém logu nebo v databázi. Prohlížečové průchody
+ * žijí jen ve vývojovém prohlížeči; tohle je hlídá při každém spuštění testů.
+ */
+class PravidlaDokumentuPrototypuTest extends TestCase
+{
+    private static function dokument(string $nazev): string
+    {
+        return (string) file_get_contents(dirname(__DIR__, 2).'/resources/galerie/'.$nazev);
+    }
+
+    /**
+     * Šablonové adresy s předponou `sc-camel-`.
+     *
+     * Prohlížeč čte šablonu dřív, než ji běhové prostředí vyplní:
+     * `src="{{ mapSrc }}"` stáhl doslova (404 na serveru při každém otevření)
+     * a `points="{{ … }}"` hlásil chybu SVG.
+     */
+    public function test_sablonove_adresy_a_svg_nemaji_doslovnou_hodnotu(): void
+    {
+        foreach (['galerie-desktop.dc.html', 'galerie-mobil.dc.html'] as $nazev) {
+            preg_match_all('/\s(src|poster|srcset|points|cx|cy|r|d|x1|x2|y1|y2)="\{\{/', self::dokument($nazev), $shody);
+
+            $this->assertSame([], $shody[0], $nazev.': atribut se šablonou bez předpony sc-camel-.');
+        }
+    }
+
+    /**
+     * Hesla, kódy, nastavení zámku a identita zařízení nejdou do sdíleného stavu.
+     *
+     * Počítač ukládá do stavu dvojice všechno, co nemá v `persistSkip`.
+     * Heslo z dialogu kódu tak leželo v databázi a „Zamknout při spuštění:
+     * Vypnuto" jednoho vypnulo zámek druhému.
+     */
+    public function test_pocitac_nesdili_hesla_ani_nastaveni_zamku(): void
+    {
+        $dokument = self::dokument('galerie-desktop.dc.html');
+
+        $this->assertMatchesRegularExpression('/this\._pSkip = \{(.*?)\n    \};/s', $dokument);
+        preg_match('/this\._pSkip = \{(.*?)\n    \};/s', $dokument, $blok);
+
+        $musi = [
+            'vaultPwd', 'lockPwd', 'lockPin', 'gatePin', 'gvPwd', 'pinHeslo', 'pinStary', 'pinNovy', 'pinZnovu',
+            'pinObnovovaci', 'obPin', 'shrPwd', 'lockCode', 'vaultLeft', 'vaultTries',
+            'lockIdle', 'lockSecs', 'lockBio', 'lockStart', 'lockWho', 'lockTrusted',
+            'klAskMine', 'klAskDone', 'vw', 'theme',
+        ];
+
+        foreach ($musi as $klic) {
+            $this->assertMatchesRegularExpression('/\b'.$klic.': 1\b/', $blok[1], 'Klíč „'.$klic.'" musí být v persistSkip.');
+        }
+    }
+
+    /** Telefon ukládá jen vyjmenované klíče — nastavení zámku mezi nimi být nesmí. */
+    public function test_telefon_neuklada_nastaveni_zamku_do_stavu(): void
+    {
+        $dokument = self::dokument('galerie-mobil.dc.html');
+
+        preg_match("/this\._pKeep = \{\};\s*\((.*?)\)\.split\(' '\)/s", $dokument, $blok);
+        $this->assertNotEmpty($blok, 'Výčet ukládaných klíčů telefonu se nenašel.');
+
+        preg_match_all("/'([^']*)'/", $blok[1], $casti);
+        $klice = preg_split('/\s+/', trim(implode(' ', $casti[1])));
+
+        foreach (['lockIdle', 'lockSecs', 'lockBio', 'lockStart', 'setVals', 'mVaultPwd', 'lockPwd', 'lockPin'] as $klic) {
+            $this->assertNotContains($klic, $klice, 'Telefon nesmí ukládat „'.$klic.'" do společného stavu.');
+        }
+    }
+
+    /** Hlasy a potvrzení „až kliknou oba" jsou u dvojice pod jménem, ne pod A/M. */
+    public function test_hlasy_se_nezapisuji_pod_stranou(): void
+    {
+        $dokument = self::dokument('galerie-desktop.dc.html');
+
+        $this->assertStringContainsString('const klic = this.ukazka() ? who : this.meWho();', $dokument);
+        $this->assertStringContainsString('homeCapReady', $dokument);
+        $this->assertStringContainsString('whOk', $dokument);
+    }
+
+    /** Ikony z cizího CDN s kontrolou integrity. */
+    public function test_ikony_z_cdn_maji_kontrolu_integrity(): void
+    {
+        foreach (['galerie-desktop.dc.html', 'galerie-mobil.dc.html'] as $nazev) {
+            preg_match_all('/<link[^>]+unpkg\.com[^>]*>/', self::dokument($nazev), $odkazy);
+
+            $this->assertNotEmpty($odkazy[0], $nazev.': odkaz na ikony se nenašel.');
+
+            foreach ($odkazy[0] as $odkaz) {
+                $this->assertStringContainsString('integrity="sha384-', $odkaz, $nazev.': chybí SRI.');
+                $this->assertStringContainsString('crossorigin="anonymous"', $odkaz);
+            }
+        }
+    }
+
+    /** Přihlášení se na kód druhého ověření ptá políčkem, ne dialogem prohlížeče. */
+    public function test_dvoufazove_overeni_ma_policko(): void
+    {
+        foreach (['galerie-desktop.dc.html', 'galerie-mobil.dc.html'] as $nazev) {
+            $dokument = self::dokument($nazev);
+
+            $this->assertStringContainsString('{{ lockNeeds2fa }}', $dokument, $nazev);
+            $this->assertStringContainsString('{ bezDotazu: true }', $dokument, $nazev);
+        }
+    }
+}
