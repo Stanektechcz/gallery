@@ -21,9 +21,10 @@ const LABEL: Record<string, string> = {
     'auth.2fa.recovery_used': 'Použit záložní kód',
     'auth.registered': 'Účet založen',
     'auth.invitation.accepted': 'Přijato pozvání',
+    'auth.password.reset': 'Heslo obnoveno přes e-mail · všechna zařízení odhlášena',
 };
 
-const ALARMING = new Set(['auth.login.failed', 'auth.2fa.failed', 'auth.2fa.disabled', 'auth.2fa.recovery_used']);
+const ALARMING = new Set(['auth.login.failed', 'auth.2fa.failed', 'auth.2fa.disabled', 'auth.2fa.recovery_used', 'auth.password.reset']);
 
 const stamp = (value: string | null) =>
     value ? new Date(value).toLocaleString('cs-CZ', {

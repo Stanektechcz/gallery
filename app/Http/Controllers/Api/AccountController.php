@@ -8,6 +8,7 @@ use App\Models\ChatMessage;
 use App\Models\JournalEntry;
 use App\Models\MediaItem;
 use App\Models\User;
+use App\Services\Auth\ZruseniUctu;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -26,8 +27,8 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  */
 class AccountController extends Controller
 {
-    /** Long enough to change your mind, short enough to mean something. */
-    private const DELETION_GRACE_DAYS = 14;
+    /** Long enough to change your mind, short enough to mean something. Executed by `gallery:zrus-ucty`. */
+    private const DELETION_GRACE_DAYS = ZruseniUctu::LHUTA_DNI;
 
     /**
      * Everything we hold about this person, as one JSON download.
@@ -66,10 +67,9 @@ class AccountController extends Controller
      *
      * Immediate deletion is unrecoverable by definition, and the commonest reason people
      * ask for it is a bad evening. The grace period costs nothing and has saved accounts;
-     * signing in during it cancels the request, which is the behaviour people expect
-     * without being told.
+     * the request stands until „Zrušení odvolat" and `gallery:zrus-ucty` carries it out.
      */
-    public function scheduleDeletion(Request $request): JsonResponse
+    public function scheduleDeletion(Request $request, ZruseniUctu $zruseni): JsonResponse
     {
         $user = $request->user();
 
@@ -81,6 +81,9 @@ class AccountController extends Controller
 
         abort_if($user->role === 'owner' && $this->isOnlyOwner($user), 422,
             'Jste jediný správce prostoru. Předejte roli jinému členovi, než účet zrušíte.');
+
+        // Vlastník galerie (`owner_id`) by prostor nechal bez správce — úloha by ho stejně přeskočila.
+        abort_if(($prekazka = $zruseni->prekazka($user)) !== null, 422, $prekazka);
 
         $at = now()->addDays(self::DELETION_GRACE_DAYS);
         $this->rememberDeletion($user, $at);
@@ -123,6 +126,8 @@ class AccountController extends Controller
                 'auth.login', 'auth.login.failed', 'auth.logout',
                 'auth.2fa.enabled', 'auth.2fa.disabled', 'auth.2fa.failed', 'auth.2fa.recovery_used',
                 'auth.registered', 'auth.invitation.accepted',
+                // Obnova hesla e-mailem: kdo ji nedělal sám, musí ji tu vidět.
+                'auth.password.reset',
             ])
             ->orderByDesc('created_at')
             ->limit(60)

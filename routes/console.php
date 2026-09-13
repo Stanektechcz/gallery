@@ -146,6 +146,13 @@ Schedule::command('gallery:purge-trash --no-interaction')
     ->withoutOverlapping()
     ->name('trash-purge');
 
+// Zrušení účtu po čtrnáctidenní lhůtě. Nastavení to slibovalo a nikdo to
+// neprovedl — žádost se jen zapsala. V noci, protože maže soubory.
+Schedule::command('gallery:zrus-ucty --no-interaction')
+    ->dailyAt('04:40')
+    ->withoutOverlapping()
+    ->name('account-deletion');
+
 // ——— Prototyp Galerie ———
 
 // Domluvy, kterým vypršela platnost. Musí běžet na serveru: klient si odpočet

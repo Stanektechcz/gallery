@@ -164,6 +164,7 @@ class PlanovaneUlohy
         'temp-cleanup' => 'Úklid dočasných souborů',
         'weekly-duplicate-scan' => 'Hledání duplicit',
         'trash-purge' => 'Vysypání koše po lhůtě',
+        'account-deletion' => 'Zrušení účtů po lhůtě',
         'galerie-expire' => 'Vypršení domluv',
         'galerie-notify' => 'Upozornění na revize',
         'scheduler-heartbeat' => 'Tep plánovače',

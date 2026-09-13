@@ -102,7 +102,7 @@ export default function AccountData({ scheduledFor, onChanged }: {
                 ) : (
                     <>
                         <p className="mt-1 text-xs text-[var(--color-text-secondary)]">
-                            Potvrďte heslem. Po čtrnácti dnech se smaže profil, deník i zprávy — nevratně.
+                            Potvrďte heslem. Po čtrnácti dnech se smaže profil, deník, zprávy i hlasovky a odhlásí se všechna zařízení — nevratně. Fotky zůstanou v galerii dvojice.
                         </p>
                         <input
                             type="password"

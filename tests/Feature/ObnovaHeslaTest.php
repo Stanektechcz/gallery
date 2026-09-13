@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Password;
 use Inertia\Testing\AssertableInertia;
+use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
 /**
@@ -75,6 +76,10 @@ class ObnovaHeslaTest extends TestCase
         $this->assertSame(0, $clovek->tokens()->count(), 'Klíče zařízení musí po obnovení hesla přestat platit.');
         $this->assertSame(0, DB::table('sessions')->where('user_id', $clovek->id)->count());
         $this->assertDatabaseHas('audit_logs', ['action' => 'auth.password.reset']);
+
+        // A v historii zabezpečení účtu je vidět — kdo ji nedělal sám, musí to poznat.
+        Sanctum::actingAs($clovek);
+        $this->getJson('/api/v1/ucet/aktivita')->assertOk()->assertJsonFragment(['action' => 'auth.password.reset']);
     }
 
     public function test_kratke_heslo_a_neplatny_odkaz_cesky(): void
