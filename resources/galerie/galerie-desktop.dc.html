@@ -2330,7 +2330,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
       <sc-if value="{{ isMap }}">
         <div style="display:flex; height:100%; min-height:640px; animation:fadeIn .2s ease">
           <div style="flex:1; min-width:0; position:relative; overflow:hidden; background:var(--g-panel)">
-            <iframe src="{{ mapSrc }}" title="Mapa archivu" style="position:absolute; inset:0; width:100%; height:100%; border:0"></iframe>
+            <iframe sc-camel-src="{{ mapSrc }}" title="Mapa archivu" style="position:absolute; inset:0; width:100%; height:100%; border:0"></iframe>
             <div style="position:absolute; left:18px; top:18px; display:flex; gap:8px; z-index:500; flex-wrap:wrap; max-width:calc(100% - 36px)">
               <button class="btn btn-secondary" onClick="{{ openFilters }}" style="background:var(--g-raise); gap:6px"><i class="ph-duotone ph-sliders-horizontal" style="font-size:16px"></i>Období a album</button>
               <span class="tag tag-neutral" style="background:var(--g-raise); align-self:center">{{ mapCountLabel }}</span>
@@ -2428,7 +2428,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                         <div style="display:flex; align-items:center; gap:7px; font-size:12px; color:var(--g-acc-deep); margin-top:4px"><i class="ph-duotone ph-microphone" style="font-size:14px"></i>{{ c.voiceMeta }}</div>
                       </sc-if>
                       <sc-if value="{{ c.hasAudio }}">
-                        <audio controls preload="none" src="{{ c.audio }}" style="display:block; width:100%; max-width:320px; height:34px; margin-top:6px"></audio>
+                        <audio controls preload="none" sc-camel-src="{{ c.audio }}" style="display:block; width:100%; max-width:320px; height:34px; margin-top:6px"></audio>
                       </sc-if>
                     </div>
                     <div style="margin-left:auto; display:flex; gap:6px; flex-wrap:wrap">
@@ -3105,10 +3105,10 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 
               <svg viewBox="0 0 900 190" style="width:100%; height:190px; display:block; margin-bottom:8px" role="img" aria-label="Předpověď zůstatku na 60 dní">
                 <sc-if value="{{ p60ShowZero }}" hint-placeholder-val="{{ false }}">
-                  <line x1="10" x2="890" y1="{{ p60ZeroY }}" y2="{{ p60ZeroY }}" stroke="var(--g-mag)" stroke-width="1" stroke-dasharray="4 4"></line>
+                  <line x1="10" x2="890" sc-camel-y1="{{ p60ZeroY }}" sc-camel-y2="{{ p60ZeroY }}" stroke="var(--g-mag)" stroke-width="1" stroke-dasharray="4 4"></line>
                 </sc-if>
-                <polyline points="{{ p60Points }}" fill="none" stroke="var(--g-ink)" stroke-width="2"></polyline>
-                <circle cx="{{ p60MinX }}" cy="{{ p60MinY }}" r="4" fill="var(--g-mag)"></circle>
+                <polyline sc-camel-points="{{ p60Points }}" fill="none" stroke="var(--g-ink)" stroke-width="2"></polyline>
+                <circle sc-camel-cx="{{ p60MinX }}" sc-camel-cy="{{ p60MinY }}" r="4" fill="var(--g-mag)"></circle>
               </svg>
               <div style="display:flex; gap:26px; flex-wrap:wrap; font-size:12.5px; color:var(--g-ink3); margin-bottom:26px">
                 <span>{{ p60Below }}</span><span>{{ p60Tight }}</span><span>po 60 dnech {{ p60End }}</span>
@@ -3170,8 +3170,8 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
               </div>
 
               <svg viewBox="0 0 900 190" style="width:100%; height:190px; display:block" role="img" aria-label="Srovnání scénáře se současným stavem">
-                <polyline points="{{ kdBasePoints }}" fill="none" stroke="var(--g-line)" stroke-width="2" stroke-dasharray="5 5"></polyline>
-                <polyline points="{{ kdPoints }}" fill="none" stroke="var(--g-mag)" stroke-width="2"></polyline>
+                <polyline sc-camel-points="{{ kdBasePoints }}" fill="none" stroke="var(--g-line)" stroke-width="2" stroke-dasharray="5 5"></polyline>
+                <polyline sc-camel-points="{{ kdPoints }}" fill="none" stroke="var(--g-mag)" stroke-width="2"></polyline>
               </svg>
               <div style="display:flex; align-items:center; gap:20px; flex-wrap:wrap; margin-top:10px">
                 <div style="font-size:14px; color:{{ kdDeltaColor }}">{{ kdDelta }}</div>
@@ -3577,9 +3577,9 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                   <div style="font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:var(--g-ink2); padding-bottom:12px; border-bottom:1px solid var(--g-ink)">Kam peníze šly</div>
                   <div style="position:relative; width:100%; max-width:280px; margin:18px auto 0">
                     <svg viewBox="0 0 160 160" style="width:100%; height:auto; transform:rotate(-90deg)" role="img" aria-label="Podíl kategorií na výdajích">
-                      <circle cx="80" cy="80" r="{{ budDonutR }}" fill="none" stroke="var(--g-line2)" stroke-width="20"></circle>
+                      <circle cx="80" cy="80" sc-camel-r="{{ budDonutR }}" fill="none" stroke="var(--g-line2)" stroke-width="20"></circle>
                       <sc-for list="{{ budDonut }}" as="d" hint-placeholder-count="6">
-                        <circle cx="80" cy="80" r="{{ budDonutR }}" fill="none" stroke="{{ d.color }}" stroke-width="20" stroke-dasharray="{{ d.dash }}" stroke-dashoffset="{{ d.off }}"></circle>
+                        <circle cx="80" cy="80" sc-camel-r="{{ budDonutR }}" fill="none" stroke="{{ d.color }}" stroke-width="20" stroke-dasharray="{{ d.dash }}" stroke-dashoffset="{{ d.off }}"></circle>
                       </sc-for>
                     </svg>
                     <div style="position:absolute; inset:0; display:grid; place-content:center; text-align:center">
@@ -4399,7 +4399,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                         <div style="height:4px; border-radius:2px; background:var(--g-line2); overflow:hidden; margin-top:8px"><div style="height:100%; width:{{ v.pct }}; background:var(--g-acc)"></div></div>
                       </sc-if>
                       <sc-if value="{{ v.hasAudio }}">
-                        <audio src="{{ v.src }}" controls="{{ v.hasAudio }}" preload="none" style="width:100%; margin-top:8px; height:34px"></audio>
+                        <audio sc-camel-src="{{ v.src }}" controls="{{ v.hasAudio }}" preload="none" style="width:100%; margin-top:8px; height:34px"></audio>
                       </sc-if>
                       <sc-if value="{{ v.playing }}">
                         <div style="font-size:12.5px; color:var(--g-ink2); margin-top:8px">{{ v.transcript }}</div>
@@ -5039,7 +5039,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                       <div style="position:relative; width:320px; height:320px; transform:rotate({{ whAngle }}); transition:transform 2.7s cubic-bezier(.16,.72,.11,1)">
                         <svg viewBox="0 0 320 320" width="320" height="320" role="img" aria-label="Rozhodovací kolečko">
                           <sc-for list="{{ whSlices }}" as="sl" hint-placeholder-count="5">
-                            <path d="{{ sl.d }}" fill="{{ sl.fill }}" stroke="var(--g-bg)" stroke-width="2"></path>
+                            <path sc-camel-d="{{ sl.d }}" fill="{{ sl.fill }}" stroke="var(--g-bg)" stroke-width="2"></path>
                           </sc-for>
                           <circle cx="160" cy="160" r="34" fill="var(--g-bg)" stroke="var(--g-ink)" stroke-width="2"></circle>
                         </svg>
@@ -5485,7 +5485,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                                 <sc-if value="{{ m.isPhoto }}">
                                   <sc-if value="{{ m.hasPhoto }}">
                                     <button onClick="{{ m.openPhoto }}" aria-label="Otevřít fotku" style="display:block; padding:0; border:0; background:transparent; cursor:{{ m.photoCursor }}; margin-bottom:7px">
-                                      <img src="{{ m.photoUrl }}" alt="{{ m.photoAlt }}" loading="lazy" style="display:block; max-width:260px; max-height:320px; width:auto; height:auto; border-radius:2px; background:var(--g-panel)" />
+                                      <img sc-camel-src="{{ m.photoUrl }}" alt="{{ m.photoAlt }}" loading="lazy" style="display:block; max-width:260px; max-height:320px; width:auto; height:auto; border-radius:2px; background:var(--g-panel)" />
                                     </button>
                                   </sc-if>
                                   <sc-if value="{{ m.noPhoto }}">
@@ -5498,7 +5498,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                                     <span style="font-size:12px; color:var(--g-ink3)">hlasovka · {{ m.len }}</span>
                                   </div>
                                   <sc-if value="{{ m.hasAudio }}">
-                                    <audio src="{{ m.audioSrc }}" controls="{{ m.hasAudio }}" preload="none" style="width:100%; margin-bottom:6px; height:34px"></audio>
+                                    <audio sc-camel-src="{{ m.audioSrc }}" controls="{{ m.hasAudio }}" preload="none" style="width:100%; margin-bottom:6px; height:34px"></audio>
                                   </sc-if>
                                   <sc-if value="{{ m.noAudio }}">
                                     <div style="font-size:12px; color:var(--g-ink3); margin-bottom:6px">{{ m.audioNote }}</div>
@@ -5641,7 +5641,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                           <span style="font-size:12px; color:var(--g-ink3)">{{ v.who }} · {{ v.when }} · {{ v.len }}</span>
                         </div>
                         <sc-if value="{{ v.hasAudio }}">
-                          <audio src="{{ v.src }}" controls="{{ v.hasAudio }}" preload="none" style="width:100%; margin-top:8px; height:34px"></audio>
+                          <audio sc-camel-src="{{ v.src }}" controls="{{ v.hasAudio }}" preload="none" style="width:100%; margin-top:8px; height:34px"></audio>
                         </sc-if>
                         <sc-if value="{{ v.noAudio }}">
                           <div style="font-size:12.5px; color:var(--g-ink3); margin-top:8px">{{ v.note }}</div>
@@ -14277,7 +14277,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
           <button onClick="{{ prev }}" aria-label="Předchozí" style="position:absolute; left:12px; z-index:3; width:42px; height:42px; border:0; border-radius:50%; background:var(--g-lb-btn); color:var(--g-lb-fg); cursor:pointer"><i class="ph-duotone ph-caret-left" style="font-size:20px"></i></button>
           <div style="position:relative; width:100%; height:100%; display:flex; align-items:center; justify-content:center">
             <sc-if value="{{ current.hasVideo }}">
-              <video src="{{ current.videoUrl }}" poster="{{ current.posterUrl }}" controls="{{ current.hasVideo }}" playsInline="{{ current.hasVideo }}" preload="metadata" style="width:min(100%,1180px); aspect-ratio:16/9; border-radius:2px; background:#000; outline:0"></video>
+              <video sc-camel-src="{{ current.videoUrl }}" sc-camel-poster="{{ current.posterUrl }}" controls="{{ current.hasVideo }}" playsInline="{{ current.hasVideo }}" preload="metadata" style="width:min(100%,1180px); aspect-ratio:16/9; border-radius:2px; background:#000; outline:0"></video>
             </sc-if>
             <sc-if value="{{ current.videoPending }}">
               <div style="position:relative; width:min(100%,1180px); aspect-ratio:16/9; border-radius:2px; overflow:hidden; background:{{ current.bg }}; display:grid; place-items:center">
@@ -14352,7 +14352,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
             </div>
             <sc-if value="{{ lbHasPlace }}">
               <div style="margin-top:10px; height:132px; border-radius:2px; overflow:hidden; position:relative; background:var(--g-panel)">
-                <iframe src="{{ lbMapSrc }}" title="Poloha položky" style="position:absolute; inset:0; width:100%; height:100%; border:0"></iframe>
+                <iframe sc-camel-src="{{ lbMapSrc }}" title="Poloha položky" style="position:absolute; inset:0; width:100%; height:100%; border:0"></iframe>
                 <button class="btn btn-ghost" onClick="{{ goMap }}" style="position:absolute; right:8px; bottom:6px; font-size:12px; color:var(--g-acc); background:var(--g-lb-panel)">Zobrazit na mapě</button>
               </div>
             </sc-if>

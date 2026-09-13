@@ -3317,7 +3317,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                 <div style="position:relative; width:256px; height:256px; transform:rotate({{ whAngle }}); transition:transform 2.4s cubic-bezier(.16,.72,.11,1)">
                   <svg viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="Rozhodovací kolečko">
                     <sc-for list="{{ whSlices }}" as="sl" hint-placeholder-count="5">
-                      <path d="{{ sl.d }}" fill="{{ sl.fill }}" stroke="var(--g-raise)" stroke-width="2"></path>
+                      <path sc-camel-d="{{ sl.d }}" fill="{{ sl.fill }}" stroke="var(--g-raise)" stroke-width="2"></path>
                     </sc-for>
                     <circle cx="128" cy="128" r="28" fill="var(--g-raise)" stroke="var(--g-ink)" stroke-width="2"></circle>
                   </svg>
@@ -3535,7 +3535,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
             <div data-screen-label="Mobil — Místa" style="animation:mIn .2s ease; padding:0 18px">
               <sc-if value="{{ fotoMapaOn }}">
                 <div style="position:relative; height:280px; border:1px solid var(--g-line); border-radius:3px; background:var(--g-panel); margin-bottom:10px; overflow:hidden">
-                  <iframe src="{{ fotoMapaSrc }}" title="Fotky na mapě" loading="lazy" style="position:absolute; inset:0; width:100%; height:100%; border:0"></iframe>
+                  <iframe sc-camel-src="{{ fotoMapaSrc }}" title="Fotky na mapě" loading="lazy" style="position:absolute; inset:0; width:100%; height:100%; border:0"></iframe>
                 </div>
                 <div style="font-size:12px; color:var(--g-ink3); margin:0 2px 16px">{{ fotoMapaPopis }}</div>
               </sc-if>
@@ -4777,7 +4777,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
               <button onClick="{{ lbPrev }}" aria-label="Předchozí" style="flex:none; width:44px; height:80px; border:0; background:transparent; cursor:pointer; color:rgba(255,255,255,.7)"><i class="ph-duotone ph-caret-left" style="font-size:24px"></i></button>
               <!-- Video se přehraje (dřív tu byl jen obrázek), fotka je velký obrázek ze serveru. -->
               <sc-if value="{{ lb.hasVideo }}">
-                <video src="{{ lb.videoUrl }}" poster="{{ lb.posterUrl }}" controls playsinline preload="metadata" aria-label="Video" style="flex:1; min-width:0; height:70%; border-radius:2px; background:#000; object-fit:contain"></video>
+                <video sc-camel-src="{{ lb.videoUrl }}" sc-camel-poster="{{ lb.posterUrl }}" controls playsinline preload="metadata" aria-label="Video" style="flex:1; min-width:0; height:70%; border-radius:2px; background:#000; object-fit:contain"></video>
               </sc-if>
               <sc-if value="{{ lb.noVideo }}">
                 <div style="flex:1; height:70%; border-radius:2px; background:{{ lb.bg }}"></div>
@@ -4794,7 +4794,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                 </div>
                 <div style="font-size:14.5px">{{ lbDetail.place }}</div>
                 <sc-if value="{{ lbDetail.hasPlace }}">
-                  <iframe src="{{ lbDetail.mapSrc }}" title="Mapa místa" loading="lazy" style="width:100%; height:132px; border:0; border-radius:2px; margin-top:7px; background:var(--g-panel)"></iframe>
+                  <iframe sc-camel-src="{{ lbDetail.mapSrc }}" title="Mapa místa" loading="lazy" style="width:100%; height:132px; border:0; border-radius:2px; margin-top:7px; background:var(--g-panel)"></iframe>
                 </sc-if>
                 <sc-if value="{{ lbDetail.noPlace }}">
                   <div style="margin-top:8px; padding:11px 12px; border-radius:2px; background:rgba(255,255,255,.08)">
