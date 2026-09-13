@@ -27877,7 +27877,7 @@ class Component extends DCLogic {
         },
         buyLabel: c.left > 0 ? 'Koupit až po lhůtě' : 'Koupit teď',
         buyOff: c.left > 0, buyOp: c.left > 0 ? .45 : 1,
-        buy: () => { const prev = cools; setCools(cools.filter(x => x.id !== c.id)); this.toast(c.what + ' schváleno · zapsáno do Financí jako plánovaný výdaj', { icon: 'ph-receipt', undo: () => setCools(prev) }); },
+        buy: () => { const prev = cools; setCools(cools.filter(x => x.id !== c.id)); this.toast(c.what + ' schváleno · rozvaha uzavřena — výdaj zapíšete v Transakcích, až proběhne', { icon: 'ph-receipt', undo: () => setCools(prev) }); },
         drop: () => { const prev = cools; setCools(cools.filter(x => x.id !== c.id)); this.toast('Návrh zrušen · po 72 hodinách často sám odpadne', { icon: 'ph-x-circle', undo: () => setCools(prev) }); },
         toDecision: () => {
           const prevD = decs, prevC = cools;
@@ -28020,6 +28020,8 @@ class Component extends DCLogic {
           expenseLabel: b.expensed ? 'Výdaj už zapsán' : 'Zapsat výdaj skrytě',
           expenseOff: b.expensed, expenseOp: b.expensed ? .45 : 1,
           expense: () => {
+            // „Zapsáno do kategorie Dárky" — do knihy se nic nezapsalo, rozpočet dárek nepočítal.
+            if (!this.ukazka()) { this.zatimNeumime('zápis dárku do Financí — výdaj zapíšete v Transakcích'); return; }
             const prev = buys;
             setBuys(buys.map(x => x.id === b.id ? { ...x, expensed: true } : x));
             this.toast(this.kc(b.price) + ' zapsáno do kategorie Dárky · bez popisu položky', { icon: 'ph-receipt', undo: () => setBuys(prev) });

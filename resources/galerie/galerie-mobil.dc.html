@@ -6397,7 +6397,7 @@ class Component extends DCLogic {
         opinion: c.opinion, opinionBy: c.opinionBy,
         buyLabel: c.left > 0 ? 'Koupit až po lhůtě' : 'Koupit teď',
         buyOff: c.left > 0, buyOp: c.left > 0 ? .45 : 1,
-        buy: () => { const prev = cools; setCools(cools.filter(x => x.id !== c.id)); this.toast(c.what + ' schváleno · zapsáno do Financí', { icon: 'ph-receipt', undo: () => setCools(prev) }); },
+        buy: () => { const prev = cools; setCools(cools.filter(x => x.id !== c.id)); this.toast(c.what + ' schváleno · výdaj zapíšete ve Financích, až proběhne', { icon: 'ph-receipt', undo: () => setCools(prev) }); },
         drop: () => { const prev = cools; setCools(cools.filter(x => x.id !== c.id)); this.toast('Návrh zrušen', { icon: 'ph-x-circle', undo: () => setCools(prev) }); }
       }))
     };
@@ -6487,7 +6487,8 @@ class Component extends DCLogic {
           advance: () => { const prev = buys; const nx = NEXT[b.status]; setBuys(buys.map(x => x.id === b.id ? { ...x, status: nx } : x)); this.toast(b.what + ' → ' + (ST[nx] || ST.given)[0].toLowerCase(), { icon: 'ph-check-circle', undo: () => setBuys(prev) }); },
           expenseLabel: b.expensed ? 'Výdaj zapsán' : 'Zapsat výdaj skrytě',
           expenseOff: b.expensed, expenseOp: b.expensed ? .45 : 1,
-          expense: () => { const prev = buys; setBuys(buys.map(x => x.id === b.id ? { ...x, expensed: true } : x)); this.toast(this.kc(b.price) + ' do kategorie Dárky · bez popisu', { icon: 'ph-receipt', undo: () => setBuys(prev) }); }
+          // „Do kategorie Dárky" se u dvojice nic nezapsalo — rozpočet dárek nepočítal.
+          expense: () => { if (((window.GalerieData || {}).DVOJICE || []).length) { this.zatimNeumime('zápis dárku do Financí — výdaj zapíšete v Transakcích'); return; } const prev = buys; setBuys(buys.map(x => x.id === b.id ? { ...x, expensed: true } : x)); this.toast(this.kc(b.price) + ' do kategorie Dárky · bez popisu', { icon: 'ph-receipt', undo: () => setBuys(prev) }); }
         };
       }),
       gftOccasions: GIFT_OCC.map(o => {
@@ -7631,7 +7632,20 @@ class Component extends DCLogic {
       kapSeal: () => {
         const t = (s.kapDraft || '').trim();
         if (!t) { this.toast('Napište, co má v kapsli být', { icon: 'ph-warning' }); return; }
-        this.setState({ kapDraft: '' });
+        /*
+         * Zapečetit doopravdy.
+         *
+         * Tlačítko jen vymazalo pole a ohlásilo „Kapsle zapečetěna" — dopis
+         * se nikam neuložil. Jde stejnou cestou jako na počítači: nová kapsle
+         * v `kapsules`, server ji zapíše do `time_capsules` a seznam se načte
+         * znovu (kolekce `KAPS` je ve skupině sdílení).
+         */
+        if (((window.GalerieData || {}).DVOJICE || []).length) {
+          this.setState({ kapDraft: '', kapsules: [{ id: 'k' + Date.now(), kind: 'vzkaz', from: this.meWho(), open: null, trig: s.kapPick || null, title: t, body: '' }].concat(s.kapsules || KAPS) });
+          if (window.GalerieObnovit) setTimeout(() => window.GalerieObnovit('sdileni'), 2500);
+        } else {
+          this.setState({ kapDraft: '' });
+        }
         this.toast('Kapsle zapečetěna · otevře se ' + (s.kapPick ? (KAP_TRIG.filter(x => x.key === s.kapPick)[0] || {}).label : 'za rok'), { icon: 'ph-package' });
       },
       isZprStats: isZprStats, zprStats: zprStats, isZprDec: isZprDec, zprDec: zprDec, isZprGone: isZprGone, zprGone: zprGone,
@@ -7643,7 +7657,7 @@ class Component extends DCLogic {
       isWho: isWho, whoCards: whoCards, whoRows: whoRows, whoHead: whoHead,
       isAnnPrint: isAnnPrint, annFmts: annFmts, annPl: annPl,
       annPrintHead: 'Sazba výročního albumu · ' + annPages + ' stran · orientačně ' + this.kc(annPrice),
-      annPrintGo: () => { this.push('alld', { allRoute: 'x-tisk', allTab: 0, allQuery: '' }); this.toast('Výroční album předáno do Návrhů tisku · ' + annPages + ' stran', { icon: 'ph-printer' }); },
+      annPrintGo: () => { this.push('alld', { allRoute: 'x-tisk', allTab: 0, allQuery: '' }); this.toast('Návrhy tisku · výroční album má ' + annPages + ' stran — objednávku odešlete odtud', { icon: 'ph-printer', silent: true }); },
       isStory: isStory, stChapters: stChapters, isStoryMs: isStoryMs, stMs: stMs,
       isTags: isTags, tagRows: tagRows,
       isSer: isSer, serRows: serRows,

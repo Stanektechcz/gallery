@@ -116,7 +116,10 @@ Route::post('/s/{token}/verify', [ShareController::class, 'verify'])
 // vybrat, a málo na zaplnění disku.
 Route::post('/s/{token}/upload', [ShareController::class, 'guestUpload'])
     ->middleware('throttle:30,1')->name('share.guest-upload');
-Route::get('/s/{token}/media/{uuid}/download', [ShareController::class, 'download'])->name('share.download');
+// Stahování originálů bez přihlášení: limit, aby jeden odkaz nešel použít jako
+// bezplatné CDN na plné rozlišení (každý požadavek čte celý soubor z disku).
+Route::get('/s/{token}/media/{uuid}/download', [ShareController::class, 'download'])
+    ->middleware('throttle:60,1,sdileni-stazeni')->name('share.download');
 
 /*
  * Vzkaz od hosta.
