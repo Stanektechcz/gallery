@@ -60,7 +60,7 @@ class VztahVeStavu
         }
 
         if (is_array($patch['cools'] ?? null)) {
-            $this->zapisRozvahy($patch['cools'], $prostor, $jmena, OdebraneVStavu::pro($patch, 'cools'));
+            $this->zapisRozvahy($patch['cools'], $prostor, $jmena, OdebraneVStavu::pro($patch, 'cools'), OdebraneVStavu::zmenene($patch, 'cools'));
         }
 
         /*
@@ -81,11 +81,11 @@ class VztahVeStavu
         }
 
         if (is_array($patch['proms'] ?? null)) {
-            $this->zapisSliby($patch['proms'], $prostor, $jmena, OdebraneVStavu::pro($patch, 'proms'));
+            $this->zapisSliby($patch['proms'], $prostor, $jmena, OdebraneVStavu::pro($patch, 'proms'), OdebraneVStavu::zmenene($patch, 'proms'));
         }
 
         if (is_array($patch['nudges'] ?? null)) {
-            $this->zapisZadosti($patch['nudges'], $prostor, $jmena, $kdo, OdebraneVStavu::pro($patch, 'nudges'));
+            $this->zapisZadosti($patch['nudges'], $prostor, $jmena, $kdo, OdebraneVStavu::pro($patch, 'nudges'), OdebraneVStavu::zmenene($patch, 'nudges'));
         }
 
         if (is_array($patch['patAuto'] ?? null)) {
@@ -103,7 +103,7 @@ class VztahVeStavu
      * @param  array<int, mixed>  $radky
      * @param  array<string, int>  $jmena
      */
-    private function zapisSliby(array $radky, GallerySpace $prostor, array $jmena, ?array $odebrane = null): void
+    private function zapisSliby(array $radky, GallerySpace $prostor, array $jmena, ?array $odebrane = null, ?array $zmenene = null): void
     {
         $vDatabazi = CouplePromise::where('gallery_space_id', $prostor->id)
             ->where('state', '!=', 'released')
@@ -124,6 +124,11 @@ class VztahVeStavu
 
             if ($podle->has($r['id'])) {
                 $s = $podle[$r['id']];
+
+                // Nezměněný slib se nepřepisuje starším opisem (viz OdebraneVStavu::zmenene()).
+                if (! OdebraneVStavu::zmeneno($zmenene, $r['id'])) {
+                    continue;
+                }
 
                 $s->update([
                     'what' => (string) $r['what'],
@@ -195,7 +200,7 @@ class VztahVeStavu
      * @param  array<int, mixed>  $radky
      * @param  array<string, int>  $jmena
      */
-    private function zapisZadosti(array $radky, GallerySpace $prostor, array $jmena, ?User $kdo, ?array $odebrane = null): void
+    private function zapisZadosti(array $radky, GallerySpace $prostor, array $jmena, ?User $kdo, ?array $odebrane = null, ?array $zmenene = null): void
     {
         $vDatabazi = CoupleNudge::where('gallery_space_id', $prostor->id)->withCount('pripominky')->get();
         $podle = $this->podleId($vDatabazi);
@@ -212,6 +217,10 @@ class VztahVeStavu
 
             if ($podle->has($r['id'])) {
                 $z = $podle[$r['id']];
+
+                if (! OdebraneVStavu::zmeneno($zmenene, $r['id'])) {
+                    continue;
+                }
 
                 $z->update([
                     'text' => (string) $r['text'],
@@ -384,7 +393,7 @@ class VztahVeStavu
      * @param  array<int, mixed>  $radky
      * @param  array<string, int>  $jmena
      */
-    private function zapisRozvahy(array $radky, GallerySpace $prostor, array $jmena, ?array $odebrane = null): void
+    private function zapisRozvahy(array $radky, GallerySpace $prostor, array $jmena, ?array $odebrane = null, ?array $zmenene = null): void
     {
         $otevrene = CoupleCoolingPurchase::where('gallery_space_id', $prostor->id)
             ->whereNull('closed_at')
@@ -401,6 +410,10 @@ class VztahVeStavu
             $prisly[] = (string) $r['id'];
 
             if ($podle->has($r['id'])) {
+                if (! OdebraneVStavu::zmeneno($zmenene, $r['id'])) {
+                    continue;
+                }
+
                 $podle[$r['id']]->update([
                     'opinion' => $r['opinion'] ?? null,
                     'opinion_by' => isset($r['opinionBy']) ? ($jmena[$r['opinionBy']] ?? null) : null,

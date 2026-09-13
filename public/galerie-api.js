@@ -143,9 +143,17 @@
   // Sloučení patche do lokální kopie. Hodnoty se nahrazují celé — objekty i pole
   // v tomhle prototypu vždy vznikají nové, takže hloubkové slučování by jen
   // schovávalo mazání klíčů.
+  /*
+   * Rozdíl pro zápis do tabulek — co prohlížeč v seznamu změnil, odebral nebo
+   * vrátil. Jde jen na server: do stavu (a do lokální kopie) nepatří, jinak by
+   * se po obnovení stránky vracel jako stav a rostl.
+   */
+  var ROZDIL = ['__odebrane', '__zmenene', 'evZmenene', 'evZrusene', 'evObnovene', 'xBoardZmenene', 'xBoardZrusene', 'vaultVyjmout'];
+
   function merge(patch) {
     var changed = false;
     Object.keys(patch || {}).forEach(function (k) {
+      if (ROZDIL.indexOf(k) >= 0) return;
       if (JSON.stringify(data[k]) === JSON.stringify(patch[k])) return;
       data[k] = patch[k];
       changed = true;
@@ -329,7 +337,25 @@
     save: function (patch) {
       if (!patch) return;
       if (!merge(patch)) return;
-      Object.keys(patch).forEach(function (k) { pending[k] = patch[k]; });
+      Object.keys(patch).forEach(function (k) {
+        /*
+         * Změněné položky se ve frontě sčítají.
+         *
+         * Ostatní rozdíly prohlížeč počítá celé ze stavu, takže novější
+         * přepíše starší správně. Změněné se ale počítají proti poslední
+         * odpovědi serveru — a zápis, který čekal ve frontě (offline, obnovení
+         * stránky), by jinak přepsal seznam změn toho předchozího.
+         */
+        if (k === '__zmenene' && pending[k] && typeof pending[k] === 'object' && patch[k] && typeof patch[k] === 'object') {
+          var spojene = Object.assign({}, pending[k]);
+          Object.keys(patch[k]).forEach(function (s) {
+            spojene[s] = Array.isArray(spojene[s]) ? spojene[s].concat((patch[k][s] || []).filter(function (id) { return spojene[s].indexOf(id) < 0; })) : patch[k][s];
+          });
+          pending[k] = spojene;
+          return;
+        }
+        pending[k] = patch[k];
+      });
       writeLocal();
       schedule();
     },

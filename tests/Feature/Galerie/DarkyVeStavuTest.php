@@ -183,6 +183,34 @@ class DarkyVeStavuTest extends TestCase
         $this->assertArrayNotHasKey('__odebrane', (array) $this->getJson('/api/state')->json('data'));
     }
 
+    /**
+     * Starší opis v prohlížeči nepřepíše úpravu druhého u jiné položky.
+     *
+     * Převodník přepisoval každé přání, které přišlo. Makinka upravila cenu
+     * svého přání, Adrian v kartě otevřené od rána změnil jiné — a Makinčina
+     * cena se vrátila. Přepisuje se jen to, co prohlížeč označil za změněné.
+     */
+    public function test_nezmenene_prani_se_starsim_opisem_neprepise(): void
+    {
+        $jeji = (string) Str::uuid();
+        $moje = (string) Str::uuid();
+        $this->darek(['uuid' => $jeji, 'title' => 'Kurz keramiky', 'status' => 'wish', 'budget' => 3100, 'created_by' => $this->maki->id]);
+        $this->darek(['uuid' => $moje, 'title' => 'Kolo', 'status' => 'wish', 'budget' => 9000]);
+
+        $this->stav([
+            'wishes' => [
+                // Starší opis: cena 2400, Makinka ji mezitím zvedla na 3100.
+                ['id' => $jeji, 'who' => 'Makinka', 'title' => 'Kurz keramiky', 'price' => 2400],
+                ['id' => $moje, 'who' => 'Adrian', 'title' => 'Kolo', 'price' => 12000],
+            ],
+            '__odebrane' => ['wishes' => []],
+            '__zmenene' => ['wishes' => [$moje]],
+        ])->assertOk();
+
+        $this->assertSame(3100, (int) DB::table('gift_ideas')->where('uuid', $jeji)->value('budget'));
+        $this->assertSame(12000, (int) DB::table('gift_ideas')->where('uuid', $moje)->value('budget'));
+    }
+
     // ——— pomůcky ———
 
     private function stav(array $patch)

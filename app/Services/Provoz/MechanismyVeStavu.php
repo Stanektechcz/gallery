@@ -228,7 +228,10 @@ class MechanismyVeStavu
             }
 
             if ($puvodni !== null) {
-                DB::table('couple_family_contacts')->where('id', $puvodni->id)->update($radek);
+                // Nezměněný kontakt se nepřepisuje starším opisem (viz OdebraneVStavu::zmenene()).
+                if (OdebraneVStavu::zmeneno(OdebraneVStavu::zmenene($this->patch, 'fam'), $uuid)) {
+                    DB::table('couple_family_contacts')->where('id', $puvodni->id)->update($radek);
+                }
                 $zustavaji[] = $puvodni->id;
 
                 continue;
@@ -308,7 +311,9 @@ class MechanismyVeStavu
             $uuid = (string) ($polozka['id'] ?? '');
 
             if (isset($znamé[$uuid])) {
-                DB::table($tabulka)->where('id', $znamé[$uuid])->update($radek + ['updated_at' => now()]);
+                if (OdebraneVStavu::zmeneno(OdebraneVStavu::zmenene($this->patch, self::KLICE[$tabulka] ?? $tabulka), $uuid)) {
+                    DB::table($tabulka)->where('id', $znamé[$uuid])->update($radek + ['updated_at' => now()]);
+                }
                 $zustavaji[] = $znamé[$uuid];
 
                 continue;

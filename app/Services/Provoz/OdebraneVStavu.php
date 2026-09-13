@@ -44,6 +44,45 @@ final class OdebraneVStavu
         ));
     }
 
+    /** Klíč se změněnými položkami (viz zmeneno()). */
+    public const ZMENENE = '__zmenene';
+
+    /**
+     * Položky seznamu, které prohlížeč změnil proti tomu, co naposledy dostal ze serveru.
+     *
+     * Převodníky přepisovaly každý řádek, který přišel — starší opis v kartě
+     * tak přepsal úpravu, kterou mezitím udělal ten druhý u jiné položky
+     * téhož seznamu. Pořadí se počítá do změny (řazení kapitol je úprava).
+     *
+     * @return list<string>|null null = prohlížeč změny neposlal (přepisuje se vše)
+     */
+    public static function zmenene(array $patch, string $klic): ?array
+    {
+        $vse = $patch[self::ZMENENE] ?? null;
+
+        if (! is_array($vse) || ! array_key_exists($klic, $vse) || ! is_array($vse[$klic])) {
+            return null;
+        }
+
+        return array_values(array_map(fn ($id) => (string) $id, array_filter(array_slice($vse[$klic], 0, 2000), 'is_scalar')));
+    }
+
+    /** Přepsat řádek? Bez seznamu změn ano (starší klient), jinak jen změněný. */
+    public static function zmeneno(?array $zmenene, mixed ...$identifikatory): bool
+    {
+        if ($zmenene === null) {
+            return true;
+        }
+
+        foreach ($identifikatory as $id) {
+            if ($id !== null && $id !== '' && in_array((string) $id, $zmenene, true)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /**
      * Smí se řádek, který v seznamu chybí, vzít za odebraný?
      *

@@ -67,8 +67,10 @@ class DarkyVeStavu
 
             $tykaSe[] = $druh;
 
+            $zmenene = OdebraneVStavu::zmenene($patch, $klic);
+
             foreach ((array) $patch[$klic] as $polozka) {
-                $id = $this->uloz((array) $polozka, $druh, $prostor, $uzivatel, $jmena);
+                $id = $this->uloz((array) $polozka, $druh, $prostor, $uzivatel, $jmena, $zmenene);
 
                 if ($id !== null) {
                     $zustavaji[] = $id;
@@ -109,12 +111,22 @@ class DarkyVeStavu
      * @param  array<string, int>  $jmena
      * @return int|null id řádku, který má zůstat
      */
-    private function uloz(array $p, string $druh, GallerySpace $prostor, User $uzivatel, array $jmena): ?int
+    private function uloz(array $p, string $druh, GallerySpace $prostor, User $uzivatel, array $jmena, ?array $zmenene = null): ?int
     {
         $nazev = trim((string) ($p['title'] ?? $p['what'] ?? ''));
 
         if ($nazev === '') {
             return null;
+        }
+
+        // Nezměněná položka se nepřepisuje — v prohlížeči může být starší opis
+        // toho, co mezitím upravil ten druhý (viz OdebraneVStavu::zmenene()).
+        if (! OdebraneVStavu::zmeneno($zmenene, $p['id'] ?? null)) {
+            $beze = DB::table('gift_ideas')->where('gallery_space_id', $prostor->id)->where('uuid', (string) ($p['id'] ?? ''))->value('id');
+
+            if ($beze) {
+                return (int) $beze;
+            }
         }
 
         $radek = [

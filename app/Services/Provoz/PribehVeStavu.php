@@ -41,6 +41,12 @@ class PribehVeStavu
         return OdebraneVStavu::pro($this->patch, $klic);
     }
 
+    /** Změnil prohlížeč tuhle položku? Nezměněná se starším opisem nepřepisuje. */
+    private function zmeneno(string $klic, string $id): bool
+    {
+        return OdebraneVStavu::zmeneno(OdebraneVStavu::zmenene($this->patch, $klic), $id);
+    }
+
     public function tykaSe(array $patch): bool
     {
         foreach (self::SERVEROVE as $klic) {
@@ -136,7 +142,9 @@ class PribehVeStavu
             $uuid = (string) ($k['id'] ?? $k[0] ?? '');
 
             if (isset($znamé[$uuid])) {
-                DB::table('couple_story_chapters')->where('id', $znamé[$uuid])->update($radek);
+                if ($this->zmeneno('storyList', $uuid)) {
+                    DB::table('couple_story_chapters')->where('id', $znamé[$uuid])->update($radek);
+                }
                 $zustavaji[] = $znamé[$uuid];
 
                 continue;
@@ -214,7 +222,9 @@ class PribehVeStavu
             $uuid = (string) ($m['id'] ?? $m[0] ?? '');
 
             if (isset($znamé[$uuid])) {
-                DB::table('couple_story_milestones')->where('id', $znamé[$uuid])->update($radek);
+                if ($this->zmeneno('msList', $uuid)) {
+                    DB::table('couple_story_milestones')->where('id', $znamé[$uuid])->update($radek);
+                }
                 $zustavaji[] = $znamé[$uuid];
 
                 continue;
@@ -373,8 +383,15 @@ class PribehVeStavu
             ];
 
             if ($puvodni !== null) {
-                DB::table('emergency_access_items')->where('id', $puvodni->id)->update($radek);
                 $zustavaji[] = $puvodni->id;
+
+                // Nezměněná položka se nepřepisuje starším opisem — a nepíše ani
+                // zápis do historie sdílení, který by se nestal.
+                if (! $this->zmeneno('emItems', $uuid)) {
+                    continue;
+                }
+
+                DB::table('emergency_access_items')->where('id', $puvodni->id)->update($radek);
 
                 if ((bool) $puvodni->is_shared !== $sdilet) {
                     $this->zapis($prostor, $uzivatel, ($uzivatel?->name ?? 'Někdo').' '
@@ -440,7 +457,9 @@ class PribehVeStavu
             $uuid = (string) ($r['id'] ?? '');
 
             if (isset($znamé[$uuid])) {
-                DB::table('paper_backup_rows')->where('id', $znamé[$uuid])->update($radek);
+                if ($this->zmeneno('paper', $uuid)) {
+                    DB::table('paper_backup_rows')->where('id', $znamé[$uuid])->update($radek);
+                }
                 $zustavaji[] = $znamé[$uuid];
 
                 continue;

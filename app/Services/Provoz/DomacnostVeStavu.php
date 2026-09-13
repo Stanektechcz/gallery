@@ -65,15 +65,15 @@ class DomacnostVeStavu
         }
 
         if (is_array($patch['chores'] ?? null)) {
-            $this->zapisPrace($patch['chores'], $prostor, $jmena);
+            $this->zapisPrace($patch['chores'], $prostor, $jmena, OdebraneVStavu::zmenene($patch, 'chores'));
         }
 
         if (is_array($patch['dues'] ?? null)) {
-            $this->zapisZavazky($patch['dues'], $prostor, $jmena, OdebraneVStavu::pro($patch, 'dues'));
+            $this->zapisZavazky($patch['dues'], $prostor, $jmena, OdebraneVStavu::pro($patch, 'dues'), OdebraneVStavu::zmenene($patch, 'dues'));
         }
 
         if (is_array($patch['inv'] ?? null)) {
-            $this->zapisByt($patch['inv'], $prostor);
+            $this->zapisByt($patch['inv'], $prostor, OdebraneVStavu::zmenene($patch, 'inv'));
         }
     }
 
@@ -230,7 +230,7 @@ class DomacnostVeStavu
      * @param  array<int, mixed>  $radky
      * @param  array<string, int>  $jmena
      */
-    private function zapisPrace(array $radky, GallerySpace $prostor, array $jmena): void
+    private function zapisPrace(array $radky, GallerySpace $prostor, array $jmena, ?array $zmenene = null): void
     {
         $prace = $this->podleId(HouseChore::where('gallery_space_id', $prostor->id)->get());
 
@@ -242,7 +242,7 @@ class DomacnostVeStavu
         }
 
         foreach ($radky as $r) {
-            if (! is_array($r) || ! isset($r['id']) || ! $prace->has($r['id'])) {
+            if (! is_array($r) || ! isset($r['id']) || ! $prace->has($r['id']) || ! OdebraneVStavu::zmeneno($zmenene, $r['id'])) {
                 continue;
             }
 
@@ -316,7 +316,7 @@ class DomacnostVeStavu
      * @param  array<int, mixed>  $radky
      * @param  array<string, int>  $jmena
      */
-    private function zapisZavazky(array $radky, GallerySpace $prostor, array $jmena, ?array $odebrane = null): void
+    private function zapisZavazky(array $radky, GallerySpace $prostor, array $jmena, ?array $odebrane = null, ?array $zmenene = null): void
     {
         $vDatabazi = HouseDue::where('gallery_space_id', $prostor->id)
             ->whereNull('settled_at')
@@ -334,9 +334,11 @@ class DomacnostVeStavu
             $prisly[] = (string) $r['id'];
 
             if ($zavazky->has($r['id'])) {
-                $zavazky[$r['id']]->update([
-                    'user_id' => $jmena[$r['who'] ?? ''] ?? $zavazky[$r['id']]->user_id,
-                ]);
+                if (OdebraneVStavu::zmeneno($zmenene, $r['id'])) {
+                    $zavazky[$r['id']]->update([
+                        'user_id' => $jmena[$r['who'] ?? ''] ?? $zavazky[$r['id']]->user_id,
+                    ]);
+                }
 
                 continue;
             }
@@ -386,7 +388,7 @@ class DomacnostVeStavu
      *
      * @param  array<int, mixed>  $radky
      */
-    private function zapisByt(array $radky, GallerySpace $prostor): void
+    private function zapisByt(array $radky, GallerySpace $prostor, ?array $zmenene = null): void
     {
         $veci = $this->podleId(HouseInventoryItem::where('gallery_space_id', $prostor->id)->get());
 
@@ -395,7 +397,7 @@ class DomacnostVeStavu
         }
 
         foreach ($radky as $r) {
-            if (! is_array($r) || ! isset($r['id']) || ! $veci->has($r['id'])) {
+            if (! is_array($r) || ! isset($r['id']) || ! $veci->has($r['id']) || ! OdebraneVStavu::zmeneno($zmenene, $r['id'])) {
                 continue;
             }
 

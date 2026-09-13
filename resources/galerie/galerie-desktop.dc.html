@@ -31070,7 +31070,32 @@ class Component extends DCLogic {
       const zakladRadky = ((typeof AL !== 'undefined' && AL[k]) || []).map((r, i) => ({ id: r[7] || (k + '-' + i) }));
       idcka(pred === undefined || pred === null ? zakladRadky : pred).concat(idcka(ted)).forEach(id => { sled[id] = 1; });
     });
-    if (!KLICE.some(k => k in patch) && !('xRows' in patch)) return;
+    /*
+     * Co se v seznamu změnilo proti tomu, co naposledy přišlo ze serveru.
+     *
+     * Převodníky přepisovaly každý řádek, který přišel, takže starší opis
+     * v kartě přepsal úpravu druhého u jiné položky téhož seznamu. Základ je
+     * seznam ze serveru (data nebo odpověď na zápis); pořadí je součást
+     * podpisu (řazení je úprava). Neznámý základ = změněné všechno, jako dřív.
+     */
+    const ZMENY = ['wishes', 'ideas', 'buys', 'chores', 'dues', 'inv', 'klTasks', 'fam', 'favList', 'forgList', 'antiList', 'rules', 'storyList', 'msList', 'emItems', 'paper', 'proms', 'nudges', 'cools'];
+    const zakladZmen = k => k === 'chores' ? (typeof HOUSE_CHORES !== 'undefined' ? HOUSE_CHORES : []) : k === 'inv' ? (typeof HOUSE_INV !== 'undefined' ? HOUSE_INV : []) : zaklad(k);
+    const podpis = list => {
+      const m = {};
+      (Array.isArray(list) ? list : []).forEach((r, i) => {
+        const id = Array.isArray(r) ? r[0] : (r && typeof r === 'object' ? r.id : undefined);
+        if (id !== undefined && id !== null && id !== '') m[String(id)] = i + '|' + JSON.stringify(r);
+      });
+      return m;
+    };
+    const zaklady = this._zmenZ || (this._zmenZ = {});
+    ZMENY.forEach(k => {
+      const pred = prev[k], ted = this.state[k];
+      if (pred === ted) return;
+      if (this._pQuiet || ted === null || ted === undefined) { zaklady[k] = podpis(ted === null || ted === undefined ? zakladZmen(k) : ted); return; }
+      if (!(k in zaklady)) zaklady[k] = pred === null || pred === undefined ? podpis(zakladZmen(k)) : null;
+    });
+    if (!KLICE.some(k => k in patch) && !ZMENY.some(k => k in patch) && !('xRows' in patch)) return;
     const out = {};
     // Seznam bez místní kopie jsou zase data ze serveru — ne prázdno (to by „odebralo" všechno).
     const aktualni = k => {
@@ -31087,6 +31112,13 @@ class Component extends DCLogic {
       out[k] = Object.keys(z[k]).filter(id => !ted[id]).slice(-500);
     });
     patch.__odebrane = out;
+    const zmenene = {};
+    ZMENY.forEach(k => {
+      if (!(k in zaklady) || zaklady[k] === null) return;
+      const ted = podpis(this.state[k] === null || this.state[k] === undefined ? zakladZmen(k) : this.state[k]);
+      zmenene[k] = Object.keys(ted).filter(id => zaklady[k][id] !== ted[id]);
+    });
+    patch.__zmenene = zmenene;
   }
   persistSave() {
     const api = window.GalerieApi;

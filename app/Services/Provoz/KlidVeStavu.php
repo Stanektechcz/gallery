@@ -69,7 +69,7 @@ class KlidVeStavu
         }
 
         if (array_key_exists('klTasks', $patch)) {
-            $this->cekaNaOkno((array) $patch['klTasks'], $prostor, OdebraneVStavu::pro($patch, 'klTasks'));
+            $this->cekaNaOkno((array) $patch['klTasks'], $prostor, OdebraneVStavu::pro($patch, 'klTasks'), OdebraneVStavu::zmenene($patch, 'klTasks'));
         }
 
         // Napsaná odpověď dorazila dřív než potvrzení, takže tenhle patch už
@@ -99,7 +99,7 @@ class KlidVeStavu
      *
      * @param  list<mixed>  $ukoly
      */
-    private function cekaNaOkno(array $ukoly, GallerySpace $prostor, ?array $odebrane = null): void
+    private function cekaNaOkno(array $ukoly, GallerySpace $prostor, ?array $odebrane = null, ?array $zmenene = null): void
     {
         if (! Schema::hasTable('wellbeing_tasks')) {
             return;
@@ -133,7 +133,9 @@ class KlidVeStavu
             $id = (int) ($u['id'] ?? 0);
 
             if ($id > 0 && $znamé->contains($id)) {
-                DB::table('wellbeing_tasks')->where('id', $id)->update($radek);
+                if (OdebraneVStavu::zmeneno($zmenene, $id)) {
+                    DB::table('wellbeing_tasks')->where('id', $id)->update($radek);
+                }
                 $zustavaji[] = $id;
 
                 continue;

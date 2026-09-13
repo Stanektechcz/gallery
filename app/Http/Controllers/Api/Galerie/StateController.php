@@ -489,7 +489,7 @@ class StateController extends Controller
 
             $state->zapomenFilmy(self::SERVEROVE_SEZNAMY);
             // Rozdíl pro převodníky (co prohlížeč odebral) do stavu nepatří.
-            unset($patch[OdebraneVStavu::KLIC]);
+            unset($patch[OdebraneVStavu::KLIC], $patch[OdebraneVStavu::ZMENENE]);
             $state->applyPatch($this->sPuvodnimTvarem($patch, $request));
 
             return response()->json([

@@ -101,7 +101,13 @@ class PravidlaDokumentuPrototypuTest extends TestCase
 
             $this->assertStringContainsString('this.odebraneRozdil(prev, patch);', $dokument, $nazev);
             $this->assertStringContainsString('patch.__odebrane = out;', $dokument, $nazev);
+            $this->assertStringContainsString('patch.__zmenene = zmenene;', $dokument, $nazev);
         }
+
+        // Rozdíl nepatří do stavu a změněné se ve frontě sčítají.
+        $api = (string) file_get_contents(dirname(__DIR__, 2).'/public/galerie-api.js');
+        $this->assertStringContainsString("if (ROZDIL.indexOf(k) >= 0) return;", $api);
+        $this->assertStringContainsString("if (k === '__zmenene' && pending[k]", $api);
 
         $pocitac = self::dokument('galerie-desktop.dc.html');
         $this->assertStringContainsString("if ('evList' in patch || 'xBoard' in patch) this.planRozdil(prev, patch);", $pocitac);

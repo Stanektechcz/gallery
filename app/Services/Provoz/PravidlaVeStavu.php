@@ -56,7 +56,7 @@ class PravidlaVeStavu
         }
 
         if (array_key_exists('rules', $patch)) {
-            $this->uloz((array) $patch['rules'], $prostor, $uzivatel, OdebraneVStavu::pro($patch, 'rules'));
+            $this->uloz((array) $patch['rules'], $prostor, $uzivatel, OdebraneVStavu::pro($patch, 'rules'), OdebraneVStavu::zmenene($patch, 'rules'));
         }
 
         /*
@@ -77,7 +77,7 @@ class PravidlaVeStavu
     /**
      * @param  list<mixed>  $pravidla  seznam v tom tvaru, ve kterém ho prototyp drží
      */
-    private function uloz(array $pravidla, GallerySpace $prostor, ?User $uzivatel, ?array $odebrane = null): void
+    private function uloz(array $pravidla, GallerySpace $prostor, ?User $uzivatel, ?array $odebrane = null, ?array $zmenene = null): void
     {
         $stavajici = DB::table('automation_rules')
             ->where('gallery_space_id', $prostor->id)
@@ -114,7 +114,10 @@ class PravidlaVeStavu
             $znamy = $stavajici[$uuid] ?? null;
 
             if ($znamy) {
-                DB::table('automation_rules')->where('id', $znamy->id)->update($radek);
+                // Nezměněné pravidlo se nepřepisuje starším opisem (viz OdebraneVStavu::zmenene()).
+                if (OdebraneVStavu::zmeneno($zmenene, $uuid)) {
+                    DB::table('automation_rules')->where('id', $znamy->id)->update($radek);
+                }
                 $zustavaji[] = $znamy->id;
 
                 continue;

@@ -170,6 +170,25 @@ class ObsahSlibyTest extends TestCase
         $this->assertSame('open', $zustane->refresh()->state);
     }
 
+    /** Nezměněný slib se starším opisem nepřepíše (druhý ho mezitím označil dodržený). */
+    public function test_nezmeneny_slib_se_starsim_opisem_neprepise(): void
+    {
+        $dodrzeny = $this->slib(['what' => 'Umýt auto', 'state' => 'kept', 'settled_at' => now()]);
+        $upraveny = $this->slib(['what' => 'Zavolat tetě']);
+
+        $this->patchJson('/api/state', ['data' => [
+            'proms' => [
+                $this->radekSlibu($dodrzeny, ['state' => 'open']),
+                $this->radekSlibu($upraveny, ['what' => 'Zavolat tetě v neděli']),
+            ],
+            '__odebrane' => ['proms' => []],
+            '__zmenene' => ['proms' => [$upraveny->uuid]],
+        ]])->assertOk();
+
+        $this->assertSame('kept', $dodrzeny->refresh()->state);
+        $this->assertSame('Zavolat tetě v neděli', $upraveny->refresh()->what);
+    }
+
     /** Posunutý termín se přepočítá na datum. */
     public function test_posunuty_termin_se_prepocita(): void
     {
