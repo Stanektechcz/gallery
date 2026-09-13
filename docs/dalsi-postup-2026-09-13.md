@@ -349,9 +349,56 @@ místo 12. Testy: **1409 PHP testů**, všechny prošly.
 ### Změny chování, o kterých mají oba vědět (2i)
 
 - Když přihlášení na zařízení skončí (90 dní bez použití, „odhlásit ostatní
-  zařízení" z jiného zařízení), aplikace hned ukáže přihlášení — dřív vypadala
-  normálně a nic se neukládalo. Změny udělané před tím odejdou po přihlášení,
-  pokud se karta mezitím nezavře.
+  zařízení" z jiného zařízení), aplikace hned ukáže přihlášení a zahodí
+  kopii dat v prohlížeči (2j) — dřív vypadala normálně a nic se neukládalo.
+  Změny udělané před tím odejdou po přihlášení, pokud se karta mezitím nezavře.
+
+---
+
+## 2j. Desáté kolo — zapomenuté heslo a paměť prohlížeče (14. 9.)
+
+**Zapomenuté heslo nemělo cestu.** Přihlašovací obrazovka aplikace na obnovu
+nikam neodkazovala, e-mail chodil anglicky („Reset Password Notification"),
+po obnovení zůstala přihlášená všechna zařízení (i to, kvůli kterému člověk
+heslo měnil) a formulář tvrdil „odkaz byl odeslán" i tam, kde e-maily nechodí.
+
+- Počítač i telefon: odkaz **Zapomenuté heslo?** pod přihlášením.
+- E-mail česky; odkaz platí 60 minut.
+- Nové heslo aspoň 10 znaků (jako při změně v Nastavení); **odhlásí všechna
+  zařízení** (klíče aplikace i sezení starého rozhraní), zapíše se do protokolu.
+- Po změně zpět do aplikace s hláškou „Heslo je změněné — přihlaste se novým
+  heslem".
+- Odpověď formuláře neprozradí, jestli k adrese účet existuje.
+- Když server e-maily neposílá (`MAIL_MAILER=log`/`array`), stránka to řekne
+  místo formuláře a `gallery:doctor` hlásí varování. Nové heslo pak nastaví
+  správce serveru: `php artisan gallery:ucet adresa@… --heslo`.
+
+**Paměť prohlížeče mezi účty.** Obsah z API se ukládal na 30–60 s
+(`private, max-age`), ale `Vary` měl jen `X-Inertia` — po odhlášení jednoho
+a přihlášení druhého na témž počítači prohlížeč podával obsah prvního
+(i soukromé zápisy deníku) a s neplatným tokenem vracel data z paměti. Teď
+`Vary: Authorization`. Worker navíc ukládal i odpovědi 401 (přepsaly dobrou
+kopii pro offline) a po odvolání zařízení v něm data zůstávala — ukládá jen
+úspěšné, po 401 kopii smaže; datová vrstva po odhlášení zahodí kopii stavu.
+
+| Commit | Obsah |
+|---|---|
+| `e28a2fad` | Zapomenuté heslo: odkaz z aplikace, český e-mail, odhlášení všech zařízení, poctivá stránka bez e-mailů, `gallery:doctor` |
+| `9e1e385f` | `Vary: Authorization`; worker bez kopie 401 a bez dat po odhlášení; datová vrstva zahodí kopii stavu |
+
+Ověřeno v prohlížeči: odkaz na obou přihlašovacích obrazovkách vede na
+formulář; bez e-mailů hláška místo formuláře; stránka nového hesla s limitem
+10 znaků a návratem do aplikace; `?heslo=zmeneno` → hláška na počítači
+i telefonu; neplatný token → mezipaměť dat i kopie stavu pryč, přihlašovací
+obrazovka jen s ukázkovými adresami; tatáž adresa s jiným tokenem 401 místo
+uložené 200. Testy: **1416 PHP testů**, všechny prošly.
+
+### Změny chování, o kterých mají oba vědět (2j)
+
+- Obnova zapomenutého hesla odhlásí všechna zařízení — na ostatních se
+  ukáže přihlášení.
+- Po nasazení: `php artisan gallery:doctor` — řádek `MAIL_MAILER delivers
+  e-mail`. Při WARN obnova hesla e-mailem nefunguje.
 
 ---
 
