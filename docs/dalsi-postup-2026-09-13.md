@@ -286,8 +286,12 @@ náhled a velký náhled, koš a vrácení, sdílený odkaz (host bez GPS, po
 zneplatnění 404), trvalé odstranění; průchod tlačítek v listech telefonu
 (79 obrazovek) bez kliknutí naprázdno. Testy: **1396 PHP testů**, všechny prošly.
 
-Co zůstává: když oba upraví **tutéž** položku v rozmezí pár minut, platí
-poslední uložení (převodníky přepisují celé řádky, které prohlížeč pošle).
+Co zůstává: převodníky seznamů (přání, sliby, kapitoly…) přepisují všechny
+řádky, které prohlížeč pošle. Upraví-li ten druhý položku a první do čtyř
+minut (než se obsah obnoví) změní jinou položku téhož seznamu, jeho starší
+opis úpravu druhého přepíše. Mazání už takhle nefunguje (2f); u kalendáře
+a úkolů se posílá jen změněné. Stejný rozdíl („jen změněné") by chtěly
+i ostatní seznamy.
 
 ---
 
