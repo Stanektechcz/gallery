@@ -124,26 +124,25 @@ class KlidVeStavuTest extends TestCase
     }
 
     /**
-     * Napsaná odpověď dorazí dřív než potvrzení.
+     * Rozepsaná odpověď ve společném stavu nezůstane.
      *
-     * Prototyp ukládá rozepsaný text hned, takže patch s „odeslat" už ho
-     * nenese — dohledá se v tom, co ve stavu leží.
+     * Druhému se objevila v jeho políčku ještě před odesláním a „odesláno"
+     * mu odemklo cizí odpověď dřív, než napsal svou. Obrazovka ji teď posílá
+     * jednou zprávou s potvrzením.
      */
-    public function test_odpoved_z_drivejsiho_patche_se_najde(): void
+    public function test_rozepsana_odpoved_druhy_neuvidi(): void
     {
-        $this->stav(['klAskMine' => 'Tři večery po deváté v práci.'])->assertOk();
+        $this->stav(['klAskMine' => 'Tři večery po deváté v práci.', 'klAskDone' => false])->assertOk();
 
+        $stav = (array) $this->getJson('/api/state')->assertOk()->json('data');
+        $this->assertArrayNotHasKey('klAskMine', $stav);
+        $this->assertArrayNotHasKey('klAskDone', $stav);
         $this->assertSame(0, DB::table('wellbeing_answers')->count());
 
-        $this->stav([
-            'klAskDone' => true,
-            'klAskQ' => 'Co z tohoto týdne bys nechtěl opakovat?',
-        ])->assertOk();
-
-        $radek = DB::table('wellbeing_answers')->first();
-
-        $this->assertSame('Tři večery po deváté v práci.', $radek->answer);
-        $this->assertSame('Co z tohoto týdne bys nechtěl opakovat?', $radek->question);
+        // Potvrzení bez textu odpověď nevyrobí — nic se nedohledává.
+        $this->stav(['klAskDone' => true, 'klAskQ' => 'Co z tohoto týdne bys nechtěl opakovat?'])->assertOk();
+        $this->assertSame(0, DB::table('wellbeing_answers')->count());
+        $this->assertArrayNotHasKey('klAskQ', (array) $this->getJson('/api/state')->assertOk()->json('data'));
     }
 
     /** Rozepsaná věta v poli není odpověď. */

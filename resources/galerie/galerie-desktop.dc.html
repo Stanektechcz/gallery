@@ -19950,11 +19950,21 @@ class Component extends DCLogic {
 
     const askIdx = (s.klAskIdx || 0) % KL_QUESTIONS.length;
     const askQ = KL_QUESTIONS[askIdx];
-    const askDone = !!s.klAskDone;
-    const askLog = s.klAskLog || KL_ASK_LOG;
     // Co o dnešní otázce ví server: jestli druhý odpověděl a co napsal.
     // Bez backendu je to null a platí ukázka.
     const askNow = ((window.GalerieData || {}).KL_ASK_NOW) || null;
+    /*
+     * U dvojice je „odesláno" to, co leží na serveru pod mým účtem.
+     *
+     * `klAskDone` i rozepsaná odpověď bývaly ve společném stavu: druhému se
+     * rozepsaná věta objevila v jeho políčku, a když jeden odeslal, druhému
+     * se obrazovka tvářila jako odeslaná — a odemkla mu cizí odpověď dřív,
+     * než napsal svou.
+     */
+    const askNaServeru = !this.ukazka();
+    const askServerDone = !!(askNow && askNow.done && askNow.q === askQ.q);
+    const askDone = askNaServeru ? (askServerDone || s.klAskSentQ === askQ.q) : !!s.klAskDone;
+    const askLog = askNaServeru ? KL_ASK_LOG : (s.klAskLog || KL_ASK_LOG);
 
     return {
       isKlid: s.route === 'x-klid',
@@ -20142,7 +20152,7 @@ class Component extends DCLogic {
       })),
 
       klAskQ: askQ.q,
-      klAskMine: s.klAskMine || '',
+      klAskMine: askServerDone ? (askNow.mine || '') : (s.klAskMine || ''),
       klAskSet: e => this.setState({ klAskMine: e.target.value }),
       klAskCan: (s.klAskMine || '').trim().length > 1 && !askDone,
       klAskDone: askDone,
@@ -20154,10 +20164,24 @@ class Component extends DCLogic {
        * naráz" odemklo větu, kterou nikdo neřekl. Se serverem se ukáže to,
        * co druhý opravdu napsal — a když ještě nenapsal nic, řekne se to.
        */
-      klAskOther: askNow ? (askNow.other || 'Druhý zatím neodpověděl. Až odpoví, objeví se to tady.') : askQ.other,
+      klAskOther: askNaServeru
+        ? ((askServerDone && askNow.other) || 'Druhý zatím neodpověděl. Až odpoví, objeví se to tady.')
+        : askQ.other,
       // Otázka se posílá s odpovědí: server jinak neví, na co se odpovídalo.
-      klAskSubmit: () => { this.setState({ klAskDone: true, klAskQ: askQ.q }); this.toast('Odpověď zapsaná — druhého uvidíte, až odpoví taky', { icon: 'ph-lock-open' }); },
+      klAskSubmit: () => {
+        if (!askNaServeru) { this.setState({ klAskDone: true, klAskQ: askQ.q }); this.toast('Odpověď zapsaná — druhého uvidíte, až odpoví taky', { icon: 'ph-lock-open' }); return; }
+        const text = (s.klAskMine || '').trim();
+        if (text.length < 2) { this.toast('Nejdřív napište svou odpověď', { icon: 'ph-pencil-simple' }); return; }
+        const api = window.GalerieApi;
+        if (!api || api.mode !== 'http') { this.toast('Odpověď se zapíše jen s připojeným serverem', { icon: 'ph-warning' }); return; }
+        // Odpověď jde jednou zprávou s otázkou a potvrzením — ve společném stavu nezůstává.
+        api.save({ klAskMine: text, klAskDone: true, klAskQ: askQ.q });
+        this.setState({ klAskSentQ: askQ.q });
+        setTimeout(() => { if (window.GalerieObnovit) window.GalerieObnovit('klid'); }, 1500);
+        this.toast('Odpověď zapsaná — druhého uvidíte, až odpoví taky', { icon: 'ph-lock-open' });
+      },
       klAskNext: () => {
+        if (askNaServeru) { this.setState({ klAskIdx: askIdx + 1, klAskMine: '', klAskSentQ: null }); return; }
         this.setState({
           klAskIdx: askIdx + 1, klAskMine: '', klAskDone: false,
           klAskLog: [{ q: askQ.q, a: s.klAskMine || '—', m: askQ.other, when: 'dnes' }].concat(askLog)
@@ -30509,7 +30533,8 @@ class Component extends DCLogic {
       albumId: 1, personId: 1, placeId: 1, recipeId: 1, tripId: 1,
       calDay: 1, calMonth: 1, calSel: 1, calView: 1, calYear: 1, cycMonth: 1, cycSel: 1, msYear: 1,
       srMonth: 1, srYear: 1, ybYear: 1, budMonth: 1,
-      homeArcIdx: 1, homeQIdx: 1, overIdx: 1, serIdx: 1, curIdx: 1, csPick: 1, pastPick: 1, pmPick: 1,
+      // `homeQIdx` ne: otázka dne musí být pro oba stejná, jinak odpovídá každý na jinou.
+      homeArcIdx: 1, overIdx: 1, serIdx: 1, curIdx: 1, csPick: 1, pastPick: 1, pmPick: 1,
       rcDay: 1, ckDay: 1, obStep: 1,
       cmpSel: 1, cmpZoom: 1, confirmPick: 1, txSel: 1, vaultPick: 1, naWithSel: 1, naName: 1, naParent: 1,
       lbEdit: 1, lbSplitMode: 1, dnExpand: 1,
@@ -30520,7 +30545,18 @@ class Component extends DCLogic {
       shrName: 1, shrExp: 1, shrComments: 1, shrDownload: 1, shrGuest: 1, shrMeta: 1, shrMsg: 1,
       shrPwdOn: 1, shrEditId: 1, ndKind: 1,
       // Předvolby zařízení — ukládají se jen v tomhle prohlížeči, viz `zarizeniKlice()`.
-      theme: 1, sbOpen: 1, grid: 1, sort: 1
+      theme: 1, sbOpen: 1, grid: 1, sort: 1,
+      /*
+       * Rozepsané texty z polí.
+       *
+       * Druhému se objevily v jeho políčku ještě před odesláním — odpověď na
+       * otázku na dva, dopis, slib, nápad na dárek nebo překvapení pro něj.
+       * Odpověď na otázku odchází jednou zprávou při odeslání (`klAskSubmit`).
+       */
+      klAskMine: 1, klAskDone: 1, klAskSentQ: 1, homeQText: 1, zprLetter: 1, promW: 1, trT: 1, vetoReason: 1,
+      gftN: 1, gftP: 1, gftS: 1, gftT: 1, surpA: 1, surpW: 1, capText: 1, confirmValue: 1,
+      dcR: 1, dcRev: 1, dcT: 1, dcW: 1, kalInput: 1, obName: 1, obPair: 1, pplName: 1, pplTarget: 1,
+      quartT: 1, quartA: 1, quartM: 1, quartW: 1, verB: 1, verV: 1, verY: 1, kidsM: 1, kidsO: 1
     };
     return this._pSkip;
   }

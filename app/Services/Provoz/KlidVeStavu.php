@@ -19,8 +19,15 @@ use Illuminate\Support\Facades\Schema;
  */
 class KlidVeStavu
 {
-    /** Klíče, které patří databázi. Do stavu se neukládají. */
-    public const SERVEROVE = ['klEn', 'klAttn', 'klAskLog', 'klTasks'];
+    /**
+     * Klíče, které patří databázi. Do stavu se neukládají.
+     *
+     * Odpověď na otázku na dva (`klAskMine`, `klAskDone`, `klAskQ`) taky ne:
+     * ve společném stavu se druhému objevila rozepsaná věta v jeho políčku
+     * a „odesláno" mu odemklo cizí odpověď dřív, než napsal svou. Obrazovka
+     * ji posílá jednou zprávou při odeslání a stav bere ze serveru (`KL_ASK_NOW`).
+     */
+    public const SERVEROVE = ['klEn', 'klAttn', 'klAskLog', 'klTasks', 'klAskMine', 'klAskDone', 'klAskQ'];
 
     public function __construct(private readonly Klid $obsah) {}
 

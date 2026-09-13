@@ -847,7 +847,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                   <sc-for list="{{ all.klAsk }}" as="q" hint-placeholder-count="4">
                     <div style="border-top:1px solid var(--g-ink); padding-top:9px">
                       <div style="font-size:16px; line-height:1.35; text-wrap:pretty">{{ q.q }}</div>
-                      <div style="font-size:10.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--g-ink3); margin-top:8px">Druhý odpověděl</div>
+                      <div style="font-size:10.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--g-ink3); margin-top:8px">{{ q.label }}</div>
                       <div style="font-size:13.5px; color:var(--g-ink2); line-height:1.55; margin-top:3px; text-wrap:pretty">{{ q.other }}</div>
                     </div>
                   </sc-for>
@@ -7581,7 +7581,30 @@ class Component extends DCLogic {
       }
     })) : [];
     const isKlQuiet = klQuietRows.length > 0;
-    const klAsk = key === 'klAsk' ? KL_QUESTIONS.map(q => ({ q: q.q, other: q.other })) : [];
+    /*
+     * U dvojice skutečné odpovědi, ne katalog ukázky.
+     *
+     * Obrazovka vypisovala otázky s „Druhý odpověděl: Ty čtvrteční hovory…"
+     * — větou, kterou nikdo z dvojice nenapsal. Se serverem je tu dnešní
+     * otázka (odpověď druhého jen, když jste odpověděli i vy) a archiv otázek,
+     * na které odpověděli oba.
+     */
+    const klAsk = key !== 'klAsk' ? [] : (() => {
+      if (!this.galerieNaServeru()) return KL_QUESTIONS.map(q => ({ q: q.q, label: 'Druhý odpověděl', other: q.other }));
+      const D = window.GalerieData || {};
+      const dnes = D.KL_ASK_NOW || null;
+      const druhy = this.krestni(this.dva()[1]);
+      const rows = [];
+      if (dnes && dnes.q) {
+        rows.push({
+          q: dnes.q,
+          label: dnes.done ? (dnes.other ? druhy + ' odpověděl' + (this.rodPripona(druhy) || '') : 'Vaše odpověď je zapsaná') : 'Odpověď ' + this.whoGen(druhy) + ' je zamčená',
+          other: dnes.done ? (dnes.other || (dnes.mine ? '„' + dnes.mine + '" · ' + druhy + ' zatím neodpověděl' + (this.rodPripona(druhy) || '') : '')) : 'Odemkne se, až odpovíte taky — na počítači v Klid → Otázka na dva.'
+        });
+      }
+      (D.KL_ASK_LOG || []).filter(l => !dnes || l.q !== dnes.q).forEach(l => rows.push({ q: l.q, label: druhy + ' · ' + (l.when || ''), other: l.m }));
+      return rows.length ? rows : [{ q: 'Zatím žádná otázka na dva', label: 'Jak na to', other: 'Otázku na dva odpovídá každý sám na počítači (Klid → Otázka na dva). Odpověď druhého se ukáže, až odpovíte oba.' }];
+    })();
     const isKlAsk = klAsk.length > 0;
 
     // ——— Technika a Kdo víc ———
