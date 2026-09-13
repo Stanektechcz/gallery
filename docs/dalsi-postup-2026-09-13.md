@@ -253,16 +253,17 @@ neobnovují), často s limitem.
 |---|---|
 | `1fdb6995` | **Kalendář a úkoly:** úprava jedné události mazala z databáze události, které přidal ten druhý, cesta nebo automatizace, i ty nad limitem seznamu; **každé uložení kalendáře rozeslalo znovu už doručené připomínky**; nový úkol/událost se zakládaly při každém odeslání znovu; první úkol dvojice se nezapsal nikdy; první odškrtnutí odznačilo všechno hotové; kategorie úkolů jako skutečné seznamy v databázi |
 | `a12483a9` | **Trezor:** „Do trezoru" u zamčeného trezoru (nebo z druhého zařízení) vrátilo celý trezor do mřížky, hledání a sdílených odkazů; vrátit z trezoru teď jde jen výslovně a jen s odemčeným trezorem. **Přání, dárky, sliby, žádosti, rozvahy nákupů, záznamy prací, závazky, kapitoly, milníky, nouzový přístup, papírová záloha, pravidla, rodina, laskavosti a antirozpočet:** maže se jen to, co prohlížeč sám odebral (`__odebrane`) |
+| `7d4d4860` | **Filmy, seriály, watchlist:** řádek se poznal podle pořadí (`films-3`) — po přidání či smazání titulu druhým dopadlo hodnocení na jiný film, starší seznam titul zdvojil a mazání trefilo vedle; teď podle uuid titulu |
 
 Pravidlo pro další převodníky: **nikdy nemazat podle toho, co v odeslaném
 seznamu chybí.** Prohlížeč posílá rozdíl (`OdebraneVStavu`, u kalendáře
 a nástěnky `evZmenene/evZrusene`, `xBoardZmenene/xBoardZrusene`), nové
 řádky se párují s identifikátorem z prohlížeče.
 
-Testy: **1390 PHP testů**, všechny prošly. V prohlížeči ověřeno: kategorie
+Testy: **1393 PHP testů**, všechny prošly. V prohlížeči ověřeno: kategorie
 (založit, úkol do ní, přesuny tam a zpět bez zdvojení, smazání), událost
 (přidat, dvakrát upravit, smazat, vrátit Zpět — v databázi pořád jedna),
-přání přidané a odebrané na počítači i telefonu.
+přání přidané a odebrané na počítači i telefonu, film odebraný, přidaný a vrácený Zpět i přidaný a později smazaný. Kontrola šablon proti hodnotám znovu čistá (266 stavů).
 
 ### Změny chování, o kterých mají oba vědět (2f)
 
