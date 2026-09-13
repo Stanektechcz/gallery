@@ -25,7 +25,14 @@ return new class extends Migration
         }
 
         CoupleState::query()->each(function (CoupleState $stav) {
-            $stav->zapomen(CoupleState::NEUKLADAT);
+            /*
+             * A místní řádky telefonu z doby před ukládáním do databáze.
+             *
+             * `txExtra`, `tasksExtra`, `diary`, `secExtra` a `mShopExtra` telefon
+             * u dvojice nečte ani nezapisuje — platby, úkoly, deník a nákup jsou
+             * v tabulkách. Ve stavu by jen ležely a posílaly se s každým načtením.
+             */
+            $stav->zapomen(array_merge(CoupleState::NEUKLADAT, ['txExtra', 'tasksExtra', 'diary', 'secExtra', 'mShopExtra']));
         });
     }
 
