@@ -204,6 +204,23 @@ class DoruceniTest extends TestCase
     }
 
     /**
+     * Odmítnutý zápis ve frontě workera se neposílá navždy.
+     *
+     * Zůstával ve frontě i po 413 nebo s tokenem, který mezitím skončil,
+     * a odcházel při každém probuzení workera.
+     */
+    public function test_fronta_workera_zahodi_odmitnuty_zapis(): void
+    {
+        $worker = (string) $this->get('/sw.js')->assertOk()->getContent();
+
+        $this->assertStringContainsString('async function flush(auth) {', $worker);
+        $this->assertStringContainsString("hlavicky['Authorization'] = auth;", $worker);
+        $this->assertStringContainsString('if (r.ok || r.status === 409 || odmitnuto) await queueDrop(it.key);', $worker);
+        $this->assertStringContainsString('flush(e.data.auth || null);', $worker);
+        $this->assertStringNotContainsString('async function flush() {', $worker);
+    }
+
+    /**
      * Paměť workera jen pro statické soubory.
      *
      * Brala napřed z paměti každý požadavek mimo navigaci a `/api/` — i fotky

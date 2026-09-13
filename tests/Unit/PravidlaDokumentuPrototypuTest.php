@@ -106,12 +106,38 @@ class PravidlaDokumentuPrototypuTest extends TestCase
 
         // Rozdíl nepatří do stavu a změněné se ve frontě sčítají.
         $api = (string) file_get_contents(dirname(__DIR__, 2).'/public/galerie-api.js');
-        $this->assertStringContainsString("if (ROZDIL.indexOf(k) >= 0) return;", $api);
+        $this->assertStringContainsString('if (ROZDIL.indexOf(k) >= 0) return;', $api);
         $this->assertStringContainsString("if (k === '__zmenene' && pending[k]", $api);
 
         $pocitac = self::dokument('galerie-desktop.dc.html');
         $this->assertStringContainsString("if ('evList' in patch || 'xBoard' in patch) this.planRozdil(prev, patch);", $pocitac);
         $this->assertStringContainsString('patch.vaultVyjmout =', $pocitac);
+    }
+
+    /**
+     * Odmítnutý zápis stavu se neopakuje každé čtyři vteřiny.
+     *
+     * Prošlé přihlášení, odebraný přístup nebo příliš velký zápis dělaly
+     * z otevřené karty smyčku `PATCH /api/state` (firewall už jednou adresu
+     * zablokoval) a čekající zápis zastavil dotazy na změny toho druhého.
+     */
+    public function test_odmitnuty_zapis_stavu_se_neopakuje_dokola(): void
+    {
+        $api = (string) file_get_contents(dirname(__DIR__, 2).'/public/galerie-api.js');
+
+        $this->assertStringNotContainsString('schedule(4000);', $api);
+        $this->assertStringContainsString('prodleva = Math.min(prodleva ? prodleva * 2 : 4000, 120000);', $api);
+        $this->assertStringContainsString('if (stav === 401 || stav === 403) {', $api);
+        $this->assertStringContainsString('if (stav === 400 || stav === 413 || stav === 422) {', $api);
+        $this->assertStringContainsString("ohlas('galerie-odhlaseno'", $api);
+
+        foreach (['galerie-desktop.dc.html', 'galerie-mobil.dc.html'] as $nazev) {
+            $dokument = self::dokument($nazev);
+
+            $this->assertStringContainsString("window.addEventListener('galerie-odhlaseno', this._odhlaseno);", $dokument, $nazev);
+            $this->assertStringContainsString("window.addEventListener('galerie-odmitnuto', this._odmitnuto);", $dokument, $nazev);
+            $this->assertStringContainsString("window.addEventListener('galerie-stret', this._stret);", $dokument, $nazev);
+        }
     }
 
     /** Koš v telefonu umí i trvale odstranit — dřív jen „Obnovit". */

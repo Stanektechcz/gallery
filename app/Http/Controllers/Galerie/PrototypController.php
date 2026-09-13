@@ -313,6 +313,33 @@ JS,
     }
 JS,
 
+            /*
+             * Fronta zápisů bez věčných pokusů.
+             *
+             * Zápis, který server odmítl, zůstával ve frontě navždy a posílal
+             * se při každém probuzení workera — i s tokenem, který mezitím
+             * skončil. Aplikace při „Odeslat" posílá aktuální přihlášení; natrvalo
+             * odmítnutý zápis (velikost, neplatná data, a s čerstvým přihlášením
+             * i 401/403) se zahodí.
+             */
+            "async function flush() {\n  const items = await queueAll();\n  for (const it of items) {\n    try {\n      const r = await fetch(it.body.url, { method: 'PATCH', headers: it.body.headers, body: it.body.body, credentials: 'same-origin' });\n      if (r.ok || r.status === 409) await queueDrop(it.key);" => <<<'JS'
+async function flush(auth) {
+  const items = await queueAll();
+  for (const it of items) {
+    try {
+      // Aktuální přihlášení z aplikace: token uložený se zápisem mohl skončit.
+      const hlavicky = Object.assign({}, it.body.headers);
+      if (auth) {
+        Object.keys(hlavicky).forEach(k => { if (k.toLowerCase() === 'authorization') delete hlavicky[k]; });
+        hlavicky['Authorization'] = auth;
+      }
+      const r = await fetch(it.body.url, { method: 'PATCH', headers: hlavicky, body: it.body.body, credentials: 'same-origin' });
+      // Natrvalo odmítnutý zápis ven z fronty — jinak by se posílal při každém probuzení.
+      const odmitnuto = r.status === 400 || r.status === 413 || r.status === 422 || (!!auth && (r.status === 401 || r.status === 403));
+      if (r.ok || r.status === 409 || odmitnuto) await queueDrop(it.key);
+JS,
+            "  if (e.data && e.data.type === 'galerie-flush') flush();" => "  if (e.data && e.data.type === 'galerie-flush') flush(e.data.auth || null);",
+
             "  // Data z API: nejdřív síť, kopie do paměti; offline se podá poslední známý stav.\n  if (url.pathname.indexOf('/api/') >= 0) {" => <<<'JS'
   // Soubory (náhledy, originály, obrázky z chatu, nahrávky) nechat prohlížeči a jeho HTTP paměti.
   if (/\/api\/(media|chat)\/[^/]+\/(thumb|raw|nahled|obrazek|video)$|\/api\/v1\/voice-notes\/[^/]+\/stream$|^\/files\//.test(url.pathname)) return;

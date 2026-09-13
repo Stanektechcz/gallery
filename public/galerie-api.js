@@ -173,17 +173,93 @@
    */
   function ohlasStret(klice) {
     if (! klice || ! klice.length) return;
+    ohlas('galerie-stret', { klice: klice.slice() });
+  }
+  function ohlas(nazev, detail) {
     try {
-      window.dispatchEvent(new CustomEvent('galerie-stret', { detail: { klice: klice.slice() } }));
+      window.dispatchEvent(new CustomEvent(nazev, { detail: detail }));
     } catch (e) {}
+  }
+
+  /*
+   * Odmítnutý zápis se neopakuje dokola.
+   *
+   * Každá chyba vracela patch do fronty a za čtyři vteřiny ho poslala znovu —
+   * i když ho server odmítl natrvalo. Prošlé přihlášení (401), odebraný
+   * přístup (403) nebo příliš velký zápis (413) tak z otevřené karty dělaly
+   * smyčku patnácti požadavků za minutu (firewall serveru už jednou adresu
+   * dvojice zablokoval) a čekající zápis zastavil i dotazy na změny toho
+   * druhého — hlavička se neptá, dokud něco čeká na odeslání.
+   *
+   *  - 401/403: token se zahodí, aplikace ukáže přihlášení (`galerie-odhlaseno`)
+   *    a zápisy čekají na nové přihlášení;
+   *  - 400/413/422: patch s víc klíči se pošle po jednom; klíč, který server
+   *    nevezme ani sám, se zahodí a aplikace to řekne (`galerie-odmitnuto`);
+   *  - výpadek a chyby serveru: další pokus s prodlužující se prodlevou
+   *    (4 s, 8 s, … nejvýš 2 minuty).
+   */
+  var prodleva = 0;
+  var poJednom = false;
+  var odmitnutyToken; // `undefined` = zápisy nečekají na přihlášení
+  var ROZDIL_KE_KLICI = { evZmenene: 'evList', evZrusene: 'evList', evObnovene: 'evList', xBoardZmenene: 'xBoard', xBoardZrusene: 'xBoard', vaultVyjmout: 'vaultAdded' };
+
+  // Jeden klíč z fronty i s rozdílem, který k němu patří (`__odebrane['xRows.films']` k `xRows`).
+  function vyjmiKlic(k) {
+    var p = {};
+    p[k] = pending[k];
+    delete pending[k];
+    ['__odebrane', '__zmenene'].forEach(function (r) {
+      var mapa = pending[r];
+      if (!mapa || typeof mapa !== 'object') return;
+      var zbytek = Object.assign({}, mapa);
+      Object.keys(mapa).forEach(function (s) {
+        if (s !== k && s.indexOf(k + '.') !== 0) return;
+        p[r] = p[r] || {};
+        p[r][s] = mapa[s];
+        delete zbytek[s];
+      });
+      if (Object.keys(zbytek).length) pending[r] = zbytek; else delete pending[r];
+    });
+    Object.keys(ROZDIL_KE_KLICI).forEach(function (r) {
+      if (ROZDIL_KE_KLICI[r] === k && r in pending) { p[r] = pending[r]; delete pending[r]; }
+    });
+    return p;
+  }
+  // Neodeslaný patch zpátky do fronty; novější zápis téhož klíče má přednost.
+  function vratDoFronty(patch) {
+    Object.keys(patch).forEach(function (k) {
+      if ((k === '__odebrane' || k === '__zmenene') && pending[k] && typeof pending[k] === 'object' && patch[k] && typeof patch[k] === 'object') {
+        pending[k] = Object.assign({}, patch[k], pending[k]);
+        return;
+      }
+      if (!(k in pending)) pending[k] = patch[k];
+    });
+    writeLocal();
+  }
+  function odhlaseno(stav, zprava) {
+    window.GALERIE_API_TOKEN = null;
+    odmitnutyToken = null;
+    try { localStorage.removeItem('galerie.token'); } catch (e) {}
+    ohlas('galerie-odhlaseno', { status: stav, zprava: zprava || '' });
+    notify();
   }
 
   function flush() {
     timer = null;
     if (inflight) { schedule(400); return; }
-    var patch = pending;
-    if (!Object.keys(patch).length) return;
-    pending = {};
+    if (!Object.keys(pending).length) return;
+    // Čeká se na přihlášení: se stejným (žádným) tokenem by to dopadlo stejně.
+    if (odmitnutyToken !== undefined && (window.GALERIE_API_TOKEN || null) === odmitnutyToken) return;
+    odmitnutyToken = undefined;
+
+    var patch;
+    var hlavniVeFronte = Object.keys(pending).filter(function (k) { return ROZDIL.indexOf(k) < 0; });
+    if (poJednom && hlavniVeFronte.length) {
+      patch = vyjmiKlic(hlavniVeFronte[0]);
+    } else {
+      patch = pending;
+      pending = {};
+    }
 
     if (mode === 'local') {
       rev += 1; writeLocal(); lastSync = new Date();
@@ -192,8 +268,14 @@
     }
 
     inflight = true;
+    var sTokenem = !!window.GALERIE_API_TOKEN;
     fetch(base + '/state', { method: 'PATCH', headers: headers(), credentials: 'same-origin', body: JSON.stringify({ data: patch, rev: rev }) })
       .then(function (r) {
+        if (r.status === 401 || r.status === 403) {
+          return r.json().catch(function () { return {}; }).then(function (b) {
+            throw Object.assign(new Error('HTTP ' + r.status), { status: r.status, zprava: (b && b.message) || '' });
+          });
+        }
         // 202 = service worker patch přijal do fronty a doručí ho sám
         // (i když aplikaci zavřete). Lokální kopie je tím pádem platná.
         if (r.status === 202) { queuedBySw = true; return null; }
@@ -206,10 +288,14 @@
           writeLocal(); notify(); ohlasStret(b.strety || Object.keys(patch));
           return null;
         });
-        if (!r.ok) throw new Error('HTTP ' + r.status);
+        if (!r.ok) throw Object.assign(new Error('HTTP ' + r.status), { status: r.status });
         return r.json();
       })
       .then(function (b) {
+        prodleva = 0;
+        if (poJednom) {
+          if (Object.keys(pending).length) schedule(300); else poJednom = false;
+        }
         if (b) {
           rev = b.rev || rev + 1;
           oznacDocasne(b);
@@ -242,12 +328,35 @@
         lastSync = new Date(); lastError = null;
       })
       .catch(function (e) {
-        // Offline nebo chyba serveru: patch se vrátí do fronty a zůstane
-        // v localStorage. Prototyp funguje dál, jen nesynchronizuje.
+        var stav = e && e.status;
         lastError = String(e && e.message || e);
-        Object.keys(patch).forEach(function (k) { if (!(k in pending)) pending[k] = patch[k]; });
-        writeLocal();
-        schedule(4000);
+
+        if (stav === 401 || stav === 403) {
+          vratDoFronty(patch);
+          odmitnutyToken = window.GALERIE_API_TOKEN || null;
+          if (sTokenem) odhlaseno(stav, e.zprava);
+          return;
+        }
+
+        if (stav === 400 || stav === 413 || stav === 422) {
+          var hlavni = Object.keys(patch).filter(function (k) { return ROZDIL.indexOf(k) < 0; });
+          if (hlavni.length > 1) {
+            vratDoFronty(patch);
+            poJednom = true;
+            schedule(300);
+            return;
+          }
+          // Tenhle klíč server nevezme ani samotný — další pokus by dopadl stejně.
+          ohlas('galerie-odmitnuto', { klice: hlavni, status: stav });
+          if (Object.keys(pending).length) schedule(300); else poJednom = false;
+          return;
+        }
+
+        // Offline nebo chyba serveru: patch se vrátí do fronty a zkusí se
+        // znovu, pokaždé s delší prodlevou. Prototyp funguje dál, jen nesynchronizuje.
+        vratDoFronty(patch);
+        prodleva = Math.min(prodleva ? prodleva * 2 : 4000, 120000);
+        schedule(prodleva);
       })
       .then(function () { inflight = false; });
   }
@@ -265,7 +374,7 @@
     data = readLocal(); notify();
   });
   // Nedoručený patch se zkusí poslat ještě při zavírání karty.
-  window.addEventListener('online', function () { schedule(200); notify(); });
+  window.addEventListener('online', function () { prodleva = 0; schedule(200); notify(); });
   window.addEventListener('offline', notify);
   if (navigator.serviceWorker) {
     navigator.serviceWorker.addEventListener('message', function (e) {
@@ -287,6 +396,8 @@
   function odesliPriOdchodu() {
     if (!Object.keys(pending).length) return;
     if (mode === 'local') { rev += 1; writeLocal(); return; }
+    // Server tenhle zápis už odmítl (přihlášení, velikost) — naslepo by ho odmítl znovu.
+    if (odmitnutyToken !== undefined || poJednom) return;
     var patch = pending;
     pending = {};
     try {
@@ -324,8 +435,20 @@
     // Autoritativní stav ze serveru (v local režimu jen lokální kopie).
     load: function () {
       if (mode === 'local') return Promise.resolve(snapshot());
+      var sTokenem = !!window.GALERIE_API_TOKEN;
       return fetch(base + '/state', { headers: headers(), credentials: 'same-origin' })
-        .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .then(function (r) {
+          // Uložený token už neplatí (90 dní bez použití, odebraný přístup).
+          // Bez tokenu je 401 jen zamčená obrazovka, žádné „přihlášení skončilo".
+          if ((r.status === 401 || r.status === 403) && sTokenem) {
+            return r.json().catch(function () { return {}; }).then(function (b) {
+              odhlaseno(r.status, b && b.message);
+              throw new Error('HTTP ' + r.status);
+            });
+          }
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          return r.json();
+        })
         .then(function (b) {
           data = b.data || {}; rev = b.rev || 0; writeLocal(); lastSync = new Date(); notify();
           return snapshot();
@@ -420,6 +543,8 @@
           if (b.token) {
             window.GALERIE_API_TOKEN = b.token;
             try { localStorage.setItem('galerie.token', b.token); } catch (e) {}
+            // Co čekalo na přihlášení, odejde hned.
+            if (Object.keys(pending).length) schedule(450);
           }
           return b;
         });
@@ -799,9 +924,12 @@
 
     // Požádá service worker, ať zkusí frontu odeslat hned.
     flush: function () {
+      prodleva = 0;
       schedule(0);
       if (navigator.serviceWorker && navigator.serviceWorker.controller) {
-        try { navigator.serviceWorker.controller.postMessage({ type: 'galerie-flush' }); } catch (e) {}
+        // S aktuálním přihlášením — zápis ve frontě workera nese token z doby, kdy vznikl.
+        var auth = window.GALERIE_API_TOKEN ? 'Bearer ' + window.GALERIE_API_TOKEN : null;
+        try { navigator.serviceWorker.controller.postMessage({ type: 'galerie-flush', auth: auth }); } catch (e) {}
       }
     }
   };

@@ -6021,6 +6021,33 @@ class Component extends DCLogic {
     };
     this._zamekZnovu();
     window.addEventListener('storage', this._zamekZnovu);
+    /*
+     * Přihlášení na tomhle zařízení skončilo — stejně jako na počítači.
+     *
+     * Token prošel (90 dní bez použití) nebo ho někdo odvolal: telefon dál
+     * ukazoval obsah a každý zápis tiše padal a zkoušel se dokola. Datová
+     * vrstva token zahodí a zápisy podrží do nového přihlášení.
+     */
+    this._odhlaseno = e => {
+      const d = e.detail || {};
+      const z = (window.GalerieData || {}).ZAMEK;
+      if (z) z.prihlasen = false;
+      this.setState({
+        appLocked: true, lockStep: 'pwd', lockPwd: '', lockPin: '', lockTrusted: false, lockSignBusy: false, lockNeeds2fa: false, lockCode: '',
+        sheet: null, lb: null,
+        lockErr: d.status === 403 && d.zprava ? d.zprava : 'Přihlášení na tomhle zařízení skončilo — přihlaste se znovu.'
+      });
+    };
+    window.addEventListener('galerie-odhlaseno', this._odhlaseno);
+    // Změna, kterou server nevezme (příliš velká) — zahodí se, ale ne potichu.
+    this._odmitnuto = e => {
+      const d = e.detail || {};
+      this.toast('Poslední změna se neuložila — server ji odmítl' + (d.status === 413 ? ' jako příliš velkou' : ''), { icon: 'ph-warning', silent: true });
+    };
+    window.addEventListener('galerie-odmitnuto', this._odmitnuto);
+    // Střet: telefon se dřív jen potichu vrátil o krok zpět.
+    this._stret = () => this.toast('Tohle se mezitím změnilo i na druhém zařízení — na obrazovce je novější verze',{ icon: 'ph-users-three', silent: true });
+    window.addEventListener('galerie-stret', this._stret);
     setTimeout(() => this.syncTabStrips(), 60);
     this.persistLoad();
     // Ťuknutí na upozornění otevře přímo tu obrazovku, o které upozornění bylo.
@@ -6094,6 +6121,9 @@ class Component extends DCLogic {
   componentWillUnmount() {
     window.removeEventListener('message', this._fotoMapa);
     window.removeEventListener('storage', this._zamekZnovu);
+    window.removeEventListener('galerie-odhlaseno', this._odhlaseno);
+    window.removeEventListener('galerie-odmitnuto', this._odmitnuto);
+    window.removeEventListener('galerie-stret', this._stret);
     window.removeEventListener('resize', this._vitrina);
     window.removeEventListener('orientationchange', this._vitrina);
     ['pointerdown', 'keydown'].forEach(e => window.removeEventListener(e, this._actH));

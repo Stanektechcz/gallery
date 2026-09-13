@@ -709,7 +709,13 @@
     Object.defineProperty(window, 'GALERIE_API_TOKEN', {
       configurable: true,
       get: function () { return token; },
-      set: function (v) { token = v; if (v) { hotovo = false; pokusu = 0; setTimeout(zkus, 0); } }
+      set: function (v) {
+        token = v;
+        if (! v) return;
+        hotovo = false; pokusu = 0; setTimeout(zkus, 0);
+        // Zápisy, které čekaly na přihlášení (i otiskem, mimo `signIn`), odejdou hned.
+        setTimeout(function () { if (window.GalerieApi && window.GalerieApi.flush) window.GalerieApi.flush(); }, 0);
+      }
     });
   } catch (e) {}
 })();
