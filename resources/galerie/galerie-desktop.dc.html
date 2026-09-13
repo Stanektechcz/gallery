@@ -15082,6 +15082,21 @@ class Component extends DCLogic {
      * odškrtnout ani smazat. Po zápisu se kuchařka načte znovu a místní kopie
      * se zahodí.
      */
+    /*
+     * Filmy, seriály a watchlist taky: nový titul má do obnovení jen jméno
+     * z obrazovky (`films-n7`) a hvězdičky či pásmo by pod ním nenašly řádek.
+     * Po zápisu se seznam načte znovu s identifikátory podle titulu.
+     */
+    if (['films', 'series', 'watchlist'].indexOf(key) >= 0 && !this.ukazka() && window.GalerieObnovit) {
+      clearTimeout(this._filmObnova);
+      this._filmObnova = setTimeout(() => {
+        Promise.resolve(window.GalerieObnovit('pribeh')).then(() => {
+          const x = { ...this.state.xRows };
+          ['films', 'series', 'watchlist'].forEach(k => { delete x[k]; });
+          this.setState({ xRows: x });
+        });
+      }, 2500);
+    }
     if (key === 'shopping' && !this.ukazka() && window.GalerieObnovit) {
       clearTimeout(this._nakupObnova);
       this._nakupObnova = setTimeout(() => {
@@ -31011,11 +31026,33 @@ class Component extends DCLogic {
       const sled = z[k] || (z[k] = {});
       idcka(prev[k] === null || prev[k] === undefined ? zaklad(k) : prev[k]).concat(idcka(this.state[k])).forEach(id => { sled[id] = 1; });
     });
-    if (!KLICE.some(k => k in patch)) return;
+    /*
+     * Filmy, seriály a watchlist leží v `xRows`. Řádek ze serveru má
+     * identifikátor podle titulu (`films-<uuid>`); základ je `AL`.
+     */
+    const RADKY = ['films', 'series', 'watchlist'];
+    const radkyZ = st => (st && st.xRows) || {};
+    RADKY.forEach(k => {
+      const pred = radkyZ(prev)[k], ted = radkyZ(this.state)[k];
+      if (pred === ted) return;
+      const sled = z['xRows.' + k] || (z['xRows.' + k] = {});
+      const zakladRadky = ((typeof AL !== 'undefined' && AL[k]) || []).map((r, i) => ({ id: r[7] || (k + '-' + i) }));
+      idcka(pred === undefined || pred === null ? zakladRadky : pred).concat(idcka(ted)).forEach(id => { sled[id] = 1; });
+    });
+    if (!KLICE.some(k => k in patch) && !('xRows' in patch)) return;
     const out = {};
+    // Seznam bez místní kopie jsou zase data ze serveru — ne prázdno (to by „odebralo" všechno).
+    const aktualni = k => {
+      if (k.indexOf('xRows.') === 0) {
+        const kk = k.slice(6), v = radkyZ(this.state)[kk];
+        return v === undefined || v === null ? ((typeof AL !== 'undefined' && AL[kk]) || []).map((r, i) => ({ id: r[7] || (kk + '-' + i) })) : v;
+      }
+      const v = this.state[k];
+      return v === null || v === undefined ? zaklad(k) : v;
+    };
     Object.keys(z).forEach(k => {
       const ted = {};
-      idcka(this.state[k]).forEach(id => { ted[id] = 1; });
+      idcka(aktualni(k)).forEach(id => { ted[id] = 1; });
       out[k] = Object.keys(z[k]).filter(id => !ted[id]).slice(-500);
     });
     patch.__odebrane = out;

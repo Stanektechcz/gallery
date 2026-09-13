@@ -97,6 +97,66 @@ class FilmyVeStavuTest extends TestCase
     }
 
     /**
+     * Titul se pozná podle uuid, ne podle pořadí.
+     *
+     * `films-3` bylo pořadí: přidal-li ten druhý titul nebo jeden smazal,
+     * hodnocení ze starší obrazovky dopadlo na jiný film, starší seznam
+     * titul zdvojil a mazání trefilo vedle.
+     */
+    public function test_titul_podle_uuid_a_starsi_seznam_nic_nezdvoji(): void
+    {
+        $prvni = $this->titul('Anatomie pádu');
+        $druhy = $this->titul('Dune: Part Two');
+        $uuidDruhy = DB::table('watch_titles')->where('id', $druhy)->value('uuid');
+        $uuidPrvni = DB::table('watch_titles')->where('id', $prvni)->value('uuid');
+
+        $ids = collect($this->getJson('/api/data/pribeh')->json('data.AL.films'))->pluck(7)->all();
+        $this->assertSame(['films-'.$uuidPrvni, 'films-'.$uuidDruhy], $ids);
+
+        // Ten druhý mezitím první titul smazal; starší obrazovka hodnotí Dune.
+        DB::table('watch_titles')->where('id', $prvni)->delete();
+
+        $this->stav([
+            'xRows' => ['films' => [
+                ['t' => 'Anatomie pádu', 'm' => '', 'g' => 'hotovo', 'id' => 'films-'.$uuidPrvni],
+                ['t' => 'Dune: Part Two', 'm' => '', 'g' => 'hotovo', 'id' => 'films-'.$uuidDruhy],
+            ]],
+            'tierMap' => ['films-'.$uuidDruhy => 'S'],
+            '__odebrane' => ['xRows.films' => []],
+        ])->assertOk();
+
+        $this->assertSame(['Dune: Part Two'], DB::table('watch_titles')->pluck('title')->all());
+        $this->assertSame('S', DB::table('watch_titles')->where('id', $druhy)->value('tier'));
+    }
+
+    /** Titul, který mezitím přidal ten druhý, starší seznam nesmaže; odebraný ano. */
+    public function test_odebrany_titul_jen_vyslovne(): void
+    {
+        $zustane = $this->titul('Zůstává');
+        $odebrany = $this->titul('Odebraný');
+        $this->titul('Mezitím od Makinky');
+        $uuid = fn (int $id) => DB::table('watch_titles')->where('id', $id)->value('uuid');
+
+        $this->stav([
+            'xRows' => ['films' => [['t' => 'Zůstává', 'm' => '', 'g' => 'hotovo', 'id' => 'films-'.$uuid($zustane)]]],
+            '__odebrane' => ['xRows.films' => ['films-'.$uuid($odebrany)]],
+        ])->assertOk();
+
+        $this->assertEqualsCanonicalizing(['Zůstává', 'Mezitím od Makinky'], DB::table('watch_titles')->pluck('title')->all());
+
+        // Znovu odeslaný nový titul se nezdvojí.
+        $novy = ['xRows' => ['films' => [['t' => 'Poor Things', 'm' => '', 'g' => 'hotovo', 'id' => 'films-n9']]], '__odebrane' => ['xRows.films' => []]];
+        $this->stav($novy)->assertOk();
+        $this->stav($novy)->assertOk();
+        $this->assertSame(1, DB::table('watch_titles')->where('title', 'Poor Things')->count());
+
+        // Zpět dřív, než obrazovka dostala uuid: odebraný `films-n9` se smaže.
+        $this->stav(['xRows' => ['films' => []], '__odebrane' => ['xRows.films' => ['films-n9']]])->assertOk();
+        $this->assertSame(0, DB::table('watch_titles')->where('title', 'Poor Things')->count());
+        $this->assertSame(2, DB::table('watch_titles')->count());
+    }
+
+    /**
      * Hvězdičky se ukládají každému zvlášť.
      *
      * „Sedm" bez toho, kdo ho dal, je ke dvojici k ničemu — celá obrazovka

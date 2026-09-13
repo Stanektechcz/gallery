@@ -252,6 +252,14 @@ class Pribeh implements MaPrazdneKolekce, PoskytovatelObsahu
                 array_filter($znamky) ? $znamky : null,
                 $t->episodes_done === null ? null : (int) $t->episodes_done,
                 $t->episodes_total === null ? null : (int) $t->episodes_total,
+                /*
+                 * Identifikátor řádku podle titulu, ne podle pořadí.
+                 *
+                 * `films-3` bylo pořadí: přidal-li ten druhý titul nebo jeden
+                 * smazal, hodnocení ze starší obrazovky dopadlo na jiný film
+                 * a starší seznam titul zdvojil.
+                 */
+                $klic.'-'.$t->uuid,
             ];
         }
 

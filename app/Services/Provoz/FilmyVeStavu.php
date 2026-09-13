@@ -5,6 +5,7 @@ namespace App\Services\Provoz;
 use App\Models\GallerySpace;
 use App\Models\User;
 use App\Services\Obsah\Pribeh;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
@@ -100,7 +101,7 @@ class FilmyVeStavu
         $podle = $this->podleId($prostor);
 
         if (is_array($patch['xRows'] ?? null)) {
-            $podle = $this->zapisSeznamy((array) $patch['xRows'], $podle, $prostor, $uzivatel);
+            $podle = $this->zapisSeznamy((array) $patch['xRows'], $podle, $prostor, $uzivatel, $patch);
         }
 
         foreach (['fmRate' => 'hvezdicky', 'fmEp' => 'dily', 'rowDone' => 'videli', 'tierMap' => 'pasmo'] as $klic => $metoda) {
@@ -159,6 +160,14 @@ class FilmyVeStavu
         foreach ($tituly as $t) {
             $seznam = $t->status === 'chceme' ? 'watchlist' : ($t->kind === 'seriál' ? 'series' : 'films');
             $podle[$seznam.'-'.$poradi[$seznam]++] = $t;
+
+            // Podle titulu pod kterýmkoli seznamem — zhlédnutý titul přechází
+            // z watchlistu do filmů a obrazovka ho může mít ještě pod starým.
+            if (! empty($t->uuid)) {
+                foreach (self::SEZNAMY as $s) {
+                    $podle[$s.'-'.$t->uuid] = $t;
+                }
+            }
         }
 
         return $podle;
@@ -174,7 +183,7 @@ class FilmyVeStavu
      * @param  array<string, object>  $podle
      * @return array<string, object>
      */
-    private function zapisSeznamy(array $seznamy, array $podle, GallerySpace $prostor, ?User $uzivatel): array
+    private function zapisSeznamy(array $seznamy, array $podle, GallerySpace $prostor, ?User $uzivatel, array $patch = []): array
     {
         $zmena = false;
 
@@ -196,14 +205,37 @@ class FilmyVeStavu
                 }
 
                 if (isset($podle[$id])) {
-                    $zustavaji[] = $id;
+                    $zustavaji[] = (int) $podle[$id]->id;
 
                     continue;
                 }
 
-                // Řádek, který na obrazovce vznikl teď — `films-n7`.
+                /*
+                 * Nový jen s vlastní předponou obrazovky (`films-n7`).
+                 *
+                 * Titul podle uuid, který v tabulce není, smazal mezitím ten
+                 * druhý; pořadí (`films-4`), které nesedí, je starší kopie
+                 * seznamu. Dřív se obojí založilo znovu — titul se zdvojil
+                 * nebo vstal ze smazaných.
+                 */
+                if (! preg_match('/^(films|series|watchlist)-n\d+$/', $id)) {
+                    continue;
+                }
+
+                // Znovu odeslaný nový řádek (obrazovka ho drží pod svým jménem do obnovení).
+                $znamy = $this->zKlienta($prostor, $id);
+
+                if ($znamy) {
+                    $zustavaji[] = (int) $znamy->id;
+
+                    continue;
+                }
+
+                $noveUuid = (string) Str::uuid();
+                Cache::put($this->klicKlienta($prostor, $id), $noveUuid, now()->addDays(2));
+
                 DB::table('watch_titles')->insert([
-                    'uuid' => (string) Str::uuid(),
+                    'uuid' => $noveUuid,
                     'gallery_space_id' => $prostor->id,
                     'created_by' => $uzivatel?->id,
                     'title' => mb_substr($nazev, 0, 180),
@@ -217,17 +249,61 @@ class FilmyVeStavu
                 $zmena = true;
             }
 
-            foreach ($podle as $id => $titul) {
-                if (str_starts_with($id, $seznam.'-') && ! in_array($id, $zustavaji, true)) {
-                    DB::table('watch_titles')->where('id', $titul->id)->delete();
-                    $zmena = true;
+            /*
+             * Smazané: jen co obrazovka výslovně odebrala (OdebraneVStavu).
+             *
+             * Titul, který mezitím přidal ten druhý, ve starší kopii seznamu
+             * chybí taky. Z odebraných se berou jen identifikátory podle
+             * titulu — pořadí ze starší kopie by mířilo na jiný řádek.
+             * Starší klient bez rozdílu: jako dřív, co v seznamu chybí.
+             */
+            $odebrane = OdebraneVStavu::pro($patch, 'xRows.'.$seznam);
+            $smazat = [];
+
+            // Nový titul vrácený tlačítkem Zpět dřív, než obrazovka dostala jeho uuid.
+            foreach ($odebrane ?? [] as $odebrany) {
+                $titul = preg_match('/^(films|series|watchlist)-n\d+$/', $odebrany) ? $this->zKlienta($prostor, $odebrany) : null;
+
+                if ($titul && ! in_array((int) $titul->id, $zustavaji, true)) {
+                    $smazat[] = (int) $titul->id;
                 }
+            }
+
+            foreach ($podle as $id => $titul) {
+                if (! preg_match('/^'.$seznam.'-\d+$/', $id) || in_array((int) $titul->id, $zustavaji, true)) {
+                    continue;
+                }
+
+                if ($odebrane === null || in_array($seznam.'-'.$titul->uuid, $odebrane, true)
+                    || array_intersect(array_map(fn ($s) => $s.'-'.$titul->uuid, self::SEZNAMY), $odebrane) !== []) {
+                    $smazat[] = (int) $titul->id;
+                }
+            }
+
+            if ($smazat !== []) {
+                DB::table('watch_titles')->where('gallery_space_id', $prostor->id)->whereIn('id', $smazat)->delete();
+                $zmena = true;
             }
         }
 
         // Po vložení a smazání se identifikátory posunuly. Zbytek patche musí
         // mířit na to, co v tabulce je teď.
         return $zmena ? $this->podleId($prostor) : $podle;
+    }
+
+    private function klicKlienta(GallerySpace $prostor, string $id): string
+    {
+        return 'filmy:klient:'.$prostor->id.':'.$id;
+    }
+
+    /** Titul založený z identifikátoru obrazovky (`films-n7`), pokud ještě existuje. */
+    private function zKlienta(GallerySpace $prostor, string $id): ?object
+    {
+        $uuid = Cache::get($this->klicKlienta($prostor, $id));
+
+        return is_string($uuid)
+            ? DB::table('watch_titles')->where('gallery_space_id', $prostor->id)->where('uuid', $uuid)->first()
+            : null;
     }
 
     /** Hvězdičky: `{ a, m }`, každý zvlášť. */

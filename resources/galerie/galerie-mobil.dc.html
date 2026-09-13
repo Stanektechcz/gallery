@@ -6763,7 +6763,7 @@ class Component extends DCLogic {
     const out = {};
     Object.keys(z).forEach(k => {
       const ted = {};
-      idcka(this.state[k]).forEach(id => { ted[id] = 1; });
+      idcka(this.state[k] === null || this.state[k] === undefined ? zaklad(k) : this.state[k]).forEach(id => { ted[id] = 1; });
       out[k] = Object.keys(z[k]).filter(id => !ted[id]).slice(-500);
     });
     patch.__odebrane = out;
