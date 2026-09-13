@@ -51,6 +51,9 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
     /** Má snímek uloženou upravenou verzi (otočení, výřez); `media_item_id => true`. */
     private array $upraveno = [];
 
+    /** Platná úprava snímku: `media_item_id => ['otoceni' => 90, 'vyrez' => true]`. */
+    private array $platnaUprava = [];
+
     /** Kdy se naposledy měnily úpravy snímku (i návrat k originálu); `media_item_id => unix čas`. */
     private array $verzeUpravy = [];
 
@@ -331,6 +334,7 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
                 'full' => $this->velky($m),
                 // Otočení nebo výřez uložené na serveru — prohlížeč pak nic neotáčí sám.
                 'upraveno' => isset($this->upraveno[$m->id]) ?: null,
+                'uprava' => $this->platnaUprava[$m->id] ?? null,
                 'tags' => $stitky[$m->id] ?? [],
                 'sync' => match ($m->status) {
                     'failed' => 'error',
@@ -1012,6 +1016,8 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
                 'play' => $f['video'] ?? null,
                 // Štítky fotky — telefon u každé fotky ukazoval první tři štítky celé knihovny.
                 'tags' => $f['tags'] ?: null,
+                // Úprava ze serveru — z ní telefon počítá další otočení a návrat k originálu.
+                'uprava' => $f['uprava'] ?? null,
                 'poster' => $f['poster'] ?? null,
                 /*
                  * Kdo to nahrál a čím.
@@ -1200,6 +1206,26 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
                 ->get()
                 ->each(function ($r) {
                     $this->verzeUpravy[(int) $r->media_item_id] = strtotime((string) $r->naposledy) ?: 1;
+                });
+
+            // Platná úprava (úhel, výřez) — telefon i počítač z ní počítají další otočení.
+            DB::table('media_edits')->whereIn('media_item_id', $id)->where('is_current', true)
+                ->get(['media_item_id', 'operations_json'])
+                ->each(function ($r) {
+                    $operace = json_decode((string) $r->operations_json, true) ?: [];
+                    $uhel = 0;
+                    $vyrez = false;
+
+                    foreach ($operace as $o) {
+                        if (($o['type'] ?? null) === 'rotate') {
+                            $uhel = (int) ($o['degrees'] ?? 0);
+                        }
+                        if (($o['type'] ?? null) === 'crop') {
+                            $vyrez = true;
+                        }
+                    }
+
+                    $this->platnaUprava[(int) $r->media_item_id] = ['otoceni' => $uhel, 'vyrez' => $vyrez];
                 });
         }
 

@@ -3,12 +3,14 @@
 namespace App\Services\Obsah;
 
 use App\Models\Budget;
+use App\Models\FinanceRecurring;
 use App\Models\GallerySpace;
 use App\Models\Transaction;
 use App\Models\Wallet;
 use App\Services\Finance\LedgerService;
 use App\Support\SpaceContext;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -139,7 +141,11 @@ class Finance implements MaPrazdneKolekce, PoskytovatelObsahu
              * v účetnictví nemá.
              */
             'TXCATS' => $this->nazvyKategorii($prostor),
-            'FIN' => ['accounts' => $ucty = $this->ucty($prostor, $penezenky)],
+            'FIN' => [
+                'accounts' => $ucty = $this->ucty($prostor, $penezenky),
+                // Nadcházející platby z předpisů (nájem, telefon) na dva měsíce dopředu.
+                'upcoming' => $this->nadchazejici($prostor),
+            ],
             /*
              * Tytéž účty jako seznam.
              *
@@ -230,6 +236,64 @@ class Finance implements MaPrazdneKolekce, PoskytovatelObsahu
             ->all();
     }
 
+    /**
+     * Nadcházející platby: `[den, název, částka, druh, kategorie, tento měsíc, uuid předpisu, datum]`.
+     *
+     * Záložka „Nadcházející platby" byla u dvojice prázdná a „Přidat platbu"
+     * i „Přeskočit" hlásily „zatím neumíme" — přitom předpisy pravidelných
+     * plateb v knize jsou. Termín, který už v knize leží (i smazaný či
+     * přeskočený), se nenabízí: generátor ho taky nevytvoří.
+     *
+     * @return list<array<int, mixed>>
+     */
+    private function nadchazejici(GallerySpace $prostor): array
+    {
+        if (! Schema::hasTable('finance_recurring')) {
+            return [];
+        }
+
+        $dnes = Carbon::today();
+        $do = $dnes->copy()->addDays(60);
+
+        $predpisy = FinanceRecurring::withoutGlobalScope(SpaceContext::SCOPE)
+            ->where('gallery_space_id', $prostor->id)
+            ->where('is_active', true)
+            ->with('category:id,name')
+            ->get();
+
+        $radky = [];
+
+        foreach ($predpisy as $p) {
+            $zapsane = Transaction::withTrashed()->withoutGlobalScope(SpaceContext::SCOPE)
+                ->where('recurring_id', $p->id)
+                ->whereBetween('occurred_at', [$dnes->toDateString(), $do->toDateString()])
+                ->pluck('occurred_at')
+                ->map(fn ($d) => Carbon::parse($d)->toDateString())
+                ->flip();
+
+            foreach ($p->terminy($dnes, $do) as $termin) {
+                if ($zapsane->has($termin->toDateString())) {
+                    continue;
+                }
+
+                $radky[] = [
+                    $termin->day.'. '.$termin->month.'.',
+                    (string) $p->name,
+                    (int) round((float) $p->amount),
+                    $p->type === 'income' ? 'příjem' : 'pravidelná platba',
+                    $p->category?->name ?? 'Nezařazeno',
+                    $termin->isSameMonth($dnes),
+                    (string) $p->uuid,
+                    $termin->toDateString(),
+                ];
+            }
+        }
+
+        usort($radky, fn ($a, $b) => strcmp($a[7], $b[7]));
+
+        return array_slice($radky, 0, 40);
+    }
+
     /** @return Collection<int, Transaction> */
     private function pohyby(GallerySpace $prostor): Collection
     {
@@ -263,11 +327,20 @@ class Finance implements MaPrazdneKolekce, PoskytovatelObsahu
                 (int) round($vydaj ? -abs($castka) : abs($castka)),
                 $t->walletFrom?->name ?? $t->walletTo?->name ?? '—',
                 $this->ikona($t->category?->icon),
-                // Meta drží prototyp jako volný objekt; účtenka je jediné, co čte.
-                (object) array_filter(['receipt' => $t->receipt_media_id ? 1 : null]),
-                // Devátá pozice je volná poznámka. Kniha pro ni sloupec nemá,
-                // takže se posílá místo, kde se platilo — nebo nic.
-                (string) ($t->place ?? ''),
+                /*
+                 * Meta drží prototyp jako volný objekt.
+                 *
+                 * `rec` — platba z předpisu (detail píše „opakuje se měsíčně"),
+                 * `mimo` — vynechaná z rozpočtu, `uuid` — pro zápis zpátky.
+                 */
+                (object) array_filter([
+                    'receipt' => $t->receipt_media_id ? 1 : null,
+                    'rec' => $t->recurring_id ? 'měsíčně' : null,
+                    'mimo' => $t->excluded_from_budget ? 1 : null,
+                    'mimoProc' => $t->excluded_from_budget ? (string) ($t->exclusion_reason ?? '') : null,
+                ], fn ($v) => $v !== null),
+                // Devátá pozice je poznámka; bez ní místo, kde se platilo.
+                (string) ($t->note ?? $t->place ?? ''),
             ];
         })->values()->all();
     }
@@ -758,6 +831,8 @@ class Finance implements MaPrazdneKolekce, PoskytovatelObsahu
                 $cil->target_on ? 'do '.CarbonImmutable::parse($cil->target_on)->format('n/Y') : 'průběžně',
                 (string) ($cil->note ?? ''),
                 null,
+                // Pod tímhle se do cíle vkládá („Vložit" u vyhrazené částky).
+                (string) $cil->uuid,
             ];
         })->values()->all();
     }
@@ -828,6 +903,26 @@ class Finance implements MaPrazdneKolekce, PoskytovatelObsahu
     {
         $jmena = System::jmenaClenu($prostor);
 
+        /*
+         * Od posledního vyrovnání.
+         *
+         * Vyrovnání říká „k tomuhle dni srovnáno" — platby do toho dne se už
+         * mezi dvojicí nepočítají. Bez toho by po zapsaném vyrovnání obrazovka
+         * dál tvrdila, že jeden druhému dluží.
+         */
+        $od = $dnes->startOfMonth();
+
+        if (Schema::hasTable('budget_settlements')) {
+            $posledni = DB::table('budget_settlements as v')
+                ->join('budgets as r', 'r.id', '=', 'v.budget_id')
+                ->where('r.gallery_space_id', $prostor->id)
+                ->max('v.settled_through');
+
+            if ($posledni && CarbonImmutable::parse($posledni)->addDay()->greaterThan($od)) {
+                $od = CarbonImmutable::parse($posledni)->addDay();
+            }
+        }
+
         return DB::table('transactions as t')
             ->leftJoin('partners as p', 'p.id', '=', 't.payer_partner_id')
             ->leftJoin('finance_categories as k', 'k.id', '=', 't.category_id')
@@ -835,7 +930,7 @@ class Finance implements MaPrazdneKolekce, PoskytovatelObsahu
             ->where('t.type', 'expense')
             ->whereNull('t.deleted_at')
             ->where('t.excluded_from_budget', false)
-            ->whereBetween('t.occurred_at', [$dnes->startOfMonth()->toDateString(), $dnes->endOfMonth()->toDateString()])
+            ->whereBetween('t.occurred_at', [$od->toDateString(), $dnes->endOfMonth()->toDateString()])
             ->selectRaw('COALESCE(p.user_id, t.created_by) AS kdo, COALESCE(k.name, ?) AS kategorie, SUM(ABS(t.amount_from)) AS castka', ['Nezařazeno'])
             ->groupBy('kdo', 'kategorie')
             ->orderByDesc('castka')

@@ -3,6 +3,7 @@
 namespace App\Services\Provoz;
 
 use App\Models\CycleDay;
+use App\Models\CycleSetting;
 use App\Models\GallerySpace;
 use App\Models\User;
 use App\Models\WellbeingMood;
@@ -22,8 +23,14 @@ use Illuminate\Support\Facades\Schema;
  */
 class ZdraviVeStavu
 {
-    /** Klíče, které patří databázi. Do stavu se neukládají. */
-    public const SERVEROVE = ['cycDays', 'klMood'];
+    /**
+     * Klíče, které patří databázi. Do stavu se neukládají.
+     *
+     * Nastavení cyklu (`cycShare` a spol.) je osobní — ve společném stavu by
+     * volba jednoho přepsala obrazovku druhého, a hlavně by nic neřídila:
+     * co partner uvidí, rozhoduje `cycle_settings.share_level`.
+     */
+    public const SERVEROVE = ['cycDays', 'klMood', 'cycShare', 'cycRemind', 'cycRemindDays', 'cycTrack'];
 
     public function tykaSe(array $patch): bool
     {
@@ -41,6 +48,8 @@ class ZdraviVeStavu
         if (! $kdo || ! Schema::hasTable('cycle_days')) {
             return;
         }
+
+        $this->zapisNastaveni($patch, $prostor, $kdo);
 
         if (is_array($patch['cycDays'] ?? null)) {
             $this->zapisDny($patch['cycDays'], $prostor, $kdo);
@@ -62,7 +71,7 @@ class ZdraviVeStavu
     private function zapisDny(array $dny, GallerySpace $prostor, User $kdo): void
     {
         foreach ($dny as $datum => $zapis) {
-            if (! is_array($zapis) || ! preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) $datum)) {
+            if (! preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) $datum) || ! ($zapis === null || is_array($zapis))) {
                 continue;
             }
 
@@ -72,14 +81,27 @@ class ZdraviVeStavu
              * Smazaný den je smazaný, ne prázdný.
              *
              * Prototyp umí zápis odebrat („cycDeleteDay"); prázdný řádek by
-             * v kalendáři zůstal jako tečka bez obsahu a kazil odhad.
+             * v kalendáři zůstal jako tečka bez obsahu a kazil odhad. Obě
+             * rozvržení mažou tak, že den nastaví na `null` — to se dřív
+             * přeskočilo a smazaný den v databázi zůstal.
              */
-            if (($zapis['deleted'] ?? false) === true) {
+            if ($zapis === null || ($zapis['deleted'] ?? false) === true) {
                 CycleDay::where('gallery_space_id', $prostor->id)
                     ->where('user_id', $kdo->id)
                     ->whereDate('day', $den)
                     ->delete();
 
+                continue;
+            }
+
+            /*
+             * Předvyplněný odhad (další dny krvácení po prvním) není zápis.
+             *
+             * Obrazovka ho kreslí přerušovaně a slibuje, že do statistik
+             * nevstupuje. Uložený by se po načtení vrátil jako skutečné
+             * krvácení a posunul odhad příštího cyklu.
+             */
+            if (($zapis['predicted'] ?? false) === true) {
                 continue;
             }
 
@@ -100,6 +122,49 @@ class ZdraviVeStavu
                 ],
             );
         }
+    }
+
+    /**
+     * Komu se cyklus ukazuje, připomínka a sledování příznaků — jen za sebe.
+     *
+     * Volba „Nic / Jen termíny / Celý deník" se dřív uložila jen do stavu
+     * obrazovky. Partner přitom viděl podle `cycle_settings`, takže obrazovka
+     * mohla ukazovat „nic nesdílíte", zatímco databáze sdílela celý deník.
+     */
+    private function zapisNastaveni(array $patch, GallerySpace $prostor, User $kdo): void
+    {
+        if (! Schema::hasTable('cycle_settings')) {
+            return;
+        }
+
+        $zmeny = [];
+
+        if (array_key_exists('cycShare', $patch)
+            && in_array($patch['cycShare'], [CycleSetting::SHARE_NONE, CycleSetting::SHARE_DATES, CycleSetting::SHARE_FULL], true)) {
+            $zmeny['share_level'] = $patch['cycShare'];
+        }
+
+        // `null` posílá klient jako „vynuť odeslání" před skutečnou hodnotou — nic nemění.
+        if (is_bool($patch['cycRemind'] ?? null)) {
+            $zmeny['remind_upcoming'] = (bool) $patch['cycRemind'];
+        }
+
+        if (array_key_exists('cycRemindDays', $patch) && is_numeric($patch['cycRemindDays'])) {
+            $zmeny['remind_days_before'] = max(0, min(14, (int) $patch['cycRemindDays']));
+        }
+
+        if (is_bool($patch['cycTrack'] ?? null)) {
+            $zmeny['track_symptoms'] = (bool) $patch['cycTrack'];
+        }
+
+        if ($zmeny === []) {
+            return;
+        }
+
+        CycleSetting::updateOrCreate(
+            ['user_id' => $kdo->id, 'gallery_space_id' => $prostor->id],
+            $zmeny,
+        );
     }
 
     /**

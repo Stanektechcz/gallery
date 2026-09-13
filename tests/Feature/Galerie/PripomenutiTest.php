@@ -1,0 +1,72 @@
+<?php
+
+namespace Tests\Feature\Galerie;
+
+use App\Models\GallerySpace;
+use App\Models\User;
+use App\Services\Notifications\WebPushService;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Laravel\Sanctum\Sanctum;
+use Mockery;
+use Tests\TestCase;
+
+/**
+ * Připomínka druhému jde opravdu do jeho telefonu — a jen jemu.
+ */
+class PripomenutiTest extends TestCase
+{
+    use RefreshDatabase;
+
+    private User $adri;
+
+    private User $maki;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->adri = User::factory()->create(['name' => 'Adrian Staněk']);
+        $this->maki = User::factory()->create(['name' => 'Makinka Kubíčková']);
+        $prostor = GallerySpace::create(['name' => 'Naše vzpomínky', 'owner_id' => $this->adri->id]);
+        $prostor->members()->syncWithoutDetaching([
+            $this->adri->id => ['role' => 'owner'],
+            $this->maki->id => ['role' => 'editor'],
+        ]);
+
+        Sanctum::actingAs($this->adri);
+    }
+
+    public function test_pripominka_jde_druhemu_clenovi(): void
+    {
+        $push = Mockery::mock(WebPushService::class);
+        $push->shouldReceive('sendToUser')->once()
+            ->withArgs(fn (User $komu, array $zprava) => $komu->is($this->maki)
+                && $zprava['title'] === 'Připomínka od Adrian'
+                && $zprava['body'] === 'Vezmeš cestou chleba?')
+            ->andReturn(2);
+        $this->app->instance(WebPushService::class, $push);
+
+        $this->postJson('/api/pripomenout', ['text' => 'Vezmeš cestou chleba?'])
+            ->assertOk()
+            ->assertJsonPath('doruceno', 2)
+            ->assertJsonPath('zprava', 'Připomínka odešla do telefonu — Makinka');
+    }
+
+    /** Bez zapnutých upozornění se neřekne „odesláno". */
+    public function test_bez_odberu_rekne_pravdu(): void
+    {
+        $push = Mockery::mock(WebPushService::class);
+        $push->shouldReceive('sendToUser')->once()->andReturn(0);
+        $this->app->instance(WebPushService::class, $push);
+
+        $this->postJson('/api/pripomenout', ['text' => 'Ahoj'])
+            ->assertOk()
+            ->assertJsonPath('doruceno', 0)
+            ->assertJsonPath('zprava', 'Makinka nemá zapnutá upozornění — připomínku uvidí až v aplikaci');
+    }
+
+    public function test_prazdna_pripominka_neprojde(): void
+    {
+        $this->postJson('/api/pripomenout', ['text' => ''])->assertStatus(422);
+    }
+}

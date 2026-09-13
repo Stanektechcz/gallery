@@ -68,6 +68,8 @@ class Zdravi implements MaPrazdneKolekce, PoskytovatelObsahu
         $nalady = $this->nalady($prostor);
 
         return array_filter([
+            // Nastavení přihlášeného — co obrazovka ukáže u „Sdílení cyklu", platí i v databázi.
+            'CYC_NASTAVENI' => $this->nastaveni($prostor),
             'CYC_BASE' => $this->zapsane($dny),
             'CYC_STARTS' => $zacatky,
             'KL_DAYS' => $this->popiskyDnu(),
@@ -78,6 +80,32 @@ class Zdravi implements MaPrazdneKolekce, PoskytovatelObsahu
             // „Přehled" z `ABARS`, ne z vlastní obrazovky.
             'ABARS' => ($c = $this->sloupceCyklu($zacatky)) ? ['cycle' => $c] : null,
         ], fn ($v) => $v !== null && $v !== []);
+    }
+
+    /**
+     * `{ share, remind, remindDays, track }` přihlášeného člověka.
+     *
+     * Bez uloženého nastavení platí výchozí z databáze: nesdílí se nic.
+     * Obrazovka dřív ukazovala „Jen termíny", přestože partner neviděl nic.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function nastaveni(GallerySpace $prostor): ?array
+    {
+        $ja = auth()->id();
+
+        if (! $ja || ! Schema::hasTable('cycle_settings')) {
+            return null;
+        }
+
+        $n = CycleSetting::where('gallery_space_id', $prostor->id)->where('user_id', $ja)->first();
+
+        return [
+            'share' => $n?->share_level ?? CycleSetting::SHARE_NONE,
+            'remind' => (bool) ($n?->remind_upcoming ?? true),
+            'remindDays' => (int) ($n?->remind_days_before ?? 2),
+            'track' => (bool) ($n?->track_symptoms ?? true),
+        ];
     }
 
     /**

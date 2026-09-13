@@ -4796,8 +4796,17 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                 </sc-if>
                 <div style="display:flex; align-items:baseline; gap:8px; margin-top:12px">
                   <div style="flex:1; min-width:0; font-size:10.5px; letter-spacing:.12em; text-transform:uppercase; color:rgba(255,255,255,.6)">Verze</div>
-                  <button onClick="{{ lbDetail.verAdd }}" style="flex:none; min-height:44px; padding:0 8px; border:0; background:transparent; cursor:pointer; font-family:inherit; font-size:12px; color:var(--g-acc)">Uložit úpravu</button>
+                  <button onClick="{{ lbDetail.verAdd }}" style="flex:none; min-height:44px; padding:0 8px; border:0; background:transparent; cursor:pointer; font-family:inherit; font-size:12px; color:var(--g-acc)">{{ lbDetail.verAddLabel }}</button>
                 </div>
+                <sc-if value="{{ lbDetail.editOn }}">
+                  <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:4px">
+                    <button onClick="{{ lbDetail.editRotate }}" style="min-height:44px; padding:0 12px; display:flex; align-items:center; gap:6px; border:1px solid rgba(255,255,255,.3); border-radius:2px; background:transparent; cursor:pointer; font-family:inherit; font-size:12.5px; color:#fff"><i class="ph-duotone ph-arrow-clockwise" style="font-size:15px"></i>Otočit o 90°</button>
+                    <button onClick="{{ lbDetail.editCrop }}" style="min-height:44px; padding:0 12px; display:flex; align-items:center; gap:6px; border:1px solid rgba(255,255,255,.3); border-radius:2px; background:transparent; cursor:pointer; font-family:inherit; font-size:12.5px; color:#fff"><i class="ph-duotone ph-crop" style="font-size:15px"></i>{{ lbDetail.editCropLabel }}</button>
+                    <sc-if value="{{ lbDetail.editCanRevert }}">
+                      <button onClick="{{ lbDetail.editRevert }}" style="min-height:44px; padding:0 12px; display:flex; align-items:center; gap:6px; border:1px solid rgba(255,255,255,.3); border-radius:2px; background:transparent; cursor:pointer; font-family:inherit; font-size:12.5px; color:#fff"><i class="ph-duotone ph-arrow-counter-clockwise" style="font-size:15px"></i>Originál</button>
+                    </sc-if>
+                  </div>
+                </sc-if>
                 <sc-for list="{{ lbDetail.verRows }}" as="v" hint-placeholder-count="1">
                   <div style="display:flex; align-items:center; gap:10px; padding:9px 0; border-bottom:1px solid rgba(255,255,255,.12)">
                     <div style="flex:1; min-width:0">
@@ -5775,7 +5784,7 @@ class Component extends DCLogic {
     vitrina: typeof window !== 'undefined' && window.innerWidth >= 900,
     sortMem: 'new', sortFin: 'date', sortTrips: 'when', sortPlaces: 'name', sortAlbums: 'new', txMonth: 'month',
     placeId: null, dayId: null, txExtra: [], itinDone: {}, net: true, queue: null, playing: null,
-    lbPanel: false, lbTags: null, lbVers: null, lbTagDraft: null,
+    lbPanel: false, lbTags: null, lbVers: null, lbTagDraft: null, lbEditOpen: false, lbEditBusy: false,
     tripBud: {},
     cycDays: {}, cycTab: 'kalendar', cycMonth: 0, cycSel: null, cycLegend: false,
     cycShare: 'dates', cycRemind: true, cycRemindDays: 2, cycTrack: true,
@@ -6570,7 +6579,7 @@ class Component extends DCLogic {
        'fsAdd fsTry fsWin quartTalk quartPlan quartTook indepLearn indepSwap ' +
        'trustCalled trustTold svedAdj exitOff exitWho exitMade dayBonus dayGiven dayShift ' +
        'blizAdd blizWA blizWM blizBlock kidsStance kidsYear kidsFixed kidsTalks ' +
-       'mineInc mineEven parDone mechLog rowDone sw rules memSaved memLater curVotesM navHide evUndone annFmtM kapOpened nedDone klQuiet evPick rtOnM ndStateM whLogM offPackM memPrefs lbTags lbVers setVals lockIdle lockSecs lockBio lockStart edits').split(' ').forEach(x => { this._pKeep[x] = 1; });
+       'mineInc mineEven parDone mechLog rowDone sw rules memSaved memLater curVotesM navHide evUndone annFmtM kapOpened nedDone klQuiet evPick rtOnM ndStateM whLogM offPackM memPrefs lbTags lbVers setVals lockIdle lockSecs lockBio lockStart edits cycDays').split(' ').forEach(x => { this._pKeep[x] = 1; });
     }
     return !!this._pKeep[k];
   }
@@ -10333,7 +10342,13 @@ class Component extends DCLogic {
           this.toast('Ze žádosti je úkol', { icon: 'ph-check-square', undo: () => this.setState({ tasksExtra: prev }) });
         },
         // Hlásilo, že připomínka odešla — a nic se neodeslalo.
-        remind: () => this.zatimNeumime('odesílání připomínek druhému'),
+        // Upozornění do telefonu druhého (WebPush). Bez serveru se nic neodešle a neříká se opak.
+        remind: () => {
+          if (!this.galerieNaServeru()) { this.toast('Připomínka odejde jen s připojeným serverem', { icon: 'ph-warning' }); return; }
+          window.GalerieApi.post('pripomenout', { text: n.text })
+            .then(res => this.toast((res && res.zprava) || 'Připomínka odešla', { icon: res && res.doruceno ? 'ph-bell-ringing' : 'ph-bell-slash' }))
+            .catch(e => this.chybaServeru(e, 'Připomínku se nepodařilo poslat'));
+        },
         del: () => { const prev = all; this.ndSet(all.filter(x => x.id !== n.id), 'Žádost zrušena', prev, 'ph-trash'); }
       };
     };
@@ -10537,6 +10552,35 @@ class Component extends DCLogic {
 
     // — cyklus, kalendář a sekce —
     const cyc = this.cycModel();
+    /*
+     * Nastavení cyklu přihlášeného ze serveru (`CYC_NASTAVENI`).
+     *
+     * „Sdílení s partnerem" telefon držel jen ve svém stavu (výchozí „jen
+     * termíny") — partner přitom viděl podle databáze. U dvojice se volba
+     * posílá na server (stav `cycShare` si bere cycle_settings) a ukazuje se
+     * to, co tam platí.
+     */
+    const cnServer = this.galerieNaServeru() ? (window.GalerieData || {}).CYC_NASTAVENI : null;
+    const cn = cnServer
+      ? { share: cnServer.share, remind: !!cnServer.remind, remindDays: +cnServer.remindDays || 0, track: !!cnServer.track }
+      : { share: s.cycShare, remind: s.cycRemind, remindDays: s.cycRemindDays, track: s.cycTrack };
+    const cycNastav = patch => {
+      if (cnServer) {
+        const mapa = { cycShare: 'share', cycRemind: 'remind', cycRemindDays: 'remindDays', cycTrack: 'track' };
+        Object.keys(patch).forEach(k => { cnServer[mapa[k]] = patch[k]; });
+        // Přímo na server. Klient posílá jen změny, a starý stav mohl mít stejnou
+        // hodnotu — proto nejdřív prázdná (server ji ignoruje), pak zvolená.
+        if (window.GalerieApi && window.GalerieApi.save) {
+          const prazdne = {};
+          Object.keys(patch).forEach(k => { prazdne[k] = null; });
+          window.GalerieApi.save(prazdne);
+          window.GalerieApi.save(patch);
+        }
+        this.forceUpdate();
+        return;
+      }
+      this.setState(patch);
+    };
     const cycFc = {};
     cyc.forecast.forEach(f => { cycFc[f.day] = f; });
     const cycPhaseOf = iso => {
@@ -12218,30 +12262,30 @@ class Component extends DCLogic {
       cycPatternsEmpty: cyc.patterns.length === 0,
       cycShareOpts: SHARE.map(o => ({
         label: o[1], note: o[2],
-        bg: s.cycShare === o[0] ? 'var(--g-acc-soft)' : 'transparent',
-        bd: s.cycShare === o[0] ? 'var(--g-acc)' : 'var(--g-line)',
-        fg: s.cycShare === o[0] ? 'var(--g-acc-deep)' : 'var(--g-ink)',
-        pick: () => { this.setState({ cycShare: o[0] }); this.toast('Sdílení s partnerem — ' + o[1].toLowerCase(), { icon: 'ph-share-network' }); }
+        bg: cn.share === o[0] ? 'var(--g-acc-soft)' : 'transparent',
+        bd: cn.share === o[0] ? 'var(--g-acc)' : 'var(--g-line)',
+        fg: cn.share === o[0] ? 'var(--g-acc-deep)' : 'var(--g-ink)',
+        pick: () => { cycNastav({ cycShare: o[0] }); this.toast('Sdílení s partnerem — ' + o[1].toLowerCase(), { icon: 'ph-share-network' }); }
       })),
       cycPartner: {
-        title: this.krestni(this.otherWho()) + (s.cycShare === 'none' ? ' nevidí nic' : s.cycShare === 'dates' ? ' vidí jen termíny' : ' vidí celý deník'),
-        note: s.cycShare === 'none'
+        title: this.krestni(this.otherWho()) + (cn.share === 'none' ? ' nevidí nic' : cn.share === 'dates' ? ' vidí jen termíny' : ' vidí celý deník'),
+        note: cn.share === 'none'
           ? 'Filtruje to server, ne obrazovka — nesdílený údaj se z aplikace vůbec neodešle.'
-          : s.cycShare === 'dates'
+          : cn.share === 'dates'
             ? (cyc.now ? cyc.now.day + '. den · ' + PHASES[cyc.now.phase][0] + ' · příští ' + dShort(cyc.pred.next) : 'zatím bez dat.') + ' Příznaky, teplotu ani poznámky nedostane.'
             : 'Včetně příznaků, nálady a poznámek. První den cyklu mu přijde upozornění.'
       },
-      cycRemindOn: s.cycRemind,
-      cycRemindTrack: s.cycRemind ? 'var(--g-acc)' : 'var(--g-line)',
-      cycRemindKnob: s.cycRemind ? '20px' : '2px',
-      cycRemindToggle: () => { this.setState({ cycRemind: !s.cycRemind }); this.toast(s.cycRemind ? 'Připomínka vypnuta' : 'Připomínka zapnuta', { icon: 'ph-bell' }); },
-      cycRemindLabel: 'Upozornit ' + this.pl(s.cycRemindDays, 'den', 'dny', 'dní') + ' předem',
-      cycRemindLess: () => this.setState({ cycRemindDays: Math.max(0, s.cycRemindDays - 1) }),
-      cycRemindMore: () => this.setState({ cycRemindDays: Math.min(7, s.cycRemindDays + 1) }),
-      cycTrackOn: s.cycTrack,
-      cycTrackTrack: s.cycTrack ? 'var(--g-acc)' : 'var(--g-line)',
-      cycTrackKnob: s.cycTrack ? '20px' : '2px',
-      cycTrackToggle: () => { this.setState({ cycTrack: !s.cycTrack }); this.toast(s.cycTrack ? 'Příznaky se nezapisují' : 'Zapisování příznaků zapnuto', { icon: 'ph-list-checks' }); },
+      cycRemindOn: cn.remind,
+      cycRemindTrack: cn.remind ? 'var(--g-acc)' : 'var(--g-line)',
+      cycRemindKnob: cn.remind ? '20px' : '2px',
+      cycRemindToggle: () => { cycNastav({ cycRemind: !cn.remind }); this.toast(cn.remind ? 'Připomínka vypnuta' : 'Připomínka zapnuta', { icon: 'ph-bell' }); },
+      cycRemindLabel: 'Upozornit ' + this.pl(cn.remindDays, 'den', 'dny', 'dní') + ' předem',
+      cycRemindLess: () => cycNastav({ cycRemindDays: Math.max(0, cn.remindDays - 1) }),
+      cycRemindMore: () => cycNastav({ cycRemindDays: Math.min(7, cn.remindDays + 1) }),
+      cycTrackOn: cn.track,
+      cycTrackTrack: cn.track ? 'var(--g-acc)' : 'var(--g-line)',
+      cycTrackKnob: cn.track ? '20px' : '2px',
+      cycTrackToggle: () => { cycNastav({ cycTrack: !cn.track }); this.toast(cn.track ? 'Příznaky se nezapisují' : 'Zapisování příznaků zapnuto', { icon: 'ph-list-checks' }); },
       cycAvgNote: cyc.avg.based >= 2
         ? 'Průměry se počítají ze skutečnosti (' + this.pl(cyc.avg.based, 'cyklus', 'cykly', 'cyklů') + '), ne z výchozích 28 dní.'
         : 'Dokud nejsou dva uzavřené cykly, počítá se s výchozími 28 a 5 dny.',
@@ -12277,7 +12321,7 @@ class Component extends DCLogic {
         bd: s.cycMood.indexOf(m) >= 0 ? 'transparent' : 'var(--g-line)',
         pick: () => this.setState({ cycMood: s.cycMood.indexOf(m) >= 0 ? s.cycMood.filter(x => x !== m) : s.cycMood.concat([m]) })
       })),
-      cycTrackSy: s.cycTrack,
+      cycTrackSy: cn.track,
       cycPainLabel: 'Bolest ' + s.cycPain + '/10',
       cycPainDots: Array.from({ length: 11 }, (_, i) => ({
         bg: i <= s.cycPain ? (i >= 7 ? 'var(--g-cyc-h)' : i >= 4 ? 'var(--g-cyc-m)' : 'var(--g-cyc-l)') : 'var(--g-line2)',
@@ -12529,7 +12573,45 @@ class Component extends DCLogic {
             this.toast('Štítek #' + free + ' přidán', { icon: 'ph-tag', undo: () => ulozStitky(tags) });
           },
           author: authorOf(lbP), uploaded: lbP.day || '',
-          verRows: [{ label: 'Originál ze zařízení', meta: 'nahráno ' + (lbP.day || '') + ' · ' + authorOf(lbP) + ' · nedotčený', isCurrent: vers.length === 0, canRestore: false, restore: () => {} }]
+          /*
+           * Úprava na serveru — tentýž `/uprava` jako na počítači.
+           *
+           * Telefon dřív nabízel „Uložit úpravu", která neupravila nic, a pak
+           * poctivé „zatím neumíme". Úhel se počítá od platné úpravy ze serveru
+           * (`uprava`), ne od paměti telefonu — jinak by druhé otočení po
+           * úpravě na počítači otočilo fotku špatně.
+           */
+          ...(() => {
+            const naServeru = this.galerieNaServeru() && /^[0-9a-f-]{36}$/.test(String(lbP.id));
+            const u = lbP.uprava || { otoceni: 0, vyrez: false };
+            const uloz = (otoceni, vyrez, hlaska) => {
+              if (s.lbEditBusy) return;
+              this.setState({ lbEditBusy: true });
+              window.GalerieApi.post('media/' + lbP.id + '/uprava', { otoceni: ((otoceni % 360) + 360) % 360, vyrez: vyrez }).then(res => {
+                if (res && window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data, res.prazdne);
+                if (window.GalerieObnovit) window.GalerieObnovit('knihovna');
+                this.setState({ lbEditBusy: false });
+                this.toast(hlaska, { icon: 'ph-check-circle', undo: () => uloz(u.otoceni || 0, !!u.vyrez, 'Úprava vrácena') });
+              }).catch(e => { this.setState({ lbEditBusy: false }); this.chybaServeru(e, 'Úpravu se nepodařilo uložit'); });
+            };
+            const upraveno = !!(u.otoceni || u.vyrez);
+            return {
+              editOn: naServeru && !!s.lbEditOpen && !lbP.video,
+              editCanRevert: upraveno,
+              editCropLabel: u.vyrez ? 'Zrušit výřez' : 'Oříznout okraje',
+              editRotate: () => uloz((u.otoceni || 0) + 90, !!u.vyrez, 'Otočeno · originál zůstává nedotčený'),
+              editCrop: () => uloz(u.otoceni || 0, !u.vyrez, u.vyrez ? 'Výřez zrušen' : 'Okraje oříznuty · originál zůstává nedotčený'),
+              editRevert: () => uloz(0, false, 'Vráceno na originál'),
+              verAddLabel: naServeru ? (s.lbEditOpen ? 'Hotovo' : 'Upravit') : 'Uložit úpravu',
+              editCurrent: upraveno ? [u.otoceni ? 'otočení ' + u.otoceni + '°' : null, u.vyrez ? 'výřez' : null].filter(Boolean).join(' · ') : ''
+            };
+          })(),
+          verRows: (this.galerieNaServeru() && /^[0-9a-f-]{36}$/.test(String(lbP.id)))
+            ? [{ label: 'Originál ze zařízení', meta: 'nahráno ' + (lbP.day || '') + ' · ' + authorOf(lbP) + ' · nedotčený', isCurrent: !(lbP.uprava && (lbP.uprava.otoceni || lbP.uprava.vyrez)), canRestore: false, restore: () => {} }]
+              .concat(lbP.uprava && (lbP.uprava.otoceni || lbP.uprava.vyrez)
+                ? [{ label: 'Upravená verze', meta: [lbP.uprava.otoceni ? 'otočení ' + lbP.uprava.otoceni + '°' : null, lbP.uprava.vyrez ? 'výřez' : null].filter(Boolean).join(' · '), isCurrent: true, canRestore: false, restore: () => {} }]
+                : [])
+            : [{ label: 'Originál ze zařízení', meta: 'nahráno ' + (lbP.day || '') + ' · ' + authorOf(lbP) + ' · nedotčený', isCurrent: vers.length === 0, canRestore: false, restore: () => {} }]
             .concat(vers.map((v, i) => ({
               label: v.label, meta: v.meta,
               isCurrent: i === vers.length - 1, canRestore: i !== vers.length - 1,
@@ -12537,14 +12619,18 @@ class Component extends DCLogic {
             }))),
           verAdd: () => {
             // „Světlejší expozice" byla verze bez jediné změny v obrázku.
-            if (this.galerieNaServeru()) { this.zatimNeumime('úpravy fotky na telefonu — otočení a výřez uložíte na počítači'); return; }
+            if (this.galerieNaServeru()) {
+              if (lbP.video) { this.toast('Video se tady upravit nedá — otáčet a ořezávat jde fotky', { icon: 'ph-info' }); return; }
+              this.setState({ lbEditOpen: !s.lbEditOpen });
+              return;
+            }
             const prev = s.lbVers || {};
             const next = vers.concat([{ label: vers.length ? 'Úprava ' + (vers.length + 1) : 'Světlejší expozice', meta: 'právě teď · ' + authorOf(lbP) }]);
             this.setState({ lbVers: Object.assign({}, prev, { [lbP.id]: next }) });
             this.toast('Nová verze uložena · originál zůstává', { icon: 'ph-sliders', undo: () => this.setState({ lbVers: prev }) });
           }
         };
-      })() : { place: '', hasPlace: false, noPlace: false, noPlaceText: '', mapSrc: '', placeGo: () => {}, fixPlace: () => {}, album: '', hasAlbum: false, albumGo: () => {}, tags: [], tagAdd: () => {}, tagDraftOn: false, tagDraft: '', tagInput: () => {}, tagKey: () => {}, tagCommit: () => {}, author: '', uploaded: '', verRows: [], verAdd: () => {} },
+      })() : { place: '', hasPlace: false, noPlace: false, noPlaceText: '', mapSrc: '', placeGo: () => {}, fixPlace: () => {}, album: '', hasAlbum: false, albumGo: () => {}, tags: [], tagAdd: () => {}, editOn: false, editCanRevert: false, editCropLabel: '', editRotate: () => {}, editCrop: () => {}, editRevert: () => {}, verAddLabel: '', editCurrent: '', tagDraftOn: false, tagDraft: '', tagInput: () => {}, tagKey: () => {}, tagCommit: () => {}, author: '', uploaded: '', verRows: [], verAdd: () => {} },
       lbActions: lbP ? [
         // „Odkaz zkopírován" bez odkazu i bez kopírování — teď skutečný odkaz na tuhle fotku.
         { label: 'Sdílet', icon: 'ph-share-network', color: '#fff', go: () => {

@@ -1595,7 +1595,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
             <button class="btn btn-secondary" onClick="{{ recipeAddShopping }}" style="gap:6px"><i class="ph-duotone ph-basket" style="font-size:16px"></i>Chybějící na nákup</button>
             <button class="btn btn-secondary" onClick="{{ recipeOpenPhotos }}" style="gap:6px"><i class="ph-duotone ph-images" style="font-size:16px"></i>Fotky</button>
             <button class="btn btn-secondary" onClick="{{ openShare }}" style="gap:6px"><i class="ph-duotone ph-share-network" style="font-size:16px"></i>Poslat recept</button>
-            <button class="btn btn-secondary" onClick="{{ recipeMore2 }}" aria-label="Další možnosti" title="Tisknout na kartu, duplikovat, zapsat vaření"><i class="ph-duotone ph-dots-three" style="font-size:18px"></i></button>
+            <button class="btn btn-secondary" onClick="{{ recipeMore2 }}" aria-label="Vytisknout kartu receptu" title="Vytisknout kartu receptu"><i class="ph-duotone ph-printer" style="font-size:18px"></i></button>
           </div>
 
           <div style="display:flex; flex-wrap:wrap; gap:44px; margin-top:38px; align-items:flex-start">
@@ -2653,10 +2653,16 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
           <div style="display:flex; align-items:flex-end; gap:18px; flex-wrap:wrap">
             <div style="min-width:0">
               <h1 style="margin:0; font-size:38px; letter-spacing:-.02em">Přehled financí</h1>
-              <p style="margin:8px 0 0; max-width:640px; font-size:15px; line-height:1.6; color:var(--g-ink2); text-wrap:pretty">Šest účtů na jednom místě. Import z bank běží ráno, zařazování podle pravidel hned po něm — do rozpočtu se to propíše samo.</p>
+              <p style="margin:8px 0 0; max-width:640px; font-size:15px; line-height:1.6; color:var(--g-ink2); text-wrap:pretty">{{ finLead }}</p>
             </div>
             <div style="margin-left:auto; display:flex; gap:8px; flex-wrap:wrap">
-              <button class="btn btn-primary" onClick="{{ finSyncAll }}" style="gap:6px"><i class="ph-duotone ph-arrows-clockwise" style="font-size:16px"></i>Synchronizovat</button>
+              <!-- Napojení na banku má jen ukázka; u dvojice by tlačítko slibovalo synchronizaci, která neexistuje. -->
+              <sc-if value="{{ finBankDemo }}">
+                <button class="btn btn-primary" onClick="{{ finSyncAll }}" style="gap:6px"><i class="ph-duotone ph-arrows-clockwise" style="font-size:16px"></i>Synchronizovat</button>
+              </sc-if>
+              <sc-if value="{{ finCanAddTx }}">
+                <button class="btn btn-primary" onClick="{{ finAddTx }}" style="gap:6px"><i class="ph-duotone ph-plus" style="font-size:16px"></i>Zapsat platbu</button>
+              </sc-if>
               <button class="btn btn-secondary" onClick="{{ finGoBudget }}" style="gap:6px"><i class="ph-duotone ph-chart-donut" style="font-size:16px"></i>Rozpočty</button>
               <button class="btn btn-secondary" onClick="{{ finGoTx }}" style="gap:6px"><i class="ph-duotone ph-receipt" style="font-size:16px"></i>Transakce</button>
             </div>
@@ -2737,7 +2743,9 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
               <div style="display:flex; align-items:baseline; gap:14px; padding-bottom:9px; border-bottom:1px solid var(--g-ink); flex-wrap:wrap">
                 <span style="font-size:12px; letter-spacing:.14em; text-transform:uppercase">Účty</span>
                 <span style="font-size:14px; font-variant-numeric:tabular-nums">{{ finTotal }}</span>
-                <button class="btn btn-secondary" onClick="{{ finAddAccount }}" style="margin-left:auto; font-size:13px; gap:6px"><i class="ph-duotone ph-plus" style="font-size:14px"></i>Napojit banku</button>
+                <sc-if value="{{ finBankDemo }}">
+                  <button class="btn btn-secondary" onClick="{{ finAddAccount }}" style="margin-left:auto; font-size:13px; gap:6px"><i class="ph-duotone ph-plus" style="font-size:14px"></i>Napojit banku</button>
+                </sc-if>
               </div>
               <div style="font-size:12.5px; color:var(--g-ink3); margin-top:12px">{{ finAccHealth }}</div>
               <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(340px,1fr)); gap:16px; margin-top:16px">
@@ -2753,10 +2761,14 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                     <div style="height:4px; border-radius:2px; background:var(--g-line2); overflow:hidden"><div style="height:100%; width:{{ a.healthPct }}; background:{{ a.healthColor }}"></div></div>
                     <div style="font-size:12px; color:var(--g-ink3)">{{ a.healthLabel }}</div>
                     <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:4px">
-                      <button class="btn btn-secondary" onClick="{{ a.refresh }}" style="font-size:12.5px; gap:5px"><i class="ph-duotone ph-arrows-clockwise" style="font-size:15px"></i>Synchronizovat</button>
+                      <sc-if value="{{ finBankDemo }}">
+                        <button class="btn btn-secondary" onClick="{{ a.refresh }}" style="font-size:12.5px; gap:5px"><i class="ph-duotone ph-arrows-clockwise" style="font-size:15px"></i>Synchronizovat</button>
+                      </sc-if>
                       <button class="btn btn-ghost" onClick="{{ a.go }}" style="font-size:12.5px">Pohyby</button>
-                      <button class="btn btn-ghost" onClick="{{ a.rules }}" style="font-size:12.5px">Pravidla</button>
-                      <button class="btn btn-ghost" onClick="{{ a.toggle }}" style="font-size:12.5px; color:var(--g-mag); margin-left:auto">Odpojit</button>
+                      <sc-if value="{{ finBankDemo }}">
+                        <button class="btn btn-ghost" onClick="{{ a.rules }}" style="font-size:12.5px">Pravidla</button>
+                        <button class="btn btn-ghost" onClick="{{ a.toggle }}" style="font-size:12.5px; color:var(--g-mag); margin-left:auto">Odpojit</button>
+                      </sc-if>
                     </div>
                   </div>
                 </sc-for>
@@ -3494,7 +3506,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                   <button class="btn btn-secondary" onClick="{{ txSplit }}" style="gap:6px"><i class="ph-duotone ph-arrows-split" style="font-size:15px"></i>Rozdělit</button>
                   <button class="btn btn-secondary" onClick="{{ txMakeRec }}" style="gap:6px"><i class="ph-duotone ph-repeat" style="font-size:15px"></i>Opakovaná</button>
                   <button class="btn btn-secondary" onClick="{{ txEditNote }}" style="gap:6px"><i class="ph-duotone ph-pencil-simple" style="font-size:15px"></i>Poznámka</button>
-                  <button class="btn btn-ghost" onClick="{{ txHide }}" style="gap:6px"><i class="ph-duotone ph-eye-slash" style="font-size:15px"></i>Skrýt z rozpočtu</button>
+                  <button class="btn btn-ghost" onClick="{{ txHide }}" style="gap:6px"><i class="ph-duotone ph-eye-slash" style="font-size:15px"></i>{{ txHideLabel }}</button>
                 </div>
               </aside>
             </sc-if>
@@ -3729,7 +3741,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
               <div style="min-width:0">
                 <div style="display:flex; align-items:baseline; gap:12px; padding-bottom:9px; border-bottom:1px solid var(--g-ink)">
                   <span style="font-size:12px; letter-spacing:.14em; text-transform:uppercase">Vyrovnávání</span>
-                  <button class="btn btn-ghost" onClick="{{ budAddRule }}" style="margin-left:auto; font-size:13px">Nové pravidlo</button>
+                  <button class="btn btn-ghost" onClick="{{ budAddRule }}" style="margin-left:auto; font-size:13px">Zapsat vyrovnání</button>
                 </div>
                 <sc-for list="{{ budRules }}" as="r" hint-placeholder-count="4">
                   <button onClick="{{ r.go }}" style="display:flex; align-items:center; gap:12px; width:100%; padding:13px 2px; border:0; border-bottom:1px solid var(--g-line2); background:transparent; cursor:pointer; text-align:left; font-family:inherit; color:inherit">
@@ -4397,7 +4409,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
               <div style="display:flex; flex-direction:column; gap:16px; max-width:900px">
                 <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap">
                   <span style="font-size:13px; color:var(--g-ink2)">{{ acHealth }}</span>
-                  <button class="btn btn-secondary" onClick="{{ acAdd }}" style="margin-left:auto; gap:6px"><i class="ph-duotone ph-plus" style="font-size:16px"></i>Napojit banku</button>
+                  <button class="btn btn-secondary" onClick="{{ acAdd }}" style="margin-left:auto; gap:6px"><i class="ph-duotone ph-plus" style="font-size:16px"></i>{{ acAddLabel }}</button>
                 </div>
                 <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(360px,1fr)); gap:16px">
                   <sc-for list="{{ acRows }}" as="a" hint-placeholder-count="3">
@@ -4413,10 +4425,14 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                         <i class="ph-duotone ph-cloud-check" style="font-size:15px"></i>{{ a.syncLabel }}
                       </div>
                       <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:4px">
-                        <button class="btn btn-secondary" onClick="{{ a.sync }}" style="font-size:12.5px; gap:5px"><i class="ph-duotone ph-arrows-clockwise" style="font-size:15px"></i>Synchronizovat</button>
+                        <sc-if value="{{ acBankDemo }}">
+                          <button class="btn btn-secondary" onClick="{{ a.sync }}" style="font-size:12.5px; gap:5px"><i class="ph-duotone ph-arrows-clockwise" style="font-size:15px"></i>Synchronizovat</button>
+                        </sc-if>
                         <button class="btn btn-ghost" onClick="{{ a.tx2 }}" style="font-size:12.5px">Transakce</button>
-                        <button class="btn btn-ghost" onClick="{{ a.rules }}" style="font-size:12.5px">Pravidla importu</button>
-                        <button class="btn btn-ghost" onClick="{{ a.toggle }}" style="font-size:12.5px; color:var(--g-mag); margin-left:auto">Odpojit</button>
+                        <sc-if value="{{ acBankDemo }}">
+                          <button class="btn btn-ghost" onClick="{{ a.rules }}" style="font-size:12.5px">Pravidla importu</button>
+                          <button class="btn btn-ghost" onClick="{{ a.toggle }}" style="font-size:12.5px; color:var(--g-mag); margin-left:auto">Odpojit</button>
+                        </sc-if>
                       </div>
                     </div>
                   </sc-for>
@@ -12519,9 +12535,11 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
         <div class="field"><label>{{ xaLabelA }}</label>
           <input class="input" value="{{ xaA }}" onInput="{{ xaSetA }}" onKeyDown="{{ xaKey }}" aria-label="{{ xaLabelA }}" />
         </div>
-        <div class="field"><label>{{ xaLabelB }}</label>
-          <input class="input" value="{{ xaB }}" onInput="{{ xaSetB }}" onKeyDown="{{ xaKey }}" aria-label="{{ xaLabelB }}" />
-        </div>
+        <sc-if value="{{ xaHasB }}">
+          <div class="field"><label>{{ xaLabelB }}</label>
+            <input class="input" value="{{ xaB }}" onInput="{{ xaSetB }}" onKeyDown="{{ xaKey }}" aria-label="{{ xaLabelB }}" />
+          </div>
+        </sc-if>
         <!-- Třetí a čtvrté pole se ukážou jen tam, kde je záznam potřebuje. -->
         <sc-if value="{{ xaHasC }}">
           <div class="field"><label>{{ xaLabelC }}</label>
@@ -14104,6 +14122,12 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
             </sc-for>
           </select>
         </sc-if>
+        <!-- Jedna hodnota k potvrzení (částka přesunu, vklad). -->
+        <sc-if value="{{ confirmHasInput }}">
+          <div class="field"><label>{{ confirmInputLabel }}</label>
+            <input class="input" value="{{ confirmValue }}" onInput="{{ confirmSetValue }}" inputMode="decimal" aria-label="{{ confirmInputLabel }}" />
+          </div>
+        </sc-if>
         <div class="dialog-actions">
           <button class="btn btn-secondary" onClick="{{ closeConfirm }}">Zrušit</button>
           <button class="btn btn-primary" onClick="{{ confirm.go }}" style="background:{{ confirm.btnBg }}">{{ confirm.cta }}</button>
@@ -15028,7 +15052,11 @@ class Component extends DCLogic {
       },
       recipeOpenPhotos: () => r.photoMatch ? this.setState({ route: 'all', query: r.photoMatch })
         : this.toast('Z tohoto receptu zatím fotky nemáme — vyfoťte ho a zařadí se sem', { icon: 'ph-camera' }),
-      recipeMore2: () => this.zatimNeumime('tisk receptu na kartu ani duplikaci')
+      // Karta receptu k tisku — s tím počtem porcí, na který je recept právě přepočtený.
+      recipeMore2: () => this.tiskni(r.title, [
+        { nadpis: 'Suroviny · ' + this.amount(s.portions, r.unitLabel), radky: r.ing.map(it => [it[0] === null ? '' : this.qty(it[0] * f) + ' ' + it[1], it[2] + (it[3] ? ' (' + it[3] + ')' : '')]) },
+        { nadpis: 'Postup', seznam: r.steps.map(st => (st[0] ? st[0] + ': ' : '') + st[1]) }
+      ].concat(r.stats && r.stats.length ? [{ nadpis: 'O receptu', radky: r.stats.map(x => [x[0], x[1]]) }] : []), r.tag || '')
     };
   }
   placeVals() {
@@ -15278,12 +15306,25 @@ class Component extends DCLogic {
           setlCan: !settled && owe >= 100,
           setlPay: () => {
             const prev = s.settleDone;
-            // Aplikace peníze neposílá a převod do knihy nezapisuje — jen si pamatuje, že je měsíc vyrovnaný.
+            /*
+             * Vyrovnání do rozpočtu (`budget_settlements`) k dnešku.
+             *
+             * Platby do dneška se pak mezi vámi nepočítají, takže „kdo komu
+             * dluží" spadne na nulu u obou, na počítači i v telefonu. Peníze
+             * aplikace neposílá — převod odejde z banky.
+             */
             if (!this.ukazka()) {
-              this.setState({ settleDone: mesicVyrovnani });
-              this.toast('Tento měsíc označen jako vyrovnaný (' + this.kc(owe) + ') · převod pošlete z banky, aplikace ho neodesílá', {
-                icon: 'ph-handshake', undo: () => this.setState({ settleDone: prev })
-              });
+              if (!this.financeNaServeru()) { this.toast('Vyrovnání se zapíše jen s připojeným serverem', { icon: 'ph-warning' }); return; }
+              const od = aDiff > 0 ? jM : jA, komu = aDiff > 0 ? jA : jM;
+              this.setState({ confirm: {
+                title: 'Zapsat vyrovnání',
+                body: od.split(' ')[0] + ' pošle ' + this.whoDat(komu) + ' ' + this.kc(owe) + '. Zapíše se, že k dnešku jste vyrovnaní — převod udělejte z banky, aplikace peníze neposílá.',
+                cta: 'Zapsat vyrovnání', btnBg: 'var(--g-acc)',
+                go: () => {
+                  this.setState({ confirm: null });
+                  this.financeAkce('finance/vyrovnani', { castka: owe, od, komu }, () => this.setState({ settleDone: mesicVyrovnani }));
+                }
+              } });
               return;
             }
             this.setState({ settleDone: true });
@@ -15326,7 +15367,7 @@ class Component extends DCLogic {
       budOver: over.map(c => ({
         name: c.name, diff: '+ ' + this.kc(c.spent - c.limit),
         go: () => this.setState({ budTab: 1 }),
-        balance: () => this.zatimNeumime('přesouvání peněz mezi kategoriemi — vyrovnání zapíšete v Rozpočtech')
+        balance: () => this.presunMeziKategoriemi(c, cats, c.spent - c.limit)
       })),
       budCats: cats.map(c => {
         const st = status(c);
@@ -15342,12 +15383,24 @@ class Component extends DCLogic {
           changed: c.limit !== BUD.cats[c.i][1],
           reset: () => { const n = { ...s.budLimits }; delete n[c.i]; this.setState({ budLimits: n }); },
           tx: () => this.setState({ route: 'x-transakce', appTab: 0 }),
-          balance: () => this.zatimNeumime('přesouvání peněz mezi kategoriemi')
+          balance: () => this.presunMeziKategoriemi(c, cats, c.spent > c.limit ? c.spent - c.limit : 0)
         };
       }),
       budPlanSum: this.kc(plan), budPlanDiff: plan === ulozenyPlan ? 'shodné s uloženým plánem' : 'změněno o ' + this.kc(plan - ulozenyPlan),
       budPlanChanged: plan !== ulozenyPlan,
-      budSavePlan: () => this.zatimNeumime('ukládání verzí plánu — změny rozpočtu se zapisují rovnou'),
+      /*
+       * Uložit plán: změněné limity (tlačítka − / +) jdou do rozpočtu.
+       *
+       * Dřív se měnily jen ve stavu obrazovky a „Uložit plán" hlásilo
+       * „zatím neumíme" — rozpočet v aplikaci počítal se starými limity.
+       */
+      budSavePlan: () => {
+        if (!this.financeNaServeru()) { this.zatimNeumime('ukládání plánu bez připojeného serveru'); return; }
+        const limity = {};
+        cats.filter(c => c.limit !== BUD.cats[c.i][1]).forEach(c => { limity[c.name] = c.limit; });
+        if (!Object.keys(limity).length) { this.toast('Plán je beze změny', { icon: 'ph-info' }); return; }
+        this.financeAkce('finance/rozpocet/limity', { limity }, () => this.setState({ budLimits: {} }));
+      },
       budResetPlan: () => this.setState({ budLimits: {} }),
       budMonths: BUD.months.map((m, i) => ({
         label: m[0], h: Math.round(m[1] / maxM * 100) + '%',
@@ -15372,21 +15425,40 @@ class Component extends DCLogic {
           pctLabel: Math.round(pct * 100) + ' %',
           dash: (pct * 163.4).toFixed(1) + ' 163.4',
           color: g[2] >= g[1] ? 'var(--g-ok)' : 'var(--g-acc)',
-          add: () => this.zatimNeumime('vklady do vyhrazené částky'),
+          // Vklad (i výběr se znaménkem −) do vyhrazené částky na serveru.
+          add: () => {
+            if (!this.financeNaServeru() || !g[7]) { this.zatimNeumime('vklady do vyhrazené částky bez připojeného serveru'); return; }
+            this.setState({
+              confirmValue: g[3] > 0 ? String(g[3]) : '',
+              confirm: {
+                title: 'Vklad — ' + g[0],
+                body: 'Zapíše se, kolik jste do „' + g[0] + '“ odložili. Peníze aplikace nepřesouvá. Výběr napište se znaménkem minus.',
+                input: 'Částka', cta: 'Zapsat vklad', btnBg: 'var(--g-acc)',
+                go: () => {
+                  const castka = this.castkaZTextu(this.state.confirmValue);
+                  if (!castka) { this.toast('Zadejte částku', { icon: 'ph-warning' }); return; }
+                  this.setState({ confirm: null, confirmValue: null });
+                  this.financeAkce('finance/cile/' + g[7] + '/vklad', { castka });
+                }
+              }
+            });
+          },
           go: () => g[6] ? this.relatedGo(g[6]) : this.setState({ route: 'x-transakce', appTab: 2 }),
           hasLink: !!g[6], linkLabel: g[6] ? 'Otevřít související' : 'Opakované platby'
         };
       }),
       budGoalsTotal: this.kc(BUD.goals.reduce((a, g) => a + g[2], 0)),
       budGoalsMonthly: this.kc(BUD.goals.reduce((a, g) => a + g[3], 0)),
-      budAddGoal: () => this.zatimNeumime('zakládání vyhrazených částek'),
+      budAddGoal: () => this.setState({ xaOpen: true, xaMode: 'cil', xaCtx: null, xaA: '', xaB: '', xaC: '', xaD: '' }),
       budRules: (AL.balancing || []).map(r => ({
         title: r[0], meta: r[1], tag: r[2],
         tagClass: r[2] === 'pravidlo' ? 'tag-neutral' : 'tag-accent',
-        go: () => this.toast(r[0], { icon: 'ph-gear' })
+        // Řádek vyrovnání vede tam, kde se vyrovnání počítá — ne na hlášku se svým vlastním názvem.
+        go: () => this.setState({ budTab: 5 })
       })),
       budHistory: (ADIARY.plan || []).map(d => ({ date: d[0], title: d[1], text: d[2], meta: d[3] || null })),
-      budAddRule: () => this.zatimNeumime('pravidla vyrovnávání'),
+      // Vyrovnání mezi vámi se zapisuje v záložce Anomálie a vyrovnání — tam je spočítané, kdo komu kolik.
+      budAddRule: () => { this.setState({ budTab: 5 }); this.toast('Kdo komu kolik dluží a zápis vyrovnání najdete tady', { icon: 'ph-arrows-left-right' }); },
       budYear: [
         { label: 'Příjmy za 12 měsíců', value: this.kc(BUD.year.income) },
         { label: 'Výdaje', value: this.kc(BUD.year.spent) },
@@ -15419,7 +15491,8 @@ class Component extends DCLogic {
   }
   txVals() {
     const s = this.state;
-    const SRC = TX.concat(s.txNew || []);
+    // U dvojice jen kniha: řádky zapsané dřív jen v prohlížeči (datum „30. 8.") v ní nikdy nebyly.
+    const SRC = TX.concat(this.ukazka() ? (s.txNew || []) : []);
     const cat = i => { const v = s.txCat[SRC[i][0]]; return v === undefined ? SRC[i][3] : v; };
     /*
      * Měsíc transakce z data „29. 8." — bez roku, takže pozdější měsíc než
@@ -15546,10 +15619,11 @@ class Component extends DCLogic {
         hasNote: !!open.note, icon: open.icon,
         amount: (open.amount > 0 ? '+ ' : '− ') + this.kc(Math.abs(open.amount)),
         amountColor: open.amount > 0 ? 'var(--g-fin-prijem)' : 'var(--g-fin-vydaj)',
-        recLabel: open.f.rec ? 'opakuje se ' + open.f.rec : 'jednorázová platba',
+        recLabel: (open.f.rec ? 'opakuje se ' + open.f.rec : 'jednorázová platba') + (open.f.mimo ? ' · nepočítá se do rozpočtu' + (open.f.mimoProc ? ' (' + open.f.mimoProc + ')' : '') : ''),
         pctOfCat: 'Podíl v kategorii ' + open.cat + ' za měsíc'
       } : null,
       txClose: () => this.setState({ txOpen: null }),
+      txHideLabel: open && open.f && open.f.mimo ? 'Počítat do rozpočtu' : 'Nepočítat do rozpočtu',
       txDetailCats: open ? TXCATS.map(c => ({
         label: c,
         color: open.cat === c ? 'var(--g-bg)' : 'var(--g-ink2)',
@@ -15573,12 +15647,42 @@ class Component extends DCLogic {
         { icon: 'ph-chart-donut', label: 'Rozpočet', value: open.cat, go: () => this.setState({ route: 'x-rozpocty', budTab: 1 }) },
         open.f.receipt && { icon: 'ph-receipt', label: 'Doklad', value: 'účtenka vyfocena', go: () => this.toast('Doklad k ' + open.name, { icon: 'ph-receipt' }) }
       ].filter(Boolean) : [],
-      txSplit: () => this.zatimNeumime('rozdělení jedné platby mezi víc kategorií'),
-      txMakeRec: () => this.zatimNeumime('označení platby za opakovanou'),
-      txEditNote: () => this.zatimNeumime('úpravu poznámky u transakce'),
+      /*
+       * Rozdělit, opakovat, poznámka, nepočítat do rozpočtu — do knihy.
+       *
+       * Všechny čtyři hlásily „zatím neumíme". Platba ze serveru má jako id
+       * své uuid; ukázkové řádky server nezná, u nich se dál jen řekne proč ne.
+       */
+      txSplit: () => {
+        if (!open) return;
+        if (!this.financeNaServeru() || !/^[0-9a-f-]{36}$/.test(String(open.id))) { this.zatimNeumime('rozdělení platby bez připojeného serveru'); return; }
+        if (open.amount > 0) { this.toast('Rozdělit do kategorií jde jen výdaj', { icon: 'ph-info' }); return; }
+        this.setState({ xaOpen: true, xaMode: 'txRozdelit', xaCtx: open.id, xaA: (open.cat !== 'Nezařazeno' ? open.cat + ' ' : '') + Math.abs(open.amount), xaB: '', xaC: '', xaD: '' });
+      },
+      txMakeRec: () => {
+        if (!open) return;
+        if (!this.financeNaServeru() || !/^[0-9a-f-]{36}$/.test(String(open.id))) { this.zatimNeumime('opakované platby bez připojeného serveru'); return; }
+        if (open.f.rec) { this.toast(open.name + ' už se opakuje ' + open.f.rec, { icon: 'ph-repeat' }); return; }
+        this.setState({ confirm: {
+          title: 'Opakovat každý měsíc',
+          body: open.name + ' (' + this.kc(Math.abs(open.amount)) + ') se bude zapisovat každý měsíc ve stejný den. Další platby uvidíte ve Financích v Nadcházejících — jednotlivý termín jde přeskočit.',
+          cta: 'Opakovat', btnBg: 'var(--g-acc)',
+          go: () => { this.setState({ confirm: null }); this.financeAkce('finance/transakce/' + open.id + '/opakovat', {}); }
+        } });
+      },
+      txEditNote: () => {
+        if (!open) return;
+        if (!this.financeNaServeru() || !/^[0-9a-f-]{36}$/.test(String(open.id))) { this.zatimNeumime('poznámky u plateb bez připojeného serveru'); return; }
+        this.setState({ xaOpen: true, xaMode: 'txPoznamka', xaCtx: open.id, xaA: open.note || '', xaB: '', xaC: '', xaD: '' });
+      },
       // „Skryto z rozpočtu" se nikam nezapsalo — rozpočet transakci počítal dál.
       txHide: () => {
-        if (!this.ukazka()) { this.zatimNeumime('skrytí transakce z rozpočtu'); return; }
+        if (open && this.financeNaServeru() && /^[0-9a-f-]{36}$/.test(String(open.id))) {
+          if (open.f.mimo) { this.financeAkce('finance/transakce/' + open.id + '/rozpocet', { vynechat: false }); return; }
+          this.setState({ xaOpen: true, xaMode: 'txVynechat', xaCtx: open.id, xaA: '', xaB: '', xaC: '', xaD: '' });
+          return;
+        }
+        if (!this.ukazka()) { this.zatimNeumime('skrytí transakce z rozpočtu bez připojeného serveru'); return; }
         this.toast(open ? open.name + ' skryto z rozpočtu' : '', { icon: 'ph-eye-slash' });
         this.setState({ txOpen: null });
       },
@@ -15673,6 +15777,15 @@ class Component extends DCLogic {
         ? FIN.accounts.filter(a => !(s.acOff || {})[a[0]]).length + ' z ' + FIN.accounts.length + ' účtů aktivních · importy běží ráno v 8:00, zařazování hned po nich'
         : this.pl(FIN.accounts.length, 'účet', 'účty', 'účtů') + ' · pohyby se zapisují ručně nebo importem výpisu, zařazování běží při importu',
       finAddAccount: () => this.zatimNeumime('napojení banky z téhle obrazovky — účty se zakládají v Nastavení'),
+      // Napojení na banku (synchronizace, odpojení, pravidla importu) má jen ukázka.
+      finBankDemo: this.ukazka(),
+      finCanAddTx: this.financeNaServeru(),
+      finAddTx: () => this.setState({ xaOpen: true, xaMode: 'tx', xaA: '', xaB: '' }),
+      finLead: this.ukazka()
+        ? 'Šest účtů na jednom místě. Import z bank běží ráno, zařazování podle pravidel hned po něm — do rozpočtu se to propíše samo.'
+        : (FIN.accounts.length
+          ? this.pl(FIN.accounts.length, 'účet', 'účty', 'účtů') + ' na jednom místě. Platby zapisujete ručně nebo z pravidelných plateb — do rozpočtu se propíšou hned.'
+          : 'Zatím tu není žádný účet. Založte ho v záložce Účty (Nový účet) a platby se začnou počítat.'),
       // Kolik účtů se synchronizuje, ví seznam účtů — ne napsaná pětka.
       finSyncAll: () => {
         // „Synchronizuji" nespustilo nic — automatické stahování z banky aplikace nemá.
@@ -15686,11 +15799,21 @@ class Component extends DCLogic {
         date: u[0], title: u[1], value: this.kc(u[2]), kind: u[3], cat: u[4],
         thisMonth: u[5], dot: u[5] ? 'var(--g-acc)' : 'var(--g-ink3)',
         go: () => this.setState({ route: 'x-rozpocty', budTab: u[4] === 'Rezerva' || u[4] === 'Cesty' ? 2 : 1 }),
-        skip: () => this.zatimNeumime('přeskočení plánované platby')
+        // Přeskočit jeden termín předpisu — v knize zůstane jako přeskočený a nezapíše se.
+        skip: () => {
+          if (!this.financeNaServeru() || !u[6]) { this.zatimNeumime('přeskočení plánované platby bez připojeného serveru'); return; }
+          this.setState({ confirm: {
+            title: 'Přeskočit platbu', cta: 'Přeskočit', btnBg: 'var(--g-acc)',
+            body: u[1] + ' ' + u[0] + ' (' + this.kc(u[2]) + ') se tentokrát nezapíše. Další termíny zůstávají.',
+            go: () => { this.setState({ confirm: null }); this.financeAkce('finance/platby/' + u[6] + '/preskocit', { datum: u[7] }); }
+          } });
+        }
       })),
       // Měsíc podle kalendáře, ne napevno srpen.
       finUpNote: 'Platby označené modrou tečkou padnou ještě do rozpočtu ' + ['ledna', 'února', 'března', 'dubna', 'května', 'června', 'července', 'srpna', 'září', 'října', 'listopadu', 'prosince'][this.dnes().getMonth()] + '.',
-      finAddPayment: () => this.zatimNeumime('plánované platby'),
+      finAddPayment: () => this.financeNaServeru()
+        ? this.setState({ xaOpen: true, xaMode: 'platba', xaCtx: null, xaA: '', xaB: '', xaC: String(this.dnes().getDate()), xaD: '' })
+        : this.zatimNeumime('plánované platby bez připojeného serveru'),
       finRules: FIN.rules.map(r => ({
         pattern: r[0], cat: r[1], count: r[2] + '× letos',
         go: () => this.setState({ route: 'x-rozpocty', budTab: 1 }),
@@ -16072,7 +16195,32 @@ class Component extends DCLogic {
       })),
       rcSteps: day.steps.map(x => ({ time: x[0], text: x[1], source: x[2], icon: x[3] })),
       rcGaps: day.gap,
-      rcToDiary: () => { this.setState({ route: 'x-denik', appTab: 0 }); this.toast('Rekonstrukce vložena do deníku jako návrh zápisu — před uložením ji projděte', { icon: 'ph-notebook' }); },
+      /*
+       * Rekonstrukce do deníku — opravdu.
+       *
+       * Hlásilo „vložena do deníku jako návrh" a jen otevřelo Deník. U dvojice
+       * se po potvrzení zapíše soukromý zápis (vidí ho jen ten, kdo ho zapsal)
+       * s časy a zdroji; upravit ho jde v Deníku.
+       */
+      rcToDiary: () => {
+        if (!day.steps.length) { this.toast('Z tohohle dne není co zapsat', { icon: 'ph-info' }); return; }
+        const text = day.steps.map(x => (x[0] ? x[0] + ' — ' : '') + x[1] + (x[2] ? ' (' + x[2] + ')' : '')).join('\n')
+          + (day.gap ? '\n\nMezery: ' + day.gap : '');
+        const api = window.GalerieApi;
+        if (this.ukazka() || !api || api.mode !== 'http') { this.setState({ route: 'x-denik', appTab: 0 }); this.toast('Zápis do deníku uložíte jen s připojeným serverem', { icon: 'ph-notebook' }); return; }
+        this.setState({ confirm: {
+          title: 'Zapsat do deníku', cta: 'Zapsat', btnBg: 'var(--g-acc)',
+          body: 'Vznikne soukromý zápis „' + day.title + '“ s ' + this.pl(day.steps.length, 'krokem', 'kroky', 'kroky') + ' dne. Věty jsou návrh z dat — v Deníku je můžete přepsat.',
+          go: () => {
+            this.setState({ confirm: null });
+            api.post('rychle/denik', { nadpis: String(day.title).slice(0, 160), text }).then(res => {
+              if (res && window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data, res.prazdne);
+              this.setState({ route: 'x-denik', appTab: 0 });
+              this.toast((res && res.zprava) || 'Zapsáno do deníku', { icon: 'ph-notebook' });
+            }).catch(e => this.toast(((e && e.body) || {}).message || 'Zápis se nepodařil', { icon: 'ph-warning', color: 'var(--g-mag)' }));
+          }
+        } });
+      },
       rcFix: () => { this.setState({ route: 'x-uklid', clnTab: 'dating' }); this.toast('Chybějící časy a data se doplňují v Úklidu → Datování', { icon: 'ph-calendar-dots' }); }
     };
   }
@@ -16297,7 +16445,12 @@ class Component extends DCLogic {
         toggle: () => { const prev = rows; this.setState({ paper: rows.map(x => x.id === r.id ? { ...x, on: !x.on } : x) }); this.toast(r.label + (r.on ? ' se na list netiskne' : ' se na list vytiskne'), { icon: 'ph-printer', undo: () => this.setState({ paper: prev }) }); }
       })),
       ppCount: this.pl(rows.filter(r => r.on).length, 'údaj na listu', 'údaje na listu', 'údajů na listu'),
-      ppPrint: () => this.zatimNeumime('tisk — list si zatím vytiskněte z prohlížeče'),
+      // Papírová záloha: jen údaje, které mají na list jít (`on`).
+      ppPrint: () => {
+        const naList = rows.filter(r => r.on);
+        if (!naList.length) { this.toast('Na listu není žádný údaj — zapněte aspoň jeden', { icon: 'ph-info' }); return; }
+        this.tiskni('Papírová záloha', [{ radky: naList.map(r => [r.label, r.value]) }], 'Uložte na bezpečné místo · po změně údajů vytiskněte znovu');
+      },
       ppMark: () => { const prev = rows; this.setState({ paper: rows.map(x => ({ ...x, changed: false })) }); this.toast('Označeno jako vytištěné · změny se počítají od dneška', { icon: 'ph-check-circle', undo: () => this.setState({ paper: prev }) }); }
     };
   }
@@ -16957,7 +17110,13 @@ class Component extends DCLogic {
       fg: on ? 'var(--g-acc-deep)' : 'var(--g-ink2)',
       bd: on ? 'var(--g-acc)' : 'var(--g-line)'
     });
-    const shareLevel = s.cycShare || 'dates';
+    /*
+     * Úroveň sdílení ze serveru (`CYC_NASTAVENI`, cycle_settings) — ta řídí,
+     * co partner doopravdy vidí. Stav obrazovky ji jen posílá tam; starý
+     * zápis ve společném stavu (i od partnera) už neplatí.
+     */
+    const cycNast = !this.ukazka() ? (window.GalerieData || {}).CYC_NASTAVENI : null;
+    const shareLevel = cycNast ? cycNast.share : (s.cycShare || 'dates');
     const maxLen = Math.max.apply(null, model.lens.concat([28]));
 
     return {
@@ -17118,7 +17277,17 @@ class Component extends DCLogic {
         bg: shareLevel === o[0] ? 'var(--g-acc-soft)' : 'var(--g-raise)',
         bd: shareLevel === o[0] ? 'var(--g-acc)' : 'var(--g-line)',
         dotBg: shareLevel === o[0] ? 'var(--g-acc)' : 'transparent',
-        pick: () => { this.setState({ cycShare: o[0] }); this.toast('Sdílení cyklu: ' + o[1].toLowerCase(), { icon: 'ph-share-network', undo: () => this.setState({ cycShare: shareLevel }) }); }
+        pick: () => {
+          const prevLevel = shareLevel;
+          const nastav = v => {
+            if (cycNast) cycNast.share = v;
+            // Stejná hodnota jako ve starém stavu by se neodeslala (zápis posílá jen změny) —
+            // proto nejdřív prázdná, pak zvolená. Prázdnou server ignoruje.
+            this.setState({ cycShare: null }, () => this.setState({ cycShare: v }));
+          };
+          nastav(o[0]);
+          this.toast('Sdílení cyklu: ' + o[1].toLowerCase() + (cycNast ? ' · platí i pro to, co partner vidí' : ''), { icon: 'ph-share-network', undo: () => nastav(prevLevel) });
+        }
       })),
       cycPreview: shareLevel === 'none'
         ? [{ label: 'Cyklus', value: 'nesdíleno', color: 'var(--g-ink3)' }]
@@ -17930,6 +18099,71 @@ class Component extends DCLogic {
         telo: (a, b, c) => ({ area: a, minutes: parseInt(b, 10) || null, asked: /^a/i.test(c) }),
         mistni: (a) => SPEAK.push({ area: a, a: 1, k: 0, ask: true, note: 'zapsáno teď' })
       },
+      // ——— finance (FinanceAkceController) — dřív „zatím neumíme" ———
+      txPoznamka: {
+        t: 'Poznámka k platbě', a: 'Poznámka — prázdná poznámku smaže', prazdneA: true,
+        h: 'Poznámka je vidět v detailu platby a v exportu CSV. Popis platby zůstává, jak přišel.',
+        cesta: ctx => 'finance/transakce/' + ctx + '/poznamka',
+        telo: a => ({ poznamka: a })
+      },
+      txVynechat: {
+        t: 'Nepočítat do rozpočtu', a: 'Proč — třeba „platí firma" nebo „vrácené zboží"',
+        chybiA: 'Napište důvod — bez něj se za půl roku nedá zjistit, proč se částka nepočítá',
+        h: 'Platba zůstane v knize i na účtu, jen se nezapočítá do čerpání rozpočtu ani do vyrovnání mezi vámi.',
+        cesta: ctx => 'finance/transakce/' + ctx + '/rozpocet',
+        telo: a => ({ vynechat: true, duvod: a })
+      },
+      txRozdelit: {
+        t: 'Rozdělit do kategorií', a: 'První část — kategorie a částka, např. Potraviny 700', b: 'Druhá část — např. Drogerie 300',
+        c: 'Třetí část (nepovinné)', d: 'Čtvrtá část (nepovinné)',
+        h: 'Součet částí musí dát celou platbu. Z jedné platby vznikne několik se stejným datem a účtem.',
+        cesta: ctx => 'finance/transakce/' + ctx + '/rozdelit',
+        telo: (a, b, c, d) => {
+          const casti = [a, b, c, d].filter(Boolean).map(x => {
+            const m = /^(.*?)[\s:]+([0-9][0-9 ]*(?:[.,][0-9]{1,2})?)\s*(?:kč|czk|€|eur)?$/i.exec(x.trim());
+            return m ? { kategorie: m[1].trim(), castka: parseFloat(m[2].replace(/\s/g, '').replace(',', '.')) } : null;
+          });
+          if (casti.some(x => !x)) return { chyba: 'Každou část napište jako kategorii a částku — třeba „Potraviny 700"' };
+          if (casti.length < 2) return { chyba: 'Rozdělit jde aspoň do dvou kategorií' };
+          return { casti };
+        }
+      },
+      platba: {
+        t: 'Nová plánovaná platba', a: 'Co se platí — třeba Nájem', b: 'Částka', c: 'Který den v měsíci (1–31)', d: 'Kategorie (nepovinné, přesně jako v Rozpočtu)',
+        h: 'Platba se objeví v Nadcházejících a v den splatnosti se zapíše do knihy. Kladná částka s + na začátku je příjem.',
+        cesta: () => 'finance/platby',
+        telo: (a, b, c, d) => {
+          const castka = parseFloat(String(b).replace(/[^0-9.,]/g, '').replace(',', '.'));
+          const den = parseInt(c, 10);
+          if (!(castka > 0)) return { chyba: 'Zadejte částku' };
+          if (!(den >= 1 && den <= 31)) return { chyba: 'Den v měsíci je číslo od 1 do 31' };
+          return { nazev: a, castka, den, kategorie: d || null, prijem: /^\s*\+/.test(b) };
+        }
+      },
+      ucet: {
+        t: 'Nový účet', a: 'Název — třeba Společný účet nebo Hotovost', b: 'Počáteční zůstatek (nepovinné)', c: 'Druh: banka, karta, hotovost nebo jiné', d: 'Měna (nepovinné, výchozí CZK)',
+        h: 'Účet je vedený ručně: platby na něj zapisujete v Transakcích nebo přicházejí z pravidelných plateb. Napojení na banku aplikace nemá.',
+        cesta: () => 'finance/ucty',
+        telo: (a, b, c, d) => {
+          const zustatek = b ? this.castkaZTextu(b) : 0;
+          if (b && isNaN(zustatek)) return { chyba: 'Zůstatek napište jako číslo' };
+          const druh = /hot/i.test(c) ? 'cash' : /kart/i.test(c) ? 'card' : /jin|spo/i.test(c) ? 'other' : 'bank';
+          const mena = (d || 'CZK').trim().toUpperCase();
+          if (!/^[A-Z]{3}$/.test(mena)) return { chyba: 'Měna jsou tři písmena, třeba CZK nebo EUR' };
+          return { nazev: a, zustatek, druh, mena };
+        }
+      },
+      cil: {
+        t: 'Nová vyhrazená částka', a: 'Na co spoříte', b: 'Kolik chcete mít', c: 'Do kdy — např. 2027-06-30 (nepovinné)', d: 'Poznámka (nepovinné)',
+        h: 'Vklady přidáte tlačítkem u částky. Aplikace je sama nepřesouvá — zapisuje, co jste odložili.',
+        cesta: () => 'finance/cile',
+        telo: (a, b, c, d) => {
+          const castka = parseFloat(String(b).replace(/[^0-9.,]/g, '').replace(',', '.'));
+          if (!(castka > 0)) return { chyba: 'Zadejte cílovou částku' };
+          if (c && !/^\d{4}-\d{2}-\d{2}$/.test(c)) return { chyba: 'Datum napište jako rok-měsíc-den, třeba 2027-06-30' };
+          return { nazev: a, castka, termin: c || null, poznamka: d || null };
+        }
+      },
       vstup: {
         druh: 'vstup',
         t: 'Na čem to stálo',
@@ -17963,28 +18197,36 @@ class Component extends DCLogic {
     const c = (s.xaC || '').trim(), d = (s.xaD || '').trim();
     const ctx = s.xaCtx || null;
 
-    if (!a) { this.toast('Zadejte, o co jde', { icon: 'ph-warning', color: 'var(--g-mag)' }); return; }
+    if (!a && !f.prazdneA) { this.toast(f.chybiA || 'Zadejte, o co jde', { icon: 'ph-warning', color: 'var(--g-mag)' }); return; }
+
+    // Formulář si může data zkontrolovat sám (částka, datum) — chyba zůstane v dialogu.
+    const telo = f.telo(a, b, c, d, ctx);
+    if (telo && telo.chyba) { this.toast(telo.chyba, { icon: 'ph-warning', color: 'var(--g-mag)' }); return; }
 
     const api = window.GalerieApi;
-    this.setState({ xaOpen: false, xaMode: null, xaCtx: null, xaA: '', xaB: '', xaC: '', xaD: '' });
 
     // Bez backendu se dopíše do kolekce, ať je vidět, jak to vypadá — ale
     // nesmí se u toho tvrdit, že se to uložilo.
     if (!api || !api.post || api.mode !== 'http') {
+      if (!f.mistni) { this.toast('Tohle se uloží jen s připojeným serverem', { icon: 'ph-warning' }); return; }
+      this.setState({ xaOpen: false, xaMode: null, xaCtx: null, xaA: '', xaB: '', xaC: '', xaD: '' });
       f.mistni(a, b, c, d, ctx);
       if (window.GalerieObnovObrazovku) window.GalerieObnovObrazovku();
       this.toast('Zapsáno jen v tomhle okně — bez přihlášení se to nikam neuloží', { icon: 'ph-warning-circle' });
       return;
     }
 
-    api.post('zaznamy/' + f.druh, f.telo(a, b, c, d, ctx)).then(res => {
+    this.setState({ xaOpen: false, xaMode: null, xaCtx: null, xaA: '', xaB: '', xaC: '', xaD: '' });
+
+    api.post(f.cesta ? f.cesta(ctx) : 'zaznamy/' + f.druh, telo).then(res => {
       if (!res) return;
       if (window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data, res.prazdne);
+      if (f.po) f.po(res, ctx);
       this.toast(res.zprava || 'Zapsáno', { icon: 'ph-check-circle' });
     }).catch(e => {
       const telo = (e && e.body) || {};
       const prvni = telo.errors ? (Object.values(telo.errors)[0] || [])[0] : null;
-      this.toast(prvni || telo.message || 'Zápis se nepodařil', { icon: 'ph-warning', color: 'var(--g-mag)' });
+      this.toast(prvni || telo.zprava || telo.message || 'Zápis se nepodařil', { icon: 'ph-warning', color: 'var(--g-mag)' });
     });
   }
 
@@ -19690,6 +19932,41 @@ class Component extends DCLogic {
    * zatím neumíme", ví, na čem je; kdo se dozví „uloženo", to zjistí až
    * ve chvíli, kdy na to spoléhal.
    */
+  /*
+   * Tisk v okně prohlížeče.
+   *
+   * Tlačítka „Vytisknout" hlásila „zatím neumíme — vytiskněte si to
+   * z prohlížeče". Prohlížeč to umí sám: nové okno s čistým listem a jeho
+   * dialog tisku (odtud jde i „Uložit jako PDF"). Obsah se skládá jako text,
+   * nikdy jako HTML z dat — název receptu ani poznámka nesmí nic spustit.
+   *
+   * `bloky`: [{ nadpis, radky: [[popis, hodnota]] } | { nadpis, text } | { nadpis, seznam: [text] }]
+   */
+  tiskni(nazev, bloky, podtitul) {
+    const esc = t => String(t === null || t === undefined ? '' : t)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    const w = window.open('', '_blank', 'width=820,height=960');
+    if (!w) { this.toast('Prohlížeč zablokoval okno pro tisk — povolte pro galerii vyskakovací okna', { icon: 'ph-warning', color: 'var(--g-mag)' }); return false; }
+    const telo = (bloky || []).map(b => '<section>' + (b.nadpis ? '<h2>' + esc(b.nadpis) + '</h2>' : '')
+      + (b.text ? '<p>' + esc(b.text).replace(/\n/g, '<br>') + '</p>' : '')
+      + (b.radky ? '<table>' + b.radky.map(r => '<tr><th>' + esc(r[0]) + '</th><td>' + esc(r[1]) + '</td></tr>').join('') + '</table>' : '')
+      + (b.seznam ? '<ol>' + b.seznam.map(x => '<li>' + esc(x) + '</li>').join('') + '</ol>' : '')
+      + '</section>').join('');
+    w.document.open();
+    w.document.write('<!doctype html><html lang="cs"><head><meta charset="utf-8"><title>' + esc(nazev) + '</title><style>'
+      + 'body{font:14px/1.5 Georgia,"Times New Roman",serif;color:#1d1b16;margin:18mm;max-width:170mm}'
+      + 'h1{font-size:24px;margin:0 0 4px}p.sub{color:#6a6458;margin:0 0 18px;font-size:12px}'
+      + 'h2{font-size:15px;margin:18px 0 6px;border-bottom:1px solid #1d1b16;padding-bottom:3px;text-transform:uppercase;letter-spacing:.08em}'
+      + 'table{border-collapse:collapse;width:100%}th,td{text-align:left;vertical-align:top;padding:4px 8px 4px 0;border-bottom:1px solid #ddd6c8}'
+      + 'th{width:38%;font-weight:normal;color:#6a6458}ol{padding-left:20px}li{margin:3px 0}'
+      + 'footer{margin-top:24px;font-size:11px;color:#6a6458}@media print{body{margin:0}}'
+      + '</style></head><body><h1>' + esc(nazev) + '</h1>' + (podtitul ? '<p class="sub">' + esc(podtitul) + '</p>' : '')
+      + telo + '<footer>Vytištěno z galerie ' + esc(new Date().toLocaleDateString('cs-CZ')) + '</footer></body></html>');
+    w.document.close();
+    w.focus();
+    setTimeout(() => { try { w.print(); } catch (e) {} }, 300);
+    return true;
+  }
   zatimNeumime(co) {
     this.toast('Tohle zatím neumíme — ' + co, { icon: 'ph-hourglass-medium' });
   }
@@ -20309,7 +20586,12 @@ class Component extends DCLogic {
           rules: () => this.setState({ route: 'x-ucty', finTab: 1, appTab: 2 })
         };
       }),
-      acAdd: () => this.zatimNeumime('napojení banky'),
+      // U dvojice se účet zakládá (ručně vedený, spoření, hotovost) — napojení na banku má jen ukázka.
+      acBankDemo: this.ukazka(),
+      acAddLabel: this.ukazka() ? 'Napojit banku' : 'Nový účet',
+      acAdd: () => this.financeNaServeru()
+        ? this.setState({ xaOpen: true, xaMode: 'ucet', xaCtx: null, xaA: '', xaB: '', xaC: '', xaD: '' })
+        : this.zatimNeumime('napojení banky'),
       acHealth: !rows.length ? 'Zatím žádný účet — založíte ho ve Financích.'
         : rows.filter(r => !(s.acOff || {})[r.id]).length + ' z ' + rows.length + ' účtů aktivních' + (this.ukazka() ? ' · importy běží každé ráno v 8:00' : '')
     };
@@ -24573,7 +24855,15 @@ class Component extends DCLogic {
           icon: 'ph-book-bookmark', undo: () => this.jobsSet(prev)
         });
       },
-      ybExport: () => this.zatimNeumime('tiskové PDF — knihu objednáte tlačítkem výš'),
+      // Podklad jako dokument z vybraných kapitol — v dialogu tisku „Uložit jako PDF".
+      ybExport: () => {
+        if (!pages) { this.toast('Vyberte aspoň jednu kapitolu', { icon: 'ph-info' }); return; }
+        this.tiskni('Rok v číslech ' + year, chosen.map(c => ({
+          nadpis: c[1],
+          text: c[3] || '',
+          radky: (c[4] || []).map(x => [x[0], x[1] + (x[2] ? ' · ' + x[2] : '')])
+        })), this.pl(chosen.length, 'kapitola', 'kapitoly', 'kapitol') + ' · ' + pages + ' stran · ' + F[0] + ' · ' + CV[0].toLowerCase());
+      },
       ybCheck: () => { this.setState({ appTab: 3 }); this.toast('Předtisková kontrola — Rok v číslech ' + year, { icon: 'ph-shield-check' }); }
     };
   }
@@ -28748,6 +29038,54 @@ class Component extends DCLogic {
       this.toast(t.zprava || t.message || prvni || 'Osobu se nepodařilo upravit', { icon: 'ph-warning', color: 'var(--g-mag)' });
     });
   }
+  // Finance na serveru (FinanceAkceController): jen dvojice s připojeným serverem.
+  financeNaServeru() {
+    const api = window.GalerieApi;
+    return !this.ukazka() && !!(api && api.mode === 'http' && api.post);
+  }
+  financeAkce(cesta, telo, hotovo) {
+    window.GalerieApi.post(cesta, telo || {}).then(res => {
+      if (res && window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data, res.prazdne);
+      if (hotovo) hotovo(res || {});
+      this.toast((res && res.zprava) || 'Uloženo', { icon: 'ph-check-circle' });
+    }).catch(e => {
+      const t = (e && e.body) || {};
+      const prvni = t.errors ? (Object.values(t.errors)[0] || [])[0] : null;
+      this.toast(t.zprava || prvni || t.message || 'Zápis se nepodařil', { icon: 'ph-warning', color: 'var(--g-mag)' });
+    });
+  }
+  // Částka z políčka: „1 500", „1500,50", „+200" → číslo.
+  castkaZTextu(t) { return parseFloat(String(t || '').replace(/\s/g, '').replace(/[^0-9.,-]/g, '').replace(',', '.')); }
+  /*
+   * Přesun peněz mezi kategoriemi rozpočtu.
+   *
+   * „Vyrovnat" u přečerpané kategorie hlásilo „zatím neumíme". Nabídnou se
+   * kategorie, ve kterých ještě zbývá, a částka přečerpání (upravit jde).
+   */
+  presunMeziKategoriemi(cil, cats, vychozi) {
+    if (!this.financeNaServeru()) { this.zatimNeumime('přesouvání peněz mezi kategoriemi bez připojeného serveru'); return; }
+    const volne = cats.filter(x => x.name !== cil.name && x.limit - x.spent > 0)
+      .sort((a, b) => (b.limit - b.spent) - (a.limit - a.spent));
+    if (!volne.length) { this.toast('V žádné jiné kategorii nezbývá — přesunout není odkud', { icon: 'ph-info' }); return; }
+    this.setState({
+      confirmPick: volne[0].name,
+      confirmValue: String(Math.max(1, Math.round(vychozi || Math.min(volne[0].limit - volne[0].spent, 500)))),
+      confirm: {
+        title: 'Přesunout do ' + cil.name,
+        body: 'Z vybrané kategorie se limit sníží, u ' + cil.name + ' zvýší. Plán celkem zůstane stejný.',
+        options: volne.map(x => ({ value: x.name, label: x.name + ' · zbývá ' + this.kc(x.limit - x.spent) })),
+        input: 'Kolik přesunout za měsíc',
+        cta: 'Přesunout', btnBg: 'var(--g-acc)',
+        go: () => {
+          const castka = this.castkaZTextu(this.state.confirmValue);
+          if (!(castka > 0)) { this.toast('Zadejte částku', { icon: 'ph-warning' }); return; }
+          const z = this.state.confirmPick;
+          this.setState({ confirm: null, confirmValue: null });
+          this.financeAkce('finance/rozpocet/presun', { z, do: cil.name, castka }, () => this.setState({ budLimits: {} }));
+        }
+      }
+    });
+  }
   peopleDlg() {
     const s = this.state, mode = s.pplDlg || null, id = s.personId;
     const server = this.lideNaServeru(), api = window.GalerieApi;
@@ -31200,6 +31538,8 @@ class Component extends DCLogic {
       xaTitle: zapF ? zapF.t : s.xaMode === 'tx' ? 'Nová transakce' : xf[2],
       xaLabelA: zapF ? zapF.a : s.xaMode === 'tx' ? 'Popis platby' : xf[0],
       xaLabelB: zapF ? zapF.b : s.xaMode === 'tx' ? 'Částka v Kč — např. 480 nebo +1200' : xf[1],
+      // Druhé pole mají všechny formuláře kromě těch s jedinou otázkou (poznámka, důvod).
+      xaHasB: !(zapF && !zapF.b),
       xaA: s.xaA || '', xaB: s.xaB || '',
       xaSetA: e => this.setState({ xaA: e.target.value }),
       xaSetB: e => this.setState({ xaB: e.target.value }),
@@ -32665,6 +33005,10 @@ class Component extends DCLogic {
       confirmOptions: (s.confirm && s.confirm.options && s.confirm.options.length) ? s.confirm.options : null,
       confirmPick: s.confirmPick || '',
       confirmSetPick: e => this.setState({ confirmPick: e.target.value }),
+      confirmHasInput: !!(s.confirm && s.confirm.input),
+      confirmInputLabel: (s.confirm && s.confirm.input) || '',
+      confirmValue: s.confirmValue === undefined || s.confirmValue === null ? '' : String(s.confirmValue),
+      confirmSetValue: e => this.setState({ confirmValue: e.target.value }),
       ...this.pinVals(),
       toastOpen: !!s.toast, toast: s.toast || {}, closeToast: () => this.setState({ toast: null }),
       undo: () => {

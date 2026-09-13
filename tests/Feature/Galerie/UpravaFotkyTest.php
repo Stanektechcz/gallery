@@ -64,6 +64,10 @@ class UpravaFotkyTest extends TestCase
         $this->assertTrue($radek['upraveno']);
         $this->assertStringContainsString('velikost=velky', $radek['full']);
         $this->assertStringContainsString('v=', $radek['bg']);
+        // Platná úprava jde s fotkou — telefon z ní počítá další otočení.
+        $this->assertSame(['otoceni' => 90, 'vyrez' => true], $radek['uprava']);
+        $mobil = collect($this->getJson('/api/data/knihovna')->json('data.MOBIL.PHOTOS'))->firstWhere('id', $fotka->uuid);
+        $this->assertSame(['otoceni' => 90, 'vyrez' => true], $mobil['uprava']);
 
         // Zpět na originál.
         $this->postJson('/api/media/'.$fotka->uuid.'/uprava', ['otoceni' => 0, 'vyrez' => false])->assertOk();

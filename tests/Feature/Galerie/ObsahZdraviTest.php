@@ -50,8 +50,38 @@ class ObsahZdraviTest extends TestCase
         $data = $this->getJson('/api/data/zdravi')->assertOk()->json('data');
 
         $this->assertCount(14, $data['KL_DAYS']);
+        // Bez uloženého nastavení se nesdílí nic — tak to obrazovka musí i ukázat.
+        $this->assertSame('none', $data['CYC_NASTAVENI']['share']);
         // Všechno ostatní prázdné — žádná nálada ani cyklus, které nikdo nezapsal.
-        $this->assertPrazdne(array_diff_key($data, ['KL_DAYS' => true]));
+        $this->assertPrazdne(array_diff_key($data, ['KL_DAYS' => true, 'CYC_NASTAVENI' => true]));
+    }
+
+    /**
+     * Volba sdílení cyklu z obrazovky řídí, co partner uvidí.
+     *
+     * Dřív se uložila jen do stavu obrazovky — partner viděl podle databáze.
+     */
+    public function test_volba_sdileni_ridi_pohled_partnera(): void
+    {
+        $this->den($this->maki, '2026-09-01', ['flow' => 'medium', 'symptoms' => ['křeče']]);
+
+        $odpoved = $this->patchJson('/api/state', ['data' => ['cycShare' => 'dates', 'cycRemindDays' => 3]])->assertOk();
+        $this->assertArrayNotHasKey('cycShare', (array) $odpoved->json('data'));
+
+        $nastaveni = CycleSetting::where('user_id', $this->maki->id)->sole();
+        $this->assertSame('dates', $nastaveni->share_level);
+        $this->assertSame(3, (int) $nastaveni->remind_days_before);
+        $this->assertSame('dates', $this->getJson('/api/data/zdravi')->json('data.CYC_NASTAVENI.share'));
+
+        // Adrian vidí termín bez příznaků.
+        Sanctum::actingAs($this->adri);
+        $den = $this->getJson('/api/data/zdravi')->json('data.CYC_BASE.2026-09-01');
+        $this->assertNotNull($den);
+        $this->assertSame([], $den['sy'] ?? $den['symptoms'] ?? []);
+
+        // A jeho volba nepřepíše Makinčinu.
+        $this->patchJson('/api/state', ['data' => ['cycShare' => 'full']])->assertOk();
+        $this->assertSame('dates', $nastaveni->fresh()->share_level);
     }
 
     /** Zapsaný den nese průtok, příznaky i bolest — a nikdy se netváří jako odhad. */
@@ -230,6 +260,19 @@ class ObsahZdraviTest extends TestCase
 
         $this->patchJson('/api/state', ['data' => ['cycDays' => [
             '2026-09-01' => ['day' => '2026-09-01', 'deleted' => true],
+        ]]])->assertOk();
+
+        $this->assertSame(0, CycleDay::where('user_id', $this->maki->id)->count());
+    }
+
+    /** Obě rozvržení mažou den hodnotou `null` — i ta smaže. Odhad se neukládá. */
+    public function test_null_smaze_den_a_odhad_se_neulozi(): void
+    {
+        $this->den($this->maki, '2026-09-01', ['flow' => 'medium']);
+
+        $this->patchJson('/api/state', ['data' => ['cycDays' => [
+            '2026-09-01' => null,
+            '2026-09-02' => ['day' => '2026-09-02', 'flow' => 'light', 'predicted' => true],
         ]]])->assertOk();
 
         $this->assertSame(0, CycleDay::where('user_id', $this->maki->id)->count());

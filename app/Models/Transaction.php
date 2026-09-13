@@ -38,7 +38,7 @@ class Transaction extends Model
         'amount_from', 'currency_from', 'amount_to', 'currency_to',
         'rate', 'reference_rate', 'rate_source', 'fee_amount', 'fee_currency',
         'finance_project_id', 'category_id', 'payer_partner_id', 'beneficiary_partner_id',
-        'counterparty', 'payment_method', 'description', 'receipt_media_id',
+        'counterparty', 'payment_method', 'description', 'note', 'receipt_media_id',
         'state', 'created_by', 'approved_by', 'approved_at',
         'fee_included', 'provider', 'place',
         'excluded_from_budget', 'exclusion_reason', 'refund_of_id', 'is_settlement', 'recurring_id',
