@@ -9015,7 +9015,8 @@ class Component extends DCLogic {
 
   library() { return PHOTOS.concat(Array.from({ length: this.state.extra }, (_, i) => ({ id: 'n' + i, di: -1, day: 'Dnes · ' + this.dnes().getDate() + '. ' + MON_CS[this.dnes().getMonth()] + ' ' + this.dnes().getFullYear(), place: 'Právě nahráno', video: false, dur: '0:00', fav: false, seed: 90 + i }))).filter(p => !this.vKosiUkazky(p.id)); }
   isFav(p) { const v = this.state.favs[p.id]; return v === undefined ? p.fav : v; }
-  diaryList() { return this.state.diary || DIARY.map((d, i) => ({ id: 'd' + i, date: d[0], title: d[1], text: d[2], meta: d[3], audio: d[4] })); }
+  // U dvojice deník ze serveru — starý seznam ve stavu telefonu by nové zápisy zakryl.
+  diaryList() { return (!this.galerieNaServeru() && this.state.diary) || DIARY.map((d, i) => ({ id: 'd' + i, date: d[0], title: d[1], text: d[2], meta: d[3], audio: d[4] })); }
   // ── cyklus: odvození cyklů, průměrů a předpovědi z dnů ──
   cycDays() {
     const out = {};
@@ -9716,11 +9717,41 @@ class Component extends DCLogic {
       return { raw: t, kind: over[i] || kind, title: title, to: addr ? (this.dva().find(j => addr[1].toLowerCase().indexOf(this.krestni(j).toLowerCase().slice(0, Math.max(3, this.krestni(j).length - 1))) === 0) || this.otherWho()) : null, amount: amt, income: income, when: when, conf: conf, url: url ? url[0] : null };
     });
   }
+  /*
+   * Rychlý zápis na server: platba, úkol, zápis do deníku.
+   *
+   * Všechny tři dřív skončily jen v paměti telefonu (platba s datem „16. 8."
+   * napevno) a hláška „Zapsáno" platila do obnovení stránky.
+   */
+  rychleNaServer(x, i) {
+    const api = window.GalerieApi, klic = 'tel-cap-' + Date.now() + '-' + i;
+    if (x.kind === 'tx') return api.post('platby/rucne', { popis: x.title, castka: Math.abs(x.amount || 0), prijem: !!x.income, klic: klic });
+    if (x.kind === 'task') return api.post('rychle/ukol', { nazev: x.title, kdo: x.to || '' });
+    return api.post('rychle/denik', { nadpis: x.title.slice(0, 42), text: x.raw });
+  }
   mCapCommit() {
     const s = this.state;
     const skip = s.mCapSkip || {};
-    const items = this.mCapItems().filter((x, i) => !skip[i]);
-    if (!items.length) { this.toast('Napište, co se má zapsat', { icon: 'ph-info' }); return; }
+    const vse = this.mCapItems().filter((x, i) => !skip[i]);
+    if (!vse.length) { this.toast('Napište, co se má zapsat', { icon: 'ph-info' }); return; }
+    let items = vse;
+    if (this.galerieNaServeru()) {
+      const naServer = vse.filter(x => (x.kind === 'tx' && x.amount) || x.kind === 'task' || x.kind === 'diary');
+      items = vse.filter(x => naServer.indexOf(x) < 0);
+      if (naServer.length) {
+        this.setState({ sheet: null, mCapText: '', mCapKind: {}, mCapSkip: {} });
+        Promise.all(naServer.map((x, i) => this.rychleNaServer(x, i).then(res => {
+          if (res && window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data, res.prazdne);
+          return true;
+        }).catch(() => false))).then(vysledky => {
+          const ok = vysledky.filter(Boolean).length;
+          this.toast(ok === naServer.length
+            ? 'Uloženo — ' + this.pl(ok, 'položka', 'položky', 'položek')
+            : 'Uloženo ' + ok + ' z ' + naServer.length + ' — zbytek se nepodařilo zapsat, zkuste to znovu', { icon: ok === naServer.length ? 'ph-lightning' : 'ph-warning' });
+        });
+        if (!items.length) return;
+      }
+    }
     const prev = { txExtra: s.txExtra, tasksExtra: s.tasksExtra, diary: s.diary, secExtra: s.secExtra, mShopExtra: s.mShopExtra, queue: s.queue, nudges: s.nudges };
     let n = s.seq || 1;
     const patch = { sheet: null, mCapText: '', mCapKind: {}, mCapSkip: {} };
@@ -10290,6 +10321,13 @@ class Component extends DCLogic {
         reject: () => this.ndPatch(n.id, { state: 'odmitnuto', note: me + ': dneska to nestihnu' }, 'Odmítnuto s důvodem', 'ph-x-circle'),
         finish: () => this.ndPatch(n.id, { state: 'hotovo', note: 'hotovo dnes' }, 'Hotovo — ' + n.text, 'ph-check-square'),
         toTask: () => {
+          if (this.galerieNaServeru()) {
+            window.GalerieApi.post('rychle/ukol', { nazev: n.text, kdo: n.to || '' }).then(res => {
+              if (res && window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data, res.prazdne);
+              this.toast('Ze žádosti je úkol ve společném seznamu', { icon: 'ph-check-square' });
+            }).catch(e => this.chybaServeru(e, 'Úkol se nepodařilo uložit'));
+            return;
+          }
           const prev = s.tasksExtra || [];
           this.setState({ tasksExtra: prev.concat([{ id: 'nd' + n.id, label: n.text, who: n.to === me ? 'já' : n.to, when: (MNDKIND[n.kind] || ['bez termínu'])[0] }]) });
           this.toast('Ze žádosti je úkol', { icon: 'ph-check-square', undo: () => this.setState({ tasksExtra: prev }) });
@@ -10439,7 +10477,8 @@ class Component extends DCLogic {
   }
   txAll() {
     const s = this.state;
-    return TXS.concat(s.txExtra || []).map(t => ({ id: t[0], date: t[1], name: t[2], cat: s.txCat[t[0]] === undefined ? t[3] : s.txCat[t[0]], amount: t[4], account: t[5], icon: t[6], trip: t[7], place: t[8] || null }));
+    // U dvojice jen kniha; řádky zapsané dřív jen v telefonu v ní nikdy nebyly.
+    return TXS.concat(this.galerieNaServeru() ? [] : (s.txExtra || [])).map(t => ({ id: t[0], date: t[1], name: t[2], cat: s.txCat[t[0]] === undefined ? t[3] : s.txCat[t[0]], amount: t[4], account: t[5], icon: t[6], trip: t[7], place: t[8] || null }));
   }
 
   renderVals() {
@@ -10603,7 +10642,7 @@ class Component extends DCLogic {
         if (!hit(t[0])) return;
         results.push({ label: t[0], meta: grp[0] + ' · ' + (t[2] || 'bez termínu') + ' · ' + (t[1] || 'spolu'), icon: 'ph-check-square', go: () => { this.setState({ tab: 'more', query: '' }); this.push('tasks'); } });
       }));
-      (s.tasksExtra || []).forEach(t => {
+      (this.galerieNaServeru() ? [] : (s.tasksExtra || [])).forEach(t => {
         if (!hit(t.label)) return;
         results.push({ label: t.label, meta: 'Přidané · ' + t.when + ' · ' + t.who, icon: 'ph-check-square', go: () => { this.setState({ tab: 'more', query: '' }); this.push('tasks'); } });
       });
@@ -10658,6 +10697,18 @@ class Component extends DCLogic {
         this.toast(this.pl(ids.length, 'položka', 'položky', 'položek') + ' → album ' + a, { icon: 'ph-folder-plus', undo: () => this.setState({ albums: prev, stack: ['albums'] }) });
         return;
       }
+      // U dvojice zápis i úkol na server; itinerář telefon zapsat neumí a neříká opak.
+      if (this.galerieNaServeru() && (s.addKind === 'diary' || s.addKind === 'task' || s.addKind === 'itin')) {
+        if (s.addKind === 'itin') { this.toast('Do itineráře zatím přidáte jen na počítači v detailu cesty', { icon: 'ph-hourglass-medium' }); return; }
+        const api = window.GalerieApi;
+        const zadost = s.addKind === 'diary' ? api.post('rychle/denik', { nadpis: a, text: b || a }) : api.post('rychle/ukol', { nazev: a, kdo: b });
+        zadost.then(res => {
+          if (res && window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data, res.prazdne);
+          this.setState({ sheet: null, addA: '', addB: '', seq: n + 1 });
+          this.toast((res && res.zprava) || 'Uloženo', { icon: s.addKind === 'diary' ? 'ph-notebook' : 'ph-check-square' });
+        }).catch(e => this.chybaServeru(e, s.addKind === 'diary' ? 'Zápis se nepodařilo uložit' : 'Úkol se nepodařilo uložit'));
+        return;
+      }
       if (s.addKind === 'diary') {
         const prev = this.diaryList();
         this.setState({ diary: [{ id: 'd-n' + n, date: 'Dnes · ' + this.dnes().getDate() + '. ' + MON_CS[this.dnes().getMonth()] + ' ' + this.dnes().getFullYear(), title: a, text: b || '—', meta: 'nový zápis' }].concat(prev), sheet: null, addA: '', addB: '', seq: n + 1 });
@@ -10675,6 +10726,15 @@ class Component extends DCLogic {
         const prev = (s.txExtra || []).slice(), prevQ = this.queueList();
         const amt = parseFloat((b || '0').replace(/[^0-9.,]/g, '').replace(',', '.')) || 0;
         if (!amt) { this.toast('Zadejte částku v Kč', { icon: 'ph-warning' }); return; }
+        // U dvojice do knihy. Dřív řádek jen v telefonu, s datem „30. 8." a frontou „nahrává se", která nic nenahrávala.
+        if (this.galerieNaServeru()) {
+          window.GalerieApi.post('platby/rucne', { popis: a, castka: Math.abs(amt), prijem: /^\s*\+/.test(b), klic: 'tel-' + Date.now() + '-' + n }).then(res => {
+            if (res && window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data, res.prazdne);
+            this.setState({ sheet: null, addA: '', addB: '', seq: n + 1, tab: 'finance', stack: [], txCat2: 'Nezařazeno', txTrip: null, sortFin: 'date' });
+            this.toast((res && res.zprava) || 'Platba zapsána', { icon: 'ph-receipt' });
+          }).catch(e => this.chybaServeru(e, 'Platbu se nepodařilo zapsat'));
+          return;
+        }
         const row = ['tn' + n, '30. 8.', a, 'Nezařazeno', -Math.abs(amt), 'Společný účet', 'ph-receipt', null, null];
         this.setState({
           txExtra: [row].concat(prev), sheet: null, addA: '', addB: '', seq: n + 1,
@@ -10686,7 +10746,7 @@ class Component extends DCLogic {
     };
 
     const extraItin = (s.itinExtra && s.itinExtra[s.tripId]) || [];
-    const tasksExtra = s.tasksExtra || [];
+    const tasksExtra = this.galerieNaServeru() ? [] : (s.tasksExtra || []);
 
     const tabDef = [
       ['home', 'Domů', 'ph-house'],

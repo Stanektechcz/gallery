@@ -1827,6 +1827,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                 </div>
               </sc-if>
 
+              <sc-if value="{{ placePriceShow }}">
               <div style="order:-1">
                 <div style="font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:var(--g-ink2); padding-bottom:9px; border-bottom:1px solid var(--g-ink)">Cena a hlídač</div>
                 <div style="display:flex; align-items:baseline; gap:10px; padding:14px 0 0; flex-wrap:wrap">
@@ -1853,6 +1854,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                 <div style="font-size:12.5px; color:var(--g-ink2); margin-top:8px; text-wrap:pretty">{{ placeWatchNote }}</div>
                 <button onClick="{{ placeBudgetPush }}" style="margin-top:10px; border:0; background:transparent; padding:0; cursor:pointer; font-family:inherit; font-size:13px; color:var(--g-acc)">Přidat do rozpočtu jako plánovaný výdaj →</button>
               </div>
+              </sc-if>
 
               <div>
                 <div style="font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:var(--g-ink2); padding-bottom:9px; border-bottom:1px solid var(--g-ink)">Souvisí</div>
@@ -15083,6 +15085,12 @@ class Component extends DCLogic {
         const now = hist[hist.length - 1].value;
         const trend = now - hist[hist.length - 2].value;
         return {
+          /*
+           * Cenová historie je vymyšlená z délky názvu místa (sinusovka)
+           * a hlídač ceny nic nesleduje — aplikace ceny nikde nezjišťuje.
+           * U dvojice by to byla čísla o jejím místě, která nikdy nebyla.
+           */
+          placePriceShow: this.ukazka(),
           placePriceCur: this.kc(now),
           placePriceUnit: p.kind && p.kind.indexOf('Ubytování') >= 0 ? 'za noc pro dva' : p.kind && p.kind.indexOf('Památka') >= 0 ? 'vstup pro dva' : 'večeře pro dva',
           placePriceTrend: (trend > 0 ? '+' : '') + this.kc(trend) + ' proti minulému měsíci',
@@ -15216,7 +15224,10 @@ class Component extends DCLogic {
         const half = totalPaid / 2;
         const aDiff = (byWho[jA] || 0) - half;
         const owe = Math.abs(Math.round(aDiff));
-        const settled = !!s.settleDone;
+        // U dvojice platí „vyrovnáno" jen pro měsíc, ve kterém ho někdo označil —
+        // dřív jednou kliknuté vyrovnání tvrdilo „jste na nule" navždy.
+        const mesicVyrovnani = (() => { const d = this.dnes(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); })();
+        const settled = this.ukazka() ? !!s.settleDone : s.settleDone === mesicVyrovnani;
         return {
           budIsAnom: tab === 5,
           anomHead: anoms.length
@@ -15266,7 +15277,15 @@ class Component extends DCLogic {
           setlOwe: this.kc(owe),
           setlCan: !settled && owe >= 100,
           setlPay: () => {
-            const prev = !!s.settleDone;
+            const prev = s.settleDone;
+            // Aplikace peníze neposílá a převod do knihy nezapisuje — jen si pamatuje, že je měsíc vyrovnaný.
+            if (!this.ukazka()) {
+              this.setState({ settleDone: mesicVyrovnani });
+              this.toast('Tento měsíc označen jako vyrovnaný (' + this.kc(owe) + ') · převod pošlete z banky, aplikace ho neodesílá', {
+                icon: 'ph-handshake', undo: () => this.setState({ settleDone: prev })
+              });
+              return;
+            }
             this.setState({ settleDone: true });
             this.toast('Vyrovnání ' + this.kc(owe) + ' zapsáno jako převod mezi účty', {
               icon: 'ph-handshake', undo: () => this.setState({ settleDone: prev })
@@ -25900,6 +25919,18 @@ class Component extends DCLogic {
         }
       };
     }
+    // Dvojice bez cíle neuvidí ukázkový „Cesta na Islandu · 68 400 Kč" jako svůj.
+    if (!this.ukazka()) {
+      return {
+        homeGoal: {
+          name: 'Zatím žádný společný cíl', saved: '—', target: 'cíle', pct: '0%', pctNum: '',
+          left: 'Cíl spoření založíte v Rozpočtech na záložce Cíle.',
+          tempo: 'Tempo a odhad data', eta: 'se spočítají z vkladů',
+          canAdd: false, add1: () => {}, add5: () => {}, reset: () => {},
+          go: () => this.setState({ route: 'x-rozpocty', budTab: 2 })
+        }
+      };
+    }
     const target = 120000, monthly = 6500;
     const saved = 68400 + (s.homeGoalAdd || 0);
     const left = Math.max(0, target - saved);
@@ -30471,6 +30502,22 @@ class Component extends DCLogic {
       if (s.xaMode === 'tx') {
         const raw = parseFloat((b || '0').replace(/[^0-9.,]/g, '').replace(',', '.')) || 0;
         const amt = b.trim()[0] === '+' ? Math.abs(raw) : -Math.abs(raw);
+        // U dvojice do knihy — řádek jen na obrazovce (s datem „30. 8.") rozpočet neviděl.
+        const api = window.GalerieApi;
+        if (!this.ukazka() && api && api.mode === 'http' && api.post) {
+          if (!raw) { this.toast('Zadejte částku', { icon: 'ph-warning', color: 'var(--g-mag)' }); return; }
+          this.setState({ xaOpen: false, xaMode: null, xaA: '', xaB: '' });
+          api.post('platby/rucne', { popis: a, castka: Math.abs(raw), prijem: amt > 0, klic: 'pc-' + Date.now() }).then(res => {
+            if (res && window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data, res.prazdne);
+            this.setState({ route: 'x-transakce', appTab: 0, txFilter: 'un', txQuery: '', txPickCat: null });
+            this.toast((res && res.zprava) || 'Platba zapsána', { icon: 'ph-receipt' });
+          }).catch(e => {
+            const t = (e && e.body) || {};
+            const prvni = t.errors ? (Object.values(t.errors)[0] || [])[0] : null;
+            this.toast(t.zprava || prvni || 'Platbu se nepodařilo zapsat', { icon: 'ph-warning', color: 'var(--g-mag)' });
+          });
+          return;
+        }
         const row = ['tn' + n, '30. 8.', a, 'Nezařazeno', amt, 'Společný účet', 'ph-receipt', {}, 'Ručně zapsaná transakce.'];
         this.setState({ txNew: (s.txNew || []).concat([row]), xaOpen: false, xaMode: null, xaA: '', xaB: '', xSeq: n + 1, route: 'x-transakce', appTab: 0, txFilter: 'un', txQuery: '', txPickCat: null });
         this.toast(a + ' — zapsáno, zařaďte do kategorie', { icon: 'ph-receipt', undo: () => this.setState({ txNew: (this.state.txNew || []).filter(r => r[0] !== 'tn' + n) }) });

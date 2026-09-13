@@ -12,6 +12,8 @@ use App\Http\Controllers\Api\Galerie\MechanismController;
 use App\Http\Controllers\Api\Galerie\MediaController;
 use App\Http\Controllers\Api\Galerie\PravidloController;
 use App\Http\Controllers\Api\Galerie\RozporController;
+use App\Http\Controllers\Api\Galerie\RucniPlatbaController;
+use App\Http\Controllers\Api\Galerie\RychlyZapisController;
 use App\Http\Controllers\Api\Galerie\SdileniController;
 use App\Http\Controllers\Api\Galerie\StateController;
 use App\Http\Controllers\Api\Galerie\StorageController;
@@ -173,6 +175,12 @@ Route::middleware(['auth:sanctum', 'dvojice', 'throttle:120,1'])->prefix('api')-
         ->whereNumber('odkaz')->name('galerie.sdileni.prodlouzit');
     Route::delete('sdileni/{odkaz}', [SdileniController::class, 'destroy'])
         ->whereNumber('odkaz')->name('galerie.sdileni.destroy');
+
+    // Rychlá ruční platba — dřív řádek jen na obrazovce s datem „30. 8.".
+    Route::post('platby/rucne', RucniPlatbaController::class)->name('galerie.platby.rucne');
+    // Rychlý zápis do deníku a úkol z telefonu — dřív jen v paměti telefonu.
+    Route::post('rychle/denik', [RychlyZapisController::class, 'denik'])->name('galerie.rychle.denik');
+    Route::post('rychle/ukol', [RychlyZapisController::class, 'ukol'])->name('galerie.rychle.ukol');
 
     // Lidé: jméno, skrytí a sloučení dřív žily jen ve stavu prohlížeče (viz LideController).
     Route::patch('osoby/{osoba}', [LideController::class, 'update'])->whereNumber('osoba')->name('galerie.osoby.update');
