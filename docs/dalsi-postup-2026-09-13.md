@@ -437,7 +437,7 @@ hesla e-mailem, zvýrazněnou jako událost, kterou je dobré zkontrolovat.
 | `1a6a93a3` | `gallery:zrus-ucty` — zrušení účtu po lhůtě; vlastník galerie chráněn; obnova hesla v historii zabezpečení |
 | `6e3a4f71` | „Odhlásit ostatní" ve starém rozhraní ruší i klíče aplikace |
 
-Testy: **1422 PHP testů**, všechny prošly.
+Testy: **1421 PHP testů**, všechny prošly.
 
 ### Po nasazení (2k)
 
