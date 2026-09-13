@@ -174,6 +174,67 @@ class StavTest extends TestCase
     }
 
     /**
+     * Dialog kódu zámku a heslo k odkazu se neukládají ani nesdílí.
+     *
+     * Počítač posílal při psaní heslo do galerie z dialogu kódu, starý i nový
+     * kód, obnovovací kód a heslo k odkazu — a druhé zařízení je dostalo zpátky.
+     * Odpočet trezoru navíc tikal do stavu každou sekundu.
+     */
+    public function test_dialog_kodu_a_heslo_odkazu_se_neukladaji(): void
+    {
+        $this->actingAs($this->adri)->patchJson('/api/state', [
+            'data' => [
+                'pinHeslo' => 'heslo-do-galerie',
+                'pinStary' => '111111',
+                'pinNovy' => '222222',
+                'pinZnovu' => '222222',
+                'pinObnovovaci' => 'OBNOVA-9876',
+                'obPin' => '333333',
+                'shrPwd' => 'heslo-k-odkazu',
+                'lockMail' => 'adrian@example.test',
+                'vaultTries' => 2,
+                'vaultLeft' => 845,
+                'lockWho' => 'M',
+                'lockTrusted' => true,
+                'joy' => ['zbytek'],
+            ],
+        ])->assertOk();
+
+        $ulozeno = CoupleState::first();
+        $vse = json_encode([$ulozeno->data, $ulozeno->private], JSON_UNESCAPED_UNICODE);
+
+        $this->assertArrayNotHasKey('lockWho', $ulozeno->data, 'Kdo u zařízení sedí, druhé zařízení nezajímá.');
+        $this->assertArrayNotHasKey('lockTrusted', $ulozeno->data);
+
+        foreach (['heslo-do-galerie', '111111', '222222', 'OBNOVA-9876', '333333', 'heslo-k-odkazu', 'adrian@example.test', '845'] as $tajne) {
+            $this->assertStringNotContainsString($tajne, $vse);
+        }
+
+        $this->assertSame(['zbytek'], $ulozeno->data['joy']);
+    }
+
+    /**
+     * Co už v databázi leží, se druhému zařízení neposílá.
+     *
+     * Stav uložený před opravou nese hesla dál, dokud ho migrace neuklidí;
+     * odpověď je nesmí vrátit ani do té doby.
+     */
+    public function test_drive_ulozene_heslo_se_neposila(): void
+    {
+        $stav = CoupleState::forCouple($this->prostor->id);
+        $stav->forceFill(['data' => ['pinHeslo' => 'stare-heslo', 'vaultLeft' => 300, 'joy' => ['ano']]])->save();
+
+        $this->actingAs($this->maki)->getJson('/api/state')
+            ->assertOk()
+            ->assertJsonMissingPath('data.pinHeslo')
+            ->assertJsonMissingPath('data.vaultLeft')
+            ->assertJsonPath('data.joy', ['ano']);
+
+        $this->assertTrue($stav->fresh()->zapomen(CoupleState::NEUKLADAT));
+        $this->assertArrayNotHasKey('pinHeslo', $stav->fresh()->data);
+    }
+
+    /**
      * Prázdný stav je `{}`, ne `[]`.
      *
      * Klient si odpověď vezme jako svou lokální kopii a ukládá ji přes

@@ -30377,12 +30377,31 @@ class Component extends DCLogic {
       // Fronta přenosů je jen tohohle okna; do společného stavu nepatří.
       queuePct: 1, queuePaused: 1, queueFiles: 1, queueInfo: 1, emStatus: 1, emLeft: 1,
       msgPlay: 1, msgTyping: 1, msgRec: 1, msgRecT: 1, msgEmoji: 1,
-      homeEdit: 1, boardDrag: 1, calDrag: 1, tierDrag: 1, storyDrag: 1, pmReveal: 1, sporReveal: 1
+      homeEdit: 1, boardDrag: 1, calDrag: 1, tierDrag: 1, storyDrag: 1, pmReveal: 1, sporReveal: 1,
+      /*
+       * Hesla, kódy a počítadla jednoho zařízení.
+       *
+       * Stav se sdílí s druhým z dvojice a leží v databázi. Heslo do galerie
+       * z dialogu kódu, starý i nový kód zámku, obnovovací kód, heslo
+       * k odkazu i rozepsané heslo trezoru tam odcházely při každém stisku
+       * klávesy — a druhé zařízení je dostalo zpátky. Odpočet odemčeného
+       * trezoru navíc tikal do stavu každou sekundu (patnáct minut zápisů)
+       * a partnerovi ukazoval „odemčeno", ač jeho sezení odemčené není.
+       */
+      vaultPwd: 1, vaultTries: 1, vaultLeft: 1,
+      pinHeslo: 1, pinStary: 1, pinNovy: 1, pinZnovu: 1, pinObnovovaci: 1, pinStep: 1, obPin: 1,
+      shrPwd: 1, lockMail: 1,
+      // Kdo u tohohle zařízení sedí a jestli mu věří. Výběr účtu na zamčené
+      // obrazovce jednoho počítače by jinak na druhém prohodil „já" a „ty"
+      // a zapamatované zařízení by se přeneslo i na počítač, kterému nikdo nevěří.
+      lockWho: 1, lockTrusted: 1, lockTrust: 1, obWho: 1
     };
     return this._pSkip;
   }
   persistKey(k) {
     if (this.persistSkip()[k]) return false;
+    // Pojistka pro pole, která přibudou: heslo ani kód se nesdílí nikdy.
+    if (/(Pwd|Heslo|Pin)$/.test(k) && k !== 'msgPin') return false;
     return !/(Dlg|Drag|Open|Err|Draft|Busy|Panel)$/.test(k);
   }
   persistLoad() {

@@ -35,6 +35,16 @@ class CoupleState extends Model
         // Příznak „právě kontroluji" patří k jednomu kliknutí, ne do sdíleného
         // stavu: uložený by po obnovení stránky nechal viset „Kontroluji…".
         'admChecking',
+        // Dialog kódu zámku (heslo do galerie, starý a nový kód, obnovovací
+        // kód), kód z prvního spuštění a heslo k odkazu. Všechno odcházelo
+        // při každém stisku klávesy a druhé zařízení to dostalo zpátky.
+        'pinHeslo', 'pinStary', 'pinNovy', 'pinZnovu', 'pinObnovovaci', 'pinStep', 'obPin', 'shrPwd',
+        // Jedno zařízení, ne dvojice: e-mail na zámku, pokusy a odpočet
+        // odemčeného trezoru (ten tikal do stavu každou sekundu).
+        'lockMail', 'vaultTries', 'vaultLeft',
+        // Kdo u zařízení sedí a jestli mu věří. Sdílené by na druhém počítači
+        // prohodilo „já" a „ty" a přeneslo důvěru na cizí zařízení.
+        'lockWho', 'lockTrusted', 'lockTrust', 'obWho',
     ];
 
     /**
@@ -283,6 +293,11 @@ class CoupleState extends Model
 
         foreach ([$this->surovy('data'), $this->private ?? []] as $cast) {
             foreach ((array) $cast as $klic => $hodnota) {
+                // Heslo nebo kód uložený dřív, než se začal zahazovat, se už neposílá.
+                if (in_array($klic, self::NEUKLADAT, true)) {
+                    continue;
+                }
+
                 $ven->{$klic} = $hodnota;
             }
         }
