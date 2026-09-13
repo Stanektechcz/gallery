@@ -33,6 +33,11 @@
   // spuštění" i před přihlášením — data o dvojici chodí až po něm.
   window.GALERIE_UCTY_EXISTUJI = @json((bool) ($uctyExistuji ?? false));
 
+  // Nabídka instalace z prohlížeče — přijde dřív, než se aplikace vykreslí,
+  // takže se chytá tady. „Nainstalovat" v Offline a zařízení ji pak použije.
+  window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); window.__instalace = e; });
+  window.addEventListener('appinstalled', function () { window.__instalace = null; window.__nainstalovano = true; });
+
   // Service worker drží skořápku offline a doručuje zápisy, které vznikly bez
   // signálu. Dosah „/" je podmínka, ne volba: ve scope /galerie/ by neviděl
   // /api/ a fronta zápisů by nefungovala.

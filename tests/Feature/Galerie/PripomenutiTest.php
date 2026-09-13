@@ -62,7 +62,23 @@ class PripomenutiTest extends TestCase
         $this->postJson('/api/pripomenout', ['text' => 'Ahoj'])
             ->assertOk()
             ->assertJsonPath('doruceno', 0)
-            ->assertJsonPath('zprava', 'Makinka nemá zapnutá upozornění — připomínku uvidí až v aplikaci');
+            ->assertJsonPath('zprava', 'Makinka nemá zapnutá upozornění — připomínka do telefonu nedošla');
+    }
+
+    /** Poděkování za práci v domácnosti jde stejnou cestou pod svým jménem. */
+    public function test_podekovani_se_tak_jmenuje(): void
+    {
+        $push = Mockery::mock(WebPushService::class);
+        $push->shouldReceive('sendToUser')->once()
+            ->withArgs(fn (User $komu, array $zprava) => $komu->is($this->maki) && $zprava['title'] === 'Poděkování od Adrian')
+            ->andReturn(1);
+        $this->app->instance(WebPushService::class, $push);
+
+        $this->postJson('/api/pripomenout', ['text' => 'Díky za vysávání', 'druh' => 'podekovani', 'obrazovka' => 'x-domacnost'])
+            ->assertOk()
+            ->assertJsonPath('zprava', 'Poděkování odešlo do telefonu — Makinka');
+
+        $this->postJson('/api/pripomenout', ['text' => 'x', 'druh' => 'cokoli'])->assertStatus(422);
     }
 
     public function test_prazdna_pripominka_neprojde(): void

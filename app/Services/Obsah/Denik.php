@@ -89,9 +89,10 @@ class Denik implements MaPrazdneKolekce, PoskytovatelObsahu
             ->orderByDesc('recorded_at')
             ->orderByDesc('created_at')
             ->limit(40)
-            ->get(['title', 'duration_ms', 'transcript', 'recorded_at', 'created_at'])
+            ->get(['uuid', 'title', 'duration_ms', 'transcript', 'recorded_at', 'created_at'])
             ->map(function (object $h) {
                 $kdy = CarbonImmutable::parse($h->recorded_at ?? $h->created_at);
+                $prepis = trim((string) ($h->transcript ?? ''));
 
                 return [
                     (string) ($h->title ?: 'Hlasovka'),
@@ -99,7 +100,11 @@ class Denik implements MaPrazdneKolekce, PoskytovatelObsahu
                         $kdy->day.'. '.$kdy->month.'.',
                         $h->duration_ms ? $this->delka((int) $h->duration_ms) : null,
                     ]))),
-                    trim((string) ($h->transcript ?? '')) !== '' ? 'přepsáno' : null,
+                    $prepis !== '' ? 'přepsáno' : null,
+                    null, null, null, null,
+                    // Identifikátor nahrávky: přehrání a smazání míří na ni, ne na pořadí.
+                    (string) $h->uuid,
+                    $prepis !== '' ? mb_substr($prepis, 0, 1000) : null,
                 ];
             })
             ->values()
@@ -115,9 +120,16 @@ class Denik implements MaPrazdneKolekce, PoskytovatelObsahu
     }
 
     /**
-     * Zápisy z deníku: `[datum, nadpis, text, doplněk]`.
+     * Zápisy z deníku: `[datum, nadpis, text, doplněk, vlastnosti]`.
      *
-     * @return list<array<int, string>>
+     * Vlastnosti nesou identifikátor, soukromí, autora (`A` je ten, kdo se
+     * dívá) a náladu — bez nich by se zápis z obrazovky nedal upravit ani
+     * smazat a štítek „jen …" by neměl čí jméno napsat.
+     *
+     * Smazaný zápis (`deleted_at`) se neposílá: `DB::table` o měkkém mazání
+     * modelu neví a smazaný zápis by se po obnovení vrátil.
+     *
+     * @return list<array<int, mixed>>
      */
     private function zapisy(GallerySpace $prostor): array
     {
@@ -129,19 +141,26 @@ class Denik implements MaPrazdneKolekce, PoskytovatelObsahu
 
         return DB::table('journal_entries')
             ->where('gallery_space_id', $prostor->id)
+            ->when(Schema::hasColumn('journal_entries', 'deleted_at'), fn ($q) => $q->whereNull('deleted_at'))
             // Cizí soukromý zápis není nic, co by měla obrazovka ukazovat.
             ->where(fn ($q) => $q->where('created_by', $ja)->orWhere('visibility', '!=', 'private'))
             ->orderByDesc('entry_date')
+            ->orderByDesc('id')
             ->limit(40)
             ->get()
             ->map(fn (object $z) => [
                 $this->denCesky(CarbonImmutable::parse($z->entry_date)),
                 (string) ($z->title ?: 'Zápis'),
                 (string) $z->body,
-                trim(implode(' · ', array_filter([
-                    $z->mood ? 'nálada '.$z->mood : null,
-                    $z->visibility === 'private' ? 'jen moje' : null,
-                ]))),
+                $z->mood ? 'nálada '.$z->mood : '',
+                [
+                    'uuid' => (string) $z->uuid,
+                    'priv' => $z->visibility === 'private',
+                    'who' => (int) $z->created_by === (int) $ja ? 'A' : 'M',
+                    'mine' => (int) $z->created_by === (int) $ja,
+                    'mood' => $z->mood ?: null,
+                    'iso' => substr((string) $z->entry_date, 0, 10),
+                ],
             ])
             ->values()
             ->all();

@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\Galerie\AlbaController;
 use App\Http\Controllers\Api\Galerie\AlbumArchivController;
 use App\Http\Controllers\Api\Galerie\CestyAkceController;
 use App\Http\Controllers\Api\Galerie\DataController;
+use App\Http\Controllers\Api\Galerie\DenikController;
 use App\Http\Controllers\Api\Galerie\FinanceAkceController;
 use App\Http\Controllers\Api\Galerie\KosController;
 use App\Http\Controllers\Api\Galerie\LideController;
@@ -20,6 +21,7 @@ use App\Http\Controllers\Api\Galerie\RucniPlatbaController;
 use App\Http\Controllers\Api\Galerie\RychlyZapisController;
 use App\Http\Controllers\Api\Galerie\SdileniController;
 use App\Http\Controllers\Api\Galerie\StateController;
+use App\Http\Controllers\Api\Galerie\StitkyController;
 use App\Http\Controllers\Api\Galerie\StorageController;
 use App\Http\Controllers\Api\Galerie\TiskController;
 use App\Http\Controllers\Api\Galerie\TokenController;
@@ -220,9 +222,16 @@ Route::middleware(['auth:sanctum', 'dvojice', 'throttle:120,1'])->prefix('api')-
     Route::post('rychle/denik', [RychlyZapisController::class, 'denik'])->name('galerie.rychle.denik');
     Route::post('rychle/ukol', [RychlyZapisController::class, 'ukol'])->name('galerie.rychle.ukol');
 
+    // Deník z počítače — dialog „Nový zápis" dřív zapisoval jen do stavu obrazovky.
+    Route::post('denik', [DenikController::class, 'store'])->name('galerie.denik.store');
+    Route::patch('denik/{zapis}', [DenikController::class, 'update'])->whereUuid('zapis')->name('galerie.denik.update');
+    Route::delete('denik/{zapis}', [DenikController::class, 'destroy'])->whereUuid('zapis')->name('galerie.denik.destroy');
+
     // Lidé: jméno, skrytí a sloučení dřív žily jen ve stavu prohlížeče (viz LideController).
     Route::patch('osoby/{osoba}', [LideController::class, 'update'])->whereNumber('osoba')->name('galerie.osoby.update');
     Route::post('osoby/{osoba}/sloucit', [LideController::class, 'sluc'])->whereNumber('osoba')->name('galerie.osoby.sloucit');
+    // Štítky psané dvakrát — „Sloučit" dřív jen přepnulo štítek řádku.
+    Route::post('stitky/sloucit', [StitkyController::class, 'sluc'])->name('galerie.stitky.sloucit');
 
     // Moderace vzkazů hostů — „Vzkaz skryt, host ho už nevidí" dřív platilo jen v prohlížeči.
     Route::patch('vzkazy-hostu/{vzkaz}', [VzkazyHostuController::class, 'update'])

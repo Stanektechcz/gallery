@@ -5672,7 +5672,11 @@ const telefonZeServeru = (() => {
       // tu není, takže pásma začínají prázdná.
       tier: ['S', 'A', 'B', 'C'].map(t => ({ id: t, label: t, items: [] }))
     });
-    nahrad(DIARY, ((G.ADIARY || {}).diary || []).map(d => [d[0], d[1], d[2], d[3] || '', null]));
+    // Za hlasovkou (d[4]) nese řádek identifikátor zápisu a jestli je můj — smazat ho smí jen autor.
+    nahrad(DIARY, ((G.ADIARY || {}).diary || []).map(d => {
+      const v = d[4] || {};
+      return [d[0], d[1], d[2], [d[3] || '', v.priv ? 'jen moje' : ''].filter(Boolean).join(' · '), null, v.uuid || null, v.mine !== false];
+    }));
     nahrad(INBOX, (AL.inbox || []).map((r, i) => ({
       id: 'si' + i, icon: 'ph-tray', src: String(r[1] || ''), title: String(r[0] || ''),
       why: '', cta: 'Vyřízeno', taps: '', eff: 'server', res: 'vyřízeno'
@@ -9079,7 +9083,7 @@ class Component extends DCLogic {
   library() { return PHOTOS.concat(Array.from({ length: this.state.extra }, (_, i) => ({ id: 'n' + i, di: -1, day: 'Dnes · ' + this.dnes().getDate() + '. ' + MON_CS[this.dnes().getMonth()] + ' ' + this.dnes().getFullYear(), place: 'Právě nahráno', video: false, dur: '0:00', fav: false, seed: 90 + i }))).filter(p => !this.vKosiUkazky(p.id)); }
   isFav(p) { const v = this.state.favs[p.id]; return v === undefined ? p.fav : v; }
   // U dvojice deník ze serveru — starý seznam ve stavu telefonu by nové zápisy zakryl.
-  diaryList() { return (!this.galerieNaServeru() && this.state.diary) || DIARY.map((d, i) => ({ id: 'd' + i, date: d[0], title: d[1], text: d[2], meta: d[3], audio: d[4] })); }
+  diaryList() { return (!this.galerieNaServeru() && this.state.diary) || DIARY.map((d, i) => ({ id: 'd' + i, date: d[0], title: d[1], text: d[2], meta: d[3], audio: d[4], uuid: d[5] || null, mine: d[6] !== false })); }
   // ── cyklus: odvození cyklů, průměrů a předpovědi z dnů ──
   cycDays() {
     const out = {};
@@ -9699,10 +9703,11 @@ class Component extends DCLogic {
         dgMomentBg: m ? (m.tiles[0] || 'var(--g-panel)') : 'var(--g-panel)',
         dgMomentTitle: m ? m.title : 'Zatím bez fotek',
         dgMomentMeta: m ? m.meta : 'z tohohle týdne',
+        // Shrnutí jde do deníku v databázi — stav telefonu se u dvojice nečte, takže by se ztratilo.
         dgDiary: () => {
-          const prev = this.diaryList();
-          this.setState({ diary: [{ id: 'd-dg-' + Date.now(), date: this.dnesCesky(), title: 'Týdenní shrnutí', text: text, meta: 'z týdenního přehledu' }].concat(prev) });
-          this.toast('Shrnutí uloženo do deníku', { icon: 'ph-notebook', undo: () => this.setState({ diary: prev }) });
+          window.GalerieApi.post('rychle/denik', { nadpis: 'Týdenní shrnutí', text: text })
+            .then(res => { if (res && window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data, res.prazdne); this.toast((res && res.zprava) || 'Shrnutí uloženo do deníku', { icon: 'ph-notebook' }); })
+            .catch(e => this.chybaServeru(e, 'Shrnutí se do deníku neuložilo'));
         },
         dgRegen: () => { if (window.GalerieObnovit) window.GalerieObnovit('tyden'); this.toast('Shrnutí se přepočítá ze serveru', { icon: 'ph-arrows-clockwise' }); },
         dgHide: () => { this.setState({ mDgHide: true }); this.toast('Karta skryta', { icon: 'ph-eye-slash', undo: () => this.setState({ mDgHide: false }) }); }
@@ -11866,7 +11871,25 @@ class Component extends DCLogic {
           this.setState({ playing: on ? null : d.id });
           this.toast(on ? 'Přehrávání zastaveno' : 'Přehrávám hlasovku · ' + d.title, { icon: on ? 'ph-pause-circle' : 'ph-play-circle' });
         },
-        del: () => { const prev = this.diaryList(); this.setState({ diary: prev.filter(x => x.id !== d.id) }); this.toast('Zápis odebrán', { icon: 'ph-trash', undo: () => this.setState({ diary: prev }) }); }
+        del: () => {
+          /*
+           * U dvojice se zápis maže v databázi.
+           *
+           * Hláška „Zápis odebrán" dřív platila jen pro stav telefonu, který
+           * se u dvojice ani nečte — zápis zůstal viset a po obnovení byl zpět.
+           */
+          if (this.galerieNaServeru()) {
+            if (!d.uuid) { this.toast('Tenhle zápis se smazat nedá', { icon: 'ph-info' }); return; }
+            if (!d.mine) { this.toast('Smazat zápis může jen ten, kdo ho napsal', { icon: 'ph-lock-simple' }); return; }
+            if (s.mDiaryDel !== d.uuid) { this.setState({ mDiaryDel: d.uuid }); this.toast('Klepněte na Odebrat ještě jednou — zápis se smaže u obou', { icon: 'ph-warning' }); return; }
+            this.setState({ mDiaryDel: null });
+            window.GalerieApi.del('denik/' + d.uuid)
+              .then(res => { if (res && window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data, res.prazdne); this.toast((res && res.zprava) || 'Zápis smazán', { icon: 'ph-trash' }); })
+              .catch(e => this.chybaServeru(e, 'Zápis se nepodařilo smazat'));
+            return;
+          }
+          const prev = this.diaryList(); this.setState({ diary: prev.filter(x => x.id !== d.id) }); this.toast('Zápis odebrán', { icon: 'ph-trash', undo: () => this.setState({ diary: prev }) });
+        }
       })),
       diaryAdd: () => this.setState({ sheet: 'add', addKind: 'diary', addA: '', addB: '' }),
 

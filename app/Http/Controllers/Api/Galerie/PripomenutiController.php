@@ -31,8 +31,11 @@ class PripomenutiController extends Controller
         $data = $request->validate([
             'text' => ['required', 'string', 'max:300'],
             'obrazovka' => ['nullable', 'string', 'max:40', 'regex:/^[a-z0-9-]+$/'],
+            // Poděkování za práci v domácnosti jde stejnou cestou, jen se tak jmenuje.
+            'druh' => ['nullable', 'in:pripominka,podekovani'],
         ]);
 
+        $podekovani = ($data['druh'] ?? null) === 'podekovani';
         $ja = $request->user();
 
         /** @var User|null $druhy */
@@ -45,7 +48,7 @@ class PripomenutiController extends Controller
         $jmeno = Str::before(trim((string) $ja->name), ' ') ?: 'Partner';
 
         $odeslano = $push->sendToUser($druhy, array_filter([
-            'title' => 'Připomínka od '.$jmeno,
+            'title' => ($podekovani ? 'Poděkování od ' : 'Připomínka od ').$jmeno,
             'body' => Str::limit(trim($data['text']), 180),
             'url' => '/',
             // Obrazovku, kterou upozornění otevře, určuje klient — zná svoje trasy.
@@ -53,16 +56,17 @@ class PripomenutiController extends Controller
             'tag' => 'pripominka-'.$ja->id,
         ]));
 
-        AuditLog::record('reminder.send', null, ['komu' => $druhy->id, 'doruceno' => $odeslano]);
+        AuditLog::record($podekovani ? 'thanks.send' : 'reminder.send', null, ['komu' => $druhy->id, 'doruceno' => $odeslano]);
 
         $druhyJmeno = Str::before(trim((string) $druhy->name), ' ');
+        $co = $podekovani ? 'Poděkování' : 'Připomínka';
 
         return response()->json([
             'ok' => true,
             'doruceno' => $odeslano,
             'zprava' => $odeslano > 0
-                ? 'Připomínka odešla do telefonu — '.$druhyJmeno
-                : $druhyJmeno.' nemá zapnutá upozornění — připomínku uvidí až v aplikaci',
+                ? $co.' odešl'.($podekovani ? 'o' : 'a').' do telefonu — '.$druhyJmeno
+                : $druhyJmeno.' nemá zapnutá upozornění — '.mb_strtolower($co).' do telefonu nedošl'.($podekovani ? 'o' : 'a'),
         ]);
     }
 }
