@@ -5,6 +5,7 @@ namespace App\Services\Obsah;
 use App\Http\Controllers\Api\Galerie\TiskController;
 use App\Models\GallerySpace;
 use App\Models\MediaItem;
+use App\Models\MediaVariant;
 use App\Support\SpaceContext;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
@@ -827,9 +828,12 @@ class Pribeh implements MaPrazdneKolekce, PoskytovatelObsahu
                 // Bez adresy je hlasovka řádek, který tvrdí, že babička něco
                 // řekla, a nejde si to poslechnout.
                 // Podepsaná — veřejná adresa /storage by hlasovku vydala komukoli.
-                'audio' => $k->audio_path ? \App\Models\MediaVariant::proxyUrl($k->audio_path) : null,
+                'audio' => $k->audio_path ? MediaVariant::proxyUrl($k->audio_path) : null,
                 'pinned' => (bool) $k->is_pinned,
             ], fn ($v) => $v !== null))
+            // Šedesát nejnovějších, ale v pořadí, jak přicházely — obrazovka
+            // bere poslední prvek jako nejnovější vzkaz („Zobrazit jako host").
+            ->reverse()
             ->values()
             ->all();
     }

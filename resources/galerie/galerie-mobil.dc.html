@@ -10964,15 +10964,31 @@ class Component extends DCLogic {
       ...this.mHouseVals(),
       ...this.mDecVals(),
       ...this.mGiftVals(),
-      guestRows: (s.guestMsgs || []).slice().reverse().map(m => ({
-        who: m.who, when: m.when, text: m.text,
-        icon: m.kind === 'like' ? 'ph-heart-straight' : 'ph-chat-teardrop-text',
-        color: m.kind === 'like' ? 'var(--g-mag)' : 'var(--g-acc)',
-        share: (this.sharesList().find(x => x.id === m.shareId) || { name: 'výchozí odkaz' }).name,
-        go: () => this.push('shares')
-      })),
-      guestEmpty: (s.guestMsgs || []).length === 0,
-      guestMeta: this.pl((s.guestMsgs || []).length, 'reakce', 'reakce', 'reakcí') + ' od hostů',
+      /*
+       * U dvojice vzkazy, které hosté na odkazech opravdu nechali (`GV_C`).
+       * `guestMsgs` je schránka ukázkové stránky hosta v tomhle prohlížeči —
+       * skutečný vzkaz od babičky do ní nikdy nedorazil.
+       */
+      guestRows: (this.galerieNaServeru()
+        ? ((window.GalerieData || {}).GV_C || []).slice().reverse().map(c => ({
+          who: c.who, when: c.when,
+          text: c.text || (c.kind === 'voice' ? 'Hlasový vzkaz' + (c.len ? ' · ' + c.len : '') + ' — přehrajete ve Sdílených na počítači' : ''),
+          icon: c.kind === 'voice' ? 'ph-microphone' : 'ph-chat-teardrop-text',
+          color: c.hidden ? 'var(--g-ink3)' : 'var(--g-acc)',
+          share: 'odkaz „' + (c.share || 'bez názvu') + '“' + (c.photo ? ' · k fotce ' + c.photo : '') + (c.hidden ? ' · skrytý' : ''),
+          go: () => this.push('shares')
+        }))
+        : (s.guestMsgs || []).slice().reverse().map(m => ({
+          who: m.who, when: m.when, text: m.text,
+          icon: m.kind === 'like' ? 'ph-heart-straight' : 'ph-chat-teardrop-text',
+          color: m.kind === 'like' ? 'var(--g-mag)' : 'var(--g-acc)',
+          share: (this.sharesList().find(x => x.id === m.shareId) || { name: 'výchozí odkaz' }).name,
+          go: () => this.push('shares')
+        }))),
+      guestEmpty: (this.galerieNaServeru() ? ((window.GalerieData || {}).GV_C || []) : (s.guestMsgs || [])).length === 0,
+      guestMeta: this.galerieNaServeru()
+        ? this.pl(((window.GalerieData || {}).GV_C || []).length, 'vzkaz', 'vzkazy', 'vzkazů') + ' od hostů'
+        : this.pl((s.guestMsgs || []).length, 'reakce', 'reakce', 'reakcí') + ' od hostů',
       showSelectBtn: screen === 'memories',
       selectLabel: s.selectMode ? 'Hotovo' : 'Vybrat',
       toggleSelect: () => this.setState({ selectMode: !s.selectMode, sel: [] }),

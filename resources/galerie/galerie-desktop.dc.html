@@ -2425,9 +2425,12 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                       <sc-if value="{{ c.isVoice }}">
                         <div style="display:flex; align-items:center; gap:7px; font-size:12px; color:var(--g-acc-deep); margin-top:4px"><i class="ph-duotone ph-microphone" style="font-size:14px"></i>{{ c.voiceMeta }}</div>
                       </sc-if>
+                      <sc-if value="{{ c.hasAudio }}">
+                        <audio controls preload="none" src="{{ c.audio }}" style="display:block; width:100%; max-width:320px; height:34px; margin-top:6px"></audio>
+                      </sc-if>
                     </div>
                     <div style="margin-left:auto; display:flex; gap:6px; flex-wrap:wrap">
-                      <sc-if value="{{ c.isVoice }}">
+                      <sc-if value="{{ c.canPin }}">
                         <button class="btn btn-ghost" onClick="{{ c.pin }}" style="font-size:12.5px; padding:6px 11px; color:{{ c.pinColor }}">{{ c.pinLabel }}</button>
                       </sc-if>
                       <button class="btn btn-ghost" onClick="{{ c.toggle }}" style="font-size:12.5px; padding:6px 11px">{{ c.toggleLabel }}</button>
@@ -27347,7 +27350,21 @@ class Component extends DCLogic {
     if (h < 56) return 0;
     return ((h * 13) % 132) + 3;
   }
-  gvList() { const c = this.state.gvC; return c === null || c === undefined ? GV_C : c; }
+  // U dvojice vede vzkazy server — starý seznam ve stavu by skutečné vzkazy zakryl.
+  gvList() { const c = this.state.gvC; return c === null || c === undefined || this.vzkazyNaServeru() ? GV_C : c; }
+  vzkazyNaServeru() {
+    const api = window.GalerieApi;
+    return !this.ukazka() && !!(api && api.mode === 'http' && api.post);
+  }
+  vzkazAkce(zadost, hotovo) {
+    zadost.then(res => {
+      if (res && window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data, res.prazdne);
+      if (hotovo) hotovo(res || {});
+    }).catch(e => {
+      const t = (e && e.body) || {};
+      this.toast(t.zprava || t.message || 'Vzkaz se nepodařilo upravit', { icon: 'ph-warning', color: 'var(--g-mag)' });
+    });
+  }
   // Náhled hosta: co přesně vidí příjemce odkazu — včetně hesla, expirace a mezí, co odkaz povoluje.
   gvVals(shareRows, guestQ) {
     const s = this.state;
@@ -27427,6 +27444,8 @@ class Component extends DCLogic {
       gvSay: () => {
         const t = (s.gvDraft || '').trim();
         if (!t) { this.toast('Vzkaz je prázdný', { icon: 'ph-warning' }); return; }
+        // Náhled nevyrábí vzkazy, které nikdo nenapsal — viz gvRecord.
+        if (this.vzkazyNaServeru()) { this.setState({ gvDraft: '' }); this.toast('Tohle je náhled. Vzkaz napíše host v odkazu, který mu pošlete.', { icon: 'ph-info' }); return; }
         const prev = this.gvList();
         this.setState({ gvC: prev.concat({ id: 'gc' + Date.now(), who: who, text: t, when: 'právě teď', share: row.name, hidden: false }), gvDraft: '' });
         this.toast('Vzkaz od hosta · objeví se ve Sdílených k moderaci', { icon: 'ph-chat-centered-text', undo: () => this.setState({ gvC: prev }) });
@@ -27437,19 +27456,35 @@ class Component extends DCLogic {
   gcVals() {
     const list = this.gvList();
     const shown = list.filter(c => !c.hidden).length;
+    const server = this.vzkazyNaServeru();
+    const api = window.GalerieApi;
+    const voices = list.filter(c => c.kind === 'voice').length;
     return {
       gcHas: list.length > 0,
-      gcNote: this.pl(list.length, 'vzkaz', 'vzkazy', 'vzkazů') + ' pod odkazy · ' + shown + ' veřejných · '
-        + this.pl(list.filter(c => c.kind === 'voice').length, 'hlasovka od rodiny', 'hlasovky od rodiny', 'hlasovek od rodiny'),
-      gcOpenLatest: () => this.setState({ gv: list[list.length - 1].share, gvForceExp: false }),
-      gcVoiceCount: list.filter(c => c.kind === 'voice').length,
+      gcNote: this.pl(list.length, 'vzkaz', 'vzkazy', 'vzkazů') + ' pod odkazy · ' + shown + ' veřejných'
+        + (voices ? ' · ' + this.pl(voices, 'hlasovka', 'hlasovky', 'hlasovek') : ''),
+      gcOpenLatest: () => { if (!list.length) return; this.setState({ gv: list[list.length - 1].share, gvForceExp: false }); },
+      gcVoiceCount: voices,
       gcRows: list.slice().reverse().map(c => ({
-        text: c.text, who: c.who, when: c.when, share: c.share,
+        // Hlasovka ze serveru přepis nemá — aplikace řeč na text nepřevádí.
+        text: c.text || (c.kind === 'voice' ? 'Hlasový vzkaz' : ''), who: c.who, when: c.when, share: c.share,
         isVoice: c.kind === 'voice',
-        voiceMeta: c.kind === 'voice' ? 'hlasovka ' + c.len + ' · přepsáno automaticky · k fotce ' + c.photo : '',
-        pinLabel: c.pinned ? 'popisek přilepen' : 'Přilepit jako popisek',
+        voiceMeta: c.kind === 'voice'
+          ? ['hlasovka' + (c.len ? ' ' + c.len : ''), server ? 'bez přepisu' : 'přepsáno automaticky', c.photo ? 'k fotce ' + c.photo : null].filter(Boolean).join(' · ')
+          : '',
+        hasAudio: !!c.audio, audio: c.audio || '',
+        // Popisek jde udělat jen z textu u konkrétní fotky.
+        canPin: server ? !!(c.text && c.photo) : c.kind === 'voice',
+        pinLabel: c.pinned ? 'Popisek přilepen · odlepit' : 'Přilepit jako popisek',
         pinColor: c.pinned ? 'var(--g-ok)' : 'var(--g-acc)',
         pin: () => {
+          if (server) {
+            this.vzkazAkce(api.post('vzkazy-hostu/' + c.id + '/prilepit', { prilepit: !c.pinned }), res => {
+              if (window.GalerieObnovit) window.GalerieObnovit('knihovna');
+              this.toast(res.zprava || (c.pinned ? 'Popisek odlepen' : 'Vzkaz přilepen jako popisek fotky'), { icon: 'ph-note-pencil' });
+            });
+            return;
+          }
           if (c.pinned) return;
           const prev = list;
           this.setState({ gvC: list.map(x => x.id === c.id ? { ...x, pinned: true } : x) });
@@ -27460,11 +27495,27 @@ class Component extends DCLogic {
         hiddenNote: c.hidden ? ' · skrytý' : '',
         toggleLabel: c.hidden ? 'Zveřejnit' : 'Skrýt',
         toggle: () => {
+          if (server) {
+            const skryt = !c.hidden;
+            this.vzkazAkce(api.patch('vzkazy-hostu/' + c.id, { skryty: skryt }), res => this.toast(res.zprava || (skryt ? 'Vzkaz skryt' : 'Vzkaz je zase vidět'), {
+              icon: skryt ? 'ph-eye-slash' : 'ph-eye',
+              undo: () => this.vzkazAkce(api.patch('vzkazy-hostu/' + c.id, { skryty: !skryt }))
+            }));
+            return;
+          }
           const prev = list;
           this.setState({ gvC: list.map(x => x.id === c.id ? { ...x, hidden: !x.hidden } : x) });
           this.toast(c.hidden ? 'Vzkaz je zase vidět' : 'Vzkaz skryt — host ho už nevidí', { icon: c.hidden ? 'ph-eye' : 'ph-eye-slash', undo: () => this.setState({ gvC: prev }) });
         },
         remove: () => {
+          if (server) {
+            // Smazání je natrvalo (i s nahrávkou), takže se ptá — „Zpět" by nemělo co vrátit.
+            this.setState({ confirm: { title: 'Smazat vzkaz?', body: 'Vzkaz od ' + c.who + ' zmizí natrvalo' + (c.kind === 'voice' ? ' i s nahrávkou' : '') + '. Když ho jen nechcete ukazovat, stačí ho skrýt.', cta: 'Smazat', btnBg: 'var(--g-mag)', go: () => {
+              this.setState({ confirm: null });
+              this.vzkazAkce(api.del('vzkazy-hostu/' + c.id), res => this.toast(res.zprava || 'Vzkaz smazán', { icon: 'ph-trash' }));
+            } } });
+            return;
+          }
           const prev = list;
           this.setState({ gvC: list.filter(x => x.id !== c.id) });
           this.toast('Vzkaz smazán', { icon: 'ph-trash', undo: () => this.setState({ gvC: prev }) });

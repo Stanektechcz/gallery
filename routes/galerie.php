@@ -18,6 +18,7 @@ use App\Http\Controllers\Api\Galerie\TiskController;
 use App\Http\Controllers\Api\Galerie\TokenController;
 use App\Http\Controllers\Api\Galerie\TrezorController;
 use App\Http\Controllers\Api\Galerie\UlozisteController;
+use App\Http\Controllers\Api\Galerie\VzkazyHostuController;
 use App\Http\Controllers\Api\Galerie\WebauthnController;
 use App\Http\Controllers\Api\Galerie\ZamekController;
 use App\Http\Controllers\Api\Galerie\ZaznamController;
@@ -171,6 +172,14 @@ Route::middleware(['auth:sanctum', 'dvojice', 'throttle:120,1'])->prefix('api')-
         ->whereNumber('odkaz')->name('galerie.sdileni.prodlouzit');
     Route::delete('sdileni/{odkaz}', [SdileniController::class, 'destroy'])
         ->whereNumber('odkaz')->name('galerie.sdileni.destroy');
+
+    // Moderace vzkazů hostů — „Vzkaz skryt, host ho už nevidí" dřív platilo jen v prohlížeči.
+    Route::patch('vzkazy-hostu/{vzkaz}', [VzkazyHostuController::class, 'update'])
+        ->whereUuid('vzkaz')->name('galerie.vzkazy-hostu.update');
+    Route::post('vzkazy-hostu/{vzkaz}/prilepit', [VzkazyHostuController::class, 'prilep'])
+        ->whereUuid('vzkaz')->name('galerie.vzkazy-hostu.prilepit');
+    Route::delete('vzkazy-hostu/{vzkaz}', [VzkazyHostuController::class, 'destroy'])
+        ->whereUuid('vzkaz')->name('galerie.vzkazy-hostu.destroy');
 
     /*
      * Vyřešení rozporu mezi aplikací a Diskem.
