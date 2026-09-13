@@ -241,6 +241,37 @@ Testy: **1370 PHP testů**, všechny prošly (z toho 4 nové pro rozpočet a ob�
 
 ---
 
+## 2f. Šesté kolo — co server mazal podle staré kopie (13. 9. v noci)
+
+Průchod tlačítek uvnitř dialogů a čtení převodníků stavu do tabulek
+(`app/Services/Provoz/*VeStavu`) ukázal nejvážnější nález celého dne:
+**server bral seznam z prohlížeče jako úplný a mazal, co v něm chybělo.**
+Seznam v prohlížeči je ale kopie z doby načtení (data se během dne
+neobnovují), často s limitem.
+
+| Commit | Obsah |
+|---|---|
+| `1fdb6995` | **Kalendář a úkoly:** úprava jedné události mazala z databáze události, které přidal ten druhý, cesta nebo automatizace, i ty nad limitem seznamu; **každé uložení kalendáře rozeslalo znovu už doručené připomínky**; nový úkol/událost se zakládaly při každém odeslání znovu; první úkol dvojice se nezapsal nikdy; první odškrtnutí odznačilo všechno hotové; kategorie úkolů jako skutečné seznamy v databázi |
+| `a12483a9` | **Trezor:** „Do trezoru" u zamčeného trezoru (nebo z druhého zařízení) vrátilo celý trezor do mřížky, hledání a sdílených odkazů; vrátit z trezoru teď jde jen výslovně a jen s odemčeným trezorem. **Přání, dárky, sliby, žádosti, rozvahy nákupů, záznamy prací, závazky, kapitoly, milníky, nouzový přístup, papírová záloha, pravidla, rodina, laskavosti a antirozpočet:** maže se jen to, co prohlížeč sám odebral (`__odebrane`) |
+
+Pravidlo pro další převodníky: **nikdy nemazat podle toho, co v odeslaném
+seznamu chybí.** Prohlížeč posílá rozdíl (`OdebraneVStavu`, u kalendáře
+a nástěnky `evZmenene/evZrusene`, `xBoardZmenene/xBoardZrusene`), nové
+řádky se párují s identifikátorem z prohlížeče.
+
+Testy: **1390 PHP testů**, všechny prošly. V prohlížeči ověřeno: kategorie
+(založit, úkol do ní, přesuny tam a zpět bez zdvojení, smazání), událost
+(přidat, dvakrát upravit, smazat, vrátit Zpět — v databázi pořád jedna),
+přání přidané a odebrané na počítači i telefonu.
+
+### Změny chování, o kterých mají oba vědět (2f)
+
+- „Uklidit hotové" na nástěnce úkoly archivuje — z nástěnky zmizí,
+  v záložce Hotovo zůstanou.
+- Vrátit fotku z trezoru do knihovny jde jen s odemčeným trezorem.
+
+---
+
 ## 3. Známé nedostatky — bezpečnost
 
 Seřazeno podle rizika. Nic z toho není aktivně zneužitelné bez jiné chyby,
