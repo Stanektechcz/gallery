@@ -154,6 +154,25 @@ class CheckoutService
             return $payment->fresh();
         }
 
+        /*
+         * „Zaplaceno" musí patřit téhle platbě.
+         *
+         * Stav se ptá na `transId`, který mohla dodat i notifikace. Bez kontroly
+         * by zaplacená transakce s jinou referencí nebo nižší částkou (třeba
+         * měsíční tarif) odemkla i roční předplatné.
+         */
+        $reference = (string) ($status['refId'] ?? '');
+        $castka = $status['price'] ?? null;
+
+        if (($reference !== '' && $reference !== $payment->reference)
+            || ($castka !== null && (int) $castka !== (int) $payment->amount)) {
+            Log::warning('Comgate status does not match the payment', [
+                'reference' => $payment->reference, 'refId' => $reference, 'price' => $castka, 'amount' => $payment->amount,
+            ]);
+
+            return $payment;
+        }
+
         return $this->markPaid($payment, $status);
     }
 

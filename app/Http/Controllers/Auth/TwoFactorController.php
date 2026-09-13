@@ -5,13 +5,13 @@ namespace App\Http\Controllers\Auth;
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\User;
+use App\Services\Auth\DruhyFaktor;
 use App\Services\Auth\TotpService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -25,10 +25,10 @@ use Inertia\Response;
  */
 class TwoFactorController extends Controller
 {
-    /** Six digits is 10^6; without a limit it is an afternoon's work. */
-    private const MAX_ATTEMPTS = 5;
-
-    public function __construct(private readonly TotpService $totp) {}
+    public function __construct(
+        private readonly TotpService $totp,
+        private readonly DruhyFaktor $druhyFaktor,
+    ) {}
 
     // ─── Setup, while signed in ─────────────────────────────────────
 
@@ -135,14 +135,6 @@ class TwoFactorController extends Controller
 
         $request->validate(['code' => 'required|string|max:20']);
 
-        $key = 'two-factor:'.$id;
-
-        if (RateLimiter::tooManyAttempts($key, self::MAX_ATTEMPTS)) {
-            $seconds = RateLimiter::availableIn($key);
-
-            return back()->withErrors(['code' => 'Příliš mnoho pokusů. Zkuste to za '.$seconds.' s.']);
-        }
-
         $user = User::find($id);
         if (! $user || ! $user->two_factor_secret) {
             $request->session()->forget(['two_factor.user_id', 'two_factor.remember']);
@@ -150,16 +142,14 @@ class TwoFactorController extends Controller
             return redirect()->route('login');
         }
 
-        $code = $request->string('code')->toString();
-
-        if (! $this->totp->verify($user->two_factor_secret, $code) && ! $this->consumeRecoveryCode($user, $code)) {
-            RateLimiter::hit($key, 300);
-            AuditLog::record('auth.2fa.failed', $user);
-
-            return back()->withErrors(['code' => 'Kód nesouhlasí.']);
+        // Stejné ověření i stejné počítadlo pokusů jako u přihlášení aplikace.
+        if (($seconds = $this->druhyFaktor->blokovano($user)) > 0) {
+            return back()->withErrors(['code' => 'Příliš mnoho pokusů. Zkuste to za '.$seconds.' s.']);
         }
 
-        RateLimiter::clear($key);
+        if (! $this->druhyFaktor->over($user, $request->string('code')->toString())) {
+            return back()->withErrors(['code' => 'Kód nesouhlasí.']);
+        }
 
         $remember = (bool) $request->session()->pull('two_factor.remember', false);
         $request->session()->forget('two_factor.user_id');
@@ -171,24 +161,5 @@ class TwoFactorController extends Controller
         AuditLog::record('auth.login', $user, ['second_factor' => true]);
 
         return redirect()->intended('/timeline');
-    }
-
-    private function consumeRecoveryCode(User $user, string $code): bool
-    {
-        $hashes = (array) $user->two_factor_recovery_codes;
-
-        foreach ($hashes as $index => $hash) {
-            if (! Hash::check($code, $hash)) {
-                continue;
-            }
-
-            unset($hashes[$index]);
-            $user->forceFill(['two_factor_recovery_codes' => array_values($hashes)])->save();
-            AuditLog::record('auth.2fa.recovery_used', $user, ['remaining' => count($hashes)]);
-
-            return true;
-        }
-
-        return false;
     }
 }

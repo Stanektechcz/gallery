@@ -28746,7 +28746,8 @@ class Component extends DCLogic {
   }
   mapTell(msg) {
     const f = document.querySelector('iframe[title="Mapa archivu"]');
-    if (f && f.contentWindow) f.contentWindow.postMessage(Object.assign({ target: 'galerie-mapa' }, msg), '*');
+    // Body s názvy míst jen mapě na téže adrese, ne komukoli, kdo by rámeček přesměroval.
+    if (f && f.contentWindow) f.contentWindow.postMessage(Object.assign({ target: 'galerie-mapa' }, msg), location.origin);
   }
   componentDidMount() {
     this.persistLoad();
@@ -28806,7 +28807,8 @@ class Component extends DCLogic {
     setTimeout(this._roAttach, 60);
     this._mapMsg = e => {
       const d = e.data || {};
-      if (d.source !== 'galerie-mapa') return;
+      // Zprávy jen od vlastní mapy — okno galerie může otevřít i cizí stránka.
+      if (e.origin !== location.origin || d.source !== 'galerie-mapa') return;
       if (d.type === 'place' && d.key !== this.state.mapPlace) this.setState({ mapPlace: d.key });
       // Po (re)startu mapy jí srovnáme téma i vybrané místo — iframe se po návratu na
       // obrazovku načítá znovu, panel a mapa si pak jinak odporují.

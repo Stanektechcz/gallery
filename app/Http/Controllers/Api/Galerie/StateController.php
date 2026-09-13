@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Galerie;
 
 use App\Http\Controllers\Api\Galerie\Concerns\UrcujePar;
 use App\Http\Controllers\Controller;
+use App\Models\AuditLog;
 use App\Models\CoupleState;
 use App\Models\GallerySpace;
 use App\Services\Provoz\AdminVeStavu;
@@ -88,8 +89,20 @@ class StateController extends Controller
         ]);
     }
 
+    /** Horní mez jednoho zápisu stavu. Celý stav dvojice má desítky kilobajtů. */
+    private const NEJVIC_BAJTU = 1_048_576;
+
     public function update(Request $request): JsonResponse
     {
+        /*
+         * Stav je jeden řádek, který se čte při každém otevření aplikace.
+         *
+         * Bez meze do něj šlo zapsat cokoli, co propustí PHP (desítky MB) — a od
+         * té chvíle by se každé načtení aplikace u obou táhlo s tím balastem.
+         */
+        abort_if(strlen((string) $request->getContent()) > self::NEJVIC_BAJTU, 413,
+            'Zápis je příliš velký — stav aplikace má jen pár desítek kilobajtů.');
+
         $validated = $request->validate([
             'data' => ['required', 'array'],
             'rev' => ['nullable', 'integer', 'min:0'],
@@ -519,9 +532,21 @@ class StateController extends Controller
         return $patch;
     }
 
+    /**
+     * Smazat celý stav — oběma najednou.
+     *
+     * Rozhraní tuhle cestu nevolá; zůstala pro `GalerieApi.reset()`. Smí ji jen
+     * vlastník prostoru a zapisuje se do protokolu: jedním požadavkem zmizí
+     * nastavení i rozepsané věci druhého z dvojice.
+     */
     public function destroy(Request $request): JsonResponse
     {
-        $state = CoupleState::forCouple($this->parId($request));
+        $prostor = GallerySpace::findOrFail($this->parId($request));
+        abort_unless((int) $prostor->owner_id === (int) $request->user()->id, 403,
+            'Společný stav může smazat jen vlastník galerie.');
+        AuditLog::record('galerie.state.reset', $prostor);
+
+        $state = CoupleState::forCouple($prostor->id);
         $state->update(['data' => [], 'private' => [], 'rev' => 0]);
 
         return response()->json(['data' => (object) [], 'rev' => 0]);

@@ -58,6 +58,9 @@ return [
     // Google Cast (optional feature)
     'google_cast_enabled' => env('GOOGLE_CAST_ENABLED', false),
 
+    // Po kolika dnech bez použití přestane platit přihlášení zařízení nebo klíč k API (0 = nikdy).
+    'token_idle_days' => (int) env('GALLERY_TOKEN_IDLE_DAYS', 90),
+
     // Invite-only registration
     'invite_only' => env('GALLERY_INVITE_ONLY', true),
 

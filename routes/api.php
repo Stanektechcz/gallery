@@ -99,7 +99,9 @@ use Illuminate\Support\Facades\Route;
 Route::get('v1/public/billing/catalogue', [BillingController::class, 'catalogue'])
     ->name('api.public.billing.catalogue');
 
-Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
+// `dvojice:klic`: účet s odebraným přístupem a klíč „jen čtení" — role tu řeší
+// původní rozhraní po svém, proto jen tahle část brány (viz `JenDvojice`).
+Route::prefix('v1')->middleware(['auth:sanctum', 'dvojice:klic'])->group(function () {
 
     // Timeline
     Route::prefix('timeline')->name('api.timeline.')->group(function () {

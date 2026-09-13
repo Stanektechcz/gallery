@@ -5877,12 +5877,13 @@ class Component extends DCLogic {
      */
     this._fotoMapa = e => {
       const d = e.data || {};
-      if (d.source !== 'galerie-mapa' || d.type !== 'ready') return;
+      if (e.origin !== location.origin || d.source !== 'galerie-mapa' || d.type !== 'ready') return;
       const body = (window.GalerieData || {}).MAPBODY || [];
       document.querySelectorAll('iframe[title="Fotky na mapě"]').forEach(f => {
         if (!f.contentWindow || f.contentWindow !== e.source) return;
-        f.contentWindow.postMessage({ target: 'galerie-mapa', type: 'theme', theme: this.state.theme === 'dark' ? 'dark' : 'light' }, '*');
-        f.contentWindow.postMessage({ target: 'galerie-mapa', type: 'body', body }, '*');
+        // Body s názvy míst jen mapě na téže adrese.
+        f.contentWindow.postMessage({ target: 'galerie-mapa', type: 'theme', theme: this.state.theme === 'dark' ? 'dark' : 'light' }, location.origin);
+        f.contentWindow.postMessage({ target: 'galerie-mapa', type: 'body', body }, location.origin);
       });
     };
     window.addEventListener('message', this._fotoMapa);

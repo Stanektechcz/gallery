@@ -19,8 +19,9 @@ const SHELL_FILES = [
   'icons/icon-192.png',
   'icons/icon-512.png'
 ];
-// Soubory, které se za vývoje mění — network-first.
-const LIVE_RE = /(\.dc\.html|support\.js|galerie-[\w-]+\.js|image-slot\.js|sw\.js)$/;
+// Soubory, které se za vývoje mění — network-first. `mapa.html` taky: oprava
+// v ní (zprávy jen od galerie) nesmí čekat jedno načtení na starou kopii z paměti.
+const LIVE_RE = /(\.dc\.html|support\.js|galerie-[\w-]+\.js|image-slot\.js|sw\.js|mapa\.html)$/;
 
 self.addEventListener('install', e => {
   e.waitUntil((async () => {

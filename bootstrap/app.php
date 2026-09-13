@@ -61,6 +61,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'can:admin' => \App\Http\Middleware\RequireAdminRole::class,
             'module'    => \App\Http\Middleware\EnsureModuleEnabled::class,
             'feature'   => \App\Http\Middleware\EnsureModuleEnabled::class,
+            'dvojice'   => \App\Http\Middleware\JenDvojice::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

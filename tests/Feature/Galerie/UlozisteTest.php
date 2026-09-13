@@ -180,17 +180,31 @@ class UlozisteTest extends TestCase
         $this->getJson('/api/storage')->assertUnauthorized();
     }
 
-    /** Panel vidí každý člen — na rozdíl od administrace. */
-    public function test_panel_vidi_i_beznny_clen(): void
+    /** Panel vidí oba z dvojice — i ten, kdo není vlastník. */
+    public function test_panel_vidi_i_spravce(): void
+    {
+        $makinka = User::factory()->create();
+        $this->prostor->members()->syncWithoutDetaching([$makinka->id => ['role' => 'editor']]);
+
+        Sanctum::actingAs($makinka);
+
+        $this->getJson('/api/storage')->assertOk();
+    }
+
+    /**
+     * Host do aplikace dvojice nesmí vůbec.
+     *
+     * Administrace o něm říká „jen sdílené odkazy". API ho přitom pouštělo
+     * k panelu úložiště i ke všemu ostatnímu — deníku, financím, trezoru.
+     */
+    public function test_host_neprojde_ani_k_panelu(): void
     {
         $host = User::factory()->create();
         $this->prostor->members()->syncWithoutDetaching([$host->id => ['role' => 'viewer']]);
 
         Sanctum::actingAs($host);
 
-        $this->getJson('/api/storage')->assertOk();
-        // Do administrace tentýž člověk nesmí — panel a administrace jsou dvě
-        // různá oprávnění, proto i dvě různé adresy.
+        $this->getJson('/api/storage')->assertForbidden();
         $this->postJson('/api/admin/users', ['email' => 'kdokoli@vzpominky.test'])->assertForbidden();
     }
 

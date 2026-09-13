@@ -134,8 +134,36 @@ class MediaController extends Controller
 
         abort_if($originál === null, 404, 'Originál tohoto souboru na disku není.');
 
-        return Storage::disk($originál->disk)->response($originál->path, $media->original_filename);
+        return $this->doprohlizece($originál->disk, $originál->path, $media->original_filename);
     }
+
+    /**
+     * Soubor z knihovny tak, aby v prohlížeči nemohl spustit skript.
+     *
+     * Typ se bral z obsahu souboru a posílal se `inline`. Soubor, který se
+     * vydával za RAW z fotoaparátu (u RAW stačí přípona), ale uvnitř byl HTML,
+     * by se na adrese galerie otevřel jako stránka — se skriptem, který dosáhne
+     * na token v `localStorage`. `sandbox` v CSP spuštění zakáže i tehdy, když
+     * typ projde, a co není obrázek ani video, jde jako příloha.
+     *
+     * @param  array<string, string>  $dalsi
+     */
+    private function doprohlizece(string $disk, string $cesta, string $jmeno, array $dalsi = []): StreamedResponse
+    {
+        $typ = (string) (rescue(fn () => Storage::disk($disk)->mimeType($cesta), null, false) ?: 'application/octet-stream');
+        $zobrazit = (str_starts_with($typ, 'image/') && ! str_contains($typ, 'svg'))
+            || str_starts_with($typ, 'video/') || str_starts_with($typ, 'audio/');
+
+        return Storage::disk($disk)->response($cesta, $jmeno, $dalsi + [
+            'Content-Type' => $zobrazit ? $typ : 'application/octet-stream',
+        ] + self::BEZ_SKRIPTU, $zobrazit ? 'inline' : 'attachment');
+    }
+
+    /** Hlavičky pro každý soubor z knihovny — viz `doprohlizece()`. */
+    private const BEZ_SKRIPTU = [
+        'X-Content-Type-Options' => 'nosniff',
+        'Content-Security-Policy' => "default-src 'none'; img-src 'self' data:; media-src 'self'; style-src 'unsafe-inline'; sandbox",
+    ];
 
     /**
      * Náhled do mřížky knihovny.
@@ -169,7 +197,7 @@ class MediaController extends Controller
 
         abort_if($varianta === null, 404, 'Náhled ani originál na disku nejsou.');
 
-        return Storage::disk($varianta->disk)->response($varianta->path, $media->original_filename, [
+        return $this->doprohlizece($varianta->disk, $varianta->path, $media->original_filename, [
             // Náhled se nemění; ať se pro druhou obrazovku nestahuje znovu.
             'Cache-Control' => 'private, max-age=86400',
         ]);
@@ -207,10 +235,12 @@ class MediaController extends Controller
         abort_if($varianta === null, 404, 'Soubor s videem na disku není.');
 
         $disk = Storage::disk($varianta->disk);
+        $typ = (string) ($media->mime_type ?: 'video/mp4');
         $hlavicky = [
-            'Content-Type' => $media->mime_type ?: 'video/mp4',
+            // Jen video — cokoli jiného by prohlížeč mohl vykreslit jako stránku.
+            'Content-Type' => str_starts_with($typ, 'video/') ? $typ : 'video/mp4',
             'Cache-Control' => 'private, max-age=86400',
-        ];
+        ] + self::BEZ_SKRIPTU;
 
         try {
             $cesta = $disk->path($varianta->path);
@@ -299,9 +329,12 @@ class MediaController extends Controller
         $pripona = $this->pripona($jmeno);
         $obsah = (string) (File::mimeType($cesta) ?: '');
         $znamaPripona = in_array($pripona, MediaFormatService::allExtensions(), true);
-        $obrazNeboVideo = str_starts_with($obsah, 'image/') || str_starts_with($obsah, 'video/')
+        // Text, HTML, SVG ani skript nejsou fotka — ani s příponou `.cr2`.
+        $spustitelny = str_starts_with($obsah, 'text/') || str_contains($obsah, 'html')
+            || str_contains($obsah, 'xml') || str_contains($obsah, 'svg') || str_contains($obsah, 'javascript');
+        $obrazNeboVideo = ! $spustitelny && (str_starts_with($obsah, 'image/') || str_starts_with($obsah, 'video/')
             // RAW a HEIC finfo často nepozná; tam musí stačit přípona.
-            || MediaFormatService::isRaw($pripona) || in_array($pripona, ['heic', 'heif', 'avif'], true);
+            || MediaFormatService::isRaw($pripona) || in_array($pripona, ['heic', 'heif', 'avif'], true));
 
         abort_unless($znamaPripona && $obrazNeboVideo, 422, sprintf(
             'Soubor „%s" není fotka ani video, do knihovny ho nahrát nejde.',

@@ -190,5 +190,20 @@ class AppServiceProvider extends ServiceProvider
 
         // Sanctum token abilities
         Sanctum::usePersonalAccessTokenModel(PersonalAccessToken::class);
+
+        /*
+         * Nečinný klíč přestane platit.
+         *
+         * Tokeny neměly žádnou platnost: telefon ztracený před rokem nebo klíč
+         * zapomenutý ve starém skriptu otevíraly galerii dál. Pevná expirace by
+         * odhlašovala i ty, kdo aplikaci používají denně — počítá se proto od
+         * posledního použití (administrace takový klíč už označuje jako nečinný).
+         */
+        Sanctum::authenticateAccessTokensUsing(function ($token, bool $platny): bool {
+            $dni = (int) config('gallery.token_idle_days', 90);
+            $naposledy = $token->last_used_at ?? $token->created_at;
+
+            return $platny && ($dni <= 0 || $naposledy === null || $naposledy->gt(now()->subDays($dni)));
+        });
     }
 }

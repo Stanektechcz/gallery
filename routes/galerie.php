@@ -58,7 +58,12 @@ Route::middleware(['throttle:20,1,otisk'])->prefix('api/webauthn')->group(functi
     Route::post('login', [WebauthnController::class, 'login'])->name('galerie.webauthn.login');
 });
 
-Route::middleware(['auth:sanctum', 'throttle:120,1'])->prefix('api')->group(function () {
+/*
+ * `dvojice`: host a účet s odebraným přístupem sem nesmí a klíč „jen čtení"
+ * nic nezapíše — viz `JenDvojice`. Kontroluje se u každého požadavku, protože
+ * token nebo sezení mohly vzniknout dřív, než přístup skončil.
+ */
+Route::middleware(['auth:sanctum', 'dvojice', 'throttle:120,1'])->prefix('api')->group(function () {
     Route::get('state', [StateController::class, 'show'])->name('galerie.state.show');
     Route::patch('state', [StateController::class, 'update'])->name('galerie.state.update');
     Route::delete('state', [StateController::class, 'destroy'])->name('galerie.state.destroy');
@@ -284,8 +289,12 @@ Route::middleware(['auth:sanctum', 'throttle:120,1'])->prefix('api')->group(func
  * Mimo skupinu výš kvůli limitu: nahrávání velkého videa po osmimegabajtových
  * částech je klidně sto požadavků za sebou a do 120 za minutu se nevejde.
  * Adresy i hlavičky jsou dané prototypem (`galerie-api.js`) a nemění se.
+ *
+ * Předpona `media` u limitu je nutná: bez ní sdílí počítadlo se skupinou výš
+ * (klíčuje se jen podle uživatele). Nahrání videa po 130 částech pak vyčerpalo
+ * i limit 120 pro zbytek aplikace a stav, data i zprávy vracely 429.
  */
-Route::middleware(['auth:sanctum', 'throttle:600,1'])->prefix('api')->group(function () {
+Route::middleware(['auth:sanctum', 'dvojice', 'throttle:600,1,media'])->prefix('api')->group(function () {
     Route::post('media', [MediaController::class, 'store'])->name('galerie.media.store');
     Route::post('media/chunk', [MediaController::class, 'chunk'])->name('galerie.media.chunk');
     Route::get('media/{uuid}/raw', [MediaController::class, 'raw'])->name('galerie.media.raw');

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Galerie;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Models\WebauthnCredential;
+use App\Services\Auth\PristupDoGalerie;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -228,6 +229,12 @@ class WebauthnController extends Controller
         }
 
         $zaznam->update(['sign_count' => $novy->counter, 'last_used_at' => now()]);
+
+        // Platný otisk neznamená přístup: účtu s odebraným přístupem nebo hostovi
+        // se token nevydá, stejně jako u přihlášení heslem (`PristupDoGalerie`).
+        if (($duvod = app(PristupDoGalerie::class)->proc($user)) !== null) {
+            throw ValidationException::withMessages(['response' => $duvod]);
+        }
 
         // Jedno zařízení = jeden token, stejně jako u přihlášení heslem.
         $jmeno = $zaznam->label ?: 'telefon';

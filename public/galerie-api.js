@@ -361,15 +361,32 @@
     // Sanctum vrátí osobní token; ten se drží v paměti a v localStorage, aby
     // se po restartu aplikace nemuselo přihlašovat znovu. V lokálním režimu
     // vrací null — volající pak ověří heslo sam, jako dosud.
-    signIn: function (email, password, device) {
+    signIn: function (email, password, device, code) {
       if (mode !== 'http') return Promise.resolve(null);
+      var self = this;
       var url = (typeof window !== 'undefined' && window.GALERIE_TOKEN_URL) || '/sanctum/token';
+      var telo = { email: email, password: password, device_name: device || 'telefon' };
+      if (code) telo.code = code;
       return fetch(url, {
         method: 'POST', credentials: 'same-origin',
         headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email, password: password, device_name: device || 'telefon' })
+        body: JSON.stringify(telo)
       }).then(function (r) {
         return r.json().then(function (b) {
+          /*
+           * Dvoufázové ověření.
+           *
+           * Server token se samotným heslem nevydá, když má účet zapnutý druhý
+           * faktor, a řekne to příznakem `two_factor`. Přihlašovací obrazovky
+           * obou rozvržení na kód políčko nemají — zeptá se proto prohlížeč
+           * a pokus se zopakuje. Zrušení dotazu vrátí chybu jako dosud.
+           */
+          if (r.status === 422 && b && b.two_factor && typeof window !== 'undefined' && window.prompt) {
+            var zadany = window.prompt(code
+              ? 'Kód nesouhlasí. Zadejte znovu kód z ověřovací aplikace, nebo obnovovací kód:'
+              : 'Zadejte kód z ověřovací aplikace, nebo obnovovací kód:');
+            if (zadany) return self.signIn(email, password, device, String(zadany).trim());
+          }
           if (!r.ok) throw Object.assign(new Error(b.message || 'HTTP ' + r.status), { status: r.status, body: b });
           if (b.token) {
             window.GALERIE_API_TOKEN = b.token;

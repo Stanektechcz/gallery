@@ -186,7 +186,7 @@ class ZbyleSeznamyTest extends TestCase
         $this->assertStringNotContainsString('…8f2a', json_encode($data), 'Ukázkový klíč z galerie-data.js.');
     }
 
-    /** Kdo správce není, klíče ani plánované úlohy nedostane. */
+    /** Host k datům aplikace dvojice nedostane nic — ani klíče, ani úlohy, ani účty. */
     public function test_host_neuvidi_klice_ani_ulohy(): void
     {
         $host = User::factory()->create(['name' => 'Klára', 'role' => 'member']);
@@ -194,15 +194,7 @@ class ZbyleSeznamyTest extends TestCase
 
         Sanctum::actingAs($host);
 
-        $data = $this->getJson('/api/data/system')->assertOk()->json('data.AL');
-
-        // Prázdné, ne chybějící: kdyby se neposlaly, zůstala by na obrazovce
-        // ukázka — klíč „Mobilní aplikace · aktivní" a „Noční záloha · hotovo"
-        // jako ujištění, že někdo někam přistupuje a zálohy běží.
-        $this->assertSame([], $data['api']);
-        $this->assertSame([], $data['jobs']);
-        // Účty a tarify jsou naopak společné — vidí je oba.
-        $this->assertNotSame([], $data['users']);
+        $this->getJson('/api/data/system')->assertForbidden();
     }
 
     /** Vyřešený řádek inboxu zmizí z inboxu a objeví se mezi hotovými. */

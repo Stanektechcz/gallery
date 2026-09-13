@@ -80,9 +80,12 @@ L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
 if (!mini) L.control.zoom({ position: 'bottomright' }).addTo(map);
 
 function pinHtml(p, sel) {
-  var bg = 'linear-gradient(140deg, hsl(' + p.hue + ' 26% 58%), hsl(' + ((p.hue + 34) % 360) + ' 30% 30%))';
-  var n = p.count > 999 ? (p.count / 1000).toFixed(1).replace('.', ',') + ' k' : p.count;
-  return '<div class="pin' + (sel ? ' sel' : '') + '" style="width:' + p.size + 'px;height:' + p.size +
+  // Do HTML jdou jen čísla — `Number()`, ať řetězec podstrčený místo počtu
+  // nebo velikosti nemůže vložit značku.
+  var pocet = Number(p.count) || 0, rozmer = Number(p.size) || 34, odst = Number(p.hue) || 0;
+  var bg = 'linear-gradient(140deg, hsl(' + odst + ' 26% 58%), hsl(' + ((odst + 34) % 360) + ' 30% 30%))';
+  var n = pocet > 999 ? (pocet / 1000).toFixed(1).replace('.', ',') + ' k' : String(Math.round(pocet));
+  return '<div class="pin' + (sel ? ' sel' : '') + '" style="width:' + rozmer + 'px;height:' + rozmer +
     'px;background:' + bg + '"><span class="count">' + n + '</span></div>';
 }
 
@@ -120,7 +123,18 @@ function vykresli() {
       icon: L.divIcon({ className: '', html: pinHtml(p, p.key === selected), iconSize: [p.size, p.size], iconAnchor: [p.size / 2, p.size / 2] }),
       title: p.name, keyboard: true, riseOnHover: true
     }).addTo(map);
-    if (!mini) m.bindTooltip(p.name + ' · ' + p.count.toLocaleString('cs-CZ'), { className: 'lbl', direction: 'top', offset: [0, -p.size / 2 - 2] });
+    /*
+     * Popisek jako text, ne jako HTML.
+     *
+     * Leaflet řetězec v `bindTooltip` vkládá přes innerHTML — a jméno místa
+     * pochází z fotky (ruční úprava, EXIF, geokódování). „<img onerror=…>"
+     * v názvu místa by se na mapě spustil jako skript s přístupem k tokenu.
+     */
+    if (!mini) {
+      var popisek = document.createElement('span');
+      popisek.textContent = String(p.name || '') + ' · ' + Number(p.count || 0).toLocaleString('cs-CZ');
+      m.bindTooltip(popisek, { className: 'lbl', direction: 'top', offset: [0, -p.size / 2 - 2] });
+    }
     m.on('click', function () { select(p.key, true); });
     m.on('keypress', function (e) { if (e.originalEvent.key === 'Enter') select(p.key, true); });
     markers[p.key] = { marker: m, place: p };
@@ -169,6 +183,14 @@ srovnej();
 
 // Řízení z aplikace: výběr místa, přiblížení na vše, přepnutí tématu.
 addEventListener('message', function (e) {
+  /*
+   * Poslouchá se jen vlastní aplikace.
+   *
+   * Bez kontroly původu mohla libovolná stránka otevřít `mapa.html` přes
+   * `window.open` a poslat jí vlastní „body" — mapa je kreslila a jméno
+   * místa šlo do HTML. Rodič je vždycky okno galerie na téže adrese.
+   */
+  if (e.origin !== location.origin || e.source !== parent || parent === window) return;
   var d = e.data || {};
   if (d.target !== 'galerie-mapa') return;
   /*
@@ -178,7 +200,8 @@ addEventListener('message', function (e) {
    * ukazovala vybrané místo, které mezitím zmizelo.
    */
   if (d.type === 'body' && Array.isArray(d.body)) {
-    PLACES = d.body;
+    // Bod bez čísel v souřadnicích by Leaflet shodil celou mapu.
+    PLACES = d.body.filter(function (p) { return p && isFinite(p.lat) && isFinite(p.lon); });
     if (!PLACES.some(function (p) { return p.key === selected; })) selected = (PLACES[0] || {}).key || '';
     vykresli();
     srovnej();
