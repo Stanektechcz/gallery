@@ -114,6 +114,16 @@ class PravidlaDokumentuPrototypuTest extends TestCase
         $this->assertStringContainsString('patch.vaultVyjmout =', $pocitac);
     }
 
+    /** Koš v telefonu umí i trvale odstranit — dřív jen „Obnovit". */
+    public function test_telefon_maze_z_kose_na_serveru(): void
+    {
+        $dokument = self::dokument('galerie-mobil.dc.html');
+
+        $this->assertStringContainsString("api.post('kos/odstranit', { id })", $dokument);
+        $this->assertStringContainsString('onClick="{{ t.purge }}"', $dokument);
+        $this->assertStringContainsString('...this.kosSmazatTlacitko(r.id, r.name, () => this.kosOdstranNaServeru(r.id))', $dokument);
+    }
+
     /** Ikony z cizího CDN s kontrolou integrity. */
     public function test_ikony_z_cdn_maji_kontrolu_integrity(): void
     {

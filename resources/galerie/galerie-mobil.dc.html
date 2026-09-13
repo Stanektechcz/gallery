@@ -2091,6 +2091,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                     <div style="font-size:11.5px; color:var(--g-ink3); margin-top:2px">{{ t.meta }}</div>
                   </div>
                   <button onClick="{{ t.restore }}" style="flex:none; min-height:44px; padding:0 11px; border:1px solid var(--g-line); border-radius:2px; background:transparent; cursor:pointer; font-family:inherit; font-size:12.5px; color:inherit" style-hover="background:var(--g-panel)">Obnovit</button>
+                  <button onClick="{{ t.purge }}" aria-label="{{ t.purgeAria }}" style="flex:none; min-height:44px; padding:0 11px; border:1px solid {{ t.purgeBd }}; border-radius:2px; background:transparent; cursor:pointer; font-family:inherit; font-size:12.5px; color:var(--g-mag)" style-hover="background:var(--g-panel)">{{ t.purgeLabel }}</button>
                 </div>
               </sc-for>
               <sc-if value="{{ trashEmpty }}">
@@ -9496,6 +9497,38 @@ class Component extends DCLogic {
       this.toast('Obnoveno do knihovny', { icon: 'ph-arrow-counter-clockwise' });
     }).catch(() => this.toast('Obnovení se nepodařilo', { icon: 'ph-warning' }));
   }
+  /*
+   * Trvalé odstranění z koše.
+   *
+   * Telefon uměl jen „Obnovit" — vyhozenou fotku šlo smazat jen z počítače
+   * nebo počkat 30 dní. Ptá se dvojím klepnutím jako u duplicit: vzít zpět
+   * to nejde a mizí i originál.
+   */
+  kosSmazatTlacitko(id, name, smaz) {
+    const potvrzuje = this.state.mKosPotvrd === id;
+    return {
+      purgeLabel: potvrzuje ? 'Opravdu smazat' : 'Smazat',
+      purgeAria: potvrzuje ? 'Klepněte znovu — ' + name + ' zmizí natrvalo' : 'Trvale odstranit ' + name,
+      purgeBd: potvrzuje ? 'var(--g-mag)' : 'var(--g-line)',
+      purge: () => {
+        if (this.state.mKosPotvrd !== id) {
+          this.setState({ mKosPotvrd: id });
+          this.toast('Klepněte znovu — „' + name + '“ zmizí natrvalo i s originálem', { icon: 'ph-warning' });
+          return;
+        }
+        this.setState({ mKosPotvrd: null });
+        smaz();
+      }
+    };
+  }
+  kosOdstranNaServeru(id) {
+    const api = window.GalerieApi;
+    if (!api || !api.post) return;
+    api.post('kos/odstranit', { id }).then(res => {
+      if (res && window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data, res.prazdne);
+      this.toast((res && res.zprava) || 'Trvale odstraněno', { icon: 'ph-trash' });
+    }).catch(e => this.toast(((e && e.body) || {}).zprava || 'Odstranění se nepodařilo', { icon: 'ph-warning' }));
+  }
   push(k, extra) { this.setState(Object.assign({ stack: this.state.stack.concat([k]), sheet: null, sel: [], selectMode: false }, extra || {})); }
   goTab(t, extra) { this.setState(Object.assign({ tab: t, stack: [], sheet: null, sel: [], selectMode: false }, extra || {})); }
 
@@ -12446,15 +12479,18 @@ class Component extends DCLogic {
           }
         };
       })(),
-      trashRows: Object.keys(s.trashed).filter(id => s.trashed[id]).map(id => {
+      // `trashed[id] === 'pryc'` je v ukázce trvale odstraněná fotka: z knihovny i z koše zmizí.
+      trashRows: Object.keys(s.trashed).filter(id => s.trashed[id] === true).map(id => {
         const p = PHOTOS.find(x => x.id === id) || { seed: 3, day: 'Nahráno dnes', place: 'telefon' };
+        const name = id.toUpperCase() + '.HEIC';
         return {
-          name: id.toUpperCase() + '.HEIC', meta: p.day + ' · ' + p.place + ' · trvale za 30 dní', bg: this.tlo(p),
-          restore: () => { const prev = s.trashed, n = Object.assign({}, s.trashed); delete n[id]; this.setState({ trashed: n }); this.toast('Obnoveno do knihovny', { icon: 'ph-arrow-counter-clockwise', undo: () => this.setState({ trashed: prev }) }); }
+          name, meta: p.day + ' · ' + p.place + ' · trvale za 30 dní', bg: this.tlo(p),
+          restore: () => { const prev = s.trashed, n = Object.assign({}, s.trashed); delete n[id]; this.setState({ trashed: n }); this.toast('Obnoveno do knihovny', { icon: 'ph-arrow-counter-clockwise', undo: () => this.setState({ trashed: prev }) }); },
+          ...this.kosSmazatTlacitko(id, name, () => { this.setState({ trashed: Object.assign({}, this.state.trashed, { [id]: 'pryc' }) }); this.toast('Trvale odstraněno — „' + name + '“', { icon: 'ph-trash' }); })
         };
       }),
-      trashMeta: this.pl(Object.keys(s.trashed).filter(id => s.trashed[id]).length, 'položka v koši', 'položky v koši', 'položek v koši'),
-      trashEmpty: Object.keys(s.trashed).filter(id => s.trashed[id]).length === 0,
+      trashMeta: this.pl(Object.keys(s.trashed).filter(id => s.trashed[id] === true).length, 'položka v koši', 'položky v koši', 'položek v koši'),
+      trashEmpty: Object.keys(s.trashed).filter(id => s.trashed[id] === true).length === 0,
       /*
        * Koš dvojice je koš na serveru — přepisuje tři klíče nad sebou.
        *
@@ -12469,7 +12505,8 @@ class Component extends DCLogic {
           trashRows: kos.map(r => ({
             name: r.name, meta: r.from + ' · ' + r.by + ' · ' + r.when + ' · trvale za ' + r.left,
             bg: 'var(--g-panel)',
-            restore: () => this.zKoseNaServeru([r.id])
+            restore: () => this.zKoseNaServeru([r.id]),
+            ...this.kosSmazatTlacitko(r.id, r.name, () => this.kosOdstranNaServeru(r.id))
           })),
           trashMeta: this.pl(kos.length, 'položka v koši', 'položky v koši', 'položek v koši'),
           trashEmpty: kos.length === 0
