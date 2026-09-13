@@ -5937,7 +5937,38 @@ class Component extends DCLogic {
     PLACES.forEach(p => { const v = (shared || {})[S.txKey(p[0])]; if (v !== undefined) m[p[0]] = v; });
     return m;
   }
+  /*
+   * Obsah ze serveru se obnovuje i během dne (hlavička, každé čtyři minuty
+   * a po návratu z pozadí). Neobnovuje se, když se zrovna něco upravuje:
+   * dialog by držel řádek, který by se mu pod rukama vyměnil.
+   */
+  muzeObnovitData() {
+    const s = this.state;
+    if (s.confirm || s.lb || s.show || s.sheet) return false;
+    // Otevřený dialog nebo list pozná obrazovka nejspolehlivěji sama.
+    if (document.querySelector('[role="dialog"]')) return false;
+    const a = document.activeElement;
+    return !(a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.tagName === 'SELECT' || a.isContentEditable));
+  }
+  /*
+   * Po obnovení zahodit kopie seznamů z odpovědí na zápis.
+   *
+   * Odpověď na uložení přání, slibu nebo úkolu nese seznam, jak ho zná
+   * server — a ten pak ve stavu zůstal a zastínil všechno, co přišlo potom.
+   * Zápis nečeká (hlavička to hlídá), takže kopie nic neuloženého nenese.
+   */
+  zahodKopieServeru() {
+    const KOPIE = ["wishes","ideas","buys","chores","choreLog","dues","inv","decs","cools","proms","fam","nudges","kapsules","rules"];
+    const patch = {};
+    KOPIE.forEach(k => { if (this.state[k] !== null && this.state[k] !== undefined) patch[k] = null; });
+    if (this.state.xBoard && Object.keys(this.state.xBoard).length) patch.xBoard = {};
+    if (!Object.keys(patch).length) return;
+    this._pQuiet = true;
+    this.setState(patch, () => { this._pQuiet = false; });
+  }
   componentDidMount() {
+    window.GalerieMuzeObnovit = () => this.muzeObnovitData();
+    window.GalerieDataObnovena = () => this.zahodKopieServeru();
     // Automatické zamčení po nečinnosti — stejné intervaly jako v nastavení.
     this._act = Date.now();
     this._actH = () => { this._act = Date.now(); };

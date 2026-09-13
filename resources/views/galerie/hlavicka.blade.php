@@ -659,8 +659,46 @@
     if (hotovo || bezi || pokusu > 12) return;
     bezi = true;
     pokusu++;
-    nacti().then(function (ok) { bezi = false; hotovo = ok; });
+    nacti().then(function (ok) { bezi = false; hotovo = ok; naposledy = Date.now(); });
   }
+
+  /*
+   * Obsah se obnovuje i během dne.
+   *
+   * Načítal se jednou při startu, takže co přidal ten druhý, se ukázalo až
+   * po obnovení stránky — a karta nechaná otevřená přes víkend ukazovala
+   * pátek. Viditelná karta si obsah stáhne znovu každé čtyři minuty a po
+   * návratu z pozadí delším než minuta. Ne s čekajícím zápisem, během
+   * načítání ani když se zrovna něco upravuje (otevřený dialog, kurzor
+   * v políčku) — to rozhodne obrazovka (`GalerieMuzeObnovit`).
+   */
+  var naposledy = 0;
+  var skrytaOd = 0;
+
+  function obnovPotichu() {
+    if (! hotovo || bezi || document.hidden || ! window.GALERIE_API_TOKEN) return;
+    var a = window.GalerieApi;
+    if (a && typeof a.status === 'function' && (a.status() || {}).pending) return;
+    if (window.GalerieNacita > 0) return;
+    if (typeof window.GalerieMuzeObnovit === 'function' && ! window.GalerieMuzeObnovit()) return;
+
+    naposledy = Date.now();
+    bezi = true;
+    nacti().then(function () {
+      bezi = false;
+      // Kopie seznamů z odpovědí na zápis by nová data zastínily.
+      if (typeof window.GalerieDataObnovena === 'function') window.GalerieDataObnovena();
+    }, function () { bezi = false; });
+  }
+
+  setInterval(function () {
+    if (naposledy && Date.now() - naposledy >= 240000) obnovPotichu();
+  }, 30000);
+
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) { skrytaOd = Date.now(); return; }
+    if (skrytaOd && Date.now() - skrytaOd > 60000) obnovPotichu();
+  });
 
   // Napoprvé hned (sezení může být přihlášené cookie), pak už jen když se objeví
   // token — kdo sedí na zámku, ten se serveru neptá vůbec.
