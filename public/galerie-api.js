@@ -666,6 +666,24 @@
             // 413 a 422 se opakováním nespraví (velký soubor, nepodporovaný formát).
             var stav = e && e.status;
             var zprava = (e && e.body && e.body.message) || '';
+            /*
+             * Bez přihlášení neprojde ani jeden další soubor.
+             *
+             * Každý zbylý soubor se zkoušel dvakrát — u pěti set fotek tisíc
+             * odmítnutých požadavků za sebou. Dávka se zastaví, zbytek se
+             * označí jako neodeslaný a aplikace ukáže přihlášení.
+             */
+            if (stav === 401 || stav === 403) {
+              var zbyle = [polozka].concat(fronta.splice(0, fronta.length));
+              zbyle.forEach(function (p) {
+                selhalo.push({ jmeno: p.f.name, stav: stav, zprava: zprava });
+                hlas(p.i, 'selhalo', zprava);
+                hotovo++;
+              });
+              if (onProgress) onProgress(hotovo, celkem);
+              if (window.GALERIE_API_TOKEN) odhlaseno(stav, zprava);
+              return;
+            }
             if (polozka.pokus < 1 && stav !== 413 && stav !== 422) {
               polozka.pokus++;
               fronta.push(polozka);

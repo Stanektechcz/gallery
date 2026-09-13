@@ -130,6 +130,8 @@ class PravidlaDokumentuPrototypuTest extends TestCase
         $this->assertStringContainsString('if (stav === 401 || stav === 403) {', $api);
         $this->assertStringContainsString('if (stav === 400 || stav === 413 || stav === 422) {', $api);
         $this->assertStringContainsString("ohlas('galerie-odhlaseno'", $api);
+        // Hromadné nahrávání se bez přihlášení zastaví, nezkouší každý soubor dvakrát.
+        $this->assertStringContainsString('var zbyle = [polozka].concat(fronta.splice(0, fronta.length));', $api);
 
         foreach (['galerie-desktop.dc.html', 'galerie-mobil.dc.html'] as $nazev) {
             $dokument = self::dokument($nazev);
