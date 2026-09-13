@@ -2379,7 +2379,9 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
               <div style="display:flex; align-items:center; gap:10px; padding:11px 12px; border-radius:2px; background:var(--g-panel); margin-bottom:14px">
                 <i class="ph-duotone ph-user-switch" style="font-size:19px; color:var(--g-acc); flex:none"></i>
                 <span style="font-size:13px; line-height:1.45">Jako <strong>{{ gftMe }}</strong> — nákupy vidíte jen vy.</span>
-                <button onClick="{{ gftSwitch }}" style="margin-left:auto; flex:none; min-height:44px; padding:0 11px; border:1px solid var(--g-line); border-radius:2px; background:transparent; cursor:pointer; font-family:inherit; font-size:12.5px; color:inherit">{{ gftOther }}</button>
+                <sc-if value="{{ gftCanSwitch }}">
+                  <button onClick="{{ gftSwitch }}" style="margin-left:auto; flex:none; min-height:44px; padding:0 11px; border:1px solid var(--g-line); border-radius:2px; background:transparent; cursor:pointer; font-family:inherit; font-size:12.5px; color:inherit">{{ gftOther }}</button>
+                </sc-if>
               </div>
 
               <div style="display:flex; gap:6px; overflow-x:auto; padding-bottom:14px" data-tabstrip="1">
@@ -6489,7 +6491,8 @@ class Component extends DCLogic {
   mGiftVals() {
     const s = this.state;
     // Výchozí stav nese „Adrian"; kdo v dvojici není, za toho se dárky neprohlížejí.
-    const me = this.dva().indexOf(s.giftMe) >= 0 ? s.giftMe : this.meWho();
+    // U dvojice jsem já ten přihlášený — přepínač „za druhého" je jen pro ukázku.
+    const me = !this.galerieNaServeru() && this.dva().indexOf(s.giftMe) >= 0 ? s.giftMe : this.meWho();
     const other = this.druhy(me);
     const otherGen = this.sklon(other, 'gen');
     const acc = n => this.sklon(n, 'acc');
@@ -6509,7 +6512,7 @@ class Component extends DCLogic {
       this.toast(what + ' → Moje nákupy · ' + other + ' to nevidí', { icon: 'ph-lock-key', undo: () => setBuys(prev) });
     };
     return {
-      gftMe: me, gftOther: other, gftOtherGen: otherGen,
+      gftMe: me, gftOther: other, gftOtherGen: otherGen, gftCanSwitch: !this.galerieNaServeru(),
       gftSwitch: () => { this.setState({ giftMe: other, giftTab: tab === 'buys' ? 'wish' : tab }); this.toast('Prohlížíte jako ' + other, { icon: 'ph-user-switch' }); },
       gftTabs: [['wish', 'Přání', wishes.length], ['buys', 'Moje nákupy', mineBuys.length], ['dates', 'Příležitosti', 3], ['ideas', 'Nápady', ideas.length]].map(t => ({
         label: t[1], count: t[2],

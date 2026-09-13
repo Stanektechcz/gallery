@@ -11742,7 +11742,10 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
           <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap; padding:11px 14px; border-radius:2px; background:var(--g-panel); margin-bottom:20px">
             <i class="ph-duotone ph-user-switch" style="font-size:20px; color:var(--g-acc)"></i>
             <div style="font-size:14px">Prohlížíte jako <strong>{{ gftMe }}</strong>. {{ gftMeNote }}</div>
-            <button class="btn btn-secondary" onClick="{{ gftSwitch }}" style="margin-left:auto; font-size:12.5px; padding:6px 12px">Přepnout na {{ gftOther }}</button>
+            <!-- U dvojice je „kdo" přihlášení — za druhého se dárky prohlížet nedají (jeho nákupy server stejně neposílá). -->
+            <sc-if value="{{ gftCanSwitch }}">
+              <button class="btn btn-secondary" onClick="{{ gftSwitch }}" style="margin-left:auto; font-size:12.5px; padding:6px 12px">Přepnout na {{ gftOther }}</button>
+            </sc-if>
           </div>
 
           <!-- PŘÁNÍ -->
@@ -24467,7 +24470,11 @@ class Component extends DCLogic {
           label: w[1], mail: w[2], on: on,
           bd: on ? 'var(--g-acc)' : 'var(--g-line)',
           bg: on ? 'var(--g-acc-soft)' : 'transparent',
-          go: () => this.setState({ obWho: w[0], lockWho: w[0] })
+          // U dvojice je „kdo" dané přihlášením (první v UCTY jsem já) — za druhého se aplikace nastavit nedá.
+          go: () => {
+            if (!this.ukazka() && w[0] !== 'A') { this.toast('Přihlášení je za ' + (((window.GalerieData || {}).UCTY || [])[0] || [''])[0] + ' — druhý z vás se přihlašuje na svém zařízení', { icon: 'ph-info', local: true }); return; }
+            this.setState({ obWho: w[0], lockWho: w[0] });
+          }
         };
       }),
       obWhoNote: 'Účty jsou dva a oddělené. Soukromé zápisy a trezor druhý neuvidí ani po odemčení telefonu.',
@@ -28957,7 +28964,8 @@ class Component extends DCLogic {
   // Dárky a přání: přání jsou společná, nákupy patří jen tomu, kdo je pořídil.
   giftVals() {
     const s = this.state;
-    const me = this.dva().indexOf(s.giftMe) >= 0 ? s.giftMe : this.meWho();
+    // U dvojice jsem já ten přihlášený — přepínač „za druhého" je jen pro ukázku.
+    const me = this.ukazka() && this.dva().indexOf(s.giftMe) >= 0 ? s.giftMe : this.meWho();
     const other = this.druhy(me);
     const otherGen = this.sklon(other, 'gen');
     const acc = n => this.sklon(n, 'acc');
@@ -28992,6 +29000,7 @@ class Component extends DCLogic {
       gftHead: this.pl(wishes.length, 'přání', 'přání', 'přání') + ' · ' + this.pl(mineBuys.length, 'váš nákup', 'vaše nákupy', 'vašich nákupů') + ' · výročí za 1 den',
       gftMe: me, gftOther: acc(other), gftOtherGen: otherGen, gftOtherName: other,
       gftMeNote: 'Přání vidíte oba, nákupy jen vy.',
+      gftCanSwitch: this.ukazka(),
       gftSwitch: () => { this.setState({ giftMe: other, giftTab: tab === 'buys' ? 'wish' : tab, wishFilter: 'all' }); this.toast('Prohlížíte jako ' + other + ' · nákupy ' + this.whoGen(me) + ' jsou teď skryté', { icon: 'ph-user-switch' }); },
       gftTabs: [['wish', 'Přání', visible.length], ['buys', 'Moje nákupy', mineBuys.length], ['dates', 'Příležitosti', 3], ['ideas', 'Nápady', ideas.length]].map(t => ({
         label: t[1], count: t[2],
