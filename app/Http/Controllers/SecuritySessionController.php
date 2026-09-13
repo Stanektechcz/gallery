@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\AuditLog;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -26,9 +27,22 @@ class SecuritySessionController extends Controller
         return response()->json(['status' => 'revoked']);
     }
 
+    /**
+     * Odhlásit všechna ostatní zařízení — i aplikaci.
+     *
+     * Rušila se jen sezení prohlížeče, a obrazovka přitom hlásila „Všechna
+     * ostatní zařízení byla odhlášena". Telefon s aplikací se ale přihlašuje
+     * klíčem, takže ten, kvůli kterému člověk tlačítko mačká, zůstal
+     * přihlášený. Stejně jako „odhlásit ostatní" v aplikaci (`ZamekController`).
+     */
     public function destroyOthers(Request $request): JsonResponse
     {
-        DB::table('sessions')->where('user_id', $request->user()->id)->where('id', '!=', $request->session()->getId())->delete();
+        $user = $request->user();
+
+        $sezeni = DB::table('sessions')->where('user_id', $user->id)->where('id', '!=', $request->session()->getId())->delete();
+        $klice = $user->tokens()->delete();
+
+        AuditLog::record('app_lock.sign_out_others', null, ['sezeni' => $sezeni, 'klice' => $klice]);
 
         return response()->json(['status' => 'revoked_others']);
     }
