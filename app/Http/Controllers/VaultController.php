@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\AuditLog;
 use App\Models\MediaItem;
+use App\Services\Provoz\PokusyTrezoru;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -30,10 +31,23 @@ class VaultController extends Controller
     public function unlock(Request $request): RedirectResponse
     {
         $data = $request->validate(['password' => 'required|string']);
-        if (! Hash::check($data['password'], $request->user()->password)) {
-            return back()->withErrors(['password' => 'Heslo není správné.']);
+        $kdo = $request->user();
+
+        // Tytéž pokusy jako v galerii — jinak by se její uzavření obešlo tudy.
+        if (($blok = PokusyTrezoru::blokDo($kdo)) > 0) {
+            return back()->withErrors(['password' => 'Přístup je uzavřený. Zkuste to za '.$blok.' s.']);
+        }
+
+        if (! Hash::check($data['password'], $kdo->password)) {
+            $chyba = PokusyTrezoru::chyba($kdo);
+            AuditLog::record('vault.unlock_failed', null, ['pokus' => $chyba['pokusu']]);
+
+            return back()->withErrors(['password' => $chyba['blok'] > 0
+                ? 'Tři neúspěšné pokusy. Přístup je '.PokusyTrezoru::naJakDlouho($chyba['blok']).' uzavřený.'
+                : 'Heslo není správné.']);
         }
         $request->session()->put('vault_unlocked_until', now()->addMinutes(15)->timestamp);
+        PokusyTrezoru::uspech($kdo);
         AuditLog::record('vault.unlock');
 
         return redirect()->route('vault.index');

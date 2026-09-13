@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Galerie;
 
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
+use App\Services\Provoz\PokusyTrezoru;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -25,20 +26,16 @@ use Illuminate\Support\Facades\Hash;
  *
  * Heslo je heslo do galerie (`users.password`) přes `Hash::check`; jiné by
  * znamenalo druhé tajemství, které nikdo neumí změnit ani obnovit.
+ *
+ * Pokusy a uzavření počítá `PokusyTrezoru` u účtu, ne v sezení — to by
+ * vynulovalo smazání cookies.
  */
 class TrezorController extends Controller
 {
     /** Jak dlouho odemčení platí. Stejných patnáct minut jako na webu. */
     private const MINUT = 15;
 
-    /** Kolik pokusů po sobě, než se přístup na půl minuty uzavře. */
-    private const POKUSU = 3;
-
     private const KLIC = 'vault_unlocked_until';
-
-    private const KLIC_POKUSY = 'vault_failed_attempts';
-
-    private const KLIC_BLOK = 'vault_blocked_until';
 
     public function stav(Request $request): JsonResponse
     {
@@ -48,16 +45,16 @@ class TrezorController extends Controller
     public function odemkni(Request $request): JsonResponse
     {
         $data = $request->validate(['heslo' => 'required|string']);
+        $kdo = $request->user();
 
-        if (($blok = $this->blokDo($request)) > 0) {
+        if (($blok = PokusyTrezoru::blokDo($kdo)) > 0) {
             return response()->json($this->odpoved($request) + [
                 'chyba' => 'Přístup je uzavřený. Zkuste to za '.$blok.' s.',
             ], 429);
         }
 
-        if (! Hash::check($data['heslo'], (string) $request->user()->password)) {
-            $pokusu = (int) $request->session()->get(self::KLIC_POKUSY, 0) + 1;
-            $request->session()->put(self::KLIC_POKUSY, $pokusu);
+        if (! Hash::check($data['heslo'], (string) $kdo->password)) {
+            $chyba = PokusyTrezoru::chyba($kdo);
 
             /*
              * Neúspěšný pokus se zapisuje.
@@ -66,18 +63,15 @@ class TrezorController extends Controller
              * a do auditu") a dosud to nebyla pravda. U trezoru je to zároveň
              * jediná stopa, podle které se pozná, že se do něj někdo dobýval.
              */
-            AuditLog::record('vault.unlock_failed', null, ['pokus' => $pokusu]);
+            AuditLog::record('vault.unlock_failed', null, ['pokus' => $chyba['pokusu']]);
 
-            if ($pokusu >= self::POKUSU) {
-                $request->session()->put(self::KLIC_BLOK, now()->addSeconds(30)->timestamp);
-                $request->session()->forget(self::KLIC_POKUSY);
-
+            if ($chyba['blok'] > 0) {
                 return response()->json($this->odpoved($request) + [
-                    'chyba' => 'Tři neúspěšné pokusy. Přístup je na půl minuty uzavřený a záznam šel do auditu.',
+                    'chyba' => 'Tři neúspěšné pokusy. Přístup je '.PokusyTrezoru::naJakDlouho($chyba['blok']).' uzavřený a záznam šel do auditu.',
                 ], 429);
             }
 
-            $zbyva = self::POKUSU - $pokusu;
+            $zbyva = $chyba['zbyva'];
 
             return response()->json($this->odpoved($request) + [
                 'chyba' => 'Heslo nesouhlasí. Zbývá '.$zbyva.' '.($zbyva === 1 ? 'pokus' : 'pokusy').'.',
@@ -85,8 +79,7 @@ class TrezorController extends Controller
         }
 
         $request->session()->put(self::KLIC, now()->addMinutes(self::MINUT)->timestamp);
-        $request->session()->forget(self::KLIC_POKUSY);
-        $request->session()->forget(self::KLIC_BLOK);
+        PokusyTrezoru::uspech($kdo);
         AuditLog::record('vault.unlock');
 
         return response()->json($this->odpoved($request));
@@ -117,12 +110,7 @@ class TrezorController extends Controller
         return [
             'odemceno' => $zbyva > 0,
             'zbyva' => $zbyva,
-            'blok' => $this->blokDo($request),
+            'blok' => PokusyTrezoru::blokDo($request->user()),
         ];
-    }
-
-    private function blokDo(Request $request): int
-    {
-        return max(0, (int) $request->session()->get(self::KLIC_BLOK, 0) - now()->timestamp);
     }
 }

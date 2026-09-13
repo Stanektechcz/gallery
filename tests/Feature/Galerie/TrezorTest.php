@@ -118,6 +118,69 @@ class TrezorTest extends TestCase
         $this->postJson('/api/trezor/odemknout', ['heslo' => 'spravne-heslo'])->assertStatus(429);
     }
 
+    /**
+     * Nové sezení pokusy nevrátí.
+     *
+     * Počítadlo bylo v sezení, takže stačilo smazat cookies a hádat dál.
+     */
+    public function test_nove_sezeni_pokusy_nevrati(): void
+    {
+        $this->postJson('/api/trezor/odemknout', ['heslo' => 'a'])->assertStatus(422);
+        $this->postJson('/api/trezor/odemknout', ['heslo' => 'b'])->assertStatus(422);
+
+        $this->flushSession();
+
+        $this->postJson('/api/trezor/odemknout', ['heslo' => 'c'])
+            ->assertStatus(429)
+            ->assertJsonPath('blok', 30);
+
+        $this->flushSession();
+
+        $this->postJson('/api/trezor/odemknout', ['heslo' => 'spravne-heslo'])->assertStatus(429);
+    }
+
+    /** Kdo po uzavření hádá dál, čeká pokaždé dvakrát déle. */
+    public function test_opakovane_uzavreni_se_prodluzuje(): void
+    {
+        foreach (['a', 'b', 'c'] as $heslo) {
+            $this->postJson('/api/trezor/odemknout', ['heslo' => $heslo]);
+        }
+
+        $this->travel(31)->seconds();
+
+        $this->postJson('/api/trezor/odemknout', ['heslo' => 'd'])->assertStatus(422);
+        $this->postJson('/api/trezor/odemknout', ['heslo' => 'e'])->assertStatus(422);
+        $this->postJson('/api/trezor/odemknout', ['heslo' => 'f'])
+            ->assertStatus(429)
+            ->assertJsonPath('blok', 60)
+            ->assertJsonPath('chyba', 'Tři neúspěšné pokusy. Přístup je na minutu uzavřený a záznam šel do auditu.');
+
+        // Správné heslo po uplynutí odemkne a počítadla vynuluje.
+        $this->travel(61)->seconds();
+        $this->postJson('/api/trezor/odemknout', ['heslo' => 'spravne-heslo'])->assertOk();
+        $this->postJson('/api/trezor/zamknout')->assertOk();
+
+        foreach (['g', 'h'] as $heslo) {
+            $this->postJson('/api/trezor/odemknout', ['heslo' => $heslo])->assertStatus(422);
+        }
+        $this->postJson('/api/trezor/odemknout', ['heslo' => 'i'])->assertJsonPath('blok', 30);
+    }
+
+    /** Uzavření z galerie platí i ve starém rozhraní — jinak by se obešlo tudy. */
+    public function test_uzavreni_plati_i_ve_starem_rozhrani(): void
+    {
+        foreach (['a', 'b', 'c'] as $heslo) {
+            $this->postJson('/api/trezor/odemknout', ['heslo' => $heslo]);
+        }
+
+        $this->actingAs($this->adri)
+            ->from('/vault')
+            ->post('/vault/unlock', ['password' => 'spravne-heslo'])
+            ->assertSessionHasErrors('password');
+
+        $this->assertFalse((int) session('vault_unlocked_until', 0) > now()->timestamp);
+    }
+
     /** Zamčený trezor neposílá, co je v něm. */
     public function test_zamceny_trezor_neposila_obsah(): void
     {
