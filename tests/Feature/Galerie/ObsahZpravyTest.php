@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Support\SpaceContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
@@ -239,6 +240,21 @@ class ObsahZpravyTest extends TestCase
         $this->assertSame('Pustevny', $radek[6]);
         $this->assertStringContainsString('/api/media/'.$polozka['uuid'].'/thumb', $radek[8]);
         $this->assertStringContainsString('signature=', $radek[8]);
+    }
+
+    /** Obrázek ze smazané zprávy přes dřív vydanou podepsanou adresu nejde otevřít. */
+    public function test_obrazek_smazane_zpravy_se_nevyda(): void
+    {
+        Storage::fake('local');
+        Storage::disk('local')->put('chat/obrazek.jpg', 'jpeg');
+
+        $zprava = $this->zprava(['media_path' => 'chat/obrazek.jpg', 'media_mime' => 'image/jpeg']);
+        $adresa = \URL::temporarySignedRoute('galerie.chat.nahled', now()->addDay(), ['uuid' => $zprava->uuid]);
+
+        $this->get($adresa)->assertOk();
+
+        $zprava->delete();
+        $this->get($adresa)->assertNotFound();
     }
 
     /** Bez zmenšeniny se nic neslibuje — bublina si nechá barvu z prototypu. */

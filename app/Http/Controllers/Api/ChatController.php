@@ -488,7 +488,10 @@ class ChatController extends Controller
     {
         $this->available();
 
-        $message = ChatMessage::withoutGlobalScopes()->where('uuid', $uuid)->firstOrFail();
+        // Bez prostoru (adresa je podepsaná, ne za tokenem) — ale ne smazanou zprávu:
+        // `withoutGlobalScopes` shazoval i měkké mazání a obrázek ze smazané zprávy
+        // šel přes dřív vydanou adresu otevřít až do jejího vypršení.
+        $message = ChatMessage::withoutGlobalScopes()->whereNull('deleted_at')->where('uuid', $uuid)->firstOrFail();
 
         abort_unless($message->media_path && Storage::disk(self::DISK)->exists($message->media_path), 404);
 

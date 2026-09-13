@@ -237,6 +237,13 @@ class MediaController extends Controller
         $media = MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
             ->where('uuid', $uuid)
             ->where('is_hidden', false)
+            /*
+             * Ani koš. Fotka vyhozená do koše šla přes dřív vydanou podepsanou
+             * adresu (sdílený odkaz, chat, přeposlaná zpráva) otevřít až do
+             * konce zítřka. Koš sám náhledy nekreslí a po obnovení přijde
+             * adresa nová — video to tak dělalo odjakživa.
+             */
+            ->whereNull('trashed_at')
             ->first();
 
         abort_if($media === null, 404, 'Takový soubor tu není.');

@@ -152,6 +152,27 @@ class MediaFileControllerTest extends TestCase
         $this->get($podepsana)->assertNotFound();
     }
 
+    /** Fotka vyhozená do koše přes dřív vydanou adresu nejde otevřít. */
+    public function test_nahled_galerie_fotku_z_kose_nevyda(): void
+    {
+        $media = $this->fotka();
+        Storage::disk('public')->put('media/'.$media->uuid.'/thumbnail.jpg', 'jpeg');
+        DB::table('media_variants')->insert([
+            'media_item_id' => $media->id, 'type' => 'thumbnail', 'disk' => 'public',
+            'path' => 'media/'.$media->uuid.'/thumbnail.jpg', 'size_bytes' => 4, 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        $podepsana = URL::temporarySignedRoute('galerie.media.thumb', now()->addDay(), ['uuid' => $media->uuid]);
+
+        $this->get($podepsana)->assertOk();
+
+        $media->forceFill(['trashed_at' => now()])->save();
+        $this->get($podepsana)->assertNotFound();
+
+        // Po obnovení z koše funguje zase.
+        $media->forceFill(['trashed_at' => null])->save();
+        $this->get($podepsana)->assertOk();
+    }
+
     public function test_podepsana_adresa_neplati_pro_jiny_soubor(): void
     {
         $media = $this->fotka();
