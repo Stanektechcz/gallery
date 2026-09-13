@@ -311,6 +311,50 @@ odstraněno; kontrola šablony telefonu bez chybějících polí.
 
 ---
 
+## 2i. Deváté kolo — odmítnutý zápis bez smyčky (14. 9.)
+
+Zápis stavu, který server odmítl, se posílal znovu každé čtyři vteřiny
+**navždy** — i když ho server odmítl natrvalo. Prošlé přihlášení (90 dní bez
+použití, odvolané zařízení), odebraný přístup nebo příliš velký zápis tak
+z každé otevřené karty dělaly smyčku 15 požadavků za minutu (stejný vzorec,
+kvůli kterému firewall už jednou adresu dvojice zablokoval). Čekající zápis
+navíc zastavil dotazy na změny toho druhého. Service worker nechával
+odmítnuté zápisy ve frontě a posílal je při každém probuzení s tokenem
+z doby, kdy vznikly.
+
+Teď:
+- **401/403** — token se zahodí, počítač i telefon ukážou přihlášení
+  s hláškou „Přihlášení na tomhle zařízení skončilo" (u odebraného přístupu
+  důvod ze serveru); zápisy počkají a po přihlášení (heslem i otiskem) odejdou.
+- **413/422/400** — patch se pošle po klíčích; klíč, který server nevezme
+  ani sám, se zahodí a aplikace řekne „Poslední změna se neuložila".
+- **Výpadek a chyby serveru** — další pokus za 4 s, 8 s, … nejvýš 2 minuty.
+- Worker: „Odeslat" posílá aktuální přihlášení; natrvalo odmítnutý zápis
+  z fronty zmizí. Telefon nově hlásí i střet o tutéž věc (dřív se potichu
+  vrátil o krok zpět).
+- **Hromadné nahrávání** se po 401/403 zastaví — dřív zkoušelo každý zbylý
+  soubor dvakrát (u 500 fotek tisíc odmítnutých požadavků).
+
+| Commit | Obsah |
+|---|---|
+| `ec5e4a62` | Zápis stavu: 401/403 → přihlášení, 413 → po klíčích, výpadek → prodleva; worker bez věčné fronty; střet na telefonu |
+| `83886e9d` | Hromadné nahrávání se bez přihlášení zastaví |
+
+Ověřeno v prohlížeči: neplatný token → přihlašovací obrazovka s hláškou
+(počítač i telefon), zápis bez přihlášení 0× odeslán, po vrácení tokenu
+hned `PATCH 200`; zápis přes 1 MB → malý klíč prošel, velký jednou 413,
+hláška a žádný další pokus; nahrání 6 souborů bez přihlášení → 3 požadavky
+místo 12. Testy: **1409 PHP testů**, všechny prošly.
+
+### Změny chování, o kterých mají oba vědět (2i)
+
+- Když přihlášení na zařízení skončí (90 dní bez použití, „odhlásit ostatní
+  zařízení" z jiného zařízení), aplikace hned ukáže přihlášení — dřív vypadala
+  normálně a nic se neukládalo. Změny udělané před tím odejdou po přihlášení,
+  pokud se karta mezitím nezavře.
+
+---
+
 ## 3. Známé nedostatky — bezpečnost
 
 Seřazeno podle rizika. Nic z toho není aktivně zneužitelné bez jiné chyby,
