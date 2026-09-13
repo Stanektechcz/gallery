@@ -21285,12 +21285,22 @@ class Component extends DCLogic {
           if (!both.length) { this.toast('Nejdřív potřebujeme aspoň jednu shodu', { icon: 'ph-info' }); return; }
           const prevSets = s.curSets || [];
           const set = { name: 'Společný výběr ' + (prevSets.length + 1), n: both.length, when: 'dnes', ids: both.map(p => p.id) };
+          // U dvojice vznikne i skutečné album — „album je v Hotových výběrech" bylo jen jméno v seznamu.
+          const ids = set.ids.filter(id => /^[0-9a-f-]{36}$/.test(String(id)));
+          if (this.albaNaServeru() && ids.length) {
+            this.albumAkce(window.GalerieApi.post('alba', { nazev: set.name, media: ids }), res => {
+              this.setState({ curSets: [{ ...set, album: res.album || null }].concat(prevSets), appTab: 3 });
+              this.toast((res.zprava || 'Album vytvořeno') + ' · ' + this.pl(ids.length, 'fotka', 'fotky', 'fotek'), { icon: 'ph-folder-plus' });
+            });
+            return;
+          }
           this.setState({ curSets: [set].concat(prevSets), appTab: 3 });
           this.toast('Výběr uzavřen · ' + this.pl(both.length, 'fotka', 'fotky', 'fotek') + ' — album je v Hotových výběrech', {
             icon: 'ph-folder-plus', undo: () => this.setState({ curSets: prevSets })
           });
         },
-        curMatchPrint: () => { this.setState({ route: 'x-tisk', appTab: 0 }); this.toast(both.length + ' fotek ze shody nabídnuto jako podklad tisku', { icon: 'ph-printer' }); }
+        // Tisk shodu sám nepřevezme — hláška „nabídnuto jako podklad" nic nenabídla.
+        curMatchPrint: () => { this.setState({ route: 'x-tisk', appTab: 0 }); this.toast('Návrh tisku založte v Tisku a vyberte do něj ' + this.pl(both.length, 'fotku', 'fotky', 'fotek') + ' ze shody', { icon: 'ph-printer' }); }
       };
     }
     if (key === 'curSplit') {
@@ -21416,7 +21426,8 @@ class Component extends DCLogic {
           this.setState({ annPick: {} });
           this.toast('Zpět na automatický výběr', { icon: 'ph-arrow-counter-clockwise', undo: () => this.setState({ annPick: prev }) });
         },
-        annToMem: () => { this.setState({ route: 'x-vzpominky', appTab: 0 }); this.toast('Výroční album propojeno se Vzpomínkami', { icon: 'ph-sparkle' }); },
+        // Nic se nepropojuje — Vzpomínky ukazují tytéž dny samy od sebe.
+        annToMem: () => { this.setState({ route: 'x-vzpominky', appTab: 0 }); this.toast('Fotky z výročí najdete ve Vzpomínkách pod „Dnes před lety"', { icon: 'ph-sparkle' }); },
         annToPrint: () => this.setState({ appTab: 1 })
       };
     }
@@ -21444,8 +21455,17 @@ class Component extends DCLogic {
         page: String(3 + i * 2)
       })),
       annPrintGo: () => {
-        this.setState({ route: 'x-tisk', appTab: 0 });
-        this.toast('Výroční album předáno do Návrhů tisku · ' + pages + ' stran', { icon: 'ph-printer' });
+        // „Předáno do Návrhů tisku" — a v Návrzích nic nebylo. Teď tam návrh opravdu vznikne.
+        const prev = this.jobsOf();
+        const job = {
+          id: 'p-ann' + (s.xSeq || 1), kind: 'kniha', title: 'Výroční album' + (denVyroci ? ' — ' + denVyroci : ''), status: 'rozpracováno',
+          qty: pages, n: 12, fmt: fmt.indexOf('čtverec') === 0 ? 1 : fmt.indexOf('šířku') >= 0 ? 2 : 0,
+          spreadsN: Math.max(1, Math.ceil(pages / 2)),
+          note: this.pl(rows.length, 'rok', 'roky', 'let') + ' · ' + layout + ' · ' + fmt
+        };
+        this.jobsSet([job].concat(prev));
+        this.setState({ route: 'x-tisk', appTab: 0, xSeq: (s.xSeq || 1) + 1 });
+        this.toast('Výroční album je v Návrzích tisku · ' + this.pl(pages, 'strana', 'strany', 'stran') + ' — nic se zatím neobjednalo', { icon: 'ph-printer', undo: () => this.jobsSet(prev) });
       },
       annPrintExport: () => {
         const txt = 'VÝROČNÍ ALBUM — ' + denVyroci + '\n\n' + rows.map(r => r.year + ' — ' + r.place + ' (' + r.count + ')').join('\n');
@@ -30832,7 +30852,7 @@ class Component extends DCLogic {
       tripHasDiary: !!trip.diary,
       tripDiary: (trip.diary || []).map(d => ({ date: d[0], title: d[1], text: d[2], meta: d[3] })),
       tripAddItem: () => this.zatimNeumime('přidávání do itineráře'),
-      tripOpenPhotos: () => trip.photoMatch ? this.setState({ route: 'all', query: trip.photoMatch }) : this.toast('Fotky se zařadí po návratu', { icon: 'ph-info' }),
+      tripOpenPhotos: () => trip.photoMatch ? this.setState({ route: 'all', query: trip.photoMatch }) : this.toast(trip.past ? 'Z téhle cesty v knihovně žádné fotky nejsou' : 'Fotky z cesty se tu ukážou, až je nahrajete', { icon: 'ph-info' }),
       tripAddExpense: () => this.setState({ tripExp: { label: '', amount: '', cat: 'Cesty' } }),
       tripMore: () => this.zatimNeumime('duplikaci cesty ani export itineráře'),
       tripLiveCan: !trip.past,
