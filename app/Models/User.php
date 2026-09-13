@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Notifications\ObnovaHeslaNotification;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -127,6 +128,12 @@ class User extends Authenticatable
         $klic->accessToken->forceFill(['suffix' => substr($klic->plainTextToken, -4)])->save();
 
         return $klic;
+    }
+
+    /** E-mail s odkazem na nové heslo česky — viz `ObnovaHeslaNotification`. */
+    public function sendPasswordResetNotification($token): void
+    {
+        $this->notify(new ObnovaHeslaNotification($token));
     }
 
     public function gallerySpaces()

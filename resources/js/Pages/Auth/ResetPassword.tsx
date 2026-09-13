@@ -3,9 +3,9 @@ import { LockKeyhole } from 'lucide-react';
 import { FormEvent } from 'react';
 
 /** Props mirror PasswordResetController::reset(). */
-type Props = { token: string; email?: string | null };
+type Props = { token: string; email?: string | null; nejkratsi?: number };
 
-export default function ResetPassword({ token, email }: Props) {
+export default function ResetPassword({ token, email, nejkratsi = 10 }: Props) {
     const { data, setData, post, processing, errors } = useForm({
         token,
         email: email ?? '',
@@ -30,7 +30,7 @@ export default function ResetPassword({ token, email }: Props) {
                             <LockKeyhole size={28} className="text-[var(--color-accent-contrast)]" />
                         </div>
                         <h1 className="text-xl font-semibold text-[var(--color-text-primary)]">Nové heslo</h1>
-                        <p className="text-sm text-[var(--color-text-secondary)] mt-1">Zvolte si heslo alespoň o 8 znacích.</p>
+                        <p className="text-sm text-[var(--color-text-secondary)] mt-1 text-center">Zvolte si heslo alespoň o {nejkratsi} znacích. Ostatní zařízení se pak odhlásí.</p>
                     </div>
 
                     <form onSubmit={submit} className="glass rounded-2xl p-6 space-y-4">
@@ -55,7 +55,7 @@ export default function ResetPassword({ token, email }: Props) {
                                 value={data.password}
                                 onChange={e => setData('password', e.target.value)}
                                 required
-                                minLength={8}
+                                minLength={nejkratsi}
                                 autoFocus={!!email}
                                 className={field}
                                 placeholder="••••••••"
@@ -70,7 +70,7 @@ export default function ResetPassword({ token, email }: Props) {
                                 value={data.password_confirmation}
                                 onChange={e => setData('password_confirmation', e.target.value)}
                                 required
-                                minLength={8}
+                                minLength={nejkratsi}
                                 className={field}
                                 placeholder="••••••••"
                             />
@@ -87,7 +87,7 @@ export default function ResetPassword({ token, email }: Props) {
                     </form>
 
                     <p className="text-center text-xs text-[var(--color-text-secondary)] mt-6">
-                        <a href="/login" className="text-[var(--color-accent)] hover:underline">Zpět na přihlášení</a>
+                        <a href="/" className="text-[var(--color-accent)] hover:underline">Zpět na přihlášení</a>
                     </p>
                 </div>
             </div>

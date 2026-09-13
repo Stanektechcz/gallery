@@ -2,7 +2,10 @@ import { Head, useForm, usePage } from '@inertiajs/react';
 import { KeyRound } from 'lucide-react';
 import { FormEvent } from 'react';
 
-export default function ForgotPassword() {
+/** Props mirror PasswordResetController::request(). */
+type Props = { emailyChodi?: boolean };
+
+export default function ForgotPassword({ emailyChodi = true }: Props) {
     const flash = usePage().props.flash;
     const { data, setData, post, processing, errors } = useForm({ email: '' });
 
@@ -22,11 +25,18 @@ export default function ForgotPassword() {
                         </div>
                         <h1 className="text-xl font-semibold text-[var(--color-text-primary)]">Zapomenuté heslo</h1>
                         <p className="text-sm text-[var(--color-text-secondary)] mt-1 text-center">
-                            Pošleme vám odkaz pro nastavení nového hesla.
+                            {emailyChodi ? 'Pošleme vám odkaz pro nastavení nového hesla.' : 'Obnova hesla e-mailem tu teď nejde.'}
                         </p>
                     </div>
 
-                    <form onSubmit={submit} className="glass rounded-2xl p-6 space-y-4">
+                    {!emailyChodi && (
+                        <div className="glass rounded-2xl p-6 space-y-2 text-sm text-[var(--color-text-secondary)]">
+                            <p className="text-[var(--color-text-primary)] font-medium">E-maily z galerie teď nechodí.</p>
+                            <p>Odkaz na nové heslo by nedorazil. Nové heslo vám nastaví ten, kdo spravuje server galerie.</p>
+                        </div>
+                    )}
+
+                    {emailyChodi && <form onSubmit={submit} className="glass rounded-2xl p-6 space-y-4">
                         {flash?.success && (
                             <p className="rounded-lg border border-emerald-400/25 bg-emerald-500/10 p-3 text-xs text-emerald-100">
                                 {flash.success}
@@ -54,10 +64,10 @@ export default function ForgotPassword() {
                         >
                             {processing ? 'Odesílám...' : 'Odeslat odkaz'}
                         </button>
-                    </form>
+                    </form>}
 
                     <p className="text-center text-xs text-[var(--color-text-secondary)] mt-6">
-                        <a href="/login" className="text-[var(--color-accent)] hover:underline">Zpět na přihlášení</a>
+                        <a href="/" className="text-[var(--color-accent)] hover:underline">Zpět na přihlášení</a>
                     </p>
                 </div>
             </div>

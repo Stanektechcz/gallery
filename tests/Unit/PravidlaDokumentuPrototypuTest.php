@@ -142,6 +142,22 @@ class PravidlaDokumentuPrototypuTest extends TestCase
         }
     }
 
+    /** Přihlášení odkazuje na zapomenuté heslo a po obnovení řekne, že je nové. */
+    public function test_prihlaseni_ma_cestu_k_zapomenutemu_heslu(): void
+    {
+        foreach (['galerie-desktop.dc.html', 'galerie-mobil.dc.html'] as $nazev) {
+            $dokument = self::dokument($nazev);
+
+            $this->assertStringContainsString('<a href="/forgot-password"', $dokument, $nazev);
+            $this->assertStringContainsString('{{ lockInfoText }}', $dokument, $nazev);
+            $this->assertStringContainsString('/[?&]heslo=zmeneno(&|$)/.test(location.search)', $dokument, $nazev);
+            $this->assertStringNotContainsString('<span>Přihlášen <strong', $dokument, $nazev);
+        }
+
+        // Informace z přihlášení nepatří do sdíleného stavu.
+        $this->assertMatchesRegularExpression('/this\._pSkip = \{.*?\blockInfo: 1\b/s', self::dokument('galerie-desktop.dc.html'));
+    }
+
     /** Koš v telefonu umí i trvale odstranit — dřív jen „Obnovit". */
     public function test_telefon_maze_z_kose_na_serveru(): void
     {

@@ -3760,11 +3760,17 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                   <sc-if value="{{ lockErrOn }}">
                     <div style="display:flex; gap:6px; align-items:flex-start; margin-top:10px; font-size:12.5px; line-height:1.5; color:var(--g-mag)"><i class="ph-duotone ph-warning-circle" style="flex:none; font-size:16px"></i><span>{{ lockErrText }}</span></div>
                   </sc-if>
+                  <sc-if value="{{ lockInfoOn }}">
+                    <div role="status" style="display:flex; gap:6px; align-items:flex-start; margin-top:10px; font-size:12.5px; line-height:1.5; color:var(--g-acc)"><i class="ph-duotone ph-key" style="flex:none; font-size:16px"></i><span>{{ lockInfoText }}</span></div>
+                  </sc-if>
                   <button onClick="{{ lockTrustToggle }}" aria-pressed="{{ lockTrustOn }}" style="display:flex; align-items:center; gap:9px; width:100%; min-height:44px; margin-top:12px; padding:0; border:0; background:transparent; cursor:pointer; font-family:inherit; font-size:13px; color:var(--g-ink2); text-align:left">
                     <span style="flex:none; width:19px; height:19px; border:1px solid var(--g-line); border-radius:2px; background:{{ lockTrustBg }}; display:grid; place-items:center; color:{{ lockTrustMark }}"><i class="ph-duotone ph-check" style="font-size:13px"></i></span>
                     Věřit tomuto telefonu — příště bude stačit kód
                   </button>
                   <button onClick="{{ lockSignIn }}" disabled="{{ lockSignCant }}" class="btn btn-primary btn-block" style="min-height:48px; margin-top:12px; gap:7px"><i class="ph-duotone ph-sign-in" style="font-size:17px"></i>Přihlásit se</button>
+                  <sc-if value="{{ lockZapomenuteOn }}">
+                    <a href="/forgot-password" style="display:flex; align-items:center; justify-content:center; min-height:44px; margin-top:4px; font-size:13px; color:var(--g-acc); text-decoration:underline; text-underline-offset:3px">Zapomenuté heslo?</a>
+                  </sc-if>
                   <div style="margin-top:16px; padding-top:11px; border-top:1px solid var(--g-line); font-size:12px; line-height:1.6; color:var(--g-ink3); text-wrap:pretty">{{ lockPwdHint }}</div>
                   <div style="display:flex; gap:8px; margin-top:4px">
                     <sc-if value="{{ obPrvni }}">
@@ -3781,7 +3787,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
               <sc-if value="{{ lockIsPin }}">
               <div style="display:flex; align-items:center; gap:9px; margin-top:12px; font-size:13.5px; color:var(--g-ink2)">
                 <span style="flex:none; width:26px; height:26px; border-radius:50%; display:grid; place-items:center; font-size:12px; background:{{ lockWhoDotBg }}; color:{{ lockWhoDotFg }}">{{ lockWhoIni }}</span>
-                <span>Přihlášen <strong style="color:var(--g-ink)">{{ lockWhoName }}</strong></span>
+                <span>Účet <strong style="color:var(--g-ink)">{{ lockWhoName }}</strong></span>
               </div>
               <div style="font-size:11.5px; color:var(--g-ink3); margin-top:3px">{{ lockWhoMail }}</div>
               <div style="font-size:12.5px; color:var(--g-ink3); margin-top:10px">Zadejte šestimístný kód</div>
@@ -6035,10 +6041,16 @@ class Component extends DCLogic {
       this.setState({
         appLocked: true, lockStep: 'pwd', lockPwd: '', lockPin: '', lockTrusted: false, lockSignBusy: false, lockNeeds2fa: false, lockCode: '',
         sheet: null, lb: null,
-        lockErr: d.status === 403 && d.zprava ? d.zprava : 'Přihlášení na tomhle zařízení skončilo — přihlaste se znovu.'
+        // Po obnovení hesla je odhlášení očekávané — hláška o novém hesle stačí.
+        lockErr: d.status === 403 && d.zprava ? d.zprava : this.state.lockInfo ? null : 'Přihlášení na tomhle zařízení skončilo — přihlaste se znovu.'
       });
     };
     window.addEventListener('galerie-odhlaseno', this._odhlaseno);
+    // Návrat z obnovy hesla (`PasswordResetController::update`): přihlásit se novým heslem.
+    if (/[?&]heslo=zmeneno(&|$)/.test(location.search)) {
+      try { history.replaceState(null, '', location.pathname + location.hash); } catch (e) {}
+      this.setState({ appLocked: true, lockStep: 'pwd', lockTrusted: false, lockErr: null, lockInfo: 'Heslo je změněné — přihlaste se novým heslem. Ostatní zařízení se odhlásila.' });
+    }
     // Změna, kterou server nevezme (příliš velká) — zahodí se, ale ne potichu.
     this._odmitnuto = e => {
       const d = e.detail || {};
@@ -8350,7 +8362,7 @@ class Component extends DCLogic {
           const email = String((res.user || {}).email || mail).toLowerCase();
           const urci = () => { const M = this.lockData().MAIL; return Object.keys(M).find(x => (M[x] || '').toLowerCase() === email) || who || 'A'; };
           const k = urci();
-          this.setState({ lockWho: k, lockStep: 'pin', lockPwd: '', lockErr: null, lockTries: 0, lockTrusted: s.lockTrust !== false, lockSignBusy: false });
+          this.setState({ lockWho: k, lockStep: 'pin', lockPwd: '', lockErr: null, lockInfo: null, lockTries: 0, lockTrusted: s.lockTrust !== false, lockSignBusy: false });
           this.toast('Přihlášeno · ' + ((res.user || {}).name || L.WHO[k] || '') + (s.lockTrust !== false ? ' · zařízení zapamatováno' : ''), { icon: 'ph-envelope-simple-open' });
           /*
            * Kdo kód nemá, nemá po přihlášení co zadávat.
@@ -8443,7 +8455,7 @@ class Component extends DCLogic {
   lockIdleMs() { return { '30 s': 30000, '1 min': 60000, '5 min': 300000, '15 min': 900000, 'Nikdy': 0 }[this.state.lockIdle || '5 min'] || 0; }
   lockOpen(note) {
     this._act = Date.now();
-    this.setState({ appLocked: false, lockPin: '', lockErr: null, lockTries: 0, lockRec: false, lockRecCode: '', lockBioBusy: false, lockAt: Date.now() });
+    this.setState({ appLocked: false, lockPin: '', lockErr: null, lockInfo: null, lockTries: 0, lockRec: false, lockRecCode: '', lockBioBusy: false, lockAt: Date.now() });
     this.toast(note || 'Odemčeno · ' + (this.lockData().WHO[this.state.lockWho || 'A'] || ''), { icon: 'ph-lock-key-open' });
   }
   // Co server říká o mém zámku: `{ nastaveno, delka, zmeneno }`.
@@ -8541,6 +8553,8 @@ class Component extends DCLogic {
       lockOtherAcct: () => this.setState({ lockStep: 'pwd', lockPwd: '', lockPin: '', lockErr: null, lockTries: 0, lockTrusted: false, lockRec: false }),
       // Nápověda pod heslem už heslo neříká — viz široké rozvržení.
       lockPwdHint: 'Heslo je totéž jako do galerie. Ověřuje ho server.',
+      // Obnovu hesla dělá server — bez něj (ukázka) není kam odkázat.
+      lockZapomenuteOn: !!(window.GalerieApi && window.GalerieApi.mode === 'http'),
       // Profil se vybírá tady, ne přepínačem přes celou aplikaci: výběr přepíše
       // i e-mail, takže se přihlašuje ten, komu kód patří.
       lockWhos: Object.keys(L.WHO).map(k => ({
@@ -8584,6 +8598,7 @@ class Component extends DCLogic {
         }
       })),
       lockErrOn: !!s.lockErr, lockErrText: s.lockErr || '',
+      lockInfoOn: !!s.lockInfo && !s.lockErr, lockInfoText: s.lockInfo || '',
       lockBioNote: s.lockBio === false ? 'Odemknutí otiskem je vypnuté v Nastavení → Zámek a přístup.'
         : !this.bioSupported() ? 'Tohle zařízení otisk nenabízí — odemkněte kódem.'
         : (() => { let has = null; try { has = localStorage.getItem(this.bioKey()); } catch (e) {} return has ? 'Ťukněte na otisk — ověří vás Touch ID nebo Face ID.' : 'Ťuknutím na otisk si ho jednou zaregistrujete, pak už stačí přiložit prst.'; })(),

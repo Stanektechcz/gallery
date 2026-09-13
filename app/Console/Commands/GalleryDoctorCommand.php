@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Http\Controllers\Auth\PasswordResetController;
 use App\Models\StorageConnection;
 use App\Models\SystemSetting;
 use Illuminate\Console\Command;
@@ -55,6 +56,12 @@ class GalleryDoctorCommand extends Command
         $this->check('APP_DEBUG=false (prod)', config('app.debug') === false, 'WARN');
         $this->check('APP_URL set', ! empty(config('app.url')));
         $this->check('APP_ENV=production', config('app.env') === 'production', 'WARN');
+        // Forgotten-password links and invitations go by e-mail; `log`/`array` delivers nothing.
+        $this->check(
+            'MAIL_MAILER delivers e-mail ('.config('mail.default').') — password reset and invitations',
+            PasswordResetController::emailyChodi(),
+            'WARN',
+        );
     }
 
     private function checkDatabase(): void
