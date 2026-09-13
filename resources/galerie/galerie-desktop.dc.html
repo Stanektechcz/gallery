@@ -5193,6 +5193,8 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                     <button class="btn btn-secondary" onClick="{{ ckSugPlanWeek }}" style="font-size:12.5px; gap:6px"><i class="ph-duotone ph-magic-wand" style="font-size:15px"></i>Složit z návrhů celý týden</button>
                   </div>
 
+                  <!-- Bez receptů byla karta návrhu prázdná a její tlačítka nic nedělala. -->
+                  <sc-if value="{{ ckSugHasTop }}">
                   <div style="display:flex; gap:26px; flex-wrap:wrap; align-items:stretch">
                     <div style="flex:1 1 300px; min-width:280px; border-radius:2px; background:{{ ckSugTop.bg }}; min-height:230px"></div>
                     <div style="flex:2 1 420px; min-width:320px; display:flex; flex-direction:column; gap:12px">
@@ -5237,6 +5239,18 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                     </div>
                   </div>
 
+                  </sc-if>
+                  <sc-if value="{{ ckSugNoTop }}">
+                    <div style="padding:22px 18px; border-radius:2px; background:var(--g-panel); display:flex; gap:14px; align-items:center; flex-wrap:wrap">
+                      <i class="ph-duotone ph-cooking-pot" style="font-size:26px; color:var(--g-acc)"></i>
+                      <div style="flex:1 1 260px; min-width:0">
+                        <div style="font-size:16px">Zatím není z čeho vybírat</div>
+                        <div style="font-size:13px; color:var(--g-ink2); margin-top:3px; line-height:1.5">Návrh na dnes řadí vaše recepty podle zásob, počasí a času. Až v kuchařce bude první recept, objeví se tady.</div>
+                      </div>
+                      <button class="btn btn-secondary" onClick="{{ ckSugRecipes }}" style="gap:6px"><i class="ph-duotone ph-book-open" style="font-size:16px"></i>Otevřít recepty</button>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ ckSugHasRows }}">
                   <div>
                     <div style="display:flex; align-items:baseline; gap:10px; padding-bottom:9px; border-bottom:1px solid var(--g-ink)">
                       <span style="font-size:12px; letter-spacing:.14em; text-transform:uppercase">Další v pořadí</span>
@@ -5271,6 +5285,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                       </div>
                     </sc-for>
                   </div>
+                  </sc-if>
 
                   <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:26px">
                     <sc-if value="{{ ckSoonAny }}">
@@ -20627,7 +20642,7 @@ class Component extends DCLogic {
           bg: this.bg((m.t.length * 6) % 40),
           album: () => {
             const all = this.photos();
-            this.startShow((AGRID.anniv.idx || []).map(i => all[i % all.length].id), m.t);
+            this.startShow((AGRID.anniv.idx || []).map(i => all.length ? all[i % all.length].id : null).filter(Boolean), m.t);
           },
           remind: () => {
             const prev = this.events();
@@ -21798,9 +21813,21 @@ class Component extends DCLogic {
           };
         }),
         // ——— boční panel se sdíleným obsahem ———
+        /*
+         * Fotky v panelu jsou ty z bubliny.
+         *
+         * Panel kreslil barevné čtverce z pořadí zprávy a otevíral fotku
+         * knihovny se stejným zbytkem po dělení — cizí fotku, a s prázdnou
+         * knihovnou nic (dělení nulou).
+         */
         shPhotos: all.filter(m => m.type === 'p').slice(-6).reverse().map(m => ({
-          bg: this.bg(m.n % 40), place: m.extra || '—',
-          open: () => this.openLb(photos[m.n % photos.length].id)
+          bg: m.bg ? "url('" + String(m.bg).replace(/'/g, '%27') + "') center/cover no-repeat var(--g-panel)" : this.bg(m.n % 40),
+          place: m.extra || '—',
+          open: () => {
+            if (m.odkaz) { this.openLb(m.odkaz); return; }
+            if (this.ukazka() && photos.length) { this.openLb(photos[m.n % photos.length].id); return; }
+            this.toast('Tenhle obrázek byl nahraný jen do chatu — v knihovně není', { icon: 'ph-image' });
+          }
         })),
         shPhotoN: all.filter(m => m.type === 'p').length,
         shHasPhotos: all.some(m => m.type === 'p'),
@@ -25349,7 +25376,11 @@ class Component extends DCLogic {
         this.setState({ appTab: 3 });
         this.toast(this.pl(add.length, 'položka', 'položky', 'položek') + ' ze zásob na nákupní seznam', { icon: 'ph-basket', undo: () => this.setRows('shopping', prev) });
       },
+      ckSugHasTop: !!top, ckSugNoTop: !top, ckSugHasRows: ranked.length > 1,
+      ckSugRecipes: () => this.setState({ appTab: 0 }),
       ckSugPlanWeek: () => {
+        // Bez receptů hlásilo „Týden složený“ a menu jen vymazalo.
+        if (!ranked.length) { this.toast('Zatím není z čeho skládat — nejdřív přidejte recept', { icon: 'ph-info' }); return; }
         const prev = this.menuOf();
         const D = ['Pondělí', 'Úterý', 'Středa', 'Čtvrtek', 'Pátek', 'Sobota', 'Neděle'];
         const next = {};
@@ -28568,12 +28599,16 @@ class Component extends DCLogic {
         : d.repeat ? 'Úprava se týká jen tohoto výskytu.' : '',
       evAlbumOpts: [{ value: '', label: 'Bez propojení' }].concat(this.albums().slice(0, 12).map(a => ({ value: a.id, label: a.name }))),
       evAlbum: d.album || '', evSetAlbum: e => set({ album: e.target.value }),
+      /*
+       * Fotky z tohoto dne — opravdu z něj.
+       *
+       * Dřív osm „náhodných" fotek podle čísla data (každá z jiného dne,
+       * při malé knihovně tytéž dokola) a s prázdnou knihovnou dělení
+       * nulou shodilo celou aplikaci hned po „Přidat" v kalendáři.
+       */
       evPhotoPick: (() => {
-        const p = iso.split('-');
-        const src = this.photos();
-        const off = ((+p[0]) + (+p[1]) * 7 + (+p[2]) * 5) % src.length;
         const picked = d.photos || [];
-        return Array.from({ length: 8 }, (_, i) => src[(off + i * 3) % src.length]).map(ph => ({
+        return this.photos().filter(ph => ph.day === iso).slice(0, 8).map(ph => ({
           bg: ph.bg, on: picked.indexOf(ph.id) >= 0,
           ring: picked.indexOf(ph.id) >= 0 ? '2px solid var(--g-acc)' : '1px solid var(--g-line2)',
           check: picked.indexOf(ph.id) >= 0 ? '1' : '0',
@@ -28582,7 +28617,7 @@ class Component extends DCLogic {
       })(),
       evPhotoNote: (d.photos || []).length
         ? this.pl((d.photos || []).length, 'fotka připojena', 'fotky připojeny', 'fotek připojeno') + ' — objeví se v detailu dne'
-        : 'Vyberte fotky z tohoto dne, které k události patří.',
+        : this.photos().some(ph => ph.day === iso) ? 'Vyberte fotky z tohoto dne, které k události patří.' : 'Z tohoto dne v knihovně žádné fotky nejsou.',
       evNote: d.note || '', evSetNote: e => set({ note: e.target.value }),
       evShareNote: d.who === 'spolu'
         ? 'Událost uvidí oba a připomenutí přijde oběma. Kdo ji vytvořil, zůstane u zápisu.'
@@ -32023,7 +32058,7 @@ class Component extends DCLogic {
     // Záložky z doby, kdy byly cesty a lidé napsaní v dokumentu. Se skutečnými
     // daty žádná „chorvatsko“ ani „Makinka“ být nemusí a `renderVals` se počítá
     // při každém překreslení — spadla by celá aplikace, ne jen ta obrazovka.
-    const trip = TRIPS[s.tripId] || TRIPS.chorvatsko || TRIPS[Object.keys(TRIPS)[0]] || { photoMatch: null, pack: [], days: [], stats: [], budget: [], docs: [], diary: null, title: '', when: '', where: '', desc: '', tag: '', n: 0 };
+    const trip = TRIPS[s.tripId] || TRIPS.chorvatsko || TRIPS[Object.keys(TRIPS)[0]] || { photoMatch: null, pack: [], days: [], stats: [], budget: [], docs: [], diary: null, title: '', when: '', where: '', desc: '', tag: '', n: 0, budgetTitle: 'Rozpočet cesty' };
     const tripTag = t => t === 'čeká platba' || t === 'čeká akci' || t === 'zařadit' ? 'tag-accent-2' : t === 'zaplaceno' || t === 'do tisku' ? 'tag-accent' : 'tag-neutral';
     const tripPhotoSrc = trip.photoMatch ? this.photos().filter(p => p.place.indexOf(trip.photoMatch) >= 0) : [];
     const packDone = i => { const k = s.tripId + '-' + i; return s.pack[k] !== undefined ? s.pack[k] : trip.pack[i][2] === 1; };
@@ -32034,7 +32069,8 @@ class Component extends DCLogic {
     const personSugLeft = (person.sug || []).filter(i => !s.sugSeen[s.personId + '-' + i]);
     const personHiddenNow = (s.pHidden || {})[s.personId] !== undefined
       ? !!(s.pHidden || {})[s.personId] : person.tag === 'skryto';
-    const pTile = i => { const p = this.photos()[i % this.photos().length]; return { ...this.tile(this.edited(p)), open: () => this.openLb(p.id) }; };
+    // Prázdná knihovna: `photos[i % 0]` je undefined a dlaždice osoby shodila vykreslení.
+    const pTile = i => { const vse = this.photos(), p = vse.length ? vse[i % vse.length] : null; return p ? { ...this.tile(this.edited(p)), open: () => this.openLb(p.id) } : { bg: this.bg(i % 40), open: () => {} }; };
     /*
      * Album jen o jednom člověku: jeho fotky, ne prvních dvanáct z mřížky.
      *
@@ -32815,11 +32851,11 @@ class Component extends DCLogic {
         }
         if (appKey === 'show' || appKey === 'tv') {
           const all = this.photos();
-          return this.startShow((AGRID.show.idx || []).map(i => all[i % all.length].id), appKey === 'tv' ? 'TV režim' : 'Slideshow');
+          return this.startShow((AGRID.show.idx || []).map(i => all.length ? all[i % all.length].id : null).filter(Boolean), appKey === 'tv' ? 'TV režim' : 'Slideshow');
         }
         if (appKey === 'anniv') {
           const all = this.photos();
-          return this.startShow((AGRID.anniv.idx || []).map(i => all[i % all.length].id), 'Výroční album');
+          return this.startShow((AGRID.anniv.idx || []).map(i => all.length ? all[i % all.length].id : null).filter(Boolean), 'Výroční album');
         }
         if (appKind === 'board') {
           this.setState({ tskDlg: { key: appKey, mode: 'new', id: null, col: 0, t: '', w: this.meWho(), d: 'dnes', pr: 0, note: '' } });
@@ -33749,7 +33785,7 @@ class Component extends DCLogic {
           return this.startShow(all.slice(i).concat(all.slice(0, i)).slice(0, 30).map(p => p.id), 'Od této fotky');
         }
         if (R === 'album') return this.startShow(albumPhotos.map(p => p.id), album.path || album.name);
-        if (R === 'person') return this.startShow(person.idx.map(i => this.photos()[i % this.photos().length].id), this.pName(s.personId));
+        if (R === 'person') return this.startShow(person.idx.map(i => this.photos().length ? this.photos()[i % this.photos().length].id : null).filter(Boolean), this.pName(s.personId));
         if (R === 'trip') return this.startShow(tripPhotoSrc.map(p => p.id), trip.title);
         return this.startShow(this.visible().slice(0, 30).map(p => p.id), 'Knihovna');
       },
