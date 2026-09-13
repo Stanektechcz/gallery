@@ -8,8 +8,10 @@ use App\Models\MediaItem;
 use App\Models\MediaVariant;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\URL;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -118,6 +120,36 @@ class MediaFileControllerTest extends TestCase
             ->withSession(['vault_unlocked_until' => now()->addMinutes(5)->timestamp])
             ->get('/files/media/'.$media->uuid.'/original?ext=jpg')
             ->assertOk();
+    }
+
+    /** Podepsaná adresa vydaná před přesunem do trezoru se zamčeným trezorem neotevře. */
+    public function test_podepsana_adresa_fotky_v_trezoru_chce_odemceni(): void
+    {
+        $media = $this->fotka();
+        Storage::disk('public')->put('media/'.$media->uuid.'/thumbnail.jpg', 'jpeg');
+        $podepsana = MediaVariant::proxyUrl('media/'.$media->uuid.'/thumbnail.jpg');
+
+        $media->forceFill(['is_hidden' => true])->save();
+
+        $this->get($podepsana)->assertNotFound();
+        $this->withSession(['vault_unlocked_until' => now()->addMinutes(5)->timestamp])->get($podepsana)->assertOk();
+    }
+
+    /** Podepsaný náhled galerie fotku z trezoru nevydá vůbec — trezor náhledy neposílá. */
+    public function test_nahled_galerie_fotku_z_trezoru_nevyda(): void
+    {
+        $media = $this->fotka();
+        Storage::disk('public')->put('media/'.$media->uuid.'/thumbnail.jpg', 'jpeg');
+        DB::table('media_variants')->insert([
+            'media_item_id' => $media->id, 'type' => 'thumbnail', 'disk' => 'public',
+            'path' => 'media/'.$media->uuid.'/thumbnail.jpg', 'size_bytes' => 4, 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        $podepsana = URL::temporarySignedRoute('galerie.media.thumb', now()->addDay(), ['uuid' => $media->uuid]);
+
+        $this->get($podepsana)->assertOk();
+
+        $media->forceFill(['is_hidden' => true])->save();
+        $this->get($podepsana)->assertNotFound();
     }
 
     public function test_podepsana_adresa_neplati_pro_jiny_soubor(): void

@@ -229,8 +229,14 @@ class MediaController extends Controller
      */
     public function thumb(Request $request, string $uuid): StreamedResponse
     {
+        /*
+         * Trezor náhledy nevydává nikdy (viz System::obsahTrezoru) — podepsaná
+         * adresa vydaná dřív, než fotka do trezoru odešla, by jinak platila
+         * do konce zítřka.
+         */
         $media = MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
             ->where('uuid', $uuid)
+            ->where('is_hidden', false)
             ->first();
 
         abort_if($media === null, 404, 'Takový soubor tu není.');

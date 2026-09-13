@@ -129,6 +129,21 @@ class MediaFileController extends Controller
     private function smi(Request $request, string $path): bool
     {
         if ($request->hasValidSignature()) {
+            /*
+             * I podepsaná adresa se u trezoru ptá na odemčení.
+             *
+             * Podpis platí do konce zítřka. Fotka, která mezitím odešla do
+             * trezoru, by přes adresu vydanou dřív (oblíbené, archiv, sdílená
+             * stránka) šla otevřít dál — i se zamčeným trezorem a bez přihlášení.
+             */
+            if (preg_match('#^(?:media|variants)/([0-9a-f-]{36})/#i', $path, $shoda)) {
+                $skryta = MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
+                    ->where('uuid', $shoda[1])
+                    ->value('is_hidden');
+
+                return ! $skryta || $this->trezorOdemceny($request);
+            }
+
             return true;
         }
 
@@ -147,8 +162,7 @@ class MediaFileController extends Controller
                 return false;
             }
 
-            return ! $media->is_hidden
-                || ($request->hasSession() && (int) $request->session()->get('vault_unlocked_until', 0) > now()->timestamp);
+            return ! $media->is_hidden || $this->trezorOdemceny($request);
         }
 
         if (preg_match('#^hlasovky/(\d+)/#', $path, $shoda)) {
@@ -157,6 +171,11 @@ class MediaFileController extends Controller
 
         // Neznámé místo na disku bez podpisu nikomu.
         return false;
+    }
+
+    private function trezorOdemceny(Request $request): bool
+    {
+        return $request->hasSession() && (int) $request->session()->get('vault_unlocked_until', 0) > now()->timestamp;
     }
 
     private function clen($user, int $prostor): bool
