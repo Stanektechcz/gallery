@@ -123,6 +123,32 @@ class AlbumArchivTest extends TestCase
         $this->assertSame(['zly.jpg'], $jmena);
     }
 
+    /**
+     * Hromadné „Stáhnout" ve výběru — dřív jen hláška „Připravuji archiv".
+     *
+     * Trezor ani cizí fotka se do archivu nedostanou.
+     */
+    public function test_vyber_se_stahne_jako_archiv(): void
+    {
+        $a = $this->fotka('A.jpg', true);
+        $b = $this->fotka('B.jpg', true);
+        $skryta = $this->fotka('TREZOR.jpg', true);
+        $skryta->forceFill(['is_hidden' => true])->save();
+
+        $cizi = User::factory()->create();
+        $ciziProstor = GallerySpace::create(['name' => 'Cizí', 'owner_id' => $cizi->id]);
+        $ciziFoto = $this->fotka('CIZI.jpg', true);
+        $ciziFoto->forceFill(['gallery_space_id' => $ciziProstor->id])->save();
+
+        $odpoved = $this->postJson('/api/media/archiv', ['ids' => [$a->uuid, $b->uuid, $skryta->uuid, $ciziFoto->uuid]])->assertOk();
+
+        $jmena = $this->vArchivu($odpoved);
+        sort($jmena);
+        $this->assertSame(['A.jpg', 'B.jpg'], $jmena);
+
+        $this->postJson('/api/media/archiv', ['ids' => [$ciziFoto->uuid]])->assertNotFound();
+    }
+
     /** Album bez jediného originálu není archiv, je to nedorozumění. */
     public function test_album_bez_originalu_je_ctyristacityri(): void
     {

@@ -1010,6 +1010,8 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
                 'full' => $f['full'] ?? null,
                 // Přehrání videa: telefon měl u videa jen obrázek, přehrát ho nešlo.
                 'play' => $f['video'] ?? null,
+                // Štítky fotky — telefon u každé fotky ukazoval první tři štítky celé knihovny.
+                'tags' => $f['tags'] ?: null,
                 'poster' => $f['poster'] ?? null,
                 /*
                  * Kdo to nahrál a čím.

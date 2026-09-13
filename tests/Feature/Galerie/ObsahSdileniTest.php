@@ -81,6 +81,11 @@ class ObsahSdileniTest extends TestCase
         $this->assertSame('Bez hesla', $odkazy['Zadar — výběr']['protection']);
         $this->assertSame('Expirovalo', $odkazy['Zadar — výběr']['expires']);
         $this->assertSame('tag-neutral', $odkazy['Zadar — výběr']['expTag']);
+
+        // „Kopírovat" potřebuje celou adresu — zkrácená z tabulky nikam nevede.
+        $token = DB::table('shared_links')->where('name', 'Zadar — výběr')->value('token');
+        $this->assertSame(route('share.show', $token), $odkazy['Zadar — výběr']['odkaz']);
+        $this->assertStringEndsWith('…', $odkazy['Zadar — výběr']['url']);
     }
 
     /** Odkaz bez expirace se nemá tvářit, že vypršel. */

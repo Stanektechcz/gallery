@@ -13,6 +13,7 @@ use App\Models\AuditLog;
 use App\Models\GallerySpace;
 use App\Models\MediaItem;
 use App\Services\Billing\EntitlementService;
+use App\Services\Media\ArchivMedii;
 use App\Services\Media\MediaFormatService;
 use App\Services\Media\UpravaFotky;
 use App\Support\SpaceContext;
@@ -22,6 +23,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -283,6 +285,33 @@ class MediaController extends Controller
     }
 
     /**
+     * Vybrané fotky jako jeden ZIP.
+     *
+     * Hromadné „Stáhnout" jen ohlásilo „Připravuji archiv" a nestáhlo nic.
+     * Trezor a koš se do archivu nedostanou, cizí fotky se tiše přeskočí.
+     */
+    public function archiv(Request $request, ArchivMedii $archiv): BinaryFileResponse
+    {
+        $data = $request->validate([
+            'ids' => ['required', 'array', 'min:1', 'max:500'],
+            'ids.*' => ['string', 'max:64'],
+        ]);
+
+        $polozky = MediaItem::whereIn('uuid', array_values(array_unique($data['ids'])))
+            ->where('gallery_space_id', $this->parId($request))
+            ->whereNull('trashed_at')
+            ->where('is_hidden', false)
+            ->with(['variants' => fn ($q) => $q->where('type', 'original')])
+            ->get();
+
+        $odpoved = $archiv->stahnout($polozky, 'vybrane-fotky-'.now()->format('Y-m-d'));
+
+        abort_if($odpoved === null, 404, 'Z výběru aplikace u sebe nemá ani jeden originál.');
+
+        return $odpoved;
+    }
+
+    /**
      * Otočení a výřez z prohlížeče fotky — viz `UpravaFotky`.
      *
      * `otoceni: 0, vyrez: false` vrací fotku k originálu.
@@ -376,7 +405,7 @@ class MediaController extends Controller
             || MediaFormatService::isRaw($pripona) || in_array($pripona, ['heic', 'heif', 'avif'], true));
 
         abort_unless($znamaPripona && $obrazNeboVideo, 422, sprintf(
-            'Soubor „%s" není fotka ani video, do knihovny ho nahrát nejde.',
+            'Soubor „%s“ není fotka ani video, do knihovny ho nahrát nejde.',
             mb_substr($jmeno, 0, 80),
         ));
 

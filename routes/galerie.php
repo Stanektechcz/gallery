@@ -308,6 +308,7 @@ Route::middleware(['auth:sanctum', 'dvojice', 'throttle:600,1,media'])->prefix('
     Route::delete('media/{uuid}', [MediaController::class, 'destroy'])->name('galerie.media.destroy');
     Route::post('media/do-kose', [MediaController::class, 'destroyMany'])->name('galerie.media.destroy-many');
     Route::post('media/{uuid}/uprava', [MediaController::class, 'uprava'])->name('galerie.media.uprava');
+    Route::post('media/archiv', [MediaController::class, 'archiv'])->name('galerie.media.archiv');
 });
 
 /*

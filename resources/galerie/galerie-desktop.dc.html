@@ -31968,7 +31968,8 @@ class Component extends DCLogic {
          * zprávy to, co měla ve schránce předtím. A když se kopírovat nedá
          * (prohlížeč to bez HTTPS zakáže), řekne se to místo toho.
          */
-        copy: () => this.kopiruj(r.url, 'Odkaz zkopírován do schránky'),
+        // Celá adresa ze serveru (`odkaz`) — `url` je zkrácená podoba do tabulky a nikam nevede.
+        copy: () => this.kopiruj(r.odkaz || r.url, 'Odkaz zkopírován do schránky'),
         revoke: () => this.setState({ confirm: { title: 'Zneplatnit odkaz?', body: '„' + r.name + '“ přestane fungovat okamžitě. Kdo si stránku právě prohlíží, uvidí informaci o ukončení sdílení.', cta: 'Zneplatnit', btnBg: 'var(--g-mag)', go: () => {
           this.setState({ confirm: null });
           // Odkaz ze serveru se ruší u něj; jinak by adresa dál fungovala
@@ -32315,7 +32316,16 @@ class Component extends DCLogic {
         { label: 'Upravit', icon: 'ph-pencil-simple', go: this.openBulk('date') },
         { label: 'Do alba', icon: 'ph-folder-plus', go: this.openBulk('album') },
         { label: 'Nové album', icon: 'ph-folder-simple-plus', go: () => this.setState({ naOpen: true, naName: '', naParent: '', naWithSel: true }) },
-        { label: 'Stáhnout', icon: 'ph-download-simple', go: () => this.toast('Připravuji archiv — ' + this.pl(s.sel.length, 'položka', 'položky', 'položek') + ' v původní kvalitě', { icon: 'ph-download-simple' }) },
+        // Hlásilo „Připravuji archiv" a nestáhlo nic. Jedna fotka jde jako originál, víc jako ZIP.
+        { label: 'Stáhnout', icon: 'ph-download-simple', go: () => {
+          const api = window.GalerieApi, ids = s.sel.slice();
+          if (!api || !api.download || api.mode !== 'http') { this.toast('Stahovat jde jen s připojeným serverem', { icon: 'ph-warning' }); return; }
+          if (ids.length === 1) { const p = this.photos().find(x => x.id === ids[0]); this.stahniOriginal(ids[0], p && p.name); return; }
+          this.toast('Připravuji archiv — ' + this.pl(ids.length, 'položka', 'položky', 'položek') + ' v původní kvalitě', { icon: 'ph-file-zip', silent: true });
+          api.download('media/archiv', 'vybrane-fotky.zip', { ids })
+            .then(() => this.toast('Archiv stažen', { icon: 'ph-download-simple' }))
+            .catch(e => this.toast(e && e.status === 404 ? 'Z výběru nemá aplikace u sebe žádný originál' : 'Archiv se nepodařilo sestavit', { icon: 'ph-warning', color: 'var(--g-mag)' }));
+        } },
         { label: 'Sdílet', icon: 'ph-share-network', go: () => this.setState({ shareOpen: true }) },
         { label: 'Oblíbené', icon: 'ph-heart-straight', go: () => { const prev = s.favs; const f = { ...s.favs }; s.sel.forEach(id => { f[id] = true; }); this.setState({ favs: f }); this.toast(this.pl(s.sel.length, 'položka přidána', 'položky přidány', 'položek přidáno') + ' do oblíbených', { icon: 'ph-heart-straight', color: 'var(--g-mag)', undo: () => this.setState({ favs: prev }) }); } },
         // `vaultIds()`, ne `s.vaultAdded || []` — viz komentář u té metody:

@@ -4788,6 +4788,12 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                   </sc-for>
                   <button onClick="{{ lbDetail.tagAdd }}" style="min-height:44px; padding:0 10px; border:1px dashed rgba(255,255,255,.35); border-radius:2px; background:transparent; cursor:pointer; font-family:inherit; font-size:12.5px; color:var(--g-acc)">+ Štítek</button>
                 </div>
+                <sc-if value="{{ lbDetail.tagDraftOn }}">
+                  <div style="display:flex; gap:6px; margin-top:6px">
+                    <input value="{{ lbDetail.tagDraft }}" onInput="{{ lbDetail.tagInput }}" onKeyDown="{{ lbDetail.tagKey }}" placeholder="název štítku" aria-label="Název nového štítku" maxlength="120" style="flex:1; min-width:0; min-height:44px; box-sizing:border-box; padding:0 10px; border:1px solid rgba(255,255,255,.35); border-radius:2px; background:transparent; color:#fff; font-family:inherit; font-size:14px" />
+                    <button onClick="{{ lbDetail.tagCommit }}" style="flex:none; min-height:44px; padding:0 12px; border:0; border-radius:2px; background:var(--g-acc); cursor:pointer; font-family:inherit; font-size:12.5px; color:#fff">Přidat</button>
+                  </div>
+                </sc-if>
                 <div style="display:flex; align-items:baseline; gap:8px; margin-top:12px">
                   <div style="flex:1; min-width:0; font-size:10.5px; letter-spacing:.12em; text-transform:uppercase; color:rgba(255,255,255,.6)">Verze</div>
                   <button onClick="{{ lbDetail.verAdd }}" style="flex:none; min-height:44px; padding:0 8px; border:0; background:transparent; cursor:pointer; font-family:inherit; font-size:12px; color:var(--g-acc)">Uložit úpravu</button>
@@ -5769,7 +5775,7 @@ class Component extends DCLogic {
     vitrina: typeof window !== 'undefined' && window.innerWidth >= 900,
     sortMem: 'new', sortFin: 'date', sortTrips: 'when', sortPlaces: 'name', sortAlbums: 'new', txMonth: 'month',
     placeId: null, dayId: null, txExtra: [], itinDone: {}, net: true, queue: null, playing: null,
-    lbPanel: false, lbTags: null, lbVers: null,
+    lbPanel: false, lbTags: null, lbVers: null, lbTagDraft: null,
     tripBud: {},
     cycDays: {}, cycTab: 'kalendar', cycMonth: 0, cycSel: null, cycLegend: false,
     cycShare: 'dates', cycRemind: true, cycRemindDays: 2, cycTrack: true,
@@ -5834,7 +5840,19 @@ class Component extends DCLogic {
       { id: 'a2', name: 'Beskydy', ids: PHOTOS.filter(p => p.place === 'Pustevny').map(p => p.id), seed: 7 }
     ];
   }
-  sharesList() { return this.state.shares || []; }
+  /*
+   * Sdílené odkazy dvojice jsou odkazy na serveru (`SHARES`), ne seznam
+   * vymyšlených adres ve stavu telefonu.
+   */
+  sharesList() {
+    if (this.galerieNaServeru()) {
+      return ((window.GalerieData || {}).SHARES || []).map(r => ({
+        id: r.id, name: r.name, url: r.odkaz || r.url, serverovy: true,
+        when: [r.expires, r.protection, +r.views ? this.pl(+r.views, 'otevření', 'otevření', 'otevření') : null].filter(Boolean).join(' · ')
+      }));
+    }
+    return this.state.shares || [];
+  }
 
   // překlad kategorií transakcí do/ze společné vrstvy (klíč = název platby, ne id řádku)
   txCatOut(map) {
@@ -5936,7 +5954,16 @@ class Component extends DCLogic {
     apply(S.get());
     this._un = S.subscribe(apply);
   }
+  /*
+   * Jediný `componentDidUpdate`.
+   *
+   * Třída ho měla dvakrát — druhá definice (posun lišt záložek) tu první tiše
+   * přepsala, takže telefon nikdy neuložil stav na server a oblíbené ani
+   * sdílení neposlal do společné vrstvy. Všechno „uloženo" platilo jen do
+   * zavření karty.
+   */
   componentDidUpdate() {
+    this.syncTabStrips();
     this.persistSave();
     const S = window.GalerieStore;
     if (!S || !this._last) return;
@@ -5946,11 +5973,17 @@ class Component extends DCLogic {
     if (this._last.txCat !== this.state.txCat) { this._last.txCat = this.state.txCat; patch.txCat = this.txCatOut(this.state.txCat); }
     if (this._last.places !== this.state.places) { this._last.places = this.state.places; patch.visited = this.visitedOut(this.state.places); }
     if (Object.keys(patch).length) S.set(patch);
+    /*
+     * Srdíčko do knihovny. Společná vrstva ho posílá jen pod `shared`, a to
+     * server do oblíbených v databázi nepropisuje — počítač posílá `favs`
+     * i napřímo. Bez toho srdíčko z telefonu po načtení knihovny zmizelo.
+     */
+    const api = window.GalerieApi;
+    if (patch.favs && api && api.mode === 'http' && api.save) api.save({ favs: this.state.favs });
   }
   // Po programové změně záložky musí být aktivní záložka vidět. Aktivní prvek
   // se pozná podle inverzního pozadí (tmavá výplň), které mu dává šablona;
   // scrollIntoView je v projektu zakázané, takže se nastavuje scrollLeft.
-  componentDidUpdate() { this.syncTabStrips(); }
   syncTabStrips() {
     const strips = document.querySelectorAll('[data-tabstrip]');
     for (let i = 0; i < strips.length; i++) {
@@ -6537,7 +6570,7 @@ class Component extends DCLogic {
        'fsAdd fsTry fsWin quartTalk quartPlan quartTook indepLearn indepSwap ' +
        'trustCalled trustTold svedAdj exitOff exitWho exitMade dayBonus dayGiven dayShift ' +
        'blizAdd blizWA blizWM blizBlock kidsStance kidsYear kidsFixed kidsTalks ' +
-       'mineInc mineEven parDone mechLog rowDone sw rules memSaved memLater curVotesM navHide evUndone annFmtM kapOpened nedDone klQuiet evPick rtOnM ndStateM whLogM offPackM memPrefs lbTags lbVers setVals lockIdle lockSecs lockBio lockStart').split(' ').forEach(x => { this._pKeep[x] = 1; });
+       'mineInc mineEven parDone mechLog rowDone sw rules memSaved memLater curVotesM navHide evUndone annFmtM kapOpened nedDone klQuiet evPick rtOnM ndStateM whLogM offPackM memPrefs lbTags lbVers setVals lockIdle lockSecs lockBio lockStart edits').split(' ').forEach(x => { this._pKeep[x] = 1; });
     }
     return !!this._pKeep[k];
   }
@@ -8929,6 +8962,40 @@ class Component extends DCLogic {
     return true;
   }
   /*
+   * Galerie telefonu na serveru: sdílení a alba.
+   *
+   * Telefon sdílel tak, že si vymyslel adresu `galerie.app/s/…` a ohlásil
+   * „Odkaz vytvořen a zkopírován" — odkaz neexistoval a ve schránce nebylo nic.
+   * Alba zakládal, plnil a mazal jen ve stavu telefonu. U dvojice jde všechno
+   * stejnými cestami jako na počítači.
+   */
+  galerieNaServeru() {
+    const api = window.GalerieApi;
+    return !!(((window.GalerieData || {}).DVOJICE || []).length && api && api.mode === 'http' && api.post);
+  }
+  chybaServeru(e, vychozi) {
+    const t = (e && e.body) || {};
+    const prvni = t.errors ? (Object.values(t.errors)[0] || [])[0] : null;
+    this.toast(t.zprava || t.message || prvni || vychozi, { icon: 'ph-warning' });
+  }
+  sdiletNaServeru(cil, nazev) {
+    window.GalerieApi.post('sdileni', Object.assign({
+      name: nazev, expirace: '7', stahovani: true, metadata: false, komentare: false, hoste: false
+    }, cil)).then(res => {
+      if (res && window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data, res.prazdne);
+      this.setState({ sel: [], selectMode: false });
+      this.kopiruj(res.odkaz, 'Odkaz vytvořen a zkopírován · platí 7 dní', 'Odkaz vytvořen · platí 7 dní — zkopírujete ho ve Sdílených odkazech');
+    }).catch(e => this.chybaServeru(e, 'Odkaz se nepodařilo vytvořit'));
+  }
+  albumNaServeru(zadost, hotovo) {
+    zadost.then(res => {
+      if (res && window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data, res.prazdne);
+      // Alba telefonu přicházejí ve vlastní kolekci — načte se znovu celá knihovna.
+      if (window.GalerieObnovit) window.GalerieObnovit('knihovna');
+      if (hotovo) hotovo(res || {});
+    }).catch(e => this.chybaServeru(e, 'Album se nepodařilo upravit'));
+  }
+  /*
    * `trashed` je koš ukázky. U dvojice rozhoduje server — a starý záznam z doby,
    * kdy telefon koš jen předstíral, by fotku schoval navždy: v koši na serveru
    * není, takže by ji nešlo ani obnovit.
@@ -10566,6 +10633,24 @@ class Component extends DCLogic {
       const a = s.addA.trim(), b = s.addB.trim(), n = s.seq;
       if (!a) { this.toast('Zadejte název', { icon: 'ph-warning' }); return; }
       if (s.addKind === 'album') {
+        /*
+         * Na serveru: stejně pojmenované album se doplní, jinak vznikne nové.
+         * Bez výběru vzniká prázdné — ukázka do nového alba přihodila prvních
+         * šest fotek z knihovny.
+         */
+        if (this.galerieNaServeru()) {
+          const api = window.GalerieApi, ids = s.sel.slice();
+          const existujici = this.albumsList().find(x => /^[0-9a-f-]{36}$/.test(String(x.id)) && String(x.name).trim().toLowerCase() === a.toLowerCase());
+          const zadost = existujici && ids.length
+            ? api.post('alba/zaradit', { album: existujici.id, media: ids })
+            : api.post('alba', { nazev: a, media: ids });
+          this.albumNaServeru(zadost, res => {
+            const id = res.album || (existujici && existujici.id);
+            this.setState({ sheet: null, addA: '', addB: '', sel: [], selectMode: false, albumId: id, tab: 'more', stack: ['albums', 'album'] });
+            this.toast(res.zprava || 'Album uloženo', { icon: 'ph-folder-plus' });
+          });
+          return;
+        }
         const prev = this.albumsList();
         const ids = s.sel.length ? s.sel.slice() : lib.slice(0, 6).map(p => p.id);
         const al = { id: 'a-n' + n, name: a, ids: ids, seed: 30 + n };
@@ -11225,6 +11310,7 @@ class Component extends DCLogic {
         { label: 'Do alba', icon: 'ph-folder-plus', go: () => this.setState({ sheet: 'add', addKind: 'album', addA: '', addB: '' }) },
         { label: 'Oblíbené', icon: 'ph-heart-straight', go: () => { const prev = s.favs, n = Object.assign({}, s.favs); s.sel.forEach(id => { n[id] = true; }); this.setState({ favs: n, sel: [] }); this.toast(this.pl(s.sel.length, 'položka', 'položky', 'položek') + ' v oblíbených', { icon: 'ph-heart-straight', undo: () => this.setState({ favs: prev }) }); } },
         { label: 'Sdílet', icon: 'ph-share-network', go: () => {
+          if (this.galerieNaServeru()) { this.sdiletNaServeru({ polozky: s.sel.slice() }, this.pl(s.sel.length, 'fotka', 'fotky', 'fotek') + ' z knihovny'); return; }
           const prev = this.sharesList(), n = s.seq;
           const sh = { id: 's-n' + n, name: this.pl(s.sel.length, 'položka', 'položky', 'položek') + ' z knihovny', url: 'galerie.app/s/' + Math.random().toString(36).slice(2, 8), when: 'právě teď · platí 7 dní' };
           this.setState({ shares: [sh].concat(prev), sel: [], selectMode: false, seq: n + 1 });
@@ -11378,11 +11464,20 @@ class Component extends DCLogic {
           meta: this.pl(items.length, 'položka', 'položky', 'položek') + ' · sdílíte oba',
           items: items.map(p => ({ bg: this.tlo(p), fav: this.isFav(p), tap: () => this.setState({ lb: p.id }) })),
           share: () => {
+            if (this.galerieNaServeru() && /^[0-9a-f-]{36}$/.test(String(a.id))) { this.sdiletNaServeru({ album: a.id }, 'Album ' + a.name); return; }
             const prev = this.sharesList(), n = s.seq;
             this.setState({ shares: [{ id: 's-n' + n, name: 'Album ' + a.name, url: 'galerie.app/s/' + Math.random().toString(36).slice(2, 8), when: 'právě teď · platí 7 dní' }].concat(prev), seq: n + 1 });
             this.toast('Odkaz na album vytvořen', { icon: 'ph-link-simple', undo: () => this.setState({ shares: prev }) });
           },
           del: () => {
+            if (this.galerieNaServeru() && /^[0-9a-f-]{36}$/.test(String(a.id))) {
+              const api = window.GalerieApi;
+              this.albumNaServeru(api.del('alba/' + a.id), res => {
+                this.setState({ stack: ['albums'] });
+                this.toast(res.zprava || 'Album smazáno — fotky zůstaly', { icon: 'ph-trash', undo: () => this.albumNaServeru(api.post('alba/' + a.id + '/obnovit')) });
+              });
+              return;
+            }
             const prev = this.albumsList();
             this.setState({ albums: prev.filter(x => x.id !== a.id), stack: ['albums'] });
             this.toast('Album ' + a.name + ' smazáno — fotky zůstávají', { icon: 'ph-trash', undo: () => this.setState({ albums: prev }) });
@@ -11434,7 +11529,16 @@ class Component extends DCLogic {
        * co v ní bylo — a člověk to zjistil, až když vložil něco jiného.
        */
       copy: () => this.kopiruj(r.url, 'Odkaz zkopírován'),
-        revoke: () => { const prev = this.sharesList(); this.setState({ shares: prev.filter(x => x.id !== r.id) }); this.toast('Odkaz zneplatněn', { icon: 'ph-link-break', undo: () => this.setState({ shares: prev }) }); }
+        revoke: () => {
+          // Odkaz ze serveru se zneplatní u něj — jinak by adresa dál otevírala fotky.
+          if (r.serverovy) {
+            window.GalerieApi.del('sdileni/' + r.id).then(res => {
+              if (res && window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data, res.prazdne);
+              this.toast(res && res.zprava ? res.zprava : 'Odkaz zneplatněn', { icon: 'ph-link-break' });
+            }).catch(e => this.chybaServeru(e, 'Odkaz se nepodařilo zneplatnit'));
+            return;
+          }
+          const prev = this.sharesList(); this.setState({ shares: prev.filter(x => x.id !== r.id) }); this.toast('Odkaz zneplatněn', { icon: 'ph-link-break', undo: () => this.setState({ shares: prev }) }); }
       })),
       sharesMeta: this.pl(this.sharesList().length, 'aktivní odkaz', 'aktivní odkazy', 'aktivních odkazů'),
       sharesEmpty: this.sharesList().length === 0,
@@ -12276,7 +12380,20 @@ class Component extends DCLogic {
         // Autor ze snímku; bez údaje „neuvedeno" — ne jméno podle zbytku po dělení.
         const authorOf = p => p.author || (this.ukazka() ? ((p.seed || 0) % 3 === 0 ? 'Makinka' : 'Adrian') : 'neuvedeno');
         const tagsAll = s.lbTags || {};
-        const tags = tagsAll[lbP.id] || ((D.ATAGS || {}).all || []).slice(0, 3).map(t => t[0]);
+        // Štítky této fotky ze serveru (`tags`); první tři štítky celé knihovny patří jen ukázce.
+        /*
+         * U dvojice drží štítky `edits` — stejný klíč jako na počítači, server
+         * ho propisuje do knihovny (MediaVeStavu). `lbTags` by po změně na
+         * počítači ukazoval na telefonu staré štítky až do smazání dat.
+         */
+        const naServeru = this.galerieNaServeru() && /^[0-9a-f-]{36}$/.test(String(lbP.id));
+        const upravaFotky = (s.edits || {})[lbP.id] || {};
+        const tags = naServeru
+          ? (Array.isArray(upravaFotky.tags) ? upravaFotky.tags : (lbP.tags || []))
+          : (tagsAll[lbP.id] || ((D.ATAGS || {}).all || []).slice(0, 3).map(t => t[0]));
+        const ulozStitky = seznam => this.setState(naServeru
+          ? { edits: Object.assign({}, s.edits || {}, { [lbP.id]: Object.assign({}, upravaFotky, { tags: seznam }) }) }
+          : { lbTags: Object.assign({}, tagsAll, { [lbP.id]: seznam }) });
         const vers = (s.lbVers || {})[lbP.id] || [];
         const alb = this.albumsList().filter(a => (a.ids || []).indexOf(lbP.id) >= 0)[0];
         const mapKey = (D.placeKey ? D.placeKey(lbP.place) : null) || null;
@@ -12303,13 +12420,36 @@ class Component extends DCLogic {
           album: alb ? alb.name : 'V žádném albu', hasAlbum: !!alb,
           albumGo: () => { if (!alb) { this.setState({ sheet: 'add', addKind: 'album', addA: '', addB: '', sel: [lbP.id] }); return; } this.setState({ albumId: alb.id, lb: null, lbPanel: false }); this.push('album'); },
           tags: tags.map(t => ({ label: '#' + t,
-            drop: () => { const next = Object.assign({}, tagsAll, { [lbP.id]: tags.filter(x => x !== t) }); this.setState({ lbTags: next }); this.toast('Štítek #' + t + ' odebrán', { icon: 'ph-tag', undo: () => this.setState({ lbTags: tagsAll }) }); } })),
+            drop: () => { ulozStitky(tags.filter(x => x !== t)); this.toast('Štítek #' + t + ' odebrán', { icon: 'ph-tag', undo: () => ulozStitky(tags) }); } })),
+          /*
+           * U dvojice se štítek píše. Nabídka z celé knihovny tu dřív
+           * u prázdné knihovny hlásila „Všechny štítky už na fotce jsou",
+           * přestože fotka neměla ani jeden.
+           */
+          tagDraftOn: typeof s.lbTagDraft === 'string',
+          tagDraft: s.lbTagDraft || '',
+          tagInput: e => this.setState({ lbTagDraft: e.target.value }),
+          tagKey: e => {
+            if (e.key === 'Escape') { this.setState({ lbTagDraft: null }); return; }
+            if (e.key !== 'Enter') return;
+            e.preventDefault();
+            this.renderVals().lbDetail.tagCommit();
+          },
+          tagCommit: () => {
+            const novy = String(s.lbTagDraft || '').replace(/^[\s#]+|\s+$/g, '').slice(0, 120);
+            if (!novy) { this.setState({ lbTagDraft: null }); return; }
+            if (tags.some(t => String(t).toLowerCase() === novy.toLowerCase())) { this.setState({ lbTagDraft: null }); this.toast('Štítek #' + novy + ' už na fotce je', { icon: 'ph-tag' }); return; }
+            ulozStitky(tags.concat([novy]));
+            this.setState({ lbTagDraft: null });
+            this.toast('Štítek #' + novy + ' přidán', { icon: 'ph-tag', undo: () => ulozStitky(tags) });
+          },
           tagAdd: () => {
+            if (this.galerieNaServeru()) { this.setState({ lbTagDraft: typeof s.lbTagDraft === 'string' ? null : '' }); return; }
             const pool = ((D.ATAGS || {}).all || []).map(t => t[0]).concat(((D.ATAGS || {}).sug || []).map(t => t[0]));
             const free = pool.filter(t => tags.indexOf(t) < 0)[0];
             if (!free) { this.toast('Všechny štítky už na fotce jsou', { icon: 'ph-tag' }); return; }
-            this.setState({ lbTags: Object.assign({}, tagsAll, { [lbP.id]: tags.concat([free]) }) });
-            this.toast('Štítek #' + free + ' přidán', { icon: 'ph-tag' });
+            ulozStitky(tags.concat([free]));
+            this.toast('Štítek #' + free + ' přidán', { icon: 'ph-tag', undo: () => ulozStitky(tags) });
           },
           author: authorOf(lbP), uploaded: lbP.day || '',
           verRows: [{ label: 'Originál ze zařízení', meta: 'nahráno ' + (lbP.day || '') + ' · ' + authorOf(lbP) + ' · nedotčený', isCurrent: vers.length === 0, canRestore: false, restore: () => {} }]
@@ -12319,16 +12459,24 @@ class Component extends DCLogic {
               restore: () => { const prev = s.lbVers || {}; this.setState({ lbVers: Object.assign({}, prev, { [lbP.id]: vers.slice(0, i + 1) }) }); this.toast('Vráceno k verzi „' + v.label + '“', { icon: 'ph-clock-counter-clockwise', undo: () => this.setState({ lbVers: prev }) }); }
             }))),
           verAdd: () => {
+            // „Světlejší expozice" byla verze bez jediné změny v obrázku.
+            if (this.galerieNaServeru()) { this.zatimNeumime('úpravy fotky na telefonu — otočení a výřez uložíte na počítači'); return; }
             const prev = s.lbVers || {};
             const next = vers.concat([{ label: vers.length ? 'Úprava ' + (vers.length + 1) : 'Světlejší expozice', meta: 'právě teď · ' + authorOf(lbP) }]);
             this.setState({ lbVers: Object.assign({}, prev, { [lbP.id]: next }) });
             this.toast('Nová verze uložena · originál zůstává', { icon: 'ph-sliders', undo: () => this.setState({ lbVers: prev }) });
           }
         };
-      })() : { place: '', hasPlace: false, noPlace: false, noPlaceText: '', mapSrc: '', placeGo: () => {}, fixPlace: () => {}, album: '', hasAlbum: false, albumGo: () => {}, tags: [], tagAdd: () => {}, author: '', uploaded: '', verRows: [], verAdd: () => {} },
+      })() : { place: '', hasPlace: false, noPlace: false, noPlaceText: '', mapSrc: '', placeGo: () => {}, fixPlace: () => {}, album: '', hasAlbum: false, albumGo: () => {}, tags: [], tagAdd: () => {}, tagDraftOn: false, tagDraft: '', tagInput: () => {}, tagKey: () => {}, tagCommit: () => {}, author: '', uploaded: '', verRows: [], verAdd: () => {} },
       lbActions: lbP ? [
-        { label: 'Sdílet', icon: 'ph-share-network', color: '#fff', go: () => this.toast('Odkaz zkopírován', { icon: 'ph-link-simple' }) },
+        // „Odkaz zkopírován" bez odkazu i bez kopírování — teď skutečný odkaz na tuhle fotku.
+        { label: 'Sdílet', icon: 'ph-share-network', color: '#fff', go: () => {
+          if (this.galerieNaServeru() && /^[0-9a-f-]{36}$/.test(String(lbP.id))) { this.sdiletNaServeru({ polozky: [lbP.id] }, 'Fotka z ' + (lbP.day || 'knihovny')); return; }
+          this.toast('Sdílet jde jen s připojeným serverem', { icon: 'ph-link-simple' });
+        } },
         { label: 'Do alba', icon: 'ph-folder-plus', color: '#fff', go: () => {
+          // Na serveru se album vybírá jménem v listu (stejné jméno = existující album).
+          if (this.galerieNaServeru()) { this.setState({ sheet: 'add', addKind: 'album', addA: '', addB: '', lb: null, sel: [lbP.id] }); return; }
           const prev = this.albumsList(), target = prev[0];
           if (!target) { this.setState({ sheet: 'add', addKind: 'album', addA: '', addB: '', lb: null, sel: [lbP.id] }); return; }
           if (target.ids.indexOf(lbP.id) >= 0) { this.toast('Už je v albu ' + target.name, { icon: 'ph-folder' }); return; }

@@ -83,7 +83,7 @@ class AlbaController extends Controller
         return response()->json([
             'ok' => true,
             'album' => $album->uuid,
-            'zprava' => 'Album „'.($album->full_display_path ?: $album->title).'" vytvořeno',
+            'zprava' => 'Album „'.($album->full_display_path ?: $album->title).'“ vytvořeno',
         ] + $this->obsahPoAkci($this->obsah, $prostor));
     }
 
@@ -130,7 +130,7 @@ class AlbaController extends Controller
 
         return response()->json([
             'ok' => true,
-            'zprava' => 'Do alba „'.$album->title.'" zařazeno: '.$pocet,
+            'zprava' => 'Do alba „'.$album->title.'“ zařazeno: '.$pocet,
         ] + $this->obsahPoAkci($this->obsah, $prostor));
     }
 
@@ -212,7 +212,7 @@ class AlbaController extends Controller
 
         return response()->json([
             'ok' => true,
-            'zprava' => 'Album přesunuto'.($rodic ? ' do „'.$rodic->title.'"' : ' mezi hlavní alba'),
+            'zprava' => 'Album přesunuto'.($rodic ? ' do „'.$rodic->title.'“' : ' mezi hlavní alba'),
         ] + $this->obsahPoAkci($this->obsah, $prostor));
     }
 
@@ -307,7 +307,7 @@ class AlbaController extends Controller
 
         return response()->json([
             'ok' => true,
-            'zprava' => 'Sloučeno do „'.$cil->title.'" · přesunuto '.$pocet,
+            'zprava' => 'Sloučeno do „'.$cil->title.'“ · přesunuto '.$pocet,
             'album' => $cil->uuid,
         ] + $this->obsahPoAkci($this->obsah, $prostor));
     }

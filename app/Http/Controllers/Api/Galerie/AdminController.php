@@ -165,7 +165,7 @@ class AdminController extends Controller
         $novy->accessToken->forceFill(['suffix' => substr($novy->plainTextToken, -4)])->save();
 
         $this->zapis($request, 'admin.key.create', null,
-            'Klíč „'.$data['name'].'" vytvořen · …'.$novy->accessToken->suffix);
+            'Klíč „'.$data['name'].'“ vytvořen · …'.$novy->accessToken->suffix);
 
         // Celý klíč jednou a naposledy — dál z něj zbývají čtyři znaky.
         return $this->prehled($prostor, ['token' => $novy->plainTextToken]);
@@ -185,7 +185,7 @@ class AdminController extends Controller
         $stary->forceFill(['expires_at' => now()])->save();
 
         $this->zapis($request, 'admin.key.regenerate', null,
-            'Klíč „'.$stary->name.'" vygenerován znovu · …'.$novy->accessToken->suffix);
+            'Klíč „'.$stary->name.'“ vygenerován znovu · …'.$novy->accessToken->suffix);
 
         return $this->prehled($prostor, ['token' => $novy->plainTextToken]);
     }
@@ -201,7 +201,7 @@ class AdminController extends Controller
         $klic->forceFill(['expires_at' => now()])->save();
 
         $this->zapis($request, 'admin.key.revoke', null,
-            'Klíč „'.$klic->name.'" zrušen — aplikace se odhlásí do minuty');
+            'Klíč „'.$klic->name.'“ zrušen — aplikace se odhlásí do minuty');
 
         return $this->prehled($prostor);
     }
@@ -219,7 +219,7 @@ class AdminController extends Controller
         // několik minut a spadlo na časovém limitu, i když by úloha doběhla.
         SpustPlanovanouUlohu::dispatch($uloha);
 
-        $this->zapis($request, 'admin.job.run', null, 'Úloha „'.$uloha.'" spuštěna ručně');
+        $this->zapis($request, 'admin.job.run', null, 'Úloha „'.$uloha.'“ spuštěna ručně');
 
         return $this->prehled($prostor);
     }
@@ -236,8 +236,8 @@ class AdminController extends Controller
         $stoji = $this->ulohy->prepni($uloha);
 
         $this->zapis($request, 'admin.job.pause', null, $stoji
-            ? 'Úloha „'.$uloha.'" pozastavena'
-            : 'Úloha „'.$uloha.'" je zpět v plánu');
+            ? 'Úloha „'.$uloha.'“ pozastavena'
+            : 'Úloha „'.$uloha.'“ je zpět v plánu');
 
         return $this->prehled($prostor);
     }

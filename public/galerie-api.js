@@ -597,9 +597,13 @@
      * sezení přihlášené tokenem dostalo 401. Takhle to funguje i s cookie,
      * i s tokenem.
      */
-    download: function (path, filename) {
+    // S `body` jde požadavek jako POST (archiv výběru — seznam fotek se do adresy nevejde).
+    download: function (path, filename, body) {
       if (mode !== 'http') return Promise.resolve(null);
-      return fetch(base + '/' + path, { headers: headers(), credentials: 'same-origin' })
+      var volby = body
+        ? { method: 'POST', headers: headers(), credentials: 'same-origin', body: JSON.stringify(body) }
+        : { headers: headers(), credentials: 'same-origin' };
+      return fetch(base + '/' + path, volby)
         .then(function (r) {
           if (!r.ok) throw Object.assign(new Error('HTTP ' + r.status), { status: r.status });
           return r.blob();

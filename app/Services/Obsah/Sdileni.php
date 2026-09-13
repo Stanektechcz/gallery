@@ -116,6 +116,14 @@ class Sdileni implements MaPrazdneKolekce, PoskytovatelObsahu
                     // Zkrácená podoba, jakou prototyp kreslí do tabulky.
                     'url' => rtrim(preg_replace('~^https?://~', '', config('app.url')), '/')
                         .'/s/'.substr($o->token, 0, 4).'…',
+                    /*
+                     * Celá adresa pro „Kopírovat".
+                     *
+                     * Tlačítko kopírovalo zkrácenou podobu z tabulky — do zprávy
+                     * se tak vložilo „…/s/Ab3d…", které nikam nevede. Tohle jsou
+                     * data přihlášené dvojice, která odkaz sama založila.
+                     */
+                    'odkaz' => route('share.show', $o->token),
                     'content' => $this->obsahOdkazu($o),
                     'created' => CarbonImmutable::parse($o->created_at)->format('j. n. Y'),
                     'expires' => match (true) {
