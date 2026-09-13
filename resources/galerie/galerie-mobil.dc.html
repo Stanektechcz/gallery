@@ -6631,7 +6631,9 @@ class Component extends DCLogic {
        // Bez nich telefon hlásil „hotovo" a „žádost odeslána" a změna žila jen do obnovení.
        'chores choreLog dues inv decs cools proms fam nudges kapsules ' +
        // Kdo je mimo platí pro oba — bez uložení by ho druhé zařízení nevidělo.
-       'soloOn soloAway soloWhy').split(' ').forEach(x => { this._pKeep[x] = 1; });
+       'soloOn soloAway soloWhy ' +
+       // Hlasy společných výběrů — tytéž jako na počítači, pod jménem.
+       'curVotes').split(' ').forEach(x => { this._pKeep[x] = 1; });
     }
     return !!this._pKeep[k];
   }
@@ -7684,10 +7686,28 @@ class Component extends DCLogic {
     const isAnnPrint = annFmts.length > 0;
 
     // ——— Společné výběry: hlasování dvou ———
-    const votes = s.curVotesM || {};
+    /*
+     * U dvojice jsou hlasy tytéž jako na počítači (`curVotes`, pod jménem)
+     * a každý dává jen svůj. Telefon měl vlastní `curVotesM` pod `A`/`M` —
+     * hlas z telefonu se na počítači neukázal, `A` bylo na každém zařízení
+     * někdo jiný a tlačítkem druhého šlo hlasovat za něj.
+     */
+    const hlasyNaServeru = this.galerieNaServeru();
+    const [jaJm, druhyJm] = [this.dva()[0], this.dva()[1]];
+    const votes = hlasyNaServeru ? (s.curVotes || {}) : (s.curVotesM || {});
     const curCand = (key === 'curVote' || key === 'curMatch' || key === 'curSplit' || key === 'curDone')
       ? (this.library ? this.library().slice(0, 12) : []) : [];
-    const vote = (id, who) => (votes[id] || {})[who];
+    const vote = (id, who) => {
+      if (!hlasyNaServeru) return (votes[id] || {})[who];
+      const h = (votes[id] || {})[who === 'A' ? jaJm : druhyJm];
+      return h === 'yes' ? 1 : h === 'no' ? 0 : undefined;
+    };
+    const mujHlas = (p, prev) => {
+      const byl = vote(p.id, 'A');
+      const v = { ...(votes[p.id] || {}), [jaJm]: byl === 1 ? 'no' : 'yes' };
+      this.setState({ curVotes: { ...votes, [p.id]: v } });
+      this.toast(this.krestni(jaJm) + ' — ' + (byl === 1 ? 'proti' : 'pro'), { icon: 'ph-thumbs-up', undo: () => this.setState({ curVotes: prev }) });
+    };
     const curSet = key === 'curMatch' ? curCand.filter(p => vote(p.id, 'A') === 1 && vote(p.id, 'M') === 1)
       : key === 'curSplit' ? curCand.filter(p => vote(p.id, 'A') !== undefined && vote(p.id, 'M') !== undefined && vote(p.id, 'A') !== vote(p.id, 'M'))
       : key === 'curDone' ? curCand.filter(p => vote(p.id, 'A') !== undefined && vote(p.id, 'M') !== undefined)
@@ -7698,11 +7718,14 @@ class Component extends DCLogic {
       meta: (p.day || '') + (p.fav ? ' · oblíbená' : ''),
       isVideo: !!p.video, isFav: !!p.fav,
       a: vote(p.id, 'A') === 1 ? 'pro' : vote(p.id, 'A') === 0 ? 'proti' : '—',
-      mk: vote(p.id, 'M') === 1 ? 'pro' : vote(p.id, 'M') === 0 ? 'proti' : '—',
+      // Hlas druhého zůstává skrytý, dokud nehlasujete oba.
+      mk: hlasyNaServeru && vote(p.id, 'A') === undefined && vote(p.id, 'M') !== undefined ? 'hlasováno'
+        : vote(p.id, 'M') === 1 ? 'pro' : vote(p.id, 'M') === 0 ? 'proti' : '—',
       aColor: vote(p.id, 'A') === 1 ? 'var(--g-ok)' : vote(p.id, 'A') === 0 ? 'var(--g-mag)' : 'var(--g-ink3)',
-      mColor: vote(p.id, 'M') === 1 ? 'var(--g-ok)' : vote(p.id, 'M') === 0 ? 'var(--g-mag)' : 'var(--g-ink3)',
-      voteA: () => { const prev = votes; this.setState({ curVotesM: Object.assign({}, votes, { [p.id]: Object.assign({}, votes[p.id], { A: vote(p.id, 'A') === 1 ? 0 : 1 }) }) }); this.toast(this.krestni(this.dva()[0]) + ' — ' + (vote(p.id, 'A') === 1 ? 'proti' : 'pro'), { icon: 'ph-thumbs-up', undo: () => this.setState({ curVotesM: prev }) }); },
-      voteM: () => { const prev = votes; this.setState({ curVotesM: Object.assign({}, votes, { [p.id]: Object.assign({}, votes[p.id], { M: vote(p.id, 'M') === 1 ? 0 : 1 }) }) }); this.toast(this.krestni(this.dva()[1]) + ' — ' + (vote(p.id, 'M') === 1 ? 'proti' : 'pro'), { icon: 'ph-thumbs-up', undo: () => this.setState({ curVotesM: prev }) }); }
+      mColor: hlasyNaServeru && vote(p.id, 'A') === undefined ? 'var(--g-ink3)'
+        : vote(p.id, 'M') === 1 ? 'var(--g-ok)' : vote(p.id, 'M') === 0 ? 'var(--g-mag)' : 'var(--g-ink3)',
+      voteA: () => { const prev = votes; if (hlasyNaServeru) { mujHlas(p, prev); return; } this.setState({ curVotesM: Object.assign({}, votes, { [p.id]: Object.assign({}, votes[p.id], { A: vote(p.id, 'A') === 1 ? 0 : 1 }) }) }); this.toast(this.krestni(this.dva()[0]) + ' — ' + (vote(p.id, 'A') === 1 ? 'proti' : 'pro'), { icon: 'ph-thumbs-up', undo: () => this.setState({ curVotesM: prev }) }); },
+      voteM: () => { const prev = votes; if (hlasyNaServeru) { this.toast(this.krestni(druhyJm) + ' hlasuje na svém zařízení — za druhého se nehlasuje', { icon: 'ph-lock-simple' }); return; } this.setState({ curVotesM: Object.assign({}, votes, { [p.id]: Object.assign({}, votes[p.id], { M: vote(p.id, 'M') === 1 ? 0 : 1 }) }) }); this.toast(this.krestni(this.dva()[1]) + ' — ' + (vote(p.id, 'M') === 1 ? 'proti' : 'pro'), { icon: 'ph-thumbs-up', undo: () => this.setState({ curVotesM: prev }) }); }
     }));
     const isCur = (key === 'curVote' || key === 'curMatch' || key === 'curSplit' || key === 'curDone') && curCand.length > 0;
     const curNote = key === 'curVote' ? 'Každý hlasuje sám. Shoda i rozpor se pak ukáže v dalších záložkách — a nikdo nemusí nic obhajovat.'
