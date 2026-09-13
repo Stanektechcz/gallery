@@ -47,6 +47,9 @@ class Planovani implements MaPrazdneKolekce, PoskytovatelObsahu
 
     public const NEKDY = 'Někdy';
 
+    /** Druh seznamu úkolů, který je kategorií (vlastní nástěnkou) z galerie. */
+    public const DRUH_KATEGORIE = 'kategorie';
+
     /** Seznamy úkolů dvojice; drží se kvůli tomu, co patří do domácnosti. */
     private array $seznamyUkolu = [];
 
@@ -62,7 +65,14 @@ class Planovani implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     public function uplne(): array
     {
-        return [];
+        // Kategorie přicházejí celé — smazaná nesmí zůstat viset v záložkách.
+        return ['PLANCATS'];
+    }
+
+    /** Klíč nástěnky kategorie v prototypu (`ATASKS`, záložky). */
+    public static function klicKategorie(string $uuid): string
+    {
+        return 'seznam-'.$uuid;
     }
 
     /**
@@ -77,6 +87,7 @@ class Planovani implements MaPrazdneKolekce, PoskytovatelObsahu
         return [
             'CALEV' => [],
             'ATASKS' => ['all' => [], 'home' => []],
+            'PLANCATS' => [],
             'LATER_ITEMS' => [],
             'EVSEED' => [],
             'AL' => ['doneTasks' => []],
@@ -90,7 +101,9 @@ class Planovani implements MaPrazdneKolekce, PoskytovatelObsahu
         if (Schema::hasTable('shared_todo_lists')) {
             $this->seznamyUkolu = DB::table('shared_todo_lists')
                 ->where('gallery_space_id', $prostor->id)
-                ->get(['id', 'title', 'kind'])
+                ->orderBy('sort_order')
+                ->orderBy('id')
+                ->get(['id', 'uuid', 'title', 'kind', 'archived_at'])
                 ->keyBy('id')
                 ->all();
         }
@@ -98,6 +111,10 @@ class Planovani implements MaPrazdneKolekce, PoskytovatelObsahu
         return array_filter([
             'CALEV' => $this->udalosti($prostor, $jmena),
             'ATASKS' => $this->nastenka($prostor, $jmena),
+            'PLANCATS' => array_values(array_map(
+                fn (object $s) => ['key' => self::klicKategorie($s->uuid), 'label' => $s->title],
+                $this->kategorie(),
+            )),
             'LATER_ITEMS' => $this->nekdy($prostor, $jmena),
             'AL' => $this->seznamy($prostor, $jmena),
             'EVSEED' => $this->stopa($prostor, $jmena),
@@ -176,6 +193,9 @@ class Planovani implements MaPrazdneKolekce, PoskytovatelObsahu
                     // Odkaz na album drží prototyp jako jeho identifikátor, takže
                     // `albums().find(a => a.id === e.album)` sedne beze změny.
                     'album' => $alba[$e->album_id] ?? '',
+                    // Odškrtnutí. Dřív se nikam neposílalo, takže po obnovení
+                    // stránky vypadalo všechno hotové jako nevyřízené.
+                    'done' => $e->status === 'completed',
                 ], fn ($v) => $v !== null);
             })
             ->values()
@@ -274,12 +294,15 @@ class Planovani implements MaPrazdneKolekce, PoskytovatelObsahu
     private function nastenka(GallerySpace $prostor, array $jmena): array
     {
         $ukoly = $this->ukoly($prostor);
+        $kategorie = $this->kategorie();
 
-        if ($ukoly->isEmpty()) {
+        if ($ukoly->isEmpty() && $kategorie === []) {
             return [];
         }
 
-        $tyden = CarbonImmutable::now()->addWeek();
+        // Týž konec týdne jako zápis zpátky (PlanovaniVeStavu) — jinak úkol
+        // přetažený do „Tento týden" skončil po obnovení v „Později".
+        $tyden = CarbonImmutable::now()->addWeek()->endOfDay();
 
         /*
          * Čtyři pole kreslí prototyp, tři jsou navíc pro cestu zpátky:
@@ -317,10 +340,31 @@ class Planovani implements MaPrazdneKolekce, PoskytovatelObsahu
         // vede jako domácí. Bez nich se záložka neposílá a zůstane napsaná.
         $domaci = $ukoly->filter(fn (SharedTodo $u) => $this->jeDomaci($u));
 
-        return array_filter([
+        $nastenky = array_filter([
             'all' => $podleCasu($ukoly),
             'home' => $domaci->isEmpty() ? [] : $podleCasu($domaci),
         ], fn ($v) => $v !== []);
+
+        // Nástěnka kategorie jde i prázdná — jinak by prototyp ukázal hlavní.
+        foreach ($kategorie as $s) {
+            $nastenky[self::klicKategorie($s->uuid)] = $podleCasu($ukoly->filter(fn (SharedTodo $u) => (int) $u->list_id === (int) $s->id));
+        }
+
+        return $nastenky;
+    }
+
+    /**
+     * Vlastní kategorie úkolů: seznamy založené jako kategorie, nearchivované.
+     *
+     * Výchozí seznam „Společné úkoly", do kterého píše zbytek aplikace, mezi
+     * ně nepatří — byla by to druhá hlavní nástěnka.
+     *
+     * @return list<object>
+     */
+    private function kategorie(): array
+    {
+        return array_values(array_filter($this->seznamyUkolu, fn (object $s) => $s->archived_at === null
+            && $s->kind === self::DRUH_KATEGORIE));
     }
 
     /**
@@ -520,6 +564,8 @@ class Planovani implements MaPrazdneKolekce, PoskytovatelObsahu
     {
         return SharedTodo::where('gallery_space_id', $prostor->id)
             ->where('status', '!=', 'cancelled')
+            // „Uklidit hotové" úkol z nástěnky archivuje; v záložce Hotovo zůstává.
+            ->where(fn ($q) => $q->where('status', '!=', 'completed')->orWhereNull('metadata->archivovano'))
             ->orderBy('due_at')
             ->orderBy('sort_order')
             ->limit(self::UKOLU)

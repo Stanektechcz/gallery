@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\Galerie\CestyAkceController;
 use App\Http\Controllers\Api\Galerie\DataController;
 use App\Http\Controllers\Api\Galerie\DenikController;
 use App\Http\Controllers\Api\Galerie\FinanceAkceController;
+use App\Http\Controllers\Api\Galerie\KategorieUkoluController;
 use App\Http\Controllers\Api\Galerie\KosController;
 use App\Http\Controllers\Api\Galerie\LideController;
 use App\Http\Controllers\Api\Galerie\MechanismController;
@@ -223,6 +224,11 @@ Route::middleware(['auth:sanctum', 'dvojice', 'throttle:120,1'])->prefix('api')-
     // Rychlý zápis do deníku a úkol z telefonu — dřív jen v paměti telefonu.
     Route::post('rychle/denik', [RychlyZapisController::class, 'denik'])->name('galerie.rychle.denik');
     Route::post('rychle/ukol', [RychlyZapisController::class, 'ukol'])->name('galerie.rychle.ukol');
+
+    // Kategorie úkolů (vlastní nástěnky) — dřív jen ve stavu prohlížeče.
+    Route::post('ukoly/kategorie', [KategorieUkoluController::class, 'store'])->name('galerie.ukoly.kategorie.store');
+    Route::patch('ukoly/kategorie/{uuid}', [KategorieUkoluController::class, 'update'])->whereUuid('uuid')->name('galerie.ukoly.kategorie.update');
+    Route::delete('ukoly/kategorie/{uuid}', [KategorieUkoluController::class, 'destroy'])->whereUuid('uuid')->name('galerie.ukoly.kategorie.destroy');
 
     // Deník z počítače — dialog „Nový zápis" dřív zapisoval jen do stavu obrazovky.
     Route::post('denik', [DenikController::class, 'store'])->name('galerie.denik.store');

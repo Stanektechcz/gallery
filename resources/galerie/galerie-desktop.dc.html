@@ -13352,10 +13352,10 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
         </div>
         <div style="font-size:12.5px; color:var(--g-ink2); display:flex; gap:8px; align-items:flex-start; padding:10px 12px; border-radius:2px; background:var(--g-panel)">
           <i class="ph-duotone ph-columns" style="font-size:17px; color:var(--g-acc); flex:none"></i>
-          <span>Každá kategorie je vlastní nástěnka se sloupci K zařízení, Probíhá a Hotovo. Úkoly mezi kategoriemi přetáhnete přes sloupce, filtry osob platí i tady.</span>
+          <span>{{ catNote }}</span>
         </div>
         <div class="dialog-actions">
-          <button class="btn btn-ghost" onClick="{{ catDelete }}" style="color:var(--g-mag)">Smazat</button>
+          <sc-if value="{{ catCanDelete }}"><button class="btn btn-ghost" onClick="{{ catDelete }}" style="color:var(--g-mag)">Smazat</button></sc-if>
           <button class="btn btn-secondary" onClick="{{ catClose }}">Zrušit</button>
           <button class="btn btn-primary" onClick="{{ catSave }}" disabled="{{ catCant }}">Uložit</button>
         </div>
@@ -14683,7 +14683,12 @@ class Component extends DCLogic {
   boardOf(key) {
     const o = this.state.xBoard[key];
     if (o) return o;
-    const src = ATASKS[key] || ATASKS.all;
+    return this.boardZeServeru(key);
+  }
+  // Nástěnka tak, jak přišla (bez místních změn) — základ pro rozdíl, viz planRozdil().
+  boardZeServeru(key) {
+    // Kategorie bez úkolů je prázdná — ne hlavní nástěnka (dřív ukazovala všechny úkoly).
+    const src = ATASKS[key] || (key === 'all' || key === 'home' ? ATASKS.all : null) || [];
     const done = [];
     /*
      * Řádek úkolu je `[co, kdo, termín, hotovo]`. Ze serveru přijdou ještě tři
@@ -14696,13 +14701,23 @@ class Component extends DCLogic {
       pr: t[6] !== undefined && t[6] !== null ? t[6] : (hotovo ? 0 : (/po termínu|dnes/.test(t[2]) ? 2 : 0)),
       note: '', id: t[4] || (key + ci + '-' + i), due: t[5] || null
     });
-    const cols = src.map((col, ci) => ({
+    let cols = src.map((col, ci) => ({
       label: col[0],
       items: col[1].filter((t, i) => {
         if (t[3] === 1) { done.push(radek(t, ci, i, true)); return false; }
         return true;
       }).map((t, i) => radek(t, ci, i, false))
     }));
+    /*
+     * U dvojice jsou sloupce podle termínu a prázdné server neposílá.
+     *
+     * Prázdná nástěnka (nová kategorie, dvojice bez úkolů) tak měla jediný
+     * sloupec Hotovo a první úkol se založil rovnou jako hotový.
+     */
+    if (!this.ukazka()) {
+      const poradi = ['Tento týden', 'Později', 'Někdy'];
+      cols = poradi.map(l => cols.find(c => c.label === l) || { label: l, items: [] }).concat(cols.filter(c => poradi.indexOf(c.label) < 0));
+    }
     return cols.concat([{ label: 'Hotovo', done: true, items: done }]);
   }
   boardSet(key, cols) { this.setState({ xBoard: { ...this.state.xBoard, [key]: cols } }); }
@@ -14755,7 +14770,7 @@ class Component extends DCLogic {
       boardDoneIcon: hideDone ? 'ph-eye' : 'ph-eye-slash',
       boardToggleDone: () => this.setState({ boardHideDone: !hideDone }),
       boardSummary: total + ' úkolů · ' + doneCount + ' hotovo' + (who === 'all' ? '' : ' · filtr ' + (who === 'spolu' ? who : this.krestni(who))),
-      boardCats: (s.planCats || []).map(c => c.label),
+      boardCats: this.planKategorie().map(c => c.label),
       ...(() => {
         // Šablony opakujících se sad úkolů — vloží několik úkolů do prvního sloupce.
         const TPL = [
@@ -14800,6 +14815,8 @@ class Component extends DCLogic {
         };
       })(),
       boardNewCat: () => {
+        // U dvojice se kategorie zakládá až s názvem — na serveru.
+        if (!this.ukazka()) { this.setState({ catDlg: { key: null, label: '', nova: true } }); return; }
         const prev = s.planCats || [];
         const n = prev.length + 1;
         const key = 'cat' + n + '-' + Date.now().toString(36).slice(-4);
@@ -14813,25 +14830,62 @@ class Component extends DCLogic {
         this.toast('Kategorie „' + label + '“ přidána — pojmenujte ji', { icon: 'ph-plus', undo: () => this.setState({ planCats: prev, appTab: 0, catDlg: null }) });
       },
       catOpen: !!s.catDlg,
+      // Přetahování mezi kategoriemi aplikace nemá — dialog to dřív sliboval.
+      catNote: this.ukazka()
+        ? 'Každá kategorie je vlastní nástěnka se sloupci K zařízení, Probíhá a Hotovo. Filtry osob platí i tady.'
+        : 'Každá kategorie je vlastní nástěnka. Úkoly v ní vidí oba a najdete je i na hlavní nástěnce; filtry osob platí i tady.',
       catName: (s.catDlg || {}).label || '',
       catSetName: e => this.setState({ catDlg: { ...s.catDlg, label: e.target.value } }),
       catClose: () => this.setState({ catDlg: null }),
       catCant: !((s.catDlg || {}).label || '').trim(),
       catSave: () => {
         const d = s.catDlg; if (!d) return;
+        const nazev = (d.label || '').trim();
+        if (!this.ukazka()) {
+          if (!nazev) { this.toast('Kategorie potřebuje název', { icon: 'ph-pencil-simple' }); return; }
+          const api = window.GalerieApi;
+          if (!api || api.mode !== 'http') { this.zatimNeumime('kategorie úkolů bez připojeného serveru'); return; }
+          this.setState({ catDlg: null });
+          if (d.nova) {
+            this.kategorieAkce(api.post('ukoly/kategorie', { nazev }), res => {
+              const i = this.planKategorie().findIndex(c => c.key === res.klic);
+              if (i >= 0) this.setState({ appTab: 2 + i });
+            });
+          } else {
+            this.kategorieAkce(api.patch('ukoly/kategorie/' + String(d.key).replace(/^seznam-/, ''), { nazev }));
+          }
+          return;
+        }
         const prev = s.planCats || [];
         this.setState({ planCats: prev.map(c => c.key === d.key ? { ...c, label: d.label.trim() } : c), catDlg: null });
         this.toast('Kategorie přejmenována na „' + d.label.trim() + '“', { icon: 'ph-pencil-simple', undo: () => this.setState({ planCats: prev }) });
       },
+      catCanDelete: !!(s.catDlg && s.catDlg.key),
       catDelete: () => {
         const d = s.catDlg; if (!d) return;
+        if (!this.ukazka()) {
+          const api = window.GalerieApi;
+          if (!api || api.mode !== 'http' || !d.key) return;
+          this.setState({
+            catDlg: null,
+            confirm: {
+              title: 'Smazat kategorii', cta: 'Smazat', btnBg: 'var(--g-mag)',
+              body: 'Kategorie „' + (d.label || '') + '“ zmizí z nástěnky. Otevřené úkoly v ní se zruší (zůstanou v historii), hotové zůstanou hotové.',
+              go: () => {
+                this.setState({ confirm: null, appTab: 0 });
+                this.kategorieAkce(api.del('ukoly/kategorie/' + String(d.key).replace(/^seznam-/, '')));
+              }
+            }
+          });
+          return;
+        }
         const prev = s.planCats || [];
         this.setState({ planCats: prev.filter(c => c.key !== d.key), catDlg: null, appTab: 0 });
         this.toast('Kategorie smazána i s úkoly', { icon: 'ph-trash', undo: () => this.setState({ planCats: prev }) });
       },
-      boardIsCustom: (s.planCats || []).some(c => c.key === key),
+      boardIsCustom: this.planKategorie().some(c => c.key === key),
       boardRenameCat: () => {
-        const c = (s.planCats || []).find(x => x.key === key);
+        const c = this.planKategorie().find(x => x.key === key);
         if (c) this.setState({ catDlg: { key: c.key, label: c.label } });
       },
       boardClearDone: () => {
@@ -26492,7 +26546,7 @@ class Component extends DCLogic {
       let name, csv;
       if ((label || '').indexOf('Úkoly') === 0) {
         const out = [['kategorie', 'sloupec', 'úkol', 'kdo', 'termín', 'opakování']];
-        const cats = [['all', 'Nástěnka'], ['home', 'Domácnost']].concat((this.state.planCats || []).map(c => [c.key, c.label]));
+        const cats = [['all', 'Nástěnka'], ['home', 'Domácnost']].concat(this.planKategorie().map(c => [c.key, c.label]));
         cats.forEach(c => this.boardOf(c[0]).forEach(col => col.items.forEach(it => out.push([c[1], col.label, it.t, it.w, it.d, it.rep || '']))));
         name = 'nase-galerie-ukoly.csv';
         csv = out.map(r => r.map(esc).join(';')).join('\n');
@@ -28530,10 +28584,45 @@ class Component extends DCLogic {
     // Skutečná událost si nese vlastní identifikátor; přepsat ho pořadím by
     // znamenalo, že se úprava nemá kam zapsat. Napsaná ho nemá a dostane pořadí,
     // jako dosud.
-    const base = s.evList || CALEV.map((e, i) => ({ ...e, id: e.id || ('ev' + i), remind: e.remind || '' }));
-    return base;
+    return s.evList || this.evZaklad();
   }
-  evDone(id) { return !!(this.state.evDoneMap || {})[id]; }
+  /*
+   * Kategorie úkolů.
+   *
+   * U dvojice jsou to seznamy úkolů v databázi (PLANCATS); ve stavu
+   * prohlížeče žily jen v ukázce. Stará místní kategorie by u dvojice
+   * ukazovala nástěnku, která se nikam neukládá.
+   */
+  planKategorie() {
+    if (this.ukazka()) return this.state.planCats || [];
+    const P = (window.GalerieData || {}).PLANCATS;
+    return Array.isArray(P) ? P : [];
+  }
+  kategorieAkce(zadost, hotovo) {
+    zadost.then(res => {
+      if (res && window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data, res.prazdne);
+      if (hotovo) hotovo(res || {});
+      if (res && res.zprava) this.toast(res.zprava, { icon: 'ph-folder-simple' });
+    }).catch(e => {
+      const t = (e && e.body) || {};
+      const prvni = t.errors ? (Object.values(t.errors)[0] || [])[0] : null;
+      this.toast(t.zprava || t.message || prvni || 'Kategorii se nepodařilo uložit', { icon: 'ph-warning', color: 'var(--g-mag)' });
+    });
+  }
+  evZaklad() { return CALEV.map((e, i) => ({ ...e, id: e.id || ('ev' + i), remind: e.remind || '' })); }
+  /*
+   * Odškrtnutí: místní mapa má přednost, jinak stav ze serveru.
+   *
+   * Mapa se na server neposílala zpátky, takže po obnovení stránky vypadalo
+   * všechno hotové jako nevyřízené.
+   */
+  evDone(id) {
+    const m = this.state.evDoneMap || {};
+    if (id in m) return !!m[id];
+    const list = this.events();
+    if (this._evDoneList !== list) { this._evDoneList = list; this._evDoneSet = {}; list.forEach(e => { if (e && e.done) this._evDoneSet[e.id] = 1; }); }
+    return !!this._evDoneSet[id];
+  }
   setEvents(list) { this.setState({ evList: list }); }
   dueTasks(y, m, d) {
     const today = this.dnes();
@@ -30899,8 +30988,52 @@ class Component extends DCLogic {
     this._pPrev = Object.assign({}, this.state);
     if (this._pQuiet) return;
     if (!Object.keys(patch).length) return;
+    if ('evList' in patch || 'xBoard' in patch) this.planRozdil(prev, patch);
     api.save(patch);
     this.mechStamp(patch);
+  }
+
+  /*
+   * Kalendář a nástěnka jdou na server i jako rozdíl.
+   *
+   * Seznam v prohlížeči je kopie z doby načtení a má limit. Server z něj
+   * dřív mazal, co v něm chybělo — události a úkoly, které mezitím přidal
+   * ten druhý, i ty nad limitem —, a nové řádky zakládal při každém dalším
+   * odeslání znovu. Rozdíl se počítá proti stavu při načtení a sčítá se,
+   * takže ho nepřepíše ani další zápis sloučený do téhož odeslání.
+   */
+  planRozdil(prev, patch) {
+    const z = this._planZ || (this._planZ = { ev: {}, board: {} });
+    const podpisy = rows => { const m = {}; (rows || []).forEach(r => { if (r && r.id !== undefined && r.id !== null) m[String(r.id)] = JSON.stringify(r); }); return m; };
+    const spocitej = (sled, predtim, ted) => {
+      if (!sled.zaklad) { sled.zaklad = predtim; sled.videno = Object.assign({}, predtim); sled.smazano = {}; }
+      Object.assign(sled.videno, ted);
+      const zrusene = Object.keys(sled.videno).filter(id => !(id in ted));
+      zrusene.forEach(id => { sled.smazano[id] = 1; });
+      return {
+        zrusene,
+        obnovene: Object.keys(ted).filter(id => sled.smazano[id]),
+        zmenene: Object.keys(ted).filter(id => sled.zaklad[id] !== ted[id] || sled.smazano[id])
+      };
+    };
+    if ('evList' in patch) {
+      const r = spocitej(z.ev, podpisy(prev.evList || this.evZaklad()), podpisy(this.state.evList));
+      patch.evZmenene = r.zmenene; patch.evZrusene = r.zrusene; patch.evObnovene = r.obnovene;
+    }
+    if ('xBoard' in patch) {
+      const radky = cols => { const out = []; (cols || []).forEach(c => (c.items || []).forEach(i => out.push({ ...i, _sloupec: c.label, _hotovo: !!c.done }))); return out; };
+      const zmenene = {}, zrusene = {}, obnovene = {};
+      Object.keys(this.state.xBoard || {}).forEach(key => {
+        const sled = z.board[key] || (z.board[key] = {});
+        const r = spocitej(sled, podpisy(radky((prev.xBoard || {})[key] || this.boardZeServeru(key))), podpisy(radky(this.state.xBoard[key])));
+        r.zmenene.forEach(id => { zmenene[id] = 1; });
+        r.zrusene.forEach(id => { zrusene[id] = 1; });
+        r.obnovene.forEach(id => { obnovene[id] = 1; });
+      });
+      // Úkol z nástěnky domácnosti je i na hlavní; vrácený v jedné se neruší kvůli druhé.
+      Object.keys(obnovene).forEach(id => { delete zrusene[id]; });
+      patch.xBoardZmenene = Object.keys(zmenene); patch.xBoardZrusene = Object.keys(zrusene);
+    }
   }
 
   componentDidUpdate() {
@@ -32092,7 +32225,7 @@ class Component extends DCLogic {
     const pageTabs = appPage
       ? (R === 'x-plan'
         ? appPage.tabs.slice(0, 2)
-          .concat((s.planCats || []).map(c => [c.label, 'board', c.key]))
+          .concat(this.planKategorie().map(c => [c.label, 'board', c.key]))
           .concat(appPage.tabs.slice(2))
         : appPage.tabs)
       : [];

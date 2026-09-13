@@ -8,7 +8,6 @@ use App\Models\SharedTodo;
 use App\Models\User;
 use App\Services\Obsah\Planovani;
 use Carbon\CarbonImmutable;
-use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
@@ -28,13 +27,25 @@ use Illuminate\Support\Str;
  */
 class PlanovaniVeStavu
 {
-    /** Klíče, které patří databázi. Do stavu se neukládají. */
-    public const SERVEROVE = ['evList', 'evDoneMap', 'xBoard', 'hsLater'];
+    /**
+     * Klíče, které patří databázi. Do stavu se neukládají.
+     *
+     * `…Zmenene`, `…Zrusene` a `evObnovene` jsou rozdíl, který spočítá
+     * prohlížeč: co se v jeho seznamu změnilo, co z něj zmizelo a co se do
+     * něj vrátilo tlačítkem Zpět. Celý seznam je totiž kopie z doby načtení —
+     * co mezitím přidal ten druhý nebo co se do seznamu nevešlo, v něm
+     * chybí, a mazat podle něj znamenalo mazat cizí události.
+     */
+    public const SERVEROVE = [
+        'evList', 'evDoneMap', 'xBoard', 'hsLater',
+        'evZmenene', 'evZrusene', 'evObnovene', 'xBoardZmenene', 'xBoardZrusene',
+    ];
 
-    /** Jak dlouhé okno událostí posílá poskytovatel; mimo něj se nemaže. */
-    private const DNU_ZPET = 90;
+    /** Jak dlouho zpátky se nový záznam páruje s identifikátorem z prohlížeče. */
+    private const DNU_KLIENT = 14;
 
-    private const DNU_VPRED = 400;
+    /** Ukázkový úkol nástěnky: `all0-3` (klíč, sloupec, pořadí). */
+    private const UKAZKOVY_UKOL = '/^[a-z]+\d+-\d+$/';
 
     public function tykaSe(array $patch): bool
     {
@@ -54,14 +65,25 @@ class PlanovaniVeStavu
         }
 
         if (is_array($patch['evList'] ?? null)) {
-            $this->zapisUdalosti($patch['evList'], $patch['evDoneMap'] ?? null, $prostor, $kdo);
+            $this->zapisUdalosti(
+                $patch['evList'], $patch['evDoneMap'] ?? null, $prostor, $kdo,
+                $this->idcka($patch['evZmenene'] ?? null), $this->idcka($patch['evObnovene'] ?? null) ?? [],
+            );
         } elseif (is_array($patch['evDoneMap'] ?? null)) {
             // Odškrtnutí přijde samo, bez seznamu událostí.
             $this->zapisOdskrtnuti($patch['evDoneMap'], $prostor);
         }
 
+        if (is_array($patch['evZrusene'] ?? null)) {
+            $this->smazUdalosti($this->idcka($patch['evZrusene']) ?? [], $prostor);
+        }
+
         if (is_array($patch['xBoard'] ?? null)) {
-            $this->zapisNastenku($patch['xBoard'], $prostor, $kdo);
+            $this->zapisNastenku($patch['xBoard'], $prostor, $kdo, $this->idcka($patch['xBoardZmenene'] ?? null));
+        }
+
+        if (is_array($patch['xBoardZrusene'] ?? null)) {
+            $this->zrusUkoly($this->idcka($patch['xBoardZrusene']) ?? [], $prostor);
         }
 
         if (is_array($patch['hsLater'] ?? null)) {
@@ -74,67 +96,93 @@ class PlanovaniVeStavu
     /**
      * Události z kalendáře.
      *
-     * Prototyp posílá celý seznam. Zapisuje se z něj to, co má identifikátor
-     * skutečné události (úprava), a to, co si prototyp právě vyrobil (nová
-     * událost). Napsané ukázkové řádky — `ev0`, `ev1` — se ignorují: nejsou
-     * to události dvojice a v jejím kalendáři nemají co dělat.
+     * Prototyp posílá celý seznam a vedle něj rozdíl (`evZmenene`). Zapisuje
+     * se jen to, co se změnilo: seznam v prohlížeči je kopie z doby načtení
+     * a úprava jedné události by jinak přepsala i ty, které mezitím změnil
+     * ten druhý. Bez rozdílu (starší klient) se bere celý seznam.
+     *
+     * Nová událost se pozná podle předpony prototypu (`ev-n1`, `ev-d4`…)
+     * a pamatuje si ji: prohlížeč ji pod tímhle jménem posílá až do obnovení
+     * stránky a každé další odeslání ji dřív založilo znovu. Ukázkové řádky
+     * (`ev0`, `ev1`) se ignorují. Mazání je jen výslovné — viz smazUdalosti().
      *
      * @param  array<int, mixed>  $radky
      * @param  array<string, mixed>|null  $odskrtnute
+     * @param  list<string>|null  $zmenene
+     * @param  list<string>  $obnovene
      */
-    private function zapisUdalosti(array $radky, ?array $odskrtnute, GallerySpace $prostor, User $kdo): void
+    private function zapisUdalosti(array $radky, ?array $odskrtnute, GallerySpace $prostor, User $kdo, ?array $zmenene, array $obnovene): void
     {
-        $vOkne = $this->udalostiVOkne($prostor);
-        $zustaly = [];
-
         foreach ($radky as $e) {
             if (! is_array($e) || ! isset($e['id'], $e['t'])) {
                 continue;
             }
 
-            $uuid = $this->uuidUdalosti((string) $e['id']);
+            $id = (string) $e['id'];
 
-            if ($uuid !== null && $vOkne->has($uuid)) {
-                $zustaly[] = $uuid;
-                $this->uprav($vOkne[$uuid], $e, $prostor);
+            if ($zmenene !== null && ! in_array($id, $zmenene, true) && ! in_array($id, $obnovene, true)) {
+                continue;
+            }
+
+            $u = $this->udalost($id, $prostor);
+
+            if ($u) {
+                $this->uprav($u, $e, $prostor);
 
                 continue;
             }
 
-            // Nová událost pozná prototyp podle vlastní předpony (`ev-n`, `ev-d`,
-            // `ev-s`, `ev-m`); ukázkový řádek žádnou nemá.
-            if ($uuid === null && preg_match('/^ev-[a-z]\d/', (string) $e['id'])) {
-                $this->zaloz($e, $prostor, $kdo);
+            // Nová událost — nebo smazaná a vrácená tlačítkem Zpět (ta se
+            // založí znovu jen na výslovnou žádost, jinak by starší kopie
+            // seznamu vzkřísila, co ten druhý smazal).
+            $nova = $this->uuidUdalosti($id) === null && preg_match('/^ev-[a-z]\d/', $id);
+
+            if ($nova || in_array($id, $obnovene, true)) {
+                $this->zaloz($e, $prostor, $kdo, $id);
             }
         }
-
-        /*
-         * Smazané: byly v okně, které server poslal, a v seznamu už nejsou.
-         *
-         * Mimo okno se nemaže nic. Klient může mít v paměti starší seznam
-         * z doby, kdy okno leželo jinde, a jeho odesláním by jinak zmizely
-         * události, na které se nikdo ani nepodíval.
-         */
-        $vOkne
-            ->reject(fn (CalendarEvent $u) => in_array($u->uuid, $zustaly, true))
-            ->each(fn (CalendarEvent $u) => $u->delete());
 
         if (is_array($odskrtnute)) {
             $this->zapisOdskrtnuti($odskrtnute, $prostor);
         }
     }
 
-    /** @return Collection<string, CalendarEvent> */
-    private function udalostiVOkne(GallerySpace $prostor): Collection
+    /**
+     * Smazané události — jen ty, které prohlížeč výslovně odebral.
+     *
+     * Dřív se mazalo všechno z okna ±90/400 dnů, co v odeslaném seznamu
+     * chybělo. Seznam má ale limit a je to kopie z doby načtení: úprava
+     * jedné události smazala ty, které se do seznamu nevešly, i ty, které
+     * mezitím přidal ten druhý nebo cesta či automatizace.
+     *
+     * @param  list<string>  $idcka
+     */
+    private function smazUdalosti(array $idcka, GallerySpace $prostor): void
     {
+        foreach ($idcka as $id) {
+            $this->udalost($id, $prostor)?->delete();
+        }
+    }
+
+    /** Událost podle identifikátoru z prohlížeče: `ev-<uuid>`, nebo založená z `ev-n1`. */
+    private function udalost(string $id, GallerySpace $prostor): ?CalendarEvent
+    {
+        $uuid = $this->uuidUdalosti($id);
+
+        if ($uuid !== null) {
+            $u = CalendarEvent::where('gallery_space_id', $prostor->id)->where('is_private', false)->where('uuid', $uuid)->first();
+
+            if ($u) {
+                return $u;
+            }
+        }
+
         return CalendarEvent::where('gallery_space_id', $prostor->id)
             ->where('is_private', false)
-            ->whereBetween('starts_at', [
-                CarbonImmutable::now()->subDays(self::DNU_ZPET),
-                CarbonImmutable::now()->addDays(self::DNU_VPRED),
-            ])
-            ->get()
-            ->keyBy('uuid');
+            ->where('metadata->klient_id', $id)
+            ->where('created_at', '>=', now()->subDays(self::DNU_KLIENT))
+            ->latest('id')
+            ->first();
     }
 
     /** @param  array<string, mixed>  $e */
@@ -161,7 +209,7 @@ class PlanovaniVeStavu
     }
 
     /** @param  array<string, mixed>  $e */
-    private function zaloz(array $e, GallerySpace $prostor, User $kdo): void
+    private function zaloz(array $e, GallerySpace $prostor, User $kdo, string $klientId): void
     {
         $zacatek = $this->zacatek($e);
 
@@ -185,7 +233,7 @@ class PlanovaniVeStavu
             'album_id' => $this->albumId($e, $prostor),
             // Opakování prototyp rozepisuje na jednotlivé události dopředu,
             // takže se neukládá jako pravidlo — přijdou všechny zvlášť.
-            'metadata' => ['source' => 'prototyp'],
+            'metadata' => ['source' => 'prototyp', 'klient_id' => $klientId],
         ]);
 
         $this->ucastnici($u, $e, $prostor);
@@ -243,9 +291,16 @@ class PlanovaniVeStavu
             return;
         }
 
-        DB::table('event_reminders')->where('event_id', $u->id)->where('status', 'pending')->delete();
+        /*
+         * Jen vlastní připomínka dialogu — ne ty, které k události založila
+         * cesta, večer vzpomínek nebo automatizace (mají `automation_key`).
+         */
+        $vlastni = fn () => DB::table('event_reminders')->where('event_id', $u->id)
+            ->when(Schema::hasColumn('event_reminders', 'automation_key'), fn ($q) => $q->whereNull('automation_key'));
 
         if ($volba === '') {
+            $vlastni()->where('status', 'pending')->delete();
+
             return;
         }
 
@@ -257,6 +312,27 @@ class PlanovaniVeStavu
             // „Ráno v den události“ — v sedm, ne v okamžik začátku.
             default => $zacatek->startOfDay()->addHours(7),
         };
+
+        /*
+         * Připomínka na tentýž okamžik už je — i doručená.
+         *
+         * Každé uložení kalendáře mazalo čekající a zakládalo novou. U doručené
+         * tak vznikla další čekající s okamžikem v minulosti a plánovač ji
+         * poslal znovu: úprava jedné události rozeslala oběma připomínky všech
+         * událostí za poslední čtvrtrok.
+         */
+        if ($vlastni()->where('remind_at', $kdy)->exists()) {
+            $vlastni()->where('status', 'pending')->where('remind_at', '!=', $kdy)->delete();
+
+            return;
+        }
+
+        $vlastni()->where('status', 'pending')->delete();
+
+        // Na událost, která už začala, se nepřipomíná.
+        if ($zacatek->isPast()) {
+            return;
+        }
 
         DB::table('event_reminders')->insert([
             'event_id' => $u->id,
@@ -276,29 +352,25 @@ class PlanovaniVeStavu
      */
     private function zapisOdskrtnuti(array $mapa, GallerySpace $prostor): void
     {
-        $hotove = [];
-
+        /*
+         * Jen to, co v mapě je.
+         *
+         * Mapa v prohlížeči začíná prázdná a plní se odškrtáváním; dřív se
+         * každá událost z okna, která v ní chyběla, vrátila na „naplánováno" —
+         * první odškrtnutí tak odznačilo všechno hotové za čtvrt roku.
+         */
         foreach ($mapa as $id => $ano) {
-            $uuid = $this->uuidUdalosti((string) $id);
-
-            if ($ano && $uuid !== null) {
-                $hotove[] = $uuid;
-            }
-        }
-
-        $vOkne = $this->udalostiVOkne($prostor);
-
-        $vOkne->each(function (CalendarEvent $u) use ($hotove) {
-            $ma = in_array($u->uuid, $hotove, true) ? 'completed' : 'planned';
+            $u = $this->udalost((string) $id, $prostor);
+            $ma = $ano ? 'completed' : 'planned';
 
             // Cizí stavy (`cancelled`, `confirmed`) se nepřepisují — prototyp
             // o nich neví a nemá je proč rušit.
-            if ($u->status === $ma || ! in_array($u->status, ['planned', 'completed'], true)) {
-                return;
+            if (! $u || $u->status === $ma || ! in_array($u->status, ['planned', 'completed'], true)) {
+                continue;
             }
 
             $u->update(['status' => $ma]);
-        });
+        }
     }
 
     // ——— nástěnka úkolů ———
@@ -312,108 +384,140 @@ class PlanovaniVeStavu
      * karta po obnovení vrátila tam, odkud ji někdo přetáhl.
      *
      * @param  array<string, mixed>  $nastenky
+     * @param  list<string>|null  $zmenene
      */
-    private function zapisNastenku(array $nastenky, GallerySpace $prostor, User $kdo): void
+    private function zapisNastenku(array $nastenky, GallerySpace $prostor, User $kdo, ?array $zmenene): void
     {
         foreach ($nastenky as $klic => $sloupce) {
             if (! is_array($sloupce)) {
                 continue;
             }
 
-            $this->zapisSloupce((string) $klic, $sloupce, $prostor, $kdo);
+            $this->zapisSloupce((string) $klic, $sloupce, $prostor, $kdo, $zmenene);
         }
     }
 
     /**
+     * Úkoly jedné nástěnky.
+     *
+     * Zapisuje se jen to, co prohlížeč označil za změněné (`xBoardZmenene`);
+     * starší klient bez rozdílu posílá celou nástěnku. Nový úkol se pamatuje
+     * pod identifikátorem z prohlížeče, takže další odeslání ho nezaloží
+     * znovu. Mazání je jen výslovné — viz zrusUkoly(). Dřív se rušilo všechno,
+     * co v odeslané nástěnce chybělo: úkoly nad limitem nástěnky, úkoly
+     * přidané mezitím druhým a úkol založený o chvíli dřív na nástěnce
+     * domácnosti.
+     *
      * @param  array<int, mixed>  $sloupce
+     * @param  list<string>|null  $zmenene
      */
-    private function zapisSloupce(string $klic, array $sloupce, GallerySpace $prostor, User $kdo): void
+    private function zapisSloupce(string $klic, array $sloupce, GallerySpace $prostor, User $kdo, ?array $zmenene): void
     {
-        $vDatabazi = SharedTodo::where('gallery_space_id', $prostor->id)
-            ->where('status', '!=', 'cancelled')
-            ->get()
-            ->keyBy('uuid');
-
-        // Nástěnka, ve které není jediný skutečný úkol, je pořád ta ukázková.
-        // Zakládat z ní by znamenalo naplnit modul vymyšlenými řádky.
-        $znama = false;
-
-        foreach ($sloupce as $sloupec) {
-            foreach ((array) ($sloupec['items'] ?? []) as $u) {
-                if (is_array($u) && isset($u['id']) && $vDatabazi->has($u['id'])) {
-                    $znama = true;
-                    break 2;
-                }
-            }
-        }
-
-        $zustaly = [];
+        $radky = [];
 
         foreach ($sloupce as $sloupec) {
             if (! is_array($sloupec)) {
                 continue;
             }
 
-            $hotovo = (bool) ($sloupec['done'] ?? false);
-            $nazev = (string) ($sloupec['label'] ?? '');
-
             foreach ((array) ($sloupec['items'] ?? []) as $u) {
-                if (! is_array($u) || ! isset($u['id'], $u['t'])) {
-                    continue;
-                }
-
-                if ($vDatabazi->has($u['id'])) {
-                    $zustaly[] = (string) $u['id'];
-                    $this->upravUkol($vDatabazi[$u['id']], $u, $nazev, $hotovo, $prostor, $kdo);
-
-                    continue;
-                }
-
-                // Nový úkol pozná prototyp podle vlastní předpony (`-n`, `-r`).
-                if ($znama && preg_match('/-[nr]\d+$/', (string) $u['id'])) {
-                    $this->zalozUkol($u, $nazev, $hotovo, $prostor, $kdo, $klic);
+                if (is_array($u) && isset($u['id'], $u['t'])) {
+                    $radky[] = [$u, (string) ($sloupec['label'] ?? ''), (bool) ($sloupec['done'] ?? false)];
                 }
             }
         }
 
         /*
-         * Smazané: byly na nástěnce a v seznamu už nejsou.
+         * Ukázková nástěnka se nezapisuje.
          *
-         * Jen když je nástěnka skutečná — a jen úkoly, které do ní patří.
-         * Zrušené se **nemažou**, dostanou stav; „uklidit hotové" nemá znamenat
-         * ztrátu historie.
+         * Pozná se podle ukázkového řádku (`all0-3`), ne podle toho, že v ní
+         * chybí úkol z databáze — tak se dřív nezapsal ani první úkol dvojice,
+         * která žádný ještě neměla.
          */
-        if (! $znama) {
-            return;
+        foreach ($radky as [$u]) {
+            if (preg_match(self::UKAZKOVY_UKOL, (string) $u['id']) && ! $this->ukol((string) $u['id'], $prostor)) {
+                return;
+            }
         }
 
-        $vDatabazi
-            ->filter(fn (SharedTodo $u) => $this->patriNaNastenku($u, $klic))
-            ->reject(fn (SharedTodo $u) => in_array($u->uuid, $zustaly, true))
-            ->each(fn (SharedTodo $u) => $u->update(['status' => 'cancelled']));
+        foreach ($radky as [$u, $nazev, $hotovo]) {
+            $id = (string) $u['id'];
+
+            if ($zmenene !== null && ! in_array($id, $zmenene, true)) {
+                continue;
+            }
+
+            $ukol = $this->ukol($id, $prostor);
+
+            if ($ukol) {
+                $this->upravUkol($ukol, $u, $nazev, $hotovo, $prostor, $kdo);
+
+                continue;
+            }
+
+            // Identifikátor, který vypadá jako z databáze a v ní není, je
+            // smazaný úkol ze starší kopie nástěnky — nezakládá se znovu.
+            if (! Str::isUuid($id)) {
+                $this->zalozUkol($u, $nazev, $hotovo, $prostor, $kdo, $klic, $id);
+            }
+        }
     }
 
     /**
-     * Patří úkol na tuhle nástěnku?
+     * Úkoly, které prohlížeč z nástěnky výslovně odebral.
      *
-     * `all` je všechno, `home` jen to, co je v domácím seznamu — přesně jak to
-     * skládá poskytovatel. Bez toho by zásah na nástěnce domácnosti zrušil
-     * všechno ostatní.
+     * Otevřený se zruší (zůstane v historii). Hotový se jen archivuje: „Uklidit
+     * hotové" slibuje, že úkoly zůstanou v záložce Hotovo, a zrušený by z ní
+     * zmizel.
+     *
+     * @param  list<string>  $idcka
      */
-    private function patriNaNastenku(SharedTodo $u, string $klic): bool
+    private function zrusUkoly(array $idcka, GallerySpace $prostor): void
     {
-        if ($klic !== 'home') {
-            return true;
+        foreach ($idcka as $id) {
+            $u = $this->ukol($id, $prostor);
+
+            if (! $u || $u->status === 'cancelled') {
+                continue;
+            }
+
+            if ($u->status === 'completed') {
+                $u->update(['metadata' => array_merge((array) $u->metadata, ['archivovano' => true])]);
+            } else {
+                $u->update(['status' => 'cancelled']);
+            }
+        }
+    }
+
+    /** Úkol podle identifikátoru z prohlížeče: uuid, nebo založený z `all-n1`. */
+    private function ukol(string $id, GallerySpace $prostor): ?SharedTodo
+    {
+        if (Str::isUuid($id)) {
+            return SharedTodo::where('gallery_space_id', $prostor->id)->where('uuid', $id)->first();
         }
 
-        if (! $u->list_id || ! Schema::hasTable('shared_todo_lists')) {
-            return false;
+        return SharedTodo::where('gallery_space_id', $prostor->id)
+            ->where('metadata->klient_id', $id)
+            ->where('created_at', '>=', now()->subDays(self::DNU_KLIENT))
+            ->latest('id')
+            ->first();
+    }
+
+    /**
+     * Identifikátory z rozdílu, který poslal prohlížeč.
+     *
+     * @return list<string>|null null = rozdíl nepřišel (starší klient)
+     */
+    private function idcka(mixed $hodnota): ?array
+    {
+        if (! is_array($hodnota)) {
+            return null;
         }
 
-        $seznam = DB::table('shared_todo_lists')->where('id', $u->list_id)->first(['title', 'kind']);
-
-        return $seznam && ($seznam->kind === 'household'
-            || mb_strtolower((string) $seznam->title) === 'domácnost');
+        return array_values(array_filter(array_map(
+            fn ($id) => is_scalar($id) ? mb_substr((string) $id, 0, 80) : '',
+            array_slice($hodnota, 0, 500),
+        ), fn (string $id) => $id !== ''));
     }
 
     /** @param  array<string, mixed>  $r */
@@ -431,32 +535,39 @@ class PlanovaniVeStavu
         $maBytHotovy = $hotovo || (bool) ($r['on'] ?? false);
         $jeHotovy = $u->status === 'completed';
 
-        if ($maBytHotovy !== $jeHotovy) {
+        // Zrušený úkol, který je zase na nástěnce, vrátilo tlačítko Zpět.
+        if ($maBytHotovy !== $jeHotovy || $u->status === 'cancelled') {
             $zmeny['status'] = $maBytHotovy ? 'completed' : 'open';
-            $zmeny['completed_at'] = $maBytHotovy ? now() : null;
-            $zmeny['completed_by'] = $maBytHotovy ? $kdo->id : null;
+            $zmeny['completed_at'] = $maBytHotovy ? ($u->completed_at ?? now()) : null;
+            $zmeny['completed_by'] = $maBytHotovy ? ($u->completed_by ?? $kdo->id) : null;
+        }
+
+        if (is_array($u->metadata) && ! empty($u->metadata['archivovano'])) {
+            $zmeny['metadata'] = array_diff_key($u->metadata, ['archivovano' => true]);
         }
 
         $u->update($zmeny);
     }
 
     /** @param  array<string, mixed>  $r */
-    private function zalozUkol(array $r, string $sloupec, bool $hotovo, GallerySpace $prostor, User $kdo, string $klic): void
+    private function zalozUkol(array $r, string $sloupec, bool $hotovo, GallerySpace $prostor, User $kdo, string $klic, string $klientId): void
     {
         SharedTodo::create([
             'gallery_space_id' => $prostor->id,
             'created_by' => $kdo->id,
             'assigned_to' => $this->kdoMa($r, $prostor),
-            'list_id' => $klic === 'home' ? $this->domaciSeznam($prostor, $kdo) : null,
+            'list_id' => $klic === 'home' ? $this->domaciSeznam($prostor, $kdo) : $this->seznamKategorie($klic, $prostor),
             'title' => (string) $r['t'],
             'description' => ($r['note'] ?? '') !== '' ? $r['note'] : null,
             'status' => $hotovo ? 'completed' : 'open',
             'priority' => $this->priorita($r),
-            'due_at' => $this->terminZeSloupce(null, (string) ($r['d'] ?? ''), $sloupec),
+            // Popisek („dnes", „pátek") má přednost; dřív se zahodil a každý nový
+            // úkol v „Tento týden" dostal konec týdne — po obnovení byl v „Později".
+            'due_at' => $this->terminZeSloupce($this->zPopisku((string) ($r['d'] ?? ''), null), (string) ($r['d'] ?? ''), $sloupec),
             'recurrence' => $this->opakovani((string) ($r['rep'] ?? '')),
             'completed_at' => $hotovo ? now() : null,
             'completed_by' => $hotovo ? $kdo->id : null,
-            'metadata' => ['source' => 'prototyp'],
+            'metadata' => ['source' => 'prototyp', 'klient_id' => $klientId],
         ]);
     }
 
@@ -620,6 +731,23 @@ class PlanovaniVeStavu
         };
     }
 
+    /** Seznam úkolů za nástěnkou kategorie (`seznam-<uuid>`); jinak žádný. */
+    private function seznamKategorie(string $klic, GallerySpace $prostor): ?int
+    {
+        if (! str_starts_with($klic, 'seznam-') || ! Schema::hasTable('shared_todo_lists')) {
+            return null;
+        }
+
+        $id = DB::table('shared_todo_lists')
+            ->where('gallery_space_id', $prostor->id)
+            ->where('uuid', substr($klic, strlen('seznam-')))
+            ->where('kind', Planovani::DRUH_KATEGORIE)
+            ->whereNull('archived_at')
+            ->value('id');
+
+        return $id === null ? null : (int) $id;
+    }
+
     private function domaciSeznam(GallerySpace $prostor, User $kdo): ?int
     {
         if (! Schema::hasTable('shared_todo_lists')) {
@@ -666,21 +794,35 @@ class PlanovaniVeStavu
             ->get()
             ->keyBy('uuid');
 
+        // Ukázkový seznam (`w1`…) se nezapisuje. Dřív se místo toho čekalo na
+        // první věc v databázi — a první věc dvojice se tak nezapsala nikdy.
+        foreach ($radky as $r) {
+            if (is_array($r) && preg_match('/^w\d{1,5}$/', (string) ($r['id'] ?? ''))) {
+                return;
+            }
+        }
+
         foreach ($radky as $r) {
             if (! is_array($r) || ! isset($r['id'], $r['text'])) {
                 continue;
             }
 
             $stav = (string) ($r['state'] ?? 'open');
+            $u = $vDatabazi[$r['id']] ?? null;
 
-            if ($vDatabazi->has($r['id'])) {
-                $u = $vDatabazi[$r['id']];
+            // Nová věc se pamatuje pod identifikátorem z prohlížeče; další
+            // odeslání seznamu ji dřív založilo znovu.
+            if (! $u && preg_match('/^w\d{6,}$/', (string) $r['id'])) {
+                $u = $this->ukol((string) $r['id'], $prostor);
+            }
 
+            if ($u) {
                 $u->update(match ($stav) {
                     'done' => [
                         'title' => (string) $r['text'],
                         // „Jde se to udělat“ — přesouvá se mezi úkoly na tento týden.
-                        'due_at' => CarbonImmutable::now()->addWeek()->endOfDay(),
+                        // Jednou: seznam chodí celý a termín by se jinak posouval.
+                        'due_at' => $u->due_at ?? CarbonImmutable::now()->addWeek()->endOfDay(),
                         'status' => 'open',
                     ],
                     'dropped' => ['title' => (string) $r['text'], 'status' => 'cancelled'],
@@ -690,15 +832,14 @@ class PlanovaniVeStavu
                 continue;
             }
 
-            // Nová věc na seznam. Ukázkové řádky (`w1`…) se ignorují.
-            if ($vDatabazi->isNotEmpty() && preg_match('/^w\d{6,}$/', (string) $r['id'])) {
+            if (preg_match('/^w\d{6,}$/', (string) $r['id'])) {
                 SharedTodo::create([
                     'gallery_space_id' => $prostor->id,
                     'created_by' => $kdo->id,
                     'title' => (string) $r['text'],
                     'status' => $stav === 'dropped' ? 'cancelled' : 'open',
                     'priority' => 'normal',
-                    'metadata' => ['source' => 'prototyp'],
+                    'metadata' => ['source' => 'prototyp', 'klient_id' => (string) $r['id']],
                 ]);
             }
         }

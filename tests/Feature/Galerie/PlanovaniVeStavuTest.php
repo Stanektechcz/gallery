@@ -159,12 +159,74 @@ class PlanovaniVeStavuTest extends TestCase
         $zustane = $this->udalost(['title' => 'Zůstane']);
         $zmizi = $this->udalost(['title' => 'Zmizí', 'starts_at' => now()->addDays(5)]);
 
-        $this->patchJson('/api/state', ['data' => ['evList' => [
-            $this->radekUdalosti($zustane),
-        ]]])->assertOk();
+        $this->patchJson('/api/state', ['data' => [
+            'evList' => [$this->radekUdalosti($zustane)],
+            'evZmenene' => [],
+            'evZrusene' => ['ev-'.$zmizi->uuid],
+        ]])->assertOk();
 
         $this->assertNotNull($zustane->fresh());
         $this->assertNull($zmizi->fresh());
+    }
+
+    /**
+     * Událost, která v odeslaném seznamu chybí, se nemaže.
+     *
+     * Seznam v prohlížeči je kopie z doby načtení a má limit. Úprava jedné
+     * události dřív smazala všechno, co přidal mezitím ten druhý (nebo cesta
+     * či automatizace), i co se do seznamu nevešlo.
+     */
+    public function test_chybejici_udalost_se_nemaze_a_nezmenena_neprepisuje(): void
+    {
+        $upravena = $this->udalost(['title' => 'Upravená']);
+        $odDruheho = $this->udalost(['title' => 'Přidal ten druhý', 'starts_at' => now()->addDays(4)]);
+        $zmenilDruhy = $this->udalost(['title' => 'Druhý přejmenoval']);
+
+        $this->patchJson('/api/state', ['data' => [
+            'evList' => [
+                $this->radekUdalosti($upravena, ['t' => 'Upravená znovu']),
+                // Stará kopie: ten druhý ji mezitím přejmenoval.
+                $this->radekUdalosti($zmenilDruhy, ['t' => 'Původní název']),
+            ],
+            'evZmenene' => ['ev-'.$upravena->uuid],
+        ]])->assertOk();
+
+        $this->assertSame('Upravená znovu', $upravena->refresh()->title);
+        $this->assertNotNull($odDruheho->fresh());
+        $this->assertSame('Druhý přejmenoval', $zmenilDruhy->refresh()->title);
+    }
+
+    /** Smazaná a vrácená událost (Zpět po odeslání) se v kalendáři obnoví. */
+    public function test_vracena_smazana_udalost_se_obnovi(): void
+    {
+        $u = $this->udalost(['title' => 'Vrátit']);
+        $radek = $this->radekUdalosti($u);
+
+        $this->patchJson('/api/state', ['data' => ['evList' => [], 'evZmenene' => [], 'evZrusene' => [$radek['id']]]])->assertOk();
+        $this->assertNull($u->fresh());
+
+        $this->patchJson('/api/state', ['data' => ['evList' => [$radek], 'evZmenene' => [], 'evObnovene' => [$radek['id']], 'evZrusene' => []]])->assertOk();
+        $this->assertSame(1, CalendarEvent::where('title', 'Vrátit')->count());
+
+        // Další úprava téže (starým identifikátorem) nezaloží třetí.
+        $this->patchJson('/api/state', ['data' => ['evList' => [array_merge($radek, ['t' => 'Vráceno'])], 'evZmenene' => [$radek['id']], 'evObnovene' => [$radek['id']]]])->assertOk();
+        $this->assertSame(['Vráceno'], CalendarEvent::pluck('title')->all());
+    }
+
+    /** Doručená připomínka se dalším uložením kalendáře nezaloží znovu. */
+    public function test_dorucena_pripominka_se_neposle_znovu(): void
+    {
+        $u = $this->udalost(['title' => 'S připomínkou', 'starts_at' => now()->addHours(10)]);
+        $radek = $this->radekUdalosti($u, ['remind' => 'den předem']);
+
+        $this->patchJson('/api/state', ['data' => ['evList' => [$radek]]])->assertOk();
+        $this->assertSame(1, DB::table('event_reminders')->where('event_id', $u->id)->count());
+
+        DB::table('event_reminders')->where('event_id', $u->id)->update(['status' => 'delivered']);
+
+        $this->patchJson('/api/state', ['data' => ['evList' => [$radek]]])->assertOk();
+
+        $this->assertSame(0, DB::table('event_reminders')->where('event_id', $u->id)->where('status', 'pending')->count());
     }
 
     /**
@@ -205,9 +267,26 @@ class PlanovaniVeStavuTest extends TestCase
 
         $this->assertSame('completed', $u->refresh()->status);
 
-        $this->patchJson('/api/state', ['data' => ['evDoneMap' => []]])->assertOk();
+        $this->patchJson('/api/state', ['data' => ['evDoneMap' => ['ev-'.$u->uuid => false]]])->assertOk();
 
         $this->assertSame('planned', $u->refresh()->status);
+    }
+
+    /**
+     * Odškrtnutí jedné události neodznačí ostatní.
+     *
+     * Mapa v prohlížeči začíná prázdná; každá hotová událost, která v ní
+     * chyběla, se dřív vrátila na „naplánováno".
+     */
+    public function test_odskrtnuti_jedne_neodznaci_ostatni(): void
+    {
+        $hotova = $this->udalost(['title' => 'Už hotová', 'status' => 'completed']);
+        $nova = $this->udalost(['title' => 'Právě odškrtnutá']);
+
+        $this->patchJson('/api/state', ['data' => ['evDoneMap' => ['ev-'.$nova->uuid => true]]])->assertOk();
+
+        $this->assertSame('completed', $nova->refresh()->status);
+        $this->assertSame('completed', $hotova->refresh()->status);
     }
 
     /** Zrušená událost se odškrtnutím neoživí — prototyp o tom stavu neví. */
@@ -381,15 +460,59 @@ class PlanovaniVeStavuTest extends TestCase
         $zustane = $this->ukol(['title' => 'Zůstane', 'due_at' => now()->addDay()]);
         $zmizi = $this->ukol(['title' => 'Zmizí', 'due_at' => now()->addDay()]);
 
-        $this->patchJson('/api/state', ['data' => ['xBoard' => ['all' => [
-            ['label' => 'Tento týden', 'items' => [
-                ['id' => $zustane->uuid, 't' => 'Zůstane', 'w' => 'spolu', 'd' => 'zítra'],
+        $this->patchJson('/api/state', ['data' => [
+            'xBoard' => ['all' => [
+                ['label' => 'Tento týden', 'items' => [
+                    ['id' => $zustane->uuid, 't' => 'Zůstane', 'w' => 'spolu', 'd' => 'zítra'],
+                ]],
             ]],
-        ]]]])->assertOk();
+            'xBoardZmenene' => [],
+            'xBoardZrusene' => [$zmizi->uuid],
+        ]])->assertOk();
 
         $this->assertSame('open', $zustane->refresh()->status);
         $this->assertSame('cancelled', $zmizi->refresh()->status);
         $this->assertDatabaseHas('shared_todos', ['title' => 'Zmizí']);
+    }
+
+    /**
+     * Úkol, který na odeslané nástěnce chybí, se neruší.
+     *
+     * Nástěnka má limit a je to kopie z doby načtení — úkol přidaný mezitím
+     * druhým (nebo rychlým zápisem z telefonu) se dřív zrušil při prvním
+     * odškrtnutí čehokoli jiného.
+     */
+    public function test_chybejici_ukol_se_nerusi(): void
+    {
+        $naNastence = $this->ukol(['title' => 'Na nástěnce', 'due_at' => now()->addDay()]);
+        $zTelefonu = $this->ukol(['title' => 'Z telefonu', 'due_at' => now()->addDay()]);
+
+        $this->patchJson('/api/state', ['data' => [
+            'xBoard' => ['all' => [
+                ['label' => 'Hotovo', 'done' => true, 'items' => [
+                    ['id' => $naNastence->uuid, 't' => 'Na nástěnce', 'w' => 'spolu', 'd' => 'zítra', 'on' => true],
+                ]],
+            ]],
+            'xBoardZmenene' => [$naNastence->uuid],
+        ]])->assertOk();
+
+        $this->assertSame('completed', $naNastence->refresh()->status);
+        $this->assertSame('open', $zTelefonu->refresh()->status);
+    }
+
+    /** „Uklidit hotové" hotový úkol archivuje — z nástěnky zmizí, v Hotovo zůstane. */
+    public function test_uklizeny_hotovy_ukol_zustane_hotovy(): void
+    {
+        $u = $this->ukol(['title' => 'Hotový', 'status' => 'completed', 'completed_at' => now(), 'due_at' => now()]);
+
+        $this->patchJson('/api/state', ['data' => ['xBoard' => ['all' => [['label' => 'Hotovo', 'done' => true, 'items' => []]]], 'xBoardZmenene' => [], 'xBoardZrusene' => [$u->uuid]]])->assertOk();
+
+        $this->assertSame('completed', $u->refresh()->status);
+        $this->assertTrue((bool) ($u->metadata['archivovano'] ?? false));
+
+        $data = $this->getJson('/api/data/planovani')->assertOk()->json('data');
+        $this->assertStringNotContainsString($u->uuid, json_encode($data['ATASKS'] ?? []));
+        $this->assertStringContainsString('Hotový', json_encode($data['AL'] ?? [], JSON_UNESCAPED_UNICODE));
     }
 
     /**
@@ -475,6 +598,133 @@ class PlanovaniVeStavuTest extends TestCase
         ]]])->assertOk();
 
         $this->assertSame(0, SharedTodo::count());
+    }
+
+    // ——— opakované odeslání a první záznam ———
+
+    /**
+     * Nový úkol se při dalším zápisu nezaloží znovu.
+     *
+     * Nástěnka v prohlížeči si nový úkol drží pod svým identifikátorem
+     * (`all-n1`) až do obnovení stránky a posílá ho s každou další změnou.
+     * Server ho pokaždé založil znovu a ten předchozí zrušil — v aktivitě
+     * přibýval „nový úkol" za každé odškrtnutí.
+     */
+    public function test_znovu_poslany_novy_ukol_nezalozi_druhy(): void
+    {
+        $stavajici = $this->ukol(['title' => 'Už tam je', 'due_at' => now()->addDays(2)]);
+        $nastenka = fn (bool $hotovo) => ['xBoard' => ['all' => [
+            ['label' => 'Tento týden', 'items' => [
+                ['id' => $stavajici->uuid, 't' => 'Už tam je', 'w' => 'spolu', 'd' => 'čtvrtek'],
+                ['id' => 'all-n1', 't' => 'Objednat servis kola', 'w' => 'Adrian', 'd' => 'zítra', 'on' => $hotovo],
+            ]],
+            ['label' => 'Hotovo', 'done' => true, 'items' => []],
+        ]]];
+
+        $this->patchJson('/api/state', ['data' => $nastenka(false)])->assertOk();
+        $prvni = SharedTodo::where('title', 'Objednat servis kola')->sole();
+
+        $this->patchJson('/api/state', ['data' => $nastenka(true)])->assertOk();
+
+        $this->assertSame(1, SharedTodo::where('title', 'Objednat servis kola')->count());
+        $this->assertSame('completed', $prvni->refresh()->status);
+        $this->assertSame('open', $stavajici->refresh()->status);
+    }
+
+    /**
+     * První úkol dvojice, která zatím žádný nemá.
+     *
+     * Nástěnka bez jediného úkolu z databáze se brala jako ukázková, takže
+     * se první úkol nezapsal nikdy — a po obnovení stránky zmizel.
+     */
+    public function test_prvni_ukol_na_prazdne_nastence_se_zapise(): void
+    {
+        $this->patchJson('/api/state', ['data' => ['xBoard' => ['all' => [
+            ['label' => 'Tento týden', 'items' => [
+                ['id' => 'all-n1', 't' => 'První úkol', 'w' => 'Adrian', 'd' => 'dnes'],
+                // Šablona, rychlý zápis a žádost mají vlastní identifikátory.
+                ['id' => 'tpl4', 't' => 'Zkontrolovat pasy', 'w' => 'Makinka', 'd' => 'bez termínu'],
+                ['id' => 'q7', 't' => 'Zavolat do servisu', 'w' => 'oba', 'd' => 'bez termínu'],
+            ]],
+            ['label' => 'Hotovo', 'done' => true, 'items' => []],
+        ]]]])->assertOk();
+
+        $this->assertEqualsCanonicalizing(['První úkol', 'Zkontrolovat pasy', 'Zavolat do servisu'], SharedTodo::pluck('title')->all());
+    }
+
+    /** Nový úkol „dnes" v Tento týden má termín dnes a po obnovení zůstane v Tento týden. */
+    public function test_novy_ukol_dostane_termin_z_popisku(): void
+    {
+        $this->patchJson('/api/state', ['data' => ['xBoard' => ['all' => [
+            ['label' => 'Tento týden', 'items' => [
+                ['id' => 'all-n1', 't' => 'Dnešní', 'w' => 'spolu', 'd' => 'dnes'],
+                ['id' => 'all-n2', 't' => 'Bez popisku', 'w' => 'spolu', 'd' => 'nové'],
+            ]],
+        ]]]])->assertOk();
+
+        $this->assertSame(now()->toDateString(), SharedTodo::where('title', 'Dnešní')->sole()->due_at->toDateString());
+
+        $sloupce = collect($this->getJson('/api/data/planovani')->json('data.ATASKS.all'))->mapWithKeys(fn ($s) => [$s[0] => collect($s[1])->pluck(0)->all()]);
+        $this->assertEqualsCanonicalizing(['Dnešní', 'Bez popisku'], $sloupce['Tento týden']);
+    }
+
+    /** Smazaný poslední úkol se zruší — prázdná nástěnka sama nic nemaže. */
+    public function test_smazany_posledni_ukol_se_zrusi(): void
+    {
+        $posledni = $this->ukol(['title' => 'Poslední', 'due_at' => now()->addDay()]);
+        $mimo = $this->ukol(['title' => 'Nenačtený', 'due_at' => now()->addDay()]);
+
+        $this->patchJson('/api/state', ['data' => [
+            'xBoard' => ['all' => [['label' => 'Tento týden', 'items' => []]]],
+            'xBoardZrusene' => [$posledni->uuid, 'all-n9'],
+        ]])->assertOk();
+
+        $this->assertSame('cancelled', $posledni->refresh()->status);
+        $this->assertSame('open', $mimo->refresh()->status);
+    }
+
+    /** Vrácený smazaný úkol (Zpět) se znovu otevře. */
+    public function test_vraceny_zruseny_ukol_se_otevre(): void
+    {
+        $u = $this->ukol(['title' => 'Vrátit', 'due_at' => now()->addDay(), 'status' => 'cancelled']);
+        $jiny = $this->ukol(['title' => 'Jiný', 'due_at' => now()->addDay()]);
+
+        $this->patchJson('/api/state', ['data' => ['xBoard' => ['all' => [['label' => 'Tento týden', 'items' => [
+            ['id' => $u->uuid, 't' => 'Vrátit', 'w' => 'spolu', 'd' => 'zítra'],
+            ['id' => $jiny->uuid, 't' => 'Jiný', 'w' => 'spolu', 'd' => 'zítra'],
+        ]]]]]])->assertOk();
+
+        $this->assertSame('open', $u->refresh()->status);
+    }
+
+    /** Nová událost se při dalším zápisu seznamu nezaloží znovu (a ta první nezmizí). */
+    public function test_znovu_poslana_nova_udalost_nezalozi_druhou(): void
+    {
+        $radek = ['id' => 'ev-n1', 'y' => 2026, 'm' => 8, 'd' => 19, 'time' => '11:00', 't' => 'Plavba na Ugljan', 'kind' => 'cesta', 'who' => 'spolu', 'remind' => '', 'note' => ''];
+
+        $this->patchJson('/api/state', ['data' => ['evList' => [$radek]]])->assertOk();
+        $prvni = CalendarEvent::where('title', 'Plavba na Ugljan')->sole();
+
+        $this->patchJson('/api/state', ['data' => ['evList' => [
+            array_merge($radek, ['time' => '12:00']),
+            ['id' => 'ev-n2', 'y' => 2026, 'm' => 8, 'd' => 20, 'time' => '', 't' => 'Návrat', 'kind' => 'cesta', 'who' => 'spolu', 'remind' => '', 'note' => ''],
+        ]]])->assertOk();
+
+        $this->assertSame(1, CalendarEvent::where('title', 'Plavba na Ugljan')->count());
+        $this->assertSame('12:00', CalendarEvent::where('title', 'Plavba na Ugljan')->sole()->starts_at->format('H:i'));
+        $this->assertSame($prvni->uuid, CalendarEvent::where('title', 'Plavba na Ugljan')->sole()->uuid);
+        $this->assertSame(1, CalendarEvent::where('title', 'Návrat')->count());
+    }
+
+    /** První věc na seznamu „až budeme mít čas" se zapíše a znovu odeslaná se nezdvojí. */
+    public function test_seznam_nekdy_prvni_vec_a_opakovane_odeslani(): void
+    {
+        $radek = ['id' => 'w1789000000', 'text' => 'Naučit se rizoto', 'by' => 'Adrian', 'added' => '2026-09-06', 'state' => 'open'];
+
+        $this->patchJson('/api/state', ['data' => ['hsLater' => [$radek]]])->assertOk();
+        $this->patchJson('/api/state', ['data' => ['hsLater' => [$radek]]])->assertOk();
+
+        $this->assertSame(1, SharedTodo::where('title', 'Naučit se rizoto')->count());
     }
 
     /** Plán se do stavu páru neukládá — jediná pravda je modul. */
