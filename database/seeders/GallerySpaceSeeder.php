@@ -30,7 +30,7 @@ class GallerySpaceSeeder extends Seeder
             ['email' => config('gallery.partner_email') ?: 'makinka@gallery.local'],
             [
                 'uuid' => (string) Str::uuid(),
-                'name' => config('gallery.partner_name', 'Makinka'),
+                'name' => config('gallery.partner_name', 'Makinka Kubíčková'),
                 'password' => Hash::make('change-me-'.Str::random(16)),
                 'role' => 'partner',
                 'is_active' => true,

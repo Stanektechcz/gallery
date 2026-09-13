@@ -86,7 +86,7 @@ class NastavHesloCommand extends Command
 
         $this->newLine();
         $this->line('  php artisan gallery:ucet adresa@example.cz --heslo');
-        $this->line('  php artisan gallery:ucet adresa@example.cz --jmeno="Markéta Kubíčková"');
+        $this->line('  php artisan gallery:ucet adresa@example.cz --jmeno="Makinka Kubíčková"');
 
         return self::SUCCESS;
     }

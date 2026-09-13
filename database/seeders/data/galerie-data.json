@@ -103,7 +103,7 @@
       "rows": [
         [
           "Zdroj",
-          "Google Photos · přihlášeno jako adrian@gmail.com",
+          "Google Photos · přihlášeno jako adrian@example.com",
           "Změnit zdroj"
         ],
         [
@@ -282,7 +282,7 @@
       "rows": [
         [
           "Připojený Google účet",
-          "adrian.stanek@gmail.com",
+          "adrian@example.com",
           "Odpojit"
         ],
         [
@@ -12556,8 +12556,8 @@
   },
   "LOCKREC": "zadar-2026-oba",
   "LOCKMAIL": {
-    "A": "adrian.stanek@gmail.com",
-    "M": "makinka.hrncirova@gmail.com"
+    "A": "adrian@example.com",
+    "M": "makinka@example.com"
   },
   "LOCKPWD": "zadar2026",
   "ADMIN": {
@@ -12575,7 +12575,7 @@
       {
         "id": "u1",
         "name": "Adrian",
-        "mail": "adrian.stanek@gmail.com",
+        "mail": "adrian@example.com",
         "role": "vlastník",
         "last": "dnes 7:40",
         "state": "aktivní"
@@ -12583,7 +12583,7 @@
       {
         "id": "u2",
         "name": "Makinka",
-        "mail": "makinka.hrncirova@gmail.com",
+        "mail": "makinka@example.com",
         "role": "správce",
         "last": "dnes 6:58",
         "state": "aktivní"
@@ -12591,7 +12591,7 @@
       {
         "id": "u3",
         "name": "Klára",
-        "mail": "klara.hrncirova@gmail.com",
+        "mail": "klara@example.com",
         "role": "host",
         "last": "nikdy",
         "state": "pozvaná"
@@ -12959,7 +12959,7 @@
     {
       "id": "a1",
       "label": "Kde jsou originály fotek",
-      "value": "Google Drive · účet adrian.stanek@gmail.com · složka Galerie",
+      "value": "Google Drive · účet adrian@example.com · složka Galerie",
       "on": true,
       "changed": false
     },

@@ -147,7 +147,7 @@ class ObsahFinanceTest extends TestCase
     {
         $this->regensburg();
         $this->adri->update(['name' => 'Adrian']);
-        $maki = User::factory()->create(['name' => 'Markéta Kubíčková']);
+        $maki = User::factory()->create(['name' => 'Makinka Kubíčková']);
         $this->prostor->members()->syncWithoutDetaching([$maki->id => ['role' => 'editor']]);
 
         $adrian = Partner::create(['gallery_space_id' => $this->prostor->id, 'kind' => 'person', 'name' => 'Adrian', 'user_id' => $this->adri->id]);
@@ -176,7 +176,7 @@ class ObsahFinanceTest extends TestCase
 
         $prijmy = $this->getJson('/api/data/finance')->assertOk()->json('data.INCOMES');
 
-        $this->assertSame(['Adrian' => 2000, 'Markéta Kubíčková' => 1500], $prijmy);
+        $this->assertSame(['Adrian' => 2000, 'Makinka Kubíčková' => 1500], $prijmy);
     }
 
     /**

@@ -38,7 +38,7 @@ class ObsahDnesTest extends TestCase
         Carbon::setTestNow('2026-09-16 18:00:00');
 
         $this->adri = User::factory()->create(['name' => 'Adrian']);
-        $this->maki = User::factory()->create(['name' => 'Markéta Kubíčková']);
+        $this->maki = User::factory()->create(['name' => 'Makinka Kubíčková']);
         $this->prostor = GallerySpace::create(['name' => 'Naše vzpomínky', 'owner_id' => $this->adri->id]);
         $this->prostor->members()->syncWithoutDetaching([
             $this->adri->id => ['role' => 'owner'],
@@ -80,7 +80,7 @@ class ObsahDnesTest extends TestCase
 
         $nahrani = $this->getJson('/api/data/dnes')->assertOk()->json('data.DNES.nahrani');
 
-        $this->assertSame('Markéta Kubíčková', $nahrani['kdo']);
+        $this->assertSame('Makinka Kubíčková', $nahrani['kdo']);
         $this->assertSame('3 soubory', $nahrani['pocet']);
         $this->assertSame('dnes v 17:10', $nahrani['kdy']);
     }
@@ -129,7 +129,7 @@ class ObsahDnesTest extends TestCase
 
         $this->assertCount(2, $aktivita);
         $this->assertSame('M', $aktivita[0][0]);
-        $this->assertSame('Markéta Kubíčková · nahrání (4 soubory)', $aktivita[0][1]);
+        $this->assertSame('Makinka Kubíčková · nahrání (4 soubory)', $aktivita[0][1]);
         $this->assertSame('Adrian · nový sdílený odkaz', $aktivita[1][1]);
         $this->assertSame('včera ve 20:00', $aktivita[1][2]);
     }

@@ -62,11 +62,12 @@ return [
     'invite_only' => env('GALLERY_INVITE_ONLY', true),
 
     // Admin user seeder config
+    // Výchozí účty dvojice — stejné, jaké nastavuje migrace `sjednotit_ucty_dvojice`.
     'owner_name' => env('GALLERY_OWNER_NAME', 'Adrian'),
-    'owner_email' => env('GALLERY_OWNER_EMAIL', ''),
+    'owner_email' => env('GALLERY_OWNER_EMAIL', 'info@stanektech.cz'),
 
-    'partner_name' => env('GALLERY_PARTNER_NAME', 'Makinka'),
-    'partner_email' => env('GALLERY_PARTNER_EMAIL', ''),
+    'partner_name' => env('GALLERY_PARTNER_NAME', 'Makinka Kubíčková'),
+    'partner_email' => env('GALLERY_PARTNER_EMAIL', 'marketa@stanektech.cz'),
 
     'default_space_name' => env('GALLERY_DEFAULT_SPACE', 'Naše galerie'),
 

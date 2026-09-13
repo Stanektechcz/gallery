@@ -221,7 +221,7 @@ class DoruceniTest extends TestCase
             (string) $this->get('/')->assertOk()->getContent(),
         );
 
-        $ucet = User::factory()->create(['name' => 'Markéta Kubíčková', 'email' => 'marketa@vzpominky.test']);
+        $ucet = User::factory()->create(['name' => 'Makinka Kubíčková', 'email' => 'marketa@vzpominky.test']);
         $telo = (string) $this->get('/')->assertOk()->getContent();
 
         $this->assertStringContainsString('window.GALERIE_UCTY_EXISTUJI = true', $telo);

@@ -198,4 +198,11 @@ echo "== Kontrola stavu =="
 "$PHP" artisan gallery:doctor || true
 
 echo
+echo "== Ukázková data v databázi =="
+# Jen výpis, nic se nemaže. Řádky, které dřív zápis stavu vložil z ukázky
+# prototypu („Dune: Part Two", „Máma, Olomouc"), se odstraní až ručně:
+#     "$PHP" artisan gallery:ukazkova-data --smazat
+"$PHP" artisan gallery:ukazkova-data || true
+
+echo
 echo "Hotovo."
