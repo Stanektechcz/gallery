@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Jobs\Media\GenerateImageVariantsJob;
 use App\Jobs\Media\GenerateVideoPosterJob;
 use App\Models\MediaItem;
+use App\Services\Auth\PristupDoGalerie;
 use App\Support\SpaceContext;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -178,9 +179,20 @@ class MediaFileController extends Controller
         return $request->hasSession() && (int) $request->session()->get('vault_unlocked_until', 0) > now()->timestamp;
     }
 
+    /**
+     * Člen dvojice prostoru, ne host.
+     *
+     * Host (`viewer`/`contributor`) má fotky jen z odkazu, který dostane —
+     * a ten vydává podepsané adresy. Bez podpisu by si přes uuid otevřel
+     * originál i po zrušení odkazu.
+     */
     private function clen($user, int $prostor): bool
     {
-        return $user->gallerySpaces()->where('gallery_spaces.id', $prostor)->exists();
+        $clenstvi = $user->gallerySpaces()->where('gallery_spaces.id', $prostor)->first();
+
+        return $clenstvi !== null
+            && ((int) $clenstvi->owner_id === (int) $user->id
+                || in_array((string) $clenstvi->pivot->role, PristupDoGalerie::ROLE_DVOJICE, true));
     }
 
     private function mimeTypeForPath(string $path): string

@@ -108,6 +108,21 @@ class MediaFileControllerTest extends TestCase
         $this->get('/files/media/'.$media->uuid.'/original?ext=jpg')->assertNotFound();
     }
 
+    /** Host prostoru má fotky jen z podepsaného odkazu, ne přes uuid. */
+    public function test_host_prostoru_soubor_bez_podpisu_nedostane(): void
+    {
+        $media = $this->fotka();
+        Storage::disk('public')->put('media/'.$media->uuid.'/original.jpg', 'jpeg');
+        Storage::disk('public')->put('media/'.$media->uuid.'/thumbnail.jpg', 'jpeg');
+
+        $host = User::factory()->create(['role' => 'viewer', 'is_active' => true]);
+        $this->prostor->members()->syncWithoutDetaching([$host->id => ['role' => 'viewer']]);
+
+        Sanctum::actingAs($host);
+        $this->get('/files/media/'.$media->uuid.'/original?ext=jpg')->assertNotFound();
+        $this->get(MediaVariant::proxyUrl('media/'.$media->uuid.'/thumbnail.jpg'))->assertOk();
+    }
+
     /** Fotka v trezoru se vydá jen s odemčeným trezorem — nebo podepsaná aplikací. */
     public function test_fotka_v_trezoru_jen_s_odemcenym_trezorem(): void
     {

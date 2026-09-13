@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Auth;
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\User;
+use App\Services\Auth\PristupDoGalerie;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -43,6 +44,13 @@ class AuthenticatedSessionController extends Controller
             Auth::logout();
 
             return back()->withErrors(['email' => 'Váš účet není aktivní.']);
+        }
+
+        // Host galerie má jen odkazy, které dostane — stejně jako u tokenu prototypu.
+        if (($duvod = app(PristupDoGalerie::class)->proc($user)) !== null) {
+            Auth::logout();
+
+            return back()->withErrors(['email' => $duvod]);
         }
 
         // The password was right, but it is not the whole answer yet. Signing out again

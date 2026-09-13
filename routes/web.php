@@ -136,13 +136,13 @@ Route::middleware('throttle:10,1')
 
 // Share Target (PWA Web Share Target)
 Route::post('/share-target', [MediaController::class, 'shareTarget'])->name('share-target')
-    ->middleware(['auth']);
+    ->middleware(['auth', 'dvojice:web']);
 Route::get('/share-target', [MediaController::class, 'showShareTarget'])->name('share-target.show')
-    ->middleware(['auth']);
+    ->middleware(['auth', 'dvojice:web']);
 Route::get('/share-target/file/{index}', [MediaController::class, 'serveShareFile'])->name('share-target.file')
-    ->middleware(['auth']);
+    ->middleware(['auth', 'dvojice:web']);
 Route::delete('/share-target', [MediaController::class, 'clearShareTarget'])->name('share-target.clear')
-    ->middleware(['auth']);
+    ->middleware(['auth', 'dvojice:web']);
 
 /*
  | Vchod. Od nasazení prototypu je jím prototyp — má vlastní zámek (e-mail, heslo,
@@ -201,10 +201,10 @@ Route::get('/prehled', function (Request $request) {
     }
 
     return app()->call([app(DashboardController::class), 'index']);
-})->name('dashboard');
+})->middleware('dvojice:web')->name('dashboard');
 
 // ── Authenticated ───────────────────────────────────────
-Route::middleware(['auth'])->group(function () {
+Route::middleware(['auth', 'dvojice:web'])->group(function () {
     Route::get('/banking/callback', [BankingOAuthController::class, 'callback'])->name('banking.callback');
     Route::get('/home', [DashboardController::class, 'index'])->name('home');
     Route::get('/timeline', fn () => Inertia::render('Timeline/Index'))->name('timeline.index');
@@ -455,7 +455,7 @@ Route::middleware(['auth'])->group(function () {
 });
 
 // ── Google OAuth ────────────────────────────────────────
-Route::middleware(['auth'])->group(function () {
+Route::middleware(['auth', 'dvojice:web'])->group(function () {
     Route::get('/oauth/google/redirect', [GoogleOAuthController::class, 'redirect'])->name('oauth.google.redirect');
     Route::get('/oauth/google/callback', [GoogleOAuthController::class, 'callback'])->name('oauth.google.callback');
     Route::post('/settings/storage/google/disconnect', [GoogleOAuthController::class, 'disconnect'])->name('storage.google.disconnect');

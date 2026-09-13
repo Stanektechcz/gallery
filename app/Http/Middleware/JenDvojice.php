@@ -6,6 +6,7 @@ use App\Models\PersonalAccessToken;
 use App\Services\Auth\PristupDoGalerie;
 use Closure;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -15,8 +16,8 @@ use Symfony\Component\HttpFoundation\Response;
  * před odebráním přístupu, sezení z prohlížeče nebo klíč z administrace by
  * jinak fungovaly dál.
  *
- * Parametr `klic` zapne jen kontrolu klíče (starší API `v1`, které používá
- * i původní rozhraní s vlastním modelem rolí).
+ * Parametr `klic` je pro starší API `v1`: klíč a u hosta jen cesty k vlastnímu
+ * účtu. Parametr `web` hlídá stránky starého rozhraní.
  */
 class JenDvojice
 {
@@ -31,6 +32,29 @@ class JenDvojice
 
         if ($user === null) {
             return $next($request);
+        }
+
+        /*
+         * Staré webové rozhraní: host se odhlásí a dozví se proč.
+         *
+         * Stránky jako alba, koš, trezor nebo export vydávaly data přímo
+         * ze serveru, bez API. Chybová stránka by ho nechala přihlášeného
+         * a bez tlačítka ven; přihlašovací formulář důvod ukáže.
+         */
+        if ($rozsah === 'web') {
+            if (($duvod = $this->pristup->proc($user)) === null) {
+                return $next($request);
+            }
+
+            if ($request->expectsJson() && ! $request->header('X-Inertia')) {
+                return response()->json(['message' => $duvod], 403);
+            }
+
+            Auth::guard('web')->logout();
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+
+            return redirect()->route('login')->withErrors(['email' => $duvod]);
         }
 
         /*
@@ -52,7 +76,32 @@ class JenDvojice
             return response()->json(['message' => $duvod], 403);
         }
 
+        /*
+         * Starší API `v1`: host jen ke svému účtu.
+         *
+         * Kontrolovalo se tu jen klíč. Host (členství `viewer`/`contributor`)
+         * přihlášený do starého rozhraní si tak přes `v1` přečetl deník,
+         * finance, chat i celou knihovnu dvojice — přitom podle administrace
+         * vidí jen odkazy, které dostane. Zůstává mu jeho profil, fotka
+         * a upozornění. Předplatné a faktury patří galerii, ne jemu; účet
+         * bez vlastní galerie (`proc()` vrací null) se zablokovaný nepozná.
+         */
+        if ($rozsah === 'klic' && ! $this->uctovaCesta($request) && ($duvod = $this->pristup->proc($user)) !== null) {
+            return response()->json(['message' => $duvod], 403);
+        }
+
         return $next($request);
+    }
+
+    /** Cesty `v1`, které patří účtu, ne datům dvojice. */
+    private function uctovaCesta(Request $request): bool
+    {
+        return $request->is(
+            'api/v1/profil', 'api/v1/profil/*',
+            'api/v1/avatar', 'api/v1/avatar/moznosti',
+            'api/v1/notifications', 'api/v1/notifications/*',
+            'api/v1/public/*',
+        );
     }
 
     /**
