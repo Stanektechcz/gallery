@@ -179,7 +179,7 @@
         admInviteCant: !/.+@.+\..+/.test((s.admNewMail || '').trim()),
         admInvite: () => {
           const mail = (s.admNewMail || '').trim();
-          if (!/.+@.+\..+/.test(mail)) return;
+          if (!/.+@.+\..+/.test(mail)) { c.toast(mail ? 'Tohle nevypadá jako e-mailová adresa' : 'Nejdřív napište e-mail, kam pozvánka půjde', { icon: 'ph-warning' }); return; }
           zavolej(c, '/users', { email: mail, role: 'host' }).then(odpoved => {
             if (!odpoved) return;
             c.setState({ admNewMail: '' });
@@ -310,7 +310,7 @@
           done: !!risk[r.id],
           fixLabel: risk[r.id] ? 'Vyřešeno' : r.fix,
           fix: () => {
-            if (risk[r.id]) return;
+            if (risk[r.id]) { c.toast(r.label + ' — už vyřešeno', { icon: 'ph-check-circle' }); return; }
             zavolej(c, '/risks/' + encodeURIComponent(r.id) + '/fix')
               .then(ok => ok && note(r.label + ' — ' + r.fix.toLowerCase()));
           }
@@ -367,7 +367,7 @@
         admNewKeyCant: !(s.admNewKeyName || '').trim(),
         admNewKey: () => {
           const name = (s.admNewKeyName || '').trim();
-          if (!name) return;
+          if (!name) { c.toast('Nejdřív klíč pojmenujte — třeba podle zařízení, které ho dostane', { icon: 'ph-pencil-simple' }); return; }
           zavolej(c, '/keys', { name: name, scope: 'čtení i zápis' }).then(odpoved => {
             if (!odpoved) return;
             zapamatujKlic(odpoved);

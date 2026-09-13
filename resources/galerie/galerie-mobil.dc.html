@@ -7786,7 +7786,7 @@ class Component extends DCLogic {
       isWho: isWho, whoCards: whoCards, whoRows: whoRows, whoHead: whoHead,
       isAnnPrint: isAnnPrint, annFmts: annFmts, annPl: annPl,
       annPrintHead: 'Sazba výročního albumu · ' + annPages + ' stran · orientačně ' + this.kc(annPrice),
-      annPrintGo: () => { this.push('alld', { allRoute: 'x-tisk', allTab: 0, allQuery: '' }); this.toast('Návrhy tisku · výroční album má ' + annPages + ' stran — objednávku odešlete odtud', { icon: 'ph-printer', silent: true }); },
+      annPrintGo: () => { this.push('alld', { allRoute: 'x-tisk', allTab: 0, allQuery: '' }); this.toast('Návrhy tisku · výroční album má ' + annPages + ' stran — zakázku založíte a odešlete na počítači v Tisku', { icon: 'ph-printer', silent: true }); },
       isStory: isStory, stChapters: stChapters, isStoryMs: isStoryMs, stMs: stMs,
       isTags: isTags, tagRows: tagRows,
       isSer: isSer, serRows: serRows,
@@ -9462,6 +9462,8 @@ class Component extends DCLogic {
         hasAct: !!act && !bezAkce, actIcon: act ? act[0] : null, actLabel: done ? 'Vrátit' : (act ? act[1] : null),
         done: done,
         act: () => {
+          // Řádek bez akce (nebo akce, kterou telefon u dvojice neumí) nemá co udělat.
+          if (!act || bezAkce) return;
           if (naServeru && key === 'tagMerge' && !done) {
             window.GalerieApi.post('stitky/sloucit', { stitky: String(r.t).split('+').map(x => x.trim()).filter(Boolean) })
               .then(res => { if (res && window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data, res.prazdne); this.toast((res && res.zprava) || 'Štítky sloučeny', { icon: 'ph-arrows-merge' }); })
@@ -12175,6 +12177,8 @@ class Component extends DCLogic {
           items: items.map(p => ({ bg: this.tlo(p), fav: this.isFav(p), tap: () => this.setState({ lb: p.id }) })),
           share: () => {
             if (this.galerieNaServeru() && /^[0-9a-f-]{36}$/.test(String(a.id))) { this.sdiletNaServeru({ album: a.id }, 'Album ' + a.name); return; }
+            // U dvojice žádný vymyšlený odkaz „galerie.app/s/…" — sdílí se jen album, které server zná.
+            if (this.galerieNaServeru()) { this.toast('Tohle album na serveru není — sdílet jde album z Alb', { icon: 'ph-info' }); return; }
             const prev = this.sharesList(), n = s.seq;
             this.setState({ shares: [{ id: 's-n' + n, name: 'Album ' + a.name, url: 'galerie.app/s/' + Math.random().toString(36).slice(2, 8), when: 'právě teď · platí 7 dní' }].concat(prev), seq: n + 1 });
             this.toast('Odkaz na album vytvořen', { icon: 'ph-link-simple', undo: () => this.setState({ shares: prev }) });
@@ -12188,6 +12192,7 @@ class Component extends DCLogic {
               });
               return;
             }
+            if (this.galerieNaServeru()) { this.toast('Tohle album na serveru není — není co smazat', { icon: 'ph-info' }); return; }
             const prev = this.albumsList();
             this.setState({ albums: prev.filter(x => x.id !== a.id), stack: ['albums'] });
             this.toast('Album ' + a.name + ' smazáno — fotky zůstávají', { icon: 'ph-trash', undo: () => this.setState({ albums: prev }) });
@@ -13022,7 +13027,10 @@ class Component extends DCLogic {
           cyc: key ? 'var(--g-cyc-' + ({ m: 'm', fert: 'fert', ovul: 'ovul', pms: 'pms' }[key]) + ')' : 'transparent',
           dots: evs.slice(0, 3).map(e => ({ color: CAL_KIND[e[2]][2] })),
           aria: dLong(c.iso) + (evs.length ? ' · ' + this.pl(evs.length, 'akce', 'akce', 'akcí') : ''),
-          tap: () => { if (isAug) this.setState({ calSel: c.iso, calDay: c.n }); }
+          // Den ze sousedního měsíce přepne na ten měsíc a vybere ho — dřív se klepnutí ztratilo.
+          tap: () => isAug
+            ? this.setState({ calSel: c.iso, calDay: c.n })
+            : this.setState({ calMonth: s.calMonth + (c.n > 15 ? -1 : 1), calSel: c.iso, calDay: c.n })
         };
       }),
       calDayLabel: dLong(this.calVybrany()),

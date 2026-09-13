@@ -613,7 +613,7 @@
       verAddOp: parseInt(s.verV || '0', 10) ? 1 : .45,
       verAdd: () => {
         const v = parseInt(String(s.verV || '').replace(/\s/g, ''), 10);
-        if (!v) return;
+        if (!v) { this.toast('Zadejte částku té verze', { icon: 'ph-pencil-simple' }); return; }
         const prev = extra;
         const kdo = s.verB === 'oba' ? oba : (s.verB || jA);
         const add = (extra[pickId] || []).concat([{ v: v, by: kdo, when: 'dnes', why: (s.verY || '').trim() || 'Bez zapsaného důvodu — za rok nikdo nebude vědět proč.' }]);

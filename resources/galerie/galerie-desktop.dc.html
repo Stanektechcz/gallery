@@ -14902,7 +14902,7 @@ class Component extends DCLogic {
       },
       tskSave: () => {
         const t = (d.t || '').trim();
-        if (!t) return;
+        if (!t) { this.toast('Nejdřív napište, o jaký úkol jde', { icon: 'ph-pencil-simple' }); return; }
         const prev = this.boardOf(d.key);
         const next = prev.map(c => ({ ...c, items: c.items.slice() }));
         const target = next[Math.max(0, Math.min(d.col, next.length - 1))];
@@ -16414,7 +16414,7 @@ class Component extends DCLogic {
       promAddOp: (s.promW || '').trim() ? 1 : .45,
       promAdd: () => {
         const t = (s.promW || '').trim();
-        if (!t) return;
+        if (!t) { this.toast('Nejdřív napište, co slibujete', { icon: 'ph-pencil-simple' }); return; }
         const prev = list;
         // Slibuje ten, kdo píše; vidí ho ten druhý — ne napevno Adrian Makince.
         const kdo = this.meWho(), komu = this.druhy(kdo);
@@ -16609,7 +16609,7 @@ class Component extends DCLogic {
       trAddOp: (s.trT || '').trim() ? 1 : .45,
       trAdd: () => {
         const v = (s.trT || '').trim();
-        if (!v) return;
+        if (!v) { this.toast('Nejdřív napište, o jakou událost jde', { icon: 'ph-pencil-simple' }); return; }
         const prev = list;
         const druhy = this.krestni(this.druhy(this.meWho()));
         this.setState({ truths: [{ id: 't' + Date.now(), title: v, when: 'dnes', a: 'Zapište svou verzi.', m: druhy + ' · verze zatím nezapsaná.', proof: ['Zatím jsme nenašli žádný doklad.'], unprovable: 'Dokud nejsou obě verze, není co srovnávat.', kept: false }].concat(list), trT: '' });
@@ -16951,7 +16951,7 @@ class Component extends DCLogic {
       },
       dupMergeAllLabel: ready.length ? 'Sloučit vybrané (' + ready.length + ')' : 'Vyberte, co nechat',
       dupMergeAllOff: ready.length === 0, dupMergeAllOp: ready.length === 0 ? '.45' : '1',
-      dupMergeAll: () => { if (ready.length) mergeGroups(ready); },
+      dupMergeAll: () => { if (ready.length) mergeGroups(ready); else this.toast('Nejdřív u nálezů vyberte, kterou kopii nechat', { icon: 'ph-info' }); },
       dupEmpty: open.length === 0,
       dupGroups: open.map(g => {
         const sel = keep[g.id];
@@ -17947,7 +17947,7 @@ class Component extends DCLogic {
       fgCant: (s.fgDraft || '').trim().length <= 3,
       fgAdd: () => {
         const t = (s.fgDraft || '').trim();
-        if (!t) return;
+        if (!t) { this.toast('Nejdřív něco napište', { icon: 'ph-pencil-simple' }); return; }
         const prev = list;
         set([{ id: 'g' + Date.now(), what: t, by: this.meWho(), date: this.dnesIso(), tries: 0 }].concat(list));
         this.setState({ fgDraft: '' });
@@ -18078,8 +18078,8 @@ class Component extends DCLogic {
     const s = String(jmeno || '').trim();
     if (! s) return s;
 
-    // Celé jméno („Makinka Kubíčková") se skloňuje křestním — věta „nic na
-    // Makinka Kubíčková nečeká" vznikala, protože příjmení na -á nemá vzor.
+    // Celé jméno („Jana Nováková") se skloňuje křestním — věta „nic na
+    // Jana Nováková nečeká" vznikala, protože příjmení na -á nemá vzor.
     if (/\s/.test(s)) return this.sklon(this.krestni(s), pad);
 
     const posledni = s.slice(-1);
@@ -18750,7 +18750,7 @@ class Component extends DCLogic {
       zprCant: (s.zprLetter || '').trim().length <= 2,
       zprSeal: () => {
         const text = (s.zprLetter || '').trim();
-        if (!text) return;
+        if (!text) { this.toast('Nejdřív napište, co má v kapsli být', { icon: 'ph-pencil-simple' }); return; }
         const prev = this.kapsList();
         // Dopis se otevře k nejbližšímu výročí, jinak za rok — ne 4. září 2027 napořád.
         const kdy = this.dalsiVyroci() || (() => { const d = this.dnes(); d.setFullYear(d.getFullYear() + 1); return d; })();
@@ -19200,7 +19200,7 @@ class Component extends DCLogic {
       kapCan: (s.kapDraft || '').trim().length > 2,
       kapSeal: () => {
         const text = (s.kapDraft || '').trim();
-        if (!text) return;
+        if (!text) { this.toast('Nejdřív napište, co má v kapsli být', { icon: 'ph-pencil-simple' }); return; }
         const prev = list;
         this.setState({
           kapsules: [{ id: 'k' + Date.now(), kind: 'vzkaz', from: this.meWho(), open: cur.date, trig: cur.date ? null : cur.key, title: text, body: '' }].concat(list),
@@ -20060,7 +20060,7 @@ class Component extends DCLogic {
       klTaskCant: !String(s.klTaskDraft || '').trim(),
       klTaskAdd: () => {
         const jmeno = String(s.klTaskDraft || '').trim();
-        if (!jmeno) return;
+        if (!jmeno) { this.toast('Napište, o jakou práci jde', { icon: 'ph-pencil-simple' }); return; }
         const prev = klTasks;
         this.setState({
           klTasks: klTasks.concat([{ id: 0, name: jmeno, need: s.klTaskNeed === undefined ? 2 : s.klTaskNeed, route: null, tab: null, label: '' }]),
@@ -20247,7 +20247,7 @@ class Component extends DCLogic {
   }
   lbComAdd() {
     const s = this.state, id = s.lb, txt = (s.lbComDraft || '').trim();
-    if (!txt) return;
+    if (!txt) { this.toast('Nejdřív napište komentář', { icon: 'ph-pencil-simple' }); return; }
     const store = s.lbCom || {};
     const cur = store[id] !== undefined ? store[id] : [];
     const now = new Date();
@@ -21110,7 +21110,7 @@ class Component extends DCLogic {
           this.toast('Tenhle seznam nevznikl z receptu', { icon: 'ph-info' });
         },
         ckShopClearPick: () => {
-          if (pick === 'vše') return;
+          if (pick === 'vše') { this.toast('Nejdřív nahoře vyberte recept', { icon: 'ph-info' }); return; }
           const prevRows = allRows, prevDone = s.rowDone;
           const map = { ...prevDone };
           rows.forEach(r => { map[r.id] = true; });
@@ -21121,7 +21121,7 @@ class Component extends DCLogic {
         ckSetShopDraft: e => this.setState({ ckShopDraft: e.target.value }),
         ckAddItem: () => {
           const t = (s.ckShopDraft || '').trim();
-          if (!t) return;
+          if (!t) { this.toast('Napište položku a stiskněte Enter', { icon: 'ph-basket' }); return; }
           const prev = this.rowsOf('shopping');
           this.setRows('shopping', [{ t, m: 'ručně přidáno', g: null, id: 'shopping-n' + (s.xSeq || 1) }].concat(prev));
           this.setState({ ckShopDraft: '', xSeq: (s.xSeq || 1) + 1 });
@@ -21561,7 +21561,7 @@ class Component extends DCLogic {
         msgSetDraft: e => this.setState({ msgDraft: e.target.value }),
         msgKey: e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); const t = (s.msgDraft || '').trim(); if (t) this.msgSend('t', t); } },
         msgCant: !(s.msgDraft || '').trim(),
-        msgSendGo: () => { const t = (s.msgDraft || '').trim(); if (t) this.msgSend('t', t); },
+        msgSendGo: () => { const t = (s.msgDraft || '').trim(); if (t) this.msgSend('t', t); else this.toast('Nejdřív napište zprávu', { icon: 'ph-pencil-simple' }); },
         // Fotka z knihovny: napřed se vybere, pak se pošle. Dřív si tlačítko
         // vybralo samo, náhodně, a do hovoru napsalo, že jsem ji poslal.
         msgAttach: () => this.setState({ msgPickOpen: true }),
@@ -22948,7 +22948,7 @@ class Component extends DCLogic {
       nowSpCant: !(d.label || '').trim() || !parseInt(String(d.amount).replace(/\s/g, ''), 10),
       nowSpSave: () => {
         const amount = parseInt(String(d.amount).replace(/\s/g, ''), 10);
-        if (!amount || !(d.label || '').trim()) return;
+        if (!amount || !(d.label || '').trim()) { this.toast(!amount ? 'Zadejte částku' : 'Napište, za co to bylo', { icon: 'ph-pencil-simple' }); return; }
         // U dvojice do výdajů cesty — útrata dne i fond se pak počítají ze serveru.
         const api = window.GalerieApi;
         if (!this.ukazka() && api && api.mode === 'http' && NOWTRIP.n) {
@@ -23809,7 +23809,7 @@ class Component extends DCLogic {
       },
       chSave: () => {
         const t = (d.title || '').trim();
-        if (!t) return;
+        if (!t) { this.toast('Kapitola potřebuje název', { icon: 'ph-pencil-simple' }); return; }
         const prev = this.storyOf();
         if (d.mode === 'edit') {
           this.storySet(prev.map(c => c.id === d.id ? { ...c, title: t, year: d.year, status: d.status, text: d.text } : c));
@@ -23842,7 +23842,7 @@ class Component extends DCLogic {
       msSave: () => {
         const t = (d.title || '').trim();
         const iso = this.msIso(d);
-        if (!t || !iso) return;
+        if (!t || !iso) { this.toast(!t ? 'Milník potřebuje název' : 'Zadejte datum — třeba 14. 2. 2019', { icon: 'ph-pencil-simple' }); return; }
         const prev = this.msOf();
         const row = { id: 'm-n' + (s.xSeq || 1), y: iso.slice(0, 4), date: d.date, title: t, note: d.note, icon: 'ph-sparkle', ch: d.ch, iso: iso };
         this.setState({ msList: prev.concat([row]).sort((a, b) => a.y.localeCompare(b.y)), msDlg: null, xSeq: (s.xSeq || 1) + 1 });
@@ -25172,7 +25172,7 @@ class Component extends DCLogic {
       ckPanKey: e => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } },
       ckPanAdd: () => {
         const t = (s.ckPanDraft || '').trim();
-        if (!t) return;
+        if (!t) { this.toast('Napište, co do zásob přidat', { icon: 'ph-pencil-simple' }); return; }
         const prev = list;
         const cat = pick === 'vše' ? 'Špajz' : pick;
         this.pantrySet([{ id: 'p-n' + (s.xSeq || 1), name: t, cat, qty: 1, unit: 'ks', days: null, keys: [t.toLowerCase()] }].concat(list),
@@ -25465,7 +25465,7 @@ class Component extends DCLogic {
             };
           }),
           ofsPackAll: () => { const prvni = OFFPACKS.find(p => !this.offlineStav(p[0])); if (prvni) this.offlineUloz(prvni[0], prvni[1]); else this.toast('Všechny balíčky už jsou v zařízení', { icon: 'ph-cloud-check' }); },
-          ofsPackNone: () => { OFFPACKS.filter(p => this.offlineStav(p[0])).forEach(p => this.offlineUvolni(p[0], p[1])); },
+          ofsPackNone: () => { const ulozene = OFFPACKS.filter(p => this.offlineStav(p[0])); if (!ulozene.length) { this.toast('V zařízení není nic staženého', { icon: 'ph-info' }); return; } ulozene.forEach(p => this.offlineUvolni(p[0], p[1])); },
           ofsPackNote: 'Obrázky se ukládají přes service worker této aplikace. Po dni nebo dvou se odkazy obnoví — balíček je dobré stáhnout před cestou znovu.'
         });
       }
@@ -25749,7 +25749,7 @@ class Component extends DCLogic {
         whDraftKey: e => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } },
         whAdd: () => {
           const t = (s.whDraft || '').trim();
-          if (!t) return;
+          if (!t) { this.toast('Napište možnost, kterou kolo přidá', { icon: 'ph-pencil-simple' }); return; }
           const prev = s.whCustom || {};
           this.setState({ whCustom: Object.assign({}, prev, { [setId]: (prev[setId] || []).concat([t]) }), whDraft: '' });
           this.toast('„' + t + '“ přidáno do kolečka ' + set.name.toLowerCase(), { icon: 'ph-plus', local: true, undo: () => this.setState({ whCustom: prev }) });
@@ -25775,7 +25775,7 @@ class Component extends DCLogic {
         })),
         whLogClear: () => {
           const prev = log;
-          if (!log.length) return;
+          if (!log.length) { this.toast('Historie je prázdná', { icon: 'ph-info' }); return; }
           this.setState({ whLog: [] });
           this.toast('Historie hodů smazána', { icon: 'ph-trash', local: true, undo: () => this.setState({ whLog: prev }) });
         }
@@ -26797,7 +26797,7 @@ class Component extends DCLogic {
       const moje = odp[ja] || '', jeho = odp[on] || '';
       const txt = (s.homeQText || {})[i] || '';
       const odeslat = () => {
-        if (!txt.trim()) return;
+        if (!txt.trim()) { this.toast('Nejdřív napište odpověď', { icon: 'ph-pencil-simple' }); return; }
         this.setState({ homeQAns: Object.assign({}, s.homeQAns || {}, { [i]: Object.assign({}, odp, { [ja]: txt.trim() }) }) });
         this.toast(jeho ? 'Odpověď uložena — teď vidíte i odpověď druhého' : 'Odpověď uložena — odpověď druhého se ukáže, až odpoví', { icon: 'ph-lock-key-open' });
       };
@@ -27236,7 +27236,7 @@ class Component extends DCLogic {
       rulDlgDry: dry.label,
       rulDlgCant: bad,
       rulDlgSave: () => {
-        if (bad) return;
+        if (bad) { this.toast('Pravidlo ještě není celé — doplňte, co je v dialogu označené', { icon: 'ph-warning' }); return; }
         const rules = this.rulesAll();
         const prev = rules;
         const row = {
@@ -27658,14 +27658,14 @@ class Component extends DCLogic {
             },
             up: () => {
               const idx = TIERS.findIndex(x => x[0] === t[0]);
-              if (idx <= 0) return;
+              if (idx <= 0) { this.toast(r.t + ' už je v nejvyšším pásmu', { icon: 'ph-info' }); return; }
               const prev = s.tierMap || {};
               this.setState(this.xRowsProTitul(r.id, { tierMap: { ...prev, [r.id]: TIERS[idx - 1][0] } }));
               this.toast(r.t + ' → tier ' + TIERS[idx - 1][0], { icon: 'ph-arrow-up', undo: () => this.setState({ tierMap: prev }) });
             },
             down: () => {
               const idx = TIERS.findIndex(x => x[0] === t[0]);
-              if (idx >= TIERS.length - 1) return;
+              if (idx >= TIERS.length - 1) { this.toast(r.t + ' už je v nejnižším pásmu', { icon: 'ph-info' }); return; }
               const prev = s.tierMap || {};
               this.setState(this.xRowsProTitul(r.id, { tierMap: { ...prev, [r.id]: TIERS[idx + 1][0] } }));
               this.toast(r.t + ' → tier ' + TIERS[idx + 1][0], { icon: 'ph-arrow-down', undo: () => this.setState({ tierMap: prev }) });
@@ -27808,7 +27808,7 @@ class Component extends DCLogic {
       fmAddLabel: key === 'watchlist' ? 'Přidat na watchlist' : key === 'series' ? 'Přidat seriál' : 'Přidat film',
       fmAdd: () => {
         const t = String(s.fmDraft || '').trim();
-        if (!t) return;
+        if (!t) { this.toast('Napište název titulu', { icon: 'ph-pencil-simple' }); return; }
         const prev = rows;
         const stitek = key === 'watchlist' ? 'chceme' : key === 'series' ? 'probíhá' : 'hotovo';
         this.setRows(key, [{
@@ -27920,7 +27920,7 @@ class Component extends DCLogic {
       },
       trSave: () => {
         const title = (d.title || '').trim();
-        if (!title) return;
+        if (!title) { this.toast('Cesta potřebuje název', { icon: 'ph-pencil-simple' }); return; }
         const prev = s.myTrips || [];
         const row = { id: d.id || 'tr-n' + (s.xSeq || 1), title, where: (d.where || '').trim() || 'zatím nevíme kam', when: (d.when || '').trim() || 'termín neurčen', budget: (d.budget || '').trim(), past: !!d.past, n: 5 + prev.length * 6 };
         this.setState({
@@ -28321,7 +28321,7 @@ class Component extends DCLogic {
       },
       evSave: () => {
         const t = (d.t || '').trim();
-        if (!t || !iso) return;
+        if (!t || !iso) { this.toast(!t ? 'Událost potřebuje název' : 'Vyberte den události', { icon: 'ph-pencil-simple' }); return; }
         const p = iso.split('-');
         const prev = this.events();
         const rep = d.repeat || '';
@@ -28956,7 +28956,7 @@ class Component extends DCLogic {
       dcAddOp: (s.dcT || '').trim() ? 1 : .45,
       dcAdd: () => {
         const t = (s.dcT || '').trim();
-        if (!t) return;
+        if (!t) { this.toast('Napište, co jste rozhodli', { icon: 'ph-pencil-simple' }); return; }
         const prev = decs;
         const rev = { '6': 'za půl roku', '12': 'za rok', '24': 'za dva roky', '0': null }[s.dcRev || '12'];
         this.setState({
@@ -29099,7 +29099,7 @@ class Component extends DCLogic {
       gftAddOp: (s.gftT || '').trim() ? 1 : .45,
       gftAdd: () => {
         const t = (s.gftT || '').trim();
-        if (!t) return;
+        if (!t) { this.toast('Napište, co si přejete', { icon: 'ph-pencil-simple' }); return; }
         const prev = wishes;
         const price = parseInt(String(s.gftP || '').replace(/[^0-9]/g, ''), 10) || 0;
         this.setState({
@@ -29264,7 +29264,8 @@ class Component extends DCLogic {
     const monthTotal = mm => { let t = 0; for (let i = 1; i <= new Date(y, mm + 1, 0).getDate(); i++) t += this.calCount(y, mm, i); return t; };
 
     // Přetažené události mají nové datum v evMoved.
-    const moved = s.evMoved || {};
+    // U dvojice se přesouvá rovnou v evList (viz drop níž); staré `evMoved` by zastínilo skutečné datum.
+    const moved = this.ukazka() ? (s.evMoved || {}) : {};
     const allEv = this.events().map(e => moved[e.id] ? { ...e, y: moved[e.id].y, m: moved[e.id].m, d: moved[e.id].d } : e);
     const evOn = (yy, mm, dd) => allEv.filter(e => e.y === yy && e.m === mm && e.d === dd)
       .sort((a, b) => (a.time || '99').localeCompare(b.time || '99'));
@@ -29339,6 +29340,19 @@ class Component extends DCLogic {
           e.preventDefault();
           const d = s.calDrag;
           if (!d) return;
+          /*
+           * U dvojice se přesouvá sama událost v kalendáři (evList → calendar_events).
+           * `evMoved` by nové datum drželo jen v zobrazení počítače — telefon,
+           * připomínky i Dnes by událost dál čekaly v původní den.
+           */
+          if (!this.ukazka()) {
+            const predtim = this.events();
+            if (!predtim.some(e => e.id === d.id)) { this.setState({ calDrag: null }); return; }
+            this.setEvents(predtim.map(e => e.id === d.id ? { ...e, y, m, d: dd } : e));
+            this.setState({ calDrag: null });
+            this.toast('„' + d.t + '“ přesunuto na ' + dd + '. ' + MG[m], { icon: 'ph-calendar-plus', undo: () => this.setEvents(predtim) });
+            return;
+          }
           const prev = s.evMoved || {};
           this.setState({ evMoved: { ...prev, [d.id]: { y, m, d: dd } }, calDrag: null });
           this.toast('„' + d.t + '“ přesunuto na ' + dd + '. ' + MG[m], {
@@ -29977,7 +29991,7 @@ class Component extends DCLogic {
       blkClose: () => this.setState({ blkOpen: false }),
       blkReset: () => this.setState(Object.assign(this.blkDefaults(), { blkOpen: true })),
       blkApply: () => {
-        if (clean) return;
+        if (clean) { this.toast('Zatím není co použít — nejdřív něco změňte', { icon: 'ph-info' }); return; }
         /*
          * Zařazení do alba jde se serverem do databáze. Dřív se zapsalo jen
          * do `edits[id].album` v prohlížeči: fotka ukázala nové album na
@@ -31578,14 +31592,14 @@ class Component extends DCLogic {
           },
           up: () => {
             const routes = list.map(x => x[0]);
-            if (i === 0) return;
+            if (i === 0) { this.toast('Už je první ve skupině', { icon: 'ph-info', local: true }); return; }
             const prev = navOrd, next = routes.slice();
             const [it] = next.splice(i, 1); next.splice(i - 1, 0, it);
             this.setState({ navOrd: { ...prev, [g[0]]: next } });
           },
           down: () => {
             const routes = list.map(x => x[0]);
-            if (i === routes.length - 1) return;
+            if (i === routes.length - 1) { this.toast('Už je poslední ve skupině', { icon: 'ph-info', local: true }); return; }
             const prev = navOrd, next = routes.slice();
             const [it] = next.splice(i, 1); next.splice(i + 1, 0, it);
             this.setState({ navOrd: { ...prev, [g[0]]: next } });
@@ -31712,7 +31726,7 @@ class Component extends DCLogic {
     const chatLive = this.chatOf();
     const chatSend = () => {
       const t = (s.chatDraft || '').trim();
-      if (!t) return;
+      if (!t) { this.toast('Nejdřív napište zprávu', { icon: 'ph-pencil-simple' }); return; }
       const d = new Date();
       const stamp = d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0');
       this.setState({ chat: chatLive.concat([{ who: 'a', text: t, meta: stamp + ' · odesláno', id: 'm-n' + s.xSeq }]), chatDraft: '', xSeq: s.xSeq + 1 });
@@ -32042,7 +32056,7 @@ class Component extends DCLogic {
       tripExpSave: () => {
         const d = s.tripExp; if (!d) return;
         const amount = parseInt(String(d.amount).replace(/\s/g, ''), 10);
-        if (!amount || !(d.label || '').trim()) return;
+        if (!amount || !(d.label || '').trim()) { this.toast(!amount ? 'Zadejte částku' : 'Napište, za co to bylo', { icon: 'ph-pencil-simple' }); return; }
         // U dvojice do výdajů cesty (fond, útrata dne, statistika) — dřív jen stav obrazovky.
         const api = window.GalerieApi;
         if (!this.ukazka() && api && api.mode === 'http' && trip.n) {
@@ -33077,7 +33091,8 @@ class Component extends DCLogic {
       })(),
       naSave: () => {
         const name = (s.naName || '').trim();
-        if (name.length < 2 || s.naBusy) return;
+        if (s.naBusy) return;
+        if (name.length < 2) { this.toast('Album potřebuje název aspoň o dvou znacích', { icon: 'ph-pencil-simple' }); return; }
         const rodic = this.baseAlbums().find(a => a.id === s.naParent);
         const path = (rodic ? rodic.path + ' → ' : '') + name;
         const api = window.GalerieApi;
