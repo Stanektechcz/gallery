@@ -6632,8 +6632,8 @@ class Component extends DCLogic {
        'chores choreLog dues inv decs cools proms fam nudges kapsules ' +
        // Kdo je mimo platí pro oba — bez uložení by ho druhé zařízení nevidělo.
        'soloOn soloAway soloWhy ' +
-       // Hlasy společných výběrů — tytéž jako na počítači, pod jménem.
-       'curVotes').split(' ').forEach(x => { this._pKeep[x] = 1; });
+       // Hlasy společných výběrů — tytéž jako na počítači, pod jménem. A zapnuté rituály.
+       'curVotes rtOn').split(' ').forEach(x => { this._pKeep[x] = 1; });
     }
     return !!this._pKeep[k];
   }
@@ -6890,7 +6890,9 @@ class Component extends DCLogic {
     const cost = COSTMEAN.map(c => ({ name: c[0], kc: this.kc(c[1]), share: c[2], note: c[3], icon: c[4] }));
     const chips = (ATAGS[key] || []).map(t => ({ label: t[0], count: t[1] }));
     const people = (APEOPLE[key] || []).map(p => ({ name: p[0], initial: String(p[0]).slice(0, 1), meta: p[1] }));
-    const grid = AGRID[key] ? { note: AGRID[key].note, tiles: AGRID[key].idx.map((x, i) => ({ i: i })) } : null;
+    // „Porovnat série" nese `pairs`, ne `idx` — záložka Úklidu na telefonu na tom spadla celá.
+    const gridIdx = AGRID[key] ? (Array.isArray(AGRID[key].idx) ? AGRID[key].idx : [].concat(...(AGRID[key].pairs || []))) : [];
+    const grid = AGRID[key] ? { note: AGRID[key].note, tiles: gridIdx.map((x, i) => ({ i: i })) } : null;
     // Vzpomínky, cesta, pravidla, vlákno, nástěnka a tisk — každé má na telefonu
     // vlastní tvar: karty, časová osa dne, přepínače s protokolem, bubliny,
     // sekce úkolů a zakázky s dráhou stavů.
@@ -7195,15 +7197,26 @@ class Component extends DCLogic {
     const isCkPantry = ckPantry.length > 0;
 
     const RITUALS = D.RITUALS || [];
-    const rtOn = s.rtOnM || {};
+    /*
+     * U dvojice bez vymyšlených poznámek a se stejnými přepínači jako počítač.
+     *
+     * Poznámky u rituálů („V kapsli je 6 věcí od Adriana a 4 od Makinky",
+     * „Naposledy uvolnilo 14,2 GB") jsou z ukázky a odpočet se počítal
+     * z vymyšleného „Nejbližší: 4. září". Zapnutí telefon držel ve vlastním
+     * `rtOnM`, takže na počítači platilo něco jiného.
+     */
+    const rtServer = this.galerieNaServeru();
+    const rtKlic = rtServer ? 'rtOn' : 'rtOnM';
+    const rtOn = s[rtKlic] || {};
+    const rtNote = r => rtServer ? '' : r[6];
     const rtRows = (key === 'rtList' || key === 'rtNext') ? RITUALS.map(r => {
       const on = rtOn[r[0]] === undefined ? r[5] : rtOn[r[0]];
-      return { title: r[1], when: r[2], what: r[3], icon: r[4], note: r[6], on: on,
+      return { title: r[1], when: r[2], what: r[3], icon: r[4], note: rtNote(r), on: on,
         track: on ? 'var(--g-acc)' : 'var(--g-line)', knob: on ? '20px' : '2px',
         toggle: () => {
           const prev = rtOn;
-          this.setState({ rtOnM: Object.assign({}, rtOn, { [r[0]]: !on }) });
-          this.toast(r[1] + (on ? ' — vypnuto' : ' — zapnuto'), { icon: r[4], undo: () => this.setState({ rtOnM: prev }) });
+          this.setState({ [rtKlic]: Object.assign({}, rtOn, { [r[0]]: !on }) });
+          this.toast(r[1] + (on ? ' — vypnuto' : ' — zapnuto'), { icon: r[4], undo: () => this.setState({ [rtKlic]: prev }) });
         } };
     }).filter(r => key === 'rtList' ? true : false) : [];
     const isRt = rtRows.length > 0;
@@ -7227,8 +7240,8 @@ class Component extends DCLogic {
     };
     const rtNextRows = key === 'rtNext' ? RITUALS.map(r => {
       const on = rtOn[r[0]] === undefined ? r[5] : rtOn[r[0]];
-      const days = rtDaysFrom(r[6]) !== null ? rtDaysFrom(r[6]) : rtDaysFrom(r[2]);
-      return { title: r[1], when: r[2], what: r[3], icon: r[4], note: r[6], on: on, days: days };
+      const days = rtDaysFrom(rtNote(r)) !== null ? rtDaysFrom(rtNote(r)) : rtDaysFrom(r[2]);
+      return { title: r[1], when: r[2], what: r[3], icon: r[4], note: rtNote(r), on: on, days: days };
     }).filter(r => r.on).sort((a, b) => (a.days === null ? 9999 : a.days) - (b.days === null ? 9999 : b.days)).map((r, i) => ({
       title: r.title, when: r.when, what: r.what, icon: r.icon, note: r.note,
       hasLeft: r.days !== null,
@@ -10655,7 +10668,8 @@ class Component extends DCLogic {
   rtOn() {
     const s = this.state;
     // `rtOnM` je totéž nastavení, které ukládá záložkový detail — dvě mapy by se rozešly.
-    const ulozene = s.rtOnM || s.rtOn || {};
+    // U dvojice platí `rtOn`, tedy stejné přepínače jako na počítači.
+    const ulozene = (this.galerieNaServeru() ? s.rtOn : (s.rtOnM || s.rtOn)) || {};
     const o = {};
     MRITUALS.forEach(r => { o[r[0]] = ulozene[r[0]] === undefined ? !!r[5] : !!ulozene[r[0]]; });
     return o;
@@ -10672,17 +10686,19 @@ class Component extends DCLogic {
       rtRows: MRITUALS.map(r => {
         const isOn = !!on[r[0]], didRun = !!ran[r[0]];
         return {
-          name: r[1], when: r[2], what: r[3], icon: r[4], note: r[6],
-          state: didRun ? 'připraveno' : isOn ? 'čeká na svůj den' : 'vypnuto',
+          // Poznámky u rituálů jsou z ukázky („V kapsli je 6 věcí od Adriana…").
+          name: r[1], when: r[2], what: r[3], icon: r[4], note: this.galerieNaServeru() ? '' : r[6],
+          state: didRun && !this.galerieNaServeru() ? 'připraveno' : isOn ? 'čeká na svůj den' : 'vypnuto',
           stateColor: didRun ? 'var(--g-ok)' : isOn ? 'var(--g-ink2)' : 'var(--g-ink3)',
           fg: isOn ? 'var(--g-ink)' : 'var(--g-ink3)',
           track: isOn ? 'var(--g-ok)' : 'var(--g-line)',
           knob: isOn ? '20px' : '2px',
           toggle: () => {
-            const prev = s.rtOnM;
-            this.setState({ rtOnM: Object.assign({}, on, { [r[0]]: !isOn }) });
+            const klic = this.galerieNaServeru() ? 'rtOn' : 'rtOnM';
+            const prev = s[klic];
+            this.setState({ [klic]: Object.assign({}, on, { [r[0]]: !isOn }) });
             this.toast(isOn ? 'Rituál vypnut — ' + r[1] : 'Rituál zapnut — ' + r[1] + ' · ' + r[2], {
-              icon: 'ph-confetti', undo: () => this.setState({ rtOnM: prev })
+              icon: 'ph-confetti', undo: () => this.setState({ [klic]: prev })
             });
           },
           runNow: () => {
