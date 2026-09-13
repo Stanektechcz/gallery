@@ -6470,7 +6470,7 @@ class Component extends DCLogic {
     const spent = mineBuys.reduce((a, b) => a + b.price, 0);
     const addBuy = (forWhom, what, price, wishId, occasion) => {
       const prev = buys;
-      setBuys([{ id: 'b' + Date.now(), owner: me, forWhom, what, price, wishId: wishId || null, occasion: occasion || 'Výročí 4. září', status: 'reserved', where: 'Doplňte, kam to schováte', expensed: false }].concat(buys));
+      setBuys([{ id: 'b' + Date.now(), owner: me, forWhom, what, price, wishId: wishId || null, occasion: occasion || ((GIFT_OCC[0] || {}).name2 || 'bez příležitosti'), status: 'reserved', where: 'Doplňte, kam to schováte', expensed: false }].concat(buys));
       this.toast(what + ' → Moje nákupy · ' + other + ' to nevidí', { icon: 'ph-lock-key', undo: () => setBuys(prev) });
     };
     return {
@@ -6536,7 +6536,16 @@ class Component extends DCLogic {
           expenseLabel: b.expensed ? 'Výdaj zapsán' : 'Zapsat výdaj skrytě',
           expenseOff: b.expensed, expenseOp: b.expensed ? .45 : 1,
           // „Do kategorie Dárky" se u dvojice nic nezapsalo — rozpočet dárek nepočítal.
-          expense: () => { if (((window.GalerieData || {}).DVOJICE || []).length) { this.zatimNeumime('zápis dárku do Financí — výdaj zapíšete v Transakcích'); return; } const prev = buys; setBuys(buys.map(x => x.id === b.id ? { ...x, expensed: true } : x)); this.toast(this.kc(b.price) + ' do kategorie Dárky · bez popisu', { icon: 'ph-receipt', undo: () => setBuys(prev) }); }
+          // Do knihy „skrytě": popis „Dárek", kategorie Dárky — druhý vidí částku, ne co a pro koho.
+          expense: () => { if (this.galerieNaServeru()) {
+            if (!(b.price > 0)) { this.toast('Dárek nemá cenu — není co zapsat', { icon: 'ph-info' }); return; }
+            window.GalerieApi.post('platby/rucne', { popis: 'Dárek', castka: b.price, kategorie: 'Dárky', klic: 'dar-' + b.id }).then(res => {
+              if (res && window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data, res.prazdne);
+              setBuys((this.state.buys || buys).map(x => x.id === b.id ? Object.assign({}, x, { expensed: true }) : x));
+              this.toast(this.kc(b.price) + ' zapsáno do Financí jako „Dárek" · bez popisu', { icon: 'ph-receipt' });
+            }).catch(e => this.chybaServeru(e, 'Výdaj se nepodařilo zapsat'));
+            return;
+          } const prev = buys; setBuys(buys.map(x => x.id === b.id ? { ...x, expensed: true } : x)); this.toast(this.kc(b.price) + ' do kategorie Dárky · bez popisu', { icon: 'ph-receipt', undo: () => setBuys(prev) }); }
         };
       }),
       gftOccasions: GIFT_OCC.map(o => {
@@ -6579,7 +6588,7 @@ class Component extends DCLogic {
        'fsAdd fsTry fsWin quartTalk quartPlan quartTook indepLearn indepSwap ' +
        'trustCalled trustTold svedAdj exitOff exitWho exitMade dayBonus dayGiven dayShift ' +
        'blizAdd blizWA blizWM blizBlock kidsStance kidsYear kidsFixed kidsTalks ' +
-       'mineInc mineEven parDone mechLog rowDone sw rules memSaved memLater curVotesM navHide evUndone annFmtM kapOpened nedDone klQuiet evPick rtOnM ndStateM whLogM offPackM memPrefs lbTags lbVers setVals lockIdle lockSecs lockBio lockStart edits cycDays').split(' ').forEach(x => { this._pKeep[x] = 1; });
+       'mineInc mineEven parDone mechLog rowDone sw rules memSaved memLater curVotesM navHide evUndone annFmtM kapOpened nedDone klQuiet evPick rtOnM ndStateM whLogM offPackM memPrefs lbTags lbVers setVals lockIdle lockSecs lockBio lockStart edits cycDays wishes ideas buys').split(' ').forEach(x => { this._pKeep[x] = 1; });
     }
     return !!this._pKeep[k];
   }
@@ -6897,7 +6906,17 @@ class Component extends DCLogic {
       trigIcon: RTRIG[r[0]].icon,
       act: RACT[r[1]].label + (r[4] ? ' · ' + r[4] : ''),
       actIcon: RACT[r[1]].icon,
-      add: () => this.zatimNeumime('zakládání pravidel z telefonu')
+      /*
+       * Založit pravidlo z návrhu — stejný tvar jako na počítači; `rules`
+       * převezme server do automation_rules (PravidlaVeStavu).
+       */
+      add: () => {
+        const prevRules = rulesList;
+        if (prevRules.some(x => x.name === r[2])) { this.toast('Tohle pravidlo už máte', { icon: 'ph-info' }); return; }
+        const row = { id: 'r' + Date.now(), name: r[2], trig: r[0], targ: r[3], act: r[1], aarg: r[4], on: true, who: 'oba', runs: 0, last: null };
+        this.setState({ rules: prevRules.concat([row]) });
+        this.toast('Pravidlo vytvořeno — ' + r[2], { icon: 'ph-flow-arrow', undo: () => this.setState({ rules: prevRules }) });
+      }
     })) : [];
     const isRulSug = rulSug.length > 0;
     const rulLog = (key === 'rulLog' ? RULOG : []).map(l => ({
@@ -7095,11 +7114,24 @@ class Component extends DCLogic {
     const ckKeys = Object.keys(RECIPES);
     const ckSuggest = key === 'ckSuggest' ? ckKeys.slice(0, 4).map((rk, i) => {
       const r = RECIPES[rk] || {};
+      // U dvojice bez vymyšleného skóre a důvodů („kromě bazalky") — aplikace spíž ani počasí nezná.
+      const ukazka = !this.galerieNaServeru();
       return { title: r.title || rk, kind: r.kind || '', time: r.time || '',
-        score: String(96 - i * 9) + ' %', w: (96 - i * 9) + '%',
-        why: i === 0 ? 'Máte doma všechno kromě bazalky.' : i === 1 ? 'Na dnešní počasí a čas, který zbývá.' : i === 2 ? 'Nevařili jste to nejdéle.' : 'Zbytky z pátku se využijí.',
+        score: ukazka ? String(96 - i * 9) + ' %' : '', w: ukazka ? (96 - i * 9) + '%' : '0%',
+        why: ukazka
+          ? (i === 0 ? 'Máte doma všechno kromě bazalky.' : i === 1 ? 'Na dnešní počasí a čas, který zbývá.' : i === 2 ? 'Nevařili jste to nejdéle.' : 'Zbytky z pátku se využijí.')
+          : 'Z vaší kuchařky' + (r.time ? ' · ' + r.time : ''),
         color: i === 0 ? 'var(--g-ok)' : 'var(--g-acc)',
-        cook: () => this.zatimNeumime('zapsání dnešního vaření z telefonu') };
+        // Uvařit dnes = recept do dnešního dne v menu (plán jídel na serveru), jako na počítači.
+        cook: () => {
+          if (ukazka) { this.toast((r.title || rk) + ' na dnešek', { icon: 'ph-cooking-pot' }); return; }
+          const DNY = ['Pondělí', 'Úterý', 'Středa', 'Čtvrtek', 'Pátek', 'Sobota', 'Neděle'];
+          const den = DNY[(new Date().getDay() + 6) % 7];
+          const menu = Object.assign({}, (window.GalerieData || {}).CKMENU || {}, { [den]: rk });
+          window.GalerieApi.save({ ckMenu: menu });
+          setTimeout(() => { if (window.GalerieObnovit) window.GalerieObnovit('kucharka'); }, 2500);
+          this.toast((r.title || rk) + ' v menu na dnešek (' + den.toLowerCase() + ')', { icon: 'ph-cooking-pot' });
+        } };
     }) : [];
     const isCkSuggest = ckSuggest.length > 0;
     const ckPantry = key === 'ckPantry' ? PANTRY.map(p => ({
@@ -8978,6 +9010,28 @@ class Component extends DCLogic {
    * Alba zakládal, plnil a mazal jen ve stavu telefonu. U dvojice jde všechno
    * stejnými cestami jako na počítači.
    */
+  /*
+   * Tisk / PDF z telefonu — čistý list v novém okně a dialog tisku prohlížeče
+   * (odtud „Uložit jako PDF" nebo sdílení). Obsah jde jako text, nikdy HTML z dat.
+   */
+  tiskni(nazev, bloky, podtitul) {
+    const esc = t => String(t === null || t === undefined ? '' : t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    const w = window.open('', '_blank');
+    if (!w) { this.toast('Prohlížeč zablokoval okno pro tisk — povolte vyskakovací okna', { icon: 'ph-warning' }); return false; }
+    const telo = (bloky || []).map(b => '<section>' + (b.nadpis ? '<h2>' + esc(b.nadpis) + '</h2>' : '')
+      + (b.text ? '<p>' + esc(b.text) + '</p>' : '')
+      + (b.radky ? '<table>' + b.radky.map(r => '<tr><th>' + esc(r[0]) + '</th><td>' + esc(r[1]) + '</td></tr>').join('') + '</table>' : '')
+      + '</section>').join('');
+    w.document.open();
+    w.document.write('<!doctype html><html lang="cs"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' + esc(nazev) + '</title><style>'
+      + 'body{font:15px/1.5 Georgia,serif;color:#1d1b16;margin:16px;max-width:680px}h1{font-size:22px;margin:0 0 4px}p.sub{color:#6a6458;font-size:12px;margin:0 0 14px}'
+      + 'h2{font-size:14px;margin:16px 0 6px;border-bottom:1px solid #1d1b16;text-transform:uppercase;letter-spacing:.08em}table{border-collapse:collapse;width:100%}'
+      + 'th,td{text-align:left;padding:4px 8px 4px 0;border-bottom:1px solid #ddd6c8;vertical-align:top}th{font-weight:normal;color:#6a6458;width:40%}</style></head><body>'
+      + '<h1>' + esc(nazev) + '</h1>' + (podtitul ? '<p class="sub">' + esc(podtitul) + '</p>' : '') + telo + '</body></html>');
+    w.document.close();
+    setTimeout(() => { try { w.focus(); w.print(); } catch (e) {} }, 300);
+    return true;
+  }
   galerieNaServeru() {
     const api = window.GalerieApi;
     return !!(((window.GalerieData || {}).DVOJICE || []).length && api && api.mode === 'http' && api.post);
@@ -9613,9 +9667,14 @@ class Component extends DCLogic {
         if (!pages) { this.toast('Vyberte aspoň jednu kapitolu', { icon: 'ph-info' }); return; }
         this.setState({ secId: 'tvtisk', secTab: 1 });
         this.push('sec');
-        this.toast('Rok v číslech ' + year + ' předán do výběrů k tisku · ' + pages + ' stran · ' + this.kc(price), { icon: 'ph-book-bookmark' });
+        // Telefon zakázku nezakládá — „předán do výběrů" nebyla pravda.
+        this.toast('Zakázku Rok v číslech ' + year + ' (' + pages + ' stran · ' + this.kc(price) + ') založíte na počítači v Tisku', { icon: 'ph-book-bookmark' });
       },
-      ybPdf: () => this.zatimNeumime('tiskové PDF')
+      // Podklad do okna tisku — z telefonu jde „Uložit jako PDF" nebo sdílet.
+      ybPdf: () => {
+        if (!pages) { this.toast('Vyberte aspoň jednu kapitolu', { icon: 'ph-info' }); return; }
+        this.tiskni('Rok v číslech ' + year, chosen.map(c => ({ nadpis: c[1], text: c[3] || '', radky: (c[4] || []).map(x => [x[0], x[1] + (x[2] ? ' · ' + x[2] : '')]) })), pages + ' stran');
+      }
     };
   }
   // ── týdenní shrnutí (automatická karta na Domů) ──
@@ -11452,8 +11511,14 @@ class Component extends DCLogic {
         actions: [
           { label: 'Fotky cesty', icon: 'ph-images', go: () => this.goTab('memories', { filter: trip.place }) },
           { label: 'Útraty', icon: 'ph-wallet', go: () => this.goTab('finance', { txTrip: s.tripId, txCat2: null }) },
-          // „Odkaz zkopírován" bez odkazu i bez kopírování.
-          { label: 'Sdílet', icon: 'ph-share-network', go: () => this.zatimNeumime('sdílení cesty odkazem — odkazem jde sdílet fotky a alba') }
+          // Sdílet cestu = odkaz na fotky z cesty (podle místa cesty), jako výběr v knihovně.
+          { label: 'Sdílet', icon: 'ph-share-network', go: () => {
+            if (!this.galerieNaServeru()) { this.toast('Sdílet jde jen s připojeným serverem', { icon: 'ph-link-simple' }); return; }
+            const misto = String(trip.place || '').toLowerCase();
+            const ids = misto ? PHOTOS.filter(p => String(p.place || '').toLowerCase().indexOf(misto) >= 0 && /^[0-9a-f-]{36}$/.test(String(p.id))).map(p => p.id) : [];
+            if (!ids.length) { this.toast('Z cesty zatím v knihovně nejsou fotky — není co sdílet', { icon: 'ph-info' }); return; }
+            this.sdiletNaServeru({ polozky: ids.slice(0, 500) }, 'Cesta ' + (trip.title || ''));
+          } }
         ],
         days: trip.days.map((d, di) => ({
           label: d[0], when: d[1],

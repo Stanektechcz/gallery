@@ -5,12 +5,14 @@ use App\Http\Controllers\Api\ChatController;
 use App\Http\Controllers\Api\Galerie\AdminController;
 use App\Http\Controllers\Api\Galerie\AlbaController;
 use App\Http\Controllers\Api\Galerie\AlbumArchivController;
+use App\Http\Controllers\Api\Galerie\CestyAkceController;
 use App\Http\Controllers\Api\Galerie\DataController;
 use App\Http\Controllers\Api\Galerie\FinanceAkceController;
 use App\Http\Controllers\Api\Galerie\KosController;
 use App\Http\Controllers\Api\Galerie\LideController;
 use App\Http\Controllers\Api\Galerie\MechanismController;
 use App\Http\Controllers\Api\Galerie\MediaController;
+use App\Http\Controllers\Api\Galerie\MistaController;
 use App\Http\Controllers\Api\Galerie\PravidloController;
 use App\Http\Controllers\Api\Galerie\PripomenutiController;
 use App\Http\Controllers\Api\Galerie\RozporController;
@@ -195,7 +197,18 @@ Route::middleware(['auth:sanctum', 'dvojice', 'throttle:120,1'])->prefix('api')-
         Route::post('cile/{uuid}/vklad', [FinanceAkceController::class, 'vklad'])->whereUuid('uuid')->name('cile.vklad');
         Route::post('vyrovnani', [FinanceAkceController::class, 'vyrovnat'])->name('vyrovnani');
         Route::post('ucty', [FinanceAkceController::class, 'pridatUcet'])->name('ucty.store');
+        Route::post('prevod', [FinanceAkceController::class, 'prevod'])->name('prevod');
     });
+
+    // Cesty: výdaj cesty a bod programu dne (dřív jen stav obrazovky / „zatím neumíme").
+    Route::post('cesty/{cesta}/vydaj', [CestyAkceController::class, 'vydaj'])->whereNumber('cesta')->name('galerie.cesty.vydaj');
+    Route::post('cesty/{cesta}/program', [CestyAkceController::class, 'program'])->whereNumber('cesta')->name('galerie.cesty.program');
+    Route::post('cesty/program/{aktivita}/posunout', [CestyAkceController::class, 'posunout'])->whereNumber('aktivita')->name('galerie.cesty.posunout');
+
+    // Místa: nový cíl, „byli jsme" a společná poznámka (dřív „zatím neumíme").
+    Route::post('mista', [MistaController::class, 'store'])->name('galerie.mista.store');
+    Route::post('mista/stav', [MistaController::class, 'stav'])->name('galerie.mista.stav');
+    Route::post('mista/poznamka', [MistaController::class, 'poznamka'])->name('galerie.mista.poznamka');
 
     // Rychlá ruční platba — dřív řádek jen na obrazovce s datem „30. 8.".
     Route::post('platby/rucne', RucniPlatbaController::class)->name('galerie.platby.rucne');

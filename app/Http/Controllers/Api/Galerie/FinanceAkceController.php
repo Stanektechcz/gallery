@@ -314,6 +314,63 @@ class FinanceAkceController extends Controller
         return $this->hotovo($prostor, 'Účet „'.trim($data['nazev']).'“ založen', 201);
     }
 
+    /**
+     * Převod mezi vlastními účty — třeba vklad na spoření.
+     *
+     * „Dokoupit" u spořicího účtu hlásilo „zatím neumíme". Převod není výdaj
+     * ani příjem: do rozpočtu se nepočítá, jen přesune zůstatek. Bez `z` jde
+     * z hlavního účtu.
+     */
+    public function prevod(Request $request): JsonResponse
+    {
+        $prostor = $this->prostor($request);
+        $data = $request->validate([
+            'z' => ['nullable', 'string', 'max:160'],
+            'na' => ['required', 'string', 'max:160'],
+            'castka' => ['required', 'numeric', 'gt:0', 'max:100000000'],
+        ]);
+
+        $ucty = Wallet::withoutGlobalScope(SpaceContext::SCOPE)->where('gallery_space_id', $prostor->id)->where('is_active', true)
+            ->orderBy('sort_order')->orderBy('id')->get();
+        $jmenem = fn (string $n) => $ucty->first(fn (Wallet $w) => mb_strtolower($w->name) === mb_strtolower(trim($n)));
+
+        $na = $jmenem($data['na']);
+        $z = ! empty($data['z']) ? $jmenem($data['z']) : $ucty->first(fn (Wallet $w) => $na === null || $w->id !== $na->id);
+
+        if ($na === null || $z === null) {
+            return $this->chyba('Převod potřebuje dva vaše účty — založte je v záložce Účty.');
+        }
+
+        if ($z->id === $na->id) {
+            return $this->chyba('Zdrojový a cílový účet nemůže být stejný.');
+        }
+
+        if ($z->currency !== $na->currency) {
+            return $this->chyba('Účty mají různou měnu ('.$z->currency.' a '.$na->currency.') — převod mezi nimi je směna, tu zapíšete v Rozpočtu.');
+        }
+
+        $castka = round((float) $data['castka'], 2);
+
+        Transaction::create([
+            'gallery_space_id' => $prostor->id,
+            'type' => 'transfer',
+            'occurred_at' => Carbon::today()->toDateString(),
+            'wallet_from_id' => $z->id,
+            'wallet_to_id' => $na->id,
+            'amount_from' => $castka,
+            'currency_from' => $z->currency,
+            'amount_to' => $castka,
+            'currency_to' => $na->currency,
+            'description' => 'Převod na '.$na->name,
+            'excluded_from_budget' => true,
+            'exclusion_reason' => 'převod mezi vlastními účty',
+            'state' => 'approved',
+            'created_by' => $request->user()->id,
+        ]);
+
+        return $this->hotovo($prostor, 'Převedeno z '.$z->name.' na '.$na->name, 201);
+    }
+
     // ——— rozpočet ———
 
     /** Měsíční limity kategorií: `{ kategorie: částka za měsíc }`. */

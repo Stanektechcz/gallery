@@ -1729,7 +1729,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
             <button class="btn btn-secondary" onClick="{{ placeAddToTrip }}" style="gap:6px"><i class="ph-duotone ph-airplane-tilt" style="font-size:16px"></i>Přidat do cesty</button>
             <button class="btn btn-secondary" onClick="{{ placeOpenPhotos }}" style="gap:6px"><i class="ph-duotone ph-images" style="font-size:16px"></i>Fotky z místa</button>
             <button class="btn btn-secondary" onClick="{{ placeAddNote }}" style="gap:6px"><i class="ph-duotone ph-pencil-simple" style="font-size:16px"></i>Poznámka</button>
-            <button class="btn btn-secondary" onClick="{{ placeMore }}" aria-label="Další možnosti" title="Sdílet místo, exportovat do mapy, archivovat"><i class="ph-duotone ph-dots-three" style="font-size:18px"></i></button>
+            <button class="btn btn-secondary" onClick="{{ placeMore }}" aria-label="Otevřít v Mapy.cz" title="Otevřít v Mapy.cz"><i class="ph-duotone ph-map-trifold" style="font-size:18px"></i></button>
           </div>
 
           <div style="display:flex; flex-wrap:wrap; gap:44px; margin-top:38px; align-items:flex-start">
@@ -2514,7 +2514,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                   <div style="font-size:14.5px; color:var(--g-ink2); text-wrap:pretty">{{ statInsight }}</div>
                   <div style="display:flex; gap:7px; flex-wrap:wrap; margin-top:14px">
                     <button class="btn btn-secondary" onClick="{{ statExtend }}" style="font-size:12.5px">Prodloužit o 30 dní</button>
-                    <button class="btn btn-ghost" onClick="{{ statQuiet }}" style="font-size:12.5px">Přestat počítat</button>
+                    <!-- „Přestat počítat" tu bylo bez funkce: otevření se počítají kvůli bezpečnosti odkazu. Odkaz jde jen zneplatnit v seznamu. -->
                   </div>
                 </div>
               </div>
@@ -2793,7 +2793,9 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                 </div>
                 <div style="margin-left:auto; display:flex; gap:8px; flex-wrap:wrap">
                   <button class="btn btn-primary" onClick="{{ invAdd }}" style="gap:6px"><i class="ph-duotone ph-plus" style="font-size:16px"></i>Nová pozice</button>
-                  <button class="btn btn-secondary" onClick="{{ invRebalance }}" style="gap:6px"><i class="ph-duotone ph-scales" style="font-size:16px"></i>Návrh rebalance</button>
+                  <sc-if value="{{ invRebalanceOn }}">
+                    <button class="btn btn-secondary" onClick="{{ invRebalance }}" style="gap:6px"><i class="ph-duotone ph-scales" style="font-size:16px"></i>Návrh rebalance</button>
+                  </sc-if>
                   <button class="btn btn-ghost" onClick="{{ invShowAll }}" style="gap:6px"><i class="ph-duotone ph-eye" style="font-size:16px"></i>Zobrazit skryté</button>
                 </div>
               </div>
@@ -13199,7 +13201,10 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
           </sc-for>
         </div>
         <div class="dialog-actions" style="flex:none">
-          <button class="btn btn-ghost" onClick="{{ histRestoreAll }}" style="margin-right:auto; gap:6px"><i class="ph-duotone ph-clock-counter-clockwise" style="font-size:15px"></i>Obnovit stav ze 11. srpna</button>
+          <!-- Hromadné vrácení má jen ukázka; u dvojice se vrací jednotlivé změny. -->
+          <sc-if value="{{ histRestoreAllOn }}">
+            <button class="btn btn-ghost" onClick="{{ histRestoreAll }}" style="margin-right:auto; gap:6px"><i class="ph-duotone ph-clock-counter-clockwise" style="font-size:15px"></i>Obnovit stav ze 11. srpna</button>
+          </sc-if>
           <button class="btn btn-primary" onClick="{{ histClose }}">Zavřít</button>
         </div>
       </div>
@@ -15090,12 +15095,25 @@ class Component extends DCLogic {
       placeVisitedIcon: vis ? 'ph-arrow-counter-clockwise' : 'ph-check-circle',
       placeToggleVisited: () => {
         const prevVisited = s.visited;
+        // U dvojice i do databáze — mapa, cesty a Světový itinerář čtou stav místa odtamtud.
+        const api = window.GalerieApi;
+        if (!this.ukazka() && api && api.mode === 'http' && p.title) {
+          api.post('mista/stav', { nazev: p.title, navstiveno: !vis }).then(res => {
+            if (res && window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data, res.prazdne);
+            if (window.GalerieObnovit) window.GalerieObnovit('cesty');
+          }).catch(() => {});
+        }
         this.setState({ visited: { ...s.visited, [s.placeId]: !vis } });
         this.toast(vis ? p.title + ' zpět v seznamu přání' : p.title + ' označeno jako navštívené', { icon: vis ? 'ph-heart-straight' : 'ph-check-circle', undo: () => this.setState({ visited: prevVisited }) });
       },
       // Hlásilo „přidáno do itineráře" a nepřidalo nic; do dne cesty se místo zapisuje v Cestách.
       placeAddToTrip: () => { this.setState({ route: 'x-cesty', appTab: 0 }); this.toast('Místo do itineráře přidáte v detailu cesty — ' + p.title, { icon: 'ph-airplane-tilt', silent: true }); },
-      placeAddNote: () => this.zatimNeumime('poznámky k místu'),
+      // Společná poznámka k místu (place_notes) — jedna pro oba, přepisuje se.
+      placeAddNote: () => {
+        const api = window.GalerieApi;
+        if (this.ukazka() || !api || api.mode !== 'http' || !p.title) { this.zatimNeumime('poznámky k místu bez připojeného serveru'); return; }
+        this.setState({ xaOpen: true, xaMode: 'mistoPoznamka', xaCtx: p.title, xaA: (p.notes[0] || [])[2] || '', xaB: '', xaC: '', xaD: '' });
+      },
       placeOpenPhotos: () => p.photoMatch ? this.setState({ route: 'all', query: p.photoMatch })
         : this.toast('Z tohoto místa ještě fotky nemáme', { icon: 'ph-camera' }),
       ...(() => {
@@ -15161,7 +15179,17 @@ class Component extends DCLogic {
           }
         };
       })(),
-      placeMore: () => this.zatimNeumime('export místa do mapy ani archivaci')
+      /*
+       * Otevřít místo v mapě (Mapy.cz) — podle souřadnic, jinak podle jména
+       * a města. Dřív „zatím neumíme".
+       */
+      placeMore: () => {
+        const poloha = (p.practical || []).find(x => x[1] === 'Poloha');
+        const dotaz = poloha ? String(poloha[2]).replace(/\s/g, '') : [p.title, p.city].filter(Boolean).join(', ');
+        if (!dotaz) { this.toast('Místo nemá polohu ani adresu', { icon: 'ph-info' }); return; }
+        const okno = window.open('https://mapy.cz/zakladni?q=' + encodeURIComponent(dotaz), '_blank', 'noopener');
+        if (okno === null && !poloha) this.toast('Otevírám „' + dotaz + '“ v Mapy.cz', { icon: 'ph-map-trifold' });
+      }
     };
   }
   amount(n, unit) {
@@ -15599,7 +15627,26 @@ class Component extends DCLogic {
       })),
       // Hlásilo „označeno jako opakovaná platba" a nic neoznačilo.
       txBulkRec: () => {
-        if (!this.ukazka()) { this.zatimNeumime('označení platby za opakovanou — pravidelné platby se zakládají v Rozpočtech'); return; }
+        // U dvojice z každé vybrané platby předpis na stejný den v měsíci (FinanceAkceController::opakovat).
+        if (!this.ukazka()) {
+          const ids = selIds.filter(id => /^[0-9a-f-]{36}$/.test(String(id)));
+          if (!this.financeNaServeru() || !ids.length) { this.zatimNeumime('opakované platby bez připojeného serveru'); return; }
+          this.setState({ confirm: {
+            title: 'Opakovat každý měsíc', cta: 'Opakovat', btnBg: 'var(--g-acc)',
+            body: this.pl(ids.length, 'vybraná platba se bude', 'vybrané platby se budou', 'vybraných plateb se bude') + ' zapisovat každý měsíc ve stejný den. Platby, které už opakované jsou, se přeskočí.',
+            go: () => {
+              this.setState({ confirm: null, txSel: [] });
+              const api = window.GalerieApi;
+              Promise.all(ids.map(id => api.post('finance/transakce/' + id + '/opakovat', {}).then(r => r, () => null))).then(vysledky => {
+                const ok = vysledky.filter(Boolean);
+                const posledni = ok[ok.length - 1];
+                if (posledni && window.GalerieObsahNavlec) window.GalerieObsahNavlec(posledni.data, posledni.prazdne);
+                this.toast(ok.length ? this.pl(ok.length, 'platba se opakuje', 'platby se opakují', 'plateb se opakuje') + (ok.length < ids.length ? ' · ' + (ids.length - ok.length) + ' už opakovaných přeskočeno' : '') : 'Žádná z vybraných plateb opakovat nejde', { icon: 'ph-repeat' });
+              });
+            }
+          } });
+          return;
+        }
         this.toast(selIds.length + '× označeno jako opakovaná platba', { icon: 'ph-repeat' });
         this.setState({ txSel: [] });
       },
@@ -16326,7 +16373,16 @@ class Component extends DCLogic {
         tagLabel: f.over ? 'po lhůtě' : 'v pořádku',
         nextWho: other(f.lastWho),
         done: () => { const prev = list; set(list.map(x => x.id === f.id ? { ...x, last: 'dnes', lastWho: other(x.lastWho), over: false } : x)); this.toast(f.name + ' — ozvali jste se · příště je na ' + this.whoDat(other(f.lastWho)), { icon: 'ph-phone-call', undo: () => set(prev) }); },
-        remind: () => this.zatimNeumime('připomínky k rodinným kontaktům'),
+        // Připomínka = úkol ve společném seznamu pro toho, kdo je na řadě (dřív „zatím neumíme").
+        remind: () => {
+          const api = window.GalerieApi;
+          if (this.ukazka() || !api || api.mode !== 'http') { this.zatimNeumime('připomínky k rodinným kontaktům bez připojeného serveru'); return; }
+          const kdo = other(f.lastWho);
+          api.post('rychle/ukol', { nazev: 'Ozvat se: ' + f.name, kdo }).then(res => {
+            if (res && window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data, res.prazdne);
+            this.toast('Úkol „Ozvat se: ' + f.name + '“ je v Plánování · na řadě ' + String(kdo).split(' ')[0], { icon: 'ph-bell-ringing' });
+          }).catch(e => this.toast(((e && e.body) || {}).message || 'Úkol se nepodařilo založit', { icon: 'ph-warning', color: 'var(--g-mag)' }));
+        },
         // Odkaz pro rodinu se zakládá ve Sdílení; odsud vede jen cesta tam.
         share: () => { this.setState({ route: 'shared' }); this.toast('Sdílené album pro ' + f.name + ' — vyberte fotky a odkaz vznikne tady', { icon: 'ph-link-simple' }); }
       }))
@@ -16473,7 +16529,8 @@ class Component extends DCLogic {
         border: t.kept ? 'var(--g-line2)' : 'var(--g-acc)',
         canKeep: !t.kept,
         keep: () => { const prev = list; set(list.map(x => x.id === t.id ? { ...x, kept: true } : x)); this.toast('Obě verze zapsány do deníku · bez rozhodnutí, kdo má pravdu', { icon: 'ph-notebook', undo: () => set(prev) }); },
-        more: () => this.zatimNeumime('dohledávání dalších dokladů k události'),
+        // Další doklady = hledání napříč fotkami, zprávami a platbami podle názvu události.
+        more: () => this.setState({ searchOpen: true, query: t.title, srScope: 'all' }),
         drop: () => { const prev = list; set(list.filter(x => x.id !== t.id)); this.toast('Událost odložena · dá se vrátit', { icon: 'ph-x', undo: () => set(prev) }); }
       })),
       trNewTitle: s.trT || '',
@@ -16547,7 +16604,18 @@ class Component extends DCLogic {
         : mode === 'ratio'
           ? 'Po zaplacení zůstane: ' + jA + ' ' + proc(leftA, iA) + ' %, ' + jM + ' ' + proc(leftM, iM) + ' % vlastní výplaty. To je ten smysl — na volné peníze zbyde oběma stejně velký kus.'
           : 'Půl na půl znamená, že zůstane: ' + jA + ' ' + proc(leftA, iA) + ' %, ' + jM + ' ' + proc(leftM, iM) + ' % výplaty. Rozdíl ' + Math.abs(proc(leftA, iA) - proc(leftM, iM)) + ' procentních bodů nese ten s nižším příjmem.',
-      splitApply: znam ? () => this.zatimNeumime('přepočet trvalých příkazů podle poměru') : zapis,
+      /*
+       * Nastavit poměr: uloží se jako dohoda obou (stav páru) a řekne se, kolik
+       * kdo pošle na společný účet. Trvalé příkazy jsou v bance — aplikace do
+       * banky nesahá, takže to netvrdí.
+       */
+      splitApply: znam ? () => {
+        const prev = s.splitMode;
+        this.setState({ splitMode: mode, splitDohoda: { mode, a: payA, m: payM, kdy: this.fmtIso(this.dnes()) } });
+        this.toast('Poměr nastaven · ' + jA.split(' ')[0] + ' ' + this.kc(payA) + ', ' + jM.split(' ')[0] + ' ' + this.kc(payM) + ' měsíčně — trvalé příkazy upravte v bance', {
+          icon: 'ph-scales', undo: () => this.setState({ splitMode: prev })
+        });
+      } : zapis,
       splitApplyLabel: znam ? 'Nastavit tento poměr' : 'Zapsat příjem'
     };
   }
@@ -16659,7 +16727,23 @@ class Component extends DCLogic {
           finish(d, 'manual', v);
         },
         skip: () => finish(d, 'skip'),
-        askFamily: () => this.zatimNeumime('album pro rodinu s hlasovým vzkazem')
+        /*
+         * Zeptat se rodiny: odkaz jen na tuhle fotku se zapnutými vzkazy
+         * (i hlasovými). Babička odpoví přímo u fotky a vzkaz se objeví ve
+         * Sdílených. Dřív „zatím neumíme".
+         */
+        askFamily: () => {
+          const api = window.GalerieApi;
+          if (this.ukazka() || !api || api.mode !== 'http' || !/^[0-9a-f-]{36}$/.test(String(d.id))) { this.zatimNeumime('album pro rodinu bez připojeného serveru'); return; }
+          api.post('sdileni', {
+            name: 'Kdy to bylo? · ' + (d.name || 'fotka'), expirace: '30', stahovani: false, metadata: false,
+            komentare: true, hoste: false, polozky: [d.id],
+            zprava: 'Pamatujete si, kdy tahle fotka vznikla? Napište nebo namluvte vzkaz přímo pod ni.'
+          }).then(res => {
+            if (res && window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data, res.prazdne);
+            this.kopiruj(res.odkaz, 'Odkaz pro rodinu zkopírován · platí 30 dní, vzkazy jsou zapnuté', 'Odkaz pro rodinu vytvořen · zkopírujete ho ve Sdílených');
+          }).catch(e => this.toast(((e && e.body) || {}).message || 'Odkaz se nepodařilo vytvořit', { icon: 'ph-warning', color: 'var(--g-mag)' }));
+        }
       }))
     };
   }
@@ -18140,6 +18224,30 @@ class Component extends DCLogic {
           return { nazev: a, castka, den, kategorie: d || null, prijem: /^\s*\+/.test(b) };
         }
       },
+      programCesty: {
+        t: 'Do programu cesty', a: 'Co podniknete — třeba Národní park Krka', b: 'Kolikátý den cesty (1 = první)', c: 'Čas (nepovinné) — např. 9:30', d: 'Místo (nepovinné)',
+        h: 'Bod se objeví v dni cesty i v cestovním režimu.',
+        cesta: ctx => 'cesty/' + ctx + '/program',
+        telo: (a, b, c, d) => {
+          const den = parseInt(b, 10);
+          if (!(den >= 1)) return { chyba: 'Den napište jako číslo — 1 je první den cesty' };
+          if (c && !/^([01]?\d|2[0-3]):[0-5]\d$/.test(c)) return { chyba: 'Čas napište jako 9:30' };
+          return { den: den - 1, nazev: a, cas: c || null, misto: d || null };
+        }
+      },
+      mistoNove: {
+        t: 'Nový cíl', a: 'Kam — třeba Lofoty', b: 'Kde to je — město nebo země (nepovinné)', c: 'Poznámka pro oba (nepovinné)',
+        h: 'Místo se objeví ve Světovém itineráři, na mapě i v Místech. Když ho navštívíte, odškrtněte ho.',
+        cesta: () => 'mista',
+        telo: (a, b, c) => ({ nazev: a, zeme: b || null, poznamka: c || null }),
+        po: () => { if (window.GalerieObnovit) window.GalerieObnovit('cesty'); }
+      },
+      mistoPoznamka: {
+        t: 'Poznámka k místu', a: 'Co si o místě pamatovat — prázdná poznámku smaže', prazdneA: true,
+        h: 'Poznámka je společná — uvidíte ji oba v detailu místa.',
+        cesta: () => 'mista/poznamka',
+        telo: (a, b, c, d, ctx) => ({ nazev: ctx, text: a })
+      },
       ucet: {
         t: 'Nový účet', a: 'Název — třeba Společný účet nebo Hotovost', b: 'Počáteční zůstatek (nepovinné)', c: 'Druh: banka, karta, hotovost nebo jiné', d: 'Měna (nepovinné, výchozí CZK)',
         h: 'Účet je vedený ručně: platby na něj zapisujete v Transakcích nebo přicházejí z pravidelných plateb. Napojení na banku aplikace nemá.',
@@ -18717,7 +18825,24 @@ class Component extends DCLogic {
           ? kM + ' · obálka nevyužitá ' + this.pl(zeroK, 'měsíc', 'měsíce', 'měsíců') + ' z ' + ENV.months.length + ', průměrně ' + podil(sumK, max) + ' % toho, na co je nárok. Nejsou to ušetřené peníze — je to zvyk nic si nedovolit, a v indexu zatížení se to pozná dřív než v rozpočtu.'
           : 'Oba obálku využívají. To je nudné číslo, které o vztahu říká hodně.',
       envAct: () => { this.setState({ route: 'x-klid', klTab: 'klBurn' }); this.toast('Nevyužitá obálka je jeden ze signálů v indexu zatížení', { icon: 'ph-heartbeat' }); },
-      envRaise: () => this.zatimNeumime('zvednutí obálky — limit se mění v Rozpočtech')
+      // Zvednout obálku = měsíční limit její kategorie v rozpočtu.
+      envRaise: () => {
+        if (!this.financeNaServeru() || !ENV.kategorie) { this.zatimNeumime('zvednutí obálky bez rozpočtu na serveru'); return; }
+        this.setState({
+          confirmValue: String(Math.round(limit * 1.2 / 100) * 100 || 1000),
+          confirm: {
+            title: 'Obálka jen pro sebe', input: 'Nový limit na měsíc pro každého',
+            body: 'Limit kategorie „' + ENV.kategorie + '“ v rozpočtu. Platí pro oba stejně — obálka nemá odůvodnění ani kontrolu, na co šla.',
+            cta: 'Nastavit limit', btnBg: 'var(--g-acc)',
+            go: () => {
+              const castka = this.castkaZTextu(this.state.confirmValue);
+              if (!(castka >= 0)) { this.toast('Zadejte částku', { icon: 'ph-warning' }); return; }
+              this.setState({ confirm: null, confirmValue: null });
+              this.financeAkce('finance/rozpocet/limity', { limity: { [ENV.kategorie]: castka } }, () => { if (window.GalerieObnovit) window.GalerieObnovit('rozbory'); });
+            }
+          }
+        });
+      }
     };
   }
   selfTimeVals() {
@@ -21837,13 +21962,24 @@ class Component extends DCLogic {
           plan: () => { this.setState({ route: 'x-cesty', appTab: 0 }); this.toast('„' + w[0] + '“ — založte cestu a doplňte termín', { icon: 'ph-airplane-takeoff' }); },
           toggle: () => {
             const prev = wDone;
+            // Místo (ne cesta) se u dvojice označí i v databázi; cesta se uzavírá v Cestách.
+            const api = window.GalerieApi;
+            if (!this.ukazka() && api && api.mode === 'http' && w[1] === 'ph-map-pin') {
+              api.post('mista/stav', { nazev: w[0], navstiveno: !wDone[w[0]] }).then(res => {
+                if (res && window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data, res.prazdne);
+              }).catch(() => {});
+            }
             this.setState({ geoWantDone: { ...prev, [w[0]]: !wDone[w[0]] } });
             this.toast(wDone[w[0]] ? 'Zpět na seznam přání' : '„' + w[0] + '“ označeno jako navštívené', {
               icon: 'ph-check-circle', undo: () => this.setState({ geoWantDone: prev })
             });
           }
         })),
-        geoWantAdd: () => this.zatimNeumime('přidání cíle odsud — místo založíte v Mapě')
+        geoWantAdd: () => {
+          const api = window.GalerieApi;
+          if (this.ukazka() || !api || api.mode !== 'http') { this.zatimNeumime('přidání cíle bez připojeného serveru'); return; }
+          this.setState({ xaOpen: true, xaMode: 'mistoNove', xaCtx: null, xaA: '', xaB: '', xaC: '', xaD: '' });
+        }
       };
     }
     const been = Object.keys(counts).length;
@@ -22316,7 +22452,9 @@ class Component extends DCLogic {
   // ——— Cesta právě nyní ———
   nowVals(key) {
     const s = this.state, T = NOWTRIP, photos = this.photos();
-    const done = s.nowDone || {}, extra = s.nowSpend || [], notes = s.nowNotes || [];
+    // U dvojice výdaje a zápisy vede server (trip_expenses, deník) — místní řádky ze stavu by se počítaly dvakrát.
+    const cestaNaServeru = !this.ukazka() && !!(window.GalerieApi && window.GalerieApi.mode === 'http' && T && T.n);
+    const done = s.nowDone || {}, extra = cestaNaServeru ? [] : (s.nowSpend || []), notes = cestaNaServeru ? [] : (s.nowNotes || []);
     if (s.tripMode === false || ! this.naCeste()) {
       const cesta = this.naCeste();
       return {
@@ -22372,8 +22510,19 @@ class Component extends DCLogic {
             this.setState({ nowDone: { ...prev, [id]: !st } });
             this.toast(st ? 'Vráceno mezi nesplněné' : '„' + p[2] + '“ odškrtnuto', { icon: 'ph-check-circle', undo: () => this.setState({ nowDone: prev }) });
           },
-          shift: () => this.zatimNeumime('posouvání programu dne'),
-          nav: () => { this.setState({ route: 'map' }); this.toast('Navigace na ' + p[2], { icon: 'ph-navigation-arrow' }); }
+          // Posunout o hodinu na serveru (trip_activities); ukázka čas nemá kam zapsat.
+          shift: () => {
+            if (!cestaNaServeru || !p[5]) { this.zatimNeumime('posouvání programu dne bez připojeného serveru'); return; }
+            window.GalerieApi.post('cesty/program/' + p[5] + '/posunout', { minut: 60 }).then(res => {
+              if (res && window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data, res.prazdne);
+              this.toast((res && res.zprava) || 'Posunuto o hodinu', { icon: 'ph-clock-clockwise', undo: () => window.GalerieApi.post('cesty/program/' + p[5] + '/posunout', { minut: -60 }).then(r => { if (r && window.GalerieObsahNavlec) window.GalerieObsahNavlec(r.data, r.prazdne); }) });
+            }).catch(e => this.toast(((e && e.body) || {}).zprava || ((e && e.body) || {}).message || 'Posunout se nepodařilo', { icon: 'ph-warning', color: 'var(--g-mag)' }));
+          },
+          // Navigace v Mapy.cz na místo bodu programu (dřív jen přepnutí na mapu galerie s hláškou).
+          nav: () => {
+            const kam = [p[3] || p[2], T.where].filter(Boolean).join(', ');
+            window.open('https://mapy.cz/zakladni?q=' + encodeURIComponent(kam), '_blank', 'noopener');
+          }
         };
       });
       return {
@@ -22415,14 +22564,16 @@ class Component extends DCLogic {
           day: d.day, title: d.title, text: d.text,
           photosLabel: this.pl(d.photos, 'fotka', 'fotky', 'fotek') + ' toho dne',
           tiles: Array.from({ length: 4 }, (_, x) => this.bg((i * 11 + x * 5) % 40)),
-          open: () => this.zatimNeumime('úpravu zápisu odsud — otevřete ho v Deníku')
+          // Zápis se upravuje v Deníku — odkaz tam vede přímo.
+          open: () => this.setState({ route: 'x-denik', appTab: 0 })
         })),
         nowDiaryNew: () => this.setState({ nowDlg: { text: '', photos: 0 } }),
         nowDiaryVoice: () => {
           this.setState({ route: 'x-zpravy', appTab: 1 });
-          this.toast('Hlasový zápis — nahrajte a přiřadíme ho ke dni ' + T.day, { icon: 'ph-microphone' });
+          this.toast('Hlasový zápis nahrajete v Hlasovkách', { icon: 'ph-microphone' });
         },
-        nowDiaryStory: () => { this.setState({ route: 'x-pribeh', appTab: 0 }); this.toast('Zápisy z cesty nabídnuty jako podklad kapitoly', { icon: 'ph-book-open' }); }
+        // Kapitola se skládá v Našem příběhu ručně — nic se tam samo „nenabízí".
+        nowDiaryStory: () => { this.setState({ route: 'x-pribeh', appTab: 0 }); this.toast('Kapitolu z cesty založíte v Našem příběhu — zápisy najdete v Deníku', { icon: 'ph-book-open' }); }
       };
     }
     if (key === 'nowSpend') {
@@ -22447,24 +22598,39 @@ class Component extends DCLogic {
           color: ['var(--g-acc)', 'var(--g-acc-deep)', 'var(--g-mag)', 'var(--g-warn)'][i % 4]
         })),
         nowSpendAdd: () => this.setState({ nowSpDlg: { label: '', amount: '', cat: 'Jídlo' } }),
+        // Útrata cesty se počítá ve fondu cesty; do měsíčního rozpočtu se nic samo nepropisuje.
         nowSpendPush: () => {
-          this.setState({ route: 'x-rozpocty', budTab: 0 });
-          this.toast(this.kc(todayTotal) + ' z dneška propsáno do kategorie Cesty', { icon: 'ph-chart-donut' });
+          this.setState({ route: 'trip', tripId: T.id });
+          this.toast('Útrata ' + this.kc(spentAll) + ' z fondu ' + this.kc(T.fund || 0) + ' — rozpis je u cesty', { icon: 'ph-chart-donut' });
         }
       };
     }
     const packed = s.nowPack || {};
-    const PACK = ['Pasy a doklady', 'Nabíječky', 'Šnorchl', 'Krém na sluníčko', 'Léky', 'Karty do foťáku'];
+    /*
+     * Balicí seznam: u dvojice ten, který má cesta (`TRIPS[..].pack`); šnorchl
+     * a krém na sluníčko patřily ukázkové Brači.
+     */
+    const cestaZaznam = (TRIPS || {})[T.id] || {};
+    const PACK = cestaNaServeru
+      ? (cestaZaznam.pack || []).map(r => r[0])
+      : ['Pasy a doklady', 'Nabíječky', 'Šnorchl', 'Krém na sluníčko', 'Léky', 'Karty do foťáku'];
+    const cekaNaOdeslani = (window.GalerieApi && window.GalerieApi.status) ? (window.GalerieApi.status().pending || 0) : 0;
     return {
       ...base,
-      nowOffHead: 'Na cestách se všechno ukládá lokálně a odešle na wifi. Mapa okolí a rezervace jsou dostupné bez signálu.',
-      nowOffCards: [
+      nowOffHead: cestaNaServeru
+        ? 'Bez signálu se změny v aplikaci drží v zařízení a odešlou se, jakmile bude připojení. Mapy offline aplikace nestahuje.'
+        : 'Na cestách se všechno ukládá lokálně a odešle na wifi. Mapa okolí a rezervace jsou dostupné bez signálu.',
+      nowOffCards: cestaNaServeru ? [
+        { icon: 'ph-ticket', title: 'Cesta a program', body: T.title + (T.where ? ' · ' + T.where : '') + ' · den ' + T.day + ' z ' + T.days, cta: 'Otevřít cestu', go: () => this.setState({ route: 'trip', tripId: T.id }) },
+        { icon: 'ph-cloud-arrow-up', title: 'Čeká na odeslání', body: cekaNaOdeslani ? this.pl(cekaNaOdeslani, 'změna čeká', 'změny čekají', 'změn čeká') + ' na připojení' : 'Nic nečeká — všechno je na serveru', cta: 'Nahrát fotky', go: () => this.pickMedia() },
+        { icon: 'ph-map-trifold', title: 'Mapa míst z cesty', body: 'Místa z programu otevřete v Mapy.cz — tam si mapu můžete stáhnout i offline.', cta: 'Otevřít v Mapy.cz', go: () => window.open('https://mapy.cz/zakladni?q=' + encodeURIComponent(T.where || T.title), '_blank', 'noopener') }
+      ] : [
         { icon: 'ph-map-trifold', title: 'Mapa Brače offline', body: 'Stažená 11. srpna · 84 MB · obsahuje Bol, Supetar, Vidovu goru', cta: 'Otevřít mapu', go: () => this.setState({ route: 'map' }) },
         { icon: 'ph-ticket', title: 'Rezervace a doklady', body: 'Apartmán, trajekty a pojištění dostupné bez signálu', cta: 'Zobrazit doklady', go: () => this.setState({ route: 'trip', tripId: T.id }) },
         { icon: 'ph-cloud-arrow-up', title: 'Fronta nahrávání', body: (s.nowUploads || 0) + 42 + ' fotek čeká na wifi v apartmánu', cta: 'Nahrát teď', go: () => this.toast('Nahrávání spuštěno přes mobilní data — 42 fotek', { icon: 'ph-cloud-arrow-up' }) }
       ],
       nowPackRows: PACK.map((p, i) => {
-        const on = packed[p] !== undefined ? packed[p] : i < 3;
+        const on = packed[p] !== undefined ? packed[p] : (!cestaNaServeru && i < 3);
         return {
           label: p, on, box: on ? 'ph-check-square' : 'ph-square',
           fg: on ? 'var(--g-ink3)' : 'var(--g-ink)',
@@ -22490,6 +22656,18 @@ class Component extends DCLogic {
       nowNoteClose: () => this.setState({ nowDlg: null }),
       nowNoteCant: !(d.text || '').trim(),
       nowNoteSave: () => {
+        // U dvojice do deníku (soukromý zápis s dnem cesty v názvu) — dřív jen stav s „12 fotkami" napevno.
+        const api = window.GalerieApi;
+        if (!this.ukazka() && api && api.mode === 'http') {
+          const text = (d.text || '').trim();
+          api.post('rychle/denik', { nadpis: (NOWTRIP.title ? NOWTRIP.title + ' · den ' + NOWTRIP.day : 'Z cesty'), text }).then(res => {
+            if (res && window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data, res.prazdne);
+            if (window.GalerieObnovit) window.GalerieObnovit('cesty');
+            this.setState({ nowDlg: null, appTab: 1 });
+            this.toast('Zápis uložen do deníku ke dni ' + NOWTRIP.day, { icon: 'ph-notebook' });
+          }).catch(e => this.toast(((e && e.body) || {}).message || 'Zápis se nepodařil', { icon: 'ph-warning', color: 'var(--g-mag)' }));
+          return;
+        }
         const prev = s.nowNotes || [];
         const row = { day: 'Den ' + NOWTRIP.day + ' · dnes', title: (d.text || '').trim().split(/[.!?]/)[0].slice(0, 40) || 'Zápis', text: d.text.trim(), photos: 12 };
         this.setState({ nowNotes: [row].concat(prev), nowDlg: null, appTab: 1 });
@@ -22512,6 +22690,16 @@ class Component extends DCLogic {
       nowSpSave: () => {
         const amount = parseInt(String(d.amount).replace(/\s/g, ''), 10);
         if (!amount || !(d.label || '').trim()) return;
+        // U dvojice do výdajů cesty — útrata dne i fond se pak počítají ze serveru.
+        const api = window.GalerieApi;
+        if (!this.ukazka() && api && api.mode === 'http' && NOWTRIP.n) {
+          api.post('cesty/' + NOWTRIP.n + '/vydaj', { nazev: d.label.trim(), castka: amount, kategorie: d.cat }).then(res => {
+            if (res && window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data, res.prazdne);
+            this.setState({ nowSpDlg: null, appTab: 2 });
+            this.toast(this.kc(amount) + ' · ' + d.label.trim() + ' zapsáno k cestě', { icon: 'ph-receipt' });
+          }).catch(e => this.toast(((e && e.body) || {}).message || 'Výdaj se nepodařilo zapsat', { icon: 'ph-warning', color: 'var(--g-mag)' }));
+          return;
+        }
         const prev = s.nowSpend || [];
         const now = new Date();
         const row = { label: d.label.trim(), amount, cat: d.cat, time: now.getHours() + ':' + String(now.getMinutes()).padStart(2, '0'), id: 'nx' + prev.length };
@@ -25493,6 +25681,7 @@ class Component extends DCLogic {
           }
         };
       }),
+      histRestoreAllOn: this.ukazka(),
       histRestoreAll: () => {
         if (!this.ukazka()) return this.zatimNeumime('hromadné vrácení celé historie — vracet jde jednotlivé změny z tohoto okna');
         const prev = undone, map = { ...prev };
@@ -26818,7 +27007,24 @@ class Component extends DCLogic {
           mo: p.mo ? this.kc(p.mo) + ' měsíčně' : 'bez dokupování',
           bar: Math.round((p.val / total) * 100) + '%',
           whoClass: p.who === 'společné' ? 'tag-neutral' : 'tag-accent',
-          buy: () => this.zatimNeumime('nákup investic'),
+          // U dvojice je „pozice" spořicí účet — dokoupit znamená převést na něj peníze z hlavního účtu.
+          buy: () => {
+            if (!this.financeNaServeru()) { this.zatimNeumime('nákup investic'); return; }
+            this.setState({
+              confirmValue: p.mo ? String(p.mo) : '',
+              confirm: {
+                title: 'Vložit na ' + p.name, input: 'Kolik převést',
+                body: 'Převod z hlavního účtu na „' + p.name + '“. Do rozpočtu se nepočítá — peníze zůstávají vaše, jen jinde.',
+                cta: 'Převést', btnBg: 'var(--g-acc)',
+                go: () => {
+                  const castka = this.castkaZTextu(this.state.confirmValue);
+                  if (!(castka > 0)) { this.toast('Zadejte částku', { icon: 'ph-warning' }); return; }
+                  this.setState({ confirm: null, confirmValue: null });
+                  this.financeAkce('finance/prevod', { na: p.name, castka });
+                }
+              }
+            });
+          },
           hide: () => {
             const prev = hide;
             this.setState({ invHide: { ...prev, [p.name]: true } });
@@ -26858,13 +27064,22 @@ class Component extends DCLogic {
           invSimNote: 'Simulace při ' + this.kc(monthly + extra) + ' měsíčně a ' + rate + ' % ročně. Bez příplatku bychom za ' + this.pl(years, 'rok', 'roky', 'let') + ' měli ' + this.kc(bez) + '.',
           invSimBaseW: Math.round((bez / sim) * 100) + '%',
           invSimApply: () => {
+            // U dvojice vznikne plánovaná platba „Spoření" — dřív jen přepnutí záložky s hláškou.
+            if (this.financeNaServeru()) {
+              this.setState({ finTab: 2, xaOpen: true, xaMode: 'platba', xaCtx: null, xaA: 'Spoření navíc', xaB: String(extra), xaC: '1', xaD: '' });
+              return;
+            }
             this.setState({ finTab: 2 });
             this.toast('Trvalý příkaz +' + this.kc(extra) + ' měsíčně — potvrďte v Nadcházejících platbách', { icon: 'ph-arrow-right' });
           }
         };
       })(),
-      invAdd: () => this.zatimNeumime('zakládání investičních pozic'),
-      // Návrh byl napsaný v dokumentu — týž pro každé portfolio.
+      // U dvojice nová pozice = nový spořicí účet (druh „jiné").
+      invAdd: () => this.financeNaServeru()
+        ? this.setState({ xaOpen: true, xaMode: 'ucet', xaCtx: null, xaA: '', xaB: '', xaC: 'jiné', xaD: '' })
+        : this.zatimNeumime('zakládání investičních pozic'),
+      // Cílové rozložení (ETF 62 % …) má jen ukázka; u dvojice by rebalance radila podle cizího cíle.
+      invRebalanceOn: this.ukazka(),
       invRebalance: () => this.zatimNeumime('návrh rebalance portfolia'),
       invShowAll: () => {
         const prev = hide;
@@ -28007,10 +28222,12 @@ class Component extends DCLogic {
     const dat = n => this.sklon(n, 'dat');
 
     const capTasks = chores.filter(c => c.day).map(c => ({ chore: c, day: c.day }));
+    // Varování „Ponechat": pro tuhle práci v tenhle den se už neukáže (stav páru, vidí oba).
+    const capNechat = s.capNechat || {};
     const clashes = capTasks
       .map(t => {
         const d = capWeek.find(x => x.key === t.day);
-        if (!d) return null;
+        if (!d || capNechat[t.chore.id + '@' + t.day]) return null;
         const free = t.chore.who === this.dva()[0] ? d.a : d.m;
         if (free * 60 >= t.chore.mins + 30) return null;
         const better = capWeek.filter(x => (t.chore.who === this.dva()[0] ? x.a : x.m) * 60 >= t.chore.mins + 60)[0];
@@ -28024,7 +28241,11 @@ class Component extends DCLogic {
             else setChores(chores.map(c => c.id === t.chore.id ? { ...c, who: other(c.who) } : c));
             this.toast(better ? t.chore.name + ' přesunuto na ' + better.name.toLowerCase() : t.chore.name + ' přebírá ' + other(t.chore.who), { icon: 'ph-arrows-left-right', undo: () => setChores(prev) });
           },
-          keep: () => this.zatimNeumime('odložení varování o rozvržení prací')
+          keep: () => {
+            const klic = t.chore.id + '@' + t.day, prev = capNechat;
+            this.setState({ capNechat: { ...prev, [klic]: true } });
+            this.toast('Ponecháno — ' + t.chore.name + ' zůstává na ' + d.name.toLowerCase() + ', varování se už neukáže', { icon: 'ph-check', undo: () => this.setState({ capNechat: prev }) });
+          }
         };
       }).filter(Boolean);
 
@@ -28322,7 +28543,7 @@ class Component extends DCLogic {
 
     const addBuy = (forWhom, what, price, wishId, occasion, status, where) => {
       const prev = buys;
-      const row = { id: 'b' + Date.now(), owner: me, forWhom, what, price, wishId: wishId || null, occasion: occasion || 'Výročí 4. září', status: status || 'reserved', where: where || 'Zatím nikde — doplňte, kam to schováte', expensed: false };
+      const row = { id: 'b' + Date.now(), owner: me, forWhom, what, price, wishId: wishId || null, occasion: occasion || ((GIFT_OCC[0] || {}).name2 || 'bez příležitosti'), status: status || 'reserved', where: where || 'Zatím nikde — doplňte, kam to schováte', expensed: false };
       setBuys([row].concat(buys));
       this.toast(what + ' → Moje nákupy · ' + other + ' se to nedozví', { icon: 'ph-lock-key', undo: () => setBuys(prev) });
     };
@@ -28361,7 +28582,7 @@ class Component extends DCLogic {
           acts.push({ label: 'Zrušit rezervaci', cls: 'btn-ghost', color: 'var(--g-ink2)', go: () => { const prev = buys; setBuys(buys.filter(b => b.id !== res.id)); this.toast('Rezervace zrušena', { icon: 'ph-arrow-counter-clockwise', undo: () => setBuys(prev) }); } });
           acts.push({ label: 'Mám koupeno', cls: 'btn-secondary', color: 'var(--g-ink)', go: () => { setBuys(buys.map(b => b.id === res.id ? { ...b, status: 'bought' } : b)); this.setState({ giftTab: 'buys' }); this.toast('Označeno jako koupené · doplňte, kam to schováte', { icon: 'ph-check-circle' }); } });
         } else {
-          acts.push({ label: 'Rezervovat', cls: 'btn-primary', color: '', go: () => addBuy(w.who, w.title, w.price, w.id, 'Výročí 4. září', 'reserved') });
+          acts.push({ label: 'Rezervovat', cls: 'btn-primary', color: '', go: () => addBuy(w.who, w.title, w.price, w.id, (GIFT_OCC[0] || {}).name2, 'reserved') });
         }
         return {
           title: w.title, note: w.note,
@@ -28423,8 +28644,20 @@ class Component extends DCLogic {
           expenseLabel: b.expensed ? 'Výdaj už zapsán' : 'Zapsat výdaj skrytě',
           expenseOff: b.expensed, expenseOp: b.expensed ? .45 : 1,
           expense: () => {
-            // „Zapsáno do kategorie Dárky" — do knihy se nic nezapsalo, rozpočet dárek nepočítal.
-            if (!this.ukazka()) { this.zatimNeumime('zápis dárku do Financí — výdaj zapíšete v Transakcích'); return; }
+            /*
+             * Výdaj do knihy „skrytě": popis jen „Dárek", kategorie Dárky (když
+             * ji rozpočet má). Druhý z vás uvidí částku, ne co a pro koho.
+             */
+            if (!this.ukazka()) {
+              const api = window.GalerieApi;
+              if (!api || api.mode !== 'http' || !(b.price > 0)) { this.zatimNeumime('zápis dárku do Financí bez připojeného serveru nebo bez ceny'); return; }
+              api.post('platby/rucne', { popis: 'Dárek', castka: b.price, kategorie: 'Dárky', klic: 'dar-' + b.id }).then(res => {
+                if (res && window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data, res.prazdne);
+                setBuys(this.state.buys ? this.state.buys.map(x => x.id === b.id ? { ...x, expensed: true } : x) : buys.map(x => x.id === b.id ? { ...x, expensed: true } : x));
+                this.toast(this.kc(b.price) + ' zapsáno do Financí jako „Dárek" · bez popisu položky', { icon: 'ph-receipt' });
+              }).catch(e => this.toast(((e && e.body) || {}).zprava || ((e && e.body) || {}).message || 'Výdaj se nepodařilo zapsat', { icon: 'ph-warning', color: 'var(--g-mag)' }));
+              return;
+            }
             const prev = buys;
             setBuys(buys.map(x => x.id === b.id ? { ...x, expensed: true } : x));
             this.toast(this.kc(b.price) + ' zapsáno do kategorie Dárky · bez popisu položky', { icon: 'ph-receipt', undo: () => setBuys(prev) });
@@ -28450,7 +28683,27 @@ class Component extends DCLogic {
             ? 'Pro ' + acc(other) + ' máte připraveno ' + this.pl(forThis.length, 'dárek', 'dárky', 'dárků') + (done ? ', z toho ' + done + ' zabalený.' : ', nic zabaleného.') + ' Co chystá ' + other + ', se tu nedozvíte.'
             : 'Pro ' + acc(other) + ' zatím nic. Co chystá ' + other + ', se tu nedozvíte.',
           plan: () => this.setState({ giftTab: 'wish', wishFilter: 'other' }),
-          remind: () => this.zatimNeumime('připomínku k dárku — do Automatizace se nic nezapsalo')
+          /*
+           * Připomínka do vašeho kalendáře v telefonu či počítači (soubor .ics).
+           *
+           * Společný úkol ani upozornění v aplikaci to být nemůže — druhý by
+           * viděl, že se chystá dárek. Kalendářová událost s připomínkou týden
+           * předem zůstane jen u vás.
+           */
+          remind: () => {
+            const den = this.dnes(); den.setDate(den.getDate() + (o.days || 0));
+            const d = x => x.getFullYear() + String(x.getMonth() + 1).padStart(2, '0') + String(x.getDate()).padStart(2, '0');
+            const po = new Date(den); po.setDate(po.getDate() + 1);
+            const esc = t => String(t || '').replace(/[\\;,]/g, m => '\\' + m).replace(/\n/g, '\\n');
+            const ics = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//MAKI Galerie//CS', 'BEGIN:VEVENT',
+              'UID:dar-' + d(den) + '-' + Date.now() + '@galerie', 'DTSTAMP:' + new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+/, ''),
+              'DTSTART;VALUE=DATE:' + d(den), 'DTEND;VALUE=DATE:' + d(po),
+              'SUMMARY:' + esc(o.name), 'DESCRIPTION:' + esc('Dárek pro ' + acc(other) + (forThis.length ? ' · připraveno ' + forThis.length : ' · zatím nic')),
+              'BEGIN:VALARM', 'TRIGGER:-P7D', 'ACTION:DISPLAY', 'DESCRIPTION:' + esc('Za týden: ' + o.name), 'END:VALARM',
+              'END:VEVENT', 'END:VCALENDAR'].join('\r\n');
+            const ok = this.download('pripominka-' + d(den) + '.ics', ics, 'text/calendar;charset=utf-8');
+            this.toast(ok ? 'Připomínka stažena — otevřete soubor a přidejte si ji do kalendáře · upozorní týden předem' : 'Stažení se nepodařilo', { icon: ok ? 'ph-calendar-plus' : 'ph-warning' });
+          }
         };
       }),
 
@@ -31161,6 +31414,16 @@ class Component extends DCLogic {
         const d = s.tripExp; if (!d) return;
         const amount = parseInt(String(d.amount).replace(/\s/g, ''), 10);
         if (!amount || !(d.label || '').trim()) return;
+        // U dvojice do výdajů cesty (fond, útrata dne, statistika) — dřív jen stav obrazovky.
+        const api = window.GalerieApi;
+        if (!this.ukazka() && api && api.mode === 'http' && trip.n) {
+          api.post('cesty/' + trip.n + '/vydaj', { nazev: d.label.trim(), castka: amount, kategorie: d.cat || null }).then(res => {
+            if (res && window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data, res.prazdne);
+            this.setState({ tripExp: null });
+            this.toast((res && res.zprava) || 'Výdaj zapsán', { icon: 'ph-receipt' });
+          }).catch(e => this.toast(((e && e.body) || {}).message || 'Výdaj se nepodařilo zapsat', { icon: 'ph-warning', color: 'var(--g-mag)' }));
+          return;
+        }
         const prev = s.tripSpend || {};
         const rows = (prev[s.tripId] || []).concat([{ label: d.label.trim(), amount, cat: d.cat || 'Cesty', when: 'dnes' }]);
         this.setState({ tripSpend: { ...prev, [s.tripId]: rows }, tripExp: null });
@@ -31189,10 +31452,19 @@ class Component extends DCLogic {
       tripPhotoMeta: tripPhotoSrc.length ? tripPhotoSrc.length + ' v archivu z této cesty' : 'cesta se ještě nekonala',
       tripHasDiary: !!trip.diary,
       tripDiary: (trip.diary || []).map(d => ({ date: d[0], title: d[1], text: d[2], meta: d[3] })),
-      tripAddItem: () => this.zatimNeumime('přidávání do itineráře'),
+      // Bod programu do dne cesty (trip_activities).
+      tripAddItem: () => {
+        const api = window.GalerieApi;
+        if (this.ukazka() || !api || api.mode !== 'http' || !trip.n) { this.zatimNeumime('přidávání do itineráře bez připojeného serveru'); return; }
+        this.setState({ xaOpen: true, xaMode: 'programCesty', xaCtx: trip.n, xaA: '', xaB: '1', xaC: '', xaD: '' });
+      },
       tripOpenPhotos: () => trip.photoMatch ? this.setState({ route: 'all', query: trip.photoMatch }) : this.toast(trip.past ? 'Z téhle cesty v knihovně žádné fotky nejsou' : 'Fotky z cesty se tu ukážou, až je nahrajete', { icon: 'ph-info' }),
       tripAddExpense: () => this.setState({ tripExp: { label: '', amount: '', cat: 'Cesty' } }),
-      tripMore: () => this.zatimNeumime('duplikaci cesty ani export itineráře'),
+      // Itinerář k tisku / do PDF: dny s programem a balicí seznam.
+      tripMore: () => this.tiskni(trip.title, (trip.days || []).map(d => ({
+        nadpis: d[0] + ' · ' + d[1] + (d[2] ? ' · ' + d[2] : ''),
+        radky: (d[3] || []).length ? d[3].map(it => [it[0], it[2] + (it[3] ? ' — ' + it[3] : '') + (it[4] ? ' (' + it[4] + ')' : '')]) : [['', 'Program zatím není']]
+      })).concat((trip.pack || []).length ? [{ nadpis: 'Sbalit', seznam: trip.pack.map(r => r[0] + (r[1] ? ' · ' + r[1] : '')) }] : []), trip.when + (trip.where ? ' · ' + trip.where : '')),
       tripLiveCan: !trip.past,
       tripLive: () => { this.setState({ route: 'x-teď', appTab: 0 }); this.toast('Režim na cestě — dnešní program, útrata dne a offline mapa', { icon: 'ph-compass' }); },
 

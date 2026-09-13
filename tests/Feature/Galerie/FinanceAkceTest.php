@@ -199,6 +199,24 @@ class FinanceAkceTest extends TestCase
         $this->postJson('/api/finance/ucty', ['nazev' => 'hotovost', 'druh' => 'cash', 'mena' => 'CZK'])->assertStatus(422);
     }
 
+    /** Vklad na spoření je převod: přesune zůstatek, do rozpočtu se nepočítá. */
+    public function test_prevod_na_sporeni(): void
+    {
+        Wallet::create([
+            'gallery_space_id' => $this->prostor->id, 'name' => 'Spoření', 'kind' => 'other',
+            'currency' => 'CZK', 'opening_balance' => 0, 'is_active' => true, 'sort_order' => 10,
+        ]);
+
+        $this->postJson('/api/finance/prevod', ['na' => 'Spoření', 'castka' => 3000])->assertStatus(201);
+
+        $t = Transaction::sole();
+        $this->assertSame('transfer', $t->type);
+        $this->assertSame($this->ucet->id, $t->wallet_from_id);
+        $this->assertTrue($t->excluded_from_budget);
+
+        $this->postJson('/api/finance/prevod', ['z' => 'Spoření', 'na' => 'Spoření', 'castka' => 1])->assertStatus(422);
+    }
+
     public function test_cizi_transakce_je_nedostupna(): void
     {
         $cizi = User::factory()->create();

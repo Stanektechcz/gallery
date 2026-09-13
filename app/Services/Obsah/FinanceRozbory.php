@@ -619,6 +619,8 @@ class FinanceRozbory implements MaPrazdneKolekce, PoskytovatelObsahu
         return [
             'limit' => (int) ($this->limitKategorie($prostor, $kategorie->id) ?: 0),
             'months' => $mesice,
+            // Pod tímhle jménem se obálka zvedá („Zvednout obálku" → limit kategorie).
+            'kategorie' => $kategorie->name,
         ];
     }
 

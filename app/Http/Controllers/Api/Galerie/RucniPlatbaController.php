@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Galerie;
 use App\Http\Controllers\Api\Galerie\Concerns\UrcujePar;
 use App\Http\Controllers\Api\Galerie\Concerns\VraciObsah;
 use App\Http\Controllers\Controller;
+use App\Models\FinanceCategory;
 use App\Models\GallerySpace;
 use App\Models\Transaction;
 use App\Models\Wallet;
@@ -41,6 +42,8 @@ class RucniPlatbaController extends Controller
             'popis' => ['required', 'string', 'max:200'],
             'castka' => ['required', 'numeric', 'gt:0', 'max:100000000'],
             'prijem' => ['sometimes', 'boolean'],
+            // Kategorie jménem, jak ji zná obrazovka („Dárky"); neznámá se nevymýšlí.
+            'kategorie' => ['nullable', 'string', 'max:120'],
             // Zápis z fronty offline se může odeslat dvakrát — stejný klíč, jedna platba.
             'klic' => ['nullable', 'string', 'max:64'],
         ]);
@@ -73,6 +76,13 @@ class RucniPlatbaController extends Controller
         $prijem = (bool) ($data['prijem'] ?? false);
         $castka = round((float) $data['castka'], 2);
 
+        $kategorie = ! empty($data['kategorie'])
+            ? FinanceCategory::withoutGlobalScope(SpaceContext::SCOPE)
+                ->where('gallery_space_id', $prostor->id)
+                ->whereRaw('LOWER(name) = ?', [mb_strtolower(trim($data['kategorie']))])
+                ->value('id')
+            : null;
+
         $platba = Transaction::create([
             'gallery_space_id' => $prostor->id,
             'type' => $prijem ? 'income' : 'expense',
@@ -84,12 +94,14 @@ class RucniPlatbaController extends Controller
             'amount_to' => $prijem ? $castka : null,
             'currency_to' => $prijem ? $ucet->currency : null,
             'description' => trim($data['popis']),
+            'category_id' => $kategorie,
             'client_key' => $data['klic'] ?? null,
             'state' => 'approved',
             'created_by' => $request->user()->id,
         ]);
 
-        return $this->odpoved($prostor, ($prijem ? 'Příjem' : 'Platba').' zapsána na účet '.$ucet->name.' — zařaďte ji do kategorie', $platba, 201);
+        return $this->odpoved($prostor, ($prijem ? 'Příjem' : 'Platba').' zapsána na účet '.$ucet->name
+            .($kategorie ? '' : ' — zařaďte ji do kategorie'), $platba, 201);
     }
 
     private function odpoved(GallerySpace $prostor, string $zprava, Transaction $platba, int $kod = 200): JsonResponse

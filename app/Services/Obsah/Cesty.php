@@ -369,6 +369,8 @@ class Cesty implements MaPrazdneKolekce, PoskytovatelObsahu
 
         return [
             'id' => $klic,
+            // Číslo cesty pro zápis výdaje a bodu programu z cestovního režimu.
+            'n' => (int) $ted->id,
             'title' => $ted->name,
             'where' => $zaznam['where'] ?? '',
             'day' => (int) $od->diffInDays($dnes) + 1,
@@ -385,6 +387,8 @@ class Cesty implements MaPrazdneKolekce, PoskytovatelObsahu
                 $a->title,
                 (string) ($a->description ?? $a->place_name ?? ''),
                 $this->stav((string) $a->status),
+                // Číslo bodu — pro „Posunout o hodinu".
+                (int) $a->id,
             ])->values()->all(),
             'spendRows' => $utraty
                 ->filter(fn ($u) => $u->occurred_at && CarbonImmutable::parse($u->occurred_at)->isSameDay($dnes))
