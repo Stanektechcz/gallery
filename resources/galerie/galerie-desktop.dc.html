@@ -429,6 +429,9 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                       </span>
                     </button>
                   </sc-for>
+                  <sc-if value="{{ dgGoodEmpty }}">
+                    <div style="padding:10px 2px; font-size:13px; color:var(--g-ink3); text-wrap:pretty">Tenhle týden zatím nic — objeví se tu fotky, zápisy a hotové úkoly z týdne.</div>
+                  </sc-if>
                 </div>
                 <div>
                   <div style="font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--g-ink3); padding-bottom:7px; border-bottom:1px solid var(--g-line2)">Nedotáhli jsme</div>
@@ -441,6 +444,9 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                       </span>
                     </button>
                   </sc-for>
+                  <sc-if value="{{ dgBadEmpty }}">
+                    <div style="padding:10px 2px; font-size:13px; color:var(--g-ink3); text-wrap:pretty">Nic po termínu — úkoly, sliby ani žádosti nečekají.</div>
+                  </sc-if>
                 </div>
                 <div>
                   <div style="font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--g-ink3); padding-bottom:7px; border-bottom:1px solid var(--g-line2)">Moment týdne</div>
@@ -2723,7 +2729,12 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                       <i class="ph-duotone ph-arrow-up-right" style="font-size:14px; flex:none; color:var(--g-ink3); margin-top:3px"></i>
                     </button>
                   </sc-for>
+                  <sc-if value="{{ finAlertsEmpty }}">
+                    <p style="margin:12px 2px 0; font-size:13.5px; color:var(--g-ink2); text-wrap:pretty">{{ finAlertsEmptyText }}</p>
+                  </sc-if>
+                  <sc-if value="{{ finBankDemo }}">
                   <div style="margin-top:22px; padding-bottom:9px; border-bottom:1px solid var(--g-ink); font-size:12px; letter-spacing:.14em; text-transform:uppercase">Poslední importy</div>
+                  </sc-if>
                   <sc-for list="{{ finImports }}" as="i" hint-placeholder-count="4">
                     <button onClick="{{ i.go }}" style="display:flex; align-items:baseline; gap:10px; width:100%; padding:11px 2px; border:0; border-bottom:1px solid var(--g-line2); background:transparent; cursor:pointer; text-align:left; font-family:inherit; color:inherit">
                       <div style="flex:1; min-width:0">
@@ -2745,6 +2756,9 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                 <span style="font-size:14px; font-variant-numeric:tabular-nums">{{ finTotal }}</span>
                 <sc-if value="{{ finBankDemo }}">
                   <button class="btn btn-secondary" onClick="{{ finAddAccount }}" style="margin-left:auto; font-size:13px; gap:6px"><i class="ph-duotone ph-plus" style="font-size:14px"></i>Napojit banku</button>
+                </sc-if>
+                <sc-if value="{{ finCanAddTx }}">
+                  <button class="btn btn-secondary" onClick="{{ finNewAccount }}" style="margin-left:auto; font-size:13px; gap:6px"><i class="ph-duotone ph-plus" style="font-size:14px"></i>Nový účet</button>
                 </sc-if>
               </div>
               <div style="font-size:12.5px; color:var(--g-ink3); margin-top:12px">{{ finAccHealth }}</div>
@@ -8371,6 +8385,9 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                       <span style="margin-left:auto; font-size:12px; color:var(--g-ink3); white-space:nowrap">{{ l.when }}</span>
                     </div>
                   </sc-for>
+                  <sc-if value="{{ emLogEmpty }}">
+                    <div style="padding:8px 0; font-size:13px; color:var(--g-ink3)">Zatím se o nouzový přístup nikdo nežádal.</div>
+                  </sc-if>
                 </div>
               </div>
             </div>
@@ -15861,6 +15878,9 @@ class Component extends DCLogic {
         go: () => this.setState({ finTab: 1 })
       })),
       finBarsNote: 'Podíl na výdajích měsíce — odkud peníze skutečně odcházejí.',
+      // Prázdný sloupec pod „Vyžaduje rozhodnutí" vypadal jako nenačtená data.
+      finAlertsEmpty: !FIN.alerts.length,
+      finAlertsEmptyText: 'Nic nečeká na rozhodnutí. Nezařazené platby najdete v Transakcích, rozpočty nad plán v Rozpočtech.',
       finAlerts: FIN.alerts.map(a => ({
         title: a[0], meta: a[1], icon: a[2],
         go: () => a[3] === 'rozpocty' ? this.setState({ route: 'x-rozpocty', budTab: 1 })
@@ -15892,7 +15912,7 @@ class Component extends DCLogic {
           },
           // „Synchronizace hotová, 2 nové transakce" bylo číslo z pořadí účtu.
           refresh: () => !this.ukazka()
-            ? this.zatimNeumime('stahování transakcí z banky — výpis naimportujete v záložce Importy')
+            ? this.zatimNeumime('stahování transakcí z banky — platby zapisujete ručně nebo přicházejí z pravidelných plateb')
             : off
               ? this.toast(a[0] + ' je odpojeno — nejdřív obnovte napojení', { icon: 'ph-warning' })
               : this.toast(a[0] + ' — synchronizace hotová, ' + (i + 1) + ' nové transakce', { icon: 'ph-arrows-clockwise' })
@@ -15900,21 +15920,23 @@ class Component extends DCLogic {
       }),
       finAccHealth: this.ukazka()
         ? FIN.accounts.filter(a => !(s.acOff || {})[a[0]]).length + ' z ' + FIN.accounts.length + ' účtů aktivních · importy běží ráno v 8:00, zařazování hned po nich'
-        : this.pl(FIN.accounts.length, 'účet', 'účty', 'účtů') + ' · pohyby se zapisují ručně nebo importem výpisu, zařazování běží při importu',
+        : this.pl(FIN.accounts.length, 'účet', 'účty', 'účtů') + ' · platby se zapisují ručně (Zapsat platbu) nebo přicházejí z pravidelných plateb',
       finAddAccount: () => this.zatimNeumime('napojení banky z téhle obrazovky — účty se zakládají v Nastavení'),
       // Napojení na banku (synchronizace, odpojení, pravidla importu) má jen ukázka.
       finBankDemo: this.ukazka(),
       finCanAddTx: this.financeNaServeru(),
+      // Úvodní věta posílá do „Účty a napojení (Nový účet)" — tlačítko tu u dvojice chybělo.
+      finNewAccount: () => this.setState({ xaOpen: true, xaMode: 'ucet', xaCtx: null, xaA: '', xaB: '', xaC: '', xaD: '' }),
       finAddTx: () => this.setState({ xaOpen: true, xaMode: 'tx', xaA: '', xaB: '' }),
       finLead: this.ukazka()
         ? 'Šest účtů na jednom místě. Import z bank běží ráno, zařazování podle pravidel hned po něm — do rozpočtu se to propíše samo.'
         : (FIN.accounts.length
           ? this.pl(FIN.accounts.length, 'účet', 'účty', 'účtů') + ' na jednom místě. Platby zapisujete ručně nebo z pravidelných plateb — do rozpočtu se propíšou hned.'
-          : 'Zatím tu není žádný účet. Založte ho v záložce Účty (Nový účet) a platby se začnou počítat.'),
+          : 'Zatím tu není žádný účet. Založte ho v záložce Účty a napojení (Nový účet) a platby se začnou počítat.'),
       // Kolik účtů se synchronizuje, ví seznam účtů — ne napsaná pětka.
       finSyncAll: () => {
         // „Synchronizuji" nespustilo nic — automatické stahování z banky aplikace nemá.
-        if (!this.ukazka()) { this.zatimNeumime('stahování transakcí z banky — výpis naimportujete v záložce Importy'); return; }
+        if (!this.ukazka()) { this.zatimNeumime('stahování transakcí z banky — platby zapisujete ručně nebo přicházejí z pravidelných plateb'); return; }
         const zive = FIN.accounts.filter(a => !(s.acOff || {})[a[0]]).length;
         this.toast(zive
           ? 'Synchronizuji ' + this.pl(zive, 'napojený účet', 'napojené účty', 'napojených účtů')
@@ -15944,7 +15966,10 @@ class Component extends DCLogic {
         go: () => this.setState({ route: 'x-rozpocty', budTab: 1 }),
         edit: () => this.zatimNeumime('úpravu pravidla importu')
       })),
-      finRulesNote: 'Zařazování běží při každém importu. Co pravidla nepokryjí, skončí v Nezařazených.',
+      // U dvojice pravidla nejsou: zařazování podle pravidel patří k importu výpisů, který galerie nemá.
+      finRulesNote: this.ukazka()
+        ? 'Zařazování běží při každém importu. Co pravidla nepokryjí, skončí v Nezařazených.'
+        : 'Pravidla zařazování patří k importu výpisů z banky, který galerie zatím nemá. Kategorii vybíráte při zápisu platby; co zůstane bez ní, najdete v Nezařazených.',
       finImports: FIN.imports.map(i => ({
         when: i[0], bank: i[1], detail: i[2], state: i[3],
         color: i[3] === 'čeká' ? 'var(--g-warn)' : 'var(--g-ok)',
@@ -16770,7 +16795,9 @@ class Component extends DCLogic {
       emWidth: Math.round(((delay - left) / Math.max(1, delay)) * 100) + '%',
       emLeft: 'zbývá ' + left + ' z ' + delay + ' hodin',
       emActions: acts,
-      emLog: log
+      emLog: log,
+      // Prázdný seznam pod nadpisem „Historie" vypadal jako nenačtená data.
+      emLogEmpty: !log.length
     };
   }
   // Datování starých skenů: rozmezí s důvody místo prázdného pole.
@@ -18712,7 +18739,10 @@ class Component extends DCLogic {
       { v: moodAvg.toFixed(1).replace('.', ',') + ' z 5', l: 'průměrná nálada obou', note: ukazka ? 'Nejsilnější souvislost měl přesčas po osmé večer.' : (vals.length ? 'Průměr ' + this.pl(vals.length, 'zapsané nálady', 'zapsaných nálad', 'zapsaných nálad') + '.' : 'Zatím nikdo náladu nezapsal.') },
       { v: String(later.filter(x => x.state === 'dropped').length + later.filter(x => x.state === 'done').length), l: 'věcí ze seznamu „až budeme mít čas“ se uzavřelo', note: 'Zbytek leží dál — a je u toho datum.' },
       { v: String(kaps.filter(c => this.kapsLocked(c)).length), l: 'zapečetěných kapslí', note: (ukazka ? 'Nejbližší se otevře k Vánocům. ' : zamcene.length ? 'Nejbližší se otevře ' + this.datumCesky(new Date(zamcene[0] + 'T12:00:00')) + '. ' : '') + this.pl(kaps.filter(c => !this.kapsLocked(c)).length, 'kapsle se letos otevřela', 'kapsle se letos otevřely', 'kapslí se letos otevřelo') + '.' },
-      { v: this.kc(p60.min), l: 'nejhorší den nejbližších dvou měsíců', note: p60.min < 0 ? 'Dva měsíce dopředu je v tom jeden den v minusu.' : p60.min < 10000 ? 'Vyjde to, ale bez rezervy na překvapení.' : 'Šedesát dní bez rizika — rezerva drží.' }
+      // Bez účtů a plateb je předpověď samé nuly — „vyjde to, ale bez rezervy" by bylo tvrzení bez dat.
+      (ukazka || P60.start || P60.daily || (P60.events || []).length)
+        ? { v: this.kc(p60.min), l: 'nejhorší den nejbližších dvou měsíců', note: p60.min < 0 ? 'Dva měsíce dopředu je v tom jeden den v minusu.' : p60.min < 10000 ? 'Vyjde to, ale bez rezervy na překvapení.' : 'Šedesát dní bez rizika — rezerva drží.' }
+        : { v: '—', l: 'nejhorší den nejbližších dvou měsíců', note: 'Předpověď se spočítá, až budou ve Financích účty a pravidelné platby.' }
     ];
     const decZeZapisu = () => ((s.decs === null || s.decs === undefined ? DEC_LIST : s.decs) || [])
       .map(d => ({ t: d.title, why: (d.why || [])[0] || '', k: d.status === 'platí' ? 'platí' : 'čeká' }))
@@ -18778,7 +18808,16 @@ class Component extends DCLogic {
     const out = [];
     const push = (kicker, text, why, min, route, tab, urg) => out.push({ kicker: kicker, text: text, why: why, min: min, route: route, tab: tab, urg: urg });
     const p60 = this.p60Calc();
-    if (p60.min < 12000) push('Peníze', 'Nejhorší den vyjde na ' + this.kc(p60.min), 'Předpověď na 60 dní je pod rezervou. Jedna platba posunutá o dva týdny to spraví.', 3, 'x-finance', null, 9);
+    /*
+     * Peníze jen z předpovědi, která opravdu je.
+     *
+     * Bez účtů a plateb je předpověď samé nuly — a bod „Nejhorší den vyjde
+     * na 0 Kč, předpověď je pod rezervou" se na schůzku dostal pokaždé.
+     * U dvojice se hlásí pokles pod nulu; rezerva 12 000 Kč je z ukázky.
+     */
+    const maPredpoved = this.ukazka() || !!(P60.start || P60.daily || (P60.events || []).length);
+    if (maPredpoved && this.ukazka() && p60.min < 12000) push('Peníze', 'Nejhorší den vyjde na ' + this.kc(p60.min), 'Předpověď na 60 dní je pod rezervou. Jedna platba posunutá o dva týdny to spraví.', 3, 'x-finance', null, 9);
+    else if (maPredpoved && !this.ukazka() && p60.min < 0) push('Peníze', 'Nejhorší den vyjde na ' + this.kc(p60.min), 'Předpověď na 60 dní klesá pod nulu — podívejte se, kterou platbu posunout nebo odložit.', 3, 'x-finance', null, 9);
     const veto = this.vetoPropList().filter(p => !p.done).length;
     if (veto) push('Rozhodnutí', this.pl(veto, 'návrh čeká na tebe', 'návrhy čekají na tebe', 'návrhů čeká na tebe'), 'Buď schválit, nebo použít veto s jednou větou. Nechat to ležet je třetí, nejhorší možnost.', 2, 'x-rozhodnuti', 'veto', 8);
     const hard = this.sporTags().filter(t => this.sporVerdict(t).label === 'tvrdý konflikt').length;
@@ -22338,7 +22377,8 @@ class Component extends DCLogic {
       geoNumCards: [
         ['Zemí s fotkami', String(been), 'z ' + CTRY.length + ' v evidenci', 'ph-globe'],
         ['Míst', String(L.placeN), 'unikátních v knihovně', 'ph-map-pin'],
-        ['Nejvíc fotek', (Object.keys(counts).sort((a, b) => counts[b] - counts[a])[0] || '—'), L.num(max) + ' položek', 'ph-image'],
+        // Bez zemí stálo „— · 1 položek".
+        ['Nejvíc fotek', (Object.keys(counts).sort((a, b) => counts[b] - counts[a])[0] || '—'), been ? this.pl(max, 'položka', 'položky', 'položek') : 'zatím žádná země', 'ph-image'],
         ['Na seznamu přání', String(WANT.filter(w => !wDone[w[0]]).length), this.pl(WANT.filter(w => !wDone[w[0]]).length, 'cíl před námi', 'cíle před námi', 'cílů před námi').replace(/^\d+\s/, ''), 'ph-flag']
       ].map(x => ({ label: x[0], value: x[1], note: x[2], icon: x[3] })),
       geoNumRows: Object.keys(counts).sort((a, b) => counts[b] - counts[a]).map(k => ({
@@ -23830,9 +23870,18 @@ class Component extends DCLogic {
         bd: paper === p ? 'var(--g-ink)' : 'var(--g-line)',
         go: () => this.setState({ bookPaper: p })
       })),
-      bookPages: pages + ' stran',
-      bookPrice: this.kc(price),
-      bookNote: 'Cena zahrnuje tvrdou vazbu a dopravu. Kapitoly ve stavu „návrh“ se do knihy netisknou, dokud je nepřepnete.',
+      /*
+       * Rozsah a cena jsou odhad, ne nabídka tiskárny.
+       *
+       * Stálo tu „1 320 Kč — cena zahrnuje tvrdou vazbu a dopravu" i u knihy
+       * bez jediné kapitoly. Aplikace s tiskárnou nemluví; vzorec je jen
+       * orientační a u dvojice se tak i jmenuje.
+       */
+      bookPages: inBook.length ? pages + ' stran' : 'zatím bez kapitol',
+      bookPrice: this.ukazka() ? this.kc(price) : inBook.length ? 'orientačně ' + this.kc(price) : 'cena až s obsahem',
+      bookNote: this.ukazka()
+        ? 'Cena zahrnuje tvrdou vazbu a dopravu. Kapitoly ve stavu „návrh“ se do knihy netisknou, dokud je nepřepnete.'
+        : 'Rozsah a cena jsou orientační — přesnou cenu a dopravu určí tiskárna, aplikace s ní nemluví. Kapitoly ve stavu „návrh“ se do knihy netisknou, dokud je nepřepnete.',
       /*
        * Objednávka se zapíše, ne odešle.
        *
@@ -23843,6 +23892,8 @@ class Component extends DCLogic {
        */
       bookOrder: () => {
         const api = window.GalerieApi;
+        // Prázdná kniha se neobjednává — dřív vznikla objednávka „24 stran" bez obsahu.
+        if (!inBook.length) { this.toast('Kniha zatím nemá žádnou kapitolu k tisku — napište kapitolu nebo přepněte návrh na hotovou', { icon: 'ph-book-open' }); return; }
         this.setState({ route: 'x-tisk', appTab: 0 });
 
         if (!api || !api.post || api.mode !== 'http') {
@@ -26006,6 +26057,8 @@ class Component extends DCLogic {
         dgNums: N.stats.map(x => ({ label: x[0], value: x[1], note: x[2] })),
         dgGood: N.moments.map(x => ({ title: x.title, note: x.meta, go: () => this.setState({ route: 'x-tyden', appTab: 0 }) })),
         dgBad: N.slipped.map(x => ({ title: x[0], note: x[1], go: () => this.setState({ route: x[2], appTab: 0 }) })),
+        // Prázdný sloupec pod nadpisem vypadal jako nenačtená data.
+        dgGoodEmpty: !N.moments.length, dgBadEmpty: !N.slipped.length,
         dgMoment: m ? { bg: m.tiles[0] || 'var(--g-panel)', title: m.title, meta: m.meta } : { bg: 'var(--g-panel)', title: 'Zatím bez fotek', meta: 'z tohohle týdne' },
         dgRuleOn: false, dgRuleLabel: 'Týdenní přehled', dgRuleIcon: 'ph-calendar-dots', dgRuleColor: 'var(--g-ink3)',
         dgRuleToggle: () => this.setState({ route: 'x-tyden', appTab: 0 }),
