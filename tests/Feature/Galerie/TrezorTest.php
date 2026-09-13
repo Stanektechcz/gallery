@@ -166,6 +166,23 @@ class TrezorTest extends TestCase
         $this->postJson('/api/trezor/odemknout', ['heslo' => 'i'])->assertJsonPath('blok', 30);
     }
 
+    /**
+     * Zámek trezoru hlídá fotku, ne „první" prostor účtu.
+     *
+     * Skrytá fotka v druhém prostoru téhož účtu se dřív vydala bez odemčení,
+     * protože se hledala jen v prostoru, který databáze vrátila jako první.
+     */
+    public function test_zamek_plati_i_pro_fotku_z_druheho_prostoru(): void
+    {
+        $rodina = GallerySpace::create(['name' => 'Rodinné album', 'owner_id' => $this->adri->id]);
+        $rodina->members()->syncWithoutDetaching([$this->adri->id => ['role' => 'owner']]);
+
+        $fotka = $this->schovanaFotka('rodny-list.jpg');
+        $fotka->update(['gallery_space_id' => $rodina->id]);
+
+        $this->getJson('/api/v1/media/'.$fotka->uuid.'/comments')->assertStatus(423);
+    }
+
     /** Uzavření z galerie platí i ve starém rozhraní — jinak by se obešlo tudy. */
     public function test_uzavreni_plati_i_ve_starem_rozhrani(): void
     {

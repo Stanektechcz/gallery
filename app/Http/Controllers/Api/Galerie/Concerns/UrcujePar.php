@@ -20,7 +20,17 @@ trait UrcujePar
 {
     protected function parId(Request $request): int
     {
-        $prostor = $request->user()?->gallerySpaces()->first();
+        /*
+         * Pořadí je pevné: výchozí prostor, jinak nejstarší.
+         *
+         * Bez řazení vracela databáze „první" podle toho, jak se jí zrovna
+         * hodilo — účet ve dvou prostorech (pozvánka do rodinného alba) mohl
+         * mezi dvěma požadavky přeskočit do jiné galerie, se stavem i fotkami.
+         */
+        $prostor = $request->user()?->gallerySpaces()
+            ->orderByDesc('gallery_spaces.is_default')
+            ->orderBy('gallery_spaces.id')
+            ->first();
 
         abort_if($prostor === null, 404,
             'Účet zatím nepatří do žádného společného prostoru. Založte ho nebo přijměte pozvánku.');

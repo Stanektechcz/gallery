@@ -8184,7 +8184,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
               </sc-if>
 
               <button class="btn btn-primary" onClick="{{ vltUnlock }}" disabled="{{ vltBlocked }}" style="width:100%; justify-content:center; margin-top:16px; opacity:{{ vltBlockedOp }}">{{ vltUnlockLabel }}</button>
-              <div style="font-size:12.5px; color:var(--g-ink3); margin-top:14px">Po třech pokusech se přístup na půl minuty uzavře. Neúspěšné pokusy se zapisují do Aktivity a do auditu.</div>
+              <div style="font-size:12.5px; color:var(--g-ink3); margin-top:14px">Po třech pokusech se přístup na půl minuty uzavře, při dalším hádání pokaždé na dvakrát delší dobu. Neúspěšné pokusy se zapisují do Aktivity a do auditu.</div>
             </div>
           </sc-if>
 
@@ -16179,7 +16179,8 @@ class Component extends DCLogic {
       vltPwd: s.vaultPwd || '', vltSetPwd: e => this.setState({ vaultPwd: e.target.value, vaultErr: null }),
       vltError: !!s.vaultErr, vltErrorText: s.vaultErr || '',
       vltBlocked: tries >= 3, vltBlockedOp: tries >= 3 ? '.45' : '1',
-      vltUnlockLabel: s.vaultBusy ? 'Ověřuje se…' : (tries >= 3 ? 'Přístup uzavřen na 30 s' : 'Odemknout trezor'),
+      // Jak dlouho uzavření trvá, říká server v hlášce nad tlačítkem — s každým dalším je delší.
+      vltUnlockLabel: s.vaultBusy ? 'Ověřuje se…' : (tries >= 3 ? 'Přístup je dočasně uzavřený' : 'Odemknout trezor'),
       /*
        * Odemyká server, ne prohlížeč.
        *
@@ -16214,7 +16215,8 @@ class Component extends DCLogic {
             const zpráva = b.chyba
               || (e && e.status === 429 ? 'Příliš mnoho pokusů za sebou. Zkuste to za minutu.' : null)
               || 'Odemknout se nepodařilo — server neodpověděl.';
-            this.setState({ vaultBusy: false, vaultTries: t, vaultErr: zpráva });
+            // Uzavření drží server u účtu — tlačítko se zavře, i když tohle zařízení ještě tři chyby nevidělo.
+            this.setState({ vaultBusy: false, vaultTries: b.blok ? Math.max(3, t) : t, vaultErr: zpráva });
             if (b.blok) setTimeout(() => this.setState({ vaultTries: 0, vaultErr: null }), b.blok * 1000);
           });
       },
@@ -31186,19 +31188,20 @@ class Component extends DCLogic {
    * přepsáním `appLocked` v konzoli.
    *
    * `POST /api/zamek/overit` porovnává proti haši u účtu **přihlášeného
-   * člověka**, počítá pokusy a po třech na půl minuty zavře. Kód partnera je
-   * jeho a odsud se k němu nedostanu.
+   * člověka**, počítá pokusy u účtu a po třech zavře — napoprvé na půl
+   * minuty, při dalším hádání na déle. Kód partnera je jeho a odsud se
+   * k němu nedostanu.
    */
   lockOver(pin, kam) {
     const api = window.GalerieApi;
-    if (!api || api.mode !== 'http') { kam('Ověřit kód umí jen server a ten teď neodpovídá.'); return; }
+    if (!api || api.mode !== 'http') { kam('Ověřit kód umí jen server a ten teď neodpovídá.', 0); return; }
     api.post('zamek/overit', { kod: pin })
-      .then(() => kam(null))
+      .then(() => kam(null, 0))
       .catch(e => {
         const b = (e && e.body) || {};
         kam(b.chyba || (e && e.status === 429
           ? 'Příliš mnoho pokusů za sebou. Zkuste to za minutu.'
-          : 'Ověřit se nepodařilo — server neodpověděl.'));
+          : 'Ověřit se nepodařilo — server neodpověděl.'), b.blok || 0);
       });
   }
   lockTry(pin) {
@@ -31206,9 +31209,14 @@ class Component extends DCLogic {
     // nastavit místo toho, aby ho nechala hádat něco, co neexistuje.
     if (!this.zamek().nastaveno) { this.lockOpen('Odemčeno · kód zámku si nastavte v Nastavení → Zámek'); return; }
     this.setState({ lockBusy: true });
-    this.lockOver(pin, chyba => {
+    this.lockOver(pin, (chyba, blok) => {
       if (!chyba) { this.setState({ lockBusy: false }); this.lockOpen(); return; }
-      this.setState({ lockBusy: false, lockTries: (this.state.lockTries || 0) + 1, lockPin: '', lockErr: chyba });
+      // Uzavření drží server; klávesnice se po něm zase otevře, ne až po obnovení stránky.
+      this.setState({ lockBusy: false, lockTries: blok ? Math.max(3, (this.state.lockTries || 0) + 1) : (this.state.lockTries || 0) + 1, lockPin: '', lockErr: chyba });
+      if (blok) {
+        clearTimeout(this._lockBlokT);
+        this._lockBlokT = setTimeout(() => this.setState({ lockTries: 0, lockErr: null }), blok * 1000);
+      }
     });
   }
   lockDigit(d) {

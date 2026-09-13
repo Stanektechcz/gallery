@@ -6,17 +6,17 @@ use App\Models\User;
 use Illuminate\Support\Facades\Cache;
 
 /**
- * Hádání hesla k trezoru.
+ * Hádání hesla k trezoru a kódu zámku aplikace.
  *
  * Pokusy se počítaly v sezení, takže je vynulovalo smazání cookies: kdo hádal,
  * dostal po třech chybách nové sezení a tři pokusy znovu. Teď patří účtu
  * a kdo po uzavření hádá dál, čeká pokaždé dvakrát déle.
  *
- * Trezor se odemyká ze dvou míst — z galerie (`api/trezor/odemknout`) a ze
- * starého rozhraní (`vault/unlock`). Obě berou tytéž pokusy, jinak by se
- * uzavření jednoho obešlo druhým.
+ * `druh` odděluje, co se hádá: `trezor` (heslo do galerie — z galerie i ze
+ * starého rozhraní `/vault/unlock`, obojí stejné počítadlo, jinak by se
+ * uzavření jednoho obešlo druhým) a `zamek` (šestimístný kód zámku).
  */
-class PokusyTrezoru
+class PokusyOvereni
 {
     /** Kolik chyb po sobě, než se přístup uzavře. */
     public const POKUSU = 3;
@@ -28,9 +28,9 @@ class PokusyTrezoru
     private const BLOK_NEJVIC = 900;
 
     /** Za kolik sekund se dá zkusit znovu; nula znamená hned. */
-    public static function blokDo(User $kdo): int
+    public static function blokDo(User $kdo, string $druh): int
     {
-        return max(0, (int) Cache::get(self::klic($kdo, 'blok'), 0) - now()->timestamp);
+        return max(0, (int) Cache::get(self::klic($kdo, $druh, 'blok'), 0) - now()->timestamp);
     }
 
     /**
@@ -39,33 +39,33 @@ class PokusyTrezoru
      * @return array{pokusu: int, zbyva: int, blok: int} `blok` je délka právě
      *                                                   začatého uzavření (jinak 0)
      */
-    public static function chyba(User $kdo): array
+    public static function chyba(User $kdo, string $druh): array
     {
-        $pokusu = (int) Cache::get(self::klic($kdo, 'pokusy'), 0) + 1;
+        $pokusu = (int) Cache::get(self::klic($kdo, $druh, 'pokusy'), 0) + 1;
 
         if ($pokusu < self::POKUSU) {
-            Cache::put(self::klic($kdo, 'pokusy'), $pokusu, now()->addMinutes(15));
+            Cache::put(self::klic($kdo, $druh, 'pokusy'), $pokusu, now()->addMinutes(15));
 
             return ['pokusu' => $pokusu, 'zbyva' => self::POKUSU - $pokusu, 'blok' => 0];
         }
 
         // Kolikáté uzavření v řadě — pamatuje se hodinu od posledního.
-        $poradi = (int) Cache::get(self::klic($kdo, 'uzavreni'), 0);
+        $poradi = (int) Cache::get(self::klic($kdo, $druh, 'uzavreni'), 0);
         $sekund = min(self::BLOK_NEJVIC, self::BLOK_SEKUND * 2 ** min($poradi, 10));
 
-        Cache::put(self::klic($kdo, 'blok'), now()->addSeconds($sekund)->timestamp, now()->addSeconds($sekund));
-        Cache::put(self::klic($kdo, 'uzavreni'), $poradi + 1, now()->addHour());
-        Cache::forget(self::klic($kdo, 'pokusy'));
+        Cache::put(self::klic($kdo, $druh, 'blok'), now()->addSeconds($sekund)->timestamp, now()->addSeconds($sekund));
+        Cache::put(self::klic($kdo, $druh, 'uzavreni'), $poradi + 1, now()->addHour());
+        Cache::forget(self::klic($kdo, $druh, 'pokusy'));
 
         return ['pokusu' => $pokusu, 'zbyva' => 0, 'blok' => $sekund];
     }
 
-    /** Správné heslo počítadla vynuluje. */
-    public static function uspech(User $kdo): void
+    /** Správné heslo nebo kód počítadla vynuluje. */
+    public static function uspech(User $kdo, string $druh): void
     {
-        Cache::forget(self::klic($kdo, 'pokusy'));
-        Cache::forget(self::klic($kdo, 'uzavreni'));
-        Cache::forget(self::klic($kdo, 'blok'));
+        Cache::forget(self::klic($kdo, $druh, 'pokusy'));
+        Cache::forget(self::klic($kdo, $druh, 'uzavreni'));
+        Cache::forget(self::klic($kdo, $druh, 'blok'));
     }
 
     public static function naJakDlouho(int $sekund): string
@@ -78,8 +78,8 @@ class PokusyTrezoru
         };
     }
 
-    private static function klic(User $kdo, string $co): string
+    private static function klic(User $kdo, string $druh, string $co): string
     {
-        return 'trezor:'.$co.':'.$kdo->getKey();
+        return 'pokusy:'.$druh.':'.$co.':'.$kdo->getKey();
     }
 }

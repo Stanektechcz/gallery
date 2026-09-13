@@ -8265,22 +8265,27 @@ class Component extends DCLogic {
    */
   lockOver(pin, kam) {
     const api = window.GalerieApi;
-    if (!api || api.mode !== 'http') { kam('Ověřit kód umí jen server a ten teď neodpovídá.'); return; }
+    if (!api || api.mode !== 'http') { kam('Ověřit kód umí jen server a ten teď neodpovídá.', 0); return; }
     api.post('zamek/overit', { kod: pin })
-      .then(() => kam(null))
+      .then(() => kam(null, 0))
       .catch(e => {
         const b = (e && e.body) || {};
         kam(b.chyba || (e && e.status === 429
           ? 'Příliš mnoho pokusů za sebou. Zkuste to za minutu.'
-          : 'Ověřit se nepodařilo — server neodpověděl.'));
+          : 'Ověřit se nepodařilo — server neodpověděl.'), b.blok || 0);
       });
   }
   lockTry(pin) {
     if (!this.zamek().nastaveno) { this.lockOpen('Odemčeno · kód zámku si nastavte v Nastavení → Zámek'); return; }
     this.setState({ lockBusy: true });
-    this.lockOver(pin, chyba => {
+    this.lockOver(pin, (chyba, blok) => {
       if (!chyba) { this.setState({ lockBusy: false }); this.lockOpen(); return; }
-      this.setState({ lockBusy: false, lockTries: (this.state.lockTries || 0) + 1, lockPin: '', lockErr: chyba });
+      // Uzavření drží server u účtu (s každým dalším delší); klávesnice se po něm zase otevře.
+      this.setState({ lockBusy: false, lockTries: blok ? Math.max(3, (this.state.lockTries || 0) + 1) : (this.state.lockTries || 0) + 1, lockPin: '', lockErr: chyba });
+      if (blok) {
+        clearTimeout(this._lockBlokT);
+        this._lockBlokT = setTimeout(() => this.setState({ lockTries: 0, lockErr: null }), blok * 1000);
+      }
     });
   }
   lockNow(why) {

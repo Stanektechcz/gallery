@@ -16,13 +16,26 @@ class ProtectVaultMedia
             return $next($request);
         }
 
-        $spaceId = $request->user()->gallerySpaces()->first()?->id;
-        $isHidden = MediaItem::where('uuid', $uuid)
-            ->where('gallery_space_id', $spaceId)
+        /*
+         * Podle samotné fotky, ne podle „prvního" prostoru.
+         *
+         * Hledalo se jen v prostoru, který databáze vrátila jako první. Fotka
+         * z trezoru v druhém prostoru téhož účtu (rodinné album, do kterého
+         * přijal pozvánku) tu tak nebyla vidět jako skrytá a vydala se bez
+         * odemčení. Kdo k fotce vůbec smí, rozhoduje kontrolér; tady jde jen
+         * o zámek trezoru.
+         */
+        $isHidden = MediaItem::withoutGlobalScopes()
+            ->where('uuid', $uuid)
             ->where('is_hidden', true)
             ->exists();
 
-        if ($isHidden && (int) $request->session()->get('vault_unlocked_until', 0) <= now()->timestamp) {
+        // Požadavek jen s tokenem (klíč k API, aplikace) sezení nemá, a tedy ani
+        // odemčený trezor — dřív tu spadl na „Session store not set" s chybou 500.
+        $odemceno = $request->hasSession()
+            && (int) $request->session()->get('vault_unlocked_until', 0) > now()->timestamp;
+
+        if ($isHidden && ! $odemceno) {
             if ($request->expectsJson()) {
                 return response()->json(['message' => 'Trezor je uzamčený.'], 423);
             }

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Galerie;
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\User;
+use App\Services\Provoz\PokusyOvereni;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -31,15 +32,13 @@ use Illuminate\Support\Str;
  */
 class ZamekController extends Controller
 {
-    /** Kolik pokusů po sobě, než se odemykání na chvíli uzavře. */
-    private const POKUSU = 3;
-
-    /** Jak dlouho pak. Půl minuty, jak to obrazovka slibuje. */
-    private const BLOK = 30;
-
-    private const KLIC_POKUSY = 'app_lock_failed_attempts';
-
-    private const KLIC_BLOK = 'app_lock_blocked_until';
+    /**
+     * Pokusy o kód počítá `PokusyOvereni` u účtu, ne v sezení.
+     *
+     * V sezení je vynulovalo smazání cookies — a šest číslic je milion
+     * možností, tedy s novým sezením po každých třech chybách otázka dnů.
+     */
+    private const DRUH = 'zamek';
 
     /** @return array{nastaveno: bool, delka: int, blok: int, zmeneno: ?string} */
     private function odpoved(Request $request): array
@@ -49,7 +48,7 @@ class ZamekController extends Controller
         return [
             'nastaveno' => (bool) $clovek->app_lock_pin,
             'delka' => 6,
-            'blok' => $this->blokDo($request),
+            'blok' => PokusyOvereni::blokDo($clovek, self::DRUH),
             'zmeneno' => $clovek->app_lock_set_at?->toDateString(),
         ];
     }
@@ -100,7 +99,7 @@ class ZamekController extends Controller
             'app_lock_set_at' => now(),
         ])->save();
 
-        $request->session()->forget([self::KLIC_POKUSY, self::KLIC_BLOK]);
+        PokusyOvereni::uspech($clovek, self::DRUH);
         AuditLog::record('app_lock.set');
 
         return response()->json($this->odpoved($request) + ['obnovovaci' => $obnovovaci]);
@@ -112,7 +111,7 @@ class ZamekController extends Controller
         $data = $request->validate(['kod' => ['required', 'string']]);
         $clovek = $request->user();
 
-        if (($blok = $this->blokDo($request)) > 0) {
+        if (($blok = PokusyOvereni::blokDo($clovek, self::DRUH)) > 0) {
             return response()->json($this->odpoved($request) + [
                 'chyba' => 'Přístup je uzavřený. Zkuste to za '.$blok.' s.',
             ], 429);
@@ -125,27 +124,23 @@ class ZamekController extends Controller
         }
 
         if (! Hash::check($data['kod'], $clovek->app_lock_pin)) {
-            $pokusu = (int) $request->session()->get(self::KLIC_POKUSY, 0) + 1;
-            $request->session()->put(self::KLIC_POKUSY, $pokusu);
-            AuditLog::record('app_lock.failed', null, ['pokus' => $pokusu]);
+            $chyba = PokusyOvereni::chyba($clovek, self::DRUH);
+            AuditLog::record('app_lock.failed', null, ['pokus' => $chyba['pokusu']]);
 
-            if ($pokusu >= self::POKUSU) {
-                $request->session()->put(self::KLIC_BLOK, now()->addSeconds(self::BLOK)->timestamp);
-                $request->session()->forget(self::KLIC_POKUSY);
-
+            if ($chyba['blok'] > 0) {
                 return response()->json($this->odpoved($request) + [
                     'chyba' => 'Kód jsme třikrát nepřijali. Zkuste odemknutí dotykem, nebo obnovovací kód.',
                 ], 429);
             }
 
-            $zbyva = self::POKUSU - $pokusu;
+            $zbyva = $chyba['zbyva'];
 
             return response()->json($this->odpoved($request) + [
                 'chyba' => 'Kód nesouhlasí — '.($zbyva === 1 ? 'zbývá poslední pokus.' : 'zbývají '.$zbyva.' pokusy.'),
             ], 422);
         }
 
-        $request->session()->forget([self::KLIC_POKUSY, self::KLIC_BLOK]);
+        PokusyOvereni::uspech($clovek, self::DRUH);
         AuditLog::record('app_lock.open');
 
         return response()->json($this->odpoved($request) + ['odemceno' => true]);
@@ -179,7 +174,7 @@ class ZamekController extends Controller
             'app_lock_set_at' => null,
         ])->save();
 
-        $request->session()->forget([self::KLIC_POKUSY, self::KLIC_BLOK]);
+        PokusyOvereni::uspech($clovek, self::DRUH);
         AuditLog::record('app_lock.recovered');
 
         return response()->json($this->odpoved($request) + ['odemceno' => true]);
@@ -202,9 +197,10 @@ class ZamekController extends Controller
         $sezeni = 0;
 
         if (Schema::hasTable('sessions')) {
+            // Požadavek jen s tokenem sezení nemá — pak se ruší všechna.
             $sezeni = DB::table('sessions')
                 ->where('user_id', $clovek->id)
-                ->where('id', '!=', $request->session()->getId())
+                ->when($request->hasSession(), fn ($q) => $q->where('id', '!=', $request->session()->getId()))
                 ->delete();
         }
 
@@ -225,10 +221,5 @@ class ZamekController extends Controller
                 ? 'Odhlášeno jinde: '.($sezeni + $klice).'× · tady zůstáváte přihlášeni'
                 : 'Nikde jinde jste přihlášení nebyli',
         ]);
-    }
-
-    private function blokDo(Request $request): int
-    {
-        return max(0, (int) $request->session()->get(self::KLIC_BLOK, 0) - now()->timestamp);
     }
 }

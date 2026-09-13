@@ -4,7 +4,7 @@ namespace App\Http\Controllers\Api\Galerie;
 
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
-use App\Services\Provoz\PokusyTrezoru;
+use App\Services\Provoz\PokusyOvereni;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -27,7 +27,7 @@ use Illuminate\Support\Facades\Hash;
  * Heslo je heslo do galerie (`users.password`) přes `Hash::check`; jiné by
  * znamenalo druhé tajemství, které nikdo neumí změnit ani obnovit.
  *
- * Pokusy a uzavření počítá `PokusyTrezoru` u účtu, ne v sezení — to by
+ * Pokusy a uzavření počítá `PokusyOvereni` u účtu, ne v sezení — to by
  * vynulovalo smazání cookies.
  */
 class TrezorController extends Controller
@@ -47,14 +47,14 @@ class TrezorController extends Controller
         $data = $request->validate(['heslo' => 'required|string']);
         $kdo = $request->user();
 
-        if (($blok = PokusyTrezoru::blokDo($kdo)) > 0) {
+        if (($blok = PokusyOvereni::blokDo($kdo, 'trezor')) > 0) {
             return response()->json($this->odpoved($request) + [
                 'chyba' => 'Přístup je uzavřený. Zkuste to za '.$blok.' s.',
             ], 429);
         }
 
         if (! Hash::check($data['heslo'], (string) $kdo->password)) {
-            $chyba = PokusyTrezoru::chyba($kdo);
+            $chyba = PokusyOvereni::chyba($kdo, 'trezor');
 
             /*
              * Neúspěšný pokus se zapisuje.
@@ -67,7 +67,7 @@ class TrezorController extends Controller
 
             if ($chyba['blok'] > 0) {
                 return response()->json($this->odpoved($request) + [
-                    'chyba' => 'Tři neúspěšné pokusy. Přístup je '.PokusyTrezoru::naJakDlouho($chyba['blok']).' uzavřený a záznam šel do auditu.',
+                    'chyba' => 'Tři neúspěšné pokusy. Přístup je '.PokusyOvereni::naJakDlouho($chyba['blok']).' uzavřený a záznam šel do auditu.',
                 ], 429);
             }
 
@@ -79,7 +79,7 @@ class TrezorController extends Controller
         }
 
         $request->session()->put(self::KLIC, now()->addMinutes(self::MINUT)->timestamp);
-        PokusyTrezoru::uspech($kdo);
+        PokusyOvereni::uspech($kdo, 'trezor');
         AuditLog::record('vault.unlock');
 
         return response()->json($this->odpoved($request));
@@ -110,7 +110,7 @@ class TrezorController extends Controller
         return [
             'odemceno' => $zbyva > 0,
             'zbyva' => $zbyva,
-            'blok' => PokusyTrezoru::blokDo($request->user()),
+            'blok' => PokusyOvereni::blokDo($request->user(), 'trezor'),
         ];
     }
 }

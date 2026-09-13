@@ -111,6 +111,22 @@ class ZamekTest extends TestCase
 
         // A správný kód v té chvíli taky ne — jinak by uzavření nic neznamenalo.
         $this->postJson('/api/zamek/overit', ['kod' => '240613'])->assertStatus(429);
+
+        // Nové sezení (smazané cookies) uzavření nezruší — pokusy patří účtu.
+        $this->flushSession();
+        $this->postJson('/api/zamek/overit', ['kod' => '240613'])->assertStatus(429);
+    }
+
+    /** Obnovovací kód otevře i uzavřený zámek — obrazovka ho po třech chybách sama nabízí. */
+    public function test_obnovovaci_kod_projde_i_pri_uzavreni(): void
+    {
+        $obnova = $this->postJson('/api/zamek', ['kod' => '240613', 'heslo' => 'heslo-adriana'])->assertOk()->json('obnovovaci');
+
+        foreach (['111111', '222222', '333333'] as $kod) {
+            $this->postJson('/api/zamek/overit', ['kod' => $kod]);
+        }
+
+        $this->postJson('/api/zamek/obnovit', ['kod' => $obnova])->assertOk()->assertJson(['odemceno' => true, 'blok' => 0]);
     }
 
     /** Změna kódu chce ten starý, ne heslo. */
