@@ -2,9 +2,11 @@
 
 namespace Tests\Feature\Galerie;
 
+use App\Models\CoupleState;
 use App\Models\GallerySpace;
 use App\Models\User;
 use App\Services\Notifications\WebPushService;
+use App\Services\Provoz\PauzaDvojice;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
 use Mockery;
@@ -79,6 +81,25 @@ class PripomenutiTest extends TestCase
             ->assertJsonPath('zprava', 'Poděkování odešlo do telefonu — Makinka');
 
         $this->postJson('/api/pripomenout', ['text' => 'x', 'druh' => 'cokoli'])->assertStatus(422);
+    }
+
+    /** Během pauzy dvojice se nic neposílá a hláška to řekne. Po jejím konci zase ano. */
+    public function test_pauza_dvojice_ztisi_pripominky(): void
+    {
+        $prostor = GallerySpace::whereHas('members', fn ($q) => $q->whereKey($this->adri->id))->firstOrFail();
+        CoupleState::forCouple($prostor->id)->update(['data' => ['pauseOn' => true, 'pauseUntil' => now()->addHours(5)->getTimestampMs()]]);
+
+        $push = Mockery::mock(WebPushService::class);
+        $push->shouldNotReceive('sendToUser');
+        $this->app->instance(WebPushService::class, $push);
+
+        $this->postJson('/api/pripomenout', ['text' => 'Ahoj'])
+            ->assertOk()
+            ->assertJsonPath('doruceno', 0)
+            ->assertJsonPath('zprava', 'Běží pauza — do telefonu se do jejího konce nic neposílá');
+
+        CoupleState::where('couple_id', $prostor->id)->first()->update(['data' => ['pauseOn' => true, 'pauseUntil' => now()->subMinute()->getTimestampMs()]]);
+        $this->assertFalse(PauzaDvojice::bezi($this->maki));
     }
 
     public function test_prazdna_pripominka_neprojde(): void

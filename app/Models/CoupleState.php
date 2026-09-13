@@ -49,7 +49,8 @@ class CoupleState extends Model
 
     /** Klíče, které patří do šifrovaného sloupce, ne do otevřeného JSONu. */
     public const PRIVATE_KEYS = [
-        'blizWA', 'blizWM', 'blizAdd', 'blizBlock',
+        // `blizW` je chuť tohoto týdne pod jménem (dřív `blizWA`/`blizWM` podle toho, kdo se dívá).
+        'blizW', 'blizWA', 'blizWM', 'blizAdd', 'blizBlock',
         'kidsStance', 'kidsYear', 'kidsFixed', 'kidsTalks',
         'optIn', 'exitMade', 'exitOff', 'exitWho',
         'svedAdj', 'mineInc', 'mineEven',

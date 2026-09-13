@@ -243,7 +243,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                 <i class="ph-duotone {{ soloEditIcon }}" style="flex:none; font-size:14px; color:var(--g-ink3)"></i>
               </button>
               <button onClick="{{ soloGo }}" aria-label="Co se sbírá na později" style="flex:none; width:44px; height:44px; display:grid; place-items:center; border:1px solid var(--g-line); border-radius:2px; background:transparent; color:var(--g-ink2); cursor:pointer"><i class="ph-duotone ph-tray" style="font-size:16px"></i></button>
-              <button onClick="{{ soloToggle }}" style="flex:none; min-height:44px; padding:0 11px; border:1px solid var(--g-ink); border-radius:2px; background:var(--g-ink); color:var(--g-bg); cursor:pointer; font-family:inherit; font-size:12px; white-space:nowrap">Je zpátky</button>
+              <button onClick="{{ soloToggle }}" style="flex:none; min-height:44px; padding:0 11px; border:1px solid var(--g-ink); border-radius:2px; background:var(--g-ink); color:var(--g-bg); cursor:pointer; font-family:inherit; font-size:12px; white-space:nowrap">{{ soloBackLabel }}</button>
             </div>
             <sc-if value="{{ soloEdit }}">
               <div style="display:flex; gap:5px; overflow-x:auto; padding-top:6px" data-tabstrip="1">
@@ -6629,7 +6629,9 @@ class Component extends DCLogic {
        'mineInc mineEven parDone mechLog rowDone sw rules memSaved memLater curVotesM navHide evUndone annFmtM kapOpened nedDone klQuiet evPick rtOnM ndStateM whLogM offPackM memPrefs lbTags lbVers setVals lockIdle lockSecs lockBio lockStart edits cycDays wishes ideas buys ' +
        // Domácnost, rozhodnutí, sliby, rodina, žádosti a kapsle: server je zapisuje do tabulek.
        // Bez nich telefon hlásil „hotovo" a „žádost odeslána" a změna žila jen do obnovení.
-       'chores choreLog dues inv decs cools proms fam nudges kapsules').split(' ').forEach(x => { this._pKeep[x] = 1; });
+       'chores choreLog dues inv decs cools proms fam nudges kapsules ' +
+       // Kdo je mimo platí pro oba — bez uložení by ho druhé zařízení nevidělo.
+       'soloOn soloAway soloWhy').split(' ').forEach(x => { this._pKeep[x] = 1; });
     }
     return !!this._pKeep[k];
   }
@@ -9065,6 +9067,9 @@ class Component extends DCLogic {
     const s = String(jmeno || '').trim();
     if (! s) return s;
 
+    // Celé jméno se skloňuje křestním (příjmení na -á vzor nemá) — viz široké rozvržení.
+    if (/\s/.test(s)) return this.sklon(this.krestni(s), pad);
+
     const posledni = s.slice(-1);
     const zaklad = s.slice(0, -1);
     const meke = ['č', 'š', 'ž', 'j', 'ň', 'ř', 'c', 'ď', 'ť'];
@@ -9444,7 +9449,7 @@ class Component extends DCLogic {
      * nenabízejí — hláška bez účinku by byla horší.
      */
     const naServeru = this.galerieNaServeru();
-    const bezAkce = naServeru && ['voice', 'print', 'dupes', 'recovery', 'tv', 'archive', 'peopleSug'].indexOf(key) >= 0;
+    const bezAkce = naServeru && ['voice', 'print', 'recovery', 'tv', 'archive', 'peopleSug'].indexOf(key) >= 0;
     return list.map(r => {
       const id = r.id;
       const zRadku = r.g === 'koupeno' || r.g === 'viděli jsme' || r.g === 'hotovo';
@@ -9461,6 +9466,24 @@ class Component extends DCLogic {
             window.GalerieApi.post('stitky/sloucit', { stitky: String(r.t).split('+').map(x => x.trim()).filter(Boolean) })
               .then(res => { if (res && window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data, res.prazdne); this.toast((res && res.zprava) || 'Štítky sloučeny', { icon: 'ph-arrows-merge' }); })
               .catch(e => this.chybaServeru(e, 'Štítky se nepodařilo sloučit'));
+            return;
+          }
+          /*
+           * Duplicity sloučí server (UklidVeStavu): nechá největší kopii,
+           * ostatní pošle do koše a nález uzavře. Řádek je ve stejném pořadí
+           * jako `DUP_GROUPS` — oba seznamy skládá server z týchž nálezů.
+           * Ptá se dvojím klepnutím, protože kopie odcházejí do koše.
+           */
+          if (naServeru && key === 'dupes' && !done) {
+            const m = /^dupes-(\d+)$/.exec(String(id));
+            const g = m ? ((window.GalerieData || {}).DUP_GROUPS || [])[+m[1]] : null;
+            if (!g || !g.id) { this.toast('Tenhle nález se sloučit nedá — obnovte seznam', { icon: 'ph-info' }); return; }
+            if (s.mDupPotvrd !== g.id) { this.setState({ mDupPotvrd: g.id }); this.toast('Klepněte znovu — zůstane největší kopie, ostatní půjdou do koše na 30 dní', { icon: 'ph-warning' }); return; }
+            // Bez `rowDone`: klíč je pořadí řádku a po obnovení by patřil jinému nálezu.
+            this.setState({ mDupPotvrd: null });
+            window.GalerieApi.save({ dupDone: [g.id], dupKeep: {} });
+            setTimeout(() => { if (window.GalerieObnovit) { window.GalerieObnovit('knihovna'); window.GalerieObnovit('system'); } }, 3000);
+            this.toast('Sloučeno — ostatní kopie jsou v koši', { icon: 'ph-broom' });
             return;
           }
           if (naServeru && key === 'recipes' && !done) {
@@ -10699,17 +10722,22 @@ class Component extends DCLogic {
   }
   soloVals() {
     const s = this.state;
-    const on = !!s.soloOn;
+    const me = this.ndMe();
     const other = this.ndOther();
-    const pend = this.ndAll().filter(n => n.state === 'ceka' && n.from === this.ndMe()).length;
+    // Kdo je mimo, jménem — společný stav oba vidí stejně (viz široké rozvržení).
+    const away = s.soloAway || (s.soloOn ? other : null);
+    const on = !!away;
+    const jaMimo = away === me;
+    const pend = this.ndAll().filter(n => n.state === 'ceka' && n.from === me).length;
     const reasons = [['signal', 'Mimo signál'], ['prace', 'V práci'], ['cesta', 'Na cestách'], ['spanek', 'Spí']];
     const why = s.soloWhy || 'signal';
     return {
       soloOn: on,
-      soloBanner: on
-        ? other + ' je mimo — ' + (reasons.find(r => r[0] === why) || reasons[0])[1].toLowerCase()
-          + '. ' + (pend ? this.pl(pend, 'věc čeká', 'věci čekají', 'věcí čeká') + ' na později.' : 'Nic nečeká.')
-        : '',
+      soloBackLabel: jaMimo ? 'Jsem zpátky' : 'Je zpátky',
+      soloBanner: !on ? '' : jaMimo
+        ? 'Jste mimo — ' + (reasons.find(r => r[0] === why) || reasons[0])[1].toLowerCase() + '. Nic na vás nečeká.'
+        : away + ' je mimo — ' + (reasons.find(r => r[0] === why) || reasons[0])[1].toLowerCase()
+          + '. ' + (pend ? this.pl(pend, 'věc čeká', 'věci čekají', 'věcí čeká') + ' na později.' : 'Nic nečeká.'),
       soloCount: pend ? this.pl(pend, 'věc čeká', 'věci čekají', 'věcí čeká') : 'nic nečeká',
       soloEdit: !!s.soloEdit,
       soloEditIcon: s.soloEdit ? 'ph-caret-up' : 'ph-caret-down',
@@ -10722,8 +10750,8 @@ class Component extends DCLogic {
         go: () => this.setState({ soloWhy: r[0] })
       })),
       soloToggle: () => {
-        this.setState({ soloOn: !on });
-        this.toast(on ? 'Režim pro jednoho vypnut — ' + other + ' je zpátky' : 'Režim pro jednoho zapnut', { icon: on ? 'ph-users-three' : 'ph-user', silent: true });
+        this.setState({ soloOn: !on, soloAway: on ? null : other });
+        this.toast(on ? (jaMimo ? 'Jste zpátky' : 'Režim pro jednoho vypnut — ' + away + ' je zpátky') : 'Režim pro jednoho zapnut', { icon: on ? 'ph-users-three' : 'ph-user', silent: true });
       },
       soloGo: () => { this.setState({ ndTab: 1 }); this.push('nudge'); }
     };

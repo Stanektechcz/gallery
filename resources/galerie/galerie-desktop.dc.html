@@ -294,7 +294,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
           </sc-for>
         </div>
         <button class="btn btn-ghost" onClick="{{ soloOpen }}" style="font-size:12.5px; gap:6px"><i class="ph-duotone ph-tray" style="font-size:15px"></i>Co se sbírá</button>
-        <button class="btn btn-secondary" onClick="{{ soloToggle }}" style="font-size:12.5px; gap:6px"><i class="ph-duotone ph-users" style="font-size:15px"></i>Je zpátky</button>
+        <button class="btn btn-secondary" onClick="{{ soloToggle }}" style="font-size:12.5px; gap:6px"><i class="ph-duotone ph-users" style="font-size:15px"></i>{{ soloBackLabel }}</button>
       </div>
     </sc-if>
 
@@ -8752,7 +8752,9 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                 <div style="padding:15px 17px; border-radius:2px; background:var(--g-raise); border:1px solid var(--g-line2)">
                   <div style="display:flex; align-items:baseline; gap:10px">
                     <div style="font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--g-ink3)">Dnešní zápis · {{ klMoodWhoName }}</div>
-                    <button onClick="{{ klMoodSwitch }}" style="margin-left:auto; border:0; background:transparent; padding:0; cursor:pointer; font-family:inherit; font-size:12.5px; color:var(--g-acc)">Přepnout osobu</button>
+                    <sc-if value="{{ klMoodCanSwitch }}">
+                      <button onClick="{{ klMoodSwitch }}" style="margin-left:auto; border:0; background:transparent; padding:0; cursor:pointer; font-family:inherit; font-size:12.5px; color:var(--g-acc)">Přepnout osobu</button>
+                    </sc-if>
                   </div>
                   <div style="display:flex; gap:7px; flex-wrap:wrap; margin-top:12px">
                     <sc-for list="{{ klMoodScale }}" as="m" hint-placeholder-count="5">
@@ -17593,20 +17595,36 @@ class Component extends DCLogic {
     };
   }
 
+  // Běží pauza? U dvojice má konec (`pauseUntil`) — po 24 hodinách skončí sama, i když ji nikdo nevypne.
+  pauzaBezi() {
+    const s = this.state;
+    if (!s.pauseOn) return false;
+    return this.ukazka() || !s.pauseUntil || s.pauseUntil > Date.now();
+  }
   pauseVals() {
     const s = this.state;
-    const on = !!s.pauseOn;
+    const on = this.pauzaBezi();
+    const ukazka = this.ukazka();
     const plan = s.pausePlan || PAUSE_PLAN;
     const log = s.pauseLog || PAUSE_LOG;
     const agreed = plan.filter(p => p.agreed).length;
+    const konec = s.pauseUntil ? new Date(s.pauseUntil) : null;
+    const doKdy = konec ? (konec.getDate() !== this.dnes().getDate() ? 'zítra ' : 'dnes ') + konec.getHours() + ':' + String(konec.getMinutes()).padStart(2, '0') : 'zítra';
+    /*
+     * Co pauza u dvojice opravdu dělá: server během ní neposílá žádná
+     * upozornění (PauzaDvojice) a nedělní agenda mlčí. Termíny se neposouvají —
+     * ukázka to tvrdila, ale nic v aplikaci lhůty neposouvá.
+     */
     return {
       pzOn: on, pzOff: !on,
       pzHead: on
-        ? 'Pauza běží · aplikace mlčí a lhůty jsou zmrazené do zítra'
+        ? (ukazka ? 'Pauza běží · aplikace mlčí a lhůty jsou zmrazené do zítra' : 'Pauza běží do ' + doKdy + ' · upozornění se neposílají')
         : 'Plán pro chvíli, kdy už na to nemáte slova',
       pzNote: on
-        ? 'Nedělní agenda je zmrazená, oznámení se nikam neposílají a nic po vás nikdo nechce. Vrátit se k tomu můžete dřív — ale nemusíte.'
-        : 'Tenhle plán se píše v klidu, protože v hádce se nedomlouvá. Pauza je jediná funkce v aplikaci, která něco ubírá: na 24 hodin zmrazí lhůty, ztiší oznámení a vyprázdní agendu.',
+        ? (ukazka ? 'Nedělní agenda je zmrazená, oznámení se nikam neposílají a nic po vás nikdo nechce. Vrátit se k tomu můžete dřív — ale nemusíte.'
+          : 'Nedělní agenda mlčí a do telefonů nechodí žádná upozornění. Termíny zůstávají, jak jsou — jen o nich aplikace nemluví. Vrátit se můžete dřív, ale nemusíte.')
+        : (ukazka ? 'Tenhle plán se píše v klidu, protože v hádce se nedomlouvá. Pauza je jediná funkce v aplikaci, která něco ubírá: na 24 hodin zmrazí lhůty, ztiší oznámení a vyprázdní agendu.'
+          : 'Tenhle plán se píše v klidu, protože v hádce se nedomlouvá. Pauza na 24 hodin ztiší upozornění do telefonů a nedělní agendu — nic víc, nic míň.'),
       pzAgreed: agreed + ' ze ' + plan.length + ' bodů dohodnuto',
       pzPlan: plan.map((p, i) => ({
         step: p.step,
@@ -17618,17 +17636,23 @@ class Component extends DCLogic {
       pzEffects: [
         { t: 'Nedělní agenda', v: on ? 'zmrazená' : 'běží', note: 'Body se nikam neztratí, jen se o nich mlčí.' },
         { t: 'Oznámení', v: on ? 'všechna ztišená' : 'podle Tichých hodin', note: 'Včetně peněz a lhůt.' },
-        { t: 'Lhůty a závazky', v: on ? 'posunuté o 24 h' : 'normální', note: 'Nic nepropadne kvůli hádce.' },
+        ukazka
+          ? { t: 'Lhůty a závazky', v: on ? 'posunuté o 24 h' : 'normální', note: 'Nic nepropadne kvůli hádce.' }
+          : { t: 'Lhůty a závazky', v: 'beze změny', note: 'Termíny pauza neposouvá — jen o nich mlčí.' },
         { t: 'Index zatížení', v: on ? 'zaznamenává pauzu' : 'počítá pět signálů', note: 'Pauza není selhání, je to použitý nástroj.' }
       ],
-      pzStart: () => { this.setState({ pauseOn: true, klTab: 'klPause' }); this.toast('Pauza na 24 hodin. Aplikace teď mlčí — a lhůty se posunuly.', { icon: 'ph-hand-palm' }); },
+      pzStart: () => {
+        this.setState({ pauseOn: true, pauseUntil: Date.now() + 24 * 3600 * 1000, klTab: 'klPause' });
+        this.toast(ukazka ? 'Pauza na 24 hodin. Aplikace teď mlčí — a lhůty se posunuly.' : 'Pauza na 24 hodin — upozornění do telefonů se do zítřka neposílají', { icon: 'ph-hand-palm' });
+      },
       pzEnd: () => {
         const prev = log;
-        this.setState({ pauseOn: false, pauseLog: [{ when: this.dnesKratce(), who: this.meWho(), topic: 'Nezapsané téma', after: 'Pauza ukončena ručně.' }].concat(log) });
+        this.setState({ pauseOn: false, pauseUntil: null, pauseLog: [{ when: this.dnesKratce(), who: this.meWho(), topic: 'Nezapsané téma', after: 'Pauza ukončena ručně.' }].concat(log) });
         this.toast('Pauza ukončena · zapsáno do historie', { icon: 'ph-play-circle', undo: () => this.setState({ pauseOn: true, pauseLog: prev }) });
       },
       pzLog: log.map(l => ({ when: l.when, who: l.who, whoTag: this.tagKdo(l.who), topic: l.topic, after: l.after })),
-      pzLogHead: log.length ? this.pl(log.length, 'použitá pauza', 'použité pauzy', 'použitých pauz') + ' — a obě skončily dohodou do dvou dní' : 'Pauza ještě nebyla potřeba'
+      // „A obě skončily dohodou do dvou dní" platilo o ukázce — u dvojice to aplikace neví.
+      pzLogHead: log.length ? this.pl(log.length, 'použitá pauza', 'použité pauzy', 'použitých pauz') + (ukazka ? ' — a obě skončily dohodou do dvou dní' : '') : 'Pauza ještě nebyla potřeba'
     };
   }
 
@@ -18053,6 +18077,10 @@ class Component extends DCLogic {
   sklon(jmeno, pad) {
     const s = String(jmeno || '').trim();
     if (! s) return s;
+
+    // Celé jméno („Makinka Kubíčková") se skloňuje křestním — věta „nic na
+    // Makinka Kubíčková nečeká" vznikala, protože příjmení na -á nemá vzor.
+    if (/\s/.test(s)) return this.sklon(this.krestni(s), pad);
 
     const posledni = s.slice(-1);
     const zaklad = s.slice(0, -1);
@@ -18790,9 +18818,9 @@ class Component extends DCLogic {
         go: () => this.setState({ nedTab: t[0] })
       })),
       nedOnAgenda: tab === 'agenda', nedOnRest: tab === 'rest', nedOnLog: tab === 'log',
-      nedAgendaShow: tab === 'agenda' && !s.pauseOn,
-      nedFrozen: !!s.pauseOn,
-      nedLive: !s.pauseOn,
+      nedAgendaShow: tab === 'agenda' && !this.pauzaBezi(),
+      nedFrozen: this.pauzaBezi(),
+      nedLive: !this.pauzaBezi(),
       nedFrozenNote: 'Běží pauza. Agenda je zmrazená a lhůty posunuté — nic z toho se neztratilo, jen po vás teď nikdo nic nechce. Až budete chtít, pauzu ukončíte v Klidu a pohodě.',
       nedToPause: () => this.setState({ route: 'x-klid', klTab: 'klPause' }),
       nedTitle: doneCount === agenda.length && agenda.length
@@ -19829,7 +19857,8 @@ class Component extends DCLogic {
      * nejen tuhle obrazovku, ale celý `renderVals` — tedy aplikaci.
      */
     const DVA = this.dva();
-    const whoM = DVA.indexOf(s.klMoodWho) >= 0 ? s.klMoodWho : DVA[0];
+    // U dvojice zapisuje každý jen svou náladu (server cizí zahodí) — DVA[0] je ten, kdo se dívá.
+    const whoM = this.ukazka() && DVA.indexOf(s.klMoodWho) >= 0 ? s.klMoodWho : DVA[0];
     const other = w => w === DVA[0] ? DVA[1] : DVA[0];
     const mean = a => { const v = a.filter(x => x !== null && x !== undefined); return v.length ? v.reduce((x, y) => x + y, 0) / v.length : null; };
     const one = n => n === null ? '—' : n.toFixed(1).replace('.', ',');
@@ -19922,7 +19951,7 @@ class Component extends DCLogic {
     return {
       isKlid: s.route === 'x-klid',
       klHead: burnLabel.toLowerCase() + ' · nálada ' + one(last7) + ' z 5',
-      ...(() => { const tb = this.tabBar([['klMood', 'Nálada dvou', ''], ['klEnergy', 'Mapa energie', fullWins], ['klAttn', 'Rozpočet pozornosti', attnTotal > 100 ? '!' : ''], ['klQuiet', 'Tiché hodiny', held.length], ['klBurn', 'Varování', burn >= 65 ? '!' : ''], ['klAsk', 'Otázka na dva', askDone ? '' : '1'], ['klTicho', 'Ticho v datech', ''], ['klSolo', 'Čas pro sebe', ''], ['klBlind', 'Slepá místa', ''], ['klPat', 'Rozpočet trpělivosti', ''], ['klPause', 'Pauza a plán', s.pauseOn ? 'běží' : ''], ['klJoy', 'Účet radosti', ''], ['klStart', 'Začátek hádky', FIGHT_START.length], ['klQuart', 'Čtvrt-rok pro sebe', QUART.filter(q => !q.when).length || ''], ['klDnes', 'Kdo je dnes na tom hůř', ''], ['klBliz', 'Blízkost', '']], KL_GRPS, tab, k => this.setState({ klTab: k })); return { klTabs: tb.tabs, klGrps: tb.grps }; })(),
+      ...(() => { const tb = this.tabBar([['klMood', 'Nálada dvou', ''], ['klEnergy', 'Mapa energie', fullWins], ['klAttn', 'Rozpočet pozornosti', attnTotal > 100 ? '!' : ''], ['klQuiet', 'Tiché hodiny', held.length], ['klBurn', 'Varování', burn >= 65 ? '!' : ''], ['klAsk', 'Otázka na dva', askDone ? '' : '1'], ['klTicho', 'Ticho v datech', ''], ['klSolo', 'Čas pro sebe', ''], ['klBlind', 'Slepá místa', ''], ['klPat', 'Rozpočet trpělivosti', ''], ['klPause', 'Pauza a plán', this.pauzaBezi() ? 'běží' : ''], ['klJoy', 'Účet radosti', ''], ['klStart', 'Začátek hádky', FIGHT_START.length], ['klQuart', 'Čtvrt-rok pro sebe', QUART.filter(q => !q.when).length || ''], ['klDnes', 'Kdo je dnes na tom hůř', ''], ['klBliz', 'Blízkost', '']], KL_GRPS, tab, k => this.setState({ klTab: k })); return { klTabs: tb.tabs, klGrps: tb.grps }; })(),
       klOnMood: tab === 'klMood', klOnEnergy: tab === 'klEnergy', klOnAttn: tab === 'klAttn',
       klOnQuiet: tab === 'klQuiet', klOnBurn: tab === 'klBurn', klOnAsk: tab === 'klAsk', klOnTicho: tab === 'klTicho', klOnSolo: tab === 'klSolo', klOnBlind: tab === 'klBlind', klOnPat: tab === 'klPat', klOnPause: tab === 'klPause', klOnJoy: tab === 'klJoy',
       klOnStart: tab === 'klStart', klOnQuart: tab === 'klQuart',
@@ -19945,6 +19974,7 @@ class Component extends DCLogic {
         ? 'Nejsilnější souvislost: ' + worstCorr.kind.toLowerCase() + '. Ve dnech, kdy se to stalo, je nálada o ' + Math.abs(worstCorr.delta).toFixed(1).replace('.', ',') + ' bodu nižší než jinak.'
         : 'Žádná událost nemá jasnou souvislost s náladou. Poslední dva týdny drží rovinu.',
       klMoodWhoName: whoM,
+      klMoodCanSwitch: this.ukazka(),
       klMoodSwitch: () => { this.setState({ klMoodWho: other(whoM) }); this.toast('Zapisujete za ' + other(whoM), { icon: 'ph-user-switch' }); },
       klMoodDays: KL_DAYS.map((d, i) => ({
         date: d,
@@ -20081,7 +20111,8 @@ class Component extends DCLogic {
         why: quiet[n.h] ? 'tichá hodina' : 'ztišená kategorie · ' + RULE_LAB[n.cat].toLowerCase()
       })),
       klHeldHead: held.length ? this.pl(held.length, 'oznámení zadrženo', 'oznámení zadržena', 'oznámení zadrženo') + ' · přijde v souhrnu' : 'Nic se dnes nezadrželo — všechno prošlo hned.',
-      klSolo: () => { this.setState({ soloOn: true }); this.toast('Solo režim zapnut · druhý vidí jen, že jste mimo', { icon: 'ph-moon' }); },
+      // „Jsem mimo" — zapisuje se, kdo mimo je, aby to oba viděli stejně (viz soloVals).
+      klSolo: () => { this.setState({ soloOn: true, soloAway: this.meWho() }); this.toast('Režim pro sebe zapnut · ' + this.krestni(this.otherWho()) + ' uvidí jen, že jste mimo', { icon: 'ph-moon' }); },
 
       klBurnBig: String(burn),
       klBurnLabel: burnLabel, klBurnColor: burnColor,
@@ -23268,9 +23299,8 @@ class Component extends DCLogic {
                 ? { ...x, qty: x.qty + step, spreadsN: j.kind === 'kniha' ? Math.ceil((x.qty + step) / 2) : x.spreadsN }
                 : x));
             },
-            editor: () => j.kind === 'kniha'
-              ? this.openBook(j.title, j.qty + ' stran · ' + j.status, j)
-              : this.toast('Editor ' + k[1].toLowerCase() + ' — rozvržení, ořezy a text', { icon: k[0] }),
+            // Rozvržení stran má jeden editor pro všechny druhy; dřív u kalendáře a přání jen hláška s názvem editoru.
+            editor: () => this.openBook(j.title, j.qty + ' ' + k[4] + ' · ' + j.status, j),
             proof: () => { this.setState({ appTab: 1 }); this.toast('Korektura na kontaktním archu — zkontrolujte ořezy a barvy', { icon: 'ph-grid-four' }); },
             check: () => { this.setState({ appTab: 2, ppJob: j.id }); this.toast('Předtisková kontrola — ' + j.title, { icon: 'ph-shield-check' }); },
             send: () => {
@@ -24150,17 +24180,29 @@ class Component extends DCLogic {
   // ——— Režim pro jednoho ———
   soloVals() {
     const s = this.state;
-    const on = !!s.soloOn;
+    const me = this.meWho();
     const other = this.otherWho();
-    const pend = this.ndAll().filter(n => n.state === 'ceka' && n.from === this.meWho()).length;
+    /*
+     * Kdo je mimo — jménem, ne přepínačem.
+     *
+     * Stav je společný pro oba. Dřív v něm leželo jen `soloOn` a každé
+     * zařízení si ho vyložilo po svém: kdo zapnul „druhý je mimo", tomu
+     * druhému telefon hlásil totéž o něm. `soloAway` říká, kdo mimo je,
+     * takže oba vidí stejnou pravdu.
+     */
+    const away = s.soloAway || (s.soloOn ? other : null);
+    const on = !!away;
+    const jaMimo = away === me;
+    const pend = this.ndAll().filter(n => n.state === 'ceka' && n.from === me).length;
     const reasons = [['signal', 'Mimo signál'], ['prace', 'V práci'], ['cesta', 'Na cestách'], ['spanek', 'Spí']];
     const why = s.soloWhy || 'signal';
     return {
       soloOn: on,
-      soloBanner: on
-        ? other + ' je teď mimo — ' + (reasons.find(r => r[0] === why) || reasons[0])[1].toLowerCase()
-          + '. Nic na ' + this.whoAcc(other) + ' nečeká, sbírám to na později.'
-        : '',
+      soloBackLabel: jaMimo ? 'Jsem zpátky' : 'Je zpátky',
+      soloBanner: !on ? '' : jaMimo
+        ? 'Jste v režimu pro sebe — ' + (reasons.find(r => r[0] === why) || reasons[0])[1].toLowerCase() + '. ' + this.krestni(other) + ' ví, že jste mimo, a nic na vás nečeká.'
+        : this.krestni(away) + ' je teď mimo — ' + (reasons.find(r => r[0] === why) || reasons[0])[1].toLowerCase()
+          + '. Nic na ' + this.whoAcc(this.krestni(away)) + ' nečeká, sbírám to na později.',
       soloCount: pend ? this.pl(pend, 'věc čeká na odsouhlasení', 'věci čekají na odsouhlasení', 'věcí čeká na odsouhlasení') : 'nic nečeká',
       soloWhys: reasons.map(r => {
         const onx = why === r[0];
@@ -24173,9 +24215,9 @@ class Component extends DCLogic {
         };
       }),
       soloToggle: () => {
-        this.setState({ soloOn: !on });
+        this.setState({ soloOn: !on, soloAway: on ? null : other });
         this.toast(on
-          ? 'Režim pro jednoho vypnut — ' + other + ' je zpátky, čeká ' + pend + ' věcí'
+          ? (jaMimo ? 'Jste zpátky — režim pro sebe vypnut' : 'Režim pro jednoho vypnut — ' + away + ' je zpátky, čeká ' + pend + ' věcí')
           : 'Režim pro jednoho zapnut — aplikace přestane čekat na ' + this.whoAcc(other), {
           icon: on ? 'ph-users' : 'ph-user', local: true
         });
@@ -24472,7 +24514,7 @@ class Component extends DCLogic {
           bg: on ? 'var(--g-acc-soft)' : 'transparent',
           // U dvojice je „kdo" dané přihlášením (první v UCTY jsem já) — za druhého se aplikace nastavit nedá.
           go: () => {
-            if (!this.ukazka() && w[0] !== 'A') { this.toast('Přihlášení je za ' + (((window.GalerieData || {}).UCTY || [])[0] || [''])[0] + ' — druhý z vás se přihlašuje na svém zařízení', { icon: 'ph-info', local: true }); return; }
+            if (!this.ukazka() && w[0] !== 'A') { this.toast('Jste přihlášení jako ' + this.krestni((((window.GalerieData || {}).UCTY || [])[0] || [''])[0]) + ' — druhý z vás se přihlašuje na svém zařízení', { icon: 'ph-info', local: true }); return; }
             this.setState({ obWho: w[0], lockWho: w[0] });
           }
         };
@@ -25996,7 +26038,8 @@ class Component extends DCLogic {
   offVals() {
     const s = this.state, q = s.offQueue || [];
     return {
-      offOn: !!s.offline,
+      // Předstíraný offline režim („fronta úprav") má jen ukázka — u dvojice frontu drží GalerieApi a ukazuje ji Offline a zařízení.
+      offOn: !!s.offline && this.ukazka(),
       offCount: q.length,
       offBarLabel: q.length
         ? 'Offline · ' + this.pl(q.length, 'úprava čeká na odeslání', 'úpravy čekají na odeslání', 'úprav čeká na odeslání')
@@ -28048,6 +28091,8 @@ class Component extends DCLogic {
   // ——— fotokniha ———
   openBook = (name, meta, job) => {
     const photos = this.photos();
+    // Bez fotek není co rozvrhnout — `photos[x % 0]` by shodilo celou aplikaci.
+    if (!photos.length) { this.toast('Nejdřív nahrajte fotky — editor z nich skládá strany', { icon: 'ph-images' }); return; }
     // Rozsah drží zakázka v dvoustranách, volby v indexech — editor je jen načte zpět.
     const n = job ? (job.spreadsN || Math.max(1, Math.ceil((job.qty || 12) / 2))) : 6;
     const spreads = Array.from({ length: n }, (_, i) => ({
@@ -28730,7 +28775,7 @@ class Component extends DCLogic {
            * nic, ani se nikam nepřičetlo. Sobě se neděkuje.
            */
           if (!this.ukazka()) {
-            if (l.who === this.meWho()) { this.toast('Tohle jste udělali vy — poděkovat může ' + this.druhy(l.who), { icon: 'ph-info' }); return; }
+            if (l.who === this.meWho()) { this.toast('Tohle jste udělali vy — poděkovat může ' + this.krestni(this.druhy(l.who)), { icon: 'ph-info' }); return; }
             if (!window.GalerieApi || window.GalerieApi.mode !== 'http') { this.toast('Poděkování odejde jen s připojeným serverem', { icon: 'ph-warning' }); return; }
             window.GalerieApi.post('pripomenout', { text: 'Díky za ' + String(l.chore).toLowerCase() + ' ♥', druh: 'podekovani', obrazovka: 'x-domacnost' })
               .then(res => {

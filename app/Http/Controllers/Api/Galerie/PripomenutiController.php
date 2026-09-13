@@ -8,6 +8,7 @@ use App\Models\AuditLog;
 use App\Models\GallerySpace;
 use App\Models\User;
 use App\Services\Notifications\WebPushService;
+use App\Services\Provoz\PauzaDvojice;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -46,6 +47,11 @@ class PripomenutiController extends Controller
         }
 
         $jmeno = Str::before(trim((string) $ja->name), ' ') ?: 'Partner';
+
+        // Během pauzy dvojice se nic neposílá — a řekne se to, ne „nemá zapnutá upozornění".
+        if (PauzaDvojice::bezi($druhy)) {
+            return response()->json(['ok' => true, 'doruceno' => 0, 'zprava' => 'Běží pauza — do telefonu se do jejího konce nic neposílá'], 200);
+        }
 
         $odeslano = $push->sendToUser($druhy, array_filter([
             'title' => ($podekovani ? 'Poděkování od ' : 'Připomínka od ').$jmeno,

@@ -3,6 +3,7 @@
 namespace App\Services\Notifications;
 
 use App\Models\User;
+use App\Services\Provoz\PauzaDvojice;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
@@ -32,6 +33,11 @@ class WebPushService
     public function sendToUser(User $user, array $payload): int
     {
         if (! $this->configured() || ! Schema::hasTable('push_subscriptions')) {
+            return 0;
+        }
+
+        // Pauza dvojice („Pauza a plán") slibuje, že aplikace 24 hodin mlčí.
+        if (PauzaDvojice::bezi($user)) {
             return 0;
         }
 

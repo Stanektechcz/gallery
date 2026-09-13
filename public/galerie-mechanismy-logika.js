@@ -76,7 +76,26 @@
       }),
       dayCanShift: !!worse && !shifted && !given,
       dayShiftLabel: worse ? 'Dnešní práce bere ' + KR(druhy) : 'Dnešní práce',
-      dayDoShift: () => { this.setState({ dayShift: true, route: 'x-domacnost', hsTab: 'chores' }); this.toast('Dnešní práce přešly na ' + PAD(this, druhy, 'acc') + ' · zítra se to nepamatuje', { icon: 'ph-arrows-left-right', undo: () => this.setState({ dayShift: false }) }); },
+      /*
+       * Přehodit dnešní práci doopravdy.
+       *
+       * Hláška „Dnešní práce přešly na …" dřív jen nastavila příznak — rozpis
+       * domácnosti zůstal, jak byl. Přehazuje se to, co dnes vychází na toho,
+       * kdo je na tom hůř: práce na dnešní den, denní a ty po termínu.
+       * Rozpis se ukládá do databáze (DomacnostVeStavu), takže to uvidí oba.
+       */
+      dayDoShift: () => {
+        const prace = s.chores === null || s.chores === undefined ? (DESK().HOUSE_CHORES || []) : s.chores;
+        const dnes = ['ne', 'po', 'út', 'st', 'čt', 'pá', 'so'][new Date().getDay()];
+        const dnesni = c => c.who === worse && (c.day === dnes || c.every === 'denně' || c.overdue);
+        const kolik = prace.filter(dnesni).length;
+        if (!kolik) { this.setState({ route: 'x-domacnost', hsTab: 'chores' }); this.toast('Na ' + PAD(this, worse, 'acc') + ' dnes z rozpisu nic nevychází — není co přehodit', { icon: 'ph-info' }); return; }
+        const prev = s.chores;
+        this.setState({ dayShift: true, chores: prace.map(c => dnesni(c) ? Object.assign({}, c, { who: druhy }) : c), route: 'x-domacnost', hsTab: 'chores' });
+        this.toast(this.pl(kolik, 'dnešní práce přešla', 'dnešní práce přešly', 'dnešních prací přešlo') + ' na ' + PAD(this, druhy, 'acc'), {
+          icon: 'ph-arrows-left-right', undo: () => this.setState({ dayShift: false, chores: prev })
+        });
+      },
       dayCanGive: !!worse && !given,
       dayGiveLabel: 'Vzdát se výhody',
       dayGive: () => { this.setState({ dayGiven: true }); this.toast('Výhoda se nepřenáší do zítřka a nikde se nesčítá', { icon: 'ph-hand-heart', undo: () => this.setState({ dayGiven: false }) }); },
@@ -98,12 +117,22 @@
     const s = this.state;
     const on = this.optOn('bliz');
     const extra = s.blizAdd || 0;
-    const wA = s.blizWA, wM = s.blizWM;
+    const [jA, jM] = DVA(this);
+    /*
+     * Chuť tento týden — pod jménem, ne pod „A" a „M".
+     *
+     * Stav je společný a `dva()` dává na první místo toho, kdo se dívá. Klíče
+     * `blizWA`/`blizWM` proto na druhém zařízení patřily tomu druhému: každý
+     * viděl číslo partnera jako svoje a mohl mu ho přepsat. U dvojice se píše
+     * do `blizW[jméno]` a zadat jde jen své vlastní.
+     */
+    const ukazka = !((DESK().DVOJICE) || []).length;
+    const wMap = s.blizW || {};
+    const wA = ukazka ? s.blizWA : wMap[jA], wM = ukazka ? s.blizWM : wMap[jM];
     const blocked = s.blizBlock || {};
     const weeks = BLIZ.weeks.map((w, i) => [w[0], w[1] + (i === BLIZ.weeks.length - 1 ? extra : 0)]);
     const total = weeks.reduce((a, w) => a + w[1], 0);
     const maxW = Math.max.apply(null, weeks.map(w => w[1]).concat([1]));
-    const [jA, jM] = DVA(this);
     const iA = (BLIZ.init || {})[jA] || 0, iM = (BLIZ.init || {})[jM] || 0;
     const nA = (BLIZ.no || {})[jA] || 0, nM = (BLIZ.no || {})[jM] || 0;
     const bothIn = wA !== undefined && wM !== undefined;
@@ -144,13 +173,13 @@
         n: String(n),
         bg: wA === n ? 'var(--g-acc-soft)' : 'transparent',
         fg: wA === n ? 'var(--g-acc-deep)' : 'var(--g-ink3)',
-        set: () => this.setState({ blizWA: n })
+        set: () => ukazka ? this.setState({ blizWA: n }) : this.setState({ blizW: Object.assign({}, wMap, { [jA]: n }) })
       })),
       blizScaleM: [1, 2, 3, 4, 5].map(n => ({
         n: String(n),
         bg: wM === n ? 'var(--g-mag-soft)' : 'transparent',
         fg: wM === n ? 'var(--g-mag)' : 'var(--g-ink3)',
-        set: () => this.setState({ blizWM: n })
+        set: () => ukazka ? this.setState({ blizWM: n }) : this.toast('Chuť zadává ' + KR(jM) + ' na svém zařízení — za druhého se nepíše', { icon: 'ph-lock-simple' })
       })),
       blizBlocks: blocks.map(b => ({
         what: b[0], v: this.pl(b[1], 'krát', 'krát', 'krát'),
@@ -248,6 +277,14 @@
       kidsNoMech: 'Arbitr se na tohle nepoužije. Losování ani minimaximum tady nemají co dělat — u rozhodnutí, které nese jeden člověk v těle, nemůže padnout mechanismem.',
       kidsPos: pos.map(p => {
         const sc = STC[p.stance] || STC['nevím'];
+        /*
+         * Pozici si píše každý sám. U dvojice je první v `dva()` ten, kdo se
+         * dívá — zapsat „ano" nebo rok za druhého by bylo mluvit za něj
+         * přesně u rozhodnutí, kde to nejde.
+         */
+        const ukazka = !((DESK().DVOJICE) || []).length;
+        const cizi = !ukazka && p.who !== jA;
+        const zaDruheho = () => { this.toast('Pozici ' + PAD(this, p.who, 'gen') + ' zapíše ' + KR(p.who) + ' na svém zařízení', { icon: 'ph-lock-simple' }); };
         return {
           who: KR(p.who), note: p.note, stance: p.stance, tag: sc[0], color: sc[1],
           year: p.year ? String(p.year) : '',
@@ -258,9 +295,9 @@
             label: x,
             bg: p.stance === x ? 'var(--g-acc-soft)' : 'transparent',
             fg: p.stance === x ? 'var(--g-acc-deep)' : 'var(--g-ink3)',
-            set: () => { const prev = st; this.setState({ kidsStance: Object.assign({}, st, { [p.who]: x }) }); this.toast(p.who + ': ' + x + ' · zapsáno bez komentáře', { icon: 'ph-user', undo: () => this.setState({ kidsStance: prev }) }); }
+            set: () => { if (cizi) { zaDruheho(); return; } const prev = st; this.setState({ kidsStance: Object.assign({}, st, { [p.who]: x }) }); this.toast(p.who + ': ' + x + ' · zapsáno bez komentáře', { icon: 'ph-user', undo: () => this.setState({ kidsStance: prev }) }); }
           })),
-          setYear: e => this.setState({ kidsYear: Object.assign({}, yr, { [p.who]: parseInt(e.target.value, 10) || p.year }) })
+          setYear: e => { if (cizi) { zaDruheho(); return; } this.setState({ kidsYear: Object.assign({}, yr, { [p.who]: parseInt(e.target.value, 10) || p.year }) }); }
         };
       }),
       kidsBlocks: blocks.map(b => ({
