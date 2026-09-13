@@ -407,6 +407,26 @@ class ObsahVztahTest extends TestCase
         $this->assertSame('přání', $bod->refresh()->kind);
     }
 
+    /** Podmínku druhého přepsat nejde — a bod za něj založit taky ne. */
+    public function test_body_druheho_se_zapisem_nezmeni(): void
+    {
+        $jeji = CoupleDisagreementPoint::create([
+            'gallery_space_id' => $this->prostor->id,
+            'author_user_id' => $this->maki->id,
+            'text' => 'Moře, ne hory',
+            'tag' => 'cesta',
+            'kind' => 'podmínka',
+        ]);
+
+        $this->patchJson('/api/state', ['data' => ['sporTheirs' => [
+            ['text' => 'Moře, ne hory', 'tag' => 'cesta', 'kind' => 'přání'],
+            ['text' => 'Podstrčený bod', 'tag' => 'cesta', 'kind' => 'podmínka'],
+        ]]])->assertOk();
+
+        $this->assertSame('podmínka', $jeji->refresh()->kind);
+        $this->assertFalse(CoupleDisagreementPoint::where('text', 'Podstrčený bod')->exists());
+    }
+
     /**
      * Použité veto se zapíše ke skutečnému člověku a s dnešním datem.
      *

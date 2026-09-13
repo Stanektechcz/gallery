@@ -237,10 +237,18 @@ class FilmyVeStavu
             return;
         }
 
-        [$prvni, $druhy] = $this->dvojice($prostor);
+        [$prvni] = $this->dvojice($prostor);
         $hodnota = (array) $hodnota;
 
-        foreach (['a' => $prvni, 'm' => $druhy] as $strana => $kdo) {
+        /*
+         * Jen vlastní hvězdičky.
+         *
+         * Klient posílá obě strany (`a` je ten, kdo se dívá, `m` ten druhý)
+         * a dřív se zapsaly obě — z Adrianova počítače tak šlo Makince přepsat
+         * známku. Hodnotí se každý sám za sebe; hodnota druhého v patchi je
+         * jen opis toho, co už v databázi leží.
+         */
+        foreach (['a' => $prvni] as $strana => $kdo) {
             if ($kdo === null || ! array_key_exists($strana, $hodnota)) {
                 continue;
             }

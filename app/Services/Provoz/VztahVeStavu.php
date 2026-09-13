@@ -63,10 +63,13 @@ class VztahVeStavu
             $this->zapisRozvahy($patch['cools'], $prostor, $jmena);
         }
 
-        foreach (['sporMine' => true, 'sporTheirs' => false] as $klic => $moje) {
-            if (is_array($patch[$klic] ?? null)) {
-                $this->zapisProtokol($patch[$klic], $prostor, $kdo, $moje);
-            }
+        /*
+         * Jen vlastní body. `sporTheirs` jsou body druhého: obrazovka je jen
+         * čte, a kdyby se zapisovaly, dalo by se druhému založit bod nebo
+         * jeho podmínku přepsat na přání. Klíč se ze stavu zahodí jako dřív.
+         */
+        if (is_array($patch['sporMine'] ?? null)) {
+            $this->zapisProtokol($patch['sporMine'], $prostor, $kdo, true);
         }
 
         if (is_array($patch['vetoProps'] ?? null)) {

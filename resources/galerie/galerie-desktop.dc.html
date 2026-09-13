@@ -25780,7 +25780,7 @@ class Component extends DCLogic {
         bg: x.id === setId ? 'var(--g-ink)' : 'transparent',
         fg: x.id === setId ? 'var(--g-bg)' : 'var(--g-ink)',
         bd: x.id === setId ? 'var(--g-ink)' : 'var(--g-line)',
-        go: () => this.setState({ whSet: x.id, whResult: null, whA: false, whM: false })
+        go: () => this.setState({ whSet: x.id, whResult: null, whA: false, whM: false, whOk: {} })
       })),
       whSetName: set.name, whSetNote: set.note
     };
@@ -25872,7 +25872,18 @@ class Component extends DCLogic {
       };
     });
     const res = s.whResult ? slices.find(x => x.key === s.whResult) || null : null;
-    const accepted = !!s.whA && !!s.whM;
+    /*
+     * „Platí to, až kývnete oba" — u dvojice kývá každý sám a pod svým jménem.
+     *
+     * `whA`/`whM` znamenaly na každém zařízení někoho jiného (A je ten, kdo se
+     * dívá), takže Adrianovo „beru" se Makince ukázalo jako její. A jedním
+     * počítačem šlo kývnout za oba.
+     */
+    const kyvNaServeru = !this.ukazka();
+    const kyvy = s.whOk || {};
+    const whA = kyvNaServeru ? !!kyvy[this.meWho()] : !!s.whA;
+    const whM = kyvNaServeru ? !!kyvy[this.otherWho()] : !!s.whM;
+    const accepted = whA && whM;
     const spin = () => {
       if (s.whBusy) return;
       const roll = Math.random() * totalW;
@@ -25883,7 +25894,7 @@ class Component extends DCLogic {
       const target = turns * 360 + (360 - sl.mid);
       const from = s.whAngle || 0;
       const next = from + ((target - (from % 360)) + 360) % 360 + turns * 360;
-      this.setState({ whAngle: next, whBusy: true, whResult: null, whA: false, whM: false });
+      this.setState({ whAngle: next, whBusy: true, whResult: null, whA: false, whM: false, whOk: {} });
       clearTimeout(this._wht);
       this._wht = setTimeout(() => {
         this.setState({ whBusy: false, whResult: hit.key });
@@ -25904,15 +25915,21 @@ class Component extends DCLogic {
       whHasResult: !!res && !s.whBusy,
       whResultName: res ? res.name : '',
       whResultNote: res ? res.note : '',
-      whAOn: !!s.whA, whMOn: !!s.whM,
-      whABg: s.whA ? 'var(--g-acc-soft)' : 'transparent',
-      whMBg: s.whM ? 'var(--g-acc-soft)' : 'transparent',
-      whABox: s.whA ? 'ph-check-circle' : 'ph-circle',
-      whMBox: s.whM ? 'ph-check-circle' : 'ph-circle',
+      whAOn: whA, whMOn: whM,
+      whABg: whA ? 'var(--g-acc-soft)' : 'transparent',
+      whMBg: whM ? 'var(--g-acc-soft)' : 'transparent',
+      whABox: whA ? 'ph-check-circle' : 'ph-circle',
+      whMBox: whM ? 'ph-check-circle' : 'ph-circle',
       whAccept: accepted,
-      whAcceptNote: accepted ? 'Shoda — oba jste kývli.' : 'Kolečko rozhodlo, ale platí to, až kývnete oba.',
-      whToggleA: () => this.setState({ whA: !s.whA }),
-      whToggleM: () => this.setState({ whM: !s.whM }),
+      whAcceptNote: accepted ? 'Shoda — oba jste kývli.'
+        : kyvNaServeru && whA ? 'Kývli jste · čeká se, až kývne ' + this.krestni(this.otherWho()) + ' na svém zařízení.'
+        : 'Kolečko rozhodlo, ale platí to, až kývnete oba.',
+      whToggleA: () => kyvNaServeru
+        ? this.setState({ whOk: { ...kyvy, [this.meWho()]: !whA } })
+        : this.setState({ whA: !s.whA }),
+      whToggleM: () => kyvNaServeru
+        ? this.toast(this.krestni(this.otherWho()) + ' kývá na svém zařízení — za druhého se nekývá', { icon: 'ph-lock-simple' })
+        : this.setState({ whM: !s.whM }),
       whTake: () => {
         if (!res) return;
         logIt(res.name, true);
@@ -26987,6 +27004,17 @@ class Component extends DCLogic {
      */
     if (!this.ukazka()) {
       const [kA, kM] = this.dva().map(j => this.krestni(j));
+      /*
+       * „Připraveno" dává každý sám, pod svým jménem.
+       *
+       * `homeCapA`/`homeCapM` byly na každém zařízení někdo jiný (A je ten,
+       * kdo se dívá): Adrianovo „připraveno" se Makince ukázalo jako její
+       * a jedním počítačem šla kapsle „otevřít společně" otevřít za oba.
+       */
+      const ja = this.meWho();
+      const pripraveni = s.homeCapReady || {};
+      const a = !!pripraveni[ja], m = !!pripraveni[this.otherWho()];
+      const open = a && m;
       const sDatem = this.kapsList().filter(c => c && /^\d{4}-\d{2}-\d{2}$/.test(String(c.open || '')))
         .sort((x, y) => String(x.open).localeCompare(String(y.open)));
       const kap = sDatem.find(c => !this.kapsLocked(c)) || sDatem.find(c => this.kapsLocked(c));
@@ -27006,10 +27034,11 @@ class Component extends DCLogic {
           mLabel: m ? kM + ' · připraveno' : 'Připraveno — ' + kM,
           aBg: a ? 'var(--g-acc)' : 'transparent', aFg: a ? '#fff' : 'var(--g-ink)',
           mBg: m ? 'var(--g-mag)' : 'transparent', mFg: m ? '#fff' : 'var(--g-ink)',
-          aGo: () => this.setState({ homeCapA: !a }),
-          mGo: () => this.setState({ homeCapM: !m }),
-          state: otevrena ? 'Odemčeno oběma' : zamcena ? 'Zamčeno' : a || m ? 'Čeká na druhého' : 'Připraveno k otevření',
-          reset: () => this.setState({ homeCapA: false, homeCapM: false })
+          aGo: () => this.setState({ homeCapReady: { ...pripraveni, [ja]: !a } }),
+          mGo: () => this.toast(kM + ' dává „připraveno" na svém zařízení — za druhého se neklikne', { icon: 'ph-lock-simple' }),
+          state: otevrena ? 'Odemčeno oběma' : zamcena ? 'Zamčeno' : a && !m ? 'Čeká na ' + this.whoAcc(kM) : m && !a ? kM + ' je připraven' + (this.rodPripona(kM) || '') + ' — čeká se na vás' : 'Připraveno k otevření',
+          // Zapečetit znovu jde jen vlastní „připraveno"; to druhého patří jemu.
+          reset: () => this.setState({ homeCapReady: { ...pripraveni, [ja]: false } })
         }
       };
     }
@@ -27788,6 +27817,11 @@ class Component extends DCLogic {
     // hodnocení po každém načtení vrátilo na „nehodnoceno".
     const rate = (r, who) => (((s.fmRate || {})[r.id] || r.rate || {})[who]) || 0;
     const setRate = (r, who, v) => {
+      // Hodnotí každý sám za sebe — server zapíše jen vlastní hvězdičky.
+      if (who === 'm' && !this.ukazka()) {
+        this.toast('Hvězdičky ' + this.whoGen(this.krestni(this.dva()[1])) + ' dává ' + this.krestni(this.dva()[1]) + ' na svém zařízení', { icon: 'ph-lock-simple' });
+        return;
+      }
       const prev = s.fmRate || {};
       const cur = prev[r.id] || r.rate || {};
       this.setState(this.xRowsProTitul(r.id, { fmRate: { ...prev, [r.id]: { ...cur, [who]: v } } }));

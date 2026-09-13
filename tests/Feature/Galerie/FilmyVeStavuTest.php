@@ -106,10 +106,20 @@ class FilmyVeStavuTest extends TestCase
     {
         $titul = $this->titul('Anatomie pádu');
 
-        $this->stav(['fmRate' => ['films-0' => ['a' => 5, 'm' => 4]]])->assertOk();
+        // Adrian pošle i hodnotu za Makinku — zapsat se smí jen jeho vlastní.
+        $this->stav(['fmRate' => ['films-0' => ['a' => 5, 'm' => 1]]])->assertOk();
 
         $znamky = DB::table('watch_title_ratings')->where('watch_title_id', $titul)->pluck('rating', 'user_id');
 
+        $this->assertSame(5, (int) $znamky[$this->adri->id]);
+        $this->assertArrayNotHasKey($this->maki->id, $znamky->all(), 'Za druhého se nehodnotí.');
+
+        // Makinka hodnotí sama, ze svého účtu — u ní je `a` ona.
+        Sanctum::actingAs($this->maki);
+        $this->stav(['fmRate' => ['films-0' => ['a' => 4, 'm' => 5]]])->assertOk();
+        Sanctum::actingAs($this->adri);
+
+        $znamky = DB::table('watch_title_ratings')->where('watch_title_id', $titul)->pluck('rating', 'user_id');
         $this->assertSame(5, (int) $znamky[$this->adri->id]);
         $this->assertSame(4, (int) $znamky[$this->maki->id]);
 
