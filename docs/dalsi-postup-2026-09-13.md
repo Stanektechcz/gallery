@@ -179,6 +179,9 @@ nemá výslovně vyřazený, a druhé zařízení si ho při synchronizaci přev
 | `e49de9b9` | **Bezpečnost:** pokusy o heslo k trezoru u účtu (ne v sezení), prodlužující se uzavření, platí i pro `/vault/unlock` — bod 11 hotový |
 | `36e2d907` | Záložky, otevřený detail, měsíc, výběry a šířka okna se nesdílí (Makinka přepnula záložku a Adrianovi se přepnula taky); hlasování ve Společných výběrech pod jménem a jen za sebe, i z telefonu |
 | `18cfaec1` | Kapsle „otevřít společně", potvrzení kolečka, hvězdičky filmů a sporné body: každý jen za sebe (server hvězdičky ani body druhého nepřijme) |
+| `4f35a897` | **Bezpečnost:** kód zámku počítá pokusy u účtu (jako trezor); zámek trezoru hlídá fotku i v druhém prostoru účtu a s tokenem bez sezení nepadá na 500; prostor dvojice je pevně výchozí/nejstarší |
+| `76825bad` | Telefon: rituály bez vymyšlených poznámek a odpočtu, Úklid → „Porovnat série" nepadá |
+| `61cd90c4` | Otázka na dva: rozepsaná odpověď a „odesláno" už nejdou druhému (dřív mu odemkly cizí odpověď dřív, než napsal svou); rozepsané texty z polí (dopis, dárek, překvapení…) se nesdílí; telefon ukazuje skutečné odpovědi |
 | `0d45a39e` | Motiv, panel, velikost náhledů a řazení patří zařízení (v prohlížeči), ne dvojici |
 | `43fbbd31` | Kapacita týdne, obálka, čas pro sebe, otázka dne, kdo mluví za nás a verze pravdy: server dával `a` zakladateli prostoru, obrazovka ho popsala jménem toho, kdo se dívá — **Makinka viděla Adrianova čísla pod svým jménem a její oprava kapacity se zapsala jemu** |
 
@@ -212,14 +215,15 @@ ale každá položka zmenšuje, co by jedna chyba napáchala.
 3. ~~**Ikony Phosphor se načítají z unpkg bez SRI**~~ — SRI doplněné (2d).
    Písma ikon jdou dál z unpkg; úplné řešení je stáhnout do `public/vendor`.
 4. **Zámek aplikace (PIN) je jen v rozhraní.** Token funguje i v zamčené
-   aplikaci a počítadlo tří pokusů je v sezení (smazání cookies ho vynuluje).
-   Chrání před někým u odemčeného telefonu, ne před útokem na API.
+   aplikaci. Chrání před někým u odemčeného telefonu, ne před útokem na API.
+   (Počítadlo pokusů je od 2d u účtu, ne v sezení.)
 5. **Dva modely rolí.** `users.role` (owner/partner/viewer) používá staré
    rozhraní, `gallery_space_user.role` aplikace dvojice. `read_only_mode`
    API galerie nekontroluje. Ve starším API `v1` kontroluje oprávnění jen
    16 z 82 kontrolerů — pro dvojici bez hostů to nevadí, s hostem ano.
-6. **Prostor se určuje jako „první" bez řazení** (`UrcujePar::parId`). Účet ve
-   dvou prostorech by dostal náhodně jeden z nich.
+6. ~~**Prostor se určuje jako „první" bez řazení**~~ — v API galerie hotovo (2d):
+   výchozí, jinak nejstarší. Staré rozhraní (`gallerySpaces()->first()` na ~90
+   místech) řazení nemá; pro dvojici s jedním prostorem to nevadí.
 7. **Staré rozhraní `/prehled` (Inertia) pořád běží** — druhá plocha, kterou
    je potřeba udržovat a hlídat. Buď ho vypnout, nebo sjednotit oprávnění.
 8. **`npm audit`**: postcss a nanoid (jen nástroje sestavení, ne běh aplikace).
