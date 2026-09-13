@@ -11408,7 +11408,8 @@ class Component extends DCLogic {
         actions: [
           { label: 'Fotky cesty', icon: 'ph-images', go: () => this.goTab('memories', { filter: trip.place }) },
           { label: 'Útraty', icon: 'ph-wallet', go: () => this.goTab('finance', { txTrip: s.tripId, txCat2: null }) },
-          { label: 'Sdílet', icon: 'ph-share-network', go: () => this.toast('Odkaz na cestu zkopírován', { icon: 'ph-link-simple' }) }
+          // „Odkaz zkopírován" bez odkazu i bez kopírování.
+          { label: 'Sdílet', icon: 'ph-share-network', go: () => this.zatimNeumime('sdílení cesty odkazem — odkazem jde sdílet fotky a alba') }
         ],
         days: trip.days.map((d, di) => ({
           label: d[0], when: d[1],
