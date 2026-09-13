@@ -60,7 +60,8 @@ php artisan gallery:thumbnails
 - **Dvoufázové ověření platí i v aplikaci.** Kdo ho má zapnuté (staré
   rozhraní `/prehled`), dostane po hesle dotaz na kód.
 - **Host** (role „host" v administraci) se do aplikace dvojice nepřihlásí —
-  vidí jen odkazy, které dostane. Tak to administrace vždycky popisovala.
+  ani do starého rozhraní (2h) — vidí jen odkazy, které dostane. Tak to
+  administrace vždycky popisovala.
 - **Klíč k API „jen čtení"** opravdu jen čte.
 - **Telefon teď opravdu ukládá.** Do 13. 9. neposlal na server ani jeden
   zápis stavu (třída měla dvakrát `componentDidUpdate`, druhá přepsala první).
@@ -291,6 +292,25 @@ Co zůstává: úprava **téže** položky oběma v rozmezí pár minut — plat
 
 ---
 
+## 2h. Osmé kolo — host a zadní vrátka (14. 9.)
+
+| Commit | Obsah |
+|---|---|
+| `60767575` | **Host galerie bez dat dvojice.** API galerie hosta odmítalo, ale starší API `v1` kontrolovalo jen klíč (deník, finance, chat, knihovna, předplatné), stránky starého rozhraní vydávaly alba, koš, trezor i export přímo ze serveru a `/files/media/{uuid}/…` dalo originál každému členovi prostoru i bez podpisu — tedy i po zrušení sdíleného odkazu. Host teď v `v1` dostane jen svůj profil, fotku a upozornění, ze starého rozhraní se odhlásí s důvodem na přihlašovacím formuláři, heslem se do něj nepřihlásí a soubory má jen z podepsané adresy |
+| `1632d4d6` | **Telefon: trvalé odstranění z koše** — dřív jen „Obnovit". Ptá se dvojím klepnutím, protože mizí i originál |
+
+Ověřeno: 1406 PHP testů (nové: host v `v1`, ve starém rozhraní, při
+přihlášení a v `/files`), v prohlížeči na telefonu nahrání → koš → „Smazat"
+→ „Opravdu smazat" → `POST /api/kos/odstranit`, koš prázdný, v databázi
+odstraněno; kontrola šablony telefonu bez chybějících polí.
+
+### Změny chování, o kterých mají oba vědět (2h)
+
+- Host (role „host" v administraci) se nepřihlásí ani do starého rozhraní
+  `/prehled` — dozví se proč. Sdílené odkazy mu fungují dál.
+
+---
+
 ## 3. Známé nedostatky — bezpečnost
 
 Seřazeno podle rizika. Nic z toho není aktivně zneužitelné bez jiné chyby,
@@ -308,9 +328,12 @@ ale každá položka zmenšuje, co by jedna chyba napáchala.
    aplikaci. Chrání před někým u odemčeného telefonu, ne před útokem na API.
    (Počítadlo pokusů je od 2d u účtu, ne v sezení.)
 5. **Dva modely rolí.** `users.role` (owner/partner/viewer) používá staré
-   rozhraní, `gallery_space_user.role` aplikace dvojice. `read_only_mode`
-   API galerie nekontroluje. Ve starším API `v1` kontroluje oprávnění jen
-   16 z 82 kontrolerů — pro dvojici bez hostů to nevadí, s hostem ano.
+   rozhraní, `gallery_space_user.role` aplikace dvojice. ~~Ve starším API `v1`
+   kontroluje oprávnění jen 16 z 82 kontrolerů — s hostem to vadí~~ — hotovo
+   (2h): host do `v1` ani do starého rozhraní nesmí (pozná se podle členství
+   v prostoru). Zbývá `read_only_mode`: API galerie ho nekontroluje, ale
+   žádná obrazovka ho nezapíná (jen databáze). Před vynucením ověřit, že
+   klient odmítnutý zápis stavu neopakuje dokola (`PATCH /api/state`, WAF).
 6. ~~**Prostor se určuje jako „první" bez řazení**~~ — v API galerie hotovo (2d):
    výchozí, jinak nejstarší. Staré rozhraní (`gallerySpaces()->first()` na ~90
    místech) řazení nemá; pro dvojici s jedním prostorem to nevadí.
