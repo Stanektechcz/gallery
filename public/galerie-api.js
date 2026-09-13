@@ -240,8 +240,27 @@
     window.GALERIE_API_TOKEN = null;
     odmitnutyToken = null;
     try { localStorage.removeItem('galerie.token'); } catch (e) {}
+    zahodKopieDat();
     ohlas('galerie-odhlaseno', { status: stav, zprava: zprava || '' });
     notify();
+  }
+  /*
+   * Kopie dat dvojice v prohlížeči.
+   *
+   * Po odhlášení nebo odvolání zařízení („odhlásit ostatní zařízení" kvůli
+   * ztracenému telefonu) zůstávala: stav v localStorage a odpovědi API
+   * v paměti workera, které se bez signálu podávaly dál. Rozepsané změny
+   * zůstávají v paměti karty a po přihlášení odejdou.
+   */
+  function zahodKopieDat() {
+    try { localStorage.removeItem(LS); } catch (e) {}
+    try {
+      if (window.caches && caches.keys) {
+        caches.keys().then(function (nazvy) {
+          nazvy.filter(function (n) { return n.indexOf('galerie-data-') === 0; }).forEach(function (n) { caches.delete(n); });
+        }).catch(function () {});
+      }
+    } catch (e) {}
   }
 
   function flush() {
@@ -554,6 +573,7 @@
     signOut: function () {
       window.GALERIE_API_TOKEN = null;
       try { localStorage.removeItem('galerie.token'); } catch (e) {}
+      if (mode === 'http') zahodKopieDat();
       if (mode !== 'http') return Promise.resolve(null);
       return fetch(base + '/logout', { method: 'POST', headers: headers(), credentials: 'same-origin' }).catch(function () { return null; });
     },

@@ -74,6 +74,21 @@ class SecurityHeaders
             $response->headers->set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
         }
 
+        /*
+         * Paměť prohlížeče rozlišuje, kdo se ptá.
+         *
+         * Obsah (`/api/data`, panel, mechanismy) jde s `private, max-age` a
+         * middleware Inertie přepisuje `Vary` jen na `X-Inertia`. Prohlížeč tak
+         * do minuty podal uloženou odpověď i požadavku s jiným tokenem — po
+         * odhlášení jednoho a přihlášení druhého na témž počítači viděl druhý
+         * obsah prvního, včetně soukromých zápisů deníku, a s neplatným tokenem
+         * se data dál vydávala z paměti. `Cookie` se nepřidává: Laravel ji
+         * šifruje při každé odpovědi znovu a paměť by nezasáhla nikdy.
+         */
+        if ($request->is('api/*') && $response->headers->hasCacheControlDirective('private')) {
+            $response->setVary('Authorization', false);
+        }
+
         return $response;
     }
 

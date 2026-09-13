@@ -221,6 +221,23 @@ class DoruceniTest extends TestCase
     }
 
     /**
+     * Kopie dat jen z úspěšné odpovědi, po 401 žádná.
+     *
+     * Odpověď 401 přepsala poslední dobrou kopii a po odvolání zařízení
+     * zůstala data dvojice v paměti workera.
+     */
+    public function test_worker_neuklada_chybu_a_po_odhlaseni_zahodi_data(): void
+    {
+        $worker = (string) $this->get('/sw.js')->assertOk()->getContent();
+
+        $this->assertStringContainsString("} else if (r.status === 401) {\n          await caches.delete(DATA);", $worker);
+        $this->assertStringNotContainsString("const c = await caches.open(DATA);\n        c.put(req, r.clone());\n        return r;", $worker);
+
+        $api = File::get(public_path('galerie-api.js'));
+        $this->assertStringContainsString("return n.indexOf('galerie-data-') === 0;", $api);
+    }
+
+    /**
      * Paměť workera jen pro statické soubory.
      *
      * Brala napřed z paměti každý požadavek mimo navigaci a `/api/` — i fotky

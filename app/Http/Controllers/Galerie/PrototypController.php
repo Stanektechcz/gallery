@@ -340,6 +340,26 @@ async function flush(auth) {
 JS,
             "  if (e.data && e.data.type === 'galerie-flush') flush();" => "  if (e.data && e.data.type === 'galerie-flush') flush(e.data.auth || null);",
 
+            /*
+             * Kopie dat jen z úspěšné odpovědi — a po odhlášení žádná.
+             *
+             * Worker ukládal každou odpověď API, i 401: poslední dobrou kopii tak
+             * přepsal chybou a bez signálu aplikace nenaběhla. A naopak — po
+             * odvolání zařízení (ztracený telefon) v paměti zůstala data dvojice
+             * a bez signálu se podávala dál. 401 znamená, že v tomhle prohlížeči
+             * nikdo přihlášený není; 403 ne (partner ho dostává běžně).
+             */
+            "        const r = await fetch(req);\n        const c = await caches.open(DATA);\n        c.put(req, r.clone());\n        return r;" => <<<'JS'
+        const r = await fetch(req);
+        if (r.ok) {
+          const c = await caches.open(DATA);
+          c.put(req, r.clone());
+        } else if (r.status === 401) {
+          await caches.delete(DATA);
+        }
+        return r;
+JS,
+
             "  // Data z API: nejdřív síť, kopie do paměti; offline se podá poslední známý stav.\n  if (url.pathname.indexOf('/api/') >= 0) {" => <<<'JS'
   // Soubory (náhledy, originály, obrázky z chatu, nahrávky) nechat prohlížeči a jeho HTTP paměti.
   if (/\/api\/(media|chat)\/[^/]+\/(thumb|raw|nahled|obrazek|video)$|\/api\/v1\/voice-notes\/[^/]+\/stream$|^\/files\//.test(url.pathname)) return;

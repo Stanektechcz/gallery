@@ -38,6 +38,24 @@ class BezpecnostPristupuTest extends TestCase
         $this->adri->gallerySpaces()->syncWithoutDetaching([$this->prostor->id => ['role' => 'owner']]);
     }
 
+    /**
+     * Uložená odpověď se nepodá požadavku s jiným tokenem.
+     *
+     * `Vary` měl jen `X-Inertia`: po odhlášení jednoho a přihlášení druhého
+     * na témž počítači prohlížeč do půl minuty podával obsah toho prvního.
+     */
+    public function test_pamet_prohlizece_rozlisuje_token(): void
+    {
+        $token = $this->adri->createToken('telefon')->plainTextToken;
+
+        foreach (['/api/data?skupiny=system', '/api/storage'] as $adresa) {
+            $vary = implode(', ', $this->withToken($token)->getJson($adresa)->assertOk()->baseResponse->getVary());
+
+            $this->assertStringContainsString('Authorization', $vary, $adresa);
+            $this->assertStringContainsString('X-Inertia', $vary, $adresa);
+        }
+    }
+
     // ——— přihlášení ———
 
     /** Odebraný přístup se nedá obejít novým přihlášením. */
