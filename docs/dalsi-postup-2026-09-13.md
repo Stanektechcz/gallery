@@ -280,18 +280,14 @@ přání přidané a odebrané na počítači i telefonu, film odebraný, přida
 | `f8b87cf9` | **Obsah se obnovuje i během dne** — viditelná karta každé čtyři minuty a po návratu z pozadí (ne s čekajícím zápisem, otevřeným dialogem ani kurzorem v políčku); změny toho druhého jsou vidět bez obnovení stránky a kopie seznamů z odpovědí na zápis se po obnovení zahodí |
 | `055d9221` | **Worker:** paměť jen pro statické soubory — zneplatněný sdílený odkaz dřív v prohlížeči dvojice dál ukazoval fotky z paměti a staré rozhraní dostávalo o krok starší data |
 | `1ccd73e1` | Test: všech 99 podstránek bez parametru (i starého rozhraní) se otevře bez chyby serveru, přihlášenému i nepřihlášenému; všech 89 obrazovek starého rozhraní existuje a je v sestavení |
+| `e8e3ec1e` | **Seznamy:** starší opis v kartě už nepřepíše úpravu druhého u jiné položky téhož seznamu — prohlížeč posílá jen změněné položky (`__zmenene`), server nezměněné nepřepisuje |
 
 Ověřeno v prohlížeči na vývojovém serveru celé jádro galerie: nahrání fotky,
 náhled a velký náhled, koš a vrácení, sdílený odkaz (host bez GPS, po
 zneplatnění 404), trvalé odstranění; průchod tlačítek v listech telefonu
-(79 obrazovek) bez kliknutí naprázdno. Testy: **1396 PHP testů**, všechny prošly.
+(79 obrazovek) bez kliknutí naprázdno. Testy: **1398 PHP testů**, všechny prošly.
 
-Co zůstává: převodníky seznamů (přání, sliby, kapitoly…) přepisují všechny
-řádky, které prohlížeč pošle. Upraví-li ten druhý položku a první do čtyř
-minut (než se obsah obnoví) změní jinou položku téhož seznamu, jeho starší
-opis úpravu druhého přepíše. Mazání už takhle nefunguje (2f); u kalendáře
-a úkolů se posílá jen změněné. Stejný rozdíl („jen změněné") by chtěly
-i ostatní seznamy.
+Co zůstává: úprava **téže** položky oběma v rozmezí pár minut — platí poslední uložení.
 
 ---
 
