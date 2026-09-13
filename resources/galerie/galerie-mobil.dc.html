@@ -2718,14 +2718,16 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                     <div style="flex:1; text-align:center; font-size:16px">{{ cycMonthLabel }}</div>
                     <button onClick="{{ cycNext }}" aria-label="Další měsíc" style="width:44px; height:44px; display:grid; place-items:center; border:1px solid var(--g-line); border-radius:2px; background:transparent; cursor:pointer; color:inherit"><i class="ph-duotone ph-caret-right" style="font-size:16px"></i></button>
                   </div>
-                  <div style="display:grid; grid-template-columns:repeat(7,1fr); gap:3px; padding-bottom:5px">
+                  <div style="display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:3px; padding-bottom:5px">
                     <sc-for list="{{ cycWeekdays }}" as="w" hint-placeholder-count="7">
                       <div style="text-align:center; font-size:10.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--g-ink3)">{{ w.label }}</div>
                     </sc-for>
                   </div>
-                  <div style="display:grid; grid-template-columns:repeat(7,1fr); gap:3px">
+                  <!-- minmax(0,1fr) a min-width:0 u dne: na 320px telefonu vycházel sloupec na 38 px,
+                       min-height 44 px přes aspect-ratio roztáhl i šířku a neděle vyjela z obrazovky. -->
+                  <div style="display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:3px">
                     <sc-for list="{{ cycGrid }}" as="d" hint-placeholder-count="42">
-                      <button onClick="{{ d.tap }}" aria-label="{{ d.aria }}" style="position:relative; aspect-ratio:1; min-height:44px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; border:{{ d.bd }}; border-radius:3px; background:{{ d.bg }}; color:{{ d.fg }}; opacity:{{ d.op }}; cursor:pointer; font-family:inherit; padding:0">
+                      <button onClick="{{ d.tap }}" aria-label="{{ d.aria }}" style="position:relative; aspect-ratio:1; min-width:0; min-height:44px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; border:{{ d.bd }}; border-radius:3px; background:{{ d.bg }}; color:{{ d.fg }}; opacity:{{ d.op }}; cursor:pointer; font-family:inherit; padding:0">
                         <span style="font-size:14px; font-variant-numeric:tabular-nums">{{ d.n }}</span>
                         <span style="display:flex; align-items:center; gap:2px; height:7px">
                           <span style="width:6px; height:6px; border-radius:50%; background:{{ d.dot }}"></span>
@@ -2869,14 +2871,14 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                 <div style="flex:1; text-align:center; font-size:16px">{{ calMonthLabel }}</div>
                 <button onClick="{{ calNext }}" aria-label="Další měsíc" style="width:44px; height:44px; display:grid; place-items:center; border:1px solid var(--g-line); border-radius:2px; background:transparent; cursor:pointer; color:inherit"><i class="ph-duotone ph-caret-right" style="font-size:16px"></i></button>
               </div>
-              <div style="display:grid; grid-template-columns:repeat(7,1fr); gap:3px; padding-bottom:5px">
+              <div style="display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:3px; padding-bottom:5px">
                 <sc-for list="{{ cycWeekdays }}" as="w" hint-placeholder-count="7">
                   <div style="text-align:center; font-size:10.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--g-ink3)">{{ w.label }}</div>
                 </sc-for>
               </div>
-              <div style="display:grid; grid-template-columns:repeat(7,1fr); gap:3px">
+              <div style="display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:3px">
                 <sc-for list="{{ calGrid }}" as="d" hint-placeholder-count="42">
-                  <button onClick="{{ d.tap }}" aria-label="{{ d.aria }}" style="position:relative; aspect-ratio:1; min-height:44px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; border:{{ d.bd }}; border-radius:3px; background:{{ d.bg }}; color:{{ d.fg }}; opacity:{{ d.op }}; cursor:pointer; font-family:inherit; padding:0">
+                  <button onClick="{{ d.tap }}" aria-label="{{ d.aria }}" style="position:relative; aspect-ratio:1; min-width:0; min-height:44px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; border:{{ d.bd }}; border-radius:3px; background:{{ d.bg }}; color:{{ d.fg }}; opacity:{{ d.op }}; cursor:pointer; font-family:inherit; padding:0">
                     <span style="position:absolute; left:0; top:0; bottom:0; width:3px; border-radius:3px 0 0 3px; background:{{ d.cyc }}"></span>
                     <span style="font-size:14px; font-variant-numeric:tabular-nums">{{ d.n }}</span>
                     <span style="display:flex; gap:2px; height:5px">
@@ -8878,10 +8880,52 @@ class Component extends DCLogic {
 
   kc(n) { return Math.round(n).toLocaleString('cs-CZ') + ' ' + ((window.GalerieData || {}).MENA || 'Kč'); }
   pl(n, one, few, many) { return n + ' ' + (n === 1 ? one : n >= 2 && n <= 4 ? few : many); }
+  /*
+   * Do koše na serveru, ne jen v prohlížeči.
+   *
+   * „Do koše" v hromadném pásu i v prohlížeči fotky zapisovalo jen `trashed`
+   * do stavu telefonu. Server takový klíč nezná: fotka zmizela jen z tohohle
+   * telefonu, v knihovně, na Disku i na počítači zůstala a koš na serveru ji
+   * nikdy neuklidil. Jde se stejnou cestou jako na počítači (`media/do-kose`).
+   *
+   * Vrací `false` bez serveru nebo u ukázkových položek — pak zůstává původní
+   * chování prototypu.
+   */
+  doKoseNaServeru(ids, hotovo) {
+    const api = window.GalerieApi;
+    if (!api || !api.post || api.mode !== 'http' || !ids.length || !ids.every(id => /^[0-9a-f-]{36}$/.test(id))) return false;
+    api.post('media/do-kose', { ids }).then(res => {
+      const presunute = (res && res.ids) || [];
+      // Z knihovny telefonu hned — nové načtení skupiny doběhne až za chvíli.
+      const zbytek = PHOTOS.filter(p => presunute.indexOf(p.id) < 0);
+      PHOTOS.length = 0;
+      Array.prototype.push.apply(PHOTOS, zbytek);
+      if (window.GalerieObnovit) { window.GalerieObnovit('knihovna'); window.GalerieObnovit('system'); }
+      if (hotovo) hotovo(presunute);
+      if (!presunute.length) { this.toast('Nic z výběru už v knihovně není', { icon: 'ph-info' }); return; }
+      this.toast(this.pl(presunute.length, 'položka', 'položky', 'položek') + ' v koši · 30 dní na vrácení', { icon: 'ph-trash', undo: () => this.zKoseNaServeru(presunute) });
+    }).catch(() => this.toast('Přesun do koše se nepodařil', { icon: 'ph-warning' }));
+    return true;
+  }
+  /*
+   * `trashed` je koš ukázky. U dvojice rozhoduje server — a starý záznam z doby,
+   * kdy telefon koš jen předstíral, by fotku schoval navždy: v koši na serveru
+   * není, takže by ji nešlo ani obnovit.
+   */
+  vKosiUkazky(id) { return !((window.GalerieData || {}).DVOJICE || []).length && !!this.state.trashed[id]; }
+  zKoseNaServeru(ids) {
+    const api = window.GalerieApi;
+    if (!api || !api.post) return;
+    api.post('kos/vratit', { ids }).then(res => {
+      if (res && window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data, res.prazdne);
+      if (window.GalerieObnovit) window.GalerieObnovit('knihovna');
+      this.toast('Obnoveno do knihovny', { icon: 'ph-arrow-counter-clockwise' });
+    }).catch(() => this.toast('Obnovení se nepodařilo', { icon: 'ph-warning' }));
+  }
   push(k, extra) { this.setState(Object.assign({ stack: this.state.stack.concat([k]), sheet: null, sel: [], selectMode: false }, extra || {})); }
   goTab(t, extra) { this.setState(Object.assign({ tab: t, stack: [], sheet: null, sel: [], selectMode: false }, extra || {})); }
 
-  library() { return PHOTOS.concat(Array.from({ length: this.state.extra }, (_, i) => ({ id: 'n' + i, di: -1, day: 'Dnes · ' + this.dnes().getDate() + '. ' + MON_CS[this.dnes().getMonth()] + ' ' + this.dnes().getFullYear(), place: 'Právě nahráno', video: false, dur: '0:00', fav: false, seed: 90 + i }))).filter(p => !this.state.trashed[p.id]); }
+  library() { return PHOTOS.concat(Array.from({ length: this.state.extra }, (_, i) => ({ id: 'n' + i, di: -1, day: 'Dnes · ' + this.dnes().getDate() + '. ' + MON_CS[this.dnes().getMonth()] + ' ' + this.dnes().getFullYear(), place: 'Právě nahráno', video: false, dur: '0:00', fav: false, seed: 90 + i }))).filter(p => !this.vKosiUkazky(p.id)); }
   isFav(p) { const v = this.state.favs[p.id]; return v === undefined ? p.fav : v; }
   diaryList() { return this.state.diary || DIARY.map((d, i) => ({ id: 'd' + i, date: d[0], title: d[1], text: d[2], meta: d[3], audio: d[4] })); }
   // ── cyklus: odvození cyklů, průměrů a předpovědi z dnů ──
@@ -11165,7 +11209,7 @@ class Component extends DCLogic {
           this.setState({ shares: [sh].concat(prev), sel: [], selectMode: false, seq: n + 1 });
           this.toast('Odkaz vytvořen a zkopírován', { icon: 'ph-link-simple', undo: () => this.setState({ shares: prev }) });
         } },
-        { label: 'Do koše', icon: 'ph-trash', go: () => { const prev = s.trashed, n = Object.assign({}, s.trashed); s.sel.forEach(id => { n[id] = true; }); this.setState({ trashed: n, sel: [], selectMode: false }); this.toast(this.pl(s.sel.length, 'položka', 'položky', 'položek') + ' v koši', { icon: 'ph-trash', undo: () => this.setState({ trashed: prev }) }); } }
+        { label: 'Do koše', icon: 'ph-trash', go: () => { if (this.doKoseNaServeru(s.sel, () => this.setState({ sel: [], selectMode: false }))) return; const prev = s.trashed, n = Object.assign({}, s.trashed); s.sel.forEach(id => { n[id] = true; }); this.setState({ trashed: n, sel: [], selectMode: false }); this.toast(this.pl(s.sel.length, 'položka', 'položky', 'položek') + ' v koši', { icon: 'ph-trash', undo: () => this.setState({ trashed: prev }) }); } }
       ],
 
       // cesty
@@ -11292,9 +11336,9 @@ class Component extends DCLogic {
       // alba, koš, odkazy
       albumList: albumsSorted.map(a => ({
         name: a.name,
-        meta: this.pl(a.ids.filter(id => !s.trashed[id]).length, 'položka', 'položky', 'položek'),
+        meta: this.pl(a.ids.filter(id => !this.vKosiUkazky(id)).length, 'položka', 'položky', 'položek'),
         cover: (() => {
-          const live = a.ids.filter(id => !s.trashed[id]);
+          const live = a.ids.filter(id => !this.vKosiUkazky(id));
           const pick = [live[0], live[Math.floor(live.length / 2)], live[live.length - 1]].filter(Boolean);
           return pick.map((id, i) => {
             const p = PHOTOS.find(x => x.id === id);
@@ -11308,7 +11352,7 @@ class Component extends DCLogic {
       albumsEmpty: this.albumsList().length === 0,
       album: (() => {
         const a = this.albumsList().find(x => x.id === s.albumId) || this.albumsList()[0] || { name: '—', ids: [], seed: 3 };
-        const items = a.ids.filter(id => !s.trashed[id]).map(id => PHOTOS.find(p => p.id === id)).filter(Boolean);
+        const items = a.ids.filter(id => !this.vKosiUkazky(id)).map(id => PHOTOS.find(p => p.id === id)).filter(Boolean);
         return {
           meta: this.pl(items.length, 'položka', 'položky', 'položek') + ' · sdílíte oba',
           items: items.map(p => ({ bg: this.tlo(p), fav: this.isFav(p), tap: () => this.setState({ lb: p.id }) })),
@@ -11333,6 +11377,26 @@ class Component extends DCLogic {
       }),
       trashMeta: this.pl(Object.keys(s.trashed).filter(id => s.trashed[id]).length, 'položka v koši', 'položky v koši', 'položek v koši'),
       trashEmpty: Object.keys(s.trashed).filter(id => s.trashed[id]).length === 0,
+      /*
+       * Koš dvojice je koš na serveru — přepisuje tři klíče nad sebou.
+       *
+       * Obrazovka ukazovala jen to, co si telefon sám poznamenal do `trashed`
+       * — fotky vyhozené na počítači v ní nebyly a „Obnovit" vracelo jen
+       * v tomhle prohlížeči. Řádky i vrácení jdou přes `TRASH` a `kos/vratit`
+       * stejně jako na počítači.
+       */
+      ...(((window.GalerieData || {}).DVOJICE || []).length ? (() => {
+        const kos = (window.GalerieData || {}).TRASH || [];
+        return {
+          trashRows: kos.map(r => ({
+            name: r.name, meta: r.from + ' · ' + r.by + ' · ' + r.when + ' · trvale za ' + r.left,
+            bg: 'var(--g-panel)',
+            restore: () => this.zKoseNaServeru([r.id])
+          })),
+          trashMeta: this.pl(kos.length, 'položka v koši', 'položky v koši', 'položek v koši'),
+          trashEmpty: kos.length === 0
+        };
+      })() : {}),
       shareRows: this.sharesList().map(r => ({
         name: r.name, url: r.url,
         when: (() => {
@@ -12247,7 +12311,7 @@ class Component extends DCLogic {
           this.toast('Přidáno do albumu ' + target.name, { icon: 'ph-folder-plus', undo: () => this.setState({ albums: prev }) });
         } },
         { label: 'Detail', icon: 'ph-info', color: '#fff', go: () => this.setState({ lbPanel: !s.lbPanel }) },
-        { label: 'Do koše', icon: 'ph-trash', color: '#fff', go: () => { const prev = s.trashed; this.setState({ trashed: Object.assign({}, s.trashed, { [lbP.id]: true }), lb: null }); this.toast('Přesunuto do koše', { icon: 'ph-trash', undo: () => this.setState({ trashed: prev }) }); } }
+        { label: 'Do koše', icon: 'ph-trash', color: '#fff', go: () => { if (this.doKoseNaServeru([lbP.id], () => this.setState({ lb: null }))) return; const prev = s.trashed; this.setState({ trashed: Object.assign({}, s.trashed, { [lbP.id]: true }), lb: null }); this.toast('Přesunuto do koše', { icon: 'ph-trash', undo: () => this.setState({ trashed: prev }) }); } }
       ] : [],
 
       // toast

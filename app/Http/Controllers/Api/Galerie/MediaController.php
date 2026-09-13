@@ -238,6 +238,44 @@ class MediaController extends Controller
         return response()->json(['id' => $media->uuid, 'status' => 'trashed']);
     }
 
+    /**
+     * Víc položek do koše jedním požadavkem.
+     *
+     * Hromadné „Do koše" a vyřízení série měnily jen stav v prohlížeči, takže
+     * fotky na serveru zůstaly. Po jednom `DELETE` na položku by stovka
+     * vybraných fotek vyčerpala limit API (počítadlo je společné) a dávka
+     * požadavků najednou už jednou spustila WAF.
+     *
+     * Cizí a neexistující identifikátory se tiše přeskočí a vrátí se jen ty,
+     * které opravdu šly do koše — podle nich klient fotky odebere z knihovny.
+     */
+    public function destroyMany(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'ids' => ['required', 'array', 'min:1', 'max:500'],
+            'ids.*' => ['string', 'max:64'],
+        ]);
+
+        $par = $this->parId($request);
+
+        $polozky = MediaItem::whereIn('uuid', array_values(array_unique($data['ids'])))
+            ->where('gallery_space_id', $par)
+            ->whereNull('trashed_at')
+            ->get();
+
+        $zaDni = now()->addDays((int) config('gallery.trash_retention_days', 30));
+
+        MediaItem::whereIn('id', $polozky->pluck('id'))->update([
+            'trashed_at' => now(),
+            'purge_after' => $zaDni,
+        ]);
+
+        return response()->json([
+            'ids' => $polozky->pluck('uuid')->values()->all(),
+            'status' => 'trashed',
+        ]);
+    }
+
     // ——— přijetí souboru ———
 
     /**

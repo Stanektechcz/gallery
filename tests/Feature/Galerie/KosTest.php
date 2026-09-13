@@ -76,6 +76,25 @@ class KosTest extends TestCase
         $this->assertNull($fotka->fresh()->trashed_at);
     }
 
+    /** „Zpět" po hromadném přesunu vrátí celou dávku jedním požadavkem. */
+    public function test_vraceni_davky_z_kose(): void
+    {
+        $prvni = $this->fotka(['trashed_at' => now(), 'purge_after' => now()->addDays(30)]);
+        $druha = $this->fotka(['trashed_at' => now(), 'purge_after' => now()->addDays(30)], 2);
+        $zustane = $this->fotka(['trashed_at' => now()], 3);
+
+        $odpoved = $this->postJson('/api/kos/vratit', ['ids' => [$prvni->uuid, $druha->uuid, 'neexistuje']])
+            ->assertOk()
+            ->assertJsonPath('ok', true);
+
+        $this->assertEqualsCanonicalizing([$prvni->uuid, $druha->uuid], $odpoved->json('ids'));
+        $this->assertNull($prvni->fresh()->trashed_at);
+        $this->assertNull($druha->fresh()->purge_after);
+        $this->assertNotNull($zustane->fresh()->trashed_at);
+
+        $this->postJson('/api/kos/vratit', ['ids' => ['neexistuje']])->assertNotFound();
+    }
+
     /**
      * Poslední vrácená položka koš vyprázdní — a obrazovka se to musí dozvědět.
      *

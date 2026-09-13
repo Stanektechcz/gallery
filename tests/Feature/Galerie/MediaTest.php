@@ -254,6 +254,43 @@ class MediaTest extends TestCase
         $this->deleteJson('/api/media/'.$nahrane->json('id'))->assertNotFound();
     }
 
+    /**
+     * Hromadné „Do koše" jedním požadavkem.
+     *
+     * Dřív se měnil jen stav v prohlížeči a fotky zůstaly v knihovně. Cizí
+     * identifikátor se přeskočí a v odpovědi není — klient podle ní odebírá.
+     */
+    public function test_hromadne_do_kose_presune_jen_vlastni_polozky(): void
+    {
+        $prvni = $this->post('/api/media', ['file' => $this->fotka('a.jpg', 'a')])->assertCreated()->json('id');
+        $druha = $this->post('/api/media', ['file' => $this->fotka('b.jpg', 'b')])->assertCreated()->json('id');
+        $nechat = $this->post('/api/media', ['file' => $this->fotka('c.jpg', 'c')])->assertCreated()->json('id');
+
+        $makinka = User::factory()->create();
+        $jinyProstor = GallerySpace::create(['name' => 'Cizí prostor', 'owner_id' => $makinka->id]);
+        $makinka->gallerySpaces()->syncWithoutDetaching([$jinyProstor->id => ['role' => 'owner']]);
+        Sanctum::actingAs($makinka);
+        $cizi = $this->post('/api/media', ['file' => $this->fotka('cizi.jpg', 'cizi')])->assertCreated()->json('id');
+
+        Sanctum::actingAs($this->adri);
+
+        $odpoved = $this->postJson('/api/media/do-kose', ['ids' => [$prvni, $druha, $cizi, 'neexistuje']])
+            ->assertOk()
+            ->assertJsonPath('status', 'trashed');
+
+        $this->assertEqualsCanonicalizing([$prvni, $druha], $odpoved->json('ids'));
+
+        $stav = MediaItem::withoutGlobalScopes()->get()->keyBy('uuid');
+        $this->assertNotNull($stav[$prvni]->trashed_at);
+        $this->assertNotNull($stav[$druha]->purge_after, 'Bez data úklidu by soubor v koši zůstal navždy.');
+        $this->assertNull($stav[$nechat]->trashed_at);
+        $this->assertNull($stav[$cizi]->trashed_at, 'Cizí fotka nesmí jít do koše jen proto, že někdo zná její identifikátor.');
+
+        // Podruhé už nic — položky v koši se znovu nepřesouvají.
+        $this->postJson('/api/media/do-kose', ['ids' => [$prvni]])->assertOk()->assertJsonPath('ids', []);
+        $this->postJson('/api/media/do-kose', ['ids' => []])->assertUnprocessable();
+    }
+
     public function test_smazany_soubor_jde_do_kose_a_ne_z_disku(): void
     {
         $nahrane = $this->post('/api/media', [

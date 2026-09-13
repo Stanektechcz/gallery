@@ -36,10 +36,41 @@ class KosController extends Controller
         private readonly System $obsah,
     ) {}
 
-    /** Vrátit z koše — vratná akce, smí ji každý z dvojice. */
+    /**
+     * Vrátit z koše — vratná akce, smí ji každý z dvojice.
+     *
+     * Kromě jedné položky (`id`) bere i seznam (`ids`): „Zpět" po hromadném
+     * přesunu do koše by jinak poslal požadavek za každou fotku a u větší
+     * dávky narazil na limit API.
+     */
     public function restore(Request $request): JsonResponse
     {
         $prostor = GallerySpace::findOrFail($this->parId($request));
+
+        if ($request->has('ids')) {
+            $data = $request->validate([
+                'ids' => ['required', 'array', 'min:1', 'max:500'],
+                'ids.*' => ['string', 'max:64'],
+            ]);
+
+            $polozky = $this->vKosi($prostor)->whereIn('uuid', $data['ids'])->get();
+
+            if ($polozky->isEmpty()) {
+                return response()->json(['ok' => false, 'zprava' => 'Nic z toho v koši není.'], 404);
+            }
+
+            MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
+                ->whereIn('id', $polozky->pluck('id'))
+                ->update(['trashed_at' => null, 'purge_after' => null]);
+            $polozky->each(fn (MediaItem $m) => AuditLog::record('media.restore', $m));
+
+            return response()->json([
+                'ok' => true,
+                'ids' => $polozky->pluck('uuid')->values()->all(),
+                'zprava' => 'Vráceno z koše — '.$polozky->count().' '.($polozky->count() === 1 ? 'položka' : ($polozky->count() <= 4 ? 'položky' : 'položek')),
+            ] + $this->obsahPoAkci($this->obsah, $prostor));
+        }
+
         $data = $request->validate(['id' => ['required', 'string', 'max:64']]);
 
         $polozka = $this->vKosi($prostor)->where('uuid', $data['id'])->first();

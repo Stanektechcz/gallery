@@ -1971,7 +1971,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                   </button>
                 </sc-for>
               </div>
-              <div role="group" aria-label="Zobrazení kalendáře" style="display:flex; gap:6px; flex:none">
+              <div role="group" aria-label="Zobrazení kalendáře" style="display:flex; gap:6px; flex-wrap:wrap; flex:0 1 auto">
                 <sc-for list="{{ calViews }}" as="v" hint-placeholder-count="3">
                   <button onClick="{{ v.go }}" aria-pressed="{{ v.on }}" style="padding:6px 13px; border:1px solid {{ v.bd }}; border-radius:2px; background:{{ v.bg }}; color:{{ v.fg }}; cursor:pointer; font-family:inherit; font-size:13px" style-hover="border-color:var(--g-ink2)">{{ v.label }}</button>
                 </sc-for>
@@ -2018,7 +2018,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
           </sc-if>
 
           <sc-if value="{{ calMonthView }}">
-            <div style="display:grid; grid-template-columns:minmax(0,1fr) minmax(300px,340px); gap:28px; align-items:start">
+            <div style="display:grid; grid-template-columns:{{ calMonthCols }}; gap:28px; align-items:start">
               <div>
                 <div style="display:grid; grid-template-columns:repeat(7,1fr); gap:6px; margin-bottom:6px">
                   <sc-for list="{{ dayNames }}" as="d" hint-placeholder-count="7">
@@ -3585,9 +3585,12 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                     <span style="font-size:12px; letter-spacing:.14em; text-transform:uppercase">Dvanáct měsíců</span>
                     <span style="font-size:12.5px; color:var(--g-ink3); margin-left:auto">klikněte na měsíc</span>
                   </div>
-                  <div style="position:relative; height:190px; margin-top:20px">
-                    <div style="position:absolute; left:0; right:0; bottom:{{ budPlanLine }}; border-top:1px dashed var(--g-ink3)"></div>
-                    <div style="position:absolute; right:0; bottom:{{ budPlanLine }}; transform:translateY(-100%); font-size:11px; color:var(--g-ink3); padding-bottom:3px">plán 50 000 Kč</div>
+                  <!-- Odsazení shora: popisek plánu stojí nad čárou a u plného grafu vyjel přes nadpis. -->
+                  <div style="position:relative; height:190px; margin-top:34px">
+                    <sc-if value="{{ budHasPlan }}">
+                      <div style="position:absolute; left:0; right:0; bottom:{{ budPlanLine }}; border-top:1px dashed var(--g-ink3)"></div>
+                      <div style="position:absolute; right:0; bottom:{{ budPlanLine }}; transform:translateY(-100%); font-size:11px; color:var(--g-ink3); padding-bottom:3px; background:var(--g-bg)">{{ budPlanLabel }}</div>
+                    </sc-if>
                     <div style="display:flex; align-items:flex-end; gap:6px; height:100%">
                       <sc-for list="{{ budMonths }}" as="m" hint-placeholder-count="12">
                         <button onClick="{{ m.pick }}" style="flex:1; min-width:0; height:100%; display:flex; flex-direction:column; justify-content:flex-end; gap:6px; border:0; background:transparent; cursor:pointer; padding:0; font-family:inherit">
@@ -3839,7 +3842,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                 <div style="flex:2 1 460px; min-width:0">
                   <div style="padding-bottom:9px; border-bottom:1px solid var(--g-ink); font-size:12px; letter-spacing:.14em; text-transform:uppercase">Výdaje po měsících</div>
                   <div style="position:relative; height:210px; margin-top:20px">
-                    <div style="position:absolute; left:0; right:0; bottom:{{ budPlanLine }}; border-top:1px dashed var(--g-ink3)"></div>
+                    <sc-if value="{{ budHasPlan }}"><div style="position:absolute; left:0; right:0; bottom:{{ budPlanLine }}; border-top:1px dashed var(--g-ink3)"></div></sc-if>
                     <div style="display:flex; align-items:flex-end; gap:6px; height:100%">
                       <sc-for list="{{ budMonths }}" as="m" hint-placeholder-count="12">
                         <button onClick="{{ m.pick }}" style="flex:1; min-width:0; height:100%; display:flex; flex-direction:column; justify-content:flex-end; gap:6px; border:0; background:transparent; cursor:pointer; padding:0; font-family:inherit">
@@ -5397,7 +5400,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                         <div style="font-size:16px">{{ d.title }}</div>
                         <div style="font-size:12.5px; color:var(--g-ink3); margin-top:2px">{{ d.meta }}</div>
                       </div>
-                      <select class="input" value="{{ d.value }}" onChange="{{ d.set }}" aria-label="Recept na {{ d.day }}" style="width:auto; min-width:190px; padding:6px 9px; font-size:13px; flex:none">
+                      <select class="input" value="{{ d.value }}" onChange="{{ d.set }}" aria-label="Recept na {{ d.day }}" style="width:220px; min-width:0; flex:0 1 220px; padding:6px 9px; font-size:13px">
                         <sc-for list="{{ d.opts }}" as="o" hint-placeholder-count="4">
                           <option value="{{ o.value }}">{{ o.label }}</option>
                         </sc-for>
@@ -5653,7 +5656,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
             <sc-if value="{{ appIsSer }}">
               <div style="display:flex; flex-direction:column; gap:18px; max-width:var(--sirka-strany)">
                 <sc-if value="{{ serEmpty }}">
-                  <div style="padding:30px 0; font-size:14.5px; color:var(--g-ink2)">Žádná série skoro shodných snímků — knihovna je v tomhle čistá.</div>
+                  <div style="padding:30px 0; font-size:14.5px; color:var(--g-ink2)">Žádná série — v knihovně nejsou snímky pořízené těsně po sobě.</div>
                 </sc-if>
                 <sc-if value="{{ serItems }}">
                   <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap">
@@ -5674,13 +5677,15 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                           <span style="margin-left:auto; font-size:11.5px; color:{{ it.labelColor }}">{{ it.label }}</span>
                         </div>
                         <div style="font-size:11.5px; color:var(--g-ink3)">{{ it.time }} · {{ it.size }}</div>
-                        <div>
-                          <div style="display:flex; align-items:baseline; gap:6px">
-                            <span style="font-size:11px; color:var(--g-ink3)">ostrost</span>
-                            <span style="margin-left:auto; font-size:11.5px; font-variant-numeric:tabular-nums">{{ it.sharp }}</span>
+                        <sc-if value="{{ it.hasSharp }}">
+                          <div>
+                            <div style="display:flex; align-items:baseline; gap:6px">
+                              <span style="font-size:11px; color:var(--g-ink3)">ostrost</span>
+                              <span style="margin-left:auto; font-size:11.5px; font-variant-numeric:tabular-nums">{{ it.sharp }}</span>
+                            </div>
+                            <div style="height:5px; border-radius:2px; background:var(--g-line2); overflow:hidden; margin-top:3px"><div style="height:100%; width:{{ it.sharpW }}; background:var(--g-acc)"></div></div>
                           </div>
-                          <div style="height:5px; border-radius:2px; background:var(--g-line2); overflow:hidden; margin-top:3px"><div style="height:100%; width:{{ it.sharpW }}; background:var(--g-acc)"></div></div>
-                        </div>
+                        </sc-if>
                         <div style="display:flex; gap:4px">
                           <button class="btn btn-ghost" onClick="{{ it.open }}" style="font-size:11.5px; gap:4px; padding:2px 6px"><i class="ph-duotone ph-magnifying-glass-plus" style="font-size:13px"></i>Detail</button>
                           <button class="btn btn-ghost" onClick="{{ it.split }}" style="font-size:11.5px; gap:4px; padding:2px 6px"><i class="ph-duotone ph-columns" style="font-size:13px"></i>Srovnat</button>
@@ -5691,7 +5696,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                   <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap; padding:14px 16px; border-radius:2px; background:var(--g-panel)">
                     <i class="ph-duotone ph-sparkle" style="font-size:20px; color:var(--g-acc)"></i>
                     <span style="flex:1 1 240px; font-size:13.5px; color:var(--g-ink2)">{{ serAdvice }}</span>
-                    <button class="btn btn-secondary" onClick="{{ serPickBest }}" style="font-size:12.5px; gap:5px"><i class="ph-duotone ph-target" style="font-size:14px"></i>Vybrat nejostřejší</button>
+                    <sc-if value="{{ serCanBest }}"><button class="btn btn-secondary" onClick="{{ serPickBest }}" style="font-size:12.5px; gap:5px"><i class="ph-duotone ph-target" style="font-size:14px"></i>Vybrat nejostřejší</button></sc-if>
                     <button class="btn btn-primary" onClick="{{ serConfirm }}" style="font-size:12.5px; gap:5px"><i class="ph-duotone ph-broom" style="font-size:14px"></i>Ponechat vybraný, zbytek do koše</button>
                     <button class="btn btn-ghost" onClick="{{ serKeepAll }}" style="font-size:12.5px">Ponechat vše</button>
                   </div>
@@ -7570,7 +7575,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                       </div>
                       <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap">
                         <span style="font-size:12px; padding:3px 9px; border:1px solid var(--g-line); border-radius:2px; color:var(--g-ink2)">rozpoznáno: {{ r.kind }}</span>
-                        <select class="input" value="{{ r.target }}" onChange="{{ r.setTarget }}" aria-label="Zařadit do cesty" style="width:auto; min-width:190px; padding:5px 9px; font-size:13px">
+                        <select class="input" value="{{ r.target }}" onChange="{{ r.setTarget }}" aria-label="Zařadit do cesty" style="width:auto; min-width:190px; max-width:100%; padding:5px 9px; font-size:13px">
                           <sc-for list="{{ r.tripOpts }}" as="o" hint-placeholder-count="3">
                             <option value="{{ o.value }}">{{ o.label }}</option>
                           </sc-for>
@@ -8515,7 +8520,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
             <sc-if value="{{ clnOnSeries }}">
               <div style="display:flex; flex-direction:column; gap:18px; max-width:var(--sirka-strany)">
                 <sc-if value="{{ serEmpty }}">
-                  <div style="padding:30px 0; font-size:14.5px; color:var(--g-ink2)">Žádná série skoro shodných snímků — knihovna je v tomhle čistá.</div>
+                  <div style="padding:30px 0; font-size:14.5px; color:var(--g-ink2)">Žádná série — v knihovně nejsou snímky pořízené těsně po sobě.</div>
                 </sc-if>
                 <sc-if value="{{ serItems }}">
                   <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap">
@@ -8536,13 +8541,15 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                           <span style="margin-left:auto; font-size:11.5px; color:{{ it.labelColor }}">{{ it.label }}</span>
                         </div>
                         <div style="font-size:11.5px; color:var(--g-ink3)">{{ it.time }} · {{ it.size }}</div>
-                        <div>
-                          <div style="display:flex; align-items:baseline; gap:6px">
-                            <span style="font-size:11px; color:var(--g-ink3)">ostrost</span>
-                            <span style="margin-left:auto; font-size:11.5px; font-variant-numeric:tabular-nums">{{ it.sharp }}</span>
+                        <sc-if value="{{ it.hasSharp }}">
+                          <div>
+                            <div style="display:flex; align-items:baseline; gap:6px">
+                              <span style="font-size:11px; color:var(--g-ink3)">ostrost</span>
+                              <span style="margin-left:auto; font-size:11.5px; font-variant-numeric:tabular-nums">{{ it.sharp }}</span>
+                            </div>
+                            <div style="height:5px; border-radius:2px; background:var(--g-line2); overflow:hidden; margin-top:3px"><div style="height:100%; width:{{ it.sharpW }}; background:var(--g-acc)"></div></div>
                           </div>
-                          <div style="height:5px; border-radius:2px; background:var(--g-line2); overflow:hidden; margin-top:3px"><div style="height:100%; width:{{ it.sharpW }}; background:var(--g-acc)"></div></div>
-                        </div>
+                        </sc-if>
                         <div style="display:flex; gap:4px">
                           <button class="btn btn-ghost" onClick="{{ it.open }}" style="font-size:11.5px; gap:4px; padding:2px 6px"><i class="ph-duotone ph-magnifying-glass-plus" style="font-size:13px"></i>Detail</button>
                           <button class="btn btn-ghost" onClick="{{ it.split }}" style="font-size:11.5px; gap:4px; padding:2px 6px"><i class="ph-duotone ph-columns" style="font-size:13px"></i>Srovnat</button>
@@ -8553,7 +8560,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                   <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap; padding:14px 16px; border-radius:2px; background:var(--g-panel)">
                     <i class="ph-duotone ph-sparkle" style="font-size:20px; color:var(--g-acc)"></i>
                     <span style="flex:1 1 240px; font-size:13.5px; color:var(--g-ink2)">{{ serAdvice }}</span>
-                    <button class="btn btn-secondary" onClick="{{ serPickBest }}" style="font-size:12.5px; gap:5px"><i class="ph-duotone ph-target" style="font-size:14px"></i>Vybrat nejostřejší</button>
+                    <sc-if value="{{ serCanBest }}"><button class="btn btn-secondary" onClick="{{ serPickBest }}" style="font-size:12.5px; gap:5px"><i class="ph-duotone ph-target" style="font-size:14px"></i>Vybrat nejostřejší</button></sc-if>
                     <button class="btn btn-primary" onClick="{{ serConfirm }}" style="font-size:12.5px; gap:5px"><i class="ph-duotone ph-broom" style="font-size:14px"></i>Ponechat vybraný, zbytek do koše</button>
                     <button class="btn btn-ghost" onClick="{{ serKeepAll }}" style="font-size:12.5px">Ponechat vše</button>
                   </div>
@@ -12121,15 +12128,15 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 
       <!-- NASTAVENÍ -->
       <sc-if value="{{ isSettings }}">
-        <div style="display:flex; animation:fadeIn .2s ease">
-          <div style="width:230px; flex:none; padding:14px 12px 40px">
+        <div style="display:flex; flex-direction:{{ setDir }}; animation:fadeIn .2s ease">
+          <div style="width:{{ setNavW }}; flex:none; display:{{ setNavDisplay }}; flex-wrap:wrap; gap:4px; padding:{{ setNavPad }}">
             <sc-for list="{{ setTabs }}" as="t" hint-placeholder-count="6">
-              <button onClick="{{ t.go }}" style="display:flex; align-items:center; gap:10px; width:100%; padding:8px 11px; border:0; border-radius:2px; cursor:pointer; text-align:left; font-family:inherit; font-size:14px; background:{{ t.bg }}; color:{{ t.fg }}">
+              <button onClick="{{ t.go }}" style="display:flex; align-items:center; gap:10px; width:{{ setNavBtnW }}; padding:8px 11px; border:0; border-radius:2px; cursor:pointer; text-align:left; font-family:inherit; font-size:14px; background:{{ t.bg }}; color:{{ t.fg }}">
                 <i class="ph-duotone {{ t.icon }}" style="font-size:18px"></i>{{ t.label }}
               </button>
             </sc-for>
           </div>
-          <div style="flex:1; min-width:0; padding:8px 28px 70px; max-width:720px">
+          <div style="flex:1; min-width:0; padding:{{ setBodyPad }}; max-width:720px">
             <h2 style="margin:0 0 3px; font-size:30px">{{ setTitle }}</h2>
             <div style="font-size:13px; color:var(--g-ink2); margin-bottom:26px">{{ setSubtitle }}</div>
             <sc-if value="{{ setIsMenu }}">
@@ -12192,7 +12199,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                   <div style="font-size:15.5px">{{ r.label }}</div>
                   <div style="font-size:12.5px; color:var(--g-ink3); margin-top:2px">{{ r.hint }}</div>
                 </div>
-                <div style="flex:none; display:flex; align-items:center; gap:7px; flex-wrap:wrap; justify-content:flex-end">
+                <div style="flex:0 1 auto; max-width:100%; display:flex; align-items:center; gap:7px; flex-wrap:wrap; justify-content:flex-end">
                   <sc-if value="{{ r.isToggle }}">
                     <button onClick="{{ r.flip }}" role="switch" aria-checked="{{ r.on }}" aria-label="{{ r.label }}" style="position:relative; width:38px; height:22px; flex:none; padding:0; border:0; border-radius:12px; cursor:pointer; background:{{ r.trackBg }}; transition:background .18s ease">
                       <span style="position:absolute; top:3px; left:{{ r.thumbLeft }}; width:16px; height:16px; border-radius:50%; background:var(--g-bg); transition:left .18s ease; box-shadow:0 1px 3px rgba(0,0,0,.25)"></span>
@@ -15088,8 +15095,10 @@ class Component extends DCLogic {
     const pctMonth = podil(BUD.today, BUD.days);
     const fixed = cats.filter(c => c.flag === 'nedotknutelné').reduce((a, c) => a + c.spent, 0);
     const pctNoFixed = podil(spent - fixed, plan - fixed);
-    // Uložený plán ze serveru; ukázka měla napevno 50 000 Kč.
-    const ulozenyPlan = BUD.plan || 50000;
+    // Uložený plán ze serveru; ukázka měla napevno 50 000 Kč. Dvojice bez limitů
+    // v kategoriích plán nemá — dosazených 50 000 Kč by kreslilo čáru a „pod plánem o…"
+    // podle cizího rozpočtu.
+    const ulozenyPlan = BUD.plan || (this.ukazka() ? 50000 : 0);
     const over = cats.filter(c => c.spent > c.limit);
     const sorted = cats.slice().sort((a, b) => b.spent - a.spent);
     // Osmá barva je poslední — zbytek se slévá do „Ostatní“, aby v jednom grafu
@@ -15268,8 +15277,12 @@ class Component extends DCLogic {
       })),
       budSelMonth: vybrany[0], budSelValue: this.kc(vybrany[1]),
       budSelDiff: !BUD.months.length ? 'zatím bez měsíců v knize'
+        : !ulozenyPlan ? 'plán zatím není — nastavíte ho limity kategorií'
         : vybrany[1] > ulozenyPlan ? 'nad plánem o ' + this.kc(vybrany[1] - ulozenyPlan) : 'pod plánem o ' + this.kc(ulozenyPlan - vybrany[1]),
       budPlanLine: Math.min(100, Math.round(ulozenyPlan / maxM * 100)) + '%',
+      // Popisek čáry plánu stál v šabloně napsaný („plán 50 000 Kč").
+      budPlanLabel: 'plán ' + this.kc(ulozenyPlan),
+      budHasPlan: ulozenyPlan > 0,
       budGoals: BUD.goals.map(g => {
         const pct = Math.min(g[2] / g[1], 1);
         return {
@@ -19905,6 +19918,25 @@ class Component extends DCLogic {
     const NOW = this.dnes().getTime();
     const sealedOf = d => !!d.letter && czTs(d.openAt) > NOW;
     const hiddenN = list.filter(d => d.priv && (d.who || 'A') !== lockWho).length;
+    const ukazka = this.ukazka();
+    /*
+     * Nálada zápisu: ruční volba, pak co přišlo ze serveru („nálada klid"
+     * v doplňku řádku). Ukázka si ji rozdávala dokola podle pořadí — skutečný
+     * zápis bez nálady ji nemá.
+     */
+    const naladaZapisu = (d, i) => (s.dnMoods || {})[d.title] || d.mood
+      || ((/nálada (\S+)/.exec(d.meta || '') || [])[1]) || (ukazka ? moods[(i % 4) + 1] : '');
+    const denKlic = t => { const x = new Date(t); return x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0'); };
+    /*
+     * Fotky k zápisu jsou fotky z téhož dne — jak slibuje hlavička seznamu.
+     * Brala se čtveřice podle pořadí zápisu (`slice(i * 3, …)`), takže pod
+     * zápisem z Vánoc visely letní fotky.
+     */
+    const fotkyZapisu = (d, i) => {
+      if (ukazka) return this.photos().slice(i * 3, i * 3 + 4);
+      const t = czTs(d.date);
+      return t ? this.photos().filter(p => p.day === denKlic(t)).slice(0, 4) : [];
+    };
     const items = list.filter(d => !q || (d.title + ' ' + d.text).toLowerCase().indexOf(q) >= 0)
       .map((d, i) => ({
         date: d.date, title: d.title, meta: d.meta || '',
@@ -19915,15 +19947,15 @@ class Component extends DCLogic {
         expandLabel: openMap[d.title] ? 'Sbalit zápis' : 'Zobrazit celý zápis',
         words: d.text.split(/\s+/).filter(Boolean).length + ' slov · ' + Math.max(1, Math.round(d.text.split(/\s+/).length / 180)) + ' min čtení',
         expand: () => this.setState({ dnExpand: { ...openMap, [d.title]: !openMap[d.title] } }),
-        mood: (s.dnMoods || {})[d.title] || moods[(i % 4) + 1],
-        photos: sealedOf(d) ? [] : this.photos().slice(i * 3, i * 3 + 4).map(p => ({ bg: p.bg, open: () => this.openLb(p.id) })),
+        mood: naladaZapisu(d, i),
+        photos: sealedOf(d) ? [] : fotkyZapisu(d, i).map(p => ({ bg: p.bg, open: () => this.openLb(p.id) })),
         priv: !!d.priv, letter: !!d.letter, privWho: d.who || 'A',
         tagOn: !!(d.priv || d.letter),
         tagLabel: d.priv ? 'jen ' + LOCKWHO[d.who || 'A'] : sealedOf(d) ? 'zapečetěno do ' + (d.openAt || '—') : d.letter ? 'dopis otevřen' : '',
         tagIcon: d.priv ? 'ph-lock-simple' : sealedOf(d) ? 'ph-envelope' : 'ph-envelope-simple-open',
         tagBg: d.priv ? 'var(--g-acc-soft)' : 'var(--g-mag-soft)',
         tagFg: d.priv ? 'var(--g-acc-deep)' : 'var(--g-mag)',
-        edit: () => this.setState({ dnDlg: { mode: 'edit', key, orig: d.title, date: d.date, title: d.title, text: d.text, priv: !!d.priv, letter: !!d.letter, openAt: d.openAt || this.vychoziOtevreni(), who: d.who || lockWho, mood: (s.dnMoods || {})[d.title] || moods[(i % 4) + 1] } }),
+        edit: () => this.setState({ dnDlg: { mode: 'edit', key, orig: d.title, date: d.date, title: d.title, text: d.text, priv: !!d.priv, letter: !!d.letter, openAt: d.openAt || this.vychoziOtevreni(), who: d.who || lockWho, mood: naladaZapisu(d, i) } }),
         del: () => {
           const prev = list;
           this.setState({ xDiary: { ...s.xDiary, [key]: list.filter(x => x !== d) } });
@@ -19958,13 +19990,60 @@ class Component extends DCLogic {
         ? this.pl(hiddenN, 'soukromý zápis', 'soukromé zápisy', 'soukromých zápisů') + ' druhého z nás tu nevidíte — soukromé zápisy zůstávají u autora.'
         : '',
       ...(() => {
-        // Roční heatmap nálady — 53 týdnů × 7 dní, deterministicky z dat zápisů a fotek.
+        const open = s.dnHeatOpen !== false;
+        if (!ukazka) {
+          /*
+           * Nálada za rok ze skutečných zápisů.
+           *
+           * Mřížka se barvila vzorcem z čísla týdne, takže dvojice s nula zápisy
+           * četla „247 dnů s náladou za posledních dvanáct měsíců" a procenta
+           * radosti a únavy. Den má barvu, jen když ten den vznikl zápis
+           * s náladou; cizí soukromý zápis se nepočítá, stejně jako se neukáže.
+           */
+          const BARVY = { radost: 'var(--g-ok)', klid: 'var(--g-acc)', 'únava': 'var(--g-warn)', 'vděk': 'var(--g-mag)', smutek: 'var(--g-ink3)' };
+          const podleDne = {};
+          list.forEach((d, i) => {
+            if (d.priv && (d.who || 'A') !== lockWho) return;
+            const t = czTs(d.date), m = naladaZapisu(d, i);
+            if (t && m) podleDne[denKlic(t)] = m;
+          });
+          const dnes = this.dnes();
+          const konec = new Date(dnes.getFullYear(), dnes.getMonth(), dnes.getDate());
+          // 53 sloupců po týdnu, poslední končí dneškem; první začíná pondělím.
+          const den = new Date(konec);
+          den.setDate(den.getDate() - ((konec.getDay() + 6) % 7) - 52 * 7);
+          const cells = [], counts = {};
+          for (; den <= konec; den.setDate(den.getDate() + 1)) {
+            const m = podleDne[denKlic(den.getTime())];
+            if (m) counts[m] = (counts[m] || 0) + 1;
+            cells.push({
+              bg: m ? (BARVY[m] || 'var(--g-ink2)') : 'var(--g-line2)', op: m ? '0.9' : '1',
+              title: den.getDate() + '. ' + (den.getMonth() + 1) + '. ' + den.getFullYear() + ' · ' + (m || 'bez zápisu s náladou')
+            });
+          }
+          const total = Object.keys(counts).reduce((a, k) => a + counts[k], 0);
+          const poradi = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
+          return {
+            dnHeatOpen: open,
+            dnHeatToggle: () => this.setState({ dnHeatOpen: !open }),
+            dnHeatLabel: open ? 'Skrýt náladu' : 'Nálada za rok',
+            dnHeatCells: cells,
+            dnHeatHead: total
+              ? this.pl(total, 'den s náladou', 'dny s náladou', 'dnů s náladou') + ' za posledních dvanáct měsíců'
+              : 'zatím žádný zápis s náladou',
+            dnHeatLegend: poradi.map(k => ({ label: k, color: BARVY[k] || 'var(--g-ink2)', pct: Math.round(counts[k] / total * 100) + ' %' })),
+            dnHeatMonths: [],
+            dnHeatNote: total
+              ? 'Nejčastěji ' + poradi[0] + ' (' + Math.round(counts[poradi[0]] / total * 100) + ' %). Sloupec je týden, řádek den v týdnu.'
+              : 'Barva se objeví u dne, kdy vznikne zápis s vybranou náladou. Sloupec je týden, řádek den v týdnu.'
+          };
+        }
+        // Roční heatmap nálady v ukázce — 53 týdnů × 7 dní, deterministicky ze vzorce.
         const MOODC = {
           radost: 'var(--g-ok)', klid: 'var(--g-acc)', unava: 'var(--g-warn)',
           smutek: 'var(--g-ink3)', vztek: 'var(--g-mag)'
         };
         const MOODL = { radost: 'radost', klid: 'klid', unava: 'únava', smutek: 'smutek', vztek: 'napětí' };
-        const open = s.dnHeatOpen !== false;
         const cells = [];
         const counts = { radost: 0, klid: 0, unava: 0, smutek: 0, vztek: 0 };
         const keys = Object.keys(MOODC);
@@ -19999,7 +20078,7 @@ class Component extends DCLogic {
           })()
         };
       })(),
-      dnNew: () => this.setState({ dnDlg: { mode: 'new', key, orig: null, date: this.dnesCesky(), title: '', text: '', mood: 'radost', priv: false, letter: false, openAt: '18. října 2026', who: lockWho } })
+      dnNew: () => this.setState({ dnDlg: { mode: 'new', key, orig: null, date: this.dnesCesky(), title: '', text: '', mood: ukazka ? 'radost' : '', priv: false, letter: false, openAt: this.vychoziOtevreni(), who: lockWho } })
     };
   }
   // Datum v češtině („18. října 2026“) → timestamp; 0 znamená nepřečtené datum.
@@ -20825,11 +20904,39 @@ class Component extends DCLogic {
   serVals() {
     const s = this.state;
     const ph = this.photos().filter(p => (s.deleted || []).indexOf(p.id) < 0);
-    // Série = skupina po sobě jdoucích snímků ze stejného dne a místa.
+    const ukazka = this.ukazka();
     const groups = [];
-    for (let i = 0; i + 2 < ph.length && groups.length < 6; i += 7) {
-      const g = ph.slice(i, i + 4 + (i % 3));
-      if (g.length >= 3) groups.push({ id: 'ser' + i, items: g });
+    if (ukazka) {
+      // Ukázka nemá časy pořízení — série i ostrost jsou v ní jen ilustrační.
+      for (let i = 0; i + 2 < ph.length && groups.length < 6; i += 7) {
+        const g = ph.slice(i, i + 4 + (i % 3));
+        if (g.length >= 3) groups.push({ id: 'ser' + i, items: g, gap: 1 });
+      }
+    } else {
+      /*
+       * Série = snímky pořízené nejvýš dvě sekundy po sobě.
+       *
+       * Skládaly se po sedmi dlaždicích podle pořadí v knihovně, takže „série"
+       * byla čtveřice z různých dní — a „zbytek do koše" mazal fotky jen proto,
+       * že v mřížce stály vedle sebe. Identifikátor je první snímek série, ne
+       * pořadí: po smazání se pořadí posune a vyřízená série by se přepsala
+       * na jinou.
+       */
+      const ROZESTUP = 2;
+      const sCasem = ph.filter(p => typeof p.ts === 'number' && !p.isVideo).sort((a, b) => a.ts - b.ts);
+      let rada = [];
+      const uzavri = () => {
+        if (rada.length >= 2) {
+          const gap = rada.slice(1).reduce((m, p, i) => Math.max(m, p.ts - rada[i].ts), 0);
+          groups.push({ id: 'ser-' + rada[0].id, items: rada, gap });
+        }
+        rada = [];
+      };
+      sCasem.forEach(p => {
+        if (rada.length && p.ts - rada[rada.length - 1].ts > ROZESTUP) uzavri();
+        rada.push(p);
+      });
+      uzavri();
     }
     const gi = Math.min(s.serIdx || 0, Math.max(0, groups.length - 1));
     const g = groups[gi];
@@ -20840,12 +20947,14 @@ class Component extends DCLogic {
     const items = g.items.map((p, i) => {
       const e = this.edited(p);
       const kept = keep[g.id] === undefined ? 0 : keep[g.id];
-      // Skóre ostrosti jen jako deterministická hodnota z indexu.
-      const sharp = 62 + ((p.n * 7) % 34);
+      // Skóre ostrosti v ukázce jen jako deterministická hodnota z indexu.
+      // Aplikace ostrost neměří, takže u skutečných fotek žádné číslo není.
+      const sharp = ukazka ? 62 + ((p.n * 7) % 34) : null;
       return {
-        bg: p.bg, name: e.name, time: e.timeVal || '—', size: e.size,
-        sharp: sharp + ' %', sharpW: sharp + '%',
-        best: sharp >= 88,
+        id: p.id, bg: p.bg, name: e.name, size: e.size,
+        time: e.timeVal || (typeof p.ts === 'number' ? new Date(p.ts * 1000).toLocaleTimeString('cs-CZ') : '—'),
+        hasSharp: sharp !== null, sharp: sharp !== null ? sharp + ' %' : '', sharpW: (sharp || 0) + '%',
+        best: sharp !== null && sharp >= 88,
         on: i === kept,
         ring: i === kept ? '3px solid var(--g-acc)' : '1px solid var(--g-line2)',
         label: i === kept ? 'ponecháme' : 'do koše',
@@ -20861,18 +20970,27 @@ class Component extends DCLogic {
       appIsSer: true, serEmpty: false,
       serHead: this.pl(openGroups.length, 'série čeká', 'série čekají', 'sérií čeká') + ' na projití · '
         + 'série ' + (gi + 1) + ' z ' + groups.length + ' · ' + this.pl(g.items.length, 'snímek', 'snímky', 'snímků'),
-      serMeta: items[0].name + ' – ' + items[items.length - 1].name + ' · rozestup pod dvě sekundy',
+      serMeta: items[0].name + ' – ' + items[items.length - 1].name + ' · '
+        + (ukazka ? 'rozestup pod dvě sekundy' : g.gap === 0 ? 'všechny ve stejné sekundě' : 'rozestup nejvýš ' + g.gap + ' s'),
       serItems: items,
-      serAdvice: bestIdx === keptIdx
+      serCanBest: ukazka,
+      serAdvice: !ukazka
+        ? 'Ostrost aplikace neměří — otevřete detail nebo „Srovnat" a ponechte snímek, který se vám líbí.'
+        : bestIdx === keptIdx
         ? 'Vybraný snímek je i nejostřejší — můžete potvrdit.'
         : 'Nejostřejší je ' + items[bestIdx].name + ' (' + items[bestIdx].sharp + '). Vybraný má ' + items[keptIdx].sharp + '.',
-      serPickBest: () => this.setState({ serKeep: { ...keep, [g.id]: bestIdx } }),
+      serPickBest: ukazka
+        ? () => this.setState({ serKeep: { ...keep, [g.id]: bestIdx } })
+        : () => this.toast('Ostrost aplikace neměří — snímek vyberte kliknutím', { icon: 'ph-info' }),
       serPrev: () => this.setState({ serIdx: Math.max(0, gi - 1) }),
       serNext: () => this.setState({ serIdx: Math.min(groups.length - 1, gi + 1) }),
       serNoPrev: gi === 0, serNoNext: gi >= groups.length - 1,
       serConfirm: () => {
         const prevDone = resolved, prevTrash = s.trashRows;
         const drop = items.filter((it, i) => i !== keptIdx);
+        // Se serverem doopravdy do koše. Série po smazání sama zmizí (zbude
+        // z ní jeden snímek), takže index zůstává — ukáže se další.
+        if (this.doKoseNaServeru(drop.map(d => d.id), () => this.setState({ serDone: { ...this.state.serDone, [g.id]: true }, serIdx: gi }))) return;
         const rows = (this._trashNow || []).slice();
         drop.forEach(d => rows.unshift({ name: d.name, from: 'Srovnání série', by: this.meWho(), when: 'právě teď', left: '30 dní', n: 4 }));
         this.setState({ serDone: { ...prevDone, [g.id]: true }, trashRows: rows, serIdx: Math.min(groups.length - 1, gi + 1) });
@@ -29194,6 +29312,43 @@ class Component extends DCLogic {
     if (window.GalerieObnovObrazovku) window.GalerieObnovObrazovku();
   }
 
+  /*
+   * Víc položek do koše najednou — na serveru, ne jen v prohlížeči.
+   *
+   * Hromadné „Do koše" a „Ponechat vybraný, zbytek do koše" v sérii zapisovaly
+   * jen `deleted` a řádky koše do stavu prohlížeče. Takový klíč server nezná:
+   * hláška slíbila „30 dní na vrácení" a fotky dál ležely v knihovně, na Disku
+   * i u druhého. Jde se na server jedním požadavkem (`media/do-kose`) — po
+   * jednom `DELETE` na fotku by větší výběr vyčerpal limit API.
+   *
+   * Vrací `false`, když server není nebo nejde o jeho položky (ukázka) —
+   * volající pak nechá původní chování prototypu.
+   */
+  doKoseNaServeru(ids, hotovo) {
+    const api = window.GalerieApi;
+    if (!api || !api.post || api.mode !== 'http' || !ids.length || !ids.every(id => /^[0-9a-f-]{36}$/.test(id))) return false;
+
+    api.post('media/do-kose', { ids }).then(res => {
+      const presunute = (res && res.ids) || [];
+      const selhalo = ids.length - presunute.length;
+      presunute.forEach(id => this.odeberZKnihovny(id));
+      if (window.GalerieObnovit) { window.GalerieObnovit('knihovna'); window.GalerieObnovit('system'); }
+      if (!presunute.length) { this.toast('Nic z výběru už v knihovně není', { icon: 'ph-info' }); return; }
+      if (hotovo) hotovo(presunute);
+      this.toast(this.pl(presunute.length, 'položka přesunuta', 'položky přesunuty', 'položek přesunuto') + ' do koše · 30 dní na vrácení'
+        + (selhalo ? ' · ' + this.pl(selhalo, 'položka už v knihovně nebyla', 'položky už v knihovně nebyly', 'položek už v knihovně nebylo') : ''), {
+        icon: 'ph-trash',
+        undo: () => api.post('kos/vratit', { ids: presunute }).then(res2 => {
+          if (res2 && window.GalerieObsahNavlec) window.GalerieObsahNavlec(res2.data, res2.prazdne);
+          if (window.GalerieObnovit) window.GalerieObnovit('knihovna');
+          this.toast('Vráceno z koše', { icon: 'ph-arrow-counter-clockwise' });
+        }).catch(() => this.toast('Vrácení se nepodařilo', { icon: 'ph-warning', color: 'var(--g-mag)' }))
+      });
+    }).catch(() => this.toast('Přesun do koše se nepodařil', { icon: 'ph-warning', color: 'var(--g-mag)' }));
+
+    return true;
+  }
+
   /* Celá obrazovka — prohlížeč to umí sám, jen se ho nikdo neptal. */
   celaObrazovka = () => {
     const el = document.documentElement;
@@ -30193,6 +30348,18 @@ class Component extends DCLogic {
         const open = drawer ? !!s.sbDrawer : (compact ? false : s.sbOpen !== false);
         return {
           bpDrawer: drawer, bpCompact: compact, bpPhone: phone, bpWide: !compact,
+          // Měsíc v kalendáři: vedle panelu dne jen na širokém okně. Na tabletu
+          // na výšku zbylo mřížce 370 px a události v buňkách se překrývaly.
+          calMonthCols: vw < 1000 ? 'minmax(0,1fr)' : 'minmax(0,1fr) minmax(300px,340px)',
+          // Nastavení: 230px postranní menu nechalo na malém tabletu obsahu 360 px
+          // a tlačítka řádků („Deník, Finance a Zprávy") vyjela z obrazovky.
+          // Pod 720 px jde menu nad obsah jako zalomená řada.
+          setDir: vw < 720 ? 'column' : 'row',
+          setNavW: vw < 720 ? 'auto' : '230px',
+          setNavDisplay: vw < 720 ? 'flex' : 'block',
+          setNavPad: vw < 720 ? '12px 16px 4px' : '14px 12px 40px',
+          setNavBtnW: vw < 720 ? 'auto' : '100%',
+          setBodyPad: vw < 720 ? '8px 16px 70px' : '8px 28px 70px',
           sbOpen: open,
           // V režimu zásuvky je panel mimo tok (fixed) — mřížka musí mít jediný sloupec,
           // jinak by obsah spadl do nulového prvního.
@@ -31876,6 +32043,7 @@ class Component extends DCLogic {
         { label: 'Do trezoru', icon: 'ph-lock-key', go: () => { const prev = this.vaultIds(); this.setState({ vaultAdded: prev.concat(s.sel.filter(i => !prev.includes(i))), sel: [], selectMode: false }); this.toast(this.pl(s.sel.length, 'položka zamčena', 'položky zamčeny', 'položek zamčeno') + ' v trezoru', { icon: 'ph-lock-key', undo: () => this.setState({ vaultAdded: prev, sel: s.sel, selectMode: true }) }); } },
         { label: 'Do koše', icon: 'ph-trash', go: () => {
           const prevDel = s.deleted || [], prevTrash = s.trashRows, ids = s.sel;
+          if (this.doKoseNaServeru(ids, () => this.setState({ sel: [], selectMode: false }))) return;
           const items = this.photos().filter(p => ids.includes(p.id));
           const rows = (this._trashNow || []).slice();
           items.forEach(p => rows.unshift({ id: p.id, name: p.name, from: this.edited(p).album || 'Knihovna', by: this.meWho(), when: 'právě teď', left: '30 dní', n: p.n }));

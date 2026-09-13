@@ -7,6 +7,7 @@ use App\Models\GallerySpace;
 use App\Models\MediaItem;
 use App\Models\Person;
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -128,6 +129,24 @@ class ObsahKnihovnaTest extends TestCase
 
         $this->assertSame(['date', 'place'], $fotky['IMG_1.jpg']['miss']);
         $this->assertSame([], $fotky['IMG_2.jpg']['miss']);
+    }
+
+    /**
+     * Čas pořízení jde s fotkou, čas nahrání ne.
+     *
+     * Série snímků se skládá z rozestupu mezi nimi; kdyby se dosadil čas
+     * nahrání, byla by celá dávka z telefonu jedna „série".
+     */
+    public function test_cas_porizeni_jde_jen_se_skutecnym_datem(): void
+    {
+        $this->fotka(['taken_at' => null, 'uploaded_at' => '2026-01-10 08:00:00']);
+        $this->fotka(['taken_at' => '2026-01-11 08:00:01'], 2);
+
+        $fotky = collect($this->getJson('/api/data/knihovna')->assertOk()->json('data.PHOTOS'))
+            ->keyBy('name');
+
+        $this->assertArrayNotHasKey('ts', $fotky['IMG_1.jpg']);
+        $this->assertSame(CarbonImmutable::parse('2026-01-11 08:00:01')->getTimestamp(), $fotky['IMG_2.jpg']['ts']);
     }
 
     /**

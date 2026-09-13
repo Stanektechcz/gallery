@@ -290,6 +290,7 @@ Route::middleware(['auth:sanctum', 'throttle:600,1'])->prefix('api')->group(func
     Route::post('media/chunk', [MediaController::class, 'chunk'])->name('galerie.media.chunk');
     Route::get('media/{uuid}/raw', [MediaController::class, 'raw'])->name('galerie.media.raw');
     Route::delete('media/{uuid}', [MediaController::class, 'destroy'])->name('galerie.media.destroy');
+    Route::post('media/do-kose', [MediaController::class, 'destroyMany'])->name('galerie.media.destroy-many');
 });
 
 /*

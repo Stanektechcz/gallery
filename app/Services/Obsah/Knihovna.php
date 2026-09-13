@@ -363,6 +363,14 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
                     $m->taken_at ? null : 'date',
                     $m->location_name || $m->latitude ? null : 'place',
                 ])),
+                /*
+                 * Okamžik pořízení v sekundách — jen když ho snímek opravdu nese.
+                 *
+                 * „Srovnat sérii" skládala série po sedmi dlaždicích podle pořadí
+                 * a psala k nim „rozestup pod dvě sekundy". Série se pozná jen
+                 * z času pořízení; čas nahrání by z celé dávky udělal jednu sérii.
+                 */
+                'ts' => $m->taken_at ? $m->taken_at->getTimestamp() : null,
                 'n' => $poradi,
             ];
 
