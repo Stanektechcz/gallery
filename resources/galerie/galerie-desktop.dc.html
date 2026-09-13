@@ -28773,7 +28773,21 @@ class Component extends DCLogic {
           this.toast('Servis ' + i.name + ' zapsán mezi lhůty · ' + i.serviceNext, { icon: 'ph-calendar-plus', undo: () => setDues(prev) });
         },
         vaultOff: i.doc, vaultOp: i.doc ? .45 : 1,
-        vault: () => { const prev = inv; this.setState({ inv: inv.map(x => x.id === i.id ? { ...x, doc: true } : x) }); this.toast('Doklad k ' + i.name + ' uložen do trezoru', { icon: 'ph-lock-key', undo: () => this.setState({ inv: prev }) }); }
+        /*
+         * „Uložit doklad do trezoru" neukládalo žádný soubor — jen přepnulo
+         * „chybí" na „v trezoru". U dvojice se to proto ptá: aplikace zapíše,
+         * že doklad máte, a sken se nahrává v Trezoru, kam tlačítko vede.
+         */
+        vault: () => {
+          const prev = inv;
+          const oznac = () => { this.setState({ inv: inv.map(x => x.id === i.id ? { ...x, doc: true } : x), confirm: null }); this.toast('Zapsáno — doklad k ' + i.name + ' máte v trezoru', { icon: 'ph-lock-key', undo: () => this.setState({ inv: prev }) }); };
+          if (this.ukazka()) { oznac(); return; }
+          this.setState({ confirm: {
+            title: 'Doklad k ' + i.name, cta: 'Doklad už v trezoru je', btnBg: 'var(--g-acc)',
+            body: 'Aplikace zapíše, že doklad máte. Samotný sken nebo fotku účtenky nahrajte do Trezoru — tam ho nenajde hledání a druhý ho neuvidí bez ověření.',
+            go: oznac
+          } });
+        }
       }))
     };
   }

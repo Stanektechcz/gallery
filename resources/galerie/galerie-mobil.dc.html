@@ -3904,7 +3904,13 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                   <i class="ph-duotone ph-lock-key" style="font-size:36px; color:var(--g-ink2)"></i>
                   <div style="font-size:19px; margin-top:12px">Trezor je zamčený</div>
                   <div style="font-size:13.5px; color:var(--g-ink2); margin-top:8px; text-wrap:pretty">Obsah se nenajde ani v hledání. Odemkněte druhým ověřením.</div>
-                  <button onClick="{{ vaultUnlock }}" class="btn btn-primary" style="margin-top:18px; min-height:44px">Odemknout Face ID</button>
+                  <sc-if value="{{ vaultNeedsPwd }}">
+                    <input class="input" type="password" autocomplete="current-password" value="{{ vaultPwd }}" onInput="{{ vaultSetPwd }}" placeholder="Heslo do galerie" aria-label="Heslo do galerie" style="width:100%; margin-top:16px; min-height:44px" />
+                    <sc-if value="{{ vaultHasErr }}">
+                      <div style="font-size:12.5px; color:var(--g-mag); margin-top:8px">{{ vaultErr }}</div>
+                    </sc-if>
+                  </sc-if>
+                  <button onClick="{{ vaultUnlock }}" class="btn btn-primary" style="margin-top:14px; min-height:44px">{{ vaultUnlockLabel }}</button>
                 </div>
               </sc-if>
               <sc-if value="{{ vaultOpen }}">
@@ -5631,7 +5637,8 @@ const telefonZeServeru = (() => {
     Object.assign(cil, nove || {});
   };
   const krestni = j => String(j || '').trim().split(/\s+/)[0];
-  const radek = r => [String((r || [])[0] || ''), String((r || [])[1] || ''), (r || [])[2] || null];
+  // Čtvrté pole je identifikátor řádku ze serveru (`shopping:…`, `inbox:…`) — odškrtnutí pak míří na řádek, ne na pořadí.
+  const radek = r => [String((r || [])[0] || ''), String((r || [])[1] || ''), (r || [])[2] || null, (r || [])[7] || null];
 
   return () => {
     const G = window.GalerieData || {};
@@ -5677,8 +5684,9 @@ const telefonZeServeru = (() => {
       const v = d[4] || {};
       return [d[0], d[1], d[2], [d[3] || '', v.priv ? 'jen moje' : ''].filter(Boolean).join(' · '), null, v.uuid || null, v.mine !== false];
     }));
+    // Klíč řádku (`inbox:…`) dává server — rozhodnutí se pak uloží k řádku, ne k jeho pořadí.
     nahrad(INBOX, (AL.inbox || []).map((r, i) => ({
-      id: 'si' + i, icon: 'ph-tray', src: String(r[1] || ''), title: String(r[0] || ''),
+      id: r[7] || ('si' + i), icon: 'ph-tray', src: String(r[1] || ''), title: String(r[0] || ''),
       why: '', cta: 'Vyřízeno', taps: '', eff: 'server', res: 'vyřízeno'
     })));
     nahrad(MEVSEED, G.EVSEED || []);
@@ -6379,7 +6387,8 @@ class Component extends DCLogic {
           this.toast('Servis zapsán mezi lhůty · ' + i.serviceNext, { icon: 'ph-calendar-plus', undo: () => setDues(prev) });
         },
         vaultOff: i.doc, vaultOp: i.doc ? .45 : 1,
-        vault: () => { const prev = inv; this.setState({ inv: inv.map(x => x.id === i.id ? { ...x, doc: true } : x) }); this.toast('Doklad uložen do trezoru', { icon: 'ph-lock-key', undo: () => this.setState({ inv: prev }) }); }
+        // Soubor se tu nenahrává — zapíše se jen, že doklad v trezoru je (sken se nahrává v Trezoru).
+        vault: () => { const prev = inv; this.setState({ inv: inv.map(x => x.id === i.id ? { ...x, doc: true } : x) }); this.toast('Zapsáno — doklad k ' + i.name + ' máte v trezoru', { icon: 'ph-lock-key', undo: () => this.setState({ inv: prev }) }); }
       }))
     };
   }
@@ -6592,7 +6601,10 @@ class Component extends DCLogic {
        'fsAdd fsTry fsWin quartTalk quartPlan quartTook indepLearn indepSwap ' +
        'trustCalled trustTold svedAdj exitOff exitWho exitMade dayBonus dayGiven dayShift ' +
        'blizAdd blizWA blizWM blizBlock kidsStance kidsYear kidsFixed kidsTalks ' +
-       'mineInc mineEven parDone mechLog rowDone sw rules memSaved memLater curVotesM navHide evUndone annFmtM kapOpened nedDone klQuiet evPick rtOnM ndStateM whLogM offPackM memPrefs lbTags lbVers setVals lockIdle lockSecs lockBio lockStart edits cycDays wishes ideas buys').split(' ').forEach(x => { this._pKeep[x] = 1; });
+       'mineInc mineEven parDone mechLog rowDone sw rules memSaved memLater curVotesM navHide evUndone annFmtM kapOpened nedDone klQuiet evPick rtOnM ndStateM whLogM offPackM memPrefs lbTags lbVers setVals lockIdle lockSecs lockBio lockStart edits cycDays wishes ideas buys ' +
+       // Domácnost, rozhodnutí, sliby, rodina, žádosti a kapsle: server je zapisuje do tabulek.
+       // Bez nich telefon hlásil „hotovo" a „žádost odeslána" a změna žila jen do obnovení.
+       'chores choreLog dues inv decs cools proms fam nudges kapsules').split(' ').forEach(x => { this._pKeep[x] = 1; });
     }
     return !!this._pKeep[k];
   }
@@ -6686,10 +6698,16 @@ class Component extends DCLogic {
       },
       pwaCanInstall: !!(window.__pwa && window.__pwa.prompt),
       pwaInstall: () => {
-        const pr = window.__pwa && window.__pwa.prompt;
+        const pr = (window.__pwa && window.__pwa.prompt) || window.__instalace;
         if (!pr) { this.toast('Instalaci nabídne systém · v Safari použijte Sdílet → Na plochu', { icon: 'ph-download-simple' }); return; }
         pr.prompt();
-        this.toast('Přidávám na plochu', { icon: 'ph-device-mobile' });
+        // Hláška až podle volby — výzvu jde odmítnout a „přidávám" by pak lhalo.
+        (pr.userChoice || Promise.resolve({})).then(v => {
+          if (window.__pwa) window.__pwa.prompt = null;
+          window.__instalace = null;
+          if (v && v.outcome === 'accepted') { window.__nainstalovano = true; this.toast('Aplikace se přidává na plochu', { icon: 'ph-device-mobile' }); }
+          this.forceUpdate();
+        });
       }
     };
   }
@@ -7855,6 +7873,8 @@ class Component extends DCLogic {
   // Jediný přepínač připojení. Používá ho tlačítko na Synchronizaci i akce
   // v Nastavení, aby stav a hláška vždy souhlasily (net je boolean).
   netToggle() {
+    // U dvojice se offline nepředstírá — připojení řídí telefon, aplikace jen ukáže, co čeká na odeslání.
+    if (this.galerieNaServeru()) { this.push('sync'); return; }
     const next = !this.state.net;
     this.setState({ net: next, queue: this.queueList().map(r => next ? r : (r.st === 'up' ? Object.assign({}, r, { st: 'wait', meta: 'offline · čeká ve frontě' }) : r)) });
     if (next) { const api = window.GalerieApi; if (api && api.flush) api.flush(); }
@@ -8777,11 +8797,13 @@ class Component extends DCLogic {
   // Nahrání z telefonu: skutečný výběr souborů. Se backendem jdou soubory
   // přes GalerieApi.upload (velké po částech), bez něj se jen započítají —
   // knihovna v prototypu roste o to, co jste vybrali, ne o vymyšlené číslo.
-  pickMedia() {
+  pickMedia(fotak) {
     const inp = document.createElement('input');
     inp.type = 'file';
-    inp.multiple = true;
-    inp.accept = 'image/*,video/*';
+    inp.multiple = !fotak;
+    inp.accept = fotak ? 'image/*' : 'image/*,video/*';
+    // „Vyfotit" otevře rovnou fotoaparát; fotka pak jde stejnou cestou jako výběr z galerie.
+    if (fotak) inp.setAttribute('capture', 'environment');
     inp.style.display = 'none';
     inp.onchange = async () => {
       const files = Array.from(inp.files || []);
@@ -9022,18 +9044,29 @@ class Component extends DCLogic {
     const esc = t => String(t === null || t === undefined ? '' : t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     const w = window.open('', '_blank');
     if (!w) { this.toast('Prohlížeč zablokoval okno pro tisk — povolte vyskakovací okna', { icon: 'ph-warning' }); return false; }
+    // Adresa obrázku jen z téhož serveru (podepsaný náhled) — nic cizího se do tisku nenačte.
+    const zTohotoServeru = src => { const t = String(src || ''); return (t.charAt(0) === '/' && t.charAt(1) !== '/') || t.indexOf(location.origin + '/') === 0; };
+    const obrazek = o => zTohotoServeru(o.src)
+      ? '<figure><img src="' + esc(o.src) + '" alt=""><figcaption>' + esc(o.popis) + '</figcaption></figure>' : '';
     const telo = (bloky || []).map(b => '<section>' + (b.nadpis ? '<h2>' + esc(b.nadpis) + '</h2>' : '')
       + (b.text ? '<p>' + esc(b.text) + '</p>' : '')
+      + (b.obrazky ? '<div class="fotky">' + b.obrazky.map(obrazek).join('') + '</div>' : '')
       + (b.radky ? '<table>' + b.radky.map(r => '<tr><th>' + esc(r[0]) + '</th><td>' + esc(r[1]) + '</td></tr>').join('') + '</table>' : '')
       + '</section>').join('');
     w.document.open();
     w.document.write('<!doctype html><html lang="cs"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' + esc(nazev) + '</title><style>'
       + 'body{font:15px/1.5 Georgia,serif;color:#1d1b16;margin:16px;max-width:680px}h1{font-size:22px;margin:0 0 4px}p.sub{color:#6a6458;font-size:12px;margin:0 0 14px}'
       + 'h2{font-size:14px;margin:16px 0 6px;border-bottom:1px solid #1d1b16;text-transform:uppercase;letter-spacing:.08em}table{border-collapse:collapse;width:100%}'
-      + 'th,td{text-align:left;padding:4px 8px 4px 0;border-bottom:1px solid #ddd6c8;vertical-align:top}th{font-weight:normal;color:#6a6458;width:40%}</style></head><body>'
+      + 'th,td{text-align:left;padding:4px 8px 4px 0;border-bottom:1px solid #ddd6c8;vertical-align:top}th{font-weight:normal;color:#6a6458;width:40%}'
+      + '.fotky{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}figure{margin:0;break-inside:avoid}figure img{width:100%;aspect-ratio:4/3;object-fit:cover;display:block}figcaption{font-size:11px;color:#6a6458;margin-top:3px}</style></head><body>'
       + '<h1>' + esc(nazev) + '</h1>' + (podtitul ? '<p class="sub">' + esc(podtitul) + '</p>' : '') + telo + '</body></html>');
     w.document.close();
-    setTimeout(() => { try { w.focus(); w.print(); } catch (e) {} }, 300);
+    // S fotkami se tiskne až po jejich načtení — jinak by v PDF zůstala prázdná pole.
+    const obr = Array.from(w.document.images || []);
+    const tisk = () => { try { w.focus(); w.print(); } catch (e) {} };
+    if (!obr.length) { setTimeout(tisk, 300); return true; }
+    Promise.all(obr.map(i => i.complete ? null : new Promise(ok => { i.onload = ok; i.onerror = ok; })))
+      .then(() => setTimeout(tisk, 200));
     return true;
   }
   galerieNaServeru() {
@@ -9247,16 +9280,54 @@ class Component extends DCLogic {
     const list = ex.map(r => Array.isArray(r)
       ? { t: r[0], m: r[1], g: r[2] || null, id: key + '-x' + String(r[0]).slice(0, 18) }
       : { t: r.t, m: r.m, g: r.g || null, id: r.id })
-      .concat((SECROWS[key] || []).map((r, i) => ({ t: r[0], m: r[1], g: r[2] || null, id: key + '-' + i })));
+      .concat((SECROWS[key] || []).map((r, i) => ({ t: r[0], m: r[1], g: r[2] || null, id: r[3] || (key + '-' + i) })));
+    /*
+     * U dvojice se odškrtnutí ukládá.
+     *
+     * `secDone` žilo jen do obnovení a nikam neodcházelo: „Koupeno" na
+     * telefonu se v nákupním seznamu na počítači nikdy neobjevilo. Serverové
+     * řádky jdou přes `rowDone` (nákup, inbox, filmy si ho berou do databáze),
+     * ostatní se drží ve společném stavu dvojice. Akce, které telefon udělat
+     * neumí (přepis hlasovky, objednávka tisku, sloučení duplicit), se tu
+     * nenabízejí — hláška bez účinku by byla horší.
+     */
+    const naServeru = this.galerieNaServeru();
+    const bezAkce = naServeru && ['voice', 'print', 'dupes', 'recovery', 'tv', 'archive', 'peopleSug'].indexOf(key) >= 0;
     return list.map(r => {
       const id = r.id;
-      const done = s.secDone[id] !== undefined ? s.secDone[id] : false;
+      const zRadku = r.g === 'koupeno' || r.g === 'viděli jsme' || r.g === 'hotovo';
+      const done = naServeru
+        ? ((s.rowDone || {})[id] !== undefined ? !!s.rowDone[id] : (s.secDone[id] !== undefined ? s.secDone[id] : (!!act && zRadku)))
+        : (s.secDone[id] !== undefined ? s.secDone[id] : false);
       return {
         id: id, title: r.t, meta: r.m,
         tag: done && act ? act[2] : r.g,
-        hasAct: !!act, actIcon: act ? act[0] : null, actLabel: done ? 'Vrátit' : (act ? act[1] : null),
+        hasAct: !!act && !bezAkce, actIcon: act ? act[0] : null, actLabel: done ? 'Vrátit' : (act ? act[1] : null),
         done: done,
         act: () => {
+          if (naServeru && key === 'tagMerge' && !done) {
+            window.GalerieApi.post('stitky/sloucit', { stitky: String(r.t).split('+').map(x => x.trim()).filter(Boolean) })
+              .then(res => { if (res && window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data, res.prazdne); this.toast((res && res.zprava) || 'Štítky sloučeny', { icon: 'ph-arrows-merge' }); })
+              .catch(e => this.chybaServeru(e, 'Štítky se nepodařilo sloučit'));
+            return;
+          }
+          if (naServeru && key === 'recipes' && !done) {
+            const RC = (window.GalerieData || {}).RECIPE_BY_TITLE || {};
+            const rk = RC[r.t];
+            if (!rk) { this.toast('„' + r.t + '“ v kuchařce chybí — do menu ho nejde dát', { icon: 'ph-info' }); return; }
+            const DNY = ['Pondělí', 'Úterý', 'Středa', 'Čtvrtek', 'Pátek', 'Sobota', 'Neděle'];
+            const den = DNY[(new Date().getDay() + 6) % 7];
+            window.GalerieApi.save({ ckMenu: Object.assign({}, (window.GalerieData || {}).CKMENU || {}, { [den]: rk }) });
+            setTimeout(() => { if (window.GalerieObnovit) window.GalerieObnovit('kucharka'); }, 2500);
+            this.toast(r.t + ' v menu na dnešek (' + den.toLowerCase() + ')', { icon: 'ph-cooking-pot' });
+            return;
+          }
+          if (naServeru) {
+            const prevR = s.rowDone || {};
+            this.setState({ rowDone: Object.assign({}, prevR, { [id]: !done }) });
+            this.toast(done ? 'Vráceno — ' + r.t : (act[2].charAt(0).toUpperCase() + act[2].slice(1)) + ' — ' + r.t, { icon: done ? 'ph-arrow-counter-clockwise' : act[0], undo: () => this.setState({ rowDone: prevR }) });
+            return;
+          }
           const prev = s.secDone;
           this.setState({ secDone: Object.assign({}, prev, { [id]: !done }) });
           this.toast(done ? 'Vráceno — ' + r.t : (act[2].charAt(0).toUpperCase() + act[2].slice(1)) + ' — ' + r.t, { icon: done ? 'ph-arrow-counter-clockwise' : act[0], undo: () => this.setState({ secDone: prev }) });
@@ -9311,6 +9382,19 @@ class Component extends DCLogic {
     const add = items.filter(t => !prev.some(x => (Array.isArray(x) ? x[0] : x.t) === t) && !(SECROWS.shop || []).some(x => x[0].toLowerCase().indexOf(String(t).toLowerCase()) >= 0))
       .map(t => [t, 'z návrhu na dnes', 'koupit']);
     if (!add.length) { this.toast('Všechno už na seznamu je', { icon: 'ph-info' }); return; }
+    /*
+     * U dvojice jde položka na společný nákupní seznam v databázi
+     * (NakupyVeStavu). Dřív ležela jen v `secExtra` telefonu — na počítači
+     * ani u druhého se neobjevila a po obnovení zmizela.
+     */
+    if (this.galerieNaServeru()) {
+      const api = window.GalerieApi, t0 = Date.now();
+      api.save({ xRows: { shopping: add.map((x, i) => ({ id: 'm-' + t0 + '-' + i, t: x[0], m: x[1] })) } });
+      setTimeout(() => { if (window.GalerieObnovit) window.GalerieObnovit('kucharka'); }, 2500);
+      if (tab) this.setState({ secId: 'kucharka', secTab: 1 });
+      this.toast(note || (this.pl(add.length, 'položka', 'položky', 'položek') + ' na společném nákupním seznamu'), { icon: 'ph-basket' });
+      return;
+    }
     this.setState(Object.assign({ secExtra: Object.assign({}, sec, { shop: add.concat(prev) }) }, tab ? { secId: 'kucharka', secTab: 1 } : {}));
     this.toast(note || (this.pl(add.length, 'položka', 'položky', 'položek') + ' na nákupní seznam'), {
       icon: 'ph-basket', undo: () => this.setState({ secExtra: sec })
@@ -9372,7 +9456,21 @@ class Component extends DCLogic {
           { label: 'Počasí', value: top.wx + '/36' },
           { label: 'Čas', value: top.tf + '/16' }
         ],
-        menu: () => { this.setState({ secId: 'kucharka', secTab: 2 }); this.push('sec'); this.toast(top.r.title + ' zařazeno do menu na týden', { icon: 'ph-calendar-plus' }); },
+        menu: () => {
+          // U dvojice recept opravdu do jídelníčku (plán jídel na serveru) — hláška dřív nic nezařadila.
+          if (this.galerieNaServeru()) {
+            const rk = ((window.GalerieData || {}).RECIPE_BY_TITLE || {})[top.r.title];
+            if (!rk) { this.toast('Nejdřív přidejte recept do kuchařky', { icon: 'ph-info' }); return; }
+            const DNY = ['Pondělí', 'Úterý', 'Středa', 'Čtvrtek', 'Pátek', 'Sobota', 'Neděle'];
+            const den = DNY[(new Date().getDay() + 6) % 7];
+            window.GalerieApi.save({ ckMenu: Object.assign({}, (window.GalerieData || {}).CKMENU || {}, { [den]: rk }) });
+            setTimeout(() => { if (window.GalerieObnovit) window.GalerieObnovit('kucharka'); }, 2500);
+            this.setState({ secId: 'kucharka', secTab: 2 }); this.push('sec');
+            this.toast(top.r.title + ' v menu na dnešek (' + den.toLowerCase() + ')', { icon: 'ph-calendar-plus' });
+            return;
+          }
+          this.setState({ secId: 'kucharka', secTab: 2 }); this.push('sec'); this.toast(top.r.title + ' zařazeno do menu na týden', { icon: 'ph-calendar-plus' });
+        },
         shop: () => this.mShopAdd(top.m.miss, top.m.missN ? null : 'Na tenhle recept nic nechybí', true),
         open: () => { this.setState({ secId: 'kucharka', secTab: 0 }); this.push('sec'); }
       },
@@ -9527,13 +9625,80 @@ class Component extends DCLogic {
     return o;
   }
   mb(n) { return n >= 1000 ? String(Math.round(n / 100) / 10).replace('.', ',') + ' GB' : n + ' MB'; }
+  /*
+   * Offline balíček u dvojice doopravdy — jako na počítači.
+   *
+   * Náhledy (letos) nebo velké obrázky (oblíbené) se stáhnou a service worker
+   * si je nechá v telefonu. Stahuje se pomalu: firewall serveru zablokuje
+   * adresu, která pošle přes 120 požadavků za minutu. Stav balíčku je věc
+   * tohohle telefonu, proto localStorage.
+   */
+  mOfflineAdresy(klic) {
+    const rok = this.dnes().getFullYear();
+    const zBg = p => { const m = /url\(['"]?([^'")]+)['"]?\)/.exec(String(this.tlo(p) || '')); return m ? m[1] : null; };
+    const fotky = this.library().filter(p => !p.video);
+    if (klic === 'fav') return fotky.filter(p => this.isFav(p)).map(p => p.full || zBg(p)).filter(Boolean);
+    if (klic === 'letos') return fotky.filter(p => String(p.day || '').indexOf(String(rok)) >= 0 || +p.y === rok).map(zBg).filter(Boolean);
+    return [];
+  }
+  mOfflineStav(klic) {
+    try { return JSON.parse(localStorage.getItem('galerie.offline.' + klic) || 'null'); } catch (e) { return null; }
+  }
+  mOfflineUloz(klic, nazev) {
+    const adresy = this.mOfflineAdresy(klic);
+    if (!adresy.length) { this.toast('V balíčku zatím nejsou načtené fotky', { icon: 'ph-info' }); return; }
+    if (this._offlineBezi) { this.toast('Už se stahuje jiný balíček — počkejte, až doběhne', { icon: 'ph-hourglass-medium' }); return; }
+    this._offlineBezi = klic;
+    let hotovo = 0;
+    this.setState({ mOffStah: { klic, hotovo: 0, celkem: adresy.length } });
+    const dalsi = () => {
+      if (this._offlineBezi !== klic) return;
+      if (hotovo >= adresy.length) {
+        this._offlineBezi = null;
+        try { localStorage.setItem('galerie.offline.' + klic, JSON.stringify({ kdy: Date.now(), kusu: adresy.length })); } catch (e) {}
+        this.setState({ mOffStah: null });
+        this.toast(nazev + ' — ' + this.pl(adresy.length, 'obrázek uložen', 'obrázky uloženy', 'obrázků uloženo') + ' v telefonu', { icon: 'ph-cloud-check' });
+        return;
+      }
+      fetch(adresy[hotovo], { credentials: 'same-origin' }).catch(() => {}).then(() => {
+        hotovo++;
+        if (hotovo % 5 === 0 || hotovo === adresy.length) this.setState({ mOffStah: { klic, hotovo, celkem: adresy.length } });
+        setTimeout(dalsi, 750);
+      });
+    };
+    dalsi();
+  }
+  async mOfflineUvolni(klic, nazev) {
+    if (this._offlineBezi === klic) this._offlineBezi = null;
+    const adresy = this.mOfflineAdresy(klic);
+    let smazano = 0;
+    try {
+      const klice = (await caches.keys()).filter(k => k.indexOf('galerie-data') === 0);
+      for (const k of klice) {
+        const c = await caches.open(k);
+        for (const a of adresy) { if (await c.delete(new URL(a, location.origin).href)) smazano++; }
+      }
+    } catch (e) {}
+    try { localStorage.removeItem('galerie.offline.' + klic); } catch (e) {}
+    this.setState({ mOffStah: null });
+    this.toast(nazev + ' uvolněno z telefonu' + (smazano ? ' · ' + this.pl(smazano, 'obrázek', 'obrázky', 'obrázků') : ''), { icon: 'ph-broom' });
+  }
   mOffVals() {
     const s = this.state;
+    const naServeru = this.galerieNaServeru();
     const on = this.mPacksOn();
     const size = MPACKS.filter(p => on[p[0]]).reduce((a, p) => a + p[3], 0);
     const limit = 12000;
-    const inst = !!s.mPwa;
-    const notif = s.mNotif === undefined ? true : !!s.mNotif;
+    /*
+     * „Přidat na plochu" a „Oznámení" byly u dvojice přepínače v paměti
+     * obrazovky. Teď: nainstalováno = běží ve vlastním okně, oznámení =
+     * skutečný odběr upozornění v tomhle telefonu.
+     */
+    const standalone = !!(window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || !!window.__nainstalovano;
+    const inst = naServeru ? standalone : !!s.mPwa;
+    const notif = naServeru
+      ? (typeof Notification !== 'undefined' && Notification.permission === 'granted' && (() => { try { return localStorage.getItem('galerie.push') === '1'; } catch (e) { return false; } })())
+      : (s.mNotif === undefined ? true : !!s.mNotif);
     const tab = s.mOffTab || 0;
     return {
       isOffline: (s.stack.length ? s.stack[s.stack.length - 1] : s.tab) === 'offline',
@@ -9545,6 +9710,27 @@ class Component extends DCLogic {
         pick: () => this.setState({ mOffTab: i })
       })),
       offIsPacks: tab === 0, offIsPwa: tab === 1,
+      ...(naServeru ? (() => {
+        const stahuje = s.mOffStah;
+        return {
+          offHead: stahuje ? 'Stahuje se ' + stahuje.hotovo + ' z ' + stahuje.celkem + ' — nechte aplikaci otevřenou' : 'Stažené balíčky zůstanou v telefonu i bez signálu',
+          offWidth: stahuje ? Math.round((stahuje.hotovo / Math.max(1, stahuje.celkem)) * 100) + '%' : '0%',
+          offColor: 'var(--g-acc)', offOver: '',
+          offPacks: MPACKS.map(p => {
+            const ulozeno = this.mOfflineStav(p[0]);
+            const kdy = ulozeno ? new Date(ulozeno.kdy) : null;
+            return {
+              name: p[1], desc: p[2], size: this.mb(p[3]), icon: p[4],
+              box: ulozeno ? 'ph-check-square' : 'ph-square',
+              boxColor: ulozeno ? 'var(--g-acc)' : 'var(--g-ink3)',
+              state: stahuje && stahuje.klic === p[0] ? 'stahuje se…' : ulozeno ? 'uloženo ' + kdy.getDate() + '. ' + (kdy.getMonth() + 1) + '. · ' + this.pl(ulozeno.kusu, 'obrázek', 'obrázky', 'obrázků') : 'není v telefonu',
+              stateColor: ulozeno ? 'var(--g-ok)' : 'var(--g-ink3)',
+              toggle: () => ulozeno ? this.mOfflineUvolni(p[0], p[1]) : this.mOfflineUloz(p[0], p[1])
+            };
+          })
+        };
+      })() : {}),
+      ...(naServeru ? {} : {
       offHead: this.mb(size) + ' z ' + this.mb(limit) + ' vyhrazených · ' + (s.net ? 'připojeno' : 'offline režim'),
       offWidth: Math.min(100, Math.round((size / limit) * 100)) + '%',
       offColor: size > limit ? 'var(--g-mag)' : size > limit * 0.8 ? 'var(--g-fin-upozorneni)' : 'var(--g-acc)',
@@ -9565,6 +9751,7 @@ class Component extends DCLogic {
             });
           }
         };
+      })
       }),
       offSync: () => this.push('sync'),
       offInstalled: inst,
@@ -9574,6 +9761,19 @@ class Component extends DCLogic {
         : 'Ikona na ploše, vlastní okno a chod i bez signálu z toho, co je stažené.',
       offPwaBtn: inst ? 'Odebrat z plochy' : 'Přidat na plochu',
       offPwaToggle: () => {
+        if (naServeru) {
+          if (inst) { this.toast('Z plochy ji odeberete dlouhým stiskem ikony — data na serveru zůstanou', { icon: 'ph-info' }); return; }
+          const nabidka = window.__instalace || (window.__pwa && window.__pwa.prompt);
+          if (!nabidka) { this.toast('Telefon teď instalaci nenabízí — použijte postup níž', { icon: 'ph-info' }); return; }
+          nabidka.prompt();
+          (nabidka.userChoice || Promise.resolve({})).then(v => {
+            window.__instalace = null;
+            if (window.__pwa) window.__pwa.prompt = null;
+            if (v && v.outcome === 'accepted') { window.__nainstalovano = true; this.toast('Aplikace se přidává na plochu', { icon: 'ph-device-mobile' }); }
+            this.forceUpdate();
+          });
+          return;
+        }
         this.setState({ mPwa: !inst });
         this.toast(inst ? 'Odebráno z plochy — data zůstala' : 'Galeria přidána na plochu', { icon: inst ? 'ph-trash' : 'ph-device-mobile' });
       },
@@ -9590,7 +9790,28 @@ class Component extends DCLogic {
       offNotifOn: notif,
       offNotifTrack: notif ? 'var(--g-acc)' : 'var(--g-line)',
       offNotifKnob: notif ? '20px' : '2px',
-      offNotifToggle: () => { this.setState({ mNotif: !notif }); this.toast(notif ? 'Oznámení vypnuta' : 'Oznámení zapnuta', { icon: 'ph-bell' }); },
+      offNotifToggle: () => {
+        if (naServeru) {
+          const api = window.GalerieApi;
+          if (notif) {
+            (api.pushUnsubscribe ? api.pushUnsubscribe() : Promise.resolve()).then(() => {
+              try { localStorage.removeItem('galerie.push'); } catch (e) {}
+              this.forceUpdate();
+              this.toast('Upozornění v tomhle telefonu vypnuta', { icon: 'ph-bell-slash' });
+            });
+            return;
+          }
+          if (!api.pushSubscribe) { this.toast('Tenhle prohlížeč upozornění neumí', { icon: 'ph-warning' }); return; }
+          Promise.resolve(api.pushSubscribe()).then(ok => {
+            if (!ok) { this.toast('Upozornění se zapnout nepodařila — povolte je v nastavení telefonu', { icon: 'ph-warning' }); return; }
+            try { localStorage.setItem('galerie.push', '1'); } catch (e) {}
+            this.forceUpdate();
+            this.toast('Upozornění zapnuta pro tenhle telefon', { icon: 'ph-bell' });
+          }).catch(() => this.toast('Upozornění se zapnout nepodařila — povolte je v nastavení telefonu', { icon: 'ph-warning' }));
+          return;
+        }
+        this.setState({ mNotif: !notif }); this.toast(notif ? 'Oznámení vypnuta' : 'Oznámení zapnuta', { icon: 'ph-bell' });
+      },
       /*
        * Kontrola verze se doopravdy zeptá.
        *
@@ -10210,9 +10431,10 @@ class Component extends DCLogic {
   }
   rtOn() {
     const s = this.state;
-    if (s.rtOn) return s.rtOn;
+    // `rtOnM` je totéž nastavení, které ukládá záložkový detail — dvě mapy by se rozešly.
+    const ulozene = s.rtOnM || s.rtOn || {};
     const o = {};
-    MRITUALS.forEach(r => { o[r[0]] = !!r[5]; });
+    MRITUALS.forEach(r => { o[r[0]] = ulozene[r[0]] === undefined ? !!r[5] : !!ulozene[r[0]]; });
     return o;
   }
   ritualVals() {
@@ -10234,13 +10456,27 @@ class Component extends DCLogic {
           track: isOn ? 'var(--g-ok)' : 'var(--g-line)',
           knob: isOn ? '20px' : '2px',
           toggle: () => {
-            const prev = on;
-            this.setState({ rtOn: Object.assign({}, on, { [r[0]]: !isOn }) });
+            const prev = s.rtOnM;
+            this.setState({ rtOnM: Object.assign({}, on, { [r[0]]: !isOn }) });
             this.toast(isOn ? 'Rituál vypnut — ' + r[1] : 'Rituál zapnut — ' + r[1] + ' · ' + r[2], {
-              icon: 'ph-confetti', undo: () => this.setState({ rtOn: prev })
+              icon: 'ph-confetti', undo: () => this.setState({ rtOnM: prev })
             });
           },
           runNow: () => {
+            /*
+             * „Spuštěno napřed" nic nesestavilo. U dvojice se otevře obrazovka,
+             * kde se ten výstup opravdu dělá — stejně jako na počítači.
+             */
+            if (this.galerieNaServeru()) {
+              const kam = { kniha: ['alld', 'x-tisk'], darky: ['gifts'], kapsle: ['alld', 'x-kapsle'], uklid: ['sec', 'duplicity'], plan: ['tasks'], jaro: ['trips'] }[r[0]];
+              if (!kam) { this.toast(r[1] + ' — výstup připravíte na počítači', { icon: r[4] }); return; }
+              if (kam[0] === 'trips') this.goTab('trips');
+              else if (kam[0] === 'sec') { this.setState({ secId: kam[1], secTab: 0 }); this.push('sec'); }
+              else if (kam[0] === 'alld') this.push('alld', { allRoute: kam[1], allTab: 0, allQuery: '' });
+              else this.push(kam[0]);
+              this.toast(r[1] + ' — výstup aplikace sama nesestaví, tady ho připravíte', { icon: r[4] });
+              return;
+            }
             const prev = ran;
             this.setState({ rtRan: Object.assign({}, ran, { [r[0]]: true }) });
             this.toast('Spuštěno napřed — ' + r[1], { icon: r[4], undo: () => this.setState({ rtRan: prev }) });
@@ -10515,7 +10751,21 @@ class Component extends DCLogic {
   inboxMove(p, to, label, icon) {
     const s = this.state, prev = s.inboxSt || {};
     this.setState({ inboxSt: Object.assign({}, prev, { [p.id]: to }) });
-    this.toast(label, { icon: icon, undo: () => this.setState({ inboxSt: prev }) });
+    this.inboxNaServer(p, to);
+    this.toast(label, { icon: icon, undo: () => { this.setState({ inboxSt: prev }); this.inboxNaServer(p, prev[p.id] || 'act'); } });
+  }
+  /*
+   * Rozhodnutí o řádku inboxu do databáze (InboxVeStavu).
+   *
+   * „Vyřízeno" a „Odložit" na telefonu platily jen do obnovení — stav inboxu
+   * se z telefonu vůbec neposílal. Seznamy řádků (`xRows`) se neposílají:
+   * v uloženém stavu je drží počítač a telefon by je přepsal jedním klíčem.
+   * Popisek v „Hotovo" si server vezme z klíče řádku.
+   */
+  inboxNaServer(p, stav) {
+    const api = window.GalerieApi;
+    if (!this.galerieNaServeru() || !api || !api.save || String(p.id).indexOf('inbox:') !== 0) return;
+    api.save({ inboxSt: Object.assign({}, this.state.inboxSt || {}, { [p.id]: stav }) });
   }
   inboxAccept(p) {
     const s = this.state;
@@ -10526,7 +10776,8 @@ class Component extends DCLogic {
     // se nepředstírá (ukázka tu přidávala nocleh v Sintře do cizí cesty).
     if (p.eff === 'server') {
       mark();
-      this.toast('Vyřízeno — ' + p.title, { icon: 'ph-check-circle', undo: undo });
+      this.inboxNaServer(p, 'done');
+      this.toast('Vyřízeno — ' + p.title, { icon: 'ph-check-circle', undo: () => { undo(); this.inboxNaServer(p, 'act'); } });
       return;
     }
     if (p.eff === 'upload') {
@@ -11337,6 +11588,13 @@ class Component extends DCLogic {
         txEmpty: pTxs.length === 0,
         toggleCta: pVisited ? 'Vrátit mezi Chceme' : 'Označit jako navštívené',
         toggle: () => {
+          // U dvojice i do databáze (MistaController) — mapa a cesty čtou stav místa odtamtud.
+          if (this.galerieNaServeru()) {
+            window.GalerieApi.post('mista/stav', { nazev: pRow[0], navstiveno: !pVisited }).then(res => {
+              if (res && window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data, res.prazdne);
+              if (window.GalerieObnovit) window.GalerieObnovit('cesty');
+            }).catch(e => this.chybaServeru(e, 'Stav místa se neuložil'));
+          }
           this.setState({ places: Object.assign({}, s.places, { [pRow[0]]: !pVisited }) });
           this.toast(pVisited ? pRow[0] + ' zpět mezi Chceme' : pRow[0] + ' označeno jako navštívené', { icon: pVisited ? 'ph-heart-straight' : 'ph-check-circle', undo: () => this.setState({ places: Object.assign({}, this.state.places, { [pRow[0]]: pVisited }) }) });
         }
@@ -11373,7 +11631,40 @@ class Component extends DCLogic {
         go: () => this.goTab('finance', { txCat2: c.name, txTrip: null })
       })),
 
-      sync: {
+      /*
+       * U dvojice skutečný stav zápisů z GalerieApi.
+       *
+       * Obrazovka měla tlačítko „Simulovat offline", které nic neodpojilo,
+       * a „Nahrát vše hned" hlásilo nahrané položky z vymyšlené fronty.
+       * Tady je fronta to, co opravdu čeká na odeslání.
+       */
+      sync: this.galerieNaServeru() ? (() => {
+        const api = window.GalerieApi, st = api.status ? api.status() : {};
+        const cekaji = st.pending || 0;
+        const cas = st.lastSync ? new Date(st.lastSync) : null;
+        return {
+          dot: !st.online ? 'var(--g-mag)' : st.lastError ? 'var(--g-warn)' : cekaji ? 'var(--g-acc)' : 'var(--g-ok)',
+          state: !st.online ? 'Bez připojení — změny čekají v telefonu' : st.lastError ? 'Online · poslední zápis neprošel' : cekaji ? 'Online · odesílá se' : 'Online · vše uložené na serveru',
+          netCta: cekaji ? 'Odeslat čekající změny' : 'Načíst znovu ze serveru',
+          toggleNet: () => {
+            if (cekaji && api.flush) { api.flush(); this.toast('Odesílám ' + this.pl(cekaji, 'změnu', 'změny', 'změn'), { icon: 'ph-cloud-arrow-up' }); return; }
+            if (api.load) api.load();
+            if (window.GalerieObnovit) ['knihovna', 'system'].forEach(g => window.GalerieObnovit(g));
+            this.toast('Načítám aktuální data ze serveru', { icon: 'ph-arrows-clockwise' });
+          },
+          pct: cekaji ? '50%' : '100%',
+          barColor: st.lastError ? 'var(--g-warn)' : 'var(--g-acc)',
+          meta: (cekaji ? this.pl(cekaji, 'změna čeká', 'změny čekají', 'změn čeká') + ' na odeslání' : 'Nic nečeká na odeslání')
+            + (cas && !isNaN(cas) ? ' · poslední srovnání ' + cas.getHours() + ':' + String(cas.getMinutes()).padStart(2, '0') : ''),
+          rows: [], empty: true, hasRows: false,
+          flushCta: 'Odeslat hned',
+          flush: () => {
+            if (!cekaji) { this.toast('Nic nečeká na odeslání', { icon: 'ph-cloud-check' }); return; }
+            if (api.flush) api.flush();
+            this.toast('Odesílám čekající změny', { icon: 'ph-cloud-arrow-up' });
+          }
+        };
+      })() : {
         dot: !s.net ? 'var(--g-mag)' : qErr ? 'var(--g-warn)' : qs.length ? 'var(--g-acc)' : 'var(--g-ok)',
         state: !s.net ? 'Offline — pracuje se z fronty' : qErr ? 'Online · ' + this.pl(qErr, 'položka selhala', 'položky selhaly', 'položek selhalo') : qs.length ? 'Online · nahrává se' : 'Online · vše nahrané',
         netCta: s.net ? 'Simulovat offline' : 'Zpět online',
@@ -11410,7 +11701,55 @@ class Component extends DCLogic {
       },
       openExport: () => this.setState({ sheet: 'export' }),
       sheetIsExport: s.sheet === 'export',
-      exportOptions: [
+      /*
+       * Záloha a export u dvojice doopravdy.
+       *
+       * Všechny čtyři volby dřív jen hlásily, že se něco „skládá", „připravuje"
+       * nebo „uložilo" — a nestalo se nic; ZIP navíc sliboval napsaných
+       * 114,5 GB. Teď: tisk výběru (v tisku se uloží jako PDF), originály
+       * ze serveru jako ZIP, platby do CSV a itineráře k tisku.
+       */
+      exportOptions: this.galerieNaServeru() ? [
+        { label: 'Fotokniha do PDF', icon: 'ph-book-open', note: this.pl(Math.min(shown.length, 120), 'fotka z aktuálního výběru', 'fotky z aktuálního výběru', 'fotek z aktuálního výběru') + ' · uložíte v tisku jako PDF', go: () => {
+          const fotky = shown.filter(p => !p.video).slice(0, 120);
+          if (!fotky.length) { this.toast('Ve výběru nejsou žádné fotky', { icon: 'ph-info' }); return; }
+          this.setState({ sheet: null });
+          const adresa = p => { const m = /url\(['"]?([^'")]+)['"]?\)/.exec(String(this.tlo(p) || '')); return m ? m[1] : null; };
+          const ok = this.tiskni('Fotokniha', [{ obrazky: fotky.map(p => ({ src: adresa(p), popis: [p.day, p.place].filter(Boolean).join(' · ') })).filter(x => x.src) }], this.pl(fotky.length, 'fotka', 'fotky', 'fotek'));
+          if (ok) this.toast('Fotokniha je otevřená k tisku — zvolte Uložit jako PDF', { icon: 'ph-book-open' });
+        } },
+        { label: 'Originály jako ZIP', icon: 'ph-file-zip', note: this.pl(Math.min(shown.length, 500), 'položka z aktuálního výběru', 'položky z aktuálního výběru', 'položek z aktuálního výběru') + ' v původní kvalitě', go: () => {
+          const ids = shown.map(p => p.id).filter(id => /^[0-9a-f-]{36}$/.test(String(id))).slice(0, 500);
+          if (!ids.length) { this.toast('Ve výběru nic ke stažení není', { icon: 'ph-info' }); return; }
+          this.setState({ sheet: null });
+          this.toast('Připravuji archiv — ' + this.pl(ids.length, 'položka', 'položky', 'položek'), { icon: 'ph-file-zip', silent: true });
+          window.GalerieApi.download('media/archiv', 'originaly.zip', { ids })
+            .then(() => this.toast('Archiv stažen', { icon: 'ph-download-simple' }))
+            .catch(e => this.toast(e && e.status === 404 ? 'Z výběru nemá aplikace u sebe žádný originál' : 'Archiv se nepodařilo sestavit', { icon: 'ph-warning' }));
+        } },
+        { label: 'Platby do CSV', icon: 'ph-table', note: this.pl(txs.length, 'řádek', 'řádky', 'řádků') + ' včetně kategorií', go: () => {
+          this.setState({ sheet: null });
+          if (!txs.length) { this.toast('Zatím tu nejsou žádné platby', { icon: 'ph-info' }); return; }
+          const pole = v => { const t = String(v === null || v === undefined ? '' : v); return /[";\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };
+          const csv = '﻿' + [['Datum', 'Popis', 'Kategorie', 'Částka', 'Účet']].concat(txs.map(t => [t.date, t.name, t.cat, String(t.amount).replace('.', ','), t.account]))
+            .map(r => r.map(pole).join(';')).join('\n');
+          try {
+            const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+            const a = document.createElement('a'); a.href = url; a.download = 'platby.csv'; document.body.appendChild(a); a.click(); a.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 4000);
+            this.toast(this.pl(txs.length, 'platba stažena', 'platby staženy', 'plateb staženo') + ' v CSV', { icon: 'ph-table' });
+          } catch (e) { this.toast('Stažení se nepodařilo', { icon: 'ph-warning' }); }
+        } },
+        { label: 'Itineráře k tisku', icon: 'ph-printer', note: this.pl(Object.keys(TRIPS).length, 'cesta', 'cesty', 'cest') + ' · program po dnech', go: () => {
+          const cesty = Object.keys(TRIPS).map(k => TRIPS[k]).filter(t => (t.days || []).length);
+          if (!cesty.length) { this.toast('Žádná cesta zatím nemá program', { icon: 'ph-info' }); return; }
+          this.setState({ sheet: null });
+          this.tiskni('Itineráře', cesty.map(t => ({
+            nadpis: t.title + (t.when ? ' · ' + t.when : ''),
+            radky: [].concat(...t.days.map(d => (d[2] || []).length ? d[2].map((a, i) => [i ? '' : [d[0], d[1]].filter(Boolean).join(' '), [a[0], a[1]].filter(Boolean).join(' · ')]) : [[[d[0], d[1]].filter(Boolean).join(' '), 'bez programu']]))
+          })));
+        } }
+      ] : [
         { label: 'Fotokniha do PDF', icon: 'ph-book-open', note: this.pl(shown.length, 'položka z aktuálního výběru', 'položky z aktuálního výběru', 'položek z aktuálního výběru'), go: () => { this.setState({ sheet: null }); this.toast('Fotokniha se skládá — pošleme upozornění', { icon: 'ph-book-open' }); } },
         { label: 'Originály jako ZIP', icon: 'ph-file-zip', note: '114,5 GB · připraví se na serveru', go: () => { this.setState({ sheet: null }); this.toast('Archiv se připravuje, odkaz přijde e-mailem', { icon: 'ph-file-zip' }); } },
         { label: 'Platby do CSV', icon: 'ph-table', note: this.pl(txs.length, 'řádek', 'řádky', 'řádků') + ' včetně kategorií', go: () => { this.setState({ sheet: null }); this.toast('CSV s ' + txs.length + ' platbami uloženo', { icon: 'ph-table' }); } },
@@ -12129,9 +12468,46 @@ class Component extends DCLogic {
       })(),
 
       // trezor
-      vaultLocked: !s.vault, vaultOpen: !!s.vault,
-      vaultUnlock: () => { this.setState({ vault: true }); this.toast('Trezor odemčen', { icon: 'ph-lock-key-open' }); },
-      vaultLock: () => { this.setState({ vault: false }); this.toast('Trezor zamčen', { icon: 'ph-lock-key' }); },
+      /*
+       * U dvojice odemyká trezor server — heslem do galerie.
+       *
+       * „Odemknout Face ID" jen přepnulo stav telefonu: žádné ověření,
+       * a obsah trezoru stejně nepřišel, protože ho server bez odemčeného
+       * sezení neposílá. Obrazovka tak hlásila „Trezor odemčen" nad prázdnem.
+       */
+      ...(() => {
+        const naServeru = this.galerieNaServeru();
+        const tr = (window.GalerieData || {}).TREZOR || {};
+        const otevreno = naServeru ? !!tr.odemceno : !!s.vault;
+        return {
+          vaultLocked: !otevreno, vaultOpen: otevreno,
+          vaultNeedsPwd: naServeru, vaultNoPwd: !naServeru,
+          vaultPwd: s.mVaultPwd || '', vaultSetPwd: e => this.setState({ mVaultPwd: e.target.value, mVaultErr: null }),
+          vaultErr: s.mVaultErr || '', vaultHasErr: !!s.mVaultErr,
+          vaultUnlockLabel: naServeru ? (s.mVaultBusy ? 'Ověřuje se…' : 'Odemknout heslem') : 'Odemknout Face ID',
+          vaultUnlock: () => {
+            if (!naServeru) { this.setState({ vault: true }); this.toast('Trezor odemčen', { icon: 'ph-lock-key-open' }); return; }
+            if (s.mVaultBusy) return;
+            if (!(s.mVaultPwd || '').trim()) { this.setState({ mVaultErr: 'Zadejte heslo do galerie.' }); return; }
+            this.setState({ mVaultBusy: true });
+            window.GalerieApi.post('trezor/odemknout', { heslo: s.mVaultPwd || '' }).then(() => {
+              this.setState({ mVaultBusy: false, mVaultPwd: '', mVaultErr: null });
+              const hotovo = () => { this.forceUpdate(); this.toast('Trezor odemčen na patnáct minut', { icon: 'ph-lock-key-open' }); };
+              if (window.GalerieObnovit) Promise.resolve(window.GalerieObnovit('system')).then(hotovo, hotovo); else hotovo();
+            }).catch(e => {
+              const b = (e && e.body) || {};
+              this.setState({ mVaultBusy: false, mVaultErr: b.chyba || (e && e.status === 429 ? 'Příliš mnoho pokusů. Zkuste to za chvíli.' : 'Odemknout se nepodařilo — server neodpověděl.') });
+            });
+          },
+          vaultLock: () => {
+            if (!naServeru) { this.setState({ vault: false }); this.toast('Trezor zamčen', { icon: 'ph-lock-key' }); return; }
+            window.GalerieApi.post('trezor/zamknout', {}).then(() => {
+              const hotovo = () => { this.forceUpdate(); this.toast('Trezor zamčen', { icon: 'ph-lock-key' }); };
+              if (window.GalerieObnovit) Promise.resolve(window.GalerieObnovit('system')).then(hotovo, hotovo); else hotovo();
+            }).catch(e => this.chybaServeru(e, 'Zamknout se nepodařilo'));
+          }
+        };
+      })(),
       vaultRows: VAULT.map(v => ({ title: v[0], meta: v[1] })),
 
       // sheety
@@ -12152,7 +12528,11 @@ class Component extends DCLogic {
         pick: () => this.setState({ filter: c[0] })
       })),
       uploadOptions: [
-        { label: 'Vyfotit', icon: 'ph-camera', note: 'uloží se do dneška', go: () => { this.setState({ extra: s.extra + 1, sheet: null, tab: 'memories', stack: [], filter: 'all' }); this.toast('1 fotka nahrána', { icon: 'ph-camera', undo: () => this.setState({ extra: s.extra }) }); } },
+        // Hlásilo „1 fotka nahrána" a nenahrálo nic — u dvojice se opravdu fotí a nahrává.
+        { label: 'Vyfotit', icon: 'ph-camera', note: 'uloží se do dneška', go: () => {
+          if (this.galerieNaServeru()) { this.pickMedia(true); return; }
+          this.setState({ extra: s.extra + 1, sheet: null, tab: 'memories', stack: [], filter: 'all' }); this.toast('1 fotka nahrána', { icon: 'ph-camera', undo: () => this.setState({ extra: s.extra }) });
+        } },
         { label: 'Z galerie telefonu', icon: 'ph-images', note: 'vyberte fotky a videa', go: () => this.pickMedia() },
         { label: 'Naskenovat účtenku', icon: 'ph-receipt', note: 'založí platbu k zařazení', go: () => this.setState({ sheet: 'add', addKind: 'tx', addA: '', addB: '' }) },
         { label: 'Zápis do deníku', icon: 'ph-notebook', note: 'text nebo hlasovka', go: () => this.setState({ sheet: 'add', addKind: 'diary', addA: '', addB: '' }) }
