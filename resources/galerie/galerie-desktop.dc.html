@@ -30518,9 +30518,37 @@ class Component extends DCLogic {
       blkTagRm: 1, blkTagsAdd: 1, blkTime: 1, blkVault: 1,
       xaMode: 1, xaCtx: 1, xaA: 1, xaB: 1, xaC: 1, xaD: 1, xCtx: 1,
       shrName: 1, shrExp: 1, shrComments: 1, shrDownload: 1, shrGuest: 1, shrMeta: 1, shrMsg: 1,
-      shrPwdOn: 1, shrEditId: 1, ndKind: 1
+      shrPwdOn: 1, shrEditId: 1, ndKind: 1,
+      // Předvolby zařízení — ukládají se jen v tomhle prohlížeči, viz `zarizeniKlice()`.
+      theme: 1, sbOpen: 1, grid: 1, sort: 1
     };
     return this._pSkip;
+  }
+  /*
+   * Předvolby tohoto zařízení: motiv, postranní panel, velikost náhledů, řazení.
+   *
+   * Ve společném stavu si je bralo i druhé zařízení — Adrian si večer zapnul
+   * tmavý režim a Makince se obrazovka přepnula taky. Zapomenout se ale po
+   * obnovení stránky nemají, takže leží v prohlížeči. Kdo je ještě nemá
+   * uložené, převezme poprvé to, co bylo ve společném stavu.
+   */
+  zarizeniKlice() { return ['theme', 'sbOpen', 'grid', 'sort', 'albView', 'calView']; }
+  zarizeniNacti(zeStavu) {
+    let ulozene = null;
+    try { ulozene = JSON.parse(localStorage.getItem('galerie.zarizeni.v1') || 'null'); } catch (e) {}
+    const zdroj = ulozene || zeStavu || {};
+    const p = {};
+    this.zarizeniKlice().forEach(k => {
+      if (zdroj[k] !== undefined && zdroj[k] !== null && zdroj[k] !== this.state[k]) p[k] = zdroj[k];
+    });
+    return p;
+  }
+  zarizeniUloz(prev) {
+    const klice = this.zarizeniKlice();
+    if (!klice.some(k => prev[k] !== this.state[k])) return;
+    const o = {};
+    klice.forEach(k => { if (this.state[k] !== undefined) o[k] = this.state[k]; });
+    try { localStorage.setItem('galerie.zarizeni.v1', JSON.stringify(o)); } catch (e) {}
   }
   persistKey(k) {
     if (this.persistSkip()[k]) return false;
@@ -30563,7 +30591,7 @@ class Component extends DCLogic {
       });
       return p;
     };
-    const first = take(api.loadSync());
+    const first = Object.assign(take(api.loadSync()), this.zarizeniNacti(api.loadSync()));
     if (Object.keys(first).length) { this._pQuiet = true; this.setState(first, () => { this._pQuiet = false; }); }
     this._unApi = api.subscribe(next => {
       const p = take(next);
@@ -30619,6 +30647,7 @@ class Component extends DCLogic {
       if (prev[k] === this.state[k]) return;
       patch[k] = this.state[k];
     });
+    this.zarizeniUloz(prev);
     this._pPrev = Object.assign({}, this.state);
     if (this._pQuiet) return;
     if (!Object.keys(patch).length) return;

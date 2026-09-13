@@ -27,6 +27,9 @@ Nasazení samo spustí tři nové migrace:
 Třetí kolo (bod 2c) přidává jednu migraci: `add_note_to_transactions`
 (sloupec `note` u plateb — poznámka k platbě z galerie).
 
+Čtvrté kolo (bod 2d) přidává migraci `smazat_hesla_ze_stavu_dvojice` — smaže
+ze sdíleného stavu hesla a kódy, které tam počítač dřív poslal (viz 2d).
+
 Druhé kolo (galerie, viz bod 2b) žádnou migraci nepřidává. Po nasazení je ale
 potřeba **jednou dogenerovat náhledy** — do té doby se chodily vydávat originály
 (náhledy kvůli chybě v Intervention Image 4 nevznikaly vůbec):
@@ -161,6 +164,39 @@ a zpět, inbox z telefonu, jméno v nastavení, chybné současné heslo, detail
 
 ---
 
+## 2d. Čtvrté kolo — co jedno zařízení posílalo druhému (13. 9. noc)
+
+Nejvážnější nález: **počítač ukládá do společného stavu každý klíč**, který
+nemá výslovně vyřazený, a druhé zařízení si ho při synchronizaci převezme.
+
+| Commit | Obsah |
+|---|---|
+| `b83fe341` | Neúplné formuláře řeknou, co chybí; přetažená událost v kalendáři mění skutečné datum |
+| `fcc4d7cd` | Načtení bez tří 404 (`/{{ mapSrc }}` apod.) a bez chyb SVG v konzoli |
+| `b47ce5f9` | Dokument galerie se při otevření stahuje jednou (service worker + ETag/304) |
+| `d46897fd` | Ikony Phosphor z unpkg s kontrolou integrity (SRI) — bezpečnost bod 3 hotový |
+| `61646857` | **Bezpečnost:** heslo do galerie z dialogu kódu, kódy zámku, obnovovací kód, heslo k odkazu a e-mail zámku už neodcházejí do stavu; odpočet trezoru nezapisuje každou sekundu; migrace smaže uložené |
+| `e49de9b9` | **Bezpečnost:** pokusy o heslo k trezoru u účtu (ne v sezení), prodlužující se uzavření, platí i pro `/vault/unlock` — bod 11 hotový |
+| `36e2d907` | Záložky, otevřený detail, měsíc, výběry a šířka okna se nesdílí (Makinka přepnula záložku a Adrianovi se přepnula taky); hlasování ve Společných výběrech pod jménem a jen za sebe, i z telefonu |
+| `18cfaec1` | Kapsle „otevřít společně", potvrzení kolečka, hvězdičky filmů a sporné body: každý jen za sebe (server hvězdičky ani body druhého nepřijme) |
+| *(poslední)* | Kapacita týdne, obálka, čas pro sebe, otázka dne, kdo mluví za nás a verze pravdy: server dával `a` zakladateli prostoru, obrazovka ho popsala jménem toho, kdo se dívá — **Makinka viděla Adrianova čísla pod svým jménem a její oprava kapacity se zapsala jemu** |
+
+Pravidlo pro další úpravy prototypu: nový stavový klíč na počítači — patří
+dvojici (data), nebo zařízení (navigace, formulář, odpočet, heslo)? Zařízení →
+`persistSkip`; tajné → i `CoupleState::NEUKLADAT`. Data o osobě pod jménem,
+nikdy pod `A`/`M` — ty jsou na každém zařízení opačně.
+
+### Změny chování, o kterých mají oba vědět (2d)
+
+- Po obnovení stránky se aplikace otevře na výchozích záložkách — poslední
+  záložka se už nepamatuje přes společný stav (dřív ji „pamatoval" i partner).
+- Ve Společných výběrech, u kapsle „otevřít společně" a u kolečka hlasuje
+  a potvrzuje každý na svém zařízení; tlačítko „Oba ano" je jen v ukázce.
+- Trezor po třech špatných heslech zavře na 30 s, pak 1, 2, 4… až 15 minut;
+  smazání cookies počítadlo nevynuluje.
+
+---
+
 ## 3. Známé nedostatky — bezpečnost
 
 Seřazeno podle rizika. Nic z toho není aktivně zneužitelné bez jiné chyby,
@@ -172,8 +208,8 @@ ale každá položka zmenšuje, co by jedna chyba napáchala.
 2. **CSP povoluje `'unsafe-inline'` a `'unsafe-eval'`.** Vyžaduje to běh
    prototypu (inline skripty, Babel v prohlížeči). Cesta ven: předkompilovat
    JSX při sestavení a přejít na `nonce`.
-3. **Ikony Phosphor se načítají z unpkg bez SRI** (`style.css` v obou
-   dokumentech). React a Babel SRI mají. Řešení: stáhnout do `public/vendor`.
+3. ~~**Ikony Phosphor se načítají z unpkg bez SRI**~~ — SRI doplněné (2d).
+   Písma ikon jdou dál z unpkg; úplné řešení je stáhnout do `public/vendor`.
 4. **Zámek aplikace (PIN) je jen v rozhraní.** Token funguje i v zamčené
    aplikaci a počítadlo tří pokusů je v sezení (smazání cookies ho vynuluje).
    Chrání před někým u odemčeného telefonu, ne před útokem na API.
@@ -191,9 +227,9 @@ ale každá položka zmenšuje, co by jedna chyba napáchala.
    postup; vyzkoušet na kopii databáze a Disku.
 10. Vývojový přístupový klíč „mereni" v **lokální** databázi (produkce ne) —
     smazat v tinkeru: `DB::table('personal_access_tokens')->where('name', 'mereni')->delete()`.
-11. **Pokusy o heslo k trezoru se počítají v sezení** — smazání cookies je
-    vynuluje. Zbývá limit 10 pokusů za minutu na účet; pro trezor s doklady
-    by patřil počítač v databázi (nebo cache podle uživatele).
+11. ~~**Pokusy o heslo k trezoru se počítají v sezení**~~ — hotovo (2d): cache
+    podle účtu s prodlužujícím se uzavřením. Na produkci musí `CACHE_STORE`
+    být sdílený (databáze/redis), ne `array`.
 12. **Podepsané náhledy platí do konce zítřka.** Fotka smazaná do koše (ne do
     trezoru) jde přes dřív vydanou adresu otevřít dál; trezor je už ošetřený.
 13. **Staré místní řádky v telefonu** (`txExtra`, `tasksExtra`, `diary` ve
