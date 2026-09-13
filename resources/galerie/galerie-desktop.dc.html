@@ -26363,8 +26363,9 @@ class Component extends DCLogic {
         go: () => this.setState({ route: 'x-pravidla', appTab: 1, notifOpen: false })
       });
     });
-    const snz = s.notifSnooze || {}, read = s.notifRead || {};
-    return out.filter(n => !snz[n.id] && !read[n.id]).sort((a, b) => a.days - b.days);
+    // Odložení platí do uloženého okamžiku; staré `true` (odloženo navždy) už neplatí.
+    const snz = s.notifSnooze || {}, read = s.notifRead || {}, ted = Date.now();
+    return out.filter(n => !(typeof snz[n.id] === 'number' && snz[n.id] > ted) && !read[n.id]).sort((a, b) => a.days - b.days);
   }
   notifVals() {
     const s = this.state, items = this.notifItems();
@@ -26384,9 +26385,11 @@ class Component extends DCLogic {
         go: n.go,
         snooze: e => {
           e.stopPropagation();
+          // Dřív se odkládalo navždy a hláška slibovala návrat „23. srpna" bez ohledu na dnešek.
           const prev = s.notifSnooze || {};
-          this.setState({ notifSnooze: { ...prev, [n.id]: true } });
-          this.toast('Odloženo o týden — vrátí se 23. srpna', { icon: 'ph-alarm', undo: () => this.setState({ notifSnooze: prev }) });
+          const az = new Date(); az.setDate(az.getDate() + 7); az.setHours(8, 0, 0, 0);
+          this.setState({ notifSnooze: { ...prev, [n.id]: az.getTime() } });
+          this.toast('Odloženo o týden — vrátí se ' + az.getDate() + '. ' + (az.getMonth() + 1) + '.', { icon: 'ph-alarm', undo: () => this.setState({ notifSnooze: prev }) });
         },
         done: e => {
           e.stopPropagation();
@@ -30821,13 +30824,24 @@ class Component extends DCLogic {
       soloAlbumTiles: soloVyber.slice(0, 12).map(p => ({ bg: p.bg, open: () => this.openLb(p.id) })),
       soloAlbumMake: () => {
         if (!soloVyber.length) { this.toast('Není z čeho album složit', { icon: 'ph-warning' }); return; }
+        // „Album vytvořeno" hlásilo tlačítko a žádné album nevzniklo.
+        const api = window.GalerieApi, ids = soloVyber.map(p => p.id).filter(id => /^[0-9a-f-]{36}$/.test(String(id)));
+        if (this.albaNaServeru() && ids.length) {
+          this.albumAkce(api.post('alba', { nazev: 'Album — ' + this.pName(s.personId), media: ids.slice(0, 500) }), res => {
+            this.setState(res.album ? { route: 'album', albumId: res.album } : { route: 'albums' });
+            this.toast(res.zprava || 'Album vytvořeno', { icon: 'ph-folder-plus' });
+          });
+          return;
+        }
         this.setState({ route: 'albums' });
         this.toast('Album vytvořeno · ' + this.pl(soloVyber.length, 'fotka', 'fotky', 'fotek') + ', řazeno podle času', { icon: 'ph-folder-plus' });
       },
-      soloAlbumShare: () => { this.setState({ shareOpen: true, shrName: 'Album o ' + this.pName(s.personId), shrExp: '30', shrPwdOn: false, shrComments: true, shrGuest: false, shrMeta: true, shrDownload: true }); },
+      // Sdílí se vybrané fotky osoby — bez výběru by dialog sdílel naposledy otevřené album.
+      soloAlbumShare: () => { this.setState({ shareOpen: true, sel: soloVyber.map(p => p.id), shrName: 'Album — ' + this.pName(s.personId), shrExp: '30', shrPwdOn: false, shrComments: true, shrGuest: false, shrMeta: true, shrDownload: true }); },
       soloAlbumPrint: () => {
         this.setState({ route: 'x-tisk', appTab: 0 });
         // Dvě fotky na stranu — víc už se na formát fotoknihy nevejde.
+        if (!this.ukazka()) { this.toast('Fotoknihu z ' + this.pl(soloVyber.length, 'fotky', 'fotek', 'fotek') + ' založíte v Tisku — zatím se nic neobjednalo', { icon: 'ph-printer' }); return; }
         this.toast('Album posláno do tisku · fotokniha na ' + this.pl(Math.max(1, Math.ceil(soloVyber.length / 2)), 'stranu', 'strany', 'stran'), { icon: 'ph-printer' });
       },
       soloAlbumWider: () => {
