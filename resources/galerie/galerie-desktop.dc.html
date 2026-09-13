@@ -28671,10 +28671,33 @@ class Component extends DCLogic {
       }
     };
   }
-  pName(id) { return (this.state.pName || {})[id] || id; }
+  /*
+   * U dvojice jméno, skrytí i sloučení vede tabulka `people` (LideController).
+   * Přepisy ve stavu (`pName`, `pHidden`, `pMerged`) jsou z doby, kdy to žilo
+   * jen v prohlížeči — nechat je platit by znamenalo ukazovat jiné jméno,
+   * než jaké najde hledání.
+   */
+  lideNaServeru() {
+    const api = window.GalerieApi;
+    return !this.ukazka() && !!(api && api.mode === 'http' && api.patch);
+  }
+  pName(id) { return this.lideNaServeru() ? id : ((this.state.pName || {})[id] || id); }
+  // Klíč osoby je jméno; po přejmenování se hledá znovu podle čísla.
+  osobaPodleCisla(n) { return Object.keys(PERSONS).find(k => PERSONS[k] && PERSONS[k].n === n) || null; }
+  lideAkce(zadost, hotovo) {
+    zadost.then(res => {
+      if (res && window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data, res.prazdne);
+      if (hotovo) hotovo(res || {});
+    }).catch(e => {
+      const t = (e && e.body) || {};
+      const prvni = t.errors ? (Object.values(t.errors)[0] || [])[0] : null;
+      this.toast(t.zprava || t.message || prvni || 'Osobu se nepodařilo upravit', { icon: 'ph-warning', color: 'var(--g-mag)' });
+    });
+  }
   peopleDlg() {
     const s = this.state, mode = s.pplDlg || null, id = s.personId;
-    const merged = s.pMerged || {};
+    const server = this.lideNaServeru(), api = window.GalerieApi;
+    const merged = server ? {} : (s.pMerged || {});
     const targets = Object.keys(PERSONS).filter(k => k !== id && merged[k] !== id)
       .map(k => ({ value: k, label: this.pName(k) + ' · ' + (PERSONS[k].stats[0] || [])[1] + ' fotek' }));
     const target = s.pplTarget || '';
@@ -28693,12 +28716,33 @@ class Component extends DCLogic {
       pplTarget: target, pplSetTarget: e => this.setState({ pplTarget: e.target.value }),
       pplIcon: mode === 'merge' ? 'ph-users-three' : 'ph-user-circle',
       pplNote: mode === 'merge'
-        ? 'Fotky obou osob se spojí pod jedno jméno. V hledání i v detailu fotky zůstane cílová osoba — původní zmizí ze seznamu Lidí. Lze vrátit.'
-        : 'Jméno se propíše do hledání, do detailu fotky i do popisků albumů. Nikam se neodesílá.',
+        ? (server
+          ? 'Fotky a alba obou osob se spojí pod cílovou osobu a původní zmizí. Vrátit to nejde — potom už nikdo neví, která fotka patřila komu.'
+          : 'Fotky obou osob se spojí pod jedno jméno. V hledání i v detailu fotky zůstane cílová osoba — původní zmizí ze seznamu Lidí. Lze vrátit.')
+        : (server ? 'Jméno se uloží pro oba a propíše se do hledání i do detailu fotky.' : 'Jméno se propíše do hledání, do detailu fotky i do popisků albumů. Nikam se neodesílá.'),
       pplCta: mode === 'merge' ? 'Sloučit' : 'Uložit jméno',
       pplCant: mode === 'merge' ? !target : !name.trim() || name.trim() === this.pName(id),
       pplClose: () => this.setState({ pplDlg: null, pplName: undefined, pplTarget: '' }),
       pplSave: () => {
+        if (server && PERSONS[id] && PERSONS[id].n) {
+          const n = PERSONS[id].n;
+          if (mode === 'rename') {
+            const v = (name || '').trim();
+            if (!v) return;
+            this.lideAkce(api.patch('osoby/' + n, { jmeno: v }), res => {
+              this.setState({ pplDlg: null, pplName: undefined, personId: this.osobaPodleCisla(n) || v });
+              this.toast(res.zprava || 'Osoba přejmenována', { icon: 'ph-pencil-simple' });
+            });
+            return;
+          }
+          if (!target || !PERSONS[target]) return;
+          const cil = PERSONS[target].n;
+          this.lideAkce(api.post('osoby/' + n + '/sloucit', { do: cil }), res => {
+            this.setState({ pplDlg: null, pplTarget: '', personId: this.osobaPodleCisla(cil) || target });
+            this.toast(res.zprava || 'Osoby sloučeny', { icon: 'ph-users-three' });
+          });
+          return;
+        }
         if (mode === 'rename') {
           const v = (name || '').trim();
           if (!v) return;
@@ -30825,9 +30869,18 @@ class Component extends DCLogic {
       },
       personRename: () => this.setState({ pplDlg: 'rename', pplName: this.pName(s.personId), pplTarget: '' }),
       personMerge: () => this.setState({ pplDlg: 'merge', pplTarget: '' }),
-      personHideLabel: (s.pHidden || {})[s.personId] ? 'Vrátit do hledání' : 'Skrýt z hledání',
-      personHideColor: (s.pHidden || {})[s.personId] ? 'var(--g-mag)' : 'var(--g-ink)',
+      personHideLabel: (this.lideNaServeru() ? (PERSONS[s.personId] || {}).tag === 'skryto' : (s.pHidden || {})[s.personId]) ? 'Vrátit do hledání' : 'Skrýt z hledání',
+      personHideColor: (this.lideNaServeru() ? (PERSONS[s.personId] || {}).tag === 'skryto' : (s.pHidden || {})[s.personId]) ? 'var(--g-mag)' : 'var(--g-ink)',
       personHide: () => {
+        const osoba = PERSONS[s.personId];
+        if (this.lideNaServeru() && osoba && osoba.n) {
+          const skryt = osoba.tag !== 'skryto';
+          this.lideAkce(window.GalerieApi.patch('osoby/' + osoba.n, { skryta: skryt }), res => this.toast(res.zprava || '', {
+            icon: skryt ? 'ph-eye-slash' : 'ph-eye',
+            undo: () => this.lideAkce(window.GalerieApi.patch('osoby/' + osoba.n, { skryta: !skryt }))
+          }));
+          return;
+        }
         const prev = s.pHidden || {}, on = !prev[s.personId];
         this.setState({ pHidden: { ...prev, [s.personId]: on } });
         this.toast(this.pName(s.personId) + (on ? ' skryto z hledání i z návrhů' : ' je zpět v hledání'), {
@@ -30835,6 +30888,7 @@ class Component extends DCLogic {
         });
       },
       personMergedNote: (() => {
+        if (this.lideNaServeru()) return '';
         const into = Object.keys(s.pMerged || {}).filter(k => (s.pMerged || {})[k] === s.personId);
         if (!into.length) return '';
         return 'Sloučeno z ' + into.map(k => '„' + this.pName(k) + '“').join(', ') + ' — fotky, štítky i výskyty se sečetly a v hledání zůstane jen tato osoba.';
@@ -31088,8 +31142,9 @@ class Component extends DCLogic {
       appIsTags: appKind === 'tags' && xTagsLive.length > 0,
       appIsGrid: appKind === 'grid',
       appPeople: Object.keys(PERSONS).filter(k => {
-        if ((s.pMerged || {})[k]) return false;
-        const hid = (s.pHidden || {})[k] !== undefined ? !!(s.pHidden || {})[k] : PERSONS[k].tag === 'skryto';
+        const server = this.lideNaServeru();
+        if (!server && (s.pMerged || {})[k]) return false;
+        const hid = !server && (s.pHidden || {})[k] !== undefined ? !!(s.pHidden || {})[k] : PERSONS[k].tag === 'skryto';
         const ok = PERSONS[k].tag === 'potvrzeno' || !!s.confirmed[k];
         const bucket = hid ? 'hidden' : ok ? 'ok' : 'sug';
         return bucket === (appKey || 'ok');

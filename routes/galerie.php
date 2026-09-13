@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\Galerie\AlbaController;
 use App\Http\Controllers\Api\Galerie\AlbumArchivController;
 use App\Http\Controllers\Api\Galerie\DataController;
 use App\Http\Controllers\Api\Galerie\KosController;
+use App\Http\Controllers\Api\Galerie\LideController;
 use App\Http\Controllers\Api\Galerie\MechanismController;
 use App\Http\Controllers\Api\Galerie\MediaController;
 use App\Http\Controllers\Api\Galerie\PravidloController;
@@ -172,6 +173,10 @@ Route::middleware(['auth:sanctum', 'dvojice', 'throttle:120,1'])->prefix('api')-
         ->whereNumber('odkaz')->name('galerie.sdileni.prodlouzit');
     Route::delete('sdileni/{odkaz}', [SdileniController::class, 'destroy'])
         ->whereNumber('odkaz')->name('galerie.sdileni.destroy');
+
+    // Lidé: jméno, skrytí a sloučení dřív žily jen ve stavu prohlížeče (viz LideController).
+    Route::patch('osoby/{osoba}', [LideController::class, 'update'])->whereNumber('osoba')->name('galerie.osoby.update');
+    Route::post('osoby/{osoba}/sloucit', [LideController::class, 'sluc'])->whereNumber('osoba')->name('galerie.osoby.sloucit');
 
     // Moderace vzkazů hostů — „Vzkaz skryt, host ho už nevidí" dřív platilo jen v prohlížeči.
     Route::patch('vzkazy-hostu/{vzkaz}', [VzkazyHostuController::class, 'update'])
