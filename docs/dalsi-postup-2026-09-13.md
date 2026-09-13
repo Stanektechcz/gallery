@@ -402,6 +402,51 @@ uložené 200. Testy: **1416 PHP testů**, všechny prošly.
 
 ---
 
+## 2k. Jedenácté kolo — zrušení účtu se opravdu provede (14. 9.)
+
+Nastavení starého rozhraní (Účet → Vaše data) nabízelo zrušení účtu
+s textem „Po čtrnácti dnech se smaže profil, deník i zprávy — nevratně".
+Žádost se ale jen zapsala do předvoleb a **nic ji nikdy neprovedlo** — účet
+i data žily dál.
+
+- Nová úloha `gallery:zrus-ucty` (plánovač denně 4:40, v administraci
+  „Zrušení účtů po lhůtě"; `--nanecisto` jen vypíše, koho by se týkala).
+- Po lhůtě smaže, co člověk sám napsal nebo namluvil: zápisy deníku, zprávy
+  (i přiložené soubory), hlasovky, jeho reakce; odhlásí všechna zařízení
+  (klíče, sezení, otisky, odběr upozornění); odebere ho z galerie a profil
+  anonymizuje (jméno, e-mail, heslo, fotka, dvoufázové ověření, kód zámku).
+  Fotky zůstávají v galerii dvojice. Zapíše se do protokolu.
+- Vlastník galerie účet zrušit nemůže (nejdřív předá vlastnictví) — úloha ho
+  přeskočí i u starší žádosti.
+- Text v nastavení teď říká přesně tohle.
+
+Ověřeno: testy (před lhůtou nic, `--nanecisto` nic, po lhůtě jen data toho
+člověka, soubory pryč, odvolaná žádost se neprovede, vlastník přeskočen,
+úloha v plánovači); v administraci úloha „denně 4:40".
+
+**„Odhlásit ostatní" ve starém rozhraní** rušilo jen sezení prohlížeče
+a hlásilo „Všechna ostatní zařízení byla odhlášena" — telefon s aplikací
+(přihlášený klíčem) zůstal přihlášený. Teď ruší i klíče, stejně jako
+tlačítko v aplikaci, a zapíše se do protokolu.
+
+Historie zabezpečení účtu (staré rozhraní → Účet) nově ukazuje i obnovu
+hesla e-mailem, zvýrazněnou jako událost, kterou je dobré zkontrolovat.
+
+| Commit | Obsah |
+|---|---|
+| `1a6a93a3` | `gallery:zrus-ucty` — zrušení účtu po lhůtě; vlastník galerie chráněn; obnova hesla v historii zabezpečení |
+| `6e3a4f71` | „Odhlásit ostatní" ve starém rozhraní ruší i klíče aplikace |
+
+Testy: **1422 PHP testů**, všechny prošly.
+
+### Po nasazení (2k)
+
+- `php artisan schedule:list` — mezi úlohami `gallery:zrus-ucty` (denně 4:40).
+- `php artisan gallery:zrus-ucty --nanecisto` — vypíše, jestli nějaký účet
+  na zrušení čeká (dnes by neměl žádný).
+
+---
+
 ## 3. Známé nedostatky — bezpečnost
 
 Seřazeno podle rizika. Nic z toho není aktivně zneužitelné bez jiné chyby,
