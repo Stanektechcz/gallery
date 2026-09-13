@@ -45,6 +45,9 @@ class CoupleState extends Model
         // Kdo u zařízení sedí a jestli mu věří. Sdílené by na druhém počítači
         // prohodilo „já" a „ty" a přeneslo důvěru na cizí zařízení.
         'lockWho', 'lockTrusted', 'lockTrust', 'obWho',
+        // Nastavení zámku a předvolby zařízení. Sdílené vypnuly zámek i druhému
+        // („Zamknout při spuštění: Vypnuto", automatické zamčení „Nikdy").
+        'lockIdle', 'lockSecs', 'lockBio', 'lockStart', 'setVals', 'navHide', 'navOrd', 'memPrefs',
     ];
 
     /**

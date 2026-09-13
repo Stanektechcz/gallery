@@ -30304,6 +30304,18 @@ class Component extends DCLogic {
     this._zamekZnovu = () => {
       const z = this.zamek();
       if (z.prihlasen && ! z.nastaveno && this.state.appLocked) this.setState({ appLocked: false });
+      /*
+       * „Zamknout při spuštění: Vypnuto" — jen při startu a jen přihlášenému.
+       *
+       * Přepínač v Nastavení se ukládal a nic nedělal. Rozhoduje se jednou,
+       * až je od serveru známo, že je člověk přihlášený; zamčení po nečinnosti
+       * nebo tlačítkem se tím později neruší.
+       */
+      if (z.prihlasen !== undefined && !this._startZamekRozhodnut) {
+        this._startZamekRozhodnut = true;
+        const start = (this._zarizeniStart || {}).lockStart;
+        if (z.prihlasen && z.nastaveno && start === false && this.state.appLocked && !this.state.lockAt) this.setState({ appLocked: false });
+      }
     };
     this._zamekZnovu();
     window.addEventListener('storage', this._zamekZnovu);
@@ -30548,6 +30560,7 @@ class Component extends DCLogic {
       shrPwdOn: 1, shrEditId: 1, ndKind: 1,
       // Předvolby zařízení — ukládají se jen v tomhle prohlížeči, viz `zarizeniKlice()`.
       theme: 1, sbOpen: 1, grid: 1, sort: 1,
+      lockIdle: 1, lockSecs: 1, lockBio: 1, lockStart: 1, setVals: 1, navHide: 1, navOrd: 1,
       /*
        * Rozepsané texty z polí.
        *
@@ -30563,22 +30576,30 @@ class Component extends DCLogic {
     return this._pSkip;
   }
   /*
-   * Předvolby tohoto zařízení: motiv, postranní panel, velikost náhledů, řazení.
+   * Předvolby tohoto zařízení: motiv, postranní panel, velikost náhledů, řazení,
+   * nabídka, hodnoty v Nastavení — a hlavně **nastavení zámku**.
    *
    * Ve společném stavu si je bralo i druhé zařízení — Adrian si večer zapnul
-   * tmavý režim a Makince se obrazovka přepnula taky. Zapomenout se ale po
-   * obnovení stránky nemají, takže leží v prohlížeči. Kdo je ještě nemá
-   * uložené, převezme poprvé to, co bylo ve společném stavu.
+   * tmavý režim a Makince se obrazovka přepnula taky. U zámku to bylo horší:
+   * „Zamknout při spuštění: Vypnuto" nebo automatické zamčení „Nikdy" na jednom
+   * zařízení vypnulo zámek i tomu druhému. Zapomenout se ale po obnovení
+   * stránky nemají, takže leží v prohlížeči.
+   *
+   * Kdo je ještě nemá uložené, převezme poprvé ze společného stavu jen to, co
+   * nic nechrání (motiv, panel, nabídku). Nastavení zámku a Nastavení ne —
+   * tam mohla ležet volba toho druhého; platí bezpečné výchozí hodnoty.
    */
-  zarizeniKlice() { return ['theme', 'sbOpen', 'grid', 'sort', 'albView', 'calView']; }
+  zarizeniKlice() { return ['theme', 'sbOpen', 'grid', 'sort', 'albView', 'calView', 'navHide', 'navOrd', 'setVals', 'lockIdle', 'lockSecs', 'lockBio', 'lockStart']; }
   zarizeniNacti(zeStavu) {
     let ulozene = null;
     try { ulozene = JSON.parse(localStorage.getItem('galerie.zarizeni.v1') || 'null'); } catch (e) {}
-    const zdroj = ulozene || zeStavu || {};
+    const prevzit = ['theme', 'sbOpen', 'grid', 'sort', 'albView', 'calView', 'navHide', 'navOrd'];
     const p = {};
     this.zarizeniKlice().forEach(k => {
+      const zdroj = ulozene || (prevzit.indexOf(k) >= 0 ? (zeStavu || {}) : {});
       if (zdroj[k] !== undefined && zdroj[k] !== null && zdroj[k] !== this.state[k]) p[k] = zdroj[k];
     });
+    this._zarizeniStart = p;
     return p;
   }
   zarizeniUloz(prev) {
@@ -31649,7 +31670,8 @@ class Component extends DCLogic {
       lockRecGo: () => this.lockRecGo(),
       lockRecCant: (s.lockRecCode || '').trim().length < 4,
       lockIdleLabel: (s.lockIdle || '5 min') === 'Nikdy' ? 'vypnuté' : 'po ' + (s.lockIdle || '5 min') + ' nečinnosti',
-      lockLastLabel: s.lockAt ? 'naposledy odemčeno ' + clock(s.lockAt) : 'poslední odemčení včera 22:14',
+      // „Poslední odemčení včera 22:14" bylo napsané v ukázce — bez odemčení v tomhle okně se nic netvrdí.
+      lockLastLabel: s.lockAt ? 'naposledy odemčeno ' + clock(s.lockAt) : 'v tomhle okně zatím neodemčeno',
       // A nápověda nad klávesnicí nevypisuje kódy obou lidí ani obnovovací kód.
       lockHint: 'Kód si každý z vás nastavuje v Nastavení → Zámek.',
       lockNowGo: () => this.lockNow('Aplikace zamčena'),

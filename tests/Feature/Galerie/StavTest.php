@@ -196,6 +196,8 @@ class StavTest extends TestCase
                 'vaultLeft' => 845,
                 'lockWho' => 'M',
                 'lockTrusted' => true,
+                'lockStart' => false,
+                'lockIdle' => 'Nikdy',
                 'joy' => ['zbytek'],
             ],
         ])->assertOk();
@@ -205,6 +207,9 @@ class StavTest extends TestCase
 
         $this->assertArrayNotHasKey('lockWho', $ulozeno->data, 'Kdo u zařízení sedí, druhé zařízení nezajímá.');
         $this->assertArrayNotHasKey('lockTrusted', $ulozeno->data);
+        // Vypnutý zámek na jednom zařízení nesmí vypnout zámek druhému.
+        $this->assertArrayNotHasKey('lockStart', $ulozeno->data);
+        $this->assertArrayNotHasKey('lockIdle', $ulozeno->data);
 
         foreach (['heslo-do-galerie', '111111', '222222', 'OBNOVA-9876', '333333', 'heslo-k-odkazu', 'adrian@example.test', '845'] as $tajne) {
             $this->assertStringNotContainsString($tajne, $vse);

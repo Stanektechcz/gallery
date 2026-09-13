@@ -5939,7 +5939,10 @@ class Component extends DCLogic {
       if (!ms || this.state.appLocked || !this.zamek().nastaveno) return;
       if (Date.now() - (this._act || 0) > ms) this.lockNow('Zamčeno po nečinnosti · ' + (this.state.lockIdle || '5 min'));
     }, 4000);
-    if (this.state.lockStart === false) this.setState({ appLocked: false });
+    // Předvolby telefonu (zámek, vzhled) hned — rozhoduje se podle nich, jestli se začne zamčeně.
+    const zarizeni = this.zarizeniNacti();
+    if (Object.keys(zarizeni).length) this.setState(zarizeni);
+    if (zarizeni.lockStart === false) this.setState({ appLocked: false });
     /*
      * Mapa se po načtení ozve (`ready`) a teprve pak dostane shluky a téma —
      * dřív zpráva nemá kam dorazit. Posílá se do všech map na obrazovce.
@@ -6626,7 +6629,8 @@ class Component extends DCLogic {
        'fsAdd fsTry fsWin quartTalk quartPlan quartTook indepLearn indepSwap ' +
        'trustCalled trustTold svedAdj exitOff exitWho exitMade dayBonus dayGiven dayShift ' +
        'blizAdd blizWA blizWM blizBlock kidsStance kidsYear kidsFixed kidsTalks ' +
-       'mineInc mineEven parDone mechLog rowDone sw rules memSaved memLater curVotesM navHide evUndone annFmtM kapOpened nedDone klQuiet evPick rtOnM ndStateM whLogM offPackM memPrefs lbTags lbVers setVals lockIdle lockSecs lockBio lockStart edits cycDays wishes ideas buys ' +
+       // `navHide memPrefs setVals lockIdle lockSecs lockBio lockStart` ne: patří zařízení, viz `zarizeniKlice()`.
+       'mineInc mineEven parDone mechLog rowDone sw rules memSaved memLater curVotesM evUndone annFmtM kapOpened nedDone klQuiet evPick rtOnM ndStateM whLogM offPackM lbTags lbVers edits cycDays wishes ideas buys ' +
        // Domácnost, rozhodnutí, sliby, rodina, žádosti a kapsle: server je zapisuje do tabulek.
        // Bez nich telefon hlásil „hotovo" a „žádost odeslána" a změna žila jen do obnovení.
        'chores choreLog dues inv decs cools proms fam nudges kapsules ' +
@@ -6636,6 +6640,32 @@ class Component extends DCLogic {
        'curVotes rtOn').split(' ').forEach(x => { this._pKeep[x] = 1; });
     }
     return !!this._pKeep[k];
+  }
+  /*
+   * Předvolby tohoto telefonu — nastavení zámku, hodnoty v Nastavení, nabídka,
+   * vzhled mřížky a upozornění na vzpomínky.
+   *
+   * Byly ve společném stavu: „Zamknout při spuštění: Vypnuto" nebo automatické
+   * zamčení „Nikdy" na Adrianově telefonu tak vypnulo zámek i Makince. Leží
+   * v prohlížeči telefonu; nic se nepřebírá ze společného stavu — tam mohla
+   * ležet volba toho druhého, a platí proto bezpečné výchozí hodnoty.
+   */
+  zarizeniKlice() { return ['lockIdle', 'lockSecs', 'lockBio', 'lockStart', 'setVals', 'navHide', 'memPrefs', 'cols', 'sort', 'theme']; }
+  zarizeniNacti() {
+    let ulozene = null;
+    try { ulozene = JSON.parse(localStorage.getItem('galerie.zarizeni.m1') || 'null'); } catch (e) {}
+    const p = {};
+    this.zarizeniKlice().forEach(k => {
+      if (ulozene && ulozene[k] !== undefined && ulozene[k] !== this.state[k]) p[k] = ulozene[k];
+    });
+    return p;
+  }
+  zarizeniUloz(prev) {
+    const klice = this.zarizeniKlice();
+    if (!klice.some(k => prev[k] !== this.state[k])) return;
+    const o = {};
+    klice.forEach(k => { if (this.state[k] !== undefined) o[k] = this.state[k]; });
+    try { localStorage.setItem('galerie.zarizeni.m1', JSON.stringify(o)); } catch (e) {}
   }
   persistLoad() {
     const api = window.GalerieApi;
@@ -6692,6 +6722,7 @@ class Component extends DCLogic {
       if (prev[k] === this.state[k]) return;
       patch[k] = this.state[k];
     });
+    this.zarizeniUloz(prev);
     this._pPrev = Object.assign({}, this.state);
     if (this._pQuiet) return;
     if (!Object.keys(patch).length) return;
@@ -8358,7 +8389,8 @@ class Component extends DCLogic {
         dotFg: who === k ? 'var(--g-ink)' : k === 'A' ? 'var(--g-acc-deep)' : 'var(--g-mag)'
       })),
       lockIdleLabel: (s.lockIdle || '5 min') === 'Nikdy' ? 'vypnuté' : 'po ' + (s.lockIdle || '5 min') + ' nečinnosti',
-      lockLastLabel: s.lockAt ? 'naposledy odemčeno ' + clock(s.lockAt) : 'poslední odemčení včera 22:14',
+      // „Poslední odemčení včera 22:14" bylo napsané v ukázce — bez odemčení v téhle relaci se nic netvrdí.
+      lockLastLabel: s.lockAt ? 'naposledy odemčeno ' + clock(s.lockAt) : 'od spuštění zatím neodemčeno',
       // A nápověda nad klávesnicí nevypisuje kódy obou lidí ani obnovovací kód.
       lockHint: 'Kód si každý z vás nastavuje v Nastavení → Zámek.',
       lockPin: pin,
