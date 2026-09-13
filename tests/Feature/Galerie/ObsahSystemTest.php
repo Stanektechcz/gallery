@@ -289,6 +289,46 @@ class ObsahSystemTest extends TestCase
     }
 
     /**
+     * Nastavení ze skutečného stavu — bez ukázkového účtu Google a vymyšlených počtů.
+     *
+     * Sekce, které nic nedělaly (import z Google Photos, ticho, „konec aplikace"),
+     * se u dvojice nenabízejí, a řádky akcí míří na úkony, které obě rozhraní umí.
+     */
+    public function test_nastaveni_je_ze_skutecneho_stavu(): void
+    {
+        // Továrna dává adresy na example.com — ta se tu hlídá jako znak ukázky.
+        $this->adri->forceFill(['email' => 'adri@galerie.test'])->save();
+
+        DB::table('shared_links')->insert([
+            ['uuid' => (string) Str::uuid(), 'token' => Str::random(40), 'created_by' => $this->adri->id, 'gallery_space_id' => $this->prostor->id,
+                'target_type' => 'album', 'is_active' => true, 'expires_at' => now()->addDay(), 'created_at' => now(), 'updated_at' => now()],
+            ['uuid' => (string) Str::uuid(), 'token' => Str::random(40), 'created_by' => $this->adri->id, 'gallery_space_id' => $this->prostor->id,
+                'target_type' => 'album', 'is_active' => true, 'expires_at' => now()->subDay(), 'created_at' => now(), 'updated_at' => now()],
+        ]);
+
+        $odpoved = $this->getJson('/api/data/system')->assertOk();
+        $data = $odpoved->json('data');
+
+        $this->assertContains('SETROWS', $odpoved->json('uplne'));
+        $this->assertSame(['profil', 'galerie', 'nahravani', 'ulozeni', 'soukromi', 'zamek', 'pwa', 'menu', 'export'], array_column($data['SETSEC'], 0));
+        $this->assertArrayNotHasKey('import', $data['SETROWS']);
+        $this->assertArrayNotHasKey('konec', $data['SETROWS']);
+
+        $json = json_encode($data['SETROWS'], JSON_UNESCAPED_UNICODE);
+        $this->assertStringNotContainsString('example.com', $json);
+        $this->assertStringNotContainsString('18 402', $json);
+        $this->assertStringNotContainsString('114,5 GB', $json);
+
+        $profil = collect($data['SETROWS']['profil']['rows'])->keyBy(0);
+        $this->assertSame('Adrian · '.$this->adri->email, $profil['Jméno a e-mail'][1]);
+        $this->assertSame('Upravit', $profil['Jméno a e-mail'][2]);
+        $this->assertSame('vypnuto', $profil['Dvoufázové přihlášení'][2]);
+
+        $odkazy = collect($data['SETROWS']['soukromi']['rows'])->keyBy(0)['Sdílené odkazy'][1];
+        $this->assertSame('1 funguje · 1 vypršel nebo je vypnutý', $odkazy);
+    }
+
+    /**
      * Kdo se přihlašuje, řekne server — ne konstanta v ukázce.
      *
      * Přihlašovací obrazovka nabízela „Adrian" a „Makinka" a předvyplňovala

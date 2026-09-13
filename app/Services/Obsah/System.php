@@ -61,6 +61,7 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
         // by znamenal dvě čísla o téže věci, která se časem rozejdou.
         private readonly AdministraceGalerie $sprava,
         private readonly PlanovaneUlohy $ulohy,
+        private readonly NastaveniAplikace $nastaveni,
     ) {}
 
     public function skupina(): string
@@ -84,7 +85,8 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
         //
         // A `LOCKWHO`/`LOCKMAIL`: v prostoru s jediným člověkem by jinak vedle
         // něj zůstala druhá ukázková volba i s cizí adresou.
-        return ['DATA_HEALTH', 'SECLIFE', 'TRASH', 'CONFLICTS', 'LOCKWHO', 'LOCKMAIL'];
+        // `SETROWS` taky: sekce, kterou server nepošle (import, ticho), nemá u dvojice zůstat z ukázky.
+        return ['DATA_HEALTH', 'SECLIFE', 'TRASH', 'CONFLICTS', 'LOCKWHO', 'LOCKMAIL', 'SETROWS'];
     }
 
     /**
@@ -124,13 +126,16 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
             ? $this->schovaneMedia($prostor)
             : new Collection;
 
+        $disk = $this->diskAStav($prostor);
+        $zamek = $this->stavZamku();
+
         return array_filter([
             'DATA_HEALTH' => $this->zdraviDat($prostor),
             'SECLIFE' => $this->zivotSekci($prostor),
             'ABARS' => $this->sloupce($prostor),
             'AFORMS' => $this->prepinace($prostor),
             'CONFLICTS' => $this->rozpory($prostor),
-            'DISK' => $this->diskAStav($prostor),
+            'DISK' => $disk,
             'TRASH' => $this->kos($prostor),
             'DVOJICE' => $this->jmenaDvojice($prostor),
             'UCTY' => $this->uctyDvojice($prostor),
@@ -161,7 +166,7 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
                  * poslední změny, aby obrazovka věděla, jestli má kód chtít,
                  * nebo nabídnout jeho nastavení.
                  */
-                'ZAMEK' => $this->stavZamku(),
+                'ZAMEK' => $zamek,
                 'TREZOR' => $this->stavTrezoru(),
                 'VAULT_ITEMS' => $this->obsahTrezoru($trezor),
                 'AL' => array_filter(
@@ -194,7 +199,9 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
                     ) || $v !== [],
                     ARRAY_FILTER_USE_BOTH,
                 ),
-            ];
+            ]
+            // Nastavení ze skutečného stavu — viz NastaveniAplikace.
+            + $this->nastaveni->pro($prostor, auth()->user(), $disk, $zamek);
     }
 
     /**

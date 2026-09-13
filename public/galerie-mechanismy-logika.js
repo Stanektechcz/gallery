@@ -609,7 +609,8 @@
       : k === 'forg' ? this.forgList().length
       : k === 'truth' ? this.truthList().length
       : k === 'dec' ? decs.length
-      : k === 'money' ? (ukazka ? 1284 : (G.RULEXP || []).length)
+      // Platby jsou řádky knihy (`TX`); `RULEXP` tu dřív počítalo vysvětlení pravidel.
+      : k === 'money' ? (ukazka ? 1284 : (G.TX || []).length)
       : (ukazka ? 8460 : (statistiky.total || 0));
     // Skloňování přes this.pl, ne pevný genitiv — jinak vyjde „1 vet“.
     const UNITS = {
@@ -623,10 +624,16 @@
       photo: ['fotografie', 'fotografie', 'fotografií']
     };
     const unit = (k, n) => { const u = UNITS[k] || UNITS.photo; return this.pl(n, u[0], u[1], u[2]); };
-    const size = m => m >= 1024 ? (m / 1024).toFixed(1).replace('.', ',') + ' GB' : m < 1 ? m.toFixed(1).replace('.', ',') + ' MB' : Math.round(m) + ' MB';
+    /*
+     * Velikosti v `EXIT_PACK` jsou ukázkové („2,4 GB plateb"). U dvojice se
+     * velikost neodhaduje: textové části mají pár kilobajtů a fotky do
+     * balíčku nejdou — leží v úložišti a stahují se zvlášť.
+     */
+    const size = m => ukazka ? (m >= 1024 ? (m / 1024).toFixed(1).replace('.', ',') + ' GB' : m < 1 ? m.toFixed(1).replace('.', ',') + ' MB' : Math.round(m) + ' MB') : '';
     const on = EXIT_PACK.filter(p => !off[p.key]);
     const mb = on.reduce((a, p) => a + p.mb, 0);
     return {
+      exitVaultOn: ukazka,
       exitWho: KR(who),
       exitPeople: [jA, jM].map(p => ({
         name: KR(p),
@@ -635,10 +642,10 @@
         fg: who === p ? 'var(--g-acc-deep)' : 'var(--g-ink2)',
         pick: () => this.setState({ exitWho: p })
       })),
-      exitHead: 'Balíček pro ' + PAD(this, who, 'acc') + ' · ' + size(mb),
+      exitHead: 'Balíček pro ' + PAD(this, who, 'acc') + (ukazka ? ' · ' + size(mb) : ''),
       exitNote: 'Tohle není rozvod. Je to pojistka proti tomu, aby aplikace byla důvod zůstat. Kdo si může odejít se svou částí, zůstává dobrovolně.',
       exitHonest: 'Balíček je připravený od prvního dne. Vygenerován ' + made + '× — a doufáme, že to tak zůstane.',
-      exitSize: size(mb),
+      exitSize: ukazka ? size(mb) : this.pl(on.length, 'část', 'části', 'částí'),
       exitCount: this.pl(on.length, 'část', 'části', 'částí') + ' z ' + EXIT_PACK.length,
       exitRows: EXIT_PACK.map(p => ({
         name: p.name, note: p.note,
@@ -654,7 +661,8 @@
       exitMake: () => this.setState({
         confirm: {
           title: 'Připravit balíček k odchodu?', btnBg: 'var(--g-ink)',
-          body: 'Vygeneruje se ' + size(mb) + ' pro ' + PAD(this, who, 'acc') + '. Druhý člověk se to nedozví — a to je záměr. Export nic nemaže a nic neruší.',
+          body: (ukazka ? 'Vygeneruje se ' + size(mb) + ' pro ' : 'Stáhne se soubor s vybranými částmi pro ') + PAD(this, who, 'acc') + '. Druhý člověk se to nedozví — a to je záměr. Export nic nemaže a nic neruší.'
+            + (ukazka ? '' : ' Fotky do souboru nejdou: originály stáhnete jako ZIP z výběru v knihovně.'),
           cta: 'Vygenerovat',
           // Skutečný soubor, ne maketa: obsah vybraných částí se poskládá
           // a stáhne. Fotografie zůstávají odkazem — ty by šly z API.
@@ -667,13 +675,15 @@
                 : p.key === 'forg' ? this.forgList()
                 : p.key === 'truth' ? this.truthList()
                 : p.key === 'dec' ? decs
-                : p.key === 'money' ? { pozn: 'Kompletní výpis plateb se stahuje z API — v prototypu jen počet.', plateb: cnt('money') }
-                : { pozn: 'Originály fotografií se stahují z úložiště — v prototypu jen počet.', fotografií: cnt('photo') };
+                : p.key === 'money' ? (ukazka
+                  ? { pozn: 'Kompletní výpis plateb se stahuje z API — v prototypu jen počet.', plateb: cnt('money') }
+                  : (G.TX || []).map(t => ({ datum: t[1], popis: t[2], kategorie: t[3], částka: t[4], účet: t[5] })))
+                : { pozn: ukazka ? 'Originály fotografií se stahují z úložiště — v prototypu jen počet.' : 'Originály fotek jsou v úložišti galerie — stáhnete je jako ZIP z výběru v knihovně.', fotografií: cnt('photo') };
             });
             const pack = {
               pro: who,
               vytvořeno: new Date().toISOString(),
-              velikost: size(mb),
+              ...(ukazka ? { velikost: size(mb) } : {}),
               části: on.map(p => p.name),
               poznámka: 'Export z aplikace Naše vzpomínky. Druhému člověku se to neoznámilo — to je záměr.',
               obsah: body
@@ -690,7 +700,7 @@
               setTimeout(() => URL.revokeObjectURL(url), 4000);
             } catch (e) {}
             this.setState({ confirm: null, exitMade: made + 1 });
-            this.toast('Balíček stažen · ' + size(mb) + ' · nikomu se to neoznámilo', { icon: 'ph-download-simple' });
+            this.toast('Balíček stažen' + (ukazka ? ' · ' + size(mb) : '') + ' · nikomu se to neoznámilo', { icon: 'ph-download-simple' });
           }
         }
       }),

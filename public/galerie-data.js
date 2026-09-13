@@ -692,11 +692,15 @@
   const SETBIND = { 'Výchozí velikost mřížky': 'grid', 'Řazení': 'sort', 'Výchozí vzhled': 'theme',
     'Automatické zamčení': 'lockIdle', 'Zamčené sekce': 'lockSecs', 'Zámek při spuštění': 'lockStart', 'Odemknutí dotykem': 'lockBio',
     'Upozornění na revize': 'push' };
+  // Druhé pole je druh akce: trasa (storage, shared…), `dl-…` export, nebo úkon
+  // (`ucet-…`, `cache-vymazat`…), který obě rozhraní obsluhují samy.
   const SETACT = {
-    'Změnit': ['ph-image', null], 'Změnit heslo': ['ph-key', null], 'Odpojit': ['ph-plugs', null],
-    'Detail': ['ph-hard-drives', 'storage'], 'Zkusit znovu': ['ph-arrow-clockwise', null],
-    'Vymazat': ['ph-broom', null], 'Spravovat': ['ph-link-simple', 'shared'],
-    'Zobrazit': ['ph-pulse', 'activity'], 'Instalovat': ['ph-device-mobile', null],
+    'Upravit': ['ph-pencil-simple', 'ucet-profil'],
+    'Změnit': ['ph-image', 'ucet-foto'], 'Změnit heslo': ['ph-key', 'ucet-heslo'], 'Odpojit': ['ph-plugs', null],
+    'Detail': ['ph-hard-drives', 'storage'], 'Zkusit znovu': ['ph-arrow-clockwise', 'disk-prenest'],
+    'Vymazat': ['ph-broom', 'cache-vymazat'], 'Spravovat': ['ph-link-simple', 'shared'],
+    'Zobrazit': ['ph-pulse', 'activity'], 'Instalovat': ['ph-device-mobile', 'pwa-instalace'],
+    'Nastavit': ['ph-bell', 'offline-obrazovka'], 'Otevřít úložiště': ['ph-hard-drives', 'storage'],
     'Stáhnout .ics': ['ph-calendar-plus', 'dl-ics'], 'Stáhnout .txt': ['ph-notebook', 'dl-txt'],
     'Stáhnout .csv': ['ph-table', 'dl-csv'], 'Připravit': ['ph-archive', 'dl-zip'],
     'Přepnout': ['ph-cloud-slash', 'offline'],

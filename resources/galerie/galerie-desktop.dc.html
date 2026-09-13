@@ -9746,7 +9746,10 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 
               <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:20px">
                 <button class="btn btn-primary" onClick="{{ exitMake }}" style="gap:6px"><i class="ph-duotone ph-download-simple" style="font-size:16px"></i>Připravit balíček</button>
-                <button class="btn btn-secondary" onClick="{{ exitVault }}">Uložit vedle klíčů</button>
+                <!-- Trezor drží fotky a videa, ne soubor s balíčkem — u dvojice by tlačítko jen přeskočilo do trezoru. -->
+                <sc-if value="{{ exitVaultOn }}">
+                  <button class="btn btn-secondary" onClick="{{ exitVault }}">Uložit vedle klíčů</button>
+                </sc-if>
               </div>
             </div>
           </sc-if>
@@ -14153,6 +14156,37 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
             <button class="btn btn-secondary" onClick="{{ closeConfirm }}">Zrušit</button>
           </sc-if>
           <button class="btn btn-primary" onClick="{{ confirm.go }}" style="background:{{ confirm.btnBg }}">{{ confirm.cta }}</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ÚČET: jméno a e-mail, heslo -->
+  <!--
+    Řádky „Jméno", „Profilová fotografie" a „Změnit heslo" v nastavení vedly
+    na hlášku, která zopakovala popisek. Tenhle dialog mluví s API účtu
+    (`/api/v1/profil`), heslo se píše do skutečných polí pro heslo.
+  -->
+  <sc-if value="{{ acOpen }}">
+    <div onClick="{{ acClose }}" class="dialog-backdrop" style="z-index:81; animation:fadeIn .14s ease">
+      <div onClick="{{ stop }}" role="dialog" aria-label="{{ acTitle }}" class="dialog" style="width:min(460px,100%); background:var(--g-raise); gap:14px">
+        <div class="dialog-title">{{ acTitle }}</div>
+        <div class="dialog-body">{{ acBody }}</div>
+        <div class="field"><label>{{ acLabelA }}</label>
+          <input class="input" type="{{ acTypeA }}" autocomplete="{{ acAutoA }}" value="{{ acA }}" onInput="{{ acSetA }}" onKeyDown="{{ acKey }}" aria-label="{{ acLabelA }}" />
+        </div>
+        <div class="field"><label>{{ acLabelB }}</label>
+          <input class="input" type="{{ acTypeB }}" autocomplete="{{ acAutoB }}" value="{{ acB }}" onInput="{{ acSetB }}" onKeyDown="{{ acKey }}" aria-label="{{ acLabelB }}" />
+        </div>
+        <div class="field"><label>{{ acLabelC }}</label>
+          <input class="input" type="password" autocomplete="{{ acAutoC }}" value="{{ acC }}" onInput="{{ acSetC }}" onKeyDown="{{ acKey }}" aria-label="{{ acLabelC }}" />
+        </div>
+        <sc-if value="{{ acHasErr }}">
+          <div style="display:flex; gap:8px; align-items:flex-start; font-size:13px; color:var(--g-mag)"><i class="ph-duotone ph-warning-circle" style="font-size:17px; flex:none"></i><span>{{ acErr }}</span></div>
+        </sc-if>
+        <div class="dialog-actions">
+          <button class="btn btn-secondary" onClick="{{ acClose }}">Zrušit</button>
+          <button class="btn btn-primary" onClick="{{ acSave }}">{{ acCta }}</button>
         </div>
       </div>
     </div>
@@ -24208,10 +24242,14 @@ class Component extends DCLogic {
         chgRows: undoable.map(row),
         chgUndoAll: () => {
           if (!undoable.length) { this.toast('Není co vracet', { icon: 'ph-info' }); return; }
+          // Vrací se a označuje jen to, co vrátit opravdu jde — krok bez uložené obsluhy (po obnovení stránky) zůstává.
           const store = this._undoStore || {};
-          undoable.slice().reverse().forEach(e => { if (store[e.id]) store[e.id](); });
-          this.setState({ events: (this.state.events || []).map(x => Object.assign({}, x, { undone: true })) });
-          this.toast('Vráceno ' + this.pl(undoable.length, 'krok', 'kroky', 'kroků') + ' — sezení je zpátky na začátku', { icon: 'ph-arrow-counter-clockwise', silent: true });
+          const vratitelne = undoable.filter(e => store[e.id]);
+          if (!vratitelne.length) { this.toast('Tyhle kroky už vrátit nejde — obnovení stránky jejich vrácení zapomnělo', { icon: 'ph-info' }); return; }
+          vratitelne.slice().reverse().forEach(e => store[e.id]());
+          const ids = vratitelne.map(e => e.id);
+          this.setState({ events: (this.state.events || []).map(x => ids.indexOf(x.id) >= 0 ? Object.assign({}, x, { undone: true }) : x) });
+          this.toast('Vráceno ' + this.pl(vratitelne.length, 'krok', 'kroky', 'kroků') + (vratitelne.length < undoable.length ? ' · ' + (undoable.length - vratitelne.length) + ' už vrátit nešlo' : ''), { icon: 'ph-arrow-counter-clockwise', silent: true });
         }
       });
     }
@@ -26129,6 +26167,8 @@ class Component extends DCLogic {
       this.toast(ok ? name + ' stažen' : 'Export se nepovedl', { icon: 'ph-table' });
       return;
     }
+    // U dvojice žádný vymyšlený archiv „114,5 GB" — originály leží v úložišti, vybrané fotky jdou jako ZIP z výběru.
+    if (!this.ukazka()) { this.setState({ route: 'storage' }); this.toast('Originály jsou v úložišti; vybrané fotky stáhnete jako ZIP z výběru v knihovně', { icon: 'ph-hard-drives' }); return; }
     this.toast('Archiv se připravuje — 114,5 GB, odhad 40 minut. Až bude hotový, přijde odkaz e-mailem.', { icon: 'ph-archive' });
   }
   // ——— hledání v přirozeném jazyce ———
@@ -30944,6 +30984,142 @@ class Component extends DCLogic {
    * jen haš. Dialog se proto po zobrazení kódu zavírá tlačítkem „Mám ho
    * opsaný", ne křížkem mimochodem.
    */
+  /*
+   * Účet z nastavení: jméno a e-mail, heslo.
+   *
+   * Mluví s API účtu (`/api/v1/profil`). Jméno se mění bez hesla, e-mail
+   * a heslo jen s tím současným — je to totéž pravidlo, jaké drží server.
+   */
+  uctoveVals() {
+    const s = this.state, d = s.acDlg;
+    if (!d) return { acOpen: false };
+    const heslo = d.mode === 'heslo';
+    const set = patch => this.setState({ acDlg: { ...this.state.acDlg, ...patch, err: null } });
+    const save = () => {
+      const api = window.GalerieApi;
+      if (d.busy) return;
+      if (!api || api.mode !== 'http') { this.setState({ acDlg: { ...d, err: 'Účet se mění jen s připojeným serverem.' } }); return; }
+      const chyba = zprava => this.setState({ acDlg: { ...this.state.acDlg, busy: false, err: zprava } });
+      const zChyby = e => {
+        const b = (e && e.body) || {};
+        const prvni = b.errors ? (Object.values(b.errors)[0] || [])[0] : null;
+        return prvni || b.message || 'Server změnu nepřijal — zkuste to znovu.';
+      };
+      if (heslo) {
+        if (!d.a || !d.b) { chyba('Vyplňte současné i nové heslo.'); return; }
+        if (d.b.length < 10) { chyba('Nové heslo musí mít aspoň 10 znaků.'); return; }
+        if (d.b !== d.c) { chyba('Nové heslo a jeho kontrola se neshodují.'); return; }
+        this.setState({ acDlg: { ...d, busy: true, err: null } });
+        api.put('v1/profil/heslo', { current_password: d.a, password: d.b, password_confirmation: d.c })
+          .then(() => { this.setState({ acDlg: null }); this.toast('Heslo změněno — ostatní zařízení zůstávají přihlášená, odhlásíte je v Zámku', { icon: 'ph-key' }); })
+          .catch(e => chyba(zChyby(e)));
+        return;
+      }
+      const jmeno = (d.a || '').trim(), mail = (d.b || '').trim();
+      if (jmeno.length < 2) { chyba('Jméno musí mít aspoň dva znaky.'); return; }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mail)) { chyba('Tohle nevypadá jako e-mailová adresa.'); return; }
+      if (mail.toLowerCase() !== String(d.puvodniMail || '').toLowerCase() && !d.c) { chyba('Změna e-mailu chce současné heslo.'); return; }
+      this.setState({ acDlg: { ...d, busy: true, err: null } });
+      api.patch('v1/profil', { name: jmeno, email: mail, current_password: d.c || null })
+        .then(() => {
+          this.setState({ acDlg: null });
+          if (window.GalerieObnovit) window.GalerieObnovit('system');
+          this.toast(mail.toLowerCase() !== String(d.puvodniMail || '').toLowerCase() ? 'Uloženo — přihlašujete se teď adresou ' + mail : 'Jméno uloženo', { icon: 'ph-user-circle' });
+        })
+        .catch(e => chyba(zChyby(e)));
+    };
+    return {
+      acOpen: true,
+      acTitle: heslo ? 'Změnit heslo' : 'Jméno a e-mail',
+      acBody: heslo
+        ? 'Heslo do galerie — s ním se přihlašujete a odemykáte trezor. Aspoň 10 znaků.'
+        : 'Jméno se ukazuje u nahraných fotek a v aktivitě. E-mailem se přihlašujete — jeho změna chce současné heslo.',
+      acLabelA: heslo ? 'Současné heslo' : 'Jméno', acTypeA: heslo ? 'password' : 'text', acAutoA: heslo ? 'current-password' : 'name',
+      acLabelB: heslo ? 'Nové heslo' : 'E-mail', acTypeB: heslo ? 'password' : 'email', acAutoB: heslo ? 'new-password' : 'email',
+      acLabelC: heslo ? 'Nové heslo znovu' : 'Současné heslo — jen při změně e-mailu', acAutoC: heslo ? 'new-password' : 'current-password',
+      acA: d.a || '', acB: d.b || '', acC: d.c || '',
+      acSetA: e => set({ a: e.target.value }), acSetB: e => set({ b: e.target.value }), acSetC: e => set({ c: e.target.value }),
+      acKey: e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') this.setState({ acDlg: null }); },
+      acHasErr: !!d.err, acErr: d.err || '',
+      acCta: d.busy ? 'Ukládám…' : heslo ? 'Změnit heslo' : 'Uložit',
+      acClose: () => this.setState({ acDlg: null }),
+      acSave: save
+    };
+  }
+  /**
+   * Úkony z řádků nastavení, které nejsou trasou ani exportem.
+   *
+   * Vrací `true`, když akci obsloužil — jinak by ji volající poslal jako
+   * trasu a z `ucet-profil` by vznikla prázdná obrazovka.
+   */
+  nastaveniAkce(kind) {
+    const api = window.GalerieApi;
+    const naServeru = !this.ukazka() && api && api.mode === 'http';
+    if (kind === 'ucet-profil') {
+      if (!naServeru) { this.toast('Účet se mění jen s připojeným serverem', { icon: 'ph-info' }); return true; }
+      const ja = (window.GalerieData || {}).LOCKMAIL || {};
+      const kdo = this.state.lockWho || 'A';
+      this.setState({ acDlg: { mode: 'profil', a: LOCKWHO[kdo] || '', b: ja[kdo] || '', c: '', puvodniMail: ja[kdo] || '' } });
+      return true;
+    }
+    if (kind === 'ucet-heslo') {
+      if (!naServeru) { this.toast('Heslo se mění jen s připojeným serverem', { icon: 'ph-info' }); return true; }
+      this.setState({ acDlg: { mode: 'heslo', a: '', b: '', c: '' } });
+      return true;
+    }
+    if (kind === 'ucet-foto') {
+      if (!naServeru || !api.nahrajAvatar) { this.toast('Fotka se mění jen s připojeným serverem', { icon: 'ph-info' }); return true; }
+      const inp = document.createElement('input');
+      inp.type = 'file'; inp.accept = 'image/jpeg,image/png,image/webp'; inp.style.display = 'none';
+      inp.onchange = () => {
+        const f = (inp.files || [])[0];
+        inp.remove();
+        if (!f) return;
+        this.toast('Nahrávám fotku…', { icon: 'ph-upload-simple', silent: true });
+        api.nahrajAvatar(f)
+          .then(() => { if (window.GalerieObnovit) window.GalerieObnovit('system'); this.toast('Profilová fotka změněna', { icon: 'ph-user-circle' }); })
+          .catch(e => { const b = (e && e.body) || {}; const prvni = b.errors ? (Object.values(b.errors)[0] || [])[0] : null; this.toast(prvni || b.message || 'Fotku se nepodařilo nahrát', { icon: 'ph-warning', color: 'var(--g-mag)' }); });
+      };
+      document.body.appendChild(inp);
+      inp.click();
+      return true;
+    }
+    if (kind === 'disk-prenest') {
+      if (!naServeru) { this.toast('Přenos spustí jen server', { icon: 'ph-info' }); return true; }
+      api.post('uloziste/prenest', {}).then(res => {
+        if (res && window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data, res.prazdne);
+        this.toast((res && res.zprava) || 'Přenos spuštěn', { icon: 'ph-cloud-arrow-up' });
+      }).catch(e => this.toast(((e && e.body) || {}).zprava || 'Přenos se nepodařilo spustit', { icon: 'ph-warning', color: 'var(--g-mag)' }));
+      return true;
+    }
+    if (kind === 'cache-vymazat') {
+      // Maže se jen to, co si zařízení stáhlo (náhledy, offline balíčky) — ne kód aplikace ani čekající zápisy.
+      const hotovo = n => {
+        try { Object.keys(localStorage).filter(k => k.indexOf('galerie.offline.') === 0).forEach(k => localStorage.removeItem(k)); } catch (e) {}
+        this.forceUpdate();
+        this.toast(n ? 'Uložené náhledy v tomhle zařízení smazány — znovu se načtou ze serveru' : 'V tomhle zařízení nebylo co mazat', { icon: 'ph-broom' });
+      };
+      if (!window.caches) { hotovo(0); return true; }
+      caches.keys().then(klice => Promise.all(klice.filter(k => k.indexOf('galerie-data') === 0).map(k => caches.delete(k))).then(v => hotovo(v.filter(Boolean).length)))
+        .catch(() => hotovo(0));
+      return true;
+    }
+    if (kind === 'pwa-instalace') {
+      const standalone = !!(window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || !!window.__nainstalovano;
+      if (standalone) { this.toast('Aplikace už běží nainstalovaná', { icon: 'ph-check-circle' }); return true; }
+      const nabidka = window.__instalace;
+      if (!nabidka) { this.setState({ route: 'x-offline', appTab: 2 }); this.toast('Prohlížeč teď instalaci nenabízí — postup pro vaše zařízení je tady', { icon: 'ph-info' }); return true; }
+      nabidka.prompt();
+      (nabidka.userChoice || Promise.resolve({})).then(v => {
+        window.__instalace = null;
+        if (v && v.outcome === 'accepted') { window.__nainstalovano = true; this.toast('Aplikace se instaluje', { icon: 'ph-device-mobile' }); }
+        this.forceUpdate();
+      });
+      return true;
+    }
+    if (kind === 'offline-obrazovka') { this.setState({ route: 'x-offline', appTab: 1 }); return true; }
+    return false;
+  }
   pinVals() {
     const s = this.state;
     const zam = this.zamek();
@@ -33519,6 +33695,7 @@ class Component extends DCLogic {
               return;
             }
             if (act && act[1] && act[1].indexOf('dl-') === 0) { this.exportData(act[1], label); return; }
+            if (act && act[1] && this.nastaveniAkce(act[1])) return;
             if (act && act[1]) { this.setState({ route: act[1] }); return; }
             this.toast(label + ' — ' + base, { icon: act ? act[0] : 'ph-arrow-right', undo: base === 'Vymazat' || base === 'Odpojit' });
           },
@@ -33694,6 +33871,7 @@ class Component extends DCLogic {
 
       confirmOpen: !!s.confirm, confirm: s.confirm || {}, closeConfirm: () => this.setState({ confirm: null }),
       confirmCancel: !(s.confirm && s.confirm.noCancel),
+      ...this.uctoveVals(),
       confirmOptions: (s.confirm && s.confirm.options && s.confirm.options.length) ? s.confirm.options : null,
       confirmPick: s.confirmPick || '',
       confirmSetPick: e => this.setState({ confirmPick: e.target.value }),

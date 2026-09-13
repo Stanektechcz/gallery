@@ -637,6 +637,41 @@
       });
     },
 
+    // Náhrada celé věci (změna hesla) — `PUT` jako v API účtu.
+    put: function (path, body) {
+      if (mode !== 'http') return Promise.resolve(null);
+      return fetch(base + '/' + path, {
+        method: 'PUT', headers: headers(), credentials: 'same-origin',
+        body: JSON.stringify(body || {})
+      }).then(function (r) {
+        return r.json().then(function (b) {
+          if (!r.ok) throw Object.assign(new Error('HTTP ' + r.status), { body: b, status: r.status });
+          return b;
+        });
+      });
+    },
+
+    /*
+     * Profilová fotka — soubor, takže `FormData` bez ručního `Content-Type`.
+     * `/api/v1/avatar` hlídá typ i velikost a vrátí adresu nové fotky.
+     */
+    nahrajAvatar: function (soubor) {
+      if (mode !== 'http' || ! soubor) return Promise.resolve(null);
+      var telo = new FormData();
+      telo.append('image', soubor, soubor.name || 'avatar');
+
+      var h = headers();
+      delete h['Content-Type'];
+
+      return fetch(base + '/v1/avatar', { method: 'POST', headers: h, credentials: 'same-origin', body: telo })
+        .then(function (r) {
+          return r.json().then(function (b) {
+            if (! r.ok) throw Object.assign(new Error('HTTP ' + r.status), { body: b, status: r.status });
+            return b;
+          });
+        });
+    },
+
     /*
      * Nahrávka hlasu.
      *
