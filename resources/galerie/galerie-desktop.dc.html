@@ -14836,7 +14836,39 @@ class Component extends DCLogic {
     // Pojistka: vyprázdněná kolekce ze serveru nesmí shodit celou aplikaci.
     return (ATAGS[key] || ATAGS.all || []).map(t => ({ t: t[0], c: t[1] }));
   }
-  setRows(key, list) { this.setState({ xRows: { ...this.state.xRows, [key]: list } }); }
+  /*
+   * Skupina dat ze serveru znovu, až dojde zápis stavu.
+   *
+   * Zápis se odesílá se zpožděním (galerie-api), a co z něj server spočítá —
+   * rozpočet po přeřazení transakce —, se jinak ukáže až po obnovení stránky.
+   */
+  obnovPozdeji(skupina) {
+    if (this.ukazka() || !window.GalerieObnovit) return;
+    this._obnovy = this._obnovy || {};
+    clearTimeout(this._obnovy[skupina]);
+    this._obnovy[skupina] = setTimeout(() => window.GalerieObnovit(skupina), 2500);
+  }
+  setRows(key, list) {
+    this.setState({ xRows: { ...this.state.xRows, [key]: list } });
+    /*
+     * Nákupní seznam patří serveru (plán jídel + připsané položky).
+     *
+     * Místní kopie `xRows.shopping` by v téhle relaci zastínila, co server
+     * uložil — nová položka by neměla svůj identifikátor, takže by se nedala
+     * odškrtnout ani smazat. Po zápisu se kuchařka načte znovu a místní kopie
+     * se zahodí.
+     */
+    if (key === 'shopping' && !this.ukazka() && window.GalerieObnovit) {
+      clearTimeout(this._nakupObnova);
+      this._nakupObnova = setTimeout(() => {
+        Promise.resolve(window.GalerieObnovit('kucharka')).then(() => {
+          const x = { ...this.state.xRows };
+          delete x.shopping;
+          this.setState({ xRows: x });
+        });
+      }, 2500);
+    }
+  }
   /*
    * Hvězdička u titulu, který server ještě nezná, nemá kam sednout.
    *
@@ -14959,12 +14991,28 @@ class Component extends DCLogic {
       recipePhotos: ph, recipeHasPhotos: ph.length > 0,
       recipePhotoMeta: ph.length > 0 ? ph.length + ' fotek odtud, kde recept vznikl' : '',
       recipeMissing: r.ing.filter((it, i) => !s.ing[s.recipeId + i]).length,
+      /*
+       * Obě tlačítka jen ohlásila, že se něco stalo — „8 položek přidáno na
+       * nákupní seznam" a „zařazeno do menu" — a „Zpět" nemělo obsluhu.
+       * Teď chybějící suroviny opravdu přibudou na seznam a recept na dnešek.
+       */
       recipeAddShopping: () => {
-        const miss = r.ing.filter((it, i) => !s.ing[s.recipeId + i]).length;
-        this.toast(miss + ' položek přidáno na nákupní seznam', { icon: 'ph-basket', undo: true });
-        this.setState({ route: 'x-kucharka', appTab: 1 });
+        const prev = this.rowsOf('shopping');
+        const add = r.ing.map((it, i) => ({ it, i })).filter(x => !this.haveIng(s.recipeId, x.i, x.it[2])).map(x => ({
+          t: (x.it[0] ? x.it[0] + ' ' + x.it[1] + ' ' : '') + x.it[2], m: 'z receptu ' + r.title, g: null, id: 'shopping-r' + s.recipeId + x.i
+        })).filter(row => !prev.some(p => p.t === row.t));
+        if (!add.length) { this.toast('Všechno z receptu už máte doma nebo na seznamu', { icon: 'ph-check-circle' }); return; }
+        this.setRows('shopping', add.concat(prev));
+        this.setState({ route: 'x-kucharka', appTab: 1, ckShopRecipe: r.title });
+        this.toast(this.pl(add.length, 'položka přidána', 'položky přidány', 'položek přidáno') + ' na nákupní seznam', { icon: 'ph-basket', undo: () => this.setRows('shopping', prev) });
       },
-      recipeCookToday: () => { this.toast(r.title + ' zařazeno do menu na týden', { icon: 'ph-calendar-plus', undo: true }); this.setState({ route: 'x-kucharka', appTab: 2 }); },
+      recipeCookToday: () => {
+        const DNY = ['Pondělí', 'Úterý', 'Středa', 'Čtvrtek', 'Pátek', 'Sobota', 'Neděle'];
+        const den = DNY[(this.dnes().getDay() + 6) % 7];
+        const prev = this.menuOf();
+        this.nastavMenu({ ckMenu: { ...prev, [den]: s.recipeId }, route: 'x-kucharka', appTab: 2 });
+        this.toast(r.title + ' na dnešek (' + den.toLowerCase() + ')', { icon: 'ph-calendar-plus', undo: () => this.nastavMenu({ ckMenu: prev }) });
+      },
       recipeOpenPhotos: () => r.photoMatch ? this.setState({ route: 'all', query: r.photoMatch })
         : this.toast('Z tohoto receptu zatím fotky nemáme — vyfoťte ho a zařadí se sem', { icon: 'ph-camera' }),
       recipeMore2: () => this.zatimNeumime('tisk receptu na kartu ani duplikaci')
@@ -15000,10 +15048,12 @@ class Component extends DCLogic {
       placeVisitedLabel: vis ? 'Vrátit mezi Chceme' : 'Označit jako navštíveno',
       placeVisitedIcon: vis ? 'ph-arrow-counter-clockwise' : 'ph-check-circle',
       placeToggleVisited: () => {
+        const prevVisited = s.visited;
         this.setState({ visited: { ...s.visited, [s.placeId]: !vis } });
-        this.toast(vis ? p.title + ' zpět v seznamu přání' : p.title + ' označeno jako navštívené', { icon: vis ? 'ph-heart-straight' : 'ph-check-circle', undo: true });
+        this.toast(vis ? p.title + ' zpět v seznamu přání' : p.title + ' označeno jako navštívené', { icon: vis ? 'ph-heart-straight' : 'ph-check-circle', undo: () => this.setState({ visited: prevVisited }) });
       },
-      placeAddToTrip: () => { this.toast(p.title + ' přidáno do itineráře — vyberte den', { icon: 'ph-airplane-tilt' }); this.setState({ route: 'x-cesty', appTab: 0 }); },
+      // Hlásilo „přidáno do itineráře" a nepřidalo nic; do dne cesty se místo zapisuje v Cestách.
+      placeAddToTrip: () => { this.setState({ route: 'x-cesty', appTab: 0 }); this.toast('Místo do itineráře přidáte v detailu cesty — ' + p.title, { icon: 'ph-airplane-tilt', silent: true }); },
       placeAddNote: () => this.zatimNeumime('poznámky k místu'),
       placeOpenPhotos: () => p.photoMatch ? this.setState({ route: 'all', query: p.photoMatch })
         : this.toast('Z tohoto místa ještě fotky nemáme', { icon: 'ph-camera' }),
@@ -15437,13 +15487,19 @@ class Component extends DCLogic {
           const n = { ...s.txCat };
           selIds.forEach(id => { n[id] = c; });
           this.setState({ txCat: n, txSel: [] });
+          this.obnovPozdeji('finance');
           this.toast(selIds.length + '× zařazeno do „' + c + '“', {
             icon: 'ph-tag',
             undo: () => this.setState({ txCat: prev, txSel: selIds })
           });
         }
       })),
-      txBulkRec: () => { this.toast(selIds.length + '× označeno jako opakovaná platba', { icon: 'ph-repeat', undo: true }); this.setState({ txSel: [] }); },
+      // Hlásilo „označeno jako opakovaná platba" a nic neoznačilo.
+      txBulkRec: () => {
+        if (!this.ukazka()) { this.zatimNeumime('označení platby za opakovanou — pravidelné platby se zakládají v Rozpočtech'); return; }
+        this.toast(selIds.length + '× označeno jako opakovaná platba', { icon: 'ph-repeat' });
+        this.setState({ txSel: [] });
+      },
       // Vybrané transakce se stáhnou; dřív se jen napsalo, kolik jich je.
       txBulkExport: () => {
         const vybrane = all.filter(r => selIds.indexOf(r.id) >= 0);
@@ -15472,6 +15528,7 @@ class Component extends DCLogic {
         pick: () => {
           const prev = s.txCat[open.id];
           this.setState({ txCat: { ...s.txCat, [open.id]: c } });
+          this.obnovPozdeji('finance');
           this.toast(open.name + ' → ' + c, {
             icon: 'ph-tag',
             undo: () => { const n = { ...this.state.txCat }; if (prev === undefined) delete n[open.id]; else n[open.id] = prev; this.setState({ txCat: n }); }
@@ -15489,7 +15546,12 @@ class Component extends DCLogic {
       txSplit: () => this.zatimNeumime('rozdělení jedné platby mezi víc kategorií'),
       txMakeRec: () => this.zatimNeumime('označení platby za opakovanou'),
       txEditNote: () => this.zatimNeumime('úpravu poznámky u transakce'),
-      txHide: () => { this.toast(open ? open.name + ' skryto z rozpočtu' : '', { icon: 'ph-eye-slash', undo: true }); this.setState({ txOpen: null }); },
+      // „Skryto z rozpočtu" se nikam nezapsalo — rozpočet transakci počítal dál.
+      txHide: () => {
+        if (!this.ukazka()) { this.zatimNeumime('skrytí transakce z rozpočtu'); return; }
+        this.toast(open ? open.name + ' skryto z rozpočtu' : '', { icon: 'ph-eye-slash' });
+        this.setState({ txOpen: null });
+      },
       txAdd: () => this.setState({ xaOpen: true, xaMode: 'tx', xaA: '', xaB: '' }),
       txImport: () => this.setState({ route: 'x-ucty', appTab: 1 }),
       txToBudget: () => this.setState({ route: 'x-rozpocty', budTab: 0 }),
@@ -15527,11 +15589,12 @@ class Component extends DCLogic {
       ...(tab === 11 ? this.mineVals() : {}),
       ...(tab === 4 ? this.investVals() : { finIsInv: false }),
       finTotal: this.kc(total), finSpend: this.kc(spend), finSaved: this.kc(saved), finDue: this.kc(due),
+      // Počty ze seznamů, ne napsané („5 napojených", „3 platby") — u dvojice s jedním účtem to lhalo.
       finHead: [
-        { label: 'Dohromady', value: this.kc(total), note: FIN.accounts.length + ' účtů, 5 napojených' },
+        { label: 'Dohromady', value: this.kc(total), note: this.pl(FIN.accounts.length, 'účet', 'účty', 'účtů') + ', ' + FIN.accounts.filter(a => a[4] === 'napojeno').length + ' bankovních' },
         { label: 'Na běžných účtech', value: this.kc(spend), note: 'k dispozici tento měsíc' },
         { label: 'Odloženo', value: this.kc(saved), note: 'rezerva a cesty' },
-        { label: 'Čeká do konce měsíce', value: this.kc(due), note: '3 platby, všechny naplánované' }
+        { label: 'Čeká do konce měsíce', value: this.kc(due), note: (() => { const n = FIN.upcoming.filter(u => u[5]).length; return n ? this.pl(n, 'platba', 'platby', 'plateb') + ' tento měsíc' : 'nic naplánovaného'; })() }
       ],
       finBars: FIN.accounts.filter(a => a[7] > 0).map((a, k) => ({
         name: a[0], pct: a[7] + ' %', width: a[7] + '%',
@@ -15553,25 +15616,37 @@ class Component extends DCLogic {
           tag: off ? 'odpojeno' : a[4], tagClass: off ? 'tag-neutral' : a[4] === 'napojeno' ? 'tag-accent' : 'tag-accent-2',
           sync: off ? 'napojení pozastaveno' : a[5], flag: a[6], hasFlag: !!a[6],
           healthPct: health + '%', healthColor: off ? 'var(--g-ink3)' : health === 100 ? 'var(--g-ok)' : 'var(--g-warn)',
-          healthLabel: off ? 'Odpojeno — historie zůstává' : health === 100 ? 'Automatický import každé ráno v 8:00' : 'Ruční import CSV — poslední před ' + (i + 2) + ' dny',
+          // Automatický import v 8:00 ani „poslední před N dny" aplikace nemá — u dvojice jen to, co ví.
+          healthLabel: off ? 'Odpojeno — historie zůstává' : !this.ukazka()
+            ? (a[4] === 'napojeno' ? 'Bankovní účet — pohyby přicházejí importem výpisu' : 'Vedený ručně · ' + (a[5] || 'bez pohybu'))
+            : health === 100 ? 'Automatický import každé ráno v 8:00' : 'Ruční import CSV — poslední před ' + (i + 2) + ' dny',
           go: () => this.setState({ route: 'x-transakce', appTab: 0 }),
           rules: () => { this.setState({ finTab: 3 }); this.toast('Pravidla zařazování pro ' + a[0], { icon: 'ph-sliders' }); },
           toggle: () => {
+            // Odpojení bylo jen barvou v prohlížeči; napojení na banku se spravuje v Nastavení.
+            if (!this.ukazka()) { this.zatimNeumime('odpojení účtu odsud — napojení se spravuje v Nastavení'); return; }
             const prev = s.acOff || {};
             this.setState({ acOff: { ...prev, [a[0]]: !off } });
             this.toast(off ? a[0] + ' znovu napojeno' : a[0] + ' odpojeno — historie transakcí zůstává', {
               icon: off ? 'ph-plugs-connected' : 'ph-plugs', undo: () => this.setState({ acOff: prev })
             });
           },
-          refresh: () => off
-            ? this.toast(a[0] + ' je odpojeno — nejdřív obnovte napojení', { icon: 'ph-warning' })
-            : this.toast(a[0] + ' — synchronizace hotová, ' + (i + 1) + ' nové transakce', { icon: 'ph-arrows-clockwise' })
+          // „Synchronizace hotová, 2 nové transakce" bylo číslo z pořadí účtu.
+          refresh: () => !this.ukazka()
+            ? this.zatimNeumime('stahování transakcí z banky — výpis naimportujete v záložce Importy')
+            : off
+              ? this.toast(a[0] + ' je odpojeno — nejdřív obnovte napojení', { icon: 'ph-warning' })
+              : this.toast(a[0] + ' — synchronizace hotová, ' + (i + 1) + ' nové transakce', { icon: 'ph-arrows-clockwise' })
         };
       }),
-      finAccHealth: FIN.accounts.filter(a => !(s.acOff || {})[a[0]]).length + ' z ' + FIN.accounts.length + ' účtů aktivních · importy běží ráno v 8:00, zařazování hned po nich',
+      finAccHealth: this.ukazka()
+        ? FIN.accounts.filter(a => !(s.acOff || {})[a[0]]).length + ' z ' + FIN.accounts.length + ' účtů aktivních · importy běží ráno v 8:00, zařazování hned po nich'
+        : this.pl(FIN.accounts.length, 'účet', 'účty', 'účtů') + ' · pohyby se zapisují ručně nebo importem výpisu, zařazování běží při importu',
       finAddAccount: () => this.zatimNeumime('napojení banky z téhle obrazovky — účty se zakládají v Nastavení'),
       // Kolik účtů se synchronizuje, ví seznam účtů — ne napsaná pětka.
       finSyncAll: () => {
+        // „Synchronizuji" nespustilo nic — automatické stahování z banky aplikace nemá.
+        if (!this.ukazka()) { this.zatimNeumime('stahování transakcí z banky — výpis naimportujete v záložce Importy'); return; }
         const zive = FIN.accounts.filter(a => !(s.acOff || {})[a[0]]).length;
         this.toast(zive
           ? 'Synchronizuji ' + this.pl(zive, 'napojený účet', 'napojené účty', 'napojených účtů')
@@ -15583,7 +15658,8 @@ class Component extends DCLogic {
         go: () => this.setState({ route: 'x-rozpocty', budTab: u[4] === 'Rezerva' || u[4] === 'Cesty' ? 2 : 1 }),
         skip: () => this.zatimNeumime('přeskočení plánované platby')
       })),
-      finUpNote: 'Platby označené modrou tečkou padnou ještě do srpnového rozpočtu.',
+      // Měsíc podle kalendáře, ne napevno srpen.
+      finUpNote: 'Platby označené modrou tečkou padnou ještě do rozpočtu ' + ['ledna', 'února', 'března', 'dubna', 'května', 'června', 'července', 'srpna', 'září', 'října', 'listopadu', 'prosince'][this.dnes().getMonth()] + '.',
       finAddPayment: () => this.zatimNeumime('plánované platby'),
       finRules: FIN.rules.map(r => ({
         pattern: r[0], cat: r[1], count: r[2] + '× letos',
@@ -20192,6 +20268,7 @@ class Component extends DCLogic {
         // to číslo bylo napsané v dokumentu a nic se nesynchronizovalo.
         sync: () => this.zatimNeumime('stahování transakcí z banky'),
           toggle: () => {
+            if (!this.ukazka()) { this.zatimNeumime('odpojení účtu odsud — napojení se spravuje v Nastavení'); return; }
             const prev = s.acOff || {};
             this.setState({ acOff: { ...prev, [r.id]: !off } });
             this.toast(off ? r.t + ' znovu napojeno' : r.t + ' odpojeno — historie zůstává', {
@@ -20209,7 +20286,32 @@ class Component extends DCLogic {
   }
   // ——— kuchařka ———
   menuOf() {
-    return this.state.ckMenu || { 'Pondělí': 'polevka', 'Středa': 'peka', 'Sobota': 'buchty' };
+    /*
+     * Menu dvojice je plán jídel na serveru (`CKMENU`) pro tenhle týden.
+     *
+     * Bralo se ze stavu prohlížeče a bez něj z ukázky — „3 ze 7 dnů
+     * naplánováno" u dvojice, která nenaplánovala nic. `ckMenu` ze stavu je
+     * mapa dnů bez týdne, takže platí jen pro změny z téhle relace; uložený
+     * z dřívějška by ukazoval minulý týden.
+     */
+    const ze = (window.GalerieData || {}).CKMENU;
+    const zeServeru = !!ze && (Object.keys(ze).length > 0 || this.zeServeru('CKMENU'));
+    if (zeServeru && !this._menuVRelaci) return ze;
+    if (this.state.ckMenu) return this.state.ckMenu;
+    if (zeServeru) return ze;
+    return this.ukazka() ? { 'Pondělí': 'polevka', 'Středa': 'peka', 'Sobota': 'buchty' } : {};
+  }
+  /*
+   * Změna menu: zapíše se do stavu (server ji převede do plánu jídel) a za
+   * chvíli se kuchařka načte znovu — nákupní seznam se z plánu počítá.
+   */
+  nastavMenu(zmena) {
+    this._menuVRelaci = true;
+    this.setState(zmena);
+    if (!this.ukazka() && window.GalerieObnovit) {
+      clearTimeout(this._menuObnova);
+      this._menuObnova = setTimeout(() => window.GalerieObnovit('kucharka'), 2500);
+    }
   }
   cookVals(key) {
     const s = this.state;
@@ -20237,8 +20339,8 @@ class Component extends DCLogic {
               e.stopPropagation();
               const prev = this.menuOf();
               const free = ['Pondělí', 'Úterý', 'Středa', 'Čtvrtek', 'Pátek', 'Sobota', 'Neděle'].find(d => !prev[d]) || 'Pondělí';
-              this.setState({ ckMenu: { ...prev, [free]: k } });
-              this.toast(r.title + ' zařazeno na ' + free.toLowerCase(), { icon: 'ph-calendar-plus', undo: () => this.setState({ ckMenu: prev }) });
+              this.nastavMenu({ ckMenu: { ...prev, [free]: k } });
+              this.toast(r.title + ' zařazeno na ' + free.toLowerCase(), { icon: 'ph-calendar-plus', undo: () => this.nastavMenu({ ckMenu: prev }) });
             },
             shop: e => {
               e.stopPropagation();
@@ -20383,8 +20485,21 @@ class Component extends DCLogic {
               },
               del: () => {
                 const prev = this.rowsOf('shopping');
+                /*
+                 * Připsaná položka se maže na serveru výslovně (`shopDel`).
+                 * Server podle toho, co v seznamu chybí, nemaže — starší seznam
+                 * z druhého telefonu by jinak smazal, co mezitím připsal ten druhý.
+                 */
+                const pripsana = String(r.id).indexOf('shopping-item:') === 0;
+                if (pripsana) this.setState({ shopDel: { ...(this.state.shopDel || {}), [String(r.id).slice(14)]: true } });
                 this.setRows('shopping', prev.filter(x => x.id !== r.id));
-                this.toast('Odebráno — ' + r.t, { icon: 'ph-trash', undo: () => this.setRows('shopping', prev) });
+                this.toast('Odebráno — ' + r.t, {
+                  icon: 'ph-trash',
+                  // Smazanou položku vrátí jen nový zápis — původní řádek už na serveru není.
+                  undo: () => this.setRows('shopping', pripsana
+                    ? [{ ...r, id: 'shopping-n' + Date.now() }].concat(prev.filter(x => x.id !== r.id))
+                    : prev)
+                });
               }
             };
           })
@@ -20402,7 +20517,9 @@ class Component extends DCLogic {
         const k = menu[d] || '';
         const r = k ? RECIPES[k] : null;
         return {
-          day: d, today: i === 6 ? 'dnes' : '',
+          // Dnešek podle kalendáře, ne napevno neděle. Den, který už tento týden
+          // byl, se plánuje na příští týden — tak ho zapisuje i server.
+          day: d, today: i === (this.dnes().getDay() + 6) % 7 ? 'dnes' : i < (this.dnes().getDay() + 6) % 7 ? 'příští týden' : '',
           title: r ? r.title : 'Volný den',
           // Kdo vaří, aplikace neví — střídání jmen patří jen ukázce.
           meta: r ? r.time + ' · ' + r.kind + (this.ukazka() ? ' · vaří ' + (i % 2 ? 'Makinka' : 'Adrian') : '') : 'zbytky, nebo něco venku',
@@ -20415,8 +20532,8 @@ class Component extends DCLogic {
             const prev = menu, v = e.target.value;
             const next = { ...menu };
             if (v) next[d] = v; else delete next[d];
-            this.setState({ ckMenu: next });
-            this.toast(v ? RECIPES[v].title + ' na ' + d.toLowerCase() : d + ' uvolněn', { icon: 'ph-calendar-plus', undo: () => this.setState({ ckMenu: prev }) });
+            this.nastavMenu({ ckMenu: next });
+            this.toast(v ? RECIPES[v].title + ' na ' + d.toLowerCase() : d + ' uvolněn', { icon: 'ph-calendar-plus', undo: () => this.nastavMenu({ ckMenu: prev }) });
           },
           open: () => k ? this.openRecipe(k) : this.setState({ appTab: 0 })
         };
@@ -20425,8 +20542,8 @@ class Component extends DCLogic {
         const keys = Object.keys(RECIPES), prev = menu;
         const next = {};
         [0, 2, 4, 6].forEach((di, i) => { next[DAYS[di]] = keys[(i + Math.floor(Math.random() * keys.length)) % keys.length]; });
-        this.setState({ ckMenu: next });
-        this.toast('Menu na týden vygenerováno ze čtyř receptů — přehoďte, co nesedí', { icon: 'ph-magic-wand', undo: () => this.setState({ ckMenu: prev }) });
+        this.nastavMenu({ ckMenu: next });
+        this.toast('Menu na týden vygenerováno ze čtyř receptů — přehoďte, co nesedí', { icon: 'ph-magic-wand', undo: () => this.nastavMenu({ ckMenu: prev }) });
       },
       ckMenuToShop: () => {
         const prev = this.rowsOf('shopping');
@@ -24098,8 +24215,8 @@ class Component extends DCLogic {
     const prev = this.menuOf(), r = RECIPES[rk];
     const D = ['Pondělí', 'Úterý', 'Středa', 'Čtvrtek', 'Pátek', 'Sobota', 'Neděle'];
     const target = day || D.find(d => !prev[d]) || 'Neděle';
-    this.setState({ ckMenu: Object.assign({}, prev, { [target]: rk }) });
-    this.toast(r.title + ' zařazeno na ' + target.toLowerCase(), { icon: 'ph-calendar-plus', undo: () => this.setState({ ckMenu: prev }) });
+    this.nastavMenu({ ckMenu: Object.assign({}, prev, { [target]: rk }) });
+    this.toast(r.title + ' zařazeno na ' + target.toLowerCase(), { icon: 'ph-calendar-plus', undo: () => this.nastavMenu({ ckMenu: prev }) });
   }
   ckSuggestVals() {
     const s = this.state;
@@ -24202,8 +24319,8 @@ class Component extends DCLogic {
         const D = ['Pondělí', 'Úterý', 'Středa', 'Čtvrtek', 'Pátek', 'Sobota', 'Neděle'];
         const next = {};
         ranked.slice(0, 4).forEach((x, i) => { next[D[i * 2]] = x.rk; });
-        this.setState({ ckMenu: next, appTab: 4 });
-        this.toast('Týden složený z nejlépe hodnocených návrhů', { icon: 'ph-magic-wand', undo: () => this.setState({ ckMenu: prev }) });
+        this.nastavMenu({ ckMenu: next, appTab: 4 });
+        this.toast('Týden složený z nejlépe hodnocených návrhů', { icon: 'ph-magic-wand', undo: () => this.nastavMenu({ ckMenu: prev }) });
       },
       ckSugPantry: () => this.setState({ appTab: 2 })
     };
@@ -24929,8 +25046,8 @@ class Component extends DCLogic {
             const D = ['Pondělí', 'Úterý', 'Středa', 'Čtvrtek', 'Pátek', 'Sobota', 'Neděle'];
             const next = {};
             [0, 2, 4, 6].forEach((di, i) => { next[D[di]] = keys[i % keys.length]; });
-            this.setState({ ckMenu: next });
-            this.toast('Menu na týden vygenerováno', { icon: 'ph-magic-wand', undo: () => this.setState({ ckMenu: prev }) });
+            this.nastavMenu({ ckMenu: next });
+            this.toast('Menu na týden vygenerováno', { icon: 'ph-magic-wand', undo: () => this.nastavMenu({ ckMenu: prev }) });
             return;
           }
           if (route) { this.setState({ route: route, appTab: 0 }); return; }
@@ -30557,8 +30674,9 @@ class Component extends DCLogic {
         const t = pTile(i);
         return {
           bg: t.bg, open: t.open,
-          yes: () => { this.setState({ sugSeen: { ...s.sugSeen, [s.personId + '-' + i]: 1 } }); this.toast('Přiřazeno k ' + s.personId, { icon: 'ph-check-circle', undo: true }); },
-          no: () => { this.setState({ sugSeen: { ...s.sugSeen, [s.personId + '-' + i]: 1 } }); this.toast('Návrh zamítnut', { icon: 'ph-x-circle', undo: true }); }
+          // „Zpět" bylo `undo: true`, tlačítko bez obsluhy.
+          yes: () => { const prev = s.sugSeen; this.setState({ sugSeen: { ...s.sugSeen, [s.personId + '-' + i]: 1 } }); this.toast('Přiřazeno k ' + this.pName(s.personId), { icon: 'ph-check-circle', undo: () => this.setState({ sugSeen: prev }) }); },
+          no: () => { const prev = s.sugSeen; this.setState({ sugSeen: { ...s.sugSeen, [s.personId + '-' + i]: 1 } }); this.toast('Návrh zamítnut', { icon: 'ph-x-circle', undo: () => this.setState({ sugSeen: prev }) }); }
         };
       }),
       personConfirm: () => { this.setState({ confirmed: { ...s.confirmed, [s.personId]: 1 } }); this.toast(this.pName(s.personId) + ' potvrzeno — propíše se do hledání', { icon: 'ph-user-circle-check' }); },
@@ -30702,8 +30820,8 @@ class Component extends DCLogic {
           const keys = Object.keys(RECIPES), prev = this.menuOf(), DAYS = ['Pondělí', 'Úterý', 'Středa', 'Čtvrtek', 'Pátek', 'Sobota', 'Neděle'];
           const next = {};
           [0, 2, 4, 6].forEach((di, i) => { next[DAYS[di]] = keys[(i + Math.floor(Math.random() * keys.length)) % keys.length]; });
-          this.setState({ ckMenu: next, appTab: 2 });
-          this.toast('Menu na týden vygenerováno ze čtyř receptů', { icon: 'ph-magic-wand', undo: () => this.setState({ ckMenu: prev }) });
+          this.nastavMenu({ ckMenu: next, appTab: 2 });
+          this.toast('Menu na týden vygenerováno ze čtyř receptů', { icon: 'ph-magic-wand', undo: () => this.nastavMenu({ ckMenu: prev }) });
           return;
         }
         if (appKey === 'shopping') {

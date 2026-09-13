@@ -11,9 +11,11 @@ use App\Services\Provoz\AdminVeStavu;
 use App\Services\Provoz\DarkyVeStavu;
 use App\Services\Provoz\DomacnostVeStavu;
 use App\Services\Provoz\FilmyVeStavu;
+use App\Services\Provoz\FinanceVeStavu;
 use App\Services\Provoz\InboxVeStavu;
 use App\Services\Provoz\KapsleVeStavu;
 use App\Services\Provoz\KlidVeStavu;
+use App\Services\Provoz\KucharkaVeStavu;
 use App\Services\Provoz\MechanismyVeStavu;
 use App\Services\Provoz\MediaVeStavu;
 use App\Services\Provoz\NakupyVeStavu;
@@ -76,6 +78,8 @@ class StateController extends Controller
         private readonly NakupyVeStavu $nakupy,
         private readonly SeznamyVeStavu $seznamy,
         private readonly MediaVeStavu $media,
+        private readonly KucharkaVeStavu $kucharka,
+        private readonly FinanceVeStavu $finance,
     ) {}
 
     public function show(Request $request): JsonResponse
@@ -225,6 +229,17 @@ class StateController extends Controller
              */
             if ($this->media->tykaSe($patch)) {
                 $this->media->zpracuj($patch, $state->toClientArray(), GallerySpace::findOrFail($coupleId), $uzivatel);
+            }
+
+            /*
+             * Zařazení transakcí do kategorií.
+             *
+             * Obrazovka Transakce ukazovala novou kategorii, rozpočet počítaný
+             * z knihy transakci dál vedl jako nezařazenou. Klíč zůstává kvůli
+             * tlačítku Zpět; do knihy se změna propíše.
+             */
+            if ($this->finance->tykaSe($patch)) {
+                $patch = $this->finance->zpracuj($patch, $state->toClientArray(), GallerySpace::findOrFail($coupleId));
             }
 
             /*
@@ -431,6 +446,19 @@ class StateController extends Controller
                 $this->nakupy->zpracuj($patch, GallerySpace::findOrFail($coupleId), $uzivatel);
                 $patch = $this->nakupy->bezNakupu($patch);
                 $state->zapomenFilmy(NakupyVeStavu::SEZNAMY);
+            }
+
+            /*
+             * Menu na týden.
+             *
+             * Výběr receptu na den zůstával ve stavu prohlížeče, takže se do
+             * nákupního seznamu (počítá se z plánu jídel) nikdy nedostal a mapa
+             * dnů bez týdne by příští pondělí ukazovala totéž.
+             */
+            if ($this->kucharka->tykaSe($patch)) {
+                $this->kucharka->zpracuj($patch, GallerySpace::findOrFail($coupleId), $uzivatel);
+                $patch = $this->kucharka->bezKucharky($patch);
+                $state->zapomen(KucharkaVeStavu::SERVEROVE);
             }
 
             /*

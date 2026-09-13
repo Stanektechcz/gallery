@@ -4,6 +4,7 @@ namespace App\Services\Obsah;
 
 use App\Models\GallerySpace;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -41,7 +42,90 @@ class Kucharka implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     public function uplne(): array
     {
-        return ['RECIPES', 'RECIPE_BY_TITLE'];
+        return ['RECIPES', 'RECIPE_BY_TITLE', 'CKMENU'];
+    }
+
+    /**
+     * Klíč receptu → id řádku, přesně jak klíče dostane prototyp v `RECIPES`.
+     *
+     * Menu na týden posílá klíče (`polevka`, `peka2`); zápis do plánu jídel
+     * potřebuje id. Počítá se stejným dotazem i pořadím jako `recepty()`, jinak
+     * by se u dvou receptů se stejným začátkem názvu přehodila čísla.
+     *
+     * @return array<string, int>
+     */
+    public function idPodleKlice(GallerySpace $prostor): array
+    {
+        if (! Schema::hasTable('recipes')) {
+            return [];
+        }
+
+        $vysledek = [];
+
+        foreach ($this->dotazReceptu($prostor)->get(['id', 'title']) as $r) {
+            $vysledek[$this->klic($r->title, $vysledek)] = (int) $r->id;
+        }
+
+        return $vysledek;
+    }
+
+    /**
+     * Datum dne z menu — nejbližší takový den od dneška včetně.
+     *
+     * Menu ukazuje Pondělí až Neděli bez data. Kdyby se bralo od pondělí
+     * tohoto týdne, výběr „Úterý" v neděli by naplánoval minulé úterý, jídlo
+     * by se do nákupního seznamu (počítá se od dneška) nedostalo a za den by
+     * menu bylo prázdné. Každý den v týdnu je tak v okně sedmi dnů právě jednou.
+     *
+     * @param  int  $poradi  0 = pondělí … 6 = neděle
+     */
+    public static function datumDne(int $poradi): CarbonImmutable
+    {
+        $dnes = CarbonImmutable::now()->startOfDay();
+        $dnesPoradi = ($dnes->dayOfWeek + 6) % 7;
+
+        return $dnes->addDays(($poradi - $dnesPoradi + 7) % 7);
+    }
+
+    /**
+     * Menu na příštích sedm dní jako `{Pondělí: klíč receptu}` (viz `datumDne`).
+     *
+     * Obrazovka ho brala ze stavu prohlížeče, a když tam nebylo, z ukázky —
+     * „3 ze 7 dnů naplánováno" u dvojice, která nenaplánovala nic. Plán jídel
+     * přitom v aplikaci je a počítá se z něj nákupní seznam.
+     *
+     * @param  array<string, int>  $idPodleKlice
+     * @return array<string, string>
+     */
+    private function menuNaTyden(GallerySpace $prostor, array $idPodleKlice): array
+    {
+        if (! Schema::hasTable('planned_meals') || $idPodleKlice === []) {
+            return [];
+        }
+
+        $klicPodleId = array_flip($idPodleKlice);
+        $od = CarbonImmutable::now()->startOfDay();
+        $menu = [];
+
+        $jidla = DB::table('planned_meals')
+            ->where('gallery_space_id', $prostor->id)
+            ->whereNull('trip_id')
+            ->where('meal_type', 'dinner')
+            ->where('status', '!=', 'cancelled')
+            ->where('planned_for', '>=', $od)
+            ->where('planned_for', '<', $od->addDays(7))
+            ->orderBy('planned_for')
+            ->get(['recipe_id', 'planned_for']);
+
+        foreach ($jidla as $j) {
+            $den = self::DNY[CarbonImmutable::parse($j->planned_for)->dayOfWeek];
+
+            if (! isset($menu[$den]) && isset($klicPodleId[(int) $j->recipe_id])) {
+                $menu[$den] = $klicPodleId[(int) $j->recipe_id];
+            }
+        }
+
+        return $menu;
     }
 
     /**
@@ -56,6 +140,7 @@ class Kucharka implements MaPrazdneKolekce, PoskytovatelObsahu
         return [
             'RECIPES' => new \stdClass,
             'RECIPE_BY_TITLE' => new \stdClass,
+            'CKMENU' => new \stdClass,
             'WEATHER' => [],
             'AL' => ['recipes' => [], 'shopping' => [], 'weekMenu' => []],
         ];
@@ -72,6 +157,8 @@ class Kucharka implements MaPrazdneKolekce, PoskytovatelObsahu
         return array_filter([
             'RECIPES' => $recepty,
             'RECIPE_BY_TITLE' => $this->rejstrik($recepty),
+            // Objekt i prázdný: „nic naplánováno" je odpověď, ne chybějící data.
+            'CKMENU' => $recepty ? (object) $this->menuNaTyden($prostor, $this->idPodleKlice($prostor)) : null,
             // Tytéž recepty a naplánovaná jídla jako seznam.
             'AL' => $this->seznamy($recepty, $prostor),
             // Předpověď na pět dní — podle ní obrazovka řadí návrhy.
@@ -149,7 +236,7 @@ class Kucharka implements MaPrazdneKolekce, PoskytovatelObsahu
             ]);
 
         if ($suroviny->isEmpty()) {
-            return [];
+            return $this->pripsane($prostor);
         }
 
         $odskrtnute = Schema::hasTable('meal_shopping_states')
@@ -199,7 +286,40 @@ class Kucharka implements MaPrazdneKolekce, PoskytovatelObsahu
             ];
         }
 
-        return $radky;
+        return array_merge($radky, $this->pripsane($prostor));
+    }
+
+    /**
+     * Položky, které někdo na seznam napsal sám — viz `NakupyVeStavu`.
+     *
+     * Ruční položky obrazovka dá do skupiny „Mimo recepty", chybějící suroviny
+     * připsané z receptu k němu. Klíč nese uuid, aby odškrtnutí i smazání
+     * mířily na řádek.
+     *
+     * @return list<array<int, ?string>>
+     */
+    private function pripsane(GallerySpace $prostor): array
+    {
+        if (! Schema::hasTable('shopping_list_items')) {
+            return [];
+        }
+
+        return DB::table('shopping_list_items')
+            ->where('gallery_space_id', $prostor->id)
+            ->orderBy('is_checked')
+            ->orderByDesc('created_at')
+            ->limit(200)
+            ->get(['uuid', 'title', 'detail', 'is_checked'])
+            ->map(fn (object $p) => [
+                $p->title,
+                // „z receptu Guláš" u chybějící suroviny připsané z receptu, jinak ruční.
+                $p->detail ?: 'ručně přidáno',
+                $p->is_checked ? 'koupeno' : null,
+                null, null, null, null,
+                'shopping-item:'.$p->uuid,
+            ])
+            ->values()
+            ->all();
     }
 
     /**
@@ -246,12 +366,7 @@ class Kucharka implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function recepty(GallerySpace $prostor): array
     {
-        $recepty = DB::table('recipes')
-            ->where('gallery_space_id', $prostor->id)
-            ->where('status', '!=', 'archived')
-            ->orderBy('title')
-            ->limit(60)
-            ->get();
+        $recepty = $this->dotazReceptu($prostor)->get();
 
         if ($recepty->isEmpty()) {
             return [];
@@ -434,6 +549,17 @@ class Kucharka implements MaPrazdneKolekce, PoskytovatelObsahu
     }
 
     /** @param  array<string, mixed>  $uz */
+    /** Jeden dotaz pro recepty i jejich klíče — pořadí rozhoduje o klíčích. */
+    private function dotazReceptu(GallerySpace $prostor): Builder
+    {
+        return DB::table('recipes')
+            ->where('gallery_space_id', $prostor->id)
+            ->where('status', '!=', 'archived')
+            ->orderBy('title')
+            ->orderBy('id')
+            ->limit(60);
+    }
+
     private function klic(string $nazev, array $uz): string
     {
         $bez = iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $nazev);
