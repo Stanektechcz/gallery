@@ -703,6 +703,22 @@ class PravidlaDokumentuPrototypuTest extends TestCase
         }
     }
 
+    /**
+     * Zápis bez signálu přežije zavření okna.
+     *
+     * Fronta žila jen v paměti: kdo zapsal něco v tunelu a stránku obnovil,
+     * o zápis přišel potichu — lokální kopie ho měla, ale odpověď serveru
+     * ji přepsala.
+     */
+    public function test_cekajici_zapis_prezije_obnoveni(): void
+    {
+        $api = (string) file_get_contents(dirname(__DIR__, 2).'/public/galerie-api.js');
+
+        $this->assertStringContainsString('if (cekal && Object.keys(cekal).length && stari < TYDEN) pending = cekal;', $api);
+        $this->assertStringContainsString('pending: ceka ? pending : undefined,', $api);
+        $this->assertStringContainsString('if (Object.keys(pending).length) { merge(pending); schedule(0); }', $api);
+    }
+
     /** Dialog účtu (hesla, klíč 2FA) a nastavení upozornění nejdou do sdíleného stavu. */
     public function test_dialog_uctu_neni_ve_sdilenem_stavu(): void
     {

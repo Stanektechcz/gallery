@@ -58,10 +58,30 @@
   var queuedBySw = false;
   var bc = null;
 
+  /*
+   * Čekající zápis přežije zavření okna.
+   *
+   * Fronta (`pending`) žila jen v paměti. Kdo zapsal něco bez signálu
+   * a stránku pak obnovil — telefon v tunelu, zavřená karta —, o zápis
+   * přišel potichu: lokální kopie ho měla, ale `load()` ji přepsala tím,
+   * co má server, a nikdo se nic nedozvěděl.
+   *
+   * Fronta se proto ukládá vedle kopie a po spuštění se zase odešle.
+   * Starší než týden se zahazuje: přepsat po týdnech to, co mezitím napsal
+   * ten druhý, by bylo horší než ztratit poznámku, na kterou se zapomnělo.
+   */
+  var TYDEN = 7 * 24 * 3600 * 1000;
+
   function readLocal() {
     try {
       var raw = JSON.parse(localStorage.getItem(LS));
-      if (raw && typeof raw === 'object') { rev = raw.rev || 0; return raw.data || {}; }
+      if (raw && typeof raw === 'object') {
+        rev = raw.rev || 0;
+        var cekal = raw.pending && typeof raw.pending === 'object' ? raw.pending : null;
+        var stari = raw.pendingAt ? Date.now() - raw.pendingAt : 0;
+        if (cekal && Object.keys(cekal).length && stari < TYDEN) pending = cekal;
+        return raw.data || {};
+      }
     } catch (e) {}
     return {};
   }
@@ -92,7 +112,13 @@
         Object.keys(data).forEach(function (k) { if (! docasne[k]) ulozit[k] = data[k]; });
       }
 
-      localStorage.setItem(LS, JSON.stringify({ data: ulozit, rev: rev, updated_at: new Date().toISOString() }));
+      var ceka = Object.keys(pending).length > 0;
+
+      localStorage.setItem(LS, JSON.stringify({
+        data: ulozit, rev: rev, updated_at: new Date().toISOString(),
+        pending: ceka ? pending : undefined,
+        pendingAt: ceka ? Date.now() : undefined
+      }));
     } catch (e) {}
   }
   data = readLocal();
@@ -469,7 +495,17 @@
           return r.json();
         })
         .then(function (b) {
-          data = b.data || {}; rev = b.rev || 0; writeLocal(); lastSync = new Date(); notify();
+          data = b.data || {}; rev = b.rev || 0;
+          /*
+           * Co čeká ve frontě, zůstává nahoře.
+           *
+           * Odpověď serveru je pravda o tom, co se uložilo — ale zápis,
+           * který se kvůli výpadku ještě neodeslal, by se jí přepsal
+           * a obrazovka by ukázala starší hodnotu, než jakou má člověk
+           * před očima. Odešle se hned, jak to půjde (`schedule`).
+           */
+          if (Object.keys(pending).length) { merge(pending); schedule(0); }
+          writeLocal(); lastSync = new Date(); notify();
           return snapshot();
         })
         .catch(function (e) { lastError = String(e && e.message || e); return snapshot(); });
