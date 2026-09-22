@@ -280,11 +280,12 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
     private function fotky(Collection $media, Collection $dny): array
     {
         $stitky = $this->stitky($media);
+        $lideNaFotce = $this->lideNaFotkach($media);
         $vAlbu = $this->vazbyAlb($media);
         $this->zjistiNahledy($media->pluck('id')->map(fn ($i) => (int) $i)->all());
         $poradi = 0;
 
-        return $media->map(function (MediaItem $m) use ($dny, $stitky, $vAlbu, &$poradi) {
+        return $media->map(function (MediaItem $m) use ($dny, $stitky, $lideNaFotce, $vAlbu, &$poradi) {
             $poradi++;
             $klic = $this->den($m)->format('Y-m-d');
             $den = $dny[$klic];
@@ -343,6 +344,8 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
                 'upraveno' => isset($this->upraveno[$m->id]) ?: null,
                 'uprava' => $this->platnaUprava[$m->id] ?? null,
                 'tags' => $stitky[$m->id] ?? [],
+                // Kdo je na fotce — označuje se v detailu fotky (MediaVeStavu).
+                'people' => $lideNaFotce[$m->id] ?? [],
                 'sync' => match ($m->status) {
                     'failed' => 'error',
                     'ready' => 'ok',
@@ -448,6 +451,30 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
             ->join('tags as t', 't.id', '=', 'mt.tag_id')
             ->whereIn('mt.media_item_id', $media->pluck('id'))
             ->get(['mt.media_item_id', 't.name'])
+            ->groupBy('media_item_id')
+            ->map(fn (Collection $r) => $r->pluck('name')->all())
+            ->all();
+    }
+
+    /**
+     * Jména lidí označených na fotkách: `{ id fotky: [jméno, …] }`.
+     *
+     * Skrytá osoba se neukazuje — skrytí znamená „zmizí z hledání".
+     *
+     * @return array<int, list<string>>
+     */
+    private function lideNaFotkach(Collection $media): array
+    {
+        if (! Schema::hasTable('media_person')) {
+            return [];
+        }
+
+        return DB::table('media_person as mp')
+            ->join('people as p', 'p.id', '=', 'mp.person_id')
+            ->whereIn('mp.media_item_id', $media->pluck('id'))
+            ->where('p.is_hidden', false)
+            ->orderBy('p.name')
+            ->get(['mp.media_item_id', 'p.name'])
             ->groupBy('media_item_id')
             ->map(fn (Collection $r) => $r->pluck('name')->all())
             ->all();
@@ -1081,6 +1108,8 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
                 'play' => $f['video'] ?? null,
                 // Štítky fotky — telefon u každé fotky ukazoval první tři štítky celé knihovny.
                 'tags' => $f['tags'] ?: null,
+                // Kdo je na fotce — označuje se i z telefonu.
+                'people' => ($f['people'] ?? []) ?: null,
                 // Úprava ze serveru — z ní telefon počítá další otočení a návrat k originálu.
                 'uprava' => $f['uprava'] ?? null,
                 'poster' => $f['poster'] ?? null,

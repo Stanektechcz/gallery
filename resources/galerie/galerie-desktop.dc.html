@@ -14496,6 +14496,24 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
               </div>
               <sc-if value="{{ lbTagAdding }}"><div style="font-size:11.5px; color:var(--g-lb-fg3); margin-top:5px">Enter přidá, Esc zruší, kliknutí mimo pole taky přidá.</div></sc-if>
             </div>
+            <div style="margin-top:14px">
+              <div style="font-size:12px; color:var(--g-lb-fg2); margin-bottom:6px">Na fotce</div>
+              <div style="display:flex; gap:6px; flex-wrap:wrap">
+                <sc-for list="{{ lbPeople }}" as="p" hint-placeholder-count="2">
+                  <span style="display:inline-flex; align-items:center; gap:5px; font-size:12px; padding:4px 9px; border-radius:2px; background:var(--g-lb-btn)"><i class="ph-duotone ph-user" style="font-size:12px"></i>{{ p.label }}<i class="ph-duotone ph-x" onClick="{{ p.remove }}" role="button" aria-label="Odebrat z fotky" style="font-size:11px; cursor:pointer; opacity:.7"></i></span>
+                </sc-for>
+                <sc-if value="{{ lbPersonAdding }}">
+                  <input class="input" list="lb-osoby" value="{{ lbPersonDraft }}" onChange="{{ lbSetPersonDraft }}" onKeyDown="{{ lbPersonKey }}" onBlur="{{ lbCommitPerson }}" placeholder="Jméno" aria-label="Kdo je na fotce" style="width:140px; font-size:12px; padding:4px 8px; background:var(--g-lb-field); color:var(--g-lb-fg); border-color:var(--g-lb-line)" />
+                  <datalist id="lb-osoby">
+                    <sc-for list="{{ lbPersonOpts }}" as="o" hint-placeholder-count="3"><option value="{{ o.value }}"></option></sc-for>
+                  </datalist>
+                </sc-if>
+                <sc-if value="{{ lbPersonIdle }}">
+                  <button onClick="{{ lbStartPerson }}" style="font-size:12px; padding:4px 9px; border-radius:2px; border:1px dashed var(--g-lb-line); background:transparent; color:var(--g-lb-fg); cursor:pointer">+ Osoba</button>
+                </sc-if>
+              </div>
+              <sc-if value="{{ lbPeopleEmpty }}"><div style="font-size:11.5px; color:var(--g-lb-fg3); margin-top:5px">Aplikace tváře nerozpoznává — kdo je na fotce, označíte sami. Osoba se pak objeví v Lidech i v hledání.</div></sc-if>
+            </div>
             <div style="margin-top:20px; display:flex; align-items:center; gap:8px; font-size:13px; color:var(--g-ok)">
               <i class="ph-duotone ph-cloud-check" style="font-size:18px"></i>Originál je bezpečně uložen
             </div>
@@ -26437,9 +26455,27 @@ class Component extends DCLogic {
     const GEN = ['list', 'table', 'diary'];
     const C = counts || {};
     let n = visN, live = liveN;
-    const def = EMPTYDEF[key];
+    /*
+     * Záložky Lidí (`ok`, `sug`, `hidden`) a Tagů (`all`, `sug`) mají jiné
+     * klíče než katalog prázdných stavů (`people`, `peopleSug`, `tags`) —
+     * pod záložkami tak nebylo nic, ani vysvětlení.
+     */
+    const KLIC = { people: { ok: 'people', sug: 'peopleSug' }, tags: { all: 'tags' } };
+    let def = EMPTYDEF[(KLIC[kind] || {})[key] || key];
+    if (!def && kind === 'people' && key === 'hidden') def = ['ph-eye-slash', 'Nikdo skrytý', 'Osobu skryjete v jejím detailu — zmizí z hledání, fotky zůstanou.', null, null, null];
+    if (!def && kind === 'tags' && key === 'sug') def = ['ph-tag', 'Žádné návrhy štítků', 'Aplikace štítky sama nenavrhuje. Přidáte je tlačítkem Nový štítek nebo v detailu fotky.', null, null, null];
     if (kind === 'tags') { n = C.tags || 0; live = n; }
-    else if (kind === 'people') { n = C.people || 0; live = n; }
+    else if (kind === 'people') {
+      // Počet v téhle záložce, ne všech lidí — prázdné Návrhy vedle potvrzených osob.
+      const server = this.lideNaServeru();
+      n = Object.keys(PERSONS).filter(k => {
+        if (!server && (s.pMerged || {})[k]) return false;
+        const hid = !server && (s.pHidden || {})[k] !== undefined ? !!(s.pHidden || {})[k] : PERSONS[k].tag === 'skryto';
+        const ok = PERSONS[k].tag === 'potvrzeno' || !!(s.confirmed || {})[k];
+        return (hid ? 'hidden' : ok ? 'ok' : 'sug') === (key || 'ok');
+      }).length;
+      live = n;
+    }
     else if (kind === 'diary' && C.diary !== undefined) { n = C.diary; live = C.diary; }
     if (key === 'recipes') {
       const q = (s.ckQuery || '').trim().toLowerCase();
@@ -35133,6 +35169,44 @@ class Component extends DCLogic {
         ed[s.lb] = { ...(ed[s.lb] || {}), tags: cur.tags.concat(t) };
         this.setState({ edits: ed, lbTagAdd: false, lbTagDraft: '' });
         this.toast('Štítek „' + t + '“ přidán', { icon: 'ph-tag', undo: () => this.setState({ edits: prev }) });
+      },
+      /*
+       * Kdo je na fotce. Označit osobu šlo jen ve starém rozhraní, takže Lidé
+       * v galerii zůstávali prázdní. Jméno se zapíše do úprav fotky a server
+       * osobu najde nebo založí (MediaVeStavu); nabízí se jména, která už jsou.
+       */
+      lbPeople: ((cur && cur.people) || []).map(j => ({
+        label: j,
+        remove: () => {
+          const prev = s.edits;
+          const ed = { ...s.edits };
+          ed[s.lb] = { ...(ed[s.lb] || {}), people: (cur.people || []).filter(x => x !== j) };
+          this.setState({ edits: ed });
+          this.toast(j + ' už na fotce není', { icon: 'ph-user-minus', undo: () => this.setState({ edits: prev }) });
+        }
+      })),
+      lbPeopleEmpty: !((cur && cur.people) || []).length && !s.lbPersonAdd,
+      lbPersonAdding: !!s.lbPersonAdd, lbPersonIdle: !s.lbPersonAdd,
+      lbPersonDraft: s.lbPersonDraft || '',
+      lbPersonOpts: Object.keys(PERSONS).map(k => ({ value: this.pName(k) })),
+      lbStartPerson: () => this.setState({ lbPersonAdd: true, lbPersonDraft: '' }),
+      lbSetPersonDraft: e => this.setState({ lbPersonDraft: e.target.value }),
+      lbPersonKey: e => {
+        if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); }
+        if (e.key === 'Escape') { e.preventDefault(); this.setState({ lbPersonAdd: false, lbPersonDraft: '' }); }
+      },
+      lbCommitPerson: () => {
+        const j = (s.lbPersonDraft || '').trim().replace(/\s+/g, ' ');
+        if (!j || !cur) { this.setState({ lbPersonAdd: false, lbPersonDraft: '' }); return; }
+        const uz = (cur.people || []).find(x => x.toLowerCase() === j.toLowerCase());
+        if (uz) { this.setState({ lbPersonAdd: false, lbPersonDraft: '' }); this.toast(uz + ' už na fotce je', { icon: 'ph-info' }); return; }
+        // Známé jméno v jeho zápisu (velikost písmen), ať nevznikne druhá osoba.
+        const znama = Object.keys(PERSONS).map(k => this.pName(k)).find(x => x.toLowerCase() === j.toLowerCase());
+        const prev = s.edits;
+        const ed = { ...s.edits };
+        ed[s.lb] = { ...(ed[s.lb] || {}), people: (cur.people || []).concat(znama || j) };
+        this.setState({ edits: ed, lbPersonAdd: false, lbPersonDraft: '' });
+        this.toast((znama || j) + ' — označeno na fotce' + (znama ? '' : ' · nová osoba v Lidech'), { icon: 'ph-user-plus', undo: () => this.setState({ edits: prev }) });
       },
       ...(() => {
         // Komentáře k médiu — vlákno pod detailem, sdílené oběma.

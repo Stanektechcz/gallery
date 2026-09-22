@@ -309,6 +309,18 @@ class PravidlaDokumentuPrototypuTest extends TestCase
         $this->assertStringContainsString('this.startShow(this.fotkyVyberu(AGRID.show, all)', $pocitac);
     }
 
+    /** Kdo je na fotce: „+ Osoba" v detailu fotky na obou rozvrženích. */
+    public function test_osoby_jdou_oznacit_na_fotce(): void
+    {
+        $pocitac = self::dokument('galerie-desktop.dc.html');
+        $telefon = self::dokument('galerie-mobil.dc.html');
+
+        $this->assertStringContainsString('onClick="{{ lbStartPerson }}"', $pocitac);
+        $this->assertStringContainsString("people: (cur.people || []).concat(znama || j)", $pocitac);
+        $this->assertStringContainsString('onClick="{{ lbDetail.personAdd }}"', $telefon);
+        $this->assertStringContainsString('{ people: seznam }', $telefon);
+    }
+
     /** Koš v telefonu umí i trvale odstranit — dřív jen „Obnovit". */
     public function test_telefon_maze_z_kose_na_serveru(): void
     {

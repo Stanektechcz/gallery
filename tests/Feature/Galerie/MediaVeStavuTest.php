@@ -4,6 +4,7 @@ namespace Tests\Feature\Galerie;
 
 use App\Models\GallerySpace;
 use App\Models\MediaItem;
+use App\Models\Person;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -63,6 +64,37 @@ class MediaVeStavuTest extends TestCase
         $this->assertEqualsCanonicalizing(['hory', 'Ráno'], $foto->tags()->pluck('name')->all());
         // Úpravy zůstávají i ve stavu — prototyp z nich kreslí hned.
         $this->assertSame('Pustevny', $this->actingAs($this->adri)->getJson('/api/state')->json('data.edits.'.$foto->uuid.'.place'));
+    }
+
+    /**
+     * Kdo je na fotce: známé jméno se použije, nové založí osobu.
+     *
+     * Označit osobu šlo jen ve starém rozhraní — Lidé v galerii zůstávali
+     * prázdní bez možnosti je naplnit.
+     */
+    public function test_osoby_na_fotce(): void
+    {
+        $foto = $this->fotka();
+        $makinka = Person::create(['gallery_space_id' => $this->prostor->id, 'name' => 'Makinka']);
+        $skryta = Person::create(['gallery_space_id' => $this->prostor->id, 'name' => 'Teta', 'is_hidden' => true]);
+        $foto->people()->attach($skryta->id);
+
+        $this->actingAs($this->adri)->patchJson('/api/state', ['data' => ['edits' => [$foto->uuid => [
+            'people' => ['makinka', 'Babička Jana'],
+        ]]]])->assertOk();
+
+        $this->assertSame(2, Person::withoutGlobalScopes()->where('gallery_space_id', $this->prostor->id)->where('is_hidden', false)->count(), 'Makinka se nezdvojila.');
+        $this->assertEqualsCanonicalizing(['Makinka', 'Babička Jana', 'Teta'], $foto->people()->pluck('name')->all());
+        $this->assertSame($this->adri->id, (int) $foto->people()->where('people.id', $makinka->id)->first()->pivot->tagged_by);
+
+        // Dlaždice ukazuje jen viditelné osoby; v Lidech je nová osoba.
+        $data = $this->actingAs($this->adri)->getJson('/api/data/knihovna')->assertOk()->json('data');
+        $this->assertSame(['Babička Jana', 'Makinka'], collect($data['PHOTOS'])->firstWhere('id', $foto->uuid)['people']);
+        $this->assertArrayHasKey('Babička Jana', $data['PERSONS']);
+
+        // Odebrání ze seznamu osobu z fotky sundá, skrytá zůstane.
+        $this->actingAs($this->adri)->patchJson('/api/state', ['data' => ['edits' => [$foto->uuid => ['people' => ['Makinka']]]]])->assertOk();
+        $this->assertEqualsCanonicalizing(['Makinka', 'Teta'], $foto->people()->pluck('name')->all());
     }
 
     /** Opakovaně poslaný stejný seznam úprav nepřepíše změnu udělanou jinde. */

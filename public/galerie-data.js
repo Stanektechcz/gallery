@@ -1527,7 +1527,7 @@
     vault: ['ph-lock-key', 'Trezor je prázdný', 'Co sem vložíte, nenajde ani hledání a druhý to bez ověření neuvidí.', null, null, null],
     users: ['ph-users', 'Žádní další lidé', 'Aplikace je pro dva. Pozvánka se dá poslat na jeden e-mail.', null, null, null],
     // Tváře aplikace nerozpoznává — osoby zakládá člověk (starší rozhraní, Lidé). Slibovat návrhy by byla lež.
-    people: ['ph-users', 'Zatím nikdo pojmenovaný', 'Aplikace tváře sama nerozpoznává. Osoby, které si založíte, se objeví tady.', 'Otevřít knihovnu', 'ph-images', 'all'],
+    people: ['ph-users', 'Zatím nikdo pojmenovaný', 'Aplikace tváře sama nerozpoznává. Kdo je na fotce, označíte v detailu fotky tlačítkem „+ Osoba" — osoba se pak objeví tady i v hledání.', 'Otevřít knihovnu', 'ph-images', 'all'],
     peopleSug: ['ph-user-focus', 'Žádné návrhy tváří', 'Aplikace tváře nerozpoznává, takže návrhy nevznikají.', null, null, null],
     tags: ['ph-tag', 'Žádné štítky', 'Štítky vznikají z popisků a z hledání. Přidat se dají i ručně u kterékoliv fotky.', 'Otevřít knihovnu', 'ph-images', 'all'],
     txs: ['ph-receipt', 'Žádné transakce', 'Napojte účet, nahrajte výpis, nebo napište platbu rychlým vstupem.', 'Účty a napojení', 'ph-bank', 'x-ucty'],

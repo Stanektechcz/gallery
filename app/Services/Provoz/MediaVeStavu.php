@@ -4,6 +4,7 @@ namespace App\Services\Provoz;
 
 use App\Models\GallerySpace;
 use App\Models\MediaItem;
+use App\Models\Person;
 use App\Models\Tag;
 use App\Models\User;
 use App\Support\SpaceContext;
@@ -154,6 +155,10 @@ class MediaVeStavu
             if ($zmena('tags') && is_array($uprava['tags'])) {
                 $this->stitky($m, $uprava['tags'], $prostor, $kdo);
             }
+
+            if ($zmena('people') && is_array($uprava['people'])) {
+                $this->osoby($m, $uprava['people'], $prostor, $kdo);
+            }
         }
     }
 
@@ -197,6 +202,49 @@ class MediaVeStavu
         }
 
         $m->tags()->sync($id);
+    }
+
+    /**
+     * Kdo je na fotce — podle jména.
+     *
+     * Označit osobu šlo jen ve starém rozhraní; galerie Lidi jen ukazovala
+     * a dvojice je neměla jak naplnit. Známé jméno (bez ohledu na velikost
+     * písmen) se použije, nové založí osobu. Skrytá osoba na fotce zůstává,
+     * i když ji obrazovka neukazuje — odebrat ji tak omylem nejde.
+     *
+     * @param  list<mixed>  $jmena
+     */
+    private function osoby(MediaItem $m, array $jmena, GallerySpace $prostor, User $kdo): void
+    {
+        $id = [];
+
+        foreach (array_slice($jmena, 0, 30) as $jmeno) {
+            $jmeno = mb_substr(trim((string) $jmeno), 0, 100);
+
+            if ($jmeno === '') {
+                continue;
+            }
+
+            $osoba = Person::withoutGlobalScope(SpaceContext::SCOPE)
+                ->where('gallery_space_id', $prostor->id)
+                ->whereRaw('LOWER(name) = ?', [mb_strtolower($jmeno)])
+                ->first()
+                ?? Person::withoutGlobalScope(SpaceContext::SCOPE)->create([
+                    'gallery_space_id' => $prostor->id,
+                    'name' => $jmeno,
+                    'created_by' => $kdo->id,
+                ]);
+
+            $id[$osoba->id] = ['tagged_by' => $kdo->id, 'created_at' => now()];
+        }
+
+        $skryte = $m->people()->where('people.is_hidden', true)->pluck('people.id')->all();
+
+        foreach ($skryte as $osoba) {
+            $id[$osoba] ??= ['tagged_by' => $kdo->id, 'created_at' => now()];
+        }
+
+        $m->people()->sync($id);
     }
 
     /** @param  list<string>  $uuid */
