@@ -447,6 +447,63 @@ Testy: **1421 PHP testů**, všechny prošly.
 
 ---
 
+## 2l. Dvanácté kolo — Zprávy na telefonu a čas dvojice (22. 9.)
+
+Porovnání, které serverové akce volá počítač a které telefon, ukázalo
+největší díru: **telefon neměl zprávy**. Hovor dvojice šel na telefonu
+otevřít jen přes Přehled → Všechny obrazovky jako náhled posledních 14
+bublin — bez psaní, bez hlasovek k poslechu a bez fotek.
+
+- **Telefon → Více → Zprávy a hlasovky**: celé vlákno po dnech, bubliny
+  s textem, fotkou a přehrávačem hlasovky; psaní, nahrání hlasovky
+  (mikrofon), poslání fotky; smazání vlastní zprávy (dvojím klepnutím);
+  během odesílání bublina „odesílá se…"; vlákno se na otevřené obrazovce
+  obnovuje každých 20 s a sjede na konec nad lištu pro psaní.
+- Posílá se stejně jako z počítače (`/v1/chat`); hlasovka se napřed nahraje
+  jako záznam a do hovoru jde odkaz na něj (`voice_note`), takže ji jde
+  přehrát na obou zařízeních.
+- **Počítač: „Smazat zprávu"** mazalo jen v místním seznamu a hlásilo
+  „smazána u obou" — po obnovení se zpráva vrátila a u druhého nezmizela
+  nikdy. Teď se ptá a maže na serveru; tlačítko je jen u vlastních zpráv
+  (cizí server smazat nedovolí).
+- **Čas v aplikaci byl UTC.** Obsah pro obrazovky formátoval okamžiky
+  v UTC: zpráva odeslaná v 11:09 ukazovala 9:09, koš „dnes v 20:53" ve
+  22:53, těsně po půlnoci patřilo „dnes" ke včerejšku. Nový
+  `App\Support\Cas` převádí okamžiky (`created_at`, smazáno, synchronizace,
+  spuštění pravidla…) do pásma dvojice (`APP_TIMEZONE`, výchozí
+  Europe/Prague) — zprávy, koš, protokol, domácnost, pravidla, vztah,
+  sdílení, finance, příběh, plánování a přehled dne. Časy zadané podle
+  hodin (začátek akce, EXIF fotky) se neposouvají. Ukládá se dál v UTC.
+
+Ověřeno v prohlížeči (telefon): otevření z menu Více, odeslání textu
+(`POST /api/v1/chat 201`, „odesílá se…", pak ve vlákně), čas 11:09 = 11:09,
+fotka ve vlákně (obrázek se načte), hlasovka s přehrávačem, smazání vlastní
+zprávy dvojím klepnutím; v rámu 375 × 760 lišta pro psaní nad navigací
+a poslední zpráva nad lištou. Počítač: cizí zpráva bez tlačítka Smazat,
+dialog „Smazat zprávu?", `DELETE /api/v1/chat/… 200`. Nahrávání mikrofonem
+v panelu prohlížeče nejde (mikrofon je zablokovaný) — pokrývá ho test
+cesty `voice_note`.
+
+Také opraven test, který by od 18. 9. 2026 sám padal (datum akce napevno
+v minulosti).
+
+| Commit | Obsah |
+|---|---|
+| `f4898d55` | Zprávy na telefonu; `/v1/chat` přijímá `voice_note`; mazání zprávy na počítači na serveru a jen u vlastních |
+| `a0e1ebad` | `App\Support\Cas` — okamžiky v pásmu dvojice (`APP_TIMEZONE`) v obsahu pro obrazovky |
+| `ae026f73` | Test připomínky s pevným „teď" |
+
+Testy: **1428 PHP testů**, všechny prošly.
+
+### Co zůstává (2l)
+
+- Datum (bez času) u některých okamžiků ve starších částech obsahu (např.
+  „přidáno 3. 9.") se počítá v UTC — liší se jen mezi půlnocí a 2:00.
+- Odesílání zpráv z telefonu bez signálu se neukládá do fronty — ukáže
+  chybu a text vrátí do pole.
+
+---
+
 ## 3. Známé nedostatky — bezpečnost
 
 Seřazeno podle rizika. Nic z toho není aktivně zneužitelné bez jiné chyby,
