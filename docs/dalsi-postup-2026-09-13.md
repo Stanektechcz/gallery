@@ -751,7 +751,7 @@ hotovou věc) a telefonu (hlášky nad klíči stavu, které se neukládají).
   chce migraci (stav, počet kusů, nastavení editoru u `photo_books`).
 - Nastavení připomínek vzpomínek (čas, komu, tichý režim) je předvolba
   zařízení, kterou server neukládá; oznámení chodí v 8:30 všem členům.
-- Komentáře k fotce (`lbCom`), archiv alba, balení na cestu, chytrá alba:
+- ~~Komentáře k fotce, archiv alba, balení na cestu~~ — hotovo (2r). Chytrá alba:
   ukládají se ve sdíleném stavu, ne v tabulkách, které k nim server má.
 
 | Commit | Obsah |
@@ -764,6 +764,52 @@ hotovou věc) a telefonu (hlášky nad klíči stavu, které se neukládají).
 | `320056cc` | Vzpomínky dvojice se konečně ukážou a generují se každé ráno |
 
 Testy: **1480 PHP testů**, všechny prošly. Nic se nemigruje.
+
+## 2r. Osmnácté kolo — sdílený stav do tabulek, audit telefonu (22. 9.)
+
+Věci, které žily jen ve sdíleném stavu dvojice (nebo jen v telefonu), přitom
+server k nim má tabulku — a audit telefonu stejnou metodou jako minule počítač.
+
+- **Komentáře u fotek**: z `lbCom` ve stavu do `media_comments`
+  (`/api/v1/media/{uuid}/comments`); smazat jde jen vlastní, čas v pásmu
+  dvojice. Co už napsané bylo, převede migrace.
+- **Archiv alb**: `albums.archived_at`, `POST /api/alba/{uuid}/archivovat`;
+  archivované album zmizí z Alb na obou zařízeních, dole v Albech (a v
+  telefonu v „Archiv a záchrana") jde vrátit. Dřívější `albArchived` migrace
+  archivuje doopravdy.
+- **Balení na cestu**: zaškrtnutí jde do `trip_packing_items` (dřív `pack`
+  podle pořadí, který přebil i to, co odškrtl druhý).
+- **Spíž**: množství, nové i odebrané položky do `house_pantry_items`
+  (`POST /api/domacnost/spiz`) na počítači i telefonu.
+- **Fronta zápisů** slučuje `xRows` po seznamech — dva rychlé zápisy různých
+  seznamů přepsaly ten první.
+- **Telefon**: rychlý zápis (nákup, nápad, odkaz), akce do kalendáře k dni
+  (`POST /api/kalendar/udalost`), zápis k dni s datem dne, nástěnka úkolů
+  (Hotovo na server), kolečko (menu, kalendář, kývnutí pod jménem), uložená
+  hledání a hranice rozvahy se ukládají; ukázkové akce v prázdném kalendáři
+  a „Plitvice" na záložním Domů jsou pryč.
+
+Ověřeno v prohlížeči (testovací řádky uklizeny): komentář přidat/smazat,
+archivace alba a návrat, akce do kalendáře k 25. 9. (18.30 → 18:30), zápis
+k 25. 8., rychlý zápis nákupu i nápadu v databázi, přesun úkolu do Hotovo
+(`completed`).
+
+| Commit | Obsah |
+|---|---|
+| `d293b06b` | Komentáře u fotek v tabulce, ne ve sdíleném stavu |
+| `4f5c48fa` | Archiv alb doopravdy: na serveru, na obou zařízeních, s návratem |
+| `15f889e4` | Balení na cestu se odškrtává na serveru |
+| `c9aaa336` | Telefon: co hlásilo uloženo, se doopravdy uloží (audit) |
+| `380cc22d` | Test pravidel: rychlý zápis posílá nápady jedním zápisem se seznamy |
+
+Testy: **1488 PHP testů**, všechny prošly. **Dvě migrace** (viz níže).
+
+### Po nasazení (2r)
+
+- Migrace `2026_09_22_100000_komentare_ze_stavu_do_tabulky` a
+  `2026_09_22_110000_add_archived_at_to_albums` spustí `deploy.sh`
+  (`artisan migrate --force`). Převedou komentáře a „archivovaná" alba ze
+  stavu dvojice; nic se nemaže kromě těch dvou klíčů ve stavu.
 
 ### Po nasazení (2q)
 
