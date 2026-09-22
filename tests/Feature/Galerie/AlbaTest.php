@@ -207,6 +207,32 @@ class AlbaTest extends TestCase
         $this->assertSame('Cizí', $ciziAlbum->fresh()->title);
     }
 
+    /**
+     * Archivované album zmizí z Alb (i z kopie telefonu) a jde vrátit.
+     *
+     * „Archivovat album" dřív schovalo album jen v jednom prohlížeči a Archiv,
+     * o kterém mluvila hláška, neexistoval.
+     */
+    public function test_album_jde_archivovat_a_vratit(): void
+    {
+        $foto = $this->fotka();
+        $uuid = $this->postJson('/api/alba', ['nazev' => 'Svatba Kláry', 'media' => [$foto->uuid]])->json('album');
+
+        $odpoved = $this->postJson('/api/alba/'.$uuid.'/archivovat', ['archivovat' => true])->assertOk();
+
+        $this->assertNotContains('Svatba Kláry', collect($odpoved->json('data.ALBUMS'))->pluck('name')->all());
+        $this->assertNotContains('Svatba Kláry', collect($odpoved->json('data.MOBIL.ALBUMS'))->pluck('name')->all());
+        $this->assertSame('Svatba Kláry', $odpoved->json('data.ALBUMS_ARCH.0.name'));
+        $this->assertStringStartsWith('archivováno ', $odpoved->json('data.ALBUMS_ARCH.0.when'));
+        // Fotka v archivovaném albu zůstává.
+        $this->assertSame(1, DB::table('album_media')->count());
+
+        $zpet = $this->postJson('/api/alba/'.$uuid.'/archivovat', ['archivovat' => false])->assertOk();
+        $this->assertContains('Svatba Kláry', collect($zpet->json('data.ALBUMS'))->pluck('name')->all());
+        // Prázdný archiv odpověď hlásí, aby klient nenechal starý seznam.
+        $this->assertTrue($zpet->json('data.ALBUMS_ARCH') === [] || in_array('ALBUMS_ARCH', $zpet->json('prazdne'), true));
+    }
+
     private function fotka(array $navic = []): MediaItem
     {
         static $poradi = 0;

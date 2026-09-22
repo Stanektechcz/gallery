@@ -5651,6 +5651,8 @@ const MEMPTY = {
   itinWish: ['ph-map-pin', 'Seznam přání je prázdný', 'Cíl, kam se chcete podívat, přidáte tady nebo v Místech — uvidíte ho oba, i na mapě.', 'Přidat místo', 'ph-map-pin-plus', 'add:place'],
   voice: ['ph-microphone', 'Žádné hlasovky', 'Nahrajte ji mikrofonem v chatu — přehrát ji půjde u zprávy. Na text ji aplikace nepřepisuje.', 'Otevřít chat', 'ph-chats-circle', 'chat'],
   tickets: ['ph-ticket', 'Žádné jízdenky', 'Jízdenku zapíšete i s trasou — uvidíte ji oba, na telefonu i na počítači.', 'Přidat jízdenku', 'ph-plus', 'add:ticket'],
+  archive: ['ph-archive', 'Archiv je prázdný', 'Album archivujete v jeho nabídce na počítači — zmizí z Alb a tady ho jde vrátit. Fotky v něm zůstávají.', null, null, null],
+  recovery: ['ph-lifebuoy', 'Tady není co zachraňovat', 'Smazané fotky a alba čekají 30 dní v Koši — odtamtud je vrátíte.', 'Otevřít koš', 'ph-trash', 'trash'],
   // Archiv jízdenek server nevede — záložka jen poctivě řekne, kde jízdenky jsou.
   ticketsOld: ['ph-archive', 'Archiv jízdenek nevedeme', 'Uložené jízdenky jsou v Aktuálních. Smazaná jízdenka zmizí u obou, do archivu se neodkládá.', 'Aktuální jízdenky', 'ph-ticket', 'sec:jizdenky/0']
 };
@@ -6042,7 +6044,8 @@ const telefonZeServeru = (() => {
       tags: (stitky.all || []).map(t => ['#' + t[0], t[1] + ' fotek', null]),
       tagMerge: al('tagMerge'),
       dupes: al('dupes'), dupesDone: [],
-      archive: [], recovery: [],
+      // Archivovaná alba ze serveru — „Vrátit" je vrátí mezi Alba (čtvrté pole je uuid).
+      archive: (G.ALBUMS_ARCH || []).map(a => [a.name, a.count + ' · ' + a.when, 'archiv', a.id]), recovery: [],
       tv: [], print: al('print'),
       story: al('story'),
       ms: milniky.map(m => [m[1], m[0], null]),
@@ -10477,7 +10480,8 @@ class Component extends DCLogic {
      * nenabízejí — hláška bez účinku by byla horší.
      */
     const naServeru = this.galerieNaServeru();
-    const bezAkce = naServeru && ['voice', 'print', 'recovery', 'tv', 'archive', 'peopleSug'].indexOf(key) >= 0;
+    // Archiv alb už akci má („Vrátit" → server); ostatní telefon u dvojice udělat neumí.
+    const bezAkce = naServeru && ['voice', 'print', 'recovery', 'tv', 'peopleSug'].indexOf(key) >= 0;
     return list.map(r => {
       const id = r.id;
       const zRadku = r.g === 'koupeno' || r.g === 'viděli jsme' || r.g === 'hotovo';
@@ -10515,6 +10519,14 @@ class Component extends DCLogic {
             window.GalerieApi.save({ dupDone: [g.id], dupKeep: {} });
             setTimeout(() => { if (window.GalerieObnovit) { window.GalerieObnovit('knihovna'); window.GalerieObnovit('system'); } }, 3000);
             this.toast('Sloučeno — ostatní kopie jsou v koši', { icon: 'ph-broom' });
+            return;
+          }
+          if (naServeru && key === 'archive') {
+            if (!/^[0-9a-f-]{36}$/i.test(String(id))) { this.toast('Tohle album se vrátit nedá — obnovte seznam', { icon: 'ph-info', silent: true }); return; }
+            window.GalerieApi.post('alba/' + id + '/archivovat', { archivovat: false }).then(res => {
+              if (res && window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data, res.prazdne);
+              this.toast((res && res.zprava) || 'Album je zpátky mezi Alby', { icon: 'ph-arrow-u-up-left' });
+            }).catch(e => this.chybaServeru(e, 'Album se nepodařilo vrátit'));
             return;
           }
           if (naServeru && key === 'tickets') {

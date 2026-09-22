@@ -79,7 +79,8 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     public function uplne(): array
     {
-        return ['PERSONS', 'ATAGS', 'APEOPLE'];
+        // Archiv alb celý: po vrácení posledního alba musí odpověď říct „prázdno".
+        return ['PERSONS', 'ATAGS', 'APEOPLE', 'ALBUMS_ARCH'];
     }
 
     /**
@@ -95,6 +96,7 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
             'PHOTOS' => [],
             'DAYS' => [],
             'ALBUMS' => [],
+            'ALBUMS_ARCH' => [],
             'ATREE' => [],
             'PERSONS' => new \stdClass,
             'APEOPLE' => ['ok' => [], 'sug' => [], 'hidden' => []],
@@ -126,6 +128,7 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
             // mají svoje počty a jinak by u nich zůstala čísla z ukázky.
             return array_filter([
                 'ALBUMS' => $alba,
+                'ALBUMS_ARCH' => $this->archivovanaAlba($prostor),
                 'ATREE' => $alba ? $this->strom($alba) : [],
                 'NAVCNT' => $this->navPocty($prostor),
             ]);
@@ -141,6 +144,7 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
             'DAYS' => $dny->values()->all(),
             'PHOTOS' => $fotky,
             'ALBUMS' => $alba,
+            'ALBUMS_ARCH' => $this->archivovanaAlba($prostor),
             'ATREE' => $this->strom($alba),
             'PERSONS' => $lide,
             // Táž jména, jen ve tvaru, na který je napsané úzké rozvržení.
@@ -490,11 +494,47 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
     }
 
     /** @return list<array<string, mixed>> */
+    /** Umí databáze archiv alb (sloupec `archived_at`)? */
+    private function archivAlb(): bool
+    {
+        return Schema::hasColumn('albums', 'archived_at');
+    }
+
+    /**
+     * Archivovaná alba: `[{ id, name, count, when }]` — vrátit je jde z Alb.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function archivovanaAlba(GallerySpace $prostor): array
+    {
+        if (! $this->archivAlb()) {
+            return [];
+        }
+
+        return DB::table('albums')
+            ->where('gallery_space_id', $prostor->id)
+            ->whereNull('deleted_at')
+            ->whereNotNull('archived_at')
+            ->orderByDesc('archived_at')
+            ->limit(50)
+            ->get(['uuid', 'title', 'media_count', 'archived_at'])
+            ->map(fn (object $a) => [
+                'id' => (string) $a->uuid,
+                'name' => (string) $a->title,
+                'count' => $this->pocet((int) $a->media_count, 'položka', 'položky', 'položek'),
+                'when' => 'archivováno '.Cas::mistni($a->archived_at)?->format('j. n. Y'),
+            ])
+            ->values()
+            ->all();
+    }
+
     private function alba(GallerySpace $prostor): array
     {
         $modely = Album::withoutGlobalScope(SpaceContext::SCOPE)
             ->where('gallery_space_id', $prostor->id)
             ->whereNull('deleted_at')
+            // Archivovaná alba mezi Alby nepatří (počítač ani telefon) — viz `archivovanaAlba()`.
+            ->when($this->archivAlb(), fn ($q) => $q->whereNull('archived_at'))
             ->with('cover:id,uuid')
             ->orderByDesc('updated_at')
             ->limit(40)

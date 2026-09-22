@@ -504,6 +504,19 @@ class PravidlaDokumentuPrototypuTest extends TestCase
         $this->assertStringContainsString('get: function (path) {', $api);
     }
 
+    /** Archiv alb na serveru — a na telefonu z něj jde album vrátit. */
+    public function test_archiv_alb_na_serveru(): void
+    {
+        $pocitac = self::dokument('galerie-desktop.dc.html');
+        $telefon = self::dokument('galerie-mobil.dc.html');
+
+        $this->assertStringContainsString("api.post('alba/' + album.id + '/archivovat', { archivovat: true })", $pocitac);
+        $this->assertStringContainsString('<sc-if value="{{ albArchOn }}">', $pocitac);
+        $this->assertStringContainsString('.filter(a => this.albumNaServeru(a) || !arch[a.id])', $pocitac);
+        $this->assertStringContainsString("archive: (G.ALBUMS_ARCH || []).map(a => [a.name, a.count + ' · ' + a.when, 'archiv', a.id])", $telefon);
+        $this->assertStringContainsString("window.GalerieApi.post('alba/' + id + '/archivovat', { archivovat: false })", $telefon);
+    }
+
     /** Přihlášení se na kód druhého ověření ptá políčkem, ne dialogem prohlížeče. */
     public function test_dvoufazove_overeni_ma_policko(): void
     {

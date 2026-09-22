@@ -270,6 +270,32 @@ class AlbaController extends Controller
         return response()->json(['ok' => true, 'zprava' => 'Album vráceno'] + $this->obsahPoAkci($this->obsah, $prostor));
     }
 
+    /**
+     * Archivovat album, nebo ho z archivu vrátit.
+     *
+     * Archivované album i s fotkami zůstává, jen se neukazuje mezi Alby
+     * (počítač i telefon); vrátit ho jde ze seznamu archivovaných.
+     */
+    public function archivuj(Request $request, string $album): JsonResponse
+    {
+        $prostor = GallerySpace::findOrFail($this->parId($request));
+        $data = $request->validate(['archivovat' => ['required', 'boolean']]);
+        $radek = $this->vProstoru($prostor)->where('uuid', $album)->firstOrFail();
+
+        DB::table('albums')->where('id', $radek->id)->update([
+            'archived_at' => $data['archivovat'] ? now() : null,
+            'updated_at' => now(),
+        ]);
+        AuditLog::record($data['archivovat'] ? 'album.archive' : 'album.unarchive', $radek);
+
+        return response()->json([
+            'ok' => true,
+            'zprava' => $data['archivovat']
+                ? '„'.$radek->title.'“ je v archivu — fotky zůstaly, album najdete dole v Albech'
+                : '„'.$radek->title.'“ je zpátky mezi Alby',
+        ] + $this->obsahPoAkci($this->obsah, $prostor));
+    }
+
     /** Sloučit do jiného alba: fotky se přesunou, prázdné album zmizí. */
     public function sluc(Request $request, string $album): JsonResponse
     {

@@ -1095,6 +1095,25 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
               </sc-for>
             </div>
           </sc-if>
+
+          <sc-if value="{{ albArchOn }}">
+            <div style="margin-top:34px; max-width:760px">
+              <div style="display:flex; align-items:baseline; gap:10px; padding-bottom:9px; border-bottom:1px solid var(--g-ink)">
+                <span style="font-size:12px; letter-spacing:.14em; text-transform:uppercase">Archiv</span>
+                <span style="font-size:12px; color:var(--g-ink3)">{{ albArchHead }}</span>
+              </div>
+              <sc-for list="{{ albArchRows }}" as="ar" hint-placeholder-count="2">
+                <div style="display:flex; align-items:center; gap:12px; padding:11px 2px; border-bottom:1px solid var(--g-line2)">
+                  <i class="ph-duotone ph-archive" style="font-size:18px; color:var(--g-ink3); flex:none"></i>
+                  <div style="flex:1; min-width:0">
+                    <div style="font-size:15px">{{ ar.name }}</div>
+                    <div style="font-size:12px; color:var(--g-ink3); margin-top:2px">{{ ar.meta }}</div>
+                  </div>
+                  <button class="btn btn-ghost" onClick="{{ ar.back }}" style="font-size:12.5px; gap:5px"><i class="ph-duotone ph-arrow-u-up-left" style="font-size:15px"></i>Vrátit mezi Alba</button>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
         </div>
       </sc-if>
 
@@ -16393,8 +16412,9 @@ class Component extends DCLogic {
   }
   albums() {
     const s = this.state, arch = s.albArchived || {}, names = s.albName || {};
+    // Alba ze serveru archivuje server (`archived_at`); `albArchived` patří ukázce.
     return (s.myAlbums || []).concat(this.baseAlbums())
-      .filter(a => !arch[a.id])
+      .filter(a => this.albumNaServeru(a) || !arch[a.id])
       .map(a => names[a.id] ? { ...a, name: names[a.id].name, path: (a.path || '').replace(/[^→]+$/, names[a.id].name), place: names[a.id].place || a.place, date: names[a.id].date || a.date } : a);
   }
   // Alba ze serveru; bez odpovědi zůstávají ukázková.
@@ -34665,6 +34685,18 @@ class Component extends DCLogic {
       albumList: albums.map(a => ({ ...a, bg: a.bg || this.bg(a.n), go: () => this.setState({ route: 'album', albumId: a.id }) })),
       // Hlavní album pozná server podle rodiče; šipka v cestě jen u ukázky —
       // album „Beskydy → Pustevny" má šipku v názvu a počítalo se jako podalbum.
+      // Archivovaná alba ze serveru — dole v Albech, s „Vrátit mezi Alba".
+      ...(() => {
+        const arch = (window.GalerieData || {}).ALBUMS_ARCH || [];
+        return {
+          albArchOn: arch.length > 0,
+          albArchHead: this.pl(arch.length, 'archivované album', 'archivovaná alba', 'archivovaných alb') + ' · fotky v nich zůstaly',
+          albArchRows: arch.map(a => ({
+            name: a.name, meta: a.count + ' · ' + a.when,
+            back: () => this.albumAkce(window.GalerieApi.post('alba/' + a.id + '/archivovat', { archivovat: false }), res => this.toast(res.zprava || 'Album je zpátky mezi Alby', { icon: 'ph-arrow-u-up-left' }))
+          }))
+        };
+      })(),
       albumsMeta: this.pl(albums.filter(a => a.parent !== undefined ? !a.parent : (a.path || '').indexOf('→') < 0).length, 'hlavní album', 'hlavní alba', 'hlavních alb')
         + ' · ' + this.pl(albums.reduce((a, x) => a + (+x.subs || 0), 0), 'podalbum', 'podalba', 'podalb')
         + ' · neomezená hierarchie',
@@ -34875,6 +34907,23 @@ class Component extends DCLogic {
           } });
         } },
         { label: 'Archivovat album', icon: 'ph-archive', go: () => {
+          /*
+           * Album ze serveru do archivu (`archived_at`) — zmizí z Alb na počítači
+           * i telefonu a vrátit ho jde dole v Albech. Dřív se schovalo jen
+           * v tomhle prohlížeči a Archiv z hlášky neexistoval.
+           */
+          if (this.albumNaServeru(album)) {
+            const api = window.GalerieApi;
+            this.setState({ albMenu: false });
+            this.albumAkce(api.post('alba/' + album.id + '/archivovat', { archivovat: true }), res => {
+              this.setState({ route: 'albums' });
+              this.toast(res.zprava || 'Album je v archivu', {
+                icon: 'ph-archive',
+                undo: () => this.albumAkce(api.post('alba/' + album.id + '/archivovat', { archivovat: false }), () => this.setState({ route: 'album', albumId: album.id }))
+              });
+            });
+            return;
+          }
           const prev = s.albArchived || {};
           this.setState({ albArchived: { ...prev, [album.id]: true }, albMenu: false, route: 'albums' });
           this.toast('„' + album.name + '“ archivováno — zmizí z Alb, zůstane v Archivu', { icon: 'ph-archive', undo: () => this.setState({ albArchived: prev, route: 'album', albumId: album.id }) });

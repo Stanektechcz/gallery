@@ -160,6 +160,8 @@ Route::middleware(['auth:sanctum', 'dvojice', 'throttle:120,1'])->prefix('api')-
     Route::delete('alba/{album}', [AlbaController::class, 'destroy'])->whereUuid('album')->name('galerie.alba.destroy');
     Route::post('alba/{album}/obnovit', [AlbaController::class, 'obnov'])->whereUuid('album')->name('galerie.alba.obnovit');
     Route::post('alba/{album}/sloucit', [AlbaController::class, 'sluc'])->whereUuid('album')->name('galerie.alba.sloucit');
+    // Archiv alb — dřív jen schované v jednom prohlížeči, bez archivu, kam by šlo.
+    Route::post('alba/{album}/archivovat', [AlbaController::class, 'archivuj'])->whereUuid('album')->name('galerie.alba.archivovat');
 
     /*
      * Objednávka tisku.
