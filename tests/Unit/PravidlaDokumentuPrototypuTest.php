@@ -292,6 +292,23 @@ class PravidlaDokumentuPrototypuTest extends TestCase
         $this->assertStringContainsString("if (s.addKind === 'decision') {", $telefon);
     }
 
+    /** Promítání na telefonu: skutečné fotky výběru a automatické listování. */
+    public function test_promitani_na_telefonu(): void
+    {
+        $telefon = self::dokument('galerie-mobil.dc.html');
+        $pocitac = self::dokument('galerie-desktop.dc.html');
+
+        $this->assertStringContainsString('onClick="{{ all.gridPlay }}"', $telefon);
+        $this->assertStringContainsString('gridPlay: () => this.promitej(gridList)', $telefon);
+        $this->assertStringContainsString('onClick="{{ lbAutoStop }}"', $telefon);
+        // Šedé čtverce bez fotky už mřížka nekreslí jako hotový výběr.
+        $this->assertStringNotContainsString('<div style="aspect-ratio:1; border-radius:2px; background:var(--g-photo)"></div>', $telefon);
+        // Časovač se při odchodu z aplikace zastaví.
+        $this->assertStringContainsString("componentWillUnmount() {\n    this.zastavPromitani();", $telefon);
+
+        $this->assertStringContainsString('this.startShow(this.fotkyVyberu(AGRID.show, all)', $pocitac);
+    }
+
     /** Koš v telefonu umí i trvale odstranit — dřív jen „Obnovit". */
     public function test_telefon_maze_z_kose_na_serveru(): void
     {

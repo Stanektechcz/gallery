@@ -54,9 +54,9 @@ class Uklid implements MaPrazdneKolekce, PoskytovatelObsahu
             'PJOBS' => [],
             'QUAR' => [],
             'AGRID' => [
-                'anniv' => ['idx' => [], 'note' => ''],
-                'show' => ['idx' => [], 'note' => ''],
-                'contact' => ['idx' => [], 'note' => ''],
+                'anniv' => ['idx' => [], 'note' => '', 'ids' => []],
+                'show' => ['idx' => [], 'note' => '', 'ids' => []],
+                'contact' => ['idx' => [], 'note' => '', 'ids' => []],
                 'noDate' => ['idx' => [], 'note' => '', 'strip' => ''],
                 'noPlace' => ['idx' => [], 'note' => '', 'strip' => ''],
                 'compare' => ['pairs' => [], 'note' => ''],
@@ -321,7 +321,7 @@ class Uklid implements MaPrazdneKolekce, PoskytovatelObsahu
             ->orderByDesc('taken_at')
             ->orderByDesc('uploaded_at')
             ->limit(self::FOTEK)
-            ->get(['id', 'is_favorite', 'taken_at']);
+            ->get(['id', 'uuid', 'is_favorite', 'taken_at']);
 
         if ($mrizka->isEmpty()) {
             return [];
@@ -329,11 +329,21 @@ class Uklid implements MaPrazdneKolekce, PoskytovatelObsahu
 
         $oblibene = $mrizka->keys()->filter(fn (int $i) => (bool) $mrizka[$i]->is_favorite)->values();
 
+        /*
+         * Promítání bez oblíbených nebylo z čeho pustit.
+         *
+         * Výběr tvořily jen oblíbené — dvojice, která ještě nic neoznačila
+         * srdíčkem, měla promítání prázdné. Pak se promítá nejnovějších dvanáct.
+         */
+        $promitani = $oblibene->isNotEmpty()
+            ? $this->vyber($oblibene->take(12)->all(), 'Oblíbené fotky — pro promítání i televizi.', $mrizka)
+            : $this->vyber(range(0, min(11, $mrizka->count() - 1)), 'Zatím bez oblíbených — promítá se dvanáct nejnovějších. Srdíčkem u fotky ji přidáte do výběru.', $mrizka);
+
         return array_filter([
             // Jedna fotka za rok — z toho se skládá výroční album.
-            'anniv' => $this->vyber($this->poRocich($mrizka), 'Vybráno automaticky z každého roku — pořadí i výběr jde změnit.'),
-            'show' => $this->vyber($oblibene->take(12)->all(), 'Aktuální výběr pro promítání i televizi.'),
-            'contact' => $this->vyber(range(0, min(23, $mrizka->count() - 1)), 'Kontaktní arch — 24 náhledů na stránku A4.'),
+            'anniv' => $this->vyber($this->poRocich($mrizka), 'Vybráno automaticky z každého roku — pořadí i výběr jde změnit.', $mrizka),
+            'show' => $promitani,
+            'contact' => $this->vyber(range(0, min(23, $mrizka->count() - 1)), 'Kontaktní arch — 24 náhledů na stránku A4.', $mrizka),
         ], fn ($v) => $v !== null);
     }
 
@@ -363,12 +373,27 @@ class Uklid implements MaPrazdneKolekce, PoskytovatelObsahu
     }
 
     /**
+     * Výběr jako pořadí v mřížce (`idx`) i jako identifikátory fotek (`ids`).
+     *
+     * Pořadí sedí jen na mřížku počítače; telefon má vlastní, kratší kopii
+     * knihovny, a tak z pořadí kreslil šedé čtverce. Podle `ids` si najde
+     * skutečné fotky a výběr i promítne.
+     *
      * @param  list<int>  $poradi
+     * @param  Collection<int, MediaItem>  $mrizka
      * @return array<string, mixed>|null
      */
-    private function vyber(array $poradi, string $poznamka): ?array
+    private function vyber(array $poradi, string $poznamka, Collection $mrizka): ?array
     {
-        return $poradi ? ['idx' => array_values($poradi), 'note' => $poznamka] : null;
+        if (! $poradi) {
+            return null;
+        }
+
+        return [
+            'idx' => array_values($poradi),
+            'note' => $poznamka,
+            'ids' => array_values(array_map(fn (int $i) => (string) $mrizka[$i]->uuid, $poradi)),
+        ];
     }
 
     /**

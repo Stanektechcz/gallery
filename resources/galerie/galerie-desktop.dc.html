@@ -20479,6 +20479,18 @@ class Component extends DCLogic {
   // Přechod jinam zruší i filtr místa z mapy — jinak by se knihovna příště otevřela vyfiltrovaná.
   go = r => () => this.setState({ route: r, sel: [], selectMode: false, appTab: 0, notifOpen: false, albMenu: false, misto: null });
   pl(n, one, few, many) { return n + ' ' + (n === 1 ? one : n >= 2 && n <= 4 ? few : many); }
+  /*
+   * Fotky výběru (promítání, výroční album) podle identifikátorů ze serveru.
+   *
+   * Pořadí `idx` sedí jen dokud prohlížeč drží tutéž mřížku; `ids` se na
+   * fotky trefí vždy. Ukázka identifikátory nemá — tam zůstává pořadí.
+   */
+  fotkyVyberu(vyber, fotky) {
+    const v = vyber || {}, all = fotky || this.photos();
+    const podleId = (v.ids || []).filter(id => all.some(p => p.id === id));
+    if (podleId.length) return podleId;
+    return (v.idx || []).map(i => all.length ? all[i % all.length].id : null).filter(Boolean);
+  }
   // Jen tvar slova — pro čísla, která se vypisují naformátovaná (L.num, toLocaleString).
   tvar(n, one, few, many) { n = Number(String(n).replace(/[^\d-]/g, '')) || 0; return n === 1 ? one : n >= 2 && n <= 4 ? few : many; }
   /*
@@ -20776,7 +20788,7 @@ class Component extends DCLogic {
           bg: this.bg((m.t.length * 6) % 40),
           album: () => {
             const all = this.photos();
-            this.startShow((AGRID.anniv.idx || []).map(i => all.length ? all[i % all.length].id : null).filter(Boolean), m.t);
+            this.startShow(this.fotkyVyberu(AGRID.anniv, all), m.t);
           },
           remind: () => {
             const prev = this.events();
@@ -33393,11 +33405,11 @@ class Component extends DCLogic {
         }
         if (appKey === 'show' || appKey === 'tv') {
           const all = this.photos();
-          return this.startShow((AGRID.show.idx || []).map(i => all.length ? all[i % all.length].id : null).filter(Boolean), appKey === 'tv' ? 'TV režim' : 'Slideshow');
+          return this.startShow(this.fotkyVyberu(AGRID.show, all), appKey === 'tv' ? 'TV režim' : 'Slideshow');
         }
         if (appKey === 'anniv') {
           const all = this.photos();
-          return this.startShow((AGRID.anniv.idx || []).map(i => all.length ? all[i % all.length].id : null).filter(Boolean), 'Výroční album');
+          return this.startShow(this.fotkyVyberu(AGRID.anniv, all), 'Výroční album');
         }
         if (appKind === 'board') {
           this.setState({ tskDlg: { key: appKey, mode: 'new', id: null, col: 0, t: '', w: this.meWho(), d: 'dnes', pr: 0, note: '' } });

@@ -1873,11 +1873,17 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 
               <sc-if value="{{ all.isGrid }}">
                 <div>
+                  <sc-if value="{{ all.gridCanPlay }}">
+                    <button onClick="{{ all.gridPlay }}" class="btn btn-primary btn-block" style="min-height:48px; gap:8px; margin-bottom:12px"><i class="ph-duotone ph-play-circle" style="font-size:18px"></i>{{ all.gridPlayLabel }}</button>
+                  </sc-if>
                   <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:3px">
                     <sc-for list="{{ all.gridTiles }}" as="g" hint-placeholder-count="9">
-                      <div style="aspect-ratio:1; border-radius:2px; background:var(--g-photo)"></div>
+                      <button onClick="{{ g.open }}" aria-label="Otevřít fotku" style="aspect-ratio:1; border:0; padding:0; border-radius:2px; background:{{ g.bg }}; background-size:cover; background-position:center; cursor:pointer"></button>
                     </sc-for>
                   </div>
+                  <sc-if value="{{ all.gridEmpty }}">
+                    <div style="padding:10px 0; font-size:13.5px; line-height:1.55; color:var(--g-ink2); text-wrap:pretty">Výběr se složí z fotek v knihovně, jakmile nějaké nahrajete.</div>
+                  </sc-if>
                   <div style="font-size:12px; color:var(--g-ink3); line-height:1.5; padding-top:8px; text-wrap:pretty">{{ all.gridNote }}</div>
                 </div>
               </sc-if>
@@ -4957,6 +4963,12 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
               <div style="flex:1; min-width:0; text-align:center; color:rgba(255,255,255,.82); font-size:12.5px">{{ lb.meta }}</div>
               <button onClick="{{ lbFav }}" aria-label="Oblíbené" style="width:44px; height:44px; display:grid; place-items:center; border:0; background:transparent; cursor:pointer; color:{{ lb.favColor }}"><i class="ph-duotone {{ lb.favIcon }}" style="font-size:22px"></i></button>
             </div>
+            <sc-if value="{{ lbAutoOn }}">
+              <div style="flex:none; display:flex; align-items:center; gap:10px; padding:0 16px 6px; color:rgba(255,255,255,.82); font-size:12.5px">
+                <i class="ph-duotone ph-play-circle" style="font-size:16px"></i>{{ lbAutoLabel }}
+                <button onClick="{{ lbAutoStop }}" style="margin-left:auto; min-height:36px; padding:0 12px; border:1px solid rgba(255,255,255,.4); border-radius:2px; background:transparent; cursor:pointer; font-family:inherit; font-size:12.5px; color:#fff">Zastavit</button>
+              </div>
+            </sc-if>
             <div style="flex:1; min-height:0; display:flex; align-items:center; gap:4px; padding:0 6px">
               <button onClick="{{ lbPrev }}" aria-label="Předchozí" style="flex:none; width:44px; height:80px; border:0; background:transparent; cursor:pointer; color:rgba(255,255,255,.7)"><i class="ph-duotone ph-caret-left" style="font-size:24px"></i></button>
               <!-- Video se přehraje (dřív tu byl jen obrázek), fotka je velký obrázek ze serveru. -->
@@ -6303,6 +6315,7 @@ class Component extends DCLogic {
     }
   }
   componentWillUnmount() {
+    this.zastavPromitani();
     window.removeEventListener('message', this._fotoMapa);
     window.removeEventListener('storage', this._zamekZnovu);
     window.removeEventListener('galerie-odhlaseno', this._odhlaseno);
@@ -7271,7 +7284,24 @@ class Component extends DCLogic {
     const people = (APEOPLE[key] || []).map(p => ({ name: p[0], initial: String(p[0]).slice(0, 1), meta: p[1] }));
     // „Porovnat série" nese `pairs`, ne `idx` — záložka Úklidu na telefonu na tom spadla celá.
     const gridIdx = AGRID[key] ? (Array.isArray(AGRID[key].idx) ? AGRID[key].idx : [].concat(...(AGRID[key].pairs || []))) : [];
-    const grid = AGRID[key] ? { note: AGRID[key].note, tiles: gridIdx.map((x, i) => ({ i: i })) } : null;
+    /*
+     * Dlaždice výběru ze skutečných fotek (`ids`), ne šedé čtverce.
+     *
+     * Pořadí `idx` ukazuje do mřížky počítače; telefon má vlastní, kratší
+     * kopii knihovny, a tak tu byly jen prázdné plochy bez možnosti cokoliv
+     * promítnout. Fotku, kterou telefon nemá načtenou, vynechá.
+     */
+    const knihovnaFotek = AGRID[key] && Array.isArray(AGRID[key].ids) ? this.library() : [];
+    const gridFotky = AGRID[key] && Array.isArray(AGRID[key].ids)
+      ? AGRID[key].ids.map(id => knihovnaFotek.find(p => p.id === id)).filter(Boolean) : [];
+    const gridList = gridFotky.map(p => p.id);
+    const grid = AGRID[key] ? {
+      note: AGRID[key].note,
+      tiles: gridFotky.length
+        ? gridFotky.map(p => ({ bg: this.tlo(p), open: () => this.setState({ lb: p.id, lbList: gridList, lbAuto: false }) }))
+        : gridIdx.map(() => ({ bg: 'var(--g-photo)', open: () => this.toast('Tahle fotka v telefonu zatím není načtená', { icon: 'ph-info' }) }))
+    } : null;
+    const gridPlay = gridFotky.length && (key === 'show' || key === 'tv' || key === 'anniv');
     // Vzpomínky, cesta, pravidla, vlákno, nástěnka a tisk — každé má na telefonu
     // vlastní tvar: karty, časová osa dne, přepínače s protokolem, bubliny,
     // sekce úkolů a zakázky s dráhou stavů.
@@ -8269,6 +8299,10 @@ class Component extends DCLogic {
       isChips: !!isChips, chips: chips,
       isPeople: !!isPeople, people: people,
       isGrid: !!isGrid, gridNote: grid ? grid.note : '', gridTiles: grid ? grid.tiles : [],
+      gridCanPlay: !!gridPlay,
+      gridPlayLabel: key === 'tv' ? 'Pustit na celou obrazovku' : 'Spustit promítání',
+      gridPlay: () => this.promitej(gridList),
+      gridEmpty: !!isGrid && (!grid || !grid.tiles.length),
       title: cur.title, note: cur.note, kind: kind,
       tabs: tabs.map((t, i) => ({
         label: t[0],
@@ -9694,6 +9728,28 @@ class Component extends DCLogic {
     const t = (e && e.body) || {};
     const prvni = t.errors ? (Object.values(t.errors)[0] || [])[0] : null;
     this.toast(t.zprava || t.message || prvni || vychozi, { icon: 'ph-warning' });
+  }
+  /*
+   * Promítání výběru v prohlížeči fotek: každých pět vteřin další, dokola.
+   *
+   * Promítání na telefonu nešlo pustit vůbec — záložka ukazovala šedé
+   * čtverce. Zastaví ho zavření prohlížeče nebo tlačítko v horní liště;
+   * `lb` se do sdíleného stavu neukládá, takže listování nic neposílá.
+   */
+  promitej(ids) {
+    const seznam = (ids || []).filter(Boolean);
+    if (!seznam.length) return;
+    this.zastavPromitani();
+    this.setState({ lbList: seznam, lb: seznam[0], lbAuto: true });
+    this._promitani = setInterval(() => {
+      const s = this.state;
+      if (!s.lbAuto || !s.lb || !Array.isArray(s.lbList) || !s.lbList.length) { this.zastavPromitani(); return; }
+      const i = s.lbList.indexOf(s.lb);
+      this.setState({ lb: s.lbList[(i + 1) % s.lbList.length] });
+    }, 5000);
+  }
+  zastavPromitani() {
+    if (this._promitani) { clearInterval(this._promitani); this._promitani = null; }
   }
   /*
    * Výpis z banky na účet — tam, kde si ho člověk stáhne.
@@ -11810,9 +11866,12 @@ class Component extends DCLogic {
     };
 
     // — lightbox —
-    const lbIdx = s.lb ? shown.findIndex(p => p.id === s.lb) : -1;
-    const lbP = lbIdx >= 0 ? shown[lbIdx] : null;
-    const lbStep = d => { const n = shown[(lbIdx + d + shown.length) % shown.length]; if (n) this.setState({ lb: n.id }); };
+    // Otevřený výběr (promítání, výroční album) listuje svými fotkami, ne celou mřížkou.
+    const lbZdroj = Array.isArray(s.lbList) && s.lbList.length
+      ? s.lbList.map(id => lib.find(p => p.id === id)).filter(Boolean) : shown;
+    const lbIdx = s.lb ? lbZdroj.findIndex(p => p.id === s.lb) : -1;
+    const lbP = lbIdx >= 0 ? lbZdroj[lbIdx] : null;
+    const lbStep = d => { const n = lbZdroj[(lbIdx + d + lbZdroj.length) % lbZdroj.length]; if (n) this.setState({ lb: n.id }); };
 
     // — cesty —
     // Výchozí `tripId` je ukázkové „chorvatsko"; dvojice takovou cestu nemá
@@ -14141,8 +14200,12 @@ class Component extends DCLogic {
         favIcon: this.isFav(lbP) ? 'ph-heart-straight-fill' : 'ph-heart-straight',
         favColor: this.isFav(lbP) ? 'var(--g-mag)' : '#fff'
       } : { bg: 'none', meta: '', favIcon: 'ph-heart-straight', favColor: '#fff', hasVideo: false, noVideo: true, videoUrl: '', posterUrl: '' },
-      lbClose: () => this.setState({ lb: null }),
+      lbClose: () => { this.zastavPromitani(); this.setState({ lb: null, lbList: null, lbAuto: false }); },
       lbPrev: () => lbStep(-1), lbNext: () => lbStep(1),
+      // Běžící promítání: kolikátá fotka a tlačítko na zastavení.
+      lbAutoOn: !!(lbP && s.lbAuto),
+      lbAutoLabel: lbP && s.lbAuto ? 'Promítání · ' + (lbIdx + 1) + ' z ' + lbZdroj.length : '',
+      lbAutoStop: () => { this.zastavPromitani(); this.setState({ lbAuto: false }); },
       lbFav: () => { if (!lbP) return; const was = this.isFav(lbP); this.setState({ favs: Object.assign({}, s.favs, { [lbP.id]: !was }) }); this.toast(was ? 'Odebráno z oblíbených' : 'Přidáno do oblíbených', { icon: 'ph-heart-straight' }); },
       // ——— Detail fotky ———
       // Tytéž údaje i akce jako v druhém rozhraní: místo s mapou, album,

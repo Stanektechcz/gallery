@@ -113,9 +113,9 @@ class ObsahUklidTest extends TestCase
     public function test_vybery_jsou_poradi_v_mrizce(): void
     {
         // Nejnovější první — mřížka řadí sestupně.
-        $this->fotka(['taken_at' => '2026-08-01 10:00:00', 'is_favorite' => true], 1);
+        $a = $this->fotka(['taken_at' => '2026-08-01 10:00:00', 'is_favorite' => true], 1);
         $this->fotka(['taken_at' => '2026-03-01 10:00:00'], 2);
-        $this->fotka(['taken_at' => '2025-06-01 10:00:00', 'is_favorite' => true], 3);
+        $c = $this->fotka(['taken_at' => '2025-06-01 10:00:00', 'is_favorite' => true], 3);
 
         $v = $this->getJson('/api/data/uklid')->assertOk()->json('data.AGRID');
 
@@ -123,18 +123,28 @@ class ObsahUklidTest extends TestCase
         $this->assertSame([0, 2], $v['anniv']['idx']);
         // Do promítání jdou oblíbené.
         $this->assertSame([0, 2], $v['show']['idx']);
+        // Telefon má jinou mřížku — pozná fotky podle identifikátorů.
+        $this->assertSame([$a->uuid, $c->uuid], $v['show']['ids']);
         // Kontaktní arch bere prvních 24 — tady jsou tři.
         $this->assertSame([0, 1, 2], $v['contact']['idx']);
     }
 
-    /** Bez oblíbených se výběr pro promítání neposílá. */
-    public function test_bez_oblibenych_neni_vyber_pro_promitani(): void
+    /**
+     * Bez oblíbených se promítá nejnovějších dvanáct.
+     *
+     * Dřív byl výběr prázdný a promítání nebylo z čeho pustit.
+     */
+    public function test_bez_oblibenych_promita_nejnovejsi(): void
     {
-        $this->fotka(['taken_at' => '2026-08-01 10:00:00']);
+        foreach (range(1, 14) as $i) {
+            $this->fotka(['taken_at' => '2026-08-'.str_pad((string) $i, 2, '0', STR_PAD_LEFT).' 10:00:00'], $i);
+        }
 
         $v = $this->getJson('/api/data/uklid')->assertOk()->json('data.AGRID');
 
-        $this->assertPrazdne($v['show'] ?? null);
+        $this->assertSame(range(0, 11), $v['show']['idx']);
+        $this->assertCount(12, $v['show']['ids']);
+        $this->assertStringContainsString('Zatím bez oblíbených', $v['show']['note']);
         $this->assertArrayHasKey('contact', $v);
     }
 
