@@ -611,6 +611,62 @@ Testovací účet a bankovní řádky z vývojové databáze uklizeny.
 
 Testy: **1445 PHP testů**, všechny prošly.
 
+## 2o. Patnácté kolo — co nešlo začít: dělba, rozhodnutí, lidé, promítání (22. 9.)
+
+Průchod prázdných obrazovek (kolik textu obrazovka má) ukázal funkce, které
+dvojice s prázdnými daty neměla **jak začít** — obrazovka byla jen pro
+prohlížení toho, co vzniklo jinde (ukázka, staré rozhraní).
+
+- **Domácí práce** (Domácnost → Dělba): nový `POST/DELETE
+  /api/domacnost/prace` — název, jak často, minuty, kdo ji má (já, druhý,
+  spolu). Počítač: „Přidat práci" a koš u řádku; telefon: „Přidat práci".
+  Převodník stavu už nezaloží znovu práci, kterou někdo odebral.
+- **Rozhodnutí a sliby na telefonu**: „Zapsat rozhodnutí" a „Zapsat slib"
+  (dřív jen čtení, bez zápisu z počítače prázdná plocha).
+- **Kdo je na fotce**: „+ Osoba" v detailu fotky na počítači i telefonu;
+  osoba se podle jména najde, nebo založí, a objeví se v Lidech. Dřív šlo
+  osobu označit jen ve starém rozhraní.
+- **Promítání**: bez oblíbených se promítá dvanáct nejnovějších (dřív
+  prázdno); telefon ukazuje skutečné fotky výběru a „Spustit promítání"
+  listuje každých pět vteřin (Zastavit v horní liště).
+- **Výpis z banky i z telefonu** (Finance → Nahrát výpis z banky) a známé
+  obchody se zařadí samy podle dřívějších plateb (poslední zařazení
+  rozhoduje; toast řekne, kolik se zařadilo a kolik zbývá).
+
+**Chyby:**
+- `GalerieObsahNavlec` dával `MOBIL` z odpovědi na akci do `GalerieData`,
+  kde ho telefon nečte — co telefon ukazuje ze své kopie (dělba, cesty,
+  alba), se po akci objevilo až po obnovení stránky.
+- Album „Beskydy → Pustevny" (šipka v názvu) se bralo jako podalbum:
+  „0 hlavních alb", ve stromu jako „Pustevny", v navigaci jako album
+  v „Beskydy" a detail do něj bral fotky všech alb začínajících „Beskydy".
+  Server teď posílá rodiče a hloubku.
+- Prázdné záložky Lidé (Potvrzení/Návrhy/Skryté) a Tagy (Návrhy) bez
+  vysvětlení; text u návrhů štítků netvrdí, že je aplikace tvoří.
+- „S Makinka" v hlavičce chatu → „S Makinkou" (7. pád).
+
+Ověřeno v prohlížeči na obou rozvrženích (testovací řádky vždy uklizeny):
+dělba — přidání dialogem (2× týdně, ikona odpadu), „Mám hotovo" (záznam
+a předání druhému na serveru), odebrání s potvrzením, přidání z telefonu
+s okamžitým překreslením; rozhodnutí a slib z telefonu v databázi;
+osoba na fotce z počítače i telefonu (vznik osoby, vazba, odebrání);
+promítání 1 z 4 → 2 z 4 → Zastavit bez jediného `PATCH /api/state`;
+výpis z banky — tlačítko u jednoho účtu, list účtů u dvou.
+
+| Commit | Obsah |
+|---|---|
+| `0a2aadb5` | Telefon: výpis z banky se nahraje z Financí |
+| `c3844a73` | Import výpisu: známé obchody se zařadí podle dřívějších plateb |
+| `574b0eb0` | Odpověď na akci plní i kopii telefonu (MOBIL) |
+| `e2f1f24c` | Domácí práce jde založit a odebrat (počítač i telefon) |
+| `5b8ad4d6` | Telefon: rozhodnutí a sliby jdou zapsat, prázdné stavy |
+| `07879ac2` | Promítání: výběr podle fotek, bez oblíbených nejnovější, na telefonu jde pustit |
+| `4bdd1989` | Telefon: „S Makinkou" v hlavičce chatu |
+| `f0e50c19` | Alba: šipka v názvu nedělá z alba podalbum |
+| `24512ad2` | Lidé: osobu jde označit na fotce; prázdné záložky Lidé a Tagy |
+
+Testy: **1456 PHP testů**, všechny prošly. Nic se nemigruje.
+
 ### Po nasazení (2n)
 
 - Nic se nemigruje. Import výpisu používá tabulky bankovního modulu
@@ -684,7 +740,8 @@ návrh — většina hlášek „bez připojeného serveru" platí jen pro ukáz
 - Kompletní archiv originálů jedním souborem (dnes: originály na Google Disku,
   vybrané fotky jako ZIP z výběru; celé GB přes prohlížeč nejdou)
 - Přepis hlasovek na text (aplikace ho nedělá a netvrdí to)
-- Přidání osoby na fotku ručně (rozpoznávání tváří aplikace nemá)
+- ~~Přidání osoby na fotku ručně~~ — hotovo (2o): „+ Osoba" v detailu
+  fotky. Rozpoznávání tváří aplikace dál nemá a netvrdí to.
 
 Úplný seznam: `grep -o "zatimNeumime('[^']*'" resources/galerie/*.html`.
 
