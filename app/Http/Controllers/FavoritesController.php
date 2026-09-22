@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\MediaItem;
+use App\Models\MediaVariant;
 use App\Models\User;
 use App\Notifications\GalleryNotification;
 use Illuminate\Http\JsonResponse;
@@ -148,7 +149,7 @@ class FavoritesController extends Controller
             'variants' => $m->variants->map(fn ($v) => [
                 'type' => $v->type,
                 // Podepsaná adresa přes /files — přímé /storage obcházelo přihlášení.
-                'url' => \App\Models\MediaVariant::proxyUrl($v->path),
+                'url' => MediaVariant::proxyUrl($v->path),
                 'dominant_color' => $v->dominant_color,
                 'aspect_ratio' => $v->aspect_ratio,
             ]),

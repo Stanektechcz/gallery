@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\AuditLog;
 use App\Models\MediaItem;
+use App\Models\MediaVariant;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -70,7 +71,7 @@ class ArchiveController extends Controller
             'variants' => $m->variants->map(fn ($v) => [
                 'type' => $v->type,
                 // Podepsaná adresa přes /files — přímé /storage obcházelo přihlášení.
-                'url' => \App\Models\MediaVariant::proxyUrl($v->path),
+                'url' => MediaVariant::proxyUrl($v->path),
                 'dominant_color' => $v->dominant_color,
                 'aspect_ratio' => $v->aspect_ratio,
             ]),
