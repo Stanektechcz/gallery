@@ -7,6 +7,7 @@ use App\Models\GallerySpace;
 use App\Models\SharedTodo;
 use App\Models\User;
 use App\Services\Planning\SharedTodoService;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -189,6 +190,27 @@ class ObsahPlanovaniTest extends TestCase
 
         $this->assertSame('po termínu', $terminy['Zapomenutý']);
         $this->assertSame('dnes', $terminy['Dnešní']);
+    }
+
+    /**
+     * „Dnes" podle pražských hodin.
+     *
+     * Ve 23:30 UTC je v Praze už další den. Úkol na tenhle den ukazoval
+     * „zítra" a včerejší ještě „dnes", dokud UTC nepřešlo přes půlnoc.
+     */
+    public function test_dnes_se_pocita_v_pasmu_dvojice(): void
+    {
+        config(['app.display_timezone' => 'Europe/Prague']);
+        $this->travelTo(CarbonImmutable::parse('2026-10-08 23:30:00', 'UTC'));
+
+        $this->ukol(['title' => 'Pátek', 'due_at' => '2026-10-09 23:59:59']);
+        $this->ukol(['title' => 'Čtvrtek', 'due_at' => '2026-10-08 23:59:59']);
+
+        $terminy = collect($this->getJson('/api/data/planovani')->assertOk()->json('data.ATASKS.all.0.1'))
+            ->mapWithKeys(fn ($r) => [$r[0] => $r[2]]);
+
+        $this->assertSame('dnes', $terminy['Pátek']);
+        $this->assertSame('po termínu', $terminy['Čtvrtek']);
     }
 
     /** Úkol bez odpovědného je společný, ne ničí. */

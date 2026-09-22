@@ -27411,6 +27411,33 @@ class Component extends DCLogic {
     ];
     return { homeDay: { rows, head: this.pl(rows.length, 'záznam', 'záznamy', 'záznamů') + ' · pondělí 16. srpna' } };
   }
+  /*
+   * Odznak v hlavičce aplikační stránky — jen ze skutečných dat.
+   *
+   * Katalog `APP` nesl čísla ukázky: „2 návrhy" u Lidí, „3 na dnes"
+   * u Plánování, „4 aktivní" u Pravidel, „16 nálezů" u Úklidu a „2 nové"
+   * u Zpráv. Přihlášená dvojice je viděla, i když nic z toho neměla.
+   * Obrazovka bez vlastního počtu odznak nemá (nepřečtené zprávy
+   * aplikace nesleduje).
+   */
+  odznakHlavicky(R) {
+    const kolik = (n, a, b, c) => n > 0 ? this.pl(n, a, b, c) : null;
+    if (R === 'x-lide') return kolik(((APEOPLE || {}).sug || []).length, 'návrh', 'návrhy', 'návrhů');
+    if (R === 'x-pravidla') return kolik(this.rulesAll().filter(r => r.on).length, 'aktivní', 'aktivní', 'aktivních');
+    if (R === 'x-plan') {
+      const d = new Date();
+      const dnes = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+      // Dnešní a zmeškané, stejně jako odznak v menu ze serveru.
+      const n = this.boardOf('all').filter(c => !c.done)
+        .reduce((a, c) => a + c.items.filter(t => !t.on && (t.due ? String(t.due).slice(0, 10) <= dnes : /po termínu|dnes/.test(t.d || ''))).length, 0);
+      return n > 0 ? n + ' na dnes' : null;
+    }
+    if (R === 'x-uklid') {
+      const n = parseInt(String(((window.GalerieData || {}).NAVCNT || {})['x-uklid'] || '').replace(/\D/g, ''), 10) || 0;
+      return kolik(n, 'nález', 'nálezy', 'nálezů');
+    }
+    return null;
+  }
   // ——— automatizace a pravidla ———
   rulesAll() { return this.state.rules || RULEDEF; }
   rulSet(arr, note, undoPrev) {
@@ -33120,11 +33147,16 @@ class Component extends DCLogic {
        * je soubor prototypu a do něj se nesahá.
        */
       appNote: appPage ? (this.opravaPopisku(appKey && appPage.title) || appPage.note) : '',
+      // Tvar podle počtu: dřív „3 položek" a „31 nezařazená".
       appBadge: badgeLeft[R] !== undefined
-        ? (badgeLeft[R] > 0 ? badgeLeft[R] + (R === 'x-inbox' ? ' položek' : R === 'x-transakce' ? ' nezařazená' : ' čeká') : 'vyřízeno')
+        ? (badgeLeft[R] > 0
+          ? (R === 'x-inbox' ? this.pl(badgeLeft[R], 'položka', 'položky', 'položek')
+            : R === 'x-transakce' ? this.pl(badgeLeft[R], 'nezařazená', 'nezařazené', 'nezařazených')
+              : this.pl(badgeLeft[R], 'čeká', 'čekají', 'čeká'))
+          : 'vyřízeno')
         : R === 'x-vzpominky'
           ? (this.memTodayCount() ? this.memTodayCount() + ' na dnes' : 'na dnes nic')
-          : (appPage ? (appPage.badge || null) : null),
+          : (appPage ? this.odznakHlavicky(R) : null),
       appHasPrimary: !!appCta, appCta: appCta || '', appCtaIcon: appCtaIcon,
       appHasSecondary: appKind === 'list' && CUSTOM_KEYS.indexOf(appKey) < 0,
       appPrimary: () => {

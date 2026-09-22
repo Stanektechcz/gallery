@@ -303,7 +303,7 @@ class Planovani implements MaPrazdneKolekce, PoskytovatelObsahu
 
         // Týž konec týdne jako zápis zpátky (PlanovaniVeStavu) — jinak úkol
         // přetažený do „Tento týden" skončil po obnovení v „Později".
-        $tyden = CarbonImmutable::now()->addWeek()->endOfDay();
+        $tyden = Cas::dnes()->addWeek()->endOfDay();
 
         /*
          * Čtyři pole kreslí prototyp, tři jsou navíc pro cestu zpátky:
@@ -397,8 +397,10 @@ class Planovani implements MaPrazdneKolekce, PoskytovatelObsahu
             return 'bez termínu';
         }
 
+        // Termín je den na hodinách dvojice, takže i „dnes" musí být pražské —
+        // podle UTC byl mezi půlnocí a druhou ranní ještě včerejšek.
         $den = CarbonImmutable::parse($u->due_at)->startOfDay();
-        $dnes = CarbonImmutable::now()->startOfDay();
+        $dnes = Cas::dnes();
         $rozdil = (int) $dnes->diffInDays($den, false);
 
         return match (true) {

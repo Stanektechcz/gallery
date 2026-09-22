@@ -7,6 +7,7 @@ use App\Models\GallerySpace;
 use App\Models\SharedTodo;
 use App\Models\User;
 use App\Services\Obsah\Planovani;
+use App\Support\Cas;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -614,7 +615,7 @@ class PlanovaniVeStavu
      */
     private function terminZeSloupce(?CarbonImmutable $termin, string $popisek, string $sloupec): ?CarbonImmutable
     {
-        $tyden = CarbonImmutable::now()->addWeek()->endOfDay();
+        $tyden = Cas::dnes()->addWeek()->endOfDay();
 
         return match ($sloupec) {
             Planovani::NEKDY => null,
@@ -629,7 +630,7 @@ class PlanovaniVeStavu
     private function popisek(CarbonImmutable $den): string
     {
         $den = $den->startOfDay();
-        $dnes = CarbonImmutable::now()->startOfDay();
+        $dnes = Cas::dnes();
         $rozdil = (int) $dnes->diffInDays($den, false);
 
         return match (true) {
@@ -651,7 +652,8 @@ class PlanovaniVeStavu
     private function zPopisku(string $popisek, ?CarbonImmutable $puvodni): ?CarbonImmutable
     {
         $t = mb_strtolower(trim($popisek));
-        $dnes = CarbonImmutable::now();
+        // „Dnes" a „zítra" podle hodin dvojice, stejně jako popisek z poskytovatele.
+        $dnes = Cas::dnes();
 
         if ($t === '' || str_contains($t, 'bez termínu')) {
             return null;
@@ -822,7 +824,7 @@ class PlanovaniVeStavu
                         'title' => (string) $r['text'],
                         // „Jde se to udělat“ — přesouvá se mezi úkoly na tento týden.
                         // Jednou: seznam chodí celý a termín by se jinak posouval.
-                        'due_at' => $u->due_at ?? CarbonImmutable::now()->addWeek()->endOfDay(),
+                        'due_at' => $u->due_at ?? Cas::dnes()->addWeek()->endOfDay(),
                         'status' => 'open',
                     ],
                     'dropped' => ['title' => (string) $r['text'], 'status' => 'cancelled'],
