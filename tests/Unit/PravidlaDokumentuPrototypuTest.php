@@ -238,6 +238,20 @@ class PravidlaDokumentuPrototypuTest extends TestCase
         $this->assertStringNotContainsString("value: String(lib.length), meta: 'položek v knihovně'", $telefon);
     }
 
+    /** Výpis z banky jde nahrát u účtu a klient ho posílá jako soubor. */
+    public function test_vypis_z_banky_se_nahrava_u_uctu(): void
+    {
+        $pocitac = self::dokument('galerie-desktop.dc.html');
+        $api = (string) file_get_contents(dirname(__DIR__, 2).'/public/galerie-api.js');
+        $data = (string) file_get_contents(dirname(__DIR__, 2).'/public/galerie-data.js');
+
+        $this->assertStringContainsString('onClick="{{ a.importVypis }}"', $pocitac);
+        $this->assertStringContainsString('importVypis: () => this.nahratVypis(a[8], a[0])', $pocitac);
+        $this->assertStringContainsString("fetch(base + '/finance/import'", $api);
+        $this->assertStringContainsString("telo.append('vypis', soubor", $api);
+        $this->assertStringNotContainsString('Import z Revolutu ústí sem.', $data);
+    }
+
     /** Koš v telefonu umí i trvale odstranit — dřív jen „Obnovit". */
     public function test_telefon_maze_z_kose_na_serveru(): void
     {

@@ -1030,9 +1030,14 @@ class Finance implements MaPrazdneKolekce, PoskytovatelObsahu
                 $this->ikonaUctu($p->kind),
                 // Napojení na banku je zvláštní modul; bez něj je účet ruční.
                 $p->kind === 'bank' ? 'napojeno' : 'ručně',
-                $p->updated_at ? 'upraveno '.$p->updated_at->diffForHumans() : 'bez pohybu',
+                // Česky i na serveru s APP_LOCALE=en — stálo tu „upraveno 0 seconds ago".
+                $p->updated_at ? 'upraveno '.(CarbonImmutable::parse($p->updated_at)->diffInSeconds(now(), true) < 60
+                    ? 'právě teď'
+                    : CarbonImmutable::parse($p->updated_at)->locale('cs')->diffForHumans()) : 'bez pohybu',
                 $p->sort_order === 0 ? 'hlavní' : null,
                 (int) round(abs($castka) / $celkem * 100),
+                // Kam nahrát výpis z banky (ImportVypisuController).
+                $p->uuid,
             ];
         })->values()->all();
     }

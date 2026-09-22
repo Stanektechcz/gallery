@@ -122,7 +122,7 @@
       tabs: [['Nové', 'list', 'travelInbox'], ['Zařazené', 'list', 'ticket']] },
     'x-finance': { g: 'Finance', title: 'Přehled financí', note: 'Jedna sekce místo dvou aplikací — rozpočty a bankovní napojení splynuly.',
       tabs: [['Měsíc', 'stats', 'bud'], ['Rok', 'stats', 'year'], ['Předpověď čerpání', 'stats', 'fc']] },
-    'x-transakce': { g: 'Finance', title: 'Transakce', note: 'Import z Revolutu ústí sem.', badge: '1 nezařazená',
+    'x-transakce': { g: 'Finance', title: 'Transakce', note: 'Výpis z banky (CSV, XLS, XLSX) nahrajete u účtu v Přehledu financí na počítači — nové platby se objeví tady mezi nezařazenými.', badge: '1 nezařazená',
       tabs: [['Vše', 'table', 'all'], ['Nezařazené', 'table', 'un'], ['Opakované', 'table', 'rec']] },
     'x-rozpocty': { g: 'Finance', title: 'Rozpočty', note: 'Vyhrazené částky i automatické vyrovnávání jsou záložky rozpočtu.',
       tabs: [['Plán', 'stats', 'bud'], ['Vyhrazené částky', 'stats', 'res'], ['Vyrovnávání', 'list', 'balancing'], ['Historie plánu', 'diary', 'plan']] },

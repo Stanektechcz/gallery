@@ -2778,6 +2778,9 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                       <sc-if value="{{ finBankDemo }}">
                         <button class="btn btn-secondary" onClick="{{ a.refresh }}" style="font-size:12.5px; gap:5px"><i class="ph-duotone ph-arrows-clockwise" style="font-size:15px"></i>Synchronizovat</button>
                       </sc-if>
+                      <sc-if value="{{ a.canImport }}">
+                        <button class="btn btn-secondary" onClick="{{ a.importVypis }}" title="Výpis z banky jako CSV, XLS nebo XLSX" style="font-size:12.5px; gap:5px"><i class="ph-duotone ph-file-arrow-up" style="font-size:15px"></i>Nahrát výpis</button>
+                      </sc-if>
                       <button class="btn btn-ghost" onClick="{{ a.go }}" style="font-size:12.5px">Pohyby</button>
                       <sc-if value="{{ finBankDemo }}">
                         <button class="btn btn-ghost" onClick="{{ a.rules }}" style="font-size:12.5px">Pravidla</button>
@@ -16066,8 +16069,11 @@ class Component extends DCLogic {
           healthPct: health + '%', healthColor: off ? 'var(--g-ink3)' : health === 100 ? 'var(--g-ok)' : 'var(--g-warn)',
           // Automatický import v 8:00 ani „poslední před N dny" aplikace nemá — u dvojice jen to, co ví.
           healthLabel: off ? 'Odpojeno — historie zůstává' : !this.ukazka()
-            ? (a[4] === 'napojeno' ? 'Bankovní účet — pohyby přicházejí importem výpisu' : 'Vedený ručně · ' + (a[5] || 'bez pohybu'))
+            ? (a[4] === 'napojeno' ? 'Bankovní účet — pohyby doplníte nahráním výpisu z banky' : 'Vedený ručně · ' + (a[5] || 'bez pohybu'))
             : health === 100 ? 'Automatický import každé ráno v 8:00' : 'Ruční import CSV — poslední před ' + (i + 2) + ' dny',
+          // Výpis z banky na tenhle účet (u dvojice; ukázka má „Synchronizovat").
+          canImport: this.financeNaServeru() && !!a[8],
+          importVypis: () => this.nahratVypis(a[8], a[0]),
           go: () => this.setState({ route: 'x-transakce', appTab: 0 }),
           rules: () => { this.setState({ finTab: 3 }); this.toast('Pravidla zařazování pro ' + a[0], { icon: 'ph-sliders' }); },
           toggle: () => {
@@ -16089,7 +16095,8 @@ class Component extends DCLogic {
       }),
       finAccHealth: this.ukazka()
         ? FIN.accounts.filter(a => !(s.acOff || {})[a[0]]).length + ' z ' + FIN.accounts.length + ' účtů aktivních · importy běží ráno v 8:00, zařazování hned po nich'
-        : this.pl(FIN.accounts.length, 'účet', 'účty', 'účtů') + ' · platby se zapisují ručně (Zapsat platbu) nebo přicházejí z pravidelných plateb',
+        : !FIN.accounts.length ? 'Zatím žádný účet — založte ho tlačítkem Nový účet; pak do něj půjde nahrát i výpis z banky.'
+          : this.pl(FIN.accounts.length, 'účet', 'účty', 'účtů') + ' · platby se zapisují ručně (Zapsat platbu), přicházejí z pravidelných plateb nebo z nahraného výpisu banky (Nahrát výpis u účtu)',
       finAddAccount: () => this.zatimNeumime('napojení banky z téhle obrazovky — účty se zakládají v Nastavení'),
       // Napojení na banku (synchronizace, odpojení, pravidla importu) má jen ukázka.
       finBankDemo: this.ukazka(),
@@ -16100,7 +16107,7 @@ class Component extends DCLogic {
       finLead: this.ukazka()
         ? 'Šest účtů na jednom místě. Import z bank běží ráno, zařazování podle pravidel hned po něm — do rozpočtu se to propíše samo.'
         : (FIN.accounts.length
-          ? this.pl(FIN.accounts.length, 'účet', 'účty', 'účtů') + ' na jednom místě. Platby zapisujete ručně nebo z pravidelných plateb — do rozpočtu se propíšou hned.'
+          ? this.pl(FIN.accounts.length, 'účet', 'účty', 'účtů') + ' na jednom místě. Platby zapisujete ručně, z pravidelných plateb nebo nahráním výpisu z banky — do rozpočtu se propíšou hned.'
           : 'Zatím tu není žádný účet. Založte ho v záložce Účty a napojení (Nový účet) a platby se začnou počítat.'),
       // Kolik účtů se synchronizuje, ví seznam účtů — ne napsaná pětka.
       finSyncAll: () => {
@@ -30350,6 +30357,36 @@ class Component extends DCLogic {
       const prvni = t.errors ? (Object.values(t.errors)[0] || [])[0] : null;
       this.toast(t.zprava || prvni || t.message || 'Zápis se nepodařil', { icon: 'ph-warning', color: 'var(--g-mag)' });
     });
+  }
+  /*
+   * Výpis z banky na účet (ImportVypisuController).
+   *
+   * U účtu stálo „stahování transakcí z banky zatím neumíme" a Transakce
+   * slibovaly import, který do nich nikdy nedošel. Vybere se soubor z banky
+   * (CSV, XLS, XLSX), server ho přečte, odduplikuje a nové pohyby zapíše
+   * jako nezařazené platby; toast říká, kolik přibylo a co vynechal.
+   */
+  nahratVypis(ucet, nazev) {
+    if (!this.financeNaServeru() || !window.GalerieApi.nahrajVypis) { this.zatimNeumime('nahrání výpisu bez připojeného serveru'); return; }
+    const vstup = document.createElement('input');
+    vstup.type = 'file';
+    vstup.accept = '.csv,.xls,.xlsx,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    vstup.onchange = () => {
+      const soubor = vstup.files && vstup.files[0];
+      if (!soubor) return;
+      this.toast('Čtu výpis „' + soubor.name + '“' + (nazev ? ' pro účet ' + nazev : '') + '…', { icon: 'ph-file-arrow-up', silent: true });
+      window.GalerieApi.nahrajVypis(soubor, ucet).then(res => {
+        if (res && window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data, res.prazdne);
+        this.toast((res && res.zprava) || 'Výpis zpracován', { icon: res && res.zapsano ? 'ph-check-circle' : 'ph-info' });
+        // Nové platby jsou bez kategorie — rovnou tam, kde se zařazují.
+        if (res && res.zapsano) this.setState({ route: 'x-transakce', txFilter: 'un', txQuery: '', txPickCat: null });
+      }).catch(e => {
+        const t = (e && e.body) || {};
+        const prvni = t.errors ? (Object.values(t.errors)[0] || [])[0] : null;
+        this.toast(t.zprava || prvni || t.message || 'Výpis se nepodařilo nahrát', { icon: 'ph-warning', color: 'var(--g-mag)' });
+      });
+    };
+    vstup.click();
   }
   // Částka z políčka: „1 500", „1500,50", „+200" → číslo.
   castkaZTextu(t) { return parseFloat(String(t || '').replace(/\s/g, '').replace(/[^0-9.,-]/g, '').replace(',', '.')); }

@@ -891,6 +891,34 @@
     },
 
     /*
+     * Výpis z banky (CSV, XLS, XLSX) na účet v knize plateb.
+     *
+     * Soubor, takže `FormData` bez ručního `Content-Type`. Server vrátí větu
+     * pro toast a rovnou novou knihu (`data`, `prazdne`) jako jiné akce.
+     * Příliš velký soubor odmítne už webový server stránkou místo JSON —
+     * i pak přijde srozumitelná chyba, ne výjimka z `r.json()`.
+     */
+    nahrajVypis: function (soubor, ucet) {
+      if (mode !== 'http' || ! soubor) return Promise.resolve(null);
+      var telo = new FormData();
+      telo.append('vypis', soubor, soubor.name || 'vypis.csv');
+      if (ucet) telo.append('ucet', ucet);
+
+      var h = headers();
+      delete h['Content-Type'];
+
+      return fetch(base + '/finance/import', { method: 'POST', headers: h, credentials: 'same-origin', body: telo })
+        .then(function (r) {
+          return r.json().catch(function () {
+            return { message: r.status === 413 ? 'Výpis je na server příliš velký — stáhněte z banky kratší období.' : 'Server výpis nepřijal (' + r.status + ').' };
+          }).then(function (b) {
+            if (! r.ok) throw Object.assign(new Error('HTTP ' + r.status), { body: b, status: r.status });
+            return b;
+          });
+        });
+    },
+
+    /*
      * Obrázek do chatu.
      *
      * Zvlášť od `post` ze stejného důvodu jako hlasovka: jde o soubor, takže

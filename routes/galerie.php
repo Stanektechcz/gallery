@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\Galerie\CestyAkceController;
 use App\Http\Controllers\Api\Galerie\DataController;
 use App\Http\Controllers\Api\Galerie\DenikController;
 use App\Http\Controllers\Api\Galerie\FinanceAkceController;
+use App\Http\Controllers\Api\Galerie\ImportVypisuController;
 use App\Http\Controllers\Api\Galerie\KategorieUkoluController;
 use App\Http\Controllers\Api\Galerie\KosController;
 use App\Http\Controllers\Api\Galerie\LideController;
@@ -203,6 +204,9 @@ Route::middleware(['auth:sanctum', 'dvojice', 'throttle:120,1'])->prefix('api')-
         Route::post('vyrovnani', [FinanceAkceController::class, 'vyrovnat'])->name('vyrovnani');
         Route::post('ucty', [FinanceAkceController::class, 'pridatUcet'])->name('ucty.store');
         Route::post('prevod', [FinanceAkceController::class, 'prevod'])->name('prevod');
+        // Výpis z banky do Transakcí — dřív „stahování z banky zatím neumíme".
+        Route::post('import', ImportVypisuController::class)
+            ->middleware('throttle:10,1,import-vypisu')->name('import');
     });
 
     // Cesty: výdaj cesty a bod programu dne (dřív jen stav obrazovky / „zatím neumíme").
