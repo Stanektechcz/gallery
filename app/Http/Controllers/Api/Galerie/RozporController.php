@@ -7,11 +7,11 @@ use App\Http\Controllers\Api\Galerie\Concerns\VraciObsah;
 use App\Http\Controllers\Controller;
 use App\Models\GallerySpace;
 use App\Services\Obsah\System;
+use App\Support\Tabulky;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 
 /**
  * Vyřešení rozporu mezi aplikací a Diskem.
@@ -43,7 +43,7 @@ class RozporController extends Controller
 
         $prostor = GallerySpace::findOrFail($this->parId($request));
 
-        abort_unless(Schema::hasTable('drive_conflicts'), 503, 'Rozpory budou dostupné po dokončení aktualizace databáze.');
+        abort_unless(Tabulky::je('drive_conflicts'), 503, 'Rozpory budou dostupné po dokončení aktualizace databáze.');
 
         // Obrazovka nese `r12`, tabulka číslo. Prefix odlišuje skutečný rozpor
         // od ukázkového `c1` z `galerie-data.js`, který v tabulce není.

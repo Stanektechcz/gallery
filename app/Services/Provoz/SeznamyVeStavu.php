@@ -4,8 +4,8 @@ namespace App\Services\Provoz;
 
 use App\Models\GallerySpace;
 use App\Models\User;
+use App\Support\Tabulky;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 /**
@@ -90,7 +90,7 @@ class SeznamyVeStavu
      */
     private function napady(array $radky, GallerySpace $prostor, ?User $uzivatel): void
     {
-        if (! Schema::hasTable('gift_ideas')) {
+        if (! Tabulky::je('gift_ideas')) {
             return;
         }
 
@@ -136,7 +136,7 @@ class SeznamyVeStavu
      */
     private function randicka(array $radky, GallerySpace $prostor, ?User $uzivatel): void
     {
-        if (! Schema::hasTable('couple_date_ideas')) {
+        if (! Tabulky::je('couple_date_ideas')) {
             return;
         }
 
@@ -182,7 +182,7 @@ class SeznamyVeStavu
      */
     private function jizdenky(array $radky, GallerySpace $prostor, ?User $uzivatel): void
     {
-        if (! Schema::hasTable('saved_transport_routes')) {
+        if (! Tabulky::je('saved_transport_routes')) {
             return;
         }
 
@@ -237,7 +237,7 @@ class SeznamyVeStavu
      */
     private function cestovniInbox(array $radky, GallerySpace $prostor): void
     {
-        if (! Schema::hasTable('travel_inbox_items')) {
+        if (! Tabulky::je('travel_inbox_items')) {
             return;
         }
 

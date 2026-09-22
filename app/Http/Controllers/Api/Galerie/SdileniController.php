@@ -11,12 +11,12 @@ use App\Models\GallerySpace;
 use App\Models\MediaItem;
 use App\Models\SharedLink;
 use App\Services\Obsah\Sdileni;
+use App\Support\Tabulky;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Schema;
 
 /**
  * Sdílený odkaz, který opravdu vznikne.
@@ -216,7 +216,7 @@ class SdileniController extends Controller
 
         $album = $request->input('album');
 
-        if ($album && Schema::hasTable('albums')) {
+        if ($album && Tabulky::je('albums')) {
             $id = Album::withoutGlobalScopes()
                 ->where('gallery_space_id', $prostor->id)
                 ->where('uuid', $album)

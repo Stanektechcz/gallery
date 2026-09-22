@@ -4,10 +4,10 @@ namespace App\Services\Provoz;
 
 use App\Models\GallerySpace;
 use App\Models\Transaction;
+use App\Support\Tabulky;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 /**
@@ -37,7 +37,7 @@ class FinanceVeStavu
      */
     public function zpracuj(array $patch, array $predtim, GallerySpace $prostor): array
     {
-        if (! Schema::hasTable('transactions') || ! Schema::hasTable('finance_categories')) {
+        if (! Tabulky::je('transactions') || ! Tabulky::je('finance_categories')) {
             return $patch;
         }
 

@@ -5,9 +5,9 @@ namespace App\Services\Provoz;
 use App\Models\GallerySpace;
 use App\Models\User;
 use App\Services\Obsah\Darky;
+use App\Support\Tabulky;
 use App\Support\Vejde;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 /**
@@ -53,7 +53,7 @@ class DarkyVeStavu
      */
     public function zpracuj(array $patch, GallerySpace $prostor, ?User $uzivatel): array
     {
-        if ($uzivatel === null || ! Schema::hasTable('gift_ideas')) {
+        if ($uzivatel === null || ! Tabulky::je('gift_ideas')) {
             return [];
         }
 
@@ -148,7 +148,7 @@ class DarkyVeStavu
         $pojmenovany = $jmena[(string) ($p['who'] ?? $p['owner'] ?? '')] ?? null;
         $autor = $pojmenovany ?? $uzivatel->id;
 
-        if (Schema::hasColumn('gift_ideas', 'private_to_user_id')) {
+        if (Tabulky::sloupec('gift_ideas', 'private_to_user_id')) {
             $radek['private_to_user_id'] = $druh === 'nakup' ? $autor : null;
         }
 
@@ -213,7 +213,7 @@ class DarkyVeStavu
             ->where('gallery_space_id', $prostor->id)
             ->whereIn('status', $stavy)
             ->when(
-                Schema::hasColumn('gift_ideas', 'private_to_user_id'),
+                Tabulky::sloupec('gift_ideas', 'private_to_user_id'),
                 fn ($q) => $q->where(
                     fn ($v) => $v->whereNull('private_to_user_id')->orWhere('private_to_user_id', $uzivatel->id),
                 ),

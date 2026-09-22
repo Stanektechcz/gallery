@@ -6,10 +6,10 @@ use App\Models\GallerySpace;
 use App\Models\User;
 use App\Services\Obsah\Klid;
 use App\Support\Cas;
+use App\Support\Tabulky;
 use App\Support\Vejde;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 
 /**
  * Klid a pohoda, který přišel jako změna stavu.
@@ -104,7 +104,7 @@ class KlidVeStavu
      */
     private function cekaNaOkno(array $ukoly, GallerySpace $prostor, ?array $odebrane = null, ?array $zmenene = null): void
     {
-        if (! Schema::hasTable('wellbeing_tasks')) {
+        if (! Tabulky::je('wellbeing_tasks')) {
             return;
         }
 
@@ -178,7 +178,7 @@ class KlidVeStavu
      */
     private function energie(array $mapa, GallerySpace $prostor, array $jmena): void
     {
-        if (! Schema::hasTable('wellbeing_energy')) {
+        if (! Tabulky::je('wellbeing_energy')) {
             return;
         }
 
@@ -227,7 +227,7 @@ class KlidVeStavu
      */
     private function pozornost(array $prani, GallerySpace $prostor): void
     {
-        if (! Schema::hasTable('wellbeing_attention')) {
+        if (! Tabulky::je('wellbeing_attention')) {
             return;
         }
 
@@ -289,7 +289,7 @@ class KlidVeStavu
      */
     private function odpoved(array $patch, GallerySpace $prostor, User $uzivatel): void
     {
-        if (! Schema::hasTable('wellbeing_answers') || ($patch['klAskDone'] ?? false) !== true) {
+        if (! Tabulky::je('wellbeing_answers') || ($patch['klAskDone'] ?? false) !== true) {
             return;
         }
 

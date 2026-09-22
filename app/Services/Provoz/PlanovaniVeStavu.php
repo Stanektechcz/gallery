@@ -8,10 +8,10 @@ use App\Models\SharedTodo;
 use App\Models\User;
 use App\Services\Obsah\Planovani;
 use App\Support\Cas;
+use App\Support\Tabulky;
 use App\Support\Vejde;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 /**
@@ -252,7 +252,7 @@ class PlanovaniVeStavu
      */
     private function ucastnici(CalendarEvent $u, array $e, GallerySpace $prostor): void
     {
-        if (! Schema::hasTable('event_participants')) {
+        if (! Tabulky::je('event_participants')) {
             return;
         }
 
@@ -289,7 +289,7 @@ class PlanovaniVeStavu
      */
     private function pripominka(CalendarEvent $u, string $volba): void
     {
-        if (! Schema::hasTable('event_reminders')) {
+        if (! Tabulky::je('event_reminders')) {
             return;
         }
 
@@ -298,7 +298,7 @@ class PlanovaniVeStavu
          * cesta, večer vzpomínek nebo automatizace (mají `automation_key`).
          */
         $vlastni = fn () => DB::table('event_reminders')->where('event_id', $u->id)
-            ->when(Schema::hasColumn('event_reminders', 'automation_key'), fn ($q) => $q->whereNull('automation_key'));
+            ->when(Tabulky::sloupec('event_reminders', 'automation_key'), fn ($q) => $q->whereNull('automation_key'));
 
         if ($volba === '') {
             $vlastni()->where('status', 'pending')->delete();
@@ -737,7 +737,7 @@ class PlanovaniVeStavu
     /** Seznam úkolů za nástěnkou kategorie (`seznam-<uuid>`); jinak žádný. */
     private function seznamKategorie(string $klic, GallerySpace $prostor): ?int
     {
-        if (! str_starts_with($klic, 'seznam-') || ! Schema::hasTable('shared_todo_lists')) {
+        if (! str_starts_with($klic, 'seznam-') || ! Tabulky::je('shared_todo_lists')) {
             return null;
         }
 
@@ -753,7 +753,7 @@ class PlanovaniVeStavu
 
     private function domaciSeznam(GallerySpace $prostor, User $kdo): ?int
     {
-        if (! Schema::hasTable('shared_todo_lists')) {
+        if (! Tabulky::je('shared_todo_lists')) {
             return null;
         }
 
@@ -922,7 +922,7 @@ class PlanovaniVeStavu
     {
         $uuid = (string) ($e['album'] ?? '');
 
-        if ($uuid === '' || ! Schema::hasTable('albums')) {
+        if ($uuid === '' || ! Tabulky::je('albums')) {
             return null;
         }
 

@@ -4,8 +4,8 @@ namespace App\Services\Provoz;
 
 use App\Models\GallerySpace;
 use App\Models\User;
+use App\Support\Tabulky;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 /**
@@ -102,7 +102,7 @@ class NakupyVeStavu
 
     public function zpracuj(array $patch, GallerySpace $prostor, ?User $uzivatel): void
     {
-        if (Schema::hasTable('shopping_list_items')) {
+        if (Tabulky::je('shopping_list_items')) {
             /*
              * Smazání jen výslovně (`shopDel`), ne podle toho, co v seznamu chybí.
              *
@@ -127,7 +127,7 @@ class NakupyVeStavu
             $klic = (string) $klic;
 
             if (str_starts_with($klic, self::VLASTNI)) {
-                if (Schema::hasTable('shopping_list_items')) {
+                if (Tabulky::je('shopping_list_items')) {
                     DB::table('shopping_list_items')
                         ->where('gallery_space_id', $prostor->id)
                         ->where('uuid', substr($klic, strlen(self::VLASTNI)))
@@ -141,7 +141,7 @@ class NakupyVeStavu
                 continue;
             }
 
-            if (! str_starts_with($klic, self::PREDPONA) || ! Schema::hasTable('meal_shopping_states')) {
+            if (! str_starts_with($klic, self::PREDPONA) || ! Tabulky::je('meal_shopping_states')) {
                 continue;
             }
 

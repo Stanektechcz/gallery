@@ -6,10 +6,10 @@ use App\Models\GallerySpace;
 use App\Models\User;
 use App\Services\Obsah\Mechanismy;
 use App\Support\Cas;
+use App\Support\Tabulky;
 use App\Support\Vejde;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 /**
@@ -108,7 +108,7 @@ class MechanismyVeStavu
      */
     private function laskavosti(array $seznam, GallerySpace $prostor, array $lide): void
     {
-        if (! Schema::hasTable('couple_favours')) {
+        if (! Tabulky::je('couple_favours')) {
             return;
         }
 
@@ -131,7 +131,7 @@ class MechanismyVeStavu
      */
     private function odpustene(array $seznam, GallerySpace $prostor, array $lide): void
     {
-        if (! Schema::hasTable('couple_forgiven')) {
+        if (! Tabulky::je('couple_forgiven')) {
             return;
         }
 
@@ -155,7 +155,7 @@ class MechanismyVeStavu
      */
     private function antiRozpocet(array $seznam, GallerySpace $prostor): void
     {
-        if (! Schema::hasTable('couple_anti_budget')) {
+        if (! Tabulky::je('couple_anti_budget')) {
             return;
         }
 
@@ -193,7 +193,7 @@ class MechanismyVeStavu
      */
     private function rodina(array $seznam, GallerySpace $prostor, array $lide): void
     {
-        if (! Schema::hasTable('couple_family_contacts')) {
+        if (! Tabulky::je('couple_family_contacts')) {
             return;
         }
 
@@ -271,7 +271,7 @@ class MechanismyVeStavu
      */
     private function pravdy(array $seznam, GallerySpace $prostor): void
     {
-        if (! Schema::hasTable('couple_truths')) {
+        if (! Tabulky::je('couple_truths')) {
             return;
         }
 

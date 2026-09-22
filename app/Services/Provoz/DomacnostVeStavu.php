@@ -7,11 +7,11 @@ use App\Models\HouseChore;
 use App\Models\HouseChoreLogEntry;
 use App\Models\HouseDue;
 use App\Models\HouseInventoryItem;
+use App\Support\Tabulky;
 use App\Support\Vejde;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 /**
@@ -55,7 +55,7 @@ class DomacnostVeStavu
             $this->zapisTyden($patch['capWeek'], $prostor);
         }
 
-        if (! Schema::hasTable('house_chores')) {
+        if (! Tabulky::je('house_chores')) {
             return;
         }
 
@@ -92,7 +92,7 @@ class DomacnostVeStavu
      */
     private function zapisTyden(array $dny, GallerySpace $prostor): void
     {
-        if (! Schema::hasTable('house_week') || ! Schema::hasTable('house_week_capacity')) {
+        if (! Tabulky::je('house_week') || ! Tabulky::je('house_week_capacity')) {
             return;
         }
 

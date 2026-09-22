@@ -5,10 +5,10 @@ namespace App\Services\Provoz;
 use App\Models\GallerySpace;
 use App\Models\User;
 use App\Services\Obsah\Sdileni;
+use App\Support\Tabulky;
 use App\Support\Vejde;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 /**
@@ -44,7 +44,7 @@ class KapsleVeStavu
     /** @return array<string, mixed> */
     public function zpracuj(array $patch, GallerySpace $prostor, ?User $uzivatel): array
     {
-        if ($uzivatel === null || ! Schema::hasTable('time_capsules')) {
+        if ($uzivatel === null || ! Tabulky::je('time_capsules')) {
             return [];
         }
 

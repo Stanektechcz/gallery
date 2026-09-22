@@ -9,7 +9,7 @@ use App\Models\StorageConnection;
 use App\Services\Billing\EntitlementService;
 use App\Services\Storage\DriveConnectionResolver;
 use App\Support\SpaceContext;
-use Illuminate\Support\Facades\Schema;
+use App\Support\Tabulky;
 
 /**
  * Čísla pro postranní panel: kolik místa je zabráno a co ještě není v cloudu.
@@ -138,7 +138,7 @@ class UlozisteGalerie
      */
     private function disk(GallerySpace $prostor): ?StorageConnection
     {
-        if (! Schema::hasTable('storage_connections')) {
+        if (! Tabulky::je('storage_connections')) {
             return null;
         }
 

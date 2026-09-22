@@ -12,9 +12,9 @@ use App\Models\SystemSetting;
 use App\Models\User;
 use App\Services\Billing\EntitlementService;
 use App\Support\SpaceContext;
+use App\Support\Tabulky;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 
 /**
  * Administrace prostoru ve tvaru, ve kterém ji kreslí prototyp.
@@ -133,8 +133,8 @@ class AdministraceGalerie
         $celkem = @disk_total_space(storage_path()) ?: 0;
         $diskPct = $celkem > 0 ? (int) round(($celkem - $volno) / $celkem * 100) : 0;
 
-        $ceka = Schema::hasTable('jobs') ? (int) DB::table('jobs')->count() : 0;
-        $selhalo = Schema::hasTable('failed_jobs') ? (int) DB::table('failed_jobs')->count() : 0;
+        $ceka = Tabulky::je('jobs') ? (int) DB::table('jobs')->count() : 0;
+        $selhalo = Tabulky::je('failed_jobs') ? (int) DB::table('failed_jobs')->count() : 0;
 
         $limit = $this->tarify->storageUsage($prostor)['limit_bytes'] ?? null;
         $tarifPct = $limit ? (int) round($obsazeno * 1_073_741_824 / $limit * 100) : 0;
@@ -285,7 +285,7 @@ class AdministraceGalerie
         $kosGb = round((int) (clone $kos)->sum('size_bytes') / 1_073_741_824, 1);
         $kosPocet = (clone $kos)->count();
 
-        $cloud = Schema::hasTable('storage_connections')
+        $cloud = Tabulky::je('storage_connections')
             ? StorageConnection::where('gallery_space_id', $prostor->id)->first()
             : null;
 

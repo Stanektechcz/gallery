@@ -6,11 +6,11 @@ use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\User;
 use App\Services\Provoz\PokusyOvereni;
+use App\Support\Tabulky;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 /**
@@ -196,7 +196,7 @@ class ZamekController extends Controller
         $clovek = $request->user();
         $sezeni = 0;
 
-        if (Schema::hasTable('sessions')) {
+        if (Tabulky::je('sessions')) {
             // Požadavek jen s tokenem sezení nemá — pak se ruší všechna.
             $sezeni = DB::table('sessions')
                 ->where('user_id', $clovek->id)

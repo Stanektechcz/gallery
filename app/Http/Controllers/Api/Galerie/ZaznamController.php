@@ -9,10 +9,10 @@ use App\Models\GallerySpace;
 use App\Services\Obsah\Mechanismy;
 use App\Services\Obsah\Rozhodovani;
 use App\Support\Cas;
+use App\Support\Tabulky;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
@@ -294,7 +294,7 @@ class ZaznamController extends Controller
         $kontakt = null;
         $oblast = trim($data['area']);
 
-        if (($data['contact'] ?? '') !== '' && Schema::hasTable('couple_family_contacts')) {
+        if (($data['contact'] ?? '') !== '' && Tabulky::je('couple_family_contacts')) {
             $kontakt = DB::table('couple_family_contacts')
                 ->where('gallery_space_id', $prostor->id)
                 ->where('name', trim((string) $data['contact']))

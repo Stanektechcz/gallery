@@ -4,8 +4,8 @@ namespace App\Services\Provoz;
 
 use App\Models\GallerySpace;
 use App\Models\User;
+use App\Support\Tabulky;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 
 /**
  * Akční inbox: co dvojice vyřešila a co odložila.
@@ -105,7 +105,7 @@ class InboxVeStavu
 
     public function zpracuj(array $patch, GallerySpace $prostor, ?User $uzivatel): void
     {
-        if (! Schema::hasTable('inbox_states')) {
+        if (! Tabulky::je('inbox_states')) {
             return;
         }
 

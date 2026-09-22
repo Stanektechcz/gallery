@@ -6,8 +6,8 @@ use App\Models\GallerySpace;
 use App\Models\MediaItem;
 use App\Services\Obsah\Uklid;
 use App\Support\SpaceContext;
+use App\Support\Tabulky;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 
 /**
  * Úklid knihovny, který přišel jako změna stavu.
@@ -180,7 +180,7 @@ class UklidVeStavu
      */
     private function duplicity(array $patch, GallerySpace $prostor): float
     {
-        if (! Schema::hasTable('duplicate_groups')) {
+        if (! Tabulky::je('duplicate_groups')) {
             return 0.0;
         }
 

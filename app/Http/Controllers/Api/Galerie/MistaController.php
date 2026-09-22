@@ -9,10 +9,10 @@ use App\Models\GallerySpace;
 use App\Models\Place;
 use App\Services\Obsah\Cesty;
 use App\Services\Obsah\Tyden;
+use App\Support\Tabulky;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 
 /**
  * Místa z galerie: nový cíl na seznam přání, „byli jsme" a společná poznámka.
@@ -117,7 +117,7 @@ class MistaController extends Controller
 
     private function ulozPoznamku(GallerySpace $prostor, int $misto, string $text, int $kdo): void
     {
-        if (! Schema::hasTable('place_notes')) {
+        if (! Tabulky::je('place_notes')) {
             return;
         }
 

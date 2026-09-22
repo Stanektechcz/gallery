@@ -5,8 +5,8 @@ namespace App\Services\Provoz;
 use App\Models\GallerySpace;
 use App\Models\User;
 use App\Services\Obsah\Formulare;
+use App\Support\Tabulky;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 
 /**
  * Přepínače nastavení, které přišly jako změna stavu.
@@ -128,7 +128,7 @@ class NastaveniVeStavu
 
     private function predvolba(string $klic, bool $zapnuto, ?User $uzivatel): void
     {
-        if ($uzivatel === null || ! Schema::hasTable('user_settings')) {
+        if ($uzivatel === null || ! Tabulky::je('user_settings')) {
             return;
         }
 

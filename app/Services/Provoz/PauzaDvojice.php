@@ -4,8 +4,8 @@ namespace App\Services\Provoz;
 
 use App\Models\CoupleState;
 use App\Models\User;
+use App\Support\Tabulky;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 
 /**
  * Pauza dvojice („Pauza a plán") — 24 hodin, kdy aplikace mlčí.
@@ -19,7 +19,7 @@ class PauzaDvojice
 {
     public static function bezi(User $clovek): bool
     {
-        if (! Schema::hasTable('couple_states') || ! Schema::hasTable('gallery_space_user')) {
+        if (! Tabulky::je('couple_states') || ! Tabulky::je('gallery_space_user')) {
             return false;
         }
 

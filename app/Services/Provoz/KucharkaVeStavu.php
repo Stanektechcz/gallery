@@ -6,8 +6,8 @@ use App\Models\GallerySpace;
 use App\Models\PlannedMeal;
 use App\Models\User;
 use App\Services\Obsah\Kucharka;
+use App\Support\Tabulky;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 /**
@@ -43,7 +43,7 @@ class KucharkaVeStavu
 
     public function zpracuj(array $patch, GallerySpace $prostor, User $kdo): void
     {
-        if (! Schema::hasTable('planned_meals') || ! is_array($patch['ckMenu'] ?? null)) {
+        if (! Tabulky::je('planned_meals') || ! is_array($patch['ckMenu'] ?? null)) {
             return;
         }
 

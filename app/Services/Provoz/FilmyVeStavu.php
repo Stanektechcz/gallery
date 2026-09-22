@@ -5,9 +5,9 @@ namespace App\Services\Provoz;
 use App\Models\GallerySpace;
 use App\Models\User;
 use App\Services\Obsah\Pribeh;
+use App\Support\Tabulky;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 /**
@@ -92,7 +92,7 @@ class FilmyVeStavu
     /** @return array<string, mixed> */
     public function zpracuj(array $patch, GallerySpace $prostor, ?User $uzivatel): array
     {
-        if (! Schema::hasTable('watch_titles')) {
+        if (! Tabulky::je('watch_titles')) {
             return [];
         }
 
@@ -309,7 +309,7 @@ class FilmyVeStavu
     /** Hvězdičky: `{ a, m }`, každý zvlášť. */
     private function hvezdicky(object $titul, mixed $hodnota, GallerySpace $prostor): void
     {
-        if (! Schema::hasTable('watch_title_ratings')) {
+        if (! Tabulky::je('watch_title_ratings')) {
             return;
         }
 

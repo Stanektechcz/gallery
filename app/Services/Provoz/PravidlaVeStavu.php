@@ -6,8 +6,8 @@ use App\Models\GallerySpace;
 use App\Models\User;
 use App\Services\Obsah\Pravidla;
 use App\Services\Obsah\SlovnikPravidel;
+use App\Support\Tabulky;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 /**
@@ -51,7 +51,7 @@ class PravidlaVeStavu
      */
     public function zpracuj(array $patch, GallerySpace $prostor, ?User $uzivatel): array
     {
-        if (! Schema::hasTable('automation_rules')) {
+        if (! Tabulky::je('automation_rules')) {
             return [];
         }
 

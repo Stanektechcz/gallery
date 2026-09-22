@@ -7,8 +7,8 @@ use App\Models\CycleSetting;
 use App\Models\GallerySpace;
 use App\Models\User;
 use App\Models\WellbeingMood;
+use App\Support\Tabulky;
 use Carbon\CarbonImmutable;
-use Illuminate\Support\Facades\Schema;
 
 /**
  * Cyklus a nálada, které přišly jako změna stavu.
@@ -45,7 +45,7 @@ class ZdraviVeStavu
 
     public function zpracuj(array $patch, GallerySpace $prostor, ?User $kdo): void
     {
-        if (! $kdo || ! Schema::hasTable('cycle_days')) {
+        if (! $kdo || ! Tabulky::je('cycle_days')) {
             return;
         }
 
@@ -55,7 +55,7 @@ class ZdraviVeStavu
             $this->zapisDny($patch['cycDays'], $prostor, $kdo);
         }
 
-        if (is_array($patch['klMood'] ?? null) && Schema::hasTable('wellbeing_moods')) {
+        if (is_array($patch['klMood'] ?? null) && Tabulky::je('wellbeing_moods')) {
             $this->zapisNalady($patch['klMood'], $prostor, $kdo);
         }
     }
@@ -133,7 +133,7 @@ class ZdraviVeStavu
      */
     private function zapisNastaveni(array $patch, GallerySpace $prostor, User $kdo): void
     {
-        if (! Schema::hasTable('cycle_settings')) {
+        if (! Tabulky::je('cycle_settings')) {
             return;
         }
 

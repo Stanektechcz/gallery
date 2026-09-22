@@ -8,10 +8,10 @@ use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\GallerySpace;
 use App\Services\Obsah\Knihovna;
+use App\Support\Tabulky;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 /**
@@ -79,7 +79,7 @@ class StitkyController extends Controller
             $this->presun('media_tag', 'media_item_id', $cil->id, $zdroje);
             $this->presun('album_tag', 'album_id', $cil->id, $zdroje);
 
-            if (Schema::hasTable('tag_assignments')) {
+            if (Tabulky::je('tag_assignments')) {
                 foreach (DB::table('tag_assignments')->whereIn('tag_id', $zdroje)->get() as $p) {
                     $uz = DB::table('tag_assignments')->where('tag_id', $cil->id)
                         ->where('entity_type', $p->entity_type)->where('entity_id', $p->entity_id)->exists();
@@ -108,7 +108,7 @@ class StitkyController extends Controller
      */
     private function presun(string $tabulka, string $sloupec, int $cil, array $zdroje): void
     {
-        if (! Schema::hasTable($tabulka)) {
+        if (! Tabulky::je($tabulka)) {
             return;
         }
 

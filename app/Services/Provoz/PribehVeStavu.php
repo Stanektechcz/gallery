@@ -5,10 +5,10 @@ namespace App\Services\Provoz;
 use App\Models\GallerySpace;
 use App\Models\User;
 use App\Services\Obsah\Pribeh;
+use App\Support\Tabulky;
 use App\Support\Vejde;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 /**
@@ -114,7 +114,7 @@ class PribehVeStavu
      */
     private function kapitoly(array $kapitoly, GallerySpace $prostor, ?User $uzivatel): void
     {
-        if (! Schema::hasTable('couple_story_chapters')) {
+        if (! Tabulky::je('couple_story_chapters')) {
             return;
         }
 
@@ -187,7 +187,7 @@ class PribehVeStavu
      */
     private function milniky(array $milniky, GallerySpace $prostor): void
     {
-        if (! Schema::hasTable('couple_story_milestones')) {
+        if (! Tabulky::je('couple_story_milestones')) {
             return;
         }
 
@@ -353,7 +353,7 @@ class PribehVeStavu
      */
     private function nouze(array $polozky, GallerySpace $prostor, ?User $uzivatel): void
     {
-        if (! Schema::hasTable('emergency_access_items')) {
+        if (! Tabulky::je('emergency_access_items')) {
             return;
         }
 
@@ -429,7 +429,7 @@ class PribehVeStavu
      */
     private function papir(array $radky, GallerySpace $prostor): void
     {
-        if (! Schema::hasTable('paper_backup_rows')) {
+        if (! Tabulky::je('paper_backup_rows')) {
             return;
         }
 
@@ -485,7 +485,7 @@ class PribehVeStavu
 
     private function zapis(GallerySpace $prostor, ?User $uzivatel, string $text): void
     {
-        if (! Schema::hasTable('emergency_access_log')) {
+        if (! Tabulky::je('emergency_access_log')) {
             return;
         }
 

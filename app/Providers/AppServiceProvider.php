@@ -36,6 +36,7 @@ use App\Services\Obsah\Uklid;
 use App\Services\Obsah\Vztah;
 use App\Services\Obsah\Zdravi;
 use App\Services\Obsah\Zpravy;
+use App\Support\Tabulky;
 use Illuminate\Console\Events\ScheduledTaskFailed;
 use Illuminate\Console\Events\ScheduledTaskFinished;
 use Illuminate\Console\Events\ScheduledTaskSkipped;
@@ -177,6 +178,9 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        // Paměť o schématu platí jen v rámci běhu — v testech se tím čistí mezi testy.
+        Tabulky::zapomen();
+
         $this->registerAutomationTriggers();
         $this->registerScheduleLogging();
 

@@ -8,11 +8,11 @@ use App\Http\Controllers\Controller;
 use App\Models\GallerySpace;
 use App\Services\Obsah\Cesty;
 use App\Services\Planning\TravelInboxService;
+use App\Support\Tabulky;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 /**
@@ -54,7 +54,7 @@ class CestyAkceController extends Controller
             'title' => trim($data['nazev']),
             'category' => self::KATEGORIE[mb_strtolower(trim((string) ($data['kategorie'] ?? '')))] ?? 'other',
             'amount' => round((float) $data['castka'], 2),
-            'currency' => Schema::hasColumn('trips', 'currency') && ! empty($radek->currency) ? $radek->currency : 'CZK',
+            'currency' => Tabulky::sloupec('trips', 'currency') && ! empty($radek->currency) ? $radek->currency : 'CZK',
             'paid_by' => $data['zaplatil'] ?? $request->user()->name,
             'state' => 'actual',
             'occurred_at' => now(),

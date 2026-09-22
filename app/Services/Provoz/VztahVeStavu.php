@@ -13,10 +13,10 @@ use App\Models\CoupleVeto;
 use App\Models\CoupleVetoProposal;
 use App\Models\GallerySpace;
 use App\Models\User;
+use App\Support\Tabulky;
 use App\Support\Vejde;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Schema;
 
 /**
  * Mechanismy vztahu, které přišly jako změna stavu.
@@ -50,7 +50,7 @@ class VztahVeStavu
 
     public function zpracuj(array $patch, GallerySpace $prostor, ?User $kdo): void
     {
-        if (! Schema::hasTable('couple_decisions')) {
+        if (! Tabulky::je('couple_decisions')) {
             return;
         }
 

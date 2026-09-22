@@ -4,9 +4,9 @@ namespace App\Services\Provoz;
 
 use App\Models\GallerySpace;
 use App\Services\Obsah\FinanceRozbory;
+use App\Support\Tabulky;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 
 /**
  * Sezónní fondy, které přišly jako změna stavu.
@@ -45,7 +45,7 @@ class RozboryVeStavu
      */
     public function zpracuj(array $patch, GallerySpace $prostor): array
     {
-        if (! Schema::hasTable('budget_goals')) {
+        if (! Tabulky::je('budget_goals')) {
             return [];
         }
 
