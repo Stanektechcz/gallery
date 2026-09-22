@@ -9568,6 +9568,18 @@ class Component extends DCLogic {
     const zaklad = s.slice(0, -1);
     const meke = ['č', 'š', 'ž', 'j', 'ň', 'ř', 'c', 'ď', 'ť'];
 
+    // Sedmý pád („s kým"): s Makinkou, s Julií, s Adrianem, s Jiřím.
+    if (pad === 'ins') {
+      if (posledni === 'a') return s.slice(-2) === 'ia' ? zaklad + 'í' : zaklad + 'ou';
+      if (posledni === 'í' || posledni === 'ý') return s + 'm';
+      if (posledni === 'o') return zaklad + 'em';
+      if ('bcčdďfghjklmnňprřsštťvzž'.indexOf(posledni) >= 0) {
+        const kmen = s.slice(-2, -1) === 'e' && s.length > 3 ? s.slice(0, -2) + posledni : s;
+        return kmen + 'em';
+      }
+      return s;
+    }
+
     // Ženská jména na -a: Klára, Makinka, Naďa.
     if (posledni === 'a') {
       if (s.slice(-2) === 'ia') {
@@ -10069,7 +10081,8 @@ class Component extends DCLogic {
     return {
       chatGroups: skupiny.map(g => ({ day: g.day, items: g.items.map(bublina) })),
       chatEmpty: vse.length === 0,
-      chatHead: (druhy ? 'S ' + this.krestni(druhy) + ' · ' : '') + this.pl(zeServeru.length, 'zpráva', 'zprávy', 'zpráv')
+      // „S Makinkou", ne „S Makinka".
+      chatHead: (druhy ? 'S ' + this.sklon(this.krestni(druhy), 'ins') + ' · ' : '') + this.pl(zeServeru.length, 'zpráva', 'zprávy', 'zpráv')
         + (naServeru ? ' · vidíte je oba' : ' · ukázka bez serveru'),
       chatDraft: s.mChatDraft || '',
       chatSetDraft: e => this.setState({ mChatDraft: e.target.value }),
