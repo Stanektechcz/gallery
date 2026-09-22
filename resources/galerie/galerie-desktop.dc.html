@@ -24011,8 +24011,17 @@ class Component extends DCLogic {
   // ——— Tisk a fotoknihy ———
   jobsOf() {
     const s = this.state;
-    if (s.pJobs) return s.pJobs;
-    return PJOBS.map(j => ({ id: j[0], kind: j[1], title: j[2], status: j[3], qty: j[4], n: j[5], note: j[6] }));
+    const serverove = PJOBS.map(j => ({ id: j[0], kind: j[1], title: j[2], status: j[3], qty: j[4], n: j[5], note: j[6] }));
+    if (!s.pJobs) return serverove;
+    if (this.ukazka()) return s.pJobs;
+    /*
+     * U dvojice návrhy z Tisku (sdílený stav) i fotoknihy ze starého
+     * rozhraní (`photo_books`). Dřív první návrh založený tady schoval
+     * všechny fotoknihy ze serveru. Úprava téhož návrhu (stejné id) má
+     * přednost; smazaný ze serveru si pamatuje `pJobsSkryte`.
+     */
+    const skryte = s.pJobsSkryte || {};
+    return s.pJobs.concat(serverove.filter(j => !skryte[j.id] && !s.pJobs.some(m => m.id === j.id)));
   }
   jobsSet(list) { this.setState({ pJobs: list }); }
   /*
@@ -24163,6 +24172,22 @@ class Component extends DCLogic {
               this.toast('Zakázka zduplikována', { icon: 'ph-copy', undo: () => this.jobsSet(prev) });
             },
             del: () => {
+              // Fotokniha ze serveru se smaže doopravdy (`/api/v1/books/{uuid}`), s potvrzením.
+              if (!this.ukazka() && this.apiNaServeru() && /^[0-9a-f-]{36}$/i.test(String(j.id))) {
+                this.setState({ confirm: {
+                  title: 'Smazat fotoknihu', cta: 'Smazat', btnBg: 'var(--g-mag)',
+                  body: '„' + j.title + '“ zmizí i ze starého rozhraní. Fotky v knihovně zůstanou.',
+                  go: () => {
+                    this.setState({ confirm: null });
+                    window.GalerieApi.del('v1/books/' + j.id).then(() => {
+                      this.setState({ pJobs: (s.pJobs || []).filter(x => x.id !== j.id), pJobsSkryte: { ...(s.pJobsSkryte || {}), [j.id]: true } });
+                      if (window.GalerieObnovit) window.GalerieObnovit('uklid');
+                      this.toast('Fotokniha smazána — ' + j.title, { icon: 'ph-trash' });
+                    }).catch(e => { const b = (e && e.body) || {}; this.toast(b.message || 'Smazat se nepodařilo', { icon: 'ph-warning', color: 'var(--g-mag)' }); });
+                  }
+                } });
+                return;
+              }
               const prev = jobs;
               this.jobsSet(jobs.filter(x => x.id !== j.id));
               this.toast('Zakázka smazána', { icon: 'ph-trash', undo: () => this.jobsSet(prev) });

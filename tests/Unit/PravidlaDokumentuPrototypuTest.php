@@ -538,6 +538,15 @@ class PravidlaDokumentuPrototypuTest extends TestCase
         $this->assertStringContainsString("if (k === 'xRows' && pending[k] && typeof pending[k] === 'object'", $api);
     }
 
+    /** Tisk u dvojice: místní návrhy neschovají fotoknihy ze serveru; ty se mažou na serveru. */
+    public function test_tisk_spojuje_navrhy_s_fotoknihami(): void
+    {
+        $pocitac = self::dokument('galerie-desktop.dc.html');
+
+        $this->assertStringContainsString('return s.pJobs.concat(serverove.filter(j => !skryte[j.id] && !s.pJobs.some(m => m.id === j.id)));', $pocitac);
+        $this->assertStringContainsString("window.GalerieApi.del('v1/books/' + j.id)", $pocitac);
+    }
+
     /** Přihlášení se na kód druhého ověření ptá políčkem, ne dialogem prohlížeče. */
     public function test_dvoufazove_overeni_ma_policko(): void
     {
