@@ -153,6 +153,8 @@ class NotificationCenterController extends Controller
             'quiet.from' => ['sometimes', 'date_format:H:i'],
             'quiet.to' => ['sometimes', 'date_format:H:i'],
             'browser_notifications' => ['sometimes', 'boolean'],
+            // Večerní souhrn místo drobností — služba ho čte (wantsDigest), jen se nedal zapnout.
+            'digest' => ['sometimes', 'boolean'],
         ]);
         $preferences = $this->preferences->update($request->user(), $data);
 

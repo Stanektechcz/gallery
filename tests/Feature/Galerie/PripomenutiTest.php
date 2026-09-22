@@ -5,9 +5,11 @@ namespace Tests\Feature\Galerie;
 use App\Models\CoupleState;
 use App\Models\GallerySpace;
 use App\Models\User;
+use App\Services\Notifications\NotificationPreferenceService;
 use App\Services\Notifications\WebPushService;
 use App\Services\Provoz\PauzaDvojice;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\Sanctum;
 use Mockery;
 use Tests\TestCase;
@@ -100,6 +102,43 @@ class PripomenutiTest extends TestCase
 
         CoupleState::where('couple_id', $prostor->id)->first()->update(['data' => ['pauseOn' => true, 'pauseUntil' => now()->subMinute()->getTimestampMs()]]);
         $this->assertFalse(PauzaDvojice::bezi($this->maki));
+    }
+
+    /**
+     * Tiché hodiny druhého: nic se nepošle a hláška řekne proč.
+     *
+     * Klid → Tiché hodiny tvrdil, že aplikace mlčí; web push přitom tiché
+     * hodiny vůbec nečetl.
+     */
+    public function test_tiche_hodiny_druheho_ztisi_pripominku(): void
+    {
+        app(NotificationPreferenceService::class)->update($this->maki, ['quiet' => ['enabled' => true, 'from' => '00:00', 'to' => '00:00']]);
+
+        $push = Mockery::mock(WebPushService::class);
+        $push->shouldNotReceive('sendToUser');
+        $this->app->instance(WebPushService::class, $push);
+
+        $this->postJson('/api/pripomenout', ['text' => 'Ahoj'])
+            ->assertOk()
+            ->assertJsonPath('doruceno', 0)
+            ->assertJsonPath('zprava', 'Makinka má tiché hodiny — do telefonu teď nic nepřijde');
+    }
+
+    /** Push v tichých hodinách neodejde — kromě připomínky, kterou si člověk nastavil sám. */
+    public function test_push_respektuje_tiche_hodiny(): void
+    {
+        config(['push.public_key' => 'x', 'push.private_key' => 'y', 'push.subject' => 'mailto:test@galerie.test']);
+        app(NotificationPreferenceService::class)->update($this->maki, ['quiet' => ['enabled' => true, 'from' => '00:00', 'to' => '00:00']]);
+
+        $zarizeni = fn () => collect(DB::getQueryLog())->filter(fn ($q) => str_contains($q['query'], 'from "push_subscriptions"'))->count();
+
+        DB::enableQueryLog();
+        $this->assertSame(0, app(WebPushService::class)->sendToUser($this->maki->fresh(), ['title' => 'Revize', 'body' => 'x']));
+        $this->assertSame(0, $zarizeni(), 'V tichých hodinách se zařízení ani nehledají.');
+
+        DB::flushQueryLog();
+        app(WebPushService::class)->sendToUser($this->maki->fresh(), ['title' => 'Let v 6:40', 'body' => 'x', 'i_v_tichu' => true]);
+        $this->assertSame(1, $zarizeni(), 'Vlastní připomínka k akci tichými hodinami projde.');
     }
 
     public function test_prazdna_pripominka_neprojde(): void

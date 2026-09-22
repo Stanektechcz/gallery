@@ -537,16 +537,17 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
             ->when($this->archivAlb(), fn ($q) => $q->whereNull('archived_at'))
             ->with('cover:id,uuid')
             ->orderByDesc('updated_at')
-            ->limit(40)
+            ->limit(200)
             ->get();
 
         // Rodič podle uuid a hloubka z řetězu rodičů — i když rodič sám mezi
-        // čtyřiceti posledními není. Sloupec `depth` se přepočítává jen při
+        // posledními upravenými není. Sloupec `depth` se přepočítává jen při
         // přesunu, na ten se spoléhat nejde.
         $vsechna = DB::table('albums')
             ->where('gallery_space_id', $prostor->id)
             ->whereNull('deleted_at')
-            ->get(['id', 'parent_id', 'uuid'])
+            ->orderBy('title')
+            ->get(array_merge(['id', 'parent_id', 'uuid', 'title', 'media_count'], $this->archivAlb() ? ['archived_at'] : []))
             ->keyBy('id');
         $rodice = $vsechna->map(fn (object $r) => $r->uuid);
         $hloubka = function (int $id) use ($vsechna): int {
@@ -595,20 +596,24 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
          * Podalba, ne pět vymyšlených.
          *
          * Detail alba si je v prototypu dokresloval sám ze jmen „Zadar, Krka,
-         * Plitvice…" podle počtu potomků. Skutečná hierarchie je v `parent_id`.
+         * Plitvice…" podle počtu potomků. Skutečná hierarchie je v `parent_id`
+         * — a bere se ze všech alb, ne jen z posledních upravených: podalbum,
+         * na které se dlouho nesáhlo, by jinak v detailu rodiče chybělo.
          */
-        foreach ($modely as $a) {
-            if (! $a->parent_id || ! $radky->has($a->parent_id) || ! $radky->has($a->id)) {
+        $modelPodId = $modely->keyBy('id');
+        foreach ($vsechna as $a) {
+            if (! $a->parent_id || ! $radky->has($a->parent_id) || ! empty($a->archived_at)) {
                 continue;
             }
 
+            $model = $modelPodId[$a->id] ?? null;
             $rodic = $radky[$a->parent_id];
             $rodic['children'][] = [
                 'id' => $a->uuid,
                 'name' => $a->title,
                 'count' => $this->pocet((int) $a->media_count, 'položka', 'položky', 'položek'),
-                'bg' => $a->cover ? $this->nahled($a->cover) : null,
-                'n' => $a->id,
+                'bg' => $model && $model->cover ? $this->nahled($model->cover) : null,
+                'n' => (int) $a->id,
             ];
             $radky[$a->parent_id] = $rodic;
         }

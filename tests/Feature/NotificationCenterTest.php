@@ -5,7 +5,9 @@ namespace Tests\Feature;
 use App\Models\GallerySpace;
 use App\Models\User;
 use App\Notifications\GalleryNotification;
+use App\Services\Notifications\NotificationPreferenceService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
@@ -111,6 +113,35 @@ class NotificationCenterTest extends TestCase
         $this->actingAs($this->partner)->getJson('/api/v1/notifications/preferences')->assertOk()
             ->assertJsonPath('preferences.categories.finance', false)
             ->assertJsonPath('preferences.priority_floor', 'high');
+    }
+
+    /** Večerní souhrn jde zapnout (Klid → Tiché hodiny), dřív ho validace zahodila. */
+    public function test_vecerni_souhrn_jde_zapnout(): void
+    {
+        $this->actingAs($this->owner)->patchJson('/api/v1/notifications/preferences', ['digest' => true])
+            ->assertOk()->assertJsonPath('preferences.digest', true);
+
+        $this->assertTrue(app(NotificationPreferenceService::class)->wantsDigest($this->owner->fresh()));
+    }
+
+    /**
+     * Tiché hodiny se počítají v místním čase, ne v UTC.
+     *
+     * „Ticho od 22:00" v létě začínalo až o půlnoci, protože se hodiny
+     * porovnávaly s časem v UTC, ve kterém aplikace ukládá.
+     */
+    public function test_tiche_hodiny_v_mistnim_case(): void
+    {
+        config(['app.display_timezone' => 'Europe/Prague']);
+        $this->actingAs($this->owner)->patchJson('/api/v1/notifications/preferences', [
+            'quiet' => ['enabled' => true, 'from' => '22:00', 'to' => '07:00'],
+        ])->assertOk();
+
+        $sluzba = app(NotificationPreferenceService::class);
+        // 20:30 UTC v létě je 22:30 v Praze — už ticho.
+        $this->assertTrue($sluzba->isQuiet($this->owner->fresh(), Carbon::parse('2026-07-01 20:30:00', 'UTC')));
+        // 05:30 UTC je 7:30 v Praze — ticho skončilo.
+        $this->assertFalse($sluzba->isQuiet($this->owner->fresh(), Carbon::parse('2026-07-01 05:30:00', 'UTC')));
     }
 
     public function test_shared_space_notification_reaches_only_the_other_partner_with_source_context(): void

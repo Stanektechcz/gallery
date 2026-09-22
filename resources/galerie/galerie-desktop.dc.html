@@ -1348,7 +1348,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                   </div>
                 </sc-if>
                 <sc-if value="{{ tripNoPhotos }}">
-                  <div style="padding:26px 2px; font-size:14px; color:var(--g-ink2); max-width:520px">Zatím nic. Po návratu se sem samy zařadí fotky pořízené mezi {{ trip.when }} v okolí destinace — ručně je hledat nemusíte.</div>
+                  <div style="padding:26px 2px; font-size:14px; color:var(--g-ink2); max-width:520px">Zatím nic. Fotky pořízené v termínu {{ trip.when }} se sem zařadí samy, jakmile je nahrajete — ručně je hledat nemusíte.</div>
                 </sc-if>
               </div>
 
@@ -9034,9 +9034,16 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 
               <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr)); gap:22px; align-items:start">
                 <div>
-                  <div style="font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--g-ink3); margin-bottom:10px">Strop na den</div>
-                  <input type="range" min="2" max="12" step="1" value="{{ klBudgetVal }}" onChange="{{ klBudgetSet }}" aria-label="Maximum oznámení za den" style="width:100%; accent-color:var(--g-acc)">
-                  <div style="font-size:13px; color:var(--g-ink2); margin-top:7px; text-wrap:pretty">{{ klBudgetNote }}</div>
+                  <sc-if value="{{ klBudgetOn }}">
+                    <div style="font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--g-ink3); margin-bottom:10px">Strop na den</div>
+                    <input type="range" min="2" max="12" step="1" value="{{ klBudgetVal }}" onChange="{{ klBudgetSet }}" aria-label="Maximum oznámení za den" style="width:100%; accent-color:var(--g-acc)">
+                    <div style="font-size:13px; color:var(--g-ink2); margin-top:7px; text-wrap:pretty">{{ klBudgetNote }}</div>
+                  </sc-if>
+                  <sc-if value="{{ klDigestOn }}">
+                    <div style="font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--g-ink3); margin-bottom:10px">Souhrn místo drobností</div>
+                    <button class="btn btn-secondary" onClick="{{ klDigestToggle }}" aria-pressed="{{ klDigest }}" style="gap:6px"><i class="ph-duotone ph-stack" style="font-size:16px"></i>{{ klDigestLabel }}</button>
+                    <div style="font-size:13px; color:var(--g-ink2); margin-top:7px; text-wrap:pretty">{{ klDigestNote }}</div>
+                  </sc-if>
 
                   <div style="font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--g-ink3); margin:20px 0 10px">Ztišené kategorie</div>
                   <div style="display:flex; flex-direction:column; gap:6px">
@@ -11167,7 +11174,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                   <div style="max-width:460px; margin:50px auto; text-align:center">
                     <i class="ph-duotone ph-check-circle" style="font-size:40px; color:var(--g-ok)"></i>
                     <h3 style="margin:12px 0 6px; font-size:21px">Nic nečeká na rozmyšlenou</h3>
-                    <p style="font-size:14px; color:var(--g-ink2); text-wrap:pretty">Návrh nad {{ coolLimit }} se sem zapíše sám — z rychlého vstupu, z přání i z nákupního seznamu.</p>
+                    <p style="font-size:14px; color:var(--g-ink2); text-wrap:pretty">Samo se sem nic nezapisuje. Výdaj nad {{ coolLimit }} sem pošlete tlačítkem „Poslat na rozvahu" v kalkulačce odhadů, zrušení předplatného u lhůty v Domácnosti.</p>
                   </div>
                 </sc-if>
               </div>
@@ -11574,7 +11581,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
               </table></div>
               <div style="display:flex; align-items:flex-end; gap:16px; flex-wrap:wrap; margin-top:16px">
                 <div style="flex:1 1 500px; font-size:14px; color:var(--g-ink2); text-wrap:pretty">{{ adVerdict }}</div>
-                <button class="btn btn-secondary" onClick="{{ adRule }}" style="font-size:12.5px; padding:6px 12px">Založit to pravidlo</button>
+                <button class="btn btn-secondary" onClick="{{ adRule }}" style="font-size:12.5px; padding:6px 12px">Otevřít pravidla</button>
               </div>
             </div>
           </sc-if>
@@ -12048,12 +12055,12 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                   </div>
                 </sc-for>
                 <sc-if value="{{ gftIdeasEmpty }}">
-                  <div style="padding:40px 0; font-size:14.5px; color:var(--g-ink2)">Všechny nápady jsou vyřízené. Nové se sem přidají samy z deníku a chatu.</div>
+                  <div style="padding:40px 0; font-size:14.5px; color:var(--g-ink2)">Všechny nápady jsou vyřízené. Nový zapíšete rychlým zápisem v telefonu (druh Nápad) nebo v Milníky → Dárky a nápady.</div>
                 </sc-if>
               </div>
               <div>
                 <div style="font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--g-ink3); margin-bottom:11px">Odkud se to bere</div>
-                <div style="font-size:13.5px; color:var(--g-ink2); text-wrap:pretty">Aplikace si všímá věty typu „to bych chtěl“ v deníku, chatu a hlasovkách. Nápad se sem zapíše, nikam se neposílá a druhý ho neuvidí, dokud z něj neuděláte přání.</div>
+                <div style="font-size:13.5px; color:var(--g-ink2); text-wrap:pretty">Nápady si zapisujete sami — rychlým zápisem v telefonu, nebo v Milníky → Dárky a nápady. Nikam se neposílají a druhý je neuvidí, dokud z nich neuděláte přání.</div>
                 <button class="btn btn-secondary" onClick="{{ gftGoMilestones }}" style="margin-top:14px; font-size:12.5px">Otevřít Milníky → Dárky a nápady</button>
               </div>
             </div>
@@ -14215,7 +14222,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
             <div class="field"><label>Heslo</label><input class="input" type="password" value="{{ gvPwd }}" onChange="{{ gvSetPwd }}" placeholder="Zadejte heslo"></div>
             <sc-if value="{{ gvPwdErr }}"><div style="font-size:12.5px; color:var(--g-mag); margin-top:7px">Heslo nesouhlasí. Zkuste to znovu, nebo napište tomu, kdo vám odkaz poslal.</div></sc-if>
             <button class="btn btn-primary" onClick="{{ gvUnlock }}" style="width:100%; justify-content:center; margin-top:14px">Otevřít galerii</button>
-            <div style="font-size:12px; color:var(--g-ink3); margin-top:12px">Po třetím špatném pokusu se odkaz na pět minut zamkne.</div>
+            <div style="font-size:12px; color:var(--g-ink3); margin-top:12px">{{ gvGateNote }}</div>
           </div>
         </sc-if>
 
@@ -16064,7 +16071,14 @@ class Component extends DCLogic {
         open.f.recipe && RECIPES[open.f.recipe] && { icon: 'ph-cooking-pot', label: 'Recept', value: RECIPES[open.f.recipe].title, go: () => this.openRecipe(open.f.recipe) },
         open.f.goal && { icon: 'ph-piggy-bank', label: 'Vyhrazená částka', value: open.f.goal, go: () => this.setState({ route: 'x-rozpocty', budTab: 2 }) },
         { icon: 'ph-chart-donut', label: 'Rozpočet', value: open.cat, go: () => this.setState({ route: 'x-rozpocty', budTab: 1 }) },
-        open.f.receipt && { icon: 'ph-receipt', label: 'Doklad', value: 'účtenka vyfocena', go: () => this.toast('Doklad k ' + open.name, { icon: 'ph-receipt' }) }
+        // Doklad je fotka v knihovně (uuid ze serveru): otevře se v prohlížeči fotek, jinak se stáhne originál.
+        open.f.receipt && { icon: 'ph-receipt', label: 'Doklad', value: 'účtenka vyfocena', go: () => {
+          const id = String(open.f.receipt);
+          if (this.photos().some(p => p.id === id)) { this.openLb(id); return; }
+          const api = window.GalerieApi;
+          if (!/^[0-9a-f-]{36}$/.test(id) || !api || api.mode !== 'http' || !api.download) { this.toast('Doklad k ' + open.name + ' je vyfocený, ale v téhle ukázce se neotevře', { icon: 'ph-receipt', silent: true }); return; }
+          api.download('media/' + id + '/raw', 'doklad-' + open.name).catch(() => this.toast('Doklad se nepodařilo otevřít', { icon: 'ph-warning', color: 'var(--g-mag)' }));
+        } }
       ].filter(Boolean) : [],
       /*
        * Rozdělit, opakovat, poznámka, nepočítat do rozpočtu — do knihy.
@@ -17937,8 +17951,9 @@ class Component extends DCLogic {
       adVerdict: (rows.length
         ? 'Nejdražší nerozhodnutí: ' + rows.slice().sort((x, y) => y.cost - x.cost)[0].what.toLowerCase() + '. '
         : 'Zatím nic nepropadlo ani nezůstalo bez odpovědi. ')
-        + 'Zvyk se dá zlomit jedním pravidlem: každá rozvaha, která propadne, se automaticky zapíše jako „rozhodli jsme se nechat to být“ — s podpisem obou.',
-      adRule: () => { this.setState({ route: 'x-pravidla' }); this.toast('Pravidlo: propadlá rozvaha = zapsané rozhodnutí nechat to být', { icon: 'ph-flow-arrow' }); }
+        + 'Zvyk se dá zlomit jednou dohodou: rozvaha, která propadne, znamená „rozhodli jsme se nechat to být“ — zapište ji tak tlačítkem „Přiznat jako rozhodnutí“.',
+      // Spouštěč „propadlá rozvaha" pravidla neznají (SlovnikPravidel) — tlačítko pravidlo nezakládá, jen je otevře.
+      adRule: () => this.setState({ route: 'x-pravidla' })
     };
   }
 
@@ -17969,13 +17984,20 @@ class Component extends DCLogic {
       hrRuleOn: late,
       hrRuleLabel: late ? 'Pravidlo platí · po 22:00 se velké věci jen zapisují' : 'Zapnout pravidlo po 22:00',
       hrRuleBtn: late ? 'Vypnout pravidlo' : 'Zapnout pravidlo po 22:00',
+      // Pravidlo je dohoda dvou; aplikace k němu přidává jen ztišení peněžních upozornění
+      // (dřív slibovala, že u velkých věcí sama nabídne „zapsat na zítra" — nic takového nedělala).
       hrRuleNote: late
-        ? 'Po dvaadvacáté aplikace u velkých věcí nabídne jen „zapsat na zítra“. Zároveň se ztišily peněžní notifikace v Tichých hodinách — protože zpráva o splátce v půl jedenácté je taky rozhodnutí.'
+        ? 'Dohoda platí: po dvaadvacáté se velké věci jen zapisují na zítra. Peněžní upozornění jsou ztišená v Tichých hodinách — protože zpráva o splátce v půl jedenácté je taky rozhodnutí.'
         : 'Jedno pravidlo místo předsevzetí: po 22:00 se velké věci jen zapisují, rozhoduje se za světla. Zapne se tím i ztišení peněz v Tichých hodinách.',
       hrRule: () => {
         const rules = s.klRules || { money: true, chores: false, tasks: false, other: true };
         this.setState({ lateRule: !late, klRules: Object.assign({}, rules, { money: !late ? true : rules.money }) });
-        this.toast(!late ? 'Pravidlo zapnuto · velké věci po 22:00 se jen zapisují' : 'Pravidlo vypnuto', { icon: 'ph-moon-stars' });
+        // U dvojice ztišení peněz platí na serveru (nastavení upozornění přihlášeného).
+        if (!late && this.tichoNaServeru()) {
+          const zeSrv = this.state.klSrv ? this.tichoZeServeru(this.state.klSrv) : { rules: { money: false, chores: false, tasks: false, other: false } };
+          this.tichoUloz({ categories: this.tichoKategoriePro(Object.assign({}, zeSrv.rules, { money: true })) });
+        }
+        this.toast(!late ? 'Pravidlo zapnuto · peněžní upozornění ztišená' : 'Pravidlo vypnuto', { icon: 'ph-moon-stars' });
       },
       hrToQuiet: () => { this.setState({ route: 'x-klid', klTab: 'klQuiet' }); this.toast('Tiché hodiny drží druhou polovinu toho pravidla', { icon: 'ph-bell-slash' }); }
     };
@@ -18060,7 +18082,9 @@ class Component extends DCLogic {
         : 'Nemoc, služebka, tři dny v nemocnici s dítětem',
       awNote: who
         ? 'Režim skončí, až ho vypnete. Nic se nemaže — jen se to na tu dobu nese jinak.'
-        : 'Jedno klepnutí místo dvaceti otázek. Práce se přerozdělí, nekritická oznámení zmlknou a druhému se ukáže právě to, co dosud viselo jen v hlavě toho, kdo je mimo.',
+        : this.tichoNaServeru()
+          ? 'Jedno klepnutí místo dvaceti otázek. Práce se přerozdělí a druhému se ukáže právě to, co dosud viselo jen v hlavě toho, kdo je mimo. Upozornění si každý ztiší v Tichých hodinách.'
+          : 'Jedno klepnutí místo dvaceti otázek. Práce se přerozdělí, nekritická oznámení zmlknou a druhému se ukáže právě to, co dosud viselo jen v hlavě toho, kdo je mimo.',
       awOpts: this.dva().map(w => ({
         name: w,
         bg: who === w ? 'var(--g-ink)' : 'transparent',
@@ -18069,6 +18093,13 @@ class Component extends DCLogic {
           const other = this.druhy(w);
           const prev = chores;
           const rules = s.klRules || { money: true, chores: false, tasks: false, other: true };
+          // U dvojice se oznámení tímhle neztiší — nastavení upozornění je každého zvlášť
+          // a server strop „dvě denně" nezná. Hláška to proto neslibuje.
+          if (this.tichoNaServeru()) {
+            this.setState({ awayWho: w, awayPrevChores: prev, chores: chores.map(c => c.who === w ? { ...c, who: other } : c) });
+            this.toast(w + ' je mimo · práci přebírá ' + other, { icon: 'ph-user-minus' });
+            return;
+          }
           this.setState({
             awayWho: w,
             awayPrevChores: prev,
@@ -20421,6 +20452,75 @@ class Component extends DCLogic {
     };
   }
 
+  /*
+   * Tiché hodiny u dvojice = skutečné nastavení upozornění
+   * (`/api/v1/notifications/preferences`).
+   *
+   * Mřížka, ztišené kategorie i „strop na den" se dřív ukládaly jen do
+   * sdíleného stavu a nic na serveru je nečetlo. Nastavení upozornění je navíc
+   * každého zvlášť — ve sdíleném stavu by Adrianovo ticho přepsalo Makinčino.
+   * Proto `klSrv` (v `_pSkip`) drží, co vrátil server pro přihlášeného.
+   */
+  tichoNaServeru() {
+    const api = window.GalerieApi;
+    return !this.ukazka() && !!(api && api.mode === 'http' && api.get && api.patch);
+  }
+  tichoNacti() {
+    if (!this.tichoNaServeru() || this._tichoNacteno) return;
+    this._tichoNacteno = true;
+    window.GalerieApi.get('v1/notifications/preferences')
+      .then(res => { if (res && res.preferences) this.setState({ klSrv: res.preferences }); })
+      .catch(() => { this._tichoNacteno = false; });
+  }
+  // Kategorie z Klidu → kategorie upozornění na serveru.
+  tichoKategorie() {
+    return { money: ['finance'], chores: ['general'], tasks: ['planning'], other: ['relationship', 'memories'] };
+  }
+  tichoZeServeru(p) {
+    const q = (p && p.quiet) || {}, hodiny = new Array(24).fill(0);
+    if (q.enabled) {
+      const od = parseInt(String(q.from || '22:00'), 10), po = parseInt(String(q.to || '07:00'), 10);
+      for (let h = od, n = 0; n < 24; h = (h + 1) % 24, n++) { if (h === po && n > 0) break; hodiny[h] = 1; }
+    }
+    const K = this.tichoKategorie(), kat = (p && p.categories) || {}, rules = {};
+    Object.keys(K).forEach(k => { rules[k] = K[k].every(c => kat[c] === false); });
+    return { quiet: hodiny, rules, digest: !!(p && p.digest) };
+  }
+  /** Mřížka → nejdelší souvislý úsek (i přes půlnoc); server drží jeden rozsah. */
+  tichoRozsah(hodiny) {
+    const n = hodiny.filter(x => x).length;
+    if (!n) return { enabled: false };
+    if (n === 24) return { enabled: true, from: '00:00', to: '00:00' };
+    let best = { od: 0, delka: 0 };
+    for (let start = 0; start < 24; start++) {
+      if (!hodiny[start] || hodiny[(start + 23) % 24]) continue;
+      let d = 0;
+      while (d < 24 && hodiny[(start + d) % 24]) d++;
+      if (d > best.delka) best = { od: start, delka: d };
+    }
+    const hh = h => (h < 10 ? '0' : '') + h + ':00';
+    return { enabled: true, from: hh(best.od), to: hh((best.od + best.delka) % 24) };
+  }
+  tichoUloz(zmena, hlaska) {
+    if (!this.tichoNaServeru()) return Promise.resolve(null);
+    return window.GalerieApi.patch('v1/notifications/preferences', zmena)
+      .then(res => {
+        if (res && res.preferences) this.setState({ klSrv: res.preferences });
+        if (hlaska) this.toast(hlaska, { icon: 'ph-bell-slash', silent: true });
+        return res;
+      })
+      .catch(e => {
+        const b = (e && e.body) || {};
+        this.toast(b.message || 'Nastavení upozornění se nepodařilo uložit', { icon: 'ph-warning', color: 'var(--g-mag)' });
+        return null;
+      });
+  }
+  /** Ztišené kategorie z Klidu jako `categories` pro server. */
+  tichoKategoriePro(rules) {
+    const K = this.tichoKategorie(), out = {};
+    Object.keys(K).forEach(k => K[k].forEach(c => { out[c] = !rules[k]; }));
+    return out;
+  }
   klidVals() {
     const s = this.state;
     const tab = s.klTab || 'klMood';
@@ -20489,8 +20589,11 @@ class Component extends DCLogic {
     const myRow = rows.find(r => r.key === 'my') || rows[1] || nicRow;
     const setAttn = (i, d) => this.setState({ klAttn: attn.map((v, j) => j === i ? Math.max(0, Math.min(60, v + d)) : v) });
 
-    const quiet = s.klQuiet || [1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1];
-    const rules = s.klRules || { money: true, chores: false, tasks: false, other: true };
+    const srvTicho = this.tichoNaServeru();
+    if (srvTicho && tab === 'klQuiet') this.tichoNacti();
+    const zeSrv = srvTicho && s.klSrv ? this.tichoZeServeru(s.klSrv) : null;
+    const quiet = zeSrv ? zeSrv.quiet : s.klQuiet || [1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1];
+    const rules = zeSrv ? zeSrv.rules : s.klRules || { money: true, chores: false, tasks: false, other: true };
     const RULE_LAB = { money: 'Peníze a splátky', chores: 'Domácnost a dělba', tasks: 'Úkoly a lhůty', other: 'Cokoliv od druhého' };
     // Pět vymyšlených oznámení („Splátka hypotéky odejde zítra", „Makinka přidala
     // přání") patří ukázce; dvojici by tvrdila, že jí aplikace něco zadržela.
@@ -20680,10 +20783,26 @@ class Component extends DCLogic {
         label: (h < 10 ? '0' + h : String(h)),
         bg: q ? 'var(--g-ink)' : 'var(--g-raise)',
         fg: q ? 'var(--g-bg)' : 'var(--g-ink3)',
-        toggle: () => this.setState({ klQuiet: quiet.map((x, j) => j === h ? (x ? 0 : 1) : x) })
+        toggle: () => {
+          const nove = quiet.map((x, j) => j === h ? (x ? 0 : 1) : x);
+          if (!srvTicho) { this.setState({ klQuiet: nove }); return; }
+          const r = this.tichoRozsah(nove);
+          this.tichoUloz({ quiet: r }, r.enabled ? 'Tiché hodiny ' + r.from + '–' + r.to : 'Tiché hodiny vypnuté');
+        }
       })),
       klQuietCount: this.pl(quietHours, 'tichá hodina', 'tiché hodiny', 'tichých hodin'),
-      klQuietNote: quietHours >= 10 ? 'Aplikace mlčí většinu dne. Co se nestihne, uvidíte ráno v jednom souhrnu.' : quietHours >= 6 ? 'Rozumný večerní klid. Ráno dostanete souhrn.' : 'Skoro nic není utišené — telefon bude mluvit i ve dvě ráno.',
+      klQuietNote: srvTicho
+        ? (quietHours ? 'V tichých hodinách vám do telefonu nic nepřijde, kromě připomínek, které si k akci nastavíte sami — ostatní počká v přehledu upozornění. Platí pro vás, ' + this.krestni(this.otherWho()) + ' má svoje.' + (quietHours < 24 ? ' Drží se jeden souvislý úsek.' : '') : 'Nic není utišené — upozornění se ozvou kdykoliv.')
+        : quietHours >= 10 ? 'Aplikace mlčí většinu dne. Co se nestihne, uvidíte ráno v jednom souhrnu.' : quietHours >= 6 ? 'Rozumný večerní klid. Ráno dostanete souhrn.' : 'Skoro nic není utišené — telefon bude mluvit i ve dvě ráno.',
+      // Strop oznámení za den server nezná; dvojice má místo něj večerní souhrn (`digest`).
+      klBudgetOn: !srvTicho,
+      klDigestOn: srvTicho,
+      klDigest: !!(zeSrv && zeSrv.digest),
+      klDigestLabel: zeSrv && zeSrv.digest ? 'Večerní souhrn zapnutý' : 'Zapnout večerní souhrn',
+      klDigestNote: zeSrv && zeSrv.digest
+        ? 'Drobnosti (nové fotky, přidané položky) nechodí jednotlivě — sejdou se večer v jednom upozornění.'
+        : 'Drobnosti chodí hned, každá zvlášť. Se souhrnem se sejdou večer v jednom upozornění.',
+      klDigestToggle: () => this.tichoUloz({ digest: !(zeSrv && zeSrv.digest) }, zeSrv && zeSrv.digest ? 'Souhrn vypnutý — drobnosti chodí hned' : 'Souhrn zapnutý — drobnosti přijdou večer najednou'),
       klBudgetVal: String(s.klBudget || 6),
       klBudgetSet: e => this.setState({ klBudget: Number(e.target.value) }),
       klBudgetNote: 'Víc než ' + (s.klBudget || 6) + ' oznámení denně aplikace nepošle. Zbytek slije do jednoho souhrnu v 19:00.',
@@ -20692,7 +20811,11 @@ class Component extends DCLogic {
         state: rules[k] ? 'ztišeno' : 'chodí',
         bg: rules[k] ? 'var(--g-ink)' : 'transparent',
         fg: rules[k] ? 'var(--g-bg)' : 'var(--g-ink2)',
-        toggle: () => this.setState({ klRules: { ...rules, [k]: !rules[k] } })
+        toggle: () => {
+          const nove = { ...rules, [k]: !rules[k] };
+          if (!srvTicho) { this.setState({ klRules: nove }); return; }
+          this.tichoUloz({ categories: this.tichoKategoriePro(nove) }, RULE_LAB[k] + (nove[k] ? ' — ztišeno' : ' — zase chodí'));
+        }
       })),
       klHeld: held.map(n => ({
         text: n.text,
@@ -21961,10 +22084,11 @@ class Component extends DCLogic {
       try { n.rec.stop(); } catch (e) { hotovo(null); }
     });
   }
-  msgRecStart() {
+  msgRecStart(rada) {
     clearInterval(this._recI);
     this.hlasZacni().then(bezi => {
       if (! bezi) return;
+      if (rada) this.toast('Nahrávám — dalším klikem hlasovku odešlete', { icon: 'ph-microphone', silent: true });
       this.setState({ msgRec: true, msgRecT: 0, appTab: 0 });
       this._recI = setInterval(() => this.setState(st => ({ msgRecT: (st.msgRecT || 0) + 1 })), 1000);
     });
@@ -28925,7 +29049,7 @@ class Component extends DCLogic {
         planLabel: this.pl(cnt, 'položka v plánu', 'položky v plánu', 'položek v plánu'),
         days: this.pl((t.days || []).length, 'den', 'dny', 'dní') + (past ? ' zaznamenáno' : ' naplánováno'),
         go: () => this.setState({ route: 'trip', tripId: k, sel: [], selectMode: false }),
-        show: e => { e.stopPropagation(); const ph = t.photoMatch ? this.photos().filter(p => p.place.indexOf(t.photoMatch) >= 0) : []; ph.length ? this.startShow(ph.map(p => p.id), t.title) : this.toast('Z této cesty ještě fotky nejsou', { icon: 'ph-camera' }); },
+        show: e => { e.stopPropagation(); const ph = this.fotkyCesty(t); ph.length ? this.startShow(ph.map(p => p.id), t.title) : this.toast('Z této cesty ještě fotky nejsou', { icon: 'ph-camera' }); },
         pack: e => { e.stopPropagation(); this.setState({ route: 'trip', tripId: k }); this.toast('Seznam na sbalení — ' + t.title, { icon: 'ph-suitcase-rolling' }); }
       };
     }).concat(mine.filter(t => match(t.title, t.where)).map(t => ({
@@ -29606,7 +29730,10 @@ class Component extends DCLogic {
     const forceExp = !!s.gvForceExp;
     const stage = !row ? null : (realExp || forceExp) ? 'expired' : (pwdOn && !unlocked) ? 'gate' : 'album';
     const meta = !row || row.meta !== false;
-    const who = 'Babička';
+    // Odkaz dvojice: heslo zná jen server (je uložené jako haš), náhled ho proto
+    // nekontroluje. Dřív tu platilo jen ukázkové „letnizadar" a pisatel byl „Babička".
+    const skutecny = !!(row && row.odkaz);
+    const who = skutecny ? 'host' : 'Babička';
     const mine = row ? this.gvList().filter(c => c.share === row.name && !c.hidden) : [];
     const tiles = this.photos().slice(0, 12);
     const sw = [];
@@ -29624,8 +29751,11 @@ class Component extends DCLogic {
       gvPwd: s.gvPwd || '',
       gvSetPwd: e => this.setState({ gvPwd: e.target.value, gvPwdErr: false }),
       gvPwdErr: !!s.gvPwdErr,
+      gvGateNote: skutecny
+        ? 'V náhledu heslo psát nemusíte — host ho zadá tady. Po deseti špatných pokusech za minutu musí chvíli počkat.'
+        : 'Po třetím špatném pokusu se odkaz na pět minut zamkne.',
       gvUnlock: () => {
-        if ((s.gvPwd || '') === 'letnizadar') { this.setState({ gvUnlocked: { ...s.gvUnlocked, [row.name]: true }, gvPwd: '', gvPwdErr: false, gvTries: 0 }); return; }
+        if (skutecny || (s.gvPwd || '') === 'letnizadar') { this.setState({ gvUnlocked: { ...s.gvUnlocked, [row.name]: true }, gvPwd: '', gvPwdErr: false, gvTries: 0 }); return; }
         const t = (s.gvTries || 0) + 1;
         this.setState({ gvPwdErr: true, gvTries: t });
         if (t >= 3) this.toast('Host by teď měl odkaz na pět minut zamčený · správné heslo je letnizadar', { icon: 'ph-lock-key' });
@@ -30049,7 +30179,7 @@ class Component extends DCLogic {
       capClashes: clashes, capNoClash: clashes.length === 0,
 
       dueTitle: this.pl(dues.filter(d => d.days <= 30).length, 'věc do měsíce', 'věci do měsíce', 'věcí do měsíce') + ' · ' + this.pl(dues.length, 'závazek celkem', 'závazky celkem', 'závazků celkem'),
-      dueRiskLine: 'Odkládání téhle sedmičky může stát ' + this.kc(dues.reduce((a, d) => a + (d.delayCost || 0), 0)) + ' na pokutách, penále a plných cenách. Není to výčitka, je to číslo.',
+      dueRiskLine: !dues.length ? 'Žádná lhůta nečeká. Přidejte platbu, předplatné nebo termín, ať na něj nezapomenete.' : (dues.length === 1 ? 'Odkládání téhle lhůty' : 'Odkládání těchhle ' + dues.length + ' lhůt') + ' může stát ' + this.kc(dues.reduce((a, d) => a + (d.delayCost || 0), 0)) + ' na pokutách, penále a plných cenách. Není to výčitka, je to číslo.',
       dueSum: this.kc(dueSum),
       // Přidat lhůtu a věc do bytu — dřív šlo jen spravovat, co přišlo z ukázky.
       dueEmpty: dues.length === 0,
@@ -30068,7 +30198,8 @@ class Component extends DCLogic {
         delayCost: d.delayCost ? (d.days <= 0 ? 'odklad už stojí ' + this.kc(d.delayCost) : 'odklad může stát ' + this.kc(d.delayCost)) : 'odklad nestojí peníze, jen krytí',
         delayColor: d.delayCost >= 3000 ? 'var(--g-mag)' : 'var(--g-ink2)',
         doneLabel: d.kind === 'platba' ? 'Zaplaceno' : 'Vyřízeno',
-        done: () => { const prev = dues; setDues(dues.filter(x => x.id !== d.id)); this.toast(d.what + ' vyřízeno · další termín se doplní podle periody', { icon: 'ph-check-circle', undo: () => setDues(prev) }); },
+        // Lhůta nemá periodu (house_dues ji nezná) — příští termín se nevymýšlí, přidá se nová lhůta.
+        done: () => { const prev = dues; setDues(dues.filter(x => x.id !== d.id)); this.toast(d.what + ' vyřízeno · opakuje-li se, přidejte příští termín jako novou lhůtu', { icon: 'ph-check-circle', undo: () => setDues(prev) }); },
         handTo: acc(other(d.who)),
         hand: () => { const prev = dues; setDues(dues.map(x => x.id === d.id ? { ...x, who: other(x.who) } : x)); this.toast(d.what + ' má teď na starost ' + other(d.who), { icon: 'ph-user-switch', undo: () => setDues(prev) }); },
         canWeigh: !!d.change,
@@ -30281,12 +30412,17 @@ class Component extends DCLogic {
 
     return {
       isGifts: s.route === 'x-darky',
-      gftHead: this.pl(wishes.length, 'přání', 'přání', 'přání') + ' · ' + this.pl(mineBuys.length, 'váš nákup', 'vaše nákupy', 'vašich nákupů') + ' · výročí za 1 den',
+      // Nejbližší příležitost z GIFT_OCC — dřív tu stálo pořád „výročí za 1 den".
+      gftHead: [this.pl(wishes.length, 'přání', 'přání', 'přání'), this.pl(mineBuys.length, 'váš nákup', 'vaše nákupy', 'vašich nákupů')].concat((() => {
+        const pristi = GIFT_OCC.filter(o => o.days >= 0).sort((a, b) => a.days - b.days)[0];
+        if (!pristi) return [];
+        return [(pristi.name2 || pristi.name) + (pristi.days === 0 ? ' dnes' : pristi.days === 1 ? ' zítra' : ' za ' + this.pl(pristi.days, 'den', 'dny', 'dní'))];
+      })()).join(' · '),
       gftMe: me, gftOther: acc(other), gftOtherGen: otherGen, gftOtherName: other,
       gftMeNote: 'Přání vidíte oba, nákupy jen vy.',
       gftCanSwitch: this.ukazka(),
       gftSwitch: () => { this.setState({ giftMe: other, giftTab: tab === 'buys' ? 'wish' : tab, wishFilter: 'all' }); this.toast('Prohlížíte jako ' + other + ' · nákupy ' + this.whoGen(me) + ' jsou teď skryté', { icon: 'ph-user-switch' }); },
-      gftTabs: [['wish', 'Přání', visible.length], ['buys', 'Moje nákupy', mineBuys.length], ['dates', 'Příležitosti', 3], ['ideas', 'Nápady', ideas.length]].map(t => ({
+      gftTabs: [['wish', 'Přání', visible.length], ['buys', 'Moje nákupy', mineBuys.length], ['dates', 'Příležitosti', GIFT_OCC.length], ['ideas', 'Nápady', ideas.length]].map(t => ({
         label: t[1], count: t[2],
         weight: tab === t[0] ? 500 : 400,
         color: tab === t[0] ? 'var(--g-ink)' : 'var(--g-ink2)',
@@ -30802,6 +30938,7 @@ class Component extends DCLogic {
             slots, freeN,
             allFree: freeN === 3,
             badge: freeN === 3 ? 'celý den volný' : freeN === 0 ? 'plno' : freeN + ' ze 3',
+            iso: dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0') + '-' + String(dt.getDate()).padStart(2, '0'),
             openDay: () => this.setState({ calYear: dt.getFullYear(), calMonth: dt.getMonth(), calDay: dt.getDate(), calView: 'day' })
           };
         });
@@ -30828,8 +30965,9 @@ class Component extends DCLogic {
             go: () => this.setState({ freeNeed: w })
           })),
           calFreeSuggest: () => {
-            if (!first) { this.toast('Celý volný den nenajdeme — zkuste delší období', { icon: 'ph-info' }); return; }
-            this.toast('Návrh: ' + first.dayName.toLowerCase() + ' ' + first.num + ' — celý den volný. Rezervujeme?', { icon: 'ph-calendar-check' });
+            if (!first) { this.toast('Celý volný den nenajdeme — zkuste delší období', { icon: 'ph-info', silent: true }); return; }
+            // Dřív jen hláška „…Rezervujeme?" bez tlačítka. Teď rovnou nová akce na ten den.
+            this.setState({ evDlg: { mode: 'new', id: null, t: '', kind: 'jine', who: 'spolu', remind: '', repeat: '', album: '', photos: [], note: '', date: first.iso, time: '' } });
           },
           calFreeShare: () => {
             this.setState({ route: 'x-zpravy', appTab: 0 });
@@ -31407,6 +31545,16 @@ class Component extends DCLogic {
    * lepší nic než rozbitá obrazovka. Dlaždice samy míří na skutečné fotky, viz
    * `timeline` a `onThisDay`.
    */
+  /**
+   * Fotky z cesty: pořízené v jejích dnech (`od`–`do` ze serveru, `p.day` je Y-m-d).
+   * Dřív se hledalo jen podle názvu místa, takže prázdný stav sliboval
+   * „fotky pořízené mezi …" a řadil podle něčeho jiného.
+   */
+  fotkyCesty(t) {
+    if (!t) return [];
+    if (t.od && t.do) return this.photos().filter(p => p.day && p.day >= t.od && p.day <= t.do);
+    return t.photoMatch ? this.photos().filter(p => (p.place || '').indexOf(t.photoMatch) >= 0) : [];
+  }
   openLb(id) {
     if (! this.photos().some(p => p.id === id)) return;
     this.setState({ lb: id, lbZoom: { scale: 1, x: 0, y: 0 } });
@@ -31734,6 +31882,8 @@ class Component extends DCLogic {
       appLocked: 1, lockPin: 1, lockPwd: 1, lockTries: 1, lockRec: 1, lockRecCode: 1, lockStep: 1, lockAt: 1, secUntil: 1, gatePin: 1, lockInfo: 1,
       // Kód druhého ověření při přihlášení — jednorázový a jen tohohle okna.
       lockCode: 1, lockNeeds2fa: 1,
+      // Nastavení upozornění ze serveru je každého zvlášť (viz tichoNaServeru), a dialog účtu drží hesla.
+      klSrv: 1, acDlg: 1,
       // Uložený by po obnovení stránky nechal tlačítko viset na „Přihlašuji…".
       lockSignBusy: 1,
       // Fronta přenosů je jen tohohle okna; do společného stavu nepatří.
@@ -33337,7 +33487,7 @@ class Component extends DCLogic {
     // při každém překreslení — spadla by celá aplikace, ne jen ta obrazovka.
     const trip = TRIPS[s.tripId] || TRIPS.chorvatsko || TRIPS[Object.keys(TRIPS)[0]] || { photoMatch: null, pack: [], days: [], stats: [], budget: [], docs: [], diary: null, title: '', when: '', where: '', desc: '', tag: '', n: 0, budgetTitle: 'Rozpočet cesty' };
     const tripTag = t => t === 'čeká platba' || t === 'čeká akci' || t === 'zařadit' ? 'tag-accent-2' : t === 'zaplaceno' || t === 'do tisku' ? 'tag-accent' : 'tag-neutral';
-    const tripPhotoSrc = trip.photoMatch ? this.photos().filter(p => p.place.indexOf(trip.photoMatch) >= 0) : [];
+    const tripPhotoSrc = this.fotkyCesty(trip);
     // Položka balení ze serveru (`[co, kdo, zabaleno, id]`) je zabalená podle serveru; `pack` patří ukázce.
     const packDone = i => { const k = s.tripId + '-' + i; return !trip.pack[i][3] && s.pack[k] !== undefined ? s.pack[k] : trip.pack[i][2] === 1; };
     const packCount = trip.pack.filter((r, i) => packDone(i)).length;
@@ -33716,13 +33866,16 @@ class Component extends DCLogic {
       navGroups,
       // Úložiště ze serveru (GET /api/storage). Když je připojený Google Disk,
       // počítá se podle něj — je to jeho místo, které dojde dřív než tarif.
-      // Bez odpovědi zůstanou ukázková čísla, ať panel nezůstane prázdný.
+      // Bez odpovědi zůstanou ukázková čísla jen v ukázce; dvojici by lhala o jejím místě.
       ...(() => {
         const u = (window.GalerieData || {}).STORAGE;
         const tón = { ok: 'var(--g-ok)', warn: 'var(--g-warn)' };
         return u ? {
           storagePct: u.pct, storageLabel: u.label,
           syncLabel: u.sync, syncIcon: u.syncIcon, syncColor: tón[u.syncTon] || 'var(--g-ink2)'
+        } : !this.ukazka() ? {
+          storagePct: '0 %', storageLabel: 'Úložiště se zjišťuje…',
+          syncLabel: 'Stav záloh zatím neznáme', syncIcon: 'ph-cloud', syncColor: 'var(--g-ink3)'
         } : {
           storagePct: '57 %', storageLabel: '114,5 GB ze 200 GB',
           syncLabel: '3 originály čekají', syncIcon: 'ph-cloud-arrow-up', syncColor: 'var(--g-warn)'
@@ -33845,7 +33998,8 @@ class Component extends DCLogic {
         if (this.ukazka() || !api || api.mode !== 'http' || !trip.n) { this.zatimNeumime('přidávání do itineráře bez připojeného serveru'); return; }
         this.setState({ xaOpen: true, xaMode: 'programCesty', xaCtx: trip.n, xaA: '', xaB: '1', xaC: '', xaD: '' });
       },
-      tripOpenPhotos: () => trip.photoMatch ? this.setState({ route: 'all', query: trip.photoMatch }) : this.toast(trip.past ? 'Z téhle cesty v knihovně žádné fotky nejsou' : 'Fotky z cesty se tu ukážou, až je nahrajete', { icon: 'ph-info' }),
+      // Knihovna jen s fotkami z dnů cesty (filtr `misto` bere seznam id, jako u míst na mapě).
+      tripOpenPhotos: () => tripPhotoSrc.length ? this.setState({ route: 'all', query: '', misto: { name: trip.title, label: 'Cesta: ' + trip.title, ids: tripPhotoSrc.map(p => p.id) } }) : this.toast(trip.past ? 'Z téhle cesty v knihovně žádné fotky nejsou' : 'Fotky z cesty se tu ukážou, až je nahrajete', { icon: 'ph-info' }),
       tripAddExpense: () => this.setState({ tripExp: { label: '', amount: '', cat: 'Cesty' } }),
       // Itinerář k tisku / do PDF: dny s programem a balicí seznam.
       tripMore: () => this.tiskni(trip.title, (trip.days || []).map(d => ({
@@ -34025,9 +34179,9 @@ class Component extends DCLogic {
         if (appKey === 'book') { this.toast('Kniha se sestavuje z kapitol — přidejte kapitolu v záložce Kapitoly', { icon: 'ph-info' }); return; }
         if (appKey === 'saved') { this.setState({ appTab: 0 }); this.toast('Vzpomínky vznikají připnutím zprávy v chatu', { icon: 'ph-push-pin' }); return; }
         if (appKey === 'thread' || appKey === 'msgVoice') {
-          if (s.msgRec) { this.msgRecStop(); this.toast('Hlasovka odeslána do chatu', { icon: 'ph-microphone' }); return; }
-          this.msgRecStart();
-          this.toast('Nahrávám — dalším klikem hlasovku odešlete', { icon: 'ph-microphone' });
+          // Výsledek hlásí msgRecStop („Hlasovka nahrána", nebo chyba) a msgRecStart až s mikrofonem.
+          if (s.msgRec) { this.msgRecStop(); return; }
+          this.msgRecStart(true);
           return;
         }
         if (appKey === 'print') { this.openBook('Nová fotokniha', 'rozpracováno · právě teď'); return; }
@@ -34805,7 +34959,7 @@ class Component extends DCLogic {
       })),
 
       hasFilters: s.filters.length > 0 || !!(s.misto && R === 'all'), filterCount: s.filters.length + (s.misto && R === 'all' ? 1 : 0),
-      activeFilters: (s.misto && R === 'all' ? [{ label: 'Místo: ' + s.misto.name, remove: () => this.setState({ misto: null }) }] : [])
+      activeFilters: (s.misto && R === 'all' ? [{ label: s.misto.label || 'Místo: ' + s.misto.name, remove: () => this.setState({ misto: null }) }] : [])
         .concat(s.filters.map(f => ({ label: f, remove: () => this.setState({ filters: s.filters.filter(x => x !== f) }) }))),
       clearFilters: () => this.setState({ filters: [], filtersOpen: false, query: '', misto: null }),
       openFilters: () => this.setState({ filtersOpen: true }), closeFilters: () => this.setState({ filtersOpen: false }),
@@ -34943,10 +35097,10 @@ class Component extends DCLogic {
             .concat([{ name: album.name, go: () => {} }]);
         })()
         : ('Alba → ' + album.path).split(' → ').map((c, i, arr) => ({ name: i === arr.length - 1 ? c : c + '  →', go: this.go('albums') })),
-      hasSubs: album.subs > 0, albumEmpty: albumPhotos.length === 0,
-      // Skutečná podalba přicházejí se serverem; napsané album si je dokreslí,
-      // jako to prototyp dělal vždycky.
-      subAlbums: (album.children || []).length ? album.children.slice(0, 5).map(sub => ({
+      hasSubs: this.albumNaServeru(album) ? (album.children || []).length > 0 : album.subs > 0, albumEmpty: albumPhotos.length === 0,
+      // Skutečná podalba přicházejí se serverem; jen album z ukázky si je dokreslí
+      // (u dvojice to vymýšlelo „Zadar, Krka, Plitvice" s vymyšlenými počty).
+      subAlbums: (album.children || []).length || this.albumNaServeru(album) ? (album.children || []).slice(0, 5).map(sub => ({
         name: sub.name, meta: sub.count, bg: sub.bg || this.bg(sub.n),
         go: () => this.setState({ route: 'album', albumId: sub.id, sel: [], selectMode: false })
       })) : Array.from({ length: Math.min(album.subs, 5) }, (_, i) => {
@@ -35030,6 +35184,16 @@ class Component extends DCLogic {
           });
         } },
         { label: 'Duplikovat strukturu', icon: 'ph-copy', go: () => {
+          // Album dvojice se kopíruje na serveru i se stromem podalb; kopie ve stavu prohlížeče nešla naplnit.
+          if (this.albumNaServeru(album)) {
+            this.setState({ albMenu: false });
+            this.albumAkce(window.GalerieApi.post('alba/' + album.id + '/duplikovat', {}), res => {
+              if (res.album) this.setState({ route: 'album', albumId: res.album, sel: [], selectMode: false });
+              this.toast(res.zprava || 'Struktura zduplikována', { icon: 'ph-copy' });
+            });
+            return;
+          }
+          if (!this.ukazka()) { this.setState({ albMenu: false }); this.zatimNeumime('duplikování alba bez připojeného serveru'); return; }
           const mine = s.myAlbums || [];
           const id = album.id + '-copy' + (mine.length + 1);
           const copy = { ...album, id, name: album.name + ' (kopie)', path: album.path + ' (kopie)', fav: false, shared: false };
@@ -35668,9 +35832,15 @@ class Component extends DCLogic {
         { title: 'Chytrá alba', items: (s.smartAlbums || []).slice(0, 4).map(x => ({ label: x.name, meta: x.filters.length ? x.filters.length + ' filtrů' : 'text', icon: 'ph-sparkle', go: () => this.setState({ searchOpen: false, route: 'all', query: x.query, filters: x.filters }) })) },
         { title: 'Alba', items: albums.filter(a => !s.query || a.name.toLowerCase().includes(s.query.toLowerCase())).slice(0, 3).map(a => ({ label: a.path, meta: a.count, bg: this.bg(a.n), go: () => this.setState({ searchOpen: false, route: 'album', albumId: a.id }) })) },
         { title: 'Fotky a videa', items: ph.slice(0, 3).map(p => ({ label: p.name + ' — ' + p.place, meta: p.dateShort, bg: p.bg, go: () => this.setState({ searchOpen: false, lb: p.id }) })) },
-        { title: 'Místa', items: [{ label: 'Zadar, Chorvatsko', meta: '512', icon: 'ph-map-pin' }, { label: 'Pustevny, Beskydy', meta: '1 106', icon: 'ph-map-pin' }]
-            .filter(x => this.srTextHit(x.label, x.meta))
-            .map(x => ({ ...x, go: () => this.setState({ searchOpen: false, route: 'map' }) })) },
+        // Místa a štítky dvojice (`MAPBODY`, `ATAGS.all`); vymyšlený Zadar a „nedávno hledané" jen v ukázce.
+        { title: 'Místa', items: (this.ukazka()
+          ? [{ label: 'Zadar, Chorvatsko', meta: '512', icon: 'ph-map-pin' }, { label: 'Pustevny, Beskydy', meta: '1 106', icon: 'ph-map-pin' }]
+            .map(x => ({ ...x, go: () => this.setState({ searchOpen: false, route: 'map' }) }))
+          : ((window.GalerieData || {}).MAPBODY || []).filter(b => b.name).map(b => ({
+            label: b.name, meta: String(b.count), icon: 'ph-map-pin',
+            go: () => this.setState({ searchOpen: false, route: 'all', query: '', misto: { name: b.name, ids: b.ids || [] } })
+          })))
+            .filter(x => this.srTextHit(x.label)).slice(0, 4) },
         { title: 'Recepty a místa', items: Object.keys(RECIPES).map(k => ({ label: RECIPES[k].title, meta: RECIPES[k].time, icon: 'ph-cooking-pot', go: () => { this.setState({ searchOpen: false }); this.openRecipe(k); } }))
             .concat(Object.keys(PLACES).map(k => ({ label: PLACES[k].title, meta: PLACES[k].city, icon: 'ph-map-pin', go: () => { this.setState({ searchOpen: false }); this.openPlace(k); } })))
             .filter(x => !s.query || x.label.toLowerCase().includes(s.query.toLowerCase()) || x.meta.toLowerCase().includes(s.query.toLowerCase())).slice(0, 4) },
@@ -35694,8 +35864,10 @@ class Component extends DCLogic {
           }));
           return out.slice(0, 5);
         })() },
-        { title: 'Štítky a nedávná hledání', items: [{ label: 'léto', meta: '4 812', icon: 'ph-tag' }, { label: 'dron', meta: '96', icon: 'ph-tag' }, { label: 'Vánoce', meta: 'nedávno hledané', icon: 'ph-clock-counter-clockwise' }]
-            .filter(x => this.srTextHit(x.label, x.meta))
+        { title: this.ukazka() ? 'Štítky a nedávná hledání' : 'Štítky', items: (this.ukazka()
+          ? [{ label: 'léto', meta: '4 812', icon: 'ph-tag' }, { label: 'dron', meta: '96', icon: 'ph-tag' }, { label: 'Vánoce', meta: 'nedávno hledané', icon: 'ph-clock-counter-clockwise' }]
+          : ((((window.GalerieData || {}).ATAGS || {}).all) || []).filter(t => t[1] > 0).map(t => ({ label: t[0], meta: String(t[1]), icon: 'ph-tag' })))
+            .filter(x => this.srTextHit(x.label)).slice(0, 5)
             .map(x => ({ ...x, go: () => this.setState({ searchOpen: false, route: 'all', query: x.label }) })) }
       ].concat(this.searchExtraGroups())),
       searchNoResults: s.query.trim().length > 2 && (this._srGroups || []).length === 0,

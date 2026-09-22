@@ -159,7 +159,9 @@ class NotificationPreferenceService
         if (! $quiet['enabled']) {
             return false;
         }
-        $time = ($at ?? now())->timezone(config('app.timezone'))->format('H:i');
+        // Hodiny zadává člověk podle svých hodinek — ne v UTC, ve kterém se ukládá.
+        // S `app.timezone` začínalo „ticho od 22:00" v létě až o půlnoci.
+        $time = ($at ?? now())->timezone(config('app.display_timezone', config('app.timezone')))->format('H:i');
         if ($quiet['from'] === $quiet['to']) {
             return true;
         }

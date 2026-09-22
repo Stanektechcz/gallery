@@ -306,7 +306,7 @@ class Finance implements MaPrazdneKolekce, PoskytovatelObsahu
     {
         return Transaction::withoutGlobalScope(SpaceContext::SCOPE)
             ->where('gallery_space_id', $prostor->id)
-            ->with(['category:id,name,icon', 'walletFrom:id,name', 'walletTo:id,name'])
+            ->with(['category:id,name,icon', 'walletFrom:id,name', 'walletTo:id,name', 'receipt' => fn ($q) => $q->withoutGlobalScope(SpaceContext::SCOPE)->select('id', 'uuid')])
             ->orderByDesc('occurred_at')
             ->limit(self::TRANSAKCI)
             ->get();
@@ -341,7 +341,8 @@ class Finance implements MaPrazdneKolekce, PoskytovatelObsahu
                  * `mimo` — vynechaná z rozpočtu, `uuid` — pro zápis zpátky.
                  */
                 (object) array_filter([
-                    'receipt' => $t->receipt_media_id ? 1 : null,
+                    // Uuid fotky dokladu — „Doklad" v detailu ji otevře (dřív jen jednička a hláška).
+                    'receipt' => $t->receipt_media_id ? ($t->receipt?->uuid ?? 1) : null,
                     'rec' => $t->recurring_id ? 'měsíčně' : null,
                     'mimo' => $t->excluded_from_budget ? 1 : null,
                     'mimoProc' => $t->excluded_from_budget ? (string) ($t->exclusion_reason ?? '') : null,

@@ -27,7 +27,7 @@ class WebPushService
     }
 
     /**
-     * @param  array{title:string, body:string, url?:string, tag?:string}  $payload
+     * @param  array{title:string, body:string, url?:string, route?:string|null, tag?:string, i_v_tichu?:bool}  $payload
      * @return int Number of devices the message reached.
      */
     public function sendToUser(User $user, array $payload): int
@@ -38,6 +38,12 @@ class WebPushService
 
         // Pauza dvojice („Pauza a plán") slibuje, že aplikace 24 hodin mlčí.
         if (PauzaDvojice::bezi($user)) {
+            return 0;
+        }
+
+        // Tiché hodiny (Klid → Tiché hodiny, nastavení upozornění). Projde jen to,
+        // co si člověk na ten čas výslovně nastavil sám — připomínka k akci.
+        if (empty($payload['i_v_tichu']) && app(NotificationPreferenceService::class)->isQuiet($user)) {
             return 0;
         }
 

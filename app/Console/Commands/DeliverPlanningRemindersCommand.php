@@ -41,6 +41,8 @@ class DeliverPlanningRemindersCommand extends Command
                     'body' => $this->pushBody($reminder->event),
                     'url' => '/calendar/events/'.$reminder->event->uuid,
                     'tag' => 'event-'.$reminder->event->uuid,
+                    // Připomínku si na tenhle čas nastavil sám — tiché hodiny ji nezastaví.
+                    'i_v_tichu' => true,
                 ]);
                 $reminder->update(['status' => 'delivered', 'delivered_at' => now(), 'last_error' => null]);
                 DB::table('reminder_delivery_logs')->insert(['event_reminder_id' => $reminder->id, 'channel' => $reminder->channel, 'status' => 'delivered', 'created_at' => now()]);

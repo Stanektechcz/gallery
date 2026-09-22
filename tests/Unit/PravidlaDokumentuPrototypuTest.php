@@ -583,4 +583,45 @@ class PravidlaDokumentuPrototypuTest extends TestCase
             $this->assertStringNotContainsString('v1/ucet/2fa?', $dokument, $nazev);
         }
     }
+
+    /** Dialog účtu (hesla, klíč 2FA) a nastavení upozornění nejdou do sdíleného stavu. */
+    public function test_dialog_uctu_neni_ve_sdilenem_stavu(): void
+    {
+        $this->assertStringContainsString('klSrv: 1, acDlg: 1,', self::dokument('galerie-desktop.dc.html'));
+    }
+
+    /**
+     * Druhý audit počítače: co tvrdilo, že něco dělá, to dělá — nebo to netvrdí.
+     */
+    public function test_druhy_audit_pocitace(): void
+    {
+        $pocitac = self::dokument('galerie-desktop.dc.html');
+
+        // Tiché hodiny jdou do nastavení upozornění přihlášeného.
+        $this->assertStringContainsString("window.GalerieApi.patch('v1/notifications/preferences', zmena)", $pocitac);
+        $this->assertStringContainsString("window.GalerieApi.get('v1/notifications/preferences')", $pocitac);
+        // Duplikace alba dvojice na serveru, podalba jen skutečná.
+        $this->assertStringContainsString("window.GalerieApi.post('alba/' + album.id + '/duplikovat', {})", $pocitac);
+        $this->assertStringContainsString("hasSubs: this.albumNaServeru(album) ? (album.children || []).length > 0 : album.subs > 0", $pocitac);
+        // Hledání: místa a štítky dvojice, ne Zadar a „nedávno hledané".
+        $this->assertStringContainsString("((window.GalerieData || {}).MAPBODY || []).filter(b => b.name).map(b => ({", $pocitac);
+        // Náhled odkazu nepouští ukázkovým heslem.
+        $this->assertStringContainsString("if (skutecny || (s.gvPwd || '') === 'letnizadar')", $pocitac);
+        // Hlasovka nehlásí „odeslána" před nahráním.
+        $this->assertStringNotContainsString("this.msgRecStop(); this.toast('Hlasovka odeslána do chatu'", $pocitac);
+        // Dárky: nejbližší příležitost ze serveru.
+        $this->assertStringNotContainsString("' · výročí za 1 den'", $pocitac);
+        $this->assertStringContainsString("['dates', 'Příležitosti', GIFT_OCC.length]", $pocitac);
+        // Lhůty: žádná vymyšlená perioda ani „sedmička".
+        $this->assertStringNotContainsString('další termín se doplní podle periody', $pocitac);
+        $this->assertStringNotContainsString('Odkládání téhle sedmičky', $pocitac);
+        // Fotky z cesty podle jejích dnů.
+        $this->assertStringContainsString('if (t.od && t.do) return this.photos().filter(p => p.day && p.day >= t.od && p.day <= t.do);', $pocitac);
+        // Navrhnout termín otevře novou akci, ne otázku bez tlačítka.
+        $this->assertStringNotContainsString('celý den volný. Rezervujeme?', $pocitac);
+        // Texty, které slibovaly automatiku, která není.
+        $this->assertStringNotContainsString('Nové se sem přidají samy z deníku a chatu.', $pocitac);
+        $this->assertStringNotContainsString('se sem zapíše sám — z rychlého vstupu', $pocitac);
+        $this->assertStringNotContainsString('Založit to pravidlo', $pocitac);
+    }
 }

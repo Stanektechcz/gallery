@@ -296,6 +296,60 @@ class AlbaController extends Controller
         ] + $this->obsahPoAkci($this->obsah, $prostor));
     }
 
+    /**
+     * Duplikovat strukturu: prázdná kopie alba i se stromem podalb.
+     *
+     * Prototyp přidal „kopii" jen do stavu v prohlížeči — nešlo do ní nic
+     * zařadit a každá další akce na ní selhala. Fotky se nekopírují (zůstávají
+     * v původním albu), kopie jde vedle originálu pod stejného rodiče.
+     */
+    public function duplikuj(Request $request, string $album): JsonResponse
+    {
+        $prostor = GallerySpace::findOrFail($this->parId($request));
+        $radek = $this->vProstoru($prostor)->where('uuid', $album)->firstOrFail();
+        $pocet = 0;
+        $nova = [];
+
+        $kopie = DB::transaction(function () use ($prostor, $radek, $request, &$pocet, &$nova) {
+            $zkopiruj = function (Album $zdroj, ?int $rodic, string $nazev, int $hloubka) use (&$zkopiruj, $prostor, $request, &$pocet, &$nova): Album {
+                $nove = $this->alba->create($prostor, [
+                    'title' => mb_substr($nazev, 0, 160),
+                    'parent_id' => $rodic,
+                    'visibility' => 'shared',
+                ], $request->user());
+                $nova[] = $nove;
+                $pocet++;
+
+                // Strop drží jeden požadavek krátký i u rozvětveného stromu.
+                if ($hloubka < 12 && $pocet < 200) {
+                    foreach ($this->vProstoru($prostor)->where('parent_id', $zdroj->id)->orderBy('title')->get() as $dite) {
+                        if ($pocet >= 200) {
+                            break;
+                        }
+                        $zkopiruj($dite, $nove->id, (string) $dite->title, $hloubka + 1);
+                    }
+                }
+
+                return $nove;
+            };
+
+            return $zkopiruj($radek, $radek->parent_id, $radek->title.' (kopie)', 0);
+        });
+
+        foreach ($nova as $a) {
+            $this->slozkaNaDisku($a);
+        }
+        AuditLog::record('album.duplicate', $kopie, ['zdroj' => $radek->uuid, 'alb' => $pocet]);
+
+        return response()->json([
+            'ok' => true,
+            'album' => $kopie->uuid,
+            'zprava' => $pocet > 1
+                ? 'Struktura zduplikována — „'.$kopie->title.'“ a '.($pocet - 1).' podalb, fotky zůstaly v originálu'
+                : 'Album zduplikováno — „'.$kopie->title.'“ je prázdné, fotky zůstaly v originálu',
+        ] + $this->obsahPoAkci($this->obsah, $prostor));
+    }
+
     /** Sloučit do jiného alba: fotky se přesunou, prázdné album zmizí. */
     public function sluc(Request $request, string $album): JsonResponse
     {

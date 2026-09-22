@@ -233,6 +233,55 @@ class AlbaTest extends TestCase
         $this->assertTrue($zpet->json('data.ALBUMS_ARCH') === [] || in_array('ALBUMS_ARCH', $zpet->json('prazdne'), true));
     }
 
+    /**
+     * „Duplikovat strukturu" založí skutečná alba i se stromem podalb.
+     *
+     * Kopie žila jen ve stavu prohlížeče: nešlo do ní nic zařadit a každá
+     * další akce na ní selhala, protože neměla skutečné id.
+     */
+    public function test_duplikovat_strukturu_zalozi_alba_na_serveru(): void
+    {
+        $foto = $this->fotka();
+        $cesta = $this->postJson('/api/alba', ['nazev' => 'Chorvatsko', 'media' => [$foto->uuid]])->json('album');
+        $zadar = $this->postJson('/api/alba', ['nazev' => 'Zadar', 'rodic' => $cesta])->json('album');
+        $this->postJson('/api/alba', ['nazev' => 'Staré město', 'rodic' => $zadar])->assertOk();
+
+        $odpoved = $this->postJson('/api/alba/'.$cesta.'/duplikovat')->assertOk()->assertJsonPath('ok', true);
+
+        $kopie = Album::where('uuid', $odpoved->json('album'))->sole();
+        $this->assertSame('Chorvatsko (kopie)', $kopie->title);
+        $this->assertNull($kopie->parent_id);
+        $zadarKopie = Album::where('parent_id', $kopie->id)->sole();
+        $this->assertSame('Zadar', $zadarKopie->title);
+        $this->assertSame('Staré město', Album::where('parent_id', $zadarKopie->id)->value('title'));
+        $this->assertStringContainsString('2 podalb', $odpoved->json('zprava'));
+        // Fotky zůstávají jen v originálu.
+        $this->assertSame(0, DB::table('album_media')->where('album_id', $kopie->id)->count());
+        $this->assertSame(1, DB::table('album_media')->count());
+    }
+
+    /** Podalbum, na které se dlouho nesáhlo, v detailu rodiče nechybí. */
+    public function test_podalba_i_mimo_posledni_upravena(): void
+    {
+        $rodic = $this->postJson('/api/alba', ['nazev' => 'Beskydy'])->json('album');
+        $dite = $this->postJson('/api/alba', ['nazev' => 'Pustevny', 'rodic' => $rodic])->json('album');
+        Album::where('uuid', $dite)->update(['updated_at' => now()->subYears(3)]);
+        Album::where('uuid', $rodic)->update(['updated_at' => now()->addMinute()]);
+        for ($i = 0; $i < 205; $i++) {
+            DB::table('albums')->insert([
+                'uuid' => (string) Str::uuid(), 'gallery_space_id' => $this->prostor->id,
+                'title' => 'Výplň '.$i, 'slug' => 'vypln-'.$i, 'visibility' => 'shared', 'depth' => 0,
+                'materialized_path' => '/vypln-'.$i, 'full_display_path' => 'Výplň '.$i,
+                'created_at' => now(), 'updated_at' => now(),
+            ]);
+        }
+
+        $alba = collect($this->getJson('/api/data/knihovna')->assertOk()->json('data.ALBUMS'))->keyBy('id');
+
+        $this->assertArrayNotHasKey($dite, $alba->all(), 'Podalbum je mimo posledních dvě stě upravených.');
+        $this->assertSame(['Pustevny'], array_column($alba[$rodic]['children'], 'name'));
+    }
+
     private function fotka(array $navic = []): MediaItem
     {
         static $poradi = 0;
