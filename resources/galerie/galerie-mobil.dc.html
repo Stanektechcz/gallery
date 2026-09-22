@@ -278,6 +278,28 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                 </sc-for>
               </div>
 
+              <!-- Oznámení ze serveru — dřív je galerie nikde neukazovala. -->
+              <sc-if value="{{ oznOn }}">
+                <div style="margin:18px 18px 0">
+                  <div style="display:flex; align-items:baseline; gap:8px; padding-bottom:6px; border-bottom:1px solid var(--g-line)">
+                    <span style="font-size:10.5px; letter-spacing:.12em; text-transform:uppercase; color:var(--g-ink3)">{{ oznHead }}</span>
+                    <button onClick="{{ oznAll }}" style="margin-left:auto; min-height:44px; padding:0 4px; border:0; background:transparent; cursor:pointer; font-family:inherit; font-size:12px; color:var(--g-acc)">Vše přečteno</button>
+                  </div>
+                  <sc-for list="{{ oznRows }}" as="o" hint-placeholder-count="3">
+                    <div style="display:flex; align-items:center; gap:10px; border-bottom:1px solid var(--g-line2)">
+                      <button onClick="{{ o.go }}" style="flex:1; min-width:0; display:flex; align-items:center; gap:10px; min-height:52px; padding:8px 0; border:0; background:transparent; cursor:pointer; text-align:left; font-family:inherit; color:inherit">
+                        <i class="ph-duotone {{ o.icon }}" style="flex:none; font-size:19px; color:{{ o.color }}"></i>
+                        <span style="flex:1; min-width:0">
+                          <span style="display:block; font-size:14px; line-height:1.35; text-wrap:pretty">{{ o.text }}</span>
+                          <span style="display:block; font-size:11.5px; color:var(--g-ink3); margin-top:2px">{{ o.when }}</span>
+                        </span>
+                      </button>
+                      <button onClick="{{ o.done }}" aria-label="Přečteno" style="flex:none; width:44px; height:44px; display:grid; place-items:center; border:0; background:transparent; cursor:pointer; color:var(--g-ink3)"><i class="ph-duotone ph-check" style="font-size:18px"></i></button>
+                    </div>
+                  </sc-for>
+                </div>
+              </sc-if>
+
               <sc-if value="{{ dgOn }}">
                 <div style="margin:18px 18px 0; border:1px solid var(--g-line); border-radius:3px; padding:14px">
                   <div style="display:flex; align-items:baseline; gap:8px">
@@ -8704,6 +8726,24 @@ class Component extends DCLogic {
     const fin = ['x-denik', 'x-rozpocty', 'x-transakce', 'x-finance', 'x-ucty', 'diary', 'finance'];
     return v === 'Deník, Finance a Zprávy' ? fin.concat(['x-zpravy']) : fin;
   }
+  /*
+   * Serverové oznámení: přečíst, nebo všechna přečíst.
+   *
+   * Řádek zmizí hned (z `OZNAMENI` na místě) a zápis jde na server; stav
+   * se kvůli tomu neukládá — oznámení patří jen tomu, kdo se dívá.
+   */
+  oznameniAkce(id, akce) {
+    const seznam = (window.GalerieData || {}).OZNAMENI;
+    if (Array.isArray(seznam)) {
+      if (akce === 'vse') seznam.splice(0, seznam.length);
+      else { const i = seznam.findIndex(o => o.id === id); if (i >= 0) seznam.splice(i, 1); }
+    }
+    if (window.GalerieObnovObrazovku) window.GalerieObnovObrazovku();
+    const api = window.GalerieApi;
+    if (!api || api.mode !== 'http' || !api.post) return;
+    api.post(akce === 'vse' ? 'v1/notifications/read-all' : 'v1/notifications/' + encodeURIComponent(id) + '/read', {})
+      .catch(() => { if (window.GalerieObnovit) window.GalerieObnovit('system'); });
+  }
   // Otevření trasy zvenčí (upozornění, sdílený odkaz, zkratka na ploše).
   // Používá tytéž mapy jako nabídka Více, takže se chová shodně.
   openRoute(route) {
@@ -13037,6 +13077,20 @@ class Component extends DCLogic {
         };
       })(),
       photoCount: String(lib.length),
+      // Oznámení ze serveru na Domů (telefon nemá zvonek) — dřív nikde.
+      ...(() => {
+        const ozn = ((window.GalerieData || {}).OZNAMENI || []);
+        return {
+          oznOn: ozn.length > 0,
+          oznHead: this.pl(ozn.length, 'nové oznámení', 'nová oznámení', 'nových oznámení'),
+          oznAll: () => { this.oznameniAkce(null, 'vse'); this.toast('Oznámení přečtena', { icon: 'ph-checks', silent: true }); },
+          oznRows: ozn.slice(0, 5).map(o => ({
+            text: o.text, when: o.kdy, icon: o.ikona || 'ph-bell', color: o.dulezite ? 'var(--g-mag)' : 'var(--g-acc)',
+            go: () => { this.oznameniAkce(o.id, 'precist'); if (o.kam) this.openRoute(o.kam); },
+            done: () => this.oznameniAkce(o.id, 'precist')
+          }))
+        };
+      })(),
       goMemories: () => this.goTab('memories'),
       homeTiles: lib.slice(0, 9).map(p => ({ bg: this.tlo(p), fav: this.isFav(p), video: p.video, dur: p.dur, open: () => this.setState({ lb: p.id }) })),
       homePlaces: DAYS.slice(0, 4).map((d, i) => ({ name: d[1], meta: d[0].split(' 20')[0] + ' · ' + this.pl(d[2], 'fotka', 'fotky', 'fotek'), bg: this.bg(4 + i * 5), go: () => this.setState({ dayId: d[0], tab: 'home', stack: ['day'], sheet: null }) })),

@@ -27969,9 +27969,45 @@ class Component extends DCLogic {
         go: () => this.setState({ route: 'x-pravidla', appTab: 1, notifOpen: false })
       });
     });
+    /*
+     * Oznámení ze serveru (`OZNAMENI`): nahrané fotky, přidělený úkol,
+     * narozeniny, import financí… Server je zapisoval, ale zvonek skládal
+     * jen připomenutí z obrazovek. Přečíst a odložit jdou na server.
+     */
+    ((window.GalerieData || {}).OZNAMENI || []).forEach(o => {
+      out.push({
+        id: 'srv-' + o.id, srv: o.id, days: o.dulezite ? -1 : 0, icon: o.ikona || 'ph-bell',
+        color: o.dulezite ? 'var(--g-mag)' : 'var(--g-acc)',
+        title: o.text, meta: o.kdy, when: o.kdy, cta: o.kam ? 'Otevřít' : 'Vyřízeno',
+        go: () => {
+          this.oznameniAkce(o.id, 'precist');
+          this.setState(o.kam ? { route: o.kam, appTab: 0, notifOpen: false } : { notifOpen: false });
+        }
+      });
+    });
     // Odložení platí do uloženého okamžiku; staré `true` (odloženo navždy) už neplatí.
     const snz = s.notifSnooze || {}, read = s.notifRead || {}, ted = Date.now();
     return out.filter(n => !(typeof snz[n.id] === 'number' && snz[n.id] > ted) && !read[n.id]).sort((a, b) => a.days - b.days);
+  }
+  /*
+   * Serverové oznámení: přečíst, odložit o týden, nebo všechna přečíst.
+   *
+   * Řádek zmizí hned (z `OZNAMENI` na místě a překreslením bez zápisu stavu
+   * — `notifRead` je sdílený stav, oznámení patří jen tomu, kdo se dívá).
+   */
+  oznameniAkce(id, akce) {
+    const seznam = (window.GalerieData || {}).OZNAMENI;
+    if (Array.isArray(seznam)) {
+      if (akce === 'vse') seznam.splice(0, seznam.length);
+      else { const i = seznam.findIndex(o => o.id === id); if (i >= 0) seznam.splice(i, 1); }
+    }
+    if (window.GalerieObnovObrazovku) window.GalerieObnovObrazovku();
+    const api = window.GalerieApi;
+    if (!api || api.mode !== 'http' || !api.post) return;
+    const cesta = akce === 'vse' ? 'v1/notifications/read-all'
+      : 'v1/notifications/' + encodeURIComponent(id) + (akce === 'odlozit' ? '/snooze' : '/read');
+    api.post(cesta, akce === 'odlozit' ? { minutes: 10080 } : {})
+      .catch(() => { if (window.GalerieObnovit) window.GalerieObnovit('system'); });
   }
   notifVals() {
     const s = this.state, items = this.notifItems();
@@ -27991,6 +28027,7 @@ class Component extends DCLogic {
         go: n.go,
         snooze: e => {
           e.stopPropagation();
+          if (n.srv) { this.oznameniAkce(n.srv, 'odlozit'); this.toast('Odloženo o týden', { icon: 'ph-alarm', silent: true }); return; }
           // Dřív se odkládalo navždy a hláška slibovala návrat „23. srpna" bez ohledu na dnešek.
           const prev = s.notifSnooze || {};
           const az = new Date(); az.setDate(az.getDate() + 7); az.setHours(8, 0, 0, 0);
@@ -27999,6 +28036,7 @@ class Component extends DCLogic {
         },
         done: e => {
           e.stopPropagation();
+          if (n.srv) { this.oznameniAkce(n.srv, 'precist'); this.toast('Vyřízeno', { icon: 'ph-check-circle', silent: true }); return; }
           const prev = s.notifRead || {};
           this.setState({ notifRead: { ...prev, [n.id]: true } });
           this.toast('Vyřízeno — zmizí z připomenutí', { icon: 'ph-check-circle', undo: () => this.setState({ notifRead: prev }) });
@@ -28006,8 +28044,9 @@ class Component extends DCLogic {
       })),
       notifMore: items.length > 8 ? 'a dalších ' + (items.length - 8) : '',
       notifAllRead: () => {
+        if (items.some(n => n.srv)) this.oznameniAkce(null, 'vse');
         const prev = s.notifRead || {}, map = { ...prev };
-        items.forEach(n => { map[n.id] = true; });
+        items.filter(n => !n.srv).forEach(n => { map[n.id] = true; });
         this.setState({ notifRead: map });
         this.toast('Vše označeno jako vyřízené', { icon: 'ph-checks', undo: () => this.setState({ notifRead: prev }) });
       },

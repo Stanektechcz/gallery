@@ -5,6 +5,7 @@ namespace Tests\Feature\Galerie;
 use App\Models\GallerySpace;
 use App\Models\MediaItem;
 use App\Models\User;
+use App\Notifications\GalleryNotification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -617,6 +618,32 @@ class ObsahSystemTest extends TestCase
         );
 
         $this->getJson('/api/data')->assertStatus(422);
+    }
+
+    /**
+     * Oznámení ze serveru jdou do zvonku galerie — jen nepřečtená a jen svoje.
+     *
+     * Server je zapisoval (import financí, přidělený úkol…), ale galerie je
+     * nikde neukazovala.
+     */
+    public function test_neprectena_oznameni_jdou_do_galerie(): void
+    {
+        $this->adri->notify(new GalleryNotification('finance.imported', 'Makinka doplnila finance o 12 transakcí.', '/finances'));
+        $this->adri->notify(new GalleryNotification('todo.assigned', 'Máš úkol: Vynést koš'));
+        $this->maki->notify(new GalleryNotification('todo.assigned', 'Cizí oznámení'));
+
+        $oznameni = collect($this->getJson('/api/data/system')->assertOk()->json('data.OZNAMENI'))->keyBy('text');
+
+        $this->assertCount(2, $oznameni);
+        $finance = $oznameni['Makinka doplnila finance o 12 transakcí.'];
+        $this->assertSame('ph-credit-card', $finance['ikona']);
+        $this->assertSame('x-transakce', $finance['kam']);
+        $this->assertStringStartsWith('dnes v ', $finance['kdy']);
+        $this->assertSame('x-plan', $oznameni['Máš úkol: Vynést koš']['kam']);
+
+        // Přečtené přes API ze zvonku zmizí.
+        $this->postJson('/api/v1/notifications/'.$finance['id'].'/read')->assertOk();
+        $this->assertCount(1, $this->getJson('/api/data/system')->assertOk()->json('data.OZNAMENI'));
     }
 
     private function fotka(array $navic = [], int $poradi = 1): MediaItem

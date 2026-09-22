@@ -328,6 +328,18 @@ class PravidlaDokumentuPrototypuTest extends TestCase
         $this->assertStringContainsString('{ people: seznam }', $telefon);
     }
 
+    /** Oznámení ze serveru: zvonek na počítači, Domů na telefonu, přečtení na server. */
+    public function test_oznameni_ze_serveru(): void
+    {
+        $pocitac = self::dokument('galerie-desktop.dc.html');
+        $telefon = self::dokument('galerie-mobil.dc.html');
+
+        $this->assertStringContainsString('((window.GalerieData || {}).OZNAMENI || []).forEach(o => {', $pocitac);
+        $this->assertStringContainsString("'v1/notifications/read-all'", $pocitac);
+        $this->assertStringContainsString('<sc-if value="{{ oznOn }}">', $telefon);
+        $this->assertStringContainsString("'v1/notifications/read-all'", $telefon);
+    }
+
     /** Koš v telefonu umí i trvale odstranit — dřív jen „Obnovit". */
     public function test_telefon_maze_z_kose_na_serveru(): void
     {

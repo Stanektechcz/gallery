@@ -7,6 +7,7 @@ use App\Models\MediaItem;
 use App\Models\StorageConnection;
 use App\Models\User;
 use App\Services\Finance\LedgerService;
+use App\Services\Notifications\NotificationPreferenceService;
 use App\Services\Provoz\AdministraceGalerie;
 use App\Services\Provoz\PlanovaneUlohy;
 use App\Services\Provoz\UlozisteGalerie;
@@ -14,6 +15,7 @@ use App\Services\Storage\DriveConnectionResolver;
 use App\Support\Cas;
 use App\Support\SpaceContext;
 use Carbon\CarbonImmutable;
+use Illuminate\Notifications\DatabaseNotification;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -87,7 +89,8 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
         // A `LOCKWHO`/`LOCKMAIL`: v prostoru s jediným člověkem by jinak vedle
         // něj zůstala druhá ukázková volba i s cizí adresou.
         // `SETROWS` taky: sekce, kterou server nepošle (import, ticho), nemá u dvojice zůstat z ukázky.
-        return ['DATA_HEALTH', 'SECLIFE', 'TRASH', 'CONFLICTS', 'LOCKWHO', 'LOCKMAIL', 'SETROWS'];
+        // `OZNAMENI`: přečtené oznámení musí ze zvonku zmizet i po obnovení.
+        return ['DATA_HEALTH', 'SECLIFE', 'TRASH', 'CONFLICTS', 'LOCKWHO', 'LOCKMAIL', 'SETROWS', 'OZNAMENI'];
     }
 
     /**
@@ -103,6 +106,7 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
             'CONFLICTS' => [],
             'DATA_HEALTH' => [],
             'SECLIFE' => [],
+            'OZNAMENI' => [],
             'VAULT_ITEMS' => [],
             'ABARS' => ['health' => [], 'risk' => []],
             'AL' => ['inbox' => [], 'snoozed' => [], 'inboxDone' => [], 'vault' => [], 'users' => [], 'jobs' => [], 'api' => [], 'tarify' => []],
@@ -140,6 +144,7 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
             'TRASH' => $this->kos($prostor),
             'DVOJICE' => $this->jmenaDvojice($prostor),
             'UCTY' => $this->uctyDvojice($prostor),
+            'OZNAMENI' => $this->oznameni(),
         ], fn ($v) => $v !== null && $v !== [])
             + [
                 /*
@@ -428,6 +433,93 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
             ->take(2)
             ->values()
             ->all();
+    }
+
+    /**
+     * Nepřečtená oznámení toho, kdo se dívá: `{ id, text, ikona, kdy, kam, dulezite }`.
+     *
+     * Server je zapisuje (nahrané fotky, přidělený úkol, narozeniny, dárek,
+     * kapsle, import financí…), ale galerie je nikde neukazovala — zvonek
+     * skládal jen připomenutí odvozená z obrazovek. Přečíst a odložit se dají
+     * přes `/api/v1/notifications`. Odložená, archivovaná a vypnutá v předvolbách
+     * se neposílají.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function oznameni(): array
+    {
+        $ja = auth()->user();
+
+        if (! $ja instanceof User || ! Schema::hasTable('notifications')) {
+            return [];
+        }
+
+        $dotaz = $ja->unreadNotifications();
+
+        if (Schema::hasColumn('notifications', 'archived_at')) {
+            $dotaz->whereNull('archived_at')
+                ->where(fn ($q) => $q->whereNull('snoozed_until')->orWhere('snoozed_until', '<=', now()));
+        }
+
+        $predvolby = app(NotificationPreferenceService::class);
+        $dnes = Cas::ted();
+
+        return $dotaz->latest()->limit(60)->get()
+            ->filter(fn (DatabaseNotification $n) => $predvolby->allows($ja, (string) ($n->data['type'] ?? ''), (array) $n->data))
+            ->take(15)
+            ->map(function (DatabaseNotification $n) use ($predvolby, $dnes) {
+                $druh = (string) ($n->data['type'] ?? '');
+                $meta = $predvolby->metadata($druh, (array) $n->data);
+                $kdy = Cas::mistni($n->created_at);
+
+                return [
+                    'id' => (string) $n->id,
+                    'text' => mb_substr(trim((string) ($n->data['message'] ?? 'Oznámení')), 0, 200),
+                    'ikona' => $this->ikonaOznameni($druh),
+                    'kdy' => $kdy === null ? ''
+                        : ($kdy->isSameDay($dnes) ? 'dnes v '.$kdy->format('G:i')
+                            : ($kdy->isSameDay($dnes->subDay()) ? 'včera v '.$kdy->format('G:i') : $kdy->format('j. n.'))),
+                    'kam' => $this->kamOznameni($druh),
+                    'dulezite' => in_array($meta['priority'], ['high', 'critical'], true),
+                ];
+            })
+            ->values()
+            ->all();
+    }
+
+    private function ikonaOznameni(string $druh): string
+    {
+        return match (true) {
+            str_starts_with($druh, 'upload') || str_starts_with($druh, 'media') => 'ph-images',
+            str_starts_with($druh, 'album') => 'ph-folder',
+            str_contains($druh, 'todo') || str_contains($druh, 'task') => 'ph-check-square',
+            str_starts_with($druh, 'calendar') || str_starts_with($druh, 'planning') => 'ph-calendar-check',
+            str_starts_with($druh, 'finance') || str_starts_with($druh, 'bank') => 'ph-credit-card',
+            str_starts_with($druh, 'gift') => 'ph-gift',
+            str_starts_with($druh, 'relationship') => 'ph-heart',
+            str_starts_with($druh, 'memory') => 'ph-sparkle',
+            str_starts_with($druh, 'cycle') || str_starts_with($druh, 'health') => 'ph-drop',
+            str_starts_with($druh, 'drive') || str_starts_with($druh, 'export') => 'ph-hard-drives',
+            default => 'ph-bell',
+        };
+    }
+
+    /** Kam oznámení vede v galerii (klíč trasy); `null` = nikam, jen přečíst. */
+    private function kamOznameni(string $druh): ?string
+    {
+        return match (true) {
+            str_starts_with($druh, 'upload') || str_starts_with($druh, 'media') => 'all',
+            str_starts_with($druh, 'album') => 'albums',
+            str_contains($druh, 'todo') || str_contains($druh, 'task') => 'x-plan',
+            str_starts_with($druh, 'calendar') || str_starts_with($druh, 'planning') => 'calendar',
+            str_starts_with($druh, 'finance') || str_starts_with($druh, 'bank') => 'x-transakce',
+            str_starts_with($druh, 'gift') => 'x-darky',
+            str_starts_with($druh, 'relationship') => 'x-milniky',
+            str_starts_with($druh, 'memory') => 'x-vzpominky',
+            str_starts_with($druh, 'cycle') || str_starts_with($druh, 'health') => 'x-cyklus',
+            str_starts_with($druh, 'drive') || str_starts_with($druh, 'export') => 'storage',
+            default => null,
+        };
     }
 
     /**
