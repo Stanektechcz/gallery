@@ -25,6 +25,26 @@ class CasTest extends TestCase
         $this->assertNull(Cas::mistni(null));
     }
 
+    /**
+     * Dnešní datum dvojice je porovnatelné s daty z databáze.
+     *
+     * V 23:30 UTC je v Praze už další den; datum se ale musí dát srovnat
+     * s půlnocí `start_date` bez posunu o dvě hodiny (jinak by v den odjezdu
+     * cesta ještě „plánovala").
+     */
+    public function test_dnesni_datum_dvojice(): void
+    {
+        config(['app.display_timezone' => 'Europe/Prague']);
+        $this->travelTo(CarbonImmutable::parse('2026-10-08 23:30:00', 'UTC'));
+
+        $dnes = Cas::dnes();
+        $odjezd = CarbonImmutable::parse('2026-10-09');
+
+        $this->assertSame('2026-10-09', $dnes->toDateString());
+        $this->assertTrue($dnes->equalTo($odjezd), 'V den odjezdu je dnešek roven začátku cesty.');
+        $this->assertSame(3, (int) $odjezd->diffInDays(CarbonImmutable::parse('2026-10-12')));
+    }
+
     public function test_cas_podle_hodin_se_neposouva(): void
     {
         config(['app.display_timezone' => 'Europe/Prague']);

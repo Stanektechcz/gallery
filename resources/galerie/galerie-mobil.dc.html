@@ -2084,6 +2084,18 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                 <button onClick="{{ album.share }}" class="btn btn-secondary" style="flex:1; min-height:44px">Sdílet album</button>
                 <button onClick="{{ album.del }}" class="btn btn-ghost" style="flex:none; min-height:44px; color:var(--g-mag)">Smazat</button>
               </div>
+              <sc-if value="{{ album.canEdit }}">
+                <div style="padding:8px 18px 0; display:flex; gap:8px">
+                  <button onClick="{{ album.renameGo }}" aria-expanded="{{ album.renameOpen }}" class="btn btn-ghost" style="flex:1; min-height:44px; gap:6px"><i class="ph-duotone ph-pencil-simple" style="font-size:16px"></i>Přejmenovat</button>
+                  <button onClick="{{ album.download }}" class="btn btn-ghost" style="flex:1; min-height:44px; gap:6px"><i class="ph-duotone ph-file-zip" style="font-size:16px"></i>Stáhnout ZIP</button>
+                </div>
+                <sc-if value="{{ album.renameOpen }}">
+                  <div style="padding:10px 18px 0; display:flex; gap:8px">
+                    <input class="input" value="{{ album.renameVal }}" onInput="{{ album.renameSet }}" aria-label="Nový název alba" style="flex:1; min-width:0; box-sizing:border-box; min-height:44px; font-family:inherit; font-size:15px" />
+                    <button onClick="{{ album.renameSave }}" disabled="{{ album.renameCant }}" class="btn btn-primary" style="flex:none; min-height:44px">Uložit</button>
+                  </div>
+                </sc-if>
+              </sc-if>
             </div>
           </sc-if>
 
@@ -12958,9 +12970,32 @@ class Component extends DCLogic {
       album: (() => {
         const a = this.albumsList().find(x => x.id === s.albumId) || this.albumsList()[0] || { name: '—', ids: [], seed: 3 };
         const items = a.ids.filter(id => !this.vKosiUkazky(id)).map(id => PHOTOS.find(p => p.id === id)).filter(Boolean);
+        // Album ze serveru jde i přejmenovat a stáhnout — telefon uměl jen sdílet a smazat.
+        const albumZeServeru = this.galerieNaServeru() && /^[0-9a-f-]{36}$/.test(String(a.id));
+        const prejmenovava = s.mAlbRename === a.id;
         return {
           meta: this.pl(items.length, 'položka', 'položky', 'položek') + ' · sdílíte oba',
           items: items.map(p => ({ bg: this.tlo(p), fav: this.isFav(p), tap: () => this.setState({ lb: p.id }) })),
+          canEdit: albumZeServeru,
+          renameOpen: prejmenovava,
+          renameVal: s.mAlbName || '',
+          renameSet: e => this.setState({ mAlbName: e.target.value }),
+          renameGo: () => this.setState({ mAlbRename: prejmenovava ? null : a.id, mAlbName: a.name }),
+          renameCant: (s.mAlbName || '').trim().length < 2 || (s.mAlbName || '').trim() === a.name,
+          renameSave: () => {
+            const nazev = (s.mAlbName || '').trim();
+            if (!nazev || nazev === a.name) return;
+            this.albumNaServeru(window.GalerieApi.patch('alba/' + a.id, { nazev }), res => {
+              this.setState({ mAlbRename: null, mAlbName: '' });
+              this.toast(res.zprava || 'Album přejmenováno — ' + nazev, { icon: 'ph-pencil-simple', silent: true });
+            });
+          },
+          download: () => {
+            this.toast('Připravuji archiv — u velkého alba to chvíli trvá', { icon: 'ph-file-zip', silent: true });
+            window.GalerieApi.download('alba/' + a.id + '/archiv', (a.name || 'album') + '.zip')
+              .then(() => this.toast('Album staženo', { icon: 'ph-download-simple', silent: true }))
+              .catch(e => this.toast(e && e.status === 404 ? 'V albu není ani jeden originál ke stažení' : 'Archiv se nepodařilo sestavit', { icon: 'ph-warning', silent: true }));
+          },
           share: () => {
             if (this.galerieNaServeru() && /^[0-9a-f-]{36}$/.test(String(a.id))) { this.sdiletNaServeru({ album: a.id }, 'Album ' + a.name); return; }
             // U dvojice žádný vymyšlený odkaz „galerie.app/s/…" — sdílí se jen album, které server zná.
@@ -13067,9 +13102,10 @@ class Component extends DCLogic {
         // Odznaky se počítají z dat — ne statické číslo z definice.
         const doneRows = s.rowDone || {};
         const resolvedIn = k => (AL[k] || []).filter((r, i) => doneRows[k + '-' + i]).length;
+        // Ze skutečných řádků jako na počítači — dřív napevno 12 a 6 (počty z ukázky) i u dvojice.
         const liveBadge = {
-          'x-inbox': 12 - resolvedIn('inbox'),
-          'x-inbox-cesty': 6 - resolvedIn('travelInbox'),
+          'x-inbox': (AL.inbox || []).length - resolvedIn('inbox'),
+          'x-inbox-cesty': (AL.travelInbox || []).length - resolvedIn('travelInbox'),
           'x-transakce': TX.filter(t => (s.txCat[t[0]] === undefined ? t[3] : s.txCat[t[0]]) === 'Nezařazeno').length
         };
         const remember = route => {
@@ -13096,7 +13132,11 @@ class Component extends DCLogic {
               all: { meta: 'celá knihovna', go: () => this.goTab('memories', { filter: 'all', sortMem: 'new' }) },
               favorites: { meta: 'jen oblíbené', go: () => this.goTab('memories', { filter: 'fav', sortMem: 'fav' }) },
               timeline: { meta: 'od nejstarších', go: () => this.goTab('memories', { filter: 'all', sortMem: 'old' }) },
-              'x-teď': { meta: 'den 5 z 8', go: () => { this.setState({ secId: 'cestanyni', secTab: 0 }); this.push('sec'); } }
+              // Den běžící cesty ze serveru (NOWTRIP), ne „den 5 z 8" z ukázky u dvojice, která je doma.
+              'x-teď': {
+                meta: (GD.NOWTRIP && GD.NOWTRIP.title) ? 'den ' + GD.NOWTRIP.day + ' z ' + GD.NOWTRIP.days : 'teď žádná cesta neběží',
+                go: () => { this.setState({ secId: 'cestanyni', secTab: 0 }); this.push('sec'); }
+              }
             };
             const sp = SPECIAL[route];
             return {

@@ -51,6 +51,19 @@ final class Cas
         return CarbonImmutable::parse($kdy instanceof DateTimeInterface ? $kdy->format('Y-m-d H:i:s') : (string) $kdy, self::pasmo());
     }
 
+    /**
+     * Dnešní datum dvojice jako půlnoc v pásmu aplikace.
+     *
+     * Pro porovnání s daty z databáze (začátek cesty, datum zápisu…), která se
+     * čtou jako půlnoc v UTC. Půlnoc v Praze je 22:00 předchozího dne UTC —
+     * s ní by počty dní vycházely o jeden menší a v den odjezdu by cesta ještě
+     * „plánovala".
+     */
+    public static function dnes(): CarbonImmutable
+    {
+        return CarbonImmutable::parse(self::ted()->toDateString());
+    }
+
     /** Teď v pásmu dvojice — pro „dnes", „včera" a počty dní. */
     public static function ted(): CarbonImmutable
     {

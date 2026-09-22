@@ -3,6 +3,7 @@
 namespace App\Services\Obsah;
 
 use App\Models\GallerySpace;
+use App\Support\Cas;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -213,7 +214,7 @@ class Cesty implements MaPrazdneKolekce, PoskytovatelObsahu
         $doklady = $this->doklady($id);
         $denik = $this->denik($id);
 
-        $dnes = CarbonImmutable::now()->startOfDay();
+        $dnes = Cas::dnes();
         $vysledek = [];
 
         foreach ($cesty as $c) {
@@ -347,7 +348,7 @@ class Cesty implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function prave(GallerySpace $prostor, array $cesty): ?array
     {
-        $dnes = CarbonImmutable::now()->startOfDay();
+        $dnes = Cas::dnes();
 
         $ted = DB::table('trips')
             ->where('gallery_space_id', $prostor->id)
@@ -381,7 +382,8 @@ class Cesty implements MaPrazdneKolekce, PoskytovatelObsahu
             'day' => (int) $od->diffInDays($dnes) + 1,
             'days' => (int) $od->diffInDays($do) + 1,
             'when' => self::DNY[$dnes->dayOfWeek].' '.$dnes->day.'. '.self::MESICE[$dnes->month].' '.$dnes->year,
-            'fund' => (int) DB::table('trip_budget_limits')->where('trip_id', $ted->id)->sum('amount'),
+            // Jako u seznamu cest: limity kategorií, jinak celkový rozpočet z dialogu nové cesty.
+            'fund' => (int) DB::table('trip_budget_limits')->where('trip_id', $ted->id)->sum('amount') ?: (int) round((float) ($ted->budget ?? 0)),
             'spent' => (int) $utraty->sum('amount'),
             'todaySpent' => (int) $utraty
                 ->filter(fn ($u) => $u->occurred_at && CarbonImmutable::parse($u->occurred_at)->isSameDay($dnes))
@@ -666,7 +668,7 @@ class Cesty implements MaPrazdneKolekce, PoskytovatelObsahu
             return [];
         }
 
-        $dnes = CarbonImmutable::now()->startOfDay();
+        $dnes = Cas::dnes();
 
         return DB::table('travel_journal_entries')
             ->where('trip_id', $cesta)

@@ -62,7 +62,8 @@ class Dnes implements PoskytovatelObsahu
 
         $jmena = System::jmenaClenu($prostor);
         // Dnešek dvojice, ne serveru: po půlnoci v UTC ještě běží včerejšek (a naopak).
-        $dnes = Cas::ted();
+        // Jako datum (půlnoc v pásmu aplikace) — porovnává se s daty z databáze.
+        $dnes = Cas::dnes();
 
         return [
             'DNES' => [

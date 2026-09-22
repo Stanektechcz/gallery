@@ -202,6 +202,13 @@ class PravidlaDokumentuPrototypuTest extends TestCase
         $this->assertStringContainsString("window.GalerieApi.patch('vzkazy-hostu/' + c.id, { skryty: !c.hidden })", $telefon);
         $this->assertStringContainsString("window.GalerieApi.del('vzkazy-hostu/' + c.id)", $telefon);
 
+        // Album z telefonu jde přejmenovat a stáhnout (dřív jen sdílet a smazat).
+        $this->assertStringContainsString("window.GalerieApi.patch('alba/' + a.id, { nazev })", $telefon);
+        $this->assertStringContainsString("window.GalerieApi.download('alba/' + a.id + '/archiv'", $telefon);
+        // Odznaky a „den cesty" v menu Více ze skutečných dat, ne čísla z ukázky.
+        $this->assertStringNotContainsString("'x-inbox': 12 - resolvedIn", $telefon);
+        $this->assertStringNotContainsString("meta: 'den 5 z 8'", $telefon);
+
         $data = (string) file_get_contents(dirname(__DIR__, 2).'/public/galerie-data.js');
         foreach ([$telefon, $data] as $zdroj) {
             $this->assertStringNotContainsString('Rozpoznávání běží', $zdroj);
