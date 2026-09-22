@@ -804,6 +804,38 @@ k 25. 8., rychlý zápis nákupu i nápadu v databázi, přesun úkolu do Hotovo
 
 Testy: **1488 PHP testů**, všechny prošly. **Dvě migrace** (viz níže).
 
+## 2u. Dvacáté první kolo — bezpečnost přístupu, druhý audit telefonu (22. 9.)
+
+Audit oprávnění celého galerijního API, druhý průchod telefonem a kontrola
+rozhraní (přetečení, jména pro čtečku, klávesnice).
+
+- **Bezpečnost — dvě odpovědi na otázku „ve které galerii jsem"**: kontrola
+  role se ptala neseřazeným `gallerySpaces()->first()`, požadavek pak běžel
+  v prostoru z `UrcujePar::parId()`. Kdo byl v jedné galerii host a ve své
+  vlastní vlastník, prošel kontrolou podle té svojí a sáhl si na cizí fotky,
+  stav i administraci. Relace má teď pevné pořadí — a s ní i devadesát
+  dalších míst, která se ptají týmž `first()`.
+- **Trvalé mazání koše** se řídilo sloupcem `users.role` (rolí účtu, ne rolí
+  v galerii); **`GET /api/admin`** jako jediná metoda administrace neměla
+  kontrolu; **smazání stavu** nechávalo šifrovanou část a revize klíčů
+  (`private` ani `rev_keys` nejsou v `$fillable`) a po „smazání" se nedalo
+  psát; **`PATCH /api/v1/profil`** ověřuje heslo a neměl strop pokusů.
+- **Telefon — ztráta dat**: odložené a přijaté návrhy ze schránky po obnovení
+  mizely (server je posílá zvlášť), kolečko a kategorie plateb se neukládaly.
+- **Telefon — hluché ovládání**: balíčky „do telefonu" nic nestahovaly,
+  přijetí žádosti nedošlo k druhému, „Řazení" psalo do klíče počítače, tiché
+  hodiny u vzpomínek nic nenastavily (teď nastaví skutečné 22:00–8:00),
+  export sliboval e-mail, rituály „připraví výstup", volby času a příjemce
+  připomínek nikam nešly. Otevření dne z kalendáře u prázdné knihovny padalo.
+- **Poctivé prázdné stavy** pro dvacet záložek, které se dvojici nenaplní
+  (Zároveň, Přepisy, TV režim, Tierlist, Automatizace, Cesta právě nyní…) —
+  místo obecného „až se záložka začne plnit" rovnou řeknou, kde ta věc je.
+- **Prostor s jedním členem** (druhý ještě nepřijal pozvánku) dostával jména
+  z ukázky; teď je to „vaše jméno" a „Druhý z vás".
+- **Rozhraní**: dlaždice fotek a políčka kalendáře mají jméno pro čtečku,
+  Escape zavírá všechny dialogy (kromě záchranných kódů), telefon ani počítač
+  nemají přetečení (kontrolováno i na 360 px).
+
 ## 2t. Dvacáté kolo — mechanismy pro dva: konec prázdných obrazovek (22. 9.)
 
 Audit souboru s mechanismy (`public/galerie-mechanismy-logika.js`) a kontrola
