@@ -126,11 +126,20 @@
      * viděl číslo partnera jako svoje a mohl mu ho přepsat. U dvojice se píše
      * do `blizW[jméno]` a zadat jde jen své vlastní.
      */
-    const ukazka = !((DESK().DVOJICE) || []).length;
+    // Stejná hranice jako v `dva()`: s jedním členem prostoru se jména dvojice
+    // dokreslují z ukázky, takže tu nesmí platit „skutečná dvojice".
+    const ukazka = ((DESK().DVOJICE) || []).length < 2;
     const wMap = s.blizW || {};
     const wA = ukazka ? s.blizWA : wMap[jA], wM = ukazka ? s.blizWM : wMap[jM];
     const blocked = s.blizBlock || {};
-    const weeks = BLIZ.weeks.map((w, i) => [w[0], w[1] + (i === BLIZ.weeks.length - 1 ? extra : 0)]);
+    /*
+     * Bez historie ze serveru (u dvojice `BLIZ.weeks` chodí prázdné) drží
+     * zápisy aspoň tenhle týden — dřív šlo „Zapsat k tomuto týdnu" tisknout
+     * donekonečna a na obrazovce se nezměnilo nic.
+     */
+    const weeks = BLIZ.weeks.length
+      ? BLIZ.weeks.map((w, i) => [w[0], w[1] + (i === BLIZ.weeks.length - 1 ? extra : 0)])
+      : (extra ? [['tento týden', extra]] : []);
     const total = weeks.reduce((a, w) => a + w[1], 0);
     const maxW = Math.max.apply(null, weeks.map(w => w[1]).concat([1]));
     const iA = (BLIZ.init || {})[jA] || 0, iM = (BLIZ.init || {})[jM] || 0;
@@ -143,7 +152,10 @@
       blizEnable: () => this.optEnable('bliz', 'Blízkost'),
       blizDisable: () => this.optOff('bliz', 'Blízkost'),
       blizOptWhy: 'Nejčastější důvod, proč se páry rozejdou, nemá v aplikaci řádek. Tohle není hodnocení, není tu žádné cílové číslo a nikdo tu nedostane známku. Je tu frekvence, kdo navrhuje, kdo odmítá — a co tomu stojí v cestě.',
-      blizHead: this.pl(total, 'krát za osm týdnů', 'krát za osm týdnů', 'krát za osm týdnů'),
+      // „Za osm týdnů" platí jen pro historii ze serveru; zápisy dvojice jsou z tohohle týdne.
+      blizHead: BLIZ.weeks.length
+        ? this.pl(total, 'krát za osm týdnů', 'krát za osm týdnů', 'krát za osm týdnů')
+        : total ? this.pl(total, 'krát tento týden', 'krát tento týden', 'krát tento týden') : 'Zatím nic zapsaného',
       blizNote: 'Žádné doporučené číslo neexistuje. Zajímavý je jen trend a to, jestli je iniciativa na jedné straně.',
       blizWeeks: weeks.map(w => ({
         label: w[0], v: String(w[1]),
@@ -239,6 +251,8 @@
         ? 'Samostatně na tom hůř: ' + KR(weak.r.who) + '. To není argument v hádce — je to důvod, proč má obálka jen pro sebe smysl právě tam víc.'
         : '',
       mineEvenOn: even,
+      // Bez zapsaných příjmů není co vyrovnávat — tlačítko se neukazuje.
+      mineEvenCan: rows.length > 0,
       mineEvenLabel: even ? 'Podíly jsou 50 : 50' : 'Vyrovnat podíly na 50 : 50',
       mineEven: () => { const prev = even; this.setState({ mineEven: !even }); this.toast(even ? 'Podíly zpátky podle příjmů' : 'Podíly vyrovnány na polovinu · vyšší příjem to unese lépe', { icon: 'ph-scales', undo: () => this.setState({ mineEven: prev }) }); },
       mineEnv: () => this.setState({ route: 'x-rozpocty', budTab: 8 }),
@@ -268,12 +282,13 @@
       kidsEnable: () => this.optEnable('kids', 'Děti'),
       kidsDisable: () => this.optOff('kids', 'Děti'),
       kidsOptWhy: 'Největší rozhodnutí, které pár dělá, tady dosud nemělo řádek. Tahle záložka na nic netlačí: nemá termín, nepočítá odpočet a nikdy nepošle připomínku. Drží jen dvě pozice, dvě čísla a seznam toho, co tomu stojí v cestě.',
-      kidsHead: pos[0].stance === pos[1].stance
+      // `pos` může mít jen jednu položku (do prostoru se přidal zatím jeden).
+      kidsHead: pos.length > 1 && pos[0].stance === pos[1].stance
         ? 'Oba říkáte „' + pos[0].stance + '“'
-        : KR(pos[0].who) + ': ' + pos[0].stance + ' · ' + KR(pos[1].who) + ': ' + pos[1].stance,
+        : pos.map(p => KR(p.who) + ': ' + p.stance).join(' · '),
       kidsGap: gap
         ? this.pl(gap, 'rok rozdílu', 'roky rozdílu', 'let rozdílu') + ' v tom, kdy. Rozdíl v roce není nesouhlas — je to informace o tom, kolik času máte na ' + this.pl(openB.length, 'tu jednu věc', 'ty věci', 'ty věci') + ' níž.'
-        : years[0] && years[1] ? 'Ve roce se shodujete.' : 'Rok zatím nikdo nezapsal.',
+        : years[0] && years[1] ? 'V roce se shodujete.' : 'Rok zatím nikdo nezapsal.',
       kidsNoMech: 'Arbitr se na tohle nepoužije. Losování ani minimaximum tady nemají co dělat — u rozhodnutí, které nese jeden člověk v těle, nemůže padnout mechanismem.',
       kidsPos: pos.map(p => {
         const sc = STC[p.stance] || STC['nevím'];
@@ -282,7 +297,7 @@
          * dívá — zapsat „ano" nebo rok za druhého by bylo mluvit za něj
          * přesně u rozhodnutí, kde to nejde.
          */
-        const ukazka = !((DESK().DVOJICE) || []).length;
+        const ukazka = ((DESK().DVOJICE) || []).length < 2;
         const cizi = !ukazka && p.who !== jA;
         const zaDruheho = () => { this.toast('Pozici ' + PAD(this, p.who, 'gen') + ' zapíše ' + KR(p.who) + ' na svém zařízení', { icon: 'ph-lock-simple' }); };
         return {
@@ -386,8 +401,11 @@
     const over = s.arbMech || {}, done = s.arbDone || {};
     const M = {}; ARB_MECH.forEach(m => { M[m.id] = m; });
     const mechOf = r => over[r.id] !== undefined ? over[r.id] : r.mech;
+    // Rozpory dvojice (`arbExtra`) vedle katalogu z ukázky: u dvojice chodí
+    // `ARB_ROWS` prázdné, takže bez zakládání by tu nikdy nebylo co rozhodnout.
+    const ARB = ARB_ROWS.concat(s.arbExtra || []);
     const decs = s.decs === null || s.decs === undefined ? DESK().DEC_LIST : s.decs;
-    const open = ARB_ROWS.filter(r => !done[r.id]);
+    const open = ARB.filter(r => !done[r.id]);
     const missing = open.filter(r => !mechOf(r));
     const oldest = open.slice().sort((a, b) => b.days - a.days)[0];
     const run = r => {
@@ -400,9 +418,11 @@
       const prevD = done, prevDec = decs;
       const patch = { arbDone: Object.assign({}, done, { [r.id]: { pick: pick, why: why, mech: m.name, when: 'právě teď' } }) };
       if (mid !== 'delay') {
+        // Mechanismus patří do `why`: `by` se na serveru rozpadá na „spolu / kdo",
+        // takže „Arbitr · Los" se při dalším načtení ztratilo a zbylo „oba".
         patch.decs = [{
-          id: 'r' + Date.now(), title: r.what + ' → ' + pick, date: 'dnes', by: 'Arbitr · ' + m.name, status: 'platí',
-          why: [why, 'Rozhodl mechanismus dohodnutý předem. Nikdo z vás nemusel druhého přesvědčit.'],
+          id: 'r' + Date.now(), title: r.what + ' → ' + pick, date: 'dnes', by: KR(DVA(this)[0]) + ' a ' + KR(DVA(this)[1]), status: 'platí',
+          why: [why, 'Rozhodl ' + m.name.toLowerCase() + ' — mechanismus dohodnutý předem. Nikdo z vás nemusel druhého přesvědčit.'],
           rejected: [pick === r.optA ? r.optM : r.optA], review: 'za rok'
         }].concat(decs);
       }
@@ -411,9 +431,10 @@
         { icon: m.icon, undo: () => this.setState({ arbDone: prevD, decs: prevDec }) });
     };
     return {
-      arbHead: missing.length
-        ? this.pl(missing.length, 'rozpor bez mechanismu', 'rozpory bez mechanismu', 'rozporů bez mechanismu')
-        : 'Každý otevřený rozpor má svůj mechanismus',
+      arbHead: !ARB.length ? 'Zatím žádný zapsaný rozpor'
+        : missing.length
+          ? this.pl(missing.length, 'rozpor bez mechanismu', 'rozpory bez mechanismu', 'rozporů bez mechanismu')
+          : 'Každý otevřený rozpor má svůj mechanismus',
       arbNote: 'Mechanismus se vybírá, dokud jste v pohodě. Ve chvíli, kdy se nemůžete dohodnout, se o něm už nehlasuje — jen se spustí. To je celý trik.',
       arbBig: String(open.length),
       arbOldest: oldest
@@ -421,9 +442,9 @@
         : 'Nic otevřeného.',
       arbMechs: ARB_MECH.map(m => ({
         name: m.name, how: m.how, icon: m.icon,
-        used: ARB_ROWS.filter(r => mechOf(r) === m.id).length + '×'
+        used: ARB.filter(r => mechOf(r) === m.id).length + '×'
       })),
-      arbRows: ARB_ROWS.map(r => {
+      arbRows: ARB.map(r => {
         const mid = mechOf(r), m = M[mid], v = done[r.id];
         return {
           what: r.what, area: r.area, days: r.days + ' dní otevřené',
@@ -457,7 +478,32 @@
       }),
       arbSettled: Object.keys(done).length
         ? this.pl(Object.keys(done).length, 'rozpor už padl', 'rozpory už padly', 'rozporů už padlo') + ' mechanismem — bez jediného přesvědčování.'
-        : 'Zatím nic nepadlo mechanismem. Všechno se pořád řeší ručně.'
+        : 'Zatím nic nepadlo mechanismem. Všechno se pořád řeší ručně.',
+      /*
+       * Zapsat rozpor. Bez tohohle byla celá obrazovka u dvojice prázdná:
+       * `ARB_ROWS` chodí ze serveru prázdné a žádná cesta, jak rozpor přidat,
+       * neexistovala — mechanismus se tedy nedal na nic použít.
+       */
+      arbNewWhat: s.arbW || '', arbNewArea: s.arbAr || '', arbNewA: s.arbOA || '', arbNewM: s.arbOM || '',
+      arbSetWhat: e => this.setState({ arbW: e.target.value }),
+      arbSetArea: e => this.setState({ arbAr: e.target.value }),
+      arbSetA: e => this.setState({ arbOA: e.target.value }),
+      arbSetM: e => this.setState({ arbOM: e.target.value }),
+      arbAddOff: !((s.arbW || '').trim() && (s.arbOA || '').trim() && (s.arbOM || '').trim()),
+      arbAddOp: (s.arbW || '').trim() && (s.arbOA || '').trim() && (s.arbOM || '').trim() ? 1 : .45,
+      arbAdd: () => {
+        const co = (s.arbW || '').trim(), a = (s.arbOA || '').trim(), m = (s.arbOM || '').trim();
+        if (!co || !a || !m) { this.toast('Napište, o co jde, a obě varianty', { icon: 'ph-pencil-simple', silent: true }); return; }
+        const prev = s.arbExtra || [];
+        const radek = {
+          id: 'a' + Date.now(), what: co, area: (s.arbAr || '').trim() || 'bez oblasti',
+          optA: a, optM: m, owner: this.meWho(), stake: 0, lossA: 3, lossM: 3, days: 0,
+          mech: null, note: 'Mechanismus vyberte teď, dokud jste v pohodě.'
+        };
+        this.setState({ arbExtra: [radek].concat(prev), arbW: '', arbAr: '', arbOA: '', arbOM: '' });
+        this.toast('„' + co + '“ je mezi rozpory · vyberte mechanismus', { icon: 'ph-scales', undo: () => this.setState({ arbExtra: prev }) });
+      },
+      arbRowsEmpty: !ARB.length
     };
   },
 
@@ -517,10 +563,13 @@
             set: () => { const prev = srcOver; this.setState({ surpSrc: Object.assign({}, srcOver, { [d.id]: x }) }); this.toast('„' + d.what + '“ → ' + SRC[x][0], { icon: 'ph-tag', undo: () => this.setState({ surpSrc: prev }) }); }
           })),
           canPlan: k !== 'surprise',
+          // Vyhrazené částky jsou cíle rozpočtu ze serveru; tohle je jen vyřadí
+          // z překvapení. Dřív hláška tvrdila, že se tam částka přesunula — a ona
+          // zmizela z překvapení a nikde se neobjevila.
           plan: () => {
             const prev = moved;
             this.setState({ surpMoved: Object.assign({}, moved, { [d.id]: true }), budTab: 2 });
-            this.toast('„' + d.what + '“ přesunuto do vyhrazených částek · ' + this.kc(d.amount) + ' ročně', { icon: 'ph-arrow-square-out', undo: () => this.setState({ surpMoved: prev }) });
+            this.toast('„' + d.what + '“ vyřazeno z překvapení · vyhrazenou částku ' + this.kc(d.amount) + ' si tu založte', { icon: 'ph-arrow-square-out', undo: () => this.setState({ surpMoved: prev }) });
           },
           origin: () => this.setState({ route: 'x-transakce' })
         };
@@ -553,7 +602,8 @@
     const pickId = s.verPick || (VERS[0] || {}).id;
     const row = VERS.find(v => v.id === pickId) || VERS[0] || { id: '', title: 'Zatím žádné rozhodnutí s verzemi', unit: '', money: false, route: 'x-rozhodnuti', steps: [] };
     const steps = row.steps.concat(extra[pickId] || []);
-    const fmt = v => row.money ? this.kc(v) : v + ' ' + row.unit;
+    // Bez jednotky se neslepuje „5000 " s mezerou navíc.
+    const fmt = v => row.money ? this.kc(v) : (row.unit ? v + ' ' + row.unit : String(v));
     const vals = steps.map(x => x.v);
     const min = vals.length ? Math.min.apply(null, vals) : 0, max = vals.length ? Math.max.apply(null, vals) : 0;
     const span = Math.max(1, max - min);
@@ -573,7 +623,11 @@
         go: () => this.setState({ verPick: v.id })
       })),
       verTitle: row.title,
-      verHead: !steps.length ? 'Zatím bez verzí — první zapíšete níž' : 'Od ' + fmt(first) + ' k ' + fmt(last) + ' · ' + this.pl(steps.length, 'verze', 'verze', 'verzí'),
+      // Bez rozhodnutí není ke které verzi psát — formulář by ukládal do `verSteps[undefined]`.
+      verCanAdd: !!VERS.length,
+      verNoRows: !VERS.length,
+      verHead: !VERS.length ? 'Zatím žádné rozhodnutí, které by mělo verze. Vznikají v Rozhodnutích — cesta k číslu se pak skládá sama.'
+        : !steps.length ? 'Zatím bez verzí — první zapíšete níž' : 'Od ' + fmt(first) + ' k ' + fmt(last) + ' · ' + this.pl(steps.length, 'verze', 'verze', 'verzí'),
       verNote: 'Výsledek si každý pamatuje. Cestu k němu ne — a přesně tam je vidět, kdo ustoupil a o kolik. Tenhle záznam nikdo nepíše, skládá se ze zápisů.',
       verNet: steps.length < 2 ? '' : (last - first === 0 ? 'Skončili jste tam, kde jste začali' : 'Čistý posun ' + (last > first ? '+' : '−') + fmt(Math.abs(last - first))) + ' po ' + this.pl(steps.length - 1, 'změně', 'změnách', 'změnách') + '.',
       verSteps: steps.map((x, i) => {
@@ -640,7 +694,8 @@
      * součet souborů v knihovně, jen když ho server zná; platby jsou text.
      */
     const G = DESK();
-    const ukazka = !(G.DVOJICE || []).length;
+    // Jedno jméno v prostoru = jména se dokreslují z ukázky (viz `dva()`).
+    const ukazka = (G.DVOJICE || []).length < 2;
     const statistiky = G.LIBSTATS || {};
     const cnt = k => k === 'veta' ? this.vetoList().filter(v => v.who === who).length
       : k === 'prom' ? this.promList().filter(p => p.who === who || p.to === who).length
@@ -788,7 +843,14 @@
         stateColor: r.w >= 3.5 ? 'var(--g-mag)' : r.w >= 2 ? 'var(--g-warn)' : 'var(--g-ink3)',
         lighter: () => { const prev = adj; this.setState({ svedAdj: Object.assign({}, adj, { [r.id]: (adj[r.id] || 0) - 1 }) }); this.toast('„' + r.what + '“ — o bod lehčí', { icon: 'ph-feather', undo: () => this.setState({ svedAdj: prev }) }); },
         heavier: () => { const prev = adj; this.setState({ svedAdj: Object.assign({}, adj, { [r.id]: (adj[r.id] || 0) + 1 }) }); this.toast('„' + r.what + '“ — pořád to tíží. Zapsáno.', { icon: 'ph-anchor', undo: () => this.setState({ svedAdj: prev }) }); },
-        talk: () => { this.setState({ route: 'x-nedele' }); this.toast('„' + r.what + '“ půjde na nedělní desetiminutovku', { icon: 'ph-chat-circle-dots' }); },
+        // Téma se opravdu zapíše na nedělní agendu (`nedTopics`) — dřív jen hláška
+        // a přepnutí obrazovky, kde o něm agenda nevěděla.
+        talk: () => {
+          const tem = this.state.nedTopics || [];
+          if (tem.indexOf(r.what) >= 0) { this.setState({ route: 'x-nedele' }); this.toast('„' + r.what + '“ už na nedělní agendě je', { icon: 'ph-timer', silent: true }); return; }
+          this.setState({ nedTopics: tem.concat([r.what]), route: 'x-nedele' });
+          this.toast('„' + r.what + '“ je na nedělní desetiminutovce', { icon: 'ph-chat-circle-dots', undo: () => this.setState({ nedTopics: tem }) });
+        },
         open: () => this.setState({ route: 'x-rozhodnuti', dcTab: 'mem' })
       })),
       svedFoot: 'Rozhodnutí, které bylo v té době správné, může tížit stejně jako to špatné. Tahle tabulka to nerozsuzuje — jen to nedovolí zapomenout.'
@@ -799,7 +861,8 @@
   fightVals: function () {
     const s = this.state;
     const add = s.fsAdd || {}, tries = s.fsTry || {}, wins = s.fsWin || {};
-    const rows = FIGHT_START.map(f => {
+    // Spouštěče dvojice (`fsExtra`); ze serveru chodí `FIGHT_START` prázdné.
+    const rows = FIGHT_START.concat(s.fsExtra || []).map(f => {
       const n = f.n + (add[f.id] || 0);
       const tn = f.antiN + (tries[f.id] || 0), tw = f.antiWin + (wins[f.id] || 0);
       return Object.assign({}, f, { n: n, tn: tn, tw: tw, cost: Math.round(n * f.esc * 10) / 10, rate: tn ? tw / tn : 0 });
@@ -811,7 +874,8 @@
     const best = rows.slice().sort((a, b) => b.rate - a.rate)[0];
     return {
       fsBig: String(totalN),
-      fsHead: !rows.length ? 'Zatím žádný zapsaný spouštěč' : 'Za půl roku ' + this.pl(totalN, 'začátek', 'začátky', 'začátků') + ' · ' + this.pl(rows.length, 'spouštěč', 'spouštěče', 'spouštěčů'),
+      // Bez „za půl roku": u zapsaných spouštěčů dvojice nikdo žádné období neměří.
+      fsHead: !rows.length ? 'Zatím žádný zapsaný spouštěč' : this.pl(totalN, 'zapsaný začátek', 'zapsané začátky', 'zapsaných začátků') + ' · ' + this.pl(rows.length, 'spouštěč', 'spouštěče', 'spouštěčů'),
       fsNote: 'Hádka nezačíná tématem. Začíná slovem, otázkou nebo tichem — a to se dá spočítat. Jakmile spouštěč má jméno, dá se na něj připravit odpověď dopředu.',
       fsPredict: top
         ? 'Předpověď: až padne „' + top.trig + '“, eskaluje to v ' + Math.round(top.esc * 100) + ' % případů. Co zabralo místo toho: ' + top.anti.toLowerCase() + ' — ' + top.tw + ' z ' + top.tn + '.'
@@ -833,9 +897,52 @@
         again: () => { const prev = add; this.setState({ fsAdd: Object.assign({}, add, { [f.id]: (add[f.id] || 0) + 1 }) }); this.toast('„' + f.trig + '“ — zapsáno znovu · ' + (f.n + 1) + '×', { icon: 'ph-warning-circle', undo: () => this.setState({ fsAdd: prev }) }); },
         worked: () => { const pt = tries, pw = wins; this.setState({ fsTry: Object.assign({}, tries, { [f.id]: (tries[f.id] || 0) + 1 }), fsWin: Object.assign({}, wins, { [f.id]: (wins[f.id] || 0) + 1 }) }); this.toast('Zabralo to · úspěšnost protiléku roste', { icon: 'ph-check-circle', undo: () => this.setState({ fsTry: pt, fsWin: pw }) }); },
         failed: () => { const pt = tries; this.setState({ fsTry: Object.assign({}, tries, { [f.id]: (tries[f.id] || 0) + 1 }) }); this.toast('Nezabralo. Taky výsledek — protilék se možná nehodí na tenhle spouštěč.', { icon: 'ph-x-circle', undo: () => this.setState({ fsTry: pt }) }); },
-        rule: () => { this.setState({ route: 'x-rozhodnuti', dcTab: 'exp' }); this.toast('„' + f.anti + '“ → mezi vypršovací domluvy na rok', { icon: 'ph-hourglass' }); }
+        /*
+         * Protilék se doopravdy zapíše mezi vypršovací domluvy.
+         *
+         * Dřív jen hláška a přepnutí na záložku, kde u dvojice nikdy nic není:
+         * `EXPIRE` ze serveru chodí prázdné a žádná cesta, jak tam něco
+         * dostat, neexistovala. Teď to je řádek v `expExtra` (sdílený stav,
+         * vyhodnocuje ho i `galerie:expire`).
+         */
+        rule: () => {
+          const prev = this.state.expExtra || [];
+          if (prev.some(x => x.rule === f.anti)) {
+            this.setState({ route: 'x-rozhodnuti', dcTab: 'exp' });
+            this.toast('„' + f.anti + '“ už mezi vypršovacími domluvami je', { icon: 'ph-hourglass', silent: true });
+            return;
+          }
+          const d = this.dnes ? this.dnes() : new Date();
+          const radek = {
+            id: 'e' + Date.now(), rule: f.anti, why: 'Protilék na „' + f.trig + '“',
+            made: d.getDate() + '. ' + (d.getMonth() + 1) + '. ' + d.getFullYear(), days: 365, eternal: false
+          };
+          this.setState({ expExtra: [radek].concat(prev), route: 'x-rozhodnuti', dcTab: 'exp' });
+          this.toast('„' + f.anti + '“ je mezi vypršovacími domluvami · platí rok, pak zmizí sama', { icon: 'ph-hourglass', undo: () => this.setState({ expExtra: prev }) });
+        }
       })),
       fsLoop: () => this.setState({ route: 'x-rozhodnuti', dcTab: 'loop' }),
+      /*
+       * Zapsat spouštěč. Bez tohohle byla obrazovka u dvojice prázdná a
+       * protilék nebylo z čeho udělat vypršovací domluvou.
+       */
+      fsRowsEmpty: !rows.length,
+      fsNewTrig: s.fsT || '', fsNewAnti: s.fsA || '',
+      fsSetTrig: e => this.setState({ fsT: e.target.value }),
+      fsSetAnti: e => this.setState({ fsA: e.target.value }),
+      fsWho: s.fsWho || 'oba',
+      fsWhoOpts: [{ value: 'oba', label: 'začínají oba' }, { value: jA, label: 'začíná ' + KR(jA) }, { value: jM, label: 'začíná ' + KR(jM) }],
+      fsSetWho: e => this.setState({ fsWho: e.target.value }),
+      fsAddOff: !((s.fsT || '').trim() && (s.fsA || '').trim()),
+      fsAddOp: (s.fsT || '').trim() && (s.fsA || '').trim() ? 1 : .45,
+      fsAdd: () => {
+        const trig = (s.fsT || '').trim(), anti = (s.fsA || '').trim();
+        if (!trig || !anti) { this.toast('Napište spouštěč i to, co místo něj zabralo', { icon: 'ph-pencil-simple', silent: true }); return; }
+        const prev = s.fsExtra || [];
+        const radek = { id: 'f' + Date.now(), trig: trig, kind: 'zapsané', anti: anti, who: s.fsWho || 'oba', n: 1, esc: 0.5, antiN: 0, antiWin: 0 };
+        this.setState({ fsExtra: [radek].concat(prev), fsT: '', fsA: '' });
+        this.toast('„' + trig + '“ je mezi spouštěči · další případ přidáte tlačítkem „Zase to začalo"', { icon: 'ph-warning-circle', undo: () => this.setState({ fsExtra: prev }) });
+      },
       fsFoot: 'Spouštěč není vina. Je to informace o tom, kde je vaše konverzace nejtenčí — a jediné místo, kde má cenu měnit formu, ne obsah.'
     };
   },
@@ -882,7 +989,18 @@
           talk90: () => { const prev = talk; this.setState({ quartTalk: Object.assign({}, talk, { [r.id]: 90 }) }); this.toast(r.q + ' · devadesát minut bez agendy proběhlo', { icon: 'ph-chat-circle-dots', undo: () => this.setState({ quartTalk: prev }) }); },
           talkShort: () => { const prev = talk; this.setState({ quartTalk: Object.assign({}, talk, { [r.id]: 45 }) }); this.toast(r.q + ' · 45 minut. Půlka je pořád víc než nic.', { icon: 'ph-clock', undo: () => this.setState({ quartTalk: prev }) }); },
           canTook: r.state === 'done' && !r.took,
-          later: () => { this.setState({ route: 'x-domacnost', hsTab: 'later' }); this.toast('Co z rozhovoru vyšlo → Až budeme mít čas', { icon: 'ph-arrow-square-out' }); }
+          // Věta z rozhovoru se zapíše do „Až budeme mít čas" (`hsLater`),
+          // ne jen ohlásí — seznam o ní dřív nevěděl.
+          later: () => {
+            const co = (r.took || '').trim();
+            if (!co) { this.setState({ route: 'x-domacnost', hsTab: 'later' }); this.toast('Nejdřív napište, co z rozhovoru vyšlo', { icon: 'ph-pencil-simple', silent: true }); return; }
+            const prev = this.laterAll();
+            if (prev.some(x => x.text === co)) { this.setState({ route: 'x-domacnost', hsTab: 'later' }); this.toast('„' + co + '“ už v seznamu je', { icon: 'ph-info', silent: true }); return; }
+            const d = this.dnes ? this.dnes() : new Date();
+            const iso = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+            this.setState({ hsLater: [{ id: 'w' + Date.now(), text: co, by: this.meWho(), added: iso, state: 'open' }].concat(prev), route: 'x-domacnost', hsTab: 'later' });
+            this.toast('„' + co + '“ → Až budeme mít čas', { icon: 'ph-arrow-square-out', undo: () => this.setState({ hsLater: prev }) });
+          }
         };
       }),
       quartNewWhen: s.quartW || '', quartNewA: s.quartA || '', quartNewM: s.quartM || '',
@@ -966,7 +1084,8 @@
             this.setState({ indepLearn: Object.assign({}, learn, { [r.id]: true }) });
             this.toast('„' + r.what + '“ předáno · bolest ' + r.pain + ' → ' + Math.max(1, r.pain - 2), { icon: 'ph-graduation-cap', undo: () => this.setState({ indepLearn: prev }) });
           },
-          swap: () => { const prev = swap; this.setState({ indepSwap: Object.assign({}, swap, { [r.id]: !swap[r.id] }) }); this.toast('„' + r.what + '“ na měsíc přebírá ' + KR(r.holder === jA ? jM : jA), { icon: 'ph-user-switch', undo: () => this.setState({ indepSwap: prev }) }); },
+          // Prohození platí, dokud ho někdo nevrátí — žádný měsíc se nikde nepočítá.
+          swap: () => { const prev = swap; this.setState({ indepSwap: Object.assign({}, swap, { [r.id]: !swap[r.id] }) }); this.toast(swap[r.id] ? '„' + r.what + '“ je zpátky u ' + PAD(this, r.holder === jA ? jM : jA, 'gen') : '„' + r.what + '“ teď drží ' + KR(r.holder === jA ? jM : jA) + ' · vrátit jde stejným tlačítkem', { icon: 'ph-user-switch', undo: () => this.setState({ indepSwap: prev }) }); },
           vault: () => { this.setState({ route: 'x-trezor' }); this.toast('Co k „' + r.what + '“ patří, má být v trezoru', { icon: 'ph-lock-key' }); }
         }))
       })),
@@ -1039,7 +1158,9 @@
       const p = String(str).split('.').map(x => parseInt(x.trim(), 10));
       return p.length === 3 ? new Date(p[2], p[1] - 1, p[0]) : null;
     };
-    const rows = EXPIRE.map(e => {
+    // Vlastní domluvy dvojice (`expExtra`) vedle katalogu z ukázky — u dvojice
+    // je `EXPIRE` prázdné a bez tohohle by tu nikdy nic nebylo.
+    const rows = EXPIRE.concat(s.expExtra || []).map(e => {
       const made = parseCs(e.made);
       const term = 365 * (1 + (ren[e.id] || 0));
       const left = made ? Math.round(term - (today - made) / dayMs) : e.days + (ren[e.id] || 0) * 365;

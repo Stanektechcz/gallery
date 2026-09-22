@@ -9399,8 +9399,9 @@ class Component extends DCLogic {
             const patch = { arbDone: Object.assign({}, arbDone, { [r.id]: { pick: pick, why: why, mech: mName(mid), when: 'právě teď' } }) };
             if (mid !== 'delay') {
               patch.decs = [{
-                id: 'r' + Date.now(), title: r.what + ' → ' + pick, date: 'dnes', by: 'Arbitr · ' + mName(mid), status: 'platí',
-                why: [why, 'Rozhodl mechanismus dohodnutý předem. Nikdo z vás nemusel druhého přesvědčit.'],
+                // Mechanismus do `why`; `by` se na serveru rozpadá na „spolu / kdo".
+                id: 'r' + Date.now(), title: r.what + ' → ' + pick, date: 'dnes', by: kr(dva[0]) + ' a ' + kr(dva[1]), status: 'platí',
+                why: [why, 'Rozhodl ' + mName(mid).toLowerCase() + ' — mechanismus dohodnutý předem. Nikdo z vás nemusel druhého přesvědčit.'],
                 rejected: [pick === r.optA ? r.optM : r.optA], review: 'za rok'
               }].concat(decs);
             }

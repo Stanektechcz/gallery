@@ -349,6 +349,42 @@
     });
   } catch (e) {}
 
+  /*
+   * Bez odpovědi z `/api/mechanisms` nesmí dvojici zůstat ukázka.
+   *
+   * Endpoint posílá sbírky prázdné (MechanismController::PRAZDNE) — aplikace
+   * pro ně tabulky nemá. Když ale odpoví 503 (chybí `mechanismy.json`) nebo
+   * spadne síť, klient si podle komentáře v api „nechá vlastní data ze
+   * souboru" — a to je život ukázkové dvojice: postoj k dětem, zdraví rodičů,
+   * jmenovitě kdo se o ně bojí. Přihlášená dvojice to viděla jako svoje.
+   * Tady se sbírky vyprázdní na místě, ve stejném tvaru, jaký posílá server.
+   */
+  var MECH_PRAZDNE = {
+    DAY_LOAD: [], DAY_HIST: [], BLIZ: { weeks: [], init: {}, no: {}, block: [] },
+    SOLO_MONEY: [], SOLO_COST: { rent: 0, life: 0, alone: 0 },
+    KIDS: { pos: [], blockers: [], talks: [] }, PARENTS: [], ARB_ROWS: [],
+    SURP: { pct: 3, spendYear: 0, draws: [] }, VERS: [], SVED: [], FIGHT_START: [],
+    QUART: [], INDEP: [], TRUST: [], EXPIRE: []
+  };
+
+  window.GalerieMechVyprazdni = function () {
+    var m = window.GalerieMech;
+    if (! m || window.GalerieMechZeServeru) return false;
+
+    Object.keys(MECH_PRAZDNE).forEach(function (k) { navlec(m, k, MECH_PRAZDNE[k], true); });
+    // Další spuštění `galerie-mechanismy.js` by ukázku vrátilo zpátky.
+    window.GalerieMechZeServeru = MECH_PRAZDNE;
+
+    return true;
+  };
+
+  /* Přihlášená dvojice (`DVOJICE` ze serveru) a mechanismy pořád ze souboru. */
+  function mechHlidka() {
+    var d = window.GalerieData || {};
+    if (window.GalerieMechZeServeru || ! (d.DVOJICE && d.DVOJICE.length)) return;
+    if (window.GalerieMechVyprazdni() && window.GalerieObnovObrazovku) window.GalerieObnovObrazovku();
+  }
+
   function hlavicky() {
     var h = { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' };
     if (window.GALERIE_API_TOKEN) h['Authorization'] = 'Bearer ' + window.GALERIE_API_TOKEN;
@@ -525,6 +561,9 @@
             if (! navlec(window.GalerieData, klic, b.data[klic], !!uplne[klic])) neslo.push(klic);
           });
 
+          // Jakmile je jasné, že jde o přihlášenou dvojici, ukázkové mechanismy pryč.
+          mechHlidka();
+
           // Aplikace už běží; překreslit, ať se data objeví bez čekání na klik.
           if (window.GalerieObnovObrazovku) window.GalerieObnovObrazovku();
 
@@ -587,6 +626,9 @@
       obsah[klic] = [];
       navlec(window.GalerieData, klic, [], true);
     });
+
+    // Jakmile víme, že jde o přihlášenou dvojici, ukázkové mechanismy pryč.
+    mechHlidka();
 
     if (window.GalerieObnovObrazovku) window.GalerieObnovObrazovku();
 

@@ -146,25 +146,40 @@ class UpozorneniTest extends TestCase
 
     public function test_domluva_po_lhute_vyprsi(): void
     {
-        $this->mechanismy([
+        $this->stav(['expExtra' => [
             ['id' => 'e1', 'rule' => 'Nekomentovat nákupy pod tisíc', 'made' => '1. 1. 2020', 'days' => 0, 'eternal' => false],
-        ]);
-
-        $this->stav([]);
+        ]]);
 
         $this->artisan('galerie:expire')->expectsOutputToContain('Vypršelo 1')->assertSuccessful();
 
         $this->assertTrue($this->prectiStav()->data['expDead']['e1']);
     }
 
+    /**
+     * Domluvy ukázkové dvojice do stavu skutečné dvojice nepatří.
+     *
+     * Příkaz četl `EXPIRE` z `mechanismy.json` a zapisoval `expDead` pro cizí
+     * id do stavu každé dvojice — ta přitom tahle pravidla nikdy neviděla.
+     */
+    public function test_pravidla_z_ukazky_se_nevyhodnocuji(): void
+    {
+        $this->mechanismy([
+            ['id' => 'u1', 'rule' => 'Pravidlo z ukázky', 'made' => '1. 1. 2010', 'days' => 0, 'eternal' => false],
+        ]);
+
+        $this->stav(['joy' => ['něco']]);
+
+        $this->artisan('galerie:expire')->expectsOutputToContain('Nic nevypršelo')->assertSuccessful();
+
+        $this->assertArrayNotHasKey('expDead', $this->prectiStav()->data);
+    }
+
     /** Domluva, které lhůta ještě neběží, zůstane. */
     public function test_bezici_domluva_zustane(): void
     {
-        $this->mechanismy([
+        $this->stav(['expExtra' => [
             ['id' => 'e1', 'rule' => 'Vážné věci se neřeší po 21:00', 'made' => now()->format('j. n. Y'), 'days' => 365, 'eternal' => false],
-        ]);
-
-        $this->stav([]);
+        ]]);
 
         $this->artisan('galerie:expire')->expectsOutputToContain('Nic nevypršelo')->assertSuccessful();
 
@@ -174,11 +189,10 @@ class UpozorneniTest extends TestCase
     /** Obnovení posune lhůtu o rok — to je celý smysl toho tlačítka. */
     public function test_obnovena_domluva_nevyprsi(): void
     {
-        $this->mechanismy([
-            ['id' => 'e1', 'rule' => 'Kdo vaří, nemyje', 'made' => now()->subDays(400)->format('j. n. Y'), 'days' => 0, 'eternal' => false],
+        $this->stav([
+            'expExtra' => [['id' => 'e1', 'rule' => 'Kdo vaří, nemyje', 'made' => now()->subDays(400)->format('j. n. Y'), 'days' => 0, 'eternal' => false]],
+            'expRen' => ['e1' => 1],
         ]);
-
-        $this->stav(['expRen' => ['e1' => 1]]);
 
         $this->artisan('galerie:expire')->expectsOutputToContain('Nic nevypršelo')->assertSuccessful();
 
@@ -188,12 +202,13 @@ class UpozorneniTest extends TestCase
     /** Trvalá domluva nevyprší nikdy — ani ta, kterou pár udělal trvalou dodatečně. */
     public function test_trvala_domluva_nevyprsi(): void
     {
-        $this->mechanismy([
-            ['id' => 'e1', 'rule' => 'Nikdy na sebe nekřičet před rodinou', 'made' => '1. 1. 2010', 'days' => 0, 'eternal' => true],
-            ['id' => 'e2', 'rule' => 'Kdo vaří, nemyje', 'made' => '1. 1. 2010', 'days' => 0, 'eternal' => false],
+        $this->stav([
+            'expExtra' => [
+                ['id' => 'e1', 'rule' => 'Nikdy na sebe nekřičet před rodinou', 'made' => '1. 1. 2010', 'days' => 0, 'eternal' => true],
+                ['id' => 'e2', 'rule' => 'Kdo vaří, nemyje', 'made' => '1. 1. 2010', 'days' => 0, 'eternal' => false],
+            ],
+            'expEt' => ['e2' => true],
         ]);
-
-        $this->stav(['expEt' => ['e2' => true]]);
 
         $this->artisan('galerie:expire')->expectsOutputToContain('Nic nevypršelo')->assertSuccessful();
 
@@ -208,11 +223,9 @@ class UpozorneniTest extends TestCase
      */
     public function test_druhy_beh_nezvedne_rev(): void
     {
-        $this->mechanismy([
+        $this->stav(['expExtra' => [
             ['id' => 'e1', 'rule' => 'Kdo vaří, nemyje', 'made' => '1. 1. 2010', 'days' => 0, 'eternal' => false],
-        ]);
-
-        $this->stav([]);
+        ]]);
 
         $this->artisan('galerie:expire')->assertSuccessful();
         $rev = $this->prectiStav()->rev;

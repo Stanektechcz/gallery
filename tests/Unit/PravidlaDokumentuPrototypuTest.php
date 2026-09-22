@@ -612,6 +612,38 @@ class PravidlaDokumentuPrototypuTest extends TestCase
         $this->assertStringContainsString("const rid = r[7] || ('series-' + i);", $telefon);
     }
 
+    /**
+     * Mechanismy: bez serverové verze se ukázka vyprázdní a tlačítka nelžou.
+     *
+     * `/api/mechanisms` posílá sbírky prázdné; při 503 nebo výpadku sítě
+     * zůstával klientovi život ukázkové dvojice (děti, rodiče, přátelé).
+     */
+    public function test_mechanismy_bez_serveru_a_bez_hluchych_tlacitek(): void
+    {
+        $hlavicka = (string) file_get_contents(dirname(__DIR__, 2).'/resources/views/galerie/hlavicka.blade.php');
+        $this->assertStringContainsString('window.GalerieMechVyprazdni = function ()', $hlavicka);
+        $this->assertStringContainsString('function mechHlidka()', $hlavicka);
+
+        $logika = (string) file_get_contents(dirname(__DIR__, 2).'/public/galerie-mechanismy-logika.js');
+        // Zakládání tam, kde dřív nebylo co rozhodnout ani co vyprší.
+        $this->assertStringContainsString('const ARB = ARB_ROWS.concat(s.arbExtra || []);', $logika);
+        $this->assertStringContainsString('const rows = FIGHT_START.concat(s.fsExtra || []).map(f => {', $logika);
+        $this->assertStringContainsString('const rows = EXPIRE.concat(s.expExtra || []).map(e => {', $logika);
+        // Hlášky, které dřív nic nezapsaly.
+        $this->assertStringContainsString('nedTopics: tem.concat([r.what])', $logika);
+        $this->assertStringContainsString('hsLater: [{ id: ', $logika);
+        $this->assertStringNotContainsString('přesunuto do vyhrazených částek', $logika);
+        $this->assertStringNotContainsString("' na měsíc přebírá '", $logika);
+        // Prázdné seznamy neshodí obrazovku ani nevypíšou nesmysl.
+        $this->assertStringContainsString('pos.length > 1 && pos[0].stance === pos[1].stance', $logika);
+        $this->assertStringContainsString('verCanAdd: !!VERS.length', $logika);
+
+        // Server vyhodnocuje domluvy té které dvojice, ne katalog z ukázky.
+        $prikaz = (string) file_get_contents(dirname(__DIR__, 2).'/app/Console/Commands/GalerieExpireCommand.php');
+        $this->assertStringContainsString("\$data['expExtra']", $prikaz);
+        $this->assertStringNotContainsString('mechanisms_path', $prikaz);
+    }
+
     /** Dialog účtu (hesla, klíč 2FA) a nastavení upozornění nejdou do sdíleného stavu. */
     public function test_dialog_uctu_neni_ve_sdilenem_stavu(): void
     {

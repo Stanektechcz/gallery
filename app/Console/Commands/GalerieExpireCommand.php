@@ -5,7 +5,6 @@ namespace App\Console\Commands;
 use App\Models\CoupleState;
 use Carbon\CarbonImmutable;
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\File;
 
 /**
  * Vypršovací domluvy: pravidlo, které nikdo neobnovil, se samo smaže.
@@ -20,9 +19,10 @@ use Illuminate\Support\Facades\File;
  * smysl téhle funkce a upozornění by ho zrušilo.
  *
  * Scaffold prototypu tu snižoval čítač `expDays`. Takový klíč ale v prototypu
- * neexistuje: klient drží `expRen` (počet obnovení), `expEt` (trvalost) a
- * `expDead` (co už vypršelo), a zbývající dny počítá z data vzniku. Příkaz proto
- * počítá stejně jako `expVals()` v `galerie-mechanismy-logika.js`.
+ * neexistuje: klient drží `expExtra` (domluvy dvojice), `expRen` (počet
+ * obnovení), `expEt` (trvalost) a `expDead` (co už vypršelo), a zbývající dny
+ * počítá z data vzniku. Příkaz proto počítá stejně jako `expVals()`
+ * v `galerie-mechanismy-logika.js` — a jen nad domluvami té které dvojice.
  */
 class GalerieExpireCommand extends Command
 {
@@ -35,19 +35,26 @@ class GalerieExpireCommand extends Command
 
     public function handle(): int
     {
-        $pravidla = $this->pravidla();
-
-        if ($pravidla === []) {
-            $this->warn('Data mechanismů nejsou k dispozici — nic k vyhodnocení.');
-
-            return self::SUCCESS;
-        }
-
         $dnes = CarbonImmutable::today();
         $vyprselo = 0;
 
-        CoupleState::query()->each(function (CoupleState $stav) use ($pravidla, $dnes, &$vyprselo) {
+        CoupleState::query()->each(function (CoupleState $stav) use ($dnes, &$vyprselo) {
             $data = $stav->data ?? [];
+            /*
+             * Domluvy dvojice, ne katalog z ukázky.
+             *
+             * Příkaz četl `EXPIRE` z `mechanismy.json` — tedy pravidla ukázkové
+             * dvojice. Skutečná dvojice je nikdy nevidí (endpoint posílá sbírky
+             * prázdné), ale do jejího stavu se zapisovalo `expDead` pro cizí id
+             * `e1`…`e6` a příkaz hlásil „Vypršelo N domluv", které neexistují.
+             * Vlastní domluvy drží `expExtra` (zakládá je Začátek hádky).
+             */
+            $pravidla = array_values(array_filter((array) ($data['expExtra'] ?? []), 'is_array'));
+
+            if ($pravidla === []) {
+                return;
+            }
+
             $obnoveni = $data['expRen'] ?? [];
             $trvale = $data['expEt'] ?? [];
             $mrtve = $data['expDead'] ?? [];
@@ -117,19 +124,5 @@ class GalerieExpireCommand extends Command
         }
 
         return CarbonImmutable::createFromDate((int) $casti[2], (int) $casti[1], (int) $casti[0])->startOfDay();
-    }
-
-    /** @return list<array<string, mixed>> */
-    private function pravidla(): array
-    {
-        $cesta = config('galerie.mechanisms_path');
-
-        if (! $cesta || ! File::exists($cesta)) {
-            return [];
-        }
-
-        $data = json_decode(File::get($cesta), true);
-
-        return is_array($data['EXPIRE'] ?? null) ? $data['EXPIRE'] : [];
     }
 }
