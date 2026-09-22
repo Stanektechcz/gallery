@@ -10,6 +10,7 @@ use App\Models\CouplePromise;
 use App\Models\CoupleVeto;
 use App\Models\CoupleVetoProposal;
 use App\Models\GallerySpace;
+use App\Support\Cas;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -581,7 +582,9 @@ class Vztah implements MaPrazdneKolekce, PoskytovatelObsahu
     /** „dnes 7:40", „včera 20:15", jinak datum. */
     private function kdy(CarbonImmutable $kdy): string
     {
-        $dni = (int) $kdy->startOfDay()->diffInDays(CarbonImmutable::now()->startOfDay());
+        // Okamžik (otevřeno, zapsáno) v pásmu dvojice — viz App\Support\Cas.
+        $kdy = Cas::mistni($kdy);
+        $dni = (int) $kdy->startOfDay()->diffInDays(Cas::ted()->startOfDay());
 
         return match (true) {
             $dni === 0 => 'dnes '.$kdy->format('G:i'),

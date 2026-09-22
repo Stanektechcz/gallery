@@ -127,7 +127,8 @@ class ObsahTransakceZalozkyTest extends TestCase
 
         $this->assertCount(1, $z['rows']);
         $this->assertSame('Revolut · import', $z['rows'][0][2]);
-        $this->assertSame('1 importovaná · sync dnes 8:14', $z['foot']);
+        // Synchronizace v 8:14 UTC je v Praze 10:14 (App\Support\Cas).
+        $this->assertSame('1 importovaná · sync dnes 10:14', $z['foot']);
     }
 
     /** Záložky jsou úplné — server je dodává celé. */

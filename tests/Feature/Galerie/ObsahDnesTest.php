@@ -82,7 +82,8 @@ class ObsahDnesTest extends TestCase
 
         $this->assertSame('Makinka Kubíčková', $nahrani['kdo']);
         $this->assertSame('3 soubory', $nahrani['pocet']);
-        $this->assertSame('dnes v 17:10', $nahrani['kdy']);
+        // Uloženo v UTC (17:10), dvojice čte pražský čas (App\Support\Cas).
+        $this->assertSame('dnes v 19:10', $nahrani['kdy']);
     }
 
     /** Vzpomínky z tohoto dne jsou z minulých let, ne z letoška. */
@@ -131,7 +132,8 @@ class ObsahDnesTest extends TestCase
         $this->assertSame('M', $aktivita[0][0]);
         $this->assertSame('Makinka Kubíčková · nahrání (4 soubory)', $aktivita[0][1]);
         $this->assertSame('Adrian · nový sdílený odkaz', $aktivita[1][1]);
-        $this->assertSame('včera ve 20:00', $aktivita[1][2]);
+        // 20:00 UTC je ve 22:00 v Praze.
+        $this->assertSame('včera ve 22:00', $aktivita[1][2]);
     }
 
     /** Návrh na album je jen tam, kde opravdu leží hromada fotek bez alba. */

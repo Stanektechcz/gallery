@@ -68,6 +68,14 @@ return [
     'timezone' => 'UTC',
 
     /*
+     * Pásmo, ve kterém se čas ukazuje dvojici (App\Support\Cas).
+     *
+     * Ukládá se dál v UTC (`timezone` výš) — přepnout to by posunulo všechny
+     * dosavadní záznamy. Obsah pro obrazovky okamžiky převádí sem.
+     */
+    'display_timezone' => env('APP_TIMEZONE', 'Europe/Prague'),
+
+    /*
     |--------------------------------------------------------------------------
     | Application Locale Configuration
     |--------------------------------------------------------------------------

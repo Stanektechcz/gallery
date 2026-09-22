@@ -11,6 +11,7 @@ use App\Services\Provoz\AdministraceGalerie;
 use App\Services\Provoz\PlanovaneUlohy;
 use App\Services\Provoz\UlozisteGalerie;
 use App\Services\Storage\DriveConnectionResolver;
+use App\Support\Cas;
 use App\Support\SpaceContext;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
@@ -304,7 +305,7 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
             'sezeniPopis' => $sezeni->isEmpty()
                 ? 'Žádné otevřené sezení kromě tohohle'
                 : $this->pocet($sezeni->count(), 'otevřené sezení', 'otevřená sezení', 'otevřených sezení')
-                    .' · naposledy '.CarbonImmutable::createFromTimestamp((int) $sezeni->first()->last_activity)->format('j. n. G:i'),
+                    .' · naposledy '.Cas::mistni((int) $sezeni->first()->last_activity)->format('j. n. G:i'),
         ];
     }
 
@@ -671,7 +672,7 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
     /** „dnes v 8:12" nebo datum — bez přesnosti, kterou aplikace nemá. */
     private function kdy(string $cas): string
     {
-        $kdy = CarbonImmutable::parse($cas);
+        $kdy = Cas::mistni($cas);
 
         return match (true) {
             $kdy->isToday() => 'dnes v '.$kdy->format('G:i'),
@@ -1347,6 +1348,7 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
 
     private function pred(CarbonImmutable $kdy): string
     {
+        $kdy = Cas::mistni($kdy);
         $minut = $kdy->diffInMinutes(now());
 
         return match (true) {
@@ -1563,7 +1565,7 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
             if ($z->state === 'snoozed' && $z->snoozed_until && CarbonImmutable::parse($z->snoozed_until)->isAfter(now())) {
                 $odlozene[] = array_merge([
                     (string) $z->title,
-                    'odloženo do '.CarbonImmutable::parse($z->snoozed_until)->format('j. n.'),
+                    'odloženo do '.Cas::mistni($z->snoozed_until)->format('j. n.'),
                     'odloženo',
                 ], $klic);
 
@@ -1575,7 +1577,7 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
                     (string) $z->title,
                     trim(implode(' · ', array_filter([
                         'vyřešeno',
-                        $z->resolved_at ? CarbonImmutable::parse($z->resolved_at)->format('j. n.') : null,
+                        $z->resolved_at ? Cas::mistni($z->resolved_at)->format('j. n.') : null,
                         $jmena[$z->by_user_id] ?? null,
                     ]))),
                     'hotovo',

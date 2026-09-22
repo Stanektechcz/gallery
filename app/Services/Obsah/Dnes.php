@@ -3,6 +3,7 @@
 namespace App\Services\Obsah;
 
 use App\Models\GallerySpace;
+use App\Support\Cas;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -60,7 +61,8 @@ class Dnes implements PoskytovatelObsahu
         }
 
         $jmena = System::jmenaClenu($prostor);
-        $dnes = CarbonImmutable::now();
+        // Dnešek dvojice, ne serveru: po půlnoci v UTC ještě běží včerejšek (a naopak).
+        $dnes = Cas::ted();
 
         return [
             'DNES' => [
@@ -107,7 +109,7 @@ class Dnes implements PoskytovatelObsahu
             'pocet' => $this->pocet($davka->count(), 'soubor', 'soubory', 'souborů'),
             'album' => $album ? ($album->full_display_path ?: $album->title) : '',
             'albumId' => $album->uuid ?? '',
-            'kdy' => $this->kdy($konec, $dnes),
+            'kdy' => $this->kdy(Cas::mistni($konec), $dnes),
             'ulozeno' => $hotovo === $davka->count()
                 ? 'všechny originály uložené'
                 : $this->pocet($davka->count() - $hotovo, 'soubor se ještě zpracovává', 'soubory se ještě zpracovávají', 'souborů se ještě zpracovává'),
@@ -314,7 +316,7 @@ class Dnes implements PoskytovatelObsahu
             $posledni = $this->media($prostor)->whereNotNull('taken_at')->where('taken_at', '<', $dnes->startOfDay())->max('taken_at');
 
             if ($posledni) {
-                $kdy = CarbonImmutable::parse($posledni);
+                $kdy = Cas::zHodin($posledni);
                 $radky = $this->udalostiDne($prostor, $jmena, $kdy);
             }
         }
@@ -333,30 +335,39 @@ class Dnes implements PoskytovatelObsahu
      */
     private function udalostiDne(GallerySpace $prostor, array $jmena, CarbonImmutable $den): array
     {
-        $od = $den->startOfDay();
+        /*
+         * Den dvojice — a dva druhy času.
+         *
+         * Pořízení fotky je čas podle hodin (EXIF), porovnává se se dnem, jak
+         * ho vidí dvojice. Zprávy, úkoly a hlasovky jsou okamžiky v UTC: jejich
+         * okno se na UTC přepočítá a čas v řádku se ukáže v pásmu dvojice.
+         */
+        $od = Cas::zHodin($den->toDateString());
         $do = $od->addDay();
+        $odUtc = $od->utc();
+        $doUtc = $do->utc();
         $radky = [];
 
         // Fotky po hodinách — „9 fotek z Petřína", ne devět řádků.
-        $fotky = $this->media($prostor)->where('taken_at', '>=', $od)->where('taken_at', '<', $do)
+        $fotky = $this->media($prostor)->where('taken_at', '>=', $od->format('Y-m-d H:i:s'))->where('taken_at', '<', $do->format('Y-m-d H:i:s'))
             ->orderBy('taken_at')->get(['id', 'uuid', 'taken_at', 'location_name']);
 
-        foreach ($fotky->groupBy(fn ($f) => CarbonImmutable::parse($f->taken_at)->hour) as $hodina) {
+        foreach ($fotky->groupBy(fn ($f) => Cas::zHodin($f->taken_at)->hour) as $hodina) {
             $prvni = $hodina->first();
             $misto = $hodina->pluck('location_name')->filter()->first();
             $this->zjistiNahledy([$prvni->id]);
-            $radky[] = ['t' => CarbonImmutable::parse($prvni->taken_at), 'ph-image', 'Fotky',
+            $radky[] = ['t' => Cas::zHodin($prvni->taken_at), 'ph-image', 'Fotky',
                 $this->pocet($hodina->count(), 'fotka', 'fotky', 'fotek').($misto ? ' · '.$misto : ''), 'all', $this->nahled($prvni)];
         }
 
         if (Schema::hasTable('chat_messages')) {
             DB::table('chat_messages')->where('gallery_space_id', $prostor->id)->whereNull('deleted_at')
-                ->where('created_at', '>=', $od)->where('created_at', '<', $do)
+                ->where('created_at', '>=', $odUtc)->where('created_at', '<', $doUtc)
                 ->orderBy('created_at')->limit(4)
                 ->get(['created_by', 'body', 'attachment_type', 'created_at'])
                 ->each(function ($m) use (&$radky, $jmena) {
                     $text = trim((string) $m->body) !== '' ? '„'.mb_substr(trim((string) $m->body), 0, 60).'"' : 'příloha';
-                    $radky[] = ['t' => CarbonImmutable::parse($m->created_at), 'ph-chats-circle', 'Zpráva',
+                    $radky[] = ['t' => Cas::mistni($m->created_at), 'ph-chats-circle', 'Zpráva',
                         ($jmena[(int) $m->created_by] ?? 'Někdo').': '.$text, 'x-zpravy', null];
                 });
         }
@@ -368,7 +379,7 @@ class Dnes implements PoskytovatelObsahu
                 ->get(['description', 'counterparty', 'amount_from', 'currency_from', 'created_at'])
                 ->each(function ($t) use (&$radky, $od) {
                     // Datum výdaje nemá čas; řadí se podle toho, kdy byl zapsaný.
-                    $zapsano = CarbonImmutable::parse($t->created_at);
+                    $zapsano = Cas::mistni($t->created_at);
                     $radky[] = ['t' => $zapsano->isSameDay($od) ? $zapsano : $od->setTime(12, 0), 'ph-receipt', 'Výdaj',
                         ($t->description ?: ($t->counterparty ?: 'Výdaj')).' · '.$this->castka((float) $t->amount_from, (string) ($t->currency_from ?? 'CZK')), 'x-transakce', null];
                 });
@@ -376,21 +387,21 @@ class Dnes implements PoskytovatelObsahu
 
         if (Schema::hasTable('shared_todos')) {
             DB::table('shared_todos')->where('gallery_space_id', $prostor->id)->where('status', 'completed')
-                ->where('completed_at', '>=', $od)->where('completed_at', '<', $do)
+                ->where('completed_at', '>=', $odUtc)->where('completed_at', '<', $doUtc)
                 ->orderBy('completed_at')->limit(4)
                 ->get(['title', 'completed_at'])
                 ->each(function ($u) use (&$radky) {
-                    $radky[] = ['t' => CarbonImmutable::parse($u->completed_at), 'ph-list-checks', 'Úkol', 'Odškrtnuto: '.$u->title, 'x-plan', null];
+                    $radky[] = ['t' => Cas::mistni($u->completed_at), 'ph-list-checks', 'Úkol', 'Odškrtnuto: '.$u->title, 'x-plan', null];
                 });
         }
 
         if (Schema::hasTable('voice_notes')) {
             DB::table('voice_notes')->where('gallery_space_id', $prostor->id)
-                ->where('created_at', '>=', $od)->where('created_at', '<', $do)
+                ->where('created_at', '>=', $odUtc)->where('created_at', '<', $doUtc)
                 ->orderBy('created_at')->limit(3)
                 ->get(['title', 'duration_ms', 'created_at'])
                 ->each(function ($v) use (&$radky) {
-                    $radky[] = ['t' => CarbonImmutable::parse($v->created_at), 'ph-microphone', 'Hlasovka',
+                    $radky[] = ['t' => Cas::mistni($v->created_at), 'ph-microphone', 'Hlasovka',
                         $this->delka((int) round(($v->duration_ms ?? 0) / 1000)).($v->title ? ' — '.$v->title : ''), 'x-zpravy', null];
                 });
         }
@@ -403,7 +414,7 @@ class Dnes implements PoskytovatelObsahu
                 ->limit(3)
                 ->get(['title', 'created_at'])
                 ->each(function ($z) use (&$radky, $od) {
-                    $zapsano = CarbonImmutable::parse($z->created_at);
+                    $zapsano = Cas::mistni($z->created_at);
                     $radky[] = ['t' => $zapsano->isSameDay($od) ? $zapsano : $od->setTime(21, 0), 'ph-notebook', 'Zápis', (string) ($z->title ?: 'Zápis v deníku'), 'x-denik', null];
                 });
         }
@@ -566,7 +577,7 @@ class Dnes implements PoskytovatelObsahu
             return [
                 mb_strtoupper(mb_substr($kdo, 0, 1)),
                 $text,
-                $this->kdy(CarbonImmutable::parse($z->created_at), $dnes),
+                $this->kdy(Cas::mistni($z->created_at), $dnes),
                 $snimek && $z->action !== 'media.purge' ? $this->nahled($snimek) : null,
             ];
         }, $radky);

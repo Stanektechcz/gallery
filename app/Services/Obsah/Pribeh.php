@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\Galerie\TiskController;
 use App\Models\GallerySpace;
 use App\Models\MediaItem;
 use App\Models\MediaVariant;
+use App\Support\Cas;
 use App\Support\SpaceContext;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
@@ -456,7 +457,7 @@ class Pribeh implements MaPrazdneKolekce, PoskytovatelObsahu
 
             foreach ($zapisy as $z) {
                 $kroky[] = [
-                    'cas' => CarbonImmutable::parse($z->created_at)->format('G:i'),
+                    'cas' => Cas::mistni($z->created_at)->format('G:i'),
                     'text' => 'Zápis v deníku: „'.$z->title.'".',
                     'zdroj' => 'deník',
                     'ikona' => 'ph-notebook',
@@ -995,6 +996,9 @@ class Pribeh implements MaPrazdneKolekce, PoskytovatelObsahu
 
     private function kdy(CarbonImmutable $kdy): string
     {
+        // Okamžik (kapsle založena) v pásmu dvojice — viz App\Support\Cas.
+        $kdy = Cas::mistni($kdy);
+
         return match (true) {
             $kdy->isToday() => 'dnes '.$kdy->format('G:i'),
             $kdy->isYesterday() => 'včera '.$kdy->format('G:i'),

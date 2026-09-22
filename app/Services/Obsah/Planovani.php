@@ -6,6 +6,7 @@ use App\Models\CalendarEvent;
 use App\Models\GallerySpace;
 use App\Models\LifeEvent;
 use App\Models\SharedTodo;
+use App\Support\Cas;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -486,7 +487,7 @@ class Planovani implements MaPrazdneKolekce, PoskytovatelObsahu
             return [];
         }
 
-        $dnes = CarbonImmutable::now()->startOfDay();
+        $dnes = Cas::ted()->startOfDay();
 
         /*
          * Řadí se podle zápisu, ne podle `occurred_at`.
@@ -500,7 +501,8 @@ class Planovani implements MaPrazdneKolekce, PoskytovatelObsahu
             ->limit(self::UDALOSTI)
             ->get()
             ->map(function (LifeEvent $u) use ($jmena, $dnes) {
-                $kdy = CarbonImmutable::parse($u->created_at);
+                // Okamžik zápisu v pásmu dvojice — viz App\Support\Cas.
+                $kdy = Cas::mistni($u->created_at);
                 $rozdil = (int) $kdy->startOfDay()->diffInDays($dnes);
 
                 return [

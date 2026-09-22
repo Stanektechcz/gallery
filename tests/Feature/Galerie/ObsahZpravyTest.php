@@ -103,6 +103,9 @@ class ObsahZpravyTest extends TestCase
     /** Oddělovač dnů říká „Dnes" a „Včera", jinak den a datum. */
     public function test_den_se_pise_slovy(): void
     {
+        // Pevné poledne v září (UTC+2): čas zprávy se ukazuje v pásmu dvojice.
+        $this->travelTo('2026-09-16 12:00:00');
+
         $this->zprava(['body' => 'Dnešní', 'created_at' => now()->setTime(7, 42)]);
         $this->zprava(['body' => 'Včerejší', 'created_at' => now()->subDay()->setTime(19, 10)]);
         $this->zprava(['body' => 'Stará', 'created_at' => '2026-08-10 07:44:00']);
@@ -113,7 +116,7 @@ class ObsahZpravyTest extends TestCase
         $this->assertSame('Dnes', $dny['Dnešní']);
         $this->assertSame('Včera', $dny['Včerejší']);
         $this->assertSame('Pondělí 10. srpna', $dny['Stará']);
-        $this->assertSame('7:42', collect($this->getJson('/api/data/zpravy')->json('data.MSGS'))
+        $this->assertSame('9:42', collect($this->getJson('/api/data/zpravy')->json('data.MSGS'))
             ->firstWhere(5, 'Dnešní')[3]);
     }
 

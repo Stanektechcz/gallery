@@ -4,6 +4,7 @@ namespace App\Services\Obsah;
 
 use App\Models\GallerySpace;
 use App\Models\User;
+use App\Support\Cas;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -213,6 +214,9 @@ class Formulare
 
     private function kdy(CarbonImmutable $kdy): string
     {
+        // Okamžik synchronizace v pásmu dvojice — viz App\Support\Cas.
+        $kdy = Cas::mistni($kdy);
+
         return match (true) {
             $kdy->isToday() => 'dnes '.$kdy->format('G:i'),
             $kdy->isYesterday() => 'včera',

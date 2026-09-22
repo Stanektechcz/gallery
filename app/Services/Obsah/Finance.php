@@ -8,6 +8,7 @@ use App\Models\GallerySpace;
 use App\Models\Transaction;
 use App\Models\Wallet;
 use App\Services\Finance\LedgerService;
+use App\Support\Cas;
 use App\Support\SpaceContext;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Carbon;
@@ -460,7 +461,7 @@ class Finance implements MaPrazdneKolekce, PoskytovatelObsahu
             return '';
         }
 
-        $kdy = CarbonImmutable::parse($kdy);
+        $kdy = Cas::mistni($kdy);
 
         return ' · sync '.($kdy->isToday() ? 'dnes' : $kdy->format('j. n.')).' '.$kdy->format('G:i');
     }

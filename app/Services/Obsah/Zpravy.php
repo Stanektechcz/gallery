@@ -4,6 +4,7 @@ namespace App\Services\Obsah;
 
 use App\Models\ChatMessage;
 use App\Models\GallerySpace;
+use App\Support\Cas;
 use App\Support\SpaceContext;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
@@ -134,7 +135,7 @@ class Zpravy implements MaPrazdneKolekce, PoskytovatelObsahu
         $ja = auth()->id();
 
         return $zpravy->map(function (object $m) use ($ja) {
-            $kdy = CarbonImmutable::parse($m->created_at);
+            $kdy = Cas::mistni($m->created_at);
 
             return [
                 $m->uuid,
@@ -358,7 +359,7 @@ class Zpravy implements MaPrazdneKolekce, PoskytovatelObsahu
             ->map(fn (object $m) => [
                 (int) $m->created_by === (int) $ja ? 'a' : 'm',
                 $this->text($m),
-                CarbonImmutable::parse($m->created_at)->format('G:i'),
+                Cas::mistni($m->created_at)->format('G:i'),
             ])
             ->values()
             ->all();
@@ -369,7 +370,7 @@ class Zpravy implements MaPrazdneKolekce, PoskytovatelObsahu
     /** „Dnes", „Včera", jinak „Pondělí 10. srpna" — jak to kreslí oddělovač dnů. */
     private function den(CarbonImmutable $kdy): string
     {
-        $dni = (int) $kdy->startOfDay()->diffInDays(CarbonImmutable::now()->startOfDay());
+        $dni = (int) $kdy->startOfDay()->diffInDays(Cas::ted()->startOfDay());
 
         return match (true) {
             $dni === 0 => 'Dnes',

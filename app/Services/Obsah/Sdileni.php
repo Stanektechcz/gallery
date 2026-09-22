@@ -4,6 +4,7 @@ namespace App\Services\Obsah;
 
 use App\Models\GallerySpace;
 use App\Models\MediaItem;
+use App\Support\Cas;
 use App\Support\SpaceContext;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
@@ -298,7 +299,9 @@ class Sdileni implements MaPrazdneKolekce, PoskytovatelObsahu
 
     private function kdy(CarbonImmutable $kdy): string
     {
-        $dni = (int) $kdy->startOfDay()->diffInDays(CarbonImmutable::now()->startOfDay());
+        // Okamžik (vzkaz od hosta) v pásmu dvojice — viz App\Support\Cas.
+        $kdy = Cas::mistni($kdy);
+        $dni = (int) $kdy->startOfDay()->diffInDays(Cas::ted()->startOfDay());
 
         return match (true) {
             $dni === 0 => 'dnes '.$kdy->format('G:i'),

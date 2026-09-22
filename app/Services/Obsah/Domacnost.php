@@ -8,6 +8,7 @@ use App\Models\HouseChoreLogEntry;
 use App\Models\HouseDue;
 use App\Models\HouseInventoryItem;
 use App\Models\HousePantryItem;
+use App\Support\Cas;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -155,8 +156,8 @@ class Domacnost implements MaPrazdneKolekce, PoskytovatelObsahu
             ->map(function (HouseChore $p) use ($jmena) {
                 $opakovani = $p->dniOpakovani();
                 $odkdy = $p->last_done_at
-                    ? (int) CarbonImmutable::parse($p->last_done_at)->startOfDay()
-                        ->diffInDays(CarbonImmutable::now()->startOfDay())
+                    ? (int) Cas::mistni($p->last_done_at)->startOfDay()
+                        ->diffInDays(Cas::ted()->startOfDay())
                     : null;
 
                 return array_filter([
@@ -186,7 +187,7 @@ class Domacnost implements MaPrazdneKolekce, PoskytovatelObsahu
         return match (true) {
             $dni === 0 => 'dnes',
             $dni === 1 => 'včera',
-            $dni < 7 => self::V_DEN[self::DNY[CarbonImmutable::parse($kdy)->dayOfWeekIso - 1]],
+            $dni < 7 => self::V_DEN[self::DNY[Cas::mistni($kdy)->dayOfWeekIso - 1]],
             default => 'před '.$dni.' dny',
         };
     }
@@ -205,8 +206,8 @@ class Domacnost implements MaPrazdneKolekce, PoskytovatelObsahu
             ->limit(60)
             ->get()
             ->map(function (HouseChoreLogEntry $z) use ($jmena) {
-                $kdy = CarbonImmutable::parse($z->done_at);
-                $dni = (int) $kdy->startOfDay()->diffInDays(CarbonImmutable::now()->startOfDay());
+                $kdy = Cas::mistni($z->done_at);
+                $dni = (int) $kdy->startOfDay()->diffInDays(Cas::ted()->startOfDay());
 
                 return [
                     'id' => $z->uuid,
