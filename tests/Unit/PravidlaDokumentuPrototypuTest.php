@@ -517,6 +517,27 @@ class PravidlaDokumentuPrototypuTest extends TestCase
         $this->assertStringContainsString("window.GalerieApi.post('alba/' + id + '/archivovat', { archivovat: false })", $telefon);
     }
 
+    /** Audit telefonu (18. kolo): co hlásilo uloženo a žilo jen do obnovení. */
+    public function test_telefon_uklada_co_hlasi(): void
+    {
+        $telefon = self::dokument('galerie-mobil.dc.html');
+        $pocitac = self::dokument('galerie-desktop.dc.html');
+
+        $this->assertStringContainsString("'srSaved coolLimit whOk').split(' ')", $telefon);
+        $this->assertStringContainsString("window.GalerieApi.post('kalendar/udalost', { nazev: a, datum: this.calVybrany(), cas: cas || null })", $telefon);
+        $this->assertStringContainsString("window.GalerieApi.post('denik', { nadpis: a, text: b, datum: s.dayNoteIso, soukromy: true })", $telefon);
+        $this->assertStringContainsString("api.save({ xRows: { gifts: ideas.map(x => ({ t: 'Nápad: ' + x.title", $telefon);
+        $this->assertStringContainsString("if (kam === 'done' || odkud === 'done') { this.ukolNaServeru([it.t, '', '', 0, it.id], kam === 'done'); return true; }", $telefon);
+        $this->assertStringContainsString("if (this.galerieNaServeru()) return [];\n    const t = this.dnes();", $telefon);
+        $this->assertStringContainsString("window.GalerieApi.post('domacnost/spiz', { polozky })", $telefon);
+        $this->assertStringContainsString("window.GalerieApi.post('domacnost/spiz', telo)", $pocitac);
+        $this->assertStringContainsString("'mDgHide']; }", $telefon);
+
+        // Dva rychlé zápisy různých seznamů (`xRows`) se ve frontě nepřepíšou.
+        $api = (string) file_get_contents(dirname(__DIR__, 2).'/public/galerie-api.js');
+        $this->assertStringContainsString("if (k === 'xRows' && pending[k] && typeof pending[k] === 'object'", $api);
+    }
+
     /** Přihlášení se na kód druhého ověření ptá políčkem, ne dialogem prohlížeče. */
     public function test_dvoufazove_overeni_ma_policko(): void
     {

@@ -228,7 +228,7 @@
   // Neodeslaný patch zpátky do fronty; novější zápis téhož klíče má přednost.
   function vratDoFronty(patch) {
     Object.keys(patch).forEach(function (k) {
-      if ((k === '__odebrane' || k === '__zmenene') && pending[k] && typeof pending[k] === 'object' && patch[k] && typeof patch[k] === 'object') {
+      if ((k === '__odebrane' || k === '__zmenene' || k === 'xRows') && pending[k] && typeof pending[k] === 'object' && patch[k] && typeof patch[k] === 'object') {
         pending[k] = Object.assign({}, patch[k], pending[k]);
         return;
       }
@@ -494,6 +494,17 @@
             spojene[s] = Array.isArray(spojene[s]) ? spojene[s].concat((patch[k][s] || []).filter(function (id) { return spojene[s].indexOf(id) < 0; })) : patch[k][s];
           });
           pending[k] = spojene;
+          return;
+        }
+        /*
+         * Seznamy (`xRows`) se ve frontě slučují po seznamech.
+         *
+         * Telefon posílá jen seznam, který změnil (`{ xRows: { shopping } }`),
+         * a druhý zápis v téže vteřině (`{ xRows: { gifts } }`) přepsal celé
+         * `xRows` — nákup z rychlého zápisu se na server nikdy nedostal.
+         */
+        if (k === 'xRows' && pending[k] && typeof pending[k] === 'object' && patch[k] && typeof patch[k] === 'object') {
+          pending[k] = Object.assign({}, pending[k], patch[k]);
           return;
         }
         pending[k] = patch[k];

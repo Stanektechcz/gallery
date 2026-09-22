@@ -167,6 +167,41 @@ class ObsahDomacnostTest extends TestCase
         $this->assertSame(['smetana'], $radek[6]);
     }
 
+    /**
+     * Spíž se mění v databázi: množství, nová položka, odebrání.
+     *
+     * „−/+" a přidání do zásob dřív měnily jen kopii ve stavu prohlížeče
+     * (telefon ani to ne) a každé zařízení ukazovalo něco jiného.
+     */
+    public function test_spiz_se_meni_v_databazi(): void
+    {
+        $smetana = HousePantryItem::create([
+            'gallery_space_id' => $this->prostor->id, 'name' => 'Smetana', 'category' => 'Lednice',
+            'quantity' => 2, 'unit' => 'ks', 'keywords' => ['smetana'],
+        ]);
+        $mouka = HousePantryItem::create([
+            'gallery_space_id' => $this->prostor->id, 'name' => 'Mouka', 'category' => 'Pečení',
+            'quantity' => 1, 'unit' => 'kg', 'keywords' => ['mouka'],
+        ]);
+
+        $odpoved = $this->postJson('/api/domacnost/spiz', [
+            'polozky' => [
+                ['id' => $smetana->uuid, 'mnozstvi' => 1],
+                ['nazev' => 'Česnek', 'kategorie' => 'Špajz', 'jednotka' => 'palice', 'mnozstvi' => 3],
+            ],
+            'odebrat' => [$mouka->uuid],
+        ])->assertOk();
+
+        $this->assertEquals(1.0, $smetana->fresh()->quantity);
+        $this->assertNull(HousePantryItem::where('uuid', $mouka->uuid)->first());
+        $cesnek = HousePantryItem::where('name', 'Česnek')->sole();
+        $this->assertSame(['česnek'], $cesnek->keywords);
+        $this->assertEqualsCanonicalizing(['Česnek', 'Smetana'], collect($odpoved->json('data.PANTRY'))->pluck(1)->all());
+
+        // Cizí prostor spíž nezmění a prázdná změna neprojde.
+        $this->postJson('/api/domacnost/spiz', [])->assertStatus(422);
+    }
+
     /** Kapacita týdne drží hodiny obou lidí, ne dvě jména v katalogu. */
     public function test_kapacita_tydne_zna_oba(): void
     {

@@ -71,6 +71,30 @@ class ObsahPlanovaniTest extends TestCase
         $this->assertSame('Plavba na Ugljan', $ev['t']);
     }
 
+    /**
+     * Akce z kalendáře telefonu padne na vybraný den, pro oba.
+     *
+     * „Přidat do plánu" dřív zakládal úkol bez data — ve dni se neobjevil.
+     */
+    public function test_akce_z_telefonu_padne_na_vybrany_den(): void
+    {
+        CarbonImmutable::setTestNow('2026-09-16 12:00:00');
+
+        $ev = collect($this->postJson('/api/kalendar/udalost', ['nazev' => 'Večeře u rodičů', 'datum' => '2026-09-19', 'cas' => '18:30'])
+            ->assertStatus(201)
+            ->assertJsonPath('zprava', '„Večeře u rodičů“ je v kalendáři · 19. 9. v 18:30')
+            ->json('data.CALEV'))->firstWhere('t', 'Večeře u rodičů');
+
+        $this->assertSame([2026, 8, 19, '18:30', 'spolu'], [$ev['y'], $ev['m'], $ev['d'], $ev['time'], $ev['who']]);
+
+        $cely = collect($this->postJson('/api/kalendar/udalost', ['nazev' => 'Výlet', 'datum' => '2026-09-20'])->assertStatus(201)->json('data.CALEV'))
+            ->firstWhere('t', 'Výlet');
+        $this->assertSame('', $cely['time']);
+
+        $this->postJson('/api/kalendar/udalost', ['nazev' => 'X', 'datum' => '2026-09-20', 'cas' => 'večer'])->assertStatus(422);
+        CarbonImmutable::setTestNow();
+    }
+
     /** Celodenní událost nemá čas — prototyp na jeho místo kreslí pomlčku. */
     public function test_celodenni_udalost_nema_cas(): void
     {

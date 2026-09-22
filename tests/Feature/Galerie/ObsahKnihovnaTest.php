@@ -507,7 +507,8 @@ class ObsahKnihovnaTest extends TestCase
 
         $mobil = $this->getJson('/api/data/knihovna')->assertOk()->json('data.MOBIL');
 
-        $this->assertSame([['Sobota 10. ledna 2026', 'Praha', 1]], $mobil['DAYS']);
+        // Čtvrté pole je den — zápis k dni z telefonu patří k němu, ne k dnešku.
+        $this->assertSame([['Sobota 10. ledna 2026', 'Praha', 1, '2026-01-10']], $mobil['DAYS']);
         $this->assertSame(0, $mobil['PHOTOS'][0]['di']);
         $this->assertSame('Praha', $mobil['PHOTOS'][0]['place']);
     }

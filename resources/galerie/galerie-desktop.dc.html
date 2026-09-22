@@ -25798,10 +25798,33 @@ class Component extends DCLogic {
   // ——— zásoby doma ———
   pantryOf() {
     const s = this.state;
-    if (s.pantry) return s.pantry;
+    // U dvojice spíž z databáze; místní `pantry` by ji navždy zakryla.
+    if (s.pantry && !this.spizNaServeru()) return s.pantry;
     return PANTRY.map(p => ({ id: p[0], name: p[1], cat: p[2], qty: p[3], unit: p[4], days: p[5], keys: p[6] }));
   }
+  spizNaServeru() { return !this.ukazka() && this.apiNaServeru(); }
+  /*
+   * Změna spíže u dvojice: rozdíl proti databázi (množství, nové, odebrané)
+   * jde na POST /api/domacnost/spiz; „Zpět" pošle opačný rozdíl.
+   */
+  spizZmena(list, note) {
+    const puvodni = this.pantryOf(), uuid = id => /^[0-9a-f-]{36}$/i.test(String(id));
+    const polozky = [], zpet = [], odebrat = [], vratit = [];
+    list.forEach(p => {
+      const byl = puvodni.find(x => x.id === p.id);
+      if (uuid(p.id) && byl && byl.qty !== p.qty) { polozky.push({ id: p.id, mnozstvi: p.qty }); zpet.push({ id: p.id, mnozstvi: byl.qty }); }
+      if (!uuid(p.id)) polozky.push({ nazev: p.name, kategorie: p.cat, jednotka: p.unit, mnozstvi: p.qty });
+    });
+    puvodni.forEach(p => { if (uuid(p.id) && !list.some(x => x.id === p.id)) { odebrat.push(p.id); vratit.push({ nazev: p.name, kategorie: p.cat, jednotka: p.unit, mnozstvi: p.qty }); } });
+    if (!polozky.length && !odebrat.length) { if (note) this.toast(note, { icon: 'ph-package', silent: true }); return; }
+    const posli = telo => window.GalerieApi.post('domacnost/spiz', telo).then(res => { if (res && window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data, res.prazdne); return res; });
+    posli({ polozky, odebrat }).then(() => {
+      // Nová položka dostane uuid až na serveru — „Zpět" vrací jen změny a odebrání.
+      if (note) this.toast(note, { icon: 'ph-package', undo: zpet.length || vratit.length ? () => posli({ polozky: zpet.concat(vratit), odebrat: [] }) : undefined });
+    }).catch(e => { const b = (e && e.body) || {}; this.toast(b.message || 'Spíž se nepodařilo uložit', { icon: 'ph-warning', color: 'var(--g-mag)' }); });
+  }
   pantrySet(list, note, prev) {
+    if (this.spizNaServeru()) { if (list) this.spizZmena(list, note); return; }
     this.setState({ pantry: list });
     if (note) this.toast(note, { icon: 'ph-package', undo: prev ? () => this.setState({ pantry: prev }) : undefined });
   }

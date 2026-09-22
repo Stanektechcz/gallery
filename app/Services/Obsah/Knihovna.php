@@ -1130,7 +1130,8 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
         $poradiDnu = array_flip($dny->keys()->all());
 
         return [
-            'DAYS' => $dny->values()->map(fn (array $d) => [$d['label'], $d['place'], $d['n']])->all(),
+            // Čtvrté pole je den (Y-m-d) — zápis k dni pak patří k tomu dni, ne k dnešku.
+            'DAYS' => $dny->map(fn (array $d, string $klic) => [$d['label'], $d['place'], $d['n'], $klic])->values()->all(),
             // Telefon si album drží jako seznam identifikátorů fotek, ne jako počet.
             'ALBUMS' => array_map(fn (array $a) => [
                 'id' => $a['id'],

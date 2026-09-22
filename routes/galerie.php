@@ -24,6 +24,7 @@ use App\Http\Controllers\Api\Galerie\RozporController;
 use App\Http\Controllers\Api\Galerie\RucniPlatbaController;
 use App\Http\Controllers\Api\Galerie\RychlyZapisController;
 use App\Http\Controllers\Api\Galerie\SdileniController;
+use App\Http\Controllers\Api\Galerie\SpizController;
 use App\Http\Controllers\Api\Galerie\StateController;
 use App\Http\Controllers\Api\Galerie\StitkyController;
 use App\Http\Controllers\Api\Galerie\StorageController;
@@ -241,6 +242,8 @@ Route::middleware(['auth:sanctum', 'dvojice', 'throttle:120,1'])->prefix('api')-
     Route::post('rychle/ukol', [RychlyZapisController::class, 'ukol'])->name('galerie.rychle.ukol');
     // „Na příští týden" v Týdenním přehledu — dřív jen otevřelo plán.
     Route::post('ukoly/{uuid}/pristi-tyden', [UkolyController::class, 'naPristiTyden'])->whereUuid('uuid')->name('galerie.ukoly.pristi-tyden');
+    // Akce do kalendáře k vybranému dni (telefon) — dřív úkol bez data.
+    Route::post('kalendar/udalost', [UkolyController::class, 'udalost'])->name('galerie.kalendar.udalost');
 
     // Kategorie úkolů (vlastní nástěnky) — dřív jen ve stavu prohlížeče.
     Route::post('ukoly/kategorie', [KategorieUkoluController::class, 'store'])->name('galerie.ukoly.kategorie.store');
@@ -256,6 +259,8 @@ Route::middleware(['auth:sanctum', 'dvojice', 'throttle:120,1'])->prefix('api')-
     // Domácí práce — dřív šla dělba jen prohlížet, nová práce neměla kudy vzniknout.
     Route::post('domacnost/prace', [DomaciPraceController::class, 'store'])->name('galerie.domacnost.prace.store');
     Route::delete('domacnost/prace/{uuid}', [DomaciPraceController::class, 'destroy'])->whereUuid('uuid')->name('galerie.domacnost.prace.destroy');
+    // Spíž — množství do databáze (dřív jen kopie ve stavu, telefon ani to ne).
+    Route::post('domacnost/spiz', [SpizController::class, 'mnozstvi'])->name('galerie.domacnost.spiz');
     Route::patch('denik/{zapis}', [DenikController::class, 'update'])->whereUuid('zapis')->name('galerie.denik.update');
     Route::delete('denik/{zapis}', [DenikController::class, 'destroy'])->whereUuid('zapis')->name('galerie.denik.destroy');
 
