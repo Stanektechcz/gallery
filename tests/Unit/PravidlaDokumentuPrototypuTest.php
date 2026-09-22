@@ -285,6 +285,11 @@ class PravidlaDokumentuPrototypuTest extends TestCase
         $this->assertStringContainsString("window.GalerieApi.del('domacnost/prace/' + c.id)", $pocitac);
         $this->assertStringContainsString('onClick="{{ chAdd }}"', $telefon);
         $this->assertStringContainsString("window.GalerieApi.post('domacnost/prace', { nazev: a, jak_casto: jakCasto })", $telefon);
+
+        // Rozhodnutí a sliby jdou zapsat i z telefonu; prázdný stav vysvětlí k čemu jsou.
+        $this->assertStringContainsString('onClick="{{ dcAddDec }}"', $telefon);
+        $this->assertStringContainsString('onClick="{{ dcAddProm }}"', $telefon);
+        $this->assertStringContainsString("if (s.addKind === 'decision') {", $telefon);
     }
 
     /** Koš v telefonu umí i trvale odstranit — dřív jen „Obnovit". */

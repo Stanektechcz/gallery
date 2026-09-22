@@ -2437,6 +2437,10 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 
               <sc-if value="{{ dcOnMem }}" hint-placeholder-val="{{ true }}">
                 <div>
+                  <sc-if value="{{ dcEmpty }}">
+                    <div style="padding:4px 0 14px; font-size:13.5px; line-height:1.55; color:var(--g-ink2); text-wrap:pretty">Zatím žádné zapsané rozhodnutí. Co jste spolu rozhodli a proč — za rok se to hodí vědět a aplikace připomene, kdy to znovu probrat.</div>
+                  </sc-if>
+                  <button onClick="{{ dcAddDec }}" class="btn btn-secondary btn-block" style="min-height:44px; gap:7px; margin-bottom:14px"><i class="ph-duotone ph-scales" style="font-size:16px"></i>Zapsat rozhodnutí</button>
                   <sc-for list="{{ dcList }}" as="d" hint-placeholder-count="3">
                     <div style="padding-bottom:15px; border-bottom:1px solid var(--g-line2); margin-bottom:14px">
                       <div style="display:flex; align-items:baseline; gap:8px">
@@ -2462,6 +2466,10 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 
               <sc-if value="{{ dcOnProm }}">
                 <div>
+                  <sc-if value="{{ promEmpty }}">
+                    <div style="padding:4px 0 14px; font-size:13.5px; line-height:1.55; color:var(--g-ink2); text-wrap:pretty">Žádný slib. Když si něco slíbíte — „v sobotu vyvenčím", „do pátku zavolám" —, zapište to sem a druhý to uvidí.</div>
+                  </sc-if>
+                  <button onClick="{{ dcAddProm }}" class="btn btn-secondary btn-block" style="min-height:44px; gap:7px; margin-bottom:14px"><i class="ph-duotone ph-handshake" style="font-size:16px"></i>Zapsat slib</button>
                   <sc-for list="{{ promRows }}" as="p" hint-placeholder-count="5">
                     <div style="padding-bottom:14px; border-bottom:1px solid var(--g-line2); margin-bottom:13px">
                       <div style="display:flex; align-items:baseline; gap:8px">
@@ -6692,6 +6700,11 @@ class Component extends DCLogic {
         go: () => this.setState({ dcTab: t[0] })
       })),
       dcOnMem: tab === 'mem', dcOnCool: tab === 'cool', dcOnProm: tab === 'prom',
+      // Zápis z telefonu — dřív jen čtení, bez zápisu z počítače prázdná obrazovka.
+      dcEmpty: decs.length === 0,
+      promEmpty: (this.state.proms === null || this.state.proms === undefined ? PROMISES : this.state.proms).length === 0,
+      dcAddDec: () => this.setState({ sheet: 'add', addKind: 'decision', addA: '', addB: '' }),
+      dcAddProm: () => this.setState({ sheet: 'add', addKind: 'promise', addA: '', addB: '' }),
       promRows: (this.state.proms === null || this.state.proms === undefined ? PROMISES : this.state.proms).map(p => {
         const LB = { open: 'platí', late: 'po termínu', kept: 'dodrženo', broken: 'nedodrženo' };
         return {
@@ -11981,7 +11994,9 @@ class Component extends DCLogic {
       itin: ['Do itineráře', 'Co podnikneme', 'Kdy', 'Přidat'],
       tx: ['Ruční platba', 'Popis platby', 'Částka v Kč', 'Zapsat platbu'],
       album: ['Nové album', 'Název albumu', 'Poznámka (nepovinná)', 'Založit album'],
-      chore: ['Nová domácí práce', 'Co je potřeba dělat', 'Jak často: denně, 2× týdně, týdně, měsíčně', 'Přidat práci']
+      chore: ['Nová domácí práce', 'Co je potřeba dělat', 'Jak často: denně, 2× týdně, týdně, měsíčně', 'Přidat práci'],
+      decision: ['Zapsat rozhodnutí', 'Co jsme rozhodli', 'Hlavní důvod (nepovinný)', 'Zapsat rozhodnutí'],
+      promise: ['Zapsat slib', 'Co slibuji', 'Do kdy (nepovinné, třeba do pátku)', 'Zapsat slib']
     };
     const spec = addSpec[s.addKind || 'diary'];
     const addCommit = () => {
@@ -11992,6 +12007,30 @@ class Component extends DCLogic {
        * u dvojice vůbec začít. Má ji teď ten, kdo ji přidal; po „Hotovo"
        * se předá druhému.
        */
+      /*
+       * Rozhodnutí a slib — stejný tvar řádku jako na počítači; na server je
+       * převede stav (`decs`, `proms` → VztahVeStavu). Dřív šly na telefonu
+       * jen číst a bez zápisu z počítače tu byla prázdná obrazovka.
+       */
+      if (s.addKind === 'decision') {
+        const decs = s.decs === null || s.decs === undefined ? DEC_LIST : s.decs;
+        this.setState({
+          decs: [{ id: 'd' + Date.now(), title: a, date: 'dnes', by: this.dva().slice(0, 2).map(j => this.krestni(j)).join(' a '), status: 'platí', why: [b || 'Důvod zapíšeme později.'], rejected: ['Nic dalšího jsme nezvažovali'], review: 'za rok' }].concat(decs),
+          sheet: null, addA: '', addB: '', seq: n + 1, dcTab: 'mem'
+        });
+        this.toast('Rozhodnutí zapsáno · znovu ho probereme za rok', { icon: 'ph-scales', undo: () => this.setState({ decs: decs }) });
+        return;
+      }
+      if (s.addKind === 'promise') {
+        const list = s.proms === null || s.proms === undefined ? PROMISES : s.proms;
+        const kdo = this.meWho(), komu = this.druhy(kdo);
+        this.setState({
+          proms: [{ id: 'p' + Date.now(), who: kdo, to: komu, what: a, due: b || 'bez termínu', days: 99, state: 'open', said: 'zapsáno ručně' }].concat(list),
+          sheet: null, addA: '', addB: '', seq: n + 1, dcTab: 'prom'
+        });
+        this.toast('Slib zapsán · ' + this.krestni(komu) + ' ho vidí', { icon: 'ph-handshake', undo: () => this.setState({ proms: list }) });
+        return;
+      }
       if (s.addKind === 'chore') {
         if (!this.galerieNaServeru()) { this.toast('Domácí práce se ukládají jen s připojeným serverem', { icon: 'ph-info' }); return; }
         const JAK = ['denně', '2× týdně', 'týdně', 'měsíčně', 'podle potřeby'];
