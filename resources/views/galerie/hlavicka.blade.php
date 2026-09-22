@@ -553,6 +553,15 @@
     if (! mapa && ! prazdne) return false;
 
     Object.keys(mapa || {}).forEach(function (klic) {
+      /*
+       * Kopie telefonu jde do `GalerieMobil`, stejně jako při načtení skupin.
+       *
+       * Tady chyběla: `MOBIL` z odpovědi na akci skončil v `GalerieData`, kde
+       * ho telefon nečte. Nová domácí práce, cesta nebo album se na telefonu
+       * objevily až po dalším načtení stránky — hláška „přidáno" a prázdný
+       * seznam pod ní.
+       */
+      if (klic === 'MOBIL') { Object.assign(mobil, mapa[klic]); doMobilu(); return; }
       obsah[klic] = mapa[klic];
       navlec(window.GalerieData, klic, mapa[klic], !!uplne[klic]);
     });
