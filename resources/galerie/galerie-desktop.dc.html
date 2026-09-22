@@ -31884,7 +31884,8 @@ class Component extends DCLogic {
       appLocked: 1, lockPin: 1, lockPwd: 1, lockTries: 1, lockRec: 1, lockRecCode: 1, lockStep: 1, lockAt: 1, secUntil: 1, gatePin: 1, lockInfo: 1,
       // Kód druhého ověření při přihlášení — jednorázový a jen tohohle okna.
       lockCode: 1, lockNeeds2fa: 1,
-      // Nastavení upozornění ze serveru je každého zvlášť (viz tichoNaServeru), a dialog účtu drží hesla.
+      // Nastavení upozornění ze serveru je každého zvlášť (viz tichoNaServeru). Dialog účtu
+      // drží hesla — vyřazuje ho už přípona `Dlg` v persistKey, tohle je výslovná pojistka.
       klSrv: 1, acDlg: 1,
       // Uložený by po obnovení stránky nechal tlačítko viset na „Přihlašuji…".
       lockSignBusy: 1,

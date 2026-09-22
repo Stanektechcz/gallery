@@ -5,13 +5,13 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * Dialog účtu pryč ze sdíleného stavu.
+ * Dialog účtu pryč ze sdíleného stavu — pojistka.
  *
- * Počítač posílal rozepsaný dialog „Změnit heslo" / „Jméno a e-mail"
- * (`acDlg`: současné a nové heslo) do stavu dvojice s každým stiskem klávesy
- * a druhé zařízení ho dostalo zpátky. Klient to od téhle verze neposílá,
- * server `acDlg` zahazuje (CoupleState::NEUKLADAT); tohle uklidí, co už
- * v databázi leží.
+ * Rozepsaný dialog „Změnit heslo" / „Jméno a e-mail" (`acDlg`: současné
+ * a nové heslo, u dvoufázového přihlášení i tajný klíč) do stavu nepatří.
+ * Počítač ho vyřazuje příponou `Dlg` a telefon ho neukládá, takže tu nejspíš
+ * nic není; server ho teď zahazuje i sám (CoupleState::NEUKLADAT) a tohle
+ * smaže, kdyby ho sem přece jen poslal jiný klient.
  */
 return new class extends Migration
 {

@@ -53,7 +53,8 @@ class CoupleState extends Model
         // Jednorázový kód druhého ověření z přihlašovací obrazovky.
         'lockCode', 'lockNeeds2fa',
         // Dialog účtu: současné a nové heslo, tajný klíč a záchranné kódy
-        // dvoufázového přihlášení. Počítač ho posílal s každým stiskem klávesy.
+        // dvoufázového přihlášení. Počítač ho vyřazuje příponou `Dlg`
+        // (persistKey); tady je to pojistka pro jiného klienta nebo překlep.
         'acDlg',
         // Nastavení upozornění ze serveru — každého zvlášť, ne dvojice.
         'klSrv',

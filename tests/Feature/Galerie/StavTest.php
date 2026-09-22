@@ -174,10 +174,11 @@ class StavTest extends TestCase
     }
 
     /**
-     * Dialog účtu se neukládá ani nesdílí.
+     * Dialog účtu se neukládá ani nesdílí, ať ho pošle kdokoli.
      *
-     * Počítač ho posílal do sdíleného stavu s každým stiskem klávesy — současné
-     * i nové heslo, a s dvoufázovým přihlášením i tajný klíč a záchranné kódy.
+     * Nese současné i nové heslo, s dvoufázovým přihlášením i tajný klíč
+     * a záchranné kódy. Počítač ho vyřazuje příponou `Dlg`; server se na
+     * kázeň klienta spoléhat nemá.
      */
     public function test_dialog_uctu_se_neuklada(): void
     {

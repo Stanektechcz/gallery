@@ -597,7 +597,7 @@ class PravidlaDokumentuPrototypuTest extends TestCase
         $logika = (string) file_get_contents(dirname(__DIR__, 2).'/public/galerie-mechanismy-logika.js');
 
         // klQuiet: počítač 24 hodin, telefon své přepínače pod klHelpOn.
-        $this->assertStringContainsString("this.setState({ klHelpOn: Object.assign({}, klQuiet, { [i]: !klQuiet[i] }) });", $telefon);
+        $this->assertStringContainsString('this.setState({ klHelpOn: Object.assign({}, klQuiet, { [i]: !klQuiet[i] }) });', $telefon);
         $this->assertStringContainsString('Array.isArray(s.klQuiet) && s.klQuiet.length === 24', $pocitac);
         // arbDone: celý záznam i z telefonu, počítač snese starý.
         $this->assertStringContainsString("{ [r.id]: { pick: pick, why: why, mech: mName(mid), when: 'právě teď' } }", $telefon);
@@ -607,7 +607,7 @@ class PravidlaDokumentuPrototypuTest extends TestCase
         $this->assertStringNotContainsString(' nedDone klHelpOn ', $telefon);
         // rtOn: celá mapa z telefonu, výchozí hodnoty na počítači.
         $this->assertStringContainsString('plna[r[0]] = !on;', $telefon);
-        $this->assertStringContainsString("RITUALS.forEach(r => { o[r[0]] = ulozene[r[0]] === undefined ? !!r[5] : !!ulozene[r[0]]; });", $pocitac);
+        $this->assertStringContainsString('RITUALS.forEach(r => { o[r[0]] = ulozene[r[0]] === undefined ? !!r[5] : !!ulozene[r[0]]; });', $pocitac);
         // Seriály podle id titulu ze serveru.
         $this->assertStringContainsString("const rid = r[7] || ('series-' + i);", $telefon);
     }
@@ -630,9 +630,9 @@ class PravidlaDokumentuPrototypuTest extends TestCase
         $this->assertStringContainsString("window.GalerieApi.get('v1/notifications/preferences')", $pocitac);
         // Duplikace alba dvojice na serveru, podalba jen skutečná.
         $this->assertStringContainsString("window.GalerieApi.post('alba/' + album.id + '/duplikovat', {})", $pocitac);
-        $this->assertStringContainsString("hasSubs: this.albumNaServeru(album) ? (album.children || []).length > 0 : album.subs > 0", $pocitac);
+        $this->assertStringContainsString('hasSubs: this.albumNaServeru(album) ? (album.children || []).length > 0 : album.subs > 0', $pocitac);
         // Hledání: místa a štítky dvojice, ne Zadar a „nedávno hledané".
-        $this->assertStringContainsString("((window.GalerieData || {}).MAPBODY || []).filter(b => b.name).map(b => ({", $pocitac);
+        $this->assertStringContainsString('((window.GalerieData || {}).MAPBODY || []).filter(b => b.name).map(b => ({', $pocitac);
         // Náhled odkazu nepouští ukázkovým heslem.
         $this->assertStringContainsString("if (skutecny || (s.gvPwd || '') === 'letnizadar')", $pocitac);
         // Hlasovka nehlásí „odeslána" před nahráním.
