@@ -6438,10 +6438,16 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                         </div>
                       </div>
                     </sc-for>
+                    <sc-if value="{{ wkMomentsEmpty }}">
+                      <div style="padding:14px 2px; font-size:13.5px; line-height:1.55; color:var(--g-ink2); text-wrap:pretty">Z tohohle týdne zatím nejsou fotky. Jak nějaké nahrajete, nejsilnější dny se objeví tady.</div>
+                    </sc-if>
                   </div>
 
                   <div>
                     <div style="font-size:12px; letter-spacing:.14em; text-transform:uppercase; padding-bottom:9px; border-bottom:1px solid var(--g-ink)">Co se nedotáhlo</div>
+                    <sc-if value="{{ wkSlippedEmpty }}">
+                      <div style="padding:14px 2px; font-size:13.5px; line-height:1.55; color:var(--g-ink2); text-wrap:pretty">Žádný úkol po termínu — všechno má termín před sebou, nebo je hotové.</div>
+                    </sc-if>
                     <sc-for list="{{ wkSlipped }}" as="x" hint-placeholder-count="3">
                       <div style="display:flex; align-items:center; gap:14px; padding:13px 2px; border-bottom:1px solid var(--g-line2); flex-wrap:wrap">
                         <div style="flex:1; min-width:200px">
@@ -6491,7 +6497,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                         </div>
                         <p style="margin:6px 0 0; font-size:13.5px; line-height:1.6; color:var(--g-ink2); max-width:60ch">{{ w.note }}</p>
                         <div style="height:5px; border-radius:2px; background:var(--g-line2); overflow:hidden; margin-top:9px; max-width:320px"><div style="height:100%; width:{{ w.bar }}; background:var(--g-acc)"></div></div>
-                        <button onClick="{{ w.open }}" style="margin-top:8px; border:0; background:transparent; padding:0; cursor:pointer; font-family:inherit; font-size:12.5px; color:var(--g-acc)">Otevřít přehled →</button>
+                        <button onClick="{{ w.open }}" style="margin-top:8px; border:0; background:transparent; padding:0; cursor:pointer; font-family:inherit; font-size:12.5px; color:var(--g-acc)">Fotky z týdne →</button>
                       </div>
                       <div style="display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:3px">
                         <sc-for list="{{ w.tiles }}" as="t" hint-placeholder-count="5">
@@ -23133,10 +23139,26 @@ class Component extends DCLogic {
         wkLead: N.lead,
         wkStats: N.stats.map(x => ({ label: x[0], value: x[1], note: x[2], icon: x[3] })),
         wkMoments: N.moments.map(m => ({ title: m.title, meta: m.meta, note: m.note, tiles: m.tiles, open: () => otevri(m.photo) })),
+        // Prázdné sekce pod nadpisem vypadaly jako nenačtená data.
+        wkMomentsEmpty: !N.moments.length, wkSlippedEmpty: !N.slipped.length,
         wkSlipped: N.slipped.map(x => ({
           title: x[0], note: x[1],
           go: () => this.setState({ route: x[2], appTab: 0 }),
-          push: () => this.setState({ route: x[2], appTab: 0 })
+          /*
+           * „Na příští týden" doopravdy posune termín (pondělí, stejná hodina).
+           * Dřív jen otevřelo plán a úkol zůstal po termínu.
+           */
+          push: () => {
+            if (!x[3] || !this.apiNaServeru()) { this.setState({ route: x[2], appTab: 0 }); return; }
+            window.GalerieApi.post('ukoly/' + x[3] + '/pristi-tyden', {}).then(res => {
+              if (res && window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data, res.prazdne);
+              if (window.GalerieObnovit) window.GalerieObnovit('planovani');
+              this.toast((res && res.zprava) || 'Přesunuto na příští týden', { icon: 'ph-calendar-plus' });
+            }).catch(e => {
+              const b = (e && e.body) || {};
+              this.toast(b.zprava || b.message || 'Přesunout se nepodařilo — zkuste to znovu', { icon: 'ph-warning', color: 'var(--g-mag)' });
+            });
+          }
         })),
         wkDays: ['Po', 'Út', 'St', 'Čt', 'Pá', 'So', 'Ne'].map((d, i) => {
           const n = N.days[i] || 0;
@@ -23176,8 +23198,14 @@ class Component extends DCLogic {
         title: w.title, photos: this.pl(w.photos, 'fotka', 'fotky', 'fotek'), tasks: w.tasks, note: w.note,
         tiles: w.tiles,
         bar: Math.round((w.photos / nej) * 100) + '%',
-        // Týden jde otevřít jako ten den v časové ose, kde začíná.
-        open: () => this.setState({ route: 'timeline' })
+        /*
+         * Týden se otevře na své první fotce. Dřív vedl na „časovou osu" —
+         * rekonstrukci jednoho dne, která s týdnem neměla nic společného.
+         */
+        open: () => {
+          if (w.photo) { otevri(w.photo); return; }
+          this.toast('Z tohohle týdne nejsou žádné fotky', { icon: 'ph-image', silent: true });
+        }
       })),
       wkPastNote: W.past.note
     };
@@ -23208,6 +23236,7 @@ class Component extends DCLogic {
         wkTitle: 'Týden 10. – 16. srpna 2026',
         wkLead: 'Nejsilnější den byla dnešní neděle — Pustevny a cesta zpátky přes Beskydy. Nejtišší čtvrtek. Dva úkoly s termínem zbývají.',
         wkStats: stats.map(x => ({ label: x[0], value: x[1], note: x[2], icon: x[3] })),
+        wkMomentsEmpty: false, wkSlippedEmpty: false,
         wkMoments: moments.map((m, i) => ({
           title: m[0], meta: m[1], note: m[2],
           tiles: Array.from({ length: 4 }, (_, x) => this.bg((m[3] + x * 5) % 40)),
@@ -23270,7 +23299,7 @@ class Component extends DCLogic {
         title: w[0], photos: this.pl(w[1], 'fotka', 'fotky', 'fotek'), tasks: w[2], note: w[3],
         tiles: Array.from({ length: 5 }, (_, x) => this.bg((w[4] + x * 4) % 40)),
         bar: Math.round((w[1] / 318) * 100) + '%',
-        open: () => this.zatimNeumime('otevírání archivovaných přehledů')
+        open: () => this.openLb(photos[(w[4] * 3) % photos.length].id)
       })),
       wkPastNote: 'Nejsilnější byl týden 27. července – 2. srpna (318 fotek), nejslabší 20. – 26. července (96).'
     };
@@ -30640,7 +30669,7 @@ class Component extends DCLogic {
     const list = (s.vers || {})[cur.id] || [];
     const naServeru = !!(window.GalerieApi && window.GalerieApi.mode === 'http' && /^[0-9a-f-]{36}$/.test(String(cur.id)));
     const rows = [{
-      label: 'Originál ze zařízení', meta: 'nahráno ' + cur.dateShort + ' · ' + (cur.author || 'autor neznámý') + ' · nedotčený',
+      label: 'Originál ze zařízení', meta: 'nahráno ' + (cur.nahrano || cur.dateShort) + ' · ' + (cur.author || 'autor neznámý') + ' · nedotčený',
       icon: 'ph-cloud-check', iconColor: 'var(--g-ok)', bg: 'transparent',
       // Na serveru jde k originálu vrátit — upravené verze se jen smažou.
       isCurrent: list.length === 0, canRestore: naServeru && list.length > 0,
@@ -35361,8 +35390,16 @@ class Component extends DCLogic {
         subtitle: cur.dateShort + ' · ' + cur.place + ' · ' + cur.album,
         ratio: cur.orient === 'portrait' ? '3/4' : cur.orient === 'square' ? '1' : '3/2',
         frameW: cur.orient === 'portrait' ? 'min(100%, 620px)' : 'min(100%, 1180px)',
-        caption: cur.caption || '', dateVal: cur.day, timeVal: '06:42',
-        uploaded: 'nahráno ' + cur.dateShort,
+        /*
+         * Datum a čas pořízení, jak je fotka (nebo ruční úprava) opravdu nese.
+         *
+         * Čas byl napevno „06:42" u každé fotky, datum po ruční opravě dál
+         * ukazovalo původní den a fotka bez data dostala den nahrání.
+         */
+        caption: cur.caption || '',
+        dateVal: cur.missingDate ? '' : (cur.dateVal || cur.day),
+        timeVal: cur.timeVal || (this.ukazka() ? '06:42' : ''),
+        uploaded: cur.nahrano ? 'nahráno ' + cur.nahrano : 'nahráno ' + cur.dateShort,
         /*
          * Údaje o snímku ze snímku, ne z ukázky.
          *
@@ -35403,8 +35440,12 @@ class Component extends DCLogic {
       lbNoPlace: !!(cur && !placeKey(cur.place)),
       lbNoPlaceText: cur && cur.missingPlace ? 'Tahle položka nemá polohu. Doplnit ji můžete v Úklidu knihovny.' : 'Poloha „' + (cur ? cur.place : '') + '“ se nedá zobrazit na mapě — chybí jí souřadnice.',
       lbFixPlace: () => { this.setState({ lb: null, route: 'x-uklid', clnTab: 'noPlace' }); this.toast('Úklid knihovny → Bez místa', { icon: 'ph-map-pin-plus' }); },
-      lbAlbum: cur ? cur.album : '',
-      lbAlbumOpts: albums.map(a => ({ value: a.name, label: a.path || a.name })).concat([{ value: '', label: 'Bez albumu' }]),
+      /*
+       * „Bez alba" není název alba — výběr by ho nenašel a prohlížeč by ukázal
+       * první album v seznamu, jako by v něm fotka byla.
+       */
+      lbAlbum: cur && cur.album && cur.album !== 'Bez alba' ? cur.album : '',
+      lbAlbumOpts: albums.map(a => ({ value: a.name, label: a.path || a.name })).concat([{ value: '', label: 'Bez alba' }]),
       lbSetAlbum: e => {
         const v = e.target.value, prev = s.edits;
         /*

@@ -150,6 +150,28 @@ class ObsahKnihovnaTest extends TestCase
     }
 
     /**
+     * Prohlížeč fotky ukazoval u každé fotky čas „06:42" a „nahráno" s dnem
+     * pořízení. Čas je z fotoaparátu, nahrání je okamžik v pásmu dvojice.
+     */
+    public function test_cas_porizeni_a_den_nahrani_jsou_z_fotky(): void
+    {
+        $this->fotka(['taken_at' => null, 'uploaded_at' => '2026-01-10 23:30:00']);
+        $this->fotka(['taken_at' => '2025-12-24 17:45:00', 'uploaded_at' => '2026-01-11 08:00:00'], 2);
+
+        $data = $this->getJson('/api/data/knihovna')->assertOk()->json('data');
+        $fotky = collect($data['PHOTOS'])->keyBy('name');
+
+        $this->assertArrayNotHasKey('timeVal', $fotky['IMG_1.jpg']);
+        // 23:30 UTC je v Praze už 11. ledna.
+        $this->assertSame('11. 1. 2026', $fotky['IMG_1.jpg']['nahrano']);
+        $this->assertSame('17:45', $fotky['IMG_2.jpg']['timeVal']);
+        $this->assertSame('11. 1. 2026', $fotky['IMG_2.jpg']['nahrano']);
+
+        $telefon = collect($data['MOBIL']['PHOTOS'])->keyBy('id');
+        $this->assertSame('11. 1. 2026', $telefon[$fotky['IMG_2.jpg']['id']]['nahrano']);
+    }
+
+    /**
      * Fotka vložená do alba ručně hlásila „Bez alba".
      *
      * Album drží snímky dvěma cestami — `primary_album_id` a spojovací tabulkou.

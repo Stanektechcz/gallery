@@ -29,6 +29,7 @@ use App\Http\Controllers\Api\Galerie\StorageController;
 use App\Http\Controllers\Api\Galerie\TiskController;
 use App\Http\Controllers\Api\Galerie\TokenController;
 use App\Http\Controllers\Api\Galerie\TrezorController;
+use App\Http\Controllers\Api\Galerie\UkolyController;
 use App\Http\Controllers\Api\Galerie\UlozisteController;
 use App\Http\Controllers\Api\Galerie\VzkazyHostuController;
 use App\Http\Controllers\Api\Galerie\WebauthnController;
@@ -235,6 +236,8 @@ Route::middleware(['auth:sanctum', 'dvojice', 'throttle:120,1'])->prefix('api')-
     // Rychlý zápis do deníku a úkol z telefonu — dřív jen v paměti telefonu.
     Route::post('rychle/denik', [RychlyZapisController::class, 'denik'])->name('galerie.rychle.denik');
     Route::post('rychle/ukol', [RychlyZapisController::class, 'ukol'])->name('galerie.rychle.ukol');
+    // „Na příští týden" v Týdenním přehledu — dřív jen otevřelo plán.
+    Route::post('ukoly/{uuid}/pristi-tyden', [UkolyController::class, 'naPristiTyden'])->whereUuid('uuid')->name('galerie.ukoly.pristi-tyden');
 
     // Kategorie úkolů (vlastní nástěnky) — dřív jen ve stavu prohlížeče.
     Route::post('ukoly/kategorie', [KategorieUkoluController::class, 'store'])->name('galerie.ukoly.kategorie.store');

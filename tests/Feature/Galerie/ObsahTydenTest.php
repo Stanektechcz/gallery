@@ -104,9 +104,33 @@ class ObsahTydenTest extends TestCase
         $tyden = $this->getJson('/api/data/tyden')->assertOk()->json('data.WEEK');
 
         $this->assertSame('1 z 2', $tyden['now']['stats'][2][1]);
-        $this->assertSame(['Zaplatit zálohu', 'termín byl včera', 'x-plan'], $tyden['now']['slipped'][0]);
+        $this->assertSame(['Zaplatit zálohu', 'termín byl včera', 'x-plan'], array_slice($tyden['now']['slipped'][0], 0, 3));
         $this->assertCount(1, $tyden['now']['slipped']);
         $this->assertSame(['Úterý 22. 9.', 'Příští týden', 'Markéta', 'ph-check-square'], $tyden['next']['rows'][0]);
+    }
+
+    /**
+     * „Na příští týden" posune termín na pondělí, hodina zůstane.
+     *
+     * Tlačítko v přehledu dřív jen otevřelo plán a úkol visel po termínu dál.
+     */
+    public function test_ukol_po_terminu_jde_na_pristi_tyden(): void
+    {
+        $ukol = $this->ukol(['title' => 'Zaplatit zálohu', 'due_at' => '2026-09-15 18:00:00']);
+
+        $uuid = $this->getJson('/api/data/tyden')->json('data.WEEK.now.slipped.0.3');
+        $this->assertSame($ukol->uuid, $uuid);
+
+        $odpoved = $this->postJson('/api/ukoly/'.$uuid.'/pristi-tyden')->assertOk()
+            ->assertJsonPath('zprava', '„Zaplatit zálohu“ přesunuto na pondělí 21. 9.');
+
+        $this->assertSame('2026-09-21 18:00:00', $ukol->fresh()->due_at->format('Y-m-d H:i:s'));
+        $this->assertSame([], $odpoved->json('data.WEEK.now.slipped'));
+
+        // Hotový úkol se neposouvá; cizí prostor ho nenajde.
+        $ukol->update(['status' => 'completed', 'completed_at' => now()]);
+        $this->postJson('/api/ukoly/'.$uuid.'/pristi-tyden')->assertStatus(422);
+        $this->postJson('/api/ukoly/'.Str::uuid().'/pristi-tyden')->assertNotFound();
     }
 
     public function test_pristi_tyden_je_z_kalendare_bez_soukromych(): void

@@ -21,9 +21,9 @@ use Illuminate\Support\Facades\URL;
  *
  *     now:  { title, lead, stats: [[popisek, hodnota, poznámka, ikona]],
  *             moments: [{ title, meta, note, tiles, photo }],
- *             slipped: [[co, poznámka, cesta]], days: [počet × 7], daysNote }
+ *             slipped: [[co, poznámka, cesta, uuid úkolu]], days: [počet × 7], daysNote }
  *     next: { title, lead, rows: [[kdy, co, kdo, ikona]] }
- *     past: { head, note, rows: [{ title, photos, tasks, note, tiles }] }
+ *     past: { head, note, rows: [{ title, photos, tasks, note, tiles, photo }] }
  *
  * Týden začíná pondělím. Fotky se počítají podle dne pořízení — „kolik fotek
  * je z tohohle týdne", ne kdy je kdo nahrál.
@@ -373,6 +373,8 @@ class Tyden implements PoskytovatelObsahu
                 (string) $u->title,
                 'termín byl '.$this->kdyBylo(CarbonImmutable::parse($u->due_at), $dnes),
                 'x-plan',
+                // Klíč pro „Na příští týden" (`POST /api/ukoly/{uuid}/pristi-tyden`).
+                (string) $u->uuid,
             ])->values()->all(),
             'days' => $poDnech,
             'daysNote' => $nejsilnejsi === null
@@ -606,6 +608,8 @@ class Tyden implements PoskytovatelObsahu
                 'tasks' => $celkem ? $hotove.' z '.$celkem.' úkolů' : 'bez úkolů',
                 'note' => $mista ? 'Nejvíc fotek: '.implode(', ', $mista) : ($tyden->count() ? '' : 'Žádné fotky.'),
                 'tiles' => $tyden->take(5)->map(fn ($f) => $this->nahled($f))->values()->all(),
+                // Týden se otevře na své první fotce (dřív obecná časová osa).
+                'photo' => $tyden->isNotEmpty() ? (string) $tyden->first()->uuid : null,
             ];
         }
 
@@ -669,7 +673,7 @@ class Tyden implements PoskytovatelObsahu
                 ->orWhereBetween('completed_at', [$od, $do])
                 // Po termínu může být i úkol starší než pět týdnů.
                 ->orWhere(fn ($s) => $s->whereNotNull('due_at')->where('due_at', '<', $od)->where('status', '!=', 'completed')))
-            ->get(['id', 'title', 'status', 'due_at', 'completed_at', 'assigned_to']);
+            ->get(['id', 'uuid', 'title', 'status', 'due_at', 'completed_at', 'assigned_to']);
     }
 
     /**

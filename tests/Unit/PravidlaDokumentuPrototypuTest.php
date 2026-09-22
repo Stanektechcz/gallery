@@ -421,6 +421,28 @@ class PravidlaDokumentuPrototypuTest extends TestCase
         $this->assertStringContainsString("['Jízdenky a trasy', 'list', 'ticket']", $data);
     }
 
+    /** „Na příští týden" v Týdenním přehledu posune úkol na serveru, ne jen obrazovku. */
+    public function test_tydenni_prehled_posouva_ukol_na_serveru(): void
+    {
+        $pocitac = self::dokument('galerie-desktop.dc.html');
+
+        $this->assertStringContainsString("window.GalerieApi.post('ukoly/' + x[3] + '/pristi-tyden', {})", $pocitac);
+        $this->assertStringContainsString('<sc-if value="{{ wkSlippedEmpty }}">', $pocitac);
+        $this->assertStringContainsString('<sc-if value="{{ wkMomentsEmpty }}">', $pocitac);
+        $this->assertStringNotContainsString("open: () => this.setState({ route: 'timeline' })", $pocitac);
+    }
+
+    /** Prohlížeč fotky: čas, datum, nahrání a album podle fotky, ne napsané. */
+    public function test_prohlizec_fotky_neukazuje_vymyslene_udaje(): void
+    {
+        $pocitac = self::dokument('galerie-desktop.dc.html');
+
+        $this->assertStringNotContainsString("dateVal: cur.day, timeVal: '06:42'", $pocitac);
+        $this->assertStringContainsString("timeVal: cur.timeVal || (this.ukazka() ? '06:42' : '')", $pocitac);
+        $this->assertStringContainsString("lbAlbum: cur && cur.album && cur.album !== 'Bez alba' ? cur.album : ''", $pocitac);
+        $this->assertStringContainsString("'nahráno ' + (lbP.nahrano || lbP.day || '')", self::dokument('galerie-mobil.dc.html'));
+    }
+
     /** Přihlášení se na kód druhého ověření ptá políčkem, ne dialogem prohlížeče. */
     public function test_dvoufazove_overeni_ma_policko(): void
     {

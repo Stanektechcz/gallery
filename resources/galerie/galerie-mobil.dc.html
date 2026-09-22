@@ -14609,11 +14609,11 @@ class Component extends DCLogic {
             };
           })(),
           verRows: (this.galerieNaServeru() && /^[0-9a-f-]{36}$/.test(String(lbP.id)))
-            ? [{ label: 'Originál ze zařízení', meta: 'nahráno ' + (lbP.day || '') + ' · ' + authorOf(lbP) + ' · nedotčený', isCurrent: !(lbP.uprava && (lbP.uprava.otoceni || lbP.uprava.vyrez)), canRestore: false, restore: () => {} }]
+            ? [{ label: 'Originál ze zařízení', meta: 'nahráno ' + (lbP.nahrano || lbP.day || '') + ' · ' + authorOf(lbP) + ' · nedotčený', isCurrent: !(lbP.uprava && (lbP.uprava.otoceni || lbP.uprava.vyrez)), canRestore: false, restore: () => {} }]
               .concat(lbP.uprava && (lbP.uprava.otoceni || lbP.uprava.vyrez)
                 ? [{ label: 'Upravená verze', meta: [lbP.uprava.otoceni ? 'otočení ' + lbP.uprava.otoceni + '°' : null, lbP.uprava.vyrez ? 'výřez' : null].filter(Boolean).join(' · '), isCurrent: true, canRestore: false, restore: () => {} }]
                 : [])
-            : [{ label: 'Originál ze zařízení', meta: 'nahráno ' + (lbP.day || '') + ' · ' + authorOf(lbP) + ' · nedotčený', isCurrent: vers.length === 0, canRestore: false, restore: () => {} }]
+            : [{ label: 'Originál ze zařízení', meta: 'nahráno ' + (lbP.nahrano || lbP.day || '') + ' · ' + authorOf(lbP) + ' · nedotčený', isCurrent: vers.length === 0, canRestore: false, restore: () => {} }]
             .concat(vers.map((v, i) => ({
               label: v.label, meta: v.meta,
               isCurrent: i === vers.length - 1, canRestore: i !== vers.length - 1,

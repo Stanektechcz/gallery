@@ -399,6 +399,15 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
                  * z času pořízení; čas nahrání by z celé dávky udělal jednu sérii.
                  */
                 'ts' => $m->taken_at ? $m->taken_at->getTimestamp() : null,
+                /*
+                 * Čas pořízení a den nahrání.
+                 *
+                 * Prohlížeč fotky měl u každé fotky čas „06:42" a „nahráno"
+                 * s datem pořízení. Čas je podle hodin fotoaparátu (jak ho
+                 * EXIF zapsal), nahrání je okamžik v pásmu dvojice.
+                 */
+                'timeVal' => $m->taken_at ? $m->taken_at->format('H:i') : null,
+                'nahrano' => Cas::mistni($m->uploaded_at ?? $m->created_at)?->format('j. n. Y'),
                 'n' => $poradi,
             ];
 
@@ -1097,6 +1106,8 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
                 'id' => $f['id'],
                 'di' => $poradiDnu[$f['day']] ?? 0,
                 'day' => $f['dayLabel'],
+                // Den nahrání — „nahráno" u originálu ukazovalo den pořízení.
+                'nahrano' => $f['nahrano'] ?? null,
                 'place' => $f['place'],
                 'video' => $f['isVideo'],
                 'dur' => $f['dur'] ?? '0:20',
