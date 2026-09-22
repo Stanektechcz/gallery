@@ -323,7 +323,9 @@ class ObsahSystemTest extends TestCase
         $profil = collect($data['SETROWS']['profil']['rows'])->keyBy(0);
         $this->assertSame('Adrian · '.$this->adri->email, $profil['Jméno a e-mail'][1]);
         $this->assertSame('Upravit', $profil['Jméno a e-mail'][2]);
-        $this->assertSame('vypnuto', $profil['Dvoufázové přihlášení'][2]);
+        // Řádek je tlačítko (SETACT) — dřív tu stálo jen „vypnuto" a zapnout nešlo.
+        $this->assertSame('Zapnout ověření', $profil['Dvoufázové přihlášení'][2]);
+        $this->assertStringStartsWith('Vypnuto', $profil['Dvoufázové přihlášení'][1]);
 
         $odkazy = collect($data['SETROWS']['soukromi']['rows'])->keyBy(0)['Sdílené odkazy'][1];
         $this->assertSame('1 funguje · 1 vypršel nebo je vypnutý', $odkazy);

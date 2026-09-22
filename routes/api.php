@@ -142,7 +142,10 @@ Route::prefix('v1')->middleware(['auth:sanctum', 'dvojice:klic'])->group(functio
     Route::delete('/ucet/zruseni', [AccountController::class, 'cancelDeletion'])->name('api.account.delete.cancel');
     Route::get('/profil', [ProfileController::class, 'show'])->name('api.profile.show');
     Route::patch('/profil', [ProfileController::class, 'update'])->name('api.profile.update');
-    Route::put('/profil/heslo', [ProfileController::class, 'password'])->name('api.profile.password');
+    // Ověřuje současné heslo — jedno počítadlo s dvoufázovým přihlášením níž,
+    // ať se heslo nedá zkoušet přes ukradené sezení donekonečna.
+    Route::put('/profil/heslo', [ProfileController::class, 'password'])
+        ->middleware('throttle:10,1,ucet-heslo')->name('api.profile.password');
     Route::patch('/user-preferences', [UserPreferenceController::class, 'update'])->name('api.user-preferences.update');
     Route::get('/automations', [AutomationRegistryController::class, 'index'])->name('api.automations.index');
     Route::patch('/automations/{key}', [AutomationRegistryController::class, 'update'])->name('api.automations.update');
@@ -416,9 +419,11 @@ Route::prefix('v1')->middleware(['auth:sanctum', 'dvojice:klic'])->group(functio
     Route::post('/billing/trial', [BillingController::class, 'startTrial'])->name('api.billing.trial');
 
     Route::get('/ucet/aktivita', [AccountController::class, 'activity'])->name('api.account.activity');
-    Route::post('/ucet/2fa', [TwoFactorController::class, 'begin'])->name('api.2fa.begin');
-    Route::post('/ucet/2fa/potvrdit', [TwoFactorController::class, 'confirm'])->name('api.2fa.confirm');
-    Route::delete('/ucet/2fa', [TwoFactorController::class, 'disable'])->name('api.2fa.disable');
+    Route::middleware('throttle:10,1,ucet-heslo')->group(function () {
+        Route::post('/ucet/2fa', [TwoFactorController::class, 'begin'])->name('api.2fa.begin');
+        Route::post('/ucet/2fa/potvrdit', [TwoFactorController::class, 'confirm'])->name('api.2fa.confirm');
+        Route::delete('/ucet/2fa', [TwoFactorController::class, 'disable'])->name('api.2fa.disable');
+    });
 
     Route::get('/automation-rules', [AutomationRuleController::class, 'index'])->name('api.automation.rules');
     Route::post('/automation-rules', [AutomationRuleController::class, 'store'])->name('api.automation.rules.store');

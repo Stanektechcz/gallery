@@ -697,6 +697,7 @@
   const SETACT = {
     'Upravit': ['ph-pencil-simple', 'ucet-profil'],
     'Změnit': ['ph-image', 'ucet-foto'], 'Změnit heslo': ['ph-key', 'ucet-heslo'], 'Odpojit': ['ph-plugs', null],
+    'Zapnout ověření': ['ph-shield-check', '2fa-zapnout'], 'Vypnout ověření': ['ph-shield', '2fa-vypnout'],
     'Detail': ['ph-hard-drives', 'storage'], 'Zkusit znovu': ['ph-arrow-clockwise', 'disk-prenest'],
     'Vymazat': ['ph-broom', 'cache-vymazat'], 'Spravovat': ['ph-link-simple', 'shared'],
     'Zobrazit': ['ph-pulse', 'activity'], 'Instalovat': ['ph-device-mobile', 'pwa-instalace'],

@@ -14346,20 +14346,31 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
       <div onClick="{{ stop }}" role="dialog" aria-label="{{ acTitle }}" class="dialog" style="width:min(460px,100%); background:var(--g-raise); gap:14px">
         <div class="dialog-title">{{ acTitle }}</div>
         <div class="dialog-body">{{ acBody }}</div>
-        <div class="field"><label>{{ acLabelA }}</label>
-          <input class="input" type="{{ acTypeA }}" autocomplete="{{ acAutoA }}" value="{{ acA }}" onInput="{{ acSetA }}" onKeyDown="{{ acKey }}" aria-label="{{ acLabelA }}" />
-        </div>
-        <div class="field"><label>{{ acLabelB }}</label>
-          <input class="input" type="{{ acTypeB }}" autocomplete="{{ acAutoB }}" value="{{ acB }}" onInput="{{ acSetB }}" onKeyDown="{{ acKey }}" aria-label="{{ acLabelB }}" />
-        </div>
-        <div class="field"><label>{{ acLabelC }}</label>
-          <input class="input" type="password" autocomplete="{{ acAutoC }}" value="{{ acC }}" onInput="{{ acSetC }}" onKeyDown="{{ acKey }}" aria-label="{{ acLabelC }}" />
-        </div>
+        <sc-if value="{{ acInfoOn }}">
+          <div style="padding:12px 14px; border-radius:2px; background:var(--g-panel); font-family:ui-monospace, Menlo, Consolas, monospace; font-size:15px; letter-spacing:.06em; line-height:1.7; word-break:break-word; user-select:all">{{ acInfo }}</div>
+        </sc-if>
+        <sc-if value="{{ acShowA }}">
+          <div class="field"><label>{{ acLabelA }}</label>
+            <input class="input" type="{{ acTypeA }}" autocomplete="{{ acAutoA }}" value="{{ acA }}" onInput="{{ acSetA }}" onKeyDown="{{ acKey }}" aria-label="{{ acLabelA }}" />
+          </div>
+        </sc-if>
+        <sc-if value="{{ acShowB }}">
+          <div class="field"><label>{{ acLabelB }}</label>
+            <input class="input" type="{{ acTypeB }}" autocomplete="{{ acAutoB }}" value="{{ acB }}" onInput="{{ acSetB }}" onKeyDown="{{ acKey }}" aria-label="{{ acLabelB }}" />
+          </div>
+        </sc-if>
+        <sc-if value="{{ acShowC }}">
+          <div class="field"><label>{{ acLabelC }}</label>
+            <input class="input" type="password" autocomplete="{{ acAutoC }}" value="{{ acC }}" onInput="{{ acSetC }}" onKeyDown="{{ acKey }}" aria-label="{{ acLabelC }}" />
+          </div>
+        </sc-if>
         <sc-if value="{{ acHasErr }}">
           <div style="display:flex; gap:8px; align-items:flex-start; font-size:13px; color:var(--g-mag)"><i class="ph-duotone ph-warning-circle" style="font-size:17px; flex:none"></i><span>{{ acErr }}</span></div>
         </sc-if>
         <div class="dialog-actions">
-          <button class="btn btn-secondary" onClick="{{ acClose }}">Zrušit</button>
+          <sc-if value="{{ acCancelOn }}">
+            <button class="btn btn-secondary" onClick="{{ acClose }}">Zrušit</button>
+          </sc-if>
           <button class="btn btn-primary" onClick="{{ acSave }}">{{ acCta }}</button>
         </div>
       </div>
@@ -32680,6 +32691,78 @@ class Component extends DCLogic {
    * opsaný", ne křížkem mimochodem.
    */
   /*
+   * Dvoufázové přihlášení z galerie (`/api/v1/ucet/2fa`).
+   *
+   * Zapnout šlo jen ve starém rozhraní. Postup je týž: heslem se vygeneruje
+   * tajný klíč, ten se opíše do ověřovací aplikace (QR kód záměrně ne —
+   * bez knihovny by ho kreslila cizí služba), kód z aplikace to zapne
+   * a jednou se ukážou záchranné kódy. Vypnutí chce heslo.
+   */
+  dvaFVals(d) {
+    const set = patch => this.setState({ acDlg: { ...this.state.acDlg, ...patch, err: null } });
+    const chyba = zprava => this.setState({ acDlg: { ...this.state.acDlg, busy: false, err: zprava } });
+    const zChyby = e => { const b = (e && e.body) || {}; const prvni = b.errors ? (Object.values(b.errors)[0] || [])[0] : null; return prvni || b.message || 'Server změnu nepřijal — zkuste to znovu.'; };
+    const api = window.GalerieApi, vyp = d.mode === '2fa-vyp', krok = d.krok || 'heslo';
+    const ctveri = t => (String(t || '').match(/.{1,4}/g) || []).join(' ');
+    const save = () => {
+      if (d.busy) return;
+      if (krok === 'kody') { this.setState({ acDlg: null }); if (window.GalerieObnovit) window.GalerieObnovit('system'); return; }
+      if (krok === 'heslo') {
+        if (!d.a) { chyba('Napište současné heslo.'); return; }
+        this.setState({ acDlg: { ...d, busy: true, err: null } });
+        if (vyp) {
+          api.del('v1/ucet/2fa', { current_password: d.a }).then(() => {
+            this.setState({ acDlg: null });
+            if (window.GalerieObnovit) window.GalerieObnovit('system');
+            this.toast('Dvoufázové přihlášení vypnuto — přihlášení chce zase jen heslo', { icon: 'ph-shield' });
+          }).catch(e => chyba(zChyby(e)));
+          return;
+        }
+        api.post('v1/ucet/2fa', { current_password: d.a })
+          .then(res => this.setState({ acDlg: { ...this.state.acDlg, busy: false, krok: 'kod', a: '', tajny: res.secret } }))
+          .catch(e => chyba(zChyby(e)));
+        return;
+      }
+      const kod = String(d.a || '').replace(/\s+/g, '');
+      if (!/^\d{6}$/.test(kod)) { chyba('Kód z aplikace má šest číslic.'); return; }
+      this.setState({ acDlg: { ...d, busy: true, err: null } });
+      api.post('v1/ucet/2fa/potvrdit', { code: kod })
+        .then(res => this.setState({ acDlg: { ...this.state.acDlg, busy: false, krok: 'kody', a: '', kody: res.recovery_codes || [] } }))
+        .catch(e => chyba(zChyby(e)));
+    };
+    const texty = vyp ? {
+      acTitle: 'Vypnout dvoufázové přihlášení',
+      acBody: 'Přihlášení pak bude chtít jen heslo. Potvrďte současným heslem.',
+      acLabelA: 'Současné heslo', acTypeA: 'password', acAutoA: 'current-password', acCta: d.busy ? 'Vypínám…' : 'Vypnout'
+    } : krok === 'heslo' ? {
+      acTitle: 'Zapnout dvoufázové přihlášení',
+      acBody: 'Po zapnutí bude přihlášení chtít i šestimístný kód z ověřovací aplikace v telefonu (Google Authenticator, Authy, 1Password…). Začněte současným heslem.',
+      acLabelA: 'Současné heslo', acTypeA: 'password', acAutoA: 'current-password', acCta: d.busy ? 'Ověřuji…' : 'Pokračovat'
+    } : krok === 'kod' ? {
+      acTitle: 'Opište klíč do aplikace',
+      acBody: 'V ověřovací aplikaci přidejte účet ručně („zadat klíč") a opište tenhle klíč. Pak sem napište šestimístný kód, který aplikace ukáže.',
+      acLabelA: 'Kód z aplikace', acTypeA: 'text', acAutoA: 'one-time-code', acCta: d.busy ? 'Ověřuji…' : 'Zapnout'
+    } : {
+      acTitle: 'Zapnuto — uložte si záchranné kódy',
+      acBody: 'Když telefon s aplikací ztratíte, přihlásíte se jedním z těchto kódů (každý platí jednou). Ukazují se jen teď — opište si je nebo vyfoťte.',
+      acLabelA: '', acTypeA: 'text', acAutoA: 'off', acCta: 'Mám je uložené'
+    };
+    return {
+      acOpen: true, ...texty,
+      acShowA: krok !== 'kody', acShowB: false, acShowC: false, acCancelOn: krok !== 'kody',
+      acInfoOn: krok === 'kod' || krok === 'kody',
+      acInfo: krok === 'kod' ? ctveri(d.tajny) : (d.kody || []).join('   '),
+      acLabelB: '', acTypeB: 'text', acAutoB: 'off', acLabelC: '', acAutoC: 'off',
+      acA: d.a || '', acB: '', acC: '',
+      acSetA: e => set({ a: e.target.value }), acSetB: () => {}, acSetC: () => {},
+      acKey: e => { if (e.key === 'Enter') save(); if (e.key === 'Escape' && krok !== 'kody') this.setState({ acDlg: null }); },
+      acHasErr: !!d.err, acErr: d.err || '',
+      // Záchranné kódy se nezavřou omylem kliknutím vedle — ukazují se jen jednou.
+      acClose: () => { if (krok !== 'kody') this.setState({ acDlg: null }); },
+      acSave: save
+    };
+  }
+  /*
    * Účet z nastavení: jméno a e-mail, heslo.
    *
    * Mluví s API účtu (`/api/v1/profil`). Jméno se mění bez hesla, e-mail
@@ -32688,6 +32771,7 @@ class Component extends DCLogic {
   uctoveVals() {
     const s = this.state, d = s.acDlg;
     if (!d) return { acOpen: false };
+    if (String(d.mode || '').indexOf('2fa') === 0) return this.dvaFVals(d);
     const heslo = d.mode === 'heslo';
     const set = patch => this.setState({ acDlg: { ...this.state.acDlg, ...patch, err: null } });
     const save = () => {
@@ -32724,7 +32808,7 @@ class Component extends DCLogic {
         .catch(e => chyba(zChyby(e)));
     };
     return {
-      acOpen: true,
+      acOpen: true, acShowA: true, acShowB: true, acShowC: true, acCancelOn: true, acInfoOn: false, acInfo: '',
       acTitle: heslo ? 'Změnit heslo' : 'Jméno a e-mail',
       acBody: heslo
         ? 'Heslo do galerie — s ním se přihlašujete a odemykáte trezor. Aspoň 10 znaků.'
@@ -32760,6 +32844,11 @@ class Component extends DCLogic {
     if (kind === 'ucet-heslo') {
       if (!naServeru) { this.toast('Heslo se mění jen s připojeným serverem', { icon: 'ph-info' }); return true; }
       this.setState({ acDlg: { mode: 'heslo', a: '', b: '', c: '' } });
+      return true;
+    }
+    if (kind === '2fa-zapnout' || kind === '2fa-vypnout') {
+      if (!naServeru) { this.toast('Dvoufázové přihlášení se mění jen s připojeným serverem', { icon: 'ph-info' }); return true; }
+      this.setState({ acDlg: { mode: kind === '2fa-zapnout' ? '2fa-zap' : '2fa-vyp', krok: 'heslo', a: '' } });
       return true;
     }
     if (kind === 'ucet-foto') {

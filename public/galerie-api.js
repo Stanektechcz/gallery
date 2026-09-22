@@ -983,10 +983,12 @@
 
     // Smazání jedné položky (fotka do koše). Stejná cesta jako post: v lokálním
     // režimu vrací null, aby volající poznal, že backend není.
-    del: function (path) {
+    // Volitelné tělo (třeba heslo k vypnutí ověření) — nikdy do adresy, ta končí v lozích.
+    del: function (path, body) {
       if (mode !== 'http') return Promise.resolve(null);
       return fetch(base + '/' + path, {
-        method: 'DELETE', headers: headers(), credentials: 'same-origin'
+        method: 'DELETE', headers: headers(), credentials: 'same-origin',
+        body: body ? JSON.stringify(body) : undefined
       }).then(function (r) {
         return r.json().then(function (b) {
           if (!r.ok) throw Object.assign(new Error('HTTP ' + r.status), { body: b, status: r.status });

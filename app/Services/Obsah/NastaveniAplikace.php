@@ -95,9 +95,10 @@ class NastaveniAplikace
                 ['Jméno a e-mail', $ja ? trim($ja->name.' · '.$ja->email) : '', 'Upravit'],
                 ['Profilová fotografie', $fotka ? 'Vlastní obrázek u vašeho jména' : 'Zatím iniciála na barevném kolečku', 'Změnit'],
                 ['Heslo', 'S ním se přihlašujete a odemykáte trezor', 'Změnit heslo'],
+                // Třetí pole je tlačítko (SETACT v galerie-data.js): stav říká popis.
                 ['Dvoufázové přihlášení', $dvaFaktory
-                    ? 'Při přihlášení se chce i kód z ověřovací aplikace'
-                    : 'Přihlášení chce jen heslo', $dvaFaktory ? 'zapnuto' : 'vypnuto'],
+                    ? 'Zapnuto — při přihlášení se chce i kód z ověřovací aplikace'
+                    : 'Vypnuto — přihlášení chce jen heslo', $dvaFaktory ? 'Vypnout ověření' : 'Zapnout ověření'],
                 ['Výchozí vzhled', 'Světlý, tmavý nebo podle systému', 'Podle systému'],
             ],
         ];

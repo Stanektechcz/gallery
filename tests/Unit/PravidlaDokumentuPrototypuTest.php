@@ -557,4 +557,30 @@ class PravidlaDokumentuPrototypuTest extends TestCase
             $this->assertStringContainsString('{ bezDotazu: true }', $dokument, $nazev);
         }
     }
+
+    /**
+     * Dvoufázové přihlášení se zapíná z nastavení galerie.
+     *
+     * Heslo pro vypnutí jde v těle DELETE (adresy končí v protokolech serveru)
+     * a záchranné kódy nemají „Zrušit", které by nic nedělalo.
+     */
+    public function test_dvoufazove_prihlaseni_z_nastaveni(): void
+    {
+        $data = (string) file_get_contents(dirname(__DIR__, 2).'/public/galerie-data.js');
+        $this->assertStringContainsString("'Zapnout ověření': ['ph-shield-check', '2fa-zapnout']", $data);
+        $this->assertStringContainsString("'Vypnout ověření': ['ph-shield', '2fa-vypnout']", $data);
+
+        $api = (string) file_get_contents(dirname(__DIR__, 2).'/public/galerie-api.js');
+        $this->assertStringContainsString('del: function (path, body) {', $api);
+
+        foreach (['galerie-desktop.dc.html', 'galerie-mobil.dc.html'] as $nazev) {
+            $dokument = self::dokument($nazev);
+
+            $this->assertStringContainsString("if (kind === '2fa-zapnout' || kind === '2fa-vypnout') {", $dokument, $nazev);
+            $this->assertStringContainsString("api.del('v1/ucet/2fa', { current_password: d.a })", $dokument, $nazev);
+            $this->assertStringContainsString("api.post('v1/ucet/2fa/potvrdit', { code: kod })", $dokument, $nazev);
+            $this->assertStringContainsString('<sc-if value="{{ acCancelOn }}">', $dokument, $nazev);
+            $this->assertStringNotContainsString('v1/ucet/2fa?', $dokument, $nazev);
+        }
+    }
 }
