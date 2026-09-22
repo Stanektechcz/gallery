@@ -804,6 +804,72 @@ k 25. 8., rychlý zápis nákupu i nápadu v databázi, přesun úkolu do Hotovo
 
 Testy: **1488 PHP testů**, všechny prošly. **Dvě migrace** (viz níže).
 
+## 2s. Devatenácté kolo — dvoufázové přihlášení, tiché hodiny, klíče stavu (22. 9.)
+
+Druhý audit počítače a audit klíčů, které si telefon a počítač posílají.
+
+- **Pojistka — dialog účtu ve sdíleném stavu**: rozepsaný dialog „Změnit
+  heslo" / „Jméno a e-mail" (`acDlg`: současné i nové heslo, nově i tajný
+  klíč 2FA) do stavu nepatří. Počítač ho vyřazuje už příponou `Dlg`
+  (`persistKey`) a telefon ho neukládá, takže k úniku nedocházelo — server
+  ho teď ale zahazuje i sám (`CoupleState::NEUKLADAT`) a migrace by smazala,
+  kdyby ho poslal jiný klient. (Popis commitu `a5d93e2c` tvrdí, že ho
+  počítač posílal; to se nepotvrdilo — viz oprava v dalším commitu.)
+- **Dvoufázové přihlášení z nastavení** (počítač i telefon): heslo → tajný
+  klíč do ověřovací aplikace → kód → záchranné kódy (jednou, zavírá se jen
+  „Mám je uložené"). Vypnutí chce heslo v těle `DELETE`, ne v adrese.
+  Ověřování hesla v API účtu (2FA i změna hesla) má strop 10 pokusů/min.
+- **Tiché hodiny doopravdy**: u dvojice jdou do nastavení upozornění
+  přihlášeného (každého zvlášť). Server je počítal v UTC — teď v místním
+  čase — a web push je vůbec nečetl: teď v tichých hodinách neodejde nic
+  kromě připomínky k akci, kterou si člověk nastavil sám; připomínka
+  partnerovi řekne „má tiché hodiny". „Strop N denně" nahradil skutečný
+  večerní souhrn (`digest`).
+- **Alba**: „Duplikovat strukturu" založí kopii i se stromem podalb na
+  serveru; podalba se u alb dvojice nevymýšlejí a berou se ze všech alb
+  (seznam alb místo 40 posledních nese 200).
+- **Poctivé obrazovky**: hledání nabízí místa a štítky dvojice; náhled
+  chráněného odkazu nechce ukázkové heslo; doklad u platby otevře fotku;
+  hlasovka nehlásí „odeslána" před nahráním; dárky ukazují nejbližší
+  příležitost; lhůty neslibují periodu; fotky cesty podle jejích dnů;
+  „Navrhnout termín" otevře novou akci; rozvaha, nápady, pravidlo po 22:00,
+  režim „je mimo" a přepínače „Co pomohlo" neslibují automatiku, která
+  není; úložiště bez odpovědi neukazuje ukázkových 114,5 GB.
+- **Klíče sdíleného stavu**: `klQuiet` (telefon objekt, počítač 24 hodin —
+  Klid na počítači padal), `arbDone` („Rozhodl los · undefined"), `nedDone`
+  (odškrtávalo jinou položku), `rtOn` (vypínalo výchozí rituály), seriály
+  v `rowDone` (pořadí vs. id titulu) a `curVotes` (hlasuje přihlášený).
+
+Známé, ale neškodné: kapsle otevřená v telefonu (`kapOpened`) zůstane na
+počítači zapečetěná — nic se nerozbije, jen se to nesejde.
+
+Ověřeno v prohlížeči: dialog 2FA na obou zařízeních (chybné heslo →
+„Zadané heslo nesouhlasí.", kroky klíč a záchranné kódy, bez „Zrušit"
+u kódů), řádek nastavení → dialog, tiché hodiny proti serveru (22–24 h,
+ztišené peníze, souhrn; vráceno zpět), duplikace alba (kopie uklizena),
+návrh termínu, rituály z telefonu; průchod 55 tras počítače a 149 záložek
+telefonu bez chyb a bez „undefined".
+
+| Commit | Obsah |
+|---|---|
+| `745ba9fb` | Tisk: fotoknihy ze serveru zůstávají vidět vedle návrhů |
+| `36a76dec` | Nastavení: dvoufázové přihlášení se zapíná a vypíná přímo v galerii |
+| `a5d93e2c` | Stav: dialog účtu (hesla, klíč 2FA) se neukládá do sdíleného stavu (pojistka, viz výš) |
+| `235e535b` | Druhý audit počítače: tiché hodiny na serveru, duplikace alb, poctivé texty |
+| `4b872670` | Klid: telefon a počítač si nepřepisují klíč klQuiet |
+| `4547be5a` | Telefon: bez odpovědi úložiště žádných ukázkových 114,5 GB |
+| `b6d9b294` | Sdílený stav: telefon a počítač čtou stejné klíče stejně |
+| `1f42c987` | Oprava popisu a5d93e2c: dialog účtu do stavu neunikal |
+
+### Po nasazení (2s)
+
+- Migrace `2026_09_22_120000_smazat_dialog_uctu_ze_stavu` spustí
+  `deploy.sh`; maže ze stavu dvojice jen klíče `acDlg` a `klSrv` (nejspíš
+  tam nejsou — je to pojistka).
+- Tiché hodiny začnou platit pro web push hned po nasazení — kdo je má
+  v nastavení zapnuté ze starého rozhraní, tomu v nich přestanou chodit
+  upozornění do telefonu (kromě připomínek k akcím).
+
 ### Po nasazení (2r)
 
 - Migrace `2026_09_22_100000_komentare_ze_stavu_do_tabulky` a
