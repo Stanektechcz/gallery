@@ -6,6 +6,7 @@ use App\Models\GallerySpace;
 use App\Models\SharedTodo;
 use App\Models\User;
 use App\Services\Planning\SharedTodoService;
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -211,6 +212,47 @@ class ObsahPravidlaTest extends TestCase
         $this->assertSame(3, $v[6]);
         // Fotky vzpomínky pro dlaždice — dřív karta brala náhodné fotky knihovny.
         $this->assertSame(['1', '2', '3'], $v[9]);
+        $this->assertSame('2021-08-16', $v[10]);
+    }
+
+    /**
+     * Druhy z generátoru dostanou jména, podle kterých obrazovka filtruje.
+     *
+     * `anniversary`, `album` a `event` neprošly žádným přepínačem v nastavení,
+     * takže se vzpomínky dvojice na počítači neukázaly nikdy. Zamítnutá
+     * vzpomínka se neposílá.
+     */
+    public function test_druhy_vzpominek_odpovidaji_obrazovce(): void
+    {
+        foreach (['anniversary' => null, 'album' => null, 'event' => null, 'dismissed' => now()] as $druh => $zamitnuto) {
+            DB::table('generated_memories')->insert([
+                'uuid' => (string) Str::uuid(), 'gallery_space_id' => $this->prostor->id,
+                'kind' => $druh === 'dismissed' ? 'anniversary' : $druh, 'title' => 'Vzpomínka '.$druh,
+                'occurs_on' => now()->toDateString(), 'media_ids' => json_encode([]), 'score' => 1,
+                'dismissed_at' => $zamitnuto, 'created_at' => now(), 'updated_at' => now(),
+            ]);
+        }
+
+        $druhy = collect($this->getJson('/api/data/pravidla')->assertOk()->json('data.MEMS'))
+            ->mapWithKeys(fn (array $v) => [$v[3] => $v[1]])->all();
+
+        $this->assertSame(['Vzpomínka album' => 'den', 'Vzpomínka anniversary' => 'den', 'Vzpomínka event' => 'milnik'], collect($druhy)->sortKeys()->all());
+    }
+
+    /**
+     * Vzpomínky se generují každé ráno v 8:30 pražského času.
+     *
+     * `gallery:memories` v plánovači nebyl: vzpomínky se sama nikdy neobnovila
+     * a připomínka, kterou slibuje nastavení, nepřišla.
+     */
+    public function test_vzpominky_jsou_v_planovaci(): void
+    {
+        $uloha = collect(app(Schedule::class)->events())
+            ->first(fn ($u) => $u->description === 'memories');
+
+        $this->assertNotNull($uloha);
+        $this->assertSame('30 8 * * *', $uloha->expression);
+        $this->assertSame('Europe/Prague', (string) $uloha->timezone);
     }
 
     /** Pravidla jiného páru se do odpovědi nedostanou. */

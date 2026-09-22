@@ -6137,8 +6137,7 @@ class Component extends DCLogic {
   memOdlozena(id) {
     const v = (this.state.memLater || {})[id];
     if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
-    const d = this.dnes(), dva = n => (n < 10 ? '0' : '') + n;
-    return v > d.getFullYear() + '-' + dva(d.getMonth() + 1) + '-' + dva(d.getDate());
+    return v > this.dnesIso();
   }
   // Úkol ze serveru (`t[4]` je jeho uuid) je hotový podle serveru; `done` patří ukázce.
   ukolHotovy(t, key) {
@@ -7440,7 +7439,8 @@ class Component extends DCLogic {
     const memSrc = key === 'memKeep' ? MEMS.filter(x => memSaved[x[0]])
       // Odklad je den návratu (počítač ukládá „2026-09-23“); prošlý nebo starý text už neplatí.
       : key === 'memLater' ? MEMS.filter(x => this.memOdlozena(x[0]))
-      : key === 'memToday' ? MEMS.filter(x => !this.memOdlozena(x[0]))
+      // „Dnes" jen to, co na dnešek připadá (`x[10]` = den vzpomínky ze serveru).
+      : key === 'memToday' ? MEMS.filter(x => (!x[10] || x[10] === this.dnesIso()) && !this.memOdlozena(x[0]))
       : [];
     const mems = memSrc.map(x => {
       const k = MEMKIND[x[1]] || ['Vzpomínka', 'ph-sparkle', 'var(--g-acc)'];

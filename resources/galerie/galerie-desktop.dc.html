@@ -23690,12 +23690,22 @@ class Component extends DCLogic {
   }
   // ——— Vzpomínky ———
   memPrefs() {
-    const d = { den: true, serie: true, milnik: true, rok: true, cesta: true, time: '8:30', who: 'oba', minPhotos: 10, quiet: false };
+    /*
+     * Výchozí minimum fotek: u dvojice 2 — generátor zakládá vzpomínku už od
+     * dvou fotek a nejvýš s dvanácti. Deset z ukázky schovalo skoro všechno.
+     */
+    const d = { den: true, serie: true, milnik: true, rok: true, cesta: true, time: '8:30', who: 'oba', minPhotos: this.ukazka() ? 10 : 2, quiet: false };
     return { ...d, ...(this.state.memPrefs || {}) };
+  }
+  // Vzpomínka na dnešek (`iso` ze serveru); ukázka dny nerozlišuje.
+  memNaDen(m, posun) {
+    if (!m.iso) return !posun;
+    const d = this.dnes();
+    return m.iso === this.fmtIso(new Date(d.getFullYear(), d.getMonth(), d.getDate() + (posun || 0)));
   }
   memTodayCount() {
     const prefs = this.memPrefs(), hidden = this.state.memHidden || {};
-    return this.memAll().filter(m => prefs[m.kind] && m.count >= prefs.minPhotos && !hidden[m.id] && !this.memOdlozena(m.id)).length;
+    return this.memAll().filter(m => prefs[m.kind] && m.count >= prefs.minPhotos && !hidden[m.id] && this.memNaDen(m, 0) && !this.memOdlozena(m.id)).length;
   }
   /*
    * Odložená vzpomínka se vrátí sama.
@@ -23714,7 +23724,7 @@ class Component extends DCLogic {
     return { ...(this.state.memLater || {}), [id]: this.fmtIso(new Date(d.getFullYear(), d.getMonth(), d.getDate() + dni)) };
   }
   memAll() {
-    return MEMS.map(m => ({ id: m[0], kind: m[1], back: m[2], title: m[3], date: m[4], place: m[5], count: m[6], note: m[7], n: m[8], ids: m[9] || null }));
+    return MEMS.map(m => ({ id: m[0], kind: m[1], back: m[2], title: m[3], date: m[4], place: m[5], count: m[6], note: m[7], n: m[8], ids: m[9] || null, iso: m[10] || null }));
   }
   memCard(m) {
     const s = this.state, k = MEMKIND[m.kind] || MEMKIND.den;
@@ -23791,7 +23801,8 @@ class Component extends DCLogic {
     const all = this.memAll();
     const savedMap = s.memSaved || {}, laterMap = s.memLater || {}, hiddenMap = s.memHidden || {};
     const eligible = all.filter(m => prefs[m.kind] && m.count >= prefs.minPhotos && !hiddenMap[m.id]);
-    const today = eligible.filter(m => !this.memOdlozena(m.id));
+    // „Na dnes" jen vzpomínky, které na dnešek připadají — server posílá i včerejší a zítřejší.
+    const today = eligible.filter(m => this.memNaDen(m, 0) && !this.memOdlozena(m.id));
     const base = {
       appIsMem: true,
       memIsToday: key === 'memToday', memIsSaved: key === 'memKeep', memIsLater: key === 'memLater', memIsPrefs: key === 'memPrefs'
@@ -23799,12 +23810,8 @@ class Component extends DCLogic {
     if (key === 'memToday') {
       const hero = today[0] ? this.memCard(today[0]) : null;
       const rest = today.slice(1).map(m => this.memCard(m));
-      // Zítřejší den a měsíc — dřív napevno „17." z ukázky.
-      const zitra = (() => {
-        const d = this.dnes(), z = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
-        return z.getDate() + '. ' + ['ledna', 'února', 'března', 'dubna', 'května', 'června', 'července', 'srpna', 'září', 'října', 'listopadu', 'prosince'][z.getMonth()] + ' ';
-      })();
-      const tomorrow = eligible.filter(m => this.ukazka() ? m.date.indexOf('17.') === 0 : String(m.date).indexOf(zitra) === 0).slice(0, 2);
+      // Zítřejší vzpomínky podle dne, na který připadají — dřív napevno „17." z ukázky.
+      const tomorrow = eligible.filter(m => this.ukazka() ? m.date.indexOf('17.') === 0 : this.memNaDen(m, 1)).slice(0, 2);
       return {
         ...base,
         memHead: today.length
@@ -27506,7 +27513,7 @@ class Component extends DCLogic {
       };
     });
     const mpr = this.memPrefs();
-    const memAny = this.memAll().some(m => mpr[m.kind] && m.count >= mpr.minPhotos && !(s.memHidden || {})[m.id] && !this.memOdlozena(m.id));
+    const memAny = this.memAll().some(m => mpr[m.kind] && m.count >= mpr.minPhotos && !(s.memHidden || {})[m.id] && this.memNaDen(m, 0) && !this.memOdlozena(m.id));
     W.mem.show = W.mem.show && memAny;
     /*
      * Dlaždice bez skutečných dat se přihlášené dvojici neukazují — stejně
@@ -28167,7 +28174,7 @@ class Component extends DCLogic {
     const memPr = this.memPrefs();
     if (!memPr.quiet) {
       this.memAll().filter(m => memPr[m.kind] && m.count >= memPr.minPhotos
-        && !(s.memHidden || {})[m.id] && !this.memOdlozena(m.id) && !(s.memSaved || {})[m.id])
+        && !(s.memHidden || {})[m.id] && this.memNaDen(m, 0) && !this.memOdlozena(m.id) && !(s.memSaved || {})[m.id])
         .slice(0, 3).forEach(m => {
           out.push({
             id: 'n-mem-' + m.id, days: 0, icon: 'ph-sparkle', color: 'var(--g-acc)',
@@ -34300,7 +34307,7 @@ class Component extends DCLogic {
         const memN = this.memTodayCount();
         const memList = this.memAll().filter(m => {
           const pr = this.memPrefs();
-          return pr[m.kind] && m.count >= pr.minPhotos && !(s.memHidden || {})[m.id] && !this.memOdlozena(m.id);
+          return pr[m.kind] && m.count >= pr.minPhotos && !(s.memHidden || {})[m.id] && this.memNaDen(m, 0) && !this.memOdlozena(m.id);
         });
         const top = memList[0];
         // Bez běžící cesty je `NOWTRIP` prázdný; dlaždice je pak schovaná, ale

@@ -66,6 +66,15 @@ Schedule::command('gallery:relationship-milestones --no-interaction')
     ->withoutOverlapping()
     ->name('relationship-milestones');
 
+// Vzpomínky na dnešek a zítřek + jedno oznámení o té nejsilnější. Příkaz existoval,
+// ale v plánovači nebyl: záložka Vzpomínky se sama nikdy neobnovila a připomínka
+// „v 8:30", kterou slibuje nastavení, nepřišla. V pásmu dvojice, ne v UTC serveru.
+Schedule::command('gallery:memories --no-interaction')
+    ->dailyAt('08:30')
+    ->timezone(config('app.display_timezone', 'Europe/Prague'))
+    ->withoutOverlapping()
+    ->name('memories');
+
 Schedule::command('gallery:sync-cinema --days=10 --no-interaction')
     ->dailyAt('06:15')
     ->withoutOverlapping()

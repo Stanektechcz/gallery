@@ -156,7 +156,16 @@ class Pravidla implements MaPrazdneKolekce, PoskytovatelObsahu
     }
 
     /**
-     * Vzpomínky: `[id, druh, před kolika lety, název, datum, místo, fotek, text, barva, [uuid fotek]]`.
+     * Druh vzpomínky, jak ho zná obrazovka (`MEMKIND`, přepínače v nastavení).
+     *
+     * Generátor zapisuje `anniversary`, `event` a `album`; obrazovka filtruje
+     * podle `den`, `milnik`… — neznámý druh neprošel žádným přepínačem a
+     * vzpomínky dvojice se na počítači neukázaly nikdy.
+     */
+    private const DRUH_VZPOMINKY = ['anniversary' => 'den', 'album' => 'den', 'event' => 'milnik'];
+
+    /**
+     * Vzpomínky: `[id, druh, před kolika lety, název, datum, místo, fotek, text, barva, [uuid fotek], den ISO]`.
      *
      * @return list<array<int, mixed>>
      */
@@ -168,6 +177,8 @@ class Pravidla implements MaPrazdneKolekce, PoskytovatelObsahu
 
         return DB::table('generated_memories')
             ->where('gallery_space_id', $prostor->id)
+            // Zamítnuté („už nezobrazovat" ve starém rozhraní) se nevracejí.
+            ->whereNull('dismissed_at')
             ->orderByDesc('occurs_on')
             ->limit(40)
             ->get()
@@ -177,7 +188,7 @@ class Pravidla implements MaPrazdneKolekce, PoskytovatelObsahu
 
                 return [
                     $v->uuid,
-                    (string) $v->kind,
+                    self::DRUH_VZPOMINKY[(string) $v->kind] ?? (string) $v->kind,
                     (int) ($v->years_ago ?? CarbonImmutable::now()->year - $kdy->year),
                     $v->title,
                     $this->denCesky($kdy),
@@ -187,6 +198,8 @@ class Pravidla implements MaPrazdneKolekce, PoskytovatelObsahu
                     (int) $v->id,
                     // Fotky vzpomínky (prvních pět) — karta dřív brala náhodné fotky knihovny.
                     array_values(array_slice(array_map('strval', $fotky), 0, 5)),
+                    // Den, na který vzpomínka připadá — „na dnes" a „zítra" se podle něj dělí.
+                    $kdy->toDateString(),
                 ];
             })
             ->values()
