@@ -815,9 +815,14 @@ očima **úplně prázdné dvojice** (zkušební prostor bez jediného řádku).
   zdraví jejích rodičů a jmenovitě lidi, co se o ně bojí. Hlavička teď sbírky
   vyprázdní sama, jakmile ví, že jde o přihlášenou dvojici.
 - **Zakládání tam, kde nebylo co číst**: Arbitr (rozpory + výběr mechanismu +
-  rozhodnutí do Paměti rozhodnutí) a Začátek hádky (spouštěč a protilék).
-  Z protiléku jde udělat vypršovací domluvu — ta teď existuje doopravdy
-  (`expExtra`) a vyhodnocuje ji i noční `galerie:expire`.
+  rozhodnutí do Paměti rozhodnutí), Začátek hádky (spouštěč a protilék),
+  Rozhodnutí, která tíží, Matice nezávislosti, Síť důvěry, Kdo je dnes na tom
+  hůř (zápis za sebe, jen na dnešek) a Každý sám (svoje příjmy a dluhy,
+  společné náklady — místo napevno vepsaných 3 400 Kč splátka ze zápisu).
+  Z protiléku jde
+  udělat vypršovací domluvu — ta teď existuje doopravdy (`expExtra`)
+  a vyhodnocuje ji i noční `galerie:expire`. Rozepsané formuláře zůstávají
+  v zařízení (persistSkip), do sdíleného stavu jde až hotový řádek.
 - **Hluchá tlačítka**: „na nedělní desetiminutovku" zapíše téma na agendu,
   „Co z rozhovoru vyšlo" zapíše větu do „Až budeme mít čas", „přesunuto do
   vyhrazených částek" už netvrdí přesun, který se nekonal, „na měsíc přebírá"

@@ -44,8 +44,17 @@
     const s = this.state;
     const on = this.optOn('day');
     const bonus = s.dayBonus || {};
-    const score = w => (DAY_LOAD.find(d => d.who === w) || { items: [] }).items.reduce((a, i) => a + i[1], 0) + (bonus[w] || 0);
     const [jA, jM] = DVA(this);
+    /*
+     * Co dnes bylo, si dvojice zapisuje sama (`dayExtra`): `DAY_LOAD` chodí
+     * ze serveru prázdné, takže obrazovka jinak neměla z čeho počítat.
+     * Zápis nese datum — včerejší zátěž do dneška nepatří.
+     */
+    const dneska = (() => { const d = this.dnes ? this.dnes() : new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); })();
+    const zapsane = s.dayExtra || {};
+    const polozky = w => (DAY_LOAD.find(d => d.who === w) || { items: [] }).items
+      .concat((zapsane[w] || []).filter(i => i[2] === dneska).map(i => [i[0], i[1]]));
+    const score = w => polozky(w).reduce((a, i) => a + i[1], 0) + (bonus[w] || 0);
     const sA = score(jA), sM = score(jM);
     const worse = sA === sM ? null : sA > sM ? jA : jM;
     const druhy = worse === jA ? jM : jA;
@@ -58,20 +67,21 @@
       dayOptWhy: 'Máte mapu energie i náladu dvou, ale nic z toho neřekne, kdo dnes uvaří. Tohle to řekne — jedním číslem za den, ne debatou u sporáku. Nic se nikam nehlásí a nikdo za to nedostane bod.',
       dayHead: worse
         ? KR(worse) + ' je dnes na tom hůř · ' + Math.abs(sA - sM) + ' bod' + (Math.abs(sA - sM) === 1 ? '' : 'y') + ' rozdíl'
-        : DAY_LOAD.length ? 'Dnes jste na tom stejně' : 'Dnešní zátěž zatím nikdo nezapsal',
+        : (polozky(jA).length || polozky(jM).length) ? 'Dnes jste na tom stejně' : 'Dnešní zátěž zatím nikdo nezapsal',
       dayNote: worse
         ? (given ? KR(worse) + ' · výhoda vzdaná. To se taky počítá — jen se to nikde neúčtuje.' : 'Dnes ' + KR(worse) + ' nic nemusí. Není to odměna, je to logistika.')
         : 'Rozdíl je nula. Dnes se dělí všechno normálně.',
       dayNoteColor: given ? 'var(--g-ink3)' : worse ? 'var(--g-ink)' : 'var(--g-ink2)',
-      dayPeople: DAY_LOAD.map(d => {
-        const sc = score(d.who);
+      // Oba sloupce i bez dat ze serveru — jinak by se neměl kam zapsat ten, kdo začíná.
+      dayPeople: (DAY_LOAD.length ? DAY_LOAD.map(d => d.who) : [jA, jM]).map(who => {
+        const sc = score(who);
         return {
-          who: d.who, v: String(sc),
+          who: KR(who), v: String(sc),
           w: Math.round(sc / maxS * 100) + '%',
-          fill: d.who === jA ? 'var(--g-acc)' : 'var(--g-mag)',
-          lead: worse === d.who,
-          items: d.items.map(i => ({ text: i[0], pts: i[1] ? '+' + i[1] : '—', color: i[1] >= 2 ? 'var(--g-mag)' : 'var(--g-ink3)' })),
-          worse: () => { const prev = bonus; this.setState({ dayBonus: Object.assign({}, bonus, { [d.who]: (bonus[d.who] || 0) + 1 }) }); this.toast(d.who + ' — je to dnes horší, než to vypadá. Zapsáno.', { icon: 'ph-plus', undo: () => this.setState({ dayBonus: prev }) }); }
+          fill: who === jA ? 'var(--g-acc)' : 'var(--g-mag)',
+          lead: worse === who,
+          items: polozky(who).map(i => ({ text: i[0], pts: i[1] ? '+' + i[1] : '—', color: i[1] >= 2 ? 'var(--g-mag)' : 'var(--g-ink3)' })),
+          worse: () => { const prev = bonus; this.setState({ dayBonus: Object.assign({}, bonus, { [who]: (bonus[who] || 0) + 1 }) }); this.toast(KR(who) + ' — je to dnes horší, než to vypadá. Zapsáno.', { icon: 'ph-plus', undo: () => this.setState({ dayBonus: prev }) }); }
         };
       }),
       dayCanShift: !!worse && !shifted && !given,
@@ -108,6 +118,23 @@
       // Souhrn z historie, ne napsaná věta „dvakrát Adrian, dvakrát Makinka".
       dayHistLine: !DAY_HIST.length ? 'Historie zatím prázdná — začne prvním zapsaným dnem.'
         : 'Za posledních ' + this.pl(DAY_HIST.length, 'den', 'dny', 'dní') + ': ' + KR(jA) + ' ' + DAY_HIST.filter(h => h.who === jA).length + '×, ' + KR(jM) + ' ' + DAY_HIST.filter(h => h.who === jM).length + '×, nerozhodně ' + DAY_HIST.filter(h => h.who !== jA && h.who !== jM).length + '×. Kdyby to bylo pořád stejně, byla by to informace o práci, ne o dni.',
+      /* Zapsat, co dnes bylo — jen za sebe a jen na dnešek. */
+      dayNewText: s.dayT || '', dayNewPts: String(s.dayP === undefined ? 1 : s.dayP),
+      daySetText: e => this.setState({ dayT: e.target.value }),
+      daySetPts: e => this.setState({ dayP: parseInt(e.target.value, 10) || 1 }),
+      dayPtsOpts: [{ value: '1', label: 'unavilo to (+1)' }, { value: '2', label: 'sebralo to den (+2)' }, { value: '3', label: 'bylo to moc (+3)' }],
+      dayAddOff: !(s.dayT || '').trim(),
+      dayAddOp: (s.dayT || '').trim() ? 1 : .45,
+      dayAddLabel: 'Zapsat za ' + KR(this.meWho()),
+      dayAdd: () => {
+        const co = (s.dayT || '').trim();
+        if (!co) { this.toast('Napište, co dnes bylo', { icon: 'ph-pencil-simple', silent: true }); return; }
+        const ja = this.meWho();
+        const prev = zapsane;
+        const mine = (zapsane[ja] || []).concat([[co, s.dayP === undefined ? 1 : s.dayP, dneska]]);
+        this.setState({ dayExtra: Object.assign({}, zapsane, { [ja]: mine }), dayT: '' });
+        this.toast('Zapsáno k dnešku · ' + co, { icon: 'ph-note-pencil', undo: () => this.setState({ dayExtra: prev }) });
+      },
       dayFoot: 'Skóre se resetuje o půlnoci. Nikdo si nic nenese do zítřka — jinak by z toho byl další účet.'
     };
   },
@@ -213,12 +240,24 @@
     const on = this.optOn('solo');
     const inc = s.mineInc || {};
     const even = !!s.mineEven;
-    const rows = SOLO_MONEY.map(m => Object.assign({}, m, { income: inc[m.who] || m.income, share: even ? 50 : m.share }));
-    const flat = SOLO_COST.rent + SOLO_COST.life;
-    const [jA] = DVA(this);
+    const [jA, jM] = DVA(this);
+    /*
+     * Čísla si zapisuje dvojice sama (`mineMe`, `mineCost`) — `SOLO_MONEY`
+     * i `SOLO_COST` chodí ze serveru prázdné. Dřív tu stálo „vyplní si tu
+     * každý sám" a vyplnit to nešlo nikde.
+     */
+    const moje = s.mineMe || {};
+    const naklady = Object.assign({ rent: SOLO_COST.rent, life: SOLO_COST.life, alone: SOLO_COST.alone }, s.mineCost || {});
+    const zaklad = SOLO_MONEY.length ? SOLO_MONEY : [jA, jM].filter(w => moje[w]).map(w => {
+      const m = moje[w] || {};
+      return { who: w, income: m.income || 0, debt: m.debt || 0, debtNote: m.debt ? (m.debtPay ? 'splátka ' + this.kc(m.debtPay) + ' měsíčně' : 'bez zapsané splátky') : 'bez dluhu', debtPay: m.debtPay || 0, own: m.own || 0, share: 50, note: '' };
+    });
+    const rows = zaklad.map(m => Object.assign({}, m, { income: inc[m.who] || m.income, share: even ? 50 : m.share }));
+    const flat = naklady.rent + naklady.life;
     // Bez řádků by `Math.max()` vrátil −Infinity a šířky pruhů NaN.
     const maxI = Math.max.apply(null, rows.map(r => r.income).concat([1]));
-    const solo = r => r.income - (SOLO_COST.rent + SOLO_COST.alone) - Math.round(r.debt ? 3400 : 0);
+    // Splátka dluhu ze zápisu, ne napevno 3 400 Kč, které nikde nebyly.
+    const solo = r => r.income - (naklady.rent + naklady.alone) - Math.round(r.debt ? (r.debtPay || Math.round(r.debt / 60)) : 0);
     const both = rows.map(r => ({ r: r, left: solo(r) }));
     const weak = both.slice().sort((a, b) => a.left - b.left)[0];
     return {
@@ -227,7 +266,7 @@
       mineDisable: () => this.optOff('solo', 'Každý sám'),
       mineOptWhy: 'Celá aplikace počítá „naše“. To je v pořádku, dokud to funguje. Tady se to jednou rozpočítá na dva — příjem, dluh, majetek a to, co by z toho zbylo, kdyby jeden zůstal sám. Není to plán odchodu, je to test, jestli zůstáváte dobrovolně.',
       mineHead: !rows.length ? 'Zatím nic zapsaného — příjmy, dluhy a náklady si tu každý vyplní sám'
-        : 'Nájem a život ve dvou ' + this.kc(flat) + ' · sám ' + this.kc(SOLO_COST.rent + SOLO_COST.alone),
+        : 'Nájem a život ve dvou ' + this.kc(flat) + ' · sám ' + this.kc(naklady.rent + naklady.alone),
       mineNote: 'Když jeden odejde, náklady se nepůlí. Nájem zůstane celý a k životu ubere jen část — to je ten rozdíl, který nikdo nepočítá dopředu.',
       mineRows: both.map(x => ({
         who: KR(x.r.who), note: x.r.note,
@@ -256,6 +295,35 @@
       mineEvenLabel: even ? 'Podíly jsou 50 : 50' : 'Vyrovnat podíly na 50 : 50',
       mineEven: () => { const prev = even; this.setState({ mineEven: !even }); this.toast(even ? 'Podíly zpátky podle příjmů' : 'Podíly vyrovnány na polovinu · vyšší příjem to unese lépe', { icon: 'ph-scales', undo: () => this.setState({ mineEven: prev }) }); },
       mineEnv: () => this.setState({ route: 'x-rozpocty', budTab: 8 }),
+      /*
+       * Svoje čísla si vyplní každý sám (`mineMe` pod jménem) a společné
+       * náklady jsou jedny (`mineCost`). Bez toho byla obrazovka prázdná
+       * a věta „vyplní si tu každý sám" nikam nevedla.
+       */
+      mineRowsEmpty: !rows.length,
+      mineMyName: KR(this.meWho()),
+      mineNewInc: s.minI || '', mineNewDebt: s.minD || '', mineNewPay: s.minP || '', mineNewOwn: s.minO || '',
+      mineSetInc: e => this.setState({ minI: e.target.value }),
+      mineSetDebt: e => this.setState({ minD: e.target.value }),
+      mineSetPay: e => this.setState({ minP: e.target.value }),
+      mineSetOwn: e => this.setState({ minO: e.target.value }),
+      mineSaveOff: !String(s.minI || '').replace(/\s/g, ''),
+      mineSaveOp: String(s.minI || '').replace(/\s/g, '') ? 1 : .45,
+      mineSave: () => {
+        const cislo = v => parseInt(String(v || '').replace(/\s/g, ''), 10) || 0;
+        const prijem = cislo(s.minI);
+        if (!prijem) { this.toast('Napište aspoň čistý měsíční příjem', { icon: 'ph-pencil-simple', silent: true }); return; }
+        const ja = this.meWho(), prev = moje;
+        this.setState({
+          mineMe: Object.assign({}, moje, { [ja]: { income: prijem, debt: cislo(s.minD), debtPay: cislo(s.minP), own: cislo(s.minO) } }),
+          minI: '', minD: '', minP: '', minO: ''
+        });
+        this.toast('Vaše čísla uložena · druhý si svoje vyplní sám', { icon: 'ph-wallet', undo: () => this.setState({ mineMe: prev }) });
+      },
+      mineCostRent: String(naklady.rent || ''), mineCostLife: String(naklady.life || ''), mineCostAlone: String(naklady.alone || ''),
+      mineSetRent: e => this.setState({ mineCost: Object.assign({}, naklady, { rent: parseInt(String(e.target.value).replace(/\s/g, ''), 10) || 0 }) }),
+      mineSetLife: e => this.setState({ mineCost: Object.assign({}, naklady, { life: parseInt(String(e.target.value).replace(/\s/g, ''), 10) || 0 }) }),
+      mineSetAlone: e => this.setState({ mineCost: Object.assign({}, naklady, { alone: parseInt(String(e.target.value).replace(/\s/g, ''), 10) || 0 }) }),
       mineFoot: 'Tohle číslo se nikomu neposílá a v žádném souhrnu se neobjeví. Otevírá se jen tady a jen když ho někdo otevře.'
     };
   },
@@ -347,9 +415,10 @@
     const s = this.state;
     const on = this.optOn('par');
     const done = s.parDone || {};
-    const rows = PARENTS.map(p => {
+    // Rodiče dvojice (`parExtra`); `PARENTS` ze serveru chodí prázdné.
+    const rows = PARENTS.concat(s.parExtra || []).map(p => {
       const extra = done[p.id] || [];
-      return Object.assign({}, p, { done: p.done.concat(extra), missing: p.missing.filter(m => extra.indexOf(m) < 0) });
+      return Object.assign({}, p, { done: (p.done || []).concat(extra), missing: (p.missing || []).filter(m => extra.indexOf(m) < 0) });
     });
     const ready = rows.reduce((a, p) => a + p.done.length, 0);
     const all = rows.reduce((a, p) => a + p.done.length + p.missing.length, 0);
@@ -373,7 +442,8 @@
         distColor: p.dist <= 30 ? 'var(--g-ink3)' : 'var(--g-warn)',
         who: 'má ' + KR(p.who),
         whoTag: p.who === DVA(this)[0] ? 'tag-accent' : 'tag-accent-2',
-        horizon: 'za ' + Math.max(1, 80 - p.age) + ' let mu bude osmdesát',
+        // Bez rodu: „mu bude osmdesát" sedělo jen na otce.
+        horizon: p.age >= 80 ? 'osmdesát už má za sebou' : 'osmdesát za ' + this.pl(80 - p.age, 'rok', 'roky', 'let'),
         cost: p.cost ? this.kc(p.cost) + ' měsíčně už teď' : 'zatím bez nákladů',
         costColor: p.cost ? 'var(--g-mag)' : 'var(--g-ink3)',
         w: Math.round(p.done.length / Math.max(1, p.done.length + p.missing.length) * 100) + '%',
@@ -391,6 +461,32 @@
       parCost: cost ? 'Dnes to stojí ' + this.kc(cost) + ' měsíčně. Za deset let to může být deset násobek — a bude to na dvou lidech.' : 'Dnes to nestojí nic.',
       parOldest: oldest ? 'Nejstarší je ' + oldest.name.toLowerCase() + ' · ' + oldest.age + ' let. U ' + (oldest.missing.length ? this.pl(oldest.missing.length, 'té jedné věci', 'těch věcí', 'těch věcí') + ' chybí podpis' : 'něj je vyřízeno vše') + '.' : '',
       parBudget: () => this.setState({ route: 'x-rozpocty', budTab: 2 }),
+      /*
+       * Zapsat rodiče. Tři věci k vyřízení (plná moc, dokumenty, dohoda
+       * o financování) se zakládají rovnou jako chybějící — u řádku se pak
+       * odškrtávají. Bez tohohle byla tabulka u dvojice navždy prázdná.
+       */
+      parRowsEmpty: !rows.length,
+      parNewName: s.parN || '', parNewAge: s.parA || '', parNewDist: s.parD || '', parNewWho: s.parWho || DVA(this)[0],
+      parSetName: e => this.setState({ parN: e.target.value }),
+      parSetAge: e => this.setState({ parA: e.target.value }),
+      parSetDist: e => this.setState({ parD: e.target.value }),
+      parSetWho: e => this.setState({ parWho: e.target.value }),
+      parWhoOpts: DVA(this).map(w => ({ value: w, label: KR(w) })),
+      parAddOff: !((s.parN || '').trim() && parseInt(String(s.parA || ''), 10)),
+      parAddOp: (s.parN || '').trim() && parseInt(String(s.parA || ''), 10) ? 1 : .45,
+      parAdd: () => {
+        const jmeno = (s.parN || '').trim(), vek = parseInt(String(s.parA || ''), 10);
+        if (!jmeno || !vek) { this.toast('Napište jméno a věk', { icon: 'ph-pencil-simple', silent: true }); return; }
+        const prev = s.parExtra || [];
+        const radek = {
+          id: 'p' + Date.now(), name: jmeno, age: vek, dist: parseInt(String(s.parD || ''), 10) || 0,
+          who: s.parWho || DVA(this)[0], health: 'zatím bez poznámky', cost: 0,
+          done: [], missing: ['plná moc', 'dokumenty na jednom místě', 'dohoda o financování']
+        };
+        this.setState({ parExtra: [radek].concat(prev), parN: '', parA: '', parD: '' });
+        this.toast(jmeno + ' zapsán · tři věci k vyřízení čekají u řádku', { icon: 'ph-users', undo: () => this.setState({ parExtra: prev }) });
+      },
       parFoot: 'Tohle je jediná tabulka v aplikaci, která zestárne sama. Každý rok se čísla zvětší, i když nikdo nic neudělá.'
     };
   },
@@ -806,7 +902,8 @@
   svedVals: function () {
     const s = this.state;
     const adj = s.svedAdj || {};
-    const rows = SVED.map(g => {
+    // Rozhodnutí dvojice (`svedExtra`); `SVED` ze serveru chodí prázdné.
+    const rows = SVED.concat(s.svedExtra || []).map(g => {
       const w = Math.max(0, Math.min(5, Math.max(0, g.w0 - g.months / 14) + (adj[g.id] || 0)));
       return Object.assign({}, g, { w: w });
     }).sort((a, b) => b.w - a.w);
@@ -834,7 +931,8 @@
         what: r.what, kind: r.kind, note: r.note,
         who: r.who === 'oba' ? 'oba' : KR(r.who),
         whoTag: r.who === jA ? 'tag-accent' : r.who === jM ? 'tag-accent-2' : 'tag-neutral',
-        age: r.months < 12 ? r.months + ' měsíců zpátky' : Math.round(r.months / 12) + ' roky zpátky',
+        // Skloňování: dřív „1 měsíců zpátky" a „5 roky zpátky".
+        age: !r.months ? 'čerstvé' : r.months < 12 ? this.pl(r.months, 'měsíc zpátky', 'měsíce zpátky', 'měsíců zpátky') : this.pl(Math.round(r.months / 12), 'rok zpátky', 'roky zpátky', 'let zpátky'),
         cost: r.cost ? 'stálo to ' + this.kc(r.cost) : 'nestálo to peníze',
         v: r.w.toFixed(1).replace('.', ','),
         w: Math.round(r.w / 5 * 100) + '%',
@@ -853,6 +951,28 @@
         },
         open: () => this.setState({ route: 'x-rozhodnuti', dcTab: 'mem' })
       })),
+      /*
+       * Zapsat rozhodnutí, které tíží. Bez tohohle byla tabulka u dvojice
+       * prázdná — vážit se dalo jen to, co přišlo z ukázky.
+       */
+      svedRowsEmpty: !rows.length,
+      svedNewWhat: s.svedW || '', svedNewWho: s.svedWho || 'oba', svedNewKind: s.svedK || 'rozhodli jsme spolu',
+      svedSetWhat: e => this.setState({ svedW: e.target.value }),
+      svedSetWho: e => this.setState({ svedWho: e.target.value }),
+      svedSetKind: e => this.setState({ svedK: e.target.value }),
+      svedWhoOpts: [{ value: 'oba', label: 'nesete oba' }, { value: jA, label: KR(jA) }, { value: jM, label: KR(jM) }],
+      svedKindOpts: ['rozhodli jsme spolu', 'protlačil to jeden', 'jeden to odmítl'].map(k => ({ value: k, label: k })),
+      svedAddOff: !(s.svedW || '').trim(),
+      svedAddOp: (s.svedW || '').trim() ? 1 : .45,
+      svedAdd: () => {
+        const co = (s.svedW || '').trim();
+        if (!co) { this.toast('Napište, o jaké rozhodnutí jde', { icon: 'ph-pencil-simple', silent: true }); return; }
+        const prev = s.svedExtra || [];
+        // Váha 3 z 5 a nula měsíců: teprve zapsané rozhodnutí ještě nezlehčil čas.
+        const radek = { id: 's' + Date.now(), what: co, who: s.svedWho || 'oba', kind: s.svedK || 'rozhodli jsme spolu', months: 0, cost: 0, w0: 3 };
+        this.setState({ svedExtra: [radek].concat(prev), svedW: '' });
+        this.toast('„' + co + '“ zapsáno · váhu upravíte šipkami u řádku', { icon: 'ph-anchor', undo: () => this.setState({ svedExtra: prev }) });
+      },
       svedFoot: 'Rozhodnutí, které bylo v té době správné, může tížit stejně jako to špatné. Tahle tabulka to nerozsuzuje — jen to nedovolí zapomenout.'
     };
   },
@@ -1040,7 +1160,8 @@
     const s = this.state;
     const swap = s.indepSwap || {}, learn = s.indepLearn || {};
     const [jA, jM] = DVA(this);
-    const rows = INDEP.map(i => ({
+    // Položky dvojice (`indExtra`); `INDEP` ze serveru chodí prázdné.
+    const rows = INDEP.concat(s.indExtra || []).map(i => ({
       ...i,
       holder: swap[i.id] ? (i.holder === jA ? jM : jA) : i.holder,
       pain: learn[i.id] ? Math.max(1, i.pain - 2) : i.pain
@@ -1090,6 +1211,28 @@
         }))
       })),
       indepBus: () => this.setState({ hsTab: 'bus' }),
+      /*
+       * Zapsat, co kdo drží. Bez tohohle byla matice u dvojice navždy prázdná
+       * a obě tlačítka u řádků neměla na čem pracovat.
+       */
+      indepRowsEmpty: !rows.length,
+      indepNewWhat: s.indW || '', indepNewAxis: s.indAx || AX[0], indepNewWho: s.indWho || jA,
+      indepSetWhat: e => this.setState({ indW: e.target.value }),
+      indepSetAxis: e => this.setState({ indAx: e.target.value }),
+      indepSetWho: e => this.setState({ indWho: e.target.value }),
+      indepAxisOpts: AX.map(a => ({ value: a, label: a })),
+      indepWhoOpts: [jA, jM].map(w => ({ value: w, label: KR(w) })),
+      indepAddOff: !(s.indW || '').trim(),
+      indepAddOp: (s.indW || '').trim() ? 1 : .45,
+      indepAdd: () => {
+        const co = (s.indW || '').trim();
+        if (!co) { this.toast('Napište, co jeden drží', { icon: 'ph-pencil-simple', silent: true }); return; }
+        const prev = s.indExtra || [];
+        // Bolest 3 z 5 a dvě hodiny na předání jsou začátek, ne verdikt — mění se tlačítky u řádku.
+        const radek = { id: 'i' + Date.now(), what: co, axis: s.indAx || AX[0], holder: s.indWho || jA, pain: 3, hours: 2, note: '', fix: '' };
+        this.setState({ indExtra: [radek].concat(prev), indW: '' });
+        this.toast('„' + co + '“ je v matici · drží ' + KR(s.indWho || jA), { icon: 'ph-columns', undo: () => this.setState({ indExtra: prev }) });
+      },
       indepFoot: 'Tahle matice se nečte proto, aby jeden odešel. Čte se proto, aby zůstávání nebylo z bezmoci.'
     };
   },
@@ -1098,7 +1241,8 @@
   trustVals: function () {
     const s = this.state;
     const called = s.trustCalled || {}, told = s.trustTold || {};
-    const rows = TRUST.slice().sort((a, b) => (b.believes - b.worries) - (a.believes - a.worries));
+    // Lidé dvojice (`trExtra`); `TRUST` ze serveru chodí prázdné.
+    const rows = TRUST.concat(s.trExtra || []).slice().sort((a, b) => (b.believes - b.worries) - (a.believes - a.worries));
     const believers = rows.filter(r => r.believes >= 4).length;
     const worriers = rows.filter(r => r.worries >= 3);
     const oneSided = rows.filter(r => r.kind === 'slyší jen jednu stranu');
@@ -1128,7 +1272,8 @@
           if (called[t.id]) return;
           const prev = called;
           this.setState({ trustCalled: Object.assign({}, called, { [t.id]: true }) });
-          this.toast(t.name.split(' — ')[0] + ' · zapsáno mezi návštěvy a kontakty', { icon: 'ph-phone-call', undo: () => this.setState({ trustCalled: prev }) });
+          // Do kontaktů („Rodina a blízcí") se tím nic nezapisuje — tam se přidává ručně.
+          this.toast(t.name.split(' — ')[0] + ' · odškrtnuto tady, mezi kontakty to nepřidáváme', { icon: 'ph-phone-call', undo: () => this.setState({ trustCalled: prev }) });
         },
         canTell: t.kind === 'slyší jen jednu stranu' || t.kind === 'věří s otázkou',
         told: !!told[t.id],
@@ -1141,6 +1286,28 @@
         fam: () => this.setState({ hsTab: 'fam' })
       })),
       trustSpk: () => this.setState({ hsTab: 'spk' }),
+      /* Zapsat člověka ze sítě — bez tohohle seznam u dvojice nikdy nevznikl. */
+      trustRowsEmpty: !rows.length,
+      trustNewName: s.trN || '', trustNewRel: s.trR || '', trustNewKind: s.trK || 'věří',
+      trustSetName: e => this.setState({ trN: e.target.value }),
+      trustSetRel: e => this.setState({ trR: e.target.value }),
+      trustSetKind: e => this.setState({ trK: e.target.value }),
+      trustKindOpts: Object.keys(KIND).map(k => ({ value: k, label: k })),
+      trustAddOff: !(s.trN || '').trim(),
+      trustAddOp: (s.trN || '').trim() ? 1 : .45,
+      trustAdd: () => {
+        const jmeno = (s.trN || '').trim();
+        if (!jmeno) { this.toast('Napište, o koho jde', { icon: 'ph-pencil-simple', silent: true }); return; }
+        const vztah = (s.trR || '').trim();
+        const druh = s.trK || 'věří';
+        const prev = s.trExtra || [];
+        const radek = {
+          id: 't' + Date.now(), name: vztah ? jmeno + ' — ' + vztah : jmeno, kind: druh, side: 'oba',
+          signal: '', last: 'nikdy', believes: druh === 'bojí se' ? 2 : 4, worries: druh === 'bojí se' ? 4 : 1
+        };
+        this.setState({ trExtra: [radek].concat(prev), trN: '', trR: '' });
+        this.toast(jmeno + ' je v síti důvěry', { icon: 'ph-users-three', undo: () => this.setState({ trExtra: prev }) });
+      },
       trustFoot: 'Tenhle seznam se nedá vylepšit uvnitř aplikace. Jediná funkční akce je zvednout telefon.'
     };
   },

@@ -629,6 +629,18 @@ class PravidlaDokumentuPrototypuTest extends TestCase
         $this->assertStringContainsString('const ARB = ARB_ROWS.concat(s.arbExtra || []);', $logika);
         $this->assertStringContainsString('const rows = FIGHT_START.concat(s.fsExtra || []).map(f => {', $logika);
         $this->assertStringContainsString('const rows = EXPIRE.concat(s.expExtra || []).map(e => {', $logika);
+        $this->assertStringContainsString('const rows = SVED.concat(s.svedExtra || []).map(g => {', $logika);
+        $this->assertStringContainsString('const rows = INDEP.concat(s.indExtra || []).map(i => ({', $logika);
+        $this->assertStringContainsString('const rows = TRUST.concat(s.trExtra || [])', $logika);
+        $this->assertStringContainsString('const zapsane = s.dayExtra || {};', $logika);
+        $this->assertStringContainsString('const moje = s.mineMe || {};', $logika);
+        // Splátka dluhu ze zápisu, ne vymyšlených 3 400 Kč.
+        $this->assertStringNotContainsString('r.debt ? 3400 : 0', $logika);
+        // Rozepsané formuláře do sdíleného stavu nepatří.
+        $pocitac = self::dokument('galerie-desktop.dc.html');
+        foreach (['arbW', 'arbOA', 'fsT', 'fsA', 'svedW', 'indW', 'trN'] as $klic) {
+            $this->assertMatchesRegularExpression('/\b'.$klic.': 1\b/', $pocitac, 'Rozepsané pole „'.$klic.'" musí být v persistSkip.');
+        }
         // Hlášky, které dřív nic nezapsaly.
         $this->assertStringContainsString('nedTopics: tem.concat([r.what])', $logika);
         $this->assertStringContainsString('hsLater: [{ id: ', $logika);

@@ -3046,6 +3046,27 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                         <div class="field" style="margin-top:12px"><label>Přepsat příjem</label><input class="input" value="{{ r.incVal }}" onChange="{{ r.setInc }}" placeholder="Čistý měsíční příjem"></div>
                       </div>
                     </sc-for>
+                    <sc-if value="{{ mineRowsEmpty }}">
+                      <div style="font-size:13.5px; color:var(--g-ink2); padding:4px 2px; text-wrap:pretty">Zatím tu nejsou žádná čísla. Vyplňte svoje — druhý uvidí výsledek, ne to, jak jste k němu došli.</div>
+                    </sc-if>
+                  </div>
+
+                  <div style="margin-top:24px; max-width:760px">
+                    <div style="font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--g-ink3); margin-bottom:11px">Vaše čísla ({{ mineMyName }})</div>
+                    <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr)); gap:10px">
+                      <div class="field"><label>Čistý příjem měsíčně</label><input class="input" value="{{ mineNewInc }}" onChange="{{ mineSetInc }}" placeholder="Kč"></div>
+                      <div class="field"><label>Dluh celkem</label><input class="input" value="{{ mineNewDebt }}" onChange="{{ mineSetDebt }}" placeholder="Kč, nepovinné"></div>
+                      <div class="field"><label>Splátka měsíčně</label><input class="input" value="{{ mineNewPay }}" onChange="{{ mineSetPay }}" placeholder="Kč, nepovinné"></div>
+                      <div class="field"><label>Vlastní majetek</label><input class="input" value="{{ mineNewOwn }}" onChange="{{ mineSetOwn }}" placeholder="Kč, nepovinné"></div>
+                    </div>
+                    <button class="btn btn-primary" onClick="{{ mineSave }}" disabled="{{ mineSaveOff }}" style="margin-top:10px; opacity:{{ mineSaveOp }}">Uložit moje čísla</button>
+
+                    <div style="font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--g-ink3); margin:20px 0 11px">Společné náklady</div>
+                    <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr)); gap:10px">
+                      <div class="field"><label>Nájem měsíčně</label><input class="input" value="{{ mineCostRent }}" onChange="{{ mineSetRent }}" placeholder="Kč"></div>
+                      <div class="field"><label>Život ve dvou</label><input class="input" value="{{ mineCostLife }}" onChange="{{ mineSetLife }}" placeholder="Kč"></div>
+                      <div class="field"><label>Sám by platil navíc</label><input class="input" value="{{ mineCostAlone }}" onChange="{{ mineSetAlone }}" placeholder="Kč"></div>
+                    </div>
                   </div>
 
                   <div style="font-size:14px; color:var(--g-ink2); max-width:860px; margin-top:20px; text-wrap:pretty">{{ mineWeak }}</div>
@@ -9132,6 +9153,19 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                     </sc-for>
                   </div>
 
+                  <div style="margin-top:20px; max-width:620px">
+                    <div style="font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--g-ink3); margin-bottom:11px">Co dnes bylo</div>
+                    <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end">
+                      <div class="field" style="flex:1 1 260px"><label>Zapsat za sebe</label><input class="input" value="{{ dayNewText }}" onChange="{{ daySetText }}" placeholder="Co dnes ubralo sílu"></div>
+                      <div class="field" style="flex:0 1 220px"><label>Jak moc</label>
+                        <select class="input" aria-label="Jak moc" value="{{ dayNewPts }}" onChange="{{ daySetPts }}">
+                          <sc-for list="{{ dayPtsOpts }}" as="o" hint-placeholder-count="3"><option value="{{ o.value }}">{{ o.label }}</option></sc-for>
+                        </select>
+                      </div>
+                      <button class="btn btn-primary" onClick="{{ dayAdd }}" disabled="{{ dayAddOff }}" style="opacity:{{ dayAddOp }}; flex:none">{{ dayAddLabel }}</button>
+                    </div>
+                  </div>
+
                   <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:18px">
                     <sc-if value="{{ dayCanShift }}">
                       <button class="btn btn-primary" onClick="{{ dayDoShift }}" style="font-size:13px">{{ dayShiftLabel }}</button>
@@ -9854,6 +9888,29 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                     </div>
                   </div>
                 </sc-for>
+                <sc-if value="{{ svedRowsEmpty }}">
+                  <div style="font-size:13.5px; color:var(--g-ink2); padding:4px 2px; text-wrap:pretty">Zatím nic zapsaného. Sem patří rozhodnutí, na které se pořád myslí — ne to, co se povedlo.</div>
+                </sc-if>
+              </div>
+
+              <div style="margin-top:24px; max-width:620px">
+                <div style="font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--g-ink3); margin-bottom:11px">Zapsat rozhodnutí</div>
+                <div style="display:flex; flex-direction:column; gap:10px">
+                  <div class="field"><label>O jaké rozhodnutí jde</label><input class="input" value="{{ svedNewWhat }}" onChange="{{ svedSetWhat }}" placeholder="Věta, kterou si to vybavíte"></div>
+                  <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr)); gap:10px">
+                    <div class="field"><label>Kdo to nese</label>
+                      <select class="input" aria-label="Kdo to nese" value="{{ svedNewWho }}" onChange="{{ svedSetWho }}">
+                        <sc-for list="{{ svedWhoOpts }}" as="o" hint-placeholder-count="3"><option value="{{ o.value }}">{{ o.label }}</option></sc-for>
+                      </select>
+                    </div>
+                    <div class="field"><label>Jak vzniklo</label>
+                      <select class="input" aria-label="Jak vzniklo" value="{{ svedNewKind }}" onChange="{{ svedSetKind }}">
+                        <sc-for list="{{ svedKindOpts }}" as="o" hint-placeholder-count="3"><option value="{{ o.value }}">{{ o.label }}</option></sc-for>
+                      </select>
+                    </div>
+                  </div>
+                  <button class="btn btn-primary" onClick="{{ svedAdd }}" disabled="{{ svedAddOff }}" style="opacity:{{ svedAddOp }}">Zapsat rozhodnutí</button>
+                </div>
               </div>
               <div style="font-size:13px; color:var(--g-ink3); max-width:860px; margin-top:20px; text-wrap:pretty">{{ svedFoot }}</div>
             </div>
@@ -10471,6 +10528,25 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                     </sc-for>
                   </div>
 
+                  <sc-if value="{{ parRowsEmpty }}">
+                    <div style="font-size:13.5px; color:var(--g-ink2); padding:4px 2px; max-width:860px; text-wrap:pretty">Zatím nikdo zapsaný. Patří sem rodiče obou — věk, vzdálenost a tři věci, které se vyřizují, dokud je čas.</div>
+                  </sc-if>
+
+                  <div style="margin-top:22px; max-width:760px">
+                    <div style="font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--g-ink3); margin-bottom:11px">Zapsat rodiče</div>
+                    <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr)); gap:10px">
+                      <div class="field"><label>Kdo</label><input class="input" value="{{ parNewName }}" onChange="{{ parSetName }}" placeholder="Jméno"></div>
+                      <div class="field"><label>Věk</label><input class="input" value="{{ parNewAge }}" onChange="{{ parSetAge }}" placeholder="Let"></div>
+                      <div class="field"><label>Vzdálenost</label><input class="input" value="{{ parNewDist }}" onChange="{{ parSetDist }}" placeholder="km, nepovinné"></div>
+                      <div class="field"><label>Čí rodič</label>
+                        <select class="input" aria-label="Čí rodič" value="{{ parNewWho }}" onChange="{{ parSetWho }}">
+                          <sc-for list="{{ parWhoOpts }}" as="o" hint-placeholder-count="2"><option value="{{ o.value }}">{{ o.label }}</option></sc-for>
+                        </select>
+                      </div>
+                    </div>
+                    <button class="btn btn-primary" onClick="{{ parAdd }}" disabled="{{ parAddOff }}" style="margin-top:10px; opacity:{{ parAddOp }}">Zapsat rodiče</button>
+                  </div>
+
                   <div style="display:flex; flex-direction:column; gap:6px; max-width:860px; margin-top:22px">
                     <div style="font-size:14px; color:var(--g-ink); text-wrap:pretty">{{ parBalance }}</div>
                     <div style="font-size:13.5px; color:var(--g-ink2); text-wrap:pretty">{{ parCost }}</div>
@@ -10530,7 +10606,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                             <div style="font-size:12.5px; color:var(--g-ink3)">{{ i.hours }}</div>
                             <div style="margin-left:auto; display:flex; gap:6px; flex-wrap:wrap">
                               <button class="btn btn-primary" onClick="{{ i.learn }}" style="font-size:12.5px; padding:6px 11px">{{ i.learnLabel }}</button>
-                              <button class="btn btn-secondary" onClick="{{ i.swap }}" style="font-size:12.5px; padding:6px 11px">Předat na měsíc</button>
+                              <button class="btn btn-secondary" onClick="{{ i.swap }}" style="font-size:12.5px; padding:6px 11px">Předat druhému</button>
                               <button class="btn btn-ghost" onClick="{{ i.vault }}" style="font-size:12.5px; padding:6px 11px; color:var(--g-ink3)">Do trezoru</button>
                             </div>
                           </div>
@@ -10539,7 +10615,31 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                     </div>
                   </div>
                 </sc-for>
+                <sc-if value="{{ indepRowsEmpty }}">
+                  <div style="font-size:13.5px; color:var(--g-ink2); padding:4px 2px; text-wrap:pretty">Matice je prázdná. Zapište, co doma drží jeden — heslo k pojistce, servis auta, vztah s účetní.</div>
+                </sc-if>
               </div>
+
+              <div style="margin-top:24px; max-width:620px">
+                <div style="font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--g-ink3); margin-bottom:11px">Zapsat do matice</div>
+                <div style="display:flex; flex-direction:column; gap:10px">
+                  <div class="field"><label>Co to je</label><input class="input" value="{{ indepNewWhat }}" onChange="{{ indepSetWhat }}" placeholder="Věc, kterou umí jen jeden"></div>
+                  <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr)); gap:10px">
+                    <div class="field"><label>Patří do</label>
+                      <select class="input" aria-label="Osa" value="{{ indepNewAxis }}" onChange="{{ indepSetAxis }}">
+                        <sc-for list="{{ indepAxisOpts }}" as="o" hint-placeholder-count="3"><option value="{{ o.value }}">{{ o.label }}</option></sc-for>
+                      </select>
+                    </div>
+                    <div class="field"><label>Kdo to drží</label>
+                      <select class="input" aria-label="Kdo to drží" value="{{ indepNewWho }}" onChange="{{ indepSetWho }}">
+                        <sc-for list="{{ indepWhoOpts }}" as="o" hint-placeholder-count="2"><option value="{{ o.value }}">{{ o.label }}</option></sc-for>
+                      </select>
+                    </div>
+                  </div>
+                  <button class="btn btn-primary" onClick="{{ indepAdd }}" disabled="{{ indepAddOff }}" style="opacity:{{ indepAddOp }}">Zapsat do matice</button>
+                </div>
+              </div>
+
               <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-top:20px; max-width:860px">
                 <div style="font-size:13px; color:var(--g-ink3); flex:1; min-width:280px; text-wrap:pretty">{{ indepFoot }}</div>
                 <button class="btn btn-ghost" onClick="{{ indepBus }}" style="font-size:12.5px; padding:6px 11px">Když jeden vypadne</button>
@@ -10591,7 +10691,27 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                     </div>
                   </div>
                 </sc-for>
+                <sc-if value="{{ trustRowsEmpty }}">
+                  <div style="font-size:13.5px; color:var(--g-ink2); padding:4px 2px; text-wrap:pretty">Síť zatím nikdo nezapsal. Patří sem lidé, pro které je váš vztah opora — i ti, co mají obavy.</div>
+                </sc-if>
               </div>
+
+              <div style="margin-top:24px; max-width:620px">
+                <div style="font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--g-ink3); margin-bottom:11px">Zapsat člověka</div>
+                <div style="display:flex; flex-direction:column; gap:10px">
+                  <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr)); gap:10px">
+                    <div class="field"><label>Kdo</label><input class="input" value="{{ trustNewName }}" onChange="{{ trustSetName }}" placeholder="Jméno"></div>
+                    <div class="field"><label>Kým vám je</label><input class="input" value="{{ trustNewRel }}" onChange="{{ trustSetRel }}" placeholder="Nepovinné — sestra, kolega…"></div>
+                  </div>
+                  <div class="field"><label>Jak to vidí</label>
+                    <select class="input" aria-label="Jak to vidí" value="{{ trustNewKind }}" onChange="{{ trustSetKind }}">
+                      <sc-for list="{{ trustKindOpts }}" as="o" hint-placeholder-count="4"><option value="{{ o.value }}">{{ o.label }}</option></sc-for>
+                    </select>
+                  </div>
+                  <button class="btn btn-primary" onClick="{{ trustAdd }}" disabled="{{ trustAddOff }}" style="opacity:{{ trustAddOp }}">Zapsat člověka</button>
+                </div>
+              </div>
+
               <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-top:20px; max-width:860px">
                 <div style="font-size:13px; color:var(--g-ink3); flex:1; min-width:280px; text-wrap:pretty">{{ trustFoot }}</div>
                 <button class="btn btn-ghost" onClick="{{ trustSpk }}" style="font-size:12.5px; padding:6px 11px">Kdo mluví za nás</button>
@@ -31992,7 +32112,9 @@ class Component extends DCLogic {
       dcR: 1, dcRev: 1, dcT: 1, dcW: 1, kalInput: 1, obName: 1, obPair: 1, pplName: 1, pplTarget: 1,
       quartT: 1, quartA: 1, quartM: 1, quartW: 1, verB: 1, verV: 1, verY: 1, kidsM: 1, kidsO: 1,
       // Rozepsaný rozpor (Arbitr) a spouštěč hádky — do stavu patří až hotový řádek.
-      arbW: 1, arbAr: 1, arbOA: 1, arbOM: 1, fsT: 1, fsA: 1, fsWho: 1
+      arbW: 1, arbAr: 1, arbOA: 1, arbOM: 1, fsT: 1, fsA: 1, fsWho: 1, svedW: 1, svedWho: 1, svedK: 1,
+      indW: 1, indAx: 1, indWho: 1, trN: 1, trR: 1, trK: 1, dayT: 1, dayP: 1,
+      minI: 1, minD: 1, minP: 1, minO: 1, parN: 1, parA: 1, parD: 1, parWho: 1
     };
     return this._pSkip;
   }
