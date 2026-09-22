@@ -804,6 +804,81 @@ k 25. 8., rychlý zápis nákupu i nápadu v databázi, přesun úkolu do Hotovo
 
 Testy: **1488 PHP testů**, všechny prošly. **Dvě migrace** (viz níže).
 
+## 2v. Dvacáté druhé kolo — audit poskytovatelů obsahu, čas dvojice (23. 9.)
+
+Hloubková kontrola všech 31 souborů v `app/Services/Obsah/` (17 264 řádků):
+odkud se berou čísla, která galerie píše na obrazovku.
+
+- **Čísla, která nikdo nenaměřil.** „Pozdní večery" počítaly podíl z **fotek**
+  (`n` = snímků, `reg` = dnů, kdy se fotilo), takže dvojici, která fotí ráno
+  jednu fotku denně, vyšlo „100 % věcí odtud skončilo špatně". Přestěhováno
+  do `Mechanismy::pozdniVecery()` a počítá se z věcí, které opravdu mají
+  pozdější osud: útraty s vratkou a rozhodnutí označená za změněná.
+  Popisky pásem navíc neseděly s tím, co obrazovka hledá jako „pozdní",
+  takže nadpis hlásil natrvalo nula procent.
+- **Přesuny počítané jako útrata** na dvanácti místech (`type != 'income'`):
+  směna 80 000 Kč na eura i každý výběr z bankomatu nafoukly rozpočet
+  i „obvyklou útratu" — a tytéž peníze se počítaly podruhé, až se utratily.
+  Pravidlo je teď jednou: `Transaction::scopeUtraty()` a `scopeZapsane()`
+  (koncepty a smazané zápisy měnily zůstatek i předpověď).
+- **Čas dvojice vs. čas serveru.** Kontrola běžela po pražské půlnoci a
+  **jedenáct testů padalo i bez jediné změny**: mezi 00:00 a 02:00 má
+  aplikace dvě různá „dnes". Účet splatný dnes hlásil „za 1 den", týdenní
+  přehled v pondělí v 01:30 začínal **o týden zpět**, odpověď na otázku pro
+  dva zmizela a nešla zapsat znovu (jedinečný klíč). Opraveno v dvanácti
+  poskytovatelích; testy mají `TestCase::dnes()` a `ted()`, aby počítaly
+  stejnými hodinami jako aplikace.
+- **Soukromí**: řádek „Délka cyklu" obcházel celé nastavení sdílení cyklu;
+  nesdílený osobní rozpočet druhého se kreslil i s limity; soukromý zápis
+  v deníku cesty viděl i ten druhý; deník akcí nenesl galerii, takže kdo je
+  ve dvou, viděl v jedné jména souborů z druhé (migrace).
+- **Dva pády**: `json_decode(...) ?: []` propustí skalár — uložené `"vegan"`
+  shodilo celou skupinu `kucharka` (500). A `Tyden::svet()` si říkal
+  o sloupec, který na `media_items` není: SQLite to spolkne, MySQL na
+  produkci vrátí `Unknown column`, skupina spadne a prototyp dokreslí
+  ukázkové Chorvatsko.
+- **Prázdné stavy**: `Tyden` a `Dnes` neuměly říct, jak vypadají prázdné,
+  takže kdykoli se skupina nespočítala, zůstal na obrazovce cizí týden.
+  Doplněno i `CYC_NASTAVENI` (ukázkové sdílení cyklu), `ABARS.cap`, `MENA`
+  a `BUD.year.worst/best`.
+- **Výkon**: dotazy uvnitř cyklů (obálky alb, videa, duplicity, zprávy,
+  rozvahy, dárky, odkazy). Měřeno na vývojové databázi v transakci, která
+  se vrátila zpět: padesát alb s obálkami a pětadvacet videí stojí **dva
+  dotazy navíc** místo zhruba sto sedmdesáti pěti. `Uklid` navíc načítal
+  celou knihovnu a procházel ji pro každý ze čtyřiceti snímků.
+- **Drobnosti, které mění rozhodnutí**: propadlý pas neměl žádný štítek
+  (příznak `'expiring'` se nikde nezapisuje), odložení „na dnes večer" bylo
+  prošlé hned, pruh čerpání přetékal při 130 %, místa „raději ne" stála
+  mezi „kam chceme", cena za porci se dělila porcemi receptu místo porcemi
+  toho vaření, srdíčko partnera se ukazovalo jako moje, odznak „Je ve
+  sdílení" četl stav zálohy.
+- **Čeština**: druhý pád jmen dělal „od Tomáša", „od Ondřeja", „od Míšy",
+  „od Soňy" — nově Tomáše, Ondřeje, Míši, Soni (21 jmen hlídá test).
+  A tvary podle čísla: „1 minut", „1 hodin", „1 dílů", „1 jednou".
+
+| Commit | Obsah |
+|---|---|
+| `c18803cd` | Obrazovky přestaly tvrdit čísla, která nikdo nenaměřil |
+| `9ba4bd81` | Po půlnoci aplikace počítala dny o jeden vedle |
+| `c84fd72b` | Věty, které nedávaly smysl, a součty přes dvě měny |
+| `061ed3a5` | Dotazy, kterých přibývalo s každým albem a každým videem |
+| `95a1d6fe` | Propadlý pas bez varování a další drobnosti, které mění rozhodnutí |
+
+Testy: **1535 PHP testů**, všechny prošly. **Jedna migrace** (viz níže).
+
+### Po nasazení (2v)
+
+- Migrace přidá `audit_logs.gallery_space_id`. Starým záznamům se prostor
+  nedopočítá (u smazaného předmětu to nejde), takže **aktivita na úvodní
+  obrazovce bude první dny prázdná** a naplní se z nových akcí.
+- Scénáře v šedesátidenní předpovědi: „Zrušit dvě předplatná" se teď počítá
+  ze dvou nejmenších pravidelných plateb a jmenuje je. Když dvojice nemá
+  aspoň dvě, scénář se neposílá.
+- „Zůstatek na účtech" počítá jen účty v nejčastější měně a řekne, kolik
+  jich zůstalo stranou. Dřív sčítal koruny s eury.
+- Kdo zapisoval cyklus a vidí ho druhý: přehled teď ukazuje jen vlastní
+  záznamy, takže se čísla můžou proti dřívějšku lišit.
+
 ## 2u. Dvacáté první kolo — bezpečnost přístupu, druhý audit telefonu (22. 9.)
 
 Audit oprávnění celého galerijního API, druhý průchod telefonem a kontrola
