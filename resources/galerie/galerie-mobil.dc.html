@@ -867,7 +867,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 
               <sc-if value="{{ all.isKlQuiet }}">
                 <div>
-                  <div style="font-size:12.5px; color:var(--g-ink2); line-height:1.55; padding-bottom:8px; text-wrap:pretty">Co vám v posledních týdnech pomohlo. Zapnuté věci aplikace hlídá — ozve se, když z týdne vypadnou.</div>
+                  <div style="font-size:12.5px; color:var(--g-ink2); line-height:1.55; padding-bottom:8px; text-wrap:pretty">Co vám v posledních týdnech pomohlo. Zapněte, co si chcete držet — je to váš seznam, aplikace podle něj nic neposílá.</div>
                   <sc-for list="{{ all.klQuietRows }}" as="q" hint-placeholder-count="6">
                     <button onClick="{{ q.toggle }}" style="display:flex; align-items:center; gap:12px; width:100%; min-height:56px; text-align:left; border:0; border-bottom:1px solid var(--g-line2); background:transparent; padding:11px 2px; cursor:pointer; font-family:inherit; color:inherit">
                       <span style="flex:1; min-width:0; font-size:14.5px">{{ q.label }}</span>
@@ -7065,7 +7065,7 @@ class Component extends DCLogic {
        'trustCalled trustTold svedAdj exitOff exitWho exitMade dayBonus dayGiven dayShift ' +
        'blizAdd blizWA blizWM blizBlock kidsStance kidsYear kidsFixed kidsTalks ' +
        // `navHide memPrefs setVals lockIdle lockSecs lockBio lockStart` ne: patří zařízení, viz `zarizeniKlice()`.
-       'mineInc mineEven parDone mechLog rowDone sw rules memSaved memLater curVotesM evUndone annFmtM kapOpened nedDone klQuiet evPick rtOnM ndStateM whLogM offPackM lbTags lbVers edits cycDays wishes ideas buys ' +
+       'mineInc mineEven parDone mechLog rowDone sw rules memSaved memLater curVotesM evUndone annFmtM kapOpened nedDone klHelpOn evPick rtOnM ndStateM whLogM offPackM lbTags lbVers edits cycDays wishes ideas buys ' +
        // Domácnost, rozhodnutí, sliby, rodina, žádosti a kapsle: server je zapisuje do tabulek.
        // Bez nich telefon hlásil „hotovo" a „žádost odeslána" a změna žila jen do obnovení.
        'chores choreLog dues inv decs cools proms fam nudges kapsules ' +
@@ -8159,14 +8159,16 @@ class Component extends DCLogic {
         color: bad.length > good.length ? 'var(--g-warn)' : 'var(--g-ok)', w: '100%' }]);
     })() : [];
     const isKlBurn = klBurn.length > 0;
-    const klQuiet = s.klQuiet || {};
+    // „Co pomohlo" má vlastní klíč. Dřív se ukládalo do `klQuiet`, kde počítač drží
+    // 24 tichých hodin (pole) — objekt z telefonu mu shodil Klid (`quiet.map`).
+    const klQuiet = s.klHelpOn || (s.klQuiet && !Array.isArray(s.klQuiet) ? s.klQuiet : {});
     const klQuietRows = key === 'klQuiet' ? KL_HELP.map((h, i) => ({
       label: h, on: !!klQuiet[i],
       track: klQuiet[i] ? 'var(--g-acc)' : 'var(--g-line)', knob: klQuiet[i] ? '20px' : '2px',
       toggle: () => {
         const prev = klQuiet;
-        this.setState({ klQuiet: Object.assign({}, klQuiet, { [i]: !klQuiet[i] }) });
-        this.toast(h + (klQuiet[i] ? ' — vypnuto' : ' — zapnuto'), { icon: 'ph-moon', undo: () => this.setState({ klQuiet: prev }) });
+        this.setState({ klHelpOn: Object.assign({}, klQuiet, { [i]: !klQuiet[i] }) });
+        this.toast(h + (klQuiet[i] ? ' — vypnuto' : ' — zapnuto'), { icon: 'ph-moon', undo: () => this.setState({ klHelpOn: prev }) });
       }
     })) : [];
     const isKlQuiet = klQuietRows.length > 0;

@@ -20592,7 +20592,8 @@ class Component extends DCLogic {
     const srvTicho = this.tichoNaServeru();
     if (srvTicho && tab === 'klQuiet') this.tichoNacti();
     const zeSrv = srvTicho && s.klSrv ? this.tichoZeServeru(s.klSrv) : null;
-    const quiet = zeSrv ? zeSrv.quiet : s.klQuiet || [1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1];
+    // Jen pole 24 hodin: starší telefon sem ukládal objekt svých přepínačů (teď `klHelpOn`).
+    const quiet = zeSrv ? zeSrv.quiet : Array.isArray(s.klQuiet) && s.klQuiet.length === 24 ? s.klQuiet : [1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1];
     const rules = zeSrv ? zeSrv.rules : s.klRules || { money: true, chores: false, tasks: false, other: true };
     const RULE_LAB = { money: 'Peníze a splátky', chores: 'Domácnost a dělba', tasks: 'Úkoly a lhůty', other: 'Cokoliv od druhého' };
     // Pět vymyšlených oznámení („Splátka hypotéky odejde zítra", „Makinka přidala
