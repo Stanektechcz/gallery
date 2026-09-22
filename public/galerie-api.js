@@ -957,6 +957,19 @@
         .catch(function () { return null; });
     },
 
+    // Čtení jedné věci ze serveru (komentáře u fotky…). V lokálním režimu null.
+    get: function (path) {
+      if (mode !== 'http') return Promise.resolve(null);
+      return fetch(base + '/' + path, {
+        headers: headers(), credentials: 'same-origin', cache: 'no-cache'
+      }).then(function (r) {
+        return r.json().then(function (b) {
+          if (!r.ok) throw Object.assign(new Error('HTTP ' + r.status), { body: b, status: r.status });
+          return b;
+        });
+      });
+    },
+
     // Smazání jedné položky (fotka do koše). Stejná cesta jako post: v lokálním
     // režimu vrací null, aby volající poznal, že backend není.
     del: function (path) {

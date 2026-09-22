@@ -14594,7 +14594,9 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                     <div style="display:flex; align-items:baseline; gap:8px">
                       <span style="font-size:12.5px; color:var(--g-lb-fg)">{{ c.who }}</span>
                       <span style="font-size:11px; color:var(--g-lb-fg3)">{{ c.when }}</span>
-                      <button onClick="{{ c.del }}" aria-label="Smazat komentář" style="margin-left:auto; border:0; background:transparent; color:var(--g-lb-fg3); cursor:pointer; padding:0"><i class="ph-duotone ph-x" style="font-size:11px"></i></button>
+                      <sc-if value="{{ c.canDel }}">
+                        <button onClick="{{ c.del }}" aria-label="Smazat komentář" style="margin-left:auto; border:0; background:transparent; color:var(--g-lb-fg3); cursor:pointer; padding:0"><i class="ph-duotone ph-x" style="font-size:11px"></i></button>
+                      </sc-if>
                     </div>
                     <div style="font-size:13.5px; line-height:1.5; color:var(--g-lb-fg); margin-top:3px; text-wrap:pretty">{{ c.text }}</div>
                   </div>
@@ -20830,9 +20832,42 @@ class Component extends DCLogic {
     this.setState(patch);
     this._tt = setTimeout(() => this.setState({ toast: null }), 6000);
   }
+  /*
+   * Komentáře u fotky ze serveru (`/api/v1/media/{uuid}/comments`).
+   *
+   * Vlákno žilo ve sdíleném stavu (`lbCom`) — tabulka `media_comments`, kterou
+   * čte staré rozhraní, o něm nevěděla a smazat šlo i cizí komentář.
+   * Načte se při prvním otevření fotky; `null` znamená „načítá se".
+   */
+  komentareNaServeru(id) { return !this.ukazka() && this.apiNaServeru() && /^[0-9a-f-]{36}$/i.test(String(id || '')); }
+  komentare(id) {
+    this._kom = this._kom || {};
+    if (this._kom[id] !== undefined) return this._kom[id];
+    this._kom[id] = null;
+    window.GalerieApi.get('v1/media/' + id + '/comments')
+      .then(rows => { this._kom[id] = Array.isArray(rows) ? rows : []; this.forceUpdate(); })
+      .catch(() => { this._kom[id] = []; this.forceUpdate(); });
+    return null;
+  }
+  komentarKdy(iso) {
+    const d = new Date(String(iso || '').replace(' ', 'T') + (/[zZ+]/.test(String(iso || '').slice(10)) ? '' : 'Z'));
+    if (isNaN(d)) return '';
+    const dnes = this.dnes(), cas = d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0');
+    const dni = Math.round((new Date(dnes.getFullYear(), dnes.getMonth(), dnes.getDate()) - new Date(d.getFullYear(), d.getMonth(), d.getDate())) / 86400000);
+    return dni === 0 ? 'dnes v ' + cas : dni === 1 ? 'včera v ' + cas : d.getDate() + '. ' + (d.getMonth() + 1) + '. v ' + cas;
+  }
   lbComAdd() {
     const s = this.state, id = s.lb, txt = (s.lbComDraft || '').trim();
-    if (!txt) { this.toast('Nejdřív napište komentář', { icon: 'ph-pencil-simple' }); return; }
+    if (!txt) { this.toast('Nejdřív napište komentář', { icon: 'ph-pencil-simple', silent: true }); return; }
+    if (this.komentareNaServeru(id)) {
+      window.GalerieApi.post('v1/media/' + id + '/comments', { body: txt }).then(k => {
+        this._kom = this._kom || {};
+        this._kom[id] = (this._kom[id] || []).concat([k]);
+        this.setState({ lbComDraft: '' });
+        this.toast('Komentář přidán — ' + String(this.otherWho()).split(' ')[0] + ' ho uvidí u fotky', { icon: 'ph-chat-circle-text' });
+      }).catch(e => { const b = (e && e.body) || {}; this.toast(b.message || 'Komentář se nepodařilo uložit', { icon: 'ph-warning', color: 'var(--g-mag)' }); });
+      return;
+    }
     const store = s.lbCom || {};
     const cur = store[id] !== undefined ? store[id] : [];
     const now = new Date();
@@ -35770,15 +35805,29 @@ class Component extends DCLogic {
           return [];
         };
         const store = s.lbCom || {};
-        const rows = store[id] !== undefined ? store[id] : seedFor(id);
+        const zeServeru = this.komentareNaServeru(id);
+        const serverove = zeServeru ? this.komentare(id) : null;
+        const rows = zeServeru
+          ? (serverove || []).map(k => ({ id: k.id, who: this.krestni(k.user_name || '') || 'Někdo', text: k.body, when: this.komentarKdy(k.created_at), mine: !!k.is_mine }))
+          : (store[id] !== undefined ? store[id] : seedFor(id));
         const draft = s.lbComDraft || '';
         return {
-          lbComHead: rows.length ? this.pl(rows.length, 'komentář', 'komentáře', 'komentářů') : 'Zatím bez komentáře',
+          lbComHead: zeServeru && serverove === null ? 'Načítám…' : rows.length ? this.pl(rows.length, 'komentář', 'komentáře', 'komentářů') : 'Zatím bez komentáře',
           lbComRows: rows.map((c, i) => ({
             who: c.who, text: c.text, when: c.when,
             initial: c.who.slice(0, 1),
             bg: c.mine ? 'var(--g-acc-soft)' : 'var(--g-lb-btn)',
+            // Smazat jde jen vlastní komentář (server cizí odmítne).
+            canDel: !zeServeru || c.mine,
             del: () => {
+              if (zeServeru) {
+                window.GalerieApi.del('v1/media/' + id + '/comments/' + c.id).then(() => {
+                  this._kom[id] = (this._kom[id] || []).filter(k => k.id !== c.id);
+                  this.forceUpdate();
+                  this.toast('Komentář smazán', { icon: 'ph-trash' });
+                }).catch(e => { const b = (e && e.body) || {}; this.toast(b.message || 'Komentář se nepodařilo smazat', { icon: 'ph-warning', color: 'var(--g-mag)' }); });
+                return;
+              }
               const prev = rows;
               this.setState({ lbCom: { ...store, [id]: rows.filter((x, j) => j !== i) } });
               this.toast('Komentář smazán', { icon: 'ph-trash', undo: () => this.setState({ lbCom: { ...store, [id]: prev } }) });

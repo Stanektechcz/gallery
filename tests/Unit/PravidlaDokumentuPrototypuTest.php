@@ -492,6 +492,18 @@ class PravidlaDokumentuPrototypuTest extends TestCase
         $this->assertStringContainsString('this.setState({ decs: [zaznam].concat(decs)', $pocitac);
     }
 
+    /** Komentáře u fotky přes API, ne ve sdíleném stavu; cizí nejde smazat. */
+    public function test_komentare_k_fotce_na_serveru(): void
+    {
+        $pocitac = self::dokument('galerie-desktop.dc.html');
+        $api = (string) file_get_contents(dirname(__DIR__, 2).'/public/galerie-api.js');
+
+        $this->assertStringContainsString("window.GalerieApi.get('v1/media/' + id + '/comments')", $pocitac);
+        $this->assertStringContainsString("window.GalerieApi.post('v1/media/' + id + '/comments', { body: txt })", $pocitac);
+        $this->assertStringContainsString('<sc-if value="{{ c.canDel }}">', $pocitac);
+        $this->assertStringContainsString('get: function (path) {', $api);
+    }
+
     /** Přihlášení se na kód druhého ověření ptá políčkem, ne dialogem prohlížeče. */
     public function test_dvoufazove_overeni_ma_policko(): void
     {
