@@ -10079,8 +10079,17 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                 </sc-if>
               </div>
 
+              <sc-if value="{{ chCanAdd }}">
+                <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px">
+                  <span style="font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--g-ink3)">Domácí práce</span>
+                  <button class="btn btn-secondary" onClick="{{ chAdd }}" style="margin-left:auto; gap:6px"><i class="ph-duotone ph-plus" style="font-size:16px"></i>Přidat práci</button>
+                </div>
+              </sc-if>
+              <sc-if value="{{ chEmpty }}">
+                <div style="padding:22px 4px; font-size:14px; color:var(--g-ink2); max-width:640px; line-height:1.55; text-wrap:pretty">Zatím tu není žádná domácí práce. Přidejte, co se u vás opakuje — nádobí, vysávání, nákup, odpad — a kdo to teď má. Po „Mám hotovo" se práce předá druhému a minuty se počítají do spravedlivé dělby.</div>
+              </sc-if>
               <div class="tabulka-obal" style="overflow-x:auto; max-width:100%; min-width:0"><table class="table">
-                <thead><tr><th>Práce</th><th style="width:130px">Jak často</th><th style="width:150px">Teď má</th><th style="width:160px">Naposledy</th><th style="width:90px">Čas</th><th style="text-align:right; width:250px">Akce</th></tr></thead>
+                <thead><tr><th>Práce</th><th style="width:130px">Jak často</th><th style="width:150px">Teď má</th><th style="width:160px">Naposledy</th><th style="width:90px">Čas</th><th style="text-align:right; width:290px">Akce</th></tr></thead>
                 <tbody>
                   <sc-for list="{{ chRows }}" as="c" hint-placeholder-count="8">
                     <tr>
@@ -10101,6 +10110,9 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                         <button class="btn btn-secondary" onClick="{{ c.done }}" style="font-size:12.5px; padding:6px 11px">Mám hotovo</button>
                         <button class="btn btn-ghost" onClick="{{ c.swap }}" style="font-size:12.5px; padding:6px 11px">Přehodit</button>
                         <button class="btn btn-icon" onClick="{{ c.rotate }}" title="{{ c.rotateTitle }}" aria-label="{{ c.rotateTitle }}" style="color:{{ c.rotateColor }}"><i class="ph-duotone ph-repeat" style="font-size:16px"></i></button>
+                        <sc-if value="{{ c.canRemove }}">
+                          <button class="btn btn-icon" onClick="{{ c.remove }}" title="Odebrat z dělby" aria-label="Odebrat z dělby" style="color:var(--g-ink3)"><i class="ph-duotone ph-trash" style="font-size:16px"></i></button>
+                        </sc-if>
                       </td>
                     </tr>
                   </sc-for>
@@ -18563,9 +18575,26 @@ class Component extends DCLogic {
         cesta: () => 'mista/poznamka',
         telo: (a, b, c, d, ctx) => ({ nazev: ctx, text: a })
       },
+      praceNova: {
+        t: 'Nová domácí práce', a: 'Co je potřeba dělat — třeba Vynést tříděný odpad',
+        b: 'Jak často: denně, 2× týdně, týdně, měsíčně nebo podle potřeby', c: 'Kolik minut to zabere', d: 'Kdo ji má teď: já, druhý, nebo spolu',
+        h: 'Práce se po každém „Mám hotovo" předá druhému (rotaci jde u řádku vypnout). Minuty se počítají do spravedlivé dělby.',
+        cesta: () => 'domacnost/prace',
+        telo: (a, b, c, d) => {
+          const JAK = ['denně', '2× týdně', 'týdně', 'měsíčně', 'podle potřeby'];
+          const jak = (b || 'týdně').trim().toLowerCase().replace(/x/g, '×').replace(/\s+/g, ' ');
+          const jakCasto = JAK.find(x => x === jak || (x === '2× týdně' && /^2/.test(jak))) || null;
+          if (!jakCasto) return { chyba: 'Jak často: denně, 2× týdně, týdně, měsíčně nebo podle potřeby' };
+          const minuty = parseInt(c || '30', 10);
+          if (!(minuty >= 5 && minuty <= 600)) return { chyba: 'Čas napište v minutách, od 5 do 600' };
+          const kdo = /^spol/i.test(d) ? 'spolu' : /^(druh|partner)/i.test(d) || (d && this.dva()[1] && d.toLowerCase() === this.krestni(this.druhy(this.meWho())).toLowerCase()) ? 'druhy' : 'ja';
+          return { nazev: a, jak_casto: jakCasto, minuty, kdo };
+        },
+        po: () => this.setState({ chores: null, hsTab: 'chores' })
+      },
       ucet: {
         t: 'Nový účet', a: 'Název — třeba Společný účet nebo Hotovost', b: 'Počáteční zůstatek (nepovinné)', c: 'Druh: banka, karta, hotovost nebo jiné', d: 'Měna (nepovinné, výchozí CZK)',
-        h: 'Účet je vedený ručně: platby na něj zapisujete v Transakcích nebo přicházejí z pravidelných plateb. Napojení na banku aplikace nemá.',
+        h: 'Platby na účet zapisujete v Transakcích, přicházejí z pravidelných plateb, nebo je nahrajete z výpisu banky (tlačítko Nahrát výpis u účtu).',
         cesta: () => 'finance/ucty',
         telo: (a, b, c, d) => {
           const zustatek = b ? this.castkaZTextu(b) : 0;
@@ -29287,7 +29316,29 @@ class Component extends DCLogic {
         setChores(chores.map(c => c.rotate && c.who === lead ? { ...c, who: other(lead) } : c));
         this.toast('Rotace vyrovnána · práce s rotací přešly na ' + acc(other(lead)), { icon: 'ph-arrows-left-right', undo: () => setChores(prev) });
       },
+      // Nová práce a odebrání jdou na server (DomaciPraceController) — dřív dělba
+      // nešla u dvojice vůbec začít.
+      chEmpty: chores.length === 0,
+      chCanAdd: !this.ukazka() && this.apiNaServeru(),
+      chAdd: () => this.setState({ xaOpen: true, xaMode: 'praceNova', xaCtx: null, xaA: '', xaB: 'týdně', xaC: '30', xaD: 'já' }),
       chRows: chores.map(c => ({
+        canRemove: !this.ukazka() && this.apiNaServeru() && /^[0-9a-f-]{36}$/i.test(String(c.id || '')),
+        remove: () => this.setState({ confirm: {
+          title: 'Odebrat práci', cta: 'Odebrat', btnBg: 'var(--g-mag)',
+          body: '„' + c.name + '“ zmizí z dělby u obou. Co už kdo udělal, zůstane v historii i ve spravedlivé dělbě.',
+          go: () => {
+            this.setState({ confirm: null });
+            window.GalerieApi.del('domacnost/prace/' + c.id).then(res => {
+              if (res && window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data, res.prazdne);
+              // Místní kopie seznamu by odebranou práci dál ukazovala.
+              this.setState({ chores: null });
+              this.toast((res && res.zprava) || 'Práce odebrána', { icon: 'ph-trash' });
+            }).catch(e => {
+              const t = (e && e.body) || {};
+              this.toast(t.zprava || t.message || 'Práci se nepodařilo odebrat', { icon: 'ph-warning', color: 'var(--g-mag)' });
+            });
+          }
+        } }),
         name: c.name, every: c.every, who: c.who, mins: c.mins + ' min',
         icon: c.icon, sub: c.rotate ? 'rotuje po každém splnění' : 'stálá práce — ' + c.who,
         whoTag: this.tagKdo(c.who),

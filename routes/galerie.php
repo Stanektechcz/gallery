@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\Galerie\AlbumArchivController;
 use App\Http\Controllers\Api\Galerie\CestyAkceController;
 use App\Http\Controllers\Api\Galerie\DataController;
 use App\Http\Controllers\Api\Galerie\DenikController;
+use App\Http\Controllers\Api\Galerie\DomaciPraceController;
 use App\Http\Controllers\Api\Galerie\FinanceAkceController;
 use App\Http\Controllers\Api\Galerie\ImportVypisuController;
 use App\Http\Controllers\Api\Galerie\KategorieUkoluController;
@@ -237,6 +238,10 @@ Route::middleware(['auth:sanctum', 'dvojice', 'throttle:120,1'])->prefix('api')-
 
     // Deník z počítače — dialog „Nový zápis" dřív zapisoval jen do stavu obrazovky.
     Route::post('denik', [DenikController::class, 'store'])->name('galerie.denik.store');
+
+    // Domácí práce — dřív šla dělba jen prohlížet, nová práce neměla kudy vzniknout.
+    Route::post('domacnost/prace', [DomaciPraceController::class, 'store'])->name('galerie.domacnost.prace.store');
+    Route::delete('domacnost/prace/{uuid}', [DomaciPraceController::class, 'destroy'])->whereUuid('uuid')->name('galerie.domacnost.prace.destroy');
     Route::patch('denik/{zapis}', [DenikController::class, 'update'])->whereUuid('zapis')->name('galerie.denik.update');
     Route::delete('denik/{zapis}', [DenikController::class, 'destroy'])->whereUuid('zapis')->name('galerie.denik.destroy');
 

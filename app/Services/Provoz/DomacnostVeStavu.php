@@ -11,6 +11,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 
 /**
  * Domácnost, která přišla jako změna stavu.
@@ -287,6 +288,12 @@ class DomacnostVeStavu
 
         foreach (array_values($radky) as $poradi => $r) {
             if (! is_array($r) || ! isset($r['id'], $r['name'])) {
+                continue;
+            }
+
+            // Uuid vydal server: taková práce v databázi byla a někdo ji odebral
+            // (DomaciPraceController). Stará kopie seznamu ji nesmí vzkřísit.
+            if (Str::isUuid((string) $r['id'])) {
                 continue;
             }
 

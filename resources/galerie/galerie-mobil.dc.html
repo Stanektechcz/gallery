@@ -2303,9 +2303,15 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                       <span>{{ jmA }} {{ chMinsA }}</span><span>{{ jmM }} {{ chMinsM }}</span>
                     </div>
                     <sc-if value="{{ chBalanceCan }}">
-                      <button onClick="{{ chBalance }}" style="width:100%; min-height:44px; margin-top:11px; border:1px solid var(--g-line); border-radius:2px; background:transparent; cursor:pointer; font-family:inherit; font-size:13px; color:inherit">Vyrovnat rotaci</button>
+                      <button onClick="{{ chBalance }}" style="width:100%; min-height:44px; margin-top:11px; border:1px solid var(--g-line); border-radius:2px; background:transparent; cursor:pointer;font-family:inherit; font-size:13px; color:inherit">Vyrovnat rotaci</button>
                     </sc-if>
                   </div>
+                  <sc-if value="{{ chEmpty }}">
+                    <div style="padding:4px 0 14px; font-size:13.5px; line-height:1.55; color:var(--g-ink2); text-wrap:pretty">Zatím tu není žádná domácí práce. Přidejte, co se u vás opakuje — nádobí, vysávání, nákup — a po „Hotovo" se práce předá druhému.</div>
+                  </sc-if>
+                  <sc-if value="{{ chCanAdd }}">
+                    <button onClick="{{ chAdd }}" class="btn btn-secondary btn-block" style="min-height:44px; gap:7px; margin-bottom:14px"><i class="ph-duotone ph-plus" style="font-size:16px"></i>Přidat práci</button>
+                  </sc-if>
                   <sc-for list="{{ chRows }}" as="c" hint-placeholder-count="6">
                     <div style="padding-bottom:13px; border-bottom:1px solid var(--g-line2); margin-bottom:12px">
                       <div style="display:flex; align-items:baseline; gap:9px">
@@ -6608,6 +6614,10 @@ class Component extends DCLogic {
       chMinsA: hrs(minsA), chMinsM: hrs(minsM),
       chBalanceCan: diff >= 45,
       chBalance: () => { const prev = chores; setChores(chores.map(c => c.rotate && c.who === lead ? { ...c, who: other(lead) } : c)); this.toast('Rotace vyrovnána · přešlo na ' + acc(other(lead)), { icon: 'ph-arrows-left-right', undo: () => setChores(prev) }); },
+      // Novou práci jde přidat i z telefonu — dřív dělba u dvojice nešla začít.
+      chEmpty: chores.length === 0,
+      chCanAdd: this.galerieNaServeru(),
+      chAdd: () => this.setState({ sheet: 'add', addKind: 'chore', addA: '', addB: 'týdně' }),
       chRows: chores.map(c => ({
         name: c.name, every: c.every, who: c.who, mins: c.mins + ' min', icon: c.icon,
         last: c.last, lastColor: c.overdue ? 'var(--g-mag)' : 'var(--g-ink2)',
@@ -11970,12 +11980,32 @@ class Component extends DCLogic {
       task: ['Nový úkol', 'Co je potřeba', 'Kdo a kdy', 'Přidat úkol'],
       itin: ['Do itineráře', 'Co podnikneme', 'Kdy', 'Přidat'],
       tx: ['Ruční platba', 'Popis platby', 'Částka v Kč', 'Zapsat platbu'],
-      album: ['Nové album', 'Název albumu', 'Poznámka (nepovinná)', 'Založit album']
+      album: ['Nové album', 'Název albumu', 'Poznámka (nepovinná)', 'Založit album'],
+      chore: ['Nová domácí práce', 'Co je potřeba dělat', 'Jak často: denně, 2× týdně, týdně, měsíčně', 'Přidat práci']
     };
     const spec = addSpec[s.addKind || 'diary'];
     const addCommit = () => {
       const a = s.addA.trim(), b = s.addB.trim(), n = s.seq;
       if (!a) { this.toast('Zadejte název', { icon: 'ph-warning' }); return; }
+      /*
+       * Domácí práce na server (DomaciPraceController) — dělba dřív nešla
+       * u dvojice vůbec začít. Má ji teď ten, kdo ji přidal; po „Hotovo"
+       * se předá druhému.
+       */
+      if (s.addKind === 'chore') {
+        if (!this.galerieNaServeru()) { this.toast('Domácí práce se ukládají jen s připojeným serverem', { icon: 'ph-info' }); return; }
+        const JAK = ['denně', '2× týdně', 'týdně', 'měsíčně', 'podle potřeby'];
+        const jak = (b || 'týdně').toLowerCase().replace(/x/g, '×').replace(/\s+/g, ' ');
+        const jakCasto = JAK.find(x => x === jak || (x === '2× týdně' && /^2/.test(jak)));
+        if (!jakCasto) { this.toast('Jak často: denně, 2× týdně, týdně nebo měsíčně', { icon: 'ph-warning' }); return; }
+        window.GalerieApi.post('domacnost/prace', { nazev: a, jak_casto: jakCasto }).then(res => {
+          if (res && window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data, res.prazdne);
+          // Místní kopie dělby by novou práci schovala.
+          this.setState({ sheet: null, addA: '', addB: '', seq: n + 1, chores: null, hsTab: 'chores' });
+          this.toast((res && res.zprava) || 'Práce přidána', { icon: 'ph-broom' });
+        }).catch(e => this.chybaServeru(e, 'Práci se nepodařilo přidat'));
+        return;
+      }
       if (s.addKind === 'album') {
         /*
          * Na serveru: stejně pojmenované album se doplní, jinak vznikne nové.

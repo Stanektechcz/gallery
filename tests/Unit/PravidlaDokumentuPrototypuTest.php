@@ -258,6 +258,35 @@ class PravidlaDokumentuPrototypuTest extends TestCase
         $this->assertStringContainsString('<sc-if value="{{ sheetIsVypis }}">', $telefon);
     }
 
+    /**
+     * Data z odpovědi na akci dojdou i do kopie telefonu.
+     *
+     * `GalerieObsahNavlec` dával `MOBIL` do `GalerieData`, kde ho telefon
+     * nečte: nová domácí práce, cesta nebo album se na telefonu objevily až
+     * po dalším načtení stránky.
+     */
+    public function test_odpoved_na_akci_plni_i_kopii_telefonu(): void
+    {
+        $hlavicka = (string) file_get_contents(dirname(__DIR__, 2).'/resources/views/galerie/hlavicka.blade.php');
+
+        preg_match('/window\.GalerieObsahNavlec = function \(mapa, prazdne\) \{(.*?)\n  \};/s', $hlavicka, $telo);
+        $this->assertNotEmpty($telo, 'GalerieObsahNavlec se v hlavičce nenašel.');
+        $this->assertStringContainsString("if (klic === 'MOBIL') { Object.assign(mobil, mapa[klic]); doMobilu(); return; }", $telo[1]);
+    }
+
+    /** Dělba jde začít: nová práce z počítače i z telefonu, odebrání u řádku. */
+    public function test_domaci_prace_jde_pridat_a_odebrat(): void
+    {
+        $pocitac = self::dokument('galerie-desktop.dc.html');
+        $telefon = self::dokument('galerie-mobil.dc.html');
+
+        $this->assertStringContainsString('onClick="{{ chAdd }}"', $pocitac);
+        $this->assertStringContainsString("cesta: () => 'domacnost/prace'", $pocitac);
+        $this->assertStringContainsString("window.GalerieApi.del('domacnost/prace/' + c.id)", $pocitac);
+        $this->assertStringContainsString('onClick="{{ chAdd }}"', $telefon);
+        $this->assertStringContainsString("window.GalerieApi.post('domacnost/prace', { nazev: a, jak_casto: jakCasto })", $telefon);
+    }
+
     /** Koš v telefonu umí i trvale odstranit — dřív jen „Obnovit". */
     public function test_telefon_maze_z_kose_na_serveru(): void
     {
