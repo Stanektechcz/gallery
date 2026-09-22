@@ -342,12 +342,32 @@ class StavTest extends TestCase
         $this->actingAs($cizi)->getJson('/api/state')->assertOk()->assertJsonPath('data', []);
     }
 
+    /**
+     * Smazání stavu smaže i soukromou (šifrovanou) část a revize klíčů.
+     *
+     * `private` ani `rev_keys` nejsou v `$fillable`, takže je `update()` tiše
+     * zahodil: po „smazání" zůstalo v šifrovaném sloupci to nejcitlivější
+     * (blízkost, postoj k dětem, odchod) a vysoké revize klíčů proti `rev = 0`
+     * vracely na další zápis konflikt.
+     */
     public function test_smazani_stav_vynuluje(): void
     {
-        $this->actingAs($this->adri)->patchJson('/api/state', ['data' => ['favs' => ['a']]])->assertOk();
+        $this->actingAs($this->adri)->patchJson('/api/state', [
+            'data' => ['favs' => ['a'], 'kidsStance' => ['Adrian' => 'ano'], 'optIn' => ['kids' => true]],
+        ])->assertOk();
+
+        $pred = CoupleState::first();
+        $this->assertNotSame([], $pred->private ?? [], 'Test by jinak nehlídal nic — soukromá část musí být plná.');
 
         $this->actingAs($this->adri)->deleteJson('/api/state')->assertOk()->assertJsonPath('rev', 0);
         $this->actingAs($this->adri)->getJson('/api/state')->assertOk()->assertJsonPath('data', []);
+
+        $po = CoupleState::first();
+        $this->assertSame([], $po->private ?? [], 'Soukromá část musí zmizet taky.');
+        $this->assertSame([], $po->rev_keys ?? [], 'Revize klíčů nesmí přežít nulování.');
+
+        // A po smazání jde zase psát, bez konfliktu.
+        $this->actingAs($this->adri)->patchJson('/api/state', ['data' => ['favs' => ['b']], 'rev' => 0])->assertOk();
     }
 
     public function test_bez_prihlaseni_stav_nedostane(): void

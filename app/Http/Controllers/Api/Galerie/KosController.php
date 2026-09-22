@@ -94,7 +94,7 @@ class KosController extends Controller
         $prostor = GallerySpace::findOrFail($this->parId($request));
         $data = $request->validate(['id' => ['required', 'string', 'max:64']]);
 
-        if (($odmitnuto = $this->smiMazat($request)) !== null) {
+        if (($odmitnuto = $this->smiMazat($request, $prostor)) !== null) {
             return $odmitnuto;
         }
 
@@ -121,7 +121,7 @@ class KosController extends Controller
     {
         $prostor = GallerySpace::findOrFail($this->parId($request));
 
-        if (($odmitnuto = $this->smiMazat($request)) !== null) {
+        if (($odmitnuto = $this->smiMazat($request, $prostor)) !== null) {
             return $odmitnuto;
         }
 
@@ -148,14 +148,33 @@ class KosController extends Controller
     }
 
     /**
-     * Trvalé odstranění je vyhrazené správci — stejně jako ve druhém rozhraní.
+     * Trvalé odstranění je vyhrazené správci **tohohle prostoru**.
+     *
+     * Dřív o tom rozhodoval sloupec `users.role`, tedy role účtu, ne role
+     * v galerii: kdo si účet založil sám, byl všude „owner" a mohl vysypat
+     * cizí koš i s originály na disku — a pozvaný partner (`partner`) naopak
+     * nesměl vysypat ten svůj, i když ho z administrace vysypat mohl.
      *
      * Odmítnutí se **říká**: tlačítko, které mlčí, vypadá jako rozbité, a
      * u mazání je to ta horší varianta z obou.
      */
-    private function smiMazat(Request $request): ?JsonResponse
+    private function smiMazat(Request $request, GallerySpace $prostor): ?JsonResponse
     {
-        if ($request->user()?->isAdmin()) {
+        $clovek = $request->user();
+
+        if ($clovek === null) {
+            return response()->json(['ok' => false, 'zprava' => 'Trvale odstranit smí jen správce prostoru.'], 403);
+        }
+
+        if ((int) $prostor->owner_id === (int) $clovek->id) {
+            return null;
+        }
+
+        // Role v **tomhle** prostoru. `editor` je běžný člen dvojice — ten maže
+        // do koše, ne z něj; nevratný krok zůstává vlastníkovi a správci.
+        $role = (string) ($prostor->members()->where('users.id', $clovek->id)->first()?->pivot->role ?? '');
+
+        if (in_array($role, ['owner', 'admin'], true)) {
             return null;
         }
 

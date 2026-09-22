@@ -31,6 +31,9 @@ class PristupDoGalerie
             return 'Tenhle účet do galerie přístup nemá. Obnovit ho může vlastník galerie.';
         }
 
+        // Týž prostor, jaký použije `UrcujePar::parId` — relace má pevné pořadí.
+        // Dřív tu byl nesetříděný `first()`: role se posuzovala v jedné galerii
+        // a požadavek pak běžel v druhé.
         $prostor = $user->gallerySpaces()->first();
 
         // Účet bez prostoru se přihlásit smí — založí si ho, nebo přijme pozvánku.

@@ -580,8 +580,14 @@ class StateController extends Controller
             'Společný stav může smazat jen vlastník galerie.');
         AuditLog::record('galerie.state.reset', $prostor);
 
+        /*
+         * `forceFill`, ne `update`: `private` a `rev_keys` nejsou v `$fillable`,
+         * takže je Eloquent tiše zahodil. Reset pak nechal v šifrovaném sloupci
+         * to nejcitlivější (blízkost, postoj k dětem, odchod) a `rev_keys`
+         * s vysokými revizemi proti `rev = 0` — další zápis skončil konfliktem.
+         */
         $state = CoupleState::forCouple($prostor->id);
-        $state->update(['data' => [], 'private' => [], 'rev' => 0]);
+        $state->forceFill(['data' => [], 'private' => [], 'rev' => 0, 'rev_keys' => []])->save();
 
         return response()->json(['data' => (object) [], 'rev' => 0]);
     }

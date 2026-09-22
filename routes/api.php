@@ -141,7 +141,10 @@ Route::prefix('v1')->middleware(['auth:sanctum', 'dvojice:klic'])->group(functio
     Route::post('/ucet/zruseni', [AccountController::class, 'scheduleDeletion'])->name('api.account.delete');
     Route::delete('/ucet/zruseni', [AccountController::class, 'cancelDeletion'])->name('api.account.delete.cancel');
     Route::get('/profil', [ProfileController::class, 'show'])->name('api.profile.show');
-    Route::patch('/profil', [ProfileController::class, 'update'])->name('api.profile.update');
+    // Změna e-mailu ověřuje současné heslo — tedy taky počítadlo pokusů,
+    // jinak by se heslo dalo zkoušet přes tenhle endpoint bez omezení.
+    Route::patch('/profil', [ProfileController::class, 'update'])
+        ->middleware('throttle:10,1,ucet-heslo')->name('api.profile.update');
     // Ověřuje současné heslo — jedno počítadlo s dvoufázovým přihlášením níž,
     // ať se heslo nedá zkoušet přes ukradené sezení donekonečna.
     Route::put('/profil/heslo', [ProfileController::class, 'password'])

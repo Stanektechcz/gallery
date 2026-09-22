@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
+use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
 /**
@@ -281,6 +282,53 @@ class BezpecnostPristupuTest extends TestCase
 
         $this->assertSame('viewer', DB::table('gallery_space_user')->where('user_id', $makinka->id)->value('role'), 'U tří členů o roli rozhodl člověk.');
         $this->assertSame('viewer', DB::table('gallery_space_user')->where('user_id', $host->id)->value('role'));
+    }
+
+    /**
+     * Host v jedné galerii a vlastník vlastní se do cizí nedostane.
+     *
+     * O roli rozhodoval `PristupDoGalerie::proc()` nad neseřazeným
+     * `gallerySpaces()->first()`, kdežto požadavek pak běžel v prostoru
+     * z `UrcujePar::parId()` — tedy ve výchozím, jinak nejstarším. Kdo byl
+     * v jedné galerii host a ve své vlastní vlastník, prošel kontrolou podle
+     * té svojí a sáhl si na fotky, stav i administraci té cizí.
+     */
+    public function test_host_s_vlastni_galerii_se_do_cizi_nedostane(): void
+    {
+        $host = $this->clen('viewer');
+        $vlastni = GallerySpace::create(['name' => 'Moje vlastní', 'owner_id' => $host->id, 'is_default' => true]);
+        $vlastni->members()->syncWithoutDetaching([$host->id => ['role' => 'owner']]);
+        // Cizí galerie je výchozí a starší — tedy ta, kterou vybere `parId()`.
+        DB::table('gallery_spaces')->where('id', $this->prostor->id)->update(['is_default' => true]);
+
+        $token = $this->postJson('/api/sanctum/token', $this->udaje($host))->json('token');
+
+        $this->assertNull($token, 'Host s vlastní galerií nesmí dostat token do cizí.');
+
+        Sanctum::actingAs($host);
+
+        foreach (['/api/state', '/api/admin', '/api/data/knihovna'] as $cesta) {
+            $this->getJson($cesta)->assertForbidden();
+        }
+
+        $this->postJson('/api/kos/vyprazdnit')->assertForbidden();
+    }
+
+    /**
+     * Přehled administrace (e-maily, klíče, protokol) není pro každého člena.
+     *
+     * Jediná metoda administrace, které chyběla kontrola — a přitom má
+     * nejcitlivější odpověď.
+     */
+    public function test_prehled_administrace_jen_pro_spravce(): void
+    {
+        $host = $this->clen('viewer');
+
+        Sanctum::actingAs($host);
+        $this->getJson('/api/admin')->assertForbidden();
+
+        Sanctum::actingAs($this->adri);
+        $this->getJson('/api/admin')->assertOk();
     }
 
     // ——— pomocné ———

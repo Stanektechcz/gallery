@@ -43,9 +43,19 @@ class AdminController extends Controller
         private readonly AdministraceZasahy $zasahy,
     ) {}
 
+    /**
+     * Přehled administrace — jen pro vlastníka a správce.
+     *
+     * Kontrola tu jako v jediné metodě chyběla, a přitom je to ta s nejcitlivější
+     * odpovědí: e-maily obou členů, seznam přístupových klíčů s posledním
+     * použitím, protokol a tarif.
+     */
     public function index(Request $request): JsonResponse
     {
-        return $this->prehled($this->prostor($request));
+        $prostor = $this->prostor($request);
+        $this->jenSpravce($request, $prostor);
+
+        return $this->prehled($prostor);
     }
 
     // ——— účty ———

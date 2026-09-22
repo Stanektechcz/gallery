@@ -136,11 +136,25 @@ class User extends Authenticatable
         $this->notify(new ObnovaHeslaNotification($token));
     }
 
+    /**
+     * Prostory galerie, ve kterých je účet členem — v pevném pořadí.
+     *
+     * Devadesát míst v aplikaci se ptá `gallerySpaces()->first()` na to, „ve
+     * které galerii jsem". Bez řazení na to databáze odpovídala, jak se jí
+     * zrovna hodilo, a dvě místa dostala dvě různé odpovědi: přístupová
+     * kontrola (`PristupDoGalerie::proc`) posuzovala roli v jednom prostoru
+     * a `UrcujePar::parId` pak sáhlo do druhého. Účet, který je někde host
+     * a jinde vlastník, se tím mohl dostat do cizí galerie.
+     *
+     * Pořadí je stejné jako v `parId()`: výchozí prostor, jinak nejstarší.
+     */
     public function gallerySpaces()
     {
         return $this->belongsToMany(GallerySpace::class, 'gallery_space_user')
             ->withPivot(['role', 'can_delete', 'can_share', 'can_download', 'show_in_timeline', 'joined_at'])
-            ->withTimestamps();
+            ->withTimestamps()
+            ->orderByDesc('gallery_spaces.is_default')
+            ->orderBy('gallery_spaces.id');
     }
 
     public function ownedSpaces()
