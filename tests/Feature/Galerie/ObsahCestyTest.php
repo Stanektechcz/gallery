@@ -207,8 +207,14 @@ class ObsahCestyTest extends TestCase
 
         $pack = $this->getJson('/api/data/cesty')->assertOk()->json('data.TRIPS.portugalsko.pack');
 
-        $this->assertSame(['Krém na sluníčko', 'Makinka', 0], $pack[0]);
-        $this->assertSame(['Pasy a doklady', 'oba', 1], $pack[1]);
+        $this->assertSame(['Krém na sluníčko', 'Makinka', 0], array_slice($pack[0], 0, 3));
+        $this->assertSame(['Pasy a doklady', 'oba', 1], array_slice($pack[1], 0, 3));
+
+        // Id položky: zaškrtnutí jde na server a druhý ho uvidí.
+        $id = $pack[0][3];
+        $this->assertSame($id, (int) DB::table('trip_packing_items')->where('title', 'Krém na sluníčko')->value('id'));
+        $this->patchJson('/api/v1/trips/'.$cesta.'/packing-items/'.$id, ['is_packed' => true])->assertOk();
+        $this->assertSame(1, $this->getJson('/api/data/cesty')->json('data.TRIPS.portugalsko.pack.0.2'));
     }
 
     /** Doklad, který chybí, se pozná — to je celý smysl té záložky. */

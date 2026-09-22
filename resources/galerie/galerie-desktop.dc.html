@@ -28846,7 +28846,7 @@ class Component extends DCLogic {
     const match = (title, where) => !q || (title + ' ' + where).toLowerCase().indexOf(q) >= 0;
     const packOf = (k, t) => {
       const done = (t.pack || []).filter((r, i) => {
-        const v = s.pack[k + '-' + i];
+        const v = r[3] ? undefined : s.pack[k + '-' + i];
         return v === undefined ? r[2] === 1 : v;
       }).length;
       return { done, total: (t.pack || []).length };
@@ -33201,7 +33201,8 @@ class Component extends DCLogic {
     const trip = TRIPS[s.tripId] || TRIPS.chorvatsko || TRIPS[Object.keys(TRIPS)[0]] || { photoMatch: null, pack: [], days: [], stats: [], budget: [], docs: [], diary: null, title: '', when: '', where: '', desc: '', tag: '', n: 0, budgetTitle: 'Rozpočet cesty' };
     const tripTag = t => t === 'čeká platba' || t === 'čeká akci' || t === 'zařadit' ? 'tag-accent-2' : t === 'zaplaceno' || t === 'do tisku' ? 'tag-accent' : 'tag-neutral';
     const tripPhotoSrc = trip.photoMatch ? this.photos().filter(p => p.place.indexOf(trip.photoMatch) >= 0) : [];
-    const packDone = i => { const k = s.tripId + '-' + i; return s.pack[k] !== undefined ? s.pack[k] : trip.pack[i][2] === 1; };
+    // Položka balení ze serveru (`[co, kdo, zabaleno, id]`) je zabalená podle serveru; `pack` patří ukázce.
+    const packDone = i => { const k = s.tripId + '-' + i; return !trip.pack[i][3] && s.pack[k] !== undefined ? s.pack[k] : trip.pack[i][2] === 1; };
     const packCount = trip.pack.filter((r, i) => packDone(i)).length;
     const person = PERSONS[s.personId] || PERSONS.Makinka || PERSONS[Object.keys(PERSONS)[0]]
       || { n: 0, tag: 'potvrzeno', meta: '', photosMeta: '', stats: [], years: [], co: [], albums: [], idx: [], sug: [] };
@@ -33680,7 +33681,19 @@ class Component extends DCLogic {
           label: r[0], who: r[1], box: on ? 'ph-check-square' : 'ph-square',
           boxColor: on ? 'var(--g-acc)' : 'var(--g-ink3)', color: on ? 'var(--g-ink3)' : 'var(--g-ink)',
           strike: on ? 'line-through' : 'none',
-          toggle: () => this.setState({ pack: { ...s.pack, [s.tripId + '-' + i]: !on } })
+          /*
+           * Zabaleno na server (`trip_packing_items.is_packed`) — dřív jen do
+           * stavu prohlížeče, který pak navždy přebil, co odškrtl druhý.
+           */
+          toggle: () => {
+            if (r[3] && trip.n && this.apiNaServeru() && !this.ukazka()) {
+              window.GalerieApi.patch('v1/trips/' + trip.n + '/packing-items/' + r[3], { is_packed: !on })
+                .then(() => { if (window.GalerieObnovit) window.GalerieObnovit('cesty'); })
+                .catch(e => { const b = (e && e.body) || {}; this.toast(b.message || 'Balení se nepodařilo uložit', { icon: 'ph-warning', color: 'var(--g-mag)', silent: true }); });
+              return;
+            }
+            this.setState({ pack: { ...s.pack, [s.tripId + '-' + i]: !on } });
+          }
         };
       }),
       tripPackMeta: packCount + ' z ' + trip.pack.length,

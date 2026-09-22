@@ -617,6 +617,8 @@ class Cesty implements MaPrazdneKolekce, PoskytovatelObsahu
                 $p->title,
                 $jmena[$p->assigned_to] ?? 'oba',
                 $p->is_packed ? 1 : 0,
+                // Id položky — zaškrtnutí jde na server (dřív jen do stavu prohlížeče).
+                (int) $p->id,
             ])->values()->all())
             ->all();
     }
