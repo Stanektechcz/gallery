@@ -184,15 +184,23 @@ class Pravidla implements MaPrazdneKolekce, PoskytovatelObsahu
             ->get()
             ->map(function (object $v) {
                 $kdy = CarbonImmutable::parse($v->occurs_on);
-                $fotky = json_decode((string) ($v->media_ids ?? '[]'), true) ?: [];
+                // `?: []` propustí skalár a `count()` nad řetězcem je pád.
+                $fotky = json_decode((string) ($v->media_ids ?? '[]'), true);
+                $fotky = is_array($fotky) ? $fotky : [];
 
                 return [
                     $v->uuid,
                     self::DRUH_VZPOMINKY[(string) $v->kind] ?? (string) $v->kind,
-                    (int) ($v->years_ago ?? CarbonImmutable::now()->year - $kdy->year),
+                    (int) ($v->years_ago ?? Cas::ted()->year - $kdy->year),
                     $v->title,
                     $this->denCesky($kdy),
-                    (string) ($v->subtitle ?? ''),
+                    /*
+                     * Místo karta nemá kde vzít — `generated_memories` ho
+                     * nenesou. Psal se sem `subtitle`, tedy tentýž text jako
+                     * o dva řádky níž do poznámky: karta pak měla dvakrát
+                     * pod sebou totéž, jednou jako místo.
+                     */
+                    '',
                     count($fotky),
                     (string) ($v->subtitle ?? ''),
                     (int) $v->id,

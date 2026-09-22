@@ -1282,6 +1282,15 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
 
             $radek = DB::table($tabulka)
                 ->where('gallery_space_id', $prostor->id)
+                /*
+                 * Smazané se nepočítá.
+                 *
+                 * `DB::table` obchází měkké mazání, takže tahle obrazovka
+                 * hlásila u knihovny devět položek, zatímco „Zdraví dat"
+                 * o kousek vedle šest. Dvě čísla o téže věci na jedné stránce.
+                 */
+                ->when(Tabulky::sloupec($tabulka, 'deleted_at'), fn ($q) => $q->whereNull('deleted_at'))
+                ->when(Tabulky::sloupec($tabulka, 'trashed_at'), fn ($q) => $q->whereNull('trashed_at'))
                 ->selectRaw('SUM(CASE WHEN '.$autor.' = ? THEN 1 ELSE 0 END) AS a', [$vlastnik->id])
                 ->selectRaw('SUM(CASE WHEN '.$autor.' IS NOT NULL AND '.$autor.' <> ? THEN 1 ELSE 0 END) AS m', [$vlastnik->id])
                 ->selectRaw('MAX('.$cas.') AS posledni')
@@ -1678,7 +1687,15 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
             ->where('gallery_space_id', $prostor->id)
             ->where(fn ($q) => $q
                 ->where('state', 'done')
-                ->orWhere(fn ($v) => $v->where('state', 'snoozed')->whereDate('snoozed_until', '>', now())))
+                /*
+                 * Okamžik, ne datum.
+                 *
+                 * `whereDate` porovnávalo jen den, takže odložení „na dnes
+                 * večer" bylo prošlé hned — řádek se vrátil do schránky a
+                 * zároveň zůstal v „Odložených", protože ta se o pár řádků
+                 * níž ptá `isAfter(now())`. Táž položka na dvou místech.
+                 */
+                ->orWhere(fn ($v) => $v->where('state', 'snoozed')->where('snoozed_until', '>', now())))
             ->get()
             ->keyBy('item_key')
             ->all();

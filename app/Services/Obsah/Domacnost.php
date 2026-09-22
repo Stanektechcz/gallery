@@ -377,8 +377,17 @@ class Domacnost implements MaPrazdneKolekce, PoskytovatelObsahu
         }
 
         $dvojice = $this->dvojice($prostor);
-        $prvni = $jmena[$dvojice[0]] ?? 'Adrian';
-        $druhy = $jmena[$dvojice[1]] ?? 'Makinka';
+
+        /*
+         * Jména z prostoru, ne z ukázky.
+         *
+         * Stálo tu `?? 'Adrian'` a `?? 'Makinka'`. Volající se sice do
+         * jednočlenného prostoru nedostane, ale z tohohle řádku to vidět
+         * není — a kdyby se někdy dostal, napsal by dvojici jména dvou
+         * cizích lidí jako popisek jejího vlastního týdne.
+         */
+        $prvni = $jmena[$dvojice[0] ?? 0] ?? 'První z vás';
+        $druhy = $jmena[$dvojice[1] ?? 0] ?? 'Druhý z vás';
 
         $nejvic = max(array_map(fn (array $d) => (float) $d['a'] + (float) $d['m'], $tyden)) ?: 1.0;
 

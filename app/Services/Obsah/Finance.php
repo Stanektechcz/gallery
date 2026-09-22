@@ -536,7 +536,10 @@ class Finance implements MaPrazdneKolekce, PoskytovatelObsahu
                 $plan > 0
                     ? number_format($utraceno, 0, ',', ' ').' '.$this->zNeboZe($plan).' '.$this->castka($plan, $mena)
                     : $this->castka($utraceno, $mena).' · bez limitu',
-                $pomer,
+                // Šířka pruhu — proto nejvýš sto. Přečerpání o třicet procent
+                // dalo `width:130%` a pruh přetekl ze své dráhy; že se limit
+                // přešel, říká barva (1) a text vedle.
+                min(100, $pomer),
                 // Varovně jen to, co je za hranou nebo těsně před ní.
                 $pomer >= 95 ? 1 : ($pomer <= 35 ? 2 : 0),
             ];

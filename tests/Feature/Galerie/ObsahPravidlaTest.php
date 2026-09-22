@@ -210,7 +210,10 @@ class ObsahPravidlaTest extends TestCase
         $this->assertSame(5, $v[2]);
         $this->assertSame('Den u vodopádů', $v[3]);
         $this->assertSame('16. srpna 2021', $v[4]);
-        $this->assertSame('Krka, Chorvatsko', $v[5]);
+        // Místo tabulka vzpomínek nenese; do pole pro místo se psal `subtitle`,
+        // takže karta měla tentýž text dvakrát pod sebou.
+        $this->assertSame('', $v[5]);
+        $this->assertSame('Krka, Chorvatsko', $v[7], 'Poznámka je ta, která ze `subtitle` vychází.');
         $this->assertSame(3, $v[6]);
         // Fotky vzpomínky pro dlaždice — dřív karta brala náhodné fotky knihovny.
         $this->assertSame(['1', '2', '3'], $v[9]);

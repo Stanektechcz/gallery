@@ -116,7 +116,9 @@ class Cesty implements MaPrazdneKolekce, PoskytovatelObsahu
         $minule = array_values(array_filter($cesty, fn (array $c) => $c['past']));
         // „Byli jsme" pozná místo podle štítku, který mu dal `znacka()`.
         $navstivena = array_values(array_filter($mista, fn (array $m) => $m['tag'] === 'byli jsme'));
-        $chteji = array_values(array_filter($mista, fn (array $m) => $m['tag'] !== 'byli jsme'));
+        // Do „kam chceme" nepatří místo označené za „raději ne" — dvojice
+        // o něm rozhodla přesně naopak.
+        $chteji = array_values(array_filter($mista, fn (array $m) => ! in_array($m['tag'], ['byli jsme', 'raději ne'], true)));
 
         return array_filter([
             'tripsPlanned' => array_map($doCesty, $budouci),
@@ -657,15 +659,33 @@ class Cesty implements MaPrazdneKolekce, PoskytovatelObsahu
                     $d->reference,
                     $d->expires_on ? 'platí do '.CarbonImmutable::parse($d->expires_on)->format('j. n. Y') : null,
                 ]))),
-                match ($d->status) {
-                    'ready' => 'zaplaceno',
-                    'missing' => 'zařadit',
-                    'expiring' => 'čeká akci',
-                    default => null,
-                },
+                $this->stitekDokladu($d),
                 $this->ikona((string) $d->type),
             ])->values()->all())
             ->all();
+    }
+
+    /**
+     * Štítek u dokladu — a hlavně: propadlý pas se pozná.
+     *
+     * Rozhodovalo se jen podle sloupce `status`, jehož hodnota `'expiring'`
+     * se nikde nezapisuje. Doklad s prošlou platností tak neměl **žádný**
+     * štítek, a zrovna u něj na tom záleží: s propadlým pasem se nikam nejede.
+     * Datum platnosti v tabulce je, tak se z něj vychází.
+     */
+    private function stitekDokladu(object $d): ?string
+    {
+        $doKdy = $d->expires_on ? CarbonImmutable::parse($d->expires_on) : null;
+        $dni = $doKdy ? (int) Cas::dnes()->diffInDays($doKdy, false) : null;
+
+        return match (true) {
+            $dni !== null && $dni < 0 => 'propadlo',
+            // Čtvrt roku dopředu: na nový pas je potřeba čas.
+            $dni !== null && $dni <= 90 => 'brzy propadne',
+            (string) $d->status === 'ready' => 'zaplaceno',
+            (string) $d->status === 'missing' => 'zařadit',
+            default => null,
+        };
     }
 
     /**
