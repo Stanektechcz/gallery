@@ -11121,13 +11121,18 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                       <sc-for list="{{ d.why }}" as="w" hint-placeholder-count="2">
                         <div style="font-size:14px; color:var(--g-ink2); text-wrap:pretty">{{ w.text }}</div>
                       </sc-for>
+                      <sc-if value="{{ d.whyEmpty }}">
+                        <div style="font-size:14px; color:var(--g-ink3); text-wrap:pretty">Důvod u tohohle rozhodnutí zapsaný není.</div>
+                      </sc-if>
                     </div>
-                    <div style="font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--g-ink3); margin:13px 0 6px">Co jsme zamítli</div>
-                    <div style="display:flex; gap:6px; flex-wrap:wrap">
-                      <sc-for list="{{ d.rejected }}" as="r" hint-placeholder-count="2">
-                        <span class="tag tag-neutral" style="font-size:11.5px">{{ r.text }}</span>
-                      </sc-for>
-                    </div>
+                    <sc-if value="{{ d.hasRejected }}">
+                      <div style="font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--g-ink3); margin:13px 0 6px">Co jsme zamítli</div>
+                      <div style="display:flex; gap:6px; flex-wrap:wrap">
+                        <sc-for list="{{ d.rejected }}" as="r" hint-placeholder-count="2">
+                          <span class="tag tag-neutral" style="font-size:11.5px">{{ r.text }}</span>
+                        </sc-for>
+                      </div>
+                    </sc-if>
                     <sc-if value="{{ d.hasTriggers }}">
                       <div style="margin-top:14px; padding:12px 13px; border-radius:2px; background:var(--g-panel)">
                         <div style="font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--g-ink3)">Co se od zápisu změnilo</div>
@@ -17336,7 +17341,15 @@ class Component extends DCLogic {
     };
     const acc = Object.keys(done).filter(k => done[k] !== 'skip').length;
     return {
-      datHead: this.pl(list.length, 'snímek bez data', 'snímky bez data', 'snímků bez data') + ' · ' + this.pl(acc, 'datovaný', 'datované', 'datovaných') + ' v tomto sezení',
+      /*
+       * Kolik jich je doopravdy, ne kolik se jich vešlo na obrazovku.
+       *
+       * Seznam se na serveru ořezává na čtyřicet, takže knihovna s pěti sty
+       * nedatovanými snímky hlásila „40 snímků bez data".
+       */
+      datHead: this.pl(this.uklidPocet('dating', list.length), 'snímek bez data', 'snímky bez data', 'snímků bez data')
+        + (this.uklidPocet('dating', list.length) > list.length ? ' · ukazujeme ' + list.length : '')
+        + ' · ' + this.pl(acc, 'datovaný', 'datované', 'datovaných') + ' v tomto sezení',
       datEmpty: list.length === 0,
       datRows: list.map(d => ({
         name: d.name, meta: d.meta, bg: this.bg(d.n),
@@ -17379,7 +17392,19 @@ class Component extends DCLogic {
     const gone = s.quarGone || {};
     return (s.quar === null || s.quar === undefined ? QUAR : s.quar).filter(q => !gone[q.id]);
   }
-  
+
+  /*
+   * Skutečný počet ze serveru, když ho pošle; jinak délka seznamu.
+   *
+   * Fronty úklidu server ořezává (čtyřicet položek), takže délka seznamu
+   * není počet — jen tolik, kolik se vešlo na obrazovku.
+   */
+  uklidPocet(klic, vychozi) {
+    const p = (AL || {}).uklidPocty;
+    const n = p && typeof p[klic] === 'number' ? p[klic] : null;
+    return n === null || n < vychozi ? vychozi : n;
+  }
+
   // Archivní karanténa: smazané odchází přes šestimesíční „možná“, jednu otázku týdně.
   quarVals() {
     const s = this.state;
@@ -17401,13 +17426,17 @@ class Component extends DCLogic {
     const zaklad = (s.quar === null || s.quar === undefined ? QUAR : s.quar);
     const freed = zaklad.reduce((a, q) => a + (gone[q.id] === 'drop' ? (typeof q.mb === 'number' ? q.mb : 3.4) : 0), 0);
     return {
-      quarHead: this.pl(list.length, 'položka v karanténě', 'položky v karanténě', 'položek v karanténě') + ' · uvolněno ' + freed.toFixed(1).replace('.', ',') + ' MB',
+      quarHead: this.pl(this.uklidPocet('quar', list.length), 'položka v karanténě', 'položky v karanténě', 'položek v karanténě')
+        + (this.uklidPocet('quar', list.length) > list.length ? ' · ukazujeme ' + list.length : '')
+        + ' · uvolněno ' + freed.toFixed(1).replace('.', ',') + ' MB',
       quarOne: !!one,
       quarOneBg: one ? this.bg(one.n) : 'none',
       quarOneTitle: one ? one.name : '',
       quarOneMeta: one ? one.meta : '',
       quarOneWhy: one ? one.why : '',
-      quarOneLeft: one ? 'Pustíme sama za ' + one.left : '',
+      // Větu skládá server: jen on ví, jestli lhůta vůbec je. Lepením
+      // „Pustíme sama za " + left vycházelo „Pustíme sama za bez lhůty".
+      quarOneLeft: one ? (one.leftSay || '') : '',
       quarKeep: () => one && setGone(one.id, 'keep'),
       quarDrop: () => one && setGone(one.id, 'drop'),
       quarSkip: () => this.setState({ quarAsked: asked + 1 }),
@@ -17420,7 +17449,10 @@ class Component extends DCLogic {
       quarSweep: () => this.setState({
         confirm: {
           title: 'Pustit vše, co má karanténu za sebou?',
-          body: this.pl(list.filter(q => q.expired).length, 'položka je v karanténě přes šest měsíců', 'položky jsou v karanténě přes šest měsíců', 'položek je v karanténě přes šest měsíců') + '. Zmizí za sedm dní, do té doby je jde vrátit.',
+          // `expired` znamená „lhůta vypršela", ne „leží tu půl roku" — lhůta
+          // se dá nastavit i na měsíc a třicetidenní položka se tím pádem
+          // označovala za půlroční.
+          body: this.pl(list.filter(q => q.expired).length, 'položka má karanténu za sebou', 'položky mají karanténu za sebou', 'položek má karanténu za sebou') + '. Zmizí za sedm dní, do té doby je jde vrátit.',
           cta: 'Pustit staré',
           btnBg: 'var(--g-mag)',
           go: () => {
@@ -30472,8 +30504,12 @@ class Component extends DCLogic {
         title: d.title, date: d.date, by: d.by, status: d.status,
         tagClass: ST[d.status] || 'tag-neutral',
         border: d.status === 'k revizi' ? 'var(--g-mag)' : 'var(--g-line2)',
-        why: d.why.map(t => ({ text: '— ' + t })),
-        rejected: d.rejected.map(t => ({ text: t })),
+        // Co není zapsané, se nedoplňuje: dřív sem server posílal
+        // „Důvod zapíšeme později." a „Nic dalšího jsme nezvažovali".
+        why: (d.why || []).map(t => ({ text: '— ' + t })),
+        whyEmpty: !(d.why || []).length,
+        rejected: (d.rejected || []).map(t => ({ text: t })),
+        hasRejected: !!(d.rejected || []).length,
         reviewLine: d.status === 'změněno' ? 'Změněno ' + (d.changedAt || '') + ' · původní zápis zůstává v historii'
           : d.review ? (d.status === 'k revizi' ? 'Revize měla být ' + d.review : 'Znovu probrat ' + d.review) : 'Bez plánované revize',
         reviewColor: d.status === 'k revizi' ? 'var(--g-mag)' : 'var(--g-ink3)',

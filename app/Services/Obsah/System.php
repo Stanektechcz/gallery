@@ -973,7 +973,21 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
         }
 
         $zustatky = $this->kniha->walletBalances($prostor)->keyBy('uuid');
-        $celkem = $penezenky->sum(fn (object $p) => (float) ($zustatky[$p->uuid]['balance'] ?? $p->opening_balance ?? 0));
+
+        /*
+         * Sčítají se jen účty ve stejné měně.
+         *
+         * Koruny a eura se sčítaly dohromady a výsledek se napsal v měně
+         * prvního účtu — na obrazovce, jejímž jediným úkolem je říct, kterým
+         * číslům se dá věřit. Když má dvojice účty ve víc měnách, počítá se
+         * ta nejčastější a řádek řekne, že ostatní stranou.
+         */
+        $podleMeny = $penezenky->groupBy(fn (object $p) => mb_strtoupper(trim((string) ($p->currency ?: 'CZK'))));
+        $hlavni = $podleMeny->sortByDesc(fn (Collection $ucty) => $ucty->count())->keys()->first();
+        $vHlavni = $podleMeny[$hlavni];
+        $stranou = $penezenky->count() - $vHlavni->count();
+
+        $celkem = $vHlavni->sum(fn (object $p) => (float) ($zustatky[$p->uuid]['balance'] ?? $p->opening_balance ?? 0));
 
         $napojeni = Tabulky::je('bank_connections')
             ? DB::table('bank_connections')
@@ -988,11 +1002,12 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
 
         return [
             'label' => 'Zůstatek na účtech',
-            'value' => $this->castka($celkem, (string) $penezenky->first()->currency),
+            'value' => $this->castka($celkem, (string) $hlavni),
             'kind' => $sync ? 'hard' : 'manual',
-            'where' => $sync
+            'where' => trim(($sync
                 ? 'Bankovní napojení · '.($napojeni->institution_name ?: 'banka')
-                : $this->pocet($penezenky->count(), 'ručně vedený účet', 'ručně vedené účty', 'ručně vedených účtů'),
+                : $this->pocet($vHlavni->count(), 'ručně vedený účet', 'ručně vedené účty', 'ručně vedených účtů'))
+                .($stranou > 0 ? ' · '.$this->pocet($stranou, 'účet v jiné měně stranou', 'účty v jiné měně stranou', 'účtů v jiné měně stranou') : '')),
             'age' => $sync ? $this->pred($sync) : 'podle zapsaných pohybů',
             // Napojený a čerstvý zůstatek je nejtvrdší číslo v aplikaci; ručně
             // vedený je tak přesný, jak přesně se do něj zapisovalo.

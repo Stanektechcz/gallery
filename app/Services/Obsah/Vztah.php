@@ -151,8 +151,17 @@ class Vztah implements MaPrazdneKolekce, PoskytovatelObsahu
             'date' => CarbonImmutable::parse($r->decided_on)->format('j. n. Y'),
             'by' => $r->together ? implode(' a ', array_values($jmena)) : ($jmena[$r->decided_by] ?? 'oba'),
             'status' => $r->status,
-            'why' => $r->why ?: ['Důvod zapíšeme později.'],
-            'rejected' => $r->rejected ?: ['Nic dalšího jsme nezvažovali'],
+            /*
+             * Co není zapsané, se nedoplňuje.
+             *
+             * Stálo tu „Důvod zapíšeme později." a „Nic dalšího jsme
+             * nezvažovali" — obojí v jejich první osobě a obojí tvrzení,
+             * které nikdo neřekl. To druhé je horší: za rok se podle něj
+             * čte, že o jiné možnosti nebylo ani uvažováno. Prázdný seznam
+             * obrazovka umí (sekce se schová).
+             */
+            'why' => $r->why ?: [],
+            'rejected' => $r->rejected ?: [],
             'review' => $r->review_note ?: ($r->review_on
                 ? 'v '.self::MESICE[CarbonImmutable::parse($r->review_on)->month].' '.CarbonImmutable::parse($r->review_on)->year
                 : 'bez revize'),
@@ -279,7 +288,12 @@ class Vztah implements MaPrazdneKolekce, PoskytovatelObsahu
                 'kind' => 'vyprodáno',
                 'date' => CarbonImmutable::parse($n->cools_until)->toDateString(),
                 'cost' => (int) $n->price,
-                'note' => 'Rozvaha běžela '.$hodin.' hodin, nikdo se nevyjádřil.',
+                // „Rozvaha běžela 1 hodin" — číslo si žádá správný tvar.
+                'note' => 'Rozvaha běžela '.$hodin.' '.match (true) {
+                    $hodin === 1 => 'hodinu',
+                    $hodin >= 2 && $hodin <= 4 => 'hodiny',
+                    default => 'hodin',
+                }.', nikdo se nevyjádřil.',
             ];
         }
 
@@ -627,7 +641,7 @@ class Vztah implements MaPrazdneKolekce, PoskytovatelObsahu
                     trim(implode(' · ', array_filter([
                         'uloženo '.$kdy->day.'. '.$kdy->month.'.',
                         $n->estimated_cost ? ((int) round((float) $n->estimated_cost)).' '.($n->currency ?: 'Kč') : null,
-                        $n->estimated_minutes ? ((int) $n->estimated_minutes).' minut' : null,
+                        $n->estimated_minutes ? $this->minut((int) $n->estimated_minutes) : null,
                     ]))),
                     match ($n->status) {
                         'planned' => 'naplánováno',
@@ -685,7 +699,7 @@ class Vztah implements MaPrazdneKolekce, PoskytovatelObsahu
                         $n->estimated_cost
                             ? ((int) round((float) $n->estimated_cost)).' '.($n->currency ?: 'Kč')
                             : null,
-                        $n->estimated_minutes ? ((int) $n->estimated_minutes).' minut' : null,
+                        $n->estimated_minutes ? $this->minut((int) $n->estimated_minutes) : null,
                     ]))),
                     // „Nové" jen prvních čtyřiadvacet hodin. Návrh, na který
                     // se týden nesáhlo, není novinka.
@@ -694,5 +708,15 @@ class Vztah implements MaPrazdneKolekce, PoskytovatelObsahu
             })
             ->values()
             ->all();
+    }
+
+    /** Minuty se správným tvarem — psalo se „1 minut" i „3 minut". */
+    private function minut(int $kolik): string
+    {
+        return $kolik.' '.match (true) {
+            $kolik === 1 => 'minuta',
+            $kolik >= 2 && $kolik <= 4 => 'minuty',
+            default => 'minut',
+        };
     }
 }

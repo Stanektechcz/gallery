@@ -289,10 +289,18 @@ class Cesty implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function cisla(object $c, CarbonImmutable $od, CarbonImmutable $do, int $delka, CarbonImmutable $dnes, Collection $utraty, Collection $limity, Collection $dny, Collection $program): array
     {
-        $polozek = $dny->sum(fn ($d) => ($program[$d->id] ?? collect())->count());
+        // Zrušený program v plánu není — „Položek v plánu" ho počítalo taky.
+        $polozek = $dny->sum(fn ($d) => ($program[$d->id] ?? collect())
+            ->reject(fn ($p) => in_array((string) ($p->status ?? ''), ['cancelled', 'canceled'], true))
+            ->count());
         // Limity kategorií mají přednost; bez nich platí celkový rozpočet z dialogu nové cesty.
         $plan = (int) $limity->sum('amount') ?: (int) round((float) ($c->budget ?? 0));
-        $utraceno = (int) $utraty->where('state', '!=', 'planned')->sum('amount');
+        $skutecne = $utraty->where('state', '!=', 'planned');
+        $utraceno = (int) $skutecne->sum('amount');
+
+        // Měna cesty; při dvou různých měnách v útratách se součet neukazuje.
+        $menaPlanu = $this->jednaMena($limity, $c->currency ?? null);
+        $menaUtrat = $this->jednaMena($skutecne, $c->currency ?? null);
 
         return array_values(array_filter([
             ['Délka', $this->pocet($delka, 'den', 'dny', 'dní')],
@@ -301,8 +309,9 @@ class Cesty implements MaPrazdneKolekce, PoskytovatelObsahu
                 $dnes->gt($do) => ['Bylo', 'před '.$this->pocet((int) $do->diffInDays($dnes), 'dnem', 'dny', 'dny')],
                 default => ['Dnes', 'den '.((int) $od->diffInDays($dnes) + 1)],
             },
-            $plan ? ['Rozpočet', $this->koruny($plan)] : null,
-            $utraceno ? ['Utraceno', $this->koruny($utraceno)] : null,
+            $plan && $menaPlanu !== null ? ['Rozpočet', $this->castka($plan, $menaPlanu)] : null,
+            $utraceno && $menaUtrat !== null ? ['Utraceno', $this->castka($utraceno, $menaUtrat)] : null,
+            $utraceno && $menaUtrat === null ? ['Utraceno', 've víc měnách — sečíst nejde'] : null,
             $polozek ? ['Položek v plánu', (string) $polozek] : null,
         ]));
     }
@@ -348,13 +357,14 @@ class Cesty implements MaPrazdneKolekce, PoskytovatelObsahu
 
         return $limity->map(function ($l) use ($podleKategorie) {
             $limit = (int) $l->amount;
-            $utraceno = (int) ($podleKategorie[$l->category] ?? collect())->sum('amount');
+            $vKategorii = $podleKategorie[$l->category] ?? collect();
+            $utraceno = (int) $vKategorii->sum('amount');
 
             return [
                 $this->kategorie((string) $l->category),
                 $utraceno
-                    ? $this->cislo($utraceno).' z '.$this->koruny($limit)
-                    : 'plán '.$this->koruny($limit),
+                    ? $this->cislo($utraceno).' z '.$this->castka($limit, $l->currency ?? null)
+                    : 'plán '.$this->castka($limit, $l->currency ?? null),
                 $limit ? min(100, (int) round($utraceno / $limit * 100)) : 0,
                 $utraceno ? 0 : 2,
             ];
@@ -480,7 +490,8 @@ class Cesty implements MaPrazdneKolekce, PoskytovatelObsahu
                 'facts' => array_values(array_filter([
                     $m->address ? ['Adresa', $m->address] : null,
                     $m->price_level ? ['Cenová hladina', ['nízká', 'střední', 'vyšší', 'vysoká'][$m->price_level - 1] ?? 'střední'] : null,
-                    $m->estimated_visit_minutes ? ['Zdrží', $m->estimated_visit_minutes.' minut'] : null,
+                    // „Zdrží 1 minut" / „3 minut" — číslo si žádá správný tvar.
+                    $m->estimated_visit_minutes ? ['Zdrží', $this->pocet((int) $m->estimated_visit_minutes, 'minuta', 'minuty', 'minut')] : null,
                     $m->personal_rating ? ['Naše hodnocení', $m->personal_rating.' z 5'] : null,
                     ['Přidáno', CarbonImmutable::parse($m->created_at)->format('j. n. Y')],
                 ])),
@@ -894,9 +905,47 @@ class Cesty implements MaPrazdneKolekce, PoskytovatelObsahu
         return number_format($kolik, 0, ',', ' ');
     }
 
-    private function koruny(int $kolik): string
+    /**
+     * Částka s měnou, ve které je.
+     *
+     * Psalo se natvrdo „Kč" — cesta rozpočtovaná v eurech tak o sobě tvrdila
+     * „Rozpočet 1 200 Kč". `trips.currency` i `trip_expenses.currency` přitom
+     * existují. Když se v seznamu sejde víc měn, nesčítá se nic: součet korun
+     * a eur je číslo, které nic neznamená.
+     */
+    private function castka(int $kolik, ?string $mena): string
     {
-        return $this->cislo($kolik).' Kč';
+        return $this->cislo($kolik).' '.$this->znak($mena);
+    }
+
+    private function znak(?string $mena): string
+    {
+        return match (mb_strtoupper(trim((string) $mena))) {
+            '', 'CZK' => 'Kč',
+            'EUR' => '€',
+            'USD' => '$',
+            'GBP' => '£',
+            default => mb_strtoupper(trim((string) $mena)),
+        };
+    }
+
+    /**
+     * Měna, ve které jsou všechny ty řádky — nebo `null`, když se míchají.
+     *
+     * @param  Collection<int, object>  $radky
+     */
+    private function jednaMena(Collection $radky, ?string $vychozi = null): ?string
+    {
+        $meny = $radky->pluck('currency')->filter()
+            ->map(fn ($m) => mb_strtoupper(trim((string) $m)))
+            ->unique()
+            ->values();
+
+        if ($meny->count() > 1) {
+            return null;
+        }
+
+        return $meny->first() ?? ($vychozi ? mb_strtoupper(trim($vychozi)) : null);
     }
 
     private function pocet(int $kolik, string $jeden, string $dva, string $pet): string

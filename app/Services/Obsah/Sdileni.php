@@ -316,15 +316,43 @@ class Sdileni implements MaPrazdneKolekce, PoskytovatelObsahu
      * Jméno do druhého pádu.
      *
      * Prototyp píše „3 fotky od Kláry", takže tvar musí sedět. Čeština se
-     * z tabulky vyčerpat nedá — tohle pokrývá běžná ženská a mužská jména
-     * a zbytek nechává být, což je pořád lepší než „od Klára".
+     * z tabulky vyčerpat nedá; tohle pokrývá vzory, které vycházejí vždycky,
+     * a u zbytku **nechává první pád** — „3 fotky od Tomáš" je vidět jako
+     * nedokonalost, kdežto „od Tomáša" vypadá jako tvrzení, že se ten člověk
+     * tak jmenuje. Vedlejší obrazovka skloňovat odmítá úplně ze stejného
+     * důvodu.
+     *
+     * Co se dřív pletlo: `j` a `š` byly ve třídě souhlásek s koncovkou `-a`
+     * (Ondřeja, Matěja, Tomáša, Lukáša) a měkké ženské vzory dostávaly `-y`
+     * místo `-i` (Míšy, Káčy, Soňy).
      */
     private function druhyPad(string $jmeno): string
     {
+        $jmeno = trim($jmeno);
+
+        if ($jmeno === '') {
+            return $jmeno;
+        }
+
         return match (true) {
+            /*
+             * Měkký vzor „Míša, Káča, Soňa, Naďa" → Míši, Káči, Soni, Nadi.
+             *
+             * U ď/ť/ň měkkost nese až to `i`, takže se háček z písmene sundá:
+             * „Soňi" a „Naďi" se v češtině nepíšou.
+             */
+            preg_match('/[ďťň]a$/ui', $jmeno) === 1 => mb_substr($jmeno, 0, -2)
+                .strtr(mb_substr($jmeno, -2, 1), ['ď' => 'd', 'ť' => 't', 'ň' => 'n', 'Ď' => 'D', 'Ť' => 'T', 'Ň' => 'N'])
+                .'i',
+            preg_match('/[šžčřcj]a$/ui', $jmeno) === 1 => mb_substr($jmeno, 0, -1).'i',
+            // Tvrdý vzor „Klára, Adam(a)" → Kláry.
             str_ends_with($jmeno, 'a') => mb_substr($jmeno, 0, -1).'y',
-            str_ends_with($jmeno, 'e') => mb_substr($jmeno, 0, -1).'e',
-            preg_match('/[bcdfghjklmnprstvzš]$/ui', $jmeno) === 1 => $jmeno.'a',
+            // „Marie, Alice" zůstávají stejné.
+            str_ends_with($jmeno, 'e') => $jmeno,
+            // Tvrdá souhláska → -a: Petr → Petra, Adam → Adama.
+            preg_match('/[bdfgklmnprstvz]$/ui', $jmeno) === 1 => $jmeno.'a',
+            // Měkká souhláska → -e: Tomáš → Tomáše, Ondřej → Ondřeje.
+            preg_match('/[jšžčřcďťň]$/ui', $jmeno) === 1 => $jmeno.'e',
             default => $jmeno,
         };
     }

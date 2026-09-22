@@ -53,6 +53,7 @@ class Uklid implements MaPrazdneKolekce, PoskytovatelObsahu
             'DATING' => [],
             'PJOBS' => [],
             'QUAR' => [],
+            'AL' => ['uklidPocty' => ['dating' => 0, 'quar' => 0]],
             'AGRID' => [
                 'anniv' => ['idx' => [], 'note' => '', 'ids' => []],
                 'show' => ['idx' => [], 'note' => '', 'ids' => []],
@@ -71,7 +72,31 @@ class Uklid implements MaPrazdneKolekce, PoskytovatelObsahu
             'AGRID' => $this->vybery($prostor),
             'PJOBS' => $this->zakazky($prostor),
             'DATING' => $this->kDatovani($prostor),
+            'AL' => ['uklidPocty' => $this->pocty($prostor)],
         ], fn ($v) => $v !== null && $v !== []);
+    }
+
+    /**
+     * Kolik toho doopravdy je: `{ dating, quar }`.
+     *
+     * Seznamy se ořezávají na čtyřicet položek, aby obrazovka nebyla dlouhá
+     * jako celá knihovna — jenže nadpis se skládal z délky toho seznamu,
+     * takže knihovna s pěti sty nedatovanými snímky hlásila „40 snímků bez
+     * data" a dvojice si myslela, že to má skoro hotové.
+     *
+     * @return array<string, int>
+     */
+    private function pocty(GallerySpace $prostor): array
+    {
+        $zaklad = fn () => MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
+            ->where('gallery_space_id', $prostor->id)
+            ->whereNull('trashed_at')
+            ->where('is_hidden', false);
+
+        return [
+            'dating' => (int) $zaklad()->where('is_archived', false)->whereNull('taken_at')->count(),
+            'quar' => (int) $zaklad()->where('is_archived', true)->count(),
+        ];
     }
 
     /**
@@ -110,6 +135,14 @@ class Uklid implements MaPrazdneKolekce, PoskytovatelObsahu
                     // Proč to leží stranou, ví jen člověk; server si nic nedomýšlí.
                     'why' => (string) ($m->notes ?: $m->caption ?: ''),
                     'left' => $do ? $this->zbyva($dnes, $do) : 'bez lhůty',
+                    /*
+                     * Celá věta, protože jen server ví, jestli lhůta je.
+                     * Klient lepil „Pustíme sama za " + `left`, takže u položky
+                     * bez lhůty psal „Pustíme sama za bez lhůty".
+                     */
+                    'leftSay' => $do
+                        ? 'Pustíme sama za '.$this->zbyva($dnes, $do)
+                        : 'Lhůtu nemá — sama nezmizí.',
                     'n' => (int) $m->id,
                     'expired' => $do !== null && $do->lt($dnes),
                     // Kolik se pustením opravdu uvolní. Prototyp měl napsaný
