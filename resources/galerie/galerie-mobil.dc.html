@@ -1054,18 +1054,23 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                       </span>
                     </button>
                   </sc-for>
-                  <div style="font-size:10.5px; letter-spacing:.12em; text-transform:uppercase; color:var(--g-ink3); padding:15px 0 6px">Kdy přijdou</div>
-                  <div style="display:flex; gap:7px; flex-wrap:wrap">
-                    <sc-for list="{{ all.mpTimes }}" as="t" hint-placeholder-count="4">
-                      <button onClick="{{ t.pick }}" style="min-height:44px; padding:0 14px; border:1px solid var(--g-line); border-radius:2px; background:{{ t.bg }}; color:{{ t.fg }}; cursor:pointer; font-family:inherit; font-size:13px; font-variant-numeric:tabular-nums">{{ t.label }}</button>
-                    </sc-for>
-                  </div>
-                  <div style="font-size:10.5px; letter-spacing:.12em; text-transform:uppercase; color:var(--g-ink3); padding:15px 0 6px">Komu</div>
-                  <div style="display:flex; gap:7px; flex-wrap:wrap">
-                    <sc-for list="{{ all.mpWho }}" as="w" hint-placeholder-count="3">
-                      <button onClick="{{ w.pick }}" style="min-height:44px; padding:0 12px; border:1px solid var(--g-line); border-radius:2px; background:{{ w.bg }}; color:{{ w.fg }}; cursor:pointer; font-family:inherit; font-size:12.5px">{{ w.label }}</button>
-                    </sc-for>
-                  </div>
+                  <sc-if value="{{ all.mpVolbyCasu }}">
+                    <div style="font-size:10.5px; letter-spacing:.12em; text-transform:uppercase; color:var(--g-ink3); padding:15px 0 6px">Kdy přijdou</div>
+                    <div style="display:flex; gap:7px; flex-wrap:wrap">
+                      <sc-for list="{{ all.mpTimes }}" as="t" hint-placeholder-count="4">
+                        <button onClick="{{ t.pick }}" style="min-height:44px; padding:0 14px; border:1px solid var(--g-line); border-radius:2px; background:{{ t.bg }}; color:{{ t.fg }}; cursor:pointer; font-family:inherit; font-size:13px; font-variant-numeric:tabular-nums">{{ t.label }}</button>
+                      </sc-for>
+                    </div>
+                    <div style="font-size:10.5px; letter-spacing:.12em; text-transform:uppercase; color:var(--g-ink3); padding:15px 0 6px">Komu</div>
+                    <div style="display:flex; gap:7px; flex-wrap:wrap">
+                      <sc-for list="{{ all.mpWho }}" as="w" hint-placeholder-count="3">
+                        <button onClick="{{ w.pick }}" style="min-height:44px; padding:0 12px; border:1px solid var(--g-line); border-radius:2px; background:{{ w.bg }}; color:{{ w.fg }}; cursor:pointer; font-family:inherit; font-size:12.5px">{{ w.label }}</button>
+                      </sc-for>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ all.mpSrvNote }}">
+                    <div style="font-size:12.5px; color:var(--g-ink2); line-height:1.55; padding:15px 2px 4px; text-wrap:pretty">{{ all.mpSrvNoteText }}</div>
+                  </sc-if>
                   <div style="display:flex; align-items:center; gap:11px; padding:16px 2px 11px; border-bottom:1px solid var(--g-line2)">
                     <div style="flex:1; min-width:0">
                       <div style="font-size:14.5px">Nejmenší série</div>
@@ -1078,7 +1083,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                   <button onClick="{{ all.mpQuietToggle }}" style="display:flex; align-items:center; gap:12px; width:100%; min-height:56px; text-align:left; border:0; border-bottom:1px solid var(--g-line2); background:transparent; padding:11px 2px; cursor:pointer; font-family:inherit; color:inherit">
                     <span style="flex:1; min-width:0">
                       <span style="display:block; font-size:14.5px">Tiché hodiny</span>
-                      <span style="display:block; font-size:11.5px; color:var(--g-ink3); margin-top:2px">Do osmi ráno a po desáté večer nic nepřijde.</span>
+                      <span style="display:block; font-size:11.5px; color:var(--g-ink3); margin-top:2px">{{ all.mpQuietNote }}</span>
                     </span>
                     <span style="flex:none; position:relative; width:40px; height:22px; border-radius:12px; background:{{ all.mpQuiet.track }}; transition:background .18s ease">
                       <span style="position:absolute; top:2px; left:{{ all.mpQuiet.knob }}; width:18px; height:18px; border-radius:50%; background:var(--g-raise); transition:left .18s ease"></span>
@@ -5983,11 +5988,19 @@ const telefonZeServeru = (() => {
       const v = d[4] || {};
       return [d[0], d[1], d[2], [d[3] || '', v.priv ? 'jen moje' : ''].filter(Boolean).join(' · '), null, v.uuid || null, v.mine !== false];
     }));
-    // Klíč řádku (`inbox:…`) dává server — rozhodnutí se pak uloží k řádku, ne k jeho pořadí.
-    nahrad(INBOX, (AL.inbox || []).map((r, i) => ({
-      id: r[7] || ('si' + i), icon: 'ph-tray', src: String(r[1] || ''), title: String(r[0] || ''),
-      why: '', cta: 'Vyřízeno', taps: '', eff: 'server', res: 'vyřízeno'
-    })));
+    /*
+     * Klíč řádku (`inbox:…`) dává server — rozhodnutí se pak uloží k řádku,
+     * ne k jeho pořadí. Odložené a vyřízené posílá server zvlášť
+     * (`AL.snoozed`, `AL.inboxDone`); bez nich zůstaly záložky „Odloženo"
+     * a „Přijato" po obnovení prázdné, i když rozhodnutí v databázi je.
+     */
+    const inboxRadek = (r, i, predpona, stav) => ({
+      id: r[7] || (predpona + i), icon: 'ph-tray', src: String(r[1] || ''), title: String(r[0] || ''),
+      why: '', cta: 'Vyřízeno', taps: '', eff: 'server', res: 'vyřízeno', stavZeServeru: stav
+    });
+    nahrad(INBOX, (AL.inbox || []).map((r, i) => inboxRadek(r, i, 'si', 'act'))
+      .concat((AL.snoozed || []).map((r, i) => inboxRadek(r, i, 'so', 'snooze')))
+      .concat((AL.inboxDone || []).map((r, i) => inboxRadek(r, i, 'sd', 'done'))));
     nahrad(MEVSEED, G.EVSEED || []);
     nahrad(MNUDGES, G.NUDGES || []);
     nahrad(FAMILY, G.FAMILY || []);
@@ -7065,10 +7078,13 @@ class Component extends DCLogic {
        'trustCalled trustTold svedAdj exitOff exitWho exitMade dayBonus dayGiven dayShift ' +
        'blizAdd blizWA blizWM blizBlock kidsStance kidsYear kidsFixed kidsTalks ' +
        // `navHide memPrefs setVals lockIdle lockSecs lockBio lockStart` ne: patří zařízení, viz `zarizeniKlice()`.
-       'mineInc mineEven parDone mechLog rowDone sw rules memSaved memLater curVotesM evUndone annFmtM kapOpened nedDoneM klHelpOn evPick rtOnM ndStateM whLogM offPackM lbTags lbVers edits cycDays wishes ideas buys ' +
+       'mineInc mineEven parDone mechLog rowDone sw rules memSaved memLater curVotesM evUndone annFmtM kapOpened nedDoneM klHelpOn evPick rtOnM whLogM offPackM lbTags lbVers edits cycDays wishes ideas buys ' +
        // Domácnost, rozhodnutí, sliby, rodina, žádosti a kapsle: server je zapisuje do tabulek.
        // Bez nich telefon hlásil „hotovo" a „žádost odeslána" a změna žila jen do obnovení.
        'chores choreLog dues inv decs cools proms fam nudges kapsules ' +
+       // Kolečko (co v něm je a co padlo) a kategorie plateb: zapsané na telefonu
+       // se bez uložení ztratily při obnovení a do knihy plateb se nedostaly vůbec.
+       'mWOff mWLog txCat inboxSt ' +
        // Kdo je mimo platí pro oba — bez uložení by ho druhé zařízení nevidělo.
        'soloOn soloAway soloWhy ' +
        // Hlasy společných výběrů — tytéž jako na počítači, pod jménem. A zapnuté rituály.
@@ -7369,6 +7385,7 @@ class Component extends DCLogic {
       isStory: false, stChapters: [], isStoryMs: false, stMs: [], isTags: false, tagRows: [],
       isSer: false, serRows: [], isTxCards: false, txCards: [], isEv: false, evRows: [],
       isMemPrefs: false, mpKinds: [], mpTimes: [], mpWho: [], mpMin: '', mpQuiet: { on: false, track: '', knob: '2px' },
+      mpVolbyCasu: false, mpSrvNote: false, mpSrvNoteText: '', mpQuietNote: '',
       mpOnCount: '', mpLess: () => {}, mpMore: () => {}, mpQuietToggle: () => {}, mpReset: () => {},
       isCsList: false, csList: [], isCsCompare: false, csCompare: [], isCsSeason: false, csSeason: [],
       isCsSplit: false, csSplit: [], csSplitHead: '',
@@ -7682,6 +7699,14 @@ class Component extends DCLogic {
       pick: () => { mpSet({ who: w[0] }); this.toast('Chodí: ' + w[1].toLowerCase(), { icon: 'ph-users' }); }
     })) : [];
     const isMemPrefs = mpKinds.length > 0;
+    /*
+     * Čas a „komu" jsou volby ukázky.
+     *
+     * Připomínku na nejsilnější vzpomínku dne posílá server (`gallery:memories`
+     * v 8:30 oběma). Tyhle přepínače do toho nemluví — `memPrefs` je nastavení
+     * tohohle telefonu a na server se neposílá. Tak to tu i stojí.
+     */
+    const mpSrv = this.galerieNaServeru();
     const mpMin = String(mp.minPhotos);
     const mpQuiet = { on: !!mp.quiet, track: mp.quiet ? 'var(--g-acc)' : 'var(--g-line)', knob: mp.quiet ? '20px' : '2px' };
     const mpOnCount = mpKinds.filter(k => k.on).length;
@@ -7836,8 +7861,11 @@ class Component extends DCLogic {
     })) : [];
     const isRtNext = rtNextRows.length > 0;
 
-    const NUDGES = D.NUDGES || [], NUDGEKIND = D.NUDGEKIND || {};
-    const ndState = s.ndStateM || {};
+    // Žádosti se čtou z téhož seznamu jako na vlastní obrazovce (`ndAll`) —
+    // `NUDGES` je tvar ukázky a stav z `ndStateM` nikam nedošel.
+    const NUDGEKIND = D.NUDGEKIND || {};
+    const NUDGES = this.ndAll().map(n => [n.id, n.from, n.to, n.text, n.kind, n.when, n.state, n.note]);
+    const ndState = {};
     const ndST = { ceka: ['čeká', 'var(--g-warn)'], prijato: ['přijato', 'var(--g-ok)'], odmitnuto: ['odmítnuto', 'var(--g-mag)'], hotovo: ['hotovo', 'var(--g-ink3)'] };
     const ndSrc = key === 'ndIn' ? NUDGES.filter(n => n[2] === this.ndMe())
       : key === 'ndOut' ? NUDGES.filter(n => n[1] === this.ndMe())
@@ -7849,8 +7877,13 @@ class Component extends DCLogic {
         state: (ndST[st] || ['', 'var(--g-ink3)'])[0], color: (ndST[st] || ['', 'var(--g-ink3)'])[1],
         reply: n[7] || '', hasReply: !!n[7],
         canAct: key === 'ndIn' && st === 'ceka',
-        accept: () => { this.setState({ ndStateM: Object.assign({}, ndState, { [n[0]]: 'prijato' }) }); this.toast('Přijato — ' + n[3], { icon: 'ph-check' }); },
-        reject: () => { this.setState({ ndStateM: Object.assign({}, ndState, { [n[0]]: 'odmitnuto' }) }); this.toast('Odmítnuto s důvodem — napište ho v odpovědi', { icon: 'ph-x' }); } };
+        /*
+         * Odpověď na žádost jde do `nudges` (server ji zapíše do tabulky),
+         * ne do `ndStateM`, který nikdo nečetl: druhý viděl „čeká" dál.
+         * A „napište důvod v odpovědi" tu nemělo kam — odpověď se tu jen čte.
+         */
+        accept: () => this.ndPatch(n[0], { state: 'prijato', note: this.krestni(this.meWho()) + ': beru to' }, 'Přijato — ' + n[3], 'ph-check-circle'),
+        reject: () => this.ndPatch(n[0], { state: 'odmitnuto', note: this.krestni(this.meWho()) + ': teď to nezvládnu' }, 'Odmítnuto — ' + n[3], 'ph-x-circle') };
     });
     const isNd = ndRows.length > 0;
 
@@ -7893,16 +7926,28 @@ class Component extends DCLogic {
     ] : [])) : [];
     const isWhLog = whLogRows.length > 0;
 
+    /*
+     * Balíčky do telefonu: skutečné stažení, ne přepnutý příznak.
+     *
+     * Tahle záložka je ta, na kterou se dá dojít z Více; přepínač na ní jen
+     * zapsal `offPackM` a hlásil „stahuje se" / „uvolněno z telefonu", i když
+     * se nestáhlo ani neuvolnilo nic. Stahování umí `mOfflineUloz` /
+     * `mOfflineUvolni` (druhá kopie téže obrazovky) a stav se čte z toho,
+     * co je opravdu uložené.
+     */
     const offOn = s.offPackM || {};
+    const offSrv = this.galerieNaServeru();
     const offRows = key === 'offPacks' ? (D.OFFPACKS || []).map(p => {
-      const on = offOn[p[0]] === undefined ? p[5] : offOn[p[0]];
-      return { label: p[1], note: p[2], icon: p[4],
+      const ulozeno = offSrv ? !!this.mOfflineStav(p[0]) : (offOn[p[0]] === undefined ? p[5] : offOn[p[0]]);
+      const stahuje = (s.mOffStah || {}).klic === p[0];
+      return { label: p[1], note: stahuje ? 'stahuje se · ' + (s.mOffStah.hotovo || 0) + ' z ' + s.mOffStah.celkem : p[2], icon: p[4],
         size: (p[3] >= 1024 ? (p[3] / 1024).toFixed(1).replace('.', ',') + ' GB' : p[3] + ' MB'),
-        track: on ? 'var(--g-acc)' : 'var(--g-line)', knob: on ? '20px' : '2px',
+        track: ulozeno ? 'var(--g-acc)' : 'var(--g-line)', knob: ulozeno ? '20px' : '2px',
         toggle: () => {
+          if (offSrv) { ulozeno ? this.mOfflineUvolni(p[0], p[1]) : this.mOfflineUloz(p[0], p[1]); return; }
           const prev = offOn;
-          this.setState({ offPackM: Object.assign({}, offOn, { [p[0]]: !on }) });
-          this.toast(p[1] + (on ? ' — uvolněno z telefonu' : ' — stahuje se'), { icon: p[4], undo: () => this.setState({ offPackM: prev }) });
+          this.setState({ offPackM: Object.assign({}, offOn, { [p[0]]: !ulozeno }) });
+          this.toast(p[1] + (ulozeno ? ' — uvolněno z telefonu' : ' — stahuje se'), { icon: p[4], undo: () => this.setState({ offPackM: prev }) });
         } };
     }) : [];
     const isOffPacks = offRows.length > 0;
@@ -7913,9 +7958,11 @@ class Component extends DCLogic {
     const offPwa = key === 'offPwa' ? [
       { n: '1', label: 'Přidat na plochu', note: pw.pwaCanInstall ? 'Systém instalaci nabízí — stačí potvrdit.' : 'V Safari přes Sdílet → Na plochu, v Chromu přes nabídku → Instalovat.', done: pw.pwaRows[2] && pw.pwaRows[2].value === 'ano' },
       { n: '2', label: 'Nechat si stáhnout balíčky',
-        note: (() => { const on = (D.OFFPACKS || []).filter(p => (s.offPackM || {})[p[0]] === undefined ? p[5] : (s.offPackM || {})[p[0]]);
+        // U dvojice se počítá, co je opravdu uložené (`mOfflineStav`), ne přepnutý příznak.
+        note: (() => { const jeDvojice = this.galerieNaServeru();
+          const on = (D.OFFPACKS || []).filter(p => jeDvojice ? !!this.mOfflineStav(p[0]) : ((s.offPackM || {})[p[0]] === undefined ? p[5] : (s.offPackM || {})[p[0]]));
           return on.length ? on.length + ' z ' + (D.OFFPACKS || []).length + ' balíčků má telefon u sebe.' : 'Zatím žádný balíček — v záložce Co mít offline vyberte, co má telefon nosit s sebou.'; })(),
-        done: (D.OFFPACKS || []).some(p => ((s.offPackM || {})[p[0]] === undefined ? p[5] : (s.offPackM || {})[p[0]])) },
+        done: (D.OFFPACKS || []).some(p => this.galerieNaServeru() ? !!this.mOfflineStav(p[0]) : ((s.offPackM || {})[p[0]] === undefined ? p[5] : (s.offPackM || {})[p[0]])) },
       { n: '3', label: 'Ověřit, že aplikace naběhne bez signálu', note: pw.pwaRows[1] && pw.pwaRows[1].value === 'aktivní' ? 'Skořápka je v paměti — otevře se i v letadle.' : 'Zatím se nepodařilo uložit do paměti.', done: !!(pw.pwaRows[1] && pw.pwaRows[1].value === 'aktivní') }
     ] : [];
     const isOffPwa = offPwa.length > 0;
@@ -8442,10 +8489,26 @@ class Component extends DCLogic {
       isTxCards: isTxCards, txCards: txCards,
       isEv: isEv, evRows: evRows,
       isMemPrefs: isMemPrefs, mpKinds: mpKinds, mpTimes: mpTimes, mpWho: mpWho,
+      mpVolbyCasu: !mpSrv, mpSrvNote: mpSrv,
+      mpQuietNote: mpSrv ? 'Od 22:00 do 8:00 do telefonu nic nepřijde — platí pro vás, druhý si to nastaví sám.' : 'Do osmi ráno a po desáté večer nic nepřijde.',
+      mpSrvNoteText: 'Připomínku na nejsilnější vzpomínku dne posílá server v 8:30 vám oběma. Ztišit ji jde v Klidu → Tiché hodiny; tohle nastavení platí pro tenhle telefon a určuje, co se tu ukazuje.',
       mpMin: mpMin, mpQuiet: mpQuiet, mpOnCount: this.pl(mpOnCount, 'druh je zapnutý', 'druhy jsou zapnuté', 'druhů je zapnuto'),
       mpLess: () => mpSet({ minPhotos: Math.max(1, mp.minPhotos - 1) }),
       mpMore: () => mpSet({ minPhotos: Math.min(50, mp.minPhotos + 1) }),
-      mpQuietToggle: () => { const prev = mp; mpSet({ quiet: !mp.quiet }); this.toast(mp.quiet ? 'Tiché hodiny vypnuty' : 'Tiché hodiny zapnuty — do 8:00 nic nepřijde', { icon: 'ph-moon', undo: () => this.setState({ memPrefs: prev }) }); },
+      /*
+       * Tiché hodiny u dvojice nastaví skutečné nastavení upozornění
+       * (`/api/v1/notifications/preferences`, 22:00–8:00). Dřív to byl přepínač
+       * v telefonu, který nikdo nečetl — a hláška přitom slibovala, že do osmi
+       * ráno nic nepřijde.
+       */
+      mpQuietToggle: () => {
+        const prev = mp, zapnout = !mp.quiet;
+        mpSet({ quiet: zapnout });
+        if (!mpSrv) { this.toast(zapnout ? 'Tiché hodiny zapnuty' : 'Tiché hodiny vypnuty', { icon: 'ph-moon', undo: () => this.setState({ memPrefs: prev }) }); return; }
+        window.GalerieApi.patch('v1/notifications/preferences', { quiet: { enabled: zapnout, from: '22:00', to: '08:00' } })
+          .then(() => this.toast(zapnout ? 'Tiché hodiny 22:00–8:00 — do telefonu nic nepřijde' : 'Tiché hodiny vypnuté', { icon: 'ph-moon', silent: true }))
+          .catch(e => { this.setState({ memPrefs: prev }); this.chybaServeru(e, 'Tiché hodiny se nepodařilo nastavit'); });
+      },
       mpReset: () => { const prev = mp; this.setState({ memPrefs: null }); this.toast('Připomínky vrácené na výchozí', { icon: 'ph-arrow-counter-clockwise', undo: () => this.setState({ memPrefs: prev }) }); },
       isCsList: isCsList, csList: csList, isCsCompare: isCsCompare, csCompare: csCompare,
       isCsSeason: isCsSeason, csSeason: csSeason, isCsSplit: isCsSplit, csSplit: csSplit, csSplitHead: csSplitHead,
@@ -11898,8 +11961,10 @@ class Component extends DCLogic {
     const active = MRITUALS.filter(r => on[r[0]]).length;
     return {
       isRitual: (s.stack.length ? s.stack[s.stack.length - 1] : s.tab) === 'ritual',
+      // Rituál nic nepřipomíná ani nesestaví — je to váš plán a výstup si
+      // připravíte na jeho obrazovce. Počítač to říká stejně.
       rtHead: this.pl(active, 'rituál je zapnutý', 'rituály jsou zapnuté', 'rituálů je zapnutých') + ' z ' + MRITUALS.length
-        + ' · zapnutý rituál nepřipomíná, ale připraví výstup',
+        + (this.galerieNaServeru() ? ' · rituál je váš plán na rok; výstup připravíte na jeho obrazovce' : ' · zapnutý rituál nepřipomíná, ale připraví výstup'),
       rtRows: MRITUALS.map(r => {
         const isOn = !!on[r[0]], didRun = !!ran[r[0]];
         return {
@@ -12205,8 +12270,10 @@ class Component extends DCLogic {
   spotPhotos() { return PHOTOS.filter(p => p.di === 1); }
   inboxAll() { return INBOX; }
   inboxIn(tab) {
+    // Stav ze serveru (`stavZeServeru`) je pravda; `inboxSt` je jen to, co se
+    // rozhodlo teď a ještě se nevrátilo z databáze.
     const st = this.state.inboxSt || {};
-    return INBOX.filter(p => (st[p.id] || 'act') === tab);
+    return INBOX.filter(p => (st[p.id] || p.stavZeServeru || 'act') === tab);
   }
   inboxList() { return this.inboxIn('act'); }
   inboxMove(p, to, label, icon) {
@@ -14178,7 +14245,9 @@ class Component extends DCLogic {
           const stored = (s.setVals || {})[key];
           let val;
           if (bound === 'grid') val = s.cols === 2 ? 'Velká' : s.cols === 4 ? 'Malá' : 'Střední';
-          else if (bound === 'sort') val = s.sort === 'asc' ? 'Nejstarší první' : 'Nejnovější první';
+          // Řazení knihovny drží `sortMem` (podle něj řadí `sortPhotos`); `sort`
+          // byl klíč počítače a na telefonu ho nikdo nečetl — volba nic nedělala.
+          else if (bound === 'sort') val = s.sortMem === 'old' ? 'Nejstarší první' : 'Nejnovější první';
           else if (bound === 'lockIdle') val = s.lockIdle || '5 min';
           else if (bound === 'lockSecs') val = s.lockSecs || 'Deník a Finance';
           else if (bound === 'lockBio') val = s.lockBio === false ? 'Vypnuto' : 'Zapnuto';
@@ -14189,7 +14258,7 @@ class Component extends DCLogic {
           const on = val === 'Zapnuto';
           const setVal = v => {
             if (bound === 'grid') this.setState({ cols: v === 'Velká' ? 2 : v === 'Malá' ? 4 : null });
-            else if (bound === 'sort') this.setState({ sort: v === 'Nejnovější první' ? 'desc' : 'asc' });
+            else if (bound === 'sort') this.setState({ sortMem: v === 'Nejstarší první' ? 'old' : 'new' });
             else if (bound === 'theme') this.setState({ setVals: Object.assign({}, s.setVals, { [key]: v }), theme: v === 'Tmavý' ? 'dark' : 'light' });
             else if (bound === 'lockIdle') this.setState({ lockIdle: v });
             else if (bound === 'lockSecs') this.setState({ lockSecs: v });
@@ -14318,7 +14387,9 @@ class Component extends DCLogic {
       sheetNote: s.sheet === 'upload' ? 'Originály se přenesou na server, jen když je Wi-Fi nebo to povolíte.'
         : s.sheet === 'vypis' ? 'Na který účet? Pak vyberete soubor z banky (CSV, XLS nebo XLSX) — co už v knize je, se nezdvojí.'
         : s.sheet === 'sort' ? ({ memories: 'Vzpomínky', finance: 'Transakce', trips: 'Cesty', places: 'Místa', albums: 'Alba' }[screen] || null)
-        : s.sheet === 'export' ? 'Připraví se na serveru, odkaz přijde do e-mailu.' : null,
+        // U dvojice se všechny čtyři volby stáhnou hned (tisk, ZIP, CSV, itineráře);
+        // e-mail s odkazem patří ukázce, aplikace ho neposílá.
+        : s.sheet === 'export' ? (this.galerieNaServeru() ? 'Připraví se rovnou tady — tisk otevře dialog, ostatní se stáhnou do telefonu.' : 'Připraví se na serveru, odkaz přijde do e-mailu.') : null,
       closeSheet: () => this.setState({ sheet: null }),
       sheetIsFilter: s.sheet === 'filter', sheetIsUpload: s.sheet === 'upload',
       sheetIsSearch: s.sheet === 'search', sheetIsTx: s.sheet === 'tx', sheetIsAdd: s.sheet === 'add',
@@ -14674,7 +14745,7 @@ class Component extends DCLogic {
         const ph = cycPhaseOf(iso);
         const rows = this.calUdalosti(iso).map(e => ({
           title: e[1], meta: CAL_KIND[e[2]][0] + ' · ' + e[3], icon: CAL_KIND[e[2]][1], color: CAL_KIND[e[2]][2],
-          go: () => { if (e[2] === 'ukol') { this.setState({ tab: 'more', stack: [] }); this.push('tasks'); } else if (e[2] === 'cesta') { this.setState({ dayId: DAYS[0][0], tab: 'memories', stack: [] }); this.push('day'); } else { this.setState({ secId: 'weekly', secTab: 0, tab: 'more', stack: [] }); this.push('sec'); } }
+          go: () => { if (e[2] === 'ukol') { this.setState({ tab: 'more', stack: [] }); this.push('tasks'); } else if (e[2] === 'cesta') { const den = (DAYS.filter(d => d[3] === iso)[0] || DAYS[0] || [''])[0]; if (!den) { this.toast('Z toho dne zatím žádné fotky nejsou', { icon: 'ph-camera', silent: true }); return; } this.setState({ dayId: den, tab: 'memories', stack: [] }); this.push('day'); } else { this.setState({ secId: 'weekly', secTab: 0, tab: 'more', stack: [] }); this.push('sec'); } }
         }));
         if (ph) rows.push({
           title: PHASES[ph][0], meta: 'Cyklus · ' + (cycDayNo(iso) ? cycDayNo(iso) + '. den' : 'odhad'),
