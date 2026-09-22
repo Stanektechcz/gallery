@@ -31950,7 +31950,26 @@ class Component extends DCLogic {
         if (e.key === 'ArrowRight') { e.preventDefault(); this.showStep(1); return; }
         if (e.key === 'ArrowLeft') { e.preventDefault(); this.showStep(-1); return; }
       }
-      if (e.key === 'Escape') this.setState({ keysOpen: false, lb: null, searchOpen: false, filtersOpen: false, uploadOpen: false, shareOpen: false, confirm: null, pplDlg: null, blkOpen: false, notifOpen: false, albMenu: false, histOpen: false });
+      /*
+       * Escape zavírá všechny dialogy, ne jen půlku z nich.
+       *
+       * Formulářové dialogy (akce, album, kapitola, milník, pravidlo, rychlý
+       * zápis) se dřív zavíraly jen klávesou v políčku — po kliknutí jinam
+       * v nich Escape nedělal nic a zavřít je šlo jen myší. Výjimka jsou
+       * záchranné kódy dvoufázového přihlášení: ty se ukazují jednou
+       * a zavírá je jen tlačítko „Mám je uložené".
+       */
+      if (e.key === 'Escape') {
+        const ac = this.state.acDlg;
+        const kody = !!(ac && String(ac.mode || '').indexOf('2fa') === 0 && ac.krok === 'kody');
+        this.setState({
+          keysOpen: false, lb: null, searchOpen: false, filtersOpen: false, uploadOpen: false, shareOpen: false,
+          confirm: null, pplDlg: null, blkOpen: false, notifOpen: false, albMenu: false, histOpen: false,
+          acDlg: kody ? ac : null, evDlg: null, abDlg: null, chDlg: null, msDlg: null, rulDlg: null,
+          bookDlg: null, catDlg: null, dnDlg: null, nowDlg: null, nowSpDlg: null,
+          xaOpen: false, xaMode: null, xaCtx: null, capOpen: false, gv: null
+        });
+      }
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); this.setState({ searchOpen: true }); }
       if (this.state.lb && e.key === 'ArrowRight') this.step(1);
       if (this.state.lb && e.key === 'ArrowLeft') this.step(-1);
