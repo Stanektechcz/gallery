@@ -10206,7 +10206,11 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                   <div style="font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--g-ink3)">Do konce roku</div>
                   <div style="font-size:22px; font-variant-numeric:tabular-nums">{{ dueSum }}</div>
                 </div>
+                <button class="btn btn-secondary" onClick="{{ dueAdd }}" style="gap:6px"><i class="ph-duotone ph-plus" style="font-size:16px"></i>Přidat lhůtu</button>
               </div>
+              <sc-if value="{{ dueEmpty }}">
+                <div style="padding:6px 4px 18px; font-size:14px; color:var(--g-ink2); max-width:640px; line-height:1.55; text-wrap:pretty">Žádná lhůta ani platba s termínem. Zapište, co se opakuje a nesmí se zmeškat — STK, pojištění, předplatné, daň z nemovitosti — a kdo to má na starost.</div>
+              </sc-if>
 
               <div style="display:flex; flex-direction:column; gap:10px">
                 <sc-for list="{{ dueRows }}" as="d" hint-placeholder-count="7">
@@ -10254,7 +10258,11 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                   <div style="font-size:17px">{{ famHead }}</div>
                   <div style="font-size:13px; color:var(--g-ink2); text-wrap:pretty">{{ famNote }}</div>
                 </div>
+                <button class="btn btn-secondary" onClick="{{ famAdd }}" style="gap:6px"><i class="ph-duotone ph-plus" style="font-size:16px"></i>Přidat kontakt</button>
               </div>
+              <sc-if value="{{ famEmpty }}">
+                <div style="padding:6px 4px 18px; font-size:14px; color:var(--g-ink2); max-width:640px; line-height:1.55; text-wrap:pretty">Zatím tu nikdo není. Přidejte, komu se chcete pravidelně ozývat — rodiče, babičky, sourozenci — a jak často; aplikace pohlídá, na kom je řada.</div>
+              </sc-if>
               <div style="display:flex; flex-direction:column; gap:10px">
                 <sc-for list="{{ famRows }}" as="f" hint-placeholder-count="6">
                   <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr)); gap:14px; align-items:start; padding:14px 16px; border-radius:2px; background:var(--g-raise); border:1px solid var(--g-line2)">
@@ -10291,7 +10299,11 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                   <div style="font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--g-ink3)">Vlastnictví stojí</div>
                   <div style="font-size:22px; font-variant-numeric:tabular-nums">{{ flatCostSum }}</div>
                 </div>
+                <button class="btn btn-secondary" onClick="{{ flatAdd }}" style="gap:6px"><i class="ph-duotone ph-plus" style="font-size:16px"></i>Přidat věc</button>
               </div>
+              <sc-if value="{{ flatEmpty }}">
+                <div style="padding:6px 4px 18px; font-size:14px; color:var(--g-ink2); max-width:640px; line-height:1.55; text-wrap:pretty">V bytě zatím nic není zapsané. Přidejte větší věci — pračku, lednici, gauč — s cenou a zárukou; aplikace spočítá, kolik stojí ročně, a pohlídá konec záruky.</div>
+              </sc-if>
               <div class="tabulka-obal" style="overflow-x:auto; max-width:100%; min-width:0"><table class="table">
                 <thead><tr><th>Věc</th><th style="width:110px">Kde</th><th style="width:130px">Koupeno</th><th style="width:180px">Skutečná cena</th><th style="width:130px">Záruka</th><th style="width:110px">Doklad</th><th style="text-align:right; width:220px">Akce</th></tr></thead>
                 <tbody>
@@ -16677,6 +16689,8 @@ class Component extends DCLogic {
       famHead: this.pl(list.filter(f => f.over).length, 'kontakt je po lhůtě', 'kontakty jsou po lhůtě', 'kontaktů je po lhůtě')
         + ' · ' + this.dva().map(w => w + ' ' + byWho(w) + '×').join(', '),
       famNote: 'Lhůta není povinnost, jen rytmus, který si sami nastavíte. Kdo se ozval naposledy, se pamatuje kvůli rotaci — ne kvůli účtování.',
+      famEmpty: list.length === 0,
+      famAdd: () => this.setState({ xaOpen: true, xaMode: 'rodinaNova', xaCtx: null, xaA: '', xaB: 'moje', xaC: '14', xaD: '' }),
       famRows: list.map(f => ({
         name: f.name, note: f.note, side: 'rodina — ' + f.side,
         last: 'naposledy ' + f.last + ' · ' + f.lastWho,
@@ -18593,6 +18607,67 @@ class Component extends DCLogic {
         cesta: () => 'mista/poznamka',
         telo: (a, b, c, d, ctx) => ({ nazev: ctx, text: a })
       },
+      /*
+       * Lhůta, kontakt z rodiny a věc v bytě — dřív nešlo přidat nic, jen
+       * spravovat ukázku. Zapisují se přes stav (`dues`, `fam`, `inv`),
+       * odkud je převodníky uloží (DomacnostVeStavu, MechanismyVeStavu).
+       */
+      lhutaNova: {
+        t: 'Nová lhůta nebo platba', a: 'Co — třeba STK, pojištění bytu, předplatné', b: 'Kdy — datum, třeba 15. 10. 2026',
+        c: 'Částka v Kč (nepovinné)', d: 'Druh: lhůta, platba nebo předplatné',
+        h: 'Lhůta se ukáže v Domácnosti a v souhrnu; kdo ji má na starost, jde předat druhému.',
+        telo: (a, b, c, d) => {
+          const den = this.denZTextu(b);
+          if (!den) return { chyba: 'Datum napište jako 15. 10. 2026' };
+          const castka = c ? Math.round(this.castkaZTextu(c)) : 0;
+          if (c && !(castka >= 0)) return { chyba: 'Částku napište jako číslo' };
+          const druh = /plat/i.test(d) ? 'platba' : /předpl|predpl/i.test(d) ? 'předplatné' : 'lhůta';
+          return { what: a, date: den.popisek, days: den.dni, amount: castka, kind: druh };
+        },
+        stav: t => {
+          const prev = this.state.dues === null || this.state.dues === undefined ? HOUSE_DUES : this.state.dues;
+          this.setState({ dues: [{ id: 'd' + Date.now(), what: t.what, kind: t.kind, date: t.date, days: t.days, amount: t.amount, who: this.meWho(), note: '' }].concat(prev), route: 'x-domacnost', hsTab: 'due' });
+          this.toast(t.what + ' — zapsáno na ' + t.date, { icon: 'ph-calendar-plus', undo: () => this.setState({ dues: prev }) });
+        }
+      },
+      rodinaNova: {
+        t: 'Nový kontakt z rodiny', a: 'Kdo — třeba Babička Věra', b: 'Z čí rodiny: moje, druhého, nebo společná',
+        c: 'Jak často se ozvat — po kolika dnech (výchozí 14)', d: 'Poznámka (nepovinné)',
+        h: 'Kdo se ozval naposledy, se pamatuje kvůli střídání; po lhůtě se kontakt ukáže v souhrnu.',
+        telo: (a, b, c, d) => {
+          const dni = c ? parseInt(c, 10) : 14;
+          if (!(dni >= 1 && dni <= 365)) return { chyba: 'Rytmus napište ve dnech, od 1 do 365' };
+          const strana = /^spol/i.test(b) ? 'spolu' : /^(druh|partner)/i.test(b) ? this.druhy(this.meWho()) : this.meWho();
+          return { name: a, side: strana, every: dni, note: d || '' };
+        },
+        stav: t => {
+          const prev = this.famList();
+          this.setState({ fam: [{ id: 'f' + Date.now(), name: t.name, side: t.side, every: t.every, last: 'zatím nikdy', lastWho: '—', over: false, note: t.note }].concat(prev), route: 'x-domacnost', hsTab: 'fam' });
+          this.toast(t.name + ' přidán do rodiny · ozvat se každých ' + this.pl(t.every, 'den', 'dny', 'dní'), { icon: 'ph-phone-call', undo: () => this.setState({ fam: prev }) });
+        }
+      },
+      vecNova: {
+        t: 'Nová věc v bytě', a: 'Co — třeba Pračka Bosch', b: 'Kde — místnost (nepovinné)',
+        c: 'Cena v Kč (nepovinné)', d: 'Záruka do — měsíc/rok, třeba 3/2028 (nepovinné)',
+        h: 'Z ceny a životnosti (10 let) se spočítá, kolik věc stojí ročně; záruka se hlídá.',
+        telo: (a, b, c, d) => {
+          const cena = c ? Math.round(this.castkaZTextu(c)) : 0;
+          if (c && !(cena >= 0)) return { chyba: 'Cenu napište jako číslo' };
+          if (d && !/^\d{1,2}\/\d{4}$/.test(d.trim())) return { chyba: 'Záruku napište jako měsíc/rok, třeba 3/2028' };
+          return { name: a, room: b || '', price: cena, warrantyTo: (d || '').trim() };
+        },
+        stav: t => {
+          const prev = this.state.inv === null || this.state.inv === undefined ? HOUSE_INV : this.state.inv;
+          const dnes = this.dnes();
+          let zbyva = null;
+          if (t.warrantyTo) {
+            const [m, r] = t.warrantyTo.split('/').map(Number);
+            zbyva = Math.round((new Date(r, m, 0) - new Date(dnes.getFullYear(), dnes.getMonth(), dnes.getDate())) / 86400000);
+          }
+          this.setState({ inv: [{ id: 'v' + Date.now(), name: t.name, sub: '', room: t.room, bought: dnes.getDate() + '. ' + (dnes.getMonth() + 1) + '. ' + dnes.getFullYear(), warrantyTo: t.warrantyTo, warrantyDays: zbyva, doc: false, service: false, price: t.price, life: 10, energy: 0, upkeep: 0 }].concat(prev), route: 'x-domacnost', hsTab: 'flat' });
+          this.toast(t.name + ' zapsáno do bytu', { icon: 'ph-house-line', undo: () => this.setState({ inv: prev }) });
+        }
+      },
       praceNova: {
         t: 'Nová domácí práce', a: 'Co je potřeba dělat — třeba Vynést tříděný odpad',
         b: 'Jak často: denně, 2× týdně, týdně, měsíčně nebo podle potřeby', c: 'Kolik minut to zabere', d: 'Kdo ji má teď: já, druhý, nebo spolu',
@@ -18672,6 +18747,14 @@ class Component extends DCLogic {
     // Formulář si může data zkontrolovat sám (částka, datum) — chyba zůstane v dialogu.
     const telo = f.telo(a, b, c, d, ctx);
     if (telo && telo.chyba) { this.toast(telo.chyba, { icon: 'ph-warning', color: 'var(--g-mag)' }); return; }
+
+    // Formulář, který zapisuje přes sdílený stav — na server ho převede převodník
+    // (lhůty, rodina, byt). Toast i „Zpět" si řeší sám.
+    if (f.stav) {
+      this.setState({ xaOpen: false, xaMode: null, xaCtx: null, xaA: '', xaB: '', xaC: '', xaD: '' });
+      f.stav(telo, ctx);
+      return;
+    }
 
     const api = window.GalerieApi;
 
@@ -29460,6 +29543,11 @@ class Component extends DCLogic {
       dueTitle: this.pl(dues.filter(d => d.days <= 30).length, 'věc do měsíce', 'věci do měsíce', 'věcí do měsíce') + ' · ' + this.pl(dues.length, 'závazek celkem', 'závazky celkem', 'závazků celkem'),
       dueRiskLine: 'Odkládání téhle sedmičky může stát ' + this.kc(dues.reduce((a, d) => a + (d.delayCost || 0), 0)) + ' na pokutách, penále a plných cenách. Není to výčitka, je to číslo.',
       dueSum: this.kc(dueSum),
+      // Přidat lhůtu a věc do bytu — dřív šlo jen spravovat, co přišlo z ukázky.
+      dueEmpty: dues.length === 0,
+      dueAdd: () => this.setState({ xaOpen: true, xaMode: 'lhutaNova', xaCtx: null, xaA: '', xaB: '', xaC: '', xaD: 'lhůta' }),
+      flatEmpty: inv.length === 0,
+      flatAdd: () => this.setState({ xaOpen: true, xaMode: 'vecNova', xaCtx: null, xaA: '', xaB: '', xaC: '', xaD: '' }),
       dueRows: dues.map(d => ({
         what: d.what, note: d.note, change: d.change || null,
         icon: d.kind === 'platba' ? 'ph-receipt' : d.kind === 'předplatné' ? 'ph-repeat' : 'ph-calendar-check',
@@ -30486,6 +30574,23 @@ class Component extends DCLogic {
       });
     };
     vstup.click();
+  }
+  /*
+   * Datum z políčka: „15. 10. 2026", „15.10.2026" i „2026-10-15" → popisek
+   * ve tvaru, jaký čte převodník („15. 10. 2026"), a kolik dní zbývá.
+   */
+  denZTextu(t) {
+    const x = String(t || '').trim();
+    let d, m, r;
+    let p = /^(\d{1,2})\.\s*(\d{1,2})\.\s*(\d{4})$/.exec(x);
+    if (p) { d = +p[1]; m = +p[2]; r = +p[3]; }
+    else if ((p = /^(\d{4})-(\d{2})-(\d{2})$/.exec(x))) { r = +p[1]; m = +p[2]; d = +p[3]; }
+    else return null;
+    const den = new Date(r, m - 1, d);
+    if (den.getFullYear() !== r || den.getMonth() !== m - 1 || den.getDate() !== d) return null;
+    const dnes = this.dnes();
+    const od = new Date(dnes.getFullYear(), dnes.getMonth(), dnes.getDate());
+    return { popisek: d + '. ' + m + '. ' + r, dni: Math.round((den - od) / 86400000) };
   }
   // Částka z políčka: „1 500", „1500,50", „+200" → číslo.
   castkaZTextu(t) { return parseFloat(String(t || '').replace(/\s/g, '').replace(/[^0-9.,-]/g, '').replace(',', '.')); }

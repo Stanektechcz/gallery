@@ -2371,6 +2371,10 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                     <span style="font-size:12px; color:var(--g-ink3)">{{ dueTitle }}</span>
                     <span style="margin-left:auto; font-size:15px; font-variant-numeric:tabular-nums">{{ dueSum }}</span>
                   </div>
+                  <sc-if value="{{ dueEmpty }}">
+                    <div style="padding:0 0 12px; font-size:13.5px; line-height:1.55; color:var(--g-ink2); text-wrap:pretty">Žádná lhůta ani platba s termínem. Zapište, co se nesmí zmeškat — STK, pojištění, předplatné.</div>
+                  </sc-if>
+                  <button onClick="{{ dueAdd }}" class="btn btn-secondary btn-block" style="min-height:44px; gap:7px; margin-bottom:14px"><i class="ph-duotone ph-plus" style="font-size:16px"></i>Přidat lhůtu</button>
                   <sc-for list="{{ dueRows }}" as="d" hint-placeholder-count="5">
                     <div style="padding-bottom:13px; border-bottom:1px solid var(--g-line2); margin-bottom:12px">
                       <div style="display:flex; align-items:baseline; gap:8px">
@@ -2394,6 +2398,10 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
               <sc-if value="{{ hsOnFam }}">
                 <div>
                   <div style="font-size:12px; color:var(--g-ink3); padding-bottom:12px">{{ famHead }} — lhůta není povinnost, jen rytmus.</div>
+                  <sc-if value="{{ famEmpty }}">
+                    <div style="padding:0 0 12px; font-size:13.5px; line-height:1.55; color:var(--g-ink2); text-wrap:pretty">Zatím tu nikdo není. Přidejte, komu se chcete pravidelně ozývat, a jak často — aplikace pohlídá, na kom je řada.</div>
+                  </sc-if>
+                  <button onClick="{{ famAdd }}" class="btn btn-secondary btn-block" style="min-height:44px; gap:7px; margin-bottom:14px"><i class="ph-duotone ph-plus" style="font-size:16px"></i>Přidat kontakt</button>
                   <sc-for list="{{ famRows }}" as="f" hint-placeholder-count="6">
                     <div style="padding-bottom:13px; border-bottom:1px solid var(--g-line2); margin-bottom:12px">
                       <div style="display:flex; align-items:baseline; gap:8px">
@@ -2414,6 +2422,10 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
               <sc-if value="{{ hsOnFlat }}">
                 <div>
                   <div style="font-size:12px; color:var(--g-ink3); padding-bottom:12px">{{ flatTitle }}</div>
+                  <sc-if value="{{ flatEmpty }}">
+                    <div style="padding:0 0 12px; font-size:13.5px; line-height:1.55; color:var(--g-ink2); text-wrap:pretty">V bytě zatím nic není zapsané. Přidejte větší věci; s cenou a zárukou (ze které se hlídá konec) je zapíšete při přidání na počítači.</div>
+                  </sc-if>
+                  <button onClick="{{ flatAdd }}" class="btn btn-secondary btn-block" style="min-height:44px; gap:7px; margin-bottom:14px"><i class="ph-duotone ph-plus" style="font-size:16px"></i>Přidat věc</button>
                   <sc-for list="{{ flatRows }}" as="f" hint-placeholder-count="5">
                     <div style="padding-bottom:13px; border-bottom:1px solid var(--g-line2); margin-bottom:12px">
                       <div style="display:flex; align-items:baseline; gap:8px">
@@ -6526,6 +6538,18 @@ class Component extends DCLogic {
     const d = new Date();
     return new Date(d.getFullYear(), d.getMonth(), d.getDate());
   }
+  // Datum z políčka („15. 10. 2026" i „2026-10-15") → popisek pro převodník a dny do něj.
+  denZTextu(t) {
+    const x = String(t || '').trim();
+    let d, m, r;
+    let p = /^(\d{1,2})\.\s*(\d{1,2})\.\s*(\d{4})$/.exec(x);
+    if (p) { d = +p[1]; m = +p[2]; r = +p[3]; }
+    else if ((p = /^(\d{4})-(\d{2})-(\d{2})$/.exec(x))) { r = +p[1]; m = +p[2]; d = +p[3]; }
+    else return null;
+    const den = new Date(r, m - 1, d);
+    if (den.getFullYear() !== r || den.getMonth() !== m - 1 || den.getDate() !== d) return null;
+    return { popisek: d + '. ' + m + '. ' + r, dni: Math.round((den - this.dnes()) / 86400000) };
+  }
   /*
    * Datum zápisu — dnešní, ne to, ke kterému se kreslil prototyp.
    *
@@ -6630,7 +6654,14 @@ class Component extends DCLogic {
         go: () => this.setState({ hsTab: t[0] })
       })),
       hsOnChores: tab === 'chores', hsOnCap: tab === 'cap', hsOnDue: tab === 'due', hsOnFlat: tab === 'flat', hsOnFam: tab === 'fam',
-      famHead: this.pl(FAMILY.filter(f => f.over).length, 'kontakt je po lhůtě', 'kontakty jsou po lhůtě', 'kontaktů je po lhůtě'),
+      famHead: this.pl((this.state.fam === null || this.state.fam === undefined ? FAMILY : this.state.fam).filter(f => f.over).length, 'kontakt je po lhůtě', 'kontakty jsou po lhůtě', 'kontaktů je po lhůtě'),
+      // Přidávání — dřív šlo v Lhůtách, Rodině i Bytě jen spravovat ukázku.
+      dueEmpty: dues.length === 0,
+      dueAdd: () => this.setState({ sheet: 'add', addKind: 'due', addA: '', addB: '' }),
+      famEmpty: (this.state.fam === null || this.state.fam === undefined ? FAMILY : this.state.fam).length === 0,
+      famAdd: () => this.setState({ sheet: 'add', addKind: 'fam', addA: '', addB: '14' }),
+      flatEmpty: inv.length === 0,
+      flatAdd: () => this.setState({ sheet: 'add', addKind: 'item', addA: '', addB: '' }),
       famRows: (this.state.fam === null || this.state.fam === undefined ? FAMILY : this.state.fam).map(f => ({
         name: f.name, side: 'rodina ' + this.sklon(f.side, 'gen'),
         last: 'naposledy ' + f.last + ' · ' + f.lastWho + ' · rytmus ' + this.pl(f.every, 'den', 'dny', 'dní'),
@@ -12085,6 +12116,9 @@ class Component extends DCLogic {
       album: ['Nové album', 'Název albumu', 'Poznámka (nepovinná)', 'Založit album'],
       chore: ['Nová domácí práce', 'Co je potřeba dělat', 'Jak často: denně, 2× týdně, týdně, měsíčně', 'Přidat práci'],
       decision: ['Zapsat rozhodnutí', 'Co jsme rozhodli', 'Hlavní důvod (nepovinný)', 'Zapsat rozhodnutí'],
+      due: ['Nová lhůta nebo platba', 'Co — třeba STK, pojištění', 'Kdy — třeba 15. 10. 2026', 'Zapsat lhůtu'],
+      fam: ['Nový kontakt z rodiny', 'Kdo — třeba Babička Věra', 'Jak často se ozvat — po kolika dnech', 'Přidat kontakt'],
+      item: ['Nová věc v bytě', 'Co — třeba Pračka', 'Kde — místnost (nepovinné)', 'Přidat věc'],
       promise: ['Zapsat slib', 'Co slibuji', 'Do kdy (nepovinné, třeba do pátku)', 'Zapsat slib']
     };
     const spec = addSpec[s.addKind || 'diary'];
@@ -12101,6 +12135,33 @@ class Component extends DCLogic {
        * převede stav (`decs`, `proms` → VztahVeStavu). Dřív šly na telefonu
        * jen číst a bez zápisu z počítače tu byla prázdná obrazovka.
        */
+      /*
+       * Lhůta, kontakt z rodiny a věc v bytě — stejné řádky jako na počítači,
+       * na server je převede stav (`dues`, `fam`, `inv`).
+       */
+      if (s.addKind === 'due') {
+        const den = this.denZTextu(b);
+        if (!den) { this.toast('Datum napište jako 15. 10. 2026', { icon: 'ph-warning' }); return; }
+        const dues = s.dues === null || s.dues === undefined ? HOUSE_DUES : s.dues;
+        this.setState({ dues: [{ id: 'd' + Date.now(), what: a, kind: 'lhůta', date: den.popisek, days: den.dni, amount: 0, who: this.meWho(), note: '' }].concat(dues), sheet: null, addA: '', addB: '', seq: n + 1, hsTab: 'due' });
+        this.toast(a + ' — zapsáno na ' + den.popisek, { icon: 'ph-calendar-plus', undo: () => this.setState({ dues: dues }) });
+        return;
+      }
+      if (s.addKind === 'fam') {
+        const dni = b ? parseInt(b, 10) : 14;
+        if (!(dni >= 1 && dni <= 365)) { this.toast('Rytmus napište ve dnech, od 1 do 365', { icon: 'ph-warning' }); return; }
+        const fam = s.fam === null || s.fam === undefined ? FAMILY : s.fam;
+        this.setState({ fam: [{ id: 'f' + Date.now(), name: a, side: this.meWho(), every: dni, last: 'zatím nikdy', lastWho: '—', over: false, note: '' }].concat(fam), sheet: null, addA: '', addB: '', seq: n + 1, hsTab: 'fam' });
+        this.toast(a + ' přidán · ozvat se každých ' + this.pl(dni, 'den', 'dny', 'dní'), { icon: 'ph-phone-call', undo: () => this.setState({ fam: fam }) });
+        return;
+      }
+      if (s.addKind === 'item') {
+        const inv = s.inv === null || s.inv === undefined ? HOUSE_INV : s.inv;
+        const d = this.dnes();
+        this.setState({ inv: [{ id: 'v' + Date.now(), name: a, sub: '', room: b || '', bought: d.getDate() + '. ' + (d.getMonth() + 1) + '. ' + d.getFullYear(), warrantyTo: '', warrantyDays: null, doc: false, service: false, price: 0, life: 10, energy: 0, upkeep: 0 }].concat(inv), sheet: null, addA: '', addB: '', seq: n + 1, hsTab: 'flat' });
+        this.toast(a + ' zapsáno do bytu', { icon: 'ph-house-line', undo: () => this.setState({ inv: inv }) });
+        return;
+      }
       if (s.addKind === 'decision') {
         const decs = s.decs === null || s.decs === undefined ? DEC_LIST : s.decs;
         this.setState({

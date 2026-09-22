@@ -510,6 +510,31 @@ class ObsahDomacnostTest extends TestCase
         $this->assertTrue($vec->refresh()->has_doc);
     }
 
+    /**
+     * Nová věc v bytě se založí, i když už nějaké jsou.
+     *
+     * Byt se zakládal jen „prvním dotekem" ukázky — věc přidaná k existujícím
+     * se zahodila. Smazanou věc (serverové uuid) stará kopie nevzkřísí.
+     */
+    public function test_nova_vec_se_zalozi_i_k_existujicim(): void
+    {
+        $kotel = $this->vec(['name' => 'Kotel Vaillant']);
+
+        $this->patchJson('/api/state', ['data' => ['inv' => [
+            ['id' => $kotel->uuid, 'name' => 'Kotel Vaillant', 'doc' => false],
+            ['id' => 'v1789', 'name' => 'Pračka Bosch', 'room' => 'koupelna', 'bought' => '22. 9. 2026', 'price' => 14990, 'life' => 10, 'warrantyTo' => '9/2028'],
+            ['id' => (string) Str::uuid(), 'name' => 'Smazaná lednice'],
+        ]]])->assertOk();
+
+        $pracka = HouseInventoryItem::where('name', 'Pračka Bosch')->firstOrFail();
+        $this->assertSame('koupelna', $pracka->room);
+        $this->assertSame(14990, (int) $pracka->price);
+        $this->assertSame('2026-09-22', $pracka->bought_on->toDateString());
+        $this->assertSame('2028-09-30', $pracka->warranty_to->toDateString());
+        $this->assertFalse(HouseInventoryItem::where('name', 'Smazaná lednice')->exists());
+        $this->assertSame(2, HouseInventoryItem::where('gallery_space_id', $this->prostor->id)->count());
+    }
+
     /** Domácnost jiného páru se do odpovědi nedostane. */
     public function test_domacnost_jineho_paru_se_neposila(): void
     {

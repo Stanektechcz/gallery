@@ -290,6 +290,13 @@ class PravidlaDokumentuPrototypuTest extends TestCase
         $this->assertStringContainsString('onClick="{{ dcAddDec }}"', $telefon);
         $this->assertStringContainsString('onClick="{{ dcAddProm }}"', $telefon);
         $this->assertStringContainsString("if (s.addKind === 'decision') {", $telefon);
+
+        // Lhůty, rodina a byt jdou doplnit na obou rozvrženích.
+        foreach (['dueAdd', 'famAdd', 'flatAdd'] as $akce) {
+            $this->assertStringContainsString('onClick="{{ '.$akce.' }}"', $pocitac, $akce);
+            $this->assertStringContainsString('onClick="{{ '.$akce.' }}"', $telefon, $akce);
+        }
+        $this->assertStringContainsString('if (f.stav) {', $pocitac);
     }
 
     /** Promítání na telefonu: skutečné fotky výběru a automatické listování. */

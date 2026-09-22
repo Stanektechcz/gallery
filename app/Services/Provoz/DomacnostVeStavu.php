@@ -399,8 +399,19 @@ class DomacnostVeStavu
     {
         $veci = $this->podleId(HouseInventoryItem::where('gallery_space_id', $prostor->id)->get());
 
-        if ($veci->isEmpty()) {
-            $veci = $this->prvniByt($radky, $prostor);
+        /*
+         * Nová věc se založí kdykoli, ne jen při prvním doteku.
+         *
+         * Byt se dřív zakládal jen z ukázky, a tu dvojice s prázdnou domácností
+         * nevidí — věc do bytu tak nešla přidat vůbec. Nová je ta, která má
+         * identifikátor z klienta (ne uuid) a v databázi ještě není; uuid vydal
+         * server, taková věc tu byla a stará kopie seznamu ji nevzkřísí.
+         */
+        $nove = array_values(array_filter($radky, fn ($r) => is_array($r) && isset($r['id'], $r['name'])
+            && ! $veci->has($r['id']) && ! Str::isUuid((string) $r['id'])));
+
+        if ($nove !== []) {
+            $veci = $veci->merge($this->prvniByt($nove, $prostor));
         }
 
         foreach ($radky as $r) {
@@ -413,7 +424,7 @@ class DomacnostVeStavu
     }
 
     /**
-     * Založení bytu při prvním doteku.
+     * Založení nových věcí v bytě (i při prvním doteku celého seznamu).
      *
      * @param  array<int, mixed>  $radky
      * @return Collection<string, HouseInventoryItem>
@@ -458,7 +469,8 @@ class DomacnostVeStavu
             return null;
         }
 
-        return CarbonImmutable::createFromDate((int) $shoda[3], (int) $shoda[2], (int) $shoda[1]);
+        // Den bez času — `createFromDate` jinak přilepí právě teď (13:36:48).
+        return CarbonImmutable::createFromDate((int) $shoda[3], (int) $shoda[2], (int) $shoda[1])->startOfDay();
     }
 
     /** „3/2026" — záruka se píše měsícem a rokem; bere se poslední den měsíce. */
