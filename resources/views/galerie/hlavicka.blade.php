@@ -460,9 +460,18 @@
    * aplikace přestala načítat. Když dávkový požadavek selže (starší server),
    * skupiny se stáhnou po jedné jako dřív.
    */
+  /*
+   * Dávka jde vždy k serveru (`no-cache`).
+   *
+   * S výchozí pamětí vzal prohlížeč odpověď z posledních třiceti vteřin:
+   * položka přidaná těsně před obnovením stránky po obnovení „zmizela"
+   * a načtení po uložení v administraci (za 1,2 s) dostalo stav před ním.
+   * Dávky se stahují při startu a pak po čtyřech minutách — paměť tu
+   * nikdy nešetřila nic, co by stálo za zastaralý obsah.
+   */
   function nactiDavku(jmena) {
     window.GalerieNacita++;
-    return fetch('/api/data?skupiny=' + jmena.join(','), { headers: hlavicky(), credentials: 'same-origin' })
+    return fetch('/api/data?skupiny=' + jmena.join(','), { headers: hlavicky(), credentials: 'same-origin', cache: 'no-cache' })
       .then(function (r) {
         if (r.status === 404 || r.status === 405) throw new Error('bez dávky');
         return r.ok ? r.json() : null;
@@ -473,7 +482,7 @@
           .some(function (ok) { return ok; });
       })
       .catch(function (e) {
-        if (e && e.message === 'bez dávky') return Promise.all(jmena.map(function (j) { return nactiSkupinu(j); }));
+        if (e && e.message === 'bez dávky') return Promise.all(jmena.map(function (j) { return nactiSkupinu(j, true); }));
         return false;
       })
       .then(hotovaSkupina);
