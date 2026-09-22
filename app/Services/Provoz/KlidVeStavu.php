@@ -5,6 +5,7 @@ namespace App\Services\Provoz;
 use App\Models\GallerySpace;
 use App\Models\User;
 use App\Services\Obsah\Klid;
+use App\Support\Cas;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -302,7 +303,7 @@ class KlidVeStavu
                 'gallery_space_id' => $prostor->id,
                 'user_id' => $uzivatel->id,
                 'question' => mb_substr($otazka, 0, 500),
-                'asked_on' => CarbonImmutable::now()->toDateString(),
+                'asked_on' => Cas::dnes()->toDateString(),
             ],
             ['answer' => $text, 'updated_at' => now(), 'created_at' => now()],
         );

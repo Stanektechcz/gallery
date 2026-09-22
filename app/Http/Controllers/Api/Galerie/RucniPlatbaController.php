@@ -10,8 +10,8 @@ use App\Models\GallerySpace;
 use App\Models\Transaction;
 use App\Models\Wallet;
 use App\Services\Obsah\Finance;
+use App\Support\Cas;
 use App\Support\SpaceContext;
-use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -86,7 +86,7 @@ class RucniPlatbaController extends Controller
         $platba = Transaction::create([
             'gallery_space_id' => $prostor->id,
             'type' => $prijem ? 'income' : 'expense',
-            'occurred_at' => CarbonImmutable::now()->toDateString(),
+            'occurred_at' => Cas::dnes()->toDateString(),
             'wallet_from_id' => $prijem ? null : $ucet->id,
             'wallet_to_id' => $prijem ? $ucet->id : null,
             'amount_from' => $prijem ? null : $castka,

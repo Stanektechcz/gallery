@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Models\GallerySpace;
 use App\Services\Obsah\Mechanismy;
 use App\Services\Obsah\Rozhodovani;
+use App\Support\Cas;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -317,7 +318,7 @@ class ZaznamController extends Controller
             'couple_family_contact_id' => $kontakt?->id,
             'area' => $oblast,
             'by_user_id' => $request->user()?->id,
-            'happened_on' => now()->toDateString(),
+            'happened_on' => Cas::dnes()->toDateString(),
             'minutes' => $data['minutes'] ?? null,
             'asked_partner' => (bool) ($data['asked'] ?? false),
             'note' => $this->text($data['note'] ?? null),
@@ -331,7 +332,7 @@ class ZaznamController extends Controller
             DB::table('couple_family_contacts')
                 ->where('id', $kontakt->id)
                 ->update([
-                    'last_contact_on' => now()->toDateString(),
+                    'last_contact_on' => Cas::dnes()->toDateString(),
                     'last_contact_by' => $request->user()?->id,
                     'updated_at' => now(),
                 ]);

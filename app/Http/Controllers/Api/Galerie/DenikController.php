@@ -8,8 +8,8 @@ use App\Http\Controllers\Controller;
 use App\Models\GallerySpace;
 use App\Models\JournalEntry;
 use App\Services\Obsah\Denik;
+use App\Support\Cas;
 use App\Support\SpaceContext;
-use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -43,7 +43,8 @@ class DenikController extends Controller
             'title' => trim($data['nadpis']),
             'body' => trim($data['text']),
             'mood' => $data['nalada'] ?? null,
-            'entry_date' => $data['datum'] ?? CarbonImmutable::now()->toDateString(),
+            // Dnešek dvojice: zápis po půlnoci patří k novému dni i mezi 0:00 a 2:00.
+            'entry_date' => $data['datum'] ?? Cas::dnes()->toDateString(),
             'visibility' => ! empty($data['soukromy']) ? JournalEntry::VISIBILITY_PRIVATE : JournalEntry::VISIBILITY_SHARED,
             'shared_at' => ! empty($data['soukromy']) ? null : now(),
         ]);
@@ -94,7 +95,8 @@ class DenikController extends Controller
             'text' => ['required', 'string', 'max:50000'],
             'nalada' => ['nullable', 'string', 'in:'.implode(',', self::NALADY)],
             'soukromy' => ['sometimes', 'boolean'],
-            'datum' => ['nullable', 'date_format:Y-m-d', 'before_or_equal:today'],
+            // „Dnes" podle Prahy: s UTC by server po půlnoci odmítl dnešní datum.
+            'datum' => ['nullable', 'date_format:Y-m-d', 'before_or_equal:'.Cas::dnes()->toDateString()],
         ]);
     }
 

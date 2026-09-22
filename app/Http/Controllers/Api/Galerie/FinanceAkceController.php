@@ -18,6 +18,7 @@ use App\Models\Transaction;
 use App\Models\Wallet;
 use App\Services\Obsah\Finance;
 use App\Services\Obsah\FinanceRozbory;
+use App\Support\Cas;
 use App\Support\SpaceContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -209,7 +210,8 @@ class FinanceAkceController extends Controller
             return $this->chyba('Nejdřív založte účet v Rozpočtu — plánovaná platba z něj bude odcházet.');
         }
 
-        $dnes = Carbon::today();
+        // Dnešek dvojice (Praha), jako proměnlivý Carbon — níž se mění na místě.
+        $dnes = Carbon::parse(Cas::dnes()->toDateString());
         // Začíná nejbližším takovým dnem, ne zpětně — jinak by předpis dopsal minulost.
         $start = $dnes->copy()->day(min((int) $data['den'], $dnes->daysInMonth));
         if ($start->lessThan($dnes)) {
@@ -356,7 +358,7 @@ class FinanceAkceController extends Controller
         Transaction::create([
             'gallery_space_id' => $prostor->id,
             'type' => 'transfer',
-            'occurred_at' => Carbon::today()->toDateString(),
+            'occurred_at' => Cas::dnes()->toDateString(),
             'wallet_from_id' => $z->id,
             'wallet_to_id' => $na->id,
             'amount_from' => $castka,
@@ -601,7 +603,7 @@ class FinanceAkceController extends Controller
         $data = $request->validate([
             'nazev' => ['required', 'string', 'max:120'],
             'castka' => ['required', 'numeric', 'gt:0', 'max:100000000'],
-            'termin' => ['nullable', 'date', 'after:today'],
+            'termin' => ['nullable', 'date', 'after:'.Cas::dnes()->toDateString()],
             'poznamka' => ['nullable', 'string', 'max:500'],
         ]);
 
@@ -672,7 +674,7 @@ class FinanceAkceController extends Controller
         BudgetSettlement::create([
             'budget_id' => $rozpocet->id,
             'currency' => $rozpocet->currency ?: 'CZK',
-            'settled_through' => Carbon::today()->toDateString(),
+            'settled_through' => Cas::dnes()->toDateString(),
             'amount' => round((float) $data['castka'], 2),
             'from_user_id' => $od->id,
             'to_user_id' => $komu->id,

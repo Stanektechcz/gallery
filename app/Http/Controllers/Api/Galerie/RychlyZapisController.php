@@ -10,7 +10,7 @@ use App\Models\JournalEntry;
 use App\Services\Obsah\Denik;
 use App\Services\Obsah\Planovani;
 use App\Services\Planning\SharedTodoService;
-use Carbon\CarbonImmutable;
+use App\Support\Cas;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -49,7 +49,7 @@ class RychlyZapisController extends Controller
             'created_by' => $request->user()->id,
             'title' => trim((string) ($data['nadpis'] ?? '')) ?: null,
             'body' => trim($data['text']),
-            'entry_date' => CarbonImmutable::now()->toDateString(),
+            'entry_date' => Cas::dnes()->toDateString(),
             'visibility' => JournalEntry::VISIBILITY_PRIVATE,
         ]);
 

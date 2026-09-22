@@ -5,6 +5,7 @@ namespace App\Services\Provoz;
 use App\Models\GallerySpace;
 use App\Models\User;
 use App\Services\Obsah\Mechanismy;
+use App\Support\Cas;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -223,7 +224,7 @@ class MechanismyVeStavu
              * jinak by každé načtení obrazovky vypadalo jako nový kontakt.
              */
             if ($puvodni !== null && $kdo !== null && (int) $puvodni->last_contact_by !== $kdo) {
-                $radek['last_contact_on'] = CarbonImmutable::now()->toDateString();
+                $radek['last_contact_on'] = Cas::dnes()->toDateString();
                 $radek['last_contact_by'] = $kdo;
             }
 
@@ -240,7 +241,7 @@ class MechanismyVeStavu
             $zustavaji[] = DB::table('couple_family_contacts')->insertGetId($radek + [
                 'uuid' => (string) Str::uuid(),
                 'gallery_space_id' => $prostor->id,
-                'last_contact_on' => $kdo ? CarbonImmutable::now()->toDateString() : null,
+                'last_contact_on' => $kdo ? Cas::dnes()->toDateString() : null,
                 'last_contact_by' => $kdo,
                 'created_at' => now(),
             ]);
@@ -343,7 +344,7 @@ class MechanismyVeStavu
 
         return preg_match('/^\d{4}-\d{2}-\d{2}$/', $datum)
             ? $datum
-            : CarbonImmutable::now()->toDateString();
+            : Cas::dnes()->toDateString();
     }
 
     private function druhAnti(string $druh): string

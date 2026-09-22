@@ -5,6 +5,8 @@ namespace Tests\Feature\Galerie;
 use App\Models\GallerySpace;
 use App\Models\JournalEntry;
 use App\Models\User;
+use App\Support\Cas;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -106,10 +108,29 @@ class DenikGalerieTest extends TestCase
 
     public function test_budouci_datum_a_prazdny_text_neprojdou(): void
     {
-        $this->postJson('/api/denik', ['nadpis' => 'Zítra', 'text' => 'x', 'datum' => now()->addDay()->toDateString()])->assertStatus(422);
+        $this->postJson('/api/denik', ['nadpis' => 'Zítra', 'text' => 'x', 'datum' => Cas::dnes()->addDay()->toDateString()])->assertStatus(422);
         $this->postJson('/api/denik', ['nadpis' => 'Prázdný', 'text' => ''])->assertStatus(422);
         $this->postJson('/api/denik', ['nadpis' => 'Nálada', 'text' => 'x', 'nalada' => 'hurá'])->assertStatus(422);
         $this->assertSame(0, JournalEntry::withoutGlobalScopes()->count());
+    }
+
+    /**
+     * Po půlnoci v Praze je „dnes" už nový den.
+     *
+     * Ve 23:30 UTC server odmítal dnešní pražské datum jako budoucí a zápis
+     * bez data dostal včerejšek.
+     */
+    public function test_dnes_po_pulnoci_podle_prahy(): void
+    {
+        config(['app.display_timezone' => 'Europe/Prague']);
+        $this->travelTo(CarbonImmutable::parse('2026-10-08 23:30:00', 'UTC'));
+
+        $this->postJson('/api/denik', ['nadpis' => 'S datem', 'text' => 'x', 'datum' => '2026-10-09'])->assertStatus(201);
+        $this->postJson('/api/denik', ['nadpis' => 'Bez data', 'text' => 'x'])->assertStatus(201);
+        $this->postJson('/api/denik', ['nadpis' => 'Pozítří', 'text' => 'x', 'datum' => '2026-10-10'])->assertStatus(422);
+
+        $this->assertSame(['2026-10-09'], JournalEntry::withoutGlobalScopes()->get()
+            ->map(fn (JournalEntry $z) => $z->entry_date->toDateString())->unique()->values()->all());
     }
 
     public function test_cizi_prostor_je_nedostupny(): void
