@@ -720,6 +720,57 @@ z telefonu; oznámení přečtená na serveru.
 
 Testy: **1469 PHP testů**, všechny prošly. Nic se nemigruje.
 
+## 2q. Sedmnácté kolo — tlačítka, která jen přepnula obrazovku (22. 9.)
+
+Průchod počítače (s pomocí auditu všech tlačítek, jejichž hláška tvrdí
+hotovou věc) a telefonu (hlášky nad klíči stavu, které se neukládají).
+
+- **Vzpomínky se u dvojice neukazovaly vůbec**: generátor zapisuje druhy
+  `anniversary`/`album`/`event`, obrazovka filtrovala podle `den`/`milnik`…;
+  výchozí „aspoň 10 fotek" schovalo zbytek a „na dnes" bralo i včerejší.
+  `gallery:memories` navíc nebyl v plánovači — teď denně 8:30 pražského času.
+  Odložení na zítra/týden se vrátí samo; dlaždice jsou fotky vzpomínky.
+- **Týdenní přehled**: „Na příští týden" posune úkol po termínu na pondělí
+  (`POST /api/ukoly/{uuid}/pristi-tyden`); minulý týden se otevře na fotce.
+- **Prohlížeč fotky**: čas pořízení byl napevno „06:42", „nahráno" ukazovalo
+  den pořízení a fotka bez alba měla v poli Album cizí album.
+- **Úkoly na telefonu** se odškrtávají na serveru (`PATCH /api/v1/todos`).
+- **Milníky**: „Přidat milník" zakládalo nápad na dárek; nový
+  `POST /api/milniky` (počítač i telefon).
+- **Finance**: pravidla zařazování jsou tatáž, podle kterých zařazuje import
+  výpisu (dřív text, že import galerie nemá); hledání v transakcích po slovech.
+- **Audit tlačítek**: nedělní agenda, zavřít rozhodnutím, rozvaha, pravidlo
+  z mentální zátěže, kolečko → kalendář, rozpočet příští cesty, fronta hostů
+  (schválení/odmítnutí na serveru), kapitola ze vzpomínky, fotokniha v Tisku,
+  album z návrhu na Dnes (dřív prázdné) a z hotového výběru.
+
+**Co zůstává (2q):**
+- Zakázky Tisku (`pJobs`) žijí ve sdíleném stavu dvojice, ne v tabulce
+  `photo_books` ze starého rozhraní. Nic se neztrácí (stav se ukládá a vidí
+  ho oba), ale telefon a staré rozhraní vidí jen `photo_books`. Sjednotit
+  chce migraci (stav, počet kusů, nastavení editoru u `photo_books`).
+- Nastavení připomínek vzpomínek (čas, komu, tichý režim) je předvolba
+  zařízení, kterou server neukládá; oznámení chodí v 8:30 všem členům.
+- Komentáře k fotce (`lbCom`), archiv alba, balení na cestu, chytrá alba:
+  ukládají se ve sdíleném stavu, ne v tabulkách, které k nim server má.
+
+| Commit | Obsah |
+|---|---|
+| `8a8ba423` | Týdenní přehled a prohlížeč fotky: posun úkolu a skutečné údaje o fotce |
+| `9a5e1a6e` | Finance: pravidla zařazování podle plateb, hledání po slovech |
+| `28f9032e` | Telefon: odškrtnutý úkol se uzavře na serveru |
+| `b59a2e86` | Milníky, odložené vzpomínky a album z návrhu doopravdy |
+| `3b1dc8ed` | Tlačítka, která hlásila hotovo a jen přepnula obrazovku (audit) |
+| `320056cc` | Vzpomínky dvojice se konečně ukážou a generují se každé ráno |
+
+Testy: **1480 PHP testů**, všechny prošly. Nic se nemigruje.
+
+### Po nasazení (2q)
+
+- Plánovač má novou úlohu `memories` (`gallery:memories`, 8:30 Europe/Prague).
+  Na serveru běží `schedule:run` z cronu, takže stačí nasadit; první
+  vzpomínky lze vytvořit hned: `php artisan gallery:memories --no-notify`.
+
 ### Po nasazení (2p)
 
 - Nic se nemigruje. Položky cestovní schránky, které dřívější verze
