@@ -193,6 +193,8 @@ class Sdileni implements MaPrazdneKolekce, PoskytovatelObsahu
 
                 return [
                     'id' => $prvni->uuid,
+                    // Všechny nahrávky dávky — „Zařadit" jich schválí tolik, kolik jich řádek hlásí.
+                    'ids' => $davka->pluck('uuid')->map(fn ($u) => (string) $u)->values()->all(),
                     'who' => $kdo,
                     // Druhý pád do věty „fotky od Kláry"; bez skloňování se
                     // nedá poznat, jestli je to jméno, nebo vztah.

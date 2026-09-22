@@ -464,6 +464,34 @@ class PravidlaDokumentuPrototypuTest extends TestCase
         $this->assertStringNotContainsString("s.done['t' + grp[0] + i]", $telefon);
     }
 
+    /**
+     * Tlačítka, která hlásila hotovou věc a jen přepnula obrazovku (audit 17. kola).
+     */
+    public function test_tlacitka_neslibuji_co_neudelaji(): void
+    {
+        $pocitac = self::dokument('galerie-desktop.dc.html');
+
+        foreach ([
+            "' nabídnut jako podklad fotoknihy'",
+            "' uložených vzpomínek nabídnuto jako podklad fotoknihy'",
+            "'“ nabídnuto jako podklad kapitoly'",
+            "'Založena kapitola z připnuté vzpomínky'",
+            "'Téma přidáno k nedělní agendě · tři minuty'",
+            'aplikace to připomene sama, nikdo si to nemusí pamatovat',
+            "'Milník založen v Dárcích a nápadech'",
+            "this.setState({ memLater: { ...prev, [m.id]: 'zítra ráno' } })",
+            "m.date.indexOf('17.') === 0).slice(0, 2)",
+        ] as $lez) {
+            $this->assertStringNotContainsString($lez, $pocitac, $lez);
+        }
+
+        $this->assertStringContainsString("cesta: () => 'milniky'", $pocitac);
+        $this->assertStringContainsString("api.post('v1/guest-uploads/' + id + '/' + akce, {})", $pocitac);
+        $this->assertStringContainsString("window.GalerieApi.patch('v1/trips/' + dalsi.n, { budget: castka })", $pocitac);
+        $this->assertStringContainsString("(this.state.nedTopics || []).forEach(t => push('Opakované téma'", $pocitac);
+        $this->assertStringContainsString('this.setState({ decs: [zaznam].concat(decs)', $pocitac);
+    }
+
     /** Přihlášení se na kód druhého ověření ptá políčkem, ne dialogem prohlížeče. */
     public function test_dvoufazove_overeni_ma_policko(): void
     {

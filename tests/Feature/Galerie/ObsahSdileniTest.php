@@ -124,6 +124,9 @@ class ObsahSdileniTest extends TestCase
         $this->assertSame('Kláry', $fronta['Klára']['whom']);
         $this->assertSame('Beskydy s Makinkou', $fronta['Klára']['share']);
         $this->assertSame('1 fotka', $fronta['Mamka']['what']);
+        // „Zařadit" schvaluje celou dávku — řádek nese všechny tři nahrávky.
+        $this->assertCount(3, $fronta['Klára']['ids']);
+        $this->assertContains($fronta['Klára']['id'], $fronta['Klára']['ids']);
     }
 
     /**
