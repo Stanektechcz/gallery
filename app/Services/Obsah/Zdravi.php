@@ -6,6 +6,7 @@ use App\Models\CycleDay;
 use App\Models\CycleSetting;
 use App\Models\GallerySpace;
 use App\Models\WellbeingMood;
+use App\Support\Cas;
 use App\Support\Tabulky;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
@@ -171,6 +172,19 @@ class Zdravi implements MaPrazdneKolekce, PoskytovatelObsahu
         foreach ($dny as $d) {
             $klic = CarbonImmutable::parse($d->day)->format('Y-m-d');
 
+            /*
+             * Vlastní zápis přebíjí partnerův i odhad.
+             *
+             * Mapa je klíčovaná datem, takže při dvou zapisujících tiše
+             * vyhrál ten, kdo přišel v pořadí později — a na svém kalendáři
+             * jsem pak viděl partnerovo krvácení. A zapsaný den má přednost
+             * před dopočítaným (`is_predicted`), jinak by odhad přepsal to,
+             * co někdo doopravdy zapsal.
+             */
+            if (isset($mapa[$klic]) && ! $this->prebije($d, $mapa[$klic])) {
+                continue;
+            }
+
             $mapa[$klic] = [
                 'day' => $klic,
                 'flow' => $d->flow ?: 'none',
@@ -180,12 +194,40 @@ class Zdravi implements MaPrazdneKolekce, PoskytovatelObsahu
                 'temp' => $d->temperature !== null ? (float) $d->temperature : null,
                 'note' => $d->note,
                 'start' => (bool) $d->is_cycle_start,
-                // Zapsaný den má přednost před odhadem — proto nikdy `true`.
-                'predicted' => false,
+                /*
+                 * Odhad se pozná.
+                 *
+                 * `CycleService::autofillPeriod()` po zapsání prvního dne
+                 * krvácení dopočítá další dny s `is_predicted = true`.
+                 * Tady stála natvrdo nepravda, takže se kreslily plně
+                 * a s popiskem „zapsáno" — a z aplikačního odhadu se pak
+                 * počítala délka cyklu i termín toho příštího.
+                 */
+                'predicted' => (bool) $d->is_predicted,
+                'mine' => $d->user_id === auth()->id(),
             ];
         }
 
         return $mapa;
+    }
+
+    /**
+     * Má tenhle zápis přednost před tím, co v ten den už je?
+     *
+     * Vlastní před cizím, zapsaný před dopočítaným.
+     *
+     * @param  array<string, mixed>  $stavajici
+     */
+    private function prebije(CycleDay $novy, array $stavajici): bool
+    {
+        $mujNovy = $novy->user_id === auth()->id();
+        $mujStary = (bool) ($stavajici['mine'] ?? false);
+
+        if ($mujNovy !== $mujStary) {
+            return $mujNovy;
+        }
+
+        return (bool) ($stavajici['predicted'] ?? false) && ! $novy->is_predicted;
     }
 
     /**
@@ -224,7 +266,9 @@ class Zdravi implements MaPrazdneKolekce, PoskytovatelObsahu
 
         $prumer = array_sum($delky) / count($delky);
         $posledni = CarbonImmutable::parse($zacatky[count($zacatky) - 1][0]);
-        $den = (int) $posledni->startOfDay()->diffInDays(CarbonImmutable::now()->startOfDay()) + 1;
+        // „Dnes je 12. den cyklu" se počítá k dnešku dvojice. Podle serveru
+        // to bylo mezi půlnocí a druhou ranní o den zpátky.
+        $den = (int) $posledni->startOfDay()->diffInDays(Cas::dnes()) + 1;
         $pristi = $posledni->addDays((int) round($prumer));
 
         return [
@@ -236,8 +280,12 @@ class Zdravi implements MaPrazdneKolekce, PoskytovatelObsahu
             ],
             [
                 'Průměrná délka',
-                str_replace('.', ',', (string) round($prumer, 1)).' dne · '
-                    .$this->pocet(count($delky), 'zaznamenaný cyklus', 'zaznamenané cykly', 'zaznamenaných cyklů'),
+                // U celého čísla „28 dní", u desetinného „28,4 dne" — psalo se
+                // „28 dne" pořád. (`System::radekCyklus()` to řeší stejně.)
+                (round($prumer, 1) == (int) $prumer
+                    ? $this->pocet((int) $prumer, 'den', 'dny', 'dní')
+                    : str_replace('.', ',', (string) round($prumer, 1)).' dne')
+                    .' · '.$this->pocet(count($delky), 'zaznamenaný cyklus', 'zaznamenané cykly', 'zaznamenaných cyklů'),
                 100,
                 0,
             ],
@@ -261,11 +309,21 @@ class Zdravi implements MaPrazdneKolekce, PoskytovatelObsahu
 
     private function zacatky(Collection $dny): array
     {
-        $krvaceni = $dny
+        /*
+         * Délka cyklu se počítá z vlastních **zapsaných** dnů.
+         *
+         * Do `$dny` chodí i partnerovy záznamy (pokud je sdílí) a dny, které
+         * aplikace sama dopočítala. Prokládáním dvou řad vycházel průměr,
+         * který nepatřil nikomu, a z vlastního odhadu se počítal další odhad.
+         */
+        $ja = auth()->id();
+        $moje = $dny->filter(fn (CycleDay $d) => $d->user_id === $ja && ! $d->is_predicted);
+
+        $krvaceni = $moje
             ->filter(fn (CycleDay $d) => $d->flow && $d->flow !== 'none')
             ->keyBy(fn (CycleDay $d) => CarbonImmutable::parse($d->day)->format('Y-m-d'));
 
-        return $dny
+        return $moje
             ->filter(fn (CycleDay $d) => $d->is_cycle_start)
             ->map(function (CycleDay $d) use ($krvaceni) {
                 $den = CarbonImmutable::parse($d->day);
@@ -289,7 +347,7 @@ class Zdravi implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function popiskyDnu(): array
     {
-        $od = CarbonImmutable::now()->startOfDay()->subDays(self::DNU_NALADY - 1);
+        $od = Cas::dnes()->subDays(self::DNU_NALADY - 1);
 
         return collect(range(0, self::DNU_NALADY - 1))
             ->map(fn (int $i) => $od->addDays($i)->format('j. n.'))
@@ -311,7 +369,7 @@ class Zdravi implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function udalostiDnu(GallerySpace $prostor): array
     {
-        $od = CarbonImmutable::now()->startOfDay()->subDays(self::DNU_NALADY - 1);
+        $od = Cas::dnes()->subDays(self::DNU_NALADY - 1);
         $poradi = fn ($kdy) => (int) $od->diffInDays(CarbonImmutable::parse($kdy)->startOfDay());
         $udalosti = [];
 
@@ -439,7 +497,7 @@ class Zdravi implements MaPrazdneKolekce, PoskytovatelObsahu
             return [];
         }
 
-        $od = CarbonImmutable::now()->startOfDay()->subDays(self::DNU_NALADY - 1);
+        $od = Cas::dnes()->subDays(self::DNU_NALADY - 1);
 
         $zapsane = WellbeingMood::where('gallery_space_id', $prostor->id)
             ->where('day', '>=', $od)

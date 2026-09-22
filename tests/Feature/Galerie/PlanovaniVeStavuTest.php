@@ -406,7 +406,7 @@ class PlanovaniVeStavuTest extends TestCase
         $u->refresh();
 
         $this->assertNotNull($u->due_at);
-        $this->assertTrue($u->due_at->lte(now()->addWeek()->endOfDay()));
+        $this->assertTrue($u->due_at->lte($this->dnes()->addWeek()->endOfDay()));
     }
 
     /** Termín, který se nezměnil, zůstane přesně takový, jaký byl. */
@@ -441,7 +441,8 @@ class PlanovaniVeStavuTest extends TestCase
             ]],
         ]]]])->assertOk();
 
-        $this->assertTrue($u->refresh()->due_at->isTomorrow());
+        // „Zítra" počítá aplikace podle hodin dvojice, ne serveru.
+        $this->assertSame($this->dnes()->addDay()->toDateString(), $u->refresh()->due_at->toDateString());
     }
 
     /** Opakování se zapíše tak, aby ho uměl vyhodnotit modul. */
@@ -666,7 +667,7 @@ class PlanovaniVeStavuTest extends TestCase
             ]],
         ]]]])->assertOk();
 
-        $this->assertSame(now()->toDateString(), SharedTodo::where('title', 'Dnešní')->sole()->due_at->toDateString());
+        $this->assertSame($this->dnes()->toDateString(), SharedTodo::where('title', 'Dnešní')->sole()->due_at->toDateString());
 
         $sloupce = collect($this->getJson('/api/data/planovani')->json('data.ATASKS.all'))->mapWithKeys(fn ($s) => [$s[0] => collect($s[1])->pluck(0)->all()]);
         $this->assertEqualsCanonicalizing(['Dnešní', 'Bez popisku'], $sloupce['Tento týden']);

@@ -61,7 +61,8 @@ class ZbyleSeznamyTest extends TestCase
     /** Vygenerované návrhy chodí z tabulky a nesou datum, ne slovo „nové". */
     public function test_vygenerovana_randicka_nesou_datum(): void
     {
-        foreach ([['Lanovka na Ještěd', 'generated', now()], ['Keramika', 'generated', now()->subDays(4)]] as $i => [$nazev, $stav, $kdy]) {
+        // „Vygenerováno dnes" je dnešek dvojice — okamžik se formátuje v jejím pásmu.
+        foreach ([['Lanovka na Ještěd', 'generated', $this->ted()->utc()], ['Keramika', 'generated', $this->ted()->subDays(4)->utc()]] as $i => [$nazev, $stav, $kdy]) {
             DB::table('couple_date_ideas')->insert([
                 'uuid' => (string) Str::uuid(),
                 'gallery_space_id' => $this->prostor->id,

@@ -126,8 +126,9 @@ class ObsahMechanismyTest extends TestCase
      */
     public function test_po_lhute_se_pocita_ted(): void
     {
-        $this->kontakt('Máma Adriana', 7, now()->subDays(4));
-        $this->kontakt('Táta Adriana', 14, now()->subDays(19));
+        // Lhůta se počítá od dneška dvojice, ne od dneška serveru.
+        $this->kontakt('Máma Adriana', 7, $this->dnes()->subDays(4));
+        $this->kontakt('Táta Adriana', 14, $this->dnes()->subDays(19));
 
         $r = collect($this->getJson('/api/data/mechanismy')->assertOk()->json('data.FAMILY'))->keyBy('name');
 

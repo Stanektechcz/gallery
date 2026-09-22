@@ -115,7 +115,10 @@ class ObsahTransakceZalozkyTest extends TestCase
             'institution_name' => 'Revolut',
             'status' => 'active',
             'sync_enabled' => true,
-            'last_synced_at' => today()->setTime(8, 14),
+            // Okamžik, který na hodinách dvojice padne na dnešek: `today()`
+            // je půlnoc UTC, tedy v Praze už 02:00 — a po pražské půlnoci
+            // je to pořád ještě včerejšek.
+            'last_synced_at' => $this->ted()->setTime(10, 14)->utc(),
             'created_at' => now(),
             'updated_at' => now(),
         ]);

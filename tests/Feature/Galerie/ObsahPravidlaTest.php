@@ -65,7 +65,9 @@ class ObsahPravidlaTest extends TestCase
             'action_config' => json_encode(['title' => 'Týden v kostce']),
             'conditions' => json_encode([['field' => 'title', 'operator' => 'contains', 'value' => 'úklid']]),
             'run_count' => 31,
-            'last_run_at' => now()->subDay()->setTime(6, 0),
+            // „Včera" je včerejšek dvojice — aplikace formátuje okamžiky
+            // v pražském pásmu, ne v tom serverovém.
+            'last_run_at' => $this->ted()->subDay()->setTime(8, 0)->utc(),
         ]);
 
         $p = $this->getJson('/api/data/pravidla')->assertOk()->json('data.RULEDEF.0');

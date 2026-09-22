@@ -5,6 +5,7 @@ namespace App\Services\Obsah;
 use App\Models\GallerySpace;
 use App\Models\MediaItem;
 use App\Services\Integrations\FreeTravelDataService;
+use App\Support\Cas;
 use App\Support\SpaceContext;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Cache;
@@ -89,7 +90,9 @@ class Predpoved
             return [];
         }
 
-        $dnes = CarbonImmutable::now()->startOfDay();
+        // Dnešek dvojice, ne serveru — jinak je po pražské půlnoci první
+        // den předpovědi označený jako „zítra".
+        $dnes = Cas::dnes();
         $radky = [];
 
         foreach (array_slice($dny, 0, self::DNU) as $i => $den) {

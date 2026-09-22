@@ -3,6 +3,7 @@
 namespace App\Services\Obsah;
 
 use App\Models\GallerySpace;
+use App\Support\Cas;
 use App\Support\Tabulky;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
@@ -228,7 +229,9 @@ class Darky implements MaPrazdneKolekce, PoskytovatelObsahu
             return [];
         }
 
-        $dnes = CarbonImmutable::now()->startOfDay();
+        // Dnešek dvojice, ne serveru: po pražské půlnoci je v UTC ještě
+        // včerejšek a „za kolik dní" vycházelo o den vedle.
+        $dnes = Cas::dnes();
 
         return DB::table('gift_budgets')
             ->where('gallery_space_id', $prostor->id)

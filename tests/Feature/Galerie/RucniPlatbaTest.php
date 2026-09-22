@@ -50,7 +50,7 @@ class RucniPlatbaTest extends TestCase
         $this->assertSame($ucet->id, $platba->wallet_from_id);
         $this->assertEquals(432.5, (float) $platba->amount_from);
         $this->assertSame('CZK', $platba->currency_from);
-        $this->assertSame(now()->toDateString(), $platba->occurred_at->toDateString());
+        $this->assertSame($this->dnes()->toDateString(), $platba->occurred_at->toDateString());
         $this->assertSame('Albert', $odpoved->json('data.TX.0.2'));
     }
 

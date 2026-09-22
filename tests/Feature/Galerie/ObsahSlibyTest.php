@@ -54,8 +54,8 @@ class ObsahSlibyTest extends TestCase
      */
     public function test_slib_po_terminu_se_pozna_z_data(): void
     {
-        $this->slib(['what' => 'Objednám servis kola', 'due_on' => now()->subDays(13), 'state' => 'open']);
-        $this->slib(['what' => 'Zavolám tvé mámě', 'due_on' => now()->addDays(4), 'state' => 'open']);
+        $this->slib(['what' => 'Objednám servis kola', 'due_on' => $this->dnes()->subDays(13), 'state' => 'open']);
+        $this->slib(['what' => 'Zavolám tvé mámě', 'due_on' => $this->dnes()->addDays(4), 'state' => 'open']);
 
         $sliby = collect($this->getJson('/api/data/vztah')->assertOk()->json('data.PROMISES'))
             ->keyBy('what');

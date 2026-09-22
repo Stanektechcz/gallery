@@ -474,7 +474,7 @@ class Vztah implements MaPrazdneKolekce, PoskytovatelObsahu
             return [];
         }
 
-        $dnes = CarbonImmutable::now()->startOfDay();
+        $dnes = Cas::dnes();
 
         return CouplePromise::where('gallery_space_id', $prostor->id)
             // Zrušené po dohodě zůstávají v databázi, ale na obrazovku nepatří:
@@ -667,9 +667,11 @@ class Vztah implements MaPrazdneKolekce, PoskytovatelObsahu
             ->limit(20)
             ->get(['title', 'theme', 'estimated_cost', 'currency', 'estimated_minutes', 'created_at'])
             ->map(function (object $n) {
-                $kdy = CarbonImmutable::parse($n->created_at);
-                $dnes = CarbonImmutable::now()->startOfDay();
-                $dni = (int) $kdy->startOfDay()->diffInDays($dnes);
+                // `created_at` je okamžik v UTC; „dnes" a „včera" se počítají
+                // podle hodin dvojice, jinak je návrh vygenerovaný po pražské
+                // půlnoci označený za včerejší.
+                $kdy = Cas::mistni($n->created_at) ?? Cas::ted();
+                $dni = (int) $kdy->startOfDay()->diffInDays(Cas::ted()->startOfDay());
 
                 return [
                     (string) $n->title,

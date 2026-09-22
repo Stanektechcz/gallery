@@ -487,7 +487,7 @@ class Mechanismy implements MaPrazdneKolekce, PoskytovatelObsahu
             return [];
         }
 
-        $dnes = CarbonImmutable::now()->startOfDay();
+        $dnes = Cas::dnes();
 
         return DB::table('couple_family_contacts')
             ->where('gallery_space_id', $prostor->id)

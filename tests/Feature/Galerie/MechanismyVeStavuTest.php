@@ -129,7 +129,7 @@ class MechanismyVeStavuTest extends TestCase
             ['id' => $uuid, 'name' => 'Máma Adriana', 'side' => 'Adrian', 'lastWho' => 'Makinka', 'every' => 7, 'note' => ''],
         ]])->assertOk();
 
-        $this->assertSame(now()->toDateString(), DB::table('couple_family_contacts')->value('last_contact_on'));
+        $this->assertSame($this->dnes()->toDateString(), DB::table('couple_family_contacts')->value('last_contact_on'));
         $this->assertSame($this->maki->id, (int) DB::table('couple_family_contacts')->value('last_contact_by'));
     }
 

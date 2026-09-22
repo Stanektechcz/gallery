@@ -2,10 +2,35 @@
 
 namespace Tests;
 
+use App\Support\Cas;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
 
 abstract class TestCase extends BaseTestCase
 {
+    /**
+     * Dnešek dvojice — tím, co aplikace považuje za „dnes".
+     *
+     * Aplikace běží v UTC a obsah pro obrazovky počítá dny podle pásma
+     * dvojice (`app.display_timezone`, Europe/Prague). Mezi pražskou půlnocí
+     * a druhou hodinou ranní jsou to **dvě různá data**, takže fixtura
+     * postavená na `now()` v tom okně měřila o den vedle — a celá řada testů
+     * procházela jen proto, že se pouštěly přes den.
+     *
+     * Kde test znamená „dnešek dvojice", patří sem `dnes()`; kde znamená
+     * skutečný okamžik (uloženo v UTC), zůstává `now()`.
+     */
+    protected function dnes(): CarbonImmutable
+    {
+        return Cas::dnes();
+    }
+
+    /** Teď na hodinách dvojice — pro fixtury, které potřebují i čas. */
+    protected function ted(): CarbonImmutable
+    {
+        return Cas::ted();
+    }
+
     /**
      * Hodnota je prázdná až na dno: seznamy a mapy bez položek, texty prázdné,
      * čísla nulová.

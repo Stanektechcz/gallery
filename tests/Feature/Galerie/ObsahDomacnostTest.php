@@ -100,8 +100,9 @@ class ObsahDomacnostTest extends TestCase
     /** Lhůta počítá dny do termínu; záporné číslo kreslí prototyp jako po termínu. */
     public function test_lhuta_pocita_dny_do_terminu(): void
     {
-        $this->zavazek(['what' => 'STK a emise', 'due_on' => now()->addDays(41), 'amount' => 1900]);
-        $this->zavazek(['what' => 'Nájem', 'due_on' => now()->subDays(2), 'amount' => 14500]);
+        // Dny do termínu se počítají od dneška dvojice, ne od dneška serveru.
+        $this->zavazek(['what' => 'STK a emise', 'due_on' => $this->dnes()->addDays(41), 'amount' => 1900]);
+        $this->zavazek(['what' => 'Nájem', 'due_on' => $this->dnes()->subDays(2), 'amount' => 14500]);
 
         $lhuty = collect($this->getJson('/api/data/domacnost')->assertOk()->json('data.HOUSE_DUES'))
             ->keyBy('what');
@@ -128,7 +129,7 @@ class ObsahDomacnostTest extends TestCase
             'name' => 'Myčka Bosch',
             'warranty_to' => '2026-03-31',
             'needs_service' => true,
-            'service_next_on' => now()->addDays(6)->toDateString(),
+            'service_next_on' => $this->dnes()->addDays(6)->toDateString(),
             'service_price' => 1600,
         ]);
 
@@ -153,7 +154,7 @@ class ObsahDomacnostTest extends TestCase
             'category' => 'Lednice',
             'quantity' => 200,
             'unit' => 'ml',
-            'expires_on' => now()->addDays(4)->toDateString(),
+            'expires_on' => $this->dnes()->addDays(4)->toDateString(),
             'keywords' => ['smetana'],
         ]);
 

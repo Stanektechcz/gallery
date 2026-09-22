@@ -408,7 +408,7 @@ class Domacnost implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function zavazky(GallerySpace $prostor, array $jmena): array
     {
-        $dnes = CarbonImmutable::now()->startOfDay();
+        $dnes = Cas::dnes();
 
         return HouseDue::where('gallery_space_id', $prostor->id)
             ->whereNull('settled_at')
@@ -439,7 +439,7 @@ class Domacnost implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function byt(GallerySpace $prostor): array
     {
-        $dnes = CarbonImmutable::now()->startOfDay();
+        $dnes = Cas::dnes();
 
         return HouseInventoryItem::where('gallery_space_id', $prostor->id)
             ->orderBy('room')
@@ -482,7 +482,7 @@ class Domacnost implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function spiz(GallerySpace $prostor): array
     {
-        $dnes = CarbonImmutable::now()->startOfDay();
+        $dnes = Cas::dnes();
 
         return HousePantryItem::where('gallery_space_id', $prostor->id)
             ->orderBy('category')

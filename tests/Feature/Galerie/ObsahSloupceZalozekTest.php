@@ -87,15 +87,17 @@ class ObsahSloupceZalozekTest extends TestCase
     /** Přehled cyklu stojí na zaznamenaných začátcích. */
     public function test_prehled_cyklu_pocita_z_dat(): void
     {
-        $this->zacatek(now()->subDays(56));
-        $this->zacatek(now()->subDays(28));
-        $this->zacatek(now());
+        // „Dnes je N. den cyklu" se počítá k dnešku dvojice.
+        $this->zacatek($this->dnes()->subDays(56));
+        $this->zacatek($this->dnes()->subDays(28));
+        $this->zacatek($this->dnes());
 
         $s = collect($this->getJson('/api/data/zdravi')->assertOk()->json('data.ABARS.cycle'))->keyBy(0);
 
         $this->assertSame('den 1 z 28', $s['Aktuální den cyklu'][1]);
-        $this->assertSame('28 dne · 2 zaznamenané cykly', $s['Průměrná délka'][1]);
-        $this->assertSame(now()->addDays(28)->format('j. n.'), $s['Předpověď příště'][1]);
+        $this->assertSame(// U celého čísla „28 dní", u desetinného „28,4 dne".
+            '28 dní · 2 zaznamenané cykly', $s['Průměrná délka'][1]);
+        $this->assertSame($this->dnes()->addDays(28)->format('j. n.'), $s['Předpověď příště'][1]);
     }
 
     /**

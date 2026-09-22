@@ -207,7 +207,8 @@ class ObsahZdraviTest extends TestCase
         WellbeingMood::create([
             'gallery_space_id' => $this->prostor->id,
             'user_id' => $this->maki->id,
-            'day' => now()->toDateString(),
+            // Křivka nálady končí dneškem dvojice.
+            'day' => $this->dnes()->toDateString(),
             'value' => 4,
         ]);
 

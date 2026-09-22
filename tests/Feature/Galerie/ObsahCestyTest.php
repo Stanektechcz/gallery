@@ -251,25 +251,26 @@ class ObsahCestyTest extends TestCase
      */
     public function test_bezici_cesta_ma_dnesni_den_a_utraty(): void
     {
+        // Dny cesty počítá aplikace podle hodin dvojice, ne serveru.
         $cesta = $this->cesta([
             'name' => 'Brač a Šolta',
-            'start_date' => now()->subDays(4)->toDateString(),
-            'end_date' => now()->addDays(3)->toDateString(),
+            'start_date' => $this->dnes()->subDays(4)->toDateString(),
+            'end_date' => $this->dnes()->addDays(3)->toDateString(),
         ]);
 
-        $den = $this->den($cesta, now()->toDateString(), 'Šolta');
+        $den = $this->den($cesta, $this->dnes()->toDateString(), 'Šolta');
         $this->cinnost($den, ['title' => 'Loď na Šoltu', 'type' => 'boat', 'starts_at' => '10:30', 'status' => 'done']);
 
         DB::table('trip_expenses')->insert([
             [
                 'trip_id' => $cesta, 'created_by' => $this->adri->id, 'title' => 'Trajekt Bol – Šolta',
                 'category' => 'transport', 'amount' => 620, 'currency' => 'CZK', 'state' => 'actual',
-                'occurred_at' => now()->setTime(10, 24), 'created_at' => now(), 'updated_at' => now(),
+                'occurred_at' => $this->dnes()->setTime(10, 24), 'created_at' => now(), 'updated_at' => now(),
             ],
             [
                 'trip_id' => $cesta, 'created_by' => $this->adri->id, 'title' => 'Včerejší večeře',
                 'category' => 'food', 'amount' => 480, 'currency' => 'CZK', 'state' => 'actual',
-                'occurred_at' => now()->subDay(), 'created_at' => now(), 'updated_at' => now(),
+                'occurred_at' => $this->dnes()->subDay(), 'created_at' => now(), 'updated_at' => now(),
             ],
         ]);
 

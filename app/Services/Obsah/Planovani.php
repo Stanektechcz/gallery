@@ -156,7 +156,9 @@ class Planovani implements MaPrazdneKolekce, PoskytovatelObsahu
          * dvojice se čtyřiceti událostmi za poslední čtvrtrok neviděla v
          * kalendáři **nic dopředu** — limit se vyčerpal na minulosti.
          */
-        $ted = CarbonImmutable::now()->startOfDay();
+        // Půlnoc dvojice, ne serveru: po pražské půlnoci by dnešní události
+        // spadly mezi „minulé" a kalendář by začínal zítřkem.
+        $ted = Cas::dnes();
         $dotaz = fn () => CalendarEvent::where('gallery_space_id', $prostor->id)->where('is_private', false);
         $minule = $dotaz()
             ->where('starts_at', '>=', $ted->subDays(self::DNU_ZPET))

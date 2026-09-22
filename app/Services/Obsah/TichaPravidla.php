@@ -3,6 +3,7 @@
 namespace App\Services\Obsah;
 
 use App\Models\GallerySpace;
+use App\Support\Cas;
 use App\Support\Tabulky;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
@@ -148,19 +149,51 @@ class TichaPravidla
 
             // Párování: jedno bez druhého se nedělá.
             if ($podil >= 0.75) {
+                $par = [$a, $b];
+                sort($par);
+
                 $nalezy[] = [
                     'rule' => 'Kdo dělá '.mb_strtolower($a).', dělá i '.mb_strtolower($b),
                     'holds' => $pocty['spolu'],
                     'of' => $pocty['of'],
                     'since' => (string) $prvni,
                     'kind' => 'práce',
+                    // Klíč dvojice bez ohledu na směr — viz odstranění zrcadel níž.
+                    'par' => implode("\0", $par),
                 ];
             }
         }
 
         usort($nalezy, fn (array $x, array $y) => $y['of'] <=> $x['of']);
 
-        return array_slice($nalezy, 0, 3);
+        /*
+         * Zrcadlo se hlásí jednou.
+         *
+         * Vyhýbání si směr hlídalo, párování ne — takže na obrazovce stálo
+         * „Kdo dělá vaření, dělá i mytí nádobí" a hned pod tím totéž obráceně.
+         * Pro čtenáře je to jedno pravidlo; zůstane ten směr, za kterým
+         * stojí víc případů (seznam je podle toho už seřazený).
+         */
+        $videne = [];
+        $nalezy = array_values(array_filter($nalezy, function (array $n) use (&$videne) {
+            if (! isset($n['par'])) {
+                return true;
+            }
+
+            if (isset($videne[$n['par']])) {
+                return false;
+            }
+
+            $videne[$n['par']] = true;
+
+            return true;
+        }));
+
+        return array_slice(array_map(function (array $n) {
+            unset($n['par']);
+
+            return $n;
+        }, $nalezy), 0, 3);
     }
 
     /**
@@ -188,7 +221,10 @@ class TichaPravidla
         }
 
         foreach ([21, 22, 23] as $hranice) {
-            $drzi = $casy->filter(fn ($c) => CarbonImmutable::parse($c)->hour < $hranice)->count();
+            // Hodina zápisu podle nástěnných hodin dvojice: `created_at` je
+            // v UTC, takže zápis o půl dvanácté v noci vycházel na 21:30 —
+            // a stal se důkazem *pro* pravidlo „po 21:00 se peníze neřeší".
+            $drzi = $casy->filter(fn ($c) => (int) (Cas::mistni($c)?->hour ?? 0) < $hranice)->count();
             $podil = $drzi / $casy->count();
 
             if ($podil >= 0.85) {
@@ -300,11 +336,21 @@ class TichaPravidla
             return [];
         }
 
-        $obsazene = $udalosti->map(fn ($d) => CarbonImmutable::parse($d))
-            ->groupBy(fn (CarbonImmutable $d) => $d->dayOfWeekIso.'|'.$d->format('o-W'));
+        $dny = $udalosti->map(fn ($d) => CarbonImmutable::parse($d));
+        $obsazene = $dny->groupBy(fn (CarbonImmutable $d) => $d->dayOfWeekIso.'|'.$d->format('o-W'));
 
         $prvni = CarbonImmutable::parse($udalosti->min());
-        $tydnu = max(1, (int) ceil($prvni->diffInWeeks(CarbonImmutable::now())));
+
+        /*
+         * Počítá se jen z týdnů, ve kterých dvojice kalendář použila.
+         *
+         * Dřív se bral celý rozsah od první události po dnešek, takže týden,
+         * kdy do kalendáře nikdo nesáhl, byl důkazem pro všech sedm dnů
+         * naráz — a obrazovka z toho udělala objev: „V sobotu se nic
+         * neplánuje · 10 z 10." Pravda přitom byla, že se neplánuje nic.
+         */
+        $tydny = $dny->map(fn (CarbonImmutable $d) => $d->format('o-W'))->unique();
+        $tydnu = $tydny->count();
 
         $nazvy = [1 => 'pondělí', 'úterý', 'středa', 'čtvrtek', 'pátek', 'sobota', 'neděle'];
         $nejlepsi = null;

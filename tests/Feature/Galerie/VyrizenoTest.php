@@ -95,7 +95,7 @@ class VyrizenoTest extends TestCase
 
         $kontakt = DB::table('couple_family_contacts')->find($id);
 
-        $this->assertSame(now()->toDateString(), $kontakt->last_contact_on);
+        $this->assertSame($this->dnes()->toDateString(), $kontakt->last_contact_on);
         $this->assertSame($this->adri->id, $kontakt->last_contact_by);
     }
 

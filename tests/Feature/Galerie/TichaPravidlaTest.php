@@ -111,8 +111,10 @@ class TichaPravidlaTest extends TestCase
     /** „Po 22:00 se peníze neřeší" — z časů zápisů, ne z dohody. */
     public function test_najde_se_hodina_klidu_na_penize(): void
     {
+        // Hodina zápisu se čte v pásmu dvojice, takže i fixtura musí být
+        // pražská: 18:00 UTC je v Praze 20:00 a 23:30 UTC je až 01:30.
         for ($i = 1; $i <= 20; $i++) {
-            $this->transakce(now()->subDays($i)->setTime(18, 0));
+            $this->transakce($this->ted()->subDays($i)->setTime(18, 0)->utc());
         }
 
         $tacit = collect($this->getJson('/api/data/vztah')->assertOk()->json('data.TACIT'));
@@ -127,7 +129,7 @@ class TichaPravidlaTest extends TestCase
     public function test_nocni_zapisy_pravidlo_klidu_zabiji(): void
     {
         for ($i = 1; $i <= 20; $i++) {
-            $this->transakce(now()->subDays($i)->setTime($i % 2 === 0 ? 23 : 18, 30));
+            $this->transakce($this->ted()->subDays($i)->setTime($i % 2 === 0 ? 23 : 18, 30)->utc());
         }
 
         $tacit = collect($this->getJson('/api/data/vztah')->assertOk()->json('data.TACIT') ?? []);

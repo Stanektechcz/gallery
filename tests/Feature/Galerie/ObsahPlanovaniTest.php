@@ -206,8 +206,8 @@ class ObsahPlanovaniTest extends TestCase
      */
     public function test_ukol_po_terminu_se_pozna(): void
     {
-        $this->ukol(['title' => 'Zapomenutý', 'due_at' => now()->subDays(3)]);
-        $this->ukol(['title' => 'Dnešní', 'due_at' => now()]);
+        $this->ukol(['title' => 'Zapomenutý', 'due_at' => $this->dnes()->subDays(3)]);
+        $this->ukol(['title' => 'Dnešní', 'due_at' => $this->dnes()]);
 
         $terminy = collect($this->getJson('/api/data/planovani')->assertOk()->json('data.ATASKS.all.0.1'))
             ->mapWithKeys(fn ($r) => [$r[0] => $r[2]]);

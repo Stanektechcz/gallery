@@ -59,7 +59,8 @@ class PredpovedTest extends TestCase
         $this->fotkySPolohou();
 
         $this->fakePocasi([
-            'time' => [now()->toDateString(), now()->addDay()->toDateString(), now()->addDays(2)->toDateString()],
+            // „Dnes" v předpovědi je dnešek dvojice.
+            'time' => [$this->dnes()->toDateString(), $this->dnes()->addDay()->toDateString(), $this->dnes()->addDays(2)->toDateString()],
             'weather_code' => [61, 0, 3],
             'temperature_2m_max' => [12.4, 28.6, 20.1],
             'temperature_2m_min' => [7.2, 17.4, 13.0],

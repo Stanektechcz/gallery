@@ -203,14 +203,16 @@ class ObsahKlidPohodaTest extends TestCase
      */
     public function test_odpoved_druheho_je_zamcena_dokud_neodpovim(): void
     {
-        $this->odpoved($this->maki, 'Kdy jsi měl pocit, že to zvládáme?', 'Když jsi maloval.', now());
+        // Dnešní otázka je otázka dnešku dvojice — po pražské půlnoci by se
+        // odpověď zapsaná podle serveru hledala pod včerejším datem.
+        $this->odpoved($this->maki, 'Kdy jsi měl pocit, že to zvládáme?', 'Když jsi maloval.', $this->dnes());
 
         $ted = $this->getJson('/api/data/klid')->assertOk()->json('data.KL_ASK_NOW');
 
         $this->assertArrayNotHasKey('other', $ted);
         $this->assertArrayNotHasKey('done', $ted);
 
-        $this->odpoved($this->adri, 'Kdy jsi měl pocit, že to zvládáme?', 'V sobotu bez plánu.', now());
+        $this->odpoved($this->adri, 'Kdy jsi měl pocit, že to zvládáme?', 'V sobotu bez plánu.', $this->dnes());
 
         $ted = $this->getJson('/api/data/klid')->assertOk()->json('data.KL_ASK_NOW');
 

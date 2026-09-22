@@ -52,8 +52,9 @@ class ObsahKlidTest extends TestCase
     /** Den na cestě dostane značku za každý den, který do těch čtrnácti spadá. */
     public function test_cesta_znaci_kazdy_svuj_den(): void
     {
-        $this->nalada(now(), 4);
-        $this->cesta(now()->subDays(2), now());
+        // Čtrnáctidenní okno končí dneškem dvojice, ne dneškem serveru.
+        $this->nalada($this->dnes(), 4);
+        $this->cesta($this->dnes()->subDays(2), $this->dnes());
 
         $u = collect($this->getJson('/api/data/zdravi')->assertOk()->json('data.KL_EV'))
             ->where('kind', 'Na cestě');
@@ -66,9 +67,9 @@ class ObsahKlidTest extends TestCase
     /** Večer, který skončil po osmé, se pozná — a jiný ne. */
     public function test_vecer_mimo_domov_se_pozna(): void
     {
-        $this->nalada(now(), 4);
-        $this->udalost(now()->subDay()->setTime(19, 0), now()->subDay()->setTime(22, 30));
-        $this->udalost(now()->subDays(2)->setTime(9, 0), now()->subDays(2)->setTime(17, 0));
+        $this->nalada($this->dnes(), 4);
+        $this->udalost($this->dnes()->subDay()->setTime(19, 0), $this->dnes()->subDay()->setTime(22, 30));
+        $this->udalost($this->dnes()->subDays(2)->setTime(9, 0), $this->dnes()->subDays(2)->setTime(17, 0));
 
         $u = collect($this->getJson('/api/data/zdravi')->assertOk()->json('data.KL_EV'))
             ->where('kind', 'Večer mimo domov');
@@ -96,12 +97,12 @@ class ObsahKlidTest extends TestCase
      */
     public function test_prekroceni_limitu_se_hlasi_jednou(): void
     {
-        $this->nalada(now(), 4);
+        $this->nalada($this->dnes(), 4);
         $kategorie = $this->limit('Restaurace', 1000);
 
-        $this->transakce(500, $kategorie, now()->subDays(3));
-        $this->transakce(700, $kategorie, now()->subDays(2));
-        $this->transakce(300, $kategorie, now()->subDay());
+        $this->transakce(500, $kategorie, $this->dnes()->subDays(3));
+        $this->transakce(700, $kategorie, $this->dnes()->subDays(2));
+        $this->transakce(300, $kategorie, $this->dnes()->subDay());
 
         $u = collect($this->getJson('/api/data/zdravi')->assertOk()->json('data.KL_EV'))
             ->where('kind', 'Výdaj přes limit');

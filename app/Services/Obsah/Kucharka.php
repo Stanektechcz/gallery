@@ -3,6 +3,7 @@
 namespace App\Services\Obsah;
 
 use App\Models\GallerySpace;
+use App\Support\Cas;
 use App\Support\Tabulky;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Query\Builder;
@@ -81,7 +82,10 @@ class Kucharka implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     public static function datumDne(int $poradi): CarbonImmutable
     {
-        $dnes = CarbonImmutable::now()->startOfDay();
+        // Který den je dnes, se řídí hodinami dvojice: v pondělí v 01:00
+        // pražského času je na serveru ještě neděle a „Pondělí" v menu by
+        // se naplánovalo na příští týden.
+        $dnes = Cas::dnes();
         $dnesPoradi = ($dnes->dayOfWeek + 6) % 7;
 
         return $dnes->addDays(($poradi - $dnesPoradi + 7) % 7);
@@ -104,7 +108,7 @@ class Kucharka implements MaPrazdneKolekce, PoskytovatelObsahu
         }
 
         $klicPodleId = array_flip($idPodleKlice);
-        $od = CarbonImmutable::now()->startOfDay();
+        $od = Cas::dnes();
         $menu = [];
 
         $jidla = DB::table('planned_meals')
@@ -216,7 +220,7 @@ class Kucharka implements MaPrazdneKolekce, PoskytovatelObsahu
             return [];
         }
 
-        $od = CarbonImmutable::now()->startOfDay();
+        $od = Cas::dnes();
 
         $suroviny = DB::table('planned_meals as j')
             ->join('recipes as r', 'r.id', '=', 'j.recipe_id')
