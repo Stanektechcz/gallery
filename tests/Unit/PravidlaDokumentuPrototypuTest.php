@@ -196,6 +196,8 @@ class PravidlaDokumentuPrototypuTest extends TestCase
         // Bod programu cesty z telefonu na server — dřív „zatím jen na počítači".
         $this->assertStringContainsString("api.post('cesty/' + cesta.n + '/program', { den: s.addDen || 0, nazev: a, cas: b || null })", $telefon);
         $this->assertStringNotContainsString('Do itineráře zatím přidáte jen na počítači', $telefon);
+        // „Splněno" u bodu ze serveru se ukládá k bodu, ne do jednoho telefonu.
+        $this->assertStringContainsString("window.GalerieApi.post('cesty/program/' + it[3] + '/hotovo', { hotovo: !on })", $telefon);
 
         $this->assertStringContainsString("window.GalerieApi.patch('vzkazy-hostu/' + c.id, { skryty: !c.hidden })", $telefon);
         $this->assertStringContainsString("window.GalerieApi.del('vzkazy-hostu/' + c.id)", $telefon);

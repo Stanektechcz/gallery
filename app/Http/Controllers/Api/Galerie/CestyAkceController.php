@@ -115,6 +115,34 @@ class CestyAkceController extends Controller
         return $this->hotovo($prostor, '„'.trim($data['nazev']).'“ přidáno do programu '.$datum->format('j. n.'), 201);
     }
 
+    /**
+     * Bod programu splněný — nebo zpátky.
+     *
+     * Telefon si „Splněno" pamatoval jen u sebe: druhý z dvojice ani
+     * počítač o tom nevěděli a program cesty pořád ukazoval jako neudělané.
+     */
+    public function splneno(Request $request, int $aktivita): JsonResponse
+    {
+        $prostor = GallerySpace::findOrFail($this->parId($request));
+        $data = $request->validate(['hotovo' => ['required', 'boolean']]);
+
+        $radek = DB::table('trip_activities as a')
+            ->join('trip_days as d', 'd.id', '=', 'a.trip_day_id')
+            ->join('trips as t', 't.id', '=', 'd.trip_id')
+            ->where('t.gallery_space_id', $prostor->id)
+            ->where('a.id', $aktivita)
+            ->first(['a.id', 'a.title']);
+
+        abort_if($radek === null, 404, 'Takový bod programu tu není.');
+
+        DB::table('trip_activities')->where('id', $radek->id)->update([
+            'status' => $data['hotovo'] ? 'done' : 'planned',
+            'updated_at' => now(),
+        ]);
+
+        return $this->hotovo($prostor, ($data['hotovo'] ? 'Splněno — ' : 'Vráceno — ').$radek->title);
+    }
+
     /** Posunout bod programu (výchozí o hodinu) — v rámci dne, přes půlnoc ne. */
     public function posunout(Request $request, int $aktivita): JsonResponse
     {

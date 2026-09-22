@@ -302,6 +302,8 @@ class Cesty implements MaPrazdneKolekce, PoskytovatelObsahu
                     $a->title,
                     (string) ($a->description ?? $a->place_name ?? ''),
                     $this->stav((string) $a->status),
+                    // Identifikátor bodu — odškrtnutí „splněno" jde na server k němu.
+                    (int) $a->id,
                 ])->values()->all(),
             ];
         })->all();
@@ -719,7 +721,7 @@ class Cesty implements MaPrazdneKolekce, PoskytovatelObsahu
             'days' => array_map(fn (array $d) => [
                 $d[0],
                 $d[1],
-                array_map(fn (array $a) => [$a[2], $a[0], $a[4] === 'hotovo' ? 1 : 0], $d[3]),
+                array_map(fn (array $a) => [$a[2], $a[0], $a[4] === 'hotovo' ? 1 : 0, $a[5] ?? null], $d[3]),
             ], $c['days']),
         ])->all();
     }

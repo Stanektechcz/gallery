@@ -12814,14 +12814,23 @@ class Component extends DCLogic {
         days: trip.days.map((d, di) => ({
           label: d[0], when: d[1],
           items: d[2].map((it, ii) => {
-            const on = itinOn(di, ii, it[2]);
+            // Bod ze serveru (`it[3]` = id) má stav v databázi — „Splněno" platí pro oba.
+            const zeServeru = this.galerieNaServeru() && !!it[3];
+            const on = zeServeru ? !!it[2] : itinOn(di, ii, it[2]);
             return {
               label: it[0], meta: it[1],
               box: on ? 'ph-check-square' : 'ph-square',
               boxColor: on ? 'var(--g-acc)' : 'var(--g-ink3)',
               color: on ? 'var(--g-ink3)' : 'var(--g-ink)',
               strike: on ? 'line-through' : 'none',
-              toggle: () => { this.setState({ itin: Object.assign({}, s.itin, { [itinKey(di, ii)]: !on }) }); this.toast(on ? 'Vráceno — ' + it[0] : 'Splněno — ' + it[0], { icon: on ? 'ph-arrow-counter-clockwise' : 'ph-check-circle', undo: () => this.setState({ itin: Object.assign({}, this.state.itin, { [itinKey(di, ii)]: on }) }) }); }
+              toggle: () => {
+                if (zeServeru) {
+                  window.GalerieApi.post('cesty/program/' + it[3] + '/hotovo', { hotovo: !on }).then(res => {
+                    if (window.GalerieObnovit) window.GalerieObnovit('cesty');
+                    this.toast((res && res.zprava) || (on ? 'Vráceno — ' : 'Splněno — ') + it[0], { icon: on ? 'ph-arrow-counter-clockwise' : 'ph-check-circle', silent: true });
+                  }).catch(e => this.chybaServeru(e, 'Stav bodu programu se neuložil'));
+                  return;
+                } this.setState({ itin: Object.assign({}, s.itin, { [itinKey(di, ii)]: !on }) }); this.toast(on ? 'Vráceno — ' + it[0] : 'Splněno — ' + it[0], { icon: on ? 'ph-arrow-counter-clockwise' : 'ph-check-circle', undo: () => this.setState({ itin: Object.assign({}, this.state.itin, { [itinKey(di, ii)]: on }) }) }); }
             };
           }).concat(extraItin.filter(x => (x.day || 0) === di).map(x => {
             const on = !!s.itinDone[x.id];

@@ -209,6 +209,7 @@ Route::middleware(['auth:sanctum', 'dvojice', 'throttle:120,1'])->prefix('api')-
     Route::post('cesty/{cesta}/vydaj', [CestyAkceController::class, 'vydaj'])->whereNumber('cesta')->name('galerie.cesty.vydaj');
     Route::post('cesty/{cesta}/program', [CestyAkceController::class, 'program'])->whereNumber('cesta')->name('galerie.cesty.program');
     Route::post('cesty/program/{aktivita}/posunout', [CestyAkceController::class, 'posunout'])->whereNumber('aktivita')->name('galerie.cesty.posunout');
+    Route::post('cesty/program/{aktivita}/hotovo', [CestyAkceController::class, 'splneno'])->whereNumber('aktivita')->name('galerie.cesty.splneno');
 
     // Místa: nový cíl, „byli jsme" a společná poznámka (dřív „zatím neumíme").
     Route::post('mista', [MistaController::class, 'store'])->name('galerie.mista.store');
