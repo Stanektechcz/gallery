@@ -464,9 +464,39 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
             ->limit(40)
             ->get();
 
+        // Rodič podle uuid a hloubka z řetězu rodičů — i když rodič sám mezi
+        // čtyřiceti posledními není. Sloupec `depth` se přepočítává jen při
+        // přesunu, na ten se spoléhat nejde.
+        $vsechna = DB::table('albums')
+            ->where('gallery_space_id', $prostor->id)
+            ->whereNull('deleted_at')
+            ->get(['id', 'parent_id', 'uuid'])
+            ->keyBy('id');
+        $rodice = $vsechna->map(fn (object $r) => $r->uuid);
+        $hloubka = function (int $id) use ($vsechna): int {
+            $d = 0;
+            $rodic = $vsechna[$id]->parent_id ?? null;
+
+            while ($rodic && $d < 20) {
+                $d++;
+                $rodic = $vsechna[$rodic]->parent_id ?? null;
+            }
+
+            return $d;
+        };
+
         $radky = $modely->map(fn (Album $a) => [
             'id' => $a->uuid,
             'name' => $a->title,
+            /*
+             * Hierarchie ze sloupců, ne ze šipek v cestě.
+             *
+             * Album „Beskydy → Pustevny" má šipku v názvu: strom ho kreslil
+             * jako podalbum „Pustevny", přehled ho nepočítal mezi hlavní
+             * a detail do něj bral fotky všech alb začínajících „Beskydy".
+             */
+            'parent' => $a->parent_id ? ($rodice[$a->parent_id] ?? null) : null,
+            'depth' => $hloubka((int) $a->id),
             // Obálka alba; bez ní si prototyp dokreslí barevný přechod z `n`.
             'bg' => $a->cover ? $this->nahled($a->cover) : null,
             // Celá cesta, ne jen jméno: prototyp ji kreslí jako „Chorvatsko → Zadar".
@@ -528,11 +558,10 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
         usort($serazena, fn (array $a, array $b) => strcmp((string) $a['path'], (string) $b['path']));
 
         return array_map(function (array $a) {
-            $cesta = array_values(array_filter(array_map('trim', explode('→', (string) $a['path']))));
-
             return [
-                $cesta ? end($cesta) : $a['name'],
-                max(0, count($cesta) - 1),
+                // Jméno a úroveň z alba samotného — šipka může být i v názvu.
+                $a['name'],
+                (int) ($a['depth'] ?? 0),
                 // Prototyp si k číslu dopisuje „položek" sám.
                 trim(preg_replace('/\s*(položka|položky|položek)\s*/u', '', (string) $a['count'])),
                 $a['fav'] ? 1 : 0,

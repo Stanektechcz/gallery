@@ -194,6 +194,31 @@ class ObsahKnihovnaTest extends TestCase
      * Levý sloupec kreslí odsazení podle úrovně; se seznamem řazeným podle
      * `updated_at` by podalbum skočilo nad svého rodiče a odsazení by lhalo.
      */
+    /**
+     * Šipka v názvu alba z něj nedělá podalbum.
+     *
+     * „Beskydy → Pustevny" je hlavní album: strom ho kreslil jako „Pustevny"
+     * o úroveň níž a přehled ho nepočítal mezi hlavní.
+     */
+    public function test_sipka_v_nazvu_neni_hierarchie(): void
+    {
+        $this->album('Beskydy → Pustevny');
+        $rodic = $this->album('Chorvatsko 2026');
+        $this->album('Zadar', $rodic);
+        $this->fotka();
+
+        $data = $this->getJson('/api/data/knihovna')->assertOk()->json('data');
+        $alba = collect($data['ALBUMS'])->keyBy('name');
+        $strom = collect($data['ATREE'])->keyBy(0);
+
+        $this->assertNull($alba['Beskydy → Pustevny']['parent']);
+        $this->assertSame(0, $alba['Beskydy → Pustevny']['depth']);
+        $this->assertSame($rodic->uuid, $alba['Zadar']['parent']);
+        $this->assertSame(1, $alba['Zadar']['depth']);
+        $this->assertSame(0, $strom['Beskydy → Pustevny'][1]);
+        $this->assertSame(1, $strom['Zadar'][1]);
+    }
+
     public function test_strom_alb_drzi_podalbum_pod_rodicem(): void
     {
         $rodic = $this->album('Chorvatsko 2026');

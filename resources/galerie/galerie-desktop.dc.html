@@ -32813,6 +32813,10 @@ class Component extends DCLogic {
       .filter(p => !aDel.includes(p.id) && !aVault.includes(p.id))
       .filter(p => {
         const a = this.edited(p).album || '';
+        // Serverové album (má `parent`) bere fotky podle přesného názvu jako
+        // telefon. Začátek před šipkou je jen pro ukázku: do alba „Beskydy →
+        // Pustevny" by jinak spadly fotky každého alba začínajícího „Beskydy".
+        if (album.parent !== undefined) return a === album.name;
         return a.indexOf(album.name.split(' → ')[0]) === 0 || a === album.name;
       });
     const guestQ = s.guestQueue === undefined ? GUEST_Q : s.guestQueue;
@@ -34072,7 +34076,9 @@ class Component extends DCLogic {
       setAlbCards: () => this.setState({ albView: 'cards' }), setAlbList: () => this.setState({ albView: 'list' }), setAlbTree: () => this.setState({ albView: 'tree' }),
       // Skutečné album má obálku z fotky; napsané zůstává barevným přechodem.
       albumList: albums.map(a => ({ ...a, bg: a.bg || this.bg(a.n), go: () => this.setState({ route: 'album', albumId: a.id }) })),
-      albumsMeta: this.pl(albums.filter(a => (a.path || '').indexOf('→') < 0).length, 'hlavní album', 'hlavní alba', 'hlavních alb')
+      // Hlavní album pozná server podle rodiče; šipka v cestě jen u ukázky —
+      // album „Beskydy → Pustevny" má šipku v názvu a počítalo se jako podalbum.
+      albumsMeta: this.pl(albums.filter(a => a.parent !== undefined ? !a.parent : (a.path || '').indexOf('→') < 0).length, 'hlavní album', 'hlavní alba', 'hlavních alb')
         + ' · ' + this.pl(albums.reduce((a, x) => a + (+x.subs || 0), 0), 'podalbum', 'podalba', 'podalb')
         + ' · neomezená hierarchie',
       tree: this.tree(),
@@ -34149,7 +34155,22 @@ class Component extends DCLogic {
                 : 'Originály uložené'
         };
       })(),
-      album, crumbs: ('Alba → ' + album.path).split(' → ').map((c, i, arr) => ({ name: i === arr.length - 1 ? c : c + '  →', go: i === 0 ? this.go('albums') : this.go('albums') })),
+      album, crumbs: album.parent !== undefined
+        ? (() => {
+          // Cesta podle skutečných rodičů — šipka může být i v názvu alba.
+          const predci = [];
+          let rodic = album.parent, pojistka = 0;
+          while (rodic && pojistka++ < 12) {
+            const x = albums.find(a => a.id === rodic);
+            if (!x) break;
+            predci.unshift(x);
+            rodic = x.parent;
+          }
+          return [{ name: 'Alba  →', go: this.go('albums') }]
+            .concat(predci.map(x => ({ name: x.name + '  →', go: () => this.setState({ route: 'album', albumId: x.id, sel: [], selectMode: false }) })))
+            .concat([{ name: album.name, go: () => {} }]);
+        })()
+        : ('Alba → ' + album.path).split(' → ').map((c, i, arr) => ({ name: i === arr.length - 1 ? c : c + '  →', go: this.go('albums') })),
       hasSubs: album.subs > 0, albumEmpty: albumPhotos.length === 0,
       // Skutečná podalba přicházejí se serverem; napsané album si je dokreslí,
       // jako to prototyp dělal vždycky.
