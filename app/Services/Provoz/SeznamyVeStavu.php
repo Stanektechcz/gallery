@@ -199,6 +199,12 @@ class SeznamyVeStavu
                 continue;
             }
 
+            // Řádek s klíčem ze serveru už v databázi byl — chybí, protože ho
+            // někdo smazal. Stará místní kopie ho nesmí vzkřísit.
+            if (preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', (string) (((array) $r)['id'] ?? ''))) {
+                continue;
+            }
+
             /*
              * Trasa se z názvu **nehádá**.
              *
@@ -250,11 +256,13 @@ class SeznamyVeStavu
             return;
         }
 
+        // Stejný stav jako `/api/v1/calendar/inbox` — dřív tu byl vlastní
+        // „filed", se kterým zbytek aplikace nepočítal.
         DB::table('travel_inbox_items')
             ->where('gallery_space_id', $prostor->id)
             ->whereIn('title', $zarazene)
-            ->where('state', '!=', 'filed')
-            ->update(['state' => 'filed', 'updated_at' => now()]);
+            ->whereNotIn('state', ['assigned', 'filed', 'archived'])
+            ->update(['state' => 'assigned', 'updated_at' => now()]);
     }
 
     /** Název řádku — obrazovka posílá objekty `{ t, m, g, id }`. */

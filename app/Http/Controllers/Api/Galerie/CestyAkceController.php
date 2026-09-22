@@ -7,11 +7,13 @@ use App\Http\Controllers\Api\Galerie\Concerns\VraciObsah;
 use App\Http\Controllers\Controller;
 use App\Models\GallerySpace;
 use App\Services\Obsah\Cesty;
+use App\Services\Planning\TravelInboxService;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 
 /**
  * Cesty z galerie: výdaj cesty a bod programu dne.
@@ -121,6 +123,94 @@ class CestyAkceController extends Controller
      * Telefon si „Splněno" pamatoval jen u sebe: druhý z dvojice ani
      * počítač o tom nevěděli a program cesty pořád ukazoval jako neudělané.
      */
+    /**
+     * Rezervace, odkaz nebo nápad do travel inboxu.
+     *
+     * Travel inbox v galerii šlo jen vyřizovat — přidat do něj nešlo nic
+     * a prázdný stav sliboval, že se sem věci „přesypou z e-mailu". Zápis
+     * jde přes TravelInboxService jako ve starém rozhraní.
+     */
+    public function doInboxu(Request $request, TravelInboxService $inbox): JsonResponse
+    {
+        $prostor = GallerySpace::findOrFail($this->parId($request));
+        $data = $request->validate([
+            'nazev' => ['required', 'string', 'max:255'],
+            'odkaz' => ['nullable', 'url:https', 'max:2048'],
+            'poznamka' => ['nullable', 'string', 'max:5000'],
+            'druh' => ['nullable', 'in:rezervace,odkaz,napad'],
+        ], [
+            'odkaz.url' => 'Odkaz musí začínat https://.',
+        ]);
+
+        $inbox->create($prostor->id, (int) $request->user()->id, [
+            'title' => trim($data['nazev']),
+            'source_url' => $data['odkaz'] ?? null,
+            'notes' => $data['poznamka'] ?? null,
+            'kind' => match ($data['druh'] ?? null) {
+                'rezervace' => 'reservation',
+                'odkaz' => 'link',
+                default => ! empty($data['odkaz']) ? 'link' : 'idea',
+            },
+        ], 'manual');
+
+        return $this->hotovo($prostor, '„'.trim($data['nazev']).'“ je v travel inboxu — zařadíte ho, až bude jasné kam', 201);
+    }
+
+    /**
+     * Jízdenka nebo trasa, kterou si dvojice uloží.
+     *
+     * „Přidat jízdenku" dřív založilo řádek „Nová jízdenka — doplňte trasu
+     * a datum", jenže doplnit nebylo kde. Teď se název a trasa zapíšou hned.
+     */
+    public function jizdenka(Request $request): JsonResponse
+    {
+        $prostor = GallerySpace::findOrFail($this->parId($request));
+        $data = $request->validate([
+            'nazev' => ['required', 'string', 'max:160'],
+            'odkud' => ['nullable', 'string', 'max:255'],
+            'kam' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $nazev = trim($data['nazev']);
+        $existuje = DB::table('saved_transport_routes')
+            ->where('gallery_space_id', $prostor->id)
+            ->whereRaw('lower(name) = ?', [mb_strtolower($nazev)])
+            ->exists();
+
+        abort_if($existuje, 422, '„'.$nazev.'“ už mezi jízdenkami je.');
+
+        DB::table('saved_transport_routes')->insert([
+            'uuid' => (string) Str::uuid(),
+            'gallery_space_id' => $prostor->id,
+            'created_by' => $request->user()->id,
+            'name' => $nazev,
+            'origin' => trim((string) ($data['odkud'] ?? '')),
+            'destination' => trim((string) ($data['kam'] ?? '')),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        return $this->hotovo($prostor, 'Jízdenka „'.$nazev.'“ je uložená', 201);
+    }
+
+    public function smazatJizdenku(Request $request, string $uuid): JsonResponse
+    {
+        $prostor = GallerySpace::findOrFail($this->parId($request));
+        $nazev = DB::table('saved_transport_routes')
+            ->where('gallery_space_id', $prostor->id)
+            ->where('uuid', $uuid)
+            ->value('name');
+
+        abort_if($nazev === null, 404);
+
+        DB::table('saved_transport_routes')
+            ->where('gallery_space_id', $prostor->id)
+            ->where('uuid', $uuid)
+            ->delete();
+
+        return $this->hotovo($prostor, 'Smazáno — '.$nazev);
+    }
+
     public function splneno(Request $request, int $aktivita): JsonResponse
     {
         $prostor = GallerySpace::findOrFail($this->parId($request));

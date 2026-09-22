@@ -197,8 +197,35 @@ class SeznamyTest extends TestCase
             ],
         ]]])->assertOk();
 
-        $this->assertSame('filed', DB::table('travel_inbox_items')->value('state'));
+        $this->assertSame('assigned', DB::table('travel_inbox_items')->value('state'));
         $this->assertSame(1, DB::table('travel_inbox_items')->count(), 'Z téhle obrazovky se nové položky nezakládají.');
+    }
+
+    /**
+     * Akční inbox počítá jen to, co v cestovní schránce opravdu čeká.
+     *
+     * Počítal všechno kromě stavu „filed" — zařazené do cesty (`assigned`)
+     * i archivované tak dál hlásil jako „čeká na zařazení k cestě".
+     */
+    public function test_akcni_inbox_nepocita_zarazene_ani_archivovane(): void
+    {
+        foreach (['inbox' => 'Letenky do Porta', 'assigned' => 'Apartmán v Sintře', 'archived' => 'Starý odkaz', 'filed' => 'Zařazené dřív'] as $stav => $nazev) {
+            DB::table('travel_inbox_items')->insert([
+                'uuid' => (string) Str::uuid(),
+                'gallery_space_id' => $this->prostor->id,
+                'added_by' => $this->adri->id,
+                'title' => $nazev,
+                'kind' => 'link',
+                'state' => $stav,
+                'created_at' => now(), 'updated_at' => now(),
+            ]);
+        }
+
+        $inbox = $this->getJson('/api/data/system')->assertOk()->json('data.AL.inbox');
+        $cesty = array_values(array_filter($inbox, fn (array $r) => ($r[7] ?? null) === 'inbox:cestovni-schranka'));
+
+        $this->assertCount(1, $cesty);
+        $this->assertSame('1 věc v cestovní schránce', $cesty[0][0]);
     }
 
     /** Účty v seznamu jsou skutečné peněženky. */

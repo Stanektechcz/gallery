@@ -3183,6 +3183,9 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                   <div style="font-size:11.5px; color:var(--g-ink3); margin-top:2px; text-wrap:pretty">{{ sec.emptyHint }}</div>
                 </div>
               </sc-if>
+              <sc-if value="{{ sec.addOn }}">
+                <button onClick="{{ sec.add }}" class="btn btn-secondary btn-block" style="min-height:44px; margin-top:14px; gap:7px"><i class="ph-duotone ph-plus" style="font-size:16px"></i>{{ sec.addLabel }}</button>
+              </sc-if>
               <div style="height:14px"></div>
             </div>
           </sc-if>
@@ -3748,6 +3751,12 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                   <button onClick="{{ p.toggle }}" aria-label="Přepnout stav" style="flex:none; min-height:44px; padding:0 10px; border:1px solid var(--g-line); border-radius:2px; background:{{ p.tagBg }}; cursor:pointer; font-family:inherit; font-size:12px; color:{{ p.tagFg }}">{{ p.tag }}</button>
                 </div>
               </sc-for>
+              <sc-if value="{{ placesEmpty }}">
+                <div style="padding:24px 2px 6px; font-size:13px; line-height:1.55; color:var(--g-ink2); text-wrap:pretty">Zatím žádné místo. Přidejte cíl, kam se chcete podívat — objeví se tady, na mapě i ve Světovém itineráři.</div>
+              </sc-if>
+              <sc-if value="{{ placeAddOn }}">
+                <button onClick="{{ placeAdd }}" class="btn btn-secondary btn-block" style="min-height:44px; margin-top:14px; gap:7px"><i class="ph-duotone ph-map-pin-plus" style="font-size:16px"></i>Přidat místo</button>
+              </sc-if>
             </div>
           </sc-if>
 
@@ -5637,9 +5646,11 @@ const MEMPTY = {
   dupes: ['ph-copy', 'Žádné duplicity', 'Knihovna je čistá. Kontrola duplicit běží jednou týdně.', null, null, null],
   gifts: ['ph-gift', 'Žádné nápady na dárky', 'Nápad zapsaný teď se připomene týden před výročím.', null, null, null],
   datesSaved: ['ph-sparkle', 'Nic uloženého', 'Uložte, co se vám oběma zamlouvá — dostane se to i do kolečka.', 'Rozhodovací kolečko', 'ph-shuffle', 'wheel'],
-  itinWish: ['ph-map-pin', 'Seznam přání je prázdný', 'Místa sem přidáte z mapy, z odkazu, nebo rychlým vstupem.', 'Místa', 'ph-map-trifold', 'places'],
-  voice: ['ph-microphone', 'Žádné hlasovky', 'Nahrajte ji mikrofonem — přepis se pak najde v hledání.', 'Deník', 'ph-notebook', 'diary'],
-  tickets: ['ph-ticket', 'Žádné jízdenky', 'PDF a QR kódy se dají nahrát, nebo přijdou z e-mailu.', 'Cesty', 'ph-airplane-tilt', 'trips']
+  itinWish: ['ph-map-pin', 'Seznam přání je prázdný', 'Cíl, kam se chcete podívat, přidáte tady nebo v Místech — uvidíte ho oba, i na mapě.', 'Přidat místo', 'ph-map-pin-plus', 'add:place'],
+  voice: ['ph-microphone', 'Žádné hlasovky', 'Nahrajte ji mikrofonem v chatu — přehrát ji půjde u zprávy. Na text ji aplikace nepřepisuje.', 'Otevřít chat', 'ph-chats-circle', 'chat'],
+  tickets: ['ph-ticket', 'Žádné jízdenky', 'Jízdenku zapíšete i s trasou — uvidíte ji oba, na telefonu i na počítači.', 'Přidat jízdenku', 'ph-plus', 'add:ticket'],
+  // Archiv jízdenek server nevede — záložka jen poctivě řekne, kde jízdenky jsou.
+  ticketsOld: ['ph-archive', 'Archiv jízdenek nevedeme', 'Uložené jízdenky jsou v Aktuálních. Smazaná jízdenka zmizí u obou, do archivu se neodkládá.', 'Aktuální jízdenky', 'ph-ticket', 'sec:jizdenky/0']
 };
 // ── Onboarding pro dva ──
 // [titulek, úvodní věta, ikona]
@@ -6119,7 +6130,24 @@ class Component extends DCLogic {
     if (this.state.queue) return this.state.queue;
     return api && api.mode === 'http' ? [] : QUEUE.map(q => ({ id: q[0], title: q[1], meta: q[2], icon: q[3], st: q[4] }));
   }
-  placeVisited(p) { const v = this.state.places[p[0]]; return v === undefined ? p[2] === 1 : v; }
+  // U dvojice platí stav z databáze; místní `places` je jen pro ukázku.
+  placeVisited(p) { const v = this.galerieNaServeru() ? undefined : this.state.places[p[0]]; return v === undefined ? p[2] === 1 : v; }
+  /*
+   * „Byli jsme" na server (`mista/stav`) — stejně jako na počítači.
+   *
+   * Přepínač měnil jen `places` v telefonu: hláška „označeno jako navštívené",
+   * a Místa na počítači, mapa ani Světový itinerář o tom nevěděly.
+   */
+  mistoNavstiveno(nazev, navstiveno) {
+    return window.GalerieApi.post('mista/stav', { nazev, navstiveno }).then(res => {
+      if (res && window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data, res.prazdne);
+      if (window.GalerieObnovit) window.GalerieObnovit('cesty');
+      this.toast((res && res.zprava) || nazev, {
+        icon: navstiveno ? 'ph-check-circle' : 'ph-heart-straight',
+        undo: () => this.mistoNavstiveno(nazev, !navstiveno)
+      });
+    }).catch(e => this.chybaServeru(e, 'Stav místa se nepodařilo uložit'));
+  }
   tripOfPlace(name) { return Object.keys(TRIPS).find(id => TRIPS[id].place === name) || null; }
 
   // Vlastní úpravy mají přednost, pak skutečná alba ze serveru, a teprve když
@@ -7307,6 +7335,9 @@ class Component extends DCLogic {
     const src = (kind === 'ser' ? [] : (AL[key] || [])).map((r, i) => ({ t: r[0], m: r[1], g: r[2] || null, id: r[7] || (key + '-' + i), klic: r[7] || null }));
     const q = (s.allQuery || '').trim().toLowerCase();
     const rows = (q ? src.filter(r => (r.t + ' ' + r.m).toLowerCase().indexOf(q) >= 0) : src);
+    // Travel inbox dvojice má skutečné akce (přidat, archivovat), ne přeškrtnutí v telefonu.
+    const inboxNaServeru = key === 'travelInbox' && this.galerieNaServeru();
+    const tkNaServeru = key === 'ticket' && this.galerieNaServeru();
     const mob = map[s.allRoute];
     // Grafické záložky mají tady vlastní podobu, ne zmenšenou verzi té velké.
     // Sloupce leží (na 390 px se čtou lépe než stojící), tabulka je dvouřádková,
@@ -8385,7 +8416,30 @@ class Component extends DCLogic {
       setQuery: e => this.setState({ allQuery: e.target.value }),
       hasRows: rows.length > 0,
       count: this.pl(rows.length, 'položka', 'položky', 'položek'),
-      rows: rows.map(r => ({
+      rows: rows.map(r => (tkNaServeru && r.klic ? {
+        // Jízdenka dvojice: smazat dvojím klepnutím (jako v sekci Jízdenky).
+        title: r.t, meta: r.m, tag: r.g || '', strike: 'none', dim: 1,
+        actLabel: s.mTkPotvrd === r.klic ? 'opravdu smazat' : 'smazat', actIcon: 'ph-trash',
+        act: () => {
+          if (s.mTkPotvrd !== r.klic) { this.setState({ mTkPotvrd: r.klic }); this.toast('Klepněte znovu — „' + r.t + '“ zmizí z jízdenek u obou', { icon: 'ph-warning', silent: true }); return; }
+          this.setState({ mTkPotvrd: null });
+          window.GalerieApi.del('cesty/jizdenky/' + r.klic).then(res => {
+            if (res && window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data, res.prazdne);
+            this.toast((res && res.zprava) || 'Smazáno — ' + r.t, { icon: 'ph-trash' });
+          }).catch(e => this.chybaServeru(e, 'Jízdenku se nepodařilo smazat'));
+        }
+      } : inboxNaServeru && r.klic ? {
+        /*
+         * Travel inbox dvojice: „hotovo" jen přeškrtlo řádek v telefonu, na
+         * serveru položka dál čekala. Teď ji archivuje (`state: archived`).
+         */
+        title: r.t, meta: r.m, tag: r.g || '', strike: 'none', dim: 1,
+        actLabel: 'archivovat', actIcon: 'ph-archive',
+        act: () => window.GalerieApi.patch('v1/calendar/inbox/' + r.klic, { state: 'archived' }).then(() => {
+          if (window.GalerieObnovit) window.GalerieObnovit('cesty');
+          this.toast('„' + r.t + '“ archivováno — z travel inboxu zmizí', { icon: 'ph-archive' });
+        }).catch(e => this.chybaServeru(e, 'Archivovat se nepodařilo'))
+      } : {
         title: r.t, meta: r.m, tag: r.g || '',
         strike: done[r.id] ? 'line-through' : 'none',
         dim: done[r.id] ? .5 : 1,
@@ -8405,8 +8459,13 @@ class Component extends DCLogic {
         : (AL[key] && AL[key].length) || (ABARS[key] && ABARS[key].length) || (AFORMS[key] && AFORMS[key].length)
           || (ADIARY[key] && ADIARY[key].length) || (APEOPLE[key] && APEOPLE[key].length)
           ? 'Obsah téhle záložky se nepodařilo vykreslit — nahlaste to, data v aplikaci jsou.'
-          : 'Zatím tu nic není.',
-      hasOpen: false, openLabel: '', open: () => {}
+          : key === 'travelInbox'
+            ? 'Travel inbox je vyřízený. Rezervace, odkazy a nápady k cestám sem přidáte tlačítkem „Přidat do inboxu“; do cesty je zařadíte na počítači.'
+            : key === 'ticket' && tkNaServeru
+              ? 'Žádné jízdenky. Zapíšete je tlačítkem „Přidat jízdenku“ i s trasou — uvidíte je oba.'
+              : 'Zatím tu nic není.',
+      hasOpen: inboxNaServeru || tkNaServeru, openLabel: tkNaServeru ? 'Přidat jízdenku' : 'Přidat do inboxu',
+      open: () => this.setState({ sheet: 'add', addKind: tkNaServeru ? 'ticket' : 'tinbox', addA: '', addB: '' })
     };
     return vals;
   }
@@ -10369,7 +10428,8 @@ class Component extends DCLogic {
   // ── sekce z navigace repozitáře ──
   section(id) { return SECTIONS.find(x => x.id === id) || SECTIONS[0]; }
   secRowsOf(key) {
-    const s = this.state, act = SECACT[key];
+    // Jízdenky dvojice jdou smazat (dvojím klepnutím) — ukázka akci nemá.
+    const s = this.state, act = SECACT[key] || (key === 'tickets' && this.galerieNaServeru() ? ['ph-trash', 'Smazat', 'smazáno'] : null);
     const ex = (s.secExtra || {})[key] || (key === 'shop' ? (s.mShopExtra || []) : []);
     // Extra položky mají vlastní stabilní id, statické řádky pozici v SECROWS — přidání nic neposune.
     const list = ex.map(r => Array.isArray(r)
@@ -10397,7 +10457,8 @@ class Component extends DCLogic {
       return {
         id: id, title: r.t, meta: r.m,
         tag: done && act ? act[2] : r.g,
-        hasAct: !!act && !bezAkce, actIcon: act ? act[0] : null, actLabel: done ? 'Vrátit' : (act ? act[1] : null),
+        hasAct: !!act && !bezAkce, actIcon: act ? act[0] : null,
+        actLabel: key === 'tickets' && s.mTkPotvrd === id ? 'Opravdu smazat' : done ? 'Vrátit' : (act ? act[1] : null),
         done: done,
         act: () => {
           // Řádek bez akce (nebo akce, kterou telefon u dvojice neumí) nemá co udělat.
@@ -10424,6 +10485,16 @@ class Component extends DCLogic {
             window.GalerieApi.save({ dupDone: [g.id], dupKeep: {} });
             setTimeout(() => { if (window.GalerieObnovit) { window.GalerieObnovit('knihovna'); window.GalerieObnovit('system'); } }, 3000);
             this.toast('Sloučeno — ostatní kopie jsou v koši', { icon: 'ph-broom' });
+            return;
+          }
+          if (naServeru && key === 'tickets') {
+            if (!/^[0-9a-f-]{36}$/i.test(String(id))) { this.toast('Tahle jízdenka se smazat nedá — obnovte seznam', { icon: 'ph-info', silent: true }); return; }
+            if (s.mTkPotvrd !== id) { this.setState({ mTkPotvrd: id }); this.toast('Klepněte znovu — „' + r.t + '“ zmizí z jízdenek u obou', { icon: 'ph-warning', silent: true }); return; }
+            this.setState({ mTkPotvrd: null });
+            window.GalerieApi.del('cesty/jizdenky/' + id).then(res => {
+              if (res && window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data, res.prazdne);
+              this.toast((res && res.zprava) || 'Smazáno — ' + r.t, { icon: 'ph-trash' });
+            }).catch(e => this.chybaServeru(e, 'Jízdenku se nepodařilo smazat'));
             return;
           }
           if (naServeru && key === 'recipes' && !done) {
@@ -12159,7 +12230,10 @@ class Component extends DCLogic {
       due: ['Nová lhůta nebo platba', 'Co — třeba STK, pojištění', 'Kdy — třeba 15. 10. 2026', 'Zapsat lhůtu'],
       fam: ['Nový kontakt z rodiny', 'Kdo — třeba Babička Věra', 'Jak často se ozvat — po kolika dnech', 'Přidat kontakt'],
       item: ['Nová věc v bytě', 'Co — třeba Pračka', 'Kde — místnost (nepovinné)', 'Přidat věc'],
-      promise: ['Zapsat slib', 'Co slibuji', 'Do kdy (nepovinné, třeba do pátku)', 'Zapsat slib']
+      promise: ['Zapsat slib', 'Co slibuji', 'Do kdy (nepovinné, třeba do pátku)', 'Zapsat slib'],
+      tinbox: ['Do travel inboxu', 'Co — třeba Apartmán Lisabon, 3 noci', 'Odkaz (nepovinné, https://…)', 'Přidat do inboxu'],
+      ticket: ['Nová jízdenka', 'Co — třeba Vlak Brno – Vídeň', 'Trasa (nepovinné, třeba Brno – Vídeň)', 'Uložit jízdenku'],
+      place: ['Nový cíl', 'Kam — třeba Lofoty', 'Kde to je — město nebo země (nepovinné)', 'Přidat místo']
     };
     const spec = addSpec[s.addKind || 'diary'];
     const addCommit = () => {
@@ -12219,6 +12293,31 @@ class Component extends DCLogic {
           sheet: null, addA: '', addB: '', seq: n + 1, dcTab: 'prom'
         });
         this.toast('Slib zapsán · ' + this.krestni(komu) + ' ho vidí', { icon: 'ph-handshake', undo: () => this.setState({ proms: list }) });
+        return;
+      }
+      /*
+       * Travel inbox a jízdenky — na telefonu šly jen číst a „hotovo" u nich
+       * přeškrtlo řádek, aniž by se na serveru cokoliv změnilo.
+       */
+      if (s.addKind === 'tinbox' || s.addKind === 'ticket' || s.addKind === 'place') {
+        if (!this.galerieNaServeru()) { this.toast('Ukládá se jen s připojeným serverem', { icon: 'ph-info', silent: true }); return; }
+        let zadost;
+        if (s.addKind === 'place') {
+          // Nový cíl jako na počítači (MistaController) — v Místech nešlo přidat nic.
+          zadost = window.GalerieApi.post('mista', { nazev: a, zeme: b || null });
+        } else if (s.addKind === 'tinbox') {
+          if (b && !/^https:\/\/\S+$/i.test(b)) { this.toast('Odkaz musí začínat https://', { icon: 'ph-warning', silent: true }); return; }
+          zadost = window.GalerieApi.post('cesty/inbox', { nazev: a, odkaz: b || null });
+        } else {
+          const trasa = b ? b.split(/\s+[–-]\s+|\s*→\s*/) : [];
+          zadost = window.GalerieApi.post('cesty/jizdenky', { nazev: a, odkud: trasa[0] || null, kam: trasa[1] || null });
+        }
+        zadost.then(res => {
+          if (res && window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data, res.prazdne);
+          this.setState({ sheet: null, addA: '', addB: '', seq: n + 1 });
+          if (s.addKind === 'place' && window.GalerieObnovit) window.GalerieObnovit('cesty');
+          this.toast((res && res.zprava) || 'Uloženo', { icon: s.addKind === 'ticket' ? 'ph-ticket' : s.addKind === 'place' ? 'ph-map-pin-plus' : 'ph-tray' });
+        }).catch(e => this.chybaServeru(e, 'Uložit se nepodařilo — zkuste to znovu'));
         return;
       }
       if (s.addKind === 'chore') {
@@ -12838,13 +12937,8 @@ class Component extends DCLogic {
         txEmpty: pTxs.length === 0,
         toggleCta: pVisited ? 'Vrátit mezi Chceme' : 'Označit jako navštívené',
         toggle: () => {
-          // U dvojice i do databáze (MistaController) — mapa a cesty čtou stav místa odtamtud.
-          if (this.galerieNaServeru()) {
-            window.GalerieApi.post('mista/stav', { nazev: pRow[0], navstiveno: !pVisited }).then(res => {
-              if (res && window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data, res.prazdne);
-              if (window.GalerieObnovit) window.GalerieObnovit('cesty');
-            }).catch(e => this.chybaServeru(e, 'Stav místa se neuložil'));
-          }
+          // U dvojice jen do databáze (MistaController) — mapa a cesty čtou stav místa odtamtud.
+          if (this.galerieNaServeru()) { this.mistoNavstiveno(pRow[0], !pVisited); return; }
           this.setState({ places: Object.assign({}, s.places, { [pRow[0]]: !pVisited }) });
           this.toast(pVisited ? pRow[0] + ' zpět mezi Chceme' : pRow[0] + ' označeno jako navštívené', { icon: pVisited ? 'ph-heart-straight' : 'ph-check-circle', undo: () => this.setState({ places: Object.assign({}, this.state.places, { [pRow[0]]: pVisited }) }) });
         }
@@ -13455,7 +13549,8 @@ class Component extends DCLogic {
         // Ze skutečných řádků jako na počítači — dřív napevno 12 a 6 (počty z ukázky) i u dvojice.
         const liveBadge = {
           'x-inbox': (AL.inbox || []).length - resolvedIn('inbox'),
-          'x-inbox-cesty': (AL.travelInbox || []).length - resolvedIn('travelInbox'),
+          // Zařazené do cesty už nečekají — server je posílá se štítkem „zařazeno".
+          'x-inbox-cesty': (AL.travelInbox || []).filter(r => r[2] !== 'zařazeno').length - resolvedIn('travelInbox'),
           'x-transakce': TX.filter(t => (s.txCat[t[0]] === undefined ? t[3] : s.txCat[t[0]]) === 'Nezařazeno').length
         };
         const remember = route => {
@@ -13665,6 +13760,9 @@ class Component extends DCLogic {
         : 'Žádný návrh nečeká na potvrzení.',
 
       // místa
+      placesEmpty: placesSorted.length === 0,
+      placeAddOn: this.galerieNaServeru(),
+      placeAdd: () => this.setState({ sheet: 'add', addKind: 'place', addA: '', addB: '' }),
       placeRows: placesSorted.map((p, i) => {
         const vis = this.placeVisited(p);
         const cnt = lib.filter(x => x.place === p[3] || this.spotOf(x) === p[0]).length;
@@ -13675,7 +13773,7 @@ class Component extends DCLogic {
           tagBg: vis ? 'var(--g-acc-soft)' : 'transparent',
           tagFg: vis ? 'var(--g-acc-deep)' : 'var(--g-ink2)',
           go: () => { this.setState({ placeId: p[0] }); this.push('place'); },
-          toggle: () => { this.setState({ places: Object.assign({}, s.places, { [p[0]]: !vis }) }); this.toast(vis ? p[0] + ' zpět mezi Chceme' : p[0] + ' označeno jako navštívené', { icon: vis ? 'ph-heart-straight' : 'ph-check-circle', undo: () => this.setState({ places: Object.assign({}, this.state.places, { [p[0]]: vis }) }) }); }
+          toggle: () => { if (this.galerieNaServeru()) { this.mistoNavstiveno(p[0], !vis); return; } this.setState({ places: Object.assign({}, s.places, { [p[0]]: !vis }) }); this.toast(vis ? p[0] + ' zpět mezi Chceme' : p[0] + ' označeno jako navštívené', { icon: vis ? 'ph-heart-straight' : 'ph-check-circle', undo: () => this.setState({ places: Object.assign({}, this.state.places, { [p[0]]: vis }) }) }); }
         };
       }),
 
@@ -14320,6 +14418,12 @@ class Component extends DCLogic {
               emptyCta: () => {
                 if (filtered) { this.setState({ secQuery: '', secFilter: 'all' }); return; }
                 if (!d[5]) { this.toast('Zatím tu není co otevřít', { icon: 'ph-info' }); return; }
+                // `add:druh` otevře formulář přidání (jízdenka, místo).
+                if (d[5].indexOf('add:') === 0) {
+                  if (!this.galerieNaServeru()) { this.toast('Ukládá se jen s připojeným serverem', { icon: 'ph-info', silent: true }); return; }
+                  this.setState({ sheet: 'add', addKind: d[5].slice(4), addA: '', addB: '' });
+                  return;
+                }
                 if (d[5].indexOf('sec:') === 0) {
                   const p = d[5].slice(4).split('/');
                   this.setState({ secId: p[0], secTab: parseInt(p[1] || '0', 10) });
@@ -14329,6 +14433,10 @@ class Component extends DCLogic {
               }
             };
           })(),
+          // Přidat jízdenku jde i do neprázdného seznamu (prázdný má tlačítko v prázdném stavu).
+          addOn: this.galerieNaServeru() && tab[1] === 'tickets' && all.length > 0,
+          addLabel: 'Přidat jízdenku',
+          add: () => this.setState({ sheet: 'add', addKind: 'ticket', addA: '', addB: '' }),
           groupLabel: def.g
         };
       })(),

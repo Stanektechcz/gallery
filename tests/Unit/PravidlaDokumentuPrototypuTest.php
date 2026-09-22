@@ -323,7 +323,7 @@ class PravidlaDokumentuPrototypuTest extends TestCase
         $telefon = self::dokument('galerie-mobil.dc.html');
 
         $this->assertStringContainsString('onClick="{{ lbStartPerson }}"', $pocitac);
-        $this->assertStringContainsString("people: (cur.people || []).concat(znama || j)", $pocitac);
+        $this->assertStringContainsString('people: (cur.people || []).concat(znama || j)', $pocitac);
         $this->assertStringContainsString('onClick="{{ lbDetail.personAdd }}"', $telefon);
         $this->assertStringContainsString('{ people: seznam }', $telefon);
     }
@@ -363,6 +363,62 @@ class PravidlaDokumentuPrototypuTest extends TestCase
                 $this->assertStringContainsString('crossorigin="anonymous"', $odkaz);
             }
         }
+    }
+
+    /**
+     * Travel inbox a jízdenky: akce jdou na server na obou rozvrženích.
+     *
+     * Zařazení, archivace i smazání měnily jen obrazovku; „Přidat jízdenku"
+     * založilo řádek, který nešlo doplnit; na telefonu „hotovo" přeškrtlo řádek.
+     */
+    public function test_travel_inbox_a_jizdenky_na_serveru(): void
+    {
+        $pocitac = self::dokument('galerie-desktop.dc.html');
+        $telefon = self::dokument('galerie-mobil.dc.html');
+
+        $this->assertStringContainsString("api.patch('v1/calendar/inbox/' + r.klic, { state: 'assigned', trip_id: cesta.n })", $pocitac);
+        $this->assertStringContainsString("api.patch('v1/calendar/inbox/' + r.klic, { state: 'archived' })", $pocitac);
+        $this->assertStringContainsString("cesta: () => 'cesty/inbox'", $pocitac);
+        $this->assertStringContainsString("cesta: () => 'cesty/jizdenky'", $pocitac);
+        $this->assertStringContainsString("window.GalerieApi.del('cesty/jizdenky/' + r.klic)", $pocitac);
+        $this->assertStringContainsString('<sc-if value="{{ t.canSave }}">', $pocitac);
+
+        $this->assertStringContainsString("window.GalerieApi.post('cesty/inbox', { nazev: a, odkaz: b || null })", $telefon);
+        $this->assertStringContainsString("window.GalerieApi.post('cesty/jizdenky', {", $telefon);
+        $this->assertStringContainsString("window.GalerieApi.patch('v1/calendar/inbox/' + r.klic, { state: 'archived' })", $telefon);
+        $this->assertStringContainsString("window.GalerieApi.del('cesty/jizdenky/' + id)", $telefon);
+    }
+
+    /** „Byli jsme" u místa jen na server — ne do místní kopie, která přebíjela databázi. */
+    public function test_navstivena_mista_jen_na_serveru(): void
+    {
+        $pocitac = self::dokument('galerie-desktop.dc.html');
+        $telefon = self::dokument('galerie-mobil.dc.html');
+
+        $this->assertStringContainsString('if (this.mistaNaServeru() && p.title) { this.mistoNavstiveno(p.title, !vis); return; }', $pocitac);
+        $this->assertStringContainsString('if (naServeru) { this.mistoNavstiveno(p.title, !vis); return; }', $pocitac);
+        $this->assertStringContainsString('undo: () => this.mistoNavstiveno(nazev, !navstiveno)', $pocitac);
+        $this->assertStringNotContainsString('}).catch(() => {});', substr($pocitac, strpos($pocitac, 'placeToggleVisited'), 1200));
+
+        $this->assertStringContainsString('placeVisited(p) { const v = this.galerieNaServeru() ? undefined : this.state.places[p[0]];', $telefon);
+        $this->assertStringContainsString('if (this.galerieNaServeru()) { this.mistoNavstiveno(pRow[0], !pVisited); return; }', $telefon);
+        $this->assertStringContainsString("zadost = window.GalerieApi.post('mista', { nazev: a, zeme: b || null });", $telefon);
+    }
+
+    /** Prázdné stavy neslibují přepis hlasovek ani nahrávání PDF jízdenek. */
+    public function test_prazdne_stavy_neslibuji_co_neumime(): void
+    {
+        $data = file_get_contents(dirname(__DIR__, 2).'/public/galerie-data.js');
+        $telefon = self::dokument('galerie-mobil.dc.html');
+
+        foreach ([$data, $telefon] as $zdroj) {
+            $this->assertStringNotContainsString('přepis se pak najde v hledání', $zdroj);
+            $this->assertStringNotContainsString('PDF a QR kódy se dají nahrát', $zdroj);
+            $this->assertStringNotContainsString('se sem přesypou z e-mailu', $zdroj);
+        }
+
+        // Druhá záložka travel inboxu jsou jízdenky, ne „zařazené".
+        $this->assertStringContainsString("['Jízdenky a trasy', 'list', 'ticket']", $data);
     }
 
     /** Přihlášení se na kód druhého ověření ptá políčkem, ne dialogem prohlížeče. */

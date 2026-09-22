@@ -400,6 +400,82 @@ class ObsahCestyTest extends TestCase
         $this->assertSame(['Naše'], $cesty->values()->all());
     }
 
+    /**
+     * Do travel inboxu jde přidat i z galerie; druh je česky.
+     *
+     * Šel jen vyřizovat — a prázdný stav sliboval položky „z e-mailu".
+     */
+    public function test_do_travel_inboxu_jde_pridat(): void
+    {
+        $odpoved = $this->postJson('/api/cesty/inbox', [
+            'nazev' => 'Apartmán Lisabon, 3 noci', 'odkaz' => 'https://example.com/rezervace/123', 'druh' => 'rezervace',
+        ])->assertStatus(201)->assertJsonPath('ok', true);
+
+        $this->assertSame('reservation', DB::table('travel_inbox_items')->value('kind'));
+        $radek = collect($odpoved->json('data.AL.travelInbox'))->firstWhere(0, 'Apartmán Lisabon, 3 noci');
+        $this->assertStringStartsWith('rezervace · ', $radek[1]);
+        $this->assertSame('zařadit', $radek[2]);
+
+        $this->postJson('/api/cesty/inbox', ['nazev' => 'Odkaz', 'odkaz' => 'http://nebezpecne.cz'])->assertStatus(422);
+        $this->postJson('/api/cesty/inbox', ['nazev' => ''])->assertStatus(422);
+    }
+
+    /**
+     * Zařazené a archivované se v travel inboxu poznají.
+     *
+     * Zařazení přes API (`assigned`) se ukazovalo jako „zařadit" a
+     * archivované položky zůstávaly v seznamu navždy.
+     */
+    public function test_travel_inbox_pozna_zarazene_a_archivovane(): void
+    {
+        $cesta = $this->cesta(['name' => 'Lisabon']);
+        foreach ([['Letenky', 'assigned', $cesta], ['Starý odkaz', 'archived', null], ['Kavárna', 'inbox', null]] as [$nazev, $stav, $kam]) {
+            DB::table('travel_inbox_items')->insert([
+                'uuid' => (string) Str::uuid(), 'gallery_space_id' => $this->prostor->id, 'added_by' => $this->adri->id,
+                'title' => $nazev, 'kind' => 'link', 'state' => $stav, 'trip_id' => $kam,
+                'created_at' => now(), 'updated_at' => now(),
+            ]);
+        }
+
+        $radky = collect($this->getJson('/api/data/cesty')->assertOk()->json('data.AL.travelInbox'));
+
+        $this->assertSame(['Letenky', 'Kavárna'], $radky->pluck(0)->sort()->reverse()->values()->all());
+        $letenky = $radky->firstWhere(0, 'Letenky');
+        $this->assertSame('zařazeno', $letenky[2]);
+        $this->assertStringContainsString('cesta Lisabon', $letenky[1]);
+        $this->assertMatchesRegularExpression('/^[0-9a-f-]{36}$/', $letenky[7]);
+        $this->assertSame('zařadit', $radky->firstWhere(0, 'Kavárna')[2]);
+    }
+
+    /**
+     * Jízdenka jde přidat s trasou a smazat.
+     *
+     * „Přidat jízdenku" zakládalo „Nová jízdenka — doplňte trasu a datum",
+     * ale doplnit nebylo kde.
+     */
+    public function test_jizdenka_jde_pridat_a_smazat(): void
+    {
+        $odpoved = $this->postJson('/api/cesty/jizdenky', ['nazev' => 'Vlak do Vídně', 'odkud' => 'Brno', 'kam' => 'Vídeň'])
+            ->assertStatus(201)->assertJsonPath('ok', true);
+
+        $radek = collect($odpoved->json('data.AL.ticket'))->firstWhere(0, 'Vlak do Vídně');
+        $this->assertStringStartsWith('Brno – Vídeň · uloženo ', $radek[1]);
+        $uuid = $radek[7];
+        $this->assertSame($uuid, DB::table('saved_transport_routes')->value('uuid'));
+
+        $this->postJson('/api/cesty/jizdenky', ['nazev' => 'vlak do vídně'])->assertStatus(422);
+
+        // Stará místní kopie se smazanou jízdenkou ji nevzkřísí.
+        $this->deleteJson('/api/cesty/jizdenky/'.$uuid)->assertOk();
+        $this->assertSame(0, DB::table('saved_transport_routes')->count());
+        $this->patchJson('/api/state', ['data' => ['xRows' => ['ticket' => [
+            ['t' => 'Vlak do Vídně', 'm' => 'Brno – Vídeň', 'g' => 'uloženo', 'id' => $uuid],
+        ]]]])->assertOk();
+        $this->assertSame(0, DB::table('saved_transport_routes')->count());
+
+        $this->deleteJson('/api/cesty/jizdenky/'.$uuid)->assertNotFound();
+    }
+
     // ——— pomůcky ———
 
     private function cesta(array $navic = []): int

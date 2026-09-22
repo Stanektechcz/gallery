@@ -1575,9 +1575,10 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
         }
 
         if (Schema::hasTable('travel_inbox_items')) {
+            // Čeká jen to, co ještě není v cestě ani v archivu.
             $cesty = DB::table('travel_inbox_items')
                 ->where('gallery_space_id', $prostor->id)
-                ->where('state', '!=', 'filed')
+                ->whereNotIn('state', ['assigned', 'filed', 'archived'])
                 ->count();
 
             if ($cesty > 0) {

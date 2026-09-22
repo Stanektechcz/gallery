@@ -146,15 +146,21 @@ class Cesty implements MaPrazdneKolekce, PoskytovatelObsahu
             ->where('gallery_space_id', $prostor->id)
             ->orderByDesc('created_at')
             ->limit(30)
-            ->get(['name', 'origin', 'destination', 'created_at'])
-            ->map(fn (object $t) => [
-                (string) ($t->name ?: trim($t->origin.' – '.$t->destination)),
-                trim(implode(' · ', array_filter([
-                    $t->origin && $t->destination ? $t->origin.' – '.$t->destination : null,
-                    'uloženo '.CarbonImmutable::parse($t->created_at)->format('j. n. Y'),
-                ]))),
-                'uloženo',
-            ])
+            ->get(['uuid', 'name', 'origin', 'destination', 'created_at'])
+            ->map(function (object $t) {
+                $trasa = implode(' – ', array_filter([trim((string) $t->origin), trim((string) $t->destination)]));
+
+                return [
+                    (string) ($t->name ?: $trasa),
+                    trim(implode(' · ', array_filter([
+                        $trasa !== '' ? $trasa : null,
+                        'uloženo '.CarbonImmutable::parse($t->created_at)->format('j. n. Y'),
+                    ]))),
+                    'uloženo',
+                    // Klíč pro smazání (`DELETE /api/cesty/jizdenky/{uuid}`).
+                    null, null, null, null, (string) $t->uuid,
+                ];
+            })
             ->values()
             ->all();
     }
@@ -170,19 +176,36 @@ class Cesty implements MaPrazdneKolekce, PoskytovatelObsahu
             return [];
         }
 
-        return DB::table('travel_inbox_items')
-            ->where('gallery_space_id', $prostor->id)
-            ->orderByDesc('created_at')
+        return DB::table('travel_inbox_items as i')
+            ->leftJoin('trips as t', 't.id', '=', 'i.trip_id')
+            ->where('i.gallery_space_id', $prostor->id)
+            // Archivované (odložené) do schránky nepatří.
+            ->where('i.state', '!=', 'archived')
+            ->orderByDesc('i.created_at')
             ->limit(40)
-            ->get(['title', 'kind', 'state', 'created_at'])
-            ->map(fn (object $p) => [
-                (string) $p->title,
-                trim(implode(' · ', array_filter([
-                    $p->kind ?: null,
-                    CarbonImmutable::parse($p->created_at)->format('j. n.'),
-                ]))),
-                $p->state === 'filed' || $p->state === 'zarazeno' ? 'zařazeno' : 'zařadit',
-            ])
+            ->get(['i.uuid', 'i.title', 'i.kind', 'i.state', 'i.created_at', 't.name as cesta'])
+            ->map(function (object $p) {
+                // Zařazené je i to, co API zapsalo jako `assigned` (s cestou).
+                $zarazeno = in_array($p->state, ['assigned', 'filed', 'zarazeno'], true);
+
+                return [
+                    (string) $p->title,
+                    trim(implode(' · ', array_filter([
+                        // Druh česky — obrazovka ukazovala „reservation" a „idea".
+                        match ((string) $p->kind) {
+                            'reservation' => 'rezervace', 'link' => 'odkaz', 'idea' => 'nápad',
+                            'note' => 'poznámka', 'itinerary' => 'itinerář', 'file' => 'soubor', '' => null,
+                            default => (string) $p->kind,
+                        },
+                        CarbonImmutable::parse($p->created_at)->format('j. n.'),
+                        $zarazeno && $p->cesta ? 'cesta '.$p->cesta : null,
+                    ]))),
+                    $zarazeno ? 'zařazeno' : 'zařadit',
+                    null, null, null, null,
+                    // Identifikátor pro zařazení, archivaci a smazání na serveru.
+                    (string) $p->uuid,
+                ];
+            })
             ->values()
             ->all();
     }

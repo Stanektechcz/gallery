@@ -215,6 +215,11 @@ Route::middleware(['auth:sanctum', 'dvojice', 'throttle:120,1'])->prefix('api')-
     Route::post('cesty/{cesta}/program', [CestyAkceController::class, 'program'])->whereNumber('cesta')->name('galerie.cesty.program');
     Route::post('cesty/program/{aktivita}/posunout', [CestyAkceController::class, 'posunout'])->whereNumber('aktivita')->name('galerie.cesty.posunout');
     Route::post('cesty/program/{aktivita}/hotovo', [CestyAkceController::class, 'splneno'])->whereNumber('aktivita')->name('galerie.cesty.splneno');
+    // Travel inbox — dřív šel jen vyřizovat, přidat do něj nešlo nic.
+    Route::post('cesty/inbox', [CestyAkceController::class, 'doInboxu'])->name('galerie.cesty.inbox');
+    // Jízdenky: dřív „Nová jízdenka — doplňte trasu", kterou nešlo doplnit.
+    Route::post('cesty/jizdenky', [CestyAkceController::class, 'jizdenka'])->name('galerie.cesty.jizdenka');
+    Route::delete('cesty/jizdenky/{uuid}', [CestyAkceController::class, 'smazatJizdenku'])->whereUuid('uuid')->name('galerie.cesty.jizdenka.smazat');
 
     // Místa: nový cíl, „byli jsme" a společná poznámka (dřív „zatím neumíme").
     Route::post('mista', [MistaController::class, 'store'])->name('galerie.mista.store');
