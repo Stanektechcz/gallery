@@ -667,6 +667,64 @@ výpis z banky — tlačítko u jednoho účtu, list účtů u dvou.
 
 Testy: **1456 PHP testů**, všechny prošly. Nic se nemigruje.
 
+## 2p. Šestnácté kolo — co se tvářilo uložené: stav, oznámení, cesty (22. 9.)
+
+Průchod akcí, které hlásily úspěch, ale na serveru nic nezměnily (nebo
+změnily něco jiného), a obrazovek, kde u dvojice nešlo nic přidat.
+
+- **Vynulovaná kopie nesmaže data**: `fam: null` ve stavu smazalo na serveru
+  všechny kontakty z rodiny, `wishes: null` všechna přání (převodník dělal
+  z `null` prázdný seznam). Opraveno ve všech převodnících se seznamy.
+- **Domácnost**: lhůty a platby, kontakty z rodiny a věci v bytě jdou přidat
+  na počítači i telefonu (dřív jen ukázka); datum lhůty bez času.
+- **Oznámení ze serveru**: nepřečtená oznámení (úkol přidělený druhým,
+  import financí…) jsou ve zvonku na počítači a na Domů v telefonu;
+  „Přečteno", „Odložit na týden" a „Vše přečteno" jdou na server.
+- **Travel inbox**: přidání z počítače i telefonu; Zařadit do cesty,
+  Vytvořit místo, Archivovat a Smazat volají `/api/v1/calendar/inbox` (dřív
+  jen obrazovka — po obnovení se položka vrátila; bez plánované cesty
+  spadla stránka). Zařazené a archivované se počítají správně v Akčním
+  inboxu, odznacích i zvonku (zvonek je navíc ukazoval podruhé jednotlivě).
+- **Jízdenky**: „Přidat jízdenku" má dialog s názvem a trasou a jízdenka
+  jde smazat (telefon dvojím klepnutím); „Do cesty" jen v ukázce. Druhá
+  záložka travel inboxu se jmenovala „Zařazené", ale ukazovala jízdenky.
+- **Místa**: „Byli jsme" jen přes `/api/mista/stav` — počítač k tomu psal
+  místní kopii, která pak přebíjela databázi, chybu spolkl a „Zpět" vrátilo
+  jen kopii; telefon zapisoval jen do sebe. Na telefonu jde přidat cíl.
+
+**Chyby:**
+- Načtení stránky bralo `/api/data` z třicetivteřinové paměti prohlížeče:
+  co se přidalo těsně před obnovením stránky, po obnovení „zmizelo";
+  načtení po uložení v administraci dostalo stav před uložením.
+- Převodník cestovní schránky psal stav „filed", který zbytek aplikace
+  (`inbox`/`assigned`/`archived`) nezná.
+- Stará místní kopie seznamu jízdenek by smazanou jízdenku založila znovu.
+- Prázdné stavy slibovaly přepis hlasovek, nahrávání PDF jízdenek, archiv
+  jízdenek a položky „z e-mailu" — nic z toho aplikace nedělá.
+
+Ověřeno v prohlížeči na obou rozvrženích (testovací řádky uklizeny):
+travel inbox — přidání dialogem i z telefonu (s kontrolou https), Vytvořit
+místo (místo v databázi, položka `assigned`), Archivovat, Smazat
+s potvrzením, zvonek 5 → 4; jízdenky — přidání s trasou, smazání
+(počítač s potvrzením, telefon dvojím klepnutím), po smazání se nevrátila;
+místa — Byli jsme a zpět z počítače i telefonu bez místní kopie, nový cíl
+z telefonu; oznámení přečtená na serveru.
+
+| Commit | Obsah |
+|---|---|
+| `7e265fdf` | Stav: vynulovaná místní kopie seznamu na serveru nic nesmaže |
+| `e594b0d5` | Domácnost: lhůty, kontakty z rodiny a věci v bytě jdou přidat |
+| `f7a30874` | Oznámení ze serveru v galerii: zvonek na počítači, Domů na telefonu |
+| `66e6d7be` | Načtení stránky bere obsah ze serveru, ne z třicetivteřinové paměti |
+| `63f40679` | Travel inbox, jízdenky a „byli jsme" jdou doopravdy na server |
+
+Testy: **1469 PHP testů**, všechny prošly. Nic se nemigruje.
+
+### Po nasazení (2p)
+
+- Nic se nemigruje. Položky cestovní schránky, které dřívější verze
+  označila stavem „filed", se dál ukazují jako zařazené.
+
 ### Po nasazení (2n)
 
 - Nic se nemigruje. Import výpisu používá tabulky bankovního modulu
