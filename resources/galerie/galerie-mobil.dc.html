@@ -5924,7 +5924,10 @@ const telefonZeServeru = (() => {
       anniv: milniky.map(m => [m[1], m[0], null]),
       remind: [],
       itinWish: (svet.chceme || []).map(w => [w[0], w[2] || '', w[3] || null]),
-      itinDone: (svet.zeme || []).map(z => [z[0], (z[3] || 0) + ' fotek · poprvé ' + z[2], 'byli jsme']),
+      itinDone: (svet.zeme || []).map(z => {
+        const n = z[3] || 0;
+        return [z[0], n + ' ' + (n === 1 ? 'fotka' : n >= 2 && n <= 4 ? 'fotky' : 'fotek') + ' · poprvé ' + z[2], 'byli jsme'];
+      }),
       tickets: al('ticket'), ticketsOld: [],
       people: (lide.ok || []).map(p => [p[0], p[1], 'potvrzeno']),
       peopleSug: (lide.sug || []).map(p => [p[0], p[1], 'potvrdit']),
@@ -9205,7 +9208,7 @@ class Component extends DCLogic {
         { label: 'Chybí', value: String(qRows.filter(q => q.state === 'empty').length) }
       ],
       rows: qRows.map(q => R(q.q + ' · ' + (q.when || 'bez data'),
-        q.mins ? q.mins + ' minut rozhovoru' : q.when ? 'rozhovor neproběhl' : 'nikdo to nenaplánoval',
+        q.mins ? this.pl(q.mins, 'minuta', 'minuty', 'minut') + ' rozhovoru' : q.when ? 'rozhovor neproběhl' : 'nikdo to nenaplánoval',
         q.state === 'done' ? 'hotovo' : q.state === 'empty' ? 'chybí' : '',
         q.state !== 'booked' ? null : A('Proběhlo', 'ph-chat-circle-dots', () => {
           const prev = qTalk;
@@ -9271,7 +9274,7 @@ class Component extends DCLogic {
         { label: 'Chybí', value: String(pRows.reduce((a, p) => a + p.missing.length, 0)) }
       ],
       rows: pRows.map(p => R(p.name,
-        p.age + ' let · ' + p.health + ' · ' + p.dist + ' km' + (p.missing.length ? ' · chybí ' + p.missing.join(', ') : ''),
+        this.pl(p.age, 'rok', 'roky', 'let') + ' · ' + p.health + ' · ' + p.dist + ' km' + (p.missing.length ? ' · chybí ' + p.missing.join(', ') : ''),
         p.missing.length ? String(p.missing.length) : 'hotovo',
         p.missing.length ? A('Vyřídit ' + p.missing[0], 'ph-check-circle', () => {
           const prev = pDone;

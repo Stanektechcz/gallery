@@ -15265,7 +15265,7 @@ class Component extends DCLogic {
         go: () => { const k = RECIPE_BY_TITLE[p[0]]; k ? this.openRecipe(k) : this.toast(p[0], { icon: 'ph-arrow-right' }); }
       })),
       recipePhotos: ph, recipeHasPhotos: ph.length > 0,
-      recipePhotoMeta: ph.length > 0 ? ph.length + ' fotek odtud, kde recept vznikl' : '',
+      recipePhotoMeta: ph.length > 0 ? this.pl(ph.length, 'fotka', 'fotky', 'fotek') + ' odtud, kde recept vznikl' : '',
       recipeMissing: r.ing.filter((it, i) => !s.ing[s.recipeId + i]).length,
       /*
        * Obě tlačítka jen ohlásila, že se něco stalo — „8 položek přidáno na
@@ -15321,7 +15321,7 @@ class Component extends DCLogic {
       placeHasNotes: p.notes.length > 0,
       placeRelated: p.related.map(r => ({ icon: r[0], label: r[1], meta: r[2], go: () => this.relatedGo(r[3]) })),
       placePhotos: ph, placeHasPhotos: ph.length > 0,
-      placePhotoMeta: ph.length > 0 ? ph.length + ' fotek z okolí' : '',
+      placePhotoMeta: ph.length > 0 ? this.pl(ph.length, 'fotka', 'fotky', 'fotek') + ' z okolí' : '',
       placeHasSpend: spend > 0,
       placeSpend: spend.toLocaleString('cs-CZ') + ' Kč',
       placeSpendGo: () => this.setState({ route: 'x-transakce', appTab: 0 }),
@@ -16952,7 +16952,7 @@ class Component extends DCLogic {
         check: i.on ? '#fff' : 'transparent',
         toggle: () => { const prev = items; this.setState({ emItems: items.map(x => x.id === i.id ? { ...x, on: !x.on } : x) }); this.toast(i.label + (i.on ? ' se nouzově neodemkne' : ' se nouzově odemkne'), { icon: 'ph-lock-key', undo: () => this.setState({ emItems: prev }) }); }
       })),
-      emDelay: delay === 0 ? 'okamžitě' : delay + ' hodin',
+      emDelay: delay === 0 ? 'okamžitě' : this.pl(delay, 'hodina', 'hodiny', 'hodin'),
       emDelayLess: () => this.setState({ emDelay: Math.max(0, delay - 12) }),
       emDelayMore: () => this.setState({ emDelay: Math.min(96, delay + 12) }),
       emTitle: st === 'idle' ? 'Nikdo o přístup nežádá' : st === 'waiting' ? 'Žádost běží' : 'Přístup je otevřený',
@@ -19077,7 +19077,7 @@ class Component extends DCLogic {
           nedLog: [{ when: this.dnesKratce(), items: doneCount, min: doneMin, note: doneCount ? 'Odškrtnuto ' + doneCount + ' z ' + agenda.length + ' bodů.' : 'Schůzka proběhla, nic se neodškrtlo.' }].concat(log),
           nedDone: {}, nedTab: 'log'
         });
-        this.toast('Týden zavřený · ' + doneMin + ' minut', { icon: 'ph-check-circle', undo: () => this.setState({ nedLog: prev }) });
+        this.toast('Týden zavřený · ' + this.pl(doneMin, 'minuta', 'minuty', 'minut'), { icon: 'ph-check-circle', undo: () => this.setState({ nedLog: prev }) });
       }
     };
   }
@@ -20443,6 +20443,8 @@ class Component extends DCLogic {
   // Přechod jinam zruší i filtr místa z mapy — jinak by se knihovna příště otevřela vyfiltrovaná.
   go = r => () => this.setState({ route: r, sel: [], selectMode: false, appTab: 0, notifOpen: false, albMenu: false, misto: null });
   pl(n, one, few, many) { return n + ' ' + (n === 1 ? one : n >= 2 && n <= 4 ? few : many); }
+  // Jen tvar slova — pro čísla, která se vypisují naformátovaná (L.num, toLocaleString).
+  tvar(n, one, few, many) { n = Number(String(n).replace(/[^\d-]/g, '')) || 0; return n === 1 ? one : n >= 2 && n <= 4 ? few : many; }
   /*
    * Co aplikace zatím neumí, se řekne rovnou.
    *
@@ -22731,18 +22733,20 @@ class Component extends DCLogic {
         libGrowth: (() => {
           const cur = L.years[yKeys[0]] || 0, prev = L.years[yKeys[1]] || 0;
           const diff = prev ? Math.round(((cur - prev) / prev) * 100) : 0;
-          return 'Letos je v knihovně ' + L.num(cur) + ' položek'
+          return 'Letos je v knihovně ' + L.num(cur) + ' ' + this.tvar(cur, 'položka', 'položky', 'položek')
             + (prev ? ', to je o ' + Math.abs(diff) + ' % ' + (diff >= 0 ? 'víc' : 'míň') + ' než loni' : '')
             + '. Čísla se přepočítávají ze skutečné knihovny — po smazání nebo přidání se hned změní.';
         })(),
         libTop: pKeys.slice(0, 5).map(p => ({
-          place: p, count: L.num(L.places[p]) + ' položek',
+          place: p, count: L.num(L.places[p]) + ' ' + this.tvar(L.places[p], 'položka', 'položky', 'položek'),
           note: Math.round((L.places[p] / Math.max(1, L.total)) * 100) + ' % knihovny',
           go: () => this.setState({ route: 'all', query: p })
         })),
         libExport: () => {
           const ok = this.download('statistiky-knihovny.txt',
-            'STATISTIKY KNIHOVNY\n\n' + L.num(L.total) + ' položek, ' + L.num(L.favs) + ' oblíbených, ' + L.placeN + ' míst\n\nPo letech:\n'
+            'STATISTIKY KNIHOVNY\n\n' + L.num(L.total) + ' ' + this.tvar(L.total, 'položka', 'položky', 'položek') + ', '
+              + L.num(L.favs) + ' ' + this.tvar(L.favs, 'oblíbená', 'oblíbené', 'oblíbených') + ', '
+              + this.pl(L.placeN, 'místo', 'místa', 'míst') + '\n\nPo letech:\n'
             + yKeys.map(k => k + ': ' + L.years[k]).join('\n')
             + '\n\nNejčastější místa:\n' + pKeys.slice(0, 8).map(p => p + ': ' + L.places[p]).join('\n'),
             'text/plain;charset=utf-8');
@@ -22781,7 +22785,7 @@ class Component extends DCLogic {
           label: h % 3 === 0 ? String(h) : '',
           h: Math.max(2, Math.round((v / hMax) * 84)) + 'px',
           color: v === hMax ? 'var(--g-acc)' : v > hMax * 0.5 ? 'var(--g-acc-deep)' : 'var(--g-acc-soft)',
-          title: h + ':00 — ' + v + ' položek'
+          title: h + ':00 — ' + this.pl(v, 'položka', 'položky', 'položek')
         })),
         libMonths: bar(mKeys.map((k, i) => [
           MONN[k], L.num(L.months[k]),
@@ -23397,7 +23401,7 @@ class Component extends DCLogic {
         this.toast('Tuto vzpomínku už nezobrazíme', { icon: 'ph-eye-slash', undo: () => this.setState({ memHidden: prev }) });
       },
       openDay: () => { this.setState({ route: 'all', query: m.place }); this.toast('Knihovna filtrovaná na ' + m.place, { icon: 'ph-images' }); },
-      show: () => { this.setState({ route: 'x-promitani', appTab: 0 }); this.toast('„' + m.title + '“ — ' + m.count + ' fotek v promítání', { icon: 'ph-play-circle' }); },
+      show: () => { this.setState({ route: 'x-promitani', appTab: 0 }); this.toast('„' + m.title + '“ — ' + m.count + ' ' + this.tvar(m.count, 'fotka', 'fotky', 'fotek') + ' v promítání', { icon: 'ph-play-circle' }); },
       share: () => { this.setState({ route: 'x-zpravy', appTab: 0 }); this.msgSend('p', 'Vzpomínka: ' + m.title + ' (' + m.date + ')', m.place); },
       toDiary: () => this.setState({
         route: 'x-denik', appTab: 0,
@@ -23449,7 +23453,7 @@ class Component extends DCLogic {
         },
         memShowAll: () => {
           this.setState({ route: 'x-promitani', appTab: 0 });
-          this.toast('Promítání všech dnešních vzpomínek · ' + today.reduce((a, m) => a + m.count, 0) + ' fotek', { icon: 'ph-play-circle' });
+          this.toast('Promítání všech dnešních vzpomínek · ' + this.pl(today.reduce((a, m) => a + m.count, 0), 'fotka', 'fotky', 'fotek'), { icon: 'ph-play-circle' });
         },
         memGoPrefs: () => this.setState({ appTab: 3 })
       };
@@ -23573,7 +23577,7 @@ class Component extends DCLogic {
     const needPx = Math.round((dim[0] / 25.4) * 300);
     const lowN = on('dpi') ? 0 : (cur.kind === 'plakat' ? 3 : cur.kind === 'kniha' ? 6 : 1);
     const rows = [
-      [!lowN, 'Rozlišení fotek', lowN ? lowN + ' fotek pod 300 DPI (potřeba ' + needPx + ' px na šířku)' : 'Vše nad 300 DPI'],
+      [!lowN, 'Rozlišení fotek', lowN ? this.pl(lowN, 'fotka', 'fotky', 'fotek') + ' pod 300 DPI (potřeba ' + needPx + ' px na šířku)' : 'Vše nad 300 DPI'],
       [on('bleed'), 'Spad a bezpečná zóna', on('bleed') ? 'Spad 3 mm, text 5 mm od ořezu' : 'Chybí spad 3 mm'],
       [on('marks'), 'Ořezové značky', on('marks') ? 'Zapnuté v exportu' : 'Chybí v exportu'],
       [on('color'), 'Barevný profil', on('color') ? 'CMYK FOGRA39 (ISO Coated v2)' : 'sRGB — nutno převést'],
@@ -23741,7 +23745,7 @@ class Component extends DCLogic {
           if (!markedN) { this.toast('Označte na archu fotky, které chcete vytisknout', { icon: 'ph-info' }); return; }
           const prev = jobs;
           const id = 'p-a' + (s.xSeq || 1);
-          this.jobsSet([{ id, kind: 'plakat', title: 'Tisk z archu ' + (sheet + 1), status: 'ke korektuře', qty: markedN, n: 9, note: markedN + ' fotek vybraných na kontaktním archu' }].concat(jobs));
+          this.jobsSet([{ id, kind: 'plakat', title: 'Tisk z archu ' + (sheet + 1), status: 'ke korektuře', qty: markedN, n: 9, note: this.pl(markedN, 'fotka', 'fotky', 'fotek') + ' z kontaktního archu' }].concat(jobs));
           this.setState({ xSeq: (s.xSeq || 1) + 1, appTab: 0 });
           this.toast(this.pl(markedN, 'fotka převedena', 'fotky převedeny', 'fotek převedeno') + ' do nového návrhu', { icon: 'ph-printer', undo: () => this.jobsSet(prev) });
         },
@@ -23945,7 +23949,7 @@ class Component extends DCLogic {
             num: 'Kapitola ' + (i + 1), title: c.title, year: c.year,
             status: c.status, statusTag: (ST[c.status] || ST['návrh'])[0],
             accent: (ST[c.status] || ST['návrh'])[1],
-            meta: (c.photoN ? c.photoN.toLocaleString('cs-CZ').replace(/\u00a0/g, ' ') + ' fotek · ' : 'zatím bez fotek · ')
+            meta: (c.photoN ? c.photoN.toLocaleString('cs-CZ').replace(/\u00a0/g, ' ') + ' ' + this.tvar(c.photoN, 'fotka', 'fotky', 'fotek') + ' · ' : 'zatím bez fotek · ')
               + (w ? w + ' slov' : 'bez textu'),
             cover: this.bg(c.n),
             excerpt: isOpen ? c.text : (c.text || '').split('\n\n')[0].slice(0, 170) + ((c.text || '').length > 170 ? '…' : ''),
@@ -28312,7 +28316,7 @@ class Component extends DCLogic {
       return {
         title: t.title, when: t.when, where: t.where, bg: this.bg(t.n),
         tag: t.tag, tagClass: t.tag === 'plánujeme' ? 'tag-accent' : 'tag-neutral',
-        countdown: past ? (stat('Fotek') ? stat('Fotek') + ' fotek' : '') : (stat('Odjezd za') || ''),
+        countdown: past ? (stat('Fotek') ? stat('Fotek') + ' ' + this.tvar(stat('Fotek'), 'fotka', 'fotky', 'fotek') : '') : (stat('Odjezd za') || ''),
         budgetLabel: (past ? 'Utraceno' : 'Zaplaceno') + ' · ' + budgetPct + ' %', budgetPct: budgetPct + '%',
         packLabel: pk.total ? 'Sbaleno ' + pk.done + ' z ' + pk.total : 'Bez seznamu',
         packPct: pk.total ? Math.round((pk.done / pk.total) * 100) + '%' : '0%',
@@ -29916,7 +29920,7 @@ class Component extends DCLogic {
         cycColor: faze && PHASES[faze] ? PHASES[faze][2] : '',
         cycLabel: faze && PHASES[faze] ? PHASES[faze][0] : '',
         more: (evs.length > 2 ? '+' + (evs.length - 2) + ' další' : '') || (evs.length >= 2 && tasks.length ? tasks.length + ' úkol' : ''),
-        aria: inMonth ? dd + '. ' + MG[m] + ', ' + (evs.length ? this.pl(evs.length, 'událost', 'události', 'událostí') : 'bez událostí') + ((LY.photos !== false) && count ? ', ' + count + ' fotek' : '') + ((platbyDne[m + '-' + dd] || []).length ? ', ' + this.pl((platbyDne[m + '-' + dd] || []).length, 'platba', 'platby', 'plateb') : '') + (faze && PHASES[faze] ? ', ' + PHASES[faze][0] : '') : '',
+        aria: inMonth ? dd + '. ' + MG[m] + ', ' + (evs.length ? this.pl(evs.length, 'událost', 'události', 'událostí') : 'bez událostí') + ((LY.photos !== false) && count ? ', ' + this.pl(count, 'fotka', 'fotky', 'fotek') : '') + ((platbyDne[m + '-' + dd] || []).length ? ', ' + this.pl((platbyDne[m + '-' + dd] || []).length, 'platba', 'platby', 'plateb') : '') + (faze && PHASES[faze] ? ', ' + PHASES[faze][0] : '') : '',
         ring: isToday ? '2px solid var(--g-acc)' : sel ? '2px solid var(--g-ink)' : 'none',
         go: inMonth ? () => this.setState({ calDay: dd }) : () => {}
       });
@@ -30188,7 +30192,7 @@ class Component extends DCLogic {
         const fw = (new Date(y, mi, 1).getDay() + 6) % 7;
         const evc = allEv.filter(e => e.y === y && e.m === mi).length;
         return {
-          name, count: monthTotal(mi).toLocaleString('cs-CZ') + ' položek' + (evc ? ' · ' + this.pl(evc, 'událost', 'události', 'událostí') : ''),
+          name, count: monthTotal(mi).toLocaleString('cs-CZ') + ' ' + this.tvar(monthTotal(mi), 'položka', 'položky', 'položek') + (evc ? ' · ' + this.pl(evc, 'událost', 'události', 'událostí') : ''),
           cells: Array.from({ length: fw + dm }, (_, i) => {
             const dd = i - fw + 1;
             if (dd < 1) return { bg: 'transparent' };
@@ -30208,7 +30212,7 @@ class Component extends DCLogic {
         const vyroci = ANN[m + '-' + day] ? ' · ' + ANN[m + '-' + day] : '';
         const vArchivu = this.ukazka() ? (known ? known[1] : 0) : this.calCount(y, m, day);
         if (!dPh.length) return vArchivu ? this.pl(vArchivu, 'položka', 'položky', 'položek') + ' v archivu — náhledy najdete v knihovně' + vyroci : 'Z tohoto dne nic nemáme' + vyroci;
-        return dPlace + ' — ' + (vArchivu > dPh.length ? vArchivu + ' položek v archivu, ' + dPh.length + ' v náhledu' : this.pl(dPh.length, 'položka', 'položky', 'položek')) + vyroci;
+        return dPlace + ' — ' + (vArchivu > dPh.length ? this.pl(vArchivu, 'položka', 'položky', 'položek') + ' v archivu, ' + dPh.length + ' v náhledu' : this.pl(dPh.length, 'položka', 'položky', 'položek')) + vyroci;
       })(),
       calDayEmpty: dPh.length === 0,
       dayItems: dPh.map(p => ({ bg: p.bg, open: () => this.openLb(p.id) })),
@@ -30440,7 +30444,7 @@ class Component extends DCLogic {
         const prevM = merged, prevId = id;
         const cnt = parseInt(((PERSONS[id].stats[0] || [])[1] || '0').replace(/\s/g, ''), 10) || 0;
         this.setState({ pMerged: { ...merged, [id]: target }, pplDlg: null, pplTarget: '', personId: target });
-        this.toast('Sloučeno do „' + this.pName(target) + '“ · ' + cnt + ' fotek přiřazeno', {
+        this.toast('Sloučeno do „' + this.pName(target) + '“ · ' + this.pl(cnt, 'fotka', 'fotky', 'fotek') + ' ' + this.tvar(cnt, 'přiřazena', 'přiřazeny', 'přiřazeno'), {
           icon: 'ph-users-three', undo: () => this.setState({ pMerged: prevM, personId: prevId })
         });
       }
@@ -34562,7 +34566,7 @@ class Component extends DCLogic {
       navMenuHead: (() => {
         const total = navGroupDefs.reduce((a, g) => a + g[1].length, 0);
         const hid = Object.keys(navHide).filter(k => navHide[k]).length;
-        return total + ' položek v menu' + (hid ? ' · ' + this.pl(hid, 'je skrytá', 'jsou skryté', 'je skrytých') : ' · nic není skryté');
+        return this.pl(total, 'položka', 'položky', 'položek') + ' v menu' + (hid ? ' · ' + this.pl(hid, 'je skrytá', 'jsou skryté', 'je skrytých') : ' · nic není skryté');
       })(),
       navMenuReset: () => {
         const prevH = navHide, prevO = navOrd;

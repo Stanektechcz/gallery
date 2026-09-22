@@ -300,11 +300,14 @@ class Zpravy implements MaPrazdneKolekce, PoskytovatelObsahu
             return null;
         }
 
-        // Fotka, která mezitím odešla do trezoru, v chatu přestane být vidět.
+        // Fotka, která mezitím odešla do trezoru, v chatu přestane být vidět —
+        // stejně jako vyhozená do koše nebo smazaná: náhled by vrátil 404.
         return $this->polozky[$ref] ??= DB::table('media_items')
             ->where('gallery_space_id', $this->prostorId)
             ->where('uuid', $ref)
             ->where('is_hidden', false)
+            ->whereNull('trashed_at')
+            ->whereNull('deleted_at')
             ->first(['id', 'uuid', 'location_name', 'original_filename']);
     }
 

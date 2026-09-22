@@ -136,6 +136,39 @@ class ObsahDnesTest extends TestCase
         $this->assertSame('včera ve 22:00', $aktivita[1][2]);
     }
 
+    /**
+     * Náhled v aktivitě jen u fotky, kterou náhledová adresa vydá.
+     *
+     * Nahrání fotky, která se pak trvale smazala, neslo podepsanou adresu
+     * s odpovědí 404; totéž by čekalo fotku v koši a v trezoru.
+     */
+    public function test_aktivita_nema_nahled_smazane_ani_skryte_fotky(): void
+    {
+        $ok = $this->fotka();
+        $smazana = $this->fotka(['trashed_at' => now()]);
+        $smazana->delete();
+        $vTrezoru = $this->fotka(['is_hidden' => true]);
+
+        foreach ([[$ok, '09'], [$smazana, '11'], [$vTrezoru, '13']] as [$m, $hodina]) {
+            DB::table('media_variants')->insert([
+                'media_item_id' => $m->id, 'type' => 'thumbnail', 'disk' => 'local',
+                'path' => 'nahledy/'.$m->uuid.'.jpg', 'created_at' => now(), 'updated_at' => now(),
+            ]);
+            DB::table('audit_logs')->insert([
+                'user_id' => $this->adri->id, 'action' => 'media.upload', 'subject_type' => MediaItem::class,
+                'subject_id' => $m->id, 'payload' => null, 'created_at' => '2026-09-16 '.$hodina.':00:00',
+            ]);
+        }
+
+        $aktivita = $this->getJson('/api/data/dnes')->assertOk()->json('data.DNES.aktivita');
+
+        $this->assertCount(3, $aktivita);
+        $nahledy = array_column($aktivita, 3);
+        $this->assertStringContainsString($ok->uuid, (string) $nahledy[2]);
+        $this->assertNull($nahledy[1], 'Smazaná fotka nemá náhled.');
+        $this->assertNull($nahledy[0], 'Fotka v trezoru nemá náhled.');
+    }
+
     /** Návrh na album je jen tam, kde opravdu leží hromada fotek bez alba. */
     public function test_navrh_alba_z_fotek_bez_alba(): void
     {

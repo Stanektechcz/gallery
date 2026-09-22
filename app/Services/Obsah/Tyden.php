@@ -143,7 +143,9 @@ class Tyden implements PoskytovatelObsahu
      */
     private function svet(GallerySpace $prostor): array
     {
+        // Bez trezoru: země ze skryté fotky by prozradila, kde vznikla.
         $zeme = DB::table('media_items')->where('gallery_space_id', $prostor->id)->whereNull('trashed_at')->whereNull('deleted_at')
+            ->where('is_hidden', false)
             ->whereNotNull('location_country')->where('location_country', '!=', '')
             ->get(['location_country', 'location_country_code', 'location_name', 'taken_at', 'uploaded_at'])
             ->groupBy('location_country')
@@ -196,7 +198,9 @@ class Tyden implements PoskytovatelObsahu
         $do = $od->endOfYear();
         $kapitoly = [];
 
+        // Týž počet jako v knihovně — fotky v trezoru se nepočítají.
         $media = DB::table('media_items')->where('gallery_space_id', $prostor->id)->whereNull('trashed_at')->whereNull('deleted_at')
+            ->where('is_hidden', false)
             ->whereRaw('COALESCE(taken_at, uploaded_at, created_at) BETWEEN ? AND ?', [$od->toDateTimeString(), $do->toDateTimeString()])
             ->get(['media_type', 'duration_ms', 'taken_at', 'uploaded_at', 'created_at']);
 

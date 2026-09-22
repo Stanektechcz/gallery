@@ -563,7 +563,17 @@ class Dnes implements PoskytovatelObsahu
 
         $media = collect($radky)->filter(fn ($r) => str_starts_with($r['z']->action, 'media.') && $r['z']->subject_id)
             ->pluck('z.subject_id')->all();
-        $snimky = $media ? DB::table('media_items')->whereIn('id', $media)->get(['id', 'uuid'])->keyBy('id') : collect();
+        /*
+         * Náhled jen u toho, co náhledová adresa vydá.
+         *
+         * Nahrání fotky, která se mezitím trvale smazala, nesla podepsanou
+         * adresu, na kterou server odpověděl 404 — a fotka z trezoru nebo
+         * koše by se v aktivitě ukázala (nebo rozbila) stejně.
+         */
+        $snimky = $media ? DB::table('media_items')->whereIn('id', $media)
+            ->where('gallery_space_id', $prostor->id)
+            ->whereNull('deleted_at')->whereNull('trashed_at')->where('is_hidden', false)
+            ->get(['id', 'uuid'])->keyBy('id') : collect();
         $this->zjistiNahledy(array_keys($snimky->all()));
 
         return array_map(function (array $r) use ($jmena, $popisy, $snimky, $dnes) {

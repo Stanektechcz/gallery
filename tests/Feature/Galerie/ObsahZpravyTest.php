@@ -245,6 +245,24 @@ class ObsahZpravyTest extends TestCase
         $this->assertStringContainsString('signature=', $radek[8]);
     }
 
+    /** Fotka z chatu vyhozená do koše nenese adresu, na kterou server odpoví 404. */
+    public function test_fotka_v_kosi_nema_v_chatu_nahled(): void
+    {
+        $polozka = $this->polozkaSNahledem();
+        DB::table('media_items')->where('id', $polozka['id'])->update(['trashed_at' => now()]);
+
+        $this->zprava([
+            'body' => 'Tahle je v koši',
+            'attachment_type' => 'media',
+            'attachment_ref' => $polozka['uuid'],
+        ]);
+
+        $radek = collect($this->getJson('/api/data/zpravy')->assertOk()->json('data.MSGS'))
+            ->firstWhere(5, 'Tahle je v koši');
+
+        $this->assertSame('', $radek[8]);
+    }
+
     /** Obrázek ze smazané zprávy přes dřív vydanou podepsanou adresu nejde otevřít. */
     public function test_obrazek_smazane_zpravy_se_nevyda(): void
     {
