@@ -156,7 +156,7 @@ class Pravidla implements MaPrazdneKolekce, PoskytovatelObsahu
     }
 
     /**
-     * Vzpomínky: `[id, druh, před kolika lety, název, datum, místo, fotek, text, barva]`.
+     * Vzpomínky: `[id, druh, před kolika lety, název, datum, místo, fotek, text, barva, [uuid fotek]]`.
      *
      * @return list<array<int, mixed>>
      */
@@ -173,7 +173,7 @@ class Pravidla implements MaPrazdneKolekce, PoskytovatelObsahu
             ->get()
             ->map(function (object $v) {
                 $kdy = CarbonImmutable::parse($v->occurs_on);
-                $fotek = count(json_decode((string) ($v->media_ids ?? '[]'), true) ?: []);
+                $fotky = json_decode((string) ($v->media_ids ?? '[]'), true) ?: [];
 
                 return [
                     $v->uuid,
@@ -182,9 +182,11 @@ class Pravidla implements MaPrazdneKolekce, PoskytovatelObsahu
                     $v->title,
                     $this->denCesky($kdy),
                     (string) ($v->subtitle ?? ''),
-                    $fotek,
+                    count($fotky),
                     (string) ($v->subtitle ?? ''),
                     (int) $v->id,
+                    // Fotky vzpomínky (prvních pět) — karta dřív brala náhodné fotky knihovny.
+                    array_values(array_slice(array_map('strval', $fotky), 0, 5)),
                 ];
             })
             ->values()

@@ -440,7 +440,7 @@ class Dnes implements PoskytovatelObsahu
         $od = $dnes->subDays(30)->startOfDay();
 
         $bezAlba = $this->media($prostor)->whereNull('primary_album_id')->where('taken_at', '>=', $od)
-            ->get(['id', 'taken_at', 'location_name'])
+            ->get(['id', 'uuid', 'taken_at', 'location_name'])
             ->groupBy(fn ($f) => CarbonImmutable::parse($f->taken_at)->toDateString())
             ->sortByDesc(fn (Collection $d) => $d->count())
             ->first();
@@ -456,6 +456,8 @@ class Dnes implements PoskytovatelObsahu
                 'cta' => 'Vytvořit album',
                 'route' => 'album-new',
                 'album' => $misto ?: $den->day.'. '.self::MESICE[$den->month].' '.$den->year,
+                // Které fotky do alba patří — „Vytvořit album" dřív založilo prázdné.
+                'media' => $bezAlba->pluck('uuid')->map(fn ($u) => (string) $u)->values()->all(),
             ];
         }
 

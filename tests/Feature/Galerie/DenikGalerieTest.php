@@ -41,6 +41,26 @@ class DenikGalerieTest extends TestCase
         Sanctum::actingAs($this->adri);
     }
 
+    /**
+     * „Přidat milník" zapíše milník vztahu a ten je hned na ose.
+     *
+     * Dřív zakládalo nápad na dárek „Nový milník" — osa ho nikdy neukázala.
+     */
+    public function test_milnik_se_zapise_na_osu(): void
+    {
+        $odpoved = $this->postJson('/api/milniky', ['nazev' => 'Poprvé jsme se potkali', 'datum' => '18. 10. 2016'])
+            ->assertStatus(201)
+            ->assertJsonPath('zprava', 'Milník „Poprvé jsme se potkali“ je na ose · 18. 10. 2016');
+
+        $this->assertSame('2016-10-18', (string) DB::table('relationship_milestones')->value('occurred_on'));
+        $this->assertSame('shared', DB::table('relationship_milestones')->value('visibility'));
+        $this->assertSame('Poprvé jsme se potkali', $odpoved->json('data.ADIARY.ms.0.1'));
+        $this->assertSame(0, DB::table('gift_ideas')->count(), 'Milník není nápad na dárek.');
+
+        $this->postJson('/api/milniky', ['nazev' => 'Nesmysl', 'datum' => '31. 2. 2020'])->assertStatus(422);
+        $this->postJson('/api/milniky', ['nazev' => 'Bez data', 'datum' => 'loni'])->assertStatus(422);
+    }
+
     public function test_novy_zapis_se_ulozi_a_vrati_s_identifikatorem(): void
     {
         $odpoved = $this->postJson('/api/denik', [

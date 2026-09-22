@@ -209,6 +209,8 @@ class ObsahPravidlaTest extends TestCase
         $this->assertSame('16. srpna 2021', $v[4]);
         $this->assertSame('Krka, Chorvatsko', $v[5]);
         $this->assertSame(3, $v[6]);
+        // Fotky vzpomínky pro dlaždice — dřív karta brala náhodné fotky knihovny.
+        $this->assertSame(['1', '2', '3'], $v[9]);
     }
 
     /** Pravidla jiného páru se do odpovědi nedostanou. */

@@ -180,8 +180,16 @@ class ObsahDnesTest extends TestCase
 
         $this->assertSame('12 fotek z 13. 9. nemá album', $navrhy[0]['title']);
         $this->assertSame('Pálava', $navrhy[0]['album']);
+        // Fotky pro album jdou s návrhem — dřív „Vytvořit album" založilo prázdné.
+        $this->assertCount(12, $navrhy[0]['media']);
+        $this->assertMatchesRegularExpression('/^[0-9a-f-]{36}$/', $navrhy[0]['media'][0]);
         // Z téhož dne chybí i zápis v deníku.
         $this->assertSame('s-diary-2026-09-13', $navrhy[1]['id']);
+
+        // Album z těch fotek návrh uzavře.
+        $this->postJson('/api/alba', ['nazev' => 'Pálava', 'media' => $navrhy[0]['media']])->assertSuccessful();
+        $po = $this->getJson('/api/data/dnes')->assertOk()->json('data.DNES.navrhy');
+        $this->assertNotContains('s-album-2026-09-13', array_column($po, 'id'));
     }
 
     // ——— pomůcky ———

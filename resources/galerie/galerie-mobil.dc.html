@@ -6133,6 +6133,13 @@ class Component extends DCLogic {
     if (this.state.queue) return this.state.queue;
     return api && api.mode === 'http' ? [] : QUEUE.map(q => ({ id: q[0], title: q[1], meta: q[2], icon: q[3], st: q[4] }));
   }
+  // Odložená vzpomínka: `memLater` drží den návratu, stejně jako na počítači.
+  memOdlozena(id) {
+    const v = (this.state.memLater || {})[id];
+    if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
+    const d = this.dnes(), dva = n => (n < 10 ? '0' : '') + n;
+    return v > d.getFullYear() + '-' + dva(d.getMonth() + 1) + '-' + dva(d.getDate());
+  }
   // Úkol ze serveru (`t[4]` je jeho uuid) je hotový podle serveru; `done` patří ukázce.
   ukolHotovy(t, key) {
     const v = this.galerieNaServeru() && t[4] ? undefined : (this.state.done || {})[key];
@@ -7355,6 +7362,8 @@ class Component extends DCLogic {
     // Travel inbox dvojice má skutečné akce (přidat, archivovat), ne přeškrtnutí v telefonu.
     const inboxNaServeru = key === 'travelInbox' && this.galerieNaServeru();
     const tkNaServeru = key === 'ticket' && this.galerieNaServeru();
+    // Osa milníků: „Přidat milník“ zapíše milník vztahu (dřív na telefonu nešlo nic).
+    const msNaServeru = key === 'ms' && this.galerieNaServeru();
     // Seznamy, kde „hotovo" nemá co znamenat — účet, zapečetěná kapsle, zapsané rozhodnutí.
     const bezHotovo = ['accounts', 'kapSealed', 'zprDec', 'zprGone', 'klAsk'].indexOf(key) >= 0;
     const mob = map[s.allRoute];
@@ -7429,8 +7438,9 @@ class Component extends DCLogic {
     // záložky ukazují totéž a „Nastavení připomínek" vypadá jako seznam vzpomínek.
     const memSaved = s.memSaved || {}, memLater = s.memLater || {};
     const memSrc = key === 'memKeep' ? MEMS.filter(x => memSaved[x[0]])
-      : key === 'memLater' ? MEMS.filter(x => memLater[x[0]])
-      : key === 'memToday' ? MEMS.filter(x => !memLater[x[0]])
+      // Odklad je den návratu (počítač ukládá „2026-09-23“); prošlý nebo starý text už neplatí.
+      : key === 'memLater' ? MEMS.filter(x => this.memOdlozena(x[0]))
+      : key === 'memToday' ? MEMS.filter(x => !this.memOdlozena(x[0]))
       : [];
     const mems = memSrc.map(x => {
       const k = MEMKIND[x[1]] || ['Vzpomínka', 'ph-sparkle', 'var(--g-acc)'];
@@ -8483,8 +8493,9 @@ class Component extends DCLogic {
             : key === 'ticket' && tkNaServeru
               ? 'Žádné jízdenky. Zapíšete je tlačítkem „Přidat jízdenku“ i s trasou — uvidíte je oba.'
               : 'Zatím tu nic není.',
-      hasOpen: inboxNaServeru || tkNaServeru, openLabel: tkNaServeru ? 'Přidat jízdenku' : 'Přidat do inboxu',
-      open: () => this.setState({ sheet: 'add', addKind: tkNaServeru ? 'ticket' : 'tinbox', addA: '', addB: '' })
+      hasOpen: inboxNaServeru || tkNaServeru || msNaServeru,
+      openLabel: msNaServeru ? 'Přidat milník' : tkNaServeru ? 'Přidat jízdenku' : 'Přidat do inboxu',
+      open: () => this.setState({ sheet: 'add', addKind: msNaServeru ? 'milestone' : tkNaServeru ? 'ticket' : 'tinbox', addA: '', addB: '' })
     };
     return vals;
   }
@@ -12253,7 +12264,8 @@ class Component extends DCLogic {
       promise: ['Zapsat slib', 'Co slibuji', 'Do kdy (nepovinné, třeba do pátku)', 'Zapsat slib'],
       tinbox: ['Do travel inboxu', 'Co — třeba Apartmán Lisabon, 3 noci', 'Odkaz (nepovinné, https://…)', 'Přidat do inboxu'],
       ticket: ['Nová jízdenka', 'Co — třeba Vlak Brno – Vídeň', 'Trasa (nepovinné, třeba Brno – Vídeň)', 'Uložit jízdenku'],
-      place: ['Nový cíl', 'Kam — třeba Lofoty', 'Kde to je — město nebo země (nepovinné)', 'Přidat místo']
+      place: ['Nový cíl', 'Kam — třeba Lofoty', 'Kde to je — město nebo země (nepovinné)', 'Přidat místo'],
+      milestone: ['Nový milník', 'Co se stalo — třeba Poprvé jsme se potkali', 'Kdy — třeba 18. 10. 2016', 'Přidat milník']
     };
     const spec = addSpec[s.addKind || 'diary'];
     const addCommit = () => {
@@ -12319,6 +12331,16 @@ class Component extends DCLogic {
        * Travel inbox a jízdenky — na telefonu šly jen číst a „hotovo" u nich
        * přeškrtlo řádek, aniž by se na serveru cokoliv změnilo.
        */
+      if (s.addKind === 'milestone') {
+        if (!this.galerieNaServeru()) { this.toast('Ukládá se jen s připojeným serverem', { icon: 'ph-info', silent: true }); return; }
+        if (!this.denZTextu(b)) { this.toast('Datum napište jako 18. 10. 2016', { icon: 'ph-warning', silent: true }); return; }
+        window.GalerieApi.post('milniky', { nazev: a, datum: b }).then(res => {
+          if (res && window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data, res.prazdne);
+          this.setState({ sheet: null, addA: '', addB: '', seq: n + 1 });
+          this.toast((res && res.zprava) || 'Milník přidán', { icon: 'ph-flag-banner' });
+        }).catch(e => this.chybaServeru(e, 'Milník se nepodařilo uložit'));
+        return;
+      }
       if (s.addKind === 'tinbox' || s.addKind === 'ticket' || s.addKind === 'place') {
         if (!this.galerieNaServeru()) { this.toast('Ukládá se jen s připojeným serverem', { icon: 'ph-info', silent: true }); return; }
         let zadost;

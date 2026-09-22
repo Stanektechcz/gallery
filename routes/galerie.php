@@ -16,6 +16,7 @@ use App\Http\Controllers\Api\Galerie\KosController;
 use App\Http\Controllers\Api\Galerie\LideController;
 use App\Http\Controllers\Api\Galerie\MechanismController;
 use App\Http\Controllers\Api\Galerie\MediaController;
+use App\Http\Controllers\Api\Galerie\MilnikyController;
 use App\Http\Controllers\Api\Galerie\MistaController;
 use App\Http\Controllers\Api\Galerie\PravidloController;
 use App\Http\Controllers\Api\Galerie\PripomenutiController;
@@ -243,6 +244,9 @@ Route::middleware(['auth:sanctum', 'dvojice', 'throttle:120,1'])->prefix('api')-
     Route::post('ukoly/kategorie', [KategorieUkoluController::class, 'store'])->name('galerie.ukoly.kategorie.store');
     Route::patch('ukoly/kategorie/{uuid}', [KategorieUkoluController::class, 'update'])->whereUuid('uuid')->name('galerie.ukoly.kategorie.update');
     Route::delete('ukoly/kategorie/{uuid}', [KategorieUkoluController::class, 'destroy'])->whereUuid('uuid')->name('galerie.ukoly.kategorie.destroy');
+
+    // Milník vztahu — „Přidat milník" dřív zakládalo nápad na dárek.
+    Route::post('milniky', [MilnikyController::class, 'store'])->name('galerie.milniky.store');
 
     // Deník z počítače — dialog „Nový zápis" dřív zapisoval jen do stavu obrazovky.
     Route::post('denik', [DenikController::class, 'store'])->name('galerie.denik.store');

@@ -18658,6 +18658,16 @@ class Component extends DCLogic {
         telo: (a, b, c) => ({ nazev: a, zeme: b || null, poznamka: c || null }),
         po: () => { if (window.GalerieObnovit) window.GalerieObnovit('cesty'); }
       },
+      milnikNovy: {
+        t: 'Nový milník', a: 'Co se stalo — třeba Poprvé jsme se potkali', b: 'Kdy — datum, třeba 18. 10. 2016',
+        c: 'Poznámka (nepovinné)',
+        h: 'Milník se objeví na ose Milníků a výročí; každý rok vám aplikace výročí připomene.',
+        cesta: () => 'milniky',
+        telo: (a, b, c) => {
+          if (!this.denZTextu(b)) return { chyba: 'Datum napište jako 18. 10. 2016' };
+          return { nazev: a, datum: b.trim(), poznamka: c || null };
+        }
+      },
       jizdenkaNova: {
         t: 'Nová jízdenka', a: 'Co — třeba Vlak Brno – Vídeň, sobota', b: 'Odkud (nepovinné)', c: 'Kam (nepovinné)',
         h: 'Jízdenka se uloží k vašim jízdenkám a trasám — uvidíte ji oba.',
@@ -23602,20 +23612,48 @@ class Component extends DCLogic {
     return { ...d, ...(this.state.memPrefs || {}) };
   }
   memTodayCount() {
-    const prefs = this.memPrefs(), hidden = this.state.memHidden || {}, later = this.state.memLater || {};
-    return this.memAll().filter(m => prefs[m.kind] && m.count >= prefs.minPhotos && !hidden[m.id] && !later[m.id]).length;
+    const prefs = this.memPrefs(), hidden = this.state.memHidden || {};
+    return this.memAll().filter(m => prefs[m.kind] && m.count >= prefs.minPhotos && !hidden[m.id] && !this.memOdlozena(m.id)).length;
+  }
+  /*
+   * Odložená vzpomínka se vrátí sama.
+   *
+   * „Odložit na zítra" a „na týden" ukládaly jen text („zítra ráno") a nic
+   * ho nikdy nesmazalo — vzpomínka zůstala schovaná, dokud někdo neklikl
+   * „Vrátit vše na dnes". Teď se ukládá den návratu; starý text se bere
+   * jako prošlý.
+   */
+  memOdlozena(id) {
+    const v = (this.state.memLater || {})[id];
+    return typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) && v > this.fmtIso(this.dnes());
+  }
+  memOdloz(id, dni) {
+    const d = this.dnes();
+    return { ...(this.state.memLater || {}), [id]: this.fmtIso(new Date(d.getFullYear(), d.getMonth(), d.getDate() + dni)) };
   }
   memAll() {
-    return MEMS.map(m => ({ id: m[0], kind: m[1], back: m[2], title: m[3], date: m[4], place: m[5], count: m[6], note: m[7], n: m[8] }));
+    return MEMS.map(m => ({ id: m[0], kind: m[1], back: m[2], title: m[3], date: m[4], place: m[5], count: m[6], note: m[7], n: m[8], ids: m[9] || null }));
   }
   memCard(m) {
     const s = this.state, k = MEMKIND[m.kind] || MEMKIND.den;
     const photos = this.photos();
     const saved = !!(s.memSaved || {})[m.id];
-    const tiles = Array.from({ length: 5 }, (_, i) => {
-      const p = photos[(m.n + i * 3) % photos.length];
-      return { bg: this.bg((m.n + i * 5) % 40), open: () => this.openLb(p.id) };
-    });
+    /*
+     * Dlaždice z fotek vzpomínky (`ids` ze serveru). Dřív to byly barevné
+     * plochy a klepnutí otevřelo náhodnou fotku knihovny.
+     */
+    const tiles = m.ids && m.ids.length
+      ? m.ids.map((id, i) => {
+        const p = photos.find(x => x.id === id);
+        return {
+          bg: p ? p.bg : this.bg((m.n + i * 5) % 40),
+          open: () => p ? this.openLb(p.id) : this.toast('Tahle fotka je v knihovně starší, než kolik se jich načetlo najednou', { icon: 'ph-image', silent: true })
+        };
+      })
+      : Array.from({ length: 5 }, (_, i) => {
+        const p = photos[(m.n + i * 3) % photos.length];
+        return { bg: this.bg((m.n + i * 5) % 40), open: () => this.openLb(p.id) };
+      });
     return {
       id: m.id, title: m.title, date: m.date, place: m.place, note: m.note,
       kindLabel: k[0], icon: k[1], accent: k[2],
@@ -23633,12 +23671,12 @@ class Component extends DCLogic {
       },
       later: () => {
         const prev = s.memLater || {};
-        this.setState({ memLater: { ...prev, [m.id]: 'zítra ráno' } });
-        this.toast('Odloženo na zítra ráno', { icon: 'ph-clock-clockwise', undo: () => this.setState({ memLater: prev }) });
+        this.setState({ memLater: this.memOdloz(m.id, 1) });
+        this.toast('Odloženo na zítra — ráno bude zase mezi dnešními', { icon: 'ph-clock-clockwise', undo: () => this.setState({ memLater: prev }) });
       },
       laterWeek: () => {
         const prev = s.memLater || {};
-        this.setState({ memLater: { ...prev, [m.id]: 'za týden' } });
+        this.setState({ memLater: this.memOdloz(m.id, 7) });
         this.toast('Vrátí se za týden', { icon: 'ph-clock-clockwise', undo: () => this.setState({ memLater: prev }) });
       },
       hide: () => {
@@ -23661,7 +23699,7 @@ class Component extends DCLogic {
     const all = this.memAll();
     const savedMap = s.memSaved || {}, laterMap = s.memLater || {}, hiddenMap = s.memHidden || {};
     const eligible = all.filter(m => prefs[m.kind] && m.count >= prefs.minPhotos && !hiddenMap[m.id]);
-    const today = eligible.filter(m => !laterMap[m.id]);
+    const today = eligible.filter(m => !this.memOdlozena(m.id));
     const base = {
       appIsMem: true,
       memIsToday: key === 'memToday', memIsSaved: key === 'memKeep', memIsLater: key === 'memLater', memIsPrefs: key === 'memPrefs'
@@ -23669,7 +23707,12 @@ class Component extends DCLogic {
     if (key === 'memToday') {
       const hero = today[0] ? this.memCard(today[0]) : null;
       const rest = today.slice(1).map(m => this.memCard(m));
-      const tomorrow = eligible.filter(m => m.date.indexOf('17.') === 0).slice(0, 2);
+      // Zítřejší den a měsíc — dřív napevno „17." z ukázky.
+      const zitra = (() => {
+        const d = this.dnes(), z = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
+        return z.getDate() + '. ' + ['ledna', 'února', 'března', 'dubna', 'května', 'června', 'července', 'srpna', 'září', 'října', 'listopadu', 'prosince'][z.getMonth()] + ' ';
+      })();
+      const tomorrow = eligible.filter(m => this.ukazka() ? m.date.indexOf('17.') === 0 : String(m.date).indexOf(zitra) === 0).slice(0, 2);
       return {
         ...base,
         memHead: today.length
@@ -23698,6 +23741,18 @@ class Component extends DCLogic {
           this.toast('Všechny dnešní vzpomínky uloženy', { icon: 'ph-bookmark-simple', undo: () => this.setState({ memSaved: prev }) });
         },
         memShowAll: () => {
+          /*
+           * U dvojice se promítnou fotky dnešních vzpomínek. Dřív se otevřela
+           * obrazovka Promítání s výběrem oblíbených a hláška tvrdila, že běží
+           * „promítání všech dnešních vzpomínek".
+           */
+          if (!this.ukazka()) {
+            const photos = this.photos();
+            const fotky = [].concat(...today.map(m => m.ids || [])).map(id => photos.find(p => p.id === id)).filter(Boolean);
+            if (!fotky.length) { this.toast('Fotky dnešních vzpomínek ještě nejsou načtené', { icon: 'ph-image', silent: true }); return; }
+            this.startShow(fotky, 'Vzpomínky na dnes');
+            return;
+          }
           this.setState({ route: 'x-promitani', appTab: 0 });
           this.toast('Promítání všech dnešních vzpomínek · ' + this.pl(today.reduce((a, m) => a + m.count, 0), 'fotka', 'fotky', 'fotek'), { icon: 'ph-play-circle' });
         },
@@ -23726,10 +23781,11 @@ class Component extends DCLogic {
       };
     }
     if (key === 'memLater') {
-      const rows = all.filter(m => laterMap[m.id]).map(m => {
+      const rows = all.filter(m => this.memOdlozena(m.id)).map(m => {
         const c = this.memCard(m);
+        const p = String(laterMap[m.id]).split('-');
         return {
-          ...c, when: laterMap[m.id],
+          ...c, when: 'vrátí se ' + (+p[2]) + '. ' + (+p[1]) + '.',
           back: () => {
             const prev = laterMap, next = { ...prev }; delete next[m.id];
             this.setState({ memLater: next, appTab: 0 });
@@ -27335,7 +27391,7 @@ class Component extends DCLogic {
       };
     });
     const mpr = this.memPrefs();
-    const memAny = this.memAll().some(m => mpr[m.kind] && m.count >= mpr.minPhotos && !(s.memHidden || {})[m.id] && !(s.memLater || {})[m.id]);
+    const memAny = this.memAll().some(m => mpr[m.kind] && m.count >= mpr.minPhotos && !(s.memHidden || {})[m.id] && !this.memOdlozena(m.id));
     W.mem.show = W.mem.show && memAny;
     /*
      * Dlaždice bez skutečných dat se přihlášené dvojici neukazují — stejně
@@ -27996,7 +28052,7 @@ class Component extends DCLogic {
     const memPr = this.memPrefs();
     if (!memPr.quiet) {
       this.memAll().filter(m => memPr[m.kind] && m.count >= memPr.minPhotos
-        && !(s.memHidden || {})[m.id] && !(s.memLater || {})[m.id] && !(s.memSaved || {})[m.id])
+        && !(s.memHidden || {})[m.id] && !this.memOdlozena(m.id) && !(s.memSaved || {})[m.id])
         .slice(0, 3).forEach(m => {
           out.push({
             id: 'n-mem-' + m.id, days: 0, icon: 'ph-sparkle', color: 'var(--g-acc)',
@@ -31483,7 +31539,7 @@ class Component extends DCLogic {
       // `homeQIdx` ne: otázka dne musí být pro oba stejná, jinak odpovídá každý na jinou.
       homeArcIdx: 1, overIdx: 1, serIdx: 1, curIdx: 1, csPick: 1, pastPick: 1, pmPick: 1,
       rcDay: 1, ckDay: 1, obStep: 1,
-      cmpSel: 1, cmpZoom: 1, confirmPick: 1, txSel: 1, vaultPick: 1, naWithSel: 1, naName: 1, naParent: 1,
+      cmpSel: 1, cmpZoom: 1, confirmPick: 1, txSel: 1, vaultPick: 1, naWithSel: 1, naName: 1, naParent: 1, naZNavrhu: 1,
       lbEdit: 1, lbSplitMode: 1, dnExpand: 1,
       antiFilter: 1, rulLogFilter: 1, txFilter: 1, wishFilter: 1, xFilter: 1, tSort: 1, casMode: 1, albView: 1,
       blkMode: 1, blkAlbum: 1, blkDate: 1, blkFav: 1, blkPlace: 1, blkShift: 1, blkShiftUnit: 1,
@@ -33737,6 +33793,10 @@ class Component extends DCLogic {
         }
         // Transakce: primární tlačítko zapíše platbu (dřív jen hláška „Přidat transakci").
         if (appKey === 'all' || appKey === 'un' || appKey === 'rec') { this.setState({ xaOpen: true, xaMode: 'tx', xaA: '', xaB: '' }); return; }
+        if (appKey === 'ms' && !this.ukazka() && this.apiNaServeru()) {
+          this.setState({ xaOpen: true, xaMode: 'milnikNovy', xaCtx: null, xaA: '', xaB: '', xaC: '', xaD: '' });
+          return;
+        }
         if (appKey === 'ms') {
           const prev = this.rowsOf('gifts');
           this.setRows('gifts', [{ t: 'Nový milník', m: 'doplňte datum a název', g: 'nápad', id: 'gifts-m' + (s.xSeq || 1) }].concat(prev));
@@ -34124,7 +34184,7 @@ class Component extends DCLogic {
         const memN = this.memTodayCount();
         const memList = this.memAll().filter(m => {
           const pr = this.memPrefs();
-          return pr[m.kind] && m.count >= pr.minPhotos && !(s.memHidden || {})[m.id] && !(s.memLater || {})[m.id];
+          return pr[m.kind] && m.count >= pr.minPhotos && !(s.memHidden || {})[m.id] && !this.memOdlozena(m.id);
         });
         const top = memList[0];
         // Bez běžící cesty je `NOWTRIP` prázdný; dlaždice je pak schovaná, ale
@@ -34159,7 +34219,7 @@ class Component extends DCLogic {
             },
             later: () => {
               const prev = s.memLater || {};
-              this.setState({ memLater: { ...prev, [top.id]: 'zítra ráno' } });
+              this.setState({ memLater: this.memOdloz(top.id, 1) });
               this.toast('Odloženo na zítra ráno', { icon: 'ph-clock-clockwise', undo: () => this.setState({ memLater: prev }) });
             }
           } : null,
@@ -34318,7 +34378,10 @@ class Component extends DCLogic {
         ((this.dnesData() || {}).navrhy || []).filter(x => !dis[x.id]).forEach(x => raw.push({
           id: x.id, icon: x.icon, tint: tint[x.icon] || 'var(--g-acc)', title: x.title, body: x.body, cta: x.cta,
           go: x.route === 'album-new'
-            ? () => this.setState({ naOpen: true, naName: x.album, naParent: '', naWithSel: false })
+            // S fotkami z návrhu (`media`) — dřív vzniklo prázdné album a návrh visel dál.
+            ? () => this.setState(x.media && x.media.length
+              ? { naOpen: true, naName: x.album, naParent: '', naWithSel: true, sel: x.media.slice(), naZNavrhu: true }
+              : { naOpen: true, naName: x.album, naParent: '', naWithSel: false })
             : () => this.setState({ route: x.route, appTab: 0 })
         }));
         return {
@@ -34451,7 +34514,8 @@ class Component extends DCLogic {
       newAlbum: () => this.setState({ naOpen: true, naName: '', naParent: '', naWithSel: s.sel.length > 0 }),
       naOpen: s.naOpen, naName: s.naName || '',
       naSetName: e => this.setState({ naName: e.target.value }),
-      naClose: () => this.setState({ naOpen: false }),
+      // Výběr z návrhu na Dnes nepatří do knihovny — po zavření se zruší.
+      naClose: () => this.setState(s.naZNavrhu ? { naOpen: false, sel: [], naZNavrhu: false } : { naOpen: false }),
       // Nadřazené album se vybírá podle identifikátoru — cesta se u serverového alba nedá poslat.
       naParents: [{ label: 'Kořen — samostatné album', value: '' }].concat(this.baseAlbums().map(a => ({ label: a.path, value: a.id }))),
       naParent: s.naParent || '',
@@ -34481,7 +34545,9 @@ class Component extends DCLogic {
           api.post('alba', { nazev: name, rodic: rodic && !rodic.mine ? rodic.id : null, media: s.naWithSel ? s.sel : [] })
             .then(res => {
               if (window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data, res.prazdne);
-              this.setState({ naBusy: false, naOpen: false, naName: '', naParent: '', naWithSel: false, route: 'album', albumId: res.album, sel: [], selectMode: false });
+              // Návrh „nemá album" na Dnes se po založení alba přepočítá hned.
+              if (s.naZNavrhu && window.GalerieObnovit) window.GalerieObnovit('dnes');
+              this.setState({ naBusy: false, naOpen: false, naName: '', naParent: '', naWithSel: false, naZNavrhu: false, route: 'album', albumId: res.album, sel: [], selectMode: false });
               this.toast(res.zprava, { icon: 'ph-folder-plus' });
             })
             .catch(e => {
