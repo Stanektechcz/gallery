@@ -62,6 +62,16 @@ class DarkyVeStavuTest extends TestCase
         $this->assertContains('wishes', $odpoved->json('docasne'));
     }
 
+    /** Vynulovaná místní kopie (`wishes: null`) přání na serveru nesmaže. */
+    public function test_vynulovana_kopie_prani_nic_nesmaze(): void
+    {
+        $this->stav(['wishes' => [['id' => 'w1757000000000', 'who' => 'Adrian', 'title' => 'Kurz keramiky', 'price' => 2400]]])->assertOk();
+
+        $this->stav(['wishes' => null])->assertOk();
+
+        $this->assertSame(1, DB::table('gift_ideas')->count());
+    }
+
     /**
      * Chystaný dárek je soukromý toho, kdo ho pořizuje.
      *

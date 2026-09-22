@@ -55,8 +55,9 @@ class PravidlaVeStavu
             return [];
         }
 
-        if (array_key_exists('rules', $patch)) {
-            $this->uloz((array) $patch['rules'], $prostor, $uzivatel, OdebraneVStavu::pro($patch, 'rules'), OdebraneVStavu::zmenene($patch, 'rules'));
+        // Jen skutečný seznam: vynulovaná místní kopie (`null`) nic nemaže.
+        if (is_array($patch['rules'] ?? null)) {
+            $this->uloz($patch['rules'], $prostor, $uzivatel, OdebraneVStavu::pro($patch, 'rules'), OdebraneVStavu::zmenene($patch, 'rules'));
         }
 
         /*

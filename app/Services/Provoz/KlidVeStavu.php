@@ -61,16 +61,17 @@ class KlidVeStavu
 
         $jmena = $this->jmena($prostor);
 
-        if (array_key_exists('klEn', $patch)) {
-            $this->energie((array) $patch['klEn'], $prostor, $jmena);
+        // Jen skutečný seznam: vynulovaná místní kopie (`null`) nic nemaže.
+        if (is_array($patch['klEn'] ?? null)) {
+            $this->energie($patch['klEn'], $prostor, $jmena);
         }
 
-        if (array_key_exists('klAttn', $patch)) {
-            $this->pozornost((array) $patch['klAttn'], $prostor);
+        if (is_array($patch['klAttn'] ?? null)) {
+            $this->pozornost($patch['klAttn'], $prostor);
         }
 
-        if (array_key_exists('klTasks', $patch)) {
-            $this->cekaNaOkno((array) $patch['klTasks'], $prostor, OdebraneVStavu::pro($patch, 'klTasks'), OdebraneVStavu::zmenene($patch, 'klTasks'));
+        if (is_array($patch['klTasks'] ?? null)) {
+            $this->cekaNaOkno($patch['klTasks'], $prostor, OdebraneVStavu::pro($patch, 'klTasks'), OdebraneVStavu::zmenene($patch, 'klTasks'));
         }
 
         // Napsaná odpověď dorazila dřív než potvrzení, takže tenhle patch už

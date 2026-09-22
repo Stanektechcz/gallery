@@ -133,6 +133,24 @@ class MechanismyVeStavuTest extends TestCase
         $this->assertSame($this->maki->id, (int) DB::table('couple_family_contacts')->value('last_contact_by'));
     }
 
+    /**
+     * Vynulovaná místní kopie (`fam: null`) na serveru nic nesmaže.
+     *
+     * Klient kopii vynuluje, aby znovu četl data ze serveru; `(array) null`
+     * je prázdný seznam a převodník by ho mohl vzít jako „všechno odebráno".
+     */
+    public function test_vynulovana_kopie_rodiny_nic_nesmaze(): void
+    {
+        DB::table('couple_family_contacts')->insert([
+            'uuid' => (string) Str::uuid(), 'gallery_space_id' => $this->prostor->id, 'name' => 'Máma Adriana',
+            'side_user_id' => $this->adri->id, 'every_days' => 7, 'sort_order' => 0, 'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $this->stav(['fam' => null])->assertOk();
+
+        $this->assertSame(1, DB::table('couple_family_contacts')->count());
+    }
+
     /** Dvě pravdy se uloží obě. */
     public function test_dve_pravdy_se_ulozi_obe(): void
     {

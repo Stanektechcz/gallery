@@ -61,7 +61,8 @@ class DarkyVeStavu
         $tykaSe = [];
 
         foreach (['wishes' => 'prani', 'ideas' => 'napad', 'buys' => 'nakup'] as $klic => $druh) {
-            if (! array_key_exists($klic, $patch)) {
+            // Jen skutečný seznam: vynulovaná místní kopie (`null`) nesmaže všechna přání.
+            if (! is_array($patch[$klic] ?? null)) {
                 continue;
             }
 
@@ -81,7 +82,7 @@ class DarkyVeStavu
         $odebrane = [];
 
         foreach (['wishes', 'ideas', 'buys'] as $klic) {
-            if (! array_key_exists($klic, $patch)) {
+            if (! is_array($patch[$klic] ?? null)) {
                 continue;
             }
 

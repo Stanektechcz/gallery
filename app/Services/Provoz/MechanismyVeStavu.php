@@ -60,24 +60,31 @@ class MechanismyVeStavu
         $lide = array_flip($prostor->members()->pluck('users.name', 'users.id')->all());
         $this->patch = $patch;
 
-        if (array_key_exists('favList', $patch)) {
-            $this->laskavosti((array) $patch['favList'], $prostor, $lide);
+        /*
+         * Jen skutečný seznam, ne `null`.
+         *
+         * Klient místní kopii vynuluje (`fam: null`), aby znovu četl ze
+         * serveru; `(array) null` je prázdný seznam a převodník ho bral jako
+         * „všechno odebráno" — smazal všechny kontakty z rodiny.
+         */
+        if (is_array($patch['favList'] ?? null)) {
+            $this->laskavosti($patch['favList'], $prostor, $lide);
         }
 
-        if (array_key_exists('forgList', $patch)) {
-            $this->odpustene((array) $patch['forgList'], $prostor, $lide);
+        if (is_array($patch['forgList'] ?? null)) {
+            $this->odpustene($patch['forgList'], $prostor, $lide);
         }
 
-        if (array_key_exists('antiList', $patch)) {
-            $this->antiRozpocet((array) $patch['antiList'], $prostor);
+        if (is_array($patch['antiList'] ?? null)) {
+            $this->antiRozpocet($patch['antiList'], $prostor);
         }
 
-        if (array_key_exists('fam', $patch)) {
-            $this->rodina((array) $patch['fam'], $prostor, $lide);
+        if (is_array($patch['fam'] ?? null)) {
+            $this->rodina($patch['fam'], $prostor, $lide);
         }
 
-        if (array_key_exists('truths', $patch)) {
-            $this->pravdy((array) $patch['truths'], $prostor);
+        if (is_array($patch['truths'] ?? null)) {
+            $this->pravdy($patch['truths'], $prostor);
         }
 
         $obsah = $this->obsah->kolekce($prostor);

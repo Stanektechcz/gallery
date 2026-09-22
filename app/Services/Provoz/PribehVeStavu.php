@@ -69,22 +69,23 @@ class PribehVeStavu
     {
         $this->patch = $patch;
 
-        if (array_key_exists('storyList', $patch)) {
-            $this->kapitoly((array) $patch['storyList'], $prostor, $uzivatel);
+        // Jen skutečný seznam: vynulovaná místní kopie (`null`) nic nemaže.
+        if (is_array($patch['storyList'] ?? null)) {
+            $this->kapitoly($patch['storyList'], $prostor, $uzivatel);
         }
 
         // Milníky až po kapitolách: nový milník se často zakládá do kapitoly,
         // která v témže patchi teprve vzniká.
-        if (array_key_exists('msList', $patch)) {
-            $this->milniky((array) $patch['msList'], $prostor);
+        if (is_array($patch['msList'] ?? null)) {
+            $this->milniky($patch['msList'], $prostor);
         }
 
-        if (array_key_exists('emItems', $patch)) {
-            $this->nouze((array) $patch['emItems'], $prostor, $uzivatel);
+        if (is_array($patch['emItems'] ?? null)) {
+            $this->nouze($patch['emItems'], $prostor, $uzivatel);
         }
 
-        if (array_key_exists('paper', $patch)) {
-            $this->papir((array) $patch['paper'], $prostor);
+        if (is_array($patch['paper'] ?? null)) {
+            $this->papir($patch['paper'], $prostor);
         }
 
         $obsah = $this->obsah->kolekce($prostor);
