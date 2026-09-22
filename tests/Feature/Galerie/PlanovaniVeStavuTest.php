@@ -110,6 +110,10 @@ class PlanovaniVeStavuTest extends TestCase
      */
     public function test_pripomenuti_se_prelozi_na_okamzik(): void
     {
+        // Pevné „teď" před akcí: připomínka do minulosti se správně nezakládá
+        // a test s datem napevno by po 18. 9. 2026 sám od sebe začal padat.
+        $this->travelTo('2026-09-10 09:00:00');
+
         $this->patchJson('/api/state', ['data' => ['evList' => [[
             'id' => 'ev-n1', 'y' => 2026, 'm' => 8, 'd' => 19, 'time' => '11:00',
             't' => 'Zubař', 'kind' => 'zdravi', 'who' => 'Adrian', 'remind' => 'den předem',
