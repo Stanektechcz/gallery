@@ -546,8 +546,78 @@ a vzkaz z vývojové databáze uklizeny.
 |---|---|
 | `4ba1b931` | Cesty na serveru z obou rozvržení (dialog s daty, telefon: nová cesta a bod programu), rozpočet cesty; vzkazy hostů na telefonu; poctivé prázdné stavy |
 | `07fffb82` | „Splněno" u bodu programu cesty na serveru |
+| `4c6e9e41` | Telefon: album přejmenovat a stáhnout jako ZIP; odznaky inboxů a den cesty v menu Více ze skutečných dat |
 
 Testy: **1430 PHP testů**, všechny prošly.
+
+---
+
+## 2n. Čtrnácté kolo — čísla z ukázky, čas dvojice a výpis z banky (22. 9.)
+
+Průchod všech obrazovek obou rozvržení (počítač 57 tras × záložky, telefon
+59 položek menu Více × záložky) hledal jména a místa z ukázky, mrtvá
+tlačítka a čísla, která nesedí. Ukázková data v kódu už nikde nezůstala
+(co zbylo, je ukázka v **databázi** — viz 1), mrtvé tlačítko žádné.
+
+**Odznaky a čísla z ukázky u dvojice:**
+- Menu (panel na počítači, Více na telefonu): Koš „4", Sdílené „5",
+  Plánování „3", Zprávy „2", Cesta právě nyní „den 5" — server teď počítá
+  koš, platné odkazy, úkoly dnes a po termínu a den běžící cesty, i když
+  knihovna ještě nemá fotky; zprávy odznak nemají (nepřečtené se nesledují).
+- Hlavička stránky na počítači: Lidé „2 návrhy", Plánování „3 na dnes",
+  Pravidla „4 aktivní", Úklid „16 nálezů", Zprávy „2 nové" z katalogu —
+  teď ze skutečných dat, jinak nic. Panel už nekreslí „Vzpomínky 0".
+- Telefon, úvodní dlaždice: „Do konce měsíce −1 825 Kč · zbývá
+  v rozpočtu" zeleně — teď „utraceno nad příjmy" (varovně), „zbývá z příjmů"
+  nebo „tento měsíc bez plateb"; počet v knihovně z celé knihovny.
+- Tvary slov u čísel („3 položek", „31 nezařazená", „2 fotek z okolí",
+  „1 hodin"…) na obou rozvrženích; nová pomůcka `tvar()`.
+
+**Čas dvojice (Praha) i u zápisů.** Popisky úkolů „dnes/zítra/po termínu"
+a hranice „Tento týden" se počítaly podle UTC (ve 23:30 UTC byl úkol na
+dnešek „zítra"). Deník, rychlý zápis z telefonu, ruční a plánovaná platba,
+vyrovnání a záznamy mechanismů dostávaly mezi půlnocí a druhou ranní
+včerejší datum a deník odmítal dnešní datum jako budoucí. Všude
+`Cas::dnes()`.
+
+**Náhledy, které server nevydá.** Aktivita na úvodní obrazovce nesla
+adresu náhledu trvale smazané fotky (404 v konzoli) a stejně by nesla
+fotku z koše nebo trezoru; totéž chat. Týdenní přehled a světový itinerář
+nepočítají fotky v trezoru (země ze skryté fotky prozrazovala polohu).
+
+**Výpis z banky do Transakcí (nová funkce).** Transakce slibovaly „Import
+z Revolutu ústí sem", ale import výpisu (starý bankovní modul) do knihy
+plateb nikdy nedošel. Teď na kartě účtu v Přehledu financí **Nahrát výpis**
+(CSV, XLS, XLSX): server výpis přečte, odduplikuje a nové pohyby zapíše na
+účet jako nezařazené platby (záložky Nezařazené a Importované). Opakovaný
+nebo překrývající se výpis nic nezdvojí, platby v jiné měně než účet se
+vynechají (toast to řekne), převody mezi vlastními účty jdou mimo rozpočet,
+poplatek se zapíše k platbě. `POST /api/finance/import`, 10× za minutu.
+
+Ověřeno v prohlížeči: odznaky v panelu (Knihovna 4, Úklid 2, Sdílené 2,
+ostatní bez čísla) i v menu Více; hlavičky stránek; dlaždice telefonu;
+založení účtu, `Nahrát výpis` přes klienta API (2 platby v Nezařazených,
+druhé nahrání „Nic nového", nečitelný soubor → věta o chybějícím záhlaví).
+Testovací účet a bankovní řádky z vývojové databáze uklizeny.
+
+| Commit | Obsah |
+|---|---|
+| `ed6a4a4a` | Odznaky menu Koš, Sdílené, Plánování a Cesta ze skutečných dat (i bez fotek); bez „Vzpomínky 0" |
+| `17ad31e8` | Hlavičky stránek bez ukázkových čísel; úkoly „dnes" podle Prahy |
+| `6deed2b1` | Úvodní dlaždice telefonu a souhrn knihovny: poctivá čísla a tvary |
+| `1c18a7dc` | Náhledy jen u fotek, které server vydá; trezor mimo týdenní přehled; tvary slov |
+| `c1a8cf7a` | Výpis z banky do Transakcí (nahrání u účtu, deduplikace, jiná měna, převody); české „upraveno před…" |
+| `ae0e6fcf` | Zápisy s dnešním datem podle Prahy (deník, platby, vyrovnání, mechanismy) |
+
+Testy: **1445 PHP testů**, všechny prošly.
+
+### Po nasazení (2n)
+
+- Nic se nemigruje. Import výpisu používá tabulky bankovního modulu
+  (`bank_imports`, `bank_transactions`), které už na serveru jsou.
+- Velké výpisy: aplikace přijme do 20 MB; pokud nginx/PHP odmítne dřív
+  (`client_max_body_size`, `upload_max_filesize`), klient řekne „výpis je na
+  server příliš velký".
 
 ---
 
@@ -602,10 +672,9 @@ zůstává u dvojice jen to, co potřebuje napojení na cizí službu nebo vlast
 návrh — většina hlášek „bez připojeného serveru" platí jen pro ukázku.
 
 ### Potřebuje cizí službu
-- Automatické stahování transakcí a napojení banky. **Import výpisu do knihy
-  galerie nemá** (staré rozhraní má jen `POST /api/banking/imports`) —
-  platby se zapisují ručně nebo z pravidelných plateb; obrazovky to od 2e
-  říkají, dřív tvrdily „zařazování běží při každém importu"
+- Automatické stahování transakcí a napojení banky (potřebuje poskytovatele
+  a klíče). ~~Import výpisu do knihy galerie nemá~~ — hotovo (2n): výpis
+  CSV/XLS/XLSX se nahraje u účtu a zapíše do Transakcí
 - Investice: nákup a rebalance (nová pozice u dvojice založí spořicí účet)
 - Dvoufázové přihlášení se zapíná ve starém rozhraní — v galerii je jen jeho
   stav (zapnutí potřebuje QR kód ověřovací aplikace)
